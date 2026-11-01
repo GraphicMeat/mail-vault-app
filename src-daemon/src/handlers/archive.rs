@@ -443,8 +443,11 @@ pub(crate) async fn delete_with_config(
     if !config.uses_jmap() && config.uses_graph() {
         return Err("errors.bulkGraphDeleteUnsupported".into());
     }
-    let (uids, refused) = if bin {
-        capture_all(
+    // A bulk delete is permanent: the bin copy is required unless the caller
+    // opted out (`message_delete::capture_policy`, the single delete's rule).
+    use crate::message_delete::{capture_policy, CapturePolicy, Mode};
+    let (uids, refused) = match capture_policy(Mode::Permanent, bin) {
+        CapturePolicy::Required | CapturePolicy::BestEffort => capture_all(
             state,
             &original,
             &account_id,
@@ -454,9 +457,8 @@ pub(crate) async fn delete_with_config(
             &cancel,
             identity,
         )
-        .await
-    } else {
-        (uids, 0)
+        .await,
+        CapturePolicy::Skip => (uids, 0),
     };
     let (acct, mb) = (account_id.clone(), mailbox.clone());
     let (mut p, deleted) = delete_provider_only(state,account_id,config,mailbox,uids,cancel,identity,owner.clone()).await?;

@@ -13,8 +13,7 @@
 //! always 1, because ledger uids are never renumbered.
 
 use crate::handlers::common::{blocking, vault_root};
-use crate::handlers::deleted::{self, Source};
-use crate::handlers::imap::{auto_cache_with_ids, backfill_refusal, email_date_ms, opened_intent, SearchFilters, BODY_FETCH_TIMEOUT};
+use crate::handlers::imap::{auto_cache_with_ids, backfill_refusal, body_fetch_timed_out, email_date_ms, opened_intent, SearchFilters, BODY_FETCH_TIMEOUT};
 use crate::imap::{EmailHeader, ImapConfig, MailboxStatus, MessageIdLocation, MessageIdProbe, ServerSearch};
 use crate::ipc::{self, RpcResponse};
 use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta, Mailboxes};
@@ -92,9 +91,9 @@ fn is_auth_failure(f: &Fail) -> bool {
 }
 
 /// The text of a body fetch that ran out of time, from the IMAP capture
-/// (`timed out after 45s`) or the JMAP body fetch (`Timed out after 45s
-/// fetching message UID ...`, `fetch_body_timed`). The capture's own reason
-/// for it is `timeout`.
+/// (`timed out after 45s`) or a body fetch that names the message
+/// (`imap::body_fetch_timed_out`, the one builder of `Timed out after 45s
+/// fetching message UID ...`). The capture's own reason for it is `timeout`.
 pub(crate) fn is_timeout_text(e: &str) -> bool {
     e.to_ascii_lowercase().starts_with("timed out after ")
 }
@@ -438,12 +437,7 @@ async fn fetch_body_id(
 async fn fetch_body_timed(state: &Arc<DaemonState>, acct: &AccountJmap, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<Fetched>, Fail> {
     match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch_body(state, acct, account_id, mailbox, uid)).await {
         Ok(r) => r,
-        Err(_) => Err(Fail::Rpc(format!(
-            "Timed out after {}s fetching message UID {} from {}",
-            BODY_FETCH_TIMEOUT.as_secs(),
-            uid,
-            mailbox
-        ))),
+        Err(_) => Err(Fail::Rpc(body_fetch_timed_out(uid, mailbox))),
     }
 }
 
@@ -753,7 +747,7 @@ async fn answer(
 
         "imap_set_flags" => set_flags(state, params, acct).await,
         "imap_move_emails" => move_emails(state, params, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?).await,
-        "imap_delete_email" => delete_email(state, params, account, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?).await,
+        "imap_delete_email" => delete_email(state, params, account, original).await,
         "imap_create_mailbox" => create_mailbox(params, acct).await,
         "imap_rename_mailbox" => rename_mailbox(params, acct).await,
         "imap_delete_mailbox" => delete_mailbox(params, acct).await,
@@ -935,12 +929,7 @@ pub(crate) async fn fetch_by_uids(
                     ids: server_ids(&id, blob, &email),
                 }),
                 Ok(Err(e)) => Err(e.to_string()),
-                Err(_) => Err(format!(
-                    "Timed out after {}s fetching message UID {} from {}",
-                    BODY_FETCH_TIMEOUT.as_secs(),
-                    uid,
-                    mailbox
-                )),
+                Err(_) => Err(body_fetch_timed_out(uid, mailbox)),
             },
         };
         out.push((uid, fetched));
@@ -1175,60 +1164,47 @@ struct Removed {
     changed: bool,
 }
 
-/// `imap_delete_email`, the IMAP arm's steps over JMAP:
-/// 1. Into the deleted-mail bin first (`deleted::capture`, `Source::Jmap`),
-///    unless the caller opts out (`bin: false`). A permanent delete that
-///    cannot be captured is refused (`E_BIN_CAPTURE`): the bin would be its
-///    only copy.
-/// 2. `remove_one`: the label semantics rule.
-/// 3. A capture this call made is dropped when the delete failed (not for a
-///    permanent one, whose request may have landed with its reply lost, as
-///    the IMAP arm keeps it) or changed nothing. On success the bin row
-///    learns where the message went (`deleted::landed`).
-async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapConfig, acct: &AccountJmap, original: &crate::account_lifecycle::AccountStamp) -> Result<Value, Fail> {
+/// `imap_delete_email` over JMAP: the params read here, the sequence in the
+/// delete core (`message_delete::delete_one_stamped`, `Provider::Jmap`):
+/// capture into the bin (`Source::Jmap`) unless `bin: false`, `remove_one` by
+/// the label semantics rule, then landed, or the capture dropped when the
+/// delete failed (not a permanent one) or changed nothing.
+///
+/// A capture that failed on an expired or revoked session is answered as
+/// that error's own text, so `answer_with_retry` connects again and runs the
+/// delete once more, capture first. `original` is `None` while the account
+/// is closing or being changed: a permanent delete is refused as a busy
+/// capture (`E_BIN_CAPTURE:busy:`), any other as `errors.keychainBusy`.
+async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapConfig, original: Option<&crate::account_lifecycle::AccountStamp>) -> Result<Value, Fail> {
+    use crate::message_delete::{delete_one_stamped, Mode, Provider, Refusal};
     let account_id = ledger_account(params)?;
     let uid: u32 = param(params, "uid")?;
     let mailbox = mailbox_param(params);
-    let permanent = opt_param::<bool>(params, "permanent").unwrap_or(false);
-    let binned = if opt_param::<bool>(params, "bin").unwrap_or(true) {
-        match deleted::capture_stamped(state, original.clone(), &account_id, &mailbox, uid, Source::Jmap { config: account }).await {
-            Ok(binned) => binned,
-            // An expired or revoked session read nothing: answered as itself,
-            // so `answer_with_retry` connects again and runs the delete once
-            // more, capture first.
-            Err(e) if permanent && is_auth_error(&e.detail()) => return Err(Fail::Rpc(e.detail())),
-            Err(e) if permanent => {
-                tracing::error!("[jmap] delete uid={} not deleted: could not keep a copy first: {}", uid, e);
-                return Err(Fail::Rpc(e.wire()));
-            }
-            Err(e) => {
-                warn!("[jmap] delete uid={} goes ahead: could not keep a bin copy first (the server keeps it): {}", uid, e);
-                None
-            }
-        }
-    } else {
-        None
-    };
-    match remove_one(state, acct, original, &account_id, &mailbox, uid, permanent).await {
-        Ok(removed) => {
-            let bin_id = match binned {
-                Some((id, true)) if !removed.changed => {
-                    deleted::forget_stamped(state, id, original.clone()).await;
-                    None
-                }
-                other => other.map(|(id, _)| id),
-            };
-            if let (Some(id), true) = (bin_id.clone(), removed.changed) {
-                deleted::landed_stamped(state, id, removed.trash.clone(), removed.trash_uid, original.clone()).await;
-            }
-            Ok(json!({"success": true, "trash": removed.trash, "trashUid": removed.trash_uid, "binId": bin_id}))
-        }
-        Err(f) => {
-            if let Some((id, true)) = binned.filter(|_| !permanent) {
-                deleted::forget_stamped(state, id, original.clone()).await;
-            }
-            Err(f)
-        }
+    let mode = Mode::from_params(params).map_err(Fail::Params)?;
+    let bin = opt_param::<bool>(params, "bin").unwrap_or(true);
+    match delete_one_stamped(state, original.cloned(), Provider::Jmap(account), &account_id, &mailbox, uid, mode, bin).await {
+        Ok(out) => Ok(json!({"success": true, "trash": out.trash, "trashUid": out.trash_uid, "binId": out.bin_id})),
+        Err(Refusal::BinCapture(e)) if is_auth_error(&e.detail()) => Err(Fail::Rpc(e.detail())),
+        Err(Refusal::BinCapture(e)) => Err(Fail::Rpc(e.wire())),
+        Err(Refusal::Server(e)) => Err(Fail::Rpc(e)),
+    }
+}
+
+/// `remove_one` for the delete core: the Trash path and uid the message went
+/// to, and whether anything changed on the server.
+pub(crate) async fn remove_for_delete(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    original: &crate::account_lifecycle::AccountStamp,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    permanent: bool,
+) -> Result<(Option<String>, Option<u32>, bool), String> {
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    match remove_one(state, &acct, original, account_id, mailbox, uid, permanent).await {
+        Ok(r) => Ok((r.trash, r.trash_uid, r.changed)),
+        Err(Fail::Params(e) | Fail::Rpc(e)) => Err(e),
     }
 }
 

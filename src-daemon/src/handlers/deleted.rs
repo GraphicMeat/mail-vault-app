@@ -77,14 +77,21 @@ pub(crate) enum Source<'a> {
 /// to the log.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum CaptureFailure {
-    /// The server (or the local copy it falls back on) did not hand the message over.
+    /// The server did not hand the message over.
     Fetch(String),
-    /// The server did not answer within the body-fetch ceiling.
-    Timeout,
+    /// The server did not answer within the body-fetch ceiling. The text of
+    /// the fetch that ran out, when it named the message (the JMAP body
+    /// fetch's "... UID n from <folder>"), is kept for the log; `None` is the
+    /// capture's own ceiling, `timed out after 45s`.
+    Timeout(Option<String>),
     /// The account is closing or being changed: the capture was not allowed to start or finish.
     Busy,
     /// The deleted-mail bin could not be written.
     BinWrite(String),
+    /// This computer's own copy (the vault, or the bin's record of an
+    /// earlier capture) could not be read. Local storage, never the mail
+    /// server, so it shares `BinWrite`'s `write` reason.
+    LocalRead(String),
 }
 
 /// The catalog key a busy account travels as.
@@ -95,9 +102,9 @@ impl CaptureFailure {
     pub(crate) fn reason(&self) -> &'static str {
         match self {
             Self::Fetch(_) => "fetch",
-            Self::Timeout => "timeout",
+            Self::Timeout(_) => "timeout",
             Self::Busy => "busy",
-            Self::BinWrite(_) => "write",
+            Self::BinWrite(_) | Self::LocalRead(_) => "write",
         }
     }
 
@@ -105,8 +112,8 @@ impl CaptureFailure {
     /// this type replaced, so a caller that matches it (`is_auth_error`) still can.
     pub(crate) fn detail(&self) -> String {
         match self {
-            Self::Fetch(e) | Self::BinWrite(e) => e.clone(),
-            Self::Timeout => format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()),
+            Self::Fetch(e) | Self::BinWrite(e) | Self::LocalRead(e) | Self::Timeout(Some(e)) => e.clone(),
+            Self::Timeout(None) => format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()),
             Self::Busy => KEYCHAIN_BUSY.to_owned(),
         }
     }
@@ -116,15 +123,26 @@ impl CaptureFailure {
         format!("E_BIN_CAPTURE:{}: {}", self.reason(), self.detail())
     }
 
-    /// A string error from a read: a busy account and a ceiling that ran out
-    /// keep their own reason, anything else is the server not handing over.
-    fn read(e: String) -> Self {
+    /// A string error from a server read: a busy account and a ceiling that
+    /// ran out keep their own reason (the timeout its text, which names the
+    /// message), anything else is the server not handing over.
+    pub(crate) fn read(e: String) -> Self {
         if e == KEYCHAIN_BUSY {
             Self::Busy
         } else if crate::handlers::jmap_bridge::is_timeout_text(&e) {
-            Self::Timeout
+            Self::Timeout(Some(e))
         } else {
             Self::Fetch(e)
+        }
+    }
+
+    /// A string error from a read of this computer's own copy: a busy
+    /// account stays busy, anything else is local storage, never the server.
+    fn local(e: String) -> Self {
+        if e == KEYCHAIN_BUSY {
+            Self::Busy
+        } else {
+            Self::LocalRead(e)
         }
     }
 }
@@ -167,9 +185,9 @@ pub(crate) async fn capture(
     mailbox: &str,
     uid: u32,
     source: Source<'_>,
-) -> Result<Option<(String, bool)>, String> {
-    let original = state.account_lifecycle.capture(account_id).map_err(|_| KEYCHAIN_BUSY.to_owned())?;
-    capture_stamped(state, original, account_id, mailbox, uid, source).await.map_err(|e| e.detail())
+) -> Result<Option<(String, bool)>, CaptureFailure> {
+    let original = state.account_lifecycle.capture(account_id).map_err(|_| CaptureFailure::Busy)?;
+    capture_stamped(state, original, account_id, mailbox, uid, source).await
 }
 
 pub(crate) async fn capture_stamped(
@@ -185,7 +203,7 @@ pub(crate) async fn capture_stamped(
     let local = if bound {
         None
     } else {
-        crate::raw_message::local_message_stamped(state, &original, mailbox, uid, false).await.map_err(CaptureFailure::read)?
+        crate::raw_message::local_message_stamped(state, &original, mailbox, uid, false).await.map_err(CaptureFailure::local)?
     };
     let (raw, server_flags) = match local {
         Some(raw) => (Some(raw.to_vec()), None),
@@ -212,7 +230,7 @@ pub(crate) async fn capture_stamped(
                     // copy its first attempt kept.
                     Ok(Ok(_)) => return kept_already(state, account_id, mailbox, uid).await,
                     Ok(Err(e)) => return Err(CaptureFailure::read(e)),
-                    Err(_) => return Err(CaptureFailure::Timeout),
+                    Err(_) => return Err(CaptureFailure::Timeout(None)),
                 }
             }
             Source::Jmap { config } => match crate::handlers::jmap_bridge::fetch_for_capture(
@@ -345,7 +363,7 @@ async fn kept_already(state: &Arc<DaemonState>, account_id: &str, mailbox: &str,
         .await
         .and_then(|r| r)
         .map(|id| id.map(|id| (id, false)))
-        .map_err(CaptureFailure::BinWrite)
+        .map_err(CaptureFailure::LocalRead)
 }
 
 /// The delete it was captured for did not happen: a failed delete is
@@ -831,7 +849,8 @@ mod tests {
     #[test]
     fn a_capture_failure_wires_as_reason_then_detail() {
         assert_eq!(CaptureFailure::Fetch("no body".into()).wire(), "E_BIN_CAPTURE:fetch: no body");
-        assert_eq!(CaptureFailure::Timeout.wire(), "E_BIN_CAPTURE:timeout: timed out after 45s");
+        assert_eq!(CaptureFailure::Timeout(None).wire(), "E_BIN_CAPTURE:timeout: timed out after 45s");
+        assert_eq!(CaptureFailure::LocalRead("read vault copy: denied".into()).wire(), "E_BIN_CAPTURE:write: read vault copy: denied");
         assert_eq!(CaptureFailure::Busy.wire(), "E_BIN_CAPTURE:busy: errors.keychainBusy");
         assert_eq!(CaptureFailure::BinWrite("create deleted bin: denied".into()).wire(), "E_BIN_CAPTURE:write: create deleted bin: denied");
     }
@@ -847,9 +866,21 @@ mod tests {
     #[test]
     fn a_read_error_keeps_its_own_reason() {
         assert_eq!(CaptureFailure::read("errors.keychainBusy".into()), CaptureFailure::Busy);
-        assert_eq!(CaptureFailure::read("Timed out after 45s fetching message UID 3 from INBOX".into()), CaptureFailure::Timeout);
-        assert_eq!(CaptureFailure::read("timed out after 45s".into()), CaptureFailure::Timeout);
+        let named = "Timed out after 45s fetching message UID 3 from INBOX";
+        assert_eq!(CaptureFailure::read(named.into()), CaptureFailure::Timeout(Some(named.into())));
+        assert_eq!(CaptureFailure::read(named.into()).wire(), format!("E_BIN_CAPTURE:timeout: {named}"), "the uid and folder stay in the detail");
+        assert_eq!(CaptureFailure::read("timed out after 45s".into()).reason(), "timeout");
         assert_eq!(CaptureFailure::read("Server returned no body".into()), CaptureFailure::Fetch("Server returned no body".into()));
+    }
+
+    /// A failed read of this computer's own copy blames local storage, never
+    /// the mail server; a busy account stays busy.
+    #[test]
+    fn a_local_read_error_is_local_storage_not_the_server() {
+        assert_eq!(CaptureFailure::local("errors.keychainBusy".into()), CaptureFailure::Busy);
+        let e = CaptureFailure::local("Permission denied (os error 13)".into());
+        assert_eq!(e, CaptureFailure::LocalRead("Permission denied (os error 13)".into()));
+        assert_eq!(e.reason(), "write");
     }
 
     struct RecoveryGate {

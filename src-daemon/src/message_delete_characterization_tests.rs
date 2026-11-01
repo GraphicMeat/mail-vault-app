@@ -107,7 +107,7 @@ impl Mode {
     }
 }
 
-const RAW: &str = "From: Ann <ann@example.com>\r\nTo: user@example.com\r\nSubject: Keep me\r\n\
+pub(crate) const RAW: &str = "From: Ann <ann@example.com>\r\nTo: user@example.com\r\nSubject: Keep me\r\n\
                    Date: Thu, 01 Jan 2015 00:00:00 +0000\r\nMessage-ID: <keep1@example.com>\r\n\r\nThe body.\r\n";
 
 /// What a run did, beyond the response.
@@ -155,12 +155,12 @@ pub(crate) enum BinCopy {
     Nothing,
 }
 
-fn plain_state(dir: &Path) -> Arc<DaemonState> {
+pub(crate) fn plain_state(dir: &Path) -> Arc<DaemonState> {
     std::fs::create_dir_all(dir).unwrap();
     DaemonState::for_test(dir.to_path_buf(), dir.to_path_buf(), true)
 }
 
-fn seed_accounts(s: &Arc<DaemonState>, json: &str) {
+pub(crate) fn seed_accounts(s: &Arc<DaemonState>, json: &str) {
     std::fs::write(s.app_dir.join("accounts.json"), json).unwrap();
     s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
 }
@@ -171,13 +171,13 @@ fn lease(id: &str) -> crate::account_workflows::AccountLease {
 
 /// The bin directory's path is a regular file: `create_dir_all` fails, so a
 /// capture that has bytes cannot write its copy.
-fn break_the_bin(app_dir: &Path) {
+pub(crate) fn break_the_bin(app_dir: &Path) {
     let dir = bin::bin_dir(app_dir);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::write(&dir, b"not a directory").unwrap();
 }
 
-fn bin_rows(s: &DaemonState) -> Vec<Deleted> {
+pub(crate) fn bin_rows(s: &DaemonState) -> Vec<Deleted> {
     app_db::with(&s.app_dir, |c| bin::list(c, &s.app_dir)).unwrap()
 }
 
@@ -420,10 +420,12 @@ const JMAP_FETCH_DETAIL: &str = "E_JMAP_PROTOCOL: HTTP 404";
 
 fn jmap_expect(permanent: bool, capture: CaptureScenario, r: &Ran) {
     use CaptureScenario::*;
-    // JMAP: a missing stamp is a bare `errors.keychainBusy` for EVERY mode,
-    // not an `E_BIN_CAPTURE` (the bridge refuses before `delete_email` runs).
+    // JMAP with no account stamp (the account is closing): a permanent delete,
+    // whose capture is required, is the same typed busy refusal as IMAP's
+    // (Task 2; it was a bare `errors.keychainBusy` before). Any other delete
+    // cannot address the message without the stamp: a bare `errors.keychainBusy`.
     if capture == Busy {
-        return assert_refused(r, "errors.keychainBusy");
+        return if permanent { assert_capture_refused(r, "busy", "errors.keychainBusy") } else { assert_refused(r, "errors.keychainBusy") };
     }
     if !permanent {
         return match capture {

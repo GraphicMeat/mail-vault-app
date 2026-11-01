@@ -55,6 +55,13 @@ macro_rules! req {
 /// and goes quiet must not spin the caller forever.
 pub(crate) const BODY_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 
+/// The error a body fetch that outlived `BODY_FETCH_TIMEOUT` answers with
+/// (`imap_get_email_light`, the JMAP bridge's body fetches). The one place
+/// it is built: `CaptureFailure::read` knows it by `is_timeout_text`.
+pub(crate) fn body_fetch_timed_out(uid: u32, mailbox: &str) -> String {
+    format!("Timed out after {}s fetching message UID {} from {}", BODY_FETCH_TIMEOUT.as_secs(), uid, mailbox)
+}
+
 /// Same helper as `commands.rs`'s `with_background`, against the daemon's
 /// pool instead of a `tauri::State`. On success the session goes back to the
 /// pool with its last-selected mailbox; on error the guard is dropped (permit
@@ -712,12 +719,7 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
                     return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, conn_lost_message(&e, &account, uid)));
                 }
                 Err(_) => {
-                    let msg = format!(
-                        "Timed out after {}s fetching message UID {} from {}",
-                        BODY_FETCH_TIMEOUT.as_secs(),
-                        uid,
-                        mb_clone
-                    );
+                    let msg = body_fetch_timed_out(uid, &mb_clone);
                     tracing::info!("[CMD] imap_get_email_light: {} {}", msg, timing_fields);
                     return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, msg));
                 }
@@ -857,94 +859,27 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
         }
 
         "imap_delete_email" => {
+            use crate::message_delete::{delete_one, Mode, Provider, Refusal};
             let account = req!(account_arg(&id, params));
             let uid = req!(u32_arg(&id, params, "uid"));
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
-            let permanent = params.get("permanent").and_then(Value::as_bool).unwrap_or(false);
-            // Into the deleted-mail bin first (`handlers::deleted`), whole,
-            // unless the caller opts out (a purge of every copy, a cleanup
-            // rule over mail the vault already holds). A permanent delete
-            // that cannot be captured is refused: the bin would be its only
-            // copy. A message already gone from the server has nothing to keep.
-            let account_id = params.get("account").and_then(|a| a.get("id")).and_then(Value::as_str);
-            let mut bin_original = None;
-            let binned = match account_id.filter(|_| params.get("bin").and_then(Value::as_bool).unwrap_or(true)) {
-                Some(account_id) => {
-                    let captured = match state.account_lifecycle.capture(account_id) {
-                        Ok(original) => {
-                            bin_original = Some(original.clone());
-                            crate::handlers::deleted::capture_stamped(state, original, account_id, &mailbox, uid, crate::handlers::deleted::Source::Imap { config: &account, permanent, priority: true }).await
-                        }
-                        Err(_) => Err(crate::handlers::deleted::CaptureFailure::Busy),
-                    };
-                    match captured {
-                    Ok(binned) => binned,
-                    Err(e) if permanent => {
-                        tracing::error!("[delete_email] uid={} not deleted: could not keep a copy first: {}", uid, e);
-                        return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e.wire()));
-                    }
-                    Err(e) => {
-                        warn!("[delete_email] uid={} deleted without a bin copy (it moves to Trash): {}", uid, e);
-                        None
-                    }
-                    }
-                },
-                None => None,
+            let mode = match Mode::from_params(params) {
+                Ok(mode) => mode,
+                Err(e) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, e)),
             };
-            // `run_uid_delete`, not `with_priority`: a pooled socket the peer
-            // closed while it sat idle fails this before the SELECT lands,
-            // and the frontend restores the row it had already taken out — a
-            // delete that reads as a message coming back from the dead. See
-            // the pool's own doc for why a uid-addressed delete is the one
-            // mutation safe to re-send. Capabilities are cached when a
-            // session is CREATED, so read them inside the closure, after
-            // checkout — exactly like imap_move_emails below.
-            //
-            // `pool_ref`/`acct` bound outside the closure (not `state`
-            // itself) to match `commands.rs`'s original capture set
-            // byte-for-byte: `run_uid_delete` wants `Fn`, not `FnOnce` (the
-            // dead-socket retry can call it twice), and `&ImapPool`/
-            // `&ImapConfig` are the exact `Copy` references the original
-            // shipped, not a structural guess.
-            let pool_ref: &ImapPool = &state.imap_pool;
-            let acct = &account;
-            let result = state
-                .imap_pool
-                .run_uid_delete(&account, true, |mut session| {
-                    let mailbox = mailbox.clone();
-                    async move {
-                        let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
-                        let outcome = imap::delete_email(&mut session, &mailbox, uid, permanent, has_uidplus)
-                            .await
-                            .map_err(|e| format!("Failed to delete email: {}", e))?;
-                        Ok((outcome, session, Some(mailbox)))
-                    }
-                })
-                .await;
-            match result {
+            // Into the deleted-mail bin first (`handlers::deleted`), unless
+            // the caller opts out (a purge of every copy, a cleanup rule over
+            // mail the vault already holds) or names no account to keep it
+            // under. The sequence is the delete core's (`message_delete`).
+            let account_id = params.get("account").and_then(|a| a.get("id")).and_then(Value::as_str);
+            let bin = account_id.is_some() && params.get("bin").and_then(Value::as_bool).unwrap_or(true);
+            match delete_one(state, Provider::Imap(&account), account_id.unwrap_or_default(), &mailbox, uid, mode, bin).await {
                 // Where the message went, so the caller can offer an undo
                 // instead of a search: both null for a permanent delete.
                 // `binId` names its bin copy, for an undo the server cannot do.
-                Ok(outcome) => {
-                    let bin_id = binned.map(|(bin_id, _)| bin_id);
-                    if let (Some(bin_id), Some(original)) = (bin_id.clone(), bin_original.clone()) {
-                        crate::handlers::deleted::landed_stamped(state, bin_id, outcome.trash.clone(), outcome.trash_uid, original).await;
-                    }
-                    RpcResponse::success(
-                        id,
-                        json!({"success": true, "trash": outcome.trash, "trashUid": outcome.trash_uid, "binId": bin_id}),
-                    )
-                }
-                Err(e) => {
-                    tracing::error!("[delete_email] uid={} failed: {}", uid, e);
-                    // A permanent delete keeps its capture: the EXPUNGE may
-                    // have landed with its reply lost, and then the retry
-                    // finds nothing left to capture. The retry reuses this row.
-                    if let (Some((bin_id, true)), Some(original)) = (binned.filter(|_| !permanent), bin_original) {
-                        crate::handlers::deleted::forget_stamped(state, bin_id, original).await;
-                    }
-                    RpcResponse::error(id, ipc::INTERNAL_ERROR, e)
-                }
+                Ok(out) => RpcResponse::success(id, json!({"success": true, "trash": out.trash, "trashUid": out.trash_uid, "binId": out.bin_id})),
+                Err(Refusal::BinCapture(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e.wire()),
+                Err(Refusal::Server(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
 
@@ -1052,7 +987,8 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
             // empty map on the first call of a process and takes the slow
             // COPY path.
             //
-            // Same `pool_ref`/`acct` binding as imap_delete_email above —
+            // Same `pool_ref`/`acct` binding as imap_delete_email's
+            // (`message_delete::remove_imap`) —
             // `with_priority` is `FnOnce` here so it's not load-bearing for
             // compilation, but kept for the identical capture shape.
             let pool_ref: &ImapPool = &state.imap_pool;

@@ -1421,7 +1421,11 @@ async fn read_imap_identity(
 
 impl MailPorts {
     /// The server half of a purge: the identity re-proved, then the one message removed.
+    /// A purge keeps no bin copy (`bin: false` under the delete core's
+    /// `capture_policy`): its proof is the local evidence `purge_prepare`
+    /// checked, and the purge removes that copy too.
     async fn delete_on_server(&mut self,t:&PurgeTarget,cancel:Arc<AtomicBool>)->Result<(),String> {
+        debug_assert_eq!(crate::message_delete::capture_policy(crate::message_delete::Mode::Permanent, false), crate::message_delete::CapturePolicy::Skip);
         let Some(PurgeProof::Server{identity,origin,email,..})=&t.proof else { return Err("errors.bulkIdentityUncertain".into()); };
         let config=self.config(&t.group()).await?;
         if bulk_worker::origin_hash(&config) != *origin || config.email!=*email || !identity.matches_transport(&config) { return Err("errors.bulkIdentityChanged".into()); }

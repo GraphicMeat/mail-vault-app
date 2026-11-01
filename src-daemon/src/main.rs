@@ -56,6 +56,7 @@ mod launch_resync;
 mod jmap_test_support;
 pub mod llm;
 mod mbox;
+mod message_delete;
 #[cfg(test)]
 mod message_delete_characterization_tests;
 mod mbox_upload;

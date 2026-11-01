@@ -848,7 +848,7 @@ pub async fn delete_local_folder(state: &Arc<DaemonState>, account_id: &str, nam
                 // `Source::Local` reads nothing into this too: leave the message,
                 // the folder then stays and the delete says so.
                 Ok(None) => false,
-                Err(e) => return Err(format!("E_BIN_CAPTURE: {e}")),
+                Err(e) => return Err(e.wire()),
             };
             if !kept {
                 continue;
