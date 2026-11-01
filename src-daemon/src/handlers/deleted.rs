@@ -71,6 +71,28 @@ pub(crate) enum Source<'a> {
     Local,
 }
 
+/// The ceiling on the capture's body fetch. Tests shorten it per app dir
+/// (`set_fetch_ceiling_for_test`) so the timeout path does not take 45s; the
+/// error text keeps naming `BODY_FETCH_TIMEOUT`.
+fn fetch_ceiling(_state: &DaemonState) -> Duration {
+    #[cfg(test)]
+    if let Some(d) = fetch_ceilings().lock().unwrap().get(&_state.app_dir) {
+        return *d;
+    }
+    crate::handlers::imap::BODY_FETCH_TIMEOUT
+}
+
+#[cfg(test)]
+fn fetch_ceilings() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, Duration>> {
+    static CEILINGS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, Duration>>> = std::sync::OnceLock::new();
+    CEILINGS.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+pub(crate) fn set_fetch_ceiling_for_test(state: &DaemonState, ceiling: Duration) {
+    fetch_ceilings().lock().unwrap().insert(state.app_dir.clone(), ceiling);
+}
+
 /// Capture `uid` into the bin before it is deleted. `Ok(Some((id,
 /// created)))`: it is there; `created` is false when an earlier call of the
 /// same delete already put it there. `Ok(None)`: nothing to capture, the
@@ -118,7 +140,7 @@ pub(crate) async fn capture_stamped(
                         Ok((email, session, Some(mb)))
                     }
                 });
-                match tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, fetch).await {
+                match tokio::time::timeout(fetch_ceiling(state), fetch).await {
                     Ok(Ok(Some(email))) if email.uid == uid => {
                         (Some(email.raw_source_bytes), Some(email.flags))
                     }
