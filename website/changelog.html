@@ -72,7 +72,7 @@
   </style>
   <!-- Meatlytics tracker: same tag and ?v= as the sibling pages (website/faq.html), or seo/acquisition tests fail -->
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
-<link rel="stylesheet" href="/assets/english-site.css?v=20261031-brand">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
@@ -127,10 +127,10 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
-      <article class="mb-16" data-version="2.20.0">
+      <article class="mb-16" data-version="2.21.0">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.20.0</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">October 13, 2026</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.21.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">November 1, 2026</span>
           <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
@@ -144,7 +144,251 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"Are you having issues with MailVault?" before Manage Subscription.</strong> Pressing Manage Subscription on the Billing tab, in a free trial or on a paid plan, now raises this as a modal instead of an always-visible section. Under the question it asks anyone having issues to report them, says we care about every one, and that our turnaround is super quick. No carries on to the billing portal. Yes shows Report a bug or suggest a feature, a note that we answer reports and requests very quickly, a link to the GitHub discussion where we say how, and a way to continue to Manage Subscription. Closing the modal stays on the Billing tab. Yes also says we take bug reports seriously and tend to resolve them within 6 to 12 hours or sooner, that no issue is too small to report, and that old email technology and provider specials like Gmail's 2500 MB a day download limit can make some problems slower.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Social export: click a word to redact or reveal it.</strong> In the Email card or App window preview, the Redact tool (on to start with, the eye button on the preview's top left) lets you click any word to mask it everywhere it appears, or click a masked word to show it. The shot is rebuilt once your clicks settle, and Reset clicked words puts the detector's choices back. It works with the redact box off too (only the words you click are masked), clicked words are not remembered between exports, and with the tool off a click does nothing.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Social export: Hide To row.</strong> A switch leaves the To line off the email card's header and out of the App window shot. Cc stays.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Social export: your own branding.</strong> Branding picks the MailVault "made with love by Graphic Meat" lockup, nothing, or any image of your own (kept for next time) under the card.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Social export: Custom colors says what it is.</strong> The custom background swatch is named Custom colors and shows a palette icon, and its two pickers are labelled Start color and End color.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Activate Premium from a link.</strong> After paying on the website, the page that follows opens MailVault through a <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">mailvault://activate</code> link and signs it in with the subscription, no email to type. The link works once and expires after 15 minutes; devices still count against the usual five. Signing in with the email you paid with keeps working.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Safer bulk recovery foundation.</strong> The background helper can read pending selections and discard only the matching operation, without automatically replaying work after a restart. Bulk actions and the Resume/Discard prompt keep their current behavior while the worker migration continues.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The experimental Rust email renderer is in the Mac App Store build.</strong> Settings, Appearance has the same switch as the direct download. It stays off until you turn it on.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>View builder.</strong> See an email's distinctive words, who else writes about them, and turn them into a view. Click Make a view from this email (the wand beside Sender insights) in the reading pane, pick words, then add them to a saved view or make a new view for that account, or for that folder only. Point at a word to see its top senders and subjects.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Views can name their senders, and block mail that does not belong.</strong> In Make a view from this email the sender and its domain are chips beside the words: pick servico.lt with the word Utilities and the view shows only the utility's bills, not the mail you sent your tenants or a newsletter that mentions the word. A sender matches as a whole address or domain, never a piece of one, so n@x.com is not ann@x.com. Keep this email out of the view drops one message, Never show this sender blocks a sender, and Who sends this view's mail lists everyone behind the view with how much they sent, with Allow, Block and Clear on each row and a one-click Hide mail I sent, which covers every account and alias. Edit the view in Settings to undo any rule.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Hide view mail.</strong> A list button keeps mail your views already hold out of your folders. The first click opens a list of your views: pick the ones whose mail should go and press OK. From then on the button has two halves, one that turns the hiding on and off and one that reopens the list; with no view picked, the on/off half is greyed out.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Sender details show the DKIM algorithm and key size.</strong> Next to a passing DKIM result the popover now names the signing algorithm (rsa-sha256, ed25519-sha256) and, once the sender's key has been looked up in DNS, its type and size: RSA 1024, 2048 or 4096-bit, Ed25519, Ed448. The lookup runs when you open the popover and shows in Network Activity. Mail synced before this update shows the algorithm only when its Authentication-Results names one.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Send checks keep one complete message through saving and pop-out windows.</strong> Recipient errors, attachment reminders and send times are checked by the background helper. Editing or changing accounts while a check is pending leaves the draft open, and Send anyway applies only to the message that asked for confirmation.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Local drafts survive interrupted saves and cleanup.</strong> Drafts keep one identity across windows and sender-account changes, with complete revisions saved by the background helper. Discarded, sent and scheduled drafts waiting for cleanup return as cleanup-only retry entries after a restart. Cleanup problems do not resend an accepted email or recreate its schedule.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mailbox headers stay consistent after a server change or reset.</strong> Refresh and cache restore keep old and newly fetched server batches from being treated as one mailbox generation.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Download modes and data limits are read from the background helper.</strong> Settings > Data usage, the daily-limit banner, the not-in-vault row and the download-ahead now show and follow exactly what the helper enforces, instead of a copy of its rules in the app. One visible difference: with Keep Recent or Index Only, a message with no date at all is now downloaded ahead like a recent one, as the helper already kept it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Insights counts its charts in the background helper.</strong> Opening Insights on a large mailbox no longer works through every header inside the window: the helper that syncs your mail reads the headers, builds the sender, day and timeline counts and answers each filter change, while the window shows its progress and stays responsive. The counts are the same as before.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Tracker and link checks moved into the background helper.</strong> The checks that find tracking pixels and suspicious links in a message, and the warnings a list row wears, now run in the helper that syncs your mail instead of the window, with the same results. A message is shown once its check is done, which takes a few milliseconds; if the check cannot run, the message is shown with its remote images held back rather than unchecked.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Help menu on macOS no longer lists three diagnostic probes.</strong> Backup Bookmark Scope, OAuth2 Loopback Bind and Background Agent Registration were developer checks that never belonged in a shipped menu, and the build no longer bundles the throwaway agent behind the last one.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Auto-cleanup rules run in the background helper.</strong> Rules now run once a day even with the window closed, and Run All Now hands the run to the helper, which reports back in Storage settings. A "Delete from server" rule never downloads anything: only mail already saved in your vault leaves the server, after its saved copy is checked again. Mail you wrote in MailVault, mail with an action still waiting to be undone, and accounts with an Archive and delete job running are left alone, and a rule that cannot run (a protected folder, an age under 7 days) now says so on its row. With a backup drive set up, Run All Now also checks the copy on the drive (and only reads it); the daily run cannot reach the drive, so with one set up it leaves the mail on the server until you press Run All Now.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>New-mail banners show the one-time code, with Copy & delete and Delete.</strong> When a single new email carries a sign-in or reset code, its banner shows the code under the sender. On macOS the banner also has two buttons: Copy & delete copies the code and moves the email to the Trash, Delete only moves it there; neither brings the app forward. Windows and Linux banners show the code without the buttons. The code is left out when banners hide previews or privacy mode is on.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>To, Cc and Bcc take addresses as chips.</strong> Like the search box, each address becomes a chip with an x: Enter, a comma, a semicolon, a space after the address or leaving the field commits it, and Backspace in the empty field selects the last chip. Pasting an address, a list (separated by commas, semicolons, spaces or lines) or a mailto: link adds each address as its own chip, with mailto: and anything after a ? dropped, repeats skipped, and a link's cc= and bcc= going to the Cc and Bcc fields. A chip shows the contact's name with the address on hover; click it to edit it in place, drag it onto another recipient field to move it, Shift+click or Ctrl/Cmd+A to select chips and copy or cut them as a comma-separated list. A chip that is not an address gets a red outline, and Send names it instead of sending. Contacts already in the field are no longer suggested.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The view builder offers reference numbers and addresses, not only words.</strong> Make a view from this email now lists reference numbers (an invoice or customer number such as BV530133) and street addresses (such as Mindaugo g. 30-49) in their own labelled rows above the words. It also reads the email's attachments (PDF, Office and text files) and marks the words found only there with a paperclip; the attachment words appear a moment after the rest.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The experimental Rust renderer draws mail in more places.</strong> With it turned on in Settings, Appearance, Colors, it now also draws conversations, chat bubbles, the full message view, the quoted original in compose, the Open in window view, the Cleanup preview, image exports and social cards, with no web view inside the message.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Gmail and Outlook sign-ins stay fresh in the background.</strong> The helper that syncs your mail now renews a Google or Microsoft sign-in itself when it is about to expire, for every action and for the work it does with the window closed (new-mail watching, scheduled sends, Archive and delete, MBOX uploads to the server). Previously the app renewed it only while open, so mail stopped arriving and background jobs paused for a sign-in after an hour with the window closed. Nothing changes in where your sign-in is stored.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Send-as aliases are kept by the helper that syncs your mail.</strong> Adding, removing and looking up an account's aliases (Settings, Accounts, Aliases) now happens in the background helper, which asks Gmail or a JMAP server with the sign-in it holds itself. The automatic lookup runs once per account each time the helper starts, a few seconds after the app opens, one account at a time. Your aliases stay where they were saved.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The experimental Rust renderer moved to Blitz 0.3.0-beta.4.</strong> Mail drawn by it now shows buttons in the system font, leaves <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline"><a></code> tags without a link in the text colour, keeps <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">nowrap</code> table cells on one line, draws text whose fonts are all missing in the default serif font, and draws the outer lines of <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">border-collapse</code> tables on the table's edge.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The helper decides which new mail raises a banner.</strong> Quiet hours, priority senders and the account and folder switches in Settings, Notifications are now applied by the helper that syncs your mail, from your saved settings, instead of by the window. The rules are unchanged. If the helper cannot be reached, the banner is shown, and the notification log in Settings says the rules could not be checked.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Drafts save while you type an address.</strong> A half-typed recipient no longer shows "The draft could not be saved"; the draft keeps exactly what you typed in To, Cc and Bcc, and sending still checks every address.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>You can see what you type in To, Cc and Bcc with many recipients.</strong> The typing space used to shrink to a sliver after a long row of chips; it now moves to its own line.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Security updates for the TLS and DNS libraries.</strong> The helper now uses rustls 0.23.46 and hickory-resolver 0.26.3, which close a TLS 1.3 handshake acceptance flaw and three DNS lookup flaws (an endless retry loop, CNAME records that did not belong, and DNSSEC failures that went unreported).</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>No new-mail banner for mail you sent.</strong> The copy of a message you just sent lands in your Sent folder, and MailVault announced it as new mail. Anything arriving in a Sent folder (an account's own Sent, Sent Items, Gmail's Sent Mail, a folder you chose as Sent, or a localized name such as Gesendet) is now left out of banners, whoever the From says.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search suggestions offer only senders the search can find.</strong> In All Inboxes the suggestions under the search box listed senders from every folder, your own address from Sent mail included, so picking one turned into a from: search that found nothing in the inbox. The list now follows the folder being searched: the inbox in All Inboxes, the open folder otherwise, every folder when the search covers all of them.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message deleted at the mailbox leaves All Inboxes.</strong> Delete a message in webmail or another mail app and it stayed in All Inboxes until you restarted MailVault. It now goes at the next sync, like in the folder itself.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Banners and toasts no longer cover each other.</strong> The selection bar, the undo toast, backup and restore chips and the progress panels now stack along the bottom edge instead of drawing at the same spot.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Sent copies keep their exact local identity.</strong> A reused local UID or duplicate Message-ID cannot make sending overwrite or remove another message. Native ownership evidence survives local Sent-copy cleanup and is cleared explicitly when its account is removed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Backup paths reject unsafe account and folder names.</strong> A name that could escape its folder or alias another path is refused before backup files are read, copied, verified or purged. Invalid old queued purges stay pending while valid work continues.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Searching again and again no longer freezes the app.</strong> A new search now stops the one still running in the background helper, and a folder scan stops within one message instead of finishing the whole folder first. Several quick searches used to leave many scans reading whole folders at once, which could take gigabytes of memory.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Lithuanian verification codes get their bubble.</strong> A mail that says "patvirtinimo kodas" ("confirmation code") or asks you to enter "šį kodą" got no code bubble, because only English and a few other languages' code words were known. Lithuanian "kodas", "patvirtin…" (confirm) and "prisijung…" (sign in) now count; "kodėl" (why) does not.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Codes in password reset emails are found.</strong> A reset email whose subject names no code ("Password Reset Request") and whose code sits only in the body got no code bubble: the body was read only when the subject talked about a code. It is now also read when the subject is about a password reset or account recovery (in every app language), or when the preview text talks about a code.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Corrections now change how mail is sorted.</strong> Sender and subject rules, learned when you correct a category in Email Cleanup or added and edited in Settings, were never applied: the classifier could not read them. New mail from that sender, or with that subject word, now gets the category you chose, on the account where you made the correction. A correction for someone at a shared provider such as gmail.com or outlook.com learns that address, not the whole domain, and a rule for such a whole domain is refused with a message when you save or import it. Mail already sorted keeps its category. A rule only suggests deleting from the server when its category is spam, and a rule with a blank, very short or punctuation-only pattern is ignored instead of matching every message.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Recipient suggestions find your most recent contacts.</strong> Typing a short start of a name in To, Cc or Bcc could leave out people you wrote to recently when many contacts matched; every match is now ranked, most recent first. The Most popular list in the contacts picker now counts past 50 instead of stopping there.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Notifications show the app icon you picked.</strong> Windows and Linux banners now carry the icon chosen in Settings, Appearance, Colors, App icon, instead of always showing the purple one. On macOS the small icon on the left of a banner is fixed by the system to the installed app's, so a non-default pick appears as the thumbnail on the right of the banner instead.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>No more "1664 New Emails" banners.</strong> A refresh could announce a whole mailbox as new mail when its cache was out of step with the folder: a uid range the server had re-issued, a folder total that came up short, a message missing from the middle of the cache, or a switch to another folder or a branch listing while the refresh ran. A banner now counts only messages numbered above everything already cached, in the folder you still have open.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Two emails sent in the same second keep a copy each.</strong> Every email you send is saved on this computer before it goes out. Two that went out within the same second were saved under one number, so the second replaced the first one's copy. Each now gets its own.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>One scrollbar in the reading pane.</strong> Some newsletters and notices (anything sized to the window height) showed a second scrollbar inside the message, next to the pane's own. The message now never scrolls on its own, in single messages and in conversations.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Dragged attachments keep their own name.</strong> Dragging an attachment out of an email, into another email or to Finder, gave the file an internal name (account, folder and message numbers before the real name). It now carries the sender's file name. Attachments already sent with such a name keep it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Long attachment names stay inside the compose window.</strong> An attachment with a long name no longer pushes the compose window wider than its frame; the name is cut short with an ellipsis instead.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Every email goes out exactly as saved.</strong> The copy of a sent email kept on this computer and the email that went out could differ in their date line and internal layout when several emails were sending at once, when the same email was sent twice in a row, or when a failed send was retried. Each send now transmits the saved copy itself, so the two are always the same message.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16" data-version="2.20.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.20.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">October 13, 2026</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Join Discord from Help.</strong> Settings, Help now has a Join Discord button beside Report Bug, matching the sidebar and the report dialog.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An experimental Rust renderer for the reading pane.</strong> Turn it on in Settings, Appearance, Colors to draw a message with Blitz, a Rust HTML engine, instead of the system web view. Mail can never run code in it. If it cannot draw a message, the text is shown instead, with an offer to switch back to the standard renderer. It is experimental and off by default.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The experimental Rust renderer now does more than draw.</strong> Select and copy text, Reply quoting the selected text, the right-click menu, quote and signature folding, search highlights and the mail's Google Fonts now work in it, with known gaps. In the dark theme the menu and the selection highlight stay light. A glyph that only a font's latin-ext file has falls back to the next font. A selection that spans a nested inline box can be highlighted in a different order than it copies. A copy made before the selection has been prepared is plain text only on macOS, and copy writes no RTF format. It stays experimental and off by default.</span>
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
@@ -182,6 +426,33 @@
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Open or save a picture in an email.</strong> Double-click a picture in the body of an email to open it in Preview on a Mac, or in your default image viewer on Windows and Linux. In the reading pane, right-click it for Open in Preview (Open Image on Windows and Linux) and Save As. This works for pictures sent inside the email; a picture loaded from the web is left alone, and an SVG drawing can be saved but is not opened.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The experimental Rust renderer now does dark mode.</strong> With the Rust renderer turned on in Settings, Appearance, Colors, mail in dark mode gets the same colors as the standard renderer, including colors set inside the message, table backgrounds, CSS variables and pictures embedded in the message as backgrounds (SVG pictures keep their own colors).</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pictures in SVG format now draw in the experimental Rust renderer.</strong> They were left out before. A picture in SVG format is drawn but cannot read files on your computer or fetch anything from the web.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The experimental Rust renderer lays out mail much closer to the standard renderer.</strong> Tables (column widths, cell padding and spacing, borders, row heights, vertical alignment), line spacing and fonts now line up with the standard view, so fewer messages wrap or shift differently. A few messages still differ.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Network Activity describes web content correctly.</strong> Its note said that web content inside emails is not listed; it now says that the standard renderer loads remote images there (counted, not listed), plus linked fonts and styles in an email opened in its own window, that the Rust renderer lists its remote images as Email images, and that with either renderer the Google Fonts an email uses are downloaded by the app (not with tracker blocking on) and listed as Fonts, the Rust renderer loading nothing else.</span>
+            </li>
           </ul>
         </div>
 
@@ -193,6 +464,10 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The screen-reader list of links no longer shows addresses in privacy mode.</strong> With the experimental Rust renderer, privacy mode now hides each link's address from screen readers and reads only the link's visible text; a link with no visible text is left out of the list.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Saved views open fast, and show they are loading.</strong> Opening a view such as one filtered by sender could take ten seconds with many accounts, while the list still showed the folder you came from under the view's name, with that folder's count and dates. The list now shows placeholder rows until the view's mail arrives. The view's mail is read in one pass over all your accounts instead of one pass per account. The counts beside your views are worked out one at a time and no longer hold up the view you open.</span>
