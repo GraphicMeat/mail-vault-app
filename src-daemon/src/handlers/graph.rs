@@ -282,7 +282,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             bin_original = Some(original.clone());
                             crate::handlers::deleted::capture_stamped(state, original, &account_id, &mailbox, uid as u32, source).await
                         }
-                        Err(_) => Err("errors.keychainBusy".to_owned()),
+                        Err(_) => Err(crate::handlers::deleted::CaptureFailure::Busy),
                     };
                     captured
                         .unwrap_or_else(|e| {

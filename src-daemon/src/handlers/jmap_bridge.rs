@@ -91,6 +91,14 @@ fn is_auth_failure(f: &Fail) -> bool {
     matches!(f, Fail::Rpc(e) if is_auth_error(e))
 }
 
+/// The text of a body fetch that ran out of time, from the IMAP capture
+/// (`timed out after 45s`) or the JMAP body fetch (`Timed out after 45s
+/// fetching message UID ...`, `fetch_body_timed`). The capture's own reason
+/// for it is `timeout`.
+pub(crate) fn is_timeout_text(e: &str) -> bool {
+    e.to_ascii_lowercase().starts_with("timed out after ")
+}
+
 /// `E_JMAP_AUTH:`, the code of `JmapError::Unauthorized`.
 pub(crate) fn is_auth_error(e: &str) -> bool {
     e.starts_with(&format!("{}:", JmapError::Unauthorized.code()))
@@ -1188,10 +1196,10 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
             // An expired or revoked session read nothing: answered as itself,
             // so `answer_with_retry` connects again and runs the delete once
             // more, capture first.
-            Err(e) if permanent && is_auth_error(&e) => return Err(Fail::Rpc(e)),
+            Err(e) if permanent && is_auth_error(&e.detail()) => return Err(Fail::Rpc(e.detail())),
             Err(e) if permanent => {
                 tracing::error!("[jmap] delete uid={} not deleted: could not keep a copy first: {}", uid, e);
-                return Err(Fail::Rpc(format!("E_BIN_CAPTURE: {e}")));
+                return Err(Fail::Rpc(e.wire()));
             }
             Err(e) => {
                 warn!("[jmap] delete uid={} goes ahead: could not keep a bin copy first (the server keeps it): {}", uid, e);

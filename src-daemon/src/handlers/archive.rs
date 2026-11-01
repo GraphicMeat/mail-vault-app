@@ -154,7 +154,7 @@ async fn capture_all(
             let mut captured = crate::handlers::deleted::capture_stamped(state, original.clone(), account_id, mailbox, uid, source()).await;
             // A JMAP session that expired or was revoked read nothing: forgotten,
             // and the copy is tried once more on a fresh one.
-            if config.uses_jmap() && matches!(&captured, Err(e) if crate::handlers::jmap_bridge::is_auth_error(e)) {
+            if config.uses_jmap() && matches!(&captured, Err(e) if crate::handlers::jmap_bridge::is_auth_error(&e.detail())) {
                 state.jmap.forget(config);
                 captured = crate::handlers::deleted::capture_stamped(state, original.clone(), account_id, mailbox, uid, source()).await;
             }

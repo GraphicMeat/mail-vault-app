@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A permanent delete that could not keep its copy first now says why. Instead of one sentence for every case, the message says whether the mail server did not hand the message over, took too long, the account was busy, or MailVault could not write to its storage folder, and what to do. The email stays undeleted, as before.
+
 ## [2.21.0] - 2026-11-01
 
 - **The experimental Rust renderer can draw on the graphics card.** With the Rust renderer turned on in Settings, Appearance, Colors, a new switch below it paints messages with the graphics card (Metal on macOS, DirectX 12 or Vulkan on Windows, Vulkan on Linux). The row checks the graphics card first and names it, or says why it cannot be used and what to install, with links to the driver pages for Windows and Linux, in the app's language where the vendor has one. The switch needs no restart. If the graphics card fails while drawing, mail goes on drawing on the processor for the rest of the session. The graphics driver takes extra memory, so the switch stays off by default.

@@ -378,6 +378,17 @@ fn assert_refused(r: &Ran, prefix: &str) {
     assert!(r.bin.is_empty(), "no bin row for a delete that did not happen");
 }
 
+/// A capture refusal names its cause: `E_BIN_CAPTURE:<reason>: <detail>`, with
+/// the daemon's own `detail` kept for the log. Nothing on the server changed.
+fn assert_capture_refused(r: &Ran, reason: &str, detail: &str) {
+    let e = r.error();
+    let head = format!("E_BIN_CAPTURE:{reason}: ");
+    assert!(e.starts_with(&head), "expected an error starting {head:?}, got {e:?}");
+    assert!(e[head.len()..].contains(detail), "expected the detail to contain {detail:?}, got {e:?}");
+    assert!(r.in_source && !r.in_trash, "the message is untouched on the server");
+    assert!(r.bin.is_empty(), "no bin row for a delete that did not happen");
+}
+
 fn imap_expect(permanent: bool, capture: CaptureScenario, trash: &str, r: &Ran) {
     use CaptureScenario::*;
     if !permanent {
@@ -394,12 +405,18 @@ fn imap_expect(permanent: bool, capture: CaptureScenario, trash: &str, r: &Ran) 
     }
     match capture {
         Ok => assert_gone_for_good(r, BinCopy::Bytes),
-        FetchErr => assert_refused(r, "E_BIN_CAPTURE: "),
-        Timeout => assert_refused(r, "E_BIN_CAPTURE: timed out after 45s"),
-        Busy => assert_refused(r, "E_BIN_CAPTURE: errors.keychainBusy"),
-        WriteErr => assert_refused(r, "E_BIN_CAPTURE: create deleted bin"),
+        FetchErr => assert_capture_refused(r, "fetch", "Server returned no body for UID 1"),
+        Timeout => {
+            assert_eq!(r.error(), "E_BIN_CAPTURE:timeout: timed out after 45s");
+            assert_capture_refused(r, "timeout", "timed out after 45s");
+        }
+        Busy => assert_capture_refused(r, "busy", "errors.keychainBusy"),
+        WriteErr => assert_capture_refused(r, "write", "create deleted bin"),
     }
 }
+
+/// What the JMAP capture's failed blob download says (the daemon's own text).
+const JMAP_FETCH_DETAIL: &str = "E_JMAP_PROTOCOL: HTTP 404";
 
 fn jmap_expect(permanent: bool, capture: CaptureScenario, r: &Ran) {
     use CaptureScenario::*;
@@ -418,7 +435,8 @@ fn jmap_expect(permanent: bool, capture: CaptureScenario, r: &Ran) {
     }
     match capture {
         Ok => assert_gone_for_good(r, BinCopy::Bytes),
-        FetchErr | WriteErr => assert_refused(r, "E_BIN_CAPTURE: "),
+        FetchErr => assert_capture_refused(r, "fetch", JMAP_FETCH_DETAIL),
+        WriteErr => assert_capture_refused(r, "write", "create deleted bin"),
         Timeout | Busy => unreachable!(),
     }
 }
@@ -575,23 +593,22 @@ async fn delete_imap_permanent_gmail_all_mail_capture_ok() {
 #[tokio::test]
 async fn delete_imap_permanent_gmail_all_mail_capture_fetch_err() {
     let r = run_delete(P::Imap, M::Permanent, C::FetchErr, S::GmailAllMail).await;
-    assert_refused(&r, "E_BIN_CAPTURE: ");
-    println!("GMAIL fetch_err wire error: {}", r.error());
+    assert_capture_refused(&r, "fetch", "Server returned no body for UID 1, but the message is still in [Gmail]/All Mail");
     assert_eq!(r.body_fetches, 1, "the fetch was tried");
 }
 
 #[tokio::test]
 async fn delete_imap_permanent_gmail_all_mail_capture_timeout() {
     let r = run_delete(P::Imap, M::Permanent, C::Timeout, S::GmailAllMail).await;
-    assert_refused(&r, "E_BIN_CAPTURE: timed out after 45s");
-    assert_eq!(r.error(), "E_BIN_CAPTURE: timed out after 45s");
+    assert_eq!(r.error(), "E_BIN_CAPTURE:timeout: timed out after 45s");
+    assert_capture_refused(&r, "timeout", "timed out after 45s");
 }
 
 /// `auto` from All Mail is permanent (`mailbox !== 'INBOX'`): the same refusal.
 #[tokio::test]
 async fn delete_imap_auto_gmail_all_mail_capture_fetch_err() {
     let r = run_delete(P::Imap, M::Auto, C::FetchErr, S::GmailAllMail).await;
-    assert_refused(&r, "E_BIN_CAPTURE: ");
+    assert_capture_refused(&r, "fetch", "Server returned no body for UID 1");
 }
 
 /// A trash-mode delete from All Mail never fetches, so a fetch error does not matter.
@@ -600,6 +617,25 @@ async fn delete_imap_trash_gmail_all_mail_capture_fetch_err() {
     let r = run_delete(P::Imap, M::Trash, C::FetchErr, S::GmailAllMail).await;
     assert_trashed(&r, "[Gmail]/Trash", BinCopy::ByteLess);
     assert_eq!(r.body_fetches, 0);
+}
+
+/// The server no longer has the message the app is deleting (it went in
+/// another client): the capture's fetch answers with no message, which is the
+/// "gone already" path (`kept_already`), not a refusal. No earlier attempt kept
+/// a copy, so nothing is binned and the delete itself goes ahead.
+#[tokio::test]
+async fn delete_imap_permanent_capture_empty_fetch_is_gone_already_not_a_refusal() {
+    std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    let srv = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")).mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"])));
+    let account = json!({"id": "acc1", "email": "user@example.com", "password": "hunter2", "imapHost": srv.host(), "imapPort": srv.port()});
+    let s = plain_state(&std::env::temp_dir().join(format!("mv-delete-char-{}", uuid::Uuid::new_v4())));
+    seed_accounts(&s, r#"[{"id":"acc1"}]"#);
+    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": "INBOX", "permanent": true})).await;
+    let v = resp.result.clone().unwrap_or_else(|| panic!("expected a result, got {:?}", resp.error.as_ref().map(|e| &e.message)));
+    assert_eq!(v["success"], json!(true), "{v}");
+    assert_eq!(v["binId"], Value::Null, "nothing was kept, nothing to name: {v}");
+    assert!(bin_rows(&s).is_empty(), "no bin row");
+    assert_eq!(srv.count_commands("BODY.PEEK[]"), 1, "the capture asked for the message once");
 }
 
 /// The wire default: no `permanent` param at all is a move to Trash.

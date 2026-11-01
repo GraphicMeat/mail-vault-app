@@ -71,6 +71,70 @@ pub(crate) enum Source<'a> {
     Local,
 }
 
+/// Why a capture could not keep its copy, so the refusal can say so instead of
+/// one generic sentence. The wire form is `E_BIN_CAPTURE:<reason>: <detail>`
+/// (`wire`); the app maps `<reason>` to catalog copy and the detail only goes
+/// to the log.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum CaptureFailure {
+    /// The server (or the local copy it falls back on) did not hand the message over.
+    Fetch(String),
+    /// The server did not answer within the body-fetch ceiling.
+    Timeout,
+    /// The account is closing or being changed: the capture was not allowed to start or finish.
+    Busy,
+    /// The deleted-mail bin could not be written.
+    BinWrite(String),
+}
+
+/// The catalog key a busy account travels as.
+const KEYCHAIN_BUSY: &str = "errors.keychainBusy";
+
+impl CaptureFailure {
+    /// `fetch|timeout|busy|write`, the `<reason>` of the wire form.
+    pub(crate) fn reason(&self) -> &'static str {
+        match self {
+            Self::Fetch(_) => "fetch",
+            Self::Timeout => "timeout",
+            Self::Busy => "busy",
+            Self::BinWrite(_) => "write",
+        }
+    }
+
+    /// The daemon's own text, for the log. Unchanged from the string errors
+    /// this type replaced, so a caller that matches it (`is_auth_error`) still can.
+    pub(crate) fn detail(&self) -> String {
+        match self {
+            Self::Fetch(e) | Self::BinWrite(e) => e.clone(),
+            Self::Timeout => format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()),
+            Self::Busy => KEYCHAIN_BUSY.to_owned(),
+        }
+    }
+
+    /// `E_BIN_CAPTURE:<reason>: <detail>`.
+    pub(crate) fn wire(&self) -> String {
+        format!("E_BIN_CAPTURE:{}: {}", self.reason(), self.detail())
+    }
+
+    /// A string error from a read: a busy account and a ceiling that ran out
+    /// keep their own reason, anything else is the server not handing over.
+    fn read(e: String) -> Self {
+        if e == KEYCHAIN_BUSY {
+            Self::Busy
+        } else if crate::handlers::jmap_bridge::is_timeout_text(&e) {
+            Self::Timeout
+        } else {
+            Self::Fetch(e)
+        }
+    }
+}
+
+impl std::fmt::Display for CaptureFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.detail())
+    }
+}
+
 /// The ceiling on the capture's body fetch. Tests shorten it per app dir
 /// (`set_fetch_ceiling_for_test`) so the timeout path does not take 45s; the
 /// error text keeps naming `BODY_FETCH_TIMEOUT`.
@@ -104,8 +168,8 @@ pub(crate) async fn capture(
     uid: u32,
     source: Source<'_>,
 ) -> Result<Option<(String, bool)>, String> {
-    let original = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
-    capture_stamped(state, original, account_id, mailbox, uid, source).await
+    let original = state.account_lifecycle.capture(account_id).map_err(|_| KEYCHAIN_BUSY.to_owned())?;
+    capture_stamped(state, original, account_id, mailbox, uid, source).await.map_err(|e| e.detail())
 }
 
 pub(crate) async fn capture_stamped(
@@ -115,13 +179,13 @@ pub(crate) async fn capture_stamped(
     mailbox: &str,
     uid: u32,
     source: Source<'_>,
-) -> Result<Option<(String, bool)>, String> {
-    if original.id() != account_id { return Err("errors.keychainBusy".into()); }
+) -> Result<Option<(String, bool)>, CaptureFailure> {
+    if original.id() != account_id { return Err(CaptureFailure::Busy); }
     let bound = matches!(&source, Source::Bound { .. });
     let local = if bound {
         None
     } else {
-        crate::raw_message::local_message_stamped(state, &original, mailbox, uid, false).await?
+        crate::raw_message::local_message_stamped(state, &original, mailbox, uid, false).await.map_err(CaptureFailure::read)?
     };
     let (raw, server_flags) = match local {
         Some(raw) => (Some(raw.to_vec()), None),
@@ -147,13 +211,8 @@ pub(crate) async fn capture_stamped(
                     // Gone already: a retry of a delete that landed finds the
                     // copy its first attempt kept.
                     Ok(Ok(_)) => return kept_already(state, account_id, mailbox, uid).await,
-                    Ok(Err(e)) => return Err(e),
-                    Err(_) => {
-                        return Err(format!(
-                            "timed out after {}s",
-                            crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()
-                        ))
-                    }
+                    Ok(Err(e)) => return Err(CaptureFailure::read(e)),
+                    Err(_) => return Err(CaptureFailure::Timeout),
                 }
             }
             Source::Jmap { config } => match crate::handlers::jmap_bridge::fetch_for_capture(
@@ -165,7 +224,7 @@ pub(crate) async fn capture_stamped(
                 // Gone already: a retry of a delete that landed finds the
                 // copy its first attempt kept.
                 Ok(None) => return kept_already(state, account_id, mailbox, uid).await,
-                Err(e) => return Err(e),
+                Err(e) => return Err(CaptureFailure::read(e)),
             },
             Source::Bound { config, identity } => {
                 let fetched = match identity {
@@ -189,17 +248,19 @@ pub(crate) async fn capture_stamped(
                                 });
                         tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, fetched)
                             .await
-                            .map_err(|_| "errors.bulkIdentityUncertain".to_string())??
+                            .map_err(|_| CaptureFailure::Fetch("errors.bulkIdentityUncertain".to_string()))?
+                            .map_err(CaptureFailure::read)?
                             .map(|raw| (raw.raw, raw.flags))
                     }
                     mailvault_core::bulk_worker::Identity::Jmap { mailbox_id, ids } => {
-                        let email_id = ids.get(&uid).ok_or("errors.bulkIdentityUncertain")?;
+                        let email_id = ids.get(&uid).ok_or_else(|| CaptureFailure::Fetch("errors.bulkIdentityUncertain".into()))?;
                         crate::handlers::jmap_bridge::fetch_for_capture_identified(
                             state, config, mailbox, mailbox_id, email_id,
                         )
-                        .await?
+                        .await
+                        .map_err(CaptureFailure::read)?
                     }
-                    _ => return Err("errors.bulkGraphDeleteUnsupported".into()),
+                    _ => return Err(CaptureFailure::Fetch("errors.bulkGraphDeleteUnsupported".into())),
                 };
                 match fetched {
                     Some((raw, flags)) => (Some(raw), Some(flags)),
@@ -214,7 +275,7 @@ pub(crate) async fn capture_stamped(
     let state = Arc::clone(state);
     let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
     blocking(move || {
-        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
+        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| CaptureFailure::Busy)?;
         // The row the list showed, else one parsed from the message itself.
         let listed = crate::custody::with_conn(&state, |c| {
             cache::load_by_uids(c, &account_id, &mailbox, &[uid])
@@ -269,19 +330,22 @@ pub(crate) async fn capture_stamped(
             Ok(kept)
         })
         .map(Some)
+        .map_err(CaptureFailure::BinWrite)
     })
     .await
+    .map_err(CaptureFailure::BinWrite)
     .and_then(|r| r)
 }
 
 /// The bin copy an earlier attempt of this delete kept, if any.
-async fn kept_already(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(String, bool)>, String> {
+async fn kept_already(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(String, bool)>, CaptureFailure> {
     let state = Arc::clone(state);
     let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
     blocking(move || app_db::with(&state.app_dir, |c| bin::find(c, &state.app_dir, &account_id, &mailbox, uid)))
         .await
         .and_then(|r| r)
         .map(|id| id.map(|id| (id, false)))
+        .map_err(CaptureFailure::BinWrite)
 }
 
 /// The delete it was captured for did not happen: a failed delete is
@@ -763,6 +827,30 @@ mod tests {
     use mock_imap::state::{Mailbox, Message};
     use mock_imap::{Action, MockImap, Scenario, Trigger};
     use std::sync::{mpsc, Mutex, OnceLock};
+
+    #[test]
+    fn a_capture_failure_wires_as_reason_then_detail() {
+        assert_eq!(CaptureFailure::Fetch("no body".into()).wire(), "E_BIN_CAPTURE:fetch: no body");
+        assert_eq!(CaptureFailure::Timeout.wire(), "E_BIN_CAPTURE:timeout: timed out after 45s");
+        assert_eq!(CaptureFailure::Busy.wire(), "E_BIN_CAPTURE:busy: errors.keychainBusy");
+        assert_eq!(CaptureFailure::BinWrite("create deleted bin: denied".into()).wire(), "E_BIN_CAPTURE:write: create deleted bin: denied");
+    }
+
+    #[test]
+    fn a_capture_failure_keeps_the_detail_the_string_error_had() {
+        // `is_auth_error` and the logs read the detail, never the wire form.
+        let e = CaptureFailure::Fetch("E_JMAP_AUTH: session expired".into());
+        assert_eq!(e.detail(), "E_JMAP_AUTH: session expired");
+        assert_eq!(e.to_string(), "E_JMAP_AUTH: session expired");
+    }
+
+    #[test]
+    fn a_read_error_keeps_its_own_reason() {
+        assert_eq!(CaptureFailure::read("errors.keychainBusy".into()), CaptureFailure::Busy);
+        assert_eq!(CaptureFailure::read("Timed out after 45s fetching message UID 3 from INBOX".into()), CaptureFailure::Timeout);
+        assert_eq!(CaptureFailure::read("timed out after 45s".into()), CaptureFailure::Timeout);
+        assert_eq!(CaptureFailure::read("Server returned no body".into()), CaptureFailure::Fetch("Server returned no body".into()));
+    }
 
     struct RecoveryGate {
         entered: mpsc::Sender<()>,

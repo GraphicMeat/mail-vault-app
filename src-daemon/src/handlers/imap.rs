@@ -875,13 +875,13 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
                             bin_original = Some(original.clone());
                             crate::handlers::deleted::capture_stamped(state, original, account_id, &mailbox, uid, crate::handlers::deleted::Source::Imap { config: &account, permanent, priority: true }).await
                         }
-                        Err(_) => Err("errors.keychainBusy".to_owned()),
+                        Err(_) => Err(crate::handlers::deleted::CaptureFailure::Busy),
                     };
                     match captured {
                     Ok(binned) => binned,
                     Err(e) if permanent => {
                         tracing::error!("[delete_email] uid={} not deleted: could not keep a copy first: {}", uid, e);
-                        return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("E_BIN_CAPTURE: {e}")));
+                        return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e.wire()));
                     }
                     Err(e) => {
                         warn!("[delete_email] uid={} deleted without a bin copy (it moves to Trash): {}", uid, e);
