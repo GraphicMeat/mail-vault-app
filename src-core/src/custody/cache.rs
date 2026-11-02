@@ -291,15 +291,21 @@ pub fn date_rows_page(conn: &Connection, account: &str, mailbox: &str, after_uid
 const UID_CHUNK: usize = 900;
 
 /// A floor under the folder's UIDNEXT as this computer knows it: the highest
-/// cached uid + 1, or a higher `uidNext` / `syncUidNext` the cache's metadata
-/// recorded from the server. UIDNEXT only grows, so the real one is at or
+/// cached server uid + 1 (a row an mbox import numbered, `IMPORT_UID_BASE` and
+/// up, is never a server's and does not count), or a higher `uidNext` /
+/// `syncUidNext` the cache's metadata recorded from the server. UIDNEXT only
+/// grows, so the real one is at or
 /// above it, and every uid a server allocates later is too. A message the
 /// folder held earlier sits below it only when the cache had seen it: with
 /// nothing cached the floor is whatever the caller adds (the delete's
 /// retired uid + 1). `None`: nothing is known about the folder.
 pub fn uid_watermark(conn: &Connection, account: &str, mailbox: &str) -> Result<Option<u32>, String> {
     let top: Option<i64> = conn
-        .query_row("SELECT max(uid) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get(0))
+        .query_row(
+            "SELECT max(uid) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid < ?3",
+            params![account, mailbox, i64::from(crate::maildir::IMPORT_UID_BASE)],
+            |r| r.get(0),
+        )
         .map_err(err)?;
     let mut floor = top.and_then(|u| u32::try_from(u).ok()).map(|u| u.saturating_add(1));
     if let Some(text) = conn
@@ -2351,6 +2357,25 @@ mod tests {
         assert_eq!(last.len(), 1);
         assert!(date_rows_page(&conn, "a", "INBOX", 5, 2).unwrap().is_empty());
         assert!(date_rows_page(&conn, "a", "Other", 0, 2).unwrap().is_empty());
+    }
+
+    /// The floor is the highest cached SERVER uid + 1, or a higher UIDNEXT the
+    /// metadata kept. A row an mbox import numbered (`IMPORT_UID_BASE` and up)
+    /// is never a server's, so it must not lift the floor to ~3 billion.
+    #[test]
+    fn uid_watermark_is_the_highest_server_uid_plus_one_and_skips_the_import_range() {
+        use crate::maildir::IMPORT_UID_BASE;
+        let (_t, c) = store();
+        assert_eq!(uid_watermark(&c, "a", "INBOX").unwrap(), None, "nothing known");
+        insert(&c, "a", "INBOX", 3, 1);
+        insert(&c, "a", "INBOX", 7, 1);
+        assert_eq!(uid_watermark(&c, "a", "INBOX").unwrap(), Some(8));
+        insert(&c, "a", "INBOX", i64::from(IMPORT_UID_BASE) + 5, 1);
+        assert_eq!(uid_watermark(&c, "a", "INBOX").unwrap(), Some(8), "an import-range row does not lift the floor");
+        insert(&c, "a", "Imported", i64::from(IMPORT_UID_BASE), 1);
+        assert_eq!(uid_watermark(&c, "a", "Imported").unwrap(), None, "only imports: nothing known about the server");
+        c.execute("INSERT INTO header_cache_meta(account_id,mailbox_path,meta_json) VALUES ('a','INBOX','{\"uidNext\":40,\"syncUidNext\":12}')", []).unwrap();
+        assert_eq!(uid_watermark(&c, "a", "INBOX").unwrap(), Some(40), "a higher server UIDNEXT wins");
     }
 
     #[test]
