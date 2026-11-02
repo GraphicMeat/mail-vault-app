@@ -291,8 +291,9 @@ pub fn date_rows_page(conn: &Connection, account: &str, mailbox: &str, after_uid
 const UID_CHUNK: usize = 900;
 
 /// A floor under the folder's UIDNEXT as this computer knows it: the highest
-/// cached server uid + 1 (a row an mbox import numbered, `IMPORT_UID_BASE` and
-/// up, is never a server's and does not count), or a higher `uidNext` /
+/// cached server uid + 1 (a row an mbox import numbered, in the import range
+/// from `message_store::import_uid_floor` up, is never a server's and does not
+/// count), or a higher `uidNext` /
 /// `syncUidNext` the cache's metadata recorded from the server. UIDNEXT only
 /// grows, so the real one is at or above it, and every uid a server allocates
 /// later is too. A message the folder held earlier sits below it only when
@@ -303,7 +304,7 @@ pub fn uid_watermark(conn: &Connection, account: &str, mailbox: &str) -> Result<
     let top: Option<i64> = conn
         .query_row(
             "SELECT max(uid) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid < ?3",
-            params![account, mailbox, i64::from(crate::maildir::IMPORT_UID_BASE)],
+            params![account, mailbox, i64::from(crate::message_store::import_uid_floor())],
             |r| r.get(0),
         )
         .map_err(err)?;

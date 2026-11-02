@@ -724,7 +724,12 @@ pub fn held_uids(root: &Path, account_id: &str, mailbox: &str) -> Option<Vec<u32
 /// Whether `uid` is in the mbox import range (`maildir::IMPORT_UID_BASE` and
 /// up): a number the vault gave an imported message, never a server's.
 pub fn is_import_uid(uid: u32) -> bool {
-    uid >= maildir::IMPORT_UID_BASE
+    uid >= import_uid_floor()
+}
+
+/// The lowest uid of the mbox import range; every server uid is below it.
+pub fn import_uid_floor() -> u32 {
+    maildir::IMPORT_UID_BASE
 }
 
 /// The next uid of the mbox import range above every import-range uid in
