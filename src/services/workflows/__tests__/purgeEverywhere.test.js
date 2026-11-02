@@ -656,14 +656,17 @@ it('bulk-tool delete journals the range, hides its rows for the run, then clears
   const scope = captureBulkScope([1], useMailStore.getState());
   native.start.mockImplementation(async ({ type }) => {
     expect(type).toBe('delete');
-    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: {} });
+    expect(mockQueueOp).toHaveBeenCalledWith(expect.objectContaining({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1] }));
     expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
     expect(useMailStore.getState().deleteTombstones.size).toBe(1);
     return { status: 'complete', errors: 0 };
   });
   await bulkDeleteFromServer(scope);
   expect(native.start).toHaveBeenCalledTimes(1);
-  expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: {} });
+  // The bulk tool's delete is permanent: its entry says so, so the daemon's
+  // replay sends what the user chose, not the folder's default.
+  expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent' } });
+  expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent' } });
   expect(useMailStore.getState().deleteTombstones.size).toBe(0);
   expect(useMailStore.getState().loadEmails).toHaveBeenCalled();
 });
@@ -756,6 +759,7 @@ it('bulk-tool delete with errors takes off only what the run removed and keeps t
   await bulkDeleteFromServer(scope);
   const queued = mockQueueOp.mock.calls[0][0];
   expect(queued.uids).toEqual([1, 2]);
+  expect(queued.arg.mode).toBe('permanent');
   expect(queued.arg.total).toBe(2);
   expect(queued.arg.messages.map((m) => m.uid)).toEqual([1, 2]);
   expect(queued.arg.messages.every((m) => typeof m.subject === 'string' && typeof m.from === 'string')).toBe(true);

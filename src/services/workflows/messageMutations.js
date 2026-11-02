@@ -3260,7 +3260,8 @@ export async function showQueuedRows(entry, uids = entry.uids) {
 // first like any server delete. A clean run clears the journal and lifts the
 // tombstones (the daemon has already taken what it deleted out of the header
 // cache). Anything else leaves the whole range owed: the run cannot say which
-// uids landed, and replayOps re-sending one that did is a no-op on the server.
+// uids landed, and the daemon's replay worker re-sending one that did is a
+// no-op on the server.
 export async function bulkDeleteFromServer(scope) {
   const store = nativePurgeStore;
   const live = store.getState();
@@ -3269,7 +3270,9 @@ export async function bulkDeleteFromServer(scope) {
     .filter(g => !isLocalMailbox(live.localFolders, g.accountId, g.mailbox)
       && !isGraphAccount(live.accounts?.find(a => a.id === g.accountId)))
     .map(g => ({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids }))
-    .map(entry => ({ ...entry, arg: _queuedList(entry, live) }));
+    // `mode`: the bulk tool's delete is permanent, so the daemon's replay of
+    // what it leaves owed is too, whatever the folder (worker `replay_intent`).
+    .map(entry => ({ ...entry, arg: { ..._queuedList(entry, live), mode: 'permanent' } }));
   await Promise.all(journal.map(entry => db.queueOp(entry)));
   _hideDeleted(store, targets, { keys: scope.keys });
   let operation;
