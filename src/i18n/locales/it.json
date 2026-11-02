@@ -748,7 +748,7 @@
   "errors.E_BIN_CAPTURE_FETCH": "Il server di posta non ha consegnato questa email, quindi MailVault non ha potuto conservarne prima una copia. Riprova con una connessione migliore. L'email non è stata eliminata.",
   "errors.E_BIN_CAPTURE_TIMEOUT": "Il server di posta ha impiegato troppo tempo a consegnare questa email, quindi MailVault non ha potuto conservarne prima una copia. Riprova con una connessione migliore. L'email non è stata eliminata.",
   "errors.E_BIN_CAPTURE_BUSY": "Questo account è occupato in questo momento, quindi MailVault non ha potuto conservare prima una copia di questa email. Riprova tra un attimo. L'email non è stata eliminata.",
-  "errors.E_BIN_CAPTURE_WRITE": "MailVault non è riuscito a scrivere nella sua cartella di archiviazione, quindi non ha potuto conservare prima una copia di questa email. Controlla che la cartella sia disponibile e abbia spazio libero. L'email non è stata eliminata.",
+  "errors.E_BIN_CAPTURE_WRITE": "MailVault non è riuscito a leggere o scrivere nella sua cartella di archiviazione, quindi non ha potuto conservare prima una copia di questa email. Controlla che la cartella sia disponibile e abbia spazio libero. L'email non è stata eliminata.",
   "errors.E_UID_GONE": "Il messaggio non è più sul server",
   "errors.E_UID_NOT_IN_MAILDIR": "Quel messaggio non è nella tua cassaforte",
   "errors.E_VAULT_UNAVAILABLE": "La cartella di archiviazione della posta non è disponibile",

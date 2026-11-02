@@ -748,7 +748,7 @@
   "errors.E_BIN_CAPTURE_FETCH": "메일 서버가 이 이메일을 넘겨주지 않아 MailVault가 먼저 사본을 보관하지 못했습니다. 더 나은 연결에서 다시 시도해 주세요. 이메일은 삭제되지 않았습니다.",
   "errors.E_BIN_CAPTURE_TIMEOUT": "메일 서버가 이 이메일을 넘겨주는 데 너무 오래 걸려 MailVault가 먼저 사본을 보관하지 못했습니다. 더 나은 연결에서 다시 시도해 주세요. 이메일은 삭제되지 않았습니다.",
   "errors.E_BIN_CAPTURE_BUSY": "이 계정이 지금 사용 중이라 MailVault가 먼저 이 이메일의 사본을 보관하지 못했습니다. 잠시 후 다시 시도해 주세요. 이메일은 삭제되지 않았습니다.",
-  "errors.E_BIN_CAPTURE_WRITE": "MailVault가 저장 폴더에 쓰지 못해 먼저 이 이메일의 사본을 보관하지 못했습니다. 폴더를 사용할 수 있고 여유 공간이 있는지 확인해 주세요. 이메일은 삭제되지 않았습니다.",
+  "errors.E_BIN_CAPTURE_WRITE": "MailVault가 저장 폴더를 읽거나 쓰지 못해 먼저 이 이메일의 사본을 보관하지 못했습니다. 폴더를 사용할 수 있고 여유 공간이 있는지 확인해 주세요. 이메일은 삭제되지 않았습니다.",
   "errors.E_UID_GONE": "메시지가 서버에 더 이상 없습니다",
   "errors.E_UID_NOT_IN_MAILDIR": "그 메시지는 보관함에 없습니다",
   "errors.E_VAULT_UNAVAILABLE": "메일 저장 폴더를 사용할 수 없습니다",

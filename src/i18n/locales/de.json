@@ -748,7 +748,7 @@
   "errors.E_BIN_CAPTURE_FETCH": "Der Mailserver hat diese E-Mail nicht herausgegeben, daher konnte MailVault vorher keine Kopie aufbewahren. Versuche es mit einer besseren Verbindung erneut. Die E-Mail wurde nicht gelöscht.",
   "errors.E_BIN_CAPTURE_TIMEOUT": "Der Mailserver hat zu lange gebraucht, um diese E-Mail herauszugeben, daher konnte MailVault vorher keine Kopie aufbewahren. Versuche es mit einer besseren Verbindung erneut. Die E-Mail wurde nicht gelöscht.",
   "errors.E_BIN_CAPTURE_BUSY": "Dieses Konto ist gerade beschäftigt, daher konnte MailVault vorher keine Kopie dieser E-Mail aufbewahren. Versuche es in einem Moment erneut. Die E-Mail wurde nicht gelöscht.",
-  "errors.E_BIN_CAPTURE_WRITE": "MailVault konnte nicht in seinen Speicherordner schreiben und daher vorher keine Kopie dieser E-Mail aufbewahren. Prüfe, ob der Ordner verfügbar ist und genügend freien Platz hat. Die E-Mail wurde nicht gelöscht.",
+  "errors.E_BIN_CAPTURE_WRITE": "MailVault konnte seinen Speicherordner nicht lesen oder beschreiben und daher vorher keine Kopie dieser E-Mail aufbewahren. Prüfe, ob der Ordner verfügbar ist und genügend freien Platz hat. Die E-Mail wurde nicht gelöscht.",
   "errors.E_UID_GONE": "Nachricht ist nicht mehr auf dem Server",
   "errors.E_UID_NOT_IN_MAILDIR": "Diese Nachricht liegt nicht in deinem Tresor",
   "errors.E_VAULT_UNAVAILABLE": "Dein Mail-Speicherordner ist nicht verfügbar",

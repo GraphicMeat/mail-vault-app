@@ -87,6 +87,10 @@ describe('the reason copy in every locale', () => {
     }
   });
 
+  it('the write copy covers reading local storage too (the daemon files a failed read of its own copy under the write reason)', () => {
+    expect(en['errors.E_BIN_CAPTURE_WRITE']).toMatch(/read or write/);
+  });
+
   it('gives English four different copies, each saying the email was not deleted', () => {
     expect(new Set(KEYS.map((k) => en[k])).size).toBe(4);
     for (const k of KEYS) expect(en[k]).toMatch(/not deleted\.$/);

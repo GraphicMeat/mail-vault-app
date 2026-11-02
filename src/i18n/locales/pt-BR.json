@@ -748,7 +748,7 @@
   "errors.E_BIN_CAPTURE_FETCH": "O servidor de e-mail não entregou este e-mail, então o MailVault não conseguiu guardar uma cópia antes. Tente novamente com uma conexão melhor. O e-mail não foi excluído.",
   "errors.E_BIN_CAPTURE_TIMEOUT": "O servidor de e-mail demorou demais para entregar este e-mail, então o MailVault não conseguiu guardar uma cópia antes. Tente novamente com uma conexão melhor. O e-mail não foi excluído.",
   "errors.E_BIN_CAPTURE_BUSY": "Esta conta está ocupada no momento, então o MailVault não conseguiu guardar uma cópia deste e-mail antes. Tente novamente em instantes. O e-mail não foi excluído.",
-  "errors.E_BIN_CAPTURE_WRITE": "O MailVault não conseguiu gravar na sua pasta de armazenamento, então não pôde guardar uma cópia deste e-mail antes. Verifique se a pasta está disponível e tem espaço livre. O e-mail não foi excluído.",
+  "errors.E_BIN_CAPTURE_WRITE": "O MailVault não conseguiu ler nem gravar na sua pasta de armazenamento, então não pôde guardar uma cópia deste e-mail antes. Verifique se a pasta está disponível e tem espaço livre. O e-mail não foi excluído.",
   "errors.E_UID_GONE": "A mensagem não está mais no servidor",
   "errors.E_UID_NOT_IN_MAILDIR": "Essa mensagem não está no seu cofre",
   "errors.E_VAULT_UNAVAILABLE": "Sua pasta de armazenamento de correio está indisponível",
