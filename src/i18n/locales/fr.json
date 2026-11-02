@@ -2749,6 +2749,7 @@
   "settings.pendingActions.attempts_one": "Essayé une fois",
   "settings.pendingActions.attempts_other": "Essayé {{count}} fois",
   "settings.pendingActions.notTriedYet": "Pas encore essayé : MailVault l’enverra dès qu’il sera en ligne et pourra lire le mot de passe de ce compte.",
+  "settings.pendingActions.queueUnreadable": "MailVault n’a pas pu lire les suppressions que son assistant en arrière-plan doit encore faire. Elles sont conservées et réessayées ; cette liste peut être incomplète.",
   "settings.preview.answer": "Deux heures, ça me va.",
   "settings.preview.example": "Exemple",
   "settings.preview.exampleOf": "Exemple : {{setting}}",

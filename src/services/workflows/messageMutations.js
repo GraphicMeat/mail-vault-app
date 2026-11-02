@@ -35,17 +35,30 @@ import { t as tr, tErr } from '../../i18n/index.js';
 
 
 /**
- * A delete everywhere (purge) whose run could not finish a target goes again
- * quietly: five more tries, waiting 1, 2, 4, 8 and 16 seconds. Unit tests run
- * the same schedule with no wait. A plain delete has no such loop here: the
- * daemon's delete queue retries it (src-daemon/src/delete_queue.rs).
+ * What the app still sends itself goes again quietly when it fails: five more
+ * tries, waiting 1, 2, 4, 8 and 16 seconds. That is a Graph account's delete
+ * (the daemon's queue cannot replay it) and a delete everywhere (purge) whose
+ * run could not finish a target. Unit tests run the same schedule with no
+ * wait. A queued delete has no such loop here: the daemon's delete queue
+ * retries it (src-daemon/src/delete_queue.rs).
  */
-const PURGE_RETRY = {
+const QUIET_RETRY = {
   retries: 5,
   baseMs: import.meta.env?.MODE === 'test' ? 0 : 1000,
 };
-const purgeRetryDelay = (retry) => PURGE_RETRY.baseMs * 2 ** retry;
+const quietRetryDelay = (retry) => QUIET_RETRY.baseMs * 2 ** retry;
 const _wait = (ms) => (ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve());
+
+async function _withQuietRetries(send) {
+  for (let retry = 0; ; retry++) {
+    try {
+      return await send();
+    } catch (error) {
+      if (retry >= QUIET_RETRY.retries) throw error;
+      await _wait(quietRetryDelay(retry));
+    }
+  }
+}
 
 // The one place a delete that is not queued (Graph, a local-only copy) and
 // failed, or one the queue refused for good, is said.
@@ -980,24 +993,26 @@ export async function deleteMessages(targets, opts = {}) {
   // meanwhile and nothing here waits on it but this workflow.
   const queued = ctxs.filter(c => c.queued);
   const release = _holdSubmitted(queued.map(c => c.tombstone));
-  const answers = _submitGroups(_deleteGroups(queued, state));
-
-  // Offline only what the daemon does not queue waits here (a Graph delete,
-  // under the selection's rules); nothing below may claim it happened.
-  const online = useConnectivityStore.getState().online;
-  const waitsOffline = () => !online && how.offline === 'all';
-
-  // Remove from the UI now. Live, not `state`: a message opened or a row ticked
-  // across the awaits above is the user's (_hideDeleted reads live), and a view
-  // switched to keeps its rows — rows are matched by where they live. The
-  // tombstone stops a stale header cache re-rendering the row.
-  const hidden = _hideDeleted(useMailStore, ctxs.map(_where),
-    how.resolve === 'selection' ? { keys: ctxs.map(c => c.key) } : {});
-  // The result list is not `emails` — it needs telling separately.
-  await pruneSearchResults(ctxs.map(_where));
-
+  let hidden;
   let sent;
+  // From the hold on, every exit lets go of it.
   try {
+    const answers = _submitGroups(_deleteGroups(queued, state));
+
+    // Offline only what the daemon does not queue waits here (a Graph delete,
+    // under the selection's rules); nothing below may claim it happened.
+    const online = useConnectivityStore.getState().online;
+    const waitsOffline = () => !online && how.offline === 'all';
+
+    // Remove from the UI now. Live, not `state`: a message opened or a row
+    // ticked across the awaits above is the user's (_hideDeleted reads live),
+    // and a view switched to keeps its rows — rows are matched by where they
+    // live. The tombstone stops a stale header cache re-rendering the row.
+    hidden = _hideDeleted(useMailStore, ctxs.map(_where),
+      how.resolve === 'selection' ? { keys: ctxs.map(c => c.key) } : {});
+    // The result list is not `emails` — it needs telling separately.
+    await pruneSearchResults(ctxs.map(_where));
+
     sent = await _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified, answers: await answers });
   } finally {
     release();
@@ -1234,7 +1249,9 @@ function _answered(c, answer = { queued: true }, hidden) {
     // Owed: the row stays hidden by its tombstone until `delete-queue-landed`
     // settles it, with what its undo needs kept until then.
     _owedIds.add(c.tombstone);
-    _owedRows.set(c.tombstone, kept);
+    // When this window asked: a later landing never takes the undo slot from a
+    // newer action.
+    _owedRows.set(c.tombstone, { ...kept, at: Date.now() });
     return QUEUED;
   }
   _owedIds.delete(c.tombstone);
@@ -1262,9 +1279,10 @@ function _landedOutcome({ account, accountId, mailbox, uid }, landed, { messageI
   };
 }
 
-// What the daemon does not queue, sent from here once: OFFLINE when it waits,
-// LOCAL for a vault-only copy, undefined for a Graph delete. Throws what
-// failed. No retry: a failure puts the row back for the user to try again.
+// What the daemon does not queue, sent from here: OFFLINE when it waits, LOCAL
+// for a vault-only copy, undefined for a Graph delete. A Graph refusal is
+// retried on QUIET_RETRY's schedule; what still fails is thrown, and the row
+// comes back.
 async function _sendDirect(c, { how, waitsOffline, invoke }) {
   const { uid, accountId, mailbox, account } = c;
   if (c.localOnly) {
@@ -1286,7 +1304,7 @@ async function _sendDirect(c, { how, waitsOffline, invoke }) {
   // server until the next reload put it back.
   const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row: c.row, account });
   if (!graphId) throw new Error(how.noGraphId(uid));
-  await api.graphDeleteMessage(account, graphId, { accountId, mailbox, uid });
+  await _withQuietRetries(() => api.graphDeleteMessage(account, graphId, { accountId, mailbox, uid }));
   return undefined;
 }
 
@@ -1298,13 +1316,24 @@ async function _sendDirect(c, { how, waitsOffline, invoke }) {
 // which uids a submit it is awaiting holds (that submit's own reply settles
 // them, so its events must not settle them twice).
 const _owedIds = new Set();        // target ids the queue owes, as last seen
-const _owedRows = new Map();       // target id -> { messageId, row, view } for a later undo
+const _owedRows = new Map();       // target id -> { messageId, row, view, at } of this window's own queued submit
 const _held = new Map();           // target id -> awaited submits holding it
 const _landedWhileHeld = new Set(); // held target ids an event said landed
 // Target ids a submit's reply landed, until their own `delete-queue-landed`
 // (which can arrive after the reply) has been seen. A minute at most.
 const _settledByReply = new Map();
 const SETTLED_BY_REPLY_MS = 60_000;
+
+/** Test seam: forget what the window remembers about the queue. */
+export function __resetDeleteQueueForTests() {
+  _owedIds.clear();
+  _owedRows.clear();
+  _held.clear();
+  _landedWhileHeld.clear();
+  _settledByReply.clear();
+  _relisting = null;
+  _relistAgain = false;
+}
 
 function _wasSettledByReply(id) {
   const now = Date.now();
@@ -1366,15 +1395,21 @@ export async function onDeleteQueueLanded(payload) {
   for (const id of ids) _owedIds.delete(id);
   _withoutTombstones(ids);
   const account = nativePurgeStore.getState().accounts?.find(a => a.id === accountId) ?? null;
+  // The undo slot is the user's last action. Only a delete this window
+  // submitted and still remembers (used once: a repeated event finds nothing)
+  // may take it: never an earlier session's entry, the bulk tool's leftover,
+  // or over an action newer than the submit.
+  const slot = nativePurgeStore.getState().undo;
+  const newerAction = (asked) => !!slot && !String(slot.labelKey || '').startsWith('undo.deleted') && (slot.at ?? 0) >= asked;
   const outcomes = [];
   for (const { id, landed: l } of mine) {
-    const kept = _owedRows.get(id) || { messageId: null, row: null, view: null };
+    const kept = _owedRows.get(id);
     _owedRows.delete(id);
-    if (l.kind !== 'deleted') continue;
+    if (!kept || l.kind !== 'deleted' || newerAction(kept.at)) continue;
     const outcome = _landedOutcome({ account, accountId, mailbox, uid: l.uid }, l, kept);
     // Only what an undo can address, or a delete that really was permanent: a
-    // move to Trash with no COPYUID and no Message-ID (an entry from an earlier
-    // session) would otherwise read as "deleted permanently", which it is not.
+    // move to Trash with no COPYUID and no Message-ID would otherwise read as
+    // "deleted permanently", which it is not.
     const addressable = outcome.trashUid != null || (outcome.trash && outcome.messageId) || outcome.binId;
     if (addressable || outcome.trash == null) outcomes.push(outcome);
   }
@@ -1391,7 +1426,29 @@ export async function onDeleteQueueLanded(payload) {
  * vault-only folder), shows again. A tombstone the queue never listed is not
  * the queue's to lift (a submit not journalled yet, a Graph delete offline).
  */
-export async function onDeleteQueueChanged() {
+let _relisting = null;
+let _relistAgain = false;
+export function onDeleteQueueChanged() {
+  // One read at a time: a change that arrives during a read asks for one
+  // more after it, so an older answer can never land after a newer one.
+  if (_relisting) {
+    _relistAgain = true;
+    return _relisting;
+  }
+  _relisting = (async () => {
+    try {
+      do {
+        _relistAgain = false;
+        await _relistQueue();
+      } while (_relistAgain);
+    } finally {
+      _relisting = null;
+    }
+  })();
+  return _relisting;
+}
+
+async function _relistQueue() {
   let list;
   try {
     list = await api.deleteQueueList();
@@ -2854,7 +2911,7 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
   await pruneSearchResults(targets.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid })));
   // The rows stay hidden through every try. A target the daemon could not
   // finish (no proof, the server or local step not complete) or a run that
-  // failed outright goes again after PURGE_RETRY's wait, outside the queue
+  // failed outright goes again after QUIET_RETRY's wait, outside the queue
   // turn so later deletes are not held behind the wait. A refused or skipped
   // target is the daemon's answer, not a hiccup: it is not retried. Each
   // outcome is filed under its original hint, the latest try winning.
@@ -2879,8 +2936,8 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
     const again = failure ? runScope.targetHints
       : runScope.targetHints.filter(hint => _purgeRetriable(outcomes.get(originalTargetId(hint))));
     if (operation?.result) result = _mergePurgeResult(result, operation.result, retry ? runScope.targetHints.length : 0);
-    if (!again.length || retry >= PURGE_RETRY.retries) break;
-    await _wait(purgeRetryDelay(retry));
+    if (!again.length || retry >= QUIET_RETRY.retries) break;
+    await _wait(quietRetryDelay(retry));
     const ids = new Set(again.map(_targetId));
     runScope = { ...runScope, targetHints: again, keys: runScope.keys.filter(key => {
       const p = _parseSelKey(key);
@@ -3152,7 +3209,15 @@ function _mergePurgeResult(before, next, retried) {
 // journal, and every replay hands in the entries it read.
 const _hidesRows = (entry) => entry.op === 'delete' || entry.op === 'purge';
 export async function hideQueuedDeletes(ops) {
-  const purges = (ops || await db.readOps()).filter(entry => entry.op === 'purge');
+  let journal = ops || [];
+  if (!ops) {
+    try {
+      journal = await db.readOps();
+    } catch (error) {
+      console.warn('[deleteQueue] Could not read the journal:', error);
+    }
+  }
+  const purges = (journal || []).filter(entry => entry.op === 'purge');
   let deletes = [];
   if (!ops) {
     try {

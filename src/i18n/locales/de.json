@@ -2749,6 +2749,7 @@
   "settings.pendingActions.attempts_one": "Einmal versucht",
   "settings.pendingActions.attempts_other": "{{count}}-mal versucht",
   "settings.pendingActions.notTriedYet": "Noch nicht versucht: MailVault sendet es, sobald es online ist und das Passwort dieses Kontos lesen kann.",
+  "settings.pendingActions.queueUnreadable": "MailVault konnte die Löschungen, die der Hintergrunddienst noch schuldet, nicht lesen. Sie bleiben erhalten und werden erneut versucht; diese Liste ist eventuell unvollständig.",
   "settings.preview.answer": "Zwei Uhr passt mir.",
   "settings.preview.example": "Beispiel",
   "settings.preview.exampleOf": "Beispiel: {{setting}}",

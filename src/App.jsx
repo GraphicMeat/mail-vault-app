@@ -1266,8 +1266,9 @@ function App() {
           try {
             const { hideQueuedDeletes } = await import('./services/workflows/messageMutations');
             // Capped: a daemon still starting must not hold the first paint.
-            // The queue's `delete-queue-changed` and the launch replay hide
-            // them too once the daemon answers.
+            // If the cap wins, the queue's launch sync (wireDeleteQueueEvents
+            // re-reads it once wired) hides the deletes, and the launch replay
+            // hides the purges; that replay never touches delete entries.
             await Promise.race([hideQueuedDeletes(), new Promise(resolve => setTimeout(resolve, 300))]);
           } catch (e) {
             console.warn('[QuickLoad] Could not hide queued deletes:', e);

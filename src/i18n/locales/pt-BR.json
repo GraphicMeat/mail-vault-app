@@ -2749,6 +2749,7 @@
   "settings.pendingActions.attempts_one": "Tentado uma vez",
   "settings.pendingActions.attempts_other": "Tentado {{count}} vezes",
   "settings.pendingActions.notTriedYet": "Ainda não tentado: o MailVault vai enviar assim que estiver online e puder ler a senha desta conta.",
+  "settings.pendingActions.queueUnreadable": "O MailVault não conseguiu ler as exclusões que o assistente em segundo plano ainda deve fazer. Elas continuam guardadas e serão tentadas de novo; esta lista pode estar incompleta.",
   "settings.preview.answer": "Às duas está bom para mim.",
   "settings.preview.example": "Exemplo",
   "settings.preview.exampleOf": "Exemplo: {{setting}}",

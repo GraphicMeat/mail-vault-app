@@ -43,6 +43,10 @@ export function PendingActionsSettings({ focus = false }) {
   const [ops, setOps] = useState([]);
   const [failures, setFailures] = useState(() => new Map());
   const [busy, setBusy] = useState(false);
+  // The delete queue's last answer, kept when a later read fails, and whether
+  // that read failed: an unreachable daemon is not "nothing is waiting".
+  const queueRef = useRef([]);
+  const [queueUnreadable, setQueueUnreadable] = useState(false);
 
   // Both lists live on disk behind the daemon. The journal is re-read after a
   // replay or a cancel from here; the delete queue also when the daemon says
@@ -50,10 +54,18 @@ export function PendingActionsSettings({ focus = false }) {
   const refresh = useCallback(async () => {
     const [list, queue] = await Promise.all([
       db.readOps(),
-      api.deleteQueueList().catch(() => []),
+      api.deleteQueueList().then(
+        (entries) => { setQueueUnreadable(false); return Array.isArray(entries) ? entries : []; },
+        (error) => {
+          console.warn('[pendingActions] Could not read the delete queue:', error);
+          setQueueUnreadable(true);
+          return null;
+        },
+      ),
     ]);
+    if (queue) queueRef.current = queue;
     const journal = (Array.isArray(list) ? list : []).filter(entry => entry.op !== 'delete');
-    setOps([...(Array.isArray(queue) ? queue : []), ...journal].sort((a, b) => (a.at || 0) - (b.at || 0)));
+    setOps([...queueRef.current, ...journal].sort((a, b) => (a.at || 0) - (b.at || 0)));
     setFailures(new Map(db.opFailures()));
   }, []);
 
@@ -73,7 +85,10 @@ export function PendingActionsSettings({ focus = false }) {
   // is started, not awaited, and its events refresh the list as it goes.
   const retryAll = async () => {
     setBusy(true);
-    Promise.resolve().then(() => api.deleteQueueRun({ reason: 'manual' })).then(refresh, () => {});
+    Promise.resolve().then(() => api.deleteQueueRun({ reason: 'manual' })).then(refresh, (error) => {
+      console.warn('[pendingActions] The delete queue could not run now:', error);
+      refresh();
+    });
     try {
       await replayOps({ reason: 'manual' });
     } catch {
@@ -104,11 +119,11 @@ export function PendingActionsSettings({ focus = false }) {
 
   const emailFor = id => accounts.find(a => a.id === id)?.email || id;
   // One entry can hold several uids; the first one with a reason is the reason.
-  // A queued delete carries its own (`failures`, by uid); the rest are this
-  // session's, from the journal replay.
-  const failureOf = (entry, uid) => (entry.op === 'delete'
-    ? entry.failures?.[uid]
-    : failures.get(db.failureKey({ op: entry.op, accountId: entry.accountId, mailbox: entry.mailbox, uid })));
+  // A queued delete carries its own (`failures`, by uid, kept by the daemon);
+  // anything else, and a delete the bulk tool queued and noted itself, has
+  // this session's reason from the app.
+  const failureOf = (entry, uid) => (entry.op === 'delete' ? entry.failures?.[uid] : null)
+    ?? failures.get(db.failureKey({ op: entry.op, accountId: entry.accountId, mailbox: entry.mailbox, uid }));
   const reasonFor = entry => entry.uids.map(uid => failureOf(entry, uid)).find(Boolean)?.message;
   // A delete of several messages keeps all of them listed (messageMutations
   // `_queuedList`): its `uids` are what is still owed, the rest went, unless
@@ -138,8 +153,11 @@ export function PendingActionsSettings({ focus = false }) {
         </button>
       </div>
 
+      {queueUnreadable && (
+        <p role="status" className="text-xs text-mail-danger mb-2">{t('settings.pendingActions.queueUnreadable')}</p>
+      )}
       {ops.length === 0 ? (
-        <p className="text-xs text-mail-text-muted">{t('settings.pendingActions.empty')}</p>
+        !queueUnreadable && <p className="text-xs text-mail-text-muted">{t('settings.pendingActions.empty')}</p>
       ) : (
         <ul className="space-y-2">
           {ops.map(entry => {

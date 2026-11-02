@@ -2752,6 +2752,7 @@
   "settings.pendingActions.attempts_one": "Tried once",
   "settings.pendingActions.attempts_other": "Tried {{count}} times",
   "settings.pendingActions.notTriedYet": "Not tried yet: MailVault sends it once it is online and can read this account's password.",
+  "settings.pendingActions.queueUnreadable": "MailVault could not read the deletes its background helper still owes. They are kept and retried; this list may be incomplete.",
   "settings.preview.answer": "Two works for me.",
   "settings.preview.example": "Example",
   "settings.preview.exampleOf": "Example: {{setting}}",

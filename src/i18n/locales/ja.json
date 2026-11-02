@@ -2749,6 +2749,7 @@
   "settings.pendingActions.attempts_one": "1 回試行済み",
   "settings.pendingActions.attempts_other": "{{count}} 回試行済み",
   "settings.pendingActions.notTriedYet": "まだ試行していません。オンラインになり、このアカウントのパスワードを読み取れるようになると、MailVault が送信します。",
+  "settings.pendingActions.queueUnreadable": "バックグラウンドヘルパーがまだ処理していない削除を MailVault が読み取れませんでした。削除は保持され、再試行されます。この一覧は不完全な可能性があります。",
   "settings.preview.answer": "2時で大丈夫です。",
   "settings.preview.example": "表示例",
   "settings.preview.exampleOf": "表示例：{{setting}}",

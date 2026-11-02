@@ -308,7 +308,9 @@ let _queueWired = false;
  * tombstones and offers the undo, `delete-queue-changed` re-reads what is
  * owed (a delete the replay worker dropped shows again), and
  * `delete-queue-status` (after each background pass) may raise the daily
- * reminder. The app renders; the daemon decides (messageMutations has the
+ * reminder. A restarted helper or a lagging event stream may have dropped
+ * events, so both re-read the queue, and so does wiring itself (the launch
+ * sync). The app renders; the daemon decides (messageMutations has the
  * handlers). Wired with the reconnect replay, once per window.
  */
 export async function wireDeleteQueueEvents() {
@@ -321,9 +323,12 @@ export async function wireDeleteQueueEvents() {
     const { listen } = await import('@tauri-apps/api/event');
     await Promise.all([
       listen('delete-queue-landed', quietly('landed', onDeleteQueueLanded)),
-      listen('delete-queue-changed', quietly('changed', onDeleteQueueChanged)),
+      listen('delete-queue-changed', quietly('changed', () => onDeleteQueueChanged())),
       listen('delete-queue-status', quietly('status', onDeleteQueueStatus)),
+      listen('daemon-reconnected', quietly('reconnected', () => onDeleteQueueChanged())),
+      listen('daemon-events-lagged', quietly('lagged', () => onDeleteQueueChanged())),
     ]);
+    quietly('launch sync', () => onDeleteQueueChanged())();
   } catch (e) {
     // No desktop shell (the web build, a test): there is no daemon to follow.
     log('[deleteQueue] not following the delete queue:', String(e?.message || e));

@@ -145,6 +145,47 @@ describe('pending actions', () => {
   });
 });
 
+describe('when the daemon cannot be asked', () => {
+  it('says the queue could not be read instead of saying nothing is waiting', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockQueueList.mockRejectedValue(new Error('daemon unreachable'));
+
+    render(<PendingActionsSettings />);
+
+    expect(await screen.findByText(/could not read the deletes/i)).toBeTruthy();
+    expect(screen.queryByText(/Nothing is waiting/i)).toBeNull();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('keeps the deletes it last read when a later read fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockQueueList.mockResolvedValue([entry()]);
+    render(<PendingActionsSettings />);
+    await screen.findByText(/a@mock\.test/);
+    await waitFor(() => expect(listeners.has('delete-queue-changed')).toBe(true));
+
+    mockQueueList.mockRejectedValue(new Error('daemon unreachable'));
+    await act(async () => { listeners.get('delete-queue-changed')({ payload: {} }); });
+
+    expect(await screen.findByText(/could not read the deletes/i)).toBeTruthy();
+    expect(screen.getByText(/a@mock\.test/)).toBeTruthy();
+    warn.mockRestore();
+  });
+});
+
+describe('a delete the bulk tool queued', () => {
+  it('shows the reason this session recorded when the daemon kept none', async () => {
+    mockQueueList.mockResolvedValue([entry({ attempts: 0, failures: {} })]);
+    mockOpFailures.mockReturnValue(new Map([['delete|acct-a|INBOX|7', { message: 'NO bulk refused', at: Date.now() }]]));
+
+    render(<PendingActionsSettings />);
+
+    expect(await screen.findByText(/NO bulk refused/)).toBeTruthy();
+    expect(screen.queryByText(/Not tried yet/)).toBeNull();
+  });
+});
+
 describe('a delete of several messages', () => {
   it('keeps every message listed and says which went and which did not', async () => {
     mockQueueList.mockResolvedValue([entry({

@@ -2749,6 +2749,7 @@
   "settings.pendingActions.attempts_one": "Tentato una volta",
   "settings.pendingActions.attempts_other": "Tentato {{count}} volte",
   "settings.pendingActions.notTriedYet": "Non ancora tentato: MailVault lo invierà appena sarà online e potrà leggere la password di questo account.",
+  "settings.pendingActions.queueUnreadable": "MailVault non ha potuto leggere le eliminazioni ancora in sospeso nel suo assistente in background. Restano salvate e vengono ritentate; questo elenco potrebbe essere incompleto.",
   "settings.preview.answer": "Le due vanno bene.",
   "settings.preview.example": "Esempio",
   "settings.preview.exampleOf": "Esempio: {{setting}}",

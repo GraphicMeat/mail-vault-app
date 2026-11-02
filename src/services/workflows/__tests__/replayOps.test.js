@@ -47,6 +47,13 @@ vi.mock('../../authUtils', () => ({ ensureFreshToken: async (a) => a }));
 vi.mock('../../graphConfig', () => ({ isGraphAccount: () => false }));
 
 const mockReplayPurge = vi.fn();
+const mockQueueLanded = vi.fn().mockResolvedValue(undefined);
+const mockQueueChanged = vi.fn().mockResolvedValue(undefined);
+const mockQueueStatus = vi.fn().mockResolvedValue(false);
+const mockListeners = new Map();
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (name, cb) => { mockListeners.set(name, cb); return () => mockListeners.delete(name); },
+}));
 const mockHideQueued = vi.fn().mockResolvedValue(undefined);
 const mockShowQueued = vi.fn().mockResolvedValue(undefined);
 vi.mock('../messageMutations', async (importOriginal) => ({
@@ -55,6 +62,9 @@ vi.mock('../messageMutations', async (importOriginal) => ({
   replayPurge: (...a) => mockReplayPurge(...a),
   hideQueuedDeletes: (...a) => mockHideQueued(...a),
   showQueuedRows: (...a) => mockShowQueued(...a),
+  onDeleteQueueLanded: (...a) => mockQueueLanded(...a),
+  onDeleteQueueChanged: (...a) => mockQueueChanged(...a),
+  onDeleteQueueStatus: (...a) => mockQueueStatus(...a),
 }));
 const mockRemind = vi.fn().mockResolvedValue(false);
 vi.mock('../pendingActionsReminder', () => ({ remindOfUnfinished: (...a) => mockRemind(...a) }));
@@ -72,7 +82,7 @@ vi.mock('../../../stores/mailStore', () => ({
 // to it, and a hand-rolled subscribe would test the fake's semantics.
 vi.mock('../../daemonClient', () => ({ daemonCall: async () => ({ online: true }) }));
 
-import { replayOps, shouldRetryNow, wireReplayOnReconnect } from '../replayOps';
+import { replayOps, shouldRetryNow, wireReplayOnReconnect, wireDeleteQueueEvents } from '../replayOps';
 import { UNDO_TOAST_MS } from '../../../stores/slices/undoSlice';
 import { useConnectivityStore } from '../../../stores/connectivityStore';
 
@@ -249,6 +259,30 @@ describe('replayOps', () => {
     mockMoveEmails.mockRejectedValueOnce(new Error('NO'));
     await replayOps({ reason: 'manual' });
     expect(mockRemind).not.toHaveBeenCalled();
+  });
+});
+
+// The daemon's delete queue reaches the window as events; the handlers live
+// in messageMutations (pinned in deleteMessages.test.js).
+describe('wireDeleteQueueEvents', () => {
+  it('follows the queue events, re-reads the queue at once and after a reconnect or a lag, once per window', async () => {
+    await wireDeleteQueueEvents();
+    await wireDeleteQueueEvents(); // idempotent
+    expect([...mockListeners.keys()].sort()).toEqual([
+      'daemon-events-lagged', 'daemon-reconnected', 'delete-queue-changed', 'delete-queue-landed', 'delete-queue-status',
+    ]);
+    // The launch sync: what the queue owes now, whatever events were missed.
+    await vi.waitFor(() => expect(mockQueueChanged).toHaveBeenCalledTimes(1));
+
+    const landed = { accountId: 'acct1', mailbox: 'INBOX', landed: [{ kind: 'gone', uid: 7 }] };
+    mockListeners.get('delete-queue-landed')({ payload: landed });
+    mockListeners.get('delete-queue-status')({ payload: { kept: 2, online: true } });
+    mockListeners.get('delete-queue-changed')({ payload: {} });
+    mockListeners.get('daemon-reconnected')({ payload: {} });
+    mockListeners.get('daemon-events-lagged')({ payload: {} });
+    await vi.waitFor(() => expect(mockQueueChanged).toHaveBeenCalledTimes(4));
+    expect(mockQueueLanded).toHaveBeenCalledWith(landed);
+    expect(mockQueueStatus).toHaveBeenCalledWith({ kept: 2, online: true });
   });
 });
 

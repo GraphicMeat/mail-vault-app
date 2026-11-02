@@ -2749,6 +2749,7 @@
   "settings.pendingActions.attempts_one": "已尝试 1 次",
   "settings.pendingActions.attempts_other": "已尝试 {{count}} 次",
   "settings.pendingActions.notTriedYet": "尚未尝试：MailVault 联网并能读取此账户的密码后就会发送。",
+  "settings.pendingActions.queueUnreadable": "MailVault 无法读取后台助手尚未完成的删除。这些删除会保留并重试；此列表可能不完整。",
   "settings.preview.answer": "两点没问题。",
   "settings.preview.example": "示例",
   "settings.preview.exampleOf": "示例：{{setting}}",

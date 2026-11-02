@@ -119,7 +119,7 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
-const { deleteMessages, onDeleteQueueLanded, onDeleteQueueChanged, onDeleteQueueStatus, hideQueuedDeletes } = await import('../messageMutations');
+const { deleteMessages, onDeleteQueueLanded, onDeleteQueueChanged, onDeleteQueueStatus, hideQueuedDeletes, __resetDeleteQueueForTests } = await import('../messageMutations');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 
 // What the daemon answers for a group that landed whole.
@@ -184,6 +184,9 @@ beforeEach(() => {
   mockDaemonCall.mockResolvedValue({});
   mockSubmit.mockImplementation(landedAll);
   mockQueueList.mockResolvedValue([]);
+  mockGraphDeleteMessage.mockReset().mockResolvedValue(undefined);
+  // What the app remembers about the queue lives in the module: each case starts clean.
+  __resetDeleteQueueForTests();
   mockReadOps.mockResolvedValue([]);
 });
 
@@ -288,15 +291,51 @@ describe('deleteMessages, one call over many keys', () => {
     expect(useMailStore.getState().error).toMatch(/daemon unreachable/);
   });
 
-  it('a Graph message is deleted by the app itself, once, never through the queue', async () => {
+  it('a Graph message is deleted by the app itself, never through the queue, and a transient refusal is retried', async () => {
     prime({ accounts: [G], emails: [row(7), row(8)] });
     mockGraphDeleteMessage.mockRejectedValueOnce(new Error('graph busy'));
 
     await deleteMessages([{ key: 7 }]);
 
     expect(mockSubmit).not.toHaveBeenCalled();
-    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(1);
+    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(2);
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([8]);
+    expect(useMailStore.getState().deleteTombstones.has('g1|INBOX|7')).toBe(true);
+    expect(useMailStore.getState().error).toBeNull();
+  });
+
+  it('a Graph delete refused on every try comes back and says so', async () => {
+    prime({ accounts: [G], emails: [row(7), row(8)] });
+    mockGraphDeleteMessage.mockRejectedValue(new Error('graph down'));
+
+    await deleteMessages([{ key: 7 }]);
+
+    // The first try and five retries (the same schedule as Delete everywhere's).
+    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(6);
     expect(useMailStore.getState().emails.map(e => e.uid).sort()).toEqual([7, 8]);
+    expect(useMailStore.getState().deleteTombstones.has('g1|INBOX|7')).toBe(false);
+    expect(useMailStore.getState().error).toBe('Delete failed: graph down');
+  });
+
+  it('a reply that answers queued for a uid that landed while it waited counts it done, with no undo', async () => {
+    prime({ emails: [row(7), row(8)] });
+    const reply = deferred();
+    mockSubmit.mockReturnValueOnce(reply.promise);
+    const running = deleteMessages([{ key: 7 }]);
+    await vi.waitFor(() => expect(mockSubmit).toHaveBeenCalled());
+    // Another submit (or the replay worker) lands it first.
+    await onDeleteQueueLanded({ accountId: 'a1', mailbox: 'INBOX', landed: [{ kind: 'deleted', uid: 7, trash: 'Trash', trashUid: 107, binId: null }] });
+    reply.resolve({ landed: [], queued: [7], dropped: [] });
+    const { outcomes } = await running;
+
+    expect(outcomes).toEqual([]);
+    expect(useMailStore.getState().undo).toBeNull();
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([8]);
+    // It is not owed: a later re-list has nothing of it to show again.
+    const { loadEmails } = useMailStore.getState();
+    loadEmails.mockClear();
+    await onDeleteQueueChanged();
+    expect(loadEmails).not.toHaveBeenCalled();
   });
 });
 
@@ -393,6 +432,53 @@ describe('delete-queue-landed', () => {
     expect(useMailStore.getState().undo).toBeNull();
   });
 
+  // The undo slot is the user's last action. Only a delete this window
+  // submitted, and still remembers, may take it, and never over a newer action.
+  const MOVED = { labelKey: 'undo.moved', labelParams: { count: 1 }, run: async () => {} };
+  const landed8 = { accountId: 'a1', mailbox: 'INBOX', landed: [{ kind: 'deleted', uid: 8, trash: 'Trash', trashUid: 108, binId: null }] };
+
+  it('a landing for an entry this window never submitted lifts its tombstone but leaves the undo slot alone', async () => {
+    prime({ emails: [row(7)] });
+    // An earlier session's entry, or what the bulk tool's delete left owed.
+    mockQueueList.mockResolvedValue([{ id: 3, op: 'delete', accountId: 'a1', mailbox: 'INBOX', uids: [8], arg: {}, attempts: 2, failures: {} }]);
+    await hideQueuedDeletes();
+    useMailStore.getState().setUndo(MOVED);
+    const slot = useMailStore.getState().undo;
+
+    await onDeleteQueueLanded(landed8);
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|8')).toBe(false);
+    expect(useMailStore.getState().undo).toBe(slot);
+  });
+
+  it('a second landed event for the same delete leaves the undo slot alone', async () => {
+    prime({ emails: [row(7), row(8)] });
+    mockSubmit.mockResolvedValue({ landed: [], queued: [8], dropped: [] });
+    await deleteMessages([{ key: 8 }]);
+    await onDeleteQueueLanded(landed8);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted' });
+    useMailStore.getState().setUndo(MOVED);
+    const slot = useMailStore.getState().undo;
+
+    await onDeleteQueueLanded(landed8);
+
+    expect(useMailStore.getState().undo).toBe(slot);
+  });
+
+  it('a late landing does not replace a newer action the user took meanwhile', async () => {
+    prime({ emails: [row(7), row(8)] });
+    mockSubmit.mockResolvedValue({ landed: [], queued: [8], dropped: [] });
+    await deleteMessages([{ key: 8 }]);
+    // Same millisecond or later: the move is newer than the submit.
+    useMailStore.getState().setUndo(MOVED);
+    const slot = useMailStore.getState().undo;
+
+    await onDeleteQueueLanded(landed8);
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|8')).toBe(false);
+    expect(useMailStore.getState().undo).toBe(slot);
+  });
+
   it('a landing in a folder that is not open leaves the list alone', async () => {
     prime({ emails: [row(7)] });
     useMailStore.setState({ deleteTombstones: new Set(['a1|Work|3']) });
@@ -470,6 +556,21 @@ describe('delete-queue-changed', () => {
   });
 });
 
+describe('delete-queue-changed, one read at a time', () => {
+  it('a change during a re-read reads again after it, never two at once', async () => {
+    prime({ emails: [row(7), row(8)] });
+    const first = deferred();
+    mockQueueList.mockReturnValueOnce(first.promise).mockResolvedValue([]);
+    const a = onDeleteQueueChanged();
+    const b = onDeleteQueueChanged();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mockQueueList).toHaveBeenCalledTimes(1);
+    first.resolve([{ id: 1, op: 'delete', accountId: 'a1', mailbox: 'INBOX', uids: [8], arg: {}, attempts: 0, failures: {} }]);
+    await Promise.all([a, b]);
+    expect(mockQueueList).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('delete-queue-status', () => {
   it('raises the daily reminder only when something is still owed', async () => {
     useSettingsStore.setState({ pendingActionsRemindedAt: 0 });
@@ -501,5 +602,15 @@ describe('at launch', () => {
 
     expect([...useMailStore.getState().deleteTombstones].sort()).toEqual(['a1|INBOX|7', 'a1|INBOX|8']);
     expect(mockQueueList).toHaveBeenCalledTimes(1);
+  });
+
+  it('still hides what the queue owes when the journal will not read', async () => {
+    prime({ emails: [row(7), row(8)] });
+    mockQueueList.mockResolvedValue([{ id: 1, op: 'delete', accountId: 'a1', mailbox: 'INBOX', uids: [7], arg: {}, attempts: 0, failures: {} }]);
+    mockReadOps.mockRejectedValue(new Error('journal unreadable'));
+
+    await hideQueuedDeletes();
+
+    expect([...useMailStore.getState().deleteTombstones]).toEqual(['a1|INBOX|7']);
   });
 });
