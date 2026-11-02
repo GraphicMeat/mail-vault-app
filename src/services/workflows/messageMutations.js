@@ -1824,6 +1824,11 @@ export async function undoLastAction() {
   const { useMailStore } = await import('../../stores/mailStore');
   const state = useMailStore.getState();
   if (state.undo?.canUndo) return state.runUndo();
+  // A restore still on the wire (the slot's own run, spent the moment it
+  // started) owns its bin copies: recovered alongside it, the bin's APPEND
+  // puts a second copy beside the one its MOVE puts back. Wait, then take
+  // only what it left.
+  if (_restoreInFlight) await _restoreInFlight;
   if (!_lastBinned.length) return false;
   try {
     await recoverFromBin(_lastBinned);

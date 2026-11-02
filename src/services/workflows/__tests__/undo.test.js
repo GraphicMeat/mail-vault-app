@@ -506,6 +506,45 @@ describe('undo after a delete', () => {
     expect(error).not.toContain('E_JMAP');
   });
 
+  // A second Cmd+Z while the slot's restore is on the wire: the slot is spent
+  // the moment the first one runs, so the second reaches for the bin. It must
+  // wait for the restore, or `deleted.recover` APPENDs the bin copy beside the
+  // one the MOVE just put back.
+  it('a second Cmd+Z during the restore waits for it and never recovers the same bin copy', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    clearForUndo();
+    let release;
+    mockRestoreMessages.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+
+    const first = undoLastAction();
+    await vi.waitFor(() => expect(mockRestoreMessages).toHaveBeenCalled());
+    const second = undoLastAction();
+    await new Promise((r) => setTimeout(r, 20));
+    const recoveredMeanwhile = mockDaemonCall.mock.calls.some(([m]) => m === 'deleted.recover');
+    // Released whatever happened, so no later case waits on this restore.
+    release({ restored: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, newUid: 41 }], failed: [] });
+    expect(recoveredMeanwhile).toBe(false);
+
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(false);
+    expect(mockDaemonCall).not.toHaveBeenCalledWith('deleted.recover', expect.anything());
+  });
+
+  // What the restore could not put back stays in the bin, and the next Cmd+Z
+  // reaches it there once the restore is over.
+  it('a Cmd+Z after a failed restore recovers the bin copy the restore left', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [], failed: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, error: 'deletedBin.recoverFailed' }] });
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    await expect(undoLastAction()).resolves.toBe(false);
+    await expect(undoLastAction()).resolves.toBe(true);
+    expect(mockDaemonCall).toHaveBeenCalledWith('deleted.recover', { ids: ['b7'], target: 'server' });
+  });
+
   it('Cmd+Z runs the slot while it holds the delete, and the restored message leaves the bin', async () => {
     mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
     mockRestoreMessages.mockImplementation(backAs({ 7: 41 }));
