@@ -1833,10 +1833,20 @@ mod tests {
 
     #[tokio::test]
     async fn a_move_to_trash_that_errors_drops_its_copy() {
-        let server = server(Scenario::new().fault(Trigger::on("MOVE"), Action::Respond("NO".into(), "no".into())).fault(Trigger::on("COPY"), Action::Respond("NO".into(), "no".into())));
-        let s = state(&server);
-        assert!(delete(&s, &server, false).await.error.is_some());
-        assert!(binned(&s).is_empty(), "Trash or the folder still holds it, and the retry captures again");
+        // Refused with nothing run: the folder still holds it, an error.
+        let refused = server(Scenario::new().fault(Trigger::on("MOVE"), Action::RefuseWith("NO".into(), "no".into())).fault(Trigger::on("COPY"), Action::RefuseWith("NO".into(), "no".into())));
+        let s = state(&refused);
+        assert!(delete(&s, &refused, false).await.error.is_some());
+        assert!(binned(&s).is_empty(), "the folder still holds it, and the retry captures again");
+
+        // Run, then answered NO (`Respond` still runs the command): the folder
+        // no longer holds it, so the delete is gone, not an error the queue
+        // would retry for ever, and its copy is dropped all the same.
+        let ran = server(Scenario::new().fault(Trigger::on("MOVE"), Action::Respond("NO".into(), "no".into())).fault(Trigger::on("COPY"), Action::Respond("NO".into(), "no".into())));
+        let s = state(&ran);
+        let r = delete(&s, &ran, false).await;
+        assert!(r.error.is_none(), "{:?}", r.error);
+        assert!(binned(&s).is_empty(), "Trash holds it, with no record of where: no undo by its copy");
     }
 
     #[tokio::test]

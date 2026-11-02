@@ -21,6 +21,11 @@
 //!   attempt made is never dropped here.
 //! - Graph has one delete, a move to Deleted Items, so it is never permanent
 //!   and its capture is at most best effort.
+//! - A refused IMAP move to Trash asks the folder once whether it still holds
+//!   the uid (`imap::uids_present`): absent, the delete answers `gone` (an
+//!   earlier move landed with its reply lost, or another client removed it)
+//!   rather than an error the delete queue would retry for ever. A check
+//!   that fails keeps the move's own error.
 //!
 //! IMAP removes on the priority lane (`run_uid_delete`, `priority: true`): a
 //! click never queues behind a bulk run. The delete queue's background replay
@@ -311,11 +316,47 @@ async fn run(
             Ok(Outcome { trash: removed.trash, trash_uid: removed.trash_uid, bin_id, gone })
         }
         Err(e) => {
-            error!("[delete:{tag}] {account_id}/{mailbox} uid={uid} failed: {e}");
+            // A move to Trash cannot tell "already gone" from its refusal:
+            // the folder can.
+            let gone = match &provider {
+                Provider::Imap(config) if !permanent => uid_absent(state, config, mailbox, uid, priority).await,
+                _ => false,
+            };
+            if gone {
+                warn!("[delete:{tag}] {account_id}/{mailbox} uid={uid}: the move was refused and the folder no longer holds it: gone ({e})");
+            } else {
+                error!("[delete:{tag}] {account_id}/{mailbox} uid={uid} failed: {e}");
+            }
             if let Some((id, true)) = binned.filter(|_| !permanent) {
                 forget(state, id, original).await;
             }
+            if gone {
+                return Ok(Outcome { gone: true, ..Default::default() });
+            }
             Err(Refusal::Server(e))
+        }
+    }
+}
+
+/// Whether `mailbox` is known not to hold `uid` (`UID SEARCH UID`, read
+/// through its tagged OK). Any failure to ask is `false`: not known gone.
+async fn uid_absent(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, priority: bool) -> bool {
+    let checked = state
+        .imap_pool
+        .run_read(account, priority, |mut session| {
+            let mailbox = mailbox.to_string();
+            async move {
+                imap::select_mailbox(&mut session, &mailbox).await?;
+                let present = imap::uids_present(&mut session, &[uid]).await?;
+                Ok((present, session, Some(mailbox)))
+            }
+        })
+        .await;
+    match checked {
+        Ok(present) => !present.contains(&uid),
+        Err(e) => {
+            warn!("[delete] {mailbox} uid={uid}: could not ask whether it is still there: {e}");
+            false
         }
     }
 }

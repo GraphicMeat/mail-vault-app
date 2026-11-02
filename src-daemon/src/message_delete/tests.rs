@@ -256,3 +256,51 @@ async fn imap_delete_email_refuses_an_unknown_mode() {
     assert_eq!(e.code, crate::ipc::INVALID_PARAMS, "{}", e.message);
     assert!(f.in_inbox(), "nothing was deleted");
 }
+
+// ── a move to Trash that cannot tell "already gone" (final review, Important 3) ──
+
+/// The MOVE (and its COPY fallback) is refused for a uid the folder no
+/// longer holds: one presence check (`UID SEARCH UID`) says it is gone, and
+/// the delete answers `gone` instead of an error the queue would retry
+/// forever. `Auto` in INBOX resolves to the same move.
+#[tokio::test]
+async fn a_refused_move_of_a_uid_the_folder_no_longer_holds_is_gone() {
+    for mode in [Mode::Trash, Mode::Auto] {
+        let f = fixture(refuse_the_move());
+        let r = delete_one(&f.s, Provider::Imap(&f.config), "acc1", "INBOX", 5, mode, true).await;
+        let out = r.unwrap_or_else(|e| panic!("{mode:?}: an absent uid is gone, not {e:?}"));
+        assert!(out.gone, "{mode:?}: {out:?}");
+        assert_eq!((out.trash, out.trash_uid, out.bin_id), (None, None, None), "{mode:?}: nothing to undo");
+        assert!(bin_rows(&f.s).is_empty(), "{mode:?}: the capture of a delete that did nothing is dropped");
+        assert!(f.in_inbox(), "{mode:?}: uid 1 untouched");
+        assert!(f.srv.count_commands("SEARCH") >= 1, "{mode:?}: asked the folder");
+    }
+}
+
+/// The uid is still there: the refusal stands.
+#[tokio::test]
+async fn a_refused_move_of_a_uid_still_there_stays_an_error() {
+    let f = fixture(refuse_the_move());
+    let r = f.delete(Mode::Trash, true).await;
+    match &r {
+        Err(Refusal::Server(e)) => assert!(e.contains("refused"), "the original refusal: {e}"),
+        other => panic!("still there: {other:?}"),
+    }
+    assert!(f.in_inbox());
+}
+
+/// The presence check itself fails: nothing is taken as gone, and the
+/// original error is kept.
+#[tokio::test]
+async fn a_presence_check_that_fails_keeps_the_original_error() {
+    let mut faults = refuse_the_move();
+    faults.push((Trigger::on("SEARCH"), Action::RefuseWith("NO".into(), "search refused".into())));
+    let f = fixture(faults);
+    let r = delete_one(&f.s, Provider::Imap(&f.config), "acc1", "INBOX", 5, Mode::Trash, true).await;
+    match &r {
+        Err(Refusal::Server(e)) => {
+            assert!(e.contains("refused") && !e.contains("search refused"), "the delete's own error, not the check's: {e}");
+        }
+        other => panic!("an unanswered check is not gone: {other:?}"),
+    }
+}
