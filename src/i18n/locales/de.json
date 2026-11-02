@@ -1211,6 +1211,7 @@
   "list.confirmedGoneServerNothingElse": "Bestätigt vom Server verschwunden. Sonst hat es niemand: Sichere es.",
   "list.copyDiskAlsoShownWhen": "Eine Kopie liegt auf deiner Festplatte. Wird auch angezeigt, wenn die Serverkopie noch nicht geprüft wurde: Das ist die beruhigende Antwort, kein Beweis, dass der Server sie noch hat.",
   "list.deleteFailed": "Löschen fehlgeschlagen: {{err}}",
+  "list.deleteNotYet": "Noch nicht gelöscht: {{reason}} MailVault versucht es weiter.",
   "list.deleteFailedOnServer_one": "{{count}} konnte nicht vom Server gelöscht werden und blieb lokal unangetastet.",
   "list.deleteFailedOnServer_other": "{{count}} konnten nicht vom Server gelöscht werden und blieben lokal unangetastet.",
   "list.deleteKeptLocal_one": "{{count}} wurde vom Server gelöscht, aber lokal behalten.",

@@ -1211,6 +1211,7 @@
   "list.confirmedGoneServerNothingElse": "Confirmé absent du serveur. Rien d'autre ne le possède : sauvegardez-le.",
   "list.copyDiskAlsoShownWhen": "Une copie est sur votre disque. S'affiche aussi lorsque la copie serveur n'a pas encore été vérifiée : c'est la réponse rassurante, pas une preuve que le serveur l'a toujours.",
   "list.deleteFailed": "Échec de la suppression : {{err}}",
+  "list.deleteNotYet": "Pas encore supprimé : {{reason}} MailVault continue d'essayer.",
   "list.deleteFailedOnServer_one": "{{count}} n'a pas pu être supprimé du serveur et a été laissé intact en local.",
   "list.deleteFailedOnServer_other": "{{count}} n'ont pas pu être supprimés du serveur et ont été laissés intacts en local.",
   "list.deleteKeptLocal_one": "{{count}} a été supprimé du serveur mais conservé en local.",

@@ -227,7 +227,9 @@ async fn a_send_refused_through_every_round_stays_queued_with_its_reason() {
     let f = fixture(refuse_the_move());
     let mut rx = f.s.events.subscribe();
     let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
-    assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![1], dropped: vec![] });
+    let [(1, why)] = reply.refused.as_slice() else { panic!("the refusal is named: {reply:?}") };
+    assert!(why.contains("refused"), "{why}");
+    assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![1], refused: vec![(1, why.clone())], dropped: vec![] });
     assert_eq!(f.moves(), 6, "one send and five retries");
     let owed = f.journal();
     assert_eq!(owed.len(), 1);
@@ -277,7 +279,7 @@ async fn a_message_already_gone_lands_as_gone() {
     let f = fixture(vec![]);
     // uid 5 is not on the server: the permanent delete's capture asks and finds nothing.
     let reply = submit(&f.s, ask(&[5], Mode::Permanent)).await.unwrap();
-    assert_eq!(reply, SubmitReply { landed: vec![Landed::Gone { uid: 5 }], queued: vec![], dropped: vec![] });
+    assert_eq!(reply, SubmitReply { landed: vec![Landed::Gone { uid: 5 }], ..Default::default() });
     assert!(f.journal().is_empty());
     assert!(f.in_inbox(1), "nothing else touched");
 }
@@ -287,7 +289,7 @@ async fn offline_nothing_is_sent_and_everything_is_queued() {
     let f = fixture(vec![]);
     f.s.net.test_set_online(false);
     let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
-    assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![1], dropped: vec![] });
+    assert_eq!(reply, SubmitReply { queued: vec![1], ..Default::default() }, "offline: owed, nothing refused");
     assert_eq!(f.srv.count_commands("SELECT"), 0, "no send");
     let owed = f.journal();
     assert_eq!(owed.len(), 1);
@@ -329,7 +331,7 @@ async fn an_identity_change_is_dropped_and_its_uid_cleared() {
         });
     }
     let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
-    assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![], dropped: vec![(1, "errors.bulkIdentityChanged".into())] });
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, "errors.bulkIdentityChanged".into())], ..Default::default() });
     assert_eq!(sends.load(std::sync::atomic::Ordering::SeqCst), 1, "never retried");
     assert!(f.journal().is_empty());
 }
@@ -338,8 +340,8 @@ async fn an_identity_change_is_dropped_and_its_uid_cleared() {
 async fn a_required_capture_that_fails_stays_queued_not_dropped() {
     let f = fixture(vec![(Trigger::with("FETCH", "BODY.PEEK[]"), Action::RefuseWith("NO".into(), "fetch failed".into()))]);
     let reply = submit(&f.s, ask(&[1], Mode::Permanent)).await.unwrap();
-    assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![1], dropped: vec![] });
     let owed = f.journal();
+    assert_eq!(reply, SubmitReply { queued: vec![1], refused: vec![(1, owed[0].failures[&1].message.clone())], ..Default::default() });
     assert_eq!(owed[0].attempts, 6);
     assert!(owed[0].failures[&1].message.starts_with("E_BIN_CAPTURE:fetch"), "{}", owed[0].failures[&1].message);
     assert!(f.in_inbox(1), "no copy, no delete");
@@ -373,7 +375,7 @@ async fn a_cancel_while_the_entry_is_retried_stops_its_sends() {
     }
     let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
     assert_eq!(sends.load(std::sync::atomic::Ordering::SeqCst), 1, "not retried once cancelled");
-    assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![], dropped: vec![(1, "cancelled".into())] });
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, "cancelled".into())], ..Default::default() });
     assert!(f.journal().is_empty(), "the failure did not bring it back");
     assert_eq!(f.s.delete_queue.held(), 0);
     assert!(f.s.delete_queue.lock().cancelled.is_empty(), "the cancel mark went with the claim");
@@ -394,7 +396,7 @@ async fn a_uid_another_submit_answered_is_never_reported_dropped() {
         }),
     );
     let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
-    assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![1], dropped: vec![] }, "left to the submit that answered it");
+    assert_eq!(reply, SubmitReply { queued: vec![1], ..Default::default() }, "left to the submit that answered it, never refused");
     assert_eq!(f.moves(), 0, "not sent again");
     assert!(f.in_inbox(1), "nothing touched (A's landing is simulated)");
 }
@@ -492,7 +494,33 @@ async fn the_submit_rpc_reads_its_params_and_answers_the_reply() {
     assert_eq!(out["landed"][0]["kind"], "deleted");
     assert_eq!(out["landed"][0]["uid"], 1);
     assert_eq!(out["queued"], json!([]));
+    assert_eq!(out["refused"], json!([]));
     assert_eq!(out["dropped"], json!([]));
     let bad = route(&f.s, "delete_queue.submit", &json!({"accountId": "acc1", "mailbox": "INBOX", "uids": [1], "mode": "shred"}), json!(1)).await.unwrap();
     assert_eq!(bad.error.unwrap().code, ipc::INVALID_PARAMS);
+}
+
+/// Final review, Important 1: a uid refused through every round is answered
+/// `queued` AND named in `refused` with its last reason, so the app can say
+/// why the row went away while it is still owed. Offline (nothing was sent)
+/// names nothing.
+#[tokio::test]
+async fn a_refused_submit_names_each_still_owed_uid_with_its_last_reason() {
+    let f = fixture(vec![(Trigger::with("FETCH", "BODY.PEEK[]"), Action::RefuseWith("NO".into(), "fetch failed".into()))]);
+    let r = route(&f.s, "delete_queue.submit", &json!({"accountId": "acc1", "mailbox": "INBOX", "uids": [1], "mode": "permanent"}), json!(1)).await.unwrap();
+    let out = r.result.expect("answered");
+    assert_eq!(out["queued"], json!([1]), "still owed, as before");
+    let refused = out["refused"].as_array().unwrap_or_else(|| panic!("no refused field: {out}"));
+    assert_eq!(refused.len(), 1, "{out}");
+    assert_eq!(refused[0]["uid"], 1);
+    let reason = refused[0]["reason"].as_str().unwrap();
+    assert!(reason.starts_with("E_BIN_CAPTURE:fetch: "), "{reason}");
+    assert_eq!(f.journal()[0].failures[&1].message, reason, "the same reason the entry keeps");
+
+    let off = fixture(vec![]);
+    off.s.net.test_set_online(false);
+    let r = route(&off.s, "delete_queue.submit", &json!({"accountId": "acc1", "mailbox": "INBOX", "uids": [1], "mode": "trash"}), json!(1)).await.unwrap();
+    let out = r.result.expect("answered");
+    assert_eq!(out["queued"], json!([1]));
+    assert_eq!(out["refused"], json!([]), "offline nothing was refused");
 }

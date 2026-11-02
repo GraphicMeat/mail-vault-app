@@ -4,7 +4,7 @@
 
 - Undoing a delete is now done by MailVault's background helper in one step: it finds the message in Trash, moves every message of a folder back in one go, falls back to the copy MailVault kept when Trash no longer has it, and files the restored message under its new number everywhere. When two copies of one message sit in Trash, the one the delete put there is the one that comes back.
 
-- A delete your mail server refused, or one made offline, is now retried by MailVault's background helper, also with the window closed. It keeps trying every few minutes and as soon as you are back online, and Settings > Unfinished server actions now shows how often it tried and why, also after a restart.
+- A delete your mail server refused, or one made offline, is now retried by MailVault's background helper, also with the window closed. It keeps trying every few minutes and as soon as you are back online, and Settings > Unfinished server actions now shows how often it tried and why, also after a restart. When the server refuses it, a short note says why the email is not deleted yet. A permanent delete whose copy cannot be kept first (a mail server that keeps taking too long to hand the email over) is tried less often after three tries: hourly, then daily. Retry now in Settings still tries it at once.
 
 - A permanent delete that could not keep its copy first now says why. Instead of one sentence for every case, the message says whether the mail server did not hand the message over, took too long, the account was busy, or MailVault could not read or write its storage folder, and what to do. The email stays undeleted, as before.
 

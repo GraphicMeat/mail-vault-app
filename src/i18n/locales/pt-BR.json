@@ -1211,6 +1211,7 @@
   "list.confirmedGoneServerNothingElse": "Confirmado: saiu do servidor. Mais nada tem uma cópia: faça backup.",
   "list.copyDiskAlsoShownWhen": "Há uma cópia no seu disco. Também aparece quando a cópia do servidor ainda não foi verificada: é a resposta tranquila, não prova de que o servidor ainda a tem.",
   "list.deleteFailed": "Falha ao excluir: {{err}}",
+  "list.deleteNotYet": "Ainda não excluído: {{reason}} O MailVault continua tentando.",
   "list.deleteFailedOnServer_one": "{{count}} não pôde ser excluído do servidor e ficou intacto localmente.",
   "list.deleteFailedOnServer_other": "{{count}} não puderam ser excluídos do servidor e ficaram intactos localmente.",
   "list.deleteKeptLocal_one": "{{count}} foi excluído do servidor, mas mantido localmente.",

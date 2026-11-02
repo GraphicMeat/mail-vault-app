@@ -1211,6 +1211,7 @@
   "list.confirmedGoneServerNothingElse": "已确认从服务器消失。别处都没有了：请做好备份。",
   "list.copyDiskAlsoShownWhen": "副本在你的磁盘上。当服务器副本尚未核实时也会这样显示：这是让人安心的说法，并非服务器仍有它的证据。",
   "list.deleteFailed": "删除失败：{{err}}",
+  "list.deleteNotYet": "尚未删除：{{reason}} MailVault 会继续尝试。",
   "list.deleteFailedOnServer_one": "有 {{count}} 封无法从服务器删除，本地保持原样。",
   "list.deleteFailedOnServer_other": "有 {{count}} 封无法从服务器删除，本地保持原样。",
   "list.deleteKeptLocal_one": "有 {{count}} 封已从服务器删除，但本地仍保留。",

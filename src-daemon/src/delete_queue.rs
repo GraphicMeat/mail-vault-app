@@ -98,6 +98,12 @@ pub(crate) struct SubmitReply {
     /// Still owed: refused through every round, offline, or being sent by
     /// another submit right now. In the journal.
     pub queued: Vec<u32>,
+    /// The uids of `queued` the server (or a capture the delete needed)
+    /// refused on their last send, each with that reason: the wire string
+    /// the entry's `failures` keeps (`E_BIN_CAPTURE:<reason>: <detail>`, a
+    /// catalog key, or the server's text). Never one offline, unsent or left
+    /// to another submit.
+    pub refused: Vec<(u32, String)>,
     /// Refused for good, with the reason. Out of the journal.
     pub dropped: Vec<(u32, String)>,
 }
@@ -293,10 +299,13 @@ pub(crate) struct How {
     credentials_count: bool,
     /// Wait for a quiet UI before each uid (`search_index::wait_foreground_quiet`).
     yields: bool,
+    /// Whether a refusal counts one more replay pass for its uid
+    /// (`Failure.passes`, what the worker's backoff reads).
+    counts_pass: bool,
 }
 
-pub(crate) const SUBMIT: How = How { rounds: DELETE_RETRY_MS.len() + 1, priority: true, read: crate::oauth_tokens::Read::Guarded, credentials_count: true, yields: false };
-pub(crate) const REPLAY: How = How { rounds: 1, priority: false, read: crate::oauth_tokens::Read::Quiet, credentials_count: false, yields: true };
+pub(crate) const SUBMIT: How = How { rounds: DELETE_RETRY_MS.len() + 1, priority: true, read: crate::oauth_tokens::Read::Guarded, credentials_count: true, yields: false, counts_pass: false };
+pub(crate) const REPLAY: How = How { rounds: 1, priority: false, read: crate::oauth_tokens::Read::Quiet, credentials_count: false, yields: true, counts_pass: true };
 
 /// Why `send_owed` stopped before its rounds ran out.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -307,13 +316,12 @@ pub(crate) enum Halt {
     Account,
 }
 
-/// `send_owed`'s answer: the reply, how many uids the server refused on
-/// their last send (`refused`, a subset of `reply.queued`), and why it
-/// stopped early.
+/// `send_owed`'s answer: the reply (its `refused`: the uids the server
+/// refused on their last send, a subset of `queued`), and why it stopped
+/// early.
 #[derive(Debug, Default)]
 pub(crate) struct Sent {
     pub reply: SubmitReply,
-    pub refused: usize,
     pub halt: Option<Halt>,
 }
 
@@ -367,7 +375,8 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
     out.reply.queued.extend(busy);
 
     let mut refused_any = false;
-    let mut refused_last: HashSet<u32> = HashSet::new();
+    // Each uid the latest round refused, with its reason.
+    let mut refused_last: BTreeMap<u32, String> = BTreeMap::new();
     for round in 0..how.rounds {
         if pending.is_empty() {
             break;
@@ -474,9 +483,9 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
         }
         if !failed.is_empty() {
             refused_any = true;
-            note_failures(state, &owner, &failed).await;
+            note_failures(state, &owner, &failed, how.counts_pass).await;
         }
-        refused_last = failed.iter().map(|(uid, _)| *uid).collect();
+        refused_last = failed.iter().cloned().collect();
         out.reply.landed.extend(landed);
         out.reply.dropped.extend(dropped);
         pending = failed.into_iter().map(|(uid, _)| uid).chain(unsent.iter().copied()).collect();
@@ -493,7 +502,7 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
             changed(state);
         }
     }
-    out.refused = pending.iter().filter(|uid| refused_last.contains(uid)).count();
+    out.reply.refused = pending.iter().filter_map(|uid| refused_last.get(uid).map(|reason| (*uid, reason.clone()))).collect();
     out.reply.queued.extend(pending);
     out
 }
@@ -660,14 +669,17 @@ async fn note_round(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, pendin
     }
 }
 
-/// Keep the round's refusals: one write per entry, however many uids failed.
-async fn note_failures(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, failed: &[(u32, String)]) {
+/// Keep the round's refusals: one write per entry, however many uids failed,
+/// stamped by the daemon's clock (`state.clock`, the backoff's too). A
+/// replay's round (`pass`) counts one more pass for each refused uid.
+async fn note_failures(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, failed: &[(u32, String)], pass: bool) {
     let by_id = by_owner(owner, failed.iter().cloned());
     let st = Arc::clone(state);
+    let at = u64::try_from(state.clock.now_ms()).unwrap_or(0);
     let result = blocking(move || {
         let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
         st.delete_queue.wrote(by_id.len());
-        by_id.iter().try_for_each(|(id, round)| op_journal::note_failures(&st.app_dir, *id, round))
+        by_id.iter().try_for_each(|(id, round)| op_journal::note_failures_at(&st.app_dir, *id, round, at, pass))
     })
     .await
     .and_then(|r| r);
@@ -743,6 +755,7 @@ fn reply_json(reply: &SubmitReply) -> Value {
     json!({
         "landed": reply.landed,
         "queued": reply.queued,
+        "refused": reply.refused.iter().map(|(uid, reason)| json!({"uid": uid, "reason": reason})).collect::<Vec<_>>(),
         "dropped": reply.dropped.iter().map(|(uid, reason)| json!({"uid": uid, "reason": reason})).collect::<Vec<_>>(),
     })
 }

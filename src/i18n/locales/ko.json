@@ -1211,6 +1211,7 @@
   "list.confirmedGoneServerNothingElse": "서버에서 사라진 것을 확인했습니다. 다른 어디에도 없습니다. 백업하세요.",
   "list.copyDiskAlsoShownWhen": "사본이 디스크에 있습니다. 서버 사본을 아직 확인하지 않았을 때도 이렇게 표시됩니다. 안심용 표시일 뿐, 서버에 아직 있다는 증거는 아닙니다.",
   "list.deleteFailed": "삭제 실패: {{err}}",
+  "list.deleteNotYet": "아직 삭제되지 않았습니다: {{reason}} MailVault가 계속 시도합니다.",
   "list.deleteFailedOnServer_one": "{{count}}건을 서버에서 삭제하지 못해 로컬은 그대로 두었습니다.",
   "list.deleteFailedOnServer_other": "{{count}}건을 서버에서 삭제하지 못해 로컬은 그대로 두었습니다.",
   "list.deleteKeptLocal_one": "{{count}}건을 서버에서 삭제했지만 로컬에는 남겨 두었습니다.",

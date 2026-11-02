@@ -29,6 +29,15 @@ pub struct Failure {
     pub message: String,
     /// Epoch ms.
     pub at: u64,
+    /// Background replay passes (the daemon's worker, not a submit's own
+    /// rounds) that were refused this uid since it was queued. Carried over
+    /// when a newer reason replaces this one; the worker's backoff reads it.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub passes: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -169,17 +178,27 @@ pub fn clear_by_id(data_dir: &Path, id: u64, uids: &[u32]) -> Result<(), String>
 /// failed: the daemon holds the journal lock across this call. A uid the
 /// entry no longer owes (answered, cancelled) records nothing.
 pub fn note_failures(data_dir: &Path, id: u64, failures: &[(u32, String)]) -> Result<(), String> {
+    note_failures_at(data_dir, id, failures, now_ms(), false)
+}
+
+/// `note_failures` at `at` (epoch ms, the caller's clock), counting one more
+/// replay pass for each uid when `pass` (the worker's round; a submit's
+/// rounds keep the count as it was).
+pub fn note_failures_at(data_dir: &Path, id: u64, failures: &[(u32, String)], at: u64, pass: bool) -> Result<(), String> {
     if failures.is_empty() {
         return Ok(());
     }
     crate::app_db::with(data_dir, |conn| {
         crate::app_db::db::in_txn(conn, || {
             let Some(mut entry) = crate::app_db::ops::get(conn, id)?.map(row_to_entry) else { return Ok(()) };
-            let at = now_ms();
             let mut noted = false;
+            // A uid named twice in one round is one pass.
+            let mut counted = std::collections::BTreeSet::new();
             for (uid, message) in failures {
                 if entry.uids.contains(uid) {
-                    entry.failures.insert(*uid, Failure { message: message.clone(), at });
+                    let before = entry.failures.get(uid).map_or(0, |f| f.passes);
+                    let passes = if pass && counted.insert(*uid) { before.saturating_add(1) } else { before };
+                    entry.failures.insert(*uid, Failure { message: message.clone(), at, passes });
                     noted = true;
                 }
             }
@@ -304,7 +323,7 @@ mod tests {
         let d = tmp();
         let mut forged = entry("delete", &[1], serde_json::json!({}));
         forged.attempts = 9;
-        forged.failures.insert(1, Failure { message: "forged".into(), at: 1 });
+        forged.failures.insert(1, Failure { message: "forged".into(), at: 1, passes: 4 });
         let id = queue(d.path(), forged).unwrap();
         let back = get(d.path(), id).unwrap().unwrap();
         assert_eq!((back.attempts, back.failures.len()), (0, 0));
@@ -361,6 +380,28 @@ mod tests {
         assert!(!failures.contains_key(&999));
         assert_eq!(row.uids_json, serde_json::to_string(&uids).unwrap(), "the uids are untouched");
         note_failures(d.path(), id, &[]).unwrap();
+    }
+
+    /// The worker's backoff count: one per replay pass that refused the uid,
+    /// carried over a submit's rounds and a change of reason, durable, and
+    /// absent from rows written before it existed.
+    #[test]
+    fn note_failures_at_counts_replay_passes_per_uid_and_keeps_them_over_a_submit() {
+        let d = tmp();
+        let id = queue(d.path(), entry("delete", &[1, 2], serde_json::json!({}))).unwrap();
+        note_failures_at(d.path(), id, &[(1, "submit".into())], 10, false).unwrap();
+        assert_eq!(get(d.path(), id).unwrap().unwrap().failures[&1], Failure { message: "submit".into(), at: 10, passes: 0 });
+        note_failures_at(d.path(), id, &[(1, "pass".into()), (1, "pass again".into()), (2, "pass".into())], 20, true).unwrap();
+        note_failures_at(d.path(), id, &[(1, "other reason".into())], 30, true).unwrap();
+        note_failures_at(d.path(), id, &[(1, "a submit round".into())], 40, false).unwrap();
+        let e = get(d.path(), id).unwrap().unwrap();
+        assert_eq!(e.failures[&1], Failure { message: "a submit round".into(), at: 40, passes: 2 }, "two passes, the submit kept the count");
+        assert_eq!(e.failures[&2].passes, 1);
+        // A row written before the count existed reads as no passes, and a
+        // zero count is not written at all.
+        let old: Failure = serde_json::from_value(serde_json::json!({"message": "m", "at": 1})).unwrap();
+        assert_eq!(old.passes, 0);
+        assert_eq!(serde_json::to_value(&old).unwrap(), serde_json::json!({"message": "m", "at": 1}));
     }
 
     #[test]

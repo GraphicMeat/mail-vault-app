@@ -27,6 +27,15 @@
 //! The entry's `arg` says how it is sent (`replay_intent`). The journal lock
 //! is taken per read or write, never across a send. Every pass but a manual
 //! one ends with `delete-queue-status {kept, online}`.
+//!
+//! Backoff: an entry whose last refusal is a bin capture the delete needed
+//! (`E_BIN_CAPTURE:`, say a Gmail body fetch that times out every time) is
+//! sent on the first `BACKOFF_AFTER` (3) passes that are refused it, then at
+//! most hourly, then daily once `DAILY_AFTER` (12) passes refused it
+//! (`backed_off`, from the entry's durable `Failure.passes` and `at`, on
+//! `state.clock`). A timer pass skips it meanwhile (counted `skipped`, no
+//! round, no reason written); `delete_queue.run` (Settings' Retry now)
+//! sends it anyway. Any other refusal is retried every pass.
 
 use super::*;
 use std::time::Duration;
@@ -46,6 +55,36 @@ pub(crate) struct Timing {
 }
 
 pub(crate) const TIMING: Timing = Timing { launch: Duration::from_secs(20), every: Duration::from_secs(5 * 60), debounce: Duration::from_secs(2) };
+
+/// Replay passes refused a bin capture before an entry waits an hour between
+/// tries, and before it waits a day.
+pub(crate) const BACKOFF_AFTER: u32 = 3;
+pub(crate) const DAILY_AFTER: u32 = 12;
+const HOUR_MS: u64 = 60 * 60 * 1000;
+const DAY_MS: u64 = 24 * HOUR_MS;
+/// What a refused bin capture's wire string starts with (`CaptureFailure::wire`).
+const CAPTURE_REFUSED: &str = "E_BIN_CAPTURE:";
+
+/// Whether a timer pass leaves `entry` for later at `now_ms`: its latest
+/// refusal (of a uid it still owes) is a bin capture, refused on at least
+/// `BACKOFF_AFTER` replay passes, and the wait that count earns (an hour, a
+/// day from `DAILY_AFTER`) since that refusal is not over. A clock set back
+/// never waits longer than the wait itself.
+pub(crate) fn backed_off(entry: &OpEntry, now_ms: u64) -> bool {
+    let Some(last) = entry.failures.iter().filter(|(uid, _)| entry.uids.contains(uid)).map(|(_, f)| f).max_by_key(|f| f.at) else {
+        return false;
+    };
+    if !last.message.starts_with(CAPTURE_REFUSED) {
+        return false;
+    }
+    let wait = match last.passes {
+        p if p >= DAILY_AFTER => DAY_MS,
+        p if p >= BACKOFF_AFTER => HOUR_MS,
+        _ => return false,
+    };
+    let since = now_ms.saturating_sub(last.at);
+    since < wait && last.at <= now_ms.saturating_add(wait)
+}
 
 /// What one pass did, by uid.
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
@@ -129,14 +168,21 @@ async fn next_trigger(online: &mut tokio::sync::watch::Receiver<bool>, wait: Dur
 }
 
 /// `delete_queue.run`: a pass on its own task (a caller that stops waiting
-/// does not stop it halfway), answered with its counts.
+/// does not stop it halfway), answered with its counts. Asked for, so it
+/// ignores the backoff.
 pub(crate) async fn run_now(state: &Arc<DaemonState>, reason: String) -> Result<PassCounts, String> {
     let st = Arc::clone(state);
-    tokio::spawn(async move { pass(&st, &reason).await }).await.map_err(|e| format!("delete queue pass failed: {e}"))
+    tokio::spawn(async move { pass_with(&st, &reason, false).await }).await.map_err(|e| format!("delete queue pass failed: {e}"))
 }
 
-/// One pass over every delete entry, after the running one (if any) ends.
+/// One timer pass over every delete entry, after the running one (if any)
+/// ends, honouring the backoff.
 pub(crate) async fn pass(state: &Arc<DaemonState>, reason: &str) -> PassCounts {
+    pass_with(state, reason, true).await
+}
+
+/// One pass; `backoff`: leave a backed-off entry for later (`backed_off`).
+async fn pass_with(state: &Arc<DaemonState>, reason: &str, backoff: bool) -> PassCounts {
     let _one = state.delete_queue.pass.lock().await;
     #[cfg(test)]
     let _running = Running::start(state);
@@ -144,7 +190,7 @@ pub(crate) async fn pass(state: &Arc<DaemonState>, reason: &str) -> PassCounts {
     if state.delete_queue.panic_next_pass.swap(false, std::sync::atomic::Ordering::SeqCst) {
         panic!("a replay pass panicked (test)");
     }
-    let counts = replay_all(state).await;
+    let counts = replay_all(state, backoff).await;
     info!(
         "[delete-queue] {reason} pass: {} done, {} failed, {} dropped, {} skipped, {} still owed",
         counts.done, counts.failed, counts.dropped, counts.skipped, counts.kept
@@ -200,7 +246,7 @@ fn n(uids: usize) -> u32 {
     u32::try_from(uids).unwrap_or(u32::MAX)
 }
 
-async fn replay_all(state: &Arc<DaemonState>) -> PassCounts {
+async fn replay_all(state: &Arc<DaemonState>, backoff: bool) -> PassCounts {
     let mut c = PassCounts::default();
     let entries = match delete_entries(state).await {
         Ok(entries) => entries,
@@ -266,11 +312,16 @@ async fn replay_all(state: &Arc<DaemonState>) -> PassCounts {
             c.skipped += owed;
             continue;
         };
+        if backoff && backed_off(&entry, u64::try_from(state.clock.now_ms()).unwrap_or(0)) {
+            info!("[delete-queue] entry {}: its bin copy was refused again and again, waiting before the next try", entry.id);
+            c.skipped += owed;
+            continue;
+        }
 
         let owners: Vec<(u32, u64)> = entry.uids.iter().map(|uid| (*uid, entry.id)).collect();
         let s = Submit { account_id: entry.account_id.clone(), mailbox: entry.mailbox.clone(), uids: entry.uids.clone(), mode, bin, arg: entry.arg.clone() };
         let sent = send_owed(state, &s, &owners, REPLAY).await;
-        let refused = n(sent.refused);
+        let refused = n(sent.reply.refused.len());
         c.done += n(sent.reply.landed.len());
         c.dropped += n(sent.reply.dropped.len());
         c.failed += refused;

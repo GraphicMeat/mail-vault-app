@@ -31,10 +31,13 @@ const mockQueueOp = vi.fn().mockResolvedValue(undefined);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockNoteOpFailure = vi.fn();
 const mockSubmit = vi.fn();
-// The daemon's answer for a group: every uid `refuse` names stays owed.
-const answer = (refuse = () => false) => async ({ uids }) => ({
+// The daemon's answer for a group: every uid `refuse` names stays owed, and
+// is named in `refused` with the reason its last round got.
+const TIMED_OUT = 'E_BIN_CAPTURE:timeout: timed out after 45s';
+const answer = (refuse = () => false, reason = TIMED_OUT) => async ({ uids }) => ({
   landed: uids.filter(uid => !refuse(uid)).map(uid => ({ kind: 'deleted', uid, trash: 'Trash', trashUid: 100 + uid, binId: null })),
   queued: uids.filter(refuse),
+  refused: uids.filter(refuse).map(uid => ({ uid, reason })),
   dropped: [],
 });
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
@@ -111,6 +114,17 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { onDeleteQueueLanded } = await import('../messageMutations');
+const { t } = await import('../../../i18n/index.js');
+
+// The one status line a refused submit leaves: why, and that MailVault goes on.
+const notYet = (reasonKey) => t('list.deleteNotYet', { reason: t(reasonKey) });
+const expectOneNotYet = (reasonKey) => {
+  const s = useMailStore.getState();
+  expect(s.error).toBe(notYet(reasonKey));
+  // A warning, not the error toast: nothing failed for good.
+  expect(s.errorType).toBe('warning');
+  expect(s.errorTypeFor).toBe(s.error);
+};
 
 const ACCT = { id: 'acct-a', email: 'a@mock.test' };
 const row = (uid) => ({ uid, subject: `m${uid}`, flags: [], from: { address: 'x@mock.test' }, date: '2026-09-01T10:00:00Z' });
@@ -152,7 +166,7 @@ beforeEach(() => {
 });
 
 describe('a server delete the server refuses', () => {
-  it('keeps the row evicted and the queue entry owed, silently', async () => {
+  it('keeps the row evicted and the queue entry owed, and says once why it is not deleted yet', async () => {
     prime([row(7)]);
     useMailStore.setState({ error: null });
     mockSubmit.mockImplementation(answer(() => true));
@@ -162,9 +176,9 @@ describe('a server delete the server refuses', () => {
     // One submit: the retries are the daemon's.
     expect(mockSubmit).toHaveBeenCalledTimes(1);
     expect(mockSubmit).toHaveBeenCalledWith({ accountId: ACCT.id, mailbox: 'INBOX', uids: [7] }, { mode: 'auto', bin: true, arg: {} });
-    // Owed, not failed: Settings › Unfinished server actions and the daily
-    // reminder say it, not a toast.
-    expect(useMailStore.getState().error).toBeNull();
+    // Owed, not failed: the row stays gone, and one warning says why the
+    // server still has it (Settings › Unfinished server actions lists it).
+    expectOneNotYet('errors.E_BIN_CAPTURE_TIMEOUT');
     // The app keeps no journal of its own and sends nothing itself.
     expect(mockQueueOp).not.toHaveBeenCalled();
     expect(mockClearOps).not.toHaveBeenCalled();
@@ -175,6 +189,27 @@ describe('a server delete the server refuses', () => {
     // on a server answer that never came.
     expect(useMailStore.getState().totalEmails).toBe(0);
     expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|7`)).toBe(true);
+  });
+
+  it('says nothing for a uid still owed that nothing refused (offline, or another submit has it)', async () => {
+    prime([row(7)]);
+    useMailStore.setState({ error: null });
+    mockSubmit.mockResolvedValue({ landed: [], queued: [7], refused: [], dropped: [] });
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    expect(useMailStore.getState().error).toBeNull();
+    expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|7`)).toBe(true);
+  });
+
+  it('a refusal that is not a bin capture reads in its own words', async () => {
+    prime([row(7)]);
+    useMailStore.setState({ error: null });
+    mockSubmit.mockImplementation(answer(() => true, 'errors.keychainBusy'));
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    expectOneNotYet('errors.keychainBusy');
   });
 
   it('still restores the row for a Graph account, which queues nothing to replay', async () => {
@@ -204,16 +239,32 @@ describe('a server delete the server refuses', () => {
     expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([]);
     expect(mockClearOps).not.toHaveBeenCalled();
   });
+
+  it('says it once for a batch, however many uids were refused', async () => {
+    prime([row(7), row(8), row(9)], [7, 8, 9]);
+    useMailStore.setState({ error: null });
+    const set = vi.spyOn(useMailStore, 'setState');
+    mockSubmit.mockImplementation(answer((uid) => uid !== 9));
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expectOneNotYet('errors.E_BIN_CAPTURE_TIMEOUT');
+    const said = set.mock.calls.filter(([patch]) => patch && typeof patch === 'object' && 'error' in patch && patch.error);
+    expect(said).toHaveLength(1);
+    set.mockRestore();
+  });
 });
 
 describe('a server delete that is refused and then lands', () => {
-  it('stays gone and says nothing, whether it lands in the submit or later', async () => {
+  it('stays gone, and the later landing says nothing more', async () => {
     prime([row(7), row(8)], [7, 8]);
     useMailStore.setState({ error: null });
     mockSubmit.mockImplementation(answer((uid) => uid === 8));
 
     await useMailStore.getState().deleteSelectedFromServer();
     expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|8`)).toBe(true);
+    expectOneNotYet('errors.E_BIN_CAPTURE_TIMEOUT');
+    useMailStore.setState({ error: null });
 
     // The daemon's replay worker lands it a pass later.
     await onDeleteQueueLanded({ accountId: ACCT.id, mailbox: 'INBOX', landed: [{ kind: 'deleted', uid: 8, trash: 'Trash', trashUid: 108, binId: null }] });

@@ -66,6 +66,19 @@ async function _reportDeleteFailure(error) {
   useMailStore.setState({ error: tr('list.deleteFailed', { err: error?.message || String(error) }) });
 }
 
+// A queued delete the server refused on every round of its submit: the row
+// stays gone (the daemon keeps trying), and one warning says why the server
+// still has it. `reason` is the daemon's wire string: a bin capture's
+// `E_BIN_CAPTURE:<reason>: <detail>`, a catalog key, or the server's text.
+async function _reportNotDeletedYet(reason) {
+  const capture = binCaptureError(reason);
+  const why = capture instanceof Error ? capture.message : tErr(reason);
+  const message = tr('list.deleteNotYet', { reason: why });
+  const { useMailStore } = await import('../../stores/mailStore');
+  // `errorTypeFor` pins the warning tint to this exact message (utils/errorToast.js).
+  useMailStore.setState({ error: message, errorType: 'warning', errorTypeFor: message });
+}
+
 
 /**
  * Reload the list that is actually on screen.
@@ -1150,10 +1163,11 @@ function _deleteGroups(ctxs, state) {
 }
 
 // One submit per group, all at once. Resolves to each uid's answer by target
-// id: `{ landed }`, `{ queued: true }` or `{ dropped }` (a reason, or the
-// error of a submit that failed as a call: no daemon, or one it refused
-// before journalling, so nothing says it kept the delete and the row comes
-// back).
+// id: `{ landed }`, `{ queued: true, refused? }` (`refused`: the reason the
+// server gave its last send, when it was refused rather than unsent) or
+// `{ dropped }` (a reason, or the error of a submit that failed as a call: no
+// daemon, or one it refused before journalling, so nothing says it kept the
+// delete and the row comes back).
 async function _submitGroups(groups) {
   const answers = new Map();
   await Promise.all(groups.map(async (g) => {
@@ -1168,6 +1182,9 @@ async function _submitGroups(groups) {
     }
     for (const landed of reply?.landed || []) answers.set(id(landed.uid), { landed });
     for (const uid of reply?.queued || []) answers.set(id(uid), { queued: true });
+    for (const { uid, reason } of reply?.refused || []) {
+      if (answers.get(id(uid))?.queued) answers.set(id(uid), { queued: true, refused: reason });
+    }
     for (const { uid, reason } of reply?.dropped || []) answers.set(id(uid), { dropped: reason });
     // A uid the reply does not name is owed as far as anyone can tell.
     for (const uid of g.uids) if (!answers.has(id(uid))) answers.set(id(uid), { queued: true });
@@ -1191,12 +1208,16 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
   const prunes = new Map();
   const surviving = new Set();
   let lastError = null;
+  // The first reason a still-owed uid was refused for: said once, below.
+  let notYet = null;
 
   for (const c of ctxs) {
     try {
+      const answer = c.queued ? answers.get(c.tombstone) : undefined;
       const result = c.queued
-        ? _answered(c, answers.get(c.tombstone), hidden)
+        ? _answered(c, answer, hidden)
         : await _sendDirect(c, { how, waitsOffline, invoke });
+      if (result === QUEUED && answer?.refused) notYet ??= answer.refused;
       if (result === OFFLINE || result === QUEUED) continue;
       if (result && result !== LOCAL && result !== GONE) outcomes.push(result);
       if (how.reconcile === 'each') {
@@ -1219,9 +1240,11 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
       lastError = e;
     }
   }
-  // Only what is not owed is said now; a queued delete is retried by the
-  // daemon until it lands, and Settings lists it meanwhile.
+  // What nothing will finish is said first. A queued delete is retried by the
+  // daemon until it lands, and Settings lists it meanwhile; one the server
+  // refused says once why it is not deleted yet, never per uid.
   if (lastError) _reportDeleteFailure(lastError);
+  else if (notYet) await _reportNotDeletedYet(notYet);
   return { outcomes, settled, prunes, surviving };
 }
 

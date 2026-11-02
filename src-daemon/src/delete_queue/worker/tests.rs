@@ -368,3 +368,96 @@ async fn passes_never_overlap_and_triggers_during_one_coalesce() {
     wait(Duration::from_secs(10)).await;
     assert_eq!(passes(&s), 3);
 }
+
+// ── backoff (final review, Important 1) ────────────────────────────────────
+
+/// An entry whose last refusal is a bin capture the delete needed (a Gmail
+/// body fetch that times out, every time) is not fetched again every five
+/// minutes forever: three passes, then hourly, then daily after twelve. The
+/// user's Retry now (`delete_queue.run`) ignores the wait.
+#[tokio::test]
+async fn a_capture_refused_entry_backs_off_hourly_then_daily_and_retry_now_ignores_it() {
+    use crate::handlers::deleted::CaptureFailure;
+    const HOUR: i64 = 3_600_000;
+    let f = fixture(vec![]);
+    f.s.clock.set(chrono::Utc::now().timestamp_millis());
+    script(&f.s, |_, _| Some(Err(Refusal::BinCapture(CaptureFailure::Timeout(None)))));
+    let id = queue(&f, "acc1", "INBOX", &[1], json!({"mode": "permanent", "bin": true}));
+    let sent = |f: &Fixture| sends(f).len();
+
+    for n in 1..=3 {
+        assert_eq!(pass(&f.s, "retry").await.failed, 1, "pass {n} is sent");
+        assert_eq!(sent(&f), n);
+    }
+    // The fourth pass, five minutes on: waits for the hour.
+    f.s.clock.advance(5 * 60_000);
+    let counts = pass(&f.s, "retry").await;
+    assert_eq!(counts, PassCounts { attempted: 0, done: 0, failed: 0, dropped: 0, skipped: 1, kept: 1 });
+    assert_eq!(sent(&f), 3, "backed off");
+    let e = entry(&f, id).unwrap();
+    assert_eq!(e.attempts, 3, "a backed-off pass counts no round");
+    assert!(e.failures[&1].message.starts_with("E_BIN_CAPTURE:timeout"), "{}", e.failures[&1].message);
+
+    // Retry now ignores the wait.
+    let r = route(&f.s, "delete_queue.run", &json!({"reason": "manual"}), json!(1)).await.unwrap();
+    assert_eq!(r.result.unwrap()["failed"], 1);
+    assert_eq!(sent(&f), 4);
+
+    // Hourly: nothing before the hour is up, one send once it is.
+    f.s.clock.advance(HOUR - 60_000);
+    pass(&f.s, "retry").await;
+    assert_eq!(sent(&f), 4, "not yet an hour since the last try");
+    f.s.clock.advance(60_000);
+    pass(&f.s, "retry").await;
+    assert_eq!(sent(&f), 5, "an hour on");
+    // Up to twelve worker passes in all, an hour apart.
+    while sent(&f) < 12 {
+        f.s.clock.advance(HOUR);
+        pass(&f.s, "retry").await;
+    }
+    // Then daily.
+    f.s.clock.advance(HOUR);
+    pass(&f.s, "retry").await;
+    assert_eq!(sent(&f), 12, "after twelve, an hour is not enough");
+    f.s.clock.advance(23 * HOUR);
+    pass(&f.s, "retry").await;
+    assert_eq!(sent(&f), 13, "a day on");
+    assert!(entry(&f, id).is_some(), "never dropped: still owed");
+}
+
+/// A refusal that is not a bin capture (a server error) keeps the five
+/// minute retry: the backoff is for the capture a permanent delete needs.
+#[tokio::test]
+async fn a_server_refusal_keeps_retrying_every_pass() {
+    let f = fixture(refuse_the_move());
+    f.s.clock.set(chrono::Utc::now().timestamp_millis());
+    queue(&f, "acc1", "INBOX", &[1], json!({"mode": "trash", "bin": true}));
+    for n in 1..=5 {
+        f.s.clock.advance(5 * 60_000);
+        assert_eq!(pass(&f.s, "retry").await.failed, 1, "pass {n}");
+    }
+    assert_eq!(f.moves(), 5);
+}
+
+/// `backed_off` reads the latest refusal of a uid the entry still owes.
+#[test]
+fn backed_off_reads_the_latest_refusal_its_count_and_its_age() {
+    use mailvault_core::op_journal::Failure;
+    const H: u64 = 3_600_000;
+    let capture = |at, passes| Failure { message: "E_BIN_CAPTURE:timeout: timed out after 45s".into(), at, passes };
+    let e = |failures: Vec<(u32, Failure)>| OpEntry { op: "delete".into(), uids: vec![1, 2], failures: failures.into_iter().collect(), ..Default::default() };
+    let now = 100 * H;
+    assert!(!backed_off(&e(vec![]), now), "never refused");
+    assert!(!backed_off(&e(vec![(1, capture(now, 2))]), now), "two passes: not yet");
+    assert!(backed_off(&e(vec![(1, capture(now - H + 1, 3))]), now), "three: an hour");
+    assert!(!backed_off(&e(vec![(1, capture(now - H, 3))]), now), "the hour is up");
+    assert!(backed_off(&e(vec![(1, capture(now - 23 * H, 12))]), now), "twelve: a day");
+    assert!(!backed_off(&e(vec![(1, capture(now - 24 * H, 12))]), now));
+    let server = Failure { message: "Failed to delete email: NO".into(), at: now, passes: 40 };
+    assert!(!backed_off(&e(vec![(1, server.clone())]), now), "a server refusal is retried every pass");
+    assert!(!backed_off(&e(vec![(1, capture(now - 10, 5)), (2, server)]), now), "the latest refusal decides");
+    let gone = OpEntry { uids: vec![2], ..e(vec![(1, capture(now, 5))]) };
+    assert!(!backed_off(&gone, now), "a uid no longer owed decides nothing");
+    assert!(!backed_off(&e(vec![(1, capture(now + 2 * DAY, 12))]), now), "a clock set back far never waits on it");
+}
+const DAY: u64 = 24 * 3_600_000;
