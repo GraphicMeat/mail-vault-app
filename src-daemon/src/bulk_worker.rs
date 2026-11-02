@@ -2716,6 +2716,9 @@ mod tests {
             let cfg=purge_credentials(&state,&provider);
             let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":mode,"type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",Some("selected@test")),"externalStatus":"unavailable"})).await;
             assert!(reply.error.is_none(),"{mode}: {:?}",reply.error);let pending=wait_drained(&state).await;
+            // The read this test fails was actually sent: an earlier gate that
+            // refused first would pass every assertion below for the wrong reason.
+            assert!(provider.commands().iter().any(|c|c.contains("MESSAGE-ID")),"{mode}: the Message-ID FETCH was never sent: {:?}",provider.commands());
             let target=&pending["worker"]["purgeTargets"][0];
             assert_eq!(pending["result"]["deleted"],json!(0),"{mode}: {pending}");
             assert_ne!(target["alreadyGone"],json!(true),"{mode}: {target}");
