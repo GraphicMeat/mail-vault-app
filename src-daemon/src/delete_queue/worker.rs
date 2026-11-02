@@ -328,7 +328,7 @@ async fn replay_all(state: &Arc<DaemonState>, backoff: bool) -> PassCounts {
         }
 
         let owners: Vec<(u32, u64)> = entry.uids.iter().map(|uid| (*uid, entry.id)).collect();
-        let s = Submit { account_id: entry.account_id.clone(), mailbox: entry.mailbox.clone(), uids: entry.uids.clone(), mode, bin, arg: entry.arg.clone() };
+        let s = Submit { account_id: entry.account_id.clone(), mailbox: entry.mailbox.clone(), uids: entry.uids.clone(), mode, bin, arg: entry.arg.clone(), shown_generation: None };
         let sent = send_owed(state, &s, &owners, if backoff { REPLAY } else { RETRY_NOW }).await;
         let refused = n(sent.reply.refused.len());
         c.done += n(sent.reply.landed.len());

@@ -851,3 +851,31 @@ describe('at launch', () => {
     expect([...useMailStore.getState().deleteTombstones]).toEqual(['a1|INBOX|7']);
   });
 });
+
+// The daemon refuses a delete whose rows were painted from an older folder
+// generation than its cache holds: the submit says which generation the rows
+// it deletes were read in, one per group, and none when they disagree.
+describe('the generation of the rows a delete was chosen from', () => {
+  const shown = (uid, uidValidity, originHash = 'h1') => row(uid, { _nativeIdentity: { accountId: 'a1', mailbox: 'INBOX', uidValidity, originHash } });
+
+  it('rides with the submit when every row of the group was read in one generation', async () => {
+    prime({ emails: [shown(7, 5), shown(8, 5), row(9)] });
+
+    await deleteMessages([{ key: 7 }, { key: 8 }]);
+
+    expect(mockSubmit).toHaveBeenCalledWith(
+      { accountId: 'a1', mailbox: 'INBOX', uids: [7, 8] },
+      expect.objectContaining({ mode: 'auto', bin: true, shownUidValidity: 5 }),
+    );
+  });
+
+  it('is left out when the rows disagree or one has no generation', async () => {
+    prime({ emails: [shown(7, 5), shown(8, 6), shown(10, 5), row(11)] });
+
+    await deleteMessages([{ key: 7 }, { key: 8 }]);
+    await deleteMessages([{ key: 10 }, { key: 11 }]);
+
+    expect(mockSubmit).toHaveBeenCalledTimes(2);
+    for (const [, options] of mockSubmit.mock.calls) expect(options).not.toHaveProperty('shownUidValidity');
+  });
+});

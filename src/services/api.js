@@ -345,8 +345,11 @@ export async function updateEmailFlags(account, uid, flags, action = 'add', mail
  * `bin: false` skips the daemon's copy into the deleted-mail bin (a cleanup
  * rule over mail the vault already holds).
  */
-export function deleteQueueSubmit({ accountId, mailbox, uids }, { mode = 'auto', bin = true, arg = {} } = {}) {
-  return transportSend('delete_queue.submit', { accountId, mailbox, uids, mode, bin, arg });
+// `shownUidValidity`: the folder generation the rows were read in, when the
+// app knows one. The daemon refuses the delete if its cache already holds
+// another; it never lets a delete through on it.
+export function deleteQueueSubmit({ accountId, mailbox, uids }, { mode = 'auto', bin = true, arg = {}, shownUidValidity } = {}) {
+  return transportSend('delete_queue.submit', { accountId, mailbox, uids, mode, bin, arg, ...(shownUidValidity ? { shownUidValidity } : {}) });
 }
 
 /**

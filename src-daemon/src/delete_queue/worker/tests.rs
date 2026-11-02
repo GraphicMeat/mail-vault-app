@@ -549,3 +549,19 @@ async fn a_jmap_entry_is_sent_whatever_generation_it_records() {
     assert_eq!((counts.done, counts.dropped), (1, 0), "{counts:?}");
     assert!(entry(&f, id).is_none());
 }
+
+/// The bulk tool's own journal entry (permanent, with the generation of the
+/// rows it was given) replayed into a renumbered folder: nothing is sent.
+#[tokio::test]
+async fn a_bulk_tool_entry_replayed_into_a_renumbered_folder_sends_nothing() {
+    let mut work = Mailbox::new("Work");
+    work.add(Message::new(1, RAW));
+    let f = fixture_with(vec![], r#"[{"id":"acc1"}]"#, vec![work]);
+    let id = queue(&f, "acc1", "Work", &[1], json!({"total": 1, "messages": [{"uid": 1}], "mode": "permanent", "uidValidity": 1}));
+    f.srv.mutate(|st| st.find_mut("Work").unwrap().uid_validity = 42);
+    let counts = pass(&f.s, "retry").await;
+    assert_eq!((counts.done, counts.dropped), (0, 1), "{counts:?}");
+    assert_eq!(f.srv.count_commands("STORE") + f.srv.count_commands("EXPUNGE") + f.srv.count_commands("BODY.PEEK[]"), 0);
+    assert_eq!(f.srv.state().find("Work").unwrap().messages.len(), 1);
+    assert!(entry(&f, id).unwrap().uids.is_empty());
+}

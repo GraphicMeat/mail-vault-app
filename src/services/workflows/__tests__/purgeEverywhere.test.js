@@ -696,11 +696,24 @@ it('bulk-tool delete journals the range, hides its rows for the run, then clears
   await bulkDeleteFromServer(scope);
   expect(native.start).toHaveBeenCalledTimes(1);
   // The bulk tool's delete is permanent: its entry says so, so the daemon's
-  // replay sends what the user chose, not the folder's default.
-  expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent' } });
-  expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent' } });
+  // replay sends what the user chose, not the folder's default, and only into
+  // the folder generation the rows were read in.
+  expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent', uidValidity: 1 } });
+  expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uids: [1], arg: { mode: 'permanent', uidValidity: 1 } });
   expect(useMailStore.getState().deleteTombstones.size).toBe(0);
   expect(useMailStore.getState().loadEmails).toHaveBeenCalled();
+});
+
+// Rows read in two generations (or one with none) give the entry no
+// generation: the replay is then sent as before, unchecked.
+it('bulk-tool delete records no generation for rows that disagree on it', async () => {
+  prime({ emails: [row(1), { ...row(2), _nativeIdentity: { ...row(2)._nativeIdentity, uidValidity: 9 } }] });
+  const scope = captureBulkScope([1, 2], useMailStore.getState());
+  native.start.mockResolvedValue({ status: 'complete', errors: 0 });
+  await bulkDeleteFromServer(scope);
+  expect(mockQueueOp).toHaveBeenCalledTimes(1);
+  expect(mockQueueOp.mock.calls[0][0].arg).not.toHaveProperty('uidValidity');
+  expect(mockQueueOp.mock.calls[0][0].arg.mode).toBe('permanent');
 });
 
 // A run with no record of what it removed cannot say which uid landed, so the

@@ -28,8 +28,14 @@
 //!   server refusal are all retryable: the entry stays.
 //! - A uid is a name only inside one folder generation (UIDVALIDITY). The
 //!   entry keeps the one its uids were read in (`arg.uidValidity`, from the
-//!   daemon's header cache at submit, never the app's word; absent when
-//!   unknown), and every send, the submit's own rounds and the replay's
+//!   daemon's header cache at submit; never the app's `arg`, absent when
+//!   unknown). The app also says which generation the rows it painted were
+//!   read in (`shownUidValidity`): differing from the cache's, the submit is
+//!   refused before anything is journalled (every uid `dropped` with
+//!   `RENUMBERED`, so the rows come back); with no cached one, it is the one
+//!   recorded. It can only refuse, never pass a send: the SELECT still has to
+//!   match. A uid an older entry owes goes by that entry's generation, or by
+//!   the submit's when that entry has none. Every send, the submit's own rounds and the replay's
 //!   alike, goes only into that generation (`message_delete`, IMAP only). A
 //!   server that renumbered the folder gets nothing: the uid is stopped
 //!   (`op_journal::stop_by_id`), answered `dropped` with `RENUMBERED`, no
@@ -109,6 +115,10 @@ pub(crate) struct Submit {
     /// What the app wants kept with the entry (Settings' subjects and
     /// senders, `{total, messages}`); the daemon adds `mode` and `bin`.
     pub arg: Value,
+    /// The folder generation (UIDVALIDITY) the rows the user chose were read
+    /// in, as the app painted them (`shownUidValidity`). It can only refuse a
+    /// delete, never let one through: see `submit_generation`.
+    pub shown_generation: Option<u32>,
 }
 
 /// How each uid of a `Submit` ended.
@@ -393,7 +403,20 @@ async fn run_answering(state: &Arc<DaemonState>, s: Submit, answer: &mut Answer)
 
     // 1. The journal, before anything reaches the server, with the folder
     // generation the uids were read in.
-    let arg = entry_arg(&s, recorded_generation(state, &s.account_id, &s.mailbox).await);
+    let generation = match submit_generation(s.shown_generation, recorded_generation(state, &s.account_id, &s.mailbox).await) {
+        Ok(generation) => generation,
+        Err(()) => {
+            warn!("[delete-queue] {}/{}: the rows were read in another generation than the cache holds, nothing queued", s.account_id, s.mailbox);
+            let mut reply = SubmitReply::default();
+            for uid in s.uids {
+                if !reply.dropped.iter().any(|(u, _)| *u == uid) {
+                    reply.dropped.push((uid, RENUMBERED.to_string()));
+                }
+            }
+            return Ok(reply);
+        }
+    };
+    let arg = entry_arg(&s, generation);
     let owed = {
         let (st, account_id, mailbox, uids, arg) = (Arc::clone(state), s.account_id.clone(), s.mailbox.clone(), s.uids.clone(), arg.clone());
         blocking(move || {
@@ -413,6 +436,19 @@ async fn run_answering(state: &Arc<DaemonState>, s: Submit, answer: &mut Answer)
     // generation (`still_owed`), this one by its own.
     let s = Submit { arg, ..s };
     Ok(send_owed_answering(state, &s, &owed.owners, SUBMIT, answer).await.reply)
+}
+
+/// The generation a submit records, from the one the app painted the rows in
+/// (`shown`) and the one the daemon's cache holds (`cached`). Both known and
+/// different: `Err`, the rows are from another generation than the folder
+/// now has, so the delete is refused before it is journalled. Otherwise
+/// whichever is known. The app's value can only make the send stricter:
+/// the delete's own SELECT still has to match it.
+fn submit_generation(shown: Option<u32>, cached: Option<u32>) -> Result<Option<u32>, ()> {
+    match (shown, cached) {
+        (Some(a), Some(b)) if a != b => Err(()),
+        (a, b) => Ok(b.or(a)),
+    }
 }
 
 /// The generation of `mailbox` the daemon's header cache holds (its native
@@ -550,7 +586,9 @@ async fn send_owed_answering(state: &Arc<DaemonState>, s: &Submit, owners: &[(u3
                         unsent.push(uid);
                         continue;
                     }
-                    let generation = entry.and_then(|id| generations.get(&id).copied()).unwrap_or(journalled);
+                    // The owner's own generation when it has one, else the one this
+                    // send was journalled with (an older entry may have none).
+                    let generation = entry.and_then(|id| generations.get(&id).copied().flatten()).or(journalled);
                     let result = send(state, &config, s, uid, how.priority, generation).await;
                     match classify(uid, &result) {
                         Verdict::Landed(l) => {
@@ -956,7 +994,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             let bin = params.get("bin").and_then(Value::as_bool).unwrap_or(true);
             let arg = params.get("arg").cloned().unwrap_or_else(|| json!({}));
-            let s = Submit { account_id, mailbox, uids, mode, bin, arg };
+            let shown_generation = params.get("shownUidValidity").and_then(Value::as_u64).and_then(|v| u32::try_from(v).ok()).filter(|v| *v != 0);
+            let s = Submit { account_id, mailbox, uids, mode, bin, arg, shown_generation };
             done(id, submit(state, s).await.map(|reply| reply_json(&reply)))
         }
         "delete_queue.list" => {

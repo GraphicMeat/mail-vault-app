@@ -134,7 +134,7 @@ pub(super) fn fixture_with(faults: Vec<(Trigger, Action)>, accounts: &str, extra
 }
 
 fn ask(uids: &[u32], mode: Mode) -> Submit {
-    Submit { account_id: "acc1".into(), mailbox: "INBOX".into(), uids: uids.to_vec(), mode, bin: true, arg: json!({}) }
+    Submit { account_id: "acc1".into(), mailbox: "INBOX".into(), uids: uids.to_vec(), mode, bin: true, arg: json!({}), shown_generation: None }
 }
 
 /// The move to Trash refused both ways `imap::delete_email` tries it, with
@@ -827,4 +827,94 @@ async fn a_permanent_delete_with_a_local_copy_in_a_renumbered_folder_keeps_no_bi
     assert_eq!(f.srv.count_commands("BODY.PEEK[]"), 0, "the local copy was the capture");
     assert!(f.in_inbox(1));
     assert!(crate::message_delete_characterization_tests::bin_rows(&f.s).is_empty(), "the capture of a delete that never happened is dropped");
+}
+
+// ── the generation of the rows the user saw ─────────────────────────────────
+
+/// `delete_queue.submit` as the app sends it, with the generation of the rows
+/// it painted (`shownUidValidity`) when it knows one.
+async fn submit_rpc(f: &Fixture, uids: &[u32], mode: &str, shown: Option<u32>) -> Value {
+    let mut params = json!({"accountId": "acc1", "mailbox": "INBOX", "uids": uids, "mode": mode});
+    if let Some(v) = shown {
+        params["shownUidValidity"] = json!(v);
+    }
+    route(&f.s, "delete_queue.submit", &params, json!(1)).await.unwrap().result.expect("answered")
+}
+
+/// A sync already moved the cache to the new generation while the app still
+/// painted the old rows: the click names the old one. Refused before anything
+/// is journalled or sent, so the rows come back.
+#[tokio::test]
+async fn rows_shown_from_an_older_generation_than_the_cache_are_refused_before_the_journal() {
+    let f = fixture(vec![]);
+    cache_generation(&f, 42);
+    renumber(&f, Some(STRANGER));
+    let out = submit_rpc(&f, &[1, 1, 2], "trash", Some(1)).await;
+    assert_eq!(out["dropped"], json!([{"uid": 1, "reason": RENUMBERED}, {"uid": 2, "reason": RENUMBERED}]), "{out}");
+    assert_eq!(out["landed"], json!([]));
+    assert_eq!(out["queued"], json!([]));
+    assert!(f.journal().is_empty(), "nothing journalled");
+    assert_eq!(f.srv.count_commands("SELECT"), 0, "nothing sent");
+    untouched(&f);
+    assert!(f.in_inbox(1));
+}
+
+/// What the app saw and what the cache holds: equal is recorded; only one of
+/// them known, that one is recorded (the app's can only make the send
+/// stricter: the SELECT still decides); neither, nothing, as before.
+#[tokio::test]
+async fn the_recorded_generation_is_whichever_of_the_shown_and_the_cached_one_is_known() {
+    let cases: [(Option<u32>, Option<u32>, Option<u32>); 4] = [(Some(7), Some(7), Some(7)), (None, Some(5), Some(5)), (Some(7), None, Some(7)), (None, None, None)];
+    for (cached, shown, want) in cases {
+        let f = fixture(vec![]);
+        f.s.net.test_set_online(false);
+        if let Some(v) = cached {
+            cache_generation(&f, v);
+        }
+        let out = submit_rpc(&f, &[1], "trash", shown).await;
+        assert_eq!(out["queued"], json!([1]), "cached {cached:?} shown {shown:?}: {out}");
+        let arg = f.journal()[0].arg.clone();
+        assert_eq!(arg.get("uidValidity").and_then(Value::as_u64), want.map(u64::from), "cached {cached:?} shown {shown:?}: {arg}");
+    }
+}
+
+/// The app's generation alone is never a pass: shown 1, nothing cached, the
+/// server at 42. The SELECT refuses it.
+#[tokio::test]
+async fn a_shown_generation_alone_still_has_the_select_decide() {
+    let f = fixture(vec![]);
+    renumber(&f, Some(STRANGER));
+    let out = submit_rpc(&f, &[1], "trash", Some(1)).await;
+    assert_eq!(out["dropped"], json!([{"uid": 1, "reason": RENUMBERED}]), "{out}");
+    untouched(&f);
+}
+
+/// An older entry with no recorded generation (the app's, the bulk tool's
+/// before it recorded one) owes the uid: the new submit's own generation
+/// guards the send.
+#[tokio::test]
+async fn a_uid_a_legacy_entry_owes_is_sent_in_the_submits_generation() {
+    let f = fixture(vec![]);
+    op_journal::queue_delete(&f.s.app_dir, "acc1", "INBOX", &[1], &json!({"mode": "trash", "bin": true})).unwrap();
+    cache_generation(&f, 1);
+    renumber(&f, Some(STRANGER));
+    let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, RENUMBERED.into())], ..Default::default() });
+    untouched(&f);
+    assert!(f.in_inbox(1));
+}
+
+/// A move refused in the right generation, then the folder renumbered before
+/// the still-there check: that check is in the new generation and answers
+/// nothing. The delete stops instead of being retried for ever.
+#[tokio::test]
+async fn a_renumber_between_the_refused_move_and_the_presence_check_stops_the_delete() {
+    let mut faults = refuse_the_move();
+    faults.push((Trigger::nth("SELECT", 2), Action::BumpUidValidity));
+    let f = fixture(faults);
+    cache_generation(&f, 1);
+    let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, RENUMBERED.into())], ..Default::default() });
+    assert_eq!(f.srv.count_commands("SELECT"), 2, "the remove's, then the presence check's");
+    assert!(f.in_inbox(1));
 }

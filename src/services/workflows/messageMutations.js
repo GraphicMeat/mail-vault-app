@@ -23,7 +23,7 @@ import { withoutUids } from '../../stores/slices/serverUids';
 import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
 import { mailboxLabel } from '../../utils/imapUtf7';
 import { formatPurgeEverywhereOutcome, splitChangedOutcome } from '../../utils/purgeOutcome';
-import { retainSelectionSnapshots, captureSelectionSnapshot } from '../headerIdentity.js';
+import { retainSelectionSnapshots, captureSelectionSnapshot, coherentNativeIdentity } from '../headerIdentity.js';
 import { captureBulkScope } from '../bulkSelection.js';
 import { bulkOperationManager, originalTargetId, groupBulkTargets } from '../BulkOperationManager.js';
 import { retryAfterResync } from './purgeResync.js';
@@ -1195,16 +1195,26 @@ function _resolveOneDelete({ key: uid, accountId: explicitAccountId = null, mail
 }
 
 // The queued targets per (account, folder), each with the `arg` Settings lists
-// the entry by (subjects and senders, `_queuedList`).
+// the entry by (subjects and senders, `_queuedList`) and the folder generation
+// its rows were read in (`_shownGeneration`).
 function _deleteGroups(ctxs, state) {
   const groups = new Map();
-  for (const { uid, accountId, mailbox } of ctxs) {
+  for (const { uid, accountId, mailbox, row } of ctxs) {
     const groupKey = `${accountId}|${mailbox}`;
-    if (!groups.has(groupKey)) groups.set(groupKey, { accountId, mailbox, uids: [] });
+    if (!groups.has(groupKey)) groups.set(groupKey, { accountId, mailbox, uids: [], rows: [] });
     groups.get(groupKey).uids.push(uid);
+    groups.get(groupKey).rows.push(row);
   }
-  for (const g of groups.values()) g.arg = _queuedList(g, state);
-  return [...groups.values()];
+  return [...groups.values()].map(({ rows, ...g }) => ({ ...g, arg: _queuedList(g, state), shownUidValidity: _shownGeneration(rows, g.accountId, g.mailbox) }));
+}
+
+// The one UIDVALIDITY every row of a group was read in, or null when a row
+// has none or they disagree. The daemon refuses a delete whose rows are from
+// another generation than its cache holds; it can never let one through.
+function _shownGeneration(rows, accountId, mailbox) {
+  if (!rows.length || rows.some(row => !row)) return null;
+  const v = coherentNativeIdentity(rows, accountId, mailbox)?.uidValidity;
+  return Number.isInteger(v) && v > 0 ? v : null;
 }
 
 // One submit per group, all at once. Resolves to each uid's answer by target
@@ -1223,7 +1233,7 @@ async function _submitGroups(groups) {
     let reply;
     try {
       reply = await api.deleteQueueSubmit({ accountId: g.accountId, mailbox: g.mailbox, uids: g.uids },
-        { mode: 'auto', bin: true, arg: g.arg });
+        { mode: 'auto', bin: true, arg: g.arg, ...(g.shownUidValidity ? { shownUidValidity: g.shownUidValidity } : {}) });
     } catch (error) {
       for (const uid of g.uids) answers.set(id(uid), { dropped: error });
       return;
@@ -3383,6 +3393,19 @@ export async function showQueuedRows(entry, uids = entry.uids) {
 // cache). Anything else leaves the whole range owed: the run cannot say which
 // uids landed, and the daemon's replay worker re-sending one that did is a
 // no-op on the server.
+// The one UIDVALIDITY the scope's hints give every uid of `entry`, or null
+// when one has no hint, no generation, or they disagree.
+function _hintedGeneration(hints, { accountId, mailbox, uids }) {
+  let generation = null;
+  for (const uid of uids) {
+    const hint = (hints || []).find(h => h.accountId === accountId && h.mailbox === mailbox && h.uid === uid);
+    const v = hint?.nativeIdentity?.uidValidity;
+    if (!Number.isInteger(v) || v <= 0 || (generation !== null && v !== generation)) return null;
+    generation = v;
+  }
+  return generation;
+}
+
 export async function bulkDeleteFromServer(scope) {
   const store = nativePurgeStore;
   const live = store.getState();
@@ -3393,7 +3416,12 @@ export async function bulkDeleteFromServer(scope) {
     .map(g => ({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids }))
     // `mode`: the bulk tool's delete is permanent, so the daemon's replay of
     // what it leaves owed is too, whatever the folder (worker `replay_intent`).
-    .map(entry => ({ ...entry, arg: { ..._queuedList(entry, live), mode: 'permanent' } }));
+    // `uidValidity`: the generation the rows were read in, so that replay is
+    // sent only into it (`OpEntry::uid_validity`); none when unknown or mixed.
+    .map(entry => {
+      const generation = _hintedGeneration(scope.targetHints, entry);
+      return { ...entry, arg: { ..._queuedList(entry, live), mode: 'permanent', ...(generation ? { uidValidity: generation } : {}) } };
+    });
   await Promise.all(journal.map(entry => db.queueOp(entry)));
   _hideDeleted(store, targets, { keys: scope.keys });
   let operation;
