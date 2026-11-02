@@ -1020,10 +1020,16 @@ export async function deleteMessages(targets, opts = {}) {
   // The daemon journals each group before it sends anything, so the request
   // goes out before any row leaves the list: from the moment the app shows a
   // completed delete, the daemon has it, or is about to answer that it cannot.
-  // The answer can take minutes (every retry round); the rows are gone
-  // meanwhile and nothing here waits on it but this workflow.
+  // The answer comes after the daemon's first send round: a uid it still
+  // retries is answered `queued` and lands later on `delete-queue-landed`, so
+  // one stuck uid never holds the rest of the batch.
   const queued = ctxs.filter(c => c.queued);
   const release = _holdSubmitted(queued.map(c => c.tombstone));
+  // The undo slot this call files, kept with each uid still owed so a late
+  // landing joins it rather than replacing it (onDeleteQueueLanded); one that
+  // lands before the slot is filed waits in `late` and is filed with it.
+  // `skipRefresh` callers file their own slot: theirs is not tracked.
+  const batch = skipRefresh ? null : { slotId: null, outcomes: [], filed: false, late: [] };
   let hidden;
   let sent;
   // From the hold on, every exit lets go of it.
@@ -1044,34 +1050,43 @@ export async function deleteMessages(targets, opts = {}) {
     // The result list is not `emails` — it needs telling separately.
     await pruneSearchResults(ctxs.map(_where));
 
-    sent = await _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified, answers: await answers });
+    sent = await _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified, batch, answers: await answers });
+  } catch (error) {
+    if (batch) batch.filed = true;
+    throw error;
   } finally {
     release();
   }
 
-  if (how.reconcile === 'each') {
-    for (const c of sent.settled) {
-      await applyServerRemoval(c.uid, {
-        accountId: c.accountId, mailbox: c.mailbox, isUnified, skipRefresh,
-        // The optimistic paint already took the row off the count.
-        counted: hidden.counted,
-        // Never over a message this delete just opened.
-        clearSelection: hidden.closes && !hidden.threadUpdate && !hidden.openNext,
-        // No server copy was ever there to delete: nothing to stamp gold.
-        deletedByUs: !c.localFolder,
-      });
+  // A reconcile that throws still lets a late landing of this call settle on
+  // its own (`filed`), rather than wait for a slot that is never filed.
+  try {
+    if (how.reconcile === 'each') {
+      for (const c of sent.settled) {
+        await applyServerRemoval(c.uid, {
+          accountId: c.accountId, mailbox: c.mailbox, isUnified, skipRefresh,
+          // The optimistic paint already took the row off the count.
+          counted: hidden.counted,
+          // Never over a message this delete just opened.
+          clearSelection: hidden.closes && !hidden.threadUpdate && !hidden.openNext,
+          // No server copy was ever there to delete: nothing to stamp gold.
+          deletedByUs: !c.localFolder,
+        });
+      }
+      // `skipRefresh` callers collect the outcomes and fill the slot once
+      // themselves. A delete still owed or refused settles nothing here, and an
+      // outcome exists exactly where something is addressable — never for a
+      // local-only row, a message already gone or a Graph delete (it lands in
+      // Deleted Items, so "deleted permanently" would be a false claim, and there
+      // is no uid to restore by).
+      if (!skipRefresh && (sent.settled.length || batch.late.length)) await _fileBatchUndo(batch, sent.outcomes);
+    } else {
+      await _reconcileBatch(useMailStore, state, { isUnified, prunes: sent.prunes, surviving: sent.surviving });
+      // One slot for the whole batch.
+      if (!skipRefresh) await _fileBatchUndo(batch, sent.outcomes);
     }
-    // `skipRefresh` callers collect the outcomes and fill the slot once
-    // themselves. A delete still owed or refused settles nothing here, and an
-    // outcome exists exactly where something is addressable — never for a
-    // local-only row, a message already gone or a Graph delete (it lands in
-    // Deleted Items, so "deleted permanently" would be a false claim, and there
-    // is no uid to restore by).
-    if (!skipRefresh && sent.settled.length) await setDeleteUndo(sent.outcomes);
-  } else {
-    await _reconcileBatch(useMailStore, state, { isUnified, prunes: sent.prunes, surviving: sent.surviving });
-    // One slot for the whole batch.
-    if (!skipRefresh) await setDeleteUndo(sent.outcomes);
+  } finally {
+    if (batch) batch.filed = true;
   }
 
   return { outcomes: sent.outcomes };
@@ -1217,7 +1232,7 @@ async function _submitGroups(groups) {
 // Settle every target: the daemon's answer for a queued one, one direct send
 // for the rest. A queued uid still owed stays hidden; one refused for good, and
 // an unqueued delete that failed, comes back (`how.onFailure`).
-async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified, answers }) {
+async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified, batch, answers }) {
   const get = () => useMailStore.getState();
   const invoke = window.__TAURI__?.core?.invoke;
   const outcomes = [];
@@ -1237,7 +1252,7 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
     try {
       const answer = c.queued ? answers.get(c.tombstone) : undefined;
       const result = c.queued
-        ? _answered(c, answer, hidden)
+        ? _answered(c, answer, hidden, batch)
         : await _sendDirect(c, { how, waitsOffline, invoke });
       if (result === QUEUED && answer?.refused) notYet ??= answer.refused;
       if (result === OFFLINE || result === QUEUED) continue;
@@ -1273,7 +1288,7 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
 // A queued target's answer: its undo record when it landed, GONE when the
 // server no longer had it, QUEUED while it is owed. Throws a refusal for good,
 // in the app's words (`reason` keeps the daemon's code).
-function _answered(c, answer = { queued: true }, hidden) {
+function _answered(c, answer = { queued: true }, hidden, batch = null) {
   const shown = hidden.removed.find(r => _targetId(r) === c.tombstone);
   const kept = { messageId: c.row?.messageId ?? null, row: shown?.row ?? null, view: shown?.view ?? null };
   if (answer.dropped !== undefined) {
@@ -1295,7 +1310,7 @@ function _answered(c, answer = { queued: true }, hidden) {
     _owedIds.add(c.tombstone);
     // When this window asked (sent, not answered): a later landing never takes
     // the undo slot from an action newer than the click.
-    _owedRows.set(c.tombstone, { ...kept, at: answer.asked ?? Date.now() });
+    _owedRows.set(c.tombstone, { ...kept, at: answer.asked ?? Date.now(), batch });
     return QUEUED;
   }
   _owedIds.delete(c.tombstone);
@@ -1403,6 +1418,22 @@ function _holdSubmitted(ids) {
   };
 }
 
+// File `outcomes` (and what of the batch landed before this) as one delete's
+// undo slot and remember it on `batch`, so a uid of that call landing later
+// can join the slot while it is still there.
+async function _fileBatchUndo(batch, outcomes) {
+  const all = [...outcomes, ...batch.late];
+  batch.filed = true;
+  batch.late = [];
+  const before = nativePurgeStore.getState().undo;
+  await setDeleteUndo(all);
+  const after = nativePurgeStore.getState().undo;
+  if (after && after !== before) {
+    batch.slotId = after.id;
+    batch.outcomes = all;
+  }
+}
+
 // Whether the list on screen shows (account, folder).
 function _showsFolder(s, accountId, mailbox) {
   if (s.activeMailbox === 'UNIFIED') return String(mailbox).toUpperCase() === 'INBOX';
@@ -1422,8 +1453,11 @@ function _withoutTombstones(ids) {
  * `delete-queue-landed {accountId, mailbox, landed}`: the daemon deleted these
  * (a submit's round, or its replay worker) and has already pruned their header
  * rows and stamped custody. Their tombstones lift, a delete that lands after
- * its submit answered `queued` gets its undo, and the folder on screen
- * reloads. A uid a submit this app is still awaiting is left to that submit.
+ * its submit answered `queued` gets its undo (joining the slot its own call
+ * filed for the rest of its batch, while that slot holds), and the folder on
+ * screen reloads. A uid a submit this app is still awaiting is left to that
+ * submit. The daemon answers a submit after its first round when a uid is
+ * still being retried, so one stuck uid lands here and never holds its batch.
  */
 export async function onDeleteQueueLanded(payload) {
   const { accountId, mailbox, landed = [] } = payload || {};
@@ -1445,19 +1479,35 @@ export async function onDeleteQueueLanded(payload) {
   // or over an action newer than the submit.
   const slot = nativePurgeStore.getState().undo;
   const newerAction = (asked) => !!slot && !String(slot.labelKey || '').startsWith('undo.deleted') && (slot.at ?? 0) >= asked;
+  // The slot the uid's own call filed for what landed with its reply, while
+  // it is still the slot: the late one joins it, or the undo of the rest of
+  // that batch would be gone.
+  const ownSlot = (kept) => (kept.batch?.slotId != null && kept.batch.slotId === slot?.id ? kept.batch : null);
+  let joins = null;
   const outcomes = [];
   for (const { id, landed: l } of mine) {
     const kept = _owedRows.get(id);
     _owedRows.delete(id);
-    if (!kept || l.kind !== 'deleted' || newerAction(kept.at)) continue;
+    if (!kept || l.kind !== 'deleted') continue;
+    const own = ownSlot(kept);
+    const unfiled = kept.batch && !kept.batch.filed;
+    if (!own && !unfiled && newerAction(kept.at)) continue;
     const outcome = _landedOutcome({ account, accountId, mailbox, uid: l.uid }, l, kept);
     // Only what an undo can address, or a delete that really was permanent: a
     // move to Trash with no COPYUID and no Message-ID would otherwise read as
     // "deleted permanently", which it is not.
     const addressable = outcome.trashUid != null || (outcome.trash && outcome.messageId) || outcome.binId;
-    if (addressable || outcome.trash == null) outcomes.push(outcome);
+    if (!addressable && outcome.trash != null) continue;
+    // Its call is still reconciling the reply: filed with that slot.
+    if (unfiled) {
+      kept.batch.late.push(outcome);
+      continue;
+    }
+    if (own) joins = own;
+    outcomes.push(outcome);
   }
-  if (outcomes.length) await setDeleteUndo(outcomes);
+  if (joins) await _fileBatchUndo(joins, [...joins.outcomes, ...outcomes]);
+  else if (outcomes.length) await setDeleteUndo(outcomes);
   const s = nativePurgeStore.getState();
   if (_showsFolder(s, accountId, mailbox)) await reloadListInView();
   else s.updateSortedEmails?.();

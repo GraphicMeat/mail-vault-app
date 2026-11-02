@@ -11,11 +11,18 @@
 //!   rounds. Each round counts once in the entry's `attempts` before it is
 //!   sent. A landed uid gets the local bookkeeping
 //!   (`handlers::archive::after_server_delete`), leaves every delete entry
-//!   that owed it, and is announced with `delete-queue-landed`. A uid still
-//!   refused after the last round keeps its entry and its reason
-//!   (`op_journal::note_failures`, one write per entry per round) and is
-//!   answered as `queued`; the journal
-//!   change is announced with `delete-queue-changed`.
+//!   that owed it, and is announced with `delete-queue-landed`. A refused
+//!   uid keeps its entry and its reason (`op_journal::note_failures`, one
+//!   write per entry per round); the journal change is announced with
+//!   `delete-queue-changed`.
+//! - The submit answers after its FIRST round when a uid is still to be
+//!   retried: what landed or was dropped so far, the rest `queued` (each
+//!   refused one in `refused` with its reason). The later rounds go on in
+//!   the same task, the claim still held, and what lands then is announced
+//!   with `delete-queue-landed` like any replay's. A uid stuck on its
+//!   capture (a 45 s ceiling per try) so delays only itself, never the undo
+//!   or the custody of the rest of its batch. Without a retry pending the
+//!   answer comes when the rounds end, as before.
 //! - Only an identity change (`errors.bulkIdentityChanged`) is refused for
 //!   good (`dropped`, its uid cleared), as the app's replay does. A capture
 //!   the delete required that failed, a credential read that failed and a
@@ -46,8 +53,9 @@
 //! Threading: every RPC is its own connection and tokio task, so the retry
 //! sleeps (`tokio::time::sleep`) hold up nothing else. The work runs on its own
 //! spawned task, so the delete goes on to its end even when the caller stops
-//! waiting. Journal reads and writes run on `spawn_blocking` under
-//! `DaemonState.journal`, which is never held across an `.await`; the claim
+//! waiting or has its answer already (a oneshot, sent once). Journal reads
+//! and writes run on `spawn_blocking` under `DaemonState.journal`, which is
+//! never held across an `.await`; the claim
 //! set's mutex is held only to insert or remove keys. No lock is held across
 //! the network.
 //!
@@ -109,8 +117,9 @@ pub(crate) struct Submit {
 pub(crate) struct SubmitReply {
     /// Deleted on the server, or no longer there. Out of the journal.
     pub landed: Vec<Landed>,
-    /// Still owed: refused through every round, offline, or being sent by
-    /// another submit right now. In the journal.
+    /// Still owed: refused so far (a submit answers after its first round
+    /// while the retries go on), offline, or being sent by another submit
+    /// right now. In the journal.
     pub queued: Vec<u32>,
     /// The uids of `queued` the server (or a capture the delete needed)
     /// refused on their last send, each with that reason: the wire string
@@ -349,16 +358,36 @@ pub(crate) struct Sent {
 
 // ── submit ──────────────────────────────────────────────────────────────────
 
+/// Where a submit's first answer goes: the caller waiting on it, once.
+type Answer = Option<tokio::sync::oneshot::Sender<Result<SubmitReply, String>>>;
+
 /// Journal, send, retry and settle `s`, on its own task: a caller that stops
-/// waiting does not stop the delete.
+/// waiting does not stop the delete. Answered after the first send round
+/// when a uid is still being retried (`send_owed`): what landed is settled
+/// then, and the rest lands on its own `delete-queue-landed`. Otherwise
+/// answered when the rounds end.
 pub(crate) async fn submit(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitReply, String> {
     let st = Arc::clone(state);
-    tokio::spawn(async move { run(&st, s).await }).await.map_err(|e| format!("delete queue worker failed: {e}"))?
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let mut answer = Some(tx);
+        let result = run_answering(&st, s, &mut answer).await;
+        if let Some(tx) = answer {
+            let _ = tx.send(result);
+        }
+    });
+    rx.await.map_err(|e| format!("delete queue worker failed: {e}"))?
 }
 
-/// `submit`'s body, on the caller's task (tests drop it mid-send to stand in
-/// for a daemon killed between the journal write and the first send).
+/// `submit`'s body with every round on the caller's task, answered once they
+/// end (tests drop it mid-send to stand in for a daemon killed between the
+/// journal write and the first send).
 pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitReply, String> {
+    run_answering(state, s, &mut None).await
+}
+
+/// `run`, answering `answer` early when `send_owed` does.
+async fn run_answering(state: &Arc<DaemonState>, s: Submit, answer: &mut Answer) -> Result<SubmitReply, String> {
     if s.uids.is_empty() {
         return Ok(SubmitReply::default());
     }
@@ -385,7 +414,7 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
     // Sent as journalled: a uid owed by an older entry goes by that entry's
     // generation (`still_owed`), this one by its own.
     let s = Submit { arg, ..s };
-    Ok(send_owed(state, &s, &owed.owners, SUBMIT).await.reply)
+    Ok(send_owed_answering(state, &s, &owed.owners, SUBMIT, answer).await.reply)
 }
 
 /// The generation of `mailbox` the daemon's header cache holds (its native
@@ -414,6 +443,14 @@ async fn recorded_generation(state: &Arc<DaemonState>, account_id: &str, mailbox
 /// send rounds: claim, re-read what is still owed, count the round, send,
 /// settle. Shared by `submit` and the replay worker.
 pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u32, u64)], how: How) -> Sent {
+    send_owed_answering(state, s, owners, how, &mut None).await
+}
+
+/// `send_owed`, answering `answer` after the first round when a uid is still
+/// to be retried: what landed or was dropped so far, the rest `queued` (with
+/// its last refusal in `refused`). The later rounds go on here, the claim
+/// held, and announce what lands. A dropped receiver stops nothing.
+async fn send_owed_answering(state: &Arc<DaemonState>, s: &Submit, owners: &[(u32, u64)], how: How, answer: &mut Answer) -> Sent {
     let mut out = Sent::default();
     let owner: BTreeMap<u32, u64> = owners.iter().copied().collect();
 
@@ -437,6 +474,8 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
         if round > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(DELETE_RETRY_MS[round - 1])).await;
         }
+        #[cfg(test)]
+        tests::before_round(state, round).await;
         // A uid its entry no longer owes is not sent again. Cancelled by the
         // user: `dropped`. Otherwise another submit owned it and answered it
         // (its `delete-queue-landed` says how): left to that one, `queued`,
@@ -576,6 +615,22 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
             out.halt = stop;
             break;
         }
+        // A uid the user cancelled while this round sent it is not retried.
+        pending.retain(|&uid| {
+            if !was_cancelled(state, &s.account_id, &s.mailbox, uid) {
+                return true;
+            }
+            refused_last.remove(&uid);
+            out.reply.dropped.push((uid, CANCELLED.to_string()));
+            false
+        });
+        // More rounds to come: the caller has what is settled now, and a
+        // stuck uid delays only itself.
+        if !pending.is_empty() && round + 1 < how.rounds {
+            if let Some(tx) = answer.take() {
+                let _ = tx.send(Ok(so_far(&out.reply, &pending, &refused_last)));
+            }
+        }
     }
     if !pending.is_empty() {
         info!("[delete-queue] {}/{}: {} uid(s) stay queued", s.account_id, s.mailbox, pending.len());
@@ -583,9 +638,20 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
             changed(state);
         }
     }
-    out.reply.refused = pending.iter().filter_map(|uid| refused_last.get(uid).map(|reason| (*uid, reason.clone()))).collect();
-    out.reply.queued.extend(pending);
+    out.reply = so_far(&out.reply, &pending, &refused_last);
     out
+}
+
+/// The reply as it stands: `reply`'s landed and dropped, `pending` still
+/// queued, each with the reason its latest round refused it (none for a uid
+/// unsent or left to another submit).
+fn so_far(reply: &SubmitReply, pending: &[u32], refused_last: &BTreeMap<u32, String>) -> SubmitReply {
+    SubmitReply {
+        landed: reply.landed.clone(),
+        queued: reply.queued.iter().chain(pending).copied().collect(),
+        refused: pending.iter().filter_map(|uid| refused_last.get(uid).map(|reason| (*uid, reason.clone()))).collect(),
+        dropped: reply.dropped.clone(),
+    }
 }
 
 /// The account's credentials, read `read`-wise (`Quiet` never raises the

@@ -558,6 +558,83 @@ describe('delete-queue-landed after its own reply', () => {
   });
 });
 
+// Final review, Important 2: the daemon answers a submit after its first
+// round, so a uid whose capture is stuck delays only itself. What landed is
+// settled from that reply; the stuck uid lands later, on the event stream.
+describe('a batch with one stuck uid', () => {
+  const STUCK = 'E_BIN_CAPTURE:timeout: timed out after 45s';
+  const earlyReply = {
+    landed: [7, 8].map(uid => ({ kind: 'deleted', uid, trash: 'Trash', trashUid: 100 + uid, binId: null })),
+    queued: [9],
+    refused: [{ uid: 9, reason: STUCK }],
+    dropped: [],
+  };
+  const landed9 = { accountId: 'a1', mailbox: 'INBOX', landed: [{ kind: 'deleted', uid: 9, trash: 'Trash', trashUid: 109, binId: null }] };
+
+  it('settles what landed from the early reply, and the stuck one joins the same undo when it lands', async () => {
+    const db = await import('../../db');
+    prime({ emails: [row(7), row(8), row(9), row(10)] });
+    mockSubmit.mockResolvedValue(earlyReply);
+
+    const { outcomes } = await deleteMessages([{ key: 7 }, { key: 8 }, { key: 9 }]);
+
+    // Right after the reply: the two that landed are settled, custody asked
+    // for each, one undo for them; the stuck one stays hidden, owed.
+    expect(outcomes.map(o => o.uid)).toEqual([7, 8]);
+    expect(db.getLocalIndexEntry).toHaveBeenCalledWith('a1', 'INBOX', 7);
+    expect(db.getLocalIndexEntry).toHaveBeenCalledWith('a1', 'INBOX', 8);
+    expect(db.getLocalIndexEntry).not.toHaveBeenCalledWith('a1', 'INBOX', 9);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 2 } });
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|9')).toBe(true);
+
+    await onDeleteQueueLanded(landed9);
+
+    // The batch's own slot grows to the whole batch: never a slot for the
+    // late one alone, which would take the undo of the other two away.
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|9')).toBe(false);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 3 } });
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [], failed: [] });
+    await useMailStore.getState().runUndo();
+    expect(mockRestoreMessages).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: 7, trashUid: 107 }),
+      expect.objectContaining({ uid: 8, trashUid: 108 }),
+      expect.objectContaining({ uid: 9, trashUid: 109 }),
+    ]);
+  });
+
+  it('one that lands while its call is still reconciling the reply is filed in the same slot', async () => {
+    prime({ emails: [row(7), row(8), row(9), row(10)] });
+    mockSubmit.mockResolvedValue(earlyReply);
+    // The landing arrives during the batch's list reload, before its slot is filed.
+    let first = true;
+    useMailStore.setState({
+      loadEmails: vi.fn(async () => {
+        if (!first) return;
+        first = false;
+        await onDeleteQueueLanded(landed9);
+      }),
+    });
+
+    await deleteMessages([{ key: 7 }, { key: 8 }, { key: 9 }]);
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|9')).toBe(false);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 3 } });
+  });
+
+  it('the stuck one landing later never takes the slot from an action taken after the reply', async () => {
+    prime({ emails: [row(7), row(8), row(9), row(10)] });
+    mockSubmit.mockResolvedValue(earlyReply);
+    await deleteMessages([{ key: 7 }, { key: 8 }, { key: 9 }]);
+    useMailStore.getState().setUndo({ labelKey: 'undo.moved', labelParams: { count: 1 }, run: async () => {} });
+    const slot = useMailStore.getState().undo;
+
+    await onDeleteQueueLanded(landed9);
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|9')).toBe(false);
+    expect(useMailStore.getState().undo).toBe(slot);
+  });
+});
+
 describe('delete-queue-changed', () => {
   it('re-lists the queue and shows again a row the daemon dropped without landing it', async () => {
     prime({ emails: [row(7), row(8)] });

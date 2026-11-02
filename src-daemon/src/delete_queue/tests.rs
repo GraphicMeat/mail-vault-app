@@ -42,6 +42,42 @@ pub(crate) fn after_journal(state: &DaemonState) {
     }
 }
 
+/// A send round a submit waits at until the test lets it go: `(round, gate)`.
+type Gate = (usize, Arc<tokio::sync::Notify>);
+
+fn gates() -> &'static Mutex<HashMap<PathBuf, Gate>> {
+    static GATES: OnceLock<Mutex<HashMap<PathBuf, Gate>>> = OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+
+/// Runs at the start of each send round: parks there while the test holds
+/// that round's gate.
+pub(crate) async fn before_round(state: &DaemonState, round: usize) {
+    let gate = gates().lock().unwrap().get(&state.app_dir).filter(|(at, _)| *at == round).map(|(_, gate)| Arc::clone(gate));
+    if let Some(gate) = gate {
+        gate.notified().await;
+    }
+}
+
+/// Hold every send of `state` at the start of `round` until the gate is
+/// notified.
+fn hold_round(state: &DaemonState, round: usize) -> Arc<tokio::sync::Notify> {
+    let gate = Arc::new(tokio::sync::Notify::new());
+    gates().lock().unwrap().insert(state.app_dir.clone(), (round, Arc::clone(&gate)));
+    gate
+}
+
+/// Wait for every send round of `state` to end (the claim is released last).
+async fn settled(state: &DaemonState) {
+    for _ in 0..500 {
+        if state.delete_queue.held() == 0 {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the delete's rounds never ended");
+}
+
 pub(super) fn script(state: &DaemonState, f: impl Fn(&DaemonState, u32) -> Option<Result<Outcome, Refusal>> + Send + Sync + 'static) {
     scripts().lock().unwrap().insert(state.app_dir.clone(), Arc::new(f));
 }
@@ -179,7 +215,8 @@ async fn the_journal_holds_the_delete_before_the_first_send() {
             first.swap(false, std::sync::atomic::Ordering::SeqCst).then(|| Err(Refusal::Server("connection lost".into())))
         });
     }
-    let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
+    // Every round on this task (`run`): the retry's landing is the answer.
+    let reply = run(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
     assert_eq!(seen.lock().unwrap()[0], vec![1], "the uid was owed before anything was sent");
     assert!(matches!(reply.landed.as_slice(), [Landed::Deleted { uid: 1, .. }]), "{reply:?}");
     assert!(f.journal().is_empty());
@@ -231,6 +268,8 @@ async fn a_send_refused_through_every_round_stays_queued_with_its_reason() {
     let [(1, why)] = reply.refused.as_slice() else { panic!("the refusal is named: {reply:?}") };
     assert!(why.contains("refused"), "{why}");
     assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![1], refused: vec![(1, why.clone())], dropped: vec![] });
+    // The reply came after the first round; the retries go on in the daemon.
+    settled(&f.s).await;
     assert_eq!(f.moves(), 6, "one send and five retries");
     let owed = f.journal();
     assert_eq!(owed.len(), 1);
@@ -341,6 +380,7 @@ async fn an_identity_change_is_dropped_and_its_uid_cleared() {
 async fn a_required_capture_that_fails_stays_queued_not_dropped() {
     let f = fixture(vec![(Trigger::with("FETCH", "BODY.PEEK[]"), Action::RefuseWith("NO".into(), "fetch failed".into()))]);
     let reply = submit(&f.s, ask(&[1], Mode::Permanent)).await.unwrap();
+    settled(&f.s).await;
     let owed = f.journal();
     assert_eq!(reply, SubmitReply { queued: vec![1], refused: vec![(1, owed[0].failures[&1].message.clone())], ..Default::default() });
     assert_eq!(owed[0].attempts, 6);
@@ -355,6 +395,7 @@ async fn credentials_that_cannot_be_read_keep_the_entry() {
     f.s.raw_messages.accounts.lock().unwrap().clear();
     let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
     assert_eq!(reply.queued, vec![1]);
+    settled(&f.s).await;
     let owed = f.journal();
     assert_eq!(owed[0].attempts, 6);
     assert!(!owed[0].failures[&1].message.is_empty());
@@ -411,6 +452,7 @@ async fn a_round_of_many_refusals_writes_the_journal_once_per_entry() {
     let uids: Vec<u32> = (1..=20).collect();
     let reply = submit(&f.s, ask(&uids, Mode::Trash)).await.unwrap();
     assert_eq!(reply.queued.len(), 20);
+    settled(&f.s).await;
     let writes = f.s.delete_queue.journal_writes.load(std::sync::atomic::Ordering::SeqCst);
     assert_eq!(writes, 6 * 2, "per round: one attempt and one batch of reasons for the one entry");
     let owed = f.journal();
@@ -509,6 +551,7 @@ async fn the_submit_rpc_reads_its_params_and_answers_the_reply() {
 async fn a_refused_submit_names_each_still_owed_uid_with_its_last_reason() {
     let f = fixture(vec![(Trigger::with("FETCH", "BODY.PEEK[]"), Action::RefuseWith("NO".into(), "fetch failed".into()))]);
     let r = route(&f.s, "delete_queue.submit", &json!({"accountId": "acc1", "mailbox": "INBOX", "uids": [1], "mode": "permanent"}), json!(1)).await.unwrap();
+    settled(&f.s).await;
     let out = r.result.expect("answered");
     assert_eq!(out["queued"], json!([1]), "still owed, as before");
     let refused = out["refused"].as_array().unwrap_or_else(|| panic!("no refused field: {out}"));
@@ -524,6 +567,86 @@ async fn a_refused_submit_names_each_still_owed_uid_with_its_last_reason() {
     let out = r.result.expect("answered");
     assert_eq!(out["queued"], json!([1]));
     assert_eq!(out["refused"], json!([]), "offline nothing was refused");
+}
+
+// ── a stuck uid delays only itself ──────────────────────────────────────────
+
+/// `uid`'s first send fails as a capture that ran out of time (the 45 s
+/// ceiling, without the wait); every later one lands. Counts its sends. Any
+/// other uid goes to the mock server.
+fn stuck_once(state: &DaemonState, stuck: u32) -> Arc<std::sync::atomic::AtomicUsize> {
+    use crate::handlers::deleted::CaptureFailure;
+    let sends = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = Arc::clone(&sends);
+    script(state, move |_, uid| {
+        if uid != stuck {
+            return None;
+        }
+        Some(match counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst) {
+            0 => Err(Refusal::BinCapture(CaptureFailure::Timeout(None))),
+            _ => Ok(Outcome { trash: Some("Trash".into()), trash_uid: Some(90 + uid), bin_id: None, gone: false }),
+        })
+    });
+    sends
+}
+
+/// Final review, Important 2: one uid whose capture is stuck must not hold
+/// the batch. The submit answers after its first round: what landed is
+/// landed (settled on the server and in the journal), the stuck uid is
+/// `queued` with why. Its later rounds go on in the daemon, still claimed,
+/// so a replay pass meanwhile sends nothing of it, and its landing is
+/// announced on its own.
+#[tokio::test]
+async fn a_stuck_uid_does_not_hold_the_reply_for_the_one_that_landed() {
+    let f = fixture(vec![]);
+    let stuck = stuck_once(&f.s, 2);
+    let gate = hold_round(&f.s, 1);
+    let mut rx = f.s.events.subscribe();
+    let reply = tokio::time::timeout(Duration::from_secs(5), submit(&f.s, ask(&[1, 2], Mode::Trash)))
+        .await
+        .expect("answered after the first round, not held by the stuck uid")
+        .unwrap();
+    assert!(matches!(reply.landed.as_slice(), [Landed::Deleted { uid: 1, .. }]), "{reply:?}");
+    assert_eq!(reply.queued, vec![2], "{reply:?}");
+    let [(2, why)] = reply.refused.as_slice() else { panic!("the stuck uid says why: {reply:?}") };
+    assert!(why.starts_with("E_BIN_CAPTURE:"), "{why}");
+    assert!(reply.dropped.is_empty(), "{reply:?}");
+    assert!(!f.in_inbox(1) && f.in_trash(), "the one that landed is on the server already");
+    assert_eq!(f.journal()[0].uids, vec![2], "only the stuck one is still owed");
+    assert!(f.s.delete_queue.held() > 0, "the rest of its rounds still hold it");
+
+    // A replay pass while those rounds wait leaves it to them.
+    worker::pass(&f.s, "retry").await;
+    assert_eq!(stuck.load(std::sync::atomic::Ordering::SeqCst), 1, "never sent by two at once");
+
+    gate.notify_one();
+    settled(&f.s).await;
+    assert_eq!(stuck.load(std::sync::atomic::Ordering::SeqCst), 2, "sent once more, on the next round");
+    assert!(f.journal().is_empty(), "landed: no longer owed");
+    let landed: Vec<u64> = events(&mut rx)
+        .into_iter()
+        .filter(|(n, _)| n == "delete-queue-landed")
+        .flat_map(|(_, p)| p["landed"].as_array().cloned().unwrap_or_default())
+        .map(|l| l["uid"].as_u64().unwrap())
+        .collect();
+    assert_eq!(landed, vec![1, 2], "each announced once, the stuck one when it landed");
+}
+
+/// The caller stops waiting before the first round answers (the app quit,
+/// the socket closed): the rounds go on to their end all the same.
+#[tokio::test]
+async fn a_caller_that_stops_waiting_does_not_stop_the_rounds() {
+    let f = fixture(vec![]);
+    let stuck = stuck_once(&f.s, 2);
+    let gate = hold_round(&f.s, 0);
+    let gone = tokio::time::timeout(Duration::from_millis(500), submit(&f.s, ask(&[1, 2], Mode::Trash))).await;
+    assert!(gone.is_err(), "the caller gave up before the first round");
+    assert!(f.s.delete_queue.held() > 0, "the rounds hold the uids");
+    gate.notify_one();
+    settled(&f.s).await;
+    assert_eq!(stuck.load(std::sync::atomic::Ordering::SeqCst), 2, "the stuck uid was sent on the next round");
+    assert!(!f.in_inbox(1), "the other landed");
+    assert!(f.journal().is_empty(), "nothing left owed");
 }
 
 // ── a folder renumbered on the server (UIDVALIDITY) ─────────────────────────
