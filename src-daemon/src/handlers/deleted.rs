@@ -868,7 +868,8 @@ struct RestoreItem {
     message_id: Option<String>,
     #[serde(default)]
     bin_id: Option<String>,
-    /// The list row the app showed, for the header cache when the bin holds none.
+    /// The list row the app showed, for the header cache (the bin's copy of
+    /// the cache row when the app sends none).
     #[serde(default)]
     row: Option<Value>,
 }
@@ -1086,7 +1087,10 @@ async fn restore_group(state: &Arc<DaemonState>, items: &[&RestoreItem], deadlin
     let mut settle: Vec<Settle> = Vec::new();
     let mut discard: Vec<String> = Vec::new();
     for (i, item) in items.iter().enumerate() {
-        let row = bins[i].as_ref().map(|d| d.row.clone()).filter(Value::is_object).or_else(|| item.row.clone().filter(Value::is_object));
+        // The app's row first: it is what the list showed at the delete, its
+        // read state included; the bin's is the header cache at capture,
+        // which a flag change just before the delete may not have reached.
+        let row = item.row.clone().filter(Value::is_object).or_else(|| bins[i].as_ref().map(|d| d.row.clone()).filter(Value::is_object));
         let answer = match moved[i].clone() {
             InTrash::Moved { new_uid, proved } => {
                 settle.push(Settle { old: item.uid, new: new_uid, row, refiled: false });
@@ -2812,5 +2816,24 @@ mod tests {
         assert_eq!(jmap_labels(&m, "cb"), support::set(&["mb-trash"]), "still in Trash");
         assert_eq!(binned(&s).len(), 2, "neither move is proved: both bin rows stay");
         assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    /// The header row a restore writes is the app's row (what the list showed
+    /// at the delete, its read state included), not the bin's copy of the
+    /// header cache, which a flag change just before the delete may not have
+    /// reached: marked unread and deleted, it must come back unread, or the
+    /// unread count stays one short.
+    #[tokio::test]
+    async fn restore_writes_the_apps_row_over_the_bins_stale_copy() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        let mut item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        assert_eq!(binned(&s)[0].row["flags"], json!(["\\Seen"]), "the bin kept the cache's read row");
+        item["row"] = json!({"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": []});
+
+        let out = restore(&s, vec![item]).await;
+
+        let row = cached(&s, "acc1", "INBOX", new_uid_of(&out, 1)).expect("row under the new uid");
+        assert_eq!(row["flags"], json!([]), "unread, as the app showed it: {row}");
     }
 }
