@@ -935,6 +935,19 @@ describe('formatPurgeEverywhereOutcome', () => {
     expect(many).toContain('2 were deleted from the server but kept locally');
   });
 
+  // A different message now holds the uid: nothing failed on the server, and a
+  // resync is no answer; the list shows what the server holds now.
+  it('says a message that changed on the server was not deleted, not that the server failed', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    const one = formatPurgeEverywhereOutcome({ deleted: 0, failed: 0, changed: 1, queuedBackup: 0, needsResync: 0 });
+    expect(one).toContain('0 removed');
+    expect(one).toContain('1 had changed on the server, so nothing was deleted. The list will refresh.');
+    expect(one).not.toMatch(/could not be deleted|resync/);
+    const mixed = formatPurgeEverywhereOutcome({ deleted: 1, failed: 1, changed: 2, queuedBackup: 0, needsResync: 0 });
+    expect(mixed).toContain('1 could not be deleted from the server');
+    expect(mixed).toContain('2 had changed on the server, so nothing was deleted');
+  });
+
   it('uses singular wording for a count of exactly one', async () => {
     const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
     const msg = formatPurgeEverywhereOutcome({ deleted: 0, failed: 1, queuedBackup: 1, needsResync: 1 });

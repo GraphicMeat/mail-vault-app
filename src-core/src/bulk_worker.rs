@@ -209,6 +209,21 @@ pub struct Workflow {
 /// What `Ports::purge_prepare` answers for a message an earlier delete
 /// everywhere already removed: not a refusal, the target is done.
 pub const ALREADY_GONE: &str = "errors.bulkAlreadyGone";
+/// What `Ports::purge_prepare` answers when the server no longer holds the
+/// message in that folder under the original generation (Gmail's Trash
+/// expiry, a delete or a label removed in another client) and nothing local
+/// is left: the delete already happened there, so the target is done. A vault
+/// copy left behind is answered as `Prepared::ServerGone` instead.
+pub const SERVER_GONE: &str = "errors.bulkServerGone";
+/// A target `Ports::purge_prepare` proved.
+#[derive(Debug, Clone)]
+pub enum Prepared {
+    /// The server still holds the message: delete it there, then locally.
+    Live(PurgeProof),
+    /// The server no longer holds it (same generation, uid absent); the proof
+    /// is of the local copy. No server delete is sent; the local one runs.
+    ServerGone(PurgeProof),
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -497,7 +512,7 @@ pub trait Ports {
         stored: &[StoredProof],
     ) -> Result<Vec<u32>, String>;
     async fn purge_begin(&mut self,_targets:&[PurgeTarget],_cancel:Arc<AtomicBool>)->Result<(),String> {Ok(())}
-    async fn purge_prepare(&mut self, _target: &PurgeTarget, _hint: &crate::bulk::TargetHint) -> Result<PurgeProof,String> { Err("errors.bulkUnsupported".into()) }
+    async fn purge_prepare(&mut self, _target: &PurgeTarget, _hint: &crate::bulk::TargetHint) -> Result<Prepared,String> { Err("errors.bulkUnsupported".into()) }
     async fn purge_server(&mut self, _target: &PurgeTarget, _cancel: Arc<AtomicBool>) -> Result<(),String> { Err("errors.bulkUnsupported".into()) }
     async fn purge_local(&mut self, _target: &PurgeTarget) -> Result<PurgeEffect,String> { Err("errors.bulkUnsupported".into()) }
     async fn purge_mirror(&mut self, _target: &PurgeTarget) -> Result<PurgeMirror,String> { Err("errors.bulkUnsupported".into()) }
@@ -549,16 +564,24 @@ async fn run_purge(p: &mut impl Ports,w: &mut Workflow,cancel: Arc<AtomicBool>,r
             else if let Some(hint) = hint { p.purge_prepare(&w.purge_targets[i],hint).await }
             else { Err("errors.bulkIdentityUncertain".into()) };
         match proof {
-            Ok(proof) => {
+            Ok(prepared) => {
+                let (proof,server_gone) = match prepared { Prepared::Live(proof)=>(proof,false), Prepared::ServerGone(proof)=>(proof,true) };
+                // A server delete that already happened is recorded as done before
+                // any effect, so neither this run nor a resume ever sends one.
+                let server_proof = matches!(proof,PurgeProof::Server{..});
                 w.purge_targets[i].proof = Some(proof);
-                if !hint.is_some_and(|hint|w.purge_targets[i].proof_matches_hint(hint)) {
+                if !hint.is_some_and(|hint|w.purge_targets[i].proof_matches_hint(hint)) || (server_gone && !server_proof) {
                     w.purge_targets[i].proof = None;
                     w.purge_targets[i].refused = true;
                     w.purge_targets[i].needs_resync = true;
                     w.purge_targets[i].last_error = Some("errors.bulkIdentityChanged".into());
+                } else if server_gone {
+                    w.purge_targets[i].server = PurgeEffect::Complete;
                 }
             }
-            Err(error) if error == ALREADY_GONE => {
+            // Gone from the server and nothing local left: the same as a message
+            // an earlier delete everywhere removed.
+            Err(error) if error == ALREADY_GONE || error == SERVER_GONE => {
                 // Skipped like any target with nothing left to do, and counted as deleted.
                 w.purge_targets[i].skipped = true;
                 w.purge_targets[i].already_gone = true;

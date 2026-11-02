@@ -10,7 +10,7 @@ use mailvault_core::{
     bulk::{FrozenIntent, Group, Mailbox, Scope},
     bulk_worker::{
         self, ArchiveOutcome, CopyProof, Identity, Ports, Selected, StoredProof, Workflow,
-        PurgeTarget, PurgeProof, PurgeEffect, PurgeMirror,
+        PurgeTarget, PurgeProof, PurgeEffect, PurgeMirror, Prepared,
     },
 };
 use serde_json::{json, Value};
@@ -271,6 +271,76 @@ impl MailPorts {
     fn local_inventory(&self,t:&PurgeTarget)->Result<Arc<LocalInventory>,String> {
         self.inventories.get(&(t.account_id.clone(),t.mailbox.clone())).cloned().unwrap_or_else(||Err("errors.bulkIdentityUncertain".into()))
     }
+    /// The live identity of `g`. `purge`: a uid the server no longer holds
+    /// under the original generation answers `SERVER_GONE`, not "changed"
+    /// (`read_imap_identity_as`); Delete and Archive keep that a refusal.
+    async fn identity_as(&mut self, g: &Group, purge: bool) -> Result<(Identity, String), String> {
+        let config = self.config(g).await?;
+        let origin = bulk_worker::origin_hash(&config);
+        self.origins.insert(g.account_id.clone(), origin.clone());
+        if config.uses_jmap() {
+            let acct = self
+                .state
+                .jmap
+                .get(&config)
+                .await
+                .map_err(|e| service_error(&e.to_string()))?;
+            let boxes = acct
+                .refresh()
+                .await
+                .map_err(|e| service_error(&e.to_string()))?;
+            let mailbox_id = boxes
+                .ids
+                .get(&g.mailbox)
+                .cloned()
+                .ok_or("errors.bulkIdentityUncertain")?;
+            let selected = self.selected.get(&(g.account_id.clone(), g.mailbox.clone())).ok_or("errors.bulkIdentityUncertain")?;
+            let original_mailbox = selected.jmap_mailbox_id.as_ref().filter(|id| !id.is_empty()).ok_or("errors.bulkIdentityUncertain")?;
+            if original_mailbox != &mailbox_id { return Err("errors.bulkIdentityChanged".into()); }
+            let pairs = acct
+                .uid_to_id(&self.state, &g.account_id, &g.mailbox, &g.uids, false)
+                .await?;
+            let ids: HashMap<_, _> = pairs
+                .into_iter()
+                .filter_map(|(uid, id)| id.map(|id| (uid, id)))
+                .collect();
+            let selected = self
+                .selected
+                .get(&(g.account_id.clone(), g.mailbox.clone()))
+                .ok_or("errors.bulkIdentityUncertain")?;
+            if g.uids.iter().any(|uid| {
+                selected.jmap_ids.get(uid).is_none() || selected.jmap_ids.get(uid) != ids.get(uid)
+            }) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            return Ok((Identity::Jmap { mailbox_id, ids }, origin));
+        }
+        if config.uses_graph() {
+            let selected = self
+                .selected
+                .get(&(g.account_id.clone(), g.mailbox.clone()))
+                .ok_or("errors.bulkIdentityUncertain")?;
+            let root = common::vault_root(&self.state)?;
+            let sidecar = mailvault_core::header_cache::sidecar_dir(&root, &g.account_id, &g.mailbox);
+            let current = mailvault_core::graph_ledger::load(&mailvault_core::graph_ledger::ledger_path(&sidecar, false))?;
+            if g.uids.iter().any(|uid| selected.graph_ids.get(uid).is_none() || selected.graph_ids.get(uid) != current.get(uid)) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            return Ok((
+                Identity::Graph {
+                    ids: g.uids.iter().filter_map(|uid|selected.graph_ids.get(uid).cloned().map(|id|(*uid,id))).collect(),
+                },
+                origin,
+            ));
+        }
+        let selected = self
+            .selected
+            .get(&(g.account_id.clone(), g.mailbox.clone()))
+            .ok_or("errors.bulkIdentityUncertain")?;
+        read_imap_identity_as(&self.state, g, &config, selected, purge)
+            .await
+            .map(|identity| (identity, origin))
+    }
     async fn config(&self, g: &Group) -> Result<crate::imap::ImapConfig, String> {
         let (state, account) = (self.state.clone(), g.account_id.clone());
         let member = self.blocking(move || {
@@ -508,71 +578,7 @@ impl Ports for MailPorts {
         Ok(())
     }
     async fn identity(&mut self, g: &Group) -> Result<(Identity, String), String> {
-        let config = self.config(g).await?;
-        let origin = bulk_worker::origin_hash(&config);
-        self.origins.insert(g.account_id.clone(), origin.clone());
-        if config.uses_jmap() {
-            let acct = self
-                .state
-                .jmap
-                .get(&config)
-                .await
-                .map_err(|e| service_error(&e.to_string()))?;
-            let boxes = acct
-                .refresh()
-                .await
-                .map_err(|e| service_error(&e.to_string()))?;
-            let mailbox_id = boxes
-                .ids
-                .get(&g.mailbox)
-                .cloned()
-                .ok_or("errors.bulkIdentityUncertain")?;
-            let selected = self.selected.get(&(g.account_id.clone(), g.mailbox.clone())).ok_or("errors.bulkIdentityUncertain")?;
-            let original_mailbox = selected.jmap_mailbox_id.as_ref().filter(|id| !id.is_empty()).ok_or("errors.bulkIdentityUncertain")?;
-            if original_mailbox != &mailbox_id { return Err("errors.bulkIdentityChanged".into()); }
-            let pairs = acct
-                .uid_to_id(&self.state, &g.account_id, &g.mailbox, &g.uids, false)
-                .await?;
-            let ids: HashMap<_, _> = pairs
-                .into_iter()
-                .filter_map(|(uid, id)| id.map(|id| (uid, id)))
-                .collect();
-            let selected = self
-                .selected
-                .get(&(g.account_id.clone(), g.mailbox.clone()))
-                .ok_or("errors.bulkIdentityUncertain")?;
-            if g.uids.iter().any(|uid| {
-                selected.jmap_ids.get(uid).is_none() || selected.jmap_ids.get(uid) != ids.get(uid)
-            }) {
-                return Err("errors.bulkIdentityChanged".into());
-            }
-            return Ok((Identity::Jmap { mailbox_id, ids }, origin));
-        }
-        if config.uses_graph() {
-            let selected = self
-                .selected
-                .get(&(g.account_id.clone(), g.mailbox.clone()))
-                .ok_or("errors.bulkIdentityUncertain")?;
-            let root = common::vault_root(&self.state)?;
-            let sidecar = mailvault_core::header_cache::sidecar_dir(&root, &g.account_id, &g.mailbox);
-            let current = mailvault_core::graph_ledger::load(&mailvault_core::graph_ledger::ledger_path(&sidecar, false))?;
-            if g.uids.iter().any(|uid| selected.graph_ids.get(uid).is_none() || selected.graph_ids.get(uid) != current.get(uid)) {
-                return Err("errors.bulkIdentityChanged".into());
-            }
-            return Ok((
-                Identity::Graph {
-                    ids: g.uids.iter().filter_map(|uid|selected.graph_ids.get(uid).cloned().map(|id|(*uid,id))).collect(),
-                },
-                origin,
-            ));
-        }
-        let selected = self
-            .selected
-            .get(&(g.account_id.clone(), g.mailbox.clone()))
-            .ok_or("errors.bulkIdentityUncertain")?;
-        read_imap_identity(&self.state, g, &config, selected)
-            .await
-            .map(|identity| (identity, origin))
+        self.identity_as(g, false).await
     }
     async fn archive(
         &mut self,
@@ -763,7 +769,7 @@ impl Ports for MailPorts {
         self.inventories=inventories;
         Ok(())
     }
-    async fn purge_prepare(&mut self,t:&PurgeTarget,hint:&mailvault_core::bulk::TargetHint)->Result<PurgeProof,String> {
+    async fn purge_prepare(&mut self,t:&PurgeTarget,hint:&mailvault_core::bulk::TargetHint)->Result<Prepared,String> {
         // A delete clicked again on a row that outlived the first: the server copy
         // is gone and no vault copy is left, so there is nothing to prove or remove.
         // Whatever the list or the header cache still holds of it goes too.
@@ -786,7 +792,7 @@ impl Ports for MailPorts {
                     let receipt=crate::handlers::compose::local_ownership_resolved(&state,&scope,None,raw)?.ok_or("errors.bulkIdentityUncertain")?;
                     let stored = artifacts.first().map(|(name,raw)| StoredProof{uid:target.uid,name:name.clone(),sha256:bulk_worker::bytes_hash(raw)});
                     Ok(PurgeProof::Local{email,receipt,stored})
-            })).await?;
+            })).await?.map(Prepared::Live);
         }
         let config = self.config(&t.group()).await?;
         let original = hint.native_identity.as_ref().unwrap();
@@ -800,21 +806,17 @@ impl Ports for MailPorts {
         let retained=self.selected.entry((t.account_id.clone(),t.mailbox.clone())).or_default();
         retained.validity=selected.validity; retained.origin_hash=selected.origin_hash; retained.jmap_mailbox_id=selected.jmap_mailbox_id;
         retained.cached_uids.extend(selected.cached_uids); retained.message_ids.extend(selected.message_ids); retained.jmap_ids.extend(selected.jmap_ids); retained.graph_ids.extend(selected.graph_ids);
-        let identified=self.identity(&t.group()).await;
+        let identified=self.identity_as(&t.group(),true).await;
         let (identity,origin)=match identified {
             Err(error) if config.uses_jmap() && (error=="errors.jmapAuthFailed" || crate::handlers::jmap_bridge::is_auth_error(&error))=>{
                 self.state.jmap.forget(&config);
-                self.identity(&t.group()).await?
+                self.identity_as(&t.group(),true).await?
             }
+            Err(error) if error==bulk_worker::SERVER_GONE=>return self.purge_server_gone(t,hint,config,inventory).await,
             other=>other?,
         };
-        let (state,target,identity_copy,original_origin,mid)=(self.state.clone(),t.clone(),identity.clone(),origin.clone(),hint.message_id.clone());
-        let captured = self.blocking(move || common::with_mailbox_write(&state,&target.account_id,&target.mailbox,|root| {
-            let artifacts=inventory_artifacts(&state,root,&target,&inventory)?;
-            server_local_proof(&state,root,&target,&identity_copy,&original_origin,None,mid.as_deref(),&artifacts).map(ServerLocalEvidence::into_stored)
-        })).await?;
-        let stored=match captured {Ok(proof)=>proof,Err(error) if identity_error(&error)=>return Err(error),Err(error)=>{tracing::warn!("bulk purge local evidence: {error}");None}};
-        Ok(PurgeProof::Server{email:config.email,origin,identity,stored})
+        let stored=self.server_evidence(t,&identity,&origin,hint.message_id.clone(),inventory).await?;
+        Ok(Prepared::Live(PurgeProof::Server{email:config.email,origin,identity,stored}))
     }
     async fn purge_server(&mut self,t:&PurgeTarget,cancel:Arc<AtomicBool>)->Result<(),String> {
         let removed=self.delete_on_server(t,cancel).await;
@@ -1365,11 +1367,26 @@ pub(crate) fn freeze(
     Ok(work)
 }
 
+#[cfg(test)]
 async fn read_imap_identity(
     state: &Arc<DaemonState>,
     g: &Group,
     config: &crate::imap::ImapConfig,
     selected: &Selected,
+) -> Result<Identity, String> {
+    read_imap_identity_as(state, g, config, selected, false).await
+}
+/// `purge` (delete everywhere only): when every uid is absent from the folder
+/// under the original UIDVALIDITY, the server no longer holds those messages
+/// (a uid is never reissued within one generation), so the answer is
+/// `SERVER_GONE`. Anything else, including an absent uid under another
+/// generation, stays a refusal.
+async fn read_imap_identity_as(
+    state: &Arc<DaemonState>,
+    g: &Group,
+    config: &crate::imap::ImapConfig,
+    selected: &Selected,
+    purge: bool,
 ) -> Result<Identity, String> {
     let validity = selected.validity.ok_or("errors.bulkIdentityUncertain")?;
     let cached: HashSet<_> = selected.cached_uids.iter().copied().collect();
@@ -1388,12 +1405,16 @@ async fn read_imap_identity(
             let mailbox = mailbox.clone();
             let uids = uids.clone();
             async move {
+                let original = validity;
                 let validity = crate::imap::abd_cmds::uid_validity(&mut session, &mailbox)
                     .await?
                     .ok_or("errors.bulkIdentityUncertain")?;
                 let ids = crate::imap::abd_cmds::message_ids(&mut session, &mailbox, &uids).await?;
                 let live: HashSet<_> = ids.iter().map(|(uid, _)| *uid).collect();
                 if uids.iter().any(|uid| !live.contains(uid)) {
+                    if purge && validity == original && live.is_empty() {
+                        return Err(bulk_worker::SERVER_GONE.into());
+                    }
                     return Err("errors.bulkIdentityChanged".into());
                 }
                 let message_ids = ids
@@ -1420,6 +1441,36 @@ async fn read_imap_identity(
 }
 
 impl MailPorts {
+    /// The local bytes checked against a server identity before any effect:
+    /// a byte proof, or none when the evidence is unresolved. Evidence naming
+    /// another message refuses.
+    async fn server_evidence(&self,t:&PurgeTarget,identity:&Identity,origin:&str,mid:Option<String>,inventory:Arc<LocalInventory>)->Result<Option<StoredProof>,String> {
+        let (state,target,identity_copy,original_origin)=(self.state.clone(),t.clone(),identity.clone(),origin.to_string());
+        let captured = self.blocking(move || common::with_mailbox_write(&state,&target.account_id,&target.mailbox,|root| {
+            let artifacts=inventory_artifacts(&state,root,&target,&inventory)?;
+            server_local_proof(&state,root,&target,&identity_copy,&original_origin,None,mid.as_deref(),&artifacts).map(ServerLocalEvidence::into_stored)
+        })).await?;
+        match captured {Ok(proof)=>Ok(proof),Err(error) if identity_error(&error)=>Err(error),Err(error)=>{tracing::warn!("bulk purge local evidence: {error}");Ok(None)}}
+    }
+    /// The server no longer holds the message in that folder under the
+    /// original generation: nothing is sent there. With no local copy left the
+    /// target is done (`SERVER_GONE`) and its stale header row goes, as for a
+    /// message an earlier delete everywhere removed. A vault copy is proved
+    /// against the original identity like any server purge's, and the local
+    /// step removes it.
+    async fn purge_server_gone(&mut self,t:&PurgeTarget,hint:&mailvault_core::bulk::TargetHint,config:crate::imap::ImapConfig,inventory:Arc<LocalInventory>)->Result<Prepared,String> {
+        if inventory.candidates.get(&t.uid).is_none_or(Vec::is_empty) {
+            let (state,target)=(self.state.clone(),t.clone());
+            let _=common::blocking(move||crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::remove_headers(c,&target.account_id,&target.mailbox,&[target.uid]).map(|_|()))).await;
+            return Err(bulk_worker::SERVER_GONE.into());
+        }
+        let original=hint.native_identity.as_ref().ok_or("errors.bulkIdentityUncertain")?;
+        let validity=original.uid_validity.ok_or("errors.bulkIdentityUncertain")?;
+        let identity=Identity::Imap{validity,message_ids:hint.message_id.as_ref().map(|id|(t.uid,mailvault_core::maildir::normalize_message_id(id))).into_iter().collect()};
+        let origin=bulk_worker::origin_hash(&config);
+        let stored=self.server_evidence(t,&identity,&origin,hint.message_id.clone(),inventory).await?;
+        Ok(Prepared::ServerGone(PurgeProof::Server{email:config.email,origin,identity,stored}))
+    }
     /// The server half of a purge: the identity re-proved, then the one message removed.
     /// A purge keeps no bin copy (`bin: false` under the delete core's
     /// `capture_policy`, pinned by `capture_policy_truth_table`): its proof is the local evidence `purge_prepare`
@@ -2146,6 +2197,9 @@ mod tests {
             crate::custody::with_conn(state,|c|mailvault_core::custody::entries::upsert(c,"acc","INBOX",&[json!({"uid":7,"source":"server","message_id":"<selected@test>"})]).map(|_|()))
         }).unwrap();
     }
+    fn live(prepared:Prepared)->PurgeProof {
+        match prepared {Prepared::Live(proof)=>proof,other=>panic!("expected a live server proof: {other:?}")}
+    }
     fn purge_ports(state:&Arc<DaemonState>)->MailPorts {
         MailPorts{state:state.clone(),owner:test_owner(state),id:"test".into(),attempt:"A".into(),mirror:None,external_status:Some("unavailable".into()),archive_base:0,archive_errors:0,selected:HashMap::new(),inventories:HashMap::new(), origins:HashMap::new()}
     }
@@ -2160,7 +2214,7 @@ mod tests {
         let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
         let provider=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=purge_credentials(&state,&provider);let owner_a=mailvault_core::imap::NativeHeaderIdentity::new(&cfg,"acc","INBOX",Some(1));publish_purge_owner(&state,&owner_a,json!([{"uid":7,"messageId":"selected@test"}]));
         let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(original_scope(&cfg,"INBOX",Some("selected@test"))).unwrap()).unwrap();let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);
-        ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();target.proof=Some(ports.purge_prepare(&target,&hint).await.unwrap());ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
+        ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();target.proof=Some(live(ports.purge_prepare(&target,&hint).await.unwrap()));ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
         let (checked_tx,checked_rx)=std::sync::mpsc::channel();let (release_tx,release_rx)=std::sync::mpsc::channel();let (publishing_tx,publishing_rx)=std::sync::mpsc::channel();
         LOCAL_EFFECT_PROBES.get_or_init(Default::default).lock().unwrap().insert(dir.path().into(),Arc::new(LocalEffectProbe{checked:checked_tx,release:std::sync::Mutex::new(release_rx),publishing:publishing_tx}));let _watch=LocalEffectWatch(dir.path().into());
         let local=tokio::spawn(async move{ports.purge_local(&target).await});checked_rx.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -2198,7 +2252,7 @@ mod tests {
                     let pending=wait_drained(&state).await;pending["result"]["failed"]==1
                 } else {
                     let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(scope).unwrap()).unwrap();let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);
-                    ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();target.proof=Some(ports.purge_prepare(&target,&hint).await.unwrap());
+                    ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();target.proof=Some(live(ports.purge_prepare(&target,&hint).await.unwrap()));
                     ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
                     publish_purge_owner(&state,&owner_b,json!([{"uid":7,"messageId":mid}]));
                     ports.purge_local(&target).await.unwrap()==PurgeEffect::Conflict
@@ -2218,7 +2272,7 @@ mod tests {
         seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);let provider=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=purge_credentials(&state,&provider);
         let owner=mailvault_core::imap::NativeHeaderIdentity::new(&cfg,"acc","INBOX",Some(1));publish_purge_owner(&state,&owner,json!([{"uid":7,"messageId":"selected@test"}]));
         let mut work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(original_scope(&cfg,"INBOX",Some("selected@test"))).unwrap()).unwrap();
-        let mut ports=purge_ports(&state);ports.purge_begin(&work.purge_targets,Arc::new(AtomicBool::new(false))).await.unwrap();work.purge_targets[0].proof=Some(ports.purge_prepare(&work.purge_targets[0],work.purge_targets[0].hint(&work.intent).unwrap()).await.unwrap());
+        let mut ports=purge_ports(&state);ports.purge_begin(&work.purge_targets,Arc::new(AtomicBool::new(false))).await.unwrap();work.purge_targets[0].proof=Some(live(ports.purge_prepare(&work.purge_targets[0],work.purge_targets[0].hint(&work.intent).unwrap()).await.unwrap()));
         let retained=work.purge_targets[0].proof.clone();state.bulk.lock().unwrap().begin_admission("server-pending","A").unwrap();prepare_claim(&state,"server-pending","A",work.intent.clone()).unwrap();checkpoint(&state,"server-pending","A",&work).unwrap();
         let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),&cfg.email,"INBOX").unwrap();std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),PURGE_RAW).unwrap();drop(ports);drop(state);
         let restarted=DaemonState::for_test(dir.path().into(),dir.path().into(),true);let reply=handle_request_for_test(&restarted,"bulk.resume",json!({"operationId":"server-pending","attemptId":"B","mirrorRoot":drive.path()})).await;assert!(reply.error.is_none(),"{:?}",reply.error);let pending=wait_drained(&restarted).await;
@@ -2322,7 +2376,7 @@ mod tests {
         for mutation in ["row","tombstone","mailbox","global","replaced"] {
             let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
             let server=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=purge_credentials(&state,&server);let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(original_scope(&cfg,"INBOX",Some("selected@test"))).unwrap()).unwrap();
-            let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();target.proof=Some(ports.purge_prepare(&target,&hint).await.unwrap());ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
+            let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();target.proof=Some(live(ports.purge_prepare(&target,&hint).await.unwrap()));ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
             common::with_mailbox_write(&state,"acc","INBOX",|root| {
                 match mutation {
                     "row"=>{let entry=mailvault_core::message_store::find(root,"acc","INBOX",7).unwrap();state.vault_registry.upsert("acc","INBOX",7,&mailvault_core::message_store::entry_path(root,"acc","INBOX",&entry.name));},
@@ -2351,7 +2405,7 @@ mod tests {
             let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(original_scope(&cfg,"INBOX",Some("selected@test"))).unwrap()).unwrap();
             let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);
             ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();
-            target.proof=Some(ports.purge_prepare(&target,&hint).await.unwrap());
+            target.proof=Some(live(ports.purge_prepare(&target,&hint).await.unwrap()));
             ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
             match mode {
                 "meta"|"bodiless-meta"=>crate::custody::with_conn(&state,|c|c.execute("DELETE FROM header_cache_meta WHERE account_id='acc' AND mailbox_path='INBOX'",[]).map(|_|()).map_err(|e|e.to_string())).unwrap(),
@@ -2389,7 +2443,7 @@ mod tests {
             let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(scope).unwrap()).unwrap();
             let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);
             ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();
-            target.proof=Some(ports.purge_prepare(&target,&hint).await.unwrap());
+            target.proof=Some(live(ports.purge_prepare(&target,&hint).await.unwrap()));
             let original_path=match target.proof.as_ref().unwrap() {PurgeProof::Server{stored:Some(stored),..}=>mailvault_core::message_store::entry_path(dir.path(),"acc","INBOX",&stored.name),_=>panic!("native file proof")};
             ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
             if mode=="origin" {account["imapPort"]=json!(server.port()+1);std::fs::write(dir.path().join("credentials.json"),json!({"acc":account.to_string()}).to_string()).unwrap();}
@@ -2586,6 +2640,62 @@ mod tests {
         }
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
+    /// A row the app still lists whose message the server no longer holds in
+    /// that folder, under the same UIDVALIDITY: Gmail's 30-day Trash expiry, or
+    /// a delete or a label removed in another client. Nothing is left to delete
+    /// on the server, so the purge is done there; a vault copy still goes, as
+    /// for any delete everywhere. It came back refused as "changed" and "needs
+    /// resync", which the user could not fix by resyncing.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_of_a_uid_the_server_no_longer_holds_is_deleted_not_refused() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for (mailbox,vault_copy) in [("INBOX",false),("INBOX",true),("[Gmail]/Trash",false)] {
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,mailbox);
+            if vault_copy {seed_purge_file(&state,PURGE_RAW);}
+            // The folder at the same generation, without uid 7.
+            let mut folder=mock_imap::state::Mailbox::new(mailbox).with_uid_validity(1);
+            folder.add(mock_imap::Message::new(9,"Message-ID: <other@test>\r\n\r\nkeep"));
+            let provider=MockImap::start(Scenario::new().mailbox(folder));let cfg=purge_credentials(&state,&provider);
+            let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"gone","type":"delete_everywhere","scope":original_scope(&cfg,mailbox,Some("selected@test")),"externalStatus":"unavailable"})).await;
+            assert!(reply.error.is_none(),"{mailbox}: {:?}",reply.error);let pending=wait_drained(&state).await;
+            // With a vault copy, its backup copy's removal waits for the unavailable drive, as for any delete everywhere.
+            assert_eq!(pending["result"],json!({"deleted":1,"failed":0,"queuedBackup":usize::from(vault_copy),"needsResync":0}),"{mailbox} vault_copy={vault_copy}: {pending}");
+            if vault_copy {assert_eq!((&pending["worker"]["purgeTargets"][0]["server"],&pending["worker"]["purgeTargets"][0]["local"]),(&json!("complete"),&json!("complete")),"{pending}");}
+            let target=&pending["worker"]["purgeTargets"][0];
+            assert_eq!((&target["refused"],&target["needsResync"]),(&json!(false),&json!(false)),"{target}");
+            if !vault_copy {assert_eq!(target["alreadyGone"],json!(true),"{target}");}
+            assert!(provider.commands().iter().all(|c|!c.contains("STORE")&&!c.contains("EXPUNGE")&&!c.contains("MOVE")&&!c.contains("COPY")),"nothing is sent for a message the server no longer holds: {:?}",provider.commands());
+            assert!(provider.state().find(mailbox).is_some_and(|folder|folder.messages.iter().any(|m|m.uid==9)),"{mailbox}: the folder's other message stays");
+            assert!(mailvault_core::message_store::read_raw(dir.path(),"acc",mailbox,7).unwrap().is_none(),"{mailbox}: the vault copy goes too");
+            assert!(crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::load_by_uids(c,"acc",mailbox,&[7])).unwrap().is_empty(),"{mailbox}: the stale header row leaves the cache");
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    /// The controls: a uid another message now holds, and a folder whose
+    /// UIDVALIDITY moved on (the uid space was reissued), both stay refused as
+    /// changed, with nothing removed anywhere.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_of_a_uid_another_message_or_generation_holds_stays_refused() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for change in ["message","generation"] {
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+            let folder=if change=="message" {
+                let mut folder=mock_imap::state::Mailbox::new("INBOX").with_uid_validity(1);
+                folder.add(mock_imap::Message::new(7,"Message-ID: <other@test>\r\n\r\nanother message"));folder
+            } else {mock_imap::state::Mailbox::new("INBOX").with_uid_validity(2)};
+            let provider=MockImap::start(Scenario::new().mailbox(folder));let cfg=purge_credentials(&state,&provider);
+            let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":change,"type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",Some("selected@test")),"externalStatus":"unavailable"})).await;
+            assert!(reply.error.is_none(),"{change}: {:?}",reply.error);let pending=wait_drained(&state).await;
+            let target=&pending["worker"]["purgeTargets"][0];
+            assert_eq!((&target["refused"],&target["lastError"]),(&json!(true),&json!("errors.bulkIdentityChanged")),"{change}: {pending}");
+            assert_eq!(pending["result"]["deleted"],json!(0),"{change}: {pending}");
+            assert!(provider.commands().iter().all(|c|!c.contains("STORE")&&!c.contains("EXPUNGE")&&!c.contains("MOVE")),"{change}");
+            assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().as_deref(),Some(PURGE_RAW),"{change}: the vault copy stays");
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
     #[tokio::test(flavor="multi_thread")]
     async fn bulk_purge_local_replacement_after_actual_server_success_is_preserved() {
         let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
@@ -2623,7 +2733,7 @@ mod tests {
         let mut work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,scope).unwrap();
         let mut ports=MailPorts{state:state.clone(),owner:test_owner(&state),id:"retained".into(),attempt:"A".into(),mirror:None,external_status:Some("not_configured".into()),archive_base:0,archive_errors:0,selected:HashMap::new(),inventories:HashMap::new(), origins:HashMap::new()};
         ports.purge_begin(&work.purge_targets,Arc::new(AtomicBool::new(false))).await.unwrap();
-        let proof=ports.purge_prepare(&work.purge_targets[0],work.purge_targets[0].hint(&work.intent).unwrap()).await.unwrap();
+        let proof=live(ports.purge_prepare(&work.purge_targets[0],work.purge_targets[0].hint(&work.intent).unwrap()).await.unwrap());
         let PurgeProof::Local{receipt,..}=&proof else {panic!("stage must have native local proof")};
         let original=receipt.clone();work.purge_targets[0].proof=Some(proof);
         state.bulk.lock().unwrap().begin_admission("retained","A").unwrap();

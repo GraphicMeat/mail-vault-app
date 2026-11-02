@@ -144,6 +144,36 @@ it('keeps the row gone when the daemon found the message already deleted', async
   expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
   expect(useMailStore.getState().deleteTombstones.size).toBe(1);
 });
+// A uid the server no longer holds (Gmail's Trash expiry, a delete in another
+// client) comes back from the daemon as already gone: deleted, with no toast.
+it('says nothing about a delete of a message the server no longer held', async () => {
+  native.start.mockImplementation(async ({ scope }) => ({
+    status: 'complete',
+    result: { deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 },
+    outcomes: scope.targetHints.map((hint) => ({
+      hint,
+      target: { ...refused(hint), refused: false, skipped: true, alreadyGone: true },
+    })),
+  }));
+  await purgeEverywhereReporting([1]);
+  expect(useMailStore.getState().error).toBeNull();
+  expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
+});
+// Another message now holds the uid: refused as changed. The toast says so, not
+// that the server failed, and not that a resync would help.
+it('reports a refused-as-changed target as changed on the server, not a server failure', async () => {
+  native.start.mockImplementation(async ({ scope }) => ({
+    status: 'complete',
+    result: { deleted: 0, failed: 1, queuedBackup: 0, needsResync: 1 },
+    outcomes: scope.targetHints.map((hint) => ({ hint, target: { ...refused(hint), needsResync: true } })),
+  }));
+  const result = await purgeEverywhereReporting([1]);
+  expect(result).toMatchObject({ deleted: 0, failed: 0, changed: 1, needsResync: 0 });
+  const message = useMailStore.getState().error;
+  expect(message).toContain('1 had changed on the server, so nothing was deleted');
+  expect(message).not.toMatch(/could not be deleted|resync/);
+  expect(useMailStore.getState().emails.map((e) => e.uid).sort()).toEqual([1, 2]);
+});
 it('refreshes and restores conservatively when A outcomes were replaced by B', async () => {
   native.start.mockResolvedValue({
     status: 'complete',
@@ -238,9 +268,12 @@ it('clears Undo and reports four partial counters as warning, clean success sile
     result: { deleted: 1, failed: 1, queuedBackup: 2, needsResync: 3 },
   }));
   const result = await purgeEverywhereReporting([2]);
+  // The one refused target was refused as changed: counted as that, not as a
+  // server failure.
   expect(result).toEqual({
     deleted: 1,
-    failed: 1,
+    failed: 0,
+    changed: 1,
     queuedBackup: 2,
     needsResync: 3,
   });

@@ -36,6 +36,8 @@ struct Fake {
     identity_override: Option<Identity>,
     origin_override: Option<String>,
     purge_local_conflict: bool,
+    purge_prepare_error: Option<&'static str>,
+    purge_server_gone: bool,
 }
 impl Ports for Fake {
     async fn checkpoint(&mut self, w: &Workflow) -> Result<(), String> {
@@ -187,12 +189,14 @@ impl Ports for Fake {
             .take(uids.len().saturating_sub(self.delete_failed))
             .collect())
     }
-    async fn purge_prepare(&mut self,t:&PurgeTarget,_:&mailvault_core::bulk::TargetHint)->Result<PurgeProof,String> {
+    async fn purge_prepare(&mut self,t:&PurgeTarget,_:&mailvault_core::bulk::TargetHint)->Result<bulk_worker::Prepared,String> {
+        if let Some(error)=self.purge_prepare_error {return Err(error.into());}
         let (mut identity,origin)=self.identity(&t.group()).await?;
         if let Identity::Imap{message_ids,..}=&mut identity {
             for id in message_ids.values_mut() {*id=mailvault_core::maildir::normalize_message_id(id);}
         }
-        Ok(PurgeProof::Server{email:"me@mock.test".into(),origin,identity,stored:Some(StoredProof{uid:t.uid,name:format!("{}.eml",t.uid),sha256:bulk_worker::bytes_hash(t.uid.to_string().as_bytes())})})
+        let proof=PurgeProof::Server{email:"me@mock.test".into(),origin,identity,stored:Some(StoredProof{uid:t.uid,name:format!("{}.eml",t.uid),sha256:bulk_worker::bytes_hash(t.uid.to_string().as_bytes())})};
+        Ok(if self.purge_server_gone {bulk_worker::Prepared::ServerGone(proof)} else {bulk_worker::Prepared::Live(proof)})
     }
     async fn purge_server(&mut self,t:&PurgeTarget,_:Arc<AtomicBool>)->Result<(),String> {
         self.trace.push(json!({"effect":"server-delete","accountId":t.account_id,"uid":t.uid,"mailbox":t.mailbox,"permanent":true,"options":{"bin":false}}));
@@ -319,6 +323,53 @@ async fn purge_server_failure_and_local_conflict_never_reach_mirror() {
         let counts=w.purge_result.as_ref().unwrap();
         assert_eq!((counts.deleted,counts.failed,counts.kept_local),(0,usize::from(!conflict),usize::from(conflict)),"conflict={conflict}");
     }
+}
+/// The server no longer holds the message in that folder under the same
+/// generation (Gmail's Trash expiry, a delete in another client) and nothing
+/// local is left: done, counted deleted, never refused or "needs resync", and
+/// nothing is sent to the server.
+#[tokio::test]
+async fn purge_of_a_message_the_server_no_longer_holds_is_deleted_without_effects() {
+    let mut w=purge_work();
+    let mut f=Fake{purge_prepare_error:Some("errors.bulkServerGone"),..Default::default()};
+    run(&mut w,&mut f).await.unwrap();
+    assert!(f.trace.is_empty(),"no server, vault or mirror effect: {:?}",f.trace);
+    let t=&w.purge_targets[0];
+    assert!(!t.refused && !t.needs_resync && t.already_gone && t.last_error.is_none(),"{t:?}");
+    assert_eq!(json!(w.purge_result),json!({"deleted":1,"failed":0,"queuedBackup":0,"needsResync":0}));
+    assert_eq!(w.completed_keys().len(),1);
+}
+/// The same, with a vault copy left: the server delete is recorded as done at
+/// prepare (so a resume never sends one either) and the vault and backup
+/// copies go as for any delete everywhere.
+#[tokio::test]
+async fn purge_of_a_message_the_server_no_longer_holds_still_removes_the_vault_copy() {
+    let mut w=purge_work();
+    let mut f=Fake{purge_server_gone:true,..Default::default()};
+    run(&mut w,&mut f).await.unwrap();
+    let effects:Vec<_>=f.trace.iter().map(|e|e["effect"].as_str().unwrap()).collect();
+    assert_eq!(effects,["vault-delete","mirror-purge"],"no server delete: {:?}",f.trace);
+    assert!(f.checkpoints.iter().all(|c|c.purge_targets[0].server!=PurgeEffect::Attempted),"the server step is never attempted");
+    let t=&w.purge_targets[0];
+    assert_eq!((t.server,t.local,t.refused,t.needs_resync),(PurgeEffect::Complete,PurgeEffect::Complete,false,false));
+    assert_eq!(json!(w.purge_result),json!({"deleted":1,"failed":0,"queuedBackup":0,"needsResync":0}));
+    // A resume from the checkpoint written right after prepare sends nothing to the server.
+    let mut durable=f.checkpoints.iter().find(|c|c.purge_targets[0].proof.is_some()).unwrap().clone();
+    let mut resumed=Fake::default();
+    bulk_worker::run(&mut resumed,&mut durable,Arc::new(AtomicBool::new(false)),true).await.unwrap();
+    assert!(resumed.trace.iter().all(|e|e["effect"]!="server-delete"),"{:?}",resumed.trace);
+}
+/// A server-gone answer whose proof does not match the original selection is
+/// still refused as changed, with no effect.
+#[tokio::test]
+async fn purge_server_gone_with_a_mismatched_proof_stays_refused() {
+    let mut w=purge_work();
+    let mut f=Fake{purge_server_gone:true,identity_override:Some(Identity::Imap{validity:2,message_ids:HashMap::from([(1,"1@test".into())])}),..Default::default()};
+    run(&mut w,&mut f).await.unwrap();
+    assert!(f.trace.is_empty(),"{:?}",f.trace);
+    let t=&w.purge_targets[0];
+    assert!(t.refused && t.proof.is_none() && t.server==PurgeEffect::Pending,"{t:?}");
+    assert_eq!(t.last_error.as_deref(),Some("errors.bulkIdentityChanged"));
 }
 #[test]
 fn purge_counts_kept_local_is_omitted_from_the_result_when_zero() {

@@ -107,7 +107,8 @@ it('never retries a row whose Message-ID changed under the uid', async () => {
   mockGetEmailHeadersByUids.mockResolvedValue([{ ...bare(1), messageId: 'stranger@mock' }]);
   const result = await purgeEverywhere([1]);
   expect(native.start).toHaveBeenCalledTimes(1);
-  expect(result).toEqual(counts(0, 1, 1));
+  // Counted as changed on the server: not a server failure, and no resync helps.
+  expect(result).toEqual({ ...counts(0, 0, 0), changed: 1 });
   expect(useMailStore.getState().emails.map((e) => e.uid).sort()).toEqual([1, 2]);
 });
 

@@ -37,7 +37,8 @@ impl Ports for Oracle {
     async fn verify(&mut self,_:&Group,_:&Identity,_:&[StoredProof])->Result<Vec<u32>,String> {panic!("ordinary verify")}
     async fn copy(&mut self,_:&Group,_:&[u32],_:&[StoredProof])->Result<CopyProof,String> {panic!("purge must not mirror-copy")}
     async fn delete(&mut self,_:&Group,_:&[u32],_:&Identity,_:bool,_:Arc<AtomicBool>,_:&[StoredProof])->Result<Vec<u32>,String> {panic!("ordinary delete")}
-    async fn purge_prepare(&mut self,t:&PurgeTarget,hint:&mailvault_core::bulk::TargetHint)->Result<PurgeProof,String> {
+    async fn purge_prepare(&mut self,t:&PurgeTarget,hint:&mailvault_core::bulk::TargetHint)->Result<bulk_worker::Prepared,String> {
+        let proof=(|| -> Result<PurgeProof,String> {
         let raw=format!("Message-ID: <{}>\r\n\r\noracle native artifact",hint.message_id.as_deref().unwrap_or("native@test"));
         let stored=Some(StoredProof{uid:t.uid,name:format!("{}.eml",t.uid),sha256:bulk_worker::bytes_hash(raw.as_bytes())});
         if hint.native_identity.is_none() {
@@ -53,6 +54,8 @@ impl Ports for Oracle {
         if status.is_some_and(|e|e.get("error").is_some()) {return Err("errors.bulkIdentityUncertain".into());}
         let validity=status.and_then(|e|e["reply"]["uidValidity"].as_u64()).and_then(|n|u32::try_from(n).ok()).ok_or("errors.bulkIdentityUncertain")?;
         Ok(PurgeProof::Server{email:self.email(t).unwrap_or_default(),origin:"oracle-native-origin".into(),identity:Identity::Imap{validity,message_ids:hint.message_id.as_ref().map(|id|(t.uid,mailvault_core::maildir::normalize_message_id(id))).into_iter().collect()},stored})
+        })();
+        proof.map(bulk_worker::Prepared::Live)
     }
     async fn purge_server(&mut self,t:&PurgeTarget,_:Arc<AtomicBool>)->Result<(),String> {
         let effect=self.effect(t,if matches!(t.proof,Some(PurgeProof::Server{identity:Identity::Graph{..},..})){"graph-delete"}else{"server-delete"})

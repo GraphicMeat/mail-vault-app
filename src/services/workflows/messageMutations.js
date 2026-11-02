@@ -3085,7 +3085,8 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
   // Refresh the view only if it still belongs to the frozen affected scopes.
   if (groups.has(JSON.stringify([get().activeAccountId, get().activeMailbox]))) await get().loadEmails();
   if (failure && !queued.size) throw failure;
-  const settled = result || { deleted: 0, failed: scope.keys.length, queuedBackup: 0, needsResync: scope.keys.length };
+  const settled = _splitChanged(result || { deleted: 0, failed: scope.keys.length, queuedBackup: 0, needsResync: scope.keys.length },
+    scope.targetHints.map(hint => outcomes.get(originalTargetId(hint))));
   if (!queued.size) return settled;
   // A queued target is owed, not failed, and its resync is the queue's to
   // wait for: the toast counts both only over the targets that came back.
@@ -3094,6 +3095,27 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
     : queued.size;
   return { ...settled, failed: Math.max(0, (settled.failed || 0) - queued.size),
     needsResync: Math.max(0, (settled.needsResync || 0) - resyncQueued), queued: queued.size };
+}
+
+// A target refused because another message now holds its uid did not fail on
+// the server, and no resync makes it deletable: the list shows what the server
+// holds now. It leaves `failed` for `changed`, and a mailbox whose only reason
+// to resync was such a target leaves `needsResync`. Never queued
+// (`_purgeQueueable`), so the queued adjustment below never counts it again.
+function _splitChanged(result, finals) {
+  const changed = finals.filter(target => target?.refused && !target.skipped
+    && target.lastError === 'errors.bulkIdentityChanged');
+  if (!changed.length) return result;
+  // Per mailbox: true while every target there held back for resync is a changed one.
+  const resync = new Map();
+  for (const target of finals) {
+    if (!target?.needsResync) continue;
+    const key = JSON.stringify([target.accountId, target.mailbox]);
+    resync.set(key, (resync.get(key) ?? true) && changed.includes(target));
+  }
+  const changedOnly = [...resync.values()].filter(Boolean).length;
+  return { ...result, failed: Math.max(0, (result.failed || 0) - changed.length),
+    needsResync: Math.max(0, (result.needsResync || 0) - changedOnly), changed: changed.length };
 }
 
 // One journal entry per (account, folder) of a purge, carrying the proof each
