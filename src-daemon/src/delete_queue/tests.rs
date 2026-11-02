@@ -670,3 +670,38 @@ async fn one_renumbered_uid_stops_the_whole_entry() {
     assert_eq!(f.srv.count_commands("SELECT"), 1, "one look, then nothing more for this folder");
     untouched(&f);
 }
+
+/// A uid an older entry already owes is sent in THAT entry's generation, not
+/// the one the new submit read: the cache caught up with the renumber, the
+/// older entry did not.
+#[tokio::test]
+async fn a_uid_an_older_entry_owes_is_sent_in_that_entrys_generation() {
+    let f = fixture(vec![]);
+    op_journal::queue_delete(&f.s.app_dir, "acc1", "INBOX", &[1], &json!({"mode": "trash", "bin": true, "uidValidity": 1})).unwrap();
+    cache_generation(&f, 42);
+    renumber(&f, Some(STRANGER));
+    let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, RENUMBERED.into())], ..Default::default() });
+    untouched(&f);
+    assert!(f.in_inbox(1), "the stranger is still there");
+}
+
+/// A permanent delete whose bytes are local captures without asking the
+/// server; the remove then finds the folder renumbered. Nothing was sent, so
+/// the copy it made goes, permanent or not.
+#[tokio::test]
+async fn a_permanent_delete_with_a_local_copy_in_a_renumbered_folder_keeps_no_bin_copy() {
+    let f = fixture(vec![]);
+    crate::handlers::common::with_mailbox_write(&f.s, "acc1", "INBOX", |root| {
+        mailvault_core::vault_files::store(&f.s.vault_registry, root, "acc1", "INBOX", 1, RAW.as_bytes(), &[], false)
+    })
+    .unwrap();
+    cache_generation(&f, 1);
+    renumber(&f, Some(STRANGER));
+    let reply = submit(&f.s, ask(&[1], Mode::Permanent)).await.unwrap();
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, RENUMBERED.into())], ..Default::default() });
+    untouched(&f);
+    assert_eq!(f.srv.count_commands("BODY.PEEK[]"), 0, "the local copy was the capture");
+    assert!(f.in_inbox(1));
+    assert!(crate::message_delete_characterization_tests::bin_rows(&f.s).is_empty(), "the capture of a delete that never happened is dropped");
+}

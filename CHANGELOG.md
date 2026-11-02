@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- A delete waiting to be retried is never sent to a folder the mail server has renumbered since. The server's new numbering could point at other emails, so MailVault cancels that delete instead, shows the emails again, and keeps it in Settings > Unfinished server actions with the reason until you dismiss it.
+- A delete is never sent to a folder the mail server has renumbered since you chose the emails. The new numbering could point at other emails, so MailVault cancels that delete instead, shows the emails again, and keeps it in Settings > Unfinished server actions with the reason until you cancel it there.
 
 - Undoing a delete is now done by MailVault's background helper in one step: it finds the message in Trash, moves every message of a folder back in one go, falls back to the copy MailVault kept when Trash no longer has it, and files the restored message under its new number everywhere. When two copies of one message sit in Trash, the one the delete put there is the one that comes back.
 
