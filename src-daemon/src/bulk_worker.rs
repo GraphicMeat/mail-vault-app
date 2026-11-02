@@ -2649,24 +2649,25 @@ mod tests {
     #[tokio::test(flavor="multi_thread")]
     async fn bulk_purge_of_a_uid_the_server_no_longer_holds_is_deleted_not_refused() {
         let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
-        for (mailbox,vault_copy) in [("INBOX",false),("INBOX",true),("[Gmail]/Trash",false)] {
+        // `empty`: the folder holds nothing at all, as Gmail's Trash after its 30-day expiry.
+        for (mailbox,vault_copy,empty) in [("INBOX",false,false),("INBOX",true,false),("[Gmail]/Trash",false,false),("[Gmail]/Trash",false,true)] {
             let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
             seed_selection(&state,mailbox);
             if vault_copy {seed_purge_file(&state,PURGE_RAW);}
             // The folder at the same generation, without uid 7.
             let mut folder=mock_imap::state::Mailbox::new(mailbox).with_uid_validity(1);
-            folder.add(mock_imap::Message::new(9,"Message-ID: <other@test>\r\n\r\nkeep"));
+            if !empty {folder.add(mock_imap::Message::new(9,"Message-ID: <other@test>\r\n\r\nkeep"));}
             let provider=MockImap::start(Scenario::new().mailbox(folder));let cfg=purge_credentials(&state,&provider);
             let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"gone","type":"delete_everywhere","scope":original_scope(&cfg,mailbox,Some("selected@test")),"externalStatus":"unavailable"})).await;
             assert!(reply.error.is_none(),"{mailbox}: {:?}",reply.error);let pending=wait_drained(&state).await;
             // With a vault copy, its backup copy's removal waits for the unavailable drive, as for any delete everywhere.
-            assert_eq!(pending["result"],json!({"deleted":1,"failed":0,"queuedBackup":usize::from(vault_copy),"needsResync":0}),"{mailbox} vault_copy={vault_copy}: {pending}");
+            assert_eq!(pending["result"],json!({"deleted":1,"failed":0,"queuedBackup":usize::from(vault_copy),"needsResync":0}),"{mailbox} vault_copy={vault_copy} empty={empty}: {pending}");
             if vault_copy {assert_eq!((&pending["worker"]["purgeTargets"][0]["server"],&pending["worker"]["purgeTargets"][0]["local"]),(&json!("complete"),&json!("complete")),"{pending}");}
             let target=&pending["worker"]["purgeTargets"][0];
             assert_eq!((&target["refused"],&target["needsResync"]),(&json!(false),&json!(false)),"{target}");
             if !vault_copy {assert_eq!(target["alreadyGone"],json!(true),"{target}");}
             assert!(provider.commands().iter().all(|c|!c.contains("STORE")&&!c.contains("EXPUNGE")&&!c.contains("MOVE")&&!c.contains("COPY")),"nothing is sent for a message the server no longer holds: {:?}",provider.commands());
-            assert!(provider.state().find(mailbox).is_some_and(|folder|folder.messages.iter().any(|m|m.uid==9)),"{mailbox}: the folder's other message stays");
+            assert!(empty || provider.state().find(mailbox).is_some_and(|folder|folder.messages.iter().any(|m|m.uid==9)),"{mailbox}: the folder's other message stays");
             assert!(mailvault_core::message_store::read_raw(dir.path(),"acc",mailbox,7).unwrap().is_none(),"{mailbox}: the vault copy goes too");
             assert!(crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::load_by_uids(c,"acc",mailbox,&[7])).unwrap().is_empty(),"{mailbox}: the stale header row leaves the cache");
         }
