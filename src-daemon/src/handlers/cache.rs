@@ -226,6 +226,19 @@ fn rows_with_uids(data: &str, uids: &[u32]) -> Vec<Value> {
 }
 
 /// The uids a `save_email_cache` payload takes off the list.
+/// What a header-cache write that took `removed` off a folder's list owes
+/// the rest of the daemon: the search index keeps an evicted message's row
+/// while this list holds its uid, so the folder is reconciled once it does
+/// not, and Cleanup stops listing them. `save_email_cache` and the undo of a
+/// delete (`handlers::deleted`, which retires the uid it re-keys) both call it.
+pub(crate) fn after_rows_removed(state: &DaemonState, account_id: &str, mailbox: &str, removed: &[u32]) {
+    if removed.is_empty() {
+        return;
+    }
+    crate::search_index::nudge(&state.search_index, account_id, mailbox);
+    crate::classification::forget_at(&state.app_dir, account_id, mailbox, removed);
+}
+
 fn removed_uids(data: &str) -> Vec<u32> {
     if !data.contains("\"removedUids\"") {
         return Vec::new();
@@ -338,11 +351,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // this list holds its uid: reconcile the folder once it does not.
                     // The app's delete, move or re-key took them off the server
                     // folder, so Cleanup stops listing them too.
-                    let removed = removed_uids(&data);
-                    if !removed.is_empty() {
-                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
-                        crate::classification::forget_at(&state.app_dir, &account_id, &mailbox, &removed);
-                    }
+                    after_rows_removed(&state, &account_id, &mailbox, &removed_uids(&data));
                     Ok(Value::Null)
                 })
                 .await

@@ -3212,6 +3212,12 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         "delete_queue.submit" | "delete_queue.run" => None,
         "delete_queue.list" | "delete_queue.cancel" => Some(Duration::from_secs(30)),
 
+        // The undo of a delete (src-daemon/src/handlers/deleted.rs): a SEARCH
+        // and a MOVE per group, an APPEND per bin fallback, all inside the
+        // daemon's own 120s `RESTORE_BUDGET`, which answers first. Past this,
+        // the app hides the rows again and reloads to see what came back.
+        "messages.restore" => Some(Duration::from_secs(150)),
+
         // One read_dir plus comparisons, same tier as the other Phase 2
         // single-pass readers.
         "verify_archived_emails" => Some(Duration::from_secs(120)),
@@ -4821,6 +4827,15 @@ mod tests {
         assert_eq!(crate::reply_timeout("delete_queue.run"), None);
         assert_eq!(crate::reply_timeout("delete_queue.list"), Some(std::time::Duration::from_secs(30)));
         assert_eq!(crate::reply_timeout("delete_queue.cancel"), Some(std::time::Duration::from_secs(30)));
+    }
+
+    /// The undo of a delete waits on the server (a SEARCH and a MOVE per
+    /// group, an APPEND per bin fallback), so it gets a finite budget, past
+    /// the daemon's own ceiling on the whole call (`RESTORE_BUDGET`, 120s in
+    /// src-daemon/src/handlers/deleted.rs): the app's wait never ends first.
+    #[test]
+    fn reply_timeout_bounds_messages_restore_past_the_daemons_own_ceiling() {
+        assert_eq!(crate::reply_timeout("messages.restore"), Some(std::time::Duration::from_secs(150)));
     }
 
     #[test]

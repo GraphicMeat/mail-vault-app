@@ -2558,6 +2558,21 @@ pub async fn uid_of_message_id(session: &mut ImapSession, message_id: &str) -> R
     Ok(set.iter().copied().max())
 }
 
+/// Which of `uids` the SELECTED mailbox still holds (`UID SEARCH UID <set>`),
+/// read through the tagged OK so a dropped socket is an error, never "none".
+/// Only uids asked for are answered (a server may name its highest uid for a
+/// range past it).
+pub async fn uids_present(session: &mut ImapSession, uids: &[u32]) -> Result<Vec<u32>, String> {
+    if uids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut found = patient(uid_search_to_tag(session, &format!("UID {}", compress_uid_ranges(uids)))).await?;
+    found.retain(|u| uids.contains(u));
+    found.sort_unstable();
+    found.dedup();
+    Ok(found)
+}
+
 /// Every uid in the SELECTED mailbox whose Message-ID header holds
 /// `message_id` (`<>` optional), read through the tagged OK so a socket that
 /// drops mid-reply is an error, never "none" (`uid_search_to_tag`): a caller

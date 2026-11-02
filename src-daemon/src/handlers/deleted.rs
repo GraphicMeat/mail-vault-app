@@ -573,27 +573,7 @@ async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, S
                 .await.is_ok_and(|r| r["rebound"].as_array().is_some_and(|a| !a.is_empty()))
         };
         if refiled {
-            let (st, acct, mb) = (Arc::clone(state), d.account_id.clone(), d.mailbox.clone());
-            let child_owner = operation.clone();
-            let restamped = blocking(move || {
-                let _child_owner = child_owner;
-                crate::custody::with_conn(&st, |c| {
-                    let text = entries::read(c, &acct, &mb)?.unwrap_or_default();
-                    let rows: Vec<Value> = serde_json::from_str(&text).unwrap_or_default();
-                    let back: Vec<Value> = rows
-                        .into_iter()
-                        .filter(|e| entries::uid_of(e) == Some(new_uid))
-                        .map(|mut e| {
-                            e["serverDeleted"] = json!(false);
-                            e
-                        })
-                        .collect();
-                    entries::upsert(c, &acct, &mb, &back).map(|_| ())
-                })
-            })
-            .await
-            .and_then(|r| r);
-            if let Err(e) = restamped {
+            if let Err(e) = lift_server_deleted(state, &d.account_id, &d.mailbox, vec![new_uid], operation.clone()).await {
                 warn!("[deleted] recovered uid {new_uid}: vault copy still marked deleted: {e}");
             }
         }
@@ -609,9 +589,56 @@ async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, S
     Ok(json!({ "id": d.id, "accountId": d.account_id, "mailbox": d.mailbox, "uid": new_uid }))
 }
 
+/// The custody entries of `uids` stop saying "this app deleted the server
+/// copy": the message is back on the server. A uid with no entry is left alone.
+async fn lift_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: Vec<u32>, owner: OperationPermit) -> Result<(), String> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let (st, acct, mb) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
+    blocking(move || {
+        let _owner = owner;
+        crate::custody::with_conn(&st, |c| {
+            let text = entries::read(c, &acct, &mb)?.unwrap_or_default();
+            let rows: Vec<Value> = serde_json::from_str(&text).unwrap_or_default();
+            let back: Vec<Value> = rows
+                .into_iter()
+                .filter(|e| entries::uid_of(e).is_some_and(|u| uids.contains(&u)))
+                .map(|mut e| {
+                    e["serverDeleted"] = json!(false);
+                    e
+                })
+                .collect();
+            if back.is_empty() {
+                return Ok(());
+            }
+            entries::upsert(c, &acct, &mb, &back).map(|_| ())
+        })
+    })
+    .await
+    .and_then(|r| r)
+}
+
+/// The copy of `d` in the SELECTED Trash: the uid the delete recorded
+/// (`trash_uid`, its COPYUID) while Trash still holds it, else the newest
+/// one with its Message-ID. The recorded uid wins: two copies of one
+/// Message-ID can sit in Trash, and only one is this delete's.
+async fn copy_in_trash(session: &mut imap::pool::ImapSession, trash_uid: Option<u32>, message_id: Option<&str>) -> Result<Option<u32>, String> {
+    if let Some(uid) = trash_uid {
+        if imap::uids_present(session, &[uid]).await?.contains(&uid) {
+            return Ok(Some(uid));
+        }
+    }
+    match message_id {
+        Some(mid) => imap::uid_of_message_id(session, mid).await,
+        None => Ok(None),
+    }
+}
+
 /// `recover_server` on an IMAP account: moved back out of Trash when the
-/// delete put it there and it still is, else APPENDed to the folder it was
-/// deleted from. Returns the uid the server gave it, when it said.
+/// delete put it there and it still is (`copy_in_trash`), else APPENDed to
+/// the folder it was deleted from. Returns the uid the server gave it, when
+/// it said.
 async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig) -> Result<Option<u32>, String> {
     let raw = if d.has_eml {
         let (app_dir, id) = (state.app_dir.clone(), d.id.clone());
@@ -622,11 +649,11 @@ async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
     let flags = d.flags.iter().filter(|f| !matches!(f.to_ascii_lowercase().as_str(), "\\deleted" | "\\recent")).cloned().collect::<Vec<_>>().join(" ");
     let message_id = bare_message_id(d);
     let (pool, cfg) = (&state.imap_pool, config);
-    let (trash, mailbox) = (d.trash.clone(), d.mailbox.clone());
+    let (trash, mailbox, trash_uid) = (d.trash.clone(), d.mailbox.clone(), d.trash_uid);
     crate::handlers::imap::with_priority(pool, cfg, |mut session| async move {
-        if let (Some(trash), Some(mid)) = (trash.as_deref(), message_id.as_deref()) {
+        if let Some(trash) = trash.as_deref().filter(|_| trash_uid.is_some() || message_id.is_some()) {
             imap::select_mailbox(&mut session, trash).await?;
-            if let Some(in_trash) = imap::uid_of_message_id(&mut session, mid).await? {
+            if let Some(in_trash) = copy_in_trash(&mut session, trash_uid, message_id.as_deref()).await? {
                 let has_move = pool.has_capability(cfg, "MOVE").await;
                 let has_uidplus = pool.has_capability(cfg, "UIDPLUS").await;
                 let moved = imap::move_uids(&mut session, trash, &mailbox, &[in_trash], has_move, has_uidplus).await?;
@@ -727,6 +754,397 @@ async fn from_trash_jmap(state: &Arc<DaemonState>, config: &ImapConfig, trash: &
     .await
 }
 
+// ── messages.restore: the undo of a delete ─────────────────────────────────
+//
+// The app's undo slot names what a delete put in Trash (or kept in the bin);
+// the daemon does the rest, one (account, Trash, folder) group at a time:
+// find each Trash copy (the recorded uid, else its Message-ID), MOVE the
+// group back in one command, pair the old uids with the new ones, APPEND the
+// bin copy of what Trash no longer holds, then re-key the header cache, re-file
+// the vault copy, lift the custody stamp and drop the bin copy. The app keeps
+// the slot, the rows on screen and the uid map its later clicks go through.
+
+/// The ceiling on one whole `messages.restore`. The app's reply budget
+/// (src-tauri `reply_timeout`, 150s) is above it, so the daemon always
+/// answers first; a group still on the wire past it is answered
+/// `deletedBin.restoreTimedOut` (the server may have it back already).
+const RESTORE_BUDGET: Duration = Duration::from_secs(120);
+const RESTORE_TIMED_OUT: &str = "deletedBin.restoreTimedOut";
+const GONE_FROM_TRASH: &str = "deletedBin.goneFromTrash";
+const RECOVER_FAILED: &str = "deletedBin.recoverFailed";
+
+/// One message an undo asks back: where the delete took it from and where it
+/// put it, as the delete answered (`Landed::Deleted`).
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RestoreItem {
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+    #[serde(default)]
+    trash: Option<String>,
+    #[serde(default)]
+    trash_uid: Option<u32>,
+    #[serde(default)]
+    message_id: Option<String>,
+    #[serde(default)]
+    bin_id: Option<String>,
+    /// The list row the app showed, for the header cache when the bin holds none.
+    #[serde(default)]
+    row: Option<Value>,
+}
+
+/// How one item ended.
+#[derive(Debug, Clone, PartialEq)]
+enum Restored {
+    /// Back on the server, under this uid when the server named it.
+    Back(Option<u32>),
+    /// Not back, and why (a catalog key).
+    Failed(String),
+}
+
+/// A daemon or server error as the app may show it: a catalog key passes,
+/// anything else is logged and answered as `deletedBin.recoverFailed`.
+fn restore_reason(e: &str) -> String {
+    if e.starts_with("errors.") || e.starts_with("deletedBin.") {
+        e.to_string()
+    } else {
+        RECOVER_FAILED.to_string()
+    }
+}
+
+/// `messages.restore`: every item answers on its own, in the order asked.
+async fn restore(state: &Arc<DaemonState>, items: Vec<RestoreItem>) -> Value {
+    let deadline = tokio::time::Instant::now() + RESTORE_BUDGET;
+    let mut groups: Vec<((String, Option<String>, String), Vec<usize>)> = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        let key = (item.account_id.clone(), item.trash.clone(), item.mailbox.clone());
+        match groups.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, idx)) => idx.push(i),
+            None => groups.push((key, vec![i])),
+        }
+    }
+    let mut out: Vec<Option<Restored>> = vec![None; items.len()];
+    for (_, idx) in groups {
+        let group: Vec<&RestoreItem> = idx.iter().map(|&i| &items[i]).collect();
+        let answered = restore_group(state, &group, deadline).await;
+        for (i, r) in idx.into_iter().zip(answered) {
+            out[i] = Some(r);
+        }
+    }
+    let (mut restored, mut failed) = (Vec::new(), Vec::new());
+    for (item, r) in items.iter().zip(out) {
+        match r.unwrap_or_else(|| Restored::Failed(RECOVER_FAILED.into())) {
+            Restored::Back(new_uid) => restored.push(json!({"accountId": item.account_id, "mailbox": item.mailbox, "uid": item.uid, "newUid": new_uid})),
+            Restored::Failed(error) => failed.push(json!({"accountId": item.account_id, "mailbox": item.mailbox, "uid": item.uid, "error": error})),
+        }
+    }
+    json!({"restored": restored, "failed": failed})
+}
+
+/// What the server part of one group found: per item, its uid in Trash
+/// (None: Trash does not hold it) and the uid the move gave it (None: the
+/// server did not say). `uncertain`: the server moved fewer than it was
+/// sent and did not say which, so nothing may be taken as settled.
+#[derive(Default)]
+struct MovedBack {
+    found: Vec<Option<u32>>,
+    new_uids: Vec<Option<u32>>,
+    uncertain: bool,
+}
+
+/// One message back on the server, for the local half (`settle_restored`):
+/// its old uid, the new one when the server named it, its list row, and
+/// whether the bin's own recover already re-filed and stamped it.
+struct Settle {
+    old: u32,
+    new: Option<u32>,
+    row: Option<Value>,
+    refiled: bool,
+}
+
+/// One (account, Trash, folder) group: one MOVE back, the bin for what Trash
+/// no longer holds, then the local bookkeeping in one pass.
+async fn restore_group(state: &Arc<DaemonState>, items: &[&RestoreItem], deadline: tokio::time::Instant) -> Vec<Restored> {
+    let fail_all = |e: &str| vec![Restored::Failed(restore_reason(e)); items.len()];
+    let (account_id, mailbox, trash) = (items[0].account_id.clone(), items[0].mailbox.clone(), items[0].trash.clone());
+    // The bin rows first: their record of where the delete put the message
+    // fills in what the app's slot lacks, and their bytes are the fallback.
+    let mut bins: Vec<Option<Deleted>> = Vec::with_capacity(items.len());
+    for item in items {
+        bins.push(match item.bin_id.clone() {
+            Some(id) => get(state, id).await.ok().filter(|d| d.account_id == item.account_id && d.mailbox == item.mailbox && d.uid == item.uid),
+            None => None,
+        });
+    }
+    let Ok(original) = state.account_lifecycle.capture(&account_id) else { return fail_all(KEYCHAIN_BUSY) };
+    let config = match imap_config(state, &account_id).await {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("[restore] {account_id}: no server credentials: {e}");
+            return fail_all(&e);
+        }
+    };
+    let Ok(operation) = state.account_lifecycle.try_operation(std::slice::from_ref(&original)) else { return fail_all(KEYCHAIN_BUSY) };
+
+    let wanted: Vec<(Option<u32>, Option<String>)> = items
+        .iter()
+        .zip(&bins)
+        .map(|(item, bin)| {
+            let trash_uid = item.trash_uid.or_else(|| bin.as_ref().and_then(|d| d.trash_uid));
+            let mid = item.message_id.clone().or_else(|| bin.as_ref().and_then(|d| d.message_id.clone()));
+            let mid = mid.map(|m| m.trim().trim_start_matches('<').trim_end_matches('>').to_string()).filter(|m| !m.is_empty());
+            (trash_uid, mid)
+        })
+        .collect();
+    let moved = match trash.as_deref() {
+        None => MovedBack { found: vec![None; items.len()], new_uids: vec![None; items.len()], uncertain: false },
+        Some(trash) => {
+            let back = async {
+                if config.uses_jmap() {
+                    jmap_move_back(state, &config, &original, &account_id, trash, &mailbox, &wanted).await
+                } else {
+                    imap_move_back(state, &config, trash, &mailbox, &wanted).await
+                }
+            };
+            match tokio::time::timeout_at(deadline, back).await {
+                Ok(Ok(m)) => m,
+                Ok(Err(e)) => {
+                    warn!("[restore] {account_id}/{mailbox}: the move back out of {trash} failed: {e}");
+                    return fail_all(&e);
+                }
+                Err(_) => {
+                    warn!("[restore] {account_id}/{mailbox}: the move back out of {trash} ran past {}s", RESTORE_BUDGET.as_secs());
+                    return fail_all(RESTORE_TIMED_OUT);
+                }
+            }
+        }
+    };
+
+    let mut answers: Vec<Restored> = Vec::with_capacity(items.len());
+    let mut settle: Vec<Settle> = Vec::new();
+    let mut discard: Vec<String> = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        let row = bins[i].as_ref().map(|d| d.row.clone()).filter(Value::is_object).or_else(|| item.row.clone().filter(Value::is_object));
+        if moved.found[i].is_some() {
+            let new_uid = moved.new_uids[i];
+            settle.push(Settle { old: item.uid, new: new_uid, row, refiled: false });
+            if !moved.uncertain {
+                discard.extend(bins[i].as_ref().map(|d| d.id.clone()));
+            }
+            answers.push(Restored::Back(new_uid));
+            continue;
+        }
+        // Trash does not hold it: the bin copy goes back, APPENDed to the
+        // folder (or imported, on JMAP) by the bin's own recover, which
+        // re-files the vault copy, lifts its stamp and drops the row itself.
+        let answer = match bins[i].clone() {
+            Some(d) if d.has_eml => match tokio::time::timeout_at(deadline, recover_server(state, d)).await {
+                Ok(Ok(v)) => {
+                    let new_uid = v["uid"].as_u64().and_then(|u| u32::try_from(u).ok());
+                    // Re-filed and stamped already: only the header row is left.
+                    if new_uid.is_some() {
+                        settle.push(Settle { old: item.uid, new: new_uid, row, refiled: true });
+                    }
+                    Restored::Back(new_uid)
+                }
+                Ok(Err(e)) => {
+                    warn!("[restore] {account_id}/{mailbox} uid {}: the bin copy did not go back: {e}", item.uid);
+                    Restored::Failed(restore_reason(&e))
+                }
+                Err(_) => Restored::Failed(RESTORE_TIMED_OUT.into()),
+            },
+            _ => Restored::Failed(GONE_FROM_TRASH.into()),
+        };
+        answers.push(answer);
+    }
+    settle_restored(state, original, operation, &account_id, &mailbox, settle, discard).await;
+    info!("[restore] {account_id}/{mailbox}: {} of {} back", answers.iter().filter(|a| matches!(a, Restored::Back(_))).count(), items.len());
+    answers
+}
+
+/// The server part of a group on an IMAP account, on the priority lane: the
+/// Trash copies (recorded uids first, checked in one SEARCH, then a
+/// Message-ID search for the rest; never one copy for two items), one MOVE
+/// back, and the old uids paired with COPYUID's: its destination set follows
+/// the source set, which servers send ascending.
+async fn imap_move_back(state: &Arc<DaemonState>, config: &ImapConfig, trash: &str, mailbox: &str, wanted: &[(Option<u32>, Option<String>)]) -> Result<MovedBack, String> {
+    let pool = &state.imap_pool;
+    let has_move = pool.has_capability(config, "MOVE").await;
+    let has_uidplus = pool.has_capability(config, "UIDPLUS").await;
+    let (trash, mailbox, wanted) = (trash.to_string(), mailbox.to_string(), wanted.to_vec());
+    crate::handlers::imap::with_priority(pool, config, |mut session| async move {
+        imap::select_mailbox(&mut session, &trash).await?;
+        let recorded: Vec<u32> = wanted.iter().filter_map(|(uid, _)| *uid).collect();
+        let present = imap::uids_present(&mut session, &recorded).await?;
+        let mut taken = std::collections::HashSet::new();
+        let mut found: Vec<Option<u32>> = vec![None; wanted.len()];
+        for (i, (uid, _)) in wanted.iter().enumerate() {
+            if let Some(uid) = uid.filter(|u| present.contains(u) && !taken.contains(u)) {
+                taken.insert(uid);
+                found[i] = Some(uid);
+            }
+        }
+        for (i, (_, mid)) in wanted.iter().enumerate() {
+            let Some(mid) = mid.as_deref().filter(|_| found[i].is_none()) else { continue };
+            let hits = match imap::message_id_uids(&mut session, mid).await {
+                Ok(hits) => hits,
+                // An id the server cannot be asked about finds nothing.
+                Err(e) if e.starts_with("Message-ID search: no usable") => Vec::new(),
+                Err(e) => return Err(e),
+            };
+            if let Some(uid) = hits.into_iter().rev().find(|u| !taken.contains(u)) {
+                taken.insert(uid);
+                found[i] = Some(uid);
+            }
+        }
+        let to_move: Vec<u32> = found.iter().flatten().copied().collect();
+        if to_move.is_empty() {
+            let none = vec![None; wanted.len()];
+            return Ok((MovedBack { found, new_uids: none, uncertain: false }, session, Some(trash)));
+        }
+        let moved = imap::move_uids(&mut session, &trash, &mailbox, &to_move, has_move, has_uidplus).await?;
+        let pairs: std::collections::HashMap<u32, u32> = match moved.new_uids {
+            Some(mut dst) if dst.len() == to_move.len() => {
+                let mut src = to_move.clone();
+                src.sort_unstable();
+                dst.sort_unstable();
+                src.into_iter().zip(dst).collect()
+            }
+            _ => Default::default(),
+        };
+        let new_uids = found.iter().map(|f| f.and_then(|t| pairs.get(&t).copied())).collect();
+        Ok((MovedBack { found, new_uids, uncertain: false }, session, Some(trash)))
+    })
+    .await
+}
+
+/// The server part of a group on a JMAP account, over its session through
+/// the bridge's own arms: the recorded Trash uids the ledger still files in
+/// Trash, a Message-ID search in Trash for the rest, one move back, and the
+/// new uids by position (the bridge answers them in the order sent; ledger
+/// uids need not rise with Trash's). A label put back keeps its old uid.
+async fn jmap_move_back(state: &Arc<DaemonState>, config: &ImapConfig, original: &AccountStamp, account_id: &str, trash: &str, mailbox: &str, wanted: &[(Option<u32>, Option<String>)]) -> Result<MovedBack, String> {
+    use crate::handlers::jmap_bridge::{answer_for, uids_present};
+    let recorded: Vec<u32> = wanted.iter().filter_map(|(uid, _)| *uid).collect();
+    let present = if recorded.is_empty() { Vec::new() } else { uids_present(state, config, account_id, trash, &recorded).await? };
+    let mut taken = std::collections::HashSet::new();
+    let mut found: Vec<Option<u32>> = vec![None; wanted.len()];
+    for (i, (uid, _)) in wanted.iter().enumerate() {
+        if let Some(uid) = uid.filter(|u| present.contains(u) && !taken.contains(u)) {
+            taken.insert(uid);
+            found[i] = Some(uid);
+        }
+    }
+    for (i, (_, mid)) in wanted.iter().enumerate() {
+        let Some(mid) = mid.as_deref().filter(|_| found[i].is_none()) else { continue };
+        let probe = answer_for(state, "imap_find_message_id", &json!({"accountId": account_id, "messageId": mid, "stopOnFirst": false}), config, original).await?;
+        let hits = probe["found"].as_array().into_iter().flatten().filter(|l| l["mailbox"] == json!(trash)).filter_map(|l| l["uid"].as_u64().and_then(|u| u32::try_from(u).ok()));
+        if let Some(uid) = hits.filter(|u| !taken.contains(u)).max() {
+            taken.insert(uid);
+            found[i] = Some(uid);
+        }
+    }
+    let to_move: Vec<u32> = found.iter().flatten().copied().collect();
+    if to_move.is_empty() {
+        return Ok(MovedBack { new_uids: vec![None; wanted.len()], found, uncertain: false });
+    }
+    let r = answer_for(state, "imap_move_emails", &json!({"accountId": account_id, "uids": to_move, "sourceMailbox": trash, "targetMailbox": mailbox}), config, original).await?;
+    let moved = r["moved"].as_u64().unwrap_or(0) as usize;
+    if moved == 0 {
+        return Err(RECOVER_FAILED.to_string());
+    }
+    let dst: Option<Vec<u32>> = r["newUids"].as_array().map(|a| a.iter().filter_map(|u| u.as_u64().and_then(|u| u32::try_from(u).ok())).collect()).filter(|d: &Vec<u32>| d.len() == to_move.len());
+    let mut next = dst.into_iter().flatten();
+    let new_uids = found.iter().map(|f| f.and_then(|_| next.next())).collect();
+    Ok(MovedBack { found, new_uids, uncertain: moved < to_move.len() })
+}
+
+/// The local half of a restored group, once the server has the messages: the
+/// bin copies go first (kept, a later Cmd+Z would put a second copy back),
+/// then the header cache lists each message under its new uid with the
+/// retired one pruned, the vault copy is re-filed under it, and custody stops
+/// calling it the only copy. Each step is best effort and logged: the
+/// messages are back on the server either way. One that came back through
+/// the bin's own recover (`refiled`) only needs its header row.
+async fn settle_restored(state: &Arc<DaemonState>, original: AccountStamp, operation: OperationPermit, account_id: &str, mailbox: &str, back: Vec<Settle>, discard: Vec<String>) {
+    if !discard.is_empty() {
+        let (app_dir, owner) = (state.app_dir.clone(), operation.clone());
+        let dropped = blocking(move || {
+            let _owner = owner;
+            app_db::with(&app_dir, |c| discard.iter().try_for_each(|id| bin::remove(c, &app_dir, id)))
+        })
+        .await
+        .and_then(|r| r);
+        if let Err(e) = dropped {
+            warn!("[restore] {account_id}/{mailbox}: back on the server, but the bin copies stay: {e}");
+        }
+    }
+    let mut rows = Vec::new();
+    let mut retired = Vec::new();
+    let mut rebind = Vec::new();
+    let mut lift = Vec::new();
+    for Settle { old, new: new_uid, row, refiled: header_only } in back {
+        match new_uid {
+            Some(new) => {
+                if let Some(mut r) = row.filter(Value::is_object) {
+                    if let Some(o) = r.as_object_mut() {
+                        o.remove("_nativeIdentity");
+                        o.remove("_nativeExpectedIdentity");
+                        o.insert("uid".into(), json!(new));
+                    }
+                    rows.push(r);
+                }
+                if new != old {
+                    retired.push(old);
+                }
+                if header_only {
+                    continue;
+                }
+                if new == old {
+                    // A JMAP label put back keeps its ledger uid: filed right already.
+                    lift.push(old);
+                } else {
+                    rebind.push((old, new));
+                }
+            }
+            // Back, under a uid only a reload learns: the entry under the old
+            // uid stops claiming it is the only copy.
+            None if !header_only => lift.push(old),
+            None => {}
+        }
+    }
+    if !rows.is_empty() || !retired.is_empty() {
+        let (st, acct, mb, owner) = (Arc::clone(state), account_id.to_string(), mailbox.to_string(), operation.clone());
+        let mut data = json!({"emails": rows});
+        if !retired.is_empty() {
+            data["removedUids"] = json!(retired);
+        }
+        let written = blocking(move || {
+            let _owner = owner;
+            crate::custody::with_conn(&st, |c| cache::save_headers(c, &acct, &mb, &data.to_string()))?;
+            crate::handlers::cache::after_rows_removed(&st, &acct, &mb, &retired);
+            Ok::<_, String>(())
+        })
+        .await
+        .and_then(|r| r);
+        if let Err(e) = written {
+            warn!("[restore] {account_id}/{mailbox}: the header cache was not re-keyed: {e}");
+        }
+    }
+    if !rebind.is_empty() {
+        match crate::handlers::custody::rebind_uids_owned(state, original, mailbox.to_string(), rebind, operation.clone()).await {
+            Ok(r) => lift.extend(
+                r["rebound"].as_array().into_iter().flatten().filter_map(|p| p.get(1).and_then(Value::as_u64)).filter_map(|u| u32::try_from(u).ok()),
+            ),
+            Err(e) => warn!("[restore] {account_id}/{mailbox}: the vault copies stay under the retired uids: {e}"),
+        }
+    }
+    if let Err(e) = lift_server_deleted(state, account_id, mailbox, lift, operation).await {
+        warn!("[restore] {account_id}/{mailbox}: the vault copies still say the server lost them: {e}");
+    }
+}
+
 /// One purge pass. Settings that cannot be read purge nothing: a pass that
 /// cannot tell the retention must not guess a shorter one.
 fn purge(state: &DaemonState) -> Result<usize, String> {
@@ -802,6 +1220,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 }
             }
             RpcResponse::success(id, json!({ "recovered": recovered, "failed": failed }))
+        }
+        // The undo of a delete: `{ items: [{ accountId, mailbox, uid, trash,
+        // trashUid, messageId, binId, row? }] }` -> `{ restored: [{ accountId,
+        // mailbox, uid, newUid }], failed: [{ accountId, mailbox, uid, error }] }`.
+        "messages.restore" => {
+            let items = match vec_arg::<RestoreItem>(&id, params, "items") {
+                Ok(v) => v,
+                Err(resp) => return Some(resp),
+            };
+            RpcResponse::success(id, restore(state, items).await)
         }
         // Delete now: gone from the bin for good.
         "deleted.discard" => {
@@ -1684,5 +2112,290 @@ mod tests {
         assert!(rows[0].has_eml);
         let captured = bin::bin_dir(&s.app_dir).join(format!("{}.eml", rows[0].id));
         assert_eq!(std::fs::read(&captured).unwrap(), RAW.as_bytes());
+    }
+
+    // ── messages.restore (Task 8: the undo of a delete, in the daemon) ──────
+
+    const RAW2: &str = "From: Bo <bo@example.com>\r\nTo: user@example.com\r\nSubject: Keep me too\r\n\
+                        Date: Fri, 02 Jan 2015 00:00:00 +0000\r\nMessage-ID: <keep2@example.com>\r\n\r\nThe other body.\r\n";
+
+    /// INBOX holds 1 (RAW) and 2 (RAW2), and the header cache lists both.
+    fn server2() -> MockImap {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(Message::new(1, RAW).with_flags(&["\\Seen"]));
+        inbox.add(Message::new(2, RAW2));
+        MockImap::start(Scenario::new().mailbox(inbox).mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"])))
+    }
+
+    fn state2(server: &MockImap) -> Arc<DaemonState> {
+        let s = state(server);
+        let headers = json!({"emails": [
+            {"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]},
+            {"uid": 2, "messageId": "<keep2@example.com>", "subject": "Keep me too", "flags": []},
+        ]}).to_string();
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &headers)).unwrap();
+        s
+    }
+
+    /// One delete to Trash of INBOX `uid`, answered as the app's undo record keeps it.
+    async fn delete_to_trash(s: &Arc<DaemonState>, server: &MockImap, uid: u32, mid: &str) -> Value {
+        let r = handle_request_for_test(s, "imap_delete_email", json!({"account": account(server), "uid": uid, "mailbox": "INBOX", "mode": "trash"}))
+            .await
+            .result
+            .expect("deleted");
+        json!({"accountId": "acc1", "mailbox": "INBOX", "uid": uid, "trash": r["trash"], "trashUid": r["trashUid"], "messageId": mid, "binId": r["binId"]})
+    }
+
+    async fn restore(s: &Arc<DaemonState>, items: Vec<Value>) -> Value {
+        handle_request_for_test(s, "messages.restore", json!({"items": items})).await.result.expect("answered")
+    }
+
+    fn new_uid_of(out: &Value, uid: u32) -> u32 {
+        out["restored"].as_array().unwrap().iter().find(|r| r["uid"] == json!(uid)).unwrap_or_else(|| panic!("uid {uid} restored: {out}"))["newUid"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("uid {uid} has a new uid: {out}")) as u32
+    }
+
+    fn cached(s: &DaemonState, account: &str, mailbox: &str, uid: u32) -> Option<Value> {
+        crate::custody::with_conn(s, |c| cache::load_by_uids(c, account, mailbox, &[uid])).unwrap().into_iter().next()
+    }
+
+    fn inbox_raw(server: &MockImap, uid: u32) -> Vec<u8> {
+        server.state().find("INBOX").unwrap().messages.iter().find(|m| m.uid == uid).expect("in INBOX").raw.clone()
+    }
+
+    /// Two messages of one folder in one Trash: one MOVE back, not one per
+    /// message, and each old uid paired with the uid its own copy got. They
+    /// are deleted in the reverse order, so the Trash uids run the other way
+    /// round from the INBOX uids: a pairing by position would swap them.
+    #[tokio::test]
+    async fn restore_moves_a_group_back_in_one_move_and_pairs_each_uid_with_its_own_copy() {
+        let server = server2();
+        let s = state2(&server);
+        let second = delete_to_trash(&s, &server, 2, "<keep2@example.com>").await;
+        let first = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        assert!(first["trashUid"].as_u64() > second["trashUid"].as_u64(), "{first} {second}");
+        let moves = server.count_commands("UID MOVE");
+
+        let out = restore(&s, vec![first, second]).await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(server.count_commands("UID MOVE") - moves, 1, "one MOVE for the group");
+        assert!(uids(&server, "Trash").is_empty());
+        let (one, two) = (new_uid_of(&out, 1), new_uid_of(&out, 2));
+        assert_eq!(inbox_raw(&server, one), RAW.as_bytes(), "uid 1's new uid names its own message");
+        assert_eq!(inbox_raw(&server, two), RAW2.as_bytes());
+        for r in out["restored"].as_array().unwrap() {
+            assert_eq!((r["accountId"].clone(), r["mailbox"].clone()), (json!("acc1"), json!("INBOX")));
+        }
+        // The header cache lists them under the new uids, the old ones gone.
+        assert_eq!(cached(&s, "acc1", "INBOX", one).expect("row under the new uid")["subject"], json!("Keep me"));
+        assert_eq!(cached(&s, "acc1", "INBOX", two).expect("row under the new uid")["subject"], json!("Keep me too"));
+        assert!(cached(&s, "acc1", "INBOX", 1).is_none() && cached(&s, "acc1", "INBOX", 2).is_none(), "the retired uids are pruned");
+        assert!(binned(&s).is_empty(), "back on the server: the bin copies are dropped");
+    }
+
+    /// A server that named no Trash uid (no UIDPLUS, or an already-gone uid:
+    /// `Deleted{trash: Some, trash_uid: None}`): the copy is found by its
+    /// Message-ID in Trash and moved back (Review Focus 11).
+    #[tokio::test]
+    async fn restore_without_a_trash_uid_finds_the_copy_by_message_id() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        let mut item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        item["trashUid"] = Value::Null;
+
+        let out = restore(&s, vec![item]).await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert!(uids(&server, "Trash").is_empty(), "moved out of Trash");
+        assert_eq!(inbox_raw(&server, new_uid_of(&out, 1)), RAW.as_bytes());
+        assert_eq!(server.count_commands("APPEND"), 0);
+        assert!(binned(&s).is_empty());
+    }
+
+    /// Trash no longer holds the copy: the bin's bytes are APPENDed back to
+    /// the folder it left, with its flags (Review Focus 12).
+    #[tokio::test]
+    async fn restore_falls_back_to_the_bin_copy_when_trash_lost_it() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        with_mailbox_write(&s, "acc1", "INBOX", |root| vault_files::store(&s.vault_registry, root, "acc1", "INBOX", 1, RAW.as_bytes(), &[], false)).unwrap();
+        let item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        assert!(binned(&s)[0].has_eml);
+        server.mutate(|st| st.find_mut("Trash").unwrap().messages.clear());
+
+        let out = restore(&s, vec![item]).await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(server.count_commands("APPEND"), 1);
+        let back = new_uid_of(&out, 1);
+        assert_eq!(inbox_raw(&server, back), RAW.as_bytes());
+        assert!(server.state().find("INBOX").unwrap().messages[0].has_flag("\\Seen"), "the flags go back with it");
+        assert_eq!(cached(&s, "acc1", "INBOX", back).expect("row under the new uid")["subject"], json!("Keep me"));
+        assert!(binned(&s).is_empty());
+    }
+
+    /// Trash lost it and the bin holds nothing to put back: a catalog key
+    /// says so, never the server's text, and the bin row stays (it is
+    /// discarded only once the message is back).
+    #[tokio::test]
+    async fn restore_with_no_copy_anywhere_fails_with_a_catalog_reason_and_keeps_the_bin_row() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        let item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        assert!(!binned(&s)[0].has_eml, "a byte-less row: Trash was all it had");
+        server.mutate(|st| st.find_mut("Trash").unwrap().messages.clear());
+        let mut unbinned = item.clone();
+        unbinned["binId"] = Value::Null;
+
+        for one in [unbinned, item] {
+            let out = restore(&s, vec![one]).await;
+            assert_eq!(out["restored"], json!([]), "{out}");
+            assert_eq!(out["failed"], json!([{"accountId": "acc1", "mailbox": "INBOX", "uid": 1, "error": "deletedBin.goneFromTrash"}]));
+        }
+        assert_eq!(binned(&s).len(), 1, "kept: nothing came back");
+        assert_eq!(server.count_commands("APPEND"), 0);
+    }
+
+    /// A MOVE the server refuses fails the group in catalog words, and keeps
+    /// the bin copies for a later try.
+    #[tokio::test]
+    async fn restore_refused_by_the_server_fails_in_catalog_words() {
+        let server = server(Scenario::new().fault(Trigger::with("MOVE", "\"INBOX\""), Action::RefuseWith("NO".into(), "no route".into())));
+        let s = state(&server);
+        with_mailbox_write(&s, "acc1", "INBOX", |root| vault_files::store(&s.vault_registry, root, "acc1", "INBOX", 1, RAW.as_bytes(), &[], false)).unwrap();
+        let item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        let out = restore(&s, vec![item]).await;
+        assert_eq!(out["restored"], json!([]), "{out}");
+        assert_eq!(out["failed"][0]["error"], json!("deletedBin.recoverFailed"));
+        assert_eq!(uids(&server, "Trash").len(), 1, "still in Trash");
+        assert_eq!(server.count_commands("APPEND"), 0, "never a second copy beside the one Trash still holds");
+        assert_eq!(binned(&s).len(), 1);
+    }
+
+    /// A server without UIDPLUS names no uid for the copy it moved back: the
+    /// item is restored with `newUid: null` (the app reloads to learn it), the
+    /// custody stamp comes off the entry under the old uid, and the bin copy
+    /// is dropped: the server has the message again.
+    #[tokio::test]
+    async fn restore_on_a_server_that_names_no_uid_answers_null_and_still_lifts_the_stamp() {
+        let server = server(Scenario::new().without_cap("UIDPLUS"));
+        let s = state(&server);
+        let item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        assert_eq!(item["trashUid"], Value::Null, "no COPYUID: {item}");
+        let entry = json!({"uid": 1, "message_id": "<keep1@example.com>", "subject": "Keep me", "source": "local", "serverDeleted": true});
+        crate::custody::with_conn(&s, |c| entries::upsert(c, "acc1", "INBOX", &[entry])).unwrap();
+
+        let out = restore(&s, vec![item]).await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(out["restored"], json!([{"accountId": "acc1", "mailbox": "INBOX", "uid": 1, "newUid": null}]));
+        assert_eq!(uids(&server, "INBOX").len(), 1, "back on the server");
+        let custody = crate::custody::with_conn(&s, |c| entries::get(c, "acc1", "INBOX", 1)).unwrap().expect("custody entry");
+        assert_eq!(custody["serverDeleted"], json!(false));
+        assert!(binned(&s).is_empty());
+    }
+
+    /// The vault copy the delete left is filed under the new uid, and custody
+    /// stops calling it the only copy.
+    #[tokio::test]
+    async fn restore_rebinds_the_vault_copy_and_lifts_the_custody_stamp() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        with_mailbox_write(&s, "acc1", "INBOX", |root| vault_files::store(&s.vault_registry, root, "acc1", "INBOX", 1, RAW.as_bytes(), &[], false)).unwrap();
+        let item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        let entry = json!({"uid": 1, "message_id": "<keep1@example.com>", "subject": "Keep me", "source": "local", "serverDeleted": true});
+        crate::custody::with_conn(&s, |c| entries::upsert(c, "acc1", "INBOX", &[entry])).unwrap();
+
+        let out = restore(&s, vec![item]).await;
+
+        let back = new_uid_of(&out, 1);
+        assert_ne!(back, 1);
+        assert_eq!(mailvault_core::message_store::read_raw(&s.data_dir, "acc1", "INBOX", back).unwrap().as_deref(), Some(RAW.as_bytes()), "filed under the new uid");
+        assert!(mailvault_core::message_store::read_raw(&s.data_dir, "acc1", "INBOX", 1).unwrap().is_none(), "not under the retired one");
+        let custody = crate::custody::with_conn(&s, |c| entries::get(c, "acc1", "INBOX", back)).unwrap().expect("custody entry under the new uid");
+        assert_eq!(custody["serverDeleted"], json!(false));
+    }
+
+    /// Two copies of one Message-ID sit in Trash; the bin row recorded which
+    /// one the delete made. `deleted.recover` moves that one back, not the
+    /// highest uid a Message-ID search finds.
+    #[tokio::test]
+    async fn recover_prefers_the_recorded_trash_uid_over_a_message_id_search() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        let item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        let recorded = item["trashUid"].as_u64().expect("COPYUID") as u32;
+        let dup = RAW.replace("Subject: Keep me", "Subject: Another copy");
+        server.mutate(|st| { st.find_mut("Trash").unwrap().add(Message::new(recorded + 5, dup.clone())); });
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(uids(&server, "Trash"), vec![recorded + 5], "the other copy stays");
+        let inbox = server.state().find("INBOX").unwrap().messages.clone();
+        assert_eq!(inbox.len(), 1);
+        assert_eq!(inbox[0].raw, RAW.as_bytes(), "the copy this delete made came back");
+    }
+
+    /// The same for `messages.restore`: the recorded Trash uid wins.
+    #[tokio::test]
+    async fn restore_moves_the_recorded_trash_uid_not_a_duplicate() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        let item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        let recorded = item["trashUid"].as_u64().unwrap() as u32;
+        let dup = RAW.replace("Subject: Keep me", "Subject: Another copy");
+        server.mutate(|st| { st.find_mut("Trash").unwrap().add(Message::new(recorded + 5, dup.clone())); });
+
+        let out = restore(&s, vec![item]).await;
+
+        assert_eq!(uids(&server, "Trash"), vec![recorded + 5]);
+        assert_eq!(inbox_raw(&server, new_uid_of(&out, 1)), RAW.as_bytes());
+    }
+
+    /// A JMAP account: one move per group over its session, answered in the
+    /// order sent (positional), and a label put back keeps the uid it had,
+    /// so its header row comes back under that uid with nothing pruned.
+    #[tokio::test]
+    async fn jmap_restore_pairs_by_position_and_keeps_the_uid_a_label_put_back() {
+        use crate::jmap_test_support as support;
+        let mut scenario = support::scenario();
+        for (id, received) in [("ca", "2026-10-05T10:00:00Z"), ("cb", "2026-10-06T10:00:00Z")] {
+            scenario.accounts[0].mailboxes[0].emails.push(support::email(id, id, received));
+        }
+        let m = mock_jmap::MockJmap::start(scenario);
+        let (trap, port) = support::imap_trap();
+        let (s, _, _) = jmap_state(&m, port).await;
+        let listing = handle_request_for_test(&s, "imap_get_emails", json!({"account": support::account_json(&m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
+            .await
+            .result
+            .expect("listed");
+        let uid_of = |subject: &str| listing["emails"].as_array().unwrap().iter().find(|e| e["subject"] == subject).unwrap()["uid"].as_u64().unwrap() as u32;
+        // The higher INBOX uid goes to Trash first, so it gets the lower Trash uid.
+        let (low, high) = if uid_of("ca") < uid_of("cb") { ("ca", "cb") } else { ("cb", "ca") };
+        let mut items = Vec::new();
+        for copy in [high, low] {
+            let r = handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": uid_of(copy), "mailbox": "INBOX", "mode": "trash"}))
+                .await
+                .result
+                .expect("deleted");
+            assert_eq!(r["trash"], json!("Trash"), "{copy} went to Trash: {r}");
+            items.push(json!({"accountId": "acct1", "mailbox": "INBOX", "uid": uid_of(copy), "trash": r["trash"], "trashUid": r["trashUid"], "messageId": format!("<{copy}@x>"), "binId": r["binId"]}));
+        }
+        assert!(items[0]["trashUid"].as_u64() < items[1]["trashUid"].as_u64(), "{items:?}");
+
+        let out = restore(&s, items).await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        for copy in [low, high] {
+            assert_eq!(jmap_labels(&m, copy), support::set(&["mb-inbox"]), "{copy} is back in INBOX only");
+            assert_eq!(new_uid_of(&out, uid_of(copy)), uid_of(copy), "{copy} keeps its ledger uid");
+            assert_eq!(cached(&s, "acct1", "INBOX", uid_of(copy)).expect("row back under its uid")["subject"], json!(copy));
+        }
+        assert!(binned(&s).is_empty());
+        assert!(trap.accept().is_err(), "no IMAP dial");
     }
 }

@@ -129,6 +129,26 @@ where
     }
 }
 
+/// One bridged `imap_*` answer for a daemon caller that already holds the
+/// account's config and its stamp (the undo of a delete,
+/// `handlers::deleted::restore`): the very arm the app's RPC reaches, with the
+/// same single reconnect on an expired session.
+pub(crate) async fn answer_for(state: &Arc<DaemonState>, method: &str, params: &Value, account: &ImapConfig, original: &crate::account_lifecycle::AccountStamp) -> Result<Value, String> {
+    answer_with_retry(state, method, params, account, Some(original)).await.map_err(|f| match f {
+        Fail::Params(e) | Fail::Rpc(e) => e,
+    })
+}
+
+/// Which of `uids` the `mailbox` ledger names for an email the server still
+/// files there (`uid_to_id` with its recheck): what a move of them would find.
+pub(crate) async fn uids_present(state: &Arc<DaemonState>, config: &ImapConfig, account_id: &str, mailbox: &str, uids: &[u32]) -> Result<Vec<u32>, String> {
+    with_session_retry(state, config, |acct| async move {
+        let pairs = acct.uid_to_id(state, account_id, mailbox, uids, true).await?;
+        Ok(pairs.into_iter().filter_map(|(uid, id)| id.map(|_| uid)).collect())
+    })
+    .await
+}
+
 fn param<T: DeserializeOwned>(params: &Value, key: &str) -> Result<T, Fail> {
     params
         .get(key)
