@@ -3322,6 +3322,8 @@
   "deletedBin.gone": "このメールは削除済みメールにもうありません。",
   "deletedBin.goneFromTrash": "このメールはサーバーのゴミ箱にもうないため、復元できません。",
   "deletedBin.restoreTimedOut": "サーバーが時間内に応答しませんでした。更新して、メールが戻ったか確認してください。",
+  "deletedBin.recoverBusy": "このメールはすでに元に戻しています。少し待ってからもう一度確認してください。",
+  "deletedBin.deleteStillQueued": "このメールはまだサーバーでの削除待ちです。残すには、設定の「未完了のサーバー操作」で取り消してください。",
   "undo.deletedKept_one": "{{count}} 件を削除しました",
   "undo.deletedKept_other": "{{count}} 件を削除しました",
   "undo.action": "取り消す",

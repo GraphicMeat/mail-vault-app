@@ -3322,6 +3322,8 @@
   "deletedBin.gone": "Questa email non è più tra quelle eliminate.",
   "deletedBin.goneFromTrash": "Questa email non è più nel Cestino del server, quindi non può essere recuperata.",
   "deletedBin.restoreTimedOut": "Il server non ha risposto in tempo. Aggiorna per vedere se l'email è tornata.",
+  "deletedBin.recoverBusy": "Questa email è già in fase di ripristino. Attendi un momento e controlla di nuovo.",
+  "deletedBin.deleteStillQueued": "Questa email è ancora in attesa di essere eliminata sul server. Annulla l'operazione in Impostazioni, Azioni sul server non completate, per conservarla.",
   "undo.deletedKept_one": "{{count}} messaggio eliminato",
   "undo.deletedKept_other": "{{count}} messaggi eliminati",
   "undo.action": "Annulla",

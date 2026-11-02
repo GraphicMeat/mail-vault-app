@@ -3322,6 +3322,8 @@
   "deletedBin.gone": "Diese E-Mail ist nicht mehr unter den gelöschten E-Mails.",
   "deletedBin.goneFromTrash": "Diese E-Mail liegt nicht mehr im Papierkorb auf dem Server und kann nicht wiederhergestellt werden.",
   "deletedBin.restoreTimedOut": "Der Server hat nicht rechtzeitig geantwortet. Aktualisieren Sie, um zu sehen, ob die E-Mail zurück ist.",
+  "deletedBin.recoverBusy": "Diese E-Mail wird bereits zurückgelegt. Warten Sie einen Moment und sehen Sie erneut nach.",
+  "deletedBin.deleteStillQueued": "Diese E-Mail wartet noch darauf, auf dem Server gelöscht zu werden. Brechen Sie das unter Einstellungen, Nicht abgeschlossene Serveraktionen ab, um sie zu behalten.",
   "undo.deletedKept_one": "{{count}} Nachricht gelöscht",
   "undo.deletedKept_other": "{{count}} Nachrichten gelöscht",
   "undo.action": "Rückgängig",

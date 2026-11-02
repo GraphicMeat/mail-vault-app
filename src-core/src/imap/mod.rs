@@ -2573,6 +2573,10 @@ pub async fn uids_present(session: &mut ImapSession, uids: &[u32]) -> Result<Vec
     Ok(found)
 }
 
+/// `message_id_uids`'s refusal of an id it cannot search for (empty, or with a
+/// control character in it): a caller that only wants hits matches it.
+pub const NO_USABLE_MESSAGE_ID: &str = "Message-ID search: no usable Message-ID";
+
 /// Every uid in the SELECTED mailbox whose Message-ID header holds
 /// `message_id` (`<>` optional), read through the tagged OK so a socket that
 /// drops mid-reply is an error, never "none" (`uid_search_to_tag`): a caller
@@ -2584,7 +2588,7 @@ pub async fn message_id_uids(session: &mut ImapSession, message_id: &str) -> Res
     if term.is_empty() || term.chars().any(char::is_control) {
         // The id is the file's, not ours: it stays out of an error a caller
         // classifies by its words.
-        return Err("Message-ID search: no usable Message-ID".to_string());
+        return Err(NO_USABLE_MESSAGE_ID.to_string());
     }
     let mut uids = patient(uid_search_to_tag(session, &format!("HEADER Message-ID \"{term}\""))).await?;
     uids.sort_unstable();

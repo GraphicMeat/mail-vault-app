@@ -3322,6 +3322,8 @@
   "deletedBin.gone": "이 이메일은 더 이상 삭제한 이메일에 없습니다.",
   "deletedBin.goneFromTrash": "이 이메일은 더 이상 서버의 휴지통에 없어 복구할 수 없습니다.",
   "deletedBin.restoreTimedOut": "서버가 제때 응답하지 않았습니다. 새로 고쳐 이메일이 돌아왔는지 확인하세요.",
+  "deletedBin.recoverBusy": "이 이메일은 이미 되돌리는 중입니다. 잠시 기다린 후 다시 확인하세요.",
+  "deletedBin.deleteStillQueued": "이 이메일은 아직 서버에서 삭제 대기 중입니다. 보관하려면 설정의 완료되지 않은 서버 작업에서 취소하세요.",
   "undo.deletedKept_one": "메시지 {{count}}개 삭제됨",
   "undo.deletedKept_other": "메시지 {{count}}개 삭제됨",
   "undo.action": "실행 취소",

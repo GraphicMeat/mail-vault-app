@@ -100,6 +100,9 @@ pub enum Fault {
     HangUpEventSourceAfterOneEvent,
     /// This method name answers `["error", {"type":"serverFail"}, tag]`.
     ServerFail { method: String },
+    /// `Email/set` answers this email's update `notUpdated`/`notFound` and applies nothing,
+    /// though the email is still there: a server whose index is behind its store.
+    UpdateNotFound { id: String },
 }
 
 /// Advertised in the session's core capability and enforced by the server.

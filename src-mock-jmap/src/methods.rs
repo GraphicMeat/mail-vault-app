@@ -823,6 +823,10 @@ fn email_set(state: &mut State, acc: &str, args: &Args) -> Result<Value, MErr> {
     let update = obj_arg(args, "update")?;
     let destroy = ids_arg(args, "destroy")?.unwrap_or_default();
     check_set_size(state, create.len() + update.len() + destroy.len())?;
+    let refused: Vec<String> = state.faults.iter().filter_map(|f| match f {
+        Fault::UpdateNotFound { id } => Some(id.clone()),
+        _ => None,
+    }).collect();
     let a = state.account_mut(acc);
     check_if_in_state(args, a.email_state)?;
     let old = a.email_state.to_string();
@@ -833,6 +837,10 @@ fn email_set(state: &mut State, acc: &str, args: &Args) -> Result<Value, MErr> {
     }
     let (mut updated, mut not_updated) = (Map::new(), Map::new());
     for (id, patch) in &update {
+        if refused.contains(id) {
+            not_updated.insert(id.clone(), SetError::new("notFound").to_json());
+            continue;
+        }
         match apply_email_patch(a, id, patch) {
             Ok(()) => updated.insert(id.clone(), Value::Null),
             Err(e) => not_updated.insert(id.clone(), e.to_json()),

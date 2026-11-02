@@ -225,7 +225,6 @@ fn rows_with_uids(data: &str, uids: &[u32]) -> Vec<Value> {
     rows.into_iter().filter(|r| r.get("uid").and_then(Value::as_u64).is_some_and(|u| uids.contains(&u))).collect()
 }
 
-/// The uids a `save_email_cache` payload takes off the list.
 /// What a header-cache write that took `removed` off a folder's list owes
 /// the rest of the daemon: the search index keeps an evicted message's row
 /// while this list holds its uid, so the folder is reconciled once it does
@@ -239,6 +238,7 @@ pub(crate) fn after_rows_removed(state: &DaemonState, account_id: &str, mailbox:
     crate::classification::forget_at(&state.app_dir, account_id, mailbox, removed);
 }
 
+/// The uids a `save_email_cache` payload takes off the list.
 fn removed_uids(data: &str) -> Vec<u32> {
     if !data.contains("\"removedUids\"") {
         return Vec::new();

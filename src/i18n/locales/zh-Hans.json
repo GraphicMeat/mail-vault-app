@@ -3322,6 +3322,8 @@
   "deletedBin.gone": "这封邮件已不在已删除的邮件中。",
   "deletedBin.goneFromTrash": "这封邮件已不在服务器的废纸篓中，无法恢复。",
   "deletedBin.restoreTimedOut": "服务器未及时响应。请刷新，看看邮件是否已恢复。",
+  "deletedBin.recoverBusy": "这封邮件正在恢复中。请稍候再查看。",
+  "deletedBin.deleteStillQueued": "这封邮件仍在等待从服务器删除。若要保留，请在“设置”中的“未完成的服务器操作”里取消。",
   "undo.deletedKept_one": "已删除 {{count}} 封邮件",
   "undo.deletedKept_other": "已删除 {{count}} 封邮件",
   "undo.action": "撤销",

@@ -3326,6 +3326,8 @@
   "deletedBin.gone": "This email is no longer among the deleted emails.",
   "deletedBin.goneFromTrash": "This email is no longer in Trash on the server, so it cannot be recovered.",
   "deletedBin.restoreTimedOut": "The server did not answer in time. Refresh to see whether the email is back.",
+  "deletedBin.recoverBusy": "This email is already being put back. Wait a moment and look again.",
+  "deletedBin.deleteStillQueued": "This email is still waiting to be deleted on the server. Cancel that in Settings, Unfinished server actions, to keep it.",
   "undo.deletedKept_one": "Deleted {{count}} message",
   "undo.deletedKept_other": "Deleted {{count}} messages",
   "undo.action": "Undo",
