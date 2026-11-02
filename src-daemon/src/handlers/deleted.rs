@@ -1442,7 +1442,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     }
                     let _owner = state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
                     let rows = app_db::with(&state.app_dir, |c| bin::list(c, &state.app_dir))?;
-                    serde_json::to_value(rows).map_err(|e| e.to_string())
+                    let mut listed = serde_json::to_value(rows).map_err(|e| e.to_string())?;
+                    // The watermark is the bin's bookkeeping: it never leaves the daemon.
+                    for entry in listed.as_array_mut().into_iter().flatten() {
+                        if let Some(row) = entry.get_mut("row") {
+                            *row = without_watermark(row.take());
+                        }
+                    }
+                    Ok(listed)
                 })
                 .await
                 .and_then(|r| r),
@@ -3007,6 +3014,21 @@ mod tests {
         crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &json!({"uidNext": 40}).to_string())).unwrap();
         delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
         assert_eq!(binned(&s)[0].row["uidNextAtDelete"], json!(40));
+    }
+
+    /// The watermark is the bin's own bookkeeping: `deleted.list` hands the
+    /// Settings list the row as the list showed it, never the watermark, and
+    /// listing does not edit what the bin keeps.
+    #[tokio::test]
+    async fn the_list_does_not_carry_the_uidnext_watermark() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        assert!(binned(&s)[0].row.get("uidNextAtDelete").is_some(), "the bin row holds it");
+        let listed = handle_request_for_test(&s, "deleted.list", json!({})).await.result.unwrap();
+        let row = &listed[0]["row"];
+        assert!(row.is_object() && row.get("uidNextAtDelete").is_none(), "{row}");
+        assert!(binned(&s)[0].row.get("uidNextAtDelete").is_some(), "listing leaves the stored row alone");
     }
 
     /// The twin above the deleted copy pre-dates the delete, and the folder
