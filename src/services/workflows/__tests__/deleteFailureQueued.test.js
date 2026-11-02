@@ -116,11 +116,20 @@ const { useMailStore } = await import('../../../stores/mailStore');
 const { onDeleteQueueLanded } = await import('../messageMutations');
 const { t } = await import('../../../i18n/index.js');
 
-// The one status line a refused submit leaves: why, and that MailVault goes on.
-const notYet = (reasonKey) => t('list.deleteNotYet', { reason: t(reasonKey) });
-const expectOneNotYet = (reasonKey) => {
+// The one status line a refused submit leaves: why, and that MailVault goes
+// on. A bin capture's reason has a sentence of its own; anything else is the
+// reason's own words in the generic frame, without its closing period.
+const notYet = (reasonKey) => t('list.deleteNotYet', { reason: t(reasonKey).replace(/[.。]$/, '') });
+const expectOneWarning = (message) => {
   const s = useMailStore.getState();
-  expect(s.error).toBe(notYet(reasonKey));
+  expect(s.error).toBe(message);
+  // A warning, not the error toast: nothing failed for good.
+  expect(s.errorType).toBe('warning');
+  expect(s.errorTypeFor).toBe(s.error);
+};
+const expectOneNotYet = (key) => {
+  const s = useMailStore.getState();
+  expect(s.error).toBe(key.startsWith('list.') ? t(key) : notYet(key));
   // A warning, not the error toast: nothing failed for good.
   expect(s.errorType).toBe('warning');
   expect(s.errorTypeFor).toBe(s.error);
@@ -178,7 +187,7 @@ describe('a server delete the server refuses', () => {
     expect(mockSubmit).toHaveBeenCalledWith({ accountId: ACCT.id, mailbox: 'INBOX', uids: [7] }, { mode: 'auto', bin: true, arg: {} });
     // Owed, not failed: the row stays gone, and one warning says why the
     // server still has it (Settings › Unfinished server actions lists it).
-    expectOneNotYet('errors.E_BIN_CAPTURE_TIMEOUT');
+    expectOneNotYet('list.deleteNotYet_timeout');
     // The app keeps no journal of its own and sends nothing itself.
     expect(mockQueueOp).not.toHaveBeenCalled();
     expect(mockClearOps).not.toHaveBeenCalled();
@@ -210,6 +219,48 @@ describe('a server delete the server refuses', () => {
     await useMailStore.getState().deleteEmailFromServer(7);
 
     expectOneNotYet('errors.keychainBusy');
+  });
+
+  // Each bin-capture reason reads as one sentence of its own, never the
+  // errors.E_BIN_CAPTURE_* copy ("Try again ... was not deleted") wrapped.
+  for (const why of ['fetch', 'timeout', 'busy', 'write']) {
+    it(`a ${why} refusal says so in a sentence of its own`, async () => {
+      prime([row(7)]);
+      useMailStore.setState({ error: null });
+      mockSubmit.mockImplementation(answer(() => true, `E_BIN_CAPTURE:${why}: detail for the log`));
+
+      await useMailStore.getState().deleteEmailFromServer(7);
+
+      const key = `list.deleteNotYet_${why}`;
+      expect(t(key)).not.toBe(key);
+      expectOneWarning(t(key));
+      expect(t(key)).not.toMatch(/Try again|was not deleted/);
+      expect(t(key)).toMatch(/MailVault keeps trying\.$/);
+    });
+  }
+
+  it('a bin-capture refusal with no reason this app knows uses the generic sentence', async () => {
+    for (const raw of ['E_BIN_CAPTURE:sideways: x', 'E_BIN_CAPTURE: no reason given']) {
+      prime([row(7)]);
+      useMailStore.setState({ error: null });
+      mockSubmit.mockImplementation(answer(() => true, raw));
+
+      await useMailStore.getState().deleteEmailFromServer(7);
+
+      expectOneWarning(notYet('errors.E_BIN_CAPTURE'));
+    }
+  });
+
+  it("a server's own words lose their closing period inside the sentence", async () => {
+    for (const raw of ['Failed to delete email: copy refused', 'Failed to delete email: copy refused.']) {
+      prime([row(7)]);
+      useMailStore.setState({ error: null });
+      mockSubmit.mockImplementation(answer(() => true, raw));
+
+      await useMailStore.getState().deleteEmailFromServer(7);
+
+      expectOneWarning('Not deleted yet: Failed to delete email: copy refused. MailVault keeps trying.');
+    }
   });
 
   it('still restores the row for a Graph account, which queues nothing to replay', async () => {
@@ -248,7 +299,7 @@ describe('a server delete the server refuses', () => {
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    expectOneNotYet('errors.E_BIN_CAPTURE_TIMEOUT');
+    expectOneNotYet('list.deleteNotYet_timeout');
     const said = set.mock.calls.filter(([patch]) => patch && typeof patch === 'object' && 'error' in patch && patch.error);
     expect(said).toHaveLength(1);
     set.mockRestore();
@@ -263,7 +314,7 @@ describe('a server delete that is refused and then lands', () => {
 
     await useMailStore.getState().deleteSelectedFromServer();
     expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|8`)).toBe(true);
-    expectOneNotYet('errors.E_BIN_CAPTURE_TIMEOUT');
+    expectOneNotYet('list.deleteNotYet_timeout');
     useMailStore.setState({ error: null });
 
     // The daemon's replay worker lands it a pass later.

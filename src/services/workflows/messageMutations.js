@@ -66,14 +66,33 @@ async function _reportDeleteFailure(error) {
   useMailStore.setState({ error: tr('list.deleteFailed', { err: error?.message || String(error) }) });
 }
 
+// A bin capture's reason, in a sentence of its own for this warning. Not the
+// errors.E_BIN_CAPTURE_* copy: that one says "Try again" and "was not
+// deleted", which a row the user can no longer reach, and a delete MailVault
+// is still retrying, must not.
+const NOT_YET_BY_CAPTURE = {
+  fetch: 'list.deleteNotYet_fetch',
+  timeout: 'list.deleteNotYet_timeout',
+  busy: 'list.deleteNotYet_busy',
+  write: 'list.deleteNotYet_write',
+};
+
 // A queued delete the server refused on every round of its submit: the row
 // stays gone (the daemon keeps trying), and one warning says why the server
 // still has it. `reason` is the daemon's wire string: a bin capture's
 // `E_BIN_CAPTURE:<reason>: <detail>`, a catalog key, or the server's text.
+// Anything but a known capture reason goes in the generic sentence, which
+// supplies its own full stop.
 async function _reportNotDeletedYet(reason) {
   const capture = binCaptureError(reason);
-  const why = capture instanceof Error ? capture.message : tErr(reason);
-  const message = tr('list.deleteNotYet', { reason: why });
+  const key = capture instanceof Error ? NOT_YET_BY_CAPTURE[capture.reason] : undefined;
+  let message;
+  if (key) {
+    message = tr(key);
+  } else {
+    const why = String(capture instanceof Error ? capture.message : tErr(reason)).trim().replace(/[.。]+$/u, '');
+    message = tr('list.deleteNotYet', { reason: why });
+  }
   const { useMailStore } = await import('../../stores/mailStore');
   // `errorTypeFor` pins the warning tint to this exact message (utils/errorToast.js).
   useMailStore.setState({ error: message, errorType: 'warning', errorTypeFor: message });
