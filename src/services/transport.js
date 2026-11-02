@@ -137,8 +137,9 @@ export const DAEMON_OWNED = new Set([
   'op_journal_queue', 'op_journal_clear', 'op_journal_read',
   'read_pending_operation', 'save_pending_operation', 'clear_pending_operation',
   // The daemon's durable delete queue: journal first, send and retry in the
-  // daemon, answered by `delete-queue-landed` / `delete-queue-changed`.
-  'delete_queue.submit', 'delete_queue.list', 'delete_queue.cancel',
+  // daemon, answered by `delete-queue-landed` / `delete-queue-changed`;
+  // `run` is its replay pass, also run by the daemon on its own timers.
+  'delete_queue.submit', 'delete_queue.list', 'delete_queue.cancel', 'delete_queue.run',
   // User bulk mail work; native kickoff intercepts mirror authorization.
   'bulk.start', 'bulk.resume', 'bulk.status', 'bulk.cancel', 'bulk.discard',
   // Task 2.8: the six simple vault writers.

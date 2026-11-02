@@ -1387,6 +1387,25 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         return { landed, queued: [], dropped: [] };
       }
       case 'delete_queue.list': return clone(journal.filter(entry => entry.op === 'delete').map(entry => ({ attempts: 0, failures: {}, ...entry })));
+      // The replay pass: every owed delete lands, as a submit does here.
+      case 'delete_queue.run': {
+        const counts = { attempted: 0, done: 0, failed: 0, dropped: 0, skipped: 0, kept: 0 };
+        for (const entry of journal.filter(item => item.op === 'delete')) {
+          const landed = [];
+          for (const uid of entry.uids || []) {
+            const out = await invoke('imap_delete_email', { accountId: entry.accountId, mailbox: entry.mailbox, uid, mode: entry.arg?.mode || 'auto' });
+            landed.push({ kind: 'deleted', uid, trash: out?.trash ?? null, trashUid: out?.trashUid ?? null, binId: null });
+          }
+          journal.splice(journal.indexOf(entry), 1);
+          counts.attempted += landed.length;
+          counts.done += landed.length;
+          if (landed.length) emit('delete-queue-landed', { accountId: entry.accountId, mailbox: entry.mailbox, landed });
+          emit('delete-queue-changed', {});
+          emit('demo:state', { type: 'journal' });
+        }
+        if ((args?.reason || 'manual') !== 'manual') emit('delete-queue-status', { kept: 0, online: true });
+        return counts;
+      }
       case 'delete_queue.cancel': {
         const uids = new Set(args.uids || []);
         const entry = journal.find(item => item.id === args.id && item.op === 'delete');

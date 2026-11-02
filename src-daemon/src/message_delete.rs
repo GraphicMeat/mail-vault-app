@@ -23,7 +23,9 @@
 //!   and its capture is at most best effort.
 //!
 //! IMAP removes on the priority lane (`run_uid_delete`, `priority: true`): a
-//! click never queues behind a bulk run.
+//! click never queues behind a bulk run. The delete queue's background replay
+//! is the one caller on the background lane (`delete_one_on`, `priority:
+//! false`), for the capture's fetch and the remove alike.
 
 use crate::account_lifecycle::AccountStamp;
 use crate::handlers::deleted::{self, CaptureFailure, Source};
@@ -133,9 +135,9 @@ impl Provider<'_> {
         }
     }
 
-    fn source(&self, permanent: bool) -> Source<'_> {
+    fn source(&self, permanent: bool, priority: bool) -> Source<'_> {
         match self {
-            Provider::Imap(config) => Source::Imap { config, permanent, priority: true },
+            Provider::Imap(config) => Source::Imap { config, permanent, priority },
             Provider::Jmap(config) => Source::Jmap { config },
             Provider::Graph { .. } => Source::Graph,
         }
@@ -186,11 +188,28 @@ pub(crate) async fn delete_one(
     mode: Mode,
     bin: bool,
 ) -> Result<Outcome, Refusal> {
+    delete_one_on(state, provider, account_id, mailbox, uid, mode, bin, true).await
+}
+
+/// `delete_one` on the IMAP pool's priority lane (`priority`, a click) or
+/// its background lane (the delete queue's replay worker). JMAP and Graph
+/// have no lanes.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn delete_one_on(
+    state: &Arc<DaemonState>,
+    provider: Provider<'_>,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    mode: Mode,
+    bin: bool,
+    priority: bool,
+) -> Result<Outcome, Refusal> {
     let mode = provider.mode(mode, mailbox);
     let policy = capture_policy(mode, bin);
     let wants_stamp = policy != CapturePolicy::Skip || matches!(provider, Provider::Jmap(_));
     let original = if wants_stamp { state.account_lifecycle.capture(account_id).ok() } else { None };
-    run(state, original, provider, account_id, mailbox, uid, mode, policy).await
+    run(state, original, provider, account_id, mailbox, uid, mode, policy, priority).await
 }
 
 /// `delete_one` under the account stamp `original` (`None`: the account is
@@ -208,7 +227,7 @@ pub(crate) async fn delete_one_stamped(
 ) -> Result<Outcome, Refusal> {
     let mode = provider.mode(mode, mailbox);
     let policy = capture_policy(mode, bin);
-    run(state, original, provider, account_id, mailbox, uid, mode, policy).await
+    run(state, original, provider, account_id, mailbox, uid, mode, policy, true).await
 }
 
 /// The sequence, for a `mode` already resolved by `Provider::mode` (never
@@ -223,6 +242,7 @@ async fn run(
     uid: u32,
     mode: Mode,
     policy: CapturePolicy,
+    priority: bool,
 ) -> Result<Outcome, Refusal> {
     debug_assert_ne!(mode, Mode::Auto, "the caller resolves Auto against the folder");
     let tag = provider.name();
@@ -238,7 +258,7 @@ async fn run(
         CapturePolicy::Skip => None,
         CapturePolicy::BestEffort | CapturePolicy::Required => {
             let captured = match &original {
-                Some(stamp) => deleted::capture_stamped(state, stamp.clone(), account_id, mailbox, uid, provider.source(permanent)).await,
+                Some(stamp) => deleted::capture_stamped(state, stamp.clone(), account_id, mailbox, uid, provider.source(permanent, priority)).await,
                 None => Err(CaptureFailure::Busy),
             };
             match captured {
@@ -261,7 +281,7 @@ async fn run(
     };
 
     let removed = match &provider {
-        Provider::Imap(config) => remove_imap(state, config, mailbox, uid, permanent).await,
+        Provider::Imap(config) => remove_imap(state, config, mailbox, uid, permanent, priority).await,
         Provider::Jmap(config) => match &original {
             Some(stamp) => crate::handlers::jmap_bridge::remove_for_delete(state, config, stamp, account_id, mailbox, uid, permanent)
                 .await
@@ -308,7 +328,8 @@ async fn forget(state: &Arc<DaemonState>, id: String, original: Option<AccountSt
     }
 }
 
-/// `imap::delete_email` on the priority lane.
+/// `imap::delete_email` on the priority lane (`priority`), or the background
+/// lane for the delete queue's replay.
 ///
 /// `run_uid_delete`, not `with_priority`: a pooled socket the peer closed
 /// while it sat idle fails this before the SELECT lands, and the frontend
@@ -319,12 +340,12 @@ async fn forget(state: &Arc<DaemonState>, id: String, original: Option<AccountSt
 /// after checkout. `pool_ref`/`acct` are bound outside the closure because
 /// `run_uid_delete` wants `Fn`, not `FnOnce` (the dead-socket retry can call
 /// it twice).
-async fn remove_imap(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, permanent: bool) -> Result<Removed, String> {
+async fn remove_imap(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, permanent: bool, priority: bool) -> Result<Removed, String> {
     let pool_ref: &ImapPool = &state.imap_pool;
     let acct = account;
     state
         .imap_pool
-        .run_uid_delete(account, true, |mut session| {
+        .run_uid_delete(account, priority, |mut session| {
             let mailbox = mailbox.to_string();
             async move {
                 let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;

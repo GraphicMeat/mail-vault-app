@@ -23,8 +23,8 @@
 //! - Offline (`NetGate` shut) nothing is sent; every uid is `queued`.
 //! - One uid is never sent twice at once: a per-uid claim
 //!   (`QueueState`, keyed by account, folder and uid) is held from before
-//!   the first send to after the last; a second submit (or, from Task 7, the
-//!   replay worker) that finds a uid claimed sends nothing for it and
+//!   the first send to after the last; a second submit (or the replay
+//!   worker, `worker`) that finds a uid claimed sends nothing for it and
 //!   answers it `queued`, and the first one's `delete-queue-landed` says how
 //!   it ended.
 //! - Not queued: Graph accounts (their delete is addressed by a per-session
@@ -160,10 +160,25 @@ type Key = (String, String, u32);
 #[derive(Default)]
 pub(crate) struct QueueState {
     inner: Mutex<Claims>,
+    /// Held for the whole of one replay pass (`worker`): one pass at a time,
+    /// whichever trigger started it.
+    pub(crate) pass: tokio::sync::Mutex<()>,
     /// Journal writes the queue made (`note_attempt`, `note_failures`,
     /// `clear_by_id`), for the tests that pin one write per entry per round.
     #[cfg(test)]
     pub(crate) journal_writes: std::sync::atomic::AtomicUsize,
+    /// Every send `(uid, priority lane)`, and every credential read's mode.
+    #[cfg(test)]
+    pub(crate) sends: Mutex<Vec<(u32, bool)>>,
+    #[cfg(test)]
+    pub(crate) reads: Mutex<Vec<crate::oauth_tokens::Read>>,
+    /// Replay passes started, and the most ever running at once.
+    #[cfg(test)]
+    pub(crate) passes: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    pub(crate) running: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    pub(crate) most_running: std::sync::atomic::AtomicUsize,
 }
 
 #[derive(Default)]
@@ -255,6 +270,50 @@ pub(crate) fn cancel(state: &DaemonState, id: u64, uids: &[u32]) -> Result<bool,
     Ok(true)
 }
 
+// ── How a delete is sent ────────────────────────────────────────────────────
+
+/// What differs between a delete the user is waiting on (`SUBMIT`) and the
+/// replay of one already owed (`REPLAY`, the background worker).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct How {
+    /// Send rounds: the first send plus `DELETE_RETRY_MS` retries for a
+    /// submit, one for a replay (the worker's own triggers are its retries).
+    rounds: usize,
+    /// The IMAP pool's priority lane (a click) or its background lane.
+    priority: bool,
+    /// `Guarded` may raise the keychain prompt; `Quiet` never does.
+    read: crate::oauth_tokens::Read,
+    /// Whether an unreadable credential counts a send round and keeps its
+    /// reason (a submit: the user asked now and Settings should say why) or
+    /// leaves the entry exactly as it was and ends the account's pass (a
+    /// replay: a locked keychain is not an answer from the server).
+    credentials_count: bool,
+    /// Wait for a quiet UI before each uid (`search_index::wait_foreground_quiet`).
+    yields: bool,
+}
+
+pub(crate) const SUBMIT: How = How { rounds: DELETE_RETRY_MS.len() + 1, priority: true, read: crate::oauth_tokens::Read::Guarded, credentials_count: true, yields: false };
+pub(crate) const REPLAY: How = How { rounds: 1, priority: false, read: crate::oauth_tokens::Read::Quiet, credentials_count: false, yields: true };
+
+/// Why `send_owed` stopped before its rounds ran out.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Halt {
+    /// The connectivity gate is shut: nothing more can be sent anywhere.
+    Offline,
+    /// This account's credentials could not be read quietly.
+    Account,
+}
+
+/// `send_owed`'s answer: the reply, how many uids the server refused on
+/// their last send (`refused`, a subset of `reply.queued`), and why it
+/// stopped early.
+#[derive(Debug, Default)]
+pub(crate) struct Sent {
+    pub reply: SubmitReply,
+    pub refused: usize,
+    pub halt: Option<Halt>,
+}
+
 // ── submit ──────────────────────────────────────────────────────────────────
 
 /// Journal, send, retry and settle `s`, on its own task: a caller that stops
@@ -267,9 +326,8 @@ pub(crate) async fn submit(state: &Arc<DaemonState>, s: Submit) -> Result<Submit
 /// `submit`'s body, on the caller's task (tests drop it mid-send to stand in
 /// for a daemon killed between the journal write and the first send).
 pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitReply, String> {
-    let mut reply = SubmitReply::default();
     if s.uids.is_empty() {
-        return Ok(reply);
+        return Ok(SubmitReply::default());
     }
     refuse_unqueued(state, &s.account_id, &s.mailbox).await?;
 
@@ -287,18 +345,27 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
     if owed.id.is_some() {
         changed(state);
     }
-    let owner: BTreeMap<u32, u64> = owed.owners.iter().copied().collect();
     #[cfg(test)]
     tests::after_journal(state);
 
-    // 2. The claim: a uid another submit is sending is left to it.
-    let asked: Vec<u32> = owed.owners.iter().map(|(uid, _)| *uid).collect();
-    let (_claim, mut pending, busy) = claim(state, &s.account_id, &s.mailbox, &asked);
-    reply.queued.extend(busy);
+    Ok(send_owed(state, &s, &owed.owners, SUBMIT).await.reply)
+}
 
-    // 3. Send rounds.
+/// Send `s`'s uids, each owed by the entry `owners` names, in `how.rounds`
+/// send rounds: claim, re-read what is still owed, count the round, send,
+/// settle. Shared by `submit` and the replay worker.
+pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u32, u64)], how: How) -> Sent {
+    let mut out = Sent::default();
+    let owner: BTreeMap<u32, u64> = owners.iter().copied().collect();
+
+    // The claim: a uid another submit (or a replay) is sending is left to it.
+    let asked: Vec<u32> = owners.iter().map(|(uid, _)| *uid).collect();
+    let (_claim, mut pending, busy) = claim(state, &s.account_id, &s.mailbox, &asked);
+    out.reply.queued.extend(busy);
+
     let mut refused_any = false;
-    for round in 0..=DELETE_RETRY_MS.len() {
+    let mut refused_last: HashSet<u32> = HashSet::new();
+    for round in 0..how.rounds {
         if pending.is_empty() {
             break;
         }
@@ -311,10 +378,11 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
         // never reported as refused.
         let still = still_owed(state, &owner, &pending).await;
         for &uid in pending.iter().filter(|uid| !still.contains(uid)) {
+            refused_last.remove(&uid);
             if was_cancelled(state, &s.account_id, &s.mailbox, uid) {
-                reply.dropped.push((uid, CANCELLED.to_string()));
+                out.reply.dropped.push((uid, CANCELLED.to_string()));
             } else {
-                reply.queued.push(uid);
+                out.reply.queued.push(uid);
             }
         }
         pending.retain(|uid| still.contains(uid));
@@ -323,6 +391,14 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
         }
         if !state.net.is_online() {
             info!("[delete-queue] {}/{}: offline, {} uid(s) stay queued", s.account_id, s.mailbox, pending.len());
+            out.halt = Some(Halt::Offline);
+            break;
+        }
+        let config = account_config(state, &s.account_id, how.read).await;
+        if let (Err(e), false) = (&config, how.credentials_count) {
+            // Not an answer, and not a round: the entry stays as it was.
+            info!("[delete-queue] {}/{}: credentials not readable quietly, {} uid(s) stay queued: {e}", s.account_id, s.mailbox, pending.len());
+            out.halt = Some(Halt::Account);
             break;
         }
         note_round(state, &owner, &pending).await;
@@ -330,7 +406,8 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
         let mut landed = Vec::new();
         let mut dropped = Vec::new();
         let mut failed = Vec::new();
-        match crate::raw_message::account_config(state, &s.account_id).await {
+        let mut unsent = Vec::new();
+        match config {
             Err(e) => {
                 // Not an answer: the credentials could not be read now.
                 warn!("[delete-queue] {}/{}: credentials unavailable, round {} not sent: {e}", s.account_id, s.mailbox, round + 1);
@@ -341,7 +418,16 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
             }
             Ok(config) => {
                 for &uid in &pending {
-                    let result = send(state, &config, &s, uid).await;
+                    if how.yields {
+                        crate::search_index::wait_foreground_quiet(&state.search_index).await;
+                    }
+                    // The gate shut mid-round (a send below confirmed it):
+                    // the rest wait for it to open, unsent and uncounted.
+                    if !state.net.is_online() {
+                        unsent.push(uid);
+                        continue;
+                    }
+                    let result = send(state, &config, s, uid, how.priority).await;
                     match classify(uid, &result) {
                         Verdict::Landed(l) => {
                             state.net.note_success();
@@ -372,9 +458,15 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
             refused_any = true;
             note_failures(state, &owner, &failed).await;
         }
-        reply.landed.extend(landed);
-        reply.dropped.extend(dropped);
-        pending = failed.into_iter().map(|(uid, _)| uid).collect();
+        refused_last = failed.iter().map(|(uid, _)| *uid).collect();
+        out.reply.landed.extend(landed);
+        out.reply.dropped.extend(dropped);
+        pending = failed.into_iter().map(|(uid, _)| uid).chain(unsent.iter().copied()).collect();
+        if !unsent.is_empty() {
+            info!("[delete-queue] {}/{}: went offline, {} uid(s) not sent", s.account_id, s.mailbox, unsent.len());
+            out.halt = Some(Halt::Offline);
+            break;
+        }
     }
     if !pending.is_empty() {
         info!("[delete-queue] {}/{}: {} uid(s) stay queued", s.account_id, s.mailbox, pending.len());
@@ -382,8 +474,22 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
             changed(state);
         }
     }
-    reply.queued.extend(pending);
-    Ok(reply)
+    out.refused = pending.iter().filter(|uid| refused_last.contains(uid)).count();
+    out.reply.queued.extend(pending);
+    out
+}
+
+/// The account's credentials, read `read`-wise (`Quiet` never raises the
+/// keychain prompt).
+#[cfg(not(test))]
+async fn account_config(state: &DaemonState, account_id: &str, read: crate::oauth_tokens::Read) -> Result<crate::imap::ImapConfig, String> {
+    crate::oauth_tokens::resolve(state, account_id, read).await
+}
+
+#[cfg(test)]
+async fn account_config(state: &DaemonState, account_id: &str, read: crate::oauth_tokens::Read) -> Result<crate::imap::ImapConfig, String> {
+    state.delete_queue.reads.lock().unwrap().push(read);
+    crate::raw_message::account_config(state, account_id).await
 }
 
 /// The entry's `arg`: the app's, with the delete's own intent added so a
@@ -431,6 +537,11 @@ fn admit(listing: Result<mailvault_core::accounts_doc::Listing, mailvault_core::
         warn!("[delete-queue] accounts unreadable, nothing queued: {e:?}");
         ACCOUNT_UNAVAILABLE.to_string()
     })?;
+    admit_listed(&listing, account_id)
+}
+
+/// A listing that read: no such account, or a Graph one, is refused.
+fn admit_listed(listing: &mailvault_core::accounts_doc::Listing, account_id: &str) -> Result<(), String> {
     let Some(entry) = listing.accounts.iter().find(|a| a.get("id").and_then(Value::as_str) == Some(account_id)) else {
         return Err(ACCOUNT_UNAVAILABLE.to_string());
     };
@@ -442,13 +553,16 @@ fn admit(listing: Result<mailvault_core::accounts_doc::Listing, mailvault_core::
 
 /// One `delete_one` on the account's provider (a JMAP account through its
 /// session, any other through the IMAP pool's priority lane).
-async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Submit, uid: u32) -> Result<Outcome, Refusal> {
+async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Submit, uid: u32, priority: bool) -> Result<Outcome, Refusal> {
     #[cfg(test)]
-    if let Some(scripted) = tests::scripted_send(state, uid) {
-        return scripted;
+    {
+        state.delete_queue.sends.lock().unwrap().push((uid, priority));
+        if let Some(scripted) = tests::scripted_send(state, uid) {
+            return scripted;
+        }
     }
     let provider = if config.uses_jmap() { Provider::Jmap(config) } else { Provider::Imap(config) };
-    message_delete::delete_one(state, provider, &s.account_id, &s.mailbox, uid, s.mode, s.bin).await
+    message_delete::delete_one_on(state, provider, &s.account_id, &s.mailbox, uid, s.mode, s.bin, priority).await
 }
 
 /// The uids of `pending` their entries still owe: one read per entry.
@@ -655,9 +769,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             }
             done(id, result.map(|_| Value::Null))
         }
+        "delete_queue.run" => {
+            let reason = params.get("reason").and_then(Value::as_str).unwrap_or(worker::MANUAL).to_string();
+            done(id, worker::run_now(state, reason).await.map(|counts| json!(counts)))
+        }
         _ => return None,
     })
 }
+
+mod worker;
+pub(crate) use worker::spawn_worker;
 
 #[cfg(test)]
 pub(crate) mod tests;

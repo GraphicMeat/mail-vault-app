@@ -42,46 +42,54 @@ pub(crate) fn after_journal(state: &DaemonState) {
     }
 }
 
-fn script(state: &DaemonState, f: impl Fn(&DaemonState, u32) -> Option<Result<Outcome, Refusal>> + Send + Sync + 'static) {
+pub(super) fn script(state: &DaemonState, f: impl Fn(&DaemonState, u32) -> Option<Result<Outcome, Refusal>> + Send + Sync + 'static) {
     scripts().lock().unwrap().insert(state.app_dir.clone(), Arc::new(f));
 }
 
 // ── fixture ─────────────────────────────────────────────────────────────────
 
-struct Fixture {
-    srv: MockImap,
-    s: Arc<DaemonState>,
+pub(super) struct Fixture {
+    pub(super) srv: MockImap,
+    pub(super) s: Arc<DaemonState>,
 }
 
 impl Fixture {
-    fn in_inbox(&self, uid: u32) -> bool {
+    pub(super) fn in_inbox(&self, uid: u32) -> bool {
         self.srv.state().find("INBOX").is_some_and(|m| m.by_uid(uid).is_some())
     }
-    fn in_trash(&self) -> bool {
+    pub(super) fn in_trash(&self) -> bool {
         self.srv.state().find("Trash").is_some_and(|m| !m.messages.is_empty())
     }
-    fn journal(&self) -> Vec<OpEntry> {
+    pub(super) fn journal(&self) -> Vec<OpEntry> {
         op_journal::read(&self.s.app_dir)
     }
-    fn moves(&self) -> usize {
+    pub(super) fn moves(&self) -> usize {
         self.srv.count_commands("UID MOVE")
     }
 }
 
 /// INBOX holds uid 1 (no local bytes), Trash is empty, account `acc1` is
 /// configured, and the header cache has the row a sync leaves.
-fn fixture(faults: Vec<(Trigger, Action)>) -> Fixture {
+pub(super) fn fixture(faults: Vec<(Trigger, Action)>) -> Fixture {
+    fixture_with(faults, r#"[{"id":"acc1"},{"id":"ms","oauth2Transport":"graph"}]"#, vec![])
+}
+
+/// `fixture`, with `accounts` as accounts.json and `extra` mailboxes on the server.
+pub(super) fn fixture_with(faults: Vec<(Trigger, Action)>, accounts: &str, extra: Vec<Mailbox>) -> Fixture {
     std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
     let mut inbox = Mailbox::new("INBOX");
     inbox.add(Message::new(1, RAW).with_flags(&["\\Seen"]));
     let mut scenario = Scenario::new().mailbox(inbox).mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"]));
+    for mailbox in extra {
+        scenario = scenario.mailbox(mailbox);
+    }
     for (trigger, action) in faults {
         scenario = scenario.fault(trigger, action);
     }
     let srv = MockImap::start(scenario);
     let account = json!({"id": "acc1", "email": "user@example.com", "password": "hunter2", "imapHost": srv.host(), "imapPort": srv.port()});
     let s = plain_state(&std::env::temp_dir().join(format!("mv-delete-queue-{}", uuid::Uuid::new_v4())));
-    seed_accounts(&s, r#"[{"id":"acc1"},{"id":"ms","oauth2Transport":"graph"}]"#);
+    seed_accounts(&s, accounts);
     let config: crate::imap::ImapConfig = serde_json::from_value(account).unwrap();
     s.raw_messages.accounts.lock().unwrap().insert("acc1".into(), config);
     let headers = json!({"emails": [{"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]}]}).to_string();
@@ -95,7 +103,7 @@ fn ask(uids: &[u32], mode: Mode) -> Submit {
 
 /// The move to Trash refused both ways `imap::delete_email` tries it, with
 /// nothing run on the server.
-fn refuse_the_move() -> Vec<(Trigger, Action)> {
+pub(super) fn refuse_the_move() -> Vec<(Trigger, Action)> {
     vec![
         (Trigger::on("MOVE"), Action::RefuseWith("NO".into(), "move refused".into())),
         (Trigger::on("COPY"), Action::RefuseWith("NO".into(), "copy refused".into())),
@@ -103,7 +111,7 @@ fn refuse_the_move() -> Vec<(Trigger, Action)> {
 }
 
 /// Every event `rx` holds now, as `(name, payload)`.
-fn events(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<(String, Value)> {
+pub(super) fn events(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<(String, Value)> {
     let mut out = Vec::new();
     while let Ok(line) = rx.try_recv() {
         let v: Value = serde_json::from_str(&line).unwrap();

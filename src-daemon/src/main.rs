@@ -727,6 +727,10 @@ async fn daemon_main() {
     let _ = oauth_tokens::start_persistence(Arc::clone(&state));
     // Every cached mailbox is synced once, so no row keeps a pre-update cache shape.
     launch_resync::start(Arc::clone(&state));
+    // The delete queue's replay: sends what the journal still owes, 20 s
+    // after launch, when the link returns, every 5 min and on
+    // `delete_queue.run`; background lane, quiet credentials.
+    delete_queue::spawn_worker(&state);
     // Watches keychain access so a locked keychain is noticed without waiting
     // for something to ask for credentials; an unlock wakes the queued sends
     // and the snoozes it held back.
