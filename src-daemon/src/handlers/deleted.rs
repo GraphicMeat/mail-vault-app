@@ -635,10 +635,27 @@ async fn copy_in_trash(session: &mut imap::pool::ImapSession, trash_uid: Option<
     }
 }
 
+/// What the first pass of `recover_on_imap` found.
+enum ImapRecover {
+    /// Moved back out of Trash, under this uid when the server said.
+    Moved(Option<u32>),
+    /// Not in Trash. The uids in the folder it left that carry its
+    /// Message-ID and sit above the retired uid: candidates for a copy an
+    /// earlier restore put back after its answer was lost.
+    NotInTrash(Vec<u32>),
+}
+
 /// `recover_server` on an IMAP account: moved back out of Trash when the
-/// delete put it there and it still is (`copy_in_trash`), else APPENDed to
-/// the folder it was deleted from. Returns the uid the server gave it, when
-/// it said.
+/// delete put it there and it still is (`copy_in_trash`); else, when the
+/// folder it left already holds it again (a restore that landed after its
+/// answer was lost, or timed out), that copy; else APPENDed to the folder.
+/// Returns the uid the server gave it, when it said.
+///
+/// "Holds it again" is strict, or a legitimate duplicate (a second delivery,
+/// a list copy, an import) would be claimed and the bin's copy dropped: a
+/// copy counts only with a uid above the retired one (a MOVE or APPEND after
+/// the delete always gets one) and when the header cache did not list it
+/// before the delete.
 async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig) -> Result<Option<u32>, String> {
     let raw = if d.has_eml {
         let (app_dir, id) = (state.app_dir.clone(), d.id.clone());
@@ -649,33 +666,48 @@ async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
     let flags = d.flags.iter().filter(|f| !matches!(f.to_ascii_lowercase().as_str(), "\\deleted" | "\\recent")).cloned().collect::<Vec<_>>().join(" ");
     let message_id = bare_message_id(d);
     let (pool, cfg) = (&state.imap_pool, config);
-    let (trash, mailbox, trash_uid) = (d.trash.clone(), d.mailbox.clone(), d.trash_uid);
-    crate::handlers::imap::with_priority(pool, cfg, |mut session| async move {
-        if let Some(trash) = trash.as_deref().filter(|_| trash_uid.is_some() || message_id.is_some()) {
+    let (trash, mailbox, trash_uid, retired) = (d.trash.clone(), d.mailbox.clone(), d.trash_uid, d.uid);
+    let mid = message_id.clone();
+    let found = crate::handlers::imap::with_priority(pool, cfg, |mut session| async move {
+        if let Some(trash) = trash.as_deref().filter(|_| trash_uid.is_some() || mid.is_some()) {
             imap::select_mailbox(&mut session, trash).await?;
-            if let Some(in_trash) = copy_in_trash(&mut session, trash_uid, message_id.as_deref()).await? {
+            if let Some(in_trash) = copy_in_trash(&mut session, trash_uid, mid.as_deref()).await? {
                 let has_move = pool.has_capability(cfg, "MOVE").await;
                 let has_uidplus = pool.has_capability(cfg, "UIDPLUS").await;
                 let moved = imap::move_uids(&mut session, trash, &mailbox, &[in_trash], has_move, has_uidplus).await?;
-                return Ok((moved.new_uids.and_then(|u| u.first().copied()), session, Some(trash.to_string())));
+                return Ok((ImapRecover::Moved(moved.new_uids.and_then(|u| u.first().copied())), session, Some(trash.to_string())));
             }
         }
-        // Already back in the folder it left (a restore that landed after its
-        // answer was lost, or timed out): that copy is the recovered one, and
-        // an APPEND would put a second one beside it.
-        if let Some(mid) = message_id.as_deref() {
+        let mut again = Vec::new();
+        if let Some(mid) = mid.as_deref() {
             if imap::select_mailbox(&mut session, &mailbox).await.is_ok() {
-                let hits = match imap::message_id_uids(&mut session, mid).await {
+                again = match imap::message_id_uids(&mut session, mid).await {
                     Ok(hits) => hits,
                     Err(e) if e == imap::NO_USABLE_MESSAGE_ID => Vec::new(),
                     Err(e) => return Err(e),
                 };
-                if let Some(back) = hits.last().copied() {
-                    return Ok((Some(back), session, Some(mailbox)));
-                }
+                again.retain(|u| *u > retired);
             }
         }
-        let Some(raw) = raw else { return Err("deletedBin.goneFromTrash".to_string()) };
+        Ok((ImapRecover::NotInTrash(again), session, Some(mailbox)))
+    })
+    .await?;
+    let again = match found {
+        ImapRecover::Moved(new_uid) => return Ok(new_uid),
+        ImapRecover::NotInTrash(again) => again,
+    };
+    if !again.is_empty() {
+        let (st, acct, mb, at, asked) = (Arc::clone(state), d.account_id.clone(), d.mailbox.clone(), d.deleted_at, again.clone());
+        // An unreadable cache claims nothing: an APPEND is the safe side.
+        let twins = blocking(move || crate::custody::with_conn(&st, |c| cache::listed_before(c, &acct, &mb, &asked, at))).await.and_then(|r| r).unwrap_or_else(|_| again.clone());
+        if let Some(back) = again.iter().rev().find(|u| !twins.contains(u)).copied() {
+            info!("[deleted] {} is back in {}/{} already (uid {back}): nothing appended", d.id, d.account_id, d.mailbox);
+            return Ok(Some(back));
+        }
+    }
+    let Some(raw) = raw else { return Err("deletedBin.goneFromTrash".to_string()) };
+    let mailbox = d.mailbox.clone();
+    crate::handlers::imap::with_priority(pool, cfg, |mut session| async move {
         let (_, _, found) = imap::append_email_verified(&mut session, &mailbox, &raw, &flags, message_id.as_deref(), None).await?;
         Ok((found, session, Some(mailbox)))
     })
@@ -949,8 +981,9 @@ enum InTrash {
     /// Trash does not hold it: its bin copy is the way back.
     Missing,
     /// Out of Trash and back, under `new_uid` when the server named it.
-    /// `proved`: the server's answer accounts for it (every uid paired, or a
-    /// server that never names uids). Unproved, its bin row is kept.
+    /// `proved`: the server's answer accounts for it (every uid paired by
+    /// COPYUID, or a JMAP move that took all it was sent). Unproved, its bin
+    /// row is kept.
     Moved { new_uid: Option<u32>, proved: bool },
     /// Still in Trash: the move did not take it. A catalog key.
     Stayed(String),
@@ -1179,16 +1212,11 @@ async fn imap_move_back(state: &Arc<DaemonState>, config: &ImapConfig, trash: &s
                     None => InTrash::Missing,
                 }).collect()
             }
-            // A server without UIDPLUS never names uids: what left Trash is
-            // back, as far as it can say.
-            None => {
-                let still = imap::uids_present(&mut session, &to_move).await?;
-                after_recheck(&pick.found, &still).into_iter().map(|r| match r {
-                    InTrash::Moved { new_uid, .. } => InTrash::Moved { new_uid, proved: true },
-                    other => other,
-                }).collect()
-            }
-            Some(_) => {
+            // A server without UIDPLUS never names uids, and one whose
+            // COPYUID is short did not account for them all: what left
+            // Trash is back, unproved (its bin row stays; a later recover
+            // finds the copy back in its folder and appends nothing).
+            _ => {
                 let still = imap::uids_present(&mut session, &to_move).await?;
                 after_recheck(&pick.found, &still)
             }
@@ -1204,10 +1232,11 @@ async fn imap_move_back(state: &Arc<DaemonState>, config: &ImapConfig, trash: &s
                 warn!("[restore] the move back was refused: {e}");
                 Ok(after_refusal(&found, &e))
             }
-            // Answered OK, then the check of Trash failed: back, unproved.
+            // Answered OK, then the check of Trash failed: nothing is taken
+            // as back, nothing settled; the bin rows stay.
             Some((found, true)) => {
                 warn!("[restore] moved back, but Trash could not be checked again: {e}");
-                Ok(found.iter().map(|f| if f.is_some() { InTrash::Moved { new_uid: None, proved: false } } else { InTrash::Missing }).collect())
+                Ok(after_refusal(&found, RECOVER_FAILED))
             }
             None => Err(e),
         },
@@ -1251,7 +1280,7 @@ async fn jmap_move_back(state: &Arc<DaemonState>, config: &ImapConfig, original:
             Ok(still) => after_recheck(&pick.found, &still),
             Err(e) => {
                 warn!("[restore] a partial move back, and Trash could not be checked again: {e}");
-                pick.found.iter().map(|f| if f.is_some() { InTrash::Moved { new_uid: None, proved: false } } else { InTrash::Missing }).collect()
+                after_refusal(&pick.found, RECOVER_FAILED)
             }
         });
     }
@@ -2492,9 +2521,10 @@ mod tests {
     }
 
     /// A server without UIDPLUS names no uid for the copy it moved back: the
-    /// item is restored with `newUid: null` (the app reloads to learn it), the
-    /// custody stamp comes off the entry under the old uid, and the bin copy
-    /// is dropped: the server has the message again.
+    /// item is restored with `newUid: null` (the app reloads to learn it) and
+    /// the custody stamp comes off the entry under the old uid. Nothing proves
+    /// which message left Trash, so the bin copy stays; a later recover finds
+    /// the message back in its folder and appends nothing.
     #[tokio::test]
     async fn restore_on_a_server_that_names_no_uid_answers_null_and_still_lifts_the_stamp() {
         let server = server(Scenario::new().without_cap("UIDPLUS"));
@@ -2511,6 +2541,13 @@ mod tests {
         assert_eq!(uids(&server, "INBOX").len(), 1, "back on the server");
         let custody = crate::custody::with_conn(&s, |c| entries::get(c, "acc1", "INBOX", 1)).unwrap().expect("custody entry");
         assert_eq!(custody["serverDeleted"], json!(false));
+        assert_eq!(binned(&s).len(), 1, "unproved: the bin copy stays");
+
+        let again = recover(&s, "server").await;
+
+        assert_eq!(again["failed"], json!([]), "{again}");
+        assert_eq!(server.count_commands("APPEND"), 0, "never a second copy");
+        assert_eq!(uids(&server, "INBOX").len(), 1);
         assert!(binned(&s).is_empty());
     }
 
@@ -2835,5 +2872,93 @@ mod tests {
 
         let row = cached(&s, "acc1", "INBOX", new_uid_of(&out, 1)).expect("row under the new uid");
         assert_eq!(row["flags"], json!([]), "unread, as the app showed it: {row}");
+    }
+
+    // ── fix round 2 ─────────────────────────────────────────────────────────
+
+    /// A duplicate (same Message-ID, delivered twice) sits in the folder with
+    /// a HIGHER uid than the deleted copy, and the header cache listed it
+    /// before the delete. A recover must not take it for the restored one:
+    /// the bin copy is APPENDed, and the twin is left as it was.
+    #[tokio::test]
+    async fn recover_does_not_claim_a_twin_the_folder_held_before_the_delete() {
+        let twin = RAW.replace("Subject: Keep me", "Subject: Twin");
+        let server = server(Scenario::new());
+        server.mutate(|st| { st.find_mut("INBOX").unwrap().add(Message::new(2, twin.clone())); });
+        let s = state(&server);
+        let headers = json!({"emails": [
+            {"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]},
+            {"uid": 2, "messageId": "<keep1@example.com>", "subject": "Twin", "flags": []},
+        ]}).to_string();
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &headers)).unwrap();
+        delete(&s, &server, true).await.result.expect("deleted");
+        assert_eq!(uids(&server, "INBOX"), vec![2]);
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(server.count_commands("APPEND"), 1, "the bin copy went back");
+        let inbox = server.state().find("INBOX").unwrap().messages.clone();
+        assert_eq!(inbox.len(), 2);
+        assert_eq!(inbox.iter().find(|m| m.uid == 2).unwrap().raw, twin.as_bytes(), "the twin is untouched");
+        let back = out["recovered"][0]["uid"].as_u64().unwrap() as u32;
+        assert!(back > 2, "the appended copy, not the twin: {out}");
+        assert!(binned(&s).is_empty());
+    }
+
+    /// A twin with a LOWER uid than the deleted copy: a restore that landed
+    /// always gets a uid above the retired one, so the twin is never it.
+    #[tokio::test]
+    async fn recover_does_not_claim_a_twin_with_a_lower_uid() {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let twin = RAW.replace("Subject: Keep me", "Subject: Twin");
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(Message::new(1, twin.clone()));
+        inbox.add(Message::new(2, RAW).with_flags(&["\\Seen"]));
+        let server = MockImap::start(Scenario::new().mailbox(inbox).mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"])));
+        let s = state(&server);
+        let headers = json!({"emails": [{"uid": 2, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]}]}).to_string();
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &headers)).unwrap();
+        handle_request_for_test(&s, "imap_delete_email", json!({"account": account(&server), "uid": 2, "mailbox": "INBOX", "mode": "permanent"})).await.result.expect("deleted");
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(server.count_commands("APPEND"), 1);
+        assert_eq!(uids(&server, "INBOX").len(), 2);
+        assert_ne!(out["recovered"][0]["uid"], json!(1), "not the twin");
+        assert!(binned(&s).is_empty());
+    }
+
+    /// The check of Trash after a move the server did not fully account for
+    /// fails itself: nothing is taken as back. Both items fail in catalog
+    /// words and keep their bin rows; nothing is settled.
+    #[tokio::test]
+    async fn a_failed_recheck_after_a_short_copyuid_settles_nothing() {
+        let raw = "* OK [COPYUID 1 1 9] Moved\r\n{tag} OK MOVE completed\r\n".to_string();
+        let server = server2_with(Scenario::new()
+            .fault(Trigger::with("MOVE", "\"INBOX\""), Action::RespondRaw(raw))
+            .fault(Trigger::with("SEARCH", "UID 1:2"), Action::RefuseWith("NO".into(), "search refused".into())));
+        let s = state2(&server);
+        let first = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        let mut second = delete_to_trash(&s, &server, 2, "<keep2@example.com>").await;
+        // Found by Message-ID (no recorded Trash uid, no bin row to lend
+        // one), so the first check (`UID 1`) and the re-check (`UID 1:2`)
+        // differ and only the re-check is refused.
+        second["trashUid"] = Value::Null;
+        second["binId"] = Value::Null;
+
+        let out = restore(&s, vec![first, second]).await;
+
+        assert_eq!(out["restored"], json!([]), "{out}");
+        assert_eq!(out["failed"], json!([
+            {"accountId": "acc1", "mailbox": "INBOX", "uid": 1, "error": "deletedBin.recoverFailed"},
+            {"accountId": "acc1", "mailbox": "INBOX", "uid": 2, "error": "deletedBin.recoverFailed"},
+        ]));
+        assert_eq!(binned(&s).len(), 2);
+        // Both moved (the server's own answer was short): no row written
+        // under the uids they got, as nothing was taken as back.
+        assert_eq!(uids(&server, "INBOX"), vec![3, 4]);
+        assert!(cached(&s, "acc1", "INBOX", 3).is_none() && cached(&s, "acc1", "INBOX", 4).is_none(), "nothing settled");
     }
 }

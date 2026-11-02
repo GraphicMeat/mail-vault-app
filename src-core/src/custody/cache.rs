@@ -290,6 +290,26 @@ pub fn date_rows_page(conn: &Connection, account: &str, mailbox: &str, after_uid
 /// (999 before SQLite 3.32), with the two scope parameters on top.
 const UID_CHUNK: usize = 900;
 
+/// Which of `uids` have a header row last written at or before `at_ms`:
+/// messages the list already held then. A recover asks it about the
+/// same-Message-ID copies in a folder, so a twin the folder held before the
+/// delete is never taken for the restored message. A twin whose row a later
+/// write touched again is not recognised here (`updated_ms` moves on every
+/// write); the caller's other rule (a uid above the retired one) still holds.
+pub fn listed_before(conn: &Connection, account: &str, mailbox: &str, uids: &[u32], at_ms: i64) -> Result<Vec<u32>, String> {
+    let mut out = Vec::new();
+    for chunk in uids.chunks(UID_CHUNK) {
+        let marks = std::iter::repeat_n("?", chunk.len()).collect::<Vec<_>>().join(",");
+        let sql = format!("SELECT uid FROM header_cache WHERE account_id=? AND mailbox_path=? AND updated_ms<=? AND uid IN ({marks})");
+        let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into(), mailbox.to_string().into(), at_ms.into()];
+        args.extend(chunk.iter().map(|u| i64::from(*u).into()));
+        let mut stmt = conn.prepare_cached(&sql).map_err(err)?;
+        let found = stmt.query_map(params_from_iter(args), |r| r.get::<_, u32>(0)).map_err(err)?;
+        for uid in found { out.push(uid.map_err(err)?); }
+    }
+    Ok(out)
+}
+
 /// The cached headers of `uids`, newest first (`sort_ms DESC, uid DESC`, the
 /// same order as `load_headers`). Queried in chunks: one `IN (...)` holding
 /// every uid fails past SQLite's bound-parameter limit.
