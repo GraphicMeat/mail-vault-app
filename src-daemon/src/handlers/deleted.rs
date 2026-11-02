@@ -97,6 +97,20 @@ pub(crate) enum CaptureFailure {
 /// The catalog key a busy account travels as.
 const KEYCHAIN_BUSY: &str = "errors.keychainBusy";
 
+/// The key in a bin row's `row` that holds the origin folder's UIDNEXT
+/// watermark at the delete (`cache::uid_watermark`). Bookkeeping, never a
+/// header field: stripped wherever the row is written back as one.
+const UID_WATERMARK: &str = "uidNextAtDelete";
+
+/// `row` without the bin's own bookkeeping, to be written back as a header
+/// or custody row.
+fn without_watermark(mut row: Value) -> Value {
+    if let Some(o) = row.as_object_mut() {
+        o.remove(UID_WATERMARK);
+    }
+    row
+}
+
 impl CaptureFailure {
     /// `fetch|timeout|busy|write`, the `<reason>` of the wire form.
     pub(crate) fn reason(&self) -> &'static str {
@@ -300,7 +314,7 @@ pub(crate) async fn capture_stamped(
         })
         .ok()
         .and_then(|rows| rows.into_iter().next());
-        let row = listed
+        let mut row = listed
             .filter(|_| !bound)
             .or_else(|| {
                 raw.as_deref()
@@ -308,6 +322,14 @@ pub(crate) async fn capture_stamped(
                     .and_then(|r| serde_json::from_str(&r).ok())
             })
             .unwrap_or_else(|| json!({ "uid": uid }));
+        // The folder's UIDNEXT as the list knows it, from the header cache
+        // this read already opened (no server round trip on the delete path).
+        // A copy a later restore puts back is allocated at or above it; any
+        // copy the folder held before the delete sits below (`back_already`).
+        let known = crate::custody::with_conn(&state, |c| cache::uid_watermark(c, &account_id, &mailbox)).ok().flatten();
+        if let Some(o) = row.as_object_mut() {
+            o.insert(UID_WATERMARK.into(), json!(known.map_or(uid.saturating_add(1), |w| w.max(uid.saturating_add(1)))));
+        }
         let flags: Vec<String> = server_flags.unwrap_or_else(|| {
             row.get("flags")
                 .and_then(Value::as_array)
@@ -498,7 +520,7 @@ async fn recover_local(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, St
             }
             Ok(())
         })?;
-        let mut entry = if d.row.is_object() { d.row.clone() } else { json!({}) };
+        let mut entry = if d.row.is_object() { without_watermark(d.row.clone()) } else { json!({}) };
         let obj = entry.as_object_mut().expect("object");
         obj.insert("uid".into(), json!(d.uid));
         obj.insert("flags".into(), json!(d.flags));
@@ -640,9 +662,37 @@ enum ImapRecover {
     /// Moved back out of Trash, under this uid when the server said.
     Moved(Option<u32>),
     /// Not in Trash. The uids in the folder it left that carry its
-    /// Message-ID and sit above the retired uid: candidates for a copy an
-    /// earlier restore put back after its answer was lost.
+    /// Message-ID: candidates (`back_already`) for a copy an earlier restore
+    /// put back after its answer was lost.
     NotInTrash(Vec<u32>),
+}
+
+/// Of `hits` (the uids in `d`'s folder that carry its Message-ID), the copy
+/// an earlier restore put back after its answer was lost, if one is there.
+/// Strict, or a duplicate the folder already held (a second delivery, a list
+/// copy, an import) would be claimed and the bin's copy dropped:
+/// - above the retired uid, always;
+/// - at or above the UIDNEXT watermark the capture recorded: a MOVE or
+///   APPEND after the delete is allocated there, a copy the folder held
+///   before the delete sits below. A copy that arrived in the folder after
+///   the delete, from elsewhere, would also sit above it (an inherent limit);
+/// - a bin row from before the watermark falls back to "not a row the header
+///   cache listed before the delete" (`cache::listed_before`), which a later
+///   full-list save of the folder defeats.
+/// Used by every recover that goes back to the server over IMAP
+/// (`deleted.recover`, and `messages.restore`'s fallback to the bin).
+async fn back_already(state: &Arc<DaemonState>, d: &Deleted, hits: Vec<u32>) -> Option<u32> {
+    let above: Vec<u32> = hits.into_iter().filter(|u| *u > d.uid).collect();
+    if above.is_empty() {
+        return None;
+    }
+    if let Some(floor) = d.row.get(UID_WATERMARK).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()) {
+        return above.into_iter().filter(|u| *u >= floor).max();
+    }
+    let (st, acct, mb, at, asked) = (Arc::clone(state), d.account_id.clone(), d.mailbox.clone(), d.deleted_at, above.clone());
+    // An unreadable cache claims nothing: an APPEND is the safe side.
+    let listed = blocking(move || crate::custody::with_conn(&st, |c| cache::listed_before(c, &acct, &mb, &asked, at))).await.and_then(|r| r).unwrap_or_else(|_| above.clone());
+    above.into_iter().filter(|u| !listed.contains(u)).max()
 }
 
 /// `recover_server` on an IMAP account: moved back out of Trash when the
@@ -651,11 +701,7 @@ enum ImapRecover {
 /// answer was lost, or timed out), that copy; else APPENDed to the folder.
 /// Returns the uid the server gave it, when it said.
 ///
-/// "Holds it again" is strict, or a legitimate duplicate (a second delivery,
-/// a list copy, an import) would be claimed and the bin's copy dropped: a
-/// copy counts only with a uid above the retired one (a MOVE or APPEND after
-/// the delete always gets one) and when the header cache did not list it
-/// before the delete.
+/// "Holds it again" is strict (`back_already`).
 async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig) -> Result<Option<u32>, String> {
     let raw = if d.has_eml {
         let (app_dir, id) = (state.app_dir.clone(), d.id.clone());
@@ -666,7 +712,7 @@ async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
     let flags = d.flags.iter().filter(|f| !matches!(f.to_ascii_lowercase().as_str(), "\\deleted" | "\\recent")).cloned().collect::<Vec<_>>().join(" ");
     let message_id = bare_message_id(d);
     let (pool, cfg) = (&state.imap_pool, config);
-    let (trash, mailbox, trash_uid, retired) = (d.trash.clone(), d.mailbox.clone(), d.trash_uid, d.uid);
+    let (trash, mailbox, trash_uid) = (d.trash.clone(), d.mailbox.clone(), d.trash_uid);
     let mid = message_id.clone();
     let found = crate::handlers::imap::with_priority(pool, cfg, |mut session| async move {
         if let Some(trash) = trash.as_deref().filter(|_| trash_uid.is_some() || mid.is_some()) {
@@ -686,7 +732,6 @@ async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
                     Err(e) if e == imap::NO_USABLE_MESSAGE_ID => Vec::new(),
                     Err(e) => return Err(e),
                 };
-                again.retain(|u| *u > retired);
             }
         }
         Ok((ImapRecover::NotInTrash(again), session, Some(mailbox)))
@@ -696,14 +741,9 @@ async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
         ImapRecover::Moved(new_uid) => return Ok(new_uid),
         ImapRecover::NotInTrash(again) => again,
     };
-    if !again.is_empty() {
-        let (st, acct, mb, at, asked) = (Arc::clone(state), d.account_id.clone(), d.mailbox.clone(), d.deleted_at, again.clone());
-        // An unreadable cache claims nothing: an APPEND is the safe side.
-        let twins = blocking(move || crate::custody::with_conn(&st, |c| cache::listed_before(c, &acct, &mb, &asked, at))).await.and_then(|r| r).unwrap_or_else(|_| again.clone());
-        if let Some(back) = again.iter().rev().find(|u| !twins.contains(u)).copied() {
-            info!("[deleted] {} is back in {}/{} already (uid {back}): nothing appended", d.id, d.account_id, d.mailbox);
-            return Ok(Some(back));
-        }
+    if let Some(back) = back_already(state, d, again).await {
+        info!("[deleted] {} is back in {}/{} already (uid {back}): nothing appended", d.id, d.account_id, d.mailbox);
+        return Ok(Some(back));
     }
     let Some(raw) = raw else { return Err("deletedBin.goneFromTrash".to_string()) };
     let mailbox = d.mailbox.clone();
@@ -1319,7 +1359,7 @@ async fn settle_restored(state: &Arc<DaemonState>, original: AccountStamp, opera
     for Settle { old, new: new_uid, row, refiled: header_only } in back {
         match new_uid {
             Some(new) => {
-                if let Some(mut r) = row.filter(Value::is_object) {
+                if let Some(mut r) = row.filter(Value::is_object).map(without_watermark) {
                     if let Some(o) = r.as_object_mut() {
                         o.remove("_nativeIdentity");
                         o.remove("_nativeExpectedIdentity");
@@ -2960,5 +3000,113 @@ mod tests {
         // under the uids they got, as nothing was taken as back.
         assert_eq!(uids(&server, "INBOX"), vec![3, 4]);
         assert!(cached(&s, "acc1", "INBOX", 3).is_none() && cached(&s, "acc1", "INBOX", 4).is_none(), "nothing settled");
+    }
+
+    // ── fix round 3: the UIDNEXT watermark ──────────────────────────────────
+
+    fn rows_after_the_delete(s: &DaemonState, rows: Value) {
+        // The app saves the whole folder list on every load: every row is
+        // written again, after the delete.
+        std::thread::sleep(Duration::from_millis(5));
+        crate::custody::with_conn(s, |c| cache::save_headers(c, "acc1", "INBOX", &json!({"emails": rows}).to_string())).unwrap();
+    }
+
+    /// The capture records the folder's UIDNEXT as the list knew it (the
+    /// highest cached uid + 1, or a higher `uidNext` the cache's metadata
+    /// holds): a copy a later restore puts back always gets a uid at or above.
+    #[tokio::test]
+    async fn a_capture_records_the_folders_uidnext_watermark() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        assert_eq!(binned(&s)[0].row["uidNextAtDelete"], json!(2), "{:?}", binned(&s)[0].row);
+
+        let server = server2();
+        let s = state2(&server);
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &json!({"uidNext": 40}).to_string())).unwrap();
+        delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        assert_eq!(binned(&s)[0].row["uidNextAtDelete"], json!(40));
+    }
+
+    /// The twin above the deleted copy pre-dates the delete, and the folder
+    /// list was saved again after it (an ordinary folder load), so its cache
+    /// row looks new. Its uid is below the watermark: never the restored copy.
+    #[tokio::test]
+    async fn recover_does_not_claim_a_twin_whose_cache_row_was_rewritten_after_the_delete() {
+        let twin = RAW.replace("Subject: Keep me", "Subject: Twin");
+        let server = server(Scenario::new());
+        server.mutate(|st| { st.find_mut("INBOX").unwrap().add(Message::new(2, twin.clone())); });
+        let s = state(&server);
+        let both = json!([
+            {"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]},
+            {"uid": 2, "messageId": "<keep1@example.com>", "subject": "Twin", "flags": []},
+        ]);
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &json!({"emails": both}).to_string())).unwrap();
+        delete(&s, &server, true).await.result.expect("deleted");
+        rows_after_the_delete(&s, json!([{"uid": 2, "messageId": "<keep1@example.com>", "subject": "Twin", "flags": []}]));
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(server.count_commands("APPEND"), 1, "the bin copy went back");
+        let inbox = server.state().find("INBOX").unwrap().messages.clone();
+        assert_eq!(inbox.len(), 2);
+        assert_eq!(inbox.iter().find(|m| m.uid == 2).unwrap().raw, twin.as_bytes(), "the twin is untouched");
+        assert!(binned(&s).is_empty());
+    }
+
+    /// The same through the undo's own fallback (`messages.restore`, Trash
+    /// copy gone): the bin copy is APPENDed beside the twin.
+    #[tokio::test]
+    async fn restore_falls_back_to_the_bin_beside_a_twin_whose_cache_row_was_rewritten() {
+        let twin = RAW.replace("Subject: Keep me", "Subject: Twin");
+        let server = server(Scenario::new());
+        server.mutate(|st| { st.find_mut("INBOX").unwrap().add(Message::new(2, twin.clone())); });
+        let s = state(&server);
+        let both = json!([
+            {"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]},
+            {"uid": 2, "messageId": "<keep1@example.com>", "subject": "Twin", "flags": []},
+        ]);
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &json!({"emails": both}).to_string())).unwrap();
+        with_mailbox_write(&s, "acc1", "INBOX", |root| vault_files::store(&s.vault_registry, root, "acc1", "INBOX", 1, RAW.as_bytes(), &[], false)).unwrap();
+        let item = delete_to_trash(&s, &server, 1, "<keep1@example.com>").await;
+        server.mutate(|st| st.find_mut("Trash").unwrap().messages.clear());
+        rows_after_the_delete(&s, json!([{"uid": 2, "messageId": "<keep1@example.com>", "subject": "Twin", "flags": []}]));
+
+        let out = restore(&s, vec![item]).await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(server.count_commands("APPEND"), 1);
+        assert!(new_uid_of(&out, 1) > 2, "the appended copy, not the twin: {out}");
+        assert_eq!(cached(&s, "acc1", "INBOX", 2).unwrap()["subject"], json!("Twin"), "the twin's row is its own");
+        assert!(binned(&s).is_empty());
+    }
+
+    /// A bin row from before the watermark (no `uidNextAtDelete`) falls back
+    /// to the earlier rule: a copy counts only above the retired uid and when
+    /// the header cache did not list it before the delete. A twin the cache
+    /// listed then is not claimed; one a later full-list save rewrote would
+    /// be (the documented limit of legacy rows).
+    #[tokio::test]
+    async fn a_legacy_bin_row_without_a_watermark_falls_back_to_the_cache_rule() {
+        let twin = RAW.replace("Subject: Keep me", "Subject: Twin");
+        let server = server(Scenario::new());
+        server.mutate(|st| { st.find_mut("INBOX").unwrap().add(Message::new(2, twin.clone())); });
+        let s = state(&server);
+        let both = json!([
+            {"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]},
+            {"uid": 2, "messageId": "<keep1@example.com>", "subject": "Twin", "flags": []},
+        ]);
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &json!({"emails": both}).to_string())).unwrap();
+        delete(&s, &server, true).await.result.expect("deleted");
+        app_db::with(&s.app_dir, |c| c.execute("UPDATE deleted_messages SET row_json = json_remove(row_json, '$.uidNextAtDelete')", []).map_err(|e| e.to_string())).unwrap();
+        assert!(binned(&s)[0].row.get("uidNextAtDelete").is_none());
+
+        let out = recover(&s, "server").await;
+
+        assert_eq!(out["failed"], json!([]), "{out}");
+        assert_eq!(server.count_commands("APPEND"), 1, "the cached twin is not claimed");
+        assert_eq!(server.state().find("INBOX").unwrap().messages.len(), 2);
+        assert!(binned(&s).is_empty());
     }
 }

@@ -290,12 +290,36 @@ pub fn date_rows_page(conn: &Connection, account: &str, mailbox: &str, after_uid
 /// (999 before SQLite 3.32), with the two scope parameters on top.
 const UID_CHUNK: usize = 900;
 
-/// Which of `uids` have a header row last written at or before `at_ms`:
-/// messages the list already held then. A recover asks it about the
-/// same-Message-ID copies in a folder, so a twin the folder held before the
-/// delete is never taken for the restored message. A twin whose row a later
-/// write touched again is not recognised here (`updated_ms` moves on every
-/// write); the caller's other rule (a uid above the retired one) still holds.
+/// A floor under the folder's UIDNEXT as this computer knows it: the highest
+/// cached uid + 1, or a higher `uidNext` / `syncUidNext` the cache's metadata
+/// recorded from the server. UIDNEXT only grows, so the real one is at or
+/// above it, and every uid a server allocates later is too. `None`: nothing
+/// is known about the folder.
+pub fn uid_watermark(conn: &Connection, account: &str, mailbox: &str) -> Result<Option<u32>, String> {
+    let top: Option<i64> = conn
+        .query_row("SELECT max(uid) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get(0))
+        .map_err(err)?;
+    let mut floor = top.and_then(|u| u32::try_from(u).ok()).map(|u| u.saturating_add(1));
+    if let Some(text) = conn
+        .query_row("SELECT meta_json FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get::<_, String>(0))
+        .optional()
+        .map_err(err)?
+    {
+        let meta: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+        for key in ["uidNext", "syncUidNext"] {
+            if let Some(n) = meta.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()) {
+                floor = Some(floor.map_or(n, |f| f.max(n)));
+            }
+        }
+    }
+    Ok(floor)
+}
+
+/// Which of `uids` have a header row last written at or before `at_ms`.
+/// Only the fallback for a bin row captured before the UIDNEXT watermark
+/// (`uid_watermark`) existed: `updated_ms` moves on every write of the row,
+/// and the app saves a folder's whole list on every load, so a row the list
+/// held before a delete soon reads as written after it.
 pub fn listed_before(conn: &Connection, account: &str, mailbox: &str, uids: &[u32], at_ms: i64) -> Result<Vec<u32>, String> {
     let mut out = Vec::new();
     for chunk in uids.chunks(UID_CHUNK) {
