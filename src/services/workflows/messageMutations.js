@@ -1063,7 +1063,15 @@ export async function deleteMessages(targets, opts = {}) {
   try {
     // Landed while this call held them, after their answer said `queued`:
     // settled now, before the slot is filed, so they join it.
-    for (const payload of heldLandings) await onDeleteQueueLanded(payload);
+    // One that throws (its list reload) must not skip this call's own
+    // reconcile and undo below.
+    for (const payload of heldLandings) {
+      try {
+        await onDeleteQueueLanded(payload);
+      } catch (error) {
+        console.warn('[deleteMessages] Could not settle a delete that landed while it was sent:', error);
+      }
+    }
     if (how.reconcile === 'each') {
       for (const c of sent.settled) {
         await applyServerRemoval(c.uid, {
@@ -1312,6 +1320,9 @@ function _answered(c, answer = { queued: true }, hidden, batch = null) {
     // here once (a second holder finds it used).
     if (heldLanding) {
       _owedIds.delete(c.tombstone);
+      // Nothing of it is owed now: an earlier submit's row must not let a
+      // repeat of the event file a second undo slot.
+      _owedRows.delete(c.tombstone);
       const first = !heldLanding.used;
       heldLanding.used = true;
       if (!first || heldLanding.landed.kind !== 'deleted') return GONE;

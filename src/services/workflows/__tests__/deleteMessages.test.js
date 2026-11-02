@@ -683,6 +683,70 @@ describe('a batch with one stuck uid', () => {
     expect(mockRestoreMessages.mock.calls[0][0].map(o => o.uid).sort()).toEqual([7, 8, 9]);
   });
 
+  // A replayed landing that throws (its list reload) is only that landing's
+  // trouble: the call still reconciles and files its own undo slot.
+  it('a held landing whose replay throws still lets its call reconcile and file the undo', async () => {
+    const db = await import('../../db');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    prime({ emails: [row(7), row(8), row(9), row(10)] });
+    mockSubmit.mockResolvedValue(earlyReply);
+    let threw = false;
+    useMailStore.setState({
+      loadEmails: vi.fn(async () => {
+        if (threw) return;
+        threw = true;
+        throw new Error('reload failed');
+      }),
+    });
+    // 9 lands during the custody stamp of the uid that landed with the reply,
+    // so it is held and replayed when the call lets go.
+    let first = true;
+    db.getLocalIndexEntry.mockImplementation(async () => {
+      if (first) {
+        first = false;
+        await onDeleteQueueLanded(landed9);
+      }
+      return null;
+    });
+
+    try {
+      await deleteMessages([{ key: 9 }, { key: 7 }, { key: 8 }]);
+    } finally {
+      db.getLocalIndexEntry.mockResolvedValue(null);
+      warn.mockRestore();
+    }
+
+    expect(threw).toBe(true);
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|9')).toBe(false);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 3 } });
+  });
+
+  // A landing consumed from the hold leaves nothing owed behind: an earlier
+  // submit's row for the same uid must not let a repeat of the event file a
+  // second undo slot.
+  it('a repeat landing event after a held landing was consumed files no second slot', async () => {
+    prime({ emails: [row(9), row(10)] });
+    mockSubmit.mockResolvedValueOnce({ landed: [], queued: [9], dropped: [] });
+    await deleteMessages([{ key: 9 }]);
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|9')).toBe(true);
+
+    // The same uid is sent again (the row is back on screen), and the daemon's
+    // own round lands it before this reply says it is still queued.
+    prime({ emails: [row(9), row(10)] });
+    const reply = deferred();
+    mockSubmit.mockReturnValueOnce(reply.promise);
+    const running = deleteMessages([{ key: 9 }]);
+    await vi.waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(2));
+    await onDeleteQueueLanded(landed9);
+    reply.resolve({ landed: [], queued: [9], dropped: [] });
+    await running;
+
+    const slot = useMailStore.getState().undo;
+    expect(slot).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 1 } });
+    await onDeleteQueueLanded(landed9);
+    expect(useMailStore.getState().undo).toBe(slot);
+  });
+
   it('the stuck one landing later never takes the slot from an action taken after the reply', async () => {
     prime({ emails: [row(7), row(8), row(9), row(10)] });
     mockSubmit.mockResolvedValue(earlyReply);
