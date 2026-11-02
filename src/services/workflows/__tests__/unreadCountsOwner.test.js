@@ -6,6 +6,7 @@
 // now: INBOX only, and only a complete list recounts; otherwise a message that
 // leaves or changes state moves the badge by one.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { fakeDeleteQueueSubmit } from './fakeDeleteQueue.js';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 
 guardViewCounts();
@@ -19,6 +20,8 @@ if (!globalThis.window) {
 
 const mockMoveEmails = vi.fn();
 const mockDeleteEmail = vi.fn();
+// The daemon's delete queue, answering through the per-message mock above.
+const mockDeleteQueueSubmit = vi.fn((...a) => fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue({ success: true, written: [] });
 const mockFindMessageId = vi.fn();
 const mockGetLocalIndexEntry = vi.fn();
@@ -67,6 +70,8 @@ vi.mock('../../api', () => ({
   graphMoveEmails: vi.fn().mockResolvedValue(undefined),
   graphDeleteMessage: vi.fn().mockResolvedValue(undefined),
   deleteEmail: (...a) => mockDeleteEmail(...a),
+  deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
+  deleteQueueList: async () => [],
   moveEmails: (...a) => mockMoveEmails(...a),
   findMessageId: (...a) => mockFindMessageId(...a),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),

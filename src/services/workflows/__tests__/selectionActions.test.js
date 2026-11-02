@@ -6,6 +6,7 @@
 // selection as read used to update `emails` alone, so the rows kept showing the
 // old unread state until something else forced a re-derive.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { fakeDeleteQueueSubmit } from './fakeDeleteQueue.js';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 
 guardViewCounts();
@@ -21,6 +22,8 @@ if (!globalThis.window) {
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
 const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
+// The daemon's delete queue, answering through the per-message mock above.
+const mockDeleteQueueSubmit = vi.fn((...a) => fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
 const mockDeleteLocalEmail = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
@@ -113,6 +116,8 @@ vi.mock('../../api', () => ({
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
   deleteEmail: (...a) => mockDeleteEmail(...a),
+  deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
+  deleteQueueList: async () => [],
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
@@ -596,25 +601,28 @@ describe('deleteSelectedFromServer', () => {
     expect(useMailStore.getState().selectedEmailId).toBeNull();
   });
 
-  // The whole delete runs in the webview, so a reload or quit inside the loop
-  // kills it before the remaining commands are sent — and the rows are already
-  // hidden, so the user is shown a finished delete either way. The journal is
-  // what lets the next launch finish the job, and it is only useful if it is
-  // written BEFORE the first round-trip.
-  it('journals the uids before the first server delete and clears them after', async () => {
+  // The rows are hidden at the click, so the user is shown a finished delete
+  // whatever happens next. The daemon's queue journals the delete before it
+  // sends anything, so the submit goes out BEFORE the rows leave: from then on
+  // a reload or a quit cannot lose it. The app keeps no journal of its own.
+  it('submits the uids to the daemon queue before the rows go, and keeps no journal itself', async () => {
     const order = [];
-    mockQueueOp.mockImplementation(async (...a) => { order.push(['queue', ...a]); });
-    mockClearOps.mockImplementation(async (...a) => { order.push(['clear', ...a]); });
+    mockDeleteQueueSubmit.mockImplementation(async (group, opts) => {
+      order.push(['submit', group, opts, useMailStore.getState().sortedEmails.length]);
+      return fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), group);
+    });
     mockDeleteEmail.mockImplementation(async () => { order.push(['delete']); });
     primeStore(seedThread(), [1, 2]);
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    // Both messages named once, at queue time; the clear matches by that arg.
+    // Both messages named once, for Settings, in the one submit.
     const arg = { total: 2, messages: [expect.objectContaining({ uid: 1 }), expect.objectContaining({ uid: 2 })] };
-    expect(order[0]).toEqual(['queue', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2], arg }]);
-    expect(order.at(-1)).toEqual(['clear', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2], arg }]);
+    expect(order[0]).toEqual(['submit', { accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2] }, { mode: 'auto', bin: true, arg }, 2]);
     expect(order.filter(o => o[0] === 'delete')).toHaveLength(2);
+    expect(mockQueueOp).not.toHaveBeenCalled();
+    expect(mockClearOps).not.toHaveBeenCalled();
+    mockDeleteQueueSubmit.mockImplementation((...a) => fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
   });
 
   // The entry IS the delete once the server has refused it: the row is already
@@ -642,17 +650,19 @@ describe('deleteSelectedFromServer', () => {
     expect(out.deleted.map(d => d.uid)).toEqual([1, 2]);
   });
 
-  it('offline: the rows go, the ops stay journalled, the server is not called', async () => {
+  it('offline: the rows go, the daemon queue keeps the delete, the server is not called', async () => {
     netOnline = false;
+    // The daemon's own gate holds the send: it answers every uid owed.
+    mockDeleteQueueSubmit.mockImplementationOnce(async ({ uids }) => ({ landed: [], queued: uids, dropped: [] }));
     primeStore(seedThread(), [1]);
 
     const out = await useMailStore.getState().deleteSelectedFromServer();
 
-    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1], arg: {} });
+    expect(mockDeleteQueueSubmit).toHaveBeenCalledWith({ accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1] }, { mode: 'auto', bin: true, arg: {} });
     expect(mockDeleteEmail).not.toHaveBeenCalled();
-    // Nothing was deleted, so nothing may be cleared or pruned — replayOps
+    // Nothing was deleted, so nothing may be pruned — the daemon's replay
     // finishes the job, and the tombstone keeps the row off the list meanwhile.
-    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(mockQueueOp).not.toHaveBeenCalled();
     expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(1))).toBe(false);
     expect(useMailStore.getState().deleteTombstones.size).toBe(1);
     expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([2]);
@@ -754,10 +764,12 @@ describe('deleteSelectedFromServer', () => {
 // `#` shortcut. It used to hold the row on screen (and a modal over a backdrop)
 // for the whole server round trip; the bulk paths never did.
 describe('deleteEmailFromServer', () => {
-  it('keeps a newly opened reader when the journal write finishes', async () => {
+  it('keeps a newly opened reader when the queue answers', async () => {
     let releaseQueue;
     let releaseDelete;
-    mockQueueOp.mockImplementationOnce(() => new Promise(resolve => { releaseQueue = resolve; }));
+    mockDeleteQueueSubmit.mockImplementationOnce((...a) => new Promise(resolve => {
+      releaseQueue = () => resolve(fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
+    }));
     mockDeleteEmail.mockImplementationOnce(() => new Promise(resolve => { releaseDelete = resolve; }));
     primeStore(seedThread(), []);
     useMailStore.setState({ selectedEmailId: 1, selectedEmail: { uid: 1 } });
@@ -765,9 +777,9 @@ describe('deleteEmailFromServer', () => {
     const pending = useMailStore.getState().deleteEmailFromServer(1);
     await vi.waitFor(() => expect(releaseQueue).toBeTypeOf('function'));
 
-    // The user can open another row while the durable delete intent is being
-    // written. The optimistic removal must only clear the reader it started
-    // with, not this fresh selection.
+    // The user can open another row while the daemon is still answering. The
+    // delete must only clear the reader it started with, not this fresh
+    // selection.
     useMailStore.setState({ selectedEmailId: 2, selectedEmail: { uid: 2 } });
     releaseQueue();
     await vi.waitFor(() => expect(releaseDelete).toBeTypeOf('function'));
@@ -781,10 +793,12 @@ describe('deleteEmailFromServer', () => {
     expect(useMailStore.getState().selectedEmail).toEqual({ uid: 2 });
   });
 
-  it('does not alter a same-UID reader after switching account during the journal write', async () => {
+  it('does not alter a same-UID reader after switching account while the queue answers', async () => {
     let releaseQueue;
     let releaseDelete;
-    mockQueueOp.mockImplementationOnce(() => new Promise(resolve => { releaseQueue = resolve; }));
+    mockDeleteQueueSubmit.mockImplementationOnce((...a) => new Promise(resolve => {
+      releaseQueue = () => resolve(fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
+    }));
     mockDeleteEmail.mockImplementationOnce(() => new Promise(resolve => { releaseDelete = resolve; }));
     primeStore(seedThread(), []);
     useMailStore.setState({ selectedEmailId: 1, selectedEmail: { uid: 1 } });
@@ -926,25 +940,26 @@ describe('deleteEmailFromServer', () => {
     expect(useMailStore.getState().emails).toEqual([other]);
   });
 
-  // A reader opened during the journal write is still open when the optimistic
-  // paint runs, so the message leaves it — and a refusal no longer puts it
-  // back: the entry is queued, so the message stays gone until the replay says
-  // otherwise. What must NOT happen is the reader jumping to another message.
-  it('leaves the mid-delete thread pruned when the server refuses', async () => {
+  // A thread open at the click loses the message in the optimistic paint —
+  // and a refusal no longer puts it back: the delete is still owed, so the
+  // message stays gone until the daemon's replay says otherwise. What must NOT
+  // happen is the reader jumping to another message.
+  it('leaves the open thread pruned when the server refuses', async () => {
     let release;
-    mockQueueOp.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    mockDeleteQueueSubmit.mockImplementationOnce((...a) => new Promise(resolve => {
+      release = () => resolve(fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
+    }));
     mockDeleteEmail.mockRejectedValue(new Error('nope'));
     const rows = seedThread();
     primeStore(rows, []);
-    useMailStore.setState({ selectedEmailId: 1, selectedEmail: rows[0] });
-
-    const pending = useMailStore.getState().deleteEmailFromServer(1);
-    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     const thread = {
       threadId: 'a@mock', subject: 'General', emails: rows,
       lastEmail: rows[1], messageCount: 2,
     };
     useMailStore.setState({ selectedThread: thread, selectedEmailId: 2, selectedEmail: null });
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     release();
     await pending;
 
@@ -1021,15 +1036,22 @@ describe('deleteEmailFromServer', () => {
   });
 
   // The row vanishes before the server answers, so a reload in that window has
-  // to leave something the next launch can finish — the same journal the bulk
-  // path writes.
-  it('journals the uid before the row goes and clears it once the server confirms', async () => {
+  // to leave something that finishes the job: the daemon's queue, which
+  // journals the delete before it sends it, and clears it once it lands.
+  it('submits the uid to the daemon queue before the row goes, and keeps no journal itself', async () => {
     primeStore(seedThread(), []);
+    let onScreen = null;
+    mockDeleteQueueSubmit.mockImplementationOnce(async (...a) => {
+      onScreen = useMailStore.getState().sortedEmails.length;
+      return fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a);
+    });
 
     await useMailStore.getState().deleteEmailFromServer(1);
 
-    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1], arg: {} });
+    expect(mockDeleteQueueSubmit).toHaveBeenCalledWith({ accountId: 'acct1', mailbox: 'INBOX', uids: [1] }, { mode: 'auto', bin: true, arg: {} });
+    expect(onScreen).toBe(2);
+    expect(mockQueueOp).not.toHaveBeenCalled();
+    expect(mockClearOps).not.toHaveBeenCalled();
   });
 
   it('keeps the journal when the delete fails, so the replay can finish it', async () => {
@@ -1122,7 +1144,7 @@ describe('deleteEmailFromServer', () => {
       skipRefresh: true,
     });
 
-    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: OTHER_ACCOUNT.id, mailbox: 'Sent', uids: [1] });
+    expect(mockDeleteQueueSubmit).toHaveBeenCalledWith({ accountId: OTHER_ACCOUNT.id, mailbox: 'Sent', uids: [1] }, expect.objectContaining({ mode: 'auto' }));
     expect(mockDeleteEmail).toHaveBeenCalledWith(OTHER_ACCOUNT, 1, 'Sent');
     expect(useMailStore.getState().emails).toEqual([activeRow]);
     expect(useMailStore.getState().selectedEmailId).toBe(1);
@@ -1700,12 +1722,15 @@ describe('a finished mutation does not close a message opened while it ran', () 
     stillOnSecond();
   });
 
-  // The bulk delete's window is the journal write, which is awaited before the
-  // rows (and the reader) are cleared optimistically.
+  // The bulk delete's window is the submit to the daemon's queue, which goes
+  // out before the rows (and the reader) are cleared optimistically.
   it('the selection bar\'s delete', async () => {
     primeStore(seedThread(), [1]);
     openFirst();
-    mockQueueOp.mockImplementationOnce(async () => { clickSecond(); });
+    mockDeleteQueueSubmit.mockImplementationOnce(async (...a) => {
+      clickSecond();
+      return fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a);
+    });
 
     await useMailStore.getState().deleteSelectedFromServer();
 
@@ -1909,8 +1934,11 @@ describe('a finished mutation does not clear a tick made while it ran', () => {
 
   it('the selection bar\'s delete keeps only what it did not delete', async () => {
     primeStore(seedThread(), [1]);
-    // The journal write is the bulk delete's own await before the paint.
-    mockQueueOp.mockImplementationOnce(async () => { tickSecond(); });
+    // The submit to the daemon's queue is the bulk delete's own call before the paint.
+    mockDeleteQueueSubmit.mockImplementationOnce(async (...a) => {
+      tickSecond();
+      return fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a);
+    });
 
     await useMailStore.getState().deleteSelectedFromServer();
 
@@ -1967,8 +1995,11 @@ describe('a delete takes the row out of the open search results', () => {
     primeStore(seedThread(), []);
     const store = await openResults([hit(1)]);
     let goneBeforeTheServerCall = null;
-    mockDeleteEmail.mockImplementationOnce(async () => {
+    // The daemon answers a round trip later: by then the hit has to be gone.
+    mockDeleteQueueSubmit.mockImplementationOnce(async (...a) => {
+      await new Promise(resolve => setTimeout(resolve, 0));
       goneBeforeTheServerCall = subjects(store);
+      return fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a);
     });
 
     await useMailStore.getState().deleteEmailFromServer(1);

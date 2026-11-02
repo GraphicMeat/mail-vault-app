@@ -5,6 +5,7 @@
 // the Sent copy's identity, so any of them can reach the real Sent message.
 // Reminders are shown pinned above the list instead (FollowUpPinnedRows).
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import { fakeDeleteQueueSubmit } from './fakeDeleteQueue.js';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 
 guardViewCounts();
@@ -23,6 +24,8 @@ if (!globalThis.window) {
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
 const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
+// The daemon's delete queue, answering through the per-message mock above.
+const mockDeleteQueueSubmit = vi.fn((...a) => fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(undefined);
@@ -75,6 +78,8 @@ vi.mock('../../api', () => ({
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
   deleteEmail: (...a) => mockDeleteEmail(...a),
+  deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
+  deleteQueueList: async () => [],
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
@@ -266,7 +271,7 @@ describe('a due follow-up reminder and the inbox list', () => {
   it('keeps the reminder when the delete fails', async () => {
     mockDaemonCall.mockClear();
     prime({ sentEmails: [sentRow()] });
-    // Every try refused: the delete retries a refusal five times (DELETE_RETRY).
+    // Refused: the daemon queue keeps it owed and retries it itself.
     mockDeleteEmail.mockRejectedValue(new Error('NO server says no'));
     await useMailStore.getState().deleteEmailFromServer(`${ACCT_A.id}:Sent:77`).catch(() => {});
     expect(mockDeleteEmail).toHaveBeenCalled();

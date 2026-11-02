@@ -35,33 +35,20 @@ import { t as tr, tErr } from '../../i18n/index.js';
 
 
 /**
- * A delete has already left the list when it goes to the server, so a refusal
- * is retried quietly at once: five more tries, waiting 1, 2, 4, 8 and 16
- * seconds. What still has not landed stays in the journal, where replayOps
- * keeps retrying it with no limit (launch, reconnect, every five minutes) and
- * Settings › Unfinished server actions lists it. Unit tests run the same
- * schedule with no wait.
+ * A delete everywhere (purge) whose run could not finish a target goes again
+ * quietly: five more tries, waiting 1, 2, 4, 8 and 16 seconds. Unit tests run
+ * the same schedule with no wait. A plain delete has no such loop here: the
+ * daemon's delete queue retries it (src-daemon/src/delete_queue.rs).
  */
-export const DELETE_RETRY = {
+const PURGE_RETRY = {
   retries: 5,
   baseMs: import.meta.env?.MODE === 'test' ? 0 : 1000,
 };
-export const deleteRetryDelay = (retry) => DELETE_RETRY.baseMs * 2 ** retry;
+const purgeRetryDelay = (retry) => PURGE_RETRY.baseMs * 2 ** retry;
 const _wait = (ms) => (ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve());
 
-async function _withDeleteRetries(send) {
-  for (let retry = 0; ; retry++) {
-    try {
-      return await send();
-    } catch (error) {
-      if (retry >= DELETE_RETRY.retries) throw error;
-      await _wait(deleteRetryDelay(retry));
-    }
-  }
-}
-
-// The one place a delete that is not queued (Graph, a local-only copy) and ran
-// out of retries is said.
+// The one place a delete that is not queued (Graph, a local-only copy) and
+// failed, or one the queue refused for good, is said.
 async function _reportDeleteFailure(error) {
   const { useMailStore } = await import('../../stores/mailStore');
   useMailStore.setState({ error: tr('list.deleteFailed', { err: error?.message || String(error) }) });
@@ -893,8 +880,15 @@ async function _keysAfterUndo(get, keys) {
 // be two near-copies of the same loop — journal first, hide the rows, send,
 // retry, reconcile — and drifted apart in the places they still differ. Those
 // differences are not unified here: each is a named field of the two option
-// sets below, so the daemon tasks that take the retry loop, the journal and
-// the undo over can retire them one at a time.
+// sets below.
+//
+// The journal and the retries are the daemon's (src-daemon/src/delete_queue.rs):
+// one `delete_queue.submit` per (account, folder), which journals the delete
+// before it sends a thing, retries it on its own schedule, and answers each uid
+// `landed`, `queued` (still owed: its replay worker keeps sending it, with or
+// without a window, and `delete-queue-landed` says when it lands) or `dropped`
+// (refused for good). Only what the daemon cannot queue is sent from here: a
+// Graph account's delete and a local-only copy.
 
 // A local-only message's vault file. `bin`: it is the only copy, so the daemon
 // keeps it in the deleted-mail bin first, or refuses.
@@ -912,17 +906,12 @@ const SELECTION_DELETE = Object.freeze({
   // `_resolveKeyContext` over search rows + emails + sentEmails, and the keys
   // are the selection's: the hide unticks them.
   resolve: 'selection',
-  // The journal call names its `arg` even when empty (`{}`, the stored default).
-  journalArg: true,
-  // One try per message, then rounds over only the refused ones: a message the
-  // server refuses never holds up the rest while it waits. A Graph id that
-  // cannot be resolved is retried with the rest.
-  retry: 'rounds',
-  // Offline nothing is sent, Graph included: its row stays hidden by its
-  // tombstone with nothing journalled.
+  // Offline no Graph delete is sent: its row stays hidden by its tombstone with
+  // nothing queued. (A queued delete is always submitted: the daemon's gate
+  // holds its send.)
   offline: 'all',
-  // An unjournalled refusal (Graph) puts its row back and says so in the store
-  // error; the call does not throw.
+  // A refusal nothing will retry (Graph, or one the queue refused for good)
+  // puts its row back and says so in the store error; the call does not throw.
   onFailure: 'report',
   // A local-only delete that fails is warned and stays hidden.
   onLocalFailure: 'keep',
@@ -938,15 +927,10 @@ const ONE_DELETE = Object.freeze({
   // Explicit (account, folder) when the caller names one, else the key, else
   // the view; a missing account logs and deletes nothing.
   resolve: 'one',
-  // Same entry on disk (queueOp defaults `arg` to `{}`); the call omits it.
-  journalArg: false,
-  // `_withDeleteRetries` around the server call alone: a Graph id that cannot
-  // be resolved fails at once.
-  retry: 'each',
-  // Offline only a journalled delete waits; a Graph delete is still sent.
-  offline: 'journalled',
-  // An unjournalled failure (Graph, local-only) puts the row back — and the
-  // open thread, and reloads the folder — then throws to the caller.
+  // Offline a Graph delete is still sent.
+  offline: 'sent',
+  // A failure nothing will retry (Graph, local-only, refused for good) puts the
+  // row back — and the open thread, and reloads the folder — then throws.
   onFailure: 'throw',
   onLocalFailure: 'throw',
   // applyServerRemoval per message; the undo slot only when something was
@@ -958,16 +942,22 @@ const ONE_DELETE = Object.freeze({
 const _where = ({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid });
 const OFFLINE = Symbol('offline');
 const LOCAL = Symbol('local');
+// A queued uid still owed after its submit answered.
+const QUEUED = Symbol('queued');
+// A queued uid the server no longer had: done, with nothing to undo.
+const GONE = Symbol('gone');
+// The drop reason the daemon gives a uid the user cancelled (Settings).
+const CANCELLED = 'cancelled';
 
 /**
  * Delete `targets` from the server (or the vault, for a local-only copy).
  *
  * `targets` are `{ key }` — a uid or selection key — plus, for the one-message
  * shape, an explicit `accountId`/`mailbox`. Waits for an undo still moving a
- * message back and addresses the uid it has now (keyAfterUndo). Journals each
- * (account, folder) before any row leaves the list; offline the journal entry
- * is the delete and nothing is sent. Returns the addressable outcomes, the
- * records setDeleteUndo takes.
+ * message back and addresses the uid it has now (keyAfterUndo). Each (account,
+ * folder) is submitted to the daemon's delete queue before any row leaves the
+ * list; offline the daemon journals it and its replay worker sends it later.
+ * Returns the addressable outcomes, the records setDeleteUndo takes.
  *
  * `opts.skipRefresh`: the caller is deleting a set piecemeal and fills the
  * undo slot itself. The rest of `opts` is SELECTION_DELETE / ONE_DELETE.
@@ -976,41 +966,42 @@ export async function deleteMessages(targets, opts = {}) {
   const how = { ...SELECTION_DELETE, ...opts };
   const skipRefresh = !!opts.skipRefresh;
   const { useMailStore } = await import('../../stores/mailStore');
-  const get = () => useMailStore.getState();
 
   await _restoreInFlight;
-  const state = get();
+  const state = useMailStore.getState();
   const isUnified = spansMailboxes(state);
   const ctxs = await _resolveDeleteTargets(targets, state, how);
   if (!ctxs.length) return { outcomes: [] };
 
-  const groups = _deleteGroups(ctxs.filter(c => c.journalled), state);
-  await _queueDeletes(groups, how);
+  // The daemon journals each group before it sends anything, so the request
+  // goes out before any row leaves the list: from the moment the app shows a
+  // completed delete, the daemon has it, or is about to answer that it cannot.
+  // The answer can take minutes (every retry round); the rows are gone
+  // meanwhile and nothing here waits on it but this workflow.
+  const queued = ctxs.filter(c => c.queued);
+  const release = _holdSubmitted(queued.map(c => c.tombstone));
+  const answers = _submitGroups(_deleteGroups(queued, state));
 
-  // Offline the journal entries ARE the deletes: replayOps sends them when the
-  // link is back, and its completion path prunes the sidecar and stamps
-  // custody. So the rows go (their tombstones hold), but nothing below may
-  // claim a server delete that has not happened.
+  // Offline only what the daemon does not queue waits here (a Graph delete,
+  // under the selection's rules); nothing below may claim it happened.
   const online = useConnectivityStore.getState().online;
-  const waitsOffline = (c) => !online && (how.offline === 'all' || c.journalled);
+  const waitsOffline = () => !online && how.offline === 'all';
 
-  // Remove from the UI now: everything below is a network round trip (pool
-  // checkout, STORE + EXPUNGE, or a Graph id lookup) and takes seconds. Live,
-  // not `state`: the journal write above is an await, and a message opened or
-  // a row ticked across it is the user's (_hideDeleted reads live), and a view
-  // switched to during it keeps its rows — rows are matched by where they
-  // live. The tombstone stops a stale header cache re-rendering the row.
+  // Remove from the UI now. Live, not `state`: a message opened or a row ticked
+  // across the awaits above is the user's (_hideDeleted reads live), and a view
+  // switched to keeps its rows — rows are matched by where they live. The
+  // tombstone stops a stale header cache re-rendering the row.
   const hidden = _hideDeleted(useMailStore, ctxs.map(_where),
     how.resolve === 'selection' ? { keys: ctxs.map(c => c.key) } : {});
   // The result list is not `emails` — it needs telling separately.
   await pruneSearchResults(ctxs.map(_where));
 
-  const sent = await _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified });
-
-  // Every journalled uid has now been attempted. Clear what landed, one write
-  // per group: a refused one's entry IS the delete now, and offline nothing
-  // was attempted, so nothing may be cleared.
-  await _clearLanded(groups, sent.landedIds);
+  let sent;
+  try {
+    sent = await _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified, answers: await answers });
+  } finally {
+    release();
+  }
 
   if (how.reconcile === 'each') {
     for (const c of sent.settled) {
@@ -1025,10 +1016,11 @@ export async function deleteMessages(targets, opts = {}) {
       });
     }
     // `skipRefresh` callers collect the outcomes and fill the slot once
-    // themselves. An offline or refused delete returns before here, and an
+    // themselves. A delete still owed or refused settles nothing here, and an
     // outcome exists exactly where something is addressable — never for a
-    // local-only row or a Graph delete (it lands in Deleted Items, so "deleted
-    // permanently" would be a false claim, and there is no uid to restore by).
+    // local-only row, a message already gone or a Graph delete (it lands in
+    // Deleted Items, so "deleted permanently" would be a false claim, and there
+    // is no uid to restore by).
     if (!skipRefresh && sent.settled.length) await setDeleteUndo(sent.outcomes);
   } else {
     await _reconcileBatch(useMailStore, state, { isUnified, prunes: sent.prunes, surviving: sent.surviving });
@@ -1040,7 +1032,7 @@ export async function deleteMessages(targets, opts = {}) {
 }
 
 // Each target, placed: its uid, account and folder, the row that carries its
-// local-only proof, and whether it is journalled. Re-pointed first at the uid
+// local-only proof, and whether the daemon's queue takes it. Re-pointed first at the uid
 // an undo gave a message it put back (keyAfterUndo).
 async function _resolveDeleteTargets(targets, state, how) {
   const rekeyed = (t) => (_restoredUids.size
@@ -1076,10 +1068,10 @@ async function _resolveDeleteTargets(targets, state, how) {
       tombstone: `${accountId}|${mailbox}|${placed.uid}`,
       localFolder,
       localOnly,
-      // Graph is not journalled: its delete is addressed by a per-session
-      // message id, not a replayable uid. A local-only row has no server delete
-      // to replay.
-      journalled: !!account && !isGraphAccount(account) && !localOnly,
+      // Graph is not queued (the daemon refuses it): its delete is addressed by
+      // a per-session message id, not a replayable uid. A local-only row has no
+      // server delete to replay.
+      queued: !!account && !isGraphAccount(account) && !localOnly,
     });
   }
   return ctxs;
@@ -1130,8 +1122,8 @@ function _resolveOneDelete({ key: uid, accountId: explicitAccountId = null, mail
   return { uid: realUid, accountId, mailbox, account, row };
 }
 
-// The journalled targets per (account, folder), each with the `arg` the entry
-// is written and later cleared by.
+// The queued targets per (account, folder), each with the `arg` Settings lists
+// the entry by (subjects and senders, `_queuedList`).
 function _deleteGroups(ctxs, state) {
   const groups = new Map();
   for (const { uid, accountId, mailbox } of ctxs) {
@@ -1143,42 +1135,40 @@ function _deleteGroups(ctxs, state) {
   return [...groups.values()];
 }
 
-// Journal the intent BEFORE anything else, and await it.
-//
-// Everything after runs in the webview: reload or quit mid-delete and this
-// context dies before the remaining commands are sent. The journal is what
-// lets the next launch finish the job (see replayOps) — but only if it
-// actually reached disk first, and it is an async IPC racing the very window
-// it exists to cover. So it goes ahead of the optimistic update, not after it:
-// the rows do not disappear until the delete is durable, so from the moment
-// the app shows the user a completed delete, it is one. Both entry points
-// write the entry here, so they write the same one.
-async function _queueDeletes(groups, { journalArg }) {
-  await Promise.all(groups.map((g) => db.queueOp({
-    op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids,
-    ...(journalArg ? { arg: g.arg } : {}),
-  })));
-}
-
-// Forget the journalled uids that landed, by the arg they were queued with.
-async function _clearLanded(groups, landedIds) {
-  await Promise.all(groups.map((g) => {
-    const landed = g.uids.filter(uid => landedIds.has(_targetId({ ...g, uid })));
-    return landed.length
-      ? db.clearOps({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: landed, arg: g.arg })
-      : null;
+// One submit per group, all at once. Resolves to each uid's answer by target
+// id: `{ landed }`, `{ queued: true }` or `{ dropped }` (a reason, or the
+// error of a submit that failed as a call: no daemon, or one it refused
+// before journalling, so nothing says it kept the delete and the row comes
+// back).
+async function _submitGroups(groups) {
+  const answers = new Map();
+  await Promise.all(groups.map(async (g) => {
+    const id = (uid) => _targetId({ ...g, uid });
+    let reply;
+    try {
+      reply = await api.deleteQueueSubmit({ accountId: g.accountId, mailbox: g.mailbox, uids: g.uids },
+        { mode: 'auto', bin: true, arg: g.arg });
+    } catch (error) {
+      for (const uid of g.uids) answers.set(id(uid), { dropped: error });
+      return;
+    }
+    for (const landed of reply?.landed || []) answers.set(id(landed.uid), { landed });
+    for (const uid of reply?.queued || []) answers.set(id(uid), { queued: true });
+    for (const { uid, reason } of reply?.dropped || []) answers.set(id(uid), { dropped: reason });
+    // A uid the reply does not name is owed as far as anyone can tell.
+    for (const uid of g.uids) if (!answers.has(id(uid))) answers.set(id(uid), { queued: true });
   }));
+  return answers;
 }
 
-// Send every target, in retry rounds (see DELETE_RETRY and `how.retry`). What
-// the server refused on the last round is handled per target: a journalled one
-// stays queued and hidden, an unjournalled one comes back (`how.onFailure`).
-async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified }) {
+// Settle every target: the daemon's answer for a queued one, one direct send
+// for the rest. A queued uid still owed stays hidden; one refused for good, and
+// an unqueued delete that failed, comes back (`how.onFailure`).
+async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isUnified, answers }) {
   const get = () => useMailStore.getState();
   const invoke = window.__TAURI__?.core?.invoke;
   const outcomes = [];
   const settled = [];
-  const landedIds = new Set();
   // Batch reconcile only: server-deleted uids per (account, mailbox) for the
   // header sidecar prune, and the tombstones to lift once the server delete
   // landed AND the message still has a surviving local (archived) copy on
@@ -1188,67 +1178,100 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
   const surviving = new Set();
   let lastError = null;
 
-  let pending = ctxs;
-  for (let retry = 0; pending.length; retry++) {
-    const final = how.retry === 'each' || retry >= DELETE_RETRY.retries;
-    const refused = [];
-    for (const c of pending) {
-      try {
-        const result = await _sendDelete(c, { how, hidden, waitsOffline, invoke });
-        if (result === OFFLINE) continue;
-        if (result !== LOCAL && result) outcomes.push(result);
-        if (how.reconcile === 'each') {
-          settled.push(c);
-        } else if (result !== LOCAL) {
-          await _noteLandedForBatch(c, { prunes, surviving, isUnified, get });
-        }
-        landedIds.add(c.tombstone);
-      } catch (e) {
-        if (!final) {
-          refused.push(c);
-          continue;
-        }
-        console.error(`${how.tag} FAILED to delete UID ${c.uid} from "${c.mailbox}":`, e);
-        // A journalled delete is not lost when the server refuses it. The
-        // entry is still on disk, so this takes the same shape as a delete made
-        // offline: the row stays gone — which is what the user was shown and
-        // what the search results already assume — and replayOps re-sends it
-        // on the next reconnect, retry tick or launch.
-        if (c.journalled) {
-          db.noteOpFailure({ op: 'delete', accountId: c.accountId, mailbox: c.mailbox, uid: c.uid }, String(e?.message || e));
-          console.log(`${how.tag} UID ${c.uid} stays queued — replayOps will retry it`);
-          continue;
-        }
-        // Only where there is NO entry (Graph, local-only): nothing a later
-        // launch could finish, so the row comes back, or it would vanish for
-        // good with nothing anywhere owed.
-        _putBack(useMailStore, hidden, c, { reopen: how.onFailure === 'throw', isUnified });
-        if (how.onFailure === 'throw') throw e;
-        lastError = e;
+  for (const c of ctxs) {
+    try {
+      const result = c.queued
+        ? _answered(c, answers.get(c.tombstone), hidden)
+        : await _sendDirect(c, { how, waitsOffline, invoke });
+      if (result === OFFLINE || result === QUEUED) continue;
+      if (result && result !== LOCAL && result !== GONE) outcomes.push(result);
+      if (how.reconcile === 'each') {
+        settled.push(c);
+      } else if (result !== LOCAL) {
+        await _noteLandedForBatch(c, { prunes, surviving, isUnified, get });
       }
+    } catch (e) {
+      // A cancel the user made in Settings: the row is theirs again, quietly.
+      if (e?.reason === CANCELLED) {
+        _putBack(useMailStore, hidden, c, { reopen: false, isUnified });
+        continue;
+      }
+      console.error(`${how.tag} FAILED to delete UID ${c.uid} from "${c.mailbox}":`, e);
+      // Nothing anywhere will finish it (a Graph or local-only delete that
+      // failed, a delete the queue refused for good): the row comes back, or
+      // it would vanish for good with nothing owed.
+      _putBack(useMailStore, hidden, c, { reopen: how.onFailure === 'throw', isUnified });
+      if (how.onFailure === 'throw') throw e;
+      lastError = e;
     }
-    if (!refused.length) break;
-    await _wait(deleteRetryDelay(retry));
-    pending = refused;
   }
-  // Only what never entered the queue (Graph, a local-only copy) is said now;
-  // a queued delete is retried until it lands and shows in Settings.
+  // Only what is not owed is said now; a queued delete is retried by the
+  // daemon until it lands, and Settings lists it meanwhile.
   if (lastError) _reportDeleteFailure(lastError);
-  return { outcomes, settled, landedIds, prunes, surviving };
+  return { outcomes, settled, prunes, surviving };
 }
 
-// One target's delete: OFFLINE when it waits for the journal replay, LOCAL for
-// a vault-only copy, the undo record for an addressable server delete, and
-// undefined for a Graph one. Throws what the server refused.
-async function _sendDelete(c, { how, hidden, waitsOffline, invoke }) {
+// A queued target's answer: its undo record when it landed, GONE when the
+// server no longer had it, QUEUED while it is owed. Throws a refusal for good,
+// in the app's words (`reason` keeps the daemon's code).
+function _answered(c, answer = { queued: true }, hidden) {
+  const shown = hidden.removed.find(r => _targetId(r) === c.tombstone);
+  const kept = { messageId: c.row?.messageId ?? null, row: shown?.row ?? null, view: shown?.view ?? null };
+  if (answer.dropped !== undefined) {
+    _owedIds.delete(c.tombstone);
+    const reason = answer.dropped instanceof Error ? answer.dropped.message : String(answer.dropped);
+    const error = new Error(tErr(reason));
+    error.reason = reason;
+    throw error;
+  }
+  if (answer.queued) {
+    // Another submit, or the replay worker, landed it while this one waited:
+    // that answer is the one that counted, and this delete is done.
+    if (_landedWhileHeld.has(c.tombstone)) {
+      _owedIds.delete(c.tombstone);
+      return GONE;
+    }
+    // Owed: the row stays hidden by its tombstone until `delete-queue-landed`
+    // settles it, with what its undo needs kept until then.
+    _owedIds.add(c.tombstone);
+    _owedRows.set(c.tombstone, kept);
+    return QUEUED;
+  }
+  _owedIds.delete(c.tombstone);
+  // Its `delete-queue-landed` travels on the event stream, not with this
+  // reply, and can come after it: that one is already settled here.
+  _settledByReply.set(c.tombstone, Date.now());
+  if (answer.landed.kind === 'gone') return GONE;
+  return _landedOutcome(c, answer.landed, kept);
+}
+
+// The undo record for a delete the daemon landed: where it went, so a caller
+// can offer an undo instead of a SEARCH — both null for a permanent delete,
+// and for a server that reported no COPYUID, never a guessed uid.
+function _landedOutcome({ account, accountId, mailbox, uid }, landed, { messageId, row, view }) {
+  return {
+    account, accountId, mailbox, uid,
+    trash: landed.trash ?? null, trashUid: landed.trashUid ?? null,
+    // Its copy in the daemon's deleted-mail bin, when it kept one.
+    binId: landed.binId ?? null,
+    // The only handle left when the server reports no COPYUID — same fallback
+    // the move undo uses. See setDeleteUndo.
+    messageId,
+    // What an undo puts back on screen before its move goes out.
+    row, view,
+  };
+}
+
+// What the daemon does not queue, sent from here once: OFFLINE when it waits,
+// LOCAL for a vault-only copy, undefined for a Graph delete. Throws what
+// failed. No retry: a failure puts the row back for the user to try again.
+async function _sendDirect(c, { how, waitsOffline, invoke }) {
   const { uid, accountId, mailbox, account } = c;
-  const each = how.retry === 'each' ? _withDeleteRetries : (sendOnce) => sendOnce();
   if (c.localOnly) {
     if (invoke) {
       try {
         await _deleteLocalOnly({ accountId, mailbox, uid });
         await send('local_index_remove', { accountId, mailbox, uid });
-        console.log(`${how.tag} Local-only delete: UID ${uid} (${accountId}/${mailbox})`);
       } catch (err) {
         if (how.onLocalFailure === 'throw') throw err;
         console.warn(`${how.tag} Local-only delete failed for UID ${uid}:`, err);
@@ -1256,39 +1279,154 @@ async function _sendDelete(c, { how, hidden, waitsOffline, invoke }) {
     }
     return LOCAL;
   }
-  // The row is already hidden by its tombstone; the journal entry carries the
-  // rest. Nothing after this may run — the prune, the custody stamp and the
-  // clear all assert a delete that has not happened yet.
-  if (waitsOffline(c)) {
-    console.log(`${how.tag} offline — UID ${uid} journalled, replayOps will finish it`);
-    return OFFLINE;
+  // The row is already hidden by its tombstone, with nothing queued.
+  if (waitsOffline(c)) return OFFLINE;
+  // A Graph id we cannot establish means the delete did not happen: thrown,
+  // never reported as done, or the row went away and the message sat on the
+  // server until the next reload put it back.
+  const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row: c.row, account });
+  if (!graphId) throw new Error(how.noGraphId(uid));
+  await api.graphDeleteMessage(account, graphId, { accountId, mailbox, uid });
+  return undefined;
+}
+
+// ── the daemon's delete queue, as the app sees it ──
+//
+// The daemon owns every queued delete (src-daemon/src/delete_queue.rs). The
+// app keeps only what it needs to render: which rows the queue still owes
+// (their tombstones), what an undo needs for a delete that lands later, and
+// which uids a submit it is awaiting holds (that submit's own reply settles
+// them, so its events must not settle them twice).
+const _owedIds = new Set();        // target ids the queue owes, as last seen
+const _owedRows = new Map();       // target id -> { messageId, row, view } for a later undo
+const _held = new Map();           // target id -> awaited submits holding it
+const _landedWhileHeld = new Set(); // held target ids an event said landed
+// Target ids a submit's reply landed, until their own `delete-queue-landed`
+// (which can arrive after the reply) has been seen. A minute at most.
+const _settledByReply = new Map();
+const SETTLED_BY_REPLY_MS = 60_000;
+
+function _wasSettledByReply(id) {
+  const now = Date.now();
+  for (const [key, at] of _settledByReply) if (now - at > SETTLED_BY_REPLY_MS) _settledByReply.delete(key);
+  return _settledByReply.delete(id);
+}
+
+function _holdSubmitted(ids) {
+  for (const id of ids) {
+    _held.set(id, (_held.get(id) || 0) + 1);
+    // A new submit of the id is what its next landing answers.
+    _settledByReply.delete(id);
   }
-  console.log(`${how.tag} Deleting UID ${uid} from mailbox "${mailbox}" (account: ${account?.email}, isGraph: ${isGraphAccount(account)})`);
-  if (isGraphAccount(account)) {
-    // A Graph id we cannot establish means the delete did not happen: thrown,
-    // never reported as done, or the row went away and the message sat on the
-    // server until the next reload put it back.
-    const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row: c.row, account });
-    if (!graphId) throw new Error(how.noGraphId(uid));
-    await each(() => api.graphDeleteMessage(account, graphId, { accountId, mailbox, uid }));
-    return undefined;
-  }
-  const res = await each(() => api.deleteEmail(account, uid, mailbox));
-  const shown = hidden.removed.find(r => _targetId(r) === c.tombstone);
-  // Where it went, so a caller can offer an undo instead of a SEARCH: both
-  // null for a permanent delete, and for a server that reported no COPYUID —
-  // never a guessed uid.
-  return {
-    account, accountId, mailbox, uid,
-    trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
-    // Its copy in the daemon's deleted-mail bin, when it kept one.
-    binId: res?.binId ?? null,
-    // The only handle left when the server reports no COPYUID — same fallback
-    // the move undo uses. See setDeleteUndo.
-    messageId: c.row?.messageId ?? null,
-    // What an undo puts back on screen before its move goes out.
-    row: shown?.row ?? null, view: shown?.view ?? null,
+  return () => {
+    for (const id of ids) {
+      const n = (_held.get(id) || 1) - 1;
+      if (n > 0) _held.set(id, n);
+      else {
+        _held.delete(id);
+        _landedWhileHeld.delete(id);
+      }
+    }
   };
+}
+
+// Whether the list on screen shows (account, folder).
+function _showsFolder(s, accountId, mailbox) {
+  if (s.activeMailbox === 'UNIFIED') return String(mailbox).toUpperCase() === 'INBOX';
+  if (s.activeAccountId !== accountId) return false;
+  const root = s.mailboxScope?.root;
+  return s.activeMailbox === mailbox || (!!root && (mailbox === root || String(mailbox).startsWith(`${root}/`) || String(mailbox).startsWith(`${root}.`)));
+}
+
+function _withoutTombstones(ids) {
+  const before = nativePurgeStore.getState().deleteTombstones;
+  if (![...ids].some(id => before.has(id))) return false;
+  nativePurgeStore.setState({ deleteTombstones: new Set([...before].filter(id => !ids.has(id))) });
+  return true;
+}
+
+/**
+ * `delete-queue-landed {accountId, mailbox, landed}`: the daemon deleted these
+ * (a submit's round, or its replay worker) and has already pruned their header
+ * rows and stamped custody. Their tombstones lift, a delete that lands after
+ * its submit answered `queued` gets its undo, and the folder on screen
+ * reloads. A uid a submit this app is still awaiting is left to that submit.
+ */
+export async function onDeleteQueueLanded(payload) {
+  const { accountId, mailbox, landed = [] } = payload || {};
+  if (!accountId || !mailbox || !landed.length) return;
+  const mine = [];
+  for (const l of landed) {
+    const id = _targetId({ accountId, mailbox, uid: l.uid });
+    if (_held.has(id)) _landedWhileHeld.add(id);
+    else if (!_wasSettledByReply(id)) mine.push({ id, landed: l });
+  }
+  if (!mine.length) return;
+  const ids = new Set(mine.map(m => m.id));
+  for (const id of ids) _owedIds.delete(id);
+  _withoutTombstones(ids);
+  const account = nativePurgeStore.getState().accounts?.find(a => a.id === accountId) ?? null;
+  const outcomes = [];
+  for (const { id, landed: l } of mine) {
+    const kept = _owedRows.get(id) || { messageId: null, row: null, view: null };
+    _owedRows.delete(id);
+    if (l.kind !== 'deleted') continue;
+    const outcome = _landedOutcome({ account, accountId, mailbox, uid: l.uid }, l, kept);
+    // Only what an undo can address, or a delete that really was permanent: a
+    // move to Trash with no COPYUID and no Message-ID (an entry from an earlier
+    // session) would otherwise read as "deleted permanently", which it is not.
+    const addressable = outcome.trashUid != null || (outcome.trash && outcome.messageId) || outcome.binId;
+    if (addressable || outcome.trash == null) outcomes.push(outcome);
+  }
+  if (outcomes.length) await setDeleteUndo(outcomes);
+  const s = nativePurgeStore.getState();
+  if (_showsFolder(s, accountId, mailbox)) await reloadListInView();
+  else s.updateSortedEmails?.();
+}
+
+/**
+ * `delete-queue-changed {}`: re-read what the queue owes. A row it owes now
+ * (another window's delete) hides; a row it owed and no longer does, without
+ * landing it (the replay worker dropped it: the account is gone, a Graph or
+ * vault-only folder), shows again. A tombstone the queue never listed is not
+ * the queue's to lift (a submit not journalled yet, a Graph delete offline).
+ */
+export async function onDeleteQueueChanged() {
+  let list;
+  try {
+    list = await api.deleteQueueList();
+  } catch (error) {
+    console.warn('[deleteQueue] Could not re-read the delete queue:', error);
+    return;
+  }
+  const now = new Set(list.flatMap(entry => (entry.uids || []).map(uid => _targetId({ ...entry, uid }))));
+  const left = new Set([..._owedIds].filter(id => !now.has(id) && !_held.has(id)));
+  const added = [...now].filter(id => !_owedIds.has(id));
+  for (const id of left) {
+    _owedIds.delete(id);
+    _owedRows.delete(id);
+  }
+  for (const id of added) _owedIds.add(id);
+  const before = nativePurgeStore.getState().deleteTombstones;
+  const fresh = added.filter(id => !before.has(id));
+  if (fresh.length) nativePurgeStore.setState({ deleteTombstones: new Set([...before, ...fresh]) });
+  if (left.size && _withoutTombstones(left)) {
+    await reloadListInView();
+    return;
+  }
+  if (fresh.length) nativePurgeStore.getState().updateSortedEmails?.();
+}
+
+/**
+ * `delete-queue-status {kept, online}`, after every background pass (every
+ * five minutes, mostly `kept: 0`): the daily reminder, only while something
+ * is still owed and the link is up. Its 24 h guard is its own.
+ */
+export async function onDeleteQueueStatus(payload) {
+  const { kept = 0, online = true } = payload || {};
+  if (!kept || online === false) return false;
+  const { remindOfUnfinished } = await import('./pendingActionsReminder');
+  return remindOfUnfinished(kept);
 }
 
 // A batch delete that landed on the server: queue its sidecar prune, and stamp
@@ -1302,8 +1440,9 @@ async function _noteLandedForBatch({ uid, accountId, mailbox, tombstone }, { pru
   await markServerDeleted(accountId, mailbox, uid);
 }
 
-// An unjournalled delete that failed: its row back, with its count and badge,
-// and its tombstone lifted, so the reconcile re-derives it.
+// A delete nothing will finish (unqueued and failed, or refused for good): its
+// row back, with its count and badge, and its tombstone lifted, so the
+// reconcile re-derives it.
 //
 // `reopen` (one message): the open thread was pruned optimistically too, so
 // the message goes back into it — only while that pruned thread is still what
@@ -1402,8 +1541,8 @@ async function _reconcileBatch(useMailStore, state, { isUnified, prunes, survivi
 // ── deleteEmailFromServer workflow ──
 
 // One message. Returns its undo record, or undefined where there is nothing to
-// address: local-only, Graph, offline (journalled, replayOps finishes it) or
-// refused (still queued). `skipRefresh`: see deleteMessages.
+// address: local-only, Graph, already gone, or still owed (the daemon's queue
+// finishes it). `skipRefresh`: see deleteMessages.
 export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxOverride = null, accountId = null } = {}) {
   const { outcomes } = await deleteMessages([{ key: uid, accountId, mailbox: mailboxOverride }], { ...ONE_DELETE, skipRefresh });
   return outcomes[0];
@@ -2715,7 +2854,7 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
   await pruneSearchResults(targets.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid })));
   // The rows stay hidden through every try. A target the daemon could not
   // finish (no proof, the server or local step not complete) or a run that
-  // failed outright goes again after DELETE_RETRY's wait, outside the queue
+  // failed outright goes again after PURGE_RETRY's wait, outside the queue
   // turn so later deletes are not held behind the wait. A refused or skipped
   // target is the daemon's answer, not a hiccup: it is not retried. Each
   // outcome is filed under its original hint, the latest try winning.
@@ -2740,8 +2879,8 @@ async function _nativePurge(originalScope, { onProgress, panel } = {}) {
     const again = failure ? runScope.targetHints
       : runScope.targetHints.filter(hint => _purgeRetriable(outcomes.get(originalTargetId(hint))));
     if (operation?.result) result = _mergePurgeResult(result, operation.result, retry ? runScope.targetHints.length : 0);
-    if (!again.length || retry >= DELETE_RETRY.retries) break;
-    await _wait(deleteRetryDelay(retry));
+    if (!again.length || retry >= PURGE_RETRY.retries) break;
+    await _wait(purgeRetryDelay(retry));
     const ids = new Set(again.map(_targetId));
     runScope = { ...runScope, targetHints: again, keys: runScope.keys.filter(key => {
       const p = _parseSelKey(key);
@@ -3005,14 +3144,26 @@ function _mergePurgeResult(before, next, retried) {
 }
 
 
-// The journal outlives the session; the tombstones that hide its rows do not.
+// The queues outlive the session; the tombstones that hide their rows do not.
 // Every delete or purge still owed hides its rows again, so a restart never
-// paints a message the user deleted while its server delete waits. Called
-// before the first list load, and by every replay for entries written since.
+// paints a message the user deleted while its server delete waits. Deletes are
+// the daemon's queue (`delete_queue.list`), read when no journal snapshot is
+// handed in (the launch, before the first list load); purges are the app's
+// journal, and every replay hands in the entries it read.
 const _hidesRows = (entry) => entry.op === 'delete' || entry.op === 'purge';
 export async function hideQueuedDeletes(ops) {
-  const list = ops || await db.readOps();
-  const ids = list.filter(_hidesRows).flatMap(entry => entry.uids.map(uid => _targetId({ ...entry, uid })));
+  const purges = (ops || await db.readOps()).filter(entry => entry.op === 'purge');
+  let deletes = [];
+  if (!ops) {
+    try {
+      deletes = await api.deleteQueueList();
+    } catch (error) {
+      console.warn('[deleteQueue] Could not read the delete queue:', error);
+    }
+  }
+  const owed = deletes.flatMap(entry => (entry.uids || []).map(uid => _targetId({ ...entry, uid })));
+  for (const id of owed) _owedIds.add(id);
+  const ids = [...owed, ...purges.flatMap(entry => entry.uids.map(uid => _targetId({ ...entry, uid })))];
   const before = nativePurgeStore.getState().deleteTombstones;
   if (!ids.length || ids.every(id => before.has(id))) return;
   nativePurgeStore.setState({ deleteTombstones: new Set([...before, ...ids]) });
@@ -3020,11 +3171,17 @@ export async function hideQueuedDeletes(ops) {
 }
 
 // The reverse, for an entry the user gave up on (Settings › Unfinished server
-// actions) or a delete a replay finished while a vault copy stays: the rows
-// show again as whatever is left of them.
+// actions) or a purge a replay refused for good: the rows show again as
+// whatever is left of them.
 export async function showQueuedRows(entry, uids = entry.uids) {
   if (!_hidesRows(entry) || !uids?.length) return;
   const ids = new Set(uids.map(uid => _targetId({ ...entry, uid })));
+  if (entry.op === 'delete') {
+    for (const id of ids) {
+      _owedIds.delete(id);
+      _owedRows.delete(id);
+    }
+  }
   const before = nativePurgeStore.getState().deleteTombstones;
   if (![...ids].some(id => before.has(id))) return;
   nativePurgeStore.setState({ deleteTombstones: new Set([...before].filter(id => !ids.has(id))) });

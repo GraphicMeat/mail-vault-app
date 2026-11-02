@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A delete your mail server refused, or one made offline, is now retried by MailVault's background helper, also with the window closed. It keeps trying every few minutes and as soon as you are back online, and Settings > Unfinished server actions now shows how often it tried and why, also after a restart.
+
 - A permanent delete that could not keep its copy first now says why. Instead of one sentence for every case, the message says whether the mail server did not hand the message over, took too long, the account was busy, or MailVault could not write to its storage folder, and what to do. The email stays undeleted, as before.
 
 ## [2.21.0] - 2026-11-01

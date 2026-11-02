@@ -1261,11 +1261,13 @@ function App() {
           });
 
           // Before the first paint: a delete still owed to the server from an
-          // earlier session keeps its rows hidden (one journal read).
+          // earlier session keeps its rows hidden. Deletes come from the
+          // daemon's queue (`delete_queue.list`), purges from the journal.
           try {
             const { hideQueuedDeletes } = await import('./services/workflows/messageMutations');
             // Capped: a daemon still starting must not hold the first paint.
-            // The launch replay hides them too once the journal answers.
+            // The queue's `delete-queue-changed` and the launch replay hide
+            // them too once the daemon answers.
             await Promise.race([hideQueuedDeletes(), new Promise(resolve => setTimeout(resolve, 300))]);
           } catch (e) {
             console.warn('[QuickLoad] Could not hide queued deletes:', e);

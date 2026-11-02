@@ -90,18 +90,34 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('replayOps', () => {
-  it('finishes a delete, stamps the vault copy and prunes the sidecar', async () => {
-    mockReadOps.mockResolvedValue([entry()]);
+  // The daemon owns deletes end to end (src-daemon/src/delete_queue.rs): its
+  // replay worker sends them, with or without a window. The JS replay must not
+  // send, clear or hide them, or both would send the same delete.
+  it('leaves every delete entry to the daemon and still replays the rest', async () => {
+    mockReadOps.mockResolvedValue([entry(), entry({ id: 2, op: 'flag', uids: [3], arg: { flags: ['\\Seen'], action: 'add' } })]);
 
     const result = await replayOps();
 
-    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCOUNT, 7, 'INBOX');
-    expect(mockMarkServerDeleted).toHaveBeenCalledWith('acct1', 'INBOX', 7);
-    expect(mockSaveEmailHeaders).toHaveBeenCalledWith('acct1', 'INBOX', [], null, { removedUids: [7] });
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: {} });
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockMarkServerDeleted).not.toHaveBeenCalled();
+    expect(mockClearOps).not.toHaveBeenCalledWith(expect.objectContaining({ op: 'delete' }));
+    expect(mockShowQueued).not.toHaveBeenCalled();
+    expect(mockHideQueued).toHaveBeenCalledWith([expect.objectContaining({ op: 'flag' })]);
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 3, ['\\Seen'], 'add', 'INBOX');
     expect(result).toMatchObject({ attempted: 1, done: 1, failed: 0, kept: 0 });
     // The outcome is the only trace this leaves; the work happens before any UI.
     expect(mailState.opReplay).toMatchObject({ attempted: 1, done: 1 });
+  });
+
+  it('reads a journal that holds only deletes as an empty one: the undo offer stays, nothing is said', async () => {
+    mockReadOps.mockResolvedValue([entry(), entry({ id: 2, accountId: 'vanished' })]);
+
+    const result = await replayOps();
+
+    expect(result).toMatchObject({ attempted: 0, kept: 0 });
+    expect(mockClearUndo).not.toHaveBeenCalled();
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(mockRemind).not.toHaveBeenCalled();
   });
 
   it('replays a flag against the server and clears it', async () => {
@@ -135,8 +151,8 @@ describe('replayOps', () => {
   // with nothing anywhere to finish the job. It stays queued; Settings is
   // where a user cancels one that has been failing for too long.
   it('keeps an entry whose op failed, whatever the reason, and records why', async () => {
-    mockReadOps.mockResolvedValue([entry({ uids: [7] })]);
-    mockDeleteEmail.mockRejectedValueOnce(new Error('Password missing for account'));
+    mockReadOps.mockResolvedValue([entry({ op: 'move', uids: [7], arg: { target: 'Archive' } })]);
+    mockMoveEmails.mockRejectedValueOnce(new Error('Password missing for account'));
 
     const creds = await replayOps();
 
@@ -144,8 +160,8 @@ describe('replayOps', () => {
     expect(creds).toMatchObject({ attempted: 1, done: 0, failed: 1, kept: 1 });
 
     vi.clearAllMocks();
-    mockReadOps.mockResolvedValue([entry({ uids: [7] })]);
-    mockDeleteEmail.mockRejectedValueOnce(new Error('UID 7 not found'));
+    mockReadOps.mockResolvedValue([entry({ op: 'move', uids: [7], arg: { target: 'Archive' } })]);
+    mockMoveEmails.mockRejectedValueOnce(new Error('UID 7 not found'));
 
     const other = await replayOps();
     // Still owed after a replay: the daily reminder decides whether to say so.
@@ -154,7 +170,7 @@ describe('replayOps', () => {
     expect(mockClearOps).not.toHaveBeenCalled();
     expect(other).toMatchObject({ failed: 1, kept: 1 });
     expect(mockNoteOpFailure).toHaveBeenCalledWith(
-      { op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uid: 7 },
+      { op: 'move', accountId: 'acct1', mailbox: 'INBOX', uid: 7 },
       expect.stringContaining('UID 7 not found'),
     );
   });
@@ -181,30 +197,23 @@ describe('replayOps', () => {
   });
 
   it('drops an entry whose account is gone rather than carrying it forever', async () => {
-    mockReadOps.mockResolvedValue([entry({ accountId: 'vanished' })]);
+    const gone = entry({ op: 'move', accountId: 'vanished', arg: { target: 'Archive' } });
+    mockReadOps.mockResolvedValue([gone]);
 
     await replayOps();
 
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'vanished', mailbox: 'INBOX', uids: [7], arg: {} });
+    expect(mockMoveEmails).not.toHaveBeenCalled();
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'vanished', mailbox: 'INBOX', uids: [7], arg: { target: 'Archive' } });
     expect(mockShowQueued).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'vanished', uids: [7] }));
   });
 
-  it('hides the rows every owed entry names before sending anything', async () => {
-    const ops = [entry()];
+  it('hides the rows every owed purge names before sending anything', async () => {
+    const ops = [entry({ op: 'purge', uids: [7], arg: { hints: [{ uid: 7 }] } })];
     mockReadOps.mockResolvedValue(ops);
+    mockReplayPurge.mockResolvedValue({ landed: [7], kept: [], error: null });
     await replayOps();
     expect(mockHideQueued).toHaveBeenCalledWith(ops);
-    expect(mockHideQueued.mock.invocationCallOrder[0]).toBeLessThan(mockDeleteEmail.mock.invocationCallOrder[0]);
-  });
-
-  // The server row is pruned first, so lifting the tombstone can only show the
-  // vault copy, never the deleted server row for a repaint.
-  it('shows what is left of a replayed delete once its server row is pruned', async () => {
-    mockReadOps.mockResolvedValue([entry()]);
-    await replayOps();
-    expect(mockShowQueued).toHaveBeenCalledWith(expect.objectContaining({ op: 'delete' }), [7]);
-    expect(mockSaveEmailHeaders.mock.invocationCallOrder[0]).toBeLessThan(mockShowQueued.mock.invocationCallOrder[0]);
+    expect(mockHideQueued.mock.invocationCallOrder[0]).toBeLessThan(mockReplayPurge.mock.invocationCallOrder[0]);
   });
 
   it('replays a delete everywhere as one run, clears what landed and keeps the rest', async () => {
@@ -236,8 +245,8 @@ describe('replayOps', () => {
   });
 
   it('does not raise the reminder for a replay started from the Settings list', async () => {
-    mockReadOps.mockResolvedValue([entry()]);
-    mockDeleteEmail.mockRejectedValueOnce(new Error('NO'));
+    mockReadOps.mockResolvedValue([entry({ op: 'move', arg: { target: 'Archive' } })]);
+    mockMoveEmails.mockRejectedValueOnce(new Error('NO'));
     await replayOps({ reason: 'manual' });
     expect(mockRemind).not.toHaveBeenCalled();
   });

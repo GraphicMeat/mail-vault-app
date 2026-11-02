@@ -2,7 +2,9 @@
 //
 // The list a user goes looking for when a delete never stuck: every server op
 // still owed, why it last failed, and a way to give up on one that has been
-// failing for weeks.
+// failing for weeks. Deletes are the daemon's queue (`delete_queue.list`,
+// with their attempts and reasons, which survive a restart); flags, moves and
+// purges are still the app's journal.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -11,6 +13,10 @@ const mockReadOps = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 const mockClearOps = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockOpFailures = vi.hoisted(() => vi.fn().mockReturnValue(new Map()));
 const mockReplayOps = vi.hoisted(() => vi.fn().mockResolvedValue({ attempted: 1, done: 1, failed: 0, kept: 0 }));
+const mockQueueList = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+const mockQueueCancel = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockQueueRun = vi.hoisted(() => vi.fn().mockResolvedValue({ attempted: 0, done: 0, failed: 0, dropped: 0, skipped: 0, kept: 0 }));
+const listeners = vi.hoisted(() => new Map());
 
 vi.mock('../../../services/db', () => ({
   readOps: (...a) => mockReadOps(...a),
@@ -19,17 +25,28 @@ vi.mock('../../../services/db', () => ({
   failureKey: ({ op, accountId, mailbox, uid }) => `${op}|${accountId}|${mailbox}|${uid}`,
 }));
 vi.mock('../../../services/workflows/replayOps', () => ({ replayOps: (...a) => mockReplayOps(...a) }));
+vi.mock('../../../services/api', () => ({
+  deleteQueueList: (...a) => mockQueueList(...a),
+  deleteQueueCancel: (...a) => mockQueueCancel(...a),
+  deleteQueueRun: (...a) => mockQueueRun(...a),
+}));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (name, cb) => { listeners.set(name, cb); return () => listeners.delete(name); },
+}));
 
 import { PendingActionsSettings } from '../PendingActionsSettings';
 import { useMailStore } from '../../../stores/mailStore';
 
-const entry = (over = {}) => ({ id: 1, op: 'delete', accountId: 'acct-a', mailbox: 'INBOX', uids: [7, 9], arg: {}, at: Date.now() - 3600_000, ...over });
+const entry = (over = {}) => ({ id: 1, op: 'delete', accountId: 'acct-a', mailbox: 'INBOX', uids: [7, 9], arg: {}, at: Date.now() - 3600_000, attempts: 1, failures: {}, ...over });
+const failure = (message) => ({ message, at: Date.now() });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  listeners.clear();
   mockReadOps.mockResolvedValue([]);
+  mockQueueList.mockResolvedValue([]);
   mockOpFailures.mockReturnValue(new Map());
-  useMailStore.setState({ accounts: [{ id: 'acct-a', email: 'a@mock.test' }] });
+  useMailStore.setState({ accounts: [{ id: 'acct-a', email: 'a@mock.test' }], deleteTombstones: new Set(), loadEmails: vi.fn() });
 });
 afterEach(cleanup);
 
@@ -39,9 +56,8 @@ describe('pending actions', () => {
     expect(await screen.findByText(/Nothing is waiting/i)).toBeTruthy();
   });
 
-  it('lists an owed delete with its account, folder, message count and last error', async () => {
-    mockReadOps.mockResolvedValue([entry()]);
-    mockOpFailures.mockReturnValue(new Map([['delete|acct-a|INBOX|7', { message: 'socket closed', at: Date.now() }]]));
+  it('lists an owed delete with its account, folder, message count, tries and last error, from the daemon queue', async () => {
+    mockQueueList.mockResolvedValue([entry({ attempts: 3, failures: { 7: failure('socket closed') } })]);
 
     render(<PendingActionsSettings />);
 
@@ -49,44 +65,97 @@ describe('pending actions', () => {
     expect(screen.getByText(/INBOX/)).toBeTruthy();
     expect(screen.getByText(/2 messages/i)).toBeTruthy();
     expect(screen.getByText(/socket closed/)).toBeTruthy();
+    expect(screen.getByText(/Tried 3 times/)).toBeTruthy();
   });
 
-  it('cancels an entry by its full identity and drops it from the list', async () => {
-    mockReadOps.mockResolvedValue([entry()]);
+  it('says a delete never tried yet is waiting, not that it failed', async () => {
+    mockQueueList.mockResolvedValue([entry({ attempts: 0, failures: {} })]);
+
+    render(<PendingActionsSettings />);
+
+    expect(await screen.findByText(/Not tried yet/)).toBeTruthy();
+    expect(screen.queryByText(/Tried \d+ time/)).toBeNull();
+  });
+
+  it('lists a delete once, from the queue, even though the journal holds it too', async () => {
+    mockQueueList.mockResolvedValue([entry()]);
+    mockReadOps.mockResolvedValue([entry(), entry({ id: 2, op: 'move', uids: [4], arg: { target: 'Archive' } })]);
+
+    render(<PendingActionsSettings />);
+
+    expect(await screen.findByText(/Delete from server/)).toBeTruthy();
+    expect(screen.getAllByText(/Delete from server/)).toHaveLength(1);
+    expect(screen.getByText(/Move to another folder/)).toBeTruthy();
+  });
+
+  it('cancels a queued delete by its id, shows its rows again and drops it from the list', async () => {
+    mockQueueList.mockResolvedValue([entry()]);
+    useMailStore.setState({ deleteTombstones: new Set(['acct-a|INBOX|7', 'acct-a|INBOX|9']) });
+    render(<PendingActionsSettings />);
+    await screen.findByText(/a@mock\.test/);
+
+    mockQueueList.mockResolvedValue([]);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /cancel/i })); });
+
+    expect(mockQueueCancel).toHaveBeenCalledWith(1, [7, 9]);
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+    await waitFor(() => expect(screen.queryByText(/a@mock\.test/)).toBeNull());
+  });
+
+  it('cancels a journalled move by its full identity', async () => {
+    mockReadOps.mockResolvedValue([entry({ op: 'move', uids: [4], arg: { target: 'Archive' } })]);
     render(<PendingActionsSettings />);
     await screen.findByText(/a@mock\.test/);
 
     mockReadOps.mockResolvedValue([]);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /cancel/i })); });
 
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct-a', mailbox: 'INBOX', uids: [7, 9], arg: {} });
-    await waitFor(() => expect(screen.queryByText(/a@mock\.test/)).toBeNull());
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'acct-a', mailbox: 'INBOX', uids: [4], arg: { target: 'Archive' } });
+    expect(mockQueueCancel).not.toHaveBeenCalled();
   });
 
-  it('retries everything owed on demand and re-reads the journal', async () => {
-    mockReadOps.mockResolvedValue([entry()]);
+  it('retries everything owed on demand without waiting for the daemon pass', async () => {
+    mockQueueList.mockResolvedValue([entry()]);
+    // A pass can take minutes; the list does not wait for it.
+    mockQueueRun.mockReturnValue(new Promise(() => {}));
     render(<PendingActionsSettings />);
     await screen.findByText(/a@mock\.test/);
     mockReadOps.mockClear();
+    mockQueueList.mockClear();
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /retry/i })); });
 
+    expect(mockQueueRun).toHaveBeenCalledWith({ reason: 'manual' });
     expect(mockReplayOps).toHaveBeenCalledWith({ reason: 'manual' });
     await waitFor(() => expect(mockReadOps).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('button', { name: /retry/i }).disabled).toBe(false));
+  });
+
+  it('re-reads the queue when the daemon says it changed', async () => {
+    mockQueueList.mockResolvedValue([entry()]);
+    render(<PendingActionsSettings />);
+    await screen.findByText(/a@mock\.test/);
+    await waitFor(() => expect(listeners.has('delete-queue-changed')).toBe(true));
+
+    mockQueueList.mockResolvedValue([]);
+    await act(async () => { listeners.get('delete-queue-changed')({ payload: {} }); });
+
+    await waitFor(() => expect(screen.queryByText(/a@mock\.test/)).toBeNull());
   });
 });
 
 describe('a delete of several messages', () => {
   it('keeps every message listed and says which went and which did not', async () => {
-    mockReadOps.mockResolvedValue([entry({
+    mockQueueList.mockResolvedValue([entry({
       uids: [9, 11],
       arg: { total: 3, messages: [
         { uid: 7, subject: 'Invoice March', from: 'Shop' },
         { uid: 9, subject: 'Weekly digest', from: 'News' },
         { uid: 11, subject: '', from: 'Bank' },
-      ] },
+      ], mode: 'auto', bin: true },
+      failures: { 9: failure('NO server busy') },
     })]);
-    mockOpFailures.mockReturnValue(new Map([['delete|acct-a|INBOX|9', { message: 'NO server busy', at: Date.now() }]]));
 
     render(<PendingActionsSettings />);
 
@@ -116,10 +185,9 @@ describe('a delete of several messages', () => {
 
 describe('a JMAP refusal', () => {
   it('reads in the app\'s words, not the daemon\'s code', async () => {
-    mockReadOps.mockResolvedValue([entry()]);
-    mockOpFailures.mockReturnValue(new Map([['delete|acct-a|INBOX|7', {
-      message: 'E_JMAP_NO_TRASH: the account has no Trash mailbox to move UID 7 from INBOX into', at: Date.now(),
-    }]]));
+    mockQueueList.mockResolvedValue([entry({ failures: {
+      7: failure('E_JMAP_NO_TRASH: the account has no Trash mailbox to move UID 7 from INBOX into'),
+    } })]);
 
     render(<PendingActionsSettings />);
 

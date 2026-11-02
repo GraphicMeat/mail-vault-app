@@ -3,6 +3,7 @@
 // `unified?.accountId || state.activeAccountId` did exactly that, and
 // loadUnifiedInbox never clears activeAccountId, so the fallback had a target.
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { fakeDeleteQueueSubmit } from './fakeDeleteQueue.js';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 
 guardViewCounts();
@@ -21,6 +22,8 @@ if (!globalThis.window) {
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
 const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
+// The daemon's delete queue, answering through the per-message mock above.
+const mockDeleteQueueSubmit = vi.fn((...a) => fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(undefined);
@@ -82,6 +85,8 @@ vi.mock('../../api', () => ({
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
   deleteEmail: (...a) => mockDeleteEmail(...a),
+  deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
+  deleteQueueList: async () => [],
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
@@ -345,18 +350,20 @@ describe('deleting from a unified list', () => {
     expect(mockSetUnreadForAccount).not.toHaveBeenCalled();
   });
 
-  it('offline: the row goes, the op stays journalled, the server is not called', async () => {
+  it('offline: the row goes, the daemon queue keeps the delete, the server is not called', async () => {
     netOnline = false;
+    // The daemon's own gate holds the send: it answers every uid owed.
+    mockDeleteQueueSubmit.mockImplementationOnce(async ({ uids }) => ({ landed: [], queued: uids, dropped: [] }));
     const r = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
     primeUnified([r]);
 
     const out = await useMailStore.getState().deleteEmailFromServer(_selKey(r));
 
-    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCT_B.id, mailbox: 'INBOX', uids: [7] });
+    expect(mockDeleteQueueSubmit).toHaveBeenCalledWith({ accountId: ACCT_B.id, mailbox: 'INBOX', uids: [7] }, expect.objectContaining({ mode: 'auto' }));
     expect(mockDeleteEmail).not.toHaveBeenCalled();
-    // Nothing to clear and nothing to stamp: replayOps finishes both when the
-    // link is back. The tombstone is what keeps the row off the list meanwhile.
-    expect(mockClearOps).not.toHaveBeenCalled();
+    // Nothing to stamp: the daemon's replay finishes it when the link is back.
+    // The tombstone is what keeps the row off the list meanwhile.
+    expect(mockQueueOp).not.toHaveBeenCalled();
     expect(mockAppendLocalIndex).not.toHaveBeenCalled();
     expect(useMailStore.getState().emails).toEqual([]);
     expect(out).toBeUndefined();

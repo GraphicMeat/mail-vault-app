@@ -344,6 +344,38 @@ export async function deleteEmail(account, uid, mailbox = 'INBOX', { mode = 'aut
   });
 }
 
+// ── the daemon's delete queue (src-daemon/src/delete_queue.rs) ──
+//
+// The daemon journals a delete before it sends it, retries it on its own
+// schedule and keeps replaying it in the background until it lands, with or
+// without a window open. The app only submits, lists and cancels.
+
+/**
+ * One (account, folder) delete. Resolves to `{ landed, queued, dropped }`:
+ * `landed` `[{kind: 'deleted', uid, trash, trashUid, binId} | {kind: 'gone', uid}]`,
+ * `queued` uids still owed (settled later by `delete-queue-landed`), and
+ * `dropped` `[{uid, reason}]` refused for good. Can take minutes; no budget.
+ */
+export function deleteQueueSubmit({ accountId, mailbox, uids }, { mode = 'auto', bin = true, arg = {} } = {}) {
+  return transportSend('delete_queue.submit', { accountId, mailbox, uids, mode, bin, arg });
+}
+
+/** The delete entries still owed, with `attempts` and `failures` by uid. */
+export async function deleteQueueList() {
+  const list = await transportSend('delete_queue.list', {});
+  return Array.isArray(list) ? list : [];
+}
+
+/** Give up on `uids` of delete entry `id`. */
+export function deleteQueueCancel(id, uids) {
+  return transportSend('delete_queue.cancel', { id, uids });
+}
+
+/** One replay pass now. Answers its counts once the pass is over. */
+export function deleteQueueRun({ reason = 'manual' } = {}) {
+  return transportSend('delete_queue.run', { reason });
+}
+
 export async function sendEmail(account, email, sentMailbox = null) {
   if (IS_TAURI) {
     return tauriInvoke('smtp_send_email', { account, email, sentMailbox });

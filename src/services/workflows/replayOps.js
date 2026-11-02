@@ -3,7 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { isGraphAccount } from '../graphConfig';
-import { markServerDeleted, replayPurge, hideQueuedDeletes, showQueuedRows } from './messageMutations';
+import { replayPurge, hideQueuedDeletes, showQueuedRows, onDeleteQueueLanded, onDeleteQueueChanged, onDeleteQueueStatus } from './messageMutations';
 import { remindOfUnfinished } from './pendingActionsReminder';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { UNDO_TOAST_MS } from '../../stores/slices/undoSlice';
@@ -24,6 +24,11 @@ const log = (...args) => {
 /**
  * Re-issue every server mutation the user confirmed but that never reached the
  * server, then forget it.
+ *
+ * Not deletes: the daemon owns those end to end (src-daemon/src/delete_queue.rs
+ * journals, sends, retries and replays them, with or without a window), so a
+ * delete entry in the journal is skipped here, never sent, cleared or hidden.
+ * Flags, moves and purges are still replayed from here.
  *
  * The journal is written before the optimistic update and cleared after the
  * last round-trip (see messageMutations), so anything still in it belongs to a
@@ -64,9 +69,11 @@ export async function replayOps({ reason = 'launch' } = {}) {
     return result;
   };
 
-  const ops = await db.readOps();
+  // The journal table is shared with the daemon's delete queue: its entries
+  // are the daemon's to send, so this replay never sees them.
+  const ops = (await db.readOps()).filter((entry) => entry.op !== 'delete');
   if (!ops.length) return finish({ attempted: 0, done: 0, failed: 0, kept: 0, errors: [] });
-  // Rows owed a delete stay hidden, whichever session queued them.
+  // Rows owed a purge stay hidden, whichever session queued them.
   await hideQueuedDeletes(ops);
 
   // Withdraw the undo offer before sending anything.
@@ -165,10 +172,7 @@ export async function replayOps({ reason = 'launch' } = {}) {
     for (const uid of uids) {
       attempted++;
       try {
-        if (op === 'delete') {
-          await api.deleteEmail(fresh, uid, mailbox);
-          removed.push(uid);
-        } else if (op === 'flag') {
+        if (op === 'flag') {
           await api.updateEmailFlags(fresh, uid, arg?.flags, arg?.action, mailbox);
         } else if (op === 'move') {
           await api.moveEmails(fresh, [uid], mailbox, arg?.target);
@@ -196,12 +200,6 @@ export async function replayOps({ reason = 'launch' } = {}) {
     }
     if (answered.length) await db.clearOps({ op, accountId, mailbox, uids: answered, arg });
 
-    // A replayed delete is still this app deleting the server copy, so a
-    // surviving vault copy earns the same stamp the live paths write — without
-    // it, a delete that finished after a crash leaves the row saying "also
-    // still on the server" for good. See stores/slices/custody.js.
-    if (op === 'delete') for (const uid of removed) await markServerDeleted(accountId, mailbox, uid);
-
     if (removed.length) {
       // Prune the header sidecar too, or the row comes straight back.
       //
@@ -212,10 +210,6 @@ export async function replayOps({ reason = 'launch' } = {}) {
       // the uids (same shape the delete workflows use when the view has moved).
       await db.saveEmailHeaders(accountId, mailbox, [], null, { removedUids: removed });
     }
-    // The server row is pruned now, so lifting the tombstone shows only what
-    // is left: a vault copy, marked as off the server.
-    if (op === 'delete' && removed.length) await showQueuedRows(entry, removed);
-
     // If that mailbox is what the user is looking at right now, reload it — the
     // rows on screen were painted before the op landed. A flag changes no uid,
     // so it prunes nothing, but the row still paints the old read/starred state.
@@ -265,6 +259,7 @@ let _wired = false;
 export function wireReplayOnReconnect() {
   if (_wired) return;
   _wired = true;
+  void wireDeleteQueueEvents();
   let was = useConnectivityStore.getState().online;
   let timer = null;
   let running = false;
@@ -304,4 +299,33 @@ export function wireReplayOnReconnect() {
   // so gating on it stopped the tick for the rest of the session after the
   // first delete, and an op a flaky link refused was never sent.
   setInterval(async () => { if (await shouldRetryNow()) run('retry'); }, RETRY_INTERVAL_MS);
+}
+
+let _queueWired = false;
+
+/**
+ * Follow the daemon's delete queue: `delete-queue-landed` lifts the rows'
+ * tombstones and offers the undo, `delete-queue-changed` re-reads what is
+ * owed (a delete the replay worker dropped shows again), and
+ * `delete-queue-status` (after each background pass) may raise the daily
+ * reminder. The app renders; the daemon decides (messageMutations has the
+ * handlers). Wired with the reconnect replay, once per window.
+ */
+export async function wireDeleteQueueEvents() {
+  if (_queueWired) return;
+  _queueWired = true;
+  const quietly = (name, run) => (event) => {
+    Promise.resolve().then(() => run(event?.payload)).catch((e) => log(`[deleteQueue] ${name} failed:`, String(e?.message || e)));
+  };
+  try {
+    const { listen } = await import('@tauri-apps/api/event');
+    await Promise.all([
+      listen('delete-queue-landed', quietly('landed', onDeleteQueueLanded)),
+      listen('delete-queue-changed', quietly('changed', onDeleteQueueChanged)),
+      listen('delete-queue-status', quietly('status', onDeleteQueueStatus)),
+    ]);
+  } catch (e) {
+    // No desktop shell (the web build, a test): there is no daemon to follow.
+    log('[deleteQueue] not following the delete queue:', String(e?.message || e));
+  }
 }

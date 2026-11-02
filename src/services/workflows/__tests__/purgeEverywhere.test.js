@@ -567,7 +567,7 @@ it('a delete clicked while another runs waits its turn and stays gone', async ()
 });
 
 // A target the daemon tried and could not finish (no proof: the server step
-// failed) goes again, five times at most with a doubling wait (DELETE_RETRY,
+// failed) goes again, five times at most with a doubling wait (PURGE_RETRY,
 // no wait under test). Its row stays gone the whole time; only the retried
 // target is sent again.
 const unfinished = (hint) => ({ ...refused(hint), refused: false });

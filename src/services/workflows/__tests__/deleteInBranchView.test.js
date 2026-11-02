@@ -3,6 +3,7 @@
 // the display derivation matches: the row's own folder. A stale repaint of the
 // deleted row then stays hidden, and the same uid in the root folder stays shown.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { fakeDeleteQueueSubmit } from './fakeDeleteQueue.js';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
 
@@ -15,6 +16,8 @@ if (!globalThis.window) {
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
 const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
+// The daemon's delete queue, answering through the per-message mock above.
+const mockDeleteQueueSubmit = vi.fn((...a) => fakeDeleteQueueSubmit((...b) => mockDeleteEmail(...b), ...a));
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(undefined);
@@ -61,6 +64,8 @@ vi.mock('../../api', () => ({
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
   deleteEmail: (...a) => mockDeleteEmail(...a),
+  deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
+  deleteQueueList: async () => [],
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),

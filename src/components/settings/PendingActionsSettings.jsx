@@ -1,16 +1,22 @@
 // ── Settings › the server actions MailVault still owes ──
 //
 // Every delete, move and flag change is journalled before the row is repainted
-// and cleared once the server accepts it (services/db/opJournal, replayOps). A
-// failure now KEEPS its entry — the row is already gone from the list, so
-// dropping it would leave the server holding a message the app has shown as
-// deleted. That makes an entry that can never land (a mailbox the provider
-// renamed, a uid space reissued) permanent, so this is the escape hatch: what
-// is owed, why it last failed, and a way to give up on it.
+// and cleared once the server accepts it. A failure KEEPS its entry — the row
+// is already gone from the list, so dropping it would leave the server holding
+// a message the app has shown as deleted. That makes an entry that can never
+// land (a mailbox the provider renamed, a uid space reissued) permanent, so
+// this is the escape hatch: what is owed, why it last failed, and a way to
+// give up on it.
+//
+// Deletes are the daemon's queue (`delete_queue.list`): it sends and retries
+// them itself, and keeps how often it tried and why each message was refused,
+// so both survive a restart. Moves, flags and purges are the app's journal
+// (services/db/opJournal, replayOps), with this session's reasons.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, Trash2, FolderInput, Flag, Clock, Eraser } from 'lucide-react';
 import * as db from '../../services/db';
+import * as api from '../../services/api';
 import { replayOps } from '../../services/workflows/replayOps';
 import { showQueuedRows } from '../../services/workflows/messageMutations';
 import { useAccountStore } from '../../stores/accountStore';
@@ -38,18 +44,36 @@ export function PendingActionsSettings({ focus = false }) {
   const [failures, setFailures] = useState(() => new Map());
   const [busy, setBusy] = useState(false);
 
-  // Read, never subscribe: the journal lives on disk behind the daemon, and
-  // the two things that change it (a replay, a cancel) both refresh here.
+  // Both lists live on disk behind the daemon. The journal is re-read after a
+  // replay or a cancel from here; the delete queue also when the daemon says
+  // it changed (its worker runs with or without this window).
   const refresh = useCallback(async () => {
-    const list = await db.readOps();
-    setOps(Array.isArray(list) ? list : []);
+    const [list, queue] = await Promise.all([
+      db.readOps(),
+      api.deleteQueueList().catch(() => []),
+    ]);
+    const journal = (Array.isArray(list) ? list : []).filter(entry => entry.op !== 'delete');
+    setOps([...(Array.isArray(queue) ? queue : []), ...journal].sort((a, b) => (a.at || 0) - (b.at || 0)));
     setFailures(new Map(db.opFailures()));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  useEffect(() => {
+    let stops = [];
+    let live = true;
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => Promise.all(['delete-queue-changed', 'delete-queue-landed'].map(name => listen(name, () => { refresh(); }))))
+      .then((unlisten) => { if (live) stops = unlisten; else unlisten.forEach(stop => stop()); })
+      .catch(() => {});
+    return () => { live = false; stops.forEach(stop => stop()); };
+  }, [refresh]);
+
+  // The daemon's pass can take minutes (every owed delete, one at a time): it
+  // is started, not awaited, and its events refresh the list as it goes.
   const retryAll = async () => {
     setBusy(true);
+    Promise.resolve().then(() => api.deleteQueueRun({ reason: 'manual' })).then(refresh, () => {});
     try {
       await replayOps({ reason: 'manual' });
     } catch {
@@ -62,13 +86,17 @@ export function PendingActionsSettings({ focus = false }) {
   };
 
   const cancel = async (entry) => {
-    await db.clearOps({
-      op: entry.op,
-      accountId: entry.accountId,
-      mailbox: entry.mailbox,
-      uids: entry.uids,
-      arg: entry.arg || {},
-    });
+    if (entry.op === 'delete') {
+      await api.deleteQueueCancel(entry.id, entry.uids);
+    } else {
+      await db.clearOps({
+        op: entry.op,
+        accountId: entry.accountId,
+        mailbox: entry.mailbox,
+        uids: entry.uids,
+        arg: entry.arg || {},
+      });
+    }
     // Given up on: a delete's rows show again, as the server still has them.
     await showQueuedRows(entry);
     await refresh();
@@ -76,7 +104,11 @@ export function PendingActionsSettings({ focus = false }) {
 
   const emailFor = id => accounts.find(a => a.id === id)?.email || id;
   // One entry can hold several uids; the first one with a reason is the reason.
-  const failureOf = (entry, uid) => failures.get(db.failureKey({ op: entry.op, accountId: entry.accountId, mailbox: entry.mailbox, uid }));
+  // A queued delete carries its own (`failures`, by uid); the rest are this
+  // session's, from the journal replay.
+  const failureOf = (entry, uid) => (entry.op === 'delete'
+    ? entry.failures?.[uid]
+    : failures.get(db.failureKey({ op: entry.op, accountId: entry.accountId, mailbox: entry.mailbox, uid })));
   const reasonFor = entry => entry.uids.map(uid => failureOf(entry, uid)).find(Boolean)?.message;
   // A delete of several messages keeps all of them listed (messageMutations
   // `_queuedList`): its `uids` are what is still owed, the rest went, unless
@@ -116,8 +148,13 @@ export function PendingActionsSettings({ focus = false }) {
             const total = Math.max(entry.arg?.total || 0, entry.uids.length);
             const gone = total - entry.uids.length;
             const messages = Array.isArray(entry.arg?.messages) ? entry.arg.messages : null;
+            // A queued delete the daemon has not sent once, and has no reason
+            // for: it waits for the link, or for the account's password to be
+            // readable without asking.
+            const tries = entry.op === 'delete' && typeof entry.attempts === 'number' ? entry.attempts : null;
+            const untried = tries === 0 && !reason;
             return (
-              <li key={entry.id} className="flex items-start gap-3 p-3 rounded-lg bg-mail-surface">
+              <li key={`${entry.op}-${entry.id}`} className="flex items-start gap-3 p-3 rounded-lg bg-mail-surface">
                 <Icon size={16} className="mt-0.5 text-mail-text-muted shrink-0" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-mail-text">
@@ -129,6 +166,10 @@ export function PendingActionsSettings({ focus = false }) {
                   <p className="text-xs text-mail-text-muted truncate">
                     {emailFor(entry.accountId)} · {mailboxLabel(entry.mailbox)} · {t('settings.pendingActions.queuedAt', { date: formatDateTime(entry.at) })}
                   </p>
+                  {tries > 0 && (
+                    <p className="text-xs text-mail-text-muted">{t('settings.pendingActions.attempts', { count: tries })}</p>
+                  )}
+                  {untried && <p className="text-xs text-mail-text-muted mt-1">{t('settings.pendingActions.notTriedYet')}</p>}
                   {/* tErr: a JMAP refusal (no Trash, say) in the app's words. */}
                   {reason && <p className="text-xs text-mail-danger mt-1 break-words">{tErr(reason)}</p>}
                   {messages && (
