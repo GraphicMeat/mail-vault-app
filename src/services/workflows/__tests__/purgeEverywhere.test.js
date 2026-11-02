@@ -24,7 +24,8 @@ import {
   mockClearOps,
   mockNoteOpFailure,
   mockReadOps,
-  mockDeleteEmail,
+  mockDeleteQueueSubmit,
+  mockGraphDeleteMessage,
   mockMaildirDeleteMany,
   mockBackupPurgeUids,
   mockSaveEmailHeaders,
@@ -104,7 +105,8 @@ it('starts once with original hints and leaves all mail decisions native', async
     messageId: 'm1@mock',
     nativeIdentity: { originHash: 'A' },
   });
-  expect(mockDeleteEmail).not.toHaveBeenCalled();
+  expect(mockDeleteQueueSubmit).not.toHaveBeenCalled();
+  expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
   expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
   expect(mockBackupPurgeUids).not.toHaveBeenCalled();
   expect(mockSaveEmailHeaders).not.toHaveBeenCalled();

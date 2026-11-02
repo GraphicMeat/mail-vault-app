@@ -7,6 +7,7 @@ globalThis.window.addEventListener = globalThis.window.addEventListener || (() =
 globalThis.window.removeEventListener = globalThis.window.removeEventListener || (() => {});
 
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
+const mockDeleteQueueSubmit = vi.fn().mockResolvedValue({ landed: [], queued: [], dropped: [] });
 const mockMaildirDeleteMany = vi.fn().mockResolvedValue({ removed: 0 });
 const mockBackupPurgeUids = vi.fn().mockResolvedValue({ removed: 0, queued: 0 });
 // Matching non-null values by default so every test that doesn't care about
@@ -35,6 +36,7 @@ vi.mock('../../syncService', () => ({
 
 vi.mock('../../api', () => ({
   deleteEmail: (...a) => mockDeleteEmail(...a),
+  deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   maildirDeleteMany: (...a) => mockMaildirDeleteMany(...a),
   backupPurgeUids: (...a) => mockBackupPurgeUids(...a),
   checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
@@ -173,6 +175,7 @@ const serverMsg = (uid) => ({
 
 function resetPurgeMocks() {
   mockDeleteEmail.mockReset().mockResolvedValue(undefined);
+  mockDeleteQueueSubmit.mockReset().mockResolvedValue({ landed: [], queued: [], dropped: [] });
   mockMaildirDeleteMany.mockReset().mockResolvedValue({ removed: 0 });
   mockBackupPurgeUids.mockReset().mockResolvedValue({ removed: 0, queued: 0 });
   mockGetLocalIndexProvenance.mockReset().mockResolvedValue(new Map());
@@ -211,7 +214,7 @@ beforeEach(resetPurgeMocks);
 export {
   ACCOUNT, prime, serverMsg, useMailStore, purgeEverywhere, purgeEverywhereReporting, bulkDeleteFromServer,
   replayPurge, hideQueuedDeletes, showQueuedRows, mockQueueOp, mockClearOps, mockNoteOpFailure, mockReadOps,
-  setDeleteUndo, resetPurgeMocks, mockDeleteEmail, mockMaildirDeleteMany,
+  setDeleteUndo, resetPurgeMocks, mockDeleteEmail, mockDeleteQueueSubmit, mockMaildirDeleteMany,
   mockBackupPurgeUids, mockCheckMailboxStatus, mockGraphDeleteMessage,
   mockGetLocalIndexEntry, mockAppendLocalIndex, mockGetLocalIndexProvenance,
   mockGetEmailHeadersMeta, mockSaveEmailHeaders, mockIsGraphAccount,

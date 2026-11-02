@@ -72,7 +72,8 @@ fn the_body_fetch_timeout_text_reads_back_as_a_timeout() {
     // recover's read) is the one other builder, read back the same way.
     let bare = CaptureFailure::read(crate::handlers::imap::body_fetch_ceiling_text());
     assert_eq!(bare.reason(), "timeout");
-    assert_eq!(CaptureFailure::Timeout(None).detail(), bare.detail());
+    assert_eq!(crate::handlers::imap::body_fetch_ceiling_text(), "timed out after 45s");
+    assert_eq!(CaptureFailure::Timeout(None).detail(), "timed out after 45s");
 }
 
 // ── delete_one over IMAP ───────────────────────────────────────────────────

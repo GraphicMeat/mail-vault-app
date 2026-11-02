@@ -64,7 +64,8 @@ vi.mock('../../db', () => ({
 const api = vi.hoisted(() => ({
   vaultApplyFlags: vi.fn(),
   updateEmailFlags: vi.fn(),
-  deleteEmail: vi.fn(),
+  deleteQueueSubmit: vi.fn(),
+  graphDeleteMessage: vi.fn(),
   moveEmails: vi.fn(),
   checkMailboxStatus: vi.fn(),
   fetchEmailLight: vi.fn(),
@@ -229,7 +230,8 @@ describe('a message in a local folder', () => {
     await useMailStore.getState().deleteEmailFromServer(7);
 
     expect(sends('maildir_delete')).toEqual([{ accountId: ACCOUNT.id, mailbox: NAME, uid: 7, bin: true }]);
-    expect(api.deleteEmail).not.toHaveBeenCalled();
+    expect(api.deleteQueueSubmit).not.toHaveBeenCalled();
+    expect(api.graphDeleteMessage).not.toHaveBeenCalled();
     expect(m.queueOp).not.toHaveBeenCalled();
     // Nothing server-shaped is written for it either: no "we deleted the
     // server copy" stamp, and no header cache for a folder no server lists.
@@ -242,7 +244,8 @@ describe('a message in a local folder', () => {
     await useMailStore.getState().deleteSelectedFromServer();
 
     expect(sends('maildir_delete')).toEqual([{ accountId: ACCOUNT.id, mailbox: NAME, uid: 7, bin: true }]);
-    expect(api.deleteEmail).not.toHaveBeenCalled();
+    expect(api.deleteQueueSubmit).not.toHaveBeenCalled();
+    expect(api.graphDeleteMessage).not.toHaveBeenCalled();
     expect(m.queueOp).not.toHaveBeenCalled();
     expect(api.appendLocalIndex).not.toHaveBeenCalled();
     expect(m.saveEmailHeaders.mock.calls.filter(([, mailbox]) => mailbox === NAME)).toEqual([]);
@@ -262,7 +265,8 @@ describe('a message in a local folder', () => {
     await purgeEverywhere([7]);
 
     expect(api.checkMailboxStatus).not.toHaveBeenCalled();
-    expect(api.deleteEmail).not.toHaveBeenCalled();
+    expect(api.deleteQueueSubmit).not.toHaveBeenCalled();
+    expect(api.graphDeleteMessage).not.toHaveBeenCalled();
     expect(sends('maildir_delete_many')).toEqual([]);
     expect(sends('maildir_delete')).toEqual([]);
   });
@@ -311,7 +315,8 @@ describe('a search hit from a local folder, named by its directory', () => {
   };
   const noServer = () => {
     expect(api.updateEmailFlags).not.toHaveBeenCalled();
-    expect(api.deleteEmail).not.toHaveBeenCalled();
+    expect(api.deleteQueueSubmit).not.toHaveBeenCalled();
+    expect(api.graphDeleteMessage).not.toHaveBeenCalled();
     expect(api.moveEmails).not.toHaveBeenCalled();
     expect(api.fetchEmailLight).not.toHaveBeenCalled();
     expect(m.queueOp).not.toHaveBeenCalled();

@@ -225,7 +225,7 @@ describe('deleteMessages, one call over many keys', () => {
     // The app keeps no journal and sends nothing itself.
     expect(mockQueueOp).not.toHaveBeenCalled();
     expect(mockClearOps).not.toHaveBeenCalled();
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
 
     expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([9]);
 
@@ -394,7 +394,7 @@ describe('deleteMessages, Review Focus 5: offline', () => {
     expect(mockSubmit).toHaveBeenCalledTimes(1);
     expect(mockSubmit).toHaveBeenCalledWith({ accountId: 'a1', mailbox: 'INBOX', uids: [7, 8] }, expect.objectContaining({ mode: 'auto', bin: true }));
     expect(mockQueueOp).not.toHaveBeenCalled();
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
     expect(mockNoteOpFailure).not.toHaveBeenCalled();
     expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([9]);
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);

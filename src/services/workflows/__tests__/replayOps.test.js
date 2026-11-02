@@ -20,7 +20,7 @@ const mockReadOps = vi.fn().mockResolvedValue([]);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockGetAccounts = vi.fn().mockResolvedValue([ACCOUNT]);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
-const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
+const mockDeleteQueueSubmit = vi.fn().mockResolvedValue({ landed: [], queued: [], dropped: [] });
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockMarkServerDeleted = vi.fn().mockResolvedValue(true);
@@ -38,7 +38,7 @@ vi.mock('../../db', () => ({
 }));
 
 vi.mock('../../api', () => ({
-  deleteEmail: (...a) => mockDeleteEmail(...a),
+  deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
 }));
@@ -108,7 +108,7 @@ describe('replayOps', () => {
 
     const result = await replayOps();
 
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockDeleteQueueSubmit).not.toHaveBeenCalled();
     expect(mockMarkServerDeleted).not.toHaveBeenCalled();
     expect(mockClearOps).not.toHaveBeenCalledWith(expect.objectContaining({ op: 'delete' }));
     expect(mockShowQueued).not.toHaveBeenCalled();
@@ -234,7 +234,7 @@ describe('replayOps', () => {
     const result = await replayOps();
 
     expect(mockReplayPurge).toHaveBeenCalledWith(purge);
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockDeleteQueueSubmit).not.toHaveBeenCalled();
     expect(mockClearOps).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: purge.arg });
     expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uid: 8 }, 'NO try later');
     expect(result).toMatchObject({ attempted: 2, done: 1, kept: 1 });

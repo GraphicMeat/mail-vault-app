@@ -2,7 +2,7 @@
  * E2E: delete a message from the server, then undo it — in both list shapes.
  *
  * The undo slot had unit coverage from the day it shipped and it was all of
- * one shape: `api.deleteEmail` and `api.moveEmails` mocked, every case in a
+ * one shape: `api.deleteQueueSubmit` and `api.moveEmails` mocked, every case in a
  * single-folder INBOX view. That is exactly the half that worked. In All
  * Inboxes the restore reached the server and the row never came back, because
  * the repaint went through `loadEmails()`, which reloads one (account,

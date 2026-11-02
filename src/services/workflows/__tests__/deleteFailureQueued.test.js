@@ -168,7 +168,7 @@ describe('a server delete the server refuses', () => {
     // The app keeps no journal of its own and sends nothing itself.
     expect(mockQueueOp).not.toHaveBeenCalled();
     expect(mockClearOps).not.toHaveBeenCalled();
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
     expect(mockNoteOpFailure).not.toHaveBeenCalled();
     expect(useMailStore.getState().emails).toEqual([]);
     // The row stays gone, so the count does too: it drops with the row, not

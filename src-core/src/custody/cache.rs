@@ -294,11 +294,11 @@ const UID_CHUNK: usize = 900;
 /// cached server uid + 1 (a row an mbox import numbered, `IMPORT_UID_BASE` and
 /// up, is never a server's and does not count), or a higher `uidNext` /
 /// `syncUidNext` the cache's metadata recorded from the server. UIDNEXT only
-/// grows, so the real one is at or
-/// above it, and every uid a server allocates later is too. A message the
-/// folder held earlier sits below it only when the cache had seen it: with
-/// nothing cached the floor is whatever the caller adds (the delete's
-/// retired uid + 1). `None`: nothing is known about the folder.
+/// grows, so the real one is at or above it, and every uid a server allocates
+/// later is too. A message the folder held earlier sits below it only when
+/// the cache had seen it: with nothing cached the floor is whatever the
+/// caller adds (the delete's retired uid + 1). `None`: nothing is known about
+/// the folder.
 pub fn uid_watermark(conn: &Connection, account: &str, mailbox: &str) -> Result<Option<u32>, String> {
     let top: Option<i64> = conn
         .query_row(
