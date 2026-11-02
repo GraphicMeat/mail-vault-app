@@ -1032,6 +1032,7 @@ export async function deleteMessages(targets, opts = {}) {
   const batch = skipRefresh ? null : { slotId: null, outcomes: [], filed: false, late: [] };
   let hidden;
   let sent;
+  let heldLandings = [];
   // From the hold on, every exit lets go of it.
   try {
     const answers = _submitGroups(_deleteGroups(queued, state));
@@ -1055,12 +1056,14 @@ export async function deleteMessages(targets, opts = {}) {
     if (batch) batch.filed = true;
     throw error;
   } finally {
-    release();
+    heldLandings = release();
   }
-
   // A reconcile that throws still lets a late landing of this call settle on
   // its own (`filed`), rather than wait for a slot that is never filed.
   try {
+    // Landed while this call held them, after their answer said `queued`:
+    // settled now, before the slot is filed, so they join it.
+    for (const payload of heldLandings) await onDeleteQueueLanded(payload);
     if (how.reconcile === 'each') {
       for (const c of sent.settled) {
         await applyServerRemoval(c.uid, {
@@ -1254,7 +1257,7 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
       const result = c.queued
         ? _answered(c, answer, hidden, batch)
         : await _sendDirect(c, { how, waitsOffline, invoke });
-      if (result === QUEUED && answer?.refused) notYet ??= answer.refused;
+      if (result === QUEUED && answer?.refused && !_transientRefusal(answer.refused)) notYet ??= answer.refused;
       if (result === OFFLINE || result === QUEUED) continue;
       if (result && result !== LOCAL && result !== GONE) outcomes.push(result);
       if (how.reconcile === 'each') {
@@ -1285,6 +1288,10 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
   return { outcomes, settled, prunes, surviving };
 }
 
+// A busy account passes on its own: the daemon's next round usually sends it,
+// and the reply comes after the first round, so it is not worth a warning.
+const _transientRefusal = (reason) => /^E_BIN_CAPTURE:busy(:|$)/.test(String(reason));
+
 // A queued target's answer: its undo record when it landed, GONE when the
 // server no longer had it, QUEUED while it is owed. Throws a refusal for good,
 // in the app's words (`reason` keeps the daemon's code).
@@ -1298,12 +1305,17 @@ function _answered(c, answer = { queued: true }, hidden, batch = null) {
     error.reason = reason;
     throw error;
   }
+  const heldLanding = _landedWhileHeld.get(c.tombstone);
   if (answer.queued) {
-    // Another submit, or the replay worker, landed it while this one waited:
-    // that answer is the one that counted, and this delete is done.
-    if (_landedWhileHeld.has(c.tombstone)) {
+    // The daemon's own later round, another submit or the replay worker landed
+    // it while this call still held it: that landing is its answer, settled
+    // here once (a second holder finds it used).
+    if (heldLanding) {
       _owedIds.delete(c.tombstone);
-      return GONE;
+      const first = !heldLanding.used;
+      heldLanding.used = true;
+      if (!first || heldLanding.landed.kind !== 'deleted') return GONE;
+      return _landedOutcome(c, heldLanding.landed, kept);
     }
     // Owed: the row stays hidden by its tombstone until `delete-queue-landed`
     // settles it, with what its undo needs kept until then.
@@ -1314,6 +1326,8 @@ function _answered(c, answer = { queued: true }, hidden, batch = null) {
     return QUEUED;
   }
   _owedIds.delete(c.tombstone);
+  // The reply's own landing: an event for it while held is this one.
+  if (heldLanding) heldLanding.used = true;
   // Its `delete-queue-landed` travels on the event stream, not with this
   // reply, and can come after it: that one is already settled here.
   _settledByReply.set(c.tombstone, Date.now());
@@ -1377,7 +1391,11 @@ async function _sendDirect(c, { how, waitsOffline, invoke }) {
 const _owedIds = new Set();        // target ids the queue owes, as last seen
 const _owedRows = new Map();       // target id -> { messageId, row, view, at } of this window's own queued submit
 const _held = new Map();           // target id -> awaited submits holding it
-const _landedWhileHeld = new Set(); // held target ids an event said landed
+// Held target ids an event said landed: `{ accountId, mailbox, landed, used }`.
+// The holder's own answer settles it from this payload (`_answered`), or, when
+// it was already answered `queued`, the hold's release does (`_holdSubmitted`).
+// `used`: one of them has settled it, so no other settles it twice.
+const _landedWhileHeld = new Map();
 // Target ids a submit's reply landed, until their own `delete-queue-landed`
 // (which can arrive after the reply) has been seen. A minute at most.
 const _settledByReply = new Map();
@@ -1406,15 +1424,28 @@ function _holdSubmitted(ids) {
     // A new submit of the id is what its next landing answers.
     _settledByReply.delete(id);
   }
+  // Lets go, and answers the landings that came for a uid this window had
+  // already been told was `queued` (it waits in `_owedRows`): nothing else will
+  // settle them, as their event was seen while held. `delete-queue-landed`
+  // payloads, for `onDeleteQueueLanded`.
   return () => {
+    const late = new Map();
     for (const id of ids) {
       const n = (_held.get(id) || 1) - 1;
-      if (n > 0) _held.set(id, n);
-      else {
-        _held.delete(id);
-        _landedWhileHeld.delete(id);
+      if (n > 0) {
+        _held.set(id, n);
+        continue;
       }
+      _held.delete(id);
+      const landing = _landedWhileHeld.get(id);
+      _landedWhileHeld.delete(id);
+      if (!landing || landing.used || !_owedRows.has(id)) continue;
+      landing.used = true;
+      const key = `${landing.accountId}|${landing.mailbox}`;
+      if (!late.has(key)) late.set(key, { accountId: landing.accountId, mailbox: landing.mailbox, landed: [] });
+      late.get(key).landed.push(landing.landed);
     }
+    return [...late.values()];
   };
 }
 
@@ -1425,11 +1456,11 @@ async function _fileBatchUndo(batch, outcomes) {
   const all = [...outcomes, ...batch.late];
   batch.filed = true;
   batch.late = [];
-  const before = nativePurgeStore.getState().undo;
-  await setDeleteUndo(all);
-  const after = nativePurgeStore.getState().undo;
-  if (after && after !== before) {
-    batch.slotId = after.id;
+  // The slot setDeleteUndo set, as it set it: never one another action put
+  // there while this awaited.
+  const filed = await setDeleteUndo(all);
+  if (filed) {
+    batch.slotId = filed.id;
     batch.outcomes = all;
   }
 }
@@ -1465,8 +1496,9 @@ export async function onDeleteQueueLanded(payload) {
   const mine = [];
   for (const l of landed) {
     const id = _targetId({ accountId, mailbox, uid: l.uid });
-    if (_held.has(id)) _landedWhileHeld.add(id);
-    else if (!_wasSettledByReply(id)) mine.push({ id, landed: l });
+    if (_held.has(id)) {
+      if (!_landedWhileHeld.has(id)) _landedWhileHeld.set(id, { accountId, mailbox, landed: l, used: false });
+    } else if (!_wasSettledByReply(id)) mine.push({ id, landed: l });
   }
   if (!mine.length) return;
   const ids = new Set(mine.map(m => m.id));
@@ -1705,7 +1737,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
  * Restorable wins over permanent: a mixed batch offers the undo for what CAN
  * come back rather than reporting the half that cannot and leaving the rest
  * stranded. An empty list sets nothing — a local-only, Graph or offline delete
- * has nothing addressable, and leaves the previous slot alone.
+ * has nothing addressable, and leaves the previous slot alone. Resolves to
+ * the slot it set, or null.
  *
  * Exported because the row menu deletes each copy of a thread row separately
  * (`skipRefresh`) and offers the whole row back in one go, and so does the
@@ -1734,6 +1767,12 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
     }
   };
   const { useMailStore } = await import('../../stores/mailStore');
+  // The slot this call set, read as it is set (null when it set none).
+  let filed = null;
+  const setUndo = (entry) => {
+    useMailStore.getState().setUndo(entry);
+    filed = useMailStore.getState().undo;
+  };
   // Addressable, not necessarily by uid. A server without UIDPLUS reports no
   // COPYUID, so `trashUid` is null for a message that is sitting in Trash and
   // is perfectly restorable — offering nothing there told the user their mail
@@ -1747,7 +1786,7 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
   const binned = (outcomes || []).filter(o => o?.binId && !restorable.includes(o)).map(o => o.binId);
   _lastBinned = (outcomes || []).map(o => o?.binId).filter(Boolean);
   if (restorable.length) {
-    useMailStore.getState().setUndo({
+    setUndo({
       // "Moved to Trash" only when all of it went there.
       labelKey: binned.length ? 'undo.deletedKept' : 'undo.deleted',
       labelParams: { count: restorable.length + binned.length },
@@ -1758,7 +1797,7 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
       }),
     });
   } else if (binned.length) {
-    useMailStore.getState().setUndo({
+    setUndo({
       labelKey: 'undo.deletedKept',
       labelParams: { count: binned.length },
       run: () => _runDeleteUndo(async () => {
@@ -1767,12 +1806,13 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
       }),
     });
   } else if (outcomes?.length) {
-    useMailStore.getState().setUndo({
+    setUndo({
       labelKey: 'undo.deletedPermanently',
       labelParams: { count: outcomes.length },
       canUndo: false,
     });
   }
+  return filed;
 }
 
 // Put the messages back where they were deleted from: one `messages.restore`

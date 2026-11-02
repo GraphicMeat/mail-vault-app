@@ -15,14 +15,13 @@
 //!   uid keeps its entry and its reason (`op_journal::note_failures`, one
 //!   write per entry per round); the journal change is announced with
 //!   `delete-queue-changed`.
-//! - The submit answers after its FIRST round when a uid is still to be
-//!   retried: what landed or was dropped so far, the rest `queued` (each
+//! - The submit always answers after its FIRST round, never after the whole
+//!   schedule: what landed or was dropped so far, the rest `queued` (each
 //!   refused one in `refused` with its reason). The later rounds go on in
 //!   the same task, the claim still held, and what lands then is announced
 //!   with `delete-queue-landed` like any replay's. A uid stuck on its
 //!   capture (a 45 s ceiling per try) so delays only itself, never the undo
-//!   or the custody of the rest of its batch. Without a retry pending the
-//!   answer comes when the rounds end, as before.
+//!   or the custody of the rest of its batch.
 //! - Only an identity change (`errors.bulkIdentityChanged`) is refused for
 //!   good (`dropped`, its uid cleared), as the app's replay does. A capture
 //!   the delete required that failed, a credential read that failed and a
@@ -362,10 +361,9 @@ pub(crate) struct Sent {
 type Answer = Option<tokio::sync::oneshot::Sender<Result<SubmitReply, String>>>;
 
 /// Journal, send, retry and settle `s`, on its own task: a caller that stops
-/// waiting does not stop the delete. Answered after the first send round
-/// when a uid is still being retried (`send_owed`): what landed is settled
-/// then, and the rest lands on its own `delete-queue-landed`. Otherwise
-/// answered when the rounds end.
+/// waiting does not stop the delete. Always answered after the first send
+/// round (`send_owed`): what landed is settled then, and a uid still being
+/// retried lands on its own `delete-queue-landed`.
 pub(crate) async fn submit(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitReply, String> {
     let st = Arc::clone(state);
     let (tx, rx) = tokio::sync::oneshot::channel();

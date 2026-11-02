@@ -320,19 +320,19 @@ describe('deleteMessages, one call over many keys', () => {
     expect(useMailStore.getState().error).toBe('Delete failed: graph down');
   });
 
-  it('a reply that answers queued for a uid that landed while it waited counts it done, with no undo', async () => {
+  it('a reply that answers queued for a uid that landed while it waited counts it done, with its undo from the landing', async () => {
     prime({ emails: [row(7), row(8)] });
     const reply = deferred();
     mockSubmit.mockReturnValueOnce(reply.promise);
     const running = deleteMessages([{ key: 7 }]);
     await vi.waitFor(() => expect(mockSubmit).toHaveBeenCalled());
-    // Another submit (or the replay worker) lands it first.
+    // The daemon's own later round (or the replay worker) lands it first.
     await onDeleteQueueLanded({ accountId: 'a1', mailbox: 'INBOX', landed: [{ kind: 'deleted', uid: 7, trash: 'Trash', trashUid: 107, binId: null }] });
     reply.resolve({ landed: [], queued: [7], dropped: [] });
     const { outcomes } = await running;
 
-    expect(outcomes).toEqual([]);
-    expect(useMailStore.getState().undo).toBeNull();
+    expect(outcomes.map(o => [o.uid, o.trashUid])).toEqual([[7, 107]]);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 1 } });
     expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([8]);
     // It is not owed: a later re-list has nothing of it to show again.
     const { loadEmails } = useMailStore.getState();
@@ -619,6 +619,72 @@ describe('a batch with one stuck uid', () => {
 
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|9')).toBe(false);
     expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 3 } });
+  });
+
+  // Fix round 1: a landing that arrives while its OWN call still holds the
+  // uid (the call awaits every group's reply, and reconciles before letting
+  // go) is the uid's answer, and joins the batch: exactly once.
+  it('lands while another group of the same call is still unanswered: one undo for every uid', async () => {
+    prime({
+      accounts: [A, B],
+      activeMailbox: 'UNIFIED',
+      emails: [row(7, { _accountId: 'a1', _mailbox: 'INBOX' }), row(8, { _accountId: 'a1', _mailbox: 'INBOX' }), row(3, { _accountId: 'b1', _mailbox: 'INBOX' })],
+    });
+    const second = deferred();
+    mockSubmit.mockImplementation(async (group) => (group.accountId === 'a1'
+      ? { landed: [{ kind: 'deleted', uid: 7, trash: 'Trash', trashUid: 107, binId: null }], queued: [8], refused: [{ uid: 8, reason: STUCK }], dropped: [] }
+      : second.promise));
+    const running = deleteMessages([{ key: 'a1:INBOX:7' }, { key: 'a1:INBOX:8' }, { key: 'b1:INBOX:3' }]);
+    await vi.waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(2));
+    // a1's retry round lands 8 while b1's first round still runs.
+    await onDeleteQueueLanded({ accountId: 'a1', mailbox: 'INBOX', landed: [{ kind: 'deleted', uid: 8, trash: 'Trash', trashUid: 108, binId: null }] });
+    second.resolve({ landed: [{ kind: 'deleted', uid: 3, trash: 'Trash', trashUid: 103, binId: null }], queued: [], dropped: [] });
+    await running;
+
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 3 } });
+    // A repeat of the event settles nothing twice.
+    await onDeleteQueueLanded({ accountId: 'a1', mailbox: 'INBOX', landed: [{ kind: 'deleted', uid: 8, trash: 'Trash', trashUid: 108, binId: null }] });
+    expect(useMailStore.getState().undo).toMatchObject({ labelParams: { count: 3 } });
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [], failed: [] });
+    await useMailStore.getState().runUndo();
+    expect(mockRestoreMessages).toHaveBeenCalledTimes(1);
+    expect(mockRestoreMessages.mock.calls[0][0].map(o => o.uid).sort()).toEqual([3, 7, 8]);
+  });
+
+  it('lands after its answer was read but before the call lets go: one undo for every uid', async () => {
+    const db = await import('../../db');
+    prime({ emails: [row(7), row(8), row(9), row(10)] });
+    mockSubmit.mockResolvedValue(earlyReply);
+    // The landing arrives during the custody stamp of a uid that landed with
+    // the reply: 9 was already answered `queued`, and is still held.
+    let first = true;
+    db.getLocalIndexEntry.mockImplementation(async () => {
+      if (first) {
+        first = false;
+        await onDeleteQueueLanded(landed9);
+      }
+      return null;
+    });
+
+    try {
+      await deleteMessages([{ key: 9 }, { key: 7 }, { key: 8 }]);
+    } finally {
+      db.getLocalIndexEntry.mockResolvedValue(null);
+    }
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|9')).toBe(false);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 3 } });
+    // Nothing of it is still owed: a re-list has nothing to show again.
+    const { loadEmails } = useMailStore.getState();
+    loadEmails.mockClear();
+    await onDeleteQueueChanged();
+    expect(loadEmails).not.toHaveBeenCalled();
+    await onDeleteQueueLanded(landed9);
+    expect(useMailStore.getState().undo).toMatchObject({ labelParams: { count: 3 } });
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [], failed: [] });
+    await useMailStore.getState().runUndo();
+    expect(mockRestoreMessages).toHaveBeenCalledTimes(1);
+    expect(mockRestoreMessages.mock.calls[0][0].map(o => o.uid).sort()).toEqual([7, 8, 9]);
   });
 
   it('the stuck one landing later never takes the slot from an action taken after the reply', async () => {

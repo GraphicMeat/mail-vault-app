@@ -223,7 +223,7 @@ describe('a server delete the server refuses', () => {
 
   // Each bin-capture reason reads as one sentence of its own, never the
   // errors.E_BIN_CAPTURE_* copy ("Try again ... was not deleted") wrapped.
-  for (const why of ['fetch', 'timeout', 'busy', 'write']) {
+  for (const why of ['fetch', 'timeout', 'write']) {
     it(`a ${why} refusal says so in a sentence of its own`, async () => {
       prime([row(7)]);
       useMailStore.setState({ error: null });
@@ -238,6 +238,32 @@ describe('a server delete the server refuses', () => {
       expect(t(key)).toMatch(/MailVault keeps trying\.$/);
     });
   }
+
+  // A busy account is transient: the daemon's next round usually sends it, so
+  // a delete answered after its first round says nothing about it.
+  it('a busy refusal says nothing; the row stays hidden while the daemon retries', async () => {
+    prime([row(7), row(8)]);
+    useMailStore.setState({ error: null });
+    mockSubmit.mockImplementation(answer(() => true, 'E_BIN_CAPTURE:busy: account busy'));
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    expect(useMailStore.getState().error).toBeNull();
+    expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|7`)).toBe(true);
+  });
+
+  it('a busy refusal beside another reason says the other one', async () => {
+    prime([row(7), row(8), row(9)], [7, 8]);
+    useMailStore.setState({ error: null });
+    mockSubmit.mockImplementation(async ({ uids }) => ({
+      landed: [], queued: uids, dropped: [],
+      refused: [{ uid: 7, reason: 'E_BIN_CAPTURE:busy: account busy' }, { uid: 8, reason: 'E_BIN_CAPTURE:timeout: timed out after 45s' }],
+    }));
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expectOneNotYet('list.deleteNotYet_timeout');
+  });
 
   it('a bin-capture refusal with no reason this app knows uses the generic sentence', async () => {
     for (const raw of ['E_BIN_CAPTURE:sideways: x', 'E_BIN_CAPTURE: no reason given']) {
