@@ -3393,12 +3393,13 @@ export async function showQueuedRows(entry, uids = entry.uids) {
 // cache). Anything else leaves the whole range owed: the run cannot say which
 // uids landed, and the daemon's replay worker re-sending one that did is a
 // no-op on the server.
-// The one UIDVALIDITY the scope's hints give every uid of `entry`, or null
-// when one has no hint, no generation, or they disagree.
-function _hintedGeneration(hints, { accountId, mailbox, uids }) {
+// The one UIDVALIDITY the scope's hints (`hintsById`, by `_targetId`) give
+// every uid of `entry`, or null when one has no hint, no generation, or they
+// disagree. One lookup per uid: a bulk delete can span a 50k-row list.
+function _hintedGeneration(hintsById, { accountId, mailbox, uids }) {
   let generation = null;
   for (const uid of uids) {
-    const hint = (hints || []).find(h => h.accountId === accountId && h.mailbox === mailbox && h.uid === uid);
+    const hint = hintsById.get(_targetId({ accountId, mailbox, uid }));
     const v = hint?.nativeIdentity?.uidValidity;
     if (!Number.isInteger(v) || v <= 0 || (generation !== null && v !== generation)) return null;
     generation = v;
@@ -3410,6 +3411,7 @@ export async function bulkDeleteFromServer(scope) {
   const store = nativePurgeStore;
   const live = store.getState();
   const targets = scope.targetHints.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid }));
+  const hintsById = new Map(scope.targetHints.map(hint => [_targetId(hint), hint]));
   const journal = groupBulkTargets(scope.keys, scope).groups
     .filter(g => !isLocalMailbox(live.localFolders, g.accountId, g.mailbox)
       && !isGraphAccount(live.accounts?.find(a => a.id === g.accountId)))
@@ -3419,7 +3421,7 @@ export async function bulkDeleteFromServer(scope) {
     // `uidValidity`: the generation the rows were read in, so that replay is
     // sent only into it (`OpEntry::uid_validity`); none when unknown or mixed.
     .map(entry => {
-      const generation = _hintedGeneration(scope.targetHints, entry);
+      const generation = _hintedGeneration(hintsById, entry);
       return { ...entry, arg: { ..._queuedList(entry, live), mode: 'permanent', ...(generation ? { uidValidity: generation } : {}) } };
     });
   await Promise.all(journal.map(entry => db.queueOp(entry)));

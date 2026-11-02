@@ -716,6 +716,25 @@ it('bulk-tool delete records no generation for rows that disagree on it', async 
   expect(mockQueueOp.mock.calls[0][0].arg.mode).toBe('permanent');
 });
 
+// The generation is read from the scope's hints once each, never by
+// scanning every hint for every uid: over a large list that scan froze the
+// UI before the journal write.
+it('bulk-tool delete reads each hint a bounded number of times however many there are', async () => {
+  prime({ emails: [] });
+  const uids = Array.from({ length: 3000 }, (_, i) => i + 1);
+  let reads = 0;
+  const counted = (value) => new Proxy(value, { get(target, key) { reads += 1; return target[key]; } });
+  const targetHints = uids.map(uid => counted({
+    accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uid,
+    nativeIdentity: { accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uidValidity: 1, originHash: 'A' },
+  }));
+  const scope = { accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', spans: false, keys: uids, targetHints };
+  native.start.mockResolvedValue({ status: 'complete', errors: 0 });
+  await bulkDeleteFromServer(scope);
+  expect(mockQueueOp.mock.calls[0][0].arg.uidValidity).toBe(1);
+  expect(reads).toBeLessThan(uids.length * 50);
+});
+
 // A run with no record of what it removed cannot say which uid landed, so the
 // whole range stays owed and hidden; replayOps re-sends it.
 it('bulk-tool delete with errors and no per-message record keeps the range queued and its rows hidden', async () => {

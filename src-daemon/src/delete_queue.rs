@@ -35,8 +35,9 @@
 //!   `RENUMBERED`, so the rows come back); with no cached one, it is the one
 //!   recorded. It can only refuse, never pass a send: the SELECT still has to
 //!   match. A uid an older entry owes goes by that entry's generation, or by
-//!   the submit's when that entry has none. Every send, the submit's own rounds and the replay's
-//!   alike, goes only into that generation (`message_delete`, IMAP only). A
+//!   the submit's when that entry has none. Every send, the submit's own
+//!   rounds and the replay's alike, goes only into that generation
+//!   (`message_delete`, IMAP only). A
 //!   server that renumbered the folder gets nothing: the uid is stopped
 //!   (`op_journal::stop_by_id`), answered `dropped` with `RENUMBERED`, no
 //!   longer owed (so no replay sends it and the app's relist shows its row
