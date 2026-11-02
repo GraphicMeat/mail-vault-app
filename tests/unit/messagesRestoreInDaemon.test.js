@@ -33,6 +33,18 @@ it('the demo puts a message deleted to Trash back, by its Trash uid or its Messa
   }
 });
 
+// The app's path: a DAEMON_OWNED name reaches the demo as `daemon_rpc`.
+it('the demo answers messages.restore when it arrives the way the app sends it', async () => {
+  const demo = createDemoBackend();
+  const target = demo.snapshot().messages.find(m => m.custody === 'server' && m.messageId);
+  const { accountId, mailbox, uid, messageId } = target;
+  const out = await demo.invoke('imap_delete_email', { accountId, mailbox, uid, mode: 'trash' });
+  const reply = await demo.invoke('daemon_rpc', { method: 'messages.restore', params: {
+    items: [{ accountId, mailbox, uid, trash: out.trash, trashUid: out.trashUid, messageId, binId: null }],
+  } });
+  expect(reply).toEqual({ restored: [{ accountId, mailbox, uid, newUid: out.trashUid }], failed: [] });
+});
+
 it('the demo says, in catalog words, that a copy Trash no longer holds cannot come back', async () => {
   const demo = createDemoBackend();
   const reply = await demo.invoke('messages.restore', {
