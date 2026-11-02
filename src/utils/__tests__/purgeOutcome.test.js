@@ -28,3 +28,14 @@ it('drops a mailbox whose only reason to resync was a changed target', () => {
   expect(splitChangedOutcome({ deleted: 0, failed: 1, queuedBackup: 0, needsResync: 1 }, finals))
     .toEqual({ deleted: 0, failed: 0, changed: 1, queuedBackup: 0, needsResync: 0 });
 });
+
+// One mailbox holds a changed target AND an uncertain one nothing has proved:
+// the changed one leaves, the mailbox still needs its resync, counted once.
+it('keeps a mailbox that holds a changed target and an unproved uncertain one in needsResync', () => {
+  const finals = [
+    target('M', 2, { refused: true, needsResync: true, lastError: CHANGED }),
+    target('M', 3, { refused: true, needsResync: true, lastError: UNCERTAIN }),
+  ];
+  expect(splitChangedOutcome({ deleted: 0, failed: 2, queuedBackup: 0, needsResync: 1 }, finals))
+    .toEqual({ deleted: 0, failed: 1, changed: 1, queuedBackup: 0, needsResync: 1 });
+});
