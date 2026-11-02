@@ -68,6 +68,11 @@ fn the_body_fetch_timeout_text_reads_back_as_a_timeout() {
     assert_eq!(e.reason(), "timeout");
     assert!(e.detail().contains("UID 3 from INBOX"), "{}", e.detail());
     assert!(e.wire().starts_with("E_BIN_CAPTURE:timeout: "), "{}", e.wire());
+    // The ceiling text with no message named (the capture's own fetch, a bin
+    // recover's read) is the one other builder, read back the same way.
+    let bare = CaptureFailure::read(crate::handlers::imap::body_fetch_ceiling_text());
+    assert_eq!(bare.reason(), "timeout");
+    assert_eq!(CaptureFailure::Timeout(None).detail(), bare.detail());
 }
 
 // ── delete_one over IMAP ───────────────────────────────────────────────────
@@ -152,6 +157,12 @@ async fn a_capture_that_fails_under_best_effort_goes_ahead() {
 
 #[tokio::test]
 async fn a_failed_remove_forgets_the_capture_this_call_made() {
+    // Control: the same delete, its move succeeding, leaves one bin row, so an
+    // empty bin below means a capture was made and then dropped, not that
+    // none was ever made.
+    let kept = fixture(vec![]);
+    kept.delete(Mode::Trash, true).await.expect("deleted");
+    assert_eq!(bin_rows(&kept.s).len(), 1, "a delete that happens keeps its capture");
     let f = fixture(refuse_the_move());
     let r = f.delete(Mode::Trash, true).await;
     assert!(matches!(&r, Err(Refusal::Server(_))), "{r:?}");

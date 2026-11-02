@@ -293,8 +293,10 @@ const UID_CHUNK: usize = 900;
 /// A floor under the folder's UIDNEXT as this computer knows it: the highest
 /// cached uid + 1, or a higher `uidNext` / `syncUidNext` the cache's metadata
 /// recorded from the server. UIDNEXT only grows, so the real one is at or
-/// above it, and every uid a server allocates later is too. `None`: nothing
-/// is known about the folder.
+/// above it, and every uid a server allocates later is too. A message the
+/// folder held earlier sits below it only when the cache had seen it: with
+/// nothing cached the floor is whatever the caller adds (the delete's
+/// retired uid + 1). `None`: nothing is known about the folder.
 pub fn uid_watermark(conn: &Connection, account: &str, mailbox: &str) -> Result<Option<u32>, String> {
     let top: Option<i64> = conn
         .query_row("SELECT max(uid) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get(0))

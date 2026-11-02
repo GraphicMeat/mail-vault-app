@@ -343,7 +343,7 @@ async fn from_server(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, 
         Ok(Ok(Some(email))) if email.uid == uid => Ok(Some((email.raw_source_bytes, None))),
         Ok(Ok(_)) => Ok(None),
         Ok(Err(e)) => Err(e),
-        Err(_) => Err(format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs())),
+        Err(_) => Err(crate::handlers::imap::body_fetch_ceiling_text()),
     }
 }
 

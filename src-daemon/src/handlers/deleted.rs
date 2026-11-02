@@ -127,7 +127,7 @@ impl CaptureFailure {
     pub(crate) fn detail(&self) -> String {
         match self {
             Self::Fetch(e) | Self::BinWrite(e) | Self::LocalRead(e) | Self::Timeout(Some(e)) => e.clone(),
-            Self::Timeout(None) => format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()),
+            Self::Timeout(None) => crate::handlers::imap::body_fetch_ceiling_text(),
             Self::Busy => KEYCHAIN_BUSY.to_owned(),
         }
     }
@@ -324,8 +324,10 @@ pub(crate) async fn capture_stamped(
             .unwrap_or_else(|| json!({ "uid": uid }));
         // The folder's UIDNEXT as the list knows it, from the header cache
         // this read already opened (no server round trip on the delete path).
-        // A copy a later restore puts back is allocated at or above it; any
-        // copy the folder held before the delete sits below (`back_already`).
+        // A copy a later restore puts back is allocated at or above it. A copy
+        // the folder held before the delete sits below it when the header
+        // cache had seen it; with nothing cached the floor is the retired
+        // uid + 1 (`back_already`).
         let known = crate::custody::with_conn(&state, |c| cache::uid_watermark(c, &account_id, &mailbox)).ok().flatten();
         if let Some(o) = row.as_object_mut() {
             o.insert(UID_WATERMARK.into(), json!(known.map_or(uid.saturating_add(1), |w| w.max(uid.saturating_add(1)))));
@@ -390,19 +392,6 @@ async fn kept_already(state: &Arc<DaemonState>, account_id: &str, mailbox: &str,
 
 /// The delete it was captured for did not happen: a failed delete is
 /// retried, and its retry captures again.
-pub(crate) async fn forget(state: &Arc<DaemonState>, id: String) {
-    let state = Arc::clone(state);
-    let result = blocking(move || {
-        let Some(row) = app_db::with(&state.app_dir, |c| bin::get(c, &id))? else { return Ok(()); };
-        let original = state.account_lifecycle.capture(&row.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
-        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
-        app_db::with(&state.app_dir, |c| bin::remove(c, &state.app_dir, &id))
-    }).await.and_then(|r| r);
-    if let Err(e) = result {
-        warn!("[deleted] could not drop the capture of a failed delete: {e}");
-    }
-}
-
 pub(crate) async fn forget_stamped(state: &Arc<DaemonState>, id: String, original: AccountStamp) {
     let state = Arc::clone(state);
     let result = blocking(move || {
@@ -415,19 +404,6 @@ pub(crate) async fn forget_stamped(state: &Arc<DaemonState>, id: String, origina
 }
 
 /// Where the delete put the message, for a recover to move it back from.
-pub(crate) async fn landed(state: &Arc<DaemonState>, id: String, trash: Option<String>, trash_uid: Option<u32>) {
-    let state = Arc::clone(state);
-    let result = blocking(move || {
-        let Some(row) = app_db::with(&state.app_dir, |c| bin::get(c, &id))? else { return Ok(()); };
-        let original = state.account_lifecycle.capture(&row.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
-        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
-        app_db::with(&state.app_dir, |c| bin::set_trash(c, &id, trash.as_deref(), trash_uid))
-    }).await.and_then(|r| r);
-    if let Err(e) = result {
-        warn!("[deleted] could not record where a delete put the message: {e}");
-    }
-}
-
 pub(crate) async fn landed_stamped(state: &Arc<DaemonState>, id: String, trash: Option<String>, trash_uid: Option<u32>, original: AccountStamp) {
     let state = Arc::clone(state);
     let result = blocking(move || {
@@ -565,7 +541,7 @@ async fn from_trash(state: &Arc<DaemonState>, d: &Deleted) -> Result<Vec<u8>, St
         Ok(Ok(Some(raw))) => Ok(raw),
         Ok(Ok(None)) => Err("deletedBin.goneFromTrash".to_string()),
         Ok(Err(e)) => Err(e),
-        Err(_) => Err(format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs())),
+        Err(_) => Err(crate::handlers::imap::body_fetch_ceiling_text()),
     }
 }
 
@@ -673,9 +649,12 @@ enum ImapRecover {
 /// copy, an import) would be claimed and the bin's copy dropped:
 /// - above the retired uid, always;
 /// - at or above the UIDNEXT watermark the capture recorded: a MOVE or
-///   APPEND after the delete is allocated there, a copy the folder held
-///   before the delete sits below. A copy that arrived in the folder after
-///   the delete, from elsewhere, would also sit above it (an inherent limit);
+///   APPEND after the delete is allocated there, and a copy the folder held
+///   before the delete sits below it when the header cache had seen it (with
+///   nothing cached the floor is the retired uid + 1, so a duplicate the cache
+///   never listed, above the retired uid, is not excluded). A copy that
+///   arrived in the folder after the delete, from elsewhere, would also sit
+///   above it (an inherent limit);
 /// - a bin row from before the watermark falls back to "not a row the header
 ///   cache listed before the delete" (`cache::listed_before`), which a later
 ///   full-list save of the folder defeats.
@@ -835,7 +814,7 @@ async fn from_trash_jmap(state: &Arc<DaemonState>, config: &ImapConfig, trash: &
         let blob = got.list.first().and_then(|e| e["blobId"].as_str()).ok_or_else(gone)?;
         tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, acct.client.download(blob))
             .await
-            .map_err(|_| format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()))?
+            .map_err(|_| crate::handlers::imap::body_fetch_ceiling_text())?
             .map_err(|e| e.to_string())
     })
     .await
@@ -1786,13 +1765,15 @@ mod tests {
         let row = json!({"uid":1,"messageId":"<keep1@example.com>","subject":"Keep me"});
         let proof = Capture { account_id: "acc1", mailbox: "INBOX", uid: 1, message_id: Some("<keep1@example.com>"), flags: &[], row: &row, deleted_at: now_ms() };
         let (id, _) = app_db::with(&s.app_dir, |c| bin::capture(c, &s.app_dir, &proof, Some(RAW.as_bytes()))).unwrap();
+        let stamp = |s: &Arc<DaemonState>| s.account_lifecycle.capture("acc1").unwrap();
+        let (landed_stamp, forget_stamp) = (stamp(&s), stamp(&s));
         let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap();
         let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
         claim.mark_effects_started(drained).unwrap();
         claim.finish_retired().unwrap();
-        landed(&s, id.clone(), Some("Trash".into()), Some(9)).await;
+        landed_stamped(&s, id.clone(), Some("Trash".into()), Some(9), landed_stamp).await;
         let after_landed = app_db::with(&s.app_dir, |c| bin::get(c, &id)).unwrap();
-        forget(&s, id.clone()).await;
+        forget_stamped(&s, id.clone(), forget_stamp).await;
         let discarded = handle_request_for_test(&s, "deleted.discard", json!({"ids":[id.clone()]})).await;
         let retained = app_db::with(&s.app_dir, |c| bin::get(c, &id)).unwrap();
         let bytes = bin::read_eml(&s.app_dir, &id).ok();

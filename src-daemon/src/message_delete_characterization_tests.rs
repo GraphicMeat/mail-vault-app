@@ -310,7 +310,7 @@ async fn run_jmap(mode: Mode, capture: CaptureScenario, server: ServerScenario) 
 /// Items), the capture never fetches (`Source::Graph`), and a capture that
 /// fails is only logged. `FetchErr` and `Timeout` therefore mean "no local
 /// copy and nothing to fetch": the vault copy is not seeded.
-async fn run_graph(mode: Mode, capture: CaptureScenario, server: ServerScenario) -> Ran {
+async fn run_graph(mode: Mode, capture: CaptureScenario, _server: ServerScenario) -> Ran {
     let _mock = crate::handlers::graph::test_graph_mock_with(vec![(200, String::new())]);
     let s = plain_state(&std::env::temp_dir().join(format!("mv-delete-char-graph-{}", uuid::Uuid::new_v4())));
     seed_accounts(&s, r#"[{"id":"acct1"},{"id":"other"}]"#);

@@ -26,7 +26,7 @@
 //! something to fix here.
 //!
 //! A JMAP account's bulk delete never reaches either pool
-//! (`bulk_delete_jmap`): its captures carry the bytes (`Source::Jmap`, never
+//! (`bulk_delete_jmap_bound`): its captures carry the bytes (`Source::Jmap`, never
 //! byte-less: a label taken off leaves no Trash copy to recover from), and
 //! each email leaves the mailbox by the label semantics rule.
 
@@ -224,17 +224,6 @@ pub(crate) async fn end_follow_ups_at_owned(state: &Arc<DaemonState>, account_id
 /// (or a uid the ledger never issued) counts as deleted, as an IMAP uid the
 /// server no longer has does. Five at a time, with the IMAP run's
 /// `bulk-operation-progress` frames and reply.
-async fn bulk_delete_jmap(
-    state: &Arc<DaemonState>,
-    account_id: String,
-    config: &crate::imap::ImapConfig,
-    mailbox: String,
-    uids: Vec<u32>,
-    cancel: Arc<std::sync::atomic::AtomicBool>,
-) -> Result<(archive::ArchiveProgress, Vec<u32>), String> {
-    bulk_delete_jmap_bound(state,account_id,config,mailbox,uids,cancel,None).await
-}
-
 async fn bulk_delete_jmap_bound(
     state:&Arc<DaemonState>,account_id:String,config:&crate::imap::ImapConfig,mailbox:String,uids:Vec<u32>,
     cancel:Arc<std::sync::atomic::AtomicBool>,identity:Option<&mailvault_core::bulk_worker::Identity>,
@@ -1446,7 +1435,7 @@ mod tests {
         m.mutate(|st| st.faults.push(mock_jmap::Fault::UnauthorizedOnce));
 
         let config = support::config(&m, port);
-        let (p, deleted) = bulk_delete_jmap(&s, "acct1".into(), &config, "INBOX".into(), uids.clone(), Arc::new(std::sync::atomic::AtomicBool::new(false)))
+        let (p, deleted) = bulk_delete_jmap_bound(&s, "acct1".into(), &config, "INBOX".into(), uids.clone(), Arc::new(std::sync::atomic::AtomicBool::new(false)), None)
             .await
             .expect("ran");
 

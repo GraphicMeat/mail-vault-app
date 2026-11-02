@@ -62,6 +62,13 @@ pub(crate) fn body_fetch_timed_out(uid: u32, mailbox: &str) -> String {
     format!("Timed out after {}s fetching message UID {} from {}", BODY_FETCH_TIMEOUT.as_secs(), uid, mailbox)
 }
 
+/// The same ceiling where no message is named (the capture's own fetch, a bin
+/// recover's read of the Trash copy). The other builder `is_timeout_text`
+/// reads back as a timeout.
+pub(crate) fn body_fetch_ceiling_text() -> String {
+    format!("timed out after {}s", BODY_FETCH_TIMEOUT.as_secs())
+}
+
 /// Same helper as `commands.rs`'s `with_background`, against the daemon's
 /// pool instead of a `tauri::State`. On success the session goes back to the
 /// pool with its last-selected mailbox; on error the guard is dropped (permit

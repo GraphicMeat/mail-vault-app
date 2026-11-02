@@ -5,7 +5,6 @@ import { bindNativeBatch } from './headerIdentity.js';
 
 import { send as transportSend } from './transport.js';
 import { t } from '../i18n/index.js';
-import { binCaptureError } from '../utils/binCapture.js';
 
 const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI__;
 
@@ -324,26 +323,6 @@ export async function updateEmailFlags(account, uid, flags, action = 'add', mail
   });
 }
 
-// The app says what it wants; the daemon decides what that means for the
-// folder (src-daemon/src/message_delete.rs). `mode`:
-//   'auto'      (default) INBOX moves to Trash, any other folder is deleted for
-//               good. The daemon reads the folder name (INBOX is
-//               case-insensitive); nothing here does.
-//   'trash'     always a move to the account's Trash.
-//   'permanent' always removed for good.
-// `bin: false` skips the daemon's copy into the deleted-mail bin (a cleanup
-// rule over mail the vault already holds).
-export async function deleteEmail(account, uid, mailbox = 'INBOX', { mode = 'auto', bin = true } = {}) {
-  if (IS_TAURI) {
-    return tauriInvoke('imap_delete_email', { account, uid, mailbox, mode, bin })
-      .catch((e) => { throw binCaptureError(e); });
-  }
-  return httpRequest(`/email/${uid}/delete`, {
-    method: 'POST',
-    body: JSON.stringify({ account, mailbox, mode }),
-  });
-}
-
 // ── the daemon's delete queue (src-daemon/src/delete_queue.rs) ──
 //
 // The daemon journals a delete before it sends it, retries it on its own
@@ -355,6 +334,16 @@ export async function deleteEmail(account, uid, mailbox = 'INBOX', { mode = 'aut
  * `landed` `[{kind: 'deleted', uid, trash, trashUid, binId} | {kind: 'gone', uid}]`,
  * `queued` uids still owed (settled later by `delete-queue-landed`), and
  * `dropped` `[{uid, reason}]` refused for good. Can take minutes; no budget.
+ *
+ * The app says what it wants; the daemon decides what that means for the
+ * folder (src-daemon/src/message_delete.rs). `mode`:
+ *   'auto'      (default) INBOX moves to Trash, any other folder is deleted for
+ *               good. The daemon reads the folder name (INBOX is
+ *               case-insensitive); nothing here does.
+ *   'trash'     always a move to the account's Trash.
+ *   'permanent' always removed for good.
+ * `bin: false` skips the daemon's copy into the deleted-mail bin (a cleanup
+ * rule over mail the vault already holds).
  */
 export function deleteQueueSubmit({ accountId, mailbox, uids }, { mode = 'auto', bin = true, arg = {} } = {}) {
   return transportSend('delete_queue.submit', { accountId, mailbox, uids, mode, bin, arg });
@@ -739,15 +728,6 @@ export async function vaultApplyFlags(accountId, mailbox, accountEmail, changes)
     return tauriInvoke('vault_apply_flags', { accountId, mailbox, accountEmail, changes });
   }
   return { renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 };
-}
-
-// Re-file vault copies under the uids a move gave their messages
-// (`pairs`: [[oldUid, newUid]]). Answers `{ rebound }`, the pairs it moved.
-export async function vaultRebindUids(accountId, mailbox, pairs) {
-  if (IS_TAURI) {
-    return tauriInvoke('vault_rebind_uids', { accountId, mailbox, pairs });
-  }
-  return { rebound: [] };
 }
 
 export async function removeFromLocalIndex(accountId, mailbox, uid) {
