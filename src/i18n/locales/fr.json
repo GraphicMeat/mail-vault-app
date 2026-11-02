@@ -4111,6 +4111,7 @@
   "errors.syncReceiptUncertain": "La confirmation de l’actualisation native est incertaine",
   "errors.bulkIdentityUncertain": "L’identité du message est incertaine. Actualisez le dossier avant de réessayer.",
   "errors.bulkIdentityChanged": "L’identité du dossier ou du message sélectionné a changé.",
+  "errors.deleteQueueMailboxRenumbered": "Le dossier a été renuméroté sur le serveur, la suppression a donc été annulée. MailVault ne touchera pas aux autres messages qui portent désormais les anciens numéros.",
   "errors.bulkGraphDeleteUnsupported": "La suppression sur le serveur est indisponible pour ce compte Graph.",
   "errors.bulkCopyChanged": "Une copie d’archive vérifiée a changé. Le message reste sur le serveur.",
   "errors.bulkWorkerUnavailable": "Le traitement groupé n’a pas pu démarrer.",

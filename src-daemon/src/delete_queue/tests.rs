@@ -142,6 +142,7 @@ fn classify_reads_each_outcome_once() {
         Verdict::Drop("errors.bulkIdentityChanged".into()),
         "an identity change is the only final refusal"
     );
+    assert_eq!(classify(8, &Err(Refusal::Renumbered)), Verdict::Stop(RENUMBERED.into()), "a renumbered folder stops the delete, kept listed");
     match classify(4, &Err(Refusal::BinCapture(CaptureFailure::Fetch("NO fetch failed".into())))) {
         Verdict::Retry(reason) => assert!(reason.starts_with("E_BIN_CAPTURE:fetch"), "{reason}"),
         other => panic!("a required capture that failed is retried, not {other:?}"),
@@ -523,4 +524,149 @@ async fn a_refused_submit_names_each_still_owed_uid_with_its_last_reason() {
     let out = r.result.expect("answered");
     assert_eq!(out["queued"], json!([1]));
     assert_eq!(out["refused"], json!([]), "offline nothing was refused");
+}
+
+// ── a folder renumbered on the server (UIDVALIDITY) ─────────────────────────
+
+/// The reason a delete the server's renumbering stopped keeps.
+pub(super) const RENUMBERED: &str = "errors.deleteQueueMailboxRenumbered";
+
+/// A different message, the one a reissued uid 1 may name.
+const STRANGER: &str = "From: Bob <bob@example.com>\r\nTo: user@example.com\r\nSubject: Not the one you deleted\r\n\
+Message-ID: <stranger@example.com>\r\nDate: Mon, 1 Jan 2024 00:00:00 +0000\r\n\r\nSomeone else's mail.\r\n";
+
+/// The header cache's record of INBOX's generation, as a sync leaves it.
+pub(super) fn cache_generation(f: &Fixture, validity: u32) {
+    crate::custody::with_conn(&f.s, |c| cache::save_headers(c, "acc1", "INBOX", &json!({"uidValidity": validity}).to_string())).unwrap();
+}
+
+/// The server reissues INBOX's uids: UIDVALIDITY 42, uid 1 now names `one`
+/// (or nothing), and the user's message has a new uid.
+fn renumber(f: &Fixture, one: Option<&str>) {
+    f.srv.mutate(|st| {
+        let inbox = st.find_mut("INBOX").unwrap();
+        inbox.uid_validity = 42;
+        inbox.messages.clear();
+        if let Some(raw) = one {
+            inbox.add(Message::new(1, raw));
+        }
+        inbox.add(Message::new(2, RAW));
+    });
+}
+
+fn untouched(f: &Fixture) {
+    for command in ["UID MOVE", "UID COPY", "STORE", "EXPUNGE"] {
+        assert_eq!(f.srv.count_commands(command), 0, "no {command} reached the server");
+    }
+}
+
+/// What `delete_queue.list` answers for the one entry.
+async fn listed(f: &Fixture) -> Value {
+    let list = route(&f.s, "delete_queue.list", &json!({}), json!(1)).await.unwrap().result.unwrap();
+    assert_eq!(list.as_array().map(Vec::len), Some(1), "one entry listed: {list}");
+    list[0].clone()
+}
+
+#[tokio::test]
+async fn a_submit_records_the_folders_generation_from_the_cache_and_never_the_apps() {
+    let f = fixture(vec![]);
+    f.s.net.test_set_online(false);
+    cache_generation(&f, 7);
+    submit(&f.s, Submit { arg: json!({"total": 1, "uidValidity": 99}), ..ask(&[1], Mode::Trash) }).await.unwrap();
+    assert_eq!(f.journal()[0].arg["uidValidity"], 7, "{}", f.journal()[0].arg);
+    assert_eq!(f.journal()[0].arg["total"], 1);
+
+    // Unknown: none recorded, and the app's own value is never kept.
+    let g = fixture(vec![]);
+    g.s.net.test_set_online(false);
+    submit(&g.s, Submit { arg: json!({"uidValidity": 99}), ..ask(&[1], Mode::Trash) }).await.unwrap();
+    assert!(g.journal()[0].arg.get("uidValidity").is_none(), "{}", g.journal()[0].arg);
+}
+
+#[tokio::test]
+async fn a_delete_sent_in_the_generation_it_was_queued_against_lands() {
+    let f = fixture(vec![]);
+    cache_generation(&f, 1); // the mock's INBOX is UIDVALIDITY 1
+    let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
+    assert!(matches!(reply.landed.as_slice(), [Landed::Deleted { uid: 1, .. }]), "{reply:?}");
+    assert!(!f.in_inbox(1) && f.in_trash());
+    assert!(f.journal().is_empty());
+}
+
+/// The server renumbered INBOX between the list the user clicked in and the
+/// send: uid 1 is someone else now. Nothing is sent, the uid is no longer
+/// owed (so its row shows again), and the entry stays listed with the reason
+/// until the user cancels it. No pass sends it again, nor does Retry now.
+#[tokio::test]
+async fn a_folder_renumbered_before_the_send_is_never_touched_and_the_entry_says_why() {
+    let f = fixture(vec![]);
+    cache_generation(&f, 1);
+    renumber(&f, Some(STRANGER));
+    let mut rx = f.s.events.subscribe();
+    let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, RENUMBERED.into())], ..Default::default() });
+    untouched(&f);
+    assert!(f.in_inbox(1) && f.in_inbox(2), "the server holds both, untouched");
+    assert!(crate::message_delete_characterization_tests::bin_rows(&f.s).is_empty(), "no bin copy is left of a delete that never happened");
+
+    let entry = listed(&f).await;
+    assert_eq!(entry["uids"], json!([]), "nothing owed: the app shows the row again");
+    assert_eq!(entry["failures"]["1"]["message"], RENUMBERED);
+    assert_eq!(entry["failures"]["1"]["stopped"], true);
+    assert!(events(&mut rx).iter().any(|(n, _)| n == "delete-queue-changed"));
+
+    let selects = f.srv.count_commands("SELECT");
+    worker::pass(&f.s, "retry").await;
+    worker::run_now(&f.s, worker::MANUAL.into()).await.unwrap();
+    assert_eq!(f.srv.count_commands("SELECT"), selects, "never sent again");
+    listed(&f).await;
+
+    // Cancel in Settings takes it off the list.
+    let id = f.journal()[0].id;
+    let r = route(&f.s, "delete_queue.cancel", &json!({"id": id, "uids": [1]}), json!(1)).await.unwrap();
+    assert!(r.error.is_none(), "{:?}", r.error);
+    assert!(f.journal().is_empty(), "{:?}", f.journal());
+}
+
+/// A permanent delete with no local copy fetches its bin copy from the
+/// server first: in a renumbered folder that copy would be a stranger's
+/// message, and the EXPUNGE would destroy it.
+#[tokio::test]
+async fn a_permanent_delete_in_a_renumbered_folder_keeps_no_strangers_copy_and_deletes_nothing() {
+    let f = fixture(vec![]);
+    cache_generation(&f, 1);
+    renumber(&f, Some(STRANGER));
+    let reply = submit(&f.s, ask(&[1], Mode::Permanent)).await.unwrap();
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, RENUMBERED.into())], ..Default::default() });
+    untouched(&f);
+    assert_eq!(f.srv.count_commands("BODY.PEEK[]"), 0, "no body read in the wrong generation");
+    assert!(f.in_inbox(1), "the stranger is still there");
+    assert!(crate::message_delete_characterization_tests::bin_rows(&f.s).is_empty(), "no copy of a stranger's message");
+    assert_eq!(listed(&f).await["failures"]["1"]["message"], RENUMBERED);
+}
+
+/// A refused move asks the folder whether uid 1 is still there. After a
+/// renumber every old uid reads as absent: that is not "gone".
+#[tokio::test]
+async fn a_refused_move_in_a_renumbered_folder_is_not_read_as_gone() {
+    let f = fixture(refuse_the_move());
+    cache_generation(&f, 1);
+    renumber(&f, None);
+    let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
+    assert_eq!(reply, SubmitReply { dropped: vec![(1, RENUMBERED.into())], ..Default::default() });
+    assert_eq!(listed(&f).await["failures"]["1"]["message"], RENUMBERED);
+}
+
+/// One uid found the folder renumbered: the rest of the entry is the same
+/// generation, so none of it is sent.
+#[tokio::test]
+async fn one_renumbered_uid_stops_the_whole_entry() {
+    let f = fixture(vec![]);
+    cache_generation(&f, 1);
+    renumber(&f, Some(STRANGER));
+    let reply = submit(&f.s, ask(&[1, 2, 3], Mode::Trash)).await.unwrap();
+    assert_eq!(reply.dropped.iter().map(|(uid, why)| (*uid, why.as_str())).collect::<Vec<_>>(), vec![(1, RENUMBERED), (2, RENUMBERED), (3, RENUMBERED)]);
+    assert!(reply.landed.is_empty() && reply.queued.is_empty(), "{reply:?}");
+    assert_eq!(f.srv.count_commands("SELECT"), 1, "one look, then nothing more for this folder");
+    untouched(&f);
 }

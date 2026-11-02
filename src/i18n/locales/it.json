@@ -4111,6 +4111,7 @@
   "errors.syncReceiptUncertain": "La conferma dell’aggiornamento nativo è incerta",
   "errors.bulkIdentityUncertain": "L’identità del messaggio è incerta. Aggiorna la cartella prima di riprovare.",
   "errors.bulkIdentityChanged": "L’identità della cartella o del messaggio selezionato è cambiata.",
+  "errors.deleteQueueMailboxRenumbered": "La cartella è stata rinumerata sul server, quindi questa eliminazione è stata annullata. MailVault non toccherà altri messaggi che ora hanno i vecchi numeri.",
   "errors.bulkGraphDeleteUnsupported": "L’eliminazione sul server non è disponibile per questo account Graph.",
   "errors.bulkCopyChanged": "Una copia di archivio verificata è cambiata. Il messaggio è stato conservato sul server.",
   "errors.bulkWorkerUnavailable": "Impossibile avviare l’elaborazione collettiva.",

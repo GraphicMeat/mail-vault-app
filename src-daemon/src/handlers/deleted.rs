@@ -54,7 +54,10 @@ pub(crate) enum Source<'a> {
     /// `permanent`: the server keeps nothing, so the bytes are downloaded
     /// when nothing local holds them. `priority`: the user's lane (a click),
     /// else the background lane (a bulk run).
-    Imap { config: &'a ImapConfig, permanent: bool, priority: bool },
+    /// `generation`: the folder UIDVALIDITY the uid was queued in, compared
+    /// at the fetch's SELECT (another one fails it with
+    /// `errors.bulkIdentityChanged`); `None` is unchecked.
+    Imap { config: &'a ImapConfig, permanent: bool, priority: bool, generation: Option<u32> },
     /// Worker-only original identity. Never substitutes an unbound local UID
     /// copy for the message proved by the selected provider connection.
     Bound {config:&'a ImapConfig,identity:&'a mailvault_core::bulk_worker::Identity},
@@ -226,13 +229,14 @@ pub(crate) async fn capture_stamped(
                 permanent: false, ..
             } => (None, None),
             Source::Imap {
-                config, priority, ..
+                config, priority, generation, ..
             } => {
                 let mb = mailbox.to_string();
                 let fetch = state.imap_pool.run_read(config, priority, |mut session| {
                     let mb = mb.clone();
                     async move {
-                        let email = imap::fetch_email_by_uid_light(&mut session, &mb, uid).await?;
+                        let timings = std::sync::Mutex::new(imap::pool::ReadTimings::default());
+                        let email = imap::fetch_email_by_uid_light_timed_owned(&mut session, &mb, uid, generation, &timings).await?;
                         Ok((email, session, Some(mb)))
                     }
                 });

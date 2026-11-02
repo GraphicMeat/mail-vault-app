@@ -24,7 +24,11 @@
 //!   credentials, and a wait for a quiet UI before each uid. A uid a submit
 //!   holds is left to it.
 //!
-//! The entry's `arg` says how it is sent (`replay_intent`). The journal lock
+//! The entry's `arg` says how it is sent (`replay_intent`), and into which
+//! folder generation (`arg.uidValidity`, see `delete_queue`): a server that
+//! renumbered the folder stops the entry's uids, nothing sent, and a stopped
+//! uid is no longer owed, so no later pass (nor Retry now) takes it up. The
+//! entry stays listed until the user cancels it. The journal lock
 //! is taken per read or write, never across a send. Every pass but a manual
 //! one ends with `delete-queue-status {kept, online}`.
 //!

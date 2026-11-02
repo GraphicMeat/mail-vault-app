@@ -1992,11 +1992,34 @@ pub async fn delete_email(
     permanent: bool,
     has_uidplus: bool,
 ) -> Result<DeleteOutcome, String> {
+    delete_email_in(session, mailbox, uid, permanent, has_uidplus, None).await
+}
+
+/// `delete_email`, sent only when the SELECT reports the UIDVALIDITY
+/// `expected_uid_validity` names (when it names one): a uid is only a name
+/// inside one generation, and in another it may be someone else's message.
+/// Another generation (or a SELECT that reports none) answers exactly
+/// `errors.bulkIdentityChanged` with nothing sent after the SELECT.
+pub async fn delete_email_in(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uid: u32,
+    permanent: bool,
+    has_uidplus: bool,
+    expected_uid_validity: Option<u32>,
+) -> Result<DeleteOutcome, String> {
     info!(
         "[delete_email] start uid={} mailbox={} permanent={} uidplus={}",
         uid, mailbox, permanent, has_uidplus
     );
-    let _mbox = select_mailbox(session, mailbox).await?;
+    let mbox = select_mailbox(session, mailbox).await?;
+    if expected_uid_validity.is_some() && mbox.uid_validity != expected_uid_validity {
+        tracing::warn!(
+            "[delete_email] uid={} mailbox={}: UIDVALIDITY {:?}, queued in {:?}: nothing sent",
+            uid, mailbox, mbox.uid_validity, expected_uid_validity
+        );
+        return Err("errors.bulkIdentityChanged".to_owned());
+    }
 
     if permanent {
         run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid), "STORE \\Deleted").await?;

@@ -148,7 +148,7 @@ async fn capture_all(
                 if config.uses_jmap() {
                     crate::handlers::deleted::Source::Jmap { config }
                 } else {
-                    crate::handlers::deleted::Source::Imap { config, permanent: true, priority: false }
+                    crate::handlers::deleted::Source::Imap { config, permanent: true, priority: false, generation: None }
                 }
             };
             let mut captured = crate::handlers::deleted::capture_stamped(state, original.clone(), account_id, mailbox, uid, source()).await;

@@ -102,7 +102,7 @@ export function PendingActionsSettings({ focus = false }) {
 
   const cancel = async (entry) => {
     if (entry.op === 'delete') {
-      await api.deleteQueueCancel(entry.id, entry.uids);
+      await api.deleteQueueCancel(entry.id, [...entry.uids, ...stoppedOf(entry)]);
     } else {
       await db.clearOps({
         op: entry.op,
@@ -118,13 +118,19 @@ export function PendingActionsSettings({ focus = false }) {
   };
 
   const emailFor = id => accounts.find(a => a.id === id)?.email || id;
+  // A queued delete the daemon stopped for good with nothing sent (the server
+  // renumbered the folder): no longer owed, so its rows show again, but kept
+  // here with the reason until it is cancelled.
+  const stoppedOf = entry => (entry.op === 'delete'
+    ? Object.entries(entry.failures || {}).filter(([uid, f]) => f?.stopped && !entry.uids.includes(Number(uid))).map(([uid]) => Number(uid))
+    : []);
   // One entry can hold several uids; the first one with a reason is the reason.
   // A queued delete carries its own (`failures`, by uid, kept by the daemon);
   // anything else, and a delete the bulk tool queued and noted itself, has
   // this session's reason from the app.
   const failureOf = (entry, uid) => (entry.op === 'delete' ? entry.failures?.[uid] : null)
     ?? failures.get(db.failureKey({ op: entry.op, accountId: entry.accountId, mailbox: entry.mailbox, uid }));
-  const reasonFor = entry => entry.uids.map(uid => failureOf(entry, uid)).find(Boolean)?.message;
+  const reasonFor = entry => [...entry.uids, ...stoppedOf(entry)].map(uid => failureOf(entry, uid)).find(Boolean)?.message;
   // A delete of several messages keeps all of them listed (messageMutations
   // `_queuedList`): its `uids` are what is still owed, the rest went, unless
   // a reason says the server refused it.
@@ -163,8 +169,9 @@ export function PendingActionsSettings({ focus = false }) {
           {ops.map(entry => {
             const Icon = OP_ICON[entry.op] || Clock;
             const reason = reasonFor(entry);
-            const total = Math.max(entry.arg?.total || 0, entry.uids.length);
-            const gone = total - entry.uids.length;
+            const stopped = stoppedOf(entry).length;
+            const total = Math.max(entry.arg?.total || 0, entry.uids.length + stopped);
+            const gone = total - entry.uids.length - stopped;
             const messages = Array.isArray(entry.arg?.messages) ? entry.arg.messages : null;
             // A queued delete the daemon has not sent once, and has no reason
             // for: it waits for the link, or for the account's password to be

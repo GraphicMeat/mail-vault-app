@@ -4111,6 +4111,7 @@
   "errors.syncReceiptUncertain": "ネイティブ更新の確認ができません",
   "errors.bulkIdentityUncertain": "メッセージの識別情報が不確かです。フォルダーを更新してから再試行してください。",
   "errors.bulkIdentityChanged": "選択したフォルダーまたはメッセージの識別情報が変わりました。",
+  "errors.deleteQueueMailboxRenumbered": "サーバー上でフォルダーの番号が振り直されたため、この削除は取り消されました。MailVault は、古い番号を持つようになった別のメッセージには触れません。",
   "errors.bulkGraphDeleteUnsupported": "このGraphアカウントではサーバー上の削除は利用できません。",
   "errors.bulkCopyChanged": "検証済みのアーカイブコピーが変わりました。サーバー上のメッセージは保持されました。",
   "errors.bulkWorkerUnavailable": "一括処理を開始できませんでした。",

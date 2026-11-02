@@ -4111,6 +4111,7 @@
   "errors.syncReceiptUncertain": "A confirmação da atualização nativa é incerta",
   "errors.bulkIdentityUncertain": "A identidade da mensagem é incerta. Atualize a pasta antes de tentar novamente.",
   "errors.bulkIdentityChanged": "A identidade da pasta ou da mensagem selecionada foi alterada.",
+  "errors.deleteQueueMailboxRenumbered": "A pasta foi renumerada no servidor, então esta exclusão foi cancelada. O MailVault não vai mexer em outras mensagens que agora têm os números antigos.",
   "errors.bulkGraphDeleteUnsupported": "A exclusão no servidor não está disponível para esta conta Graph.",
   "errors.bulkCopyChanged": "Uma cópia de arquivo verificada foi alterada. A mensagem foi mantida no servidor.",
   "errors.bulkWorkerUnavailable": "Não foi possível iniciar o processamento em massa.",

@@ -4111,6 +4111,7 @@
   "errors.syncReceiptUncertain": "Die Bestätigung der nativen Aktualisierung ist ungewiss",
   "errors.bulkIdentityUncertain": "Die Nachrichtenidentität ist unklar. Aktualisieren Sie den Ordner und versuchen Sie es erneut.",
   "errors.bulkIdentityChanged": "Die Identität des gewählten Ordners oder der Nachricht hat sich geändert.",
+  "errors.deleteQueueMailboxRenumbered": "Der Ordner wurde auf dem Server neu nummeriert, deshalb wurde das Löschen abgebrochen. MailVault rührt keine anderen Nachrichten an, die jetzt die alten Nummern tragen.",
   "errors.bulkGraphDeleteUnsupported": "Das Löschen auf dem Server ist für dieses Graph-Konto nicht verfügbar.",
   "errors.bulkCopyChanged": "Eine geprüfte Archivkopie hat sich geändert. Die Nachricht bleibt auf dem Server.",
   "errors.bulkWorkerUnavailable": "Die Sammelverarbeitung konnte nicht gestartet werden.",

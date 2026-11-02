@@ -1207,6 +1207,8 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
         Err(Refusal::BinCapture(e)) if is_auth_error(&e.detail()) => Err(Fail::Rpc(e.detail())),
         Err(Refusal::BinCapture(e)) => Err(Fail::Rpc(e.wire())),
         Err(Refusal::Server(e)) => Err(Fail::Rpc(e)),
+        // Unreachable: JMAP has no generation to check.
+        Err(Refusal::Renumbered) => Err(Fail::Rpc("errors.bulkIdentityChanged".into())),
     }
 }
 

@@ -26,6 +26,16 @@
 //!   earlier move landed with its reply lost, or another client removed it)
 //!   rather than an error the delete queue would retry for ever. A check
 //!   that fails keeps the move's own error.
+//! - A uid is a name only inside one UIDVALIDITY. The delete queue passes
+//!   the generation it queued the uid in (`generation`); over IMAP every
+//!   SELECT on the way (the bin capture's fetch, the remove, the
+//!   still-there check) compares it, and on a mismatch (a reply with no
+//!   UIDVALIDITY counts as one) nothing more is sent and the delete answers
+//!   `Refusal::Renumbered`: the old uid may name another message now. A
+//!   capture this call made is dropped then, permanent or not: nothing was
+//!   sent. `None` (an entry with no recorded generation, every click outside
+//!   the queue) is unchecked, as before. JMAP and Graph have no UIDVALIDITY
+//!   and ignore it.
 //!
 //! IMAP removes on the priority lane (`run_uid_delete`, `priority: true`): a
 //! click never queues behind a bulk run. The delete queue's background replay
@@ -140,9 +150,9 @@ impl Provider<'_> {
         }
     }
 
-    fn source(&self, permanent: bool, priority: bool) -> Source<'_> {
+    fn source(&self, permanent: bool, priority: bool, generation: Option<u32>) -> Source<'_> {
         match self {
-            Provider::Imap(config) => Source::Imap { config, permanent, priority },
+            Provider::Imap(config) => Source::Imap { config, permanent, priority, generation },
             Provider::Jmap(config) => Source::Jmap { config },
             Provider::Graph { .. } => Source::Graph,
         }
@@ -172,6 +182,19 @@ pub(crate) enum Refusal {
     BinCapture(CaptureFailure),
     /// The provider's own error (the message is still there, or the reply was lost).
     Server(String),
+    /// The folder's UIDVALIDITY is not the generation the delete was queued
+    /// in: the uid may name another message now, so nothing was sent.
+    Renumbered,
+}
+
+/// What `imap` answers when a SELECT finds another generation than expected.
+const IDENTITY_CHANGED: &str = "errors.bulkIdentityChanged";
+
+/// Whether a SELECT that reported `selected` is outside `expected`. A
+/// generation not asked for (`None`) is never outside; a reply that names
+/// none is (the same rule as `imap::fetch_email_by_uid_light_timed_owned`).
+fn outside(expected: Option<u32>, selected: Option<u32>) -> bool {
+    expected.is_some() && selected != expected
 }
 
 /// What the provider did.
@@ -193,12 +216,13 @@ pub(crate) async fn delete_one(
     mode: Mode,
     bin: bool,
 ) -> Result<Outcome, Refusal> {
-    delete_one_on(state, provider, account_id, mailbox, uid, mode, bin, true).await
+    delete_one_on(state, provider, account_id, mailbox, uid, mode, bin, true, None).await
 }
 
 /// `delete_one` on the IMAP pool's priority lane (`priority`, a click) or
-/// its background lane (the delete queue's replay worker). JMAP and Graph
-/// have no lanes.
+/// its background lane (the delete queue's replay worker), sent only into
+/// the folder generation `generation` names when it names one (IMAP; see
+/// the module doc). JMAP and Graph have no lanes and no generation.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn delete_one_on(
     state: &Arc<DaemonState>,
@@ -209,12 +233,14 @@ pub(crate) async fn delete_one_on(
     mode: Mode,
     bin: bool,
     priority: bool,
+    generation: Option<u32>,
 ) -> Result<Outcome, Refusal> {
     let mode = provider.mode(mode, mailbox);
     let policy = capture_policy(mode, bin);
     let wants_stamp = policy != CapturePolicy::Skip || matches!(provider, Provider::Jmap(_));
     let original = if wants_stamp { state.account_lifecycle.capture(account_id).ok() } else { None };
-    run(state, original, provider, account_id, mailbox, uid, mode, policy, priority).await
+    let generation = generation.filter(|_| matches!(provider, Provider::Imap(_)));
+    run(state, original, provider, account_id, mailbox, uid, mode, policy, priority, generation).await
 }
 
 /// `delete_one` under the account stamp `original` (`None`: the account is
@@ -232,11 +258,12 @@ pub(crate) async fn delete_one_stamped(
 ) -> Result<Outcome, Refusal> {
     let mode = provider.mode(mode, mailbox);
     let policy = capture_policy(mode, bin);
-    run(state, original, provider, account_id, mailbox, uid, mode, policy, true).await
+    run(state, original, provider, account_id, mailbox, uid, mode, policy, true, None).await
 }
 
 /// The sequence, for a `mode` already resolved by `Provider::mode` (never
-/// `Auto`) and the `policy` that mode and `bin` give.
+/// `Auto`) and the `policy` that mode and `bin` give, in the IMAP folder
+/// generation `generation` (`None`: unchecked).
 #[allow(clippy::too_many_arguments)]
 async fn run(
     state: &Arc<DaemonState>,
@@ -248,6 +275,7 @@ async fn run(
     mode: Mode,
     policy: CapturePolicy,
     priority: bool,
+    generation: Option<u32>,
 ) -> Result<Outcome, Refusal> {
     debug_assert_ne!(mode, Mode::Auto, "the caller resolves Auto against the folder");
     let tag = provider.name();
@@ -263,10 +291,15 @@ async fn run(
         CapturePolicy::Skip => None,
         CapturePolicy::BestEffort | CapturePolicy::Required => {
             let captured = match &original {
-                Some(stamp) => deleted::capture_stamped(state, stamp.clone(), account_id, mailbox, uid, provider.source(permanent, priority)).await,
+                Some(stamp) => deleted::capture_stamped(state, stamp.clone(), account_id, mailbox, uid, provider.source(permanent, priority, generation)).await,
                 None => Err(CaptureFailure::Busy),
             };
             match captured {
+                // The fetch found another generation: nothing kept, nothing sent.
+                Err(CaptureFailure::Fetch(e)) if generation.is_some() && e == IDENTITY_CHANGED => {
+                    warn!("[delete:{tag}] {account_id}/{mailbox} uid={uid} not deleted: the folder was renumbered on the server since it was queued");
+                    return Err(Refusal::Renumbered);
+                }
                 Ok(binned) => {
                     // A capture that fetched from the server and kept nothing
                     // found nothing there (`deleted::capture_stamped`).
@@ -286,7 +319,7 @@ async fn run(
     };
 
     let removed = match &provider {
-        Provider::Imap(config) => remove_imap(state, config, mailbox, uid, permanent, priority).await,
+        Provider::Imap(config) => remove_imap(state, config, mailbox, uid, permanent, priority, generation).await,
         Provider::Jmap(config) => match &original {
             Some(stamp) => crate::handlers::jmap_bridge::remove_for_delete(state, config, stamp, account_id, mailbox, uid, permanent)
                 .await
@@ -317,11 +350,21 @@ async fn run(
         }
         Err(e) => {
             // A move to Trash cannot tell "already gone" from its refusal:
-            // the folder can.
-            let gone = match &provider {
-                Provider::Imap(config) if !permanent => uid_absent(state, config, mailbox, uid, priority).await,
-                _ => false,
+            // the folder can, in the generation the uid was queued in.
+            let presence = match &provider {
+                Provider::Imap(_) if generation.is_some() && e == IDENTITY_CHANGED => Presence::Renumbered,
+                Provider::Imap(config) if !permanent => uid_presence(state, config, mailbox, uid, priority, generation).await,
+                _ => Presence::Unknown,
             };
+            if presence == Presence::Renumbered {
+                warn!("[delete:{tag}] {account_id}/{mailbox} uid={uid} not deleted: the folder was renumbered on the server since it was queued");
+                // Nothing was sent: no delete to undo, permanent or not.
+                if let Some((id, true)) = binned {
+                    forget(state, id, original).await;
+                }
+                return Err(Refusal::Renumbered);
+            }
+            let gone = presence == Presence::Absent;
             if gone {
                 warn!("[delete:{tag}] {account_id}/{mailbox} uid={uid}: the move was refused and the folder no longer holds it: gone ({e})");
             } else {
@@ -338,25 +381,43 @@ async fn run(
     }
 }
 
+/// What the folder says of a uid a move to Trash was refused.
+#[derive(Debug, PartialEq)]
+enum Presence {
+    /// Known not to hold it.
+    Absent,
+    /// Holds it, or could not be asked: not known gone.
+    Unknown,
+    /// Another generation than the one the uid was queued in: the question
+    /// has no answer, every old uid reads as absent there.
+    Renumbered,
+}
+
 /// Whether `mailbox` is known not to hold `uid` (`UID SEARCH UID`, read
-/// through its tagged OK). Any failure to ask is `false`: not known gone.
-async fn uid_absent(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, priority: bool) -> bool {
+/// through its tagged OK), asked only in the generation `generation` names.
+/// Any failure to ask is `Unknown`: not known gone.
+async fn uid_presence(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, priority: bool, generation: Option<u32>) -> Presence {
     let checked = state
         .imap_pool
         .run_read(account, priority, |mut session| {
             let mailbox = mailbox.to_string();
             async move {
-                imap::select_mailbox(&mut session, &mailbox).await?;
+                let selected = imap::select_mailbox(&mut session, &mailbox).await?;
+                if outside(generation, selected.uid_validity) {
+                    return Ok((None, session, Some(mailbox)));
+                }
                 let present = imap::uids_present(&mut session, &[uid]).await?;
-                Ok((present, session, Some(mailbox)))
+                Ok((Some(present), session, Some(mailbox)))
             }
         })
         .await;
     match checked {
-        Ok(present) => !present.contains(&uid),
+        Ok(None) => Presence::Renumbered,
+        Ok(Some(present)) if !present.contains(&uid) => Presence::Absent,
+        Ok(Some(_)) => Presence::Unknown,
         Err(e) => {
             warn!("[delete] {mailbox} uid={uid}: could not ask whether it is still there: {e}");
-            false
+            Presence::Unknown
         }
     }
 }
@@ -381,7 +442,10 @@ async fn forget(state: &Arc<DaemonState>, id: String, original: Option<AccountSt
 /// after checkout. `pool_ref`/`acct` are bound outside the closure because
 /// `run_uid_delete` wants `Fn`, not `FnOnce` (the dead-socket retry can call
 /// it twice).
-async fn remove_imap(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, permanent: bool, priority: bool) -> Result<Removed, String> {
+///
+/// `generation`: compared after the SELECT, before anything is sent; another
+/// one answers exactly `IDENTITY_CHANGED`.
+async fn remove_imap(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, permanent: bool, priority: bool, generation: Option<u32>) -> Result<Removed, String> {
     let pool_ref: &ImapPool = &state.imap_pool;
     let acct = account;
     state
@@ -390,9 +454,9 @@ async fn remove_imap(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &s
             let mailbox = mailbox.to_string();
             async move {
                 let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
-                let outcome = imap::delete_email(&mut session, &mailbox, uid, permanent, has_uidplus)
+                let outcome = imap::delete_email_in(&mut session, &mailbox, uid, permanent, has_uidplus, generation)
                     .await
-                    .map_err(|e| format!("Failed to delete email: {}", e))?;
+                    .map_err(|e| if generation.is_some() && e == IDENTITY_CHANGED { e } else { format!("Failed to delete email: {}", e) })?;
                 Ok((outcome, session, Some(mailbox)))
             }
         })

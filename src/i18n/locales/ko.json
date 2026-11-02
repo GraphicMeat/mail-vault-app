@@ -4111,6 +4111,7 @@
   "errors.syncReceiptUncertain": "기본 새로고침 확인이 불확실합니다",
   "errors.bulkIdentityUncertain": "메시지 식별 정보가 불확실합니다. 폴더를 새로 고친 후 다시 시도하세요.",
   "errors.bulkIdentityChanged": "선택한 폴더 또는 메시지의 식별 정보가 변경되었습니다.",
+  "errors.deleteQueueMailboxRenumbered": "서버에서 폴더 번호가 다시 매겨져 이 삭제가 취소되었습니다. MailVault는 이제 이전 번호를 가진 다른 메시지를 건드리지 않습니다.",
   "errors.bulkGraphDeleteUnsupported": "이 Graph 계정에서는 서버 삭제를 사용할 수 없습니다.",
   "errors.bulkCopyChanged": "확인된 보관 사본이 변경되었습니다. 서버 메시지는 유지되었습니다.",
   "errors.bulkWorkerUnavailable": "일괄 작업을 시작할 수 없습니다.",

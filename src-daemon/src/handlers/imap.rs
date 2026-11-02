@@ -887,6 +887,8 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
                 Ok(out) => RpcResponse::success(id, json!({"success": true, "trash": out.trash, "trashUid": out.trash_uid, "binId": out.bin_id})),
                 Err(Refusal::BinCapture(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e.wire()),
                 Err(Refusal::Server(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+                // Unreachable: no generation is checked outside the delete queue.
+                Err(Refusal::Renumbered) => RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.bulkIdentityChanged".to_string()),
             }
         }
 

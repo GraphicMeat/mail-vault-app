@@ -288,6 +288,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 // Unreachable for Graph (its capture is best effort), kept total.
                 Err(Refusal::BinCapture(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e.wire()),
                 Err(Refusal::Server(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+                // Unreachable: no generation is checked outside the delete queue.
+                Err(Refusal::Renumbered) => RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.bulkIdentityChanged".to_string()),
             }
         }
 

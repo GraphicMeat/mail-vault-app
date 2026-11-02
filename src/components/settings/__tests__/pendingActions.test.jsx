@@ -236,3 +236,40 @@ describe('a JMAP refusal', () => {
     expect(screen.queryByText(/E_JMAP_NO_TRASH/)).toBeNull();
   });
 });
+
+// The server renumbered the folder: the daemon sent nothing, owes nothing
+// (the rows show again), and keeps the entry and its reason until cancelled.
+describe('a delete the server renumbering stopped', () => {
+  const stopped = (over = {}) => entry({
+    uids: [],
+    arg: { total: 2, messages: [{ uid: 7, subject: 'Old invoice', from: 'Shop' }, { uid: 9, subject: 'Old digest', from: 'News' }], mode: 'auto', bin: true, uidValidity: 1 },
+    failures: {
+      7: { ...failure('errors.deleteQueueMailboxRenumbered'), stopped: true },
+      9: { ...failure('errors.deleteQueueMailboxRenumbered'), stopped: true },
+    },
+    ...over,
+  });
+
+  it('says why, counts no message as deleted, and marks each as not deleted', async () => {
+    mockQueueList.mockResolvedValue([stopped()]);
+
+    render(<PendingActionsSettings />);
+
+    expect(await screen.findByText(/2 messages/i)).toBeTruthy();
+    expect(screen.getByText(/renumbered on the server/i)).toBeTruthy();
+    expect(screen.queryByText(/deleted, \d+ not yet/)).toBeNull();
+    expect(screen.getByText('Old invoice').closest('li').textContent).toMatch(/Not deleted$/);
+    expect(screen.getByText('Old digest').closest('li').textContent).toMatch(/Not deleted$/);
+  });
+
+  it('cancels the stopped messages too', async () => {
+    mockQueueList.mockResolvedValue([stopped({ uids: [11], failures: { 7: { ...failure('errors.deleteQueueMailboxRenumbered'), stopped: true } } })]);
+    render(<PendingActionsSettings />);
+    await screen.findByText(/a@mock\.test/);
+
+    mockQueueList.mockResolvedValue([]);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /cancel/i })); });
+
+    expect(mockQueueCancel).toHaveBeenCalledWith(1, [11, 7]);
+  });
+});

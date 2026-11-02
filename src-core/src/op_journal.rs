@@ -34,10 +34,20 @@ pub struct Failure {
     /// when a newer reason replaces this one; the worker's backoff reads it.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub passes: u32,
+    /// The delete was stopped for good and nothing was sent (the server
+    /// renumbered the folder since it was queued): the uid is no longer owed,
+    /// but its entry stays listed with this reason until the user cancels it
+    /// (`stop_by_id`). Absent from rows written before it existed.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub stopped: bool,
 }
 
 fn is_zero(n: &u32) -> bool {
     *n == 0
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -68,6 +78,31 @@ pub struct OpEntry {
     pub failures: BTreeMap<u32, Failure>,
 }
 
+/// The `arg` key a daemon-queued delete keeps the folder's UIDVALIDITY
+/// under: the generation its uids were read in.
+pub const UID_VALIDITY_KEY: &str = "uidValidity";
+
+/// `UID_VALIDITY_KEY` of `value` (an entry's `arg`, or the header cache's
+/// meta, which keeps the same key): a UIDVALIDITY, or `None` for anything
+/// that is not one (absent, 0, not a u32).
+pub fn uid_validity_of(value: &serde_json::Value) -> Option<u32> {
+    value.get(UID_VALIDITY_KEY).and_then(serde_json::Value::as_u64).and_then(|v| u32::try_from(v).ok()).filter(|v| *v != 0)
+}
+
+impl OpEntry {
+    /// The folder generation (UIDVALIDITY) this entry was queued against.
+    /// `None` for an entry the app wrote, one an older daemon wrote, or one
+    /// queued while the generation was unknown: sent as before, unchecked.
+    pub fn uid_validity(&self) -> Option<u32> {
+        uid_validity_of(&self.arg)
+    }
+
+    /// The uids a stop took off this entry (`stop_by_id`), still listed.
+    pub fn stopped_uids(&self) -> Vec<u32> {
+        self.failures.iter().filter(|(uid, f)| f.stopped && !self.uids.contains(uid)).map(|(uid, _)| *uid).collect()
+    }
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -90,12 +125,14 @@ fn row_to_entry(row: crate::app_db::ops::Full) -> OpEntry {
 }
 
 /// Write `entry`'s uids and failures back, dropping the failures of uids it
-/// no longer owes, or delete it when it owes nothing.
+/// no longer owes (a stop's are kept: `Failure.stopped`), or delete it when
+/// it owes nothing and lists no stop.
 fn store_uids(conn: &crate::app_db::Connection, entry: &OpEntry) -> Result<(), String> {
     let uids = serde_json::to_string(&entry.uids).map_err(|e| e.to_string())?;
-    let failures: BTreeMap<&u32, &Failure> = entry.failures.iter().filter(|(uid, _)| entry.uids.contains(uid)).collect();
+    let failures: BTreeMap<&u32, &Failure> = entry.failures.iter().filter(|(uid, f)| f.stopped || entry.uids.contains(uid)).collect();
+    let empty = entry.uids.is_empty() && failures.is_empty();
     let failures = serde_json::to_string(&failures).map_err(|e| e.to_string())?;
-    crate::app_db::ops::set_uids_and_failures(conn, entry.id, &uids, &failures, entry.uids.is_empty())
+    crate::app_db::ops::set_uids_and_failures(conn, entry.id, &uids, &failures, empty)
 }
 
 /// Every unfinished op, oldest first. A store that will not open reads as
@@ -156,15 +193,47 @@ pub fn get(data_dir: &Path, id: u64) -> Result<Option<OpEntry>, String> {
 }
 
 /// Forget these uids of entry `id`, whatever its `arg` (the daemon names the
-/// entry it wrote, so no arg match is needed), with their failures; drop the
-/// entry left with nothing. An entry that is already gone is not an error.
+/// entry it wrote, so no arg match is needed), with their failures (a stop's
+/// too: this is also the cancel); drop the entry left with nothing. An entry
+/// that is already gone is not an error.
 pub fn clear_by_id(data_dir: &Path, id: u64, uids: &[u32]) -> Result<(), String> {
     crate::app_db::with(data_dir, |conn| {
         crate::app_db::db::in_txn(conn, || {
             let Some(mut entry) = crate::app_db::ops::get(conn, id)?.map(row_to_entry) else { return Ok(()) };
-            let before = entry.uids.len();
+            let before = (entry.uids.len(), entry.failures.len());
             entry.uids.retain(|uid| !uids.contains(uid));
-            if entry.uids.len() == before {
+            entry.failures.retain(|uid, f| !(f.stopped && uids.contains(uid)));
+            if (entry.uids.len(), entry.failures.len()) == before {
+                return Ok(());
+            }
+            store_uids(conn, &entry)
+        })
+    })
+}
+
+/// Stop these `(uid, reason)` of entry `id` for good, nothing sent: each uid
+/// the entry owes is no longer owed (no replay sends it, the app's list shows
+/// its row again) and keeps `reason` as a stopped `Failure` (its pass count
+/// carried), so the entry stays listed until the user cancels it
+/// (`clear_by_id`). One transaction. A uid it does not owe, or a gone entry,
+/// records nothing.
+pub fn stop_by_id(data_dir: &Path, id: u64, stops: &[(u32, String)], at: u64) -> Result<(), String> {
+    if stops.is_empty() {
+        return Ok(());
+    }
+    crate::app_db::with(data_dir, |conn| {
+        crate::app_db::db::in_txn(conn, || {
+            let Some(mut entry) = crate::app_db::ops::get(conn, id)?.map(row_to_entry) else { return Ok(()) };
+            let mut stopped = false;
+            for (uid, message) in stops {
+                if entry.uids.contains(uid) {
+                    let passes = entry.failures.get(uid).map_or(0, |f| f.passes);
+                    entry.failures.insert(*uid, Failure { message: message.clone(), at, passes, stopped: true });
+                    entry.uids.retain(|u| u != uid);
+                    stopped = true;
+                }
+            }
+            if !stopped {
                 return Ok(());
             }
             store_uids(conn, &entry)
@@ -198,7 +267,7 @@ pub fn note_failures_at(data_dir: &Path, id: u64, failures: &[(u32, String)], at
                 if entry.uids.contains(uid) {
                     let before = entry.failures.get(uid).map_or(0, |f| f.passes);
                     let passes = if pass && counted.insert(*uid) { before.saturating_add(1) } else { before };
-                    entry.failures.insert(*uid, Failure { message: message.clone(), at, passes });
+                    entry.failures.insert(*uid, Failure { message: message.clone(), at, passes, stopped: false });
                     noted = true;
                 }
             }
@@ -323,7 +392,7 @@ mod tests {
         let d = tmp();
         let mut forged = entry("delete", &[1], serde_json::json!({}));
         forged.attempts = 9;
-        forged.failures.insert(1, Failure { message: "forged".into(), at: 1, passes: 4 });
+        forged.failures.insert(1, Failure { message: "forged".into(), at: 1, passes: 4, stopped: false });
         let id = queue(d.path(), forged).unwrap();
         let back = get(d.path(), id).unwrap().unwrap();
         assert_eq!((back.attempts, back.failures.len()), (0, 0));
@@ -390,18 +459,87 @@ mod tests {
         let d = tmp();
         let id = queue(d.path(), entry("delete", &[1, 2], serde_json::json!({}))).unwrap();
         note_failures_at(d.path(), id, &[(1, "submit".into())], 10, false).unwrap();
-        assert_eq!(get(d.path(), id).unwrap().unwrap().failures[&1], Failure { message: "submit".into(), at: 10, passes: 0 });
+        assert_eq!(get(d.path(), id).unwrap().unwrap().failures[&1], Failure { message: "submit".into(), at: 10, passes: 0, stopped: false });
         note_failures_at(d.path(), id, &[(1, "pass".into()), (1, "pass again".into()), (2, "pass".into())], 20, true).unwrap();
         note_failures_at(d.path(), id, &[(1, "other reason".into())], 30, true).unwrap();
         note_failures_at(d.path(), id, &[(1, "a submit round".into())], 40, false).unwrap();
         let e = get(d.path(), id).unwrap().unwrap();
-        assert_eq!(e.failures[&1], Failure { message: "a submit round".into(), at: 40, passes: 2 }, "two passes, the submit kept the count");
+        assert_eq!(e.failures[&1], Failure { message: "a submit round".into(), at: 40, passes: 2, stopped: false }, "two passes, the submit kept the count");
         assert_eq!(e.failures[&2].passes, 1);
         // A row written before the count existed reads as no passes, and a
         // zero count is not written at all.
         let old: Failure = serde_json::from_value(serde_json::json!({"message": "m", "at": 1})).unwrap();
         assert_eq!(old.passes, 0);
         assert_eq!(serde_json::to_value(&old).unwrap(), serde_json::json!({"message": "m", "at": 1}));
+    }
+
+    // ── a delete the server's renumbering stopped ──────────────────────────
+
+    /// A stopped uid is no longer owed (nothing replays it, the app shows its
+    /// row again), but the entry and the reason stay for Settings until the
+    /// user cancels it there.
+    #[test]
+    fn a_stopped_uid_is_no_longer_owed_but_its_entry_and_reason_stay_until_cancelled() {
+        let d = tmp();
+        let id = queue(d.path(), entry("delete", &[1, 2], serde_json::json!({"uidValidity": 1}))).unwrap();
+        note_failures_at(d.path(), id, &[(1, "refused".into())], 5, true).unwrap();
+        stop_by_id(d.path(), id, &[(1, "errors.renumbered".into()), (2, "errors.renumbered".into()), (9, "not owed".into())], 10).unwrap();
+        let e = get(d.path(), id).unwrap().expect("kept for Settings");
+        assert!(e.uids.is_empty(), "nothing owed: {e:?}");
+        assert_eq!(e.failures[&1], Failure { message: "errors.renumbered".into(), at: 10, passes: 1, stopped: true }, "the pass count is carried");
+        assert!(e.failures[&2].stopped);
+        assert!(!e.failures.contains_key(&9), "a uid the entry did not owe records nothing");
+        assert_eq!(read(d.path()).len(), 1, "durable");
+
+        // A late round's reason for a uid no longer owed records nothing.
+        note_failures(d.path(), id, &[(1, "late".into())]).unwrap();
+        assert_eq!(get(d.path(), id).unwrap().unwrap().failures[&1].message, "errors.renumbered");
+
+        // The cancel clears what it names, and the emptied entry goes.
+        clear_by_id(d.path(), id, &[1]).unwrap();
+        assert_eq!(get(d.path(), id).unwrap().unwrap().failures.keys().copied().collect::<Vec<_>>(), vec![2]);
+        clear_by_id(d.path(), id, &[2]).unwrap();
+        assert!(on_disk(d.path(), id).is_none(), "cancelled: gone");
+    }
+
+    #[test]
+    fn a_stop_leaves_the_rest_of_the_entry_owed_and_a_landing_keeps_the_stop() {
+        let d = tmp();
+        let id = queue(d.path(), entry("delete", &[1, 2], serde_json::json!({}))).unwrap();
+        stop_by_id(d.path(), id, &[(1, "errors.renumbered".into())], 10).unwrap();
+        let e = get(d.path(), id).unwrap().unwrap();
+        assert_eq!(e.uids, vec![2]);
+        assert!(e.failures[&1].stopped);
+        // uid 2 lands: nothing is owed, the stop is still listed.
+        clear_by_id(d.path(), id, &[2]).unwrap();
+        let e = get(d.path(), id).unwrap().expect("the stop keeps the entry");
+        assert!(e.uids.is_empty());
+        assert_eq!(e.failures.keys().copied().collect::<Vec<_>>(), vec![1]);
+        stop_by_id(d.path(), 999, &[(1, "x".into())], 1).unwrap();
+    }
+
+    #[test]
+    fn a_failure_written_before_stops_existed_reads_as_not_stopped() {
+        let old: Failure = serde_json::from_value(serde_json::json!({"message": "m", "at": 1, "passes": 2})).unwrap();
+        assert!(!old.stopped);
+        assert_eq!(serde_json::to_value(&old).unwrap(), serde_json::json!({"message": "m", "at": 1, "passes": 2}), "false is not written");
+        let stopped = Failure { message: "m".into(), at: 1, passes: 0, stopped: true };
+        assert_eq!(serde_json::to_value(&stopped).unwrap(), serde_json::json!({"message": "m", "at": 1, "stopped": true}));
+    }
+
+    /// The folder generation a delete was queued against, from its `arg`:
+    /// absent (an app entry, an older daemon's, or none known) or not a
+    /// UIDVALIDITY is `None`.
+    #[test]
+    fn the_recorded_generation_is_read_from_the_arg() {
+        let with = |arg| OpEntry { arg, ..Default::default() }.uid_validity();
+        assert_eq!(with(serde_json::json!({"mode": "trash", "uidValidity": 7})), Some(7));
+        assert_eq!(with(serde_json::json!({"mode": "trash"})), None);
+        assert_eq!(with(serde_json::json!({})), None);
+        assert_eq!(with(serde_json::Value::Null), None);
+        assert_eq!(with(serde_json::json!({"uidValidity": 0})), None, "0 is no UIDVALIDITY");
+        assert_eq!(with(serde_json::json!({"uidValidity": "7"})), None);
+        assert_eq!(with(serde_json::json!({"uidValidity": 1u64 << 33})), None);
     }
 
     #[test]

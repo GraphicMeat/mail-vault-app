@@ -20,6 +20,17 @@
 //!   good (`dropped`, its uid cleared), as the app's replay does. A capture
 //!   the delete required that failed, a credential read that failed and a
 //!   server refusal are all retryable: the entry stays.
+//! - A uid is a name only inside one folder generation (UIDVALIDITY). The
+//!   entry keeps the one its uids were read in (`arg.uidValidity`, from the
+//!   daemon's header cache at submit, never the app's word; absent when
+//!   unknown), and every send, the submit's own rounds and the replay's
+//!   alike, goes only into that generation (`message_delete`, IMAP only). A
+//!   server that renumbered the folder gets nothing: the uid is stopped
+//!   (`op_journal::stop_by_id`), answered `dropped` with `RENUMBERED`, no
+//!   longer owed (so no replay sends it and the app's relist shows its row
+//!   again), and the rest of that entry is stopped with it unsent. The entry
+//!   stays listed in Settings with the reason until the user cancels it. An
+//!   entry with no recorded generation is sent as before.
 //! - Offline (`NetGate` shut) nothing is sent; every uid is `queued`.
 //! - One uid is never sent twice at once: a per-uid claim
 //!   (`QueueState`, keyed by account, folder and uid) is held from before
@@ -73,6 +84,9 @@ const GRAPH_UNSUPPORTED: &str = "errors.bulkGraphDeleteUnsupported";
 const ACCOUNT_UNAVAILABLE: &str = "errors.bulkAccountUnavailable";
 /// A vault-only folder (an MBOX import) has no server to delete from.
 const LOCAL_FOLDER: &str = "errors.bulkUnsupported";
+/// The folder was renumbered on the server since the delete was queued:
+/// stopped, nothing sent (a catalog key: Settings shows it).
+const RENUMBERED: &str = "errors.deleteQueueMailboxRenumbered";
 /// A uid whose entry the user cancelled while it was being retried. Never
 /// shown: the app asked for the cancel and already restores the row.
 const CANCELLED: &str = "cancelled";
@@ -142,6 +156,9 @@ pub(crate) enum Verdict {
     Drop(String),
     /// Keep it owed and try again; the reason is kept.
     Retry(String),
+    /// Final, nothing was sent: no longer owed, but kept listed with the
+    /// reason (`op_journal::stop_by_id`) until the user cancels it.
+    Stop(String),
 }
 
 /// The queue's one reading of a `delete_one` result.
@@ -149,6 +166,7 @@ pub(crate) fn classify(uid: u32, result: &Result<Outcome, Refusal>) -> Verdict {
     match result {
         Ok(o) if o.gone && o.bin_id.is_none() => Verdict::Landed(Landed::Gone { uid }),
         Ok(o) => Verdict::Landed(Landed::Deleted { uid, trash: o.trash.clone(), trash_uid: o.trash_uid, bin_id: o.bin_id.clone() }),
+        Err(Refusal::Renumbered) => Verdict::Stop(RENUMBERED.to_string()),
         Err(Refusal::Server(e)) if e.contains(IDENTITY_CHANGED) => Verdict::Drop(IDENTITY_CHANGED.to_string()),
         // A capture the delete required is retried, never dropped: the
         // message is still on the server and the user still wants it gone.
@@ -346,10 +364,11 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
     }
     refuse_unqueued(state, &s.account_id, &s.mailbox).await?;
 
-    // 1. The journal, before anything reaches the server.
-    let arg = entry_arg(&s);
+    // 1. The journal, before anything reaches the server, with the folder
+    // generation the uids were read in.
+    let arg = entry_arg(&s, recorded_generation(state, &s.account_id, &s.mailbox).await);
     let owed = {
-        let (st, account_id, mailbox, uids) = (Arc::clone(state), s.account_id.clone(), s.mailbox.clone(), s.uids.clone());
+        let (st, account_id, mailbox, uids, arg) = (Arc::clone(state), s.account_id.clone(), s.mailbox.clone(), s.uids.clone(), arg.clone());
         blocking(move || {
             let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
             std::fs::create_dir_all(&st.app_dir).map_err(|e| format!("Failed to create data directory: {e}"))?;
@@ -363,7 +382,32 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
     #[cfg(test)]
     tests::after_journal(state);
 
+    // Sent as journalled: a uid owed by an older entry goes by that entry's
+    // generation (`still_owed`), this one by its own.
+    let s = Submit { arg, ..s };
     Ok(send_owed(state, &s, &owed.owners, SUBMIT).await.reply)
+}
+
+/// The generation of `mailbox` the daemon's header cache holds (its native
+/// owner's UIDVALIDITY, else the meta's `uidValidity`): the one the rows the
+/// user chose from were read in. `None` when unknown or unreadable: nothing
+/// is recorded and the delete is sent unchecked, as before.
+async fn recorded_generation(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Option<u32> {
+    let (st, account, folder) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
+    blocking(move || {
+        crate::custody::with_conn(&st, |c| {
+            let owner = mailvault_core::custody::cache::native_identity(c, &account, &folder).ok().flatten().and_then(|o| o.uid_validity);
+            if owner.is_some() {
+                return Ok(owner);
+            }
+            let meta = mailvault_core::custody::cache::load_meta(c, &account, &folder).ok().flatten();
+            Ok(meta.and_then(|m| serde_json::from_str::<Value>(&m).ok()).and_then(|m| op_journal::uid_validity_of(&m)))
+        })
+    })
+    .await
+    .ok()
+    .and_then(|r| r.ok())
+    .flatten()
 }
 
 /// Send `s`'s uids, each owed by the entry `owners` names, in `how.rounds`
@@ -381,6 +425,11 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
     let mut refused_any = false;
     // Each uid the latest round refused, with its reason.
     let mut refused_last: BTreeMap<u32, String> = BTreeMap::new();
+    // The generation `s` was journalled in, for an owner the journal read
+    // could not name.
+    let journalled = op_journal::uid_validity_of(&s.arg);
+    // Entries a send found renumbered: the rest of each is stopped unsent.
+    let mut renumbered: HashSet<u64> = HashSet::new();
     for round in 0..how.rounds {
         if pending.is_empty() {
             break;
@@ -392,7 +441,7 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
         // user: `dropped`. Otherwise another submit owned it and answered it
         // (its `delete-queue-landed` says how): left to that one, `queued`,
         // never reported as refused.
-        let still = still_owed(state, &owner, &pending).await;
+        let (still, generations) = still_owed(state, &owner, &pending).await;
         for &uid in pending.iter().filter(|uid| !still.contains(uid)) {
             refused_last.remove(&uid);
             if was_cancelled(state, &s.account_id, &s.mailbox, uid) {
@@ -423,6 +472,7 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
         let mut dropped = Vec::new();
         let mut failed = Vec::new();
         let mut unsent = Vec::new();
+        let mut stopped: Vec<(u32, String)> = Vec::new();
         let mut stop: Option<Halt> = None;
         match config {
             Err(e) => {
@@ -435,6 +485,11 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
             }
             Ok(config) => {
                 for &uid in &pending {
+                    let entry = owner.get(&uid).copied();
+                    if entry.is_some_and(|id| renumbered.contains(&id)) {
+                        stopped.push((uid, RENUMBERED.to_string()));
+                        continue;
+                    }
                     if stop.is_some() {
                         unsent.push(uid);
                         continue;
@@ -458,7 +513,8 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
                         unsent.push(uid);
                         continue;
                     }
-                    let result = send(state, &config, s, uid, how.priority).await;
+                    let generation = entry.and_then(|id| generations.get(&id).copied()).unwrap_or(journalled);
+                    let result = send(state, &config, s, uid, how.priority, generation).await;
                     match classify(uid, &result) {
                         Verdict::Landed(l) => {
                             state.net.note_success();
@@ -469,9 +525,24 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
                             state.net.note_failure(&reason).await;
                             failed.push((uid, reason));
                         }
+                        Verdict::Stop(reason) => {
+                            renumbered.extend(entry);
+                            stopped.push((uid, reason));
+                        }
                     }
                 }
             }
+        }
+        // What this round refused or left of a renumbered entry is that
+        // generation too: stopped, never sent again.
+        if !renumbered.is_empty() {
+            let of_renumbered = |uid: &u32| owner.get(uid).is_some_and(|id| renumbered.contains(id));
+            let (gone, kept): (Vec<_>, Vec<_>) = failed.into_iter().partition(|(uid, _)| of_renumbered(uid));
+            failed = kept;
+            stopped.extend(gone.into_iter().map(|(uid, _)| (uid, RENUMBERED.to_string())));
+            let (gone, kept): (Vec<u32>, Vec<u32>) = unsent.into_iter().partition(of_renumbered);
+            unsent = kept;
+            stopped.extend(gone.into_iter().map(|uid| (uid, RENUMBERED.to_string())));
         }
 
         if !landed.is_empty() {
@@ -484,6 +555,12 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
                 warn!("[delete-queue] {}/{} uid={uid} dropped: {reason}", s.account_id, s.mailbox);
             }
             changed(state);
+        }
+        if !stopped.is_empty() {
+            stop_owned(state, &owner, &stopped).await;
+            warn!("[delete-queue] {}/{}: {} uid(s) stopped, nothing sent: the folder was renumbered on the server", s.account_id, s.mailbox, stopped.len());
+            changed(state);
+            out.reply.dropped.extend(stopped);
         }
         if !failed.is_empty() {
             refused_any = true;
@@ -525,8 +602,9 @@ async fn account_config(state: &DaemonState, account_id: &str, read: crate::oaut
 }
 
 /// The entry's `arg`: the app's, with the delete's own intent added so a
-/// replay sends the same delete.
-fn entry_arg(s: &Submit) -> Value {
+/// replay sends the same delete, and the folder generation the daemon read
+/// (`generation`; none known: no key, whatever the app sent).
+fn entry_arg(s: &Submit, generation: Option<u32>) -> Value {
     let mut arg = match &s.arg {
         Value::Object(map) => Value::Object(map.clone()),
         _ => json!({}),
@@ -538,6 +616,12 @@ fn entry_arg(s: &Submit) -> Value {
     };
     arg["mode"] = json!(mode);
     arg["bin"] = json!(s.bin);
+    if let Some(map) = arg.as_object_mut() {
+        match generation {
+            Some(v) => map.insert(op_journal::UID_VALIDITY_KEY.to_string(), json!(v)),
+            None => map.remove(op_journal::UID_VALIDITY_KEY),
+        };
+    }
     arg
 }
 
@@ -590,8 +674,9 @@ fn admit_listed(listing: &mailvault_core::accounts_doc::Listing, account_id: &st
 }
 
 /// One `delete_one` on the account's provider (a JMAP account through its
-/// session, any other through the IMAP pool's priority lane).
-async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Submit, uid: u32, priority: bool) -> Result<Outcome, Refusal> {
+/// session, any other through the IMAP pool's priority lane), into the folder
+/// generation `generation` names (IMAP; `None`: unchecked).
+async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Submit, uid: u32, priority: bool, generation: Option<u32>) -> Result<Outcome, Refusal> {
     #[cfg(test)]
     {
         state.delete_queue.sends.lock().unwrap().push((uid, priority));
@@ -600,31 +685,35 @@ async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Su
         }
     }
     let provider = if config.uses_jmap() { Provider::Jmap(config) } else { Provider::Imap(config) };
-    message_delete::delete_one_on(state, provider, &s.account_id, &s.mailbox, uid, s.mode, s.bin, priority).await
+    message_delete::delete_one_on(state, provider, &s.account_id, &s.mailbox, uid, s.mode, s.bin, priority, generation).await
 }
 
-/// The uids of `pending` their entries still owe: one read per entry.
-async fn still_owed(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, pending: &[u32]) -> HashSet<u32> {
+/// The uids of `pending` their entries still owe, and the folder generation
+/// each of those entries was queued in: one read per entry.
+async fn still_owed(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, pending: &[u32]) -> (HashSet<u32>, BTreeMap<u64, Option<u32>>) {
     let by_id = by_owner(owner, pending.iter().copied());
     let st = Arc::clone(state);
     let read = blocking(move || {
         let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
         let mut still = HashSet::new();
+        let mut generations = BTreeMap::new();
         for (id, uids) in by_id {
             if let Some(entry) = op_journal::get(&st.app_dir, id)? {
                 still.extend(uids.into_iter().filter(|uid| entry.uids.contains(uid)));
+                generations.insert(id, entry.uid_validity());
             }
         }
-        Ok::<_, String>(still)
+        Ok::<_, String>((still, generations))
     })
     .await
     .and_then(|r| r);
     match read {
-        Ok(still) => still,
+        Ok(read) => read,
         Err(e) => {
-            // Unreadable is not "cancelled": keep sending what was asked.
+            // Unreadable is not "cancelled": keep sending what was asked
+            // (each uid in the generation its send was journalled with).
             warn!("[delete-queue] journal unreadable, sending as asked: {e}");
-            pending.iter().copied().collect()
+            (pending.iter().copied().collect(), BTreeMap::new())
         }
     }
 }
@@ -689,6 +778,24 @@ async fn note_failures(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, fai
     .and_then(|r| r);
     if let Err(e) = result {
         warn!("[delete-queue] could not keep the refusal reasons: {e}");
+    }
+}
+
+/// Stop `stopped` in the entries that own them (`op_journal::stop_by_id`):
+/// one write per entry.
+async fn stop_owned(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, stopped: &[(u32, String)]) {
+    let by_id = by_owner(owner, stopped.iter().cloned());
+    let st = Arc::clone(state);
+    let at = u64::try_from(state.clock.now_ms()).unwrap_or(0);
+    let result = blocking(move || {
+        let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
+        st.delete_queue.wrote(by_id.len());
+        by_id.iter().try_for_each(|(id, uids)| op_journal::stop_by_id(&st.app_dir, *id, uids, at))
+    })
+    .await
+    .and_then(|r| r);
+    if let Err(e) = result {
+        warn!("[delete-queue] could not stop the renumbered uids: {e}");
     }
 }
 

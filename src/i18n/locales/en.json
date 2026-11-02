@@ -4115,6 +4115,7 @@
   "errors.syncReceiptUncertain": "Native refresh receipt is uncertain",
   "errors.bulkIdentityUncertain": "Message identity is uncertain. Refresh the folder before trying again.",
   "errors.bulkIdentityChanged": "The selected folder or message identity changed.",
+  "errors.deleteQueueMailboxRenumbered": "The folder was renumbered on the server, so this delete was cancelled. MailVault will not touch other messages that now have the old numbers.",
   "errors.bulkGraphDeleteUnsupported": "Server deletion is unavailable for this Graph account.",
   "errors.bulkCopyChanged": "A verified archive copy changed. The server message was kept.",
   "errors.bulkWorkerUnavailable": "The bulk worker could not start.",

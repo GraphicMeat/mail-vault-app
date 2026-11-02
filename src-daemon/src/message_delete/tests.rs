@@ -175,7 +175,7 @@ async fn a_failed_remove_forgets_the_capture_this_call_made() {
 async fn a_failed_remove_keeps_a_capture_an_earlier_attempt_made() {
     let f = fixture(refuse_the_move());
     let stamp = f.s.account_lifecycle.capture("acc1").unwrap();
-    let (earlier, created) = deleted::capture_stamped(&f.s, stamp, "acc1", "INBOX", 1, Source::Imap { config: &f.config, permanent: false, priority: true })
+    let (earlier, created) = deleted::capture_stamped(&f.s, stamp, "acc1", "INBOX", 1, Source::Imap { config: &f.config, permanent: false, priority: true, generation: None })
         .await
         .expect("captured")
         .expect("a row");

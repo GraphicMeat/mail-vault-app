@@ -471,7 +471,7 @@ async fn a_server_refusal_keeps_retrying_every_pass() {
 fn backed_off_reads_the_latest_refusal_its_count_and_its_age() {
     use mailvault_core::op_journal::Failure;
     const H: u64 = 3_600_000;
-    let capture = |at, passes| Failure { message: "E_BIN_CAPTURE:timeout: timed out after 45s".into(), at, passes };
+    let capture = |at, passes| Failure { message: "E_BIN_CAPTURE:timeout: timed out after 45s".into(), at, passes, stopped: false };
     let e = |failures: Vec<(u32, Failure)>| OpEntry { op: "delete".into(), uids: vec![1, 2], failures: failures.into_iter().collect(), ..Default::default() };
     let now = 100 * H;
     assert!(!backed_off(&e(vec![]), now), "never refused");
@@ -480,13 +480,72 @@ fn backed_off_reads_the_latest_refusal_its_count_and_its_age() {
     assert!(!backed_off(&e(vec![(1, capture(now - H, 3))]), now), "the hour is up");
     assert!(backed_off(&e(vec![(1, capture(now - 23 * H, 12))]), now), "twelve: a day");
     assert!(!backed_off(&e(vec![(1, capture(now - 24 * H, 12))]), now));
-    let server = Failure { message: "Failed to delete email: NO".into(), at: now, passes: 40 };
+    let server = Failure { message: "Failed to delete email: NO".into(), at: now, passes: 40, stopped: false };
     assert!(!backed_off(&e(vec![(1, server.clone())]), now), "a server refusal is retried every pass");
     assert!(!backed_off(&e(vec![(1, capture(now - 10, 5)), (2, server)]), now), "the latest refusal decides");
     let gone = OpEntry { uids: vec![2], ..e(vec![(1, capture(now, 5))]) };
     assert!(!backed_off(&gone, now), "a uid no longer owed decides nothing");
     assert!(!backed_off(&e(vec![(1, capture(now + 2 * DAY, 12))]), now), "a clock set back far never waits on it");
-    let busy = Failure { message: "E_BIN_CAPTURE:busy: the account is busy".into(), at: now, passes: 12 };
+    let busy = Failure { message: "E_BIN_CAPTURE:busy: the account is busy".into(), at: now, passes: 12, stopped: false };
     assert!(!backed_off(&e(vec![(1, busy)]), now), "busy is transient: never backed off");
 }
 const DAY: u64 = 24 * 3_600_000;
+
+// ── the folder's generation (UIDVALIDITY) ─────────────────────────────────────
+
+/// An entry queued in INBOX's generation 1, replayed once the server reissued
+/// INBOX's uids: nothing is sent, the uid stops being owed, the entry stays
+/// for Settings with its reason, and neither a later pass nor Retry now sends
+/// it.
+#[tokio::test]
+async fn a_replay_into_a_renumbered_folder_sends_nothing_and_keeps_the_entry_with_its_reason() {
+    let f = fixture(vec![]);
+    let id = queue(&f, "acc1", "INBOX", &[1], json!({"mode": "trash", "bin": true, "uidValidity": 1}));
+    f.srv.mutate(|st| st.find_mut("INBOX").unwrap().uid_validity = 42);
+    let counts = pass(&f.s, "retry").await;
+    assert_eq!(counts, PassCounts { attempted: 1, done: 0, failed: 0, dropped: 1, skipped: 0, kept: 0 });
+    assert_eq!(f.moves(), 0, "nothing moved");
+    assert!(f.in_inbox(1) && !f.in_trash());
+    let kept = entry(&f, id).expect("still listed for Settings");
+    assert!(kept.uids.is_empty(), "no longer owed: {kept:?}");
+    assert_eq!(kept.failures[&1].message, crate::delete_queue::tests::RENUMBERED);
+
+    let selects = f.srv.count_commands("SELECT");
+    pass(&f.s, "retry").await;
+    run_now(&f.s, MANUAL.into()).await.unwrap();
+    assert_eq!(f.srv.count_commands("SELECT"), selects, "never sent again");
+    assert_eq!(sends(&f).len(), 1);
+    assert!(entry(&f, id).is_some());
+}
+
+/// An entry written before the generation was recorded (or with none known)
+/// is sent exactly as before.
+#[tokio::test]
+async fn a_replay_of_an_entry_with_no_recorded_generation_sends_as_before() {
+    let f = fixture(vec![]);
+    let id = queue(&f, "acc1", "INBOX", &[1], json!({"mode": "trash", "bin": true}));
+    f.srv.mutate(|st| st.find_mut("INBOX").unwrap().uid_validity = 42);
+    let counts = pass(&f.s, "retry").await;
+    assert_eq!((counts.done, counts.dropped, counts.kept), (1, 0, 0), "{counts:?}");
+    assert!(entry(&f, id).is_none());
+    assert!(!f.in_inbox(1) && f.in_trash());
+}
+
+/// JMAP has no UIDVALIDITY: a recorded value never stops its delete.
+#[tokio::test]
+async fn a_jmap_entry_is_sent_whatever_generation_it_records() {
+    use crate::jmap_test_support as support;
+    let f = fixture_with(vec![], r#"[{"id":"acc1"},{"id":"acct1"}]"#, vec![]);
+    let m = mock_jmap::MockJmap::start(support::scenario());
+    let (_trap, port) = support::imap_trap();
+    f.s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), support::config(&m, port));
+    let listing = crate::server::handle_request_for_test(&f.s, "imap_get_emails", json!({"account": support::account_json(&m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
+        .await
+        .result
+        .expect("listed");
+    let jmap_uid = listing["emails"].as_array().unwrap().iter().find(|e| e["messageId"] == "<e2@x>").unwrap()["uid"].as_u64().unwrap() as u32;
+    let id = queue(&f, "acct1", "INBOX", &[jmap_uid], json!({"mode": "auto", "bin": true, "uidValidity": 999}));
+    let counts = pass(&f.s, "retry").await;
+    assert_eq!((counts.done, counts.dropped), (1, 0), "{counts:?}");
+    assert!(entry(&f, id).is_none());
+}

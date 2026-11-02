@@ -4111,6 +4111,7 @@
   "errors.syncReceiptUncertain": "本机刷新确认结果不确定",
   "errors.bulkIdentityUncertain": "邮件身份不确定。请刷新文件夹后重试。",
   "errors.bulkIdentityChanged": "所选文件夹或邮件的身份已更改。",
+  "errors.deleteQueueMailboxRenumbered": "服务器上的文件夹已重新编号，因此此删除已取消。MailVault 不会动现在使用旧编号的其他邮件。",
   "errors.bulkGraphDeleteUnsupported": "此Graph账户无法执行服务器删除。",
   "errors.bulkCopyChanged": "已验证的归档副本已更改。服务器邮件已保留。",
   "errors.bulkWorkerUnavailable": "无法启动批量处理。",
