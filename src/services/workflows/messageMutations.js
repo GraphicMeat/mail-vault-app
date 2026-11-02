@@ -1618,6 +1618,18 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
  * messages are back, for a view the list reload does not repaint (the board);
  * one that fails is not a failed undo, the messages are back all the same.
  */
+// The delete undo running now, whole (its restore and its bin recover): a
+// Cmd+Z past the slot waits for it before it reads `_lastBinned`, or it sends
+// `deleted.recover` for bin copies this run is about to recover itself.
+let _deleteUndoRun = null;
+function _runDeleteUndo(work) {
+  const run = work();
+  _deleteUndoRun = run;
+  const done = () => { if (_deleteUndoRun === run) _deleteUndoRun = null; };
+  run.then(done, done);
+  return run;
+}
+
 export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
   const repaint = async () => {
     try {
@@ -1644,20 +1656,20 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
       // "Moved to Trash" only when all of it went there.
       labelKey: binned.length ? 'undo.deletedKept' : 'undo.deleted',
       labelParams: { count: restorable.length + binned.length },
-      run: async () => {
+      run: () => _runDeleteUndo(async () => {
         await _restoreFromTrash(restorable);
         if (binned.length) await recoverFromBin(binned);
         await repaint();
-      },
+      }),
     });
   } else if (binned.length) {
     useMailStore.getState().setUndo({
       labelKey: 'undo.deletedKept',
       labelParams: { count: binned.length },
-      run: async () => {
+      run: () => _runDeleteUndo(async () => {
         await recoverFromBin(binned);
         await repaint();
-      },
+      }),
     });
   } else if (outcomes?.length) {
     useMailStore.getState().setUndo({
@@ -1824,11 +1836,13 @@ export async function undoLastAction() {
   const { useMailStore } = await import('../../stores/mailStore');
   const state = useMailStore.getState();
   if (state.undo?.canUndo) return state.runUndo();
-  // A restore still on the wire (the slot's own run, spent the moment it
-  // started) owns its bin copies: recovered alongside it, the bin's APPEND
-  // puts a second copy beside the one its MOVE puts back. Wait, then take
-  // only what it left.
+  // A delete undo still running (the slot's own run, spent the moment it
+  // started) owns its bin copies: its restore's, and the permanent deletes'
+  // its own recover is about to send. Recovered alongside it, the bin's
+  // APPEND puts a second copy back, or its recover fails over mail that did
+  // come back. Wait for the whole run, then take only what it left.
   if (_restoreInFlight) await _restoreInFlight;
+  if (_deleteUndoRun) await _deleteUndoRun.catch(() => {});
   if (!_lastBinned.length) return false;
   try {
     await recoverFromBin(_lastBinned);

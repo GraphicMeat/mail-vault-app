@@ -532,6 +532,34 @@ describe('undo after a delete', () => {
     expect(mockDaemonCall).not.toHaveBeenCalledWith('deleted.recover', expect.anything());
   });
 
+  // A mixed delete: 7 went to Trash, 8 was deleted for good and only the bin
+  // holds it. The slot's run restores 7, then recovers 8 from the bin. A
+  // second Cmd+Z during that run must wait for ALL of it: reading the bin ids
+  // after the restore alone, it recovered 8 alongside the slot, and the slot's
+  // own recover then failed ("Undo failed") over mail that did come back.
+  it('a second Cmd+Z during a mixed undo waits for the whole run: one recover per bin copy', async () => {
+    mockDeleteEmail
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 5, binId: 'b7' })
+      .mockResolvedValueOnce({ trash: null, trashUid: null, binId: 'b8' });
+    primeStore({ emails: [row(7), row(8)], selected: [7, 8] });
+    await useMailStore.getState().deleteSelectedFromServer();
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deletedKept', canUndo: true });
+    clearForUndo();
+    let release;
+    mockRestoreMessages.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const recovers = () => mockDaemonCall.mock.calls.filter(([m]) => m === 'deleted.recover');
+
+    const first = undoLastAction();
+    await vi.waitFor(() => expect(mockRestoreMessages).toHaveBeenCalled());
+    const second = undoLastAction();
+    release({ restored: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, newUid: 41 }], failed: [] });
+
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(false);
+    expect(recovers().map(([, p]) => p)).toEqual([{ ids: ['b8'], target: 'server' }]);
+    expect(useMailStore.getState().error).toBeNull();
+  });
+
   // What the restore could not put back stays in the bin, and the next Cmd+Z
   // reaches it there once the restore is over.
   it('a Cmd+Z after a failed restore recovers the bin copy the restore left', async () => {
