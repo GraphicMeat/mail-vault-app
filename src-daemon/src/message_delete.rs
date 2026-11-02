@@ -122,6 +122,17 @@ impl Provider<'_> {
         }
     }
 
+    /// Whether this provider's capture reads the message from the server
+    /// when there is no local copy (`Source::Imap` only for a permanent
+    /// delete; a move to Trash keeps a byte-less row instead).
+    fn asks_server(&self, permanent: bool) -> bool {
+        match self {
+            Provider::Imap(_) => permanent,
+            Provider::Jmap(_) => true,
+            Provider::Graph { .. } => false,
+        }
+    }
+
     fn source(&self, permanent: bool) -> Source<'_> {
         match self {
             Provider::Imap(config) => Source::Imap { config, permanent, priority: true },
@@ -139,6 +150,12 @@ pub(crate) struct Outcome {
     pub trash: Option<String>,
     pub trash_uid: Option<u32>,
     pub bin_id: Option<String>,
+    /// The server no longer had the message: the capture asked for it and it
+    /// was not there (an earlier delete landed with its reply lost, or another
+    /// client removed it), and no earlier attempt kept a copy. Only a capture
+    /// that asks the server can tell (a permanent IMAP delete, any JMAP one);
+    /// a move to Trash over IMAP never knows and reports `false`.
+    pub gone: bool,
 }
 
 /// Why nothing was deleted.
@@ -216,6 +233,7 @@ async fn run(
         return Err(Refusal::Server(KEYCHAIN_BUSY.into()));
     }
 
+    let mut gone = false;
     let binned = match policy {
         CapturePolicy::Skip => None,
         CapturePolicy::BestEffort | CapturePolicy::Required => {
@@ -224,7 +242,12 @@ async fn run(
                 None => Err(CaptureFailure::Busy),
             };
             match captured {
-                Ok(binned) => binned,
+                Ok(binned) => {
+                    // A capture that fetched from the server and kept nothing
+                    // found nothing there (`deleted::capture_stamped`).
+                    gone = binned.is_none() && provider.asks_server(permanent);
+                    binned
+                }
                 Err(e) if policy == CapturePolicy::Required => {
                     error!("[delete:{tag}] {account_id}/{mailbox} uid={uid} not deleted: could not keep a copy first: {e}");
                     return Err(Refusal::BinCapture(e));
@@ -265,7 +288,7 @@ async fn run(
             if let (Some(id), Some(stamp), true, false) = (bin_id.clone(), original, removed.changed, matches!(provider, Provider::Graph { .. })) {
                 deleted::landed_stamped(state, id, removed.trash.clone(), removed.trash_uid, stamp).await;
             }
-            Ok(Outcome { trash: removed.trash, trash_uid: removed.trash_uid, bin_id })
+            Ok(Outcome { trash: removed.trash, trash_uid: removed.trash_uid, bin_id, gone })
         }
         Err(e) => {
             error!("[delete:{tag}] {account_id}/{mailbox} uid={uid} failed: {e}");

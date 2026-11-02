@@ -1375,6 +1375,29 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         emit('demo:state', { type: 'journal' });
         return null;
       }
+      // The daemon's delete queue: the demo has no server to refuse a delete,
+      // so a submit lands at once, the way `imap_delete_email` does here.
+      case 'delete_queue.submit': {
+        const landed = [];
+        for (const uid of args.uids || []) {
+          const out = await invoke('imap_delete_email', { accountId: args.accountId, mailbox: args.mailbox, uid, mode: args.mode });
+          landed.push({ kind: 'deleted', uid, trash: out?.trash ?? null, trashUid: out?.trashUid ?? null, binId: null });
+        }
+        emit('delete-queue-landed', { accountId: args.accountId, mailbox: args.mailbox, landed });
+        return { landed, queued: [], dropped: [] };
+      }
+      case 'delete_queue.list': return clone(journal.filter(entry => entry.op === 'delete').map(entry => ({ attempts: 0, failures: {}, ...entry })));
+      case 'delete_queue.cancel': {
+        const uids = new Set(args.uids || []);
+        const entry = journal.find(item => item.id === args.id && item.op === 'delete');
+        if (entry) {
+          entry.uids = (entry.uids || []).filter(uid => !uids.has(uid));
+          if (!entry.uids.length) journal.splice(journal.indexOf(entry), 1);
+          emit('delete-queue-changed', {});
+          emit('demo:state', { type: 'journal' });
+        }
+        return null;
+      }
       case 'bulk.status': {
         const status = { active: clone(activeBulk), pending: activeBulk ? null : bulkPendingSnapshot() };
         if (args.operationId && args.attemptId) {

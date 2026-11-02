@@ -150,6 +150,9 @@ pub struct DaemonState {
     /// write already goes through `fsx::write_atomic`, so a concurrent reader
     /// only ever sees a complete journal, old or new, never a torn one.
     pub journal: std::sync::Mutex<()>,
+    /// The daemon's delete queue (`delete_queue`): which journalled deletes
+    /// are being sent right now, so one uid is never sent twice at once.
+    pub(crate) delete_queue: crate::delete_queue::QueueState,
     /// One user bulk owner; pending state stays in the existing app.db meta.
     pub(crate) bulk: std::sync::Mutex<mailvault_core::bulk::Coordinator>,
     /// Task 3.4, generalized by Task 4.7 (decision 7): per-operation-kind run
@@ -695,6 +698,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if let Some(resp) = crate::handlers::journal::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::delete_queue::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     if let Some(resp) = crate::handlers::custody::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
@@ -1095,6 +1101,7 @@ impl DaemonState {
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
+            delete_queue: Default::default(),
             bulk: std::sync::Mutex::new(mailvault_core::bulk::Coordinator::load(
                 &app_dir_for_index,
             )),

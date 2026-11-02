@@ -57,6 +57,7 @@ mod jmap_test_support;
 pub mod llm;
 mod mbox;
 mod message_delete;
+mod delete_queue;
 #[cfg(test)]
 mod message_delete_characterization_tests;
 mod mbox_upload;
@@ -626,6 +627,7 @@ async fn daemon_main() {
         prefetch_lock: std::sync::Mutex::new(()),
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),
         journal: std::sync::Mutex::new(()),
+        delete_queue: Default::default(),
         bulk: std::sync::Mutex::new(mailvault_core::bulk::Coordinator::load(&data_dir)),
         custody,
         run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),

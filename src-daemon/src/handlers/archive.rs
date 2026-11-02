@@ -349,6 +349,16 @@ async fn forget_classifications_at(state: &Arc<DaemonState>, account_id: &str, m
     }).await;
 }
 
+/// Everything local that follows the server losing `uids`: their follow-up
+/// reminders end, cleanup forgets their classification, and
+/// `record_server_deleted` prunes the header cache and stamps custody. The
+/// bulk delete and the daemon's delete queue (`delete_queue`) both run it.
+pub(crate) async fn after_server_delete(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32], owner: &OperationPermit) {
+    end_follow_ups_at_owned(state, account_id, mailbox, uids, owner).await;
+    forget_classifications_at(state, account_id, mailbox, uids, owner).await;
+    record_server_deleted(state, account_id, mailbox, uids.to_vec(), owner).await;
+}
+
 async fn record_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: Vec<u32>, owner: &OperationPermit) {
     if uids.is_empty() {
         return;
@@ -465,9 +475,7 @@ pub(crate) async fn delete_with_config(
     };
     let (acct, mb) = (account_id.clone(), mailbox.clone());
     let (mut p, deleted) = delete_provider_only(state,account_id,config,mailbox,uids,cancel,identity,owner.clone()).await?;
-    end_follow_ups_at_owned(state, &acct, &mb, &deleted, &owner).await;
-    forget_classifications_at(state, &acct, &mb, &deleted, &owner).await;
-    record_server_deleted(state, &acct, &mb, deleted.clone(), &owner).await;
+    after_server_delete(state, &acct, &mb, &deleted, &owner).await;
     p.total += refused;
     p.errors += refused;
     Ok((p, deleted))

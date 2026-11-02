@@ -66,6 +66,74 @@ pub fn set_uids(conn: &Connection, id: u64, uids_json: &str, empty: bool) -> Res
     Ok(())
 }
 
+/// One journal row with the delete queue's retry record (schema v12):
+/// `attempts` send rounds so far, `failures_json` the last refusal per uid.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Full {
+    pub id: u64,
+    pub op: String,
+    pub account_id: String,
+    pub mailbox: String,
+    pub uids_json: String,
+    pub arg_json: String,
+    pub at: u64,
+    pub attempts: u32,
+    pub failures_json: String,
+}
+
+const FULL_COLUMNS: &str = "id, op, account_id, mailbox, uids_json, arg_json, at, attempts, failures_json";
+
+fn full_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Full> {
+    Ok(Full {
+        id: r.get::<_, i64>(0)? as u64,
+        op: r.get(1)?,
+        account_id: r.get(2)?,
+        mailbox: r.get(3)?,
+        uids_json: r.get(4)?,
+        arg_json: r.get(5)?,
+        at: r.get::<_, i64>(6)? as u64,
+        attempts: r.get::<_, i64>(7)?.clamp(0, u32::MAX as i64) as u32,
+        failures_json: r.get(8)?,
+    })
+}
+
+/// `read` with the retry record, oldest first. Same "a query error reads as
+/// empty" rule as `read`.
+pub fn read_full(conn: &Connection) -> Vec<Full> {
+    let Ok(mut stmt) = conn.prepare(&format!("SELECT {FULL_COLUMNS} FROM pending_ops ORDER BY id")) else {
+        return Vec::new();
+    };
+    stmt.query_map([], full_row).map(|rows| rows.filter_map(Result::ok).collect()).unwrap_or_default()
+}
+
+/// One row by id, `None` when it is gone (answered or cancelled).
+pub fn get(conn: &Connection, id: u64) -> Result<Option<Full>, String> {
+    conn.query_row(&format!("SELECT {FULL_COLUMNS} FROM pending_ops WHERE id = ?1"), [id as i64], full_row)
+        .optional()
+        .map_err(|e| e.to_string())
+}
+
+/// Rewrite one row's uids and failures together, or delete it when nothing
+/// is left owed.
+pub fn set_uids_and_failures(conn: &Connection, id: u64, uids_json: &str, failures_json: &str, empty: bool) -> Result<(), String> {
+    if empty {
+        return set_uids(conn, id, uids_json, true);
+    }
+    conn.execute(
+        "UPDATE pending_ops SET uids_json = ?2, failures_json = ?3 WHERE id = ?1",
+        params![id as i64, uids_json, failures_json],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// One more send round for row `id`; a row that is gone is left gone.
+pub fn bump_attempts(conn: &Connection, id: u64) -> Result<(), String> {
+    conn.execute("UPDATE pending_ops SET attempts = attempts + 1 WHERE id = ?1", [id as i64])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── Pending backup purge ────────────────────────────────────────────────────
 
 /// One exact mirror target. Raw names are retained, never sanitized.

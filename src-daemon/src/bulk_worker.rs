@@ -199,7 +199,7 @@ fn local_folder_at(root:&std::path::Path,group:&Group)->Result<bool,String> {
         }
     Ok(false)
 }
-fn native_local_folder(state:&Arc<DaemonState>,group:&Group)->Result<bool,String> {
+pub(crate) fn native_local_folder(state:&Arc<DaemonState>,group:&Group)->Result<bool,String> {
     let _gate=state.vault_gate.read().unwrap_or_else(|p|p.into_inner());
     let root=common::vault_root(state).map_err(|_|"errors.bulkLocalFoldersRead".to_string())?;
     local_folder_at(&root,group)

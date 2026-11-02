@@ -4715,6 +4715,7 @@ mod tests {
                 uids: uids.to_vec(),
                 arg,
                 at: 0,
+                ..Default::default()
             },
         )
         .unwrap();

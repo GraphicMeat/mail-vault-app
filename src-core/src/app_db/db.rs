@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 11;
+pub const SCHEMA_VERSION: i64 = 12;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -327,6 +327,28 @@ CREATE TABLE local_draft_locations(account_id TEXT NOT NULL,mailbox TEXT NOT NUL
 
 const SCHEMA_V10: &str = "ALTER TABLE pending_backup_purge ADD COLUMN proof_json TEXT;";
 
+// The daemon's delete queue retries a journalled delete itself and keeps what
+// it learned: how many send rounds the entry has had and the last reason each
+// uid was refused (`{"<uid>": {"message", "at"}}`). Existing rows read as
+// never tried. Each column is added only when missing, so a store whose
+// recorded version is older than its tables (a test that rewinds it, a
+// sibling build that numbered the same step) still opens.
+const SCHEMA_V12: [(&str, &str); 2] = [
+    ("attempts", "ALTER TABLE pending_ops ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;"),
+    ("failures_json", "ALTER TABLE pending_ops ADD COLUMN failures_json TEXT NOT NULL DEFAULT '{}';"),
+];
+
+fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, OpenError> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})")).map_err(sql)?;
+    let names = stmt.query_map([], |r| r.get::<_, String>(1)).map_err(sql)?;
+    for name in names {
+        if name.map_err(sql)? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenError {
     /// Not a database this build can read. Left exactly as it is.
@@ -503,6 +525,14 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             )).map_err(sql)?;
         }
         if version < 11 { conn.execute_batch(&format!("{SCHEMA_V11} INSERT OR REPLACE INTO meta(key,value) VALUES ('schema_version','11');")).map_err(sql)?; }
+        if version < 12 {
+            for (column, ddl) in SCHEMA_V12 {
+                if !has_column(conn, "pending_ops", column)? {
+                    conn.execute_batch(ddl).map_err(sql)?;
+                }
+            }
+            conn.execute_batch("INSERT OR REPLACE INTO meta(key,value) VALUES ('schema_version','12');").map_err(sql)?;
+        }
         Ok(())
     })();
     match stepped {
@@ -642,6 +672,40 @@ mod tests {
         let reopened = open(&dir).unwrap();
         let raw: String = reopened.query_row("SELECT proof_json FROM pending_backup_purge WHERE uid=8", [], |r| r.get(0)).unwrap();
         assert_eq!(raw,"opaque future");
+    }
+
+    /// v12 gives `pending_ops` the delete queue's retry record. A journal row
+    /// written before it (work the user already confirmed) survives the step
+    /// and reads as never tried.
+    #[test]
+    fn a_v11_store_gains_the_retry_record_and_keeps_its_journal() {
+        let dir = scratch("v11");
+        {
+            let c = Connection::open(db_path(&dir)).unwrap();
+            c.execute_batch(&format!("CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+                {SCHEMA_V1} {SCHEMA_V2} {SCHEMA_V3} {SCHEMA_V4} {SCHEMA_V5}
+                {SCHEMA_V6} {SCHEMA_V7} {SCHEMA_V8} {SCHEMA_V9} {SCHEMA_V10} {SCHEMA_V11}
+                INSERT INTO meta VALUES ('schema_version','11');
+                INSERT INTO pending_ops(op, account_id, mailbox, uids_json, arg_json, at) VALUES ('delete','a','INBOX','[4,9]','{{}}',5);")).unwrap();
+        }
+        {
+            let c = open(&dir).unwrap();
+            assert_eq!(meta_get(&c, "schema_version"), Some(SCHEMA_VERSION.to_string()));
+            let row: (String, String, i64, String) = c
+                .query_row("SELECT op, uids_json, attempts, failures_json FROM pending_ops", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+                .unwrap();
+            assert_eq!(row, ("delete".to_string(), "[4,9]".to_string(), 0, "{}".to_string()));
+        }
+        // A second open runs no step again.
+        let again = open(&dir).unwrap();
+        let n: i64 = again.query_row("SELECT COUNT(*) FROM pending_ops", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
+        // A store that says 11 but already has the columns opens too.
+        again.execute_batch("UPDATE meta SET value='11' WHERE key='schema_version';").unwrap();
+        drop(again);
+        let rewound = open(&dir).unwrap();
+        assert_eq!(meta_get(&rewound, "schema_version"), Some(SCHEMA_VERSION.to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

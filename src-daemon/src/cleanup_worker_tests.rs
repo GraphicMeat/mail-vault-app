@@ -423,7 +423,7 @@ async fn protected_copies_stay() {
     }
     mailvault_core::op_journal::queue(
         &rig.state.app_dir,
-        mailvault_core::op_journal::OpEntry { id: 0, op: "delete".into(), account_id: ACCT.into(), mailbox: "INBOX".into(), uids: vec![1], arg: json!({}), at: 1 },
+        mailvault_core::op_journal::OpEntry { op: "delete".into(), account_id: ACCT.into(), mailbox: "INBOX".into(), uids: vec![1], arg: json!({}), at: 1, ..Default::default() },
     )
     .unwrap();
     crate::custody::with_conn(&rig.state, |c| entries::upsert(c, ACCT, "INBOX", &[json!({"uid": 2, "source": "local_sent"})])).unwrap();
