@@ -1409,10 +1409,16 @@ async fn read_imap_identity_as(
                 let validity = crate::imap::abd_cmds::uid_validity(&mut session, &mailbox)
                     .await?
                     .ok_or("errors.bulkIdentityUncertain")?;
-                let ids = crate::imap::abd_cmds::message_ids(&mut session, &mailbox, &uids).await?;
+                // The uid list is bound to the generation of its own SELECT: a
+                // folder recreated after the read above answers under another.
+                let (fetched_in, ids) = crate::imap::abd_cmds::message_ids_in_generation(&mut session, &mailbox, &uids).await?;
+                let fetched_in = fetched_in.ok_or("errors.bulkIdentityUncertain")?;
+                if fetched_in != validity {
+                    return Err("errors.bulkIdentityChanged".into());
+                }
                 let live: HashSet<_> = ids.iter().map(|(uid, _)| *uid).collect();
                 if uids.iter().any(|uid| !live.contains(uid)) {
-                    if purge && validity == original && live.is_empty() {
+                    if purge && validity == original && fetched_in == original && live.is_empty() {
                         return Err(bulk_worker::SERVER_GONE.into());
                     }
                     return Err("errors.bulkIdentityChanged".into());
@@ -2670,6 +2676,54 @@ mod tests {
             assert!(empty || provider.state().find(mailbox).is_some_and(|folder|folder.messages.iter().any(|m|m.uid==9)),"{mailbox}: the folder's other message stays");
             assert!(mailvault_core::message_store::read_raw(dir.path(),"acc",mailbox,7).unwrap().is_none(),"{mailbox}: the vault copy goes too");
             assert!(crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::load_by_uids(c,"acc",mailbox,&[7])).unwrap().is_empty(),"{mailbox}: the stale header row leaves the cache");
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    /// The generation and the uid list must come from one SELECT. Here the
+    /// folder is recreated between the generation read and the uid read: the
+    /// first SELECT still reports the original UIDVALIDITY, the SELECT the uid
+    /// FETCH runs under reports another, and uid 7 is absent there. That is
+    /// not proof the message is gone; it stays refused and the vault copy stays.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_never_counts_a_uid_absent_under_another_generation_as_gone() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+        let scenario=Scenario::new().mailbox(mock_imap::state::Mailbox::new("INBOX").with_uid_validity(1))
+            .fault(mock_imap::Trigger::OnNthCommand("SELECT".into(),2),mock_imap::Action::BumpUidValidity);
+        let provider=MockImap::start(scenario);let cfg=purge_credentials(&state,&provider);
+        let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"recreated","type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",Some("selected@test")),"externalStatus":"unavailable"})).await;
+        assert!(reply.error.is_none(),"{:?}",reply.error);let pending=wait_drained(&state).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let target=&pending["worker"]["purgeTargets"][0];
+        assert_eq!(pending["result"]["deleted"],json!(0),"{pending}");
+        assert_ne!(target["alreadyGone"],json!(true),"{target}");
+        assert_eq!((&target["refused"],&target["lastError"]),(&json!(true),&json!("errors.bulkIdentityChanged")),"{target}");
+        assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().as_deref(),Some(PURGE_RAW),"the vault copy stays");
+        assert!(provider.commands().iter().all(|c|!c.contains("STORE")&&!c.contains("EXPUNGE")&&!c.contains("MOVE")));
+    }
+    /// A uid read that fails (a tagged NO, or the connection dropping after the
+    /// SELECT) is not an empty answer: the message is still there, nothing is
+    /// counted deleted and the vault copy stays.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_never_counts_a_failed_uid_read_as_gone() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for mode in ["no","drop"] {
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+            let action=if mode=="no" {mock_imap::Action::Respond("NO".into(),"try again later".into())} else {mock_imap::Action::DropConnection};
+            let provider=MockImap::start(Scenario::new().mailbox(inbox(1)).fault(mock_imap::Trigger::with("FETCH","MESSAGE-ID"),action));
+            let cfg=purge_credentials(&state,&provider);
+            let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":mode,"type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",Some("selected@test")),"externalStatus":"unavailable"})).await;
+            assert!(reply.error.is_none(),"{mode}: {:?}",reply.error);let pending=wait_drained(&state).await;
+            let target=&pending["worker"]["purgeTargets"][0];
+            assert_eq!(pending["result"]["deleted"],json!(0),"{mode}: {pending}");
+            assert_ne!(target["alreadyGone"],json!(true),"{mode}: {target}");
+            assert_eq!(target["refused"],json!(true),"{mode}: {target}");
+            assert_ne!(target["server"],json!("complete"),"{mode}: {target}");
+            assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().as_deref(),Some(PURGE_RAW),"{mode}: the vault copy stays");
+            assert!(provider.commands().iter().all(|c|!c.contains("STORE")&&!c.contains("EXPUNGE")&&!c.contains("MOVE")),"{mode}");
+            assert!(provider.state().find("INBOX").is_some_and(|f|f.messages.iter().any(|m|m.uid==7)),"{mode}: the server copy stays");
         }
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }

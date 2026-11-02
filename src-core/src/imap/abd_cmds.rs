@@ -317,11 +317,23 @@ pub async fn message_ids(
     mailbox: &str,
     uids: &[u32],
 ) -> Result<Vec<(u32, Option<String>)>, String> {
-    let mut out: Vec<(u32, Option<String>)> = Vec::with_capacity(uids.len());
     if uids.is_empty() {
-        return Ok(out);
+        return Ok(Vec::new());
     }
-    select_mailbox(session, mailbox).await?;
+    Ok(message_ids_in_generation(session, mailbox, uids).await?.1)
+}
+
+/// `message_ids`, with the UIDVALIDITY of the very SELECT its FETCH ran
+/// under: the uids answered (and the ones not answered) belong to that
+/// generation, and only to it. A generation read by an earlier SELECT says
+/// nothing about this answer; the folder may have been recreated in between.
+pub async fn message_ids_in_generation(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uids: &[u32],
+) -> Result<(Option<u32>, Vec<(u32, Option<String>)>), String> {
+    let mut out: Vec<(u32, Option<String>)> = Vec::with_capacity(uids.len());
+    let validity = select_mailbox(session, mailbox).await?.uid_validity;
     for chunk in uids.chunks(500) {
         let command = format!("UID FETCH {} (UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])", compress_uid_ranges(chunk));
         let mut nameless = 0usize;
@@ -342,7 +354,7 @@ pub async fn message_ids(
             ));
         }
     }
-    Ok(out)
+    Ok((validity, out))
 }
 
 /// The uids in `mailbox` whose Message-ID is exactly `message_id`. The server's

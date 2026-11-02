@@ -38,6 +38,7 @@ struct Fake {
     purge_local_conflict: bool,
     purge_prepare_error: Option<&'static str>,
     purge_server_gone: bool,
+    prepared_override: Option<bulk_worker::Prepared>,
 }
 impl Ports for Fake {
     async fn checkpoint(&mut self, w: &Workflow) -> Result<(), String> {
@@ -191,6 +192,7 @@ impl Ports for Fake {
     }
     async fn purge_prepare(&mut self,t:&PurgeTarget,_:&mailvault_core::bulk::TargetHint)->Result<bulk_worker::Prepared,String> {
         if let Some(error)=self.purge_prepare_error {return Err(error.into());}
+        if let Some(prepared)=&self.prepared_override {return Ok(prepared.clone());}
         let (mut identity,origin)=self.identity(&t.group()).await?;
         if let Identity::Imap{message_ids,..}=&mut identity {
             for id in message_ids.values_mut() {*id=mailvault_core::maildir::normalize_message_id(id);}
@@ -365,6 +367,29 @@ async fn purge_of_a_message_the_server_no_longer_holds_still_removes_the_vault_c
 async fn purge_server_gone_with_a_mismatched_proof_stays_refused() {
     let mut w=purge_work();
     let mut f=Fake{purge_server_gone:true,identity_override:Some(Identity::Imap{validity:2,message_ids:HashMap::from([(1,"1@test".into())])}),..Default::default()};
+    run(&mut w,&mut f).await.unwrap();
+    assert!(f.trace.is_empty(),"{:?}",f.trace);
+    let t=&w.purge_targets[0];
+    assert!(t.refused && t.proof.is_none() && t.server==PurgeEffect::Pending,"{t:?}");
+    assert_eq!(t.last_error.as_deref(),Some("errors.bulkIdentityChanged"));
+}
+/// "Server gone" only ever names a server proof. One carrying a local proof
+/// (a valid compose receipt the original selection would accept) is refused,
+/// with no effect, rather than skipping a server step it never had.
+#[tokio::test]
+async fn purge_server_gone_carrying_a_local_proof_is_refused() {
+    let mut scope=purge_work().intent.scope().clone();scope.target_hints[0].native_identity=None;
+    let mut w=Workflow::new(FrozenIntent::freeze(Action::DeleteEverywhere,scope,&[],&[]));
+    let raw=b"Message-ID: <1@test>\r\n\r\noriginal local bytes";
+    let receipt_scope=mailvault_core::app_db::compose_receipts::Scope::new("acc1","INBOX",1,"1@test").unwrap();
+    let receipt=mailvault_core::app_db::compose_receipts::Receipt::present(mailvault_core::app_db::compose_receipts::Identity::from_bytes(receipt_scope,raw).unwrap());
+    let local=PurgeProof::Local{email:Some("me@mock.test".into()),receipt,stored:Some(StoredProof{uid:1,name:"1.eml".into(),sha256:bulk_worker::bytes_hash(raw)})};
+    // The control: the same proof answered as live is accepted and removed locally.
+    let mut live=w.clone();
+    let mut f=Fake{prepared_override:Some(bulk_worker::Prepared::Live(local.clone())),..Default::default()};
+    run(&mut live,&mut f).await.unwrap();
+    assert_eq!(live.purge_result.as_ref().unwrap().deleted,1,"control: {:?}",live.purge_targets[0]);
+    let mut f=Fake{prepared_override:Some(bulk_worker::Prepared::ServerGone(local)),..Default::default()};
     run(&mut w,&mut f).await.unwrap();
     assert!(f.trace.is_empty(),"{:?}",f.trace);
     let t=&w.purge_targets[0];

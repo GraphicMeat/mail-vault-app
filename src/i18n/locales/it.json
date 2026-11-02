@@ -4136,7 +4136,7 @@
   "errors.accountRemovalBusy": "Questo account è occupato. Attendi che l’operazione in corso finisca, poi riprova.",
   "errors.accountRemovalIncomplete": "La rimozione dell’account non è stata completata. Riprova quando l’operazione in corso sarà terminata.",
   "errors.bulkAlreadyGone": "Questo messaggio era già stato eliminato.",
-  "errors.bulkServerGone": "Questo messaggio non era già più sul server.",
+  "errors.bulkServerGone": "Questo messaggio non era più sul server.",
   "settings.accounts.removeBusy": "Questo account è occupato. Attendi che l’operazione in corso finisca, poi riprova.",
   "settings.accounts.removeFailed": "Impossibile rimuovere questo account. Riprova.",
   "settings.accounts.removeIncomplete": "La rimozione dell’account non è stata completata. Riprova quando l’operazione in corso sarà terminata.",

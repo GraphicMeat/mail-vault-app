@@ -263,17 +263,16 @@ it('clears Undo and reports four partial counters as warning, clean success sile
   await purgeEverywhereReporting([1]);
   expect(useMailStore.getState().undo).toBeNull();
   expect(useMailStore.getState().error).toBeNull();
+  // A skipped target (not one refused as changed): the daemon's counters pass through.
   native.start.mockImplementation(async ({ scope }) => ({
     ...outcome(scope, true),
+    outcomes: scope.targetHints.map((hint) => ({ hint, target: { ...refused(hint), refused: false, skipped: true, lastError: null } })),
     result: { deleted: 1, failed: 1, queuedBackup: 2, needsResync: 3 },
   }));
   const result = await purgeEverywhereReporting([2]);
-  // The one refused target was refused as changed: counted as that, not as a
-  // server failure.
   expect(result).toEqual({
     deleted: 1,
-    failed: 0,
-    changed: 1,
+    failed: 1,
     queuedBackup: 2,
     needsResync: 3,
   });
