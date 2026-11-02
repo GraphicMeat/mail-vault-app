@@ -7,7 +7,6 @@ import { daemonCall } from '../daemonClient';
 import { binCaptureError } from '../../utils/binCapture';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
-import { isJmapAccount } from '../providerKind.js';
 import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, sameMessage, rowIdentity, selectionKey, pruneSelectedThread, nextAfterRemoval, vaultKey, vaultKeys } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
@@ -1632,9 +1631,9 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
   // COPYUID, so `trashUid` is null for a message that is sitting in Trash and
   // is perfectly restorable — offering nothing there told the user their mail
   // was gone for good, under the word "permanently", and left it in the bin.
-  // The Message-ID is the handle in that case, exactly as it is for a move
-  // (see _resolveDestinationUids). Only a delete that resolved NO trash folder
-  // is truly permanent.
+  // The Message-ID is the handle in that case: the daemon finds the copy by
+  // it in Trash (`messages.restore`). Only a delete that resolved NO trash
+  // folder is truly permanent.
   const restorable = (outcomes || []).filter(o => o?.trashUid != null || (o?.trash && o?.messageId));
   // What only the daemon's deleted-mail bin still holds: a permanent delete
   // it kept a copy of. Recovered from there, back to the folder it left.
@@ -1669,12 +1668,19 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
   }
 }
 
-// Put the messages back where they were deleted from — one IMAP move per
-// (account, Trash, source folder), not one per message.
+// Put the messages back where they were deleted from: one `messages.restore`
+// for the whole undo. The daemon finds each Trash copy (the uid the delete
+// recorded, else its Message-ID in Trash: never a guessed uid, which would
+// move somebody else's message back), sends one MOVE per (account, Trash,
+// folder), APPENDs the bin copy of what Trash no longer holds, re-keys the
+// header cache and the vault copy, lifts the custody stamp and drops the bin
+// copy (src-daemon/src/handlers/deleted.rs). The app keeps what is on screen.
 //
 // The rows go back on screen FIRST, before any round trip: the user pressed
-// Undo, and a list that stays empty through a MOVE and a reload reads as an undo that did nothing. The server follows. A move that
-// throws takes its rows back out, and runUndo says "Undo failed".
+// Undo, and a list that stays empty through a MOVE and a reload reads as an
+// undo that did nothing. The reply re-keys them to the uids the server gave.
+// What did not come back goes out again, and when nothing did, runUndo says
+// "Undo failed" around what this throws.
 async function _restoreFromTrash(outcomes) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -1683,15 +1689,6 @@ async function _restoreFromTrash(outcomes) {
   let settle;
   _restoreInFlight = new Promise((resolve) => { settle = resolve; });
 
-  const groups = new Map();
-  for (const o of outcomes) {
-    const k = `${o.accountId}|${o.trash}|${o.mailbox}`;
-    if (!groups.has(k)) groups.set(k, { ...o, trashUids: [], uids: [], messageIds: [], outcomes: [] });
-    groups.get(k).trashUids.push(o.trashUid);
-    groups.get(k).uids.push(o.uid);
-    groups.get(k).messageIds.push(o.messageId);
-    groups.get(k).outcomes.push(o);
-  }
   // A row this undo could not put back (another view is on screen now), or a
   // message whose new uid the server did not name, is repainted by a reload.
   let reload = back.length < outcomes.length;
@@ -1700,79 +1697,55 @@ async function _restoreFromTrash(outcomes) {
   // every uid it issued, so nothing was retired and nothing is re-keyed.
   const kept = new Set();
   try {
-    for (const g of groups.values()) {
-      const account = g.account;
-      // Without UIDPLUS the server named no destination uid, so find the copy
-      // by Message-ID in the folder it was moved to — never a guessed uid,
-      // which would move somebody else's message back.
-      // One lookup per message, so what comes back is known per message: the
-      // custody stamp and the rows left on screen follow the ones found.
-      const byCopyUid = g.trashUids.every(u => u != null);
-      const trashUids = [];
-      const found = [];
-      for (const [i, o] of g.outcomes.entries()) {
-        const hits = g.trashUids[i] != null ? [g.trashUids[i]] : await _resolveDestinationUids(account, g.trash, [o.messageId]);
-        if (!hits.length) continue;
-        trashUids.push(...hits);
-        found.push(o);
-      }
-      // Bare: runUndo already says "Undo failed: {{err}}" around whatever this
-      // throws, and saying it twice reads as a bug.
-      if (!trashUids.length) throw new Error(g.trash);
-      const res = await api.moveEmails(account, trashUids, g.trash, g.mailbox);
-      for (const o of found) moved.add(_targetId(o));
-      // Old uid -> new uid. COPYUID lists the destination uids in the order of
-      // the source set, which servers send ascending, and the trash uids came
-      // from COPYUIDs of their own. A Message-ID search gives no such pairing.
-      // ponytail: pairs by ascending trash uid; a server that reorders the set
-      // is not caught here, add a per-uid MOVE if one ever shows up.
-      const answered = byCopyUid && Array.isArray(res?.newUids) && res.newUids.length === g.uids.length;
-      if (!answered) {
-        reload = true;
-        // The vault copy was stamped "we deleted the server copy" a moment
-        // ago; it is back, so custody must stop claiming it is the only copy.
-        for (const o of found) await stampVaultEntry(g.accountId, g.mailbox, o.uid, { serverDeleted: false });
-        continue;
-      }
-      if (isJmapAccount(account)) {
-        // JMAP names the new uids in the order of the uids it was sent
-        // (jmap_bridge.rs move_emails), and ledger uids need not rise with
-        // the trash uids: pair by position, never by sorting.
-        const pairs = g.uids.map((uid, i) => [uid, res.newUids[i]]);
-        const same = g.outcomes.filter((o, i) => pairs[i][1] === o.uid);
-        for (const o of same) {
-          kept.add(_targetId(o));
-          await stampVaultEntry(g.accountId, g.mailbox, o.uid, { serverDeleted: false });
-        }
-        // The delete stamped the in-memory vault rows too; the copy is back
-        // under the same uid, so they must stop saying it is gone (the
-        // re-keyed rows get the same treatment in _rekeyRestored).
-        if (same.length) {
-          const ids = new Set(same.map(_targetId));
-          const now = useMailStore.getState();
-          useMailStore.setState({
-            localEmails: now.localEmails.map((e) => (ids.has(_rowId(e, now)) ? { ...e, serverDeleted: false } : e)),
-          });
-        }
-        try {
-          const rows = same.filter(o => o.row).map(o => o.row);
-          if (rows.length) await db.saveEmailHeaders(g.accountId, g.mailbox, rows, null);
-        } catch (error) {
-          console.warn('[undo] Could not put the header rows back:', error);
-        }
-        const changed = pairs.filter(([old, uid]) => old !== uid);
-        if (changed.length) {
-          await _rekeyRestored(useMailStore, { ...g, outcomes: g.outcomes.filter(o => !kept.has(_targetId(o))) }, changed);
-        }
-        continue;
-      }
-      const newUids = [...res.newUids].sort((a, b) => a - b);
-      const byTrash = g.uids.map((uid, i) => [g.trashUids[i], uid]).sort((a, b) => a[0] - b[0]);
-      await _rekeyRestored(useMailStore, g, byTrash.map(([, uid], i) => [uid, newUids[i]]));
+    let res;
+    try {
+      res = await api.restoreMessages(outcomes.map(o => ({
+        accountId: o.accountId, mailbox: o.mailbox, uid: o.uid,
+        trash: o.trash ?? null, trashUid: o.trashUid ?? null,
+        messageId: o.messageId ?? null, binId: o.binId ?? null,
+        // For the header cache when the bin holds no row of its own.
+        row: o.row ?? null,
+      })));
+    } catch (error) {
+      // No answer: the server may have some of it back. Out again, and the
+      // reload shows what is true.
+      reload = true;
+      throw error;
     }
-    // A message the lookup could not find in Trash stayed there.
-    const stranded = back.filter(r => !moved.has(_targetId(r)));
-    if (stranded.length) _hideDeleted(useMailStore, stranded);
+    const byId = new Map(outcomes.map(o => [_targetId(o), o]));
+    const groups = new Map();
+    for (const r of res?.restored || []) {
+      const id = _targetId(r);
+      const o = byId.get(id);
+      if (!o) continue;
+      moved.add(id);
+      if (r.newUid == null) { reload = true; continue; }
+      if (r.newUid === o.uid) { kept.add(id); continue; }
+      const k = `${o.accountId}|${o.mailbox}`;
+      if (!groups.has(k)) groups.set(k, { accountId: o.accountId, mailbox: o.mailbox, outcomes: [], pairs: [] });
+      groups.get(k).outcomes.push(o);
+      groups.get(k).pairs.push([o.uid, r.newUid]);
+    }
+    // The delete stamped the in-memory vault rows too; a copy back under the
+    // same uid must stop saying it is gone (re-keyed rows get the same
+    // treatment in _rekeyRestored).
+    if (kept.size) {
+      const now = get();
+      useMailStore.setState({
+        localEmails: now.localEmails.map((e) => (kept.has(_rowId(e, now)) ? { ...e, serverDeleted: false } : e)),
+      });
+    }
+    for (const g of groups.values()) _rekeyRestored(useMailStore, g, g.pairs);
+    // What did not come back stays where it is: off the list again.
+    const failed = back.filter(r => !moved.has(_targetId(r)));
+    if (failed.length) _hideDeleted(useMailStore, failed);
+    if (!moved.size && res?.failed?.length) {
+      // Bare: runUndo already says "Undo failed: {{err}}" around whatever
+      // this throws, and saying it twice reads as a bug. The daemon answers
+      // a catalog key.
+      throw new Error(String(res.failed[0]?.error || 'deletedBin.recoverFailed'));
+    }
+    if (res?.failed?.length) console.warn('[undo] Some messages did not come back:', res.failed);
   } catch (error) {
     // Only what did not move comes back out; what did is on the server again.
     const failed = back.filter(r => !moved.has(_targetId(r)));
@@ -1792,8 +1765,9 @@ async function _restoreFromTrash(outcomes) {
       get().updateSortedEmails();
       settle();
       _restoreInFlight = null;
-      // Back on the server: its bin copy would put a second one there.
-      _discardBinned(outcomes.filter(o => moved.has(_targetId(o))).map(o => o.binId).filter(Boolean));
+      // Back on the server: the daemon dropped its bin copy, and Cmd+Z must
+      // not offer it again.
+      _forgetBinned(outcomes.filter(o => moved.has(_targetId(o))).map(o => o.binId).filter(Boolean));
     }
   }
 }
@@ -1808,10 +1782,10 @@ async function _restoreFromTrash(outcomes) {
 // The bin copies of the last delete. Only the last, like the undo slot.
 let _lastBinned = [];
 
-function _discardBinned(ids) {
+// Bin copies that are spent: the daemon dropped them with the restore.
+function _forgetBinned(ids) {
   if (!ids.length) return;
   _lastBinned = _lastBinned.filter(id => !ids.includes(id));
-  daemonCall('deleted.discard', { ids }).catch(e => console.warn('[undo] Could not drop the bin copy:', e));
 }
 
 /**
@@ -1860,10 +1834,11 @@ export async function undoLastAction() {
   }
 }
 
-// Point the rows an undo put back at the uids the server gave them: on screen,
-// in the header cache, and in the vault. Best effort past the store write —
-// the message is already back on the server.
-async function _rekeyRestored(useMailStore, { accountId, mailbox, outcomes }, pairs) {
+// Point the rows an undo put back at the uids the server gave them, on screen
+// and in this window's vault sets. The daemon already re-keyed the header
+// cache, re-filed the vault copy and lifted its custody stamp
+// (`messages.restore`); what is left is the app's own memory of them.
+function _rekeyRestored(useMailStore, { accountId, mailbox }, pairs) {
   const get = () => useMailStore.getState();
   const newOf = new Map(pairs.map(([old, uid]) => [_targetId({ accountId, mailbox, uid: old }), uid]));
   for (const [id, uid] of newOf) _restoredUids.set(id, uid);
@@ -1890,52 +1865,32 @@ async function _rekeyRestored(useMailStore, { accountId, mailbox, outcomes }, pa
   // retired uid's tombstone then hid.
   _refreshAfterFlagChange(useMailStore);
 
-  try {
-    // Under the new uid, the old one pruned: a reload paints this row from the
-    // cache, not the retired one.
-    const rows = outcomes.filter(o => o.row).map(o => {
-      const { _nativeIdentity, _nativeExpectedIdentity, ...unbound } = o.row;
-      return { ...unbound, uid: newOf.get(_targetId(o)) };
-    });
-    await db.saveEmailHeaders(accountId, mailbox, rows, null, { removedUids: pairs.map(([old]) => old) });
-  } catch (error) {
-    console.warn('[undo] Could not re-key the header cache:', error);
-  }
   // The header memo is stamped by counts (total, cached, modseq) and a re-key
   // keeps every one of them: the memo taken when this mailbox was left still
   // matches the cache and would paint the retired uid, which its tombstone then
   // hides. Nothing but the app's own write can swap a uid inside a count.
   forgetHeaderMemo(accountId, mailbox);
 
-  // The vault copy is filed under the uid the delete retired. Left there it
-  // renders next to the message it is a copy of, and a second delete stamps
-  // nothing on it — it stays on screen claiming to be on the server.
-  let rebound = [];
-  try {
-    rebound = (await api.vaultRebindUids(accountId, mailbox, pairs))?.rebound || [];
-  } catch (error) {
-    console.warn('[undo] Could not re-file the vault copy:', error);
-  }
-  if (!rebound.length) return;
-  // Stamped "we deleted the server copy" by the delete; it is back, so custody
-  // must stop claiming this is the only copy left. See stores/slices/custody.js.
-  for (const [, uid] of rebound) await stampVaultEntry(accountId, mailbox, uid, { serverDeleted: false });
+  // The vault copy is filed under the new uid now (the daemon re-filed it):
+  // this window's sets and rows follow, or it renders next to the message it
+  // is a copy of, still claiming to be on the server's old uid. A set that
+  // never held the old uid is left as it was.
   const swap = (set, keyOf = (uid) => uid) => {
     if (!set) return set;
     const out = new Set(set);
-    for (const [old, uid] of rebound) if (out.delete(keyOf(old))) out.add(keyOf(uid));
+    for (const [old, uid] of pairs) if (out.delete(keyOf(old))) out.add(keyOf(uid));
     return out;
   };
   // The group cache holds bare uids, the store's sets are keyed by folder.
   const swapKeyed = (set) => swap(set, (uid) => vaultKey(accountId, mailbox, uid));
-  setArchivedGroup(accountId, mailbox, swap(getArchivedGroup(accountId, mailbox)) ?? null);
+  const group = getArchivedGroup(accountId, mailbox);
+  if (group) setArchivedGroup(accountId, mailbox, swap(group));
   const now = get();
-  const localOf = new Map(rebound.map(([old, uid]) => [_targetId({ accountId, mailbox, uid: old }), uid]));
   useMailStore.setState({
     archivedEmailIds: swapKeyed(now.archivedEmailIds),
     savedEmailIds: swapKeyed(now.savedEmailIds),
     localEmails: now.localEmails.map((e) => {
-      const uid = localOf.get(_rowId(e, now));
+      const uid = newOf.get(_rowId(e, now));
       if (uid == null) return e;
       const { _nativeIdentity, _nativeExpectedIdentity, ...unbound } = e;
       return { ...unbound, uid, serverDeleted: false };

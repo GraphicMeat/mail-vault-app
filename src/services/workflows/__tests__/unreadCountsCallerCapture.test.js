@@ -42,6 +42,8 @@ vi.mock('../../api',()=>({
   graphMoveEmails:vi.fn().mockResolvedValue(undefined),graphDeleteMessage:vi.fn().mockResolvedValue(undefined),
   deleteEmail:(...a)=>apiDelete(...a),moveEmails:(...a)=>apiMove(...a),
   findMessageId:(...a)=>apiFind(...a),
+  // The daemon's undo of a delete: back under the uid the old move mock named.
+  restoreMessages:async items=>({restored:items.map(i=>({accountId:i.accountId,mailbox:i.mailbox,uid:i.uid,newUid:41})),failed:[]}),
   appendLocalIndex:vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex:vi.fn().mockResolvedValue(undefined),
   vaultRebindUids:vi.fn().mockResolvedValue({rebound:[]}),

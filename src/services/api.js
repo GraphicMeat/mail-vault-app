@@ -360,6 +360,18 @@ export function deleteQueueSubmit({ accountId, mailbox, uids }, { mode = 'auto',
   return transportSend('delete_queue.submit', { accountId, mailbox, uids, mode, bin, arg });
 }
 
+/**
+ * The undo of a delete, in the daemon: each item back out of Trash (by its
+ * Trash uid, else its Message-ID), else from the deleted-mail bin, one MOVE
+ * per (account, Trash, folder). The daemon re-keys the header cache and the
+ * vault and drops the bin copy; the reply says which old uid became which.
+ * `items`: `{ accountId, mailbox, uid, trash, trashUid, messageId, binId, row? }`.
+ * Answers `{ restored: [{ accountId, mailbox, uid, newUid }], failed: [{ accountId, mailbox, uid, error }] }`.
+ */
+export function restoreMessages(items) {
+  return transportSend('messages.restore', { items });
+}
+
 /** The delete entries still owed, with `attempts` and `failures` by uid. */
 export async function deleteQueueList() {
   const list = await transportSend('delete_queue.list', {});

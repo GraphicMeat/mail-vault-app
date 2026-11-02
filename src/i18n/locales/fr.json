@@ -3321,6 +3321,7 @@
   "deletedBin.graphServerUnsupported": "Pour l'instant, ce compte ne peut récupérer les e-mails qu'en local.",
   "deletedBin.gone": "Cet e-mail ne fait plus partie des e-mails supprimés.",
   "deletedBin.goneFromTrash": "Cet e-mail n'est plus dans la Corbeille du serveur, il ne peut donc pas être récupéré.",
+  "deletedBin.restoreTimedOut": "Le serveur n'a pas répondu à temps. Actualisez pour voir si l'e-mail est revenu.",
   "undo.deletedKept_one": "{{count}} message supprimé",
   "undo.deletedKept_other": "{{count}} messages supprimés",
   "undo.action": "Annuler",

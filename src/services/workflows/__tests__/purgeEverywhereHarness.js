@@ -15,6 +15,9 @@ const mockBackupPurgeUids = vi.fn().mockResolvedValue({ removed: 0, queued: 0 })
 const mockCheckMailboxStatus = vi.fn().mockResolvedValue({ uidValidity: 1 });
 const mockMoveEmails = vi.fn().mockResolvedValue({ newUids: [171] });
 const mockVaultRebindUids = vi.fn().mockResolvedValue({ rebound: [] });
+// The daemon's undo of a delete (`messages.restore`): every item back as 171.
+const restoredAs171 = async (items) => ({ restored: items.map(i => ({ accountId: i.accountId, mailbox: i.mailbox, uid: i.uid, newUid: 171 })), failed: [] });
+const mockRestoreMessages = vi.fn(restoredAs171);
 const mockGetVaultUidSets = vi.fn().mockResolvedValue({ saved: new Set(), archived: new Set() });
 const mockGetLocalEmails = vi.fn().mockResolvedValue([]);
 const mockSearch = { searchActive: true, searchResults: [], performSearch: vi.fn() };
@@ -41,6 +44,7 @@ vi.mock('../../api', () => ({
   updateEmailFlags: vi.fn().mockResolvedValue(undefined),
   moveEmails: (...a) => mockMoveEmails(...a),
   vaultRebindUids: (...a) => mockVaultRebindUids(...a),
+  restoreMessages: (...a) => mockRestoreMessages(...a),
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
 }));
@@ -192,6 +196,7 @@ function resetPurgeMocks() {
   mockRemoveSearchResults.mockReset();
   mockMoveEmails.mockReset().mockResolvedValue({ newUids: [171] });
   mockVaultRebindUids.mockReset().mockResolvedValue({ rebound: [] });
+  mockRestoreMessages.mockReset().mockImplementation(restoredAs171);
   mockGetVaultUidSets.mockReset().mockResolvedValue({ saved: new Set(), archived: new Set() });
   mockGetLocalEmails.mockReset().mockResolvedValue([]);
   mockSearch.searchResults = [];
@@ -211,6 +216,6 @@ export {
   mockGetLocalIndexEntry, mockAppendLocalIndex, mockGetLocalIndexProvenance,
   mockGetEmailHeadersMeta, mockSaveEmailHeaders, mockIsGraphAccount,
   mockGetGraphMessageId, mockRemoveSearchResults, mockMoveEmails,
-  mockVaultRebindUids, mockGetVaultUidSets, mockGetLocalEmails, mockSearch,
+  mockVaultRebindUids, mockRestoreMessages, mockGetVaultUidSets, mockGetLocalEmails, mockSearch,
   mockSyncNow, mockWaitForSync, mockGetEmailHeadersByUids,
 };

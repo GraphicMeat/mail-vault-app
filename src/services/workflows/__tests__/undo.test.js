@@ -29,6 +29,30 @@ const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockRefreshCurrentView = vi.fn().mockResolvedValue(undefined);
 const mockVaultRebindUids = vi.fn().mockResolvedValue({ rebound: [] });
+// The daemon's undo of a delete (`messages.restore`). It finds the Trash copy,
+// moves it back, re-keys the header cache and the vault, and drops the bin
+// copy; the app only learns which old uid became which.
+const mockRestoreMessages = vi.fn();
+// Every item back on the server, under the uid `newUids` names (null: the
+// server did not say), in the reply shape the daemon answers.
+const backAs = (newUids = {}) => async (items) => ({
+  restored: items.map(i => ({ accountId: i.accountId, mailbox: i.mailbox, uid: i.uid, newUid: newUids[`${i.accountId}|${i.uid}`] ?? newUids[i.uid] ?? null })),
+  failed: [],
+});
+// What the app must no longer send itself for a delete undo.
+const expectNoAppSideRestore = () => {
+  expect(mockFindMessageId).not.toHaveBeenCalled();
+  expect(mockMoveEmails).not.toHaveBeenCalled();
+  expect(mockVaultRebindUids).not.toHaveBeenCalled();
+  expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
+  expect(mockAppendLocalIndex).not.toHaveBeenCalled();
+  expect(mockDaemonCall).not.toHaveBeenCalledWith('deleted.discard', expect.anything());
+};
+// Clears what the delete itself called, so the undo's calls stand alone.
+const clearForUndo = () => {
+  for (const m of [mockFindMessageId, mockMoveEmails, mockVaultRebindUids, mockSaveEmailHeaders, mockAppendLocalIndex, mockGetLocalIndexEntry, mockDaemonCall, mockRestoreMessages]) m.mockClear();
+};
+const item = (uid, extra = {}) => expect.objectContaining({ accountId: 'a1', mailbox: 'INBOX', uid, trash: 'Trash', ...extra });
 // The server holds the restored message under its new uid only: the retired
 // one answers "gone", as uid_still_present proves it in the app.
 const gone = () => Object.assign(new Error('gone'), { messageGone: true });
@@ -75,6 +99,7 @@ vi.mock('../../api', () => ({
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
   vaultRebindUids: (...a) => mockVaultRebindUids(...a),
+  restoreMessages: (...a) => mockRestoreMessages(...a),
 }));
 
 // The daemon's deleted-mail bin.
@@ -209,6 +234,7 @@ beforeEach(() => {
   mockGetLocalIndexEntry.mockResolvedValue({ uid: 7, subject: 'm7' });
   mockUpdateEmailFlags.mockResolvedValue({ success: true, written: [] });
   mockVaultRebindUids.mockResolvedValue({ rebound: [] });
+  mockRestoreMessages.mockImplementation(backAs());
   mockDaemonCall.mockImplementation(async (method, { ids } = {}) => (method === 'deleted.recover'
     ? { recovered: ids.map(id => ({ id })), failed: [] } : {}));
   mockFetchEmailLight.mockImplementation(async (_a, uid) => (uid === 7 ? Promise.reject(gone())
@@ -307,21 +333,24 @@ describe('undo after a delete', () => {
     // The DELETE reloads too (applyServerRemoval), so a bare toHaveBeenCalled
     // below would be satisfied by that one and pin nothing about the undo.
     useMailStore.getState().loadEmails.mockClear();
+    clearForUndo();
 
-    await useMailStore.getState().runUndo();
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(true);
 
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
-    // The vault copy was stamped "we deleted the server copy" a moment ago.
-    expect(mockAppendLocalIndex).toHaveBeenLastCalledWith('a1', 'INBOX',
-      [expect.objectContaining({ serverDeleted: false })]);
+    // One daemon call does the whole undo: find the copy, move it back,
+    // re-key the header cache and the vault, lift the custody stamp (the
+    // vault copy was stamped "we deleted the server copy" a moment ago) and
+    // drop the bin copy. The app sends none of those itself any more.
+    expect(mockRestoreMessages).toHaveBeenCalledTimes(1);
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: 5, messageId: 'm7@mock' })]);
+    expectNoAppSideRestore();
     // The restored message has a NEW uid; 7 is retired and names nothing, so
     // its tombstone stays. Lifting it let anything still holding 7 (a header
     // cache a sync wrote back, a vault copy filed under it) paint a ghost of
     // the message next to the real one.
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
-    // No COPYUID for the move back here (the default mock names two uids for
-    // one message), so the row's new uid is unknown and the folder is
-    // reloaded. One folder in view, so that is loadEmails, and the unified
+    // No COPYUID for the move back here (the daemon answers `newUid: null`),
+    // so the row's new uid is unknown and the folder is reloaded. One folder in view, so that is loadEmails, and the unified
     // refresh must not fire for it.
     expect(useMailStore.getState().loadEmails).toHaveBeenCalledTimes(1);
     expect(mockRefreshCurrentView).not.toHaveBeenCalled();
@@ -344,7 +373,7 @@ describe('undo after a delete', () => {
 
     await useMailStore.getState().runUndo();
 
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: 5 })]);
     expect(mockRefreshCurrentView).toHaveBeenCalled();
     expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
   });
@@ -355,10 +384,6 @@ describe('undo after a delete', () => {
     // message permanently" and offer nothing — the one word that must never be
     // wrong about mail, over a message sitting in the bin.
     mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: null });
-    mockFindMessageId.mockResolvedValue({
-      found: [{ mailbox: 'Trash', uid: 88 }, { mailbox: 'INBOX', uid: 7 }],
-      searched: 2, failed: 0, complete: true,
-    });
     primeStore({ emails: [row(7)] });
 
     await useMailStore.getState().deleteEmailFromServer(7);
@@ -366,26 +391,31 @@ describe('undo after a delete', () => {
     expect(useMailStore.getState().undo).toMatchObject({
       labelKey: 'undo.deleted', labelParams: { count: 1 }, canUndo: true,
     });
+    clearForUndo();
 
-    await useMailStore.getState().runUndo();
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(true);
 
-    expect(mockFindMessageId).toHaveBeenCalledWith(ACCOUNT, 'm7@mock', { stopOnFirst: false });
-    // Only the hit in Trash — the same id also sits in INBOX's own copy, and
-    // moving that one back would be moving somebody else's message.
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [88], 'Trash', 'INBOX');
+    // The daemon finds the copy by its Message-ID, in Trash only (the same id
+    // also sits in INBOX's own copy, and moving that one back would be moving
+    // somebody else's message): handlers/deleted.rs pins the search.
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: null, messageId: 'm7@mock' })]);
+    expectNoAppSideRestore();
   });
 
   it('refuses to guess when no COPYUID and no copy in Trash can be found', async () => {
     mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: null });
-    mockFindMessageId.mockResolvedValue({ found: [], searched: 1, failed: 0, complete: true });
+    // Nothing in Trash and no bin copy: the daemon says so in catalog words.
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [], failed: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, error: 'deletedBin.goneFromTrash' }] });
     primeStore({ emails: [row(7)] });
 
     await useMailStore.getState().deleteEmailFromServer(7);
-    mockMoveEmails.mockClear();
+    clearForUndo();
 
     await expect(useMailStore.getState().runUndo()).resolves.toBe(false);
-    expect(mockMoveEmails).not.toHaveBeenCalled();
-    expect(useMailStore.getState().error).toBeTruthy();
+    expectNoAppSideRestore();
+    expect(useMailStore.getState().error).toBe(t('undo.failed', { err: tErr('deletedBin.goneFromTrash') }));
+    // Hidden again: it is not back.
+    expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([]);
   });
 
   it('says a permanent delete cannot be undone rather than offering a button', async () => {
@@ -456,6 +486,7 @@ describe('undo after a delete', () => {
     await expect(undoLastAction()).resolves.toBe(true);
     expect(mockDaemonCall).toHaveBeenCalledWith('deleted.recover', { ids: ['b7'], target: 'server' });
     expect(mockMoveEmails).not.toHaveBeenCalled();
+    expect(mockRestoreMessages).not.toHaveBeenCalled();
     mockDaemonCall.mockClear();
     await expect(undoLastAction()).resolves.toBe(false);
     expect(mockDaemonCall).not.toHaveBeenCalled();
@@ -477,16 +508,20 @@ describe('undo after a delete', () => {
 
   it('Cmd+Z runs the slot while it holds the delete, and the restored message leaves the bin', async () => {
     mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
-    mockMoveEmails.mockResolvedValue({ success: true, moved: 1, newUids: [41] });
+    mockRestoreMessages.mockImplementation(backAs({ 7: 41 }));
     primeStore({ emails: [row(7)] });
     await useMailStore.getState().deleteEmailFromServer(7);
+    clearForUndo();
 
     await expect(undoLastAction()).resolves.toBe(true);
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
-    // Back on the server from Trash: its bin copy would put a second one there.
-    expect(mockDaemonCall).toHaveBeenCalledWith('deleted.discard', { ids: ['b7'] });
+    // The bin id travels with the item: back on the server from Trash, the
+    // daemon drops its bin copy, which would put a second one there.
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: 5, binId: 'b7' })]);
+    expectNoAppSideRestore();
     expect(mockDaemonCall).not.toHaveBeenCalledWith('deleted.recover', expect.anything());
+    // Spent: Cmd+Z has nothing more to bring back from the bin either.
     await expect(undoLastAction()).resolves.toBe(false);
+    expect(mockDaemonCall).not.toHaveBeenCalledWith('deleted.recover', expect.anything());
   });
 
   it('a bulk delete restores every message that reached Trash, one move per folder', async () => {
@@ -500,10 +535,14 @@ describe('undo after a delete', () => {
       labelKey: 'undo.deleted', labelParams: { count: 2 },
     });
 
+    clearForUndo();
     await useMailStore.getState().runUndo();
 
-    expect(mockMoveEmails).toHaveBeenCalledTimes(1);
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5, 6], 'Trash', 'INBOX');
+    // One daemon call for the whole undo; the daemon sends one MOVE per
+    // (account, Trash, folder) group (handlers/deleted.rs pins that).
+    expect(mockRestoreMessages).toHaveBeenCalledTimes(1);
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: 5 }), item(8, { trashUid: 6 })]);
+    expectNoAppSideRestore();
   });
 
   it('a thread-row delete fills one slot for the whole row, not one per copy', async () => {
@@ -529,11 +568,12 @@ describe('undo after a delete', () => {
       labelKey: 'undo.deleted', labelParams: { count: 3 }, canUndo: true,
     });
 
-    mockMoveEmails.mockClear();
+    clearForUndo();
     await useMailStore.getState().runUndo();
 
-    expect(mockMoveEmails).toHaveBeenCalledTimes(1);
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [51, 52, 53], 'Trash', 'INBOX');
+    expect(mockRestoreMessages).toHaveBeenCalledTimes(1);
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: 51 }), item(8, { trashUid: 52 }), item(9, { trashUid: 53 })]);
+    expectNoAppSideRestore();
   });
 
   it('a mixed bulk delete offers back exactly what reached Trash', async () => {
@@ -549,11 +589,13 @@ describe('undo after a delete', () => {
       labelKey: 'undo.deleted', labelParams: { count: 2 }, canUndo: true,
     });
 
-    mockMoveEmails.mockClear();
+    clearForUndo();
     await useMailStore.getState().runUndo();
 
-    expect(mockMoveEmails).toHaveBeenCalledTimes(1);
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5, 6], 'Trash', 'INBOX');
+    // Only what reached Trash is asked back; 8 was deleted for good.
+    expect(mockRestoreMessages).toHaveBeenCalledTimes(1);
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: 5 }), item(9, { trashUid: 6 })]);
+    expectNoAppSideRestore();
   });
 
   it('a bulk delete that emptied Trash offers no undo button', async () => {
@@ -588,14 +630,17 @@ describe('undo after a delete', () => {
       labelKey: 'undo.deleted', labelParams: { count: 2 },
     });
 
-    mockMoveEmails.mockClear();
+    clearForUndo();
     await useMailStore.getState().runUndo();
 
-    // Two accounts, so two moves — never one call carrying both accounts' uids,
-    // which would address a2's message against a1's server.
-    expect(mockMoveEmails).toHaveBeenCalledTimes(2);
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
-    expect(mockMoveEmails).toHaveBeenCalledWith(A2, [6], 'Trash', 'INBOX');
+    // Each item names its own account: the daemon groups by (account, Trash,
+    // folder), so a2's message is never addressed against a1's server.
+    expect(mockRestoreMessages).toHaveBeenCalledTimes(1);
+    expect(mockRestoreMessages).toHaveBeenCalledWith([
+      item(7, { accountId: 'a1', trashUid: 5 }),
+      item(8, { accountId: 'a2', trashUid: 6 }),
+    ]);
+    expectNoAppSideRestore();
   });
 
   it('repaints a branch listing through loadEmails, not the unified refresh', async () => {
@@ -613,7 +658,7 @@ describe('undo after a delete', () => {
 
     await useMailStore.getState().runUndo();
 
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: 5 })]);
     expect(useMailStore.getState().loadEmails).toHaveBeenCalledTimes(1);
     expect(mockRefreshCurrentView).not.toHaveBeenCalled();
   });
@@ -635,28 +680,29 @@ describe('undo puts the row back first, then the server follows', () => {
     await useMailStore.getState().deleteEmailFromServer(7);
     expect(useMailStore.getState().totalEmails).toBe(1);
     useMailStore.getState().loadEmails.mockClear();
-    mockSaveEmailHeaders.mockClear();
+    clearForUndo();
     const move = deferred();
-    mockMoveEmails.mockReturnValueOnce(move.promise);
+    mockRestoreMessages.mockReturnValueOnce(move.promise);
 
     const undone = useMailStore.getState().runUndo();
-    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mockRestoreMessages).toHaveBeenCalled());
 
     expect(uids()).toEqual([7, 8]);
     expect(useMailStore.getState().totalEmails).toBe(2);
 
     useMailStore.getState().setEmailsSelected([useMailStore.getState().emails.find(e => e.uid === 7)], true);
     expect(useMailStore.getState().selectedEmailSnapshots.get(7).nativeIdentity.uidValidity).toBe(1);
-    move.resolve({ success: true, moved: 1, newUids: [41] });
+    move.resolve({ restored: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, newUid: 41 }], failed: [] });
     await expect(undone).resolves.toBe(true);
 
     expect(uids()).toEqual([8, 41]);
     expect(useMailStore.getState().emails.find(e => e.uid === 41)._nativeIdentity).toBeUndefined();
     expect(useMailStore.getState().selectedEmailSnapshots.has(7)).toBe(false);
     expect(useMailStore.getState().selectedEmailSnapshots.get(41)).toBeNull();
-    // Filed under the new uid, the retired one pruned: a reload paints it.
-    expect(mockSaveEmailHeaders).toHaveBeenCalledWith('a1', 'INBOX',
-      [expect.objectContaining({ uid: 41, subject: 'm7' })], null, { removedUids: [7] });
+    // Filed under the new uid, the retired one pruned, by the daemon
+    // (handlers/deleted.rs: the header cache carries the new uid): the app
+    // writes no header cache of its own.
+    expectNoAppSideRestore();
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
     // Nothing left to reload: the row on screen is already the right one.
     expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
@@ -673,7 +719,7 @@ describe('undo puts the row back first, then the server follows', () => {
     memoRemember('a1', 'INBOX', [row(7), row(8)], { totalEmails: 2, totalCached: 2, highestModseq: 5, uidValidity: 1 });
     memoRemember('a1', 'Archive', [row(1)], { totalEmails: 1, totalCached: 1, highestModseq: 5, uidValidity: 1 });
     await useMailStore.getState().deleteEmailFromServer(7);
-    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 1, newUids: [41] });
+    mockRestoreMessages.mockImplementationOnce(backAs({ 7: 41 }));
 
     await expect(useMailStore.getState().runUndo()).resolves.toBe(true);
 
@@ -694,13 +740,13 @@ describe('undo puts the row back first, then the server follows', () => {
     ] });
     await useMailStore.getState().deleteEmailFromServer(7);
     const move = deferred();
-    mockMoveEmails.mockReturnValueOnce(move.promise);
+    mockRestoreMessages.mockReturnValueOnce(move.promise);
 
     const undone = useMailStore.getState().runUndo();
-    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mockRestoreMessages).toHaveBeenCalled());
     const seq = useMailStore.getState()._flagSeq;
 
-    move.resolve({ success: true, moved: 1, newUids: [41] });
+    move.resolve(await backAs({ 7: 41 })([{ accountId: 'a1', mailbox: 'INBOX', uid: 7 }]));
     await undone;
 
     expect(useMailStore.getState()._flagSeq).toBeGreaterThan(seq);
@@ -714,12 +760,12 @@ describe('undo puts the row back first, then the server follows', () => {
     primeStore({ emails: [row(7), row(8)] });
     await useMailStore.getState().deleteEmailFromServer(7);
     const move = deferred();
-    mockMoveEmails.mockReturnValueOnce(move.promise);
+    mockRestoreMessages.mockReturnValueOnce(move.promise);
 
     const undone = useMailStore.getState().runUndo();
-    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mockRestoreMessages).toHaveBeenCalled());
     const opening = useMailStore.getState().selectEmail(7);
-    move.resolve({ success: true, moved: 1, newUids: [41] });
+    move.resolve(await backAs({ 7: 41 })([{ accountId: 'a1', mailbox: 'INBOX', uid: 7 }]));
     await undone;
     await opening;
 
@@ -735,12 +781,12 @@ describe('undo puts the row back first, then the server follows', () => {
     primeStore({ emails: [row(7), row(8)] });
     await useMailStore.getState().deleteEmailFromServer(7);
     const move = deferred();
-    mockMoveEmails.mockReturnValueOnce(move.promise);
+    mockRestoreMessages.mockReturnValueOnce(move.promise);
 
     const undone = useMailStore.getState().runUndo();
-    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mockRestoreMessages).toHaveBeenCalled());
     const marked = useMailStore.getState().markEmailReadStatus(7, true);
-    move.resolve({ success: true, moved: 1, newUids: [41] });
+    move.resolve(await backAs({ 7: 41 })([{ accountId: 'a1', mailbox: 'INBOX', uid: 7 }]));
     await undone;
     await marked;
 
@@ -752,42 +798,65 @@ describe('undo puts the row back first, then the server follows', () => {
   });
 
   // Without COPYUID the copies are found by Message-ID, and a message the
-  // search cannot find stayed in Trash: it must not be stamped "back on the
-  // server", nor left on screen as though it were.
-  it('stamps and keeps on screen only the messages the lookup found in Trash', async () => {
+  // search cannot find stayed in Trash: it must not be left on screen as
+  // though it were back (the daemon stamps custody only for what it moved).
+  it('keeps on screen only the messages the daemon put back', async () => {
     mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: null });
-    mockFindMessageId.mockImplementation(async (_a, mid) => (mid === 'm7@mock'
-      ? { found: [{ mailbox: 'Trash', uid: 88 }], searched: 1, failed: 0, complete: true }
-      : { found: [], searched: 1, failed: 0, complete: true }));
+    mockRestoreMessages.mockResolvedValueOnce({
+      restored: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, newUid: null }],
+      failed: [{ accountId: 'a1', mailbox: 'INBOX', uid: 8, error: 'deletedBin.goneFromTrash' }],
+    });
     primeStore({ emails: [row(7), row(8), row(9)], selected: [7, 8] });
     await useMailStore.getState().deleteSelectedFromServer();
-    mockGetLocalIndexEntry.mockClear();
+    useMailStore.getState().loadEmails.mockClear();
+    clearForUndo();
 
-    await useMailStore.getState().runUndo();
+    // Some of it came back: the undo did not fail.
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(true);
 
-    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [88], 'Trash', 'INBOX');
-    expect(mockGetLocalIndexEntry).toHaveBeenCalledWith('a1', 'INBOX', 7);
-    expect(mockGetLocalIndexEntry).not.toHaveBeenCalledWith('a1', 'INBOX', 8);
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: null, messageId: 'm7@mock' }), item(8, { trashUid: null, messageId: 'm8@mock' })]);
+    expectNoAppSideRestore();
+    // 7 is back under a uid only the reload learns (its old one stays
+    // retired); 8 stayed in Trash and stays off the list.
+    expect(useMailStore.getState().loadEmails).toHaveBeenCalledTimes(1);
     expect(useMailStore.getState().sortedEmails.map(e => e.uid)).not.toContain(8);
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|8')).toBe(true);
   });
 
-  it('takes the row back out when the move fails', async () => {
+  it('takes the row back out when the server refuses the move, in catalog words', async () => {
     primeStore({ emails: [row(7), row(8)] });
     await useMailStore.getState().deleteEmailFromServer(7);
-    mockMoveEmails.mockRejectedValueOnce(new Error('no route'));
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [], failed: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, error: 'deletedBin.recoverFailed' }] });
+
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(false);
+
+    expect(uids()).toEqual([8]);
+    expect(useMailStore.getState().totalEmails).toBe(1);
+    expect(useMailStore.getState().error).toBe(t('undo.failed', { err: tErr('deletedBin.recoverFailed') }));
+  });
+
+  // The call itself failed (the daemon went away, or the app stopped
+  // waiting): the server may or may not have the messages back, so the rows
+  // go out again and the folder reloads to show what is true.
+  it('takes the row back out and reloads when the restore call itself fails', async () => {
+    primeStore({ emails: [row(7), row(8)] });
+    await useMailStore.getState().deleteEmailFromServer(7);
+    useMailStore.getState().loadEmails.mockClear();
+    mockRestoreMessages.mockRejectedValueOnce(new Error('no route'));
 
     await expect(useMailStore.getState().runUndo()).resolves.toBe(false);
 
     expect(uids()).toEqual([8]);
     expect(useMailStore.getState().totalEmails).toBe(1);
     expect(useMailStore.getState().error).toMatch(/no route/);
+    expect(useMailStore.getState().loadEmails).toHaveBeenCalledTimes(1);
   });
 
   it('delete, undo, delete again: no row left, and the retired uid stays tombstoned', async () => {
     mockDeleteEmail
       .mockResolvedValueOnce({ trash: 'Trash', trashUid: 5 })
       .mockResolvedValueOnce({ trash: 'Trash', trashUid: 6 });
-    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 1, newUids: [41] });
+    mockRestoreMessages.mockImplementationOnce(backAs({ 7: 41 }));
     primeStore({ emails: [row(7), row(8)] });
 
     await useMailStore.getState().deleteEmailFromServer(7);
@@ -805,7 +874,7 @@ describe('undo puts the row back first, then the server follows', () => {
     mockDeleteEmail
       .mockResolvedValueOnce({ trash: 'Trash', trashUid: 5 })
       .mockResolvedValueOnce({ trash: 'Trash', trashUid: 6 });
-    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 1, newUids: [41] });
+    mockRestoreMessages.mockImplementationOnce(backAs({ 7: 41 }));
     primeStore({
       emails: [row(7, { _accountId: 'a1', _mailbox: 'INBOX' }), row(8, { _accountId: 'a1', _mailbox: 'INBOX' })],
       activeMailbox: 'UNIFIED',
@@ -838,12 +907,12 @@ describe('undo puts the row back first, then the server follows', () => {
     primeStore({ emails: [row(7), row(8)] });
     await useMailStore.getState().deleteEmailFromServer(7);
     const move = deferred();
-    mockMoveEmails.mockReturnValueOnce(move.promise);
+    mockRestoreMessages.mockReturnValueOnce(move.promise);
 
     const undone = useMailStore.getState().runUndo();
-    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mockRestoreMessages).toHaveBeenCalled());
     const again = useMailStore.getState().deleteEmailFromServer(7);
-    move.resolve({ success: true, moved: 1, newUids: [41] });
+    move.resolve(await backAs({ 7: 41 })([{ accountId: 'a1', mailbox: 'INBOX', uid: 7 }]));
     await undone;
     await again;
 
@@ -855,7 +924,7 @@ describe('undo puts the row back first, then the server follows', () => {
     unreadPerAccount.a1 = 3;
     const release = deferred();
     mockDeleteEmail.mockReturnValueOnce(release.promise);
-    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 1, newUids: [41] });
+    mockRestoreMessages.mockImplementationOnce(backAs({ 7: 41 }));
     primeStore({
       emails: [
         row(7, { _accountId: 'a1', _mailbox: 'INBOX' }),
@@ -882,8 +951,7 @@ describe('undo puts the row back first, then the server follows', () => {
   });
 
   it('re-files an archived copy under the new uid, so it shadows the restored row instead of doubling it', async () => {
-    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 1, newUids: [41] });
-    mockVaultRebindUids.mockResolvedValueOnce({ rebound: [[7, 41]] });
+    mockRestoreMessages.mockImplementationOnce(backAs({ 7: 41 }));
     primeStore({ emails: [row(7), row(8)] });
     useMailStore.setState({
       localEmails: [row(7, { source: 'local', _nativeIdentity: { accountId: 'a1', mailbox: 'INBOX', uidValidity: 1, originHash: 'old' } })],
@@ -892,13 +960,13 @@ describe('undo puts the row back first, then the server follows', () => {
     });
 
     await useMailStore.getState().deleteEmailFromServer(7);
+    clearForUndo();
     await useMailStore.getState().runUndo();
 
-    expect(mockVaultRebindUids).toHaveBeenCalledWith('a1', 'INBOX', [[7, 41]]);
-    // The "we deleted the server copy" stamp comes off the entry under its new uid.
-    expect(mockGetLocalIndexEntry).toHaveBeenLastCalledWith('a1', 'INBOX', 41);
-    expect(mockAppendLocalIndex).toHaveBeenLastCalledWith('a1', 'INBOX',
-      [expect.objectContaining({ serverDeleted: false })]);
+    // The daemon re-filed the vault copy and took the "we deleted the server
+    // copy" stamp off it (handlers/deleted.rs pins both); the app follows
+    // with its own sets and rows.
+    expectNoAppSideRestore();
     expect([...useMailStore.getState().archivedEmailIds]).toEqual(['a1:INBOX:41']);
     expect(useMailStore.getState().sortedEmails.filter(e => e.subject === 'm7')).toHaveLength(1);
     expect(useMailStore.getState().localEmails.find(e => e.uid === 41)._nativeIdentity).toBeUndefined();
@@ -1024,33 +1092,37 @@ describe('undo after a delete on a JMAP account', () => {
     await useMailStore.getState().deleteSelectedFromServer();
     // The delete stamped the vault rows "we deleted the server copy".
     expect(useMailStore.getState().localEmails.map(e => e.serverDeleted)).toEqual([true, true]);
-    mockSaveEmailHeaders.mockClear();
-    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 2, newUids: [7, 8] });
+    clearForUndo();
+    mockRestoreMessages.mockImplementationOnce(backAs({ 7: 7, 8: 8 }));
 
     await useMailStore.getState().runUndo();
 
-    expect(mockMoveEmails).toHaveBeenCalledWith(JMAP, [10, 9], 'Trash', 'INBOX');
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { trashUid: 10 }), item(8, { trashUid: 9 })]);
     expect(uids()).toEqual([['m7', 7], ['m8', 8]]);
     const { deleteTombstones } = useMailStore.getState();
     expect(deleteTombstones.has('a1|INBOX|7')).toBe(false);
     expect(deleteTombstones.has('a1|INBOX|8')).toBe(false);
-    // Put back under the same uids; nothing pruned from the header cache.
-    expect(mockSaveEmailHeaders).toHaveBeenCalledWith('a1', 'INBOX',
-      [expect.objectContaining({ uid: 7, subject: 'm7' }), expect.objectContaining({ uid: 8, subject: 'm8' })], null);
-    for (const call of mockSaveEmailHeaders.mock.calls) expect(call[4]?.removedUids ?? []).toEqual([]);
+    // Put back under the same uids, nothing pruned: the daemon writes the
+    // rows back (handlers/deleted.rs, the JMAP restore test), the app none.
+    expectNoAppSideRestore();
     // The server copy is back under the same uids: the viewer must stop saying it is gone.
     expect(useMailStore.getState().localEmails.map(e => e.serverDeleted)).toEqual([false, false]);
   });
 
-  it('pairs new uids by position, not by sorting', async () => {
+  // The daemon pairs by position for JMAP (handlers/deleted.rs); the app
+  // takes each new uid from the reply by the old uid it names, never by the
+  // order of the reply.
+  it('re-keys each row by the old uid the reply names, not by its order', async () => {
     primeStore({ emails: [row(7), row(8)], selected: [7, 8], accounts: [JMAP] });
     await useMailStore.getState().deleteSelectedFromServer();
-    // m7 went to Trash as 10 and m8 as 9; the bridge answers in the order sent.
-    mockMoveEmails.mockResolvedValueOnce({ success: true, moved: 2, newUids: [30, 31] });
+    // m7 went to Trash as 10 and m8 as 9.
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [
+      { accountId: 'a1', mailbox: 'INBOX', uid: 8, newUid: 31 },
+      { accountId: 'a1', mailbox: 'INBOX', uid: 7, newUid: 30 },
+    ], failed: [] });
 
     await useMailStore.getState().runUndo();
 
-    // Pairing by ascending trash uid would hand m8 the uid 30 and m7 the uid 31.
     expect(uids()).toEqual([['m7', 30], ['m8', 31]]);
   });
 });

@@ -3321,6 +3321,7 @@
   "deletedBin.graphServerUnsupported": "Dieses Konto kann E-Mails vorerst nur lokal wiederherstellen.",
   "deletedBin.gone": "Diese E-Mail ist nicht mehr unter den gelöschten E-Mails.",
   "deletedBin.goneFromTrash": "Diese E-Mail liegt nicht mehr im Papierkorb auf dem Server und kann nicht wiederhergestellt werden.",
+  "deletedBin.restoreTimedOut": "Der Server hat nicht rechtzeitig geantwortet. Aktualisieren Sie, um zu sehen, ob die E-Mail zurück ist.",
   "undo.deletedKept_one": "{{count}} Nachricht gelöscht",
   "undo.deletedKept_other": "{{count}} Nachrichten gelöscht",
   "undo.action": "Rückgängig",

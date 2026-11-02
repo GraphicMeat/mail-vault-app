@@ -19,6 +19,9 @@ const mockVaultApplyFlags = vi.fn().mockResolvedValue({ renamed: 1 });
 const mockQueueOp = vi.fn().mockResolvedValue(1);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockDaemonCall = vi.fn().mockResolvedValue({});
+// The daemon's undo of a delete to Trash (`messages.restore`).
+const mockRestoreMessages = vi.fn();
+const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../daemonClient', () => ({
   daemonCall: (...a) => mockDaemonCall(...a),
@@ -59,7 +62,8 @@ vi.mock('../../api', () => ({
   graphListMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
   graphCacheMime: vi.fn().mockResolvedValue(undefined),
   deleteEmail: vi.fn().mockResolvedValue(undefined),
-  moveEmails: vi.fn().mockResolvedValue(undefined),
+  moveEmails: (...a) => mockMoveEmails(...a),
+  restoreMessages: (...a) => mockRestoreMessages(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -275,6 +279,27 @@ describe('a delete undo with a caller of its own', () => {
     mockDaemonCall.mockImplementation(async method => (method === 'deleted.recover'
       ? { recovered: [], failed: [{ id: 'bin-2', error: 'deletedBin.recoverFailed' }] } : {}));
     await setDeleteUndo([{ accountId: 'a1', mailbox: 'INBOX', uid: 8, binId: 'bin-2' }], { afterRestore });
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(false);
+    expect(afterRestore).not.toHaveBeenCalled();
+  });
+
+  // A note deleted to Trash comes back through the daemon's one restore call;
+  // the board repaints once it answers, and only when something came back.
+  it('runs the caller once the daemon put a Trash copy back, and not when it could not', async () => {
+    primeStore();
+    const afterRestore = vi.fn();
+    const trashed = (uid) => ({ accountId: 'a1', mailbox: 'INBOX', uid, trash: 'Trash', trashUid: 50 + uid, messageId: `<n${uid}@x>`, binId: null });
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, newUid: 41 }], failed: [] });
+
+    await setDeleteUndo([trashed(7)], { afterRestore });
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(true);
+    expect(mockRestoreMessages).toHaveBeenCalledWith([expect.objectContaining({ accountId: 'a1', mailbox: 'INBOX', uid: 7, trash: 'Trash', trashUid: 57, messageId: '<n7@x>' })]);
+    expect(mockMoveEmails).not.toHaveBeenCalled();
+    expect(afterRestore).toHaveBeenCalledTimes(1);
+
+    afterRestore.mockClear();
+    mockRestoreMessages.mockResolvedValueOnce({ restored: [], failed: [{ accountId: 'a1', mailbox: 'INBOX', uid: 8, error: 'deletedBin.goneFromTrash' }] });
+    await setDeleteUndo([trashed(8)], { afterRestore });
     await expect(useMailStore.getState().runUndo()).resolves.toBe(false);
     expect(afterRestore).not.toHaveBeenCalled();
   });

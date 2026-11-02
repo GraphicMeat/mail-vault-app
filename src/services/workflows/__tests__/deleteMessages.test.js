@@ -22,6 +22,8 @@ if (!globalThis.window) {
 }
 
 const mockMoveEmails = vi.fn();
+// The daemon's undo of a delete (`messages.restore`).
+const mockRestoreMessages = vi.fn();
 const mockDeleteEmail = vi.fn();
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(1);
@@ -67,6 +69,7 @@ vi.mock('../../api', () => ({
   deleteEmail: (...a) => mockDeleteEmail(...a),
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
+  restoreMessages: (...a) => mockRestoreMessages(...a),
   findMessageId: vi.fn().mockResolvedValue({ found: [], searched: 1, failed: 0, complete: true }),
   appendLocalIndex: vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
@@ -361,15 +364,15 @@ describe('deleteMessages, Review Focus 4: a delete while an undo is moving the m
     await deleteMessages([{ key: 7 }]);
     expect(mockSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ uids: [7] }), expect.anything());
     const move = deferred();
-    mockMoveEmails.mockReturnValueOnce(move.promise);
+    mockRestoreMessages.mockReturnValueOnce(move.promise);
 
     const undone = useMailStore.getState().runUndo();
-    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mockRestoreMessages).toHaveBeenCalled());
     const again = deleteMessages([{ key: 7 }]);
     // Nothing is submitted while the move is on the wire.
     await new Promise((r) => setTimeout(r, 20));
     expect(mockSubmit).toHaveBeenCalledTimes(1);
-    move.resolve({ success: true, moved: 1, newUids: [41] });
+    move.resolve({ restored: [{ accountId: 'a1', mailbox: 'INBOX', uid: 7, newUid: 41 }], failed: [] });
     await undone;
     await again;
 

@@ -3321,6 +3321,7 @@
   "deletedBin.graphServerUnsupported": "Por enquanto, esta conta só pode recuperar e-mails localmente.",
   "deletedBin.gone": "Este e-mail não está mais entre os excluídos.",
   "deletedBin.goneFromTrash": "Este e-mail não está mais na Lixeira do servidor, então não pode ser recuperado.",
+  "deletedBin.restoreTimedOut": "O servidor não respondeu a tempo. Atualize para ver se o e-mail voltou.",
   "undo.deletedKept_one": "{{count}} mensagem excluída",
   "undo.deletedKept_other": "{{count}} mensagens excluídas",
   "undo.action": "Desfazer",

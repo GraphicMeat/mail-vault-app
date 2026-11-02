@@ -3325,6 +3325,7 @@
   "deletedBin.graphServerUnsupported": "This account can only recover emails locally for now.",
   "deletedBin.gone": "This email is no longer among the deleted emails.",
   "deletedBin.goneFromTrash": "This email is no longer in Trash on the server, so it cannot be recovered.",
+  "deletedBin.restoreTimedOut": "The server did not answer in time. Refresh to see whether the email is back.",
   "undo.deletedKept_one": "Deleted {{count}} message",
   "undo.deletedKept_other": "Deleted {{count}} messages",
   "undo.action": "Undo",

@@ -1387,6 +1387,22 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         return { landed, queued: [], dropped: [] };
       }
       case 'delete_queue.list': return clone(journal.filter(entry => entry.op === 'delete').map(entry => ({ attempts: 0, failures: {}, ...entry })));
+      // The undo of a delete: each item moved back out of Trash (its Trash
+      // uid, else its Message-ID there) through the demo's own move. The demo
+      // keeps no bin, so what Trash no longer holds cannot come back.
+      case 'messages.restore': {
+        const restored = [];
+        const failed = [];
+        for (const item of args.items || []) {
+          const inTrash = item.trash && (item.trashUid != null
+            ? find({ accountId: item.accountId, mailbox: item.trash, uid: item.trashUid })
+            : messages.find(m => m.accountId === item.accountId && m.mailbox === item.trash && item.messageId && m.messageId === item.messageId));
+          const out = inTrash ? await invoke('imap_move_emails', { accountId: item.accountId, uids: [inTrash.uid], sourceMailbox: item.trash, targetMailbox: item.mailbox }) : null;
+          if (out?.newUids?.length) restored.push({ accountId: item.accountId, mailbox: item.mailbox, uid: item.uid, newUid: out.newUids[0] });
+          else failed.push({ accountId: item.accountId, mailbox: item.mailbox, uid: item.uid, error: 'deletedBin.goneFromTrash' });
+        }
+        return { restored, failed };
+      }
       // The replay pass: every owed delete lands, as a submit does here.
       case 'delete_queue.run': {
         const counts = { attempted: 0, done: 0, failed: 0, dropped: 0, skipped: 0, kept: 0 };

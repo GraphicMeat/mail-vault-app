@@ -140,6 +140,9 @@ export const DAEMON_OWNED = new Set([
   // daemon, answered by `delete-queue-landed` / `delete-queue-changed`;
   // `run` is its replay pass, also run by the daemon on its own timers.
   'delete_queue.submit', 'delete_queue.list', 'delete_queue.cancel', 'delete_queue.run',
+  // The undo of a delete: the daemon finds each Trash copy, moves it back,
+  // re-keys the header cache and the vault, and drops the bin copy.
+  'messages.restore',
   // User bulk mail work; native kickoff intercepts mirror authorization.
   'bulk.start', 'bulk.resume', 'bulk.status', 'bulk.cancel', 'bulk.discard',
   // Task 2.8: the six simple vault writers.

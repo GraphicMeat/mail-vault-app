@@ -31,6 +31,9 @@ const ALLOWED = {
   'src/services/workflows/folderOps.js': IMAP_PATH,
   'src/services/workflows/folderStatus.js': IMAP_PATH,
   'src/services/workflows/loadEmails.js': IMAP_PATH,
+  // Its one JMAP branch was the delete undo's positional uid pairing, which
+  // moved into the daemon with `messages.restore` (handlers/deleted.rs).
+  'src/services/workflows/messageMutations.js': IMAP_PATH,
   'src/services/workflows/probeServerCopy.js': IMAP_PATH,
   'src/services/workflows/replayOps.js': IMAP_PATH,
   'src/services/workflows/selectEmail.js': IMAP_PATH,

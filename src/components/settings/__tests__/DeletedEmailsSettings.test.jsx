@@ -78,6 +78,23 @@ describe('DeletedEmailsSettings', () => {
     expect(await screen.findByTestId('deleted-empty')).toBeTruthy();
   });
 
+  // A recover from here answers the uid the delete tombstoned (a local
+  // recover, a JMAP label put back): the message shows again. It is the
+  // bin's recover, never the undo's `messages.restore`.
+  it('a recover that answers the hidden uid lifts its tombstone', async () => {
+    useMailStore.setState({ deleteTombstones: new Set(['a1|INBOX|7', 'a1|INBOX|8']) });
+    daemonCall.mockImplementationOnce(async () => listed)
+      .mockImplementationOnce(async () => {
+        listed = [];
+        return { recovered: [{ id: 'b1', accountId: 'a1', mailbox: 'INBOX', uid: 7 }], failed: [] };
+      });
+    render(<DeletedEmailsSettings />);
+    fireEvent.click((await row()).querySelector('[data-action="recover-local"]'));
+    await waitFor(() => expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false));
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|8')).toBe(true);
+    expect(daemonCall).not.toHaveBeenCalledWith('messages.restore', expect.anything());
+  });
+
   it('says so when a recover fails, in catalog copy', async () => {
     daemonCall.mockImplementationOnce(async () => listed)
       .mockImplementationOnce(async () => ({ recovered: [], failed: [{ id: 'b1', error: 'IMAP APPEND refused' }] }));

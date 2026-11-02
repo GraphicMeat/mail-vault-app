@@ -3321,6 +3321,7 @@
   "deletedBin.graphServerUnsupported": "このアカウントでは、現在メールをローカルにのみ復元できます。",
   "deletedBin.gone": "このメールは削除済みメールにもうありません。",
   "deletedBin.goneFromTrash": "このメールはサーバーのゴミ箱にもうないため、復元できません。",
+  "deletedBin.restoreTimedOut": "サーバーが時間内に応答しませんでした。更新して、メールが戻ったか確認してください。",
   "undo.deletedKept_one": "{{count}} 件を削除しました",
   "undo.deletedKept_other": "{{count}} 件を削除しました",
   "undo.action": "取り消す",

@@ -31,7 +31,7 @@ import {
   mockRemoveSearchResults,
   mockGetEmailHeadersMeta,
   setDeleteUndo,
-  mockMoveEmails,
+  mockRestoreMessages,
   mockSearch,
 } from './purgeEverywhereHarness';
 import { captureBulkScope } from '../../bulkSelection.js';
@@ -300,7 +300,7 @@ it('waits for Undo rekey and refuses to transplant original proof to the new UID
     },
   ]);
   let release;
-  mockMoveEmails.mockImplementationOnce(
+  mockRestoreMessages.mockImplementationOnce(
     () =>
       new Promise((resolve) => {
         release = resolve;
@@ -312,7 +312,7 @@ it('waits for Undo rekey and refuses to transplant original proof to the new UID
     scope: captureBulkScope([1], useMailStore.getState(), [row(1)]),
   });
   expect(native.start).not.toHaveBeenCalled();
-  release({ newUids: [171] });
+  release({ restored: [{ accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uid: 1, newUid: 171 }], failed: [] });
   await undo;
   await purge;
   expect(native.start.mock.calls[0][0].scope.keys).toEqual([171]);
@@ -367,7 +367,7 @@ it('never borrows an unrelated non-null B companion after Undo maps A onto its U
     },
   ]);
   let release;
-  mockMoveEmails.mockImplementationOnce(
+  mockRestoreMessages.mockImplementationOnce(
     () =>
       new Promise((resolve) => {
         release = resolve;
@@ -393,7 +393,7 @@ it('never borrows an unrelated non-null B companion after Undo maps A onto its U
       [171, captureSelectionSnapshot(replacement, ACCOUNT.id, 'INBOX.Spam')],
     ]),
   });
-  release({ newUids: [171] });
+  release({ restored: [{ accountId: ACCOUNT.id, mailbox: 'INBOX.Spam', uid: 1, newUid: 171 }], failed: [] });
   await undo;
   await purge;
   expect(native.start.mock.calls[0][0].scope.keys).toEqual([171]);
