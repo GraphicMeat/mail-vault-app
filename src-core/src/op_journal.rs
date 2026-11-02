@@ -163,16 +163,29 @@ pub fn clear_by_id(data_dir: &Path, id: u64, uids: &[u32]) -> Result<(), String>
     })
 }
 
-/// Record why `uid` of entry `id` was refused, replacing an older reason for
-/// it. A uid the entry no longer owes (answered, cancelled) records nothing.
-pub fn note_failure(data_dir: &Path, id: u64, uid: u32, message: &str) -> Result<(), String> {
+/// Record why each `(uid, reason)` of entry `id` was refused, replacing an
+/// older reason for that uid (a uid named twice keeps the later reason). One
+/// transaction and one row rewrite for the whole round, however many uids
+/// failed: the daemon holds the journal lock across this call. A uid the
+/// entry no longer owes (answered, cancelled) records nothing.
+pub fn note_failures(data_dir: &Path, id: u64, failures: &[(u32, String)]) -> Result<(), String> {
+    if failures.is_empty() {
+        return Ok(());
+    }
     crate::app_db::with(data_dir, |conn| {
         crate::app_db::db::in_txn(conn, || {
             let Some(mut entry) = crate::app_db::ops::get(conn, id)?.map(row_to_entry) else { return Ok(()) };
-            if !entry.uids.contains(&uid) {
+            let at = now_ms();
+            let mut noted = false;
+            for (uid, message) in failures {
+                if entry.uids.contains(uid) {
+                    entry.failures.insert(*uid, Failure { message: message.clone(), at });
+                    noted = true;
+                }
+            }
+            if !noted {
                 return Ok(());
             }
-            entry.failures.insert(uid, Failure { message: message.to_string(), at: now_ms() });
             store_uids(conn, &entry)
         })
     })
@@ -298,12 +311,11 @@ mod tests {
     }
 
     #[test]
-    fn note_failure_persists_across_a_reopen_and_keeps_only_the_latest_per_uid() {
+    fn note_failures_persist_across_a_reopen_and_keep_only_the_latest_per_uid() {
         let d = tmp();
         let id = queue(d.path(), entry("delete", &[1, 2], serde_json::json!({}))).unwrap();
-        note_failure(d.path(), id, 1, "first").unwrap();
-        note_failure(d.path(), id, 1, "second").unwrap();
-        note_failure(d.path(), id, 2, "other").unwrap();
+        note_failures(d.path(), id, &[(1, "first".into())]).unwrap();
+        note_failures(d.path(), id, &[(1, "second".into()), (2, "other".into())]).unwrap();
 
         let row = on_disk(d.path(), id).expect("still owed");
         let failures: BTreeMap<u32, Failure> = serde_json::from_str(&row.failures_json).unwrap();
@@ -316,17 +328,39 @@ mod tests {
     }
 
     #[test]
-    fn note_failure_for_a_uid_no_longer_owed_records_nothing() {
+    fn note_failures_for_a_uid_no_longer_owed_record_nothing() {
         let d = tmp();
         let id = queue(d.path(), entry("delete", &[1, 2], serde_json::json!({}))).unwrap();
-        note_failure(d.path(), id, 7, "not owed").unwrap();
+        note_failures(d.path(), id, &[(7, "not owed".into())]).unwrap();
         clear_by_id(d.path(), id, &[2]).unwrap();
-        note_failure(d.path(), id, 2, "answered meanwhile").unwrap();
+        note_failures(d.path(), id, &[(2, "answered meanwhile".into())]).unwrap();
         assert!(get(d.path(), id).unwrap().unwrap().failures.is_empty());
         // A gone entry is not an error either.
         clear_by_id(d.path(), id, &[1]).unwrap();
-        note_failure(d.path(), id, 1, "cancelled meanwhile").unwrap();
+        note_failures(d.path(), id, &[(1, "cancelled meanwhile".into())]).unwrap();
         assert!(get(d.path(), id).unwrap().is_none());
+    }
+
+    /// The daemon writes a whole round's refusals in one call: every reason
+    /// lands, a uid named twice keeps the later one, a uid the entry does not
+    /// owe is skipped, and the row is rewritten once.
+    #[test]
+    fn note_failures_writes_a_whole_round_at_once() {
+        let d = tmp();
+        let uids: Vec<u32> = (1..=50).collect();
+        let id = queue(d.path(), entry("delete", &uids, serde_json::json!({}))).unwrap();
+        let mut round: Vec<(u32, String)> = uids.iter().map(|uid| (*uid, format!("refused {uid}"))).collect();
+        round.push((7, "refused again".into()));
+        round.push((999, "not owed".into()));
+        note_failures(d.path(), id, &round).unwrap();
+        let row = on_disk(d.path(), id).unwrap();
+        let failures: BTreeMap<u32, Failure> = serde_json::from_str(&row.failures_json).unwrap();
+        assert_eq!(failures.len(), 50);
+        assert_eq!(failures[&7].message, "refused again");
+        assert_eq!(failures[&50].message, "refused 50");
+        assert!(!failures.contains_key(&999));
+        assert_eq!(row.uids_json, serde_json::to_string(&uids).unwrap(), "the uids are untouched");
+        note_failures(d.path(), id, &[]).unwrap();
     }
 
     #[test]
@@ -347,8 +381,8 @@ mod tests {
         let bulk = serde_json::json!({"total": 3, "messages": [{"uid": 1}, {"uid": 2}, {"uid": 3}]});
         let id = queue(d.path(), entry("delete", &[1, 2, 3], bulk)).unwrap();
         let other = queue(d.path(), entry("delete", &[2], serde_json::json!({}))).unwrap();
-        note_failure(d.path(), id, 2, "refused").unwrap();
-        note_failure(d.path(), id, 3, "refused").unwrap();
+        note_failures(d.path(), id, &[(2, "refused".into())]).unwrap();
+        note_failures(d.path(), id, &[(3, "refused".into())]).unwrap();
 
         // No arg is needed, and another entry owing the same uid keeps it.
         clear_by_id(d.path(), id, &[2]).unwrap();
@@ -366,8 +400,8 @@ mod tests {
     fn the_arg_matched_clear_drops_the_failures_of_what_it_clears() {
         let d = tmp();
         let id = queue(d.path(), entry("delete", &[1, 2], serde_json::json!({}))).unwrap();
-        note_failure(d.path(), id, 1, "refused").unwrap();
-        note_failure(d.path(), id, 2, "refused").unwrap();
+        note_failures(d.path(), id, &[(1, "refused".into())]).unwrap();
+        note_failures(d.path(), id, &[(2, "refused".into())]).unwrap();
         clear(d.path(), "delete", "acct", "INBOX", &[1], &serde_json::json!({})).unwrap();
         let left = get(d.path(), id).unwrap().unwrap();
         assert_eq!(left.uids, vec![2]);

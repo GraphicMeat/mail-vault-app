@@ -27,6 +27,21 @@ pub(crate) fn scripted_send(state: &DaemonState, uid: u32) -> Option<Result<Outc
     script(state, uid)
 }
 
+/// Runs between a submit's journal write and its claim.
+type Hook = Arc<dyn Fn(&DaemonState) + Send + Sync>;
+
+fn hooks() -> &'static Mutex<HashMap<PathBuf, Hook>> {
+    static HOOKS: OnceLock<Mutex<HashMap<PathBuf, Hook>>> = OnceLock::new();
+    HOOKS.get_or_init(Default::default)
+}
+
+pub(crate) fn after_journal(state: &DaemonState) {
+    let hook = hooks().lock().unwrap().get(&state.app_dir).cloned();
+    if let Some(hook) = hook {
+        hook(state);
+    }
+}
+
 fn script(state: &DaemonState, f: impl Fn(&DaemonState, u32) -> Option<Result<Outcome, Refusal>> + Send + Sync + 'static) {
     scripts().lock().unwrap().insert(state.app_dir.clone(), Arc::new(f));
 }
@@ -195,7 +210,7 @@ async fn a_daemon_killed_before_the_send_landed_leaves_the_entry_owed() {
     assert_eq!(owed.len(), 1);
     assert_eq!(owed[0].uids, vec![1]);
     assert_eq!(owed[0].attempts, 1, "the round it died in is counted");
-    assert!(f.s.delete_queue.claims.lock().unwrap().is_empty(), "the claim went with the task");
+    assert_eq!(f.s.delete_queue.held(), 0, "the claim went with the task");
     assert!(f.in_inbox(1));
 }
 
@@ -238,7 +253,10 @@ async fn a_send_that_lands_clears_the_uid_and_names_where_it_went() {
     // The local bookkeeping ran: the header cache no longer lists it.
     let cached = crate::custody::with_conn(&f.s, |c| cache::load_by_uids(c, "acc1", "INBOX", &[1])).unwrap();
     assert!(cached.is_empty(), "{cached:?}");
-    let landed: Vec<Value> = events(&mut rx).into_iter().filter(|(n, _)| n == "delete-queue-landed").map(|(_, p)| p).collect();
+    let seen = events(&mut rx);
+    let at = seen.iter().position(|(n, _)| n == "delete-queue-landed").expect("landed");
+    assert!(seen[at + 1..].iter().any(|(n, _)| n == "delete-queue-changed"), "a landing changes the queue too: {seen:?}");
+    let landed: Vec<Value> = seen.into_iter().filter(|(n, _)| n == "delete-queue-landed").map(|(_, p)| p).collect();
     assert_eq!(landed.len(), 1);
     assert_eq!(landed[0]["accountId"], "acc1");
     assert_eq!(landed[0]["mailbox"], "INBOX");
@@ -341,7 +359,7 @@ async fn a_cancel_while_the_entry_is_retried_stops_its_sends() {
             sends.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             // The user cancels in Settings while this send is on the wire.
             let id = op_journal::read(&state.app_dir)[0].id;
-            op_journal::clear_by_id(&state.app_dir, id, &[uid]).unwrap();
+            assert!(cancel(state, id, &[uid]).unwrap());
             Some(Err(Refusal::Server("connection lost".into())))
         });
     }
@@ -349,6 +367,75 @@ async fn a_cancel_while_the_entry_is_retried_stops_its_sends() {
     assert_eq!(sends.load(std::sync::atomic::Ordering::SeqCst), 1, "not retried once cancelled");
     assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![], dropped: vec![(1, "cancelled".into())] });
     assert!(f.journal().is_empty(), "the failure did not bring it back");
+    assert_eq!(f.s.delete_queue.held(), 0);
+    assert!(f.s.delete_queue.lock().cancelled.is_empty(), "the cancel mark went with the claim");
+}
+
+/// Review fix 2: B adopts a uid A's entry owes, A lands and clears it before
+/// B claims it. B must not call that a refusal: the message is gone from the
+/// server, and `dropped` would have the app put its row back.
+#[tokio::test]
+async fn a_uid_another_submit_answered_is_never_reported_dropped() {
+    let f = fixture(vec![]);
+    let a = op_journal::queue_delete(&f.s.app_dir, "acc1", "INBOX", &[1], &json!({"mode": "trash", "bin": true})).unwrap().id.unwrap();
+    hooks().lock().unwrap().insert(
+        f.s.app_dir.clone(),
+        Arc::new(move |state: &DaemonState| {
+            // A lands uid 1 and clears it, between B's journal write and B's claim.
+            op_journal::clear_by_id(&state.app_dir, a, &[1]).unwrap();
+        }),
+    );
+    let reply = submit(&f.s, ask(&[1], Mode::Trash)).await.unwrap();
+    assert_eq!(reply, SubmitReply { landed: vec![], queued: vec![1], dropped: vec![] }, "left to the submit that answered it");
+    assert_eq!(f.moves(), 0, "not sent again");
+    assert!(f.in_inbox(1), "nothing touched (A's landing is simulated)");
+}
+
+/// Review fix 1: a round of N refused uids writes the journal once per
+/// entry (one attempt, one batch of reasons), not once per uid.
+#[tokio::test]
+async fn a_round_of_many_refusals_writes_the_journal_once_per_entry() {
+    let f = fixture(vec![]);
+    script(&f.s, |_, uid| Some(Err(Refusal::Server(format!("refused {uid}")))));
+    let uids: Vec<u32> = (1..=20).collect();
+    let reply = submit(&f.s, ask(&uids, Mode::Trash)).await.unwrap();
+    assert_eq!(reply.queued.len(), 20);
+    let writes = f.s.delete_queue.journal_writes.load(std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(writes, 6 * 2, "per round: one attempt and one batch of reasons for the one entry");
+    let owed = f.journal();
+    assert_eq!(owed.len(), 1);
+    assert_eq!(owed[0].attempts, 6);
+    assert_eq!(owed[0].failures.len(), 20);
+    assert_eq!(owed[0].failures[&13].message, "refused 13");
+}
+
+#[tokio::test]
+async fn a_folder_whose_local_marker_will_not_read_is_refused() {
+    let f = fixture(vec![]);
+    let root = crate::handlers::common::vault_root(&f.s).unwrap();
+    let account_dir = mailvault_core::vault_files::account_dir(&root.join("Maildir"), &crate::handlers::common::sanitize_mailbox_name("acc1"));
+    std::fs::create_dir_all(&account_dir).unwrap();
+    // A regular file where the folder's directory belongs: unreadable as a folder.
+    std::fs::write(account_dir.join(mailvault_core::search_index::text::vault_dir_name("Broken")), b"x").unwrap();
+    let broken = Submit { mailbox: "Broken".into(), ..ask(&[1], Mode::Trash) };
+    assert_eq!(submit(&f.s, broken).await, Err("errors.bulkLocalFoldersRead".to_string()));
+    assert!(f.journal().is_empty());
+    assert_eq!(f.srv.count_commands("SELECT"), 0);
+}
+
+#[tokio::test]
+async fn an_unreachable_vault_does_not_hold_up_a_server_delete() {
+    let dir = std::env::temp_dir().join(format!("mv-delete-queue-novault-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let s = DaemonState::for_test(dir.join("vault"), dir.clone(), false);
+    seed_accounts(&s, r#"[{"id":"acc1"}]"#);
+    assert_eq!(refuse_unqueued(&s, "acc1", "INBOX").await, Ok(()));
+}
+
+#[test]
+fn an_accounts_list_that_will_not_read_answers_a_catalog_key() {
+    let unreadable = Err(mailvault_core::accounts_doc::AccountsError::Io("disk on fire".into()));
+    assert_eq!(admit(unreadable, "acc1"), Err("errors.bulkAccountUnavailable".to_string()));
 }
 
 #[tokio::test]

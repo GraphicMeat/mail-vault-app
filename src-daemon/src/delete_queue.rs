@@ -13,7 +13,8 @@
 //!   (`handlers::archive::after_server_delete`), leaves every delete entry
 //!   that owed it, and is announced with `delete-queue-landed`. A uid still
 //!   refused after the last round keeps its entry and its reason
-//!   (`op_journal::note_failure`) and is answered as `queued`; the journal
+//!   (`op_journal::note_failures`, one write per entry per round) and is
+//!   answered as `queued`; the journal
 //!   change is announced with `delete-queue-changed`.
 //! - Only an identity change (`errors.bulkIdentityChanged`) is refused for
 //!   good (`dropped`, its uid cleared), as the app's replay does. A capture
@@ -154,10 +155,42 @@ pub(crate) fn classify(uid: u32, result: &Result<Outcome, Refusal>) -> Verdict {
 
 type Key = (String, String, u32);
 
-/// The uids being sent right now, process-wide.
+/// The uids being sent right now, process-wide, and which of them the user
+/// cancelled while they were being sent.
 #[derive(Default)]
 pub(crate) struct QueueState {
-    claims: Mutex<HashSet<Key>>,
+    inner: Mutex<Claims>,
+    /// Journal writes the queue made (`note_attempt`, `note_failures`,
+    /// `clear_by_id`), for the tests that pin one write per entry per round.
+    #[cfg(test)]
+    pub(crate) journal_writes: std::sync::atomic::AtomicUsize,
+}
+
+#[derive(Default)]
+struct Claims {
+    held: HashSet<Key>,
+    /// Marked by `delete_queue.cancel` for a uid some submit holds, so that
+    /// submit can tell a cancel from a uid another submit answered. Lives no
+    /// longer than the claim.
+    cancelled: HashSet<Key>,
+}
+
+impl QueueState {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Claims> {
+        self.inner.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn held(&self) -> usize {
+        self.lock().held.len()
+    }
+
+    fn wrote(&self, n: usize) {
+        #[cfg(test)]
+        self.journal_writes.fetch_add(n, std::sync::atomic::Ordering::SeqCst);
+        #[cfg(not(test))]
+        let _ = n;
+    }
 }
 
 /// The uids one submit holds; released on drop, on every exit path.
@@ -168,20 +201,21 @@ struct Claim {
 
 impl Drop for Claim {
     fn drop(&mut self) {
-        let mut claims = self.state.delete_queue.claims.lock().unwrap_or_else(|p| p.into_inner());
+        let mut claims = self.state.delete_queue.lock();
         for key in &self.keys {
-            claims.remove(key);
+            claims.held.remove(key);
+            claims.cancelled.remove(key);
         }
     }
 }
 
 /// Claim every uid of `uids` not claimed elsewhere: `(claim, held, busy)`.
 fn claim(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32]) -> (Claim, Vec<u32>, Vec<u32>) {
-    let mut claims = state.delete_queue.claims.lock().unwrap_or_else(|p| p.into_inner());
+    let mut claims = state.delete_queue.lock();
     let (mut keys, mut held, mut busy) = (Vec::new(), Vec::new(), Vec::new());
     for &uid in uids {
         let key = (account_id.to_string(), mailbox.to_string(), uid);
-        if claims.insert(key.clone()) {
+        if claims.held.insert(key.clone()) {
             keys.push(key);
             held.push(uid);
         } else {
@@ -190,6 +224,35 @@ fn claim(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32]
     }
     drop(claims);
     (Claim { state: Arc::clone(state), keys }, held, busy)
+}
+
+/// Whether the user cancelled `uid` while this submit held it.
+fn was_cancelled(state: &DaemonState, account_id: &str, mailbox: &str, uid: u32) -> bool {
+    state.delete_queue.lock().cancelled.contains(&(account_id.to_string(), mailbox.to_string(), uid))
+}
+
+/// `delete_queue.cancel`: clear `uids` of delete entry `id`, marking any a
+/// submit is sending right now as cancelled first, so that submit reports
+/// them `cancelled` rather than leaving them queued. `Ok(false)`: the entry
+/// is already gone. Blocking: journal I/O under `state.journal`.
+pub(crate) fn cancel(state: &DaemonState, id: u64, uids: &[u32]) -> Result<bool, String> {
+    let _lock = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+    let entry = match op_journal::get(&state.app_dir, id)? {
+        None => return Ok(false),
+        Some(e) if e.op != "delete" => return Err("errors.bulkUnsupported".to_string()),
+        Some(e) => e,
+    };
+    {
+        let mut claims = state.delete_queue.lock();
+        for uid in uids.iter().filter(|uid| entry.uids.contains(uid)) {
+            let key = (entry.account_id.clone(), entry.mailbox.clone(), *uid);
+            if claims.held.contains(&key) {
+                claims.cancelled.insert(key);
+            }
+        }
+    }
+    op_journal::clear_by_id(&state.app_dir, id, uids)?;
+    Ok(true)
 }
 
 // ── submit ──────────────────────────────────────────────────────────────────
@@ -225,6 +288,8 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
         changed(state);
     }
     let owner: BTreeMap<u32, u64> = owed.owners.iter().copied().collect();
+    #[cfg(test)]
+    tests::after_journal(state);
 
     // 2. The claim: a uid another submit is sending is left to it.
     let asked: Vec<u32> = owed.owners.iter().map(|(uid, _)| *uid).collect();
@@ -240,11 +305,17 @@ pub(crate) async fn run(state: &Arc<DaemonState>, s: Submit) -> Result<SubmitRep
         if round > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(DELETE_RETRY_MS[round - 1])).await;
         }
-        // A uid its entry no longer owes was cancelled (or answered by
-        // someone else): not sent again.
+        // A uid its entry no longer owes is not sent again. Cancelled by the
+        // user: `dropped`. Otherwise another submit owned it and answered it
+        // (its `delete-queue-landed` says how): left to that one, `queued`,
+        // never reported as refused.
         let still = still_owed(state, &owner, &pending).await;
-        for uid in pending.iter().filter(|uid| !still.contains(uid)) {
-            reply.dropped.push((*uid, CANCELLED.to_string()));
+        for &uid in pending.iter().filter(|uid| !still.contains(uid)) {
+            if was_cancelled(state, &s.account_id, &s.mailbox, uid) {
+                reply.dropped.push((uid, CANCELLED.to_string()));
+            } else {
+                reply.queued.push(uid);
+            }
         }
         pending.retain(|uid| still.contains(uid));
         if pending.is_empty() {
@@ -337,21 +408,36 @@ fn entry_arg(s: &Submit) -> Value {
 async fn refuse_unqueued(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Result<(), String> {
     let (st, account_id, mailbox) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
     blocking(move || {
-        let listing = mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&st.app_dir)).map_err(|e| format!("{e:?}"))?;
-        let Some(entry) = listing.accounts.iter().find(|a| a.get("id").and_then(Value::as_str) == Some(account_id.as_str())) else {
-            return Err(ACCOUNT_UNAVAILABLE.to_string());
-        };
-        if entry.get("oauth2Transport").and_then(Value::as_str) == Some("graph") {
-            return Err(GRAPH_UNSUPPORTED.to_string());
-        }
-        // An unreachable vault holds no local folder this delete could be in.
-        let group = mailvault_core::bulk::Group { account_id, mailbox, uids: Vec::new() };
-        if crate::bulk_worker::native_local_folder(&st, &group).unwrap_or(false) {
-            return Err(LOCAL_FOLDER.to_string());
+        let listing = mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&st.app_dir));
+        admit(listing, &account_id)?;
+        // No vault reachable: no local folder this delete could be in (the
+        // server delete must not wait on an unplugged drive). A reachable
+        // vault whose folder marker will not read is refused: it may be a
+        // vault-only folder, which must never be journalled.
+        if crate::handlers::common::vault_root(&st).is_ok() {
+            let group = mailvault_core::bulk::Group { account_id, mailbox, uids: Vec::new() };
+            if crate::bulk_worker::native_local_folder(&st, &group)? {
+                return Err(LOCAL_FOLDER.to_string());
+            }
         }
         Ok(())
     })
     .await?
+}
+
+/// The accounts listing's verdict on `account_id`, as a catalog key.
+fn admit(listing: Result<mailvault_core::accounts_doc::Listing, mailvault_core::accounts_doc::AccountsError>, account_id: &str) -> Result<(), String> {
+    let listing = listing.map_err(|e| {
+        warn!("[delete-queue] accounts unreadable, nothing queued: {e:?}");
+        ACCOUNT_UNAVAILABLE.to_string()
+    })?;
+    let Some(entry) = listing.accounts.iter().find(|a| a.get("id").and_then(Value::as_str) == Some(account_id)) else {
+        return Err(ACCOUNT_UNAVAILABLE.to_string());
+    };
+    if entry.get("oauth2Transport").and_then(Value::as_str) == Some("graph") {
+        return Err(GRAPH_UNSUPPORTED.to_string());
+    }
+    Ok(())
 }
 
 /// One `delete_one` on the account's provider (a JMAP account through its
@@ -365,16 +451,16 @@ async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Su
     message_delete::delete_one(state, provider, &s.account_id, &s.mailbox, uid, s.mode, s.bin).await
 }
 
-/// The uids of `pending` their entries still owe.
+/// The uids of `pending` their entries still owe: one read per entry.
 async fn still_owed(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, pending: &[u32]) -> HashSet<u32> {
-    let (st, owner, asked) = (Arc::clone(state), owner.clone(), pending.to_vec());
+    let by_id = by_owner(owner, pending.iter().copied());
+    let st = Arc::clone(state);
     let read = blocking(move || {
         let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
         let mut still = HashSet::new();
-        for uid in asked {
-            let Some(id) = owner.get(&uid) else { continue };
-            if op_journal::get(&st.app_dir, *id)?.is_some_and(|e| e.uids.contains(&uid)) {
-                still.insert(uid);
+        for (id, uids) in by_id {
+            if let Some(entry) = op_journal::get(&st.app_dir, id)? {
+                still.extend(uids.into_iter().filter(|uid| entry.uids.contains(uid)));
             }
         }
         Ok::<_, String>(still)
@@ -391,12 +477,41 @@ async fn still_owed(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, pendin
     }
 }
 
+/// `items` grouped by the entry that owes each uid.
+fn by_owner<T>(owner: &BTreeMap<u32, u64>, items: impl IntoIterator<Item = T>) -> BTreeMap<u64, Vec<T>>
+where
+    T: Owned,
+{
+    let mut grouped: BTreeMap<u64, Vec<T>> = BTreeMap::new();
+    for item in items {
+        if let Some(id) = owner.get(&item.uid()) {
+            grouped.entry(*id).or_default().push(item);
+        }
+    }
+    grouped
+}
+
+trait Owned {
+    fn uid(&self) -> u32;
+}
+impl Owned for u32 {
+    fn uid(&self) -> u32 {
+        *self
+    }
+}
+impl Owned for (u32, String) {
+    fn uid(&self) -> u32 {
+        self.0
+    }
+}
+
 /// One more round for every entry that owes a uid of `pending`.
 async fn note_round(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, pending: &[u32]) {
     let ids: std::collections::BTreeSet<u64> = pending.iter().filter_map(|uid| owner.get(uid).copied()).collect();
     let st = Arc::clone(state);
     let result = blocking(move || {
         let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
+        st.delete_queue.wrote(ids.len());
         ids.into_iter().try_for_each(|id| op_journal::note_attempt(&st.app_dir, id))
     })
     .await
@@ -406,14 +521,14 @@ async fn note_round(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, pendin
     }
 }
 
+/// Keep the round's refusals: one write per entry, however many uids failed.
 async fn note_failures(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, failed: &[(u32, String)]) {
-    let (st, owner, failed) = (Arc::clone(state), owner.clone(), failed.to_vec());
+    let by_id = by_owner(owner, failed.iter().cloned());
+    let st = Arc::clone(state);
     let result = blocking(move || {
         let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
-        failed.iter().try_for_each(|(uid, reason)| match owner.get(uid) {
-            Some(id) => op_journal::note_failure(&st.app_dir, *id, *uid, reason),
-            None => Ok(()),
-        })
+        st.delete_queue.wrote(by_id.len());
+        by_id.iter().try_for_each(|(id, round)| op_journal::note_failures(&st.app_dir, *id, round))
     })
     .await
     .and_then(|r| r);
@@ -424,15 +539,11 @@ async fn note_failures(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, fai
 
 /// Clear `uids` from the entries that own them.
 async fn clear_owned(state: &Arc<DaemonState>, owner: &BTreeMap<u32, u64>, uids: &[u32]) {
-    let mut by_id: BTreeMap<u64, Vec<u32>> = BTreeMap::new();
-    for uid in uids {
-        if let Some(id) = owner.get(uid) {
-            by_id.entry(*id).or_default().push(*uid);
-        }
-    }
+    let by_id = by_owner(owner, uids.iter().copied());
     let st = Arc::clone(state);
     let result = blocking(move || {
         let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
+        st.delete_queue.wrote(by_id.len());
         by_id.iter().try_for_each(|(id, uids)| op_journal::clear_by_id(&st.app_dir, *id, uids))
     })
     .await
@@ -454,24 +565,33 @@ async fn settle_landed(state: &Arc<DaemonState>, account_id: &str, mailbox: &str
     let (st, account, folder, gone) = (Arc::clone(state), account_id.to_string(), mailbox.to_string(), uids.clone());
     let cleared = blocking(move || {
         let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
+        let mut cleared = 0;
         for entry in op_journal::read(&st.app_dir) {
             if entry.op != "delete" || entry.account_id != account || entry.mailbox != folder {
                 continue;
             }
             let owed: Vec<u32> = entry.uids.iter().copied().filter(|uid| gone.contains(uid)).collect();
             if !owed.is_empty() {
+                st.delete_queue.wrote(1);
                 op_journal::clear_by_id(&st.app_dir, entry.id, &owed)?;
+                cleared += 1;
             }
         }
-        Ok::<_, String>(())
+        Ok::<_, String>(cleared)
     })
     .await
     .and_then(|r| r);
-    if let Err(e) = cleared {
+    let cleared = cleared.unwrap_or_else(|e| {
         // The delete happened; a replay of a uid that is gone lands as gone.
         warn!("[delete-queue] {account_id}/{mailbox}: deleted, but the journal still lists them: {e}");
-    }
+        0
+    });
     state.events.emit("delete-queue-landed", json!({ "accountId": account_id, "mailbox": mailbox, "landed": landed }));
+    // The queue itself changed too: a list that refreshes on `changed` must
+    // not keep showing what just landed.
+    if cleared > 0 {
+        changed(state);
+    }
 }
 
 fn changed(state: &Arc<DaemonState>) {
@@ -529,16 +649,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let entry = req!(u64_arg(&id, params, "id"));
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
             let st = Arc::clone(state);
-            let result = blocking(move || -> Result<bool, String> {
-                let _lock = st.journal.lock().unwrap_or_else(|p| p.into_inner());
-                match op_journal::get(&st.app_dir, entry)? {
-                    None => Ok(false),
-                    Some(e) if e.op != "delete" => Err("errors.bulkUnsupported".to_string()),
-                    Some(_) => op_journal::clear_by_id(&st.app_dir, entry, &uids).map(|()| true),
-                }
-            })
-            .await
-            .and_then(|r| r);
+            let result = blocking(move || cancel(&st, entry, &uids)).await.and_then(|r| r);
             if matches!(result, Ok(true)) {
                 changed(state);
             }
