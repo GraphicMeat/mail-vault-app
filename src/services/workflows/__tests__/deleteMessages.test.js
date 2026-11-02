@@ -24,7 +24,6 @@ if (!globalThis.window) {
 const mockMoveEmails = vi.fn();
 // The daemon's undo of a delete (`messages.restore`).
 const mockRestoreMessages = vi.fn();
-const mockDeleteEmail = vi.fn();
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(1);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
@@ -66,14 +65,12 @@ vi.mock('../../api', () => ({
   fetchEmailLight: vi.fn().mockResolvedValue(null),
   updateEmailFlags: vi.fn().mockResolvedValue({ success: true, written: [] }),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
-  deleteEmail: (...a) => mockDeleteEmail(...a),
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   restoreMessages: (...a) => mockRestoreMessages(...a),
   findMessageId: vi.fn().mockResolvedValue({ found: [], searched: 1, failed: 0, complete: true }),
   appendLocalIndex: vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
-  vaultRebindUids: vi.fn().mockResolvedValue({ rebound: [] }),
   deleteQueueSubmit: (...a) => mockSubmit(...a),
   deleteQueueList: (...a) => mockQueueList(...a),
 }));
@@ -181,7 +178,6 @@ const deferred = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   netOnline = true;
-  mockDeleteEmail.mockImplementation(async (_a, uid) => ({ trash: 'Trash', trashUid: 100 + Number(uid) }));
   mockMoveEmails.mockResolvedValue({ success: true, moved: 1, newUids: [41] });
   mockResolveGraphMessageId.mockResolvedValue('graph-id');
   mockDaemonCall.mockResolvedValue({});

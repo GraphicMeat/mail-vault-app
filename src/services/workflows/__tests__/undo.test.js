@@ -28,7 +28,6 @@ const mockQueueOp = vi.fn().mockResolvedValue(1);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockRefreshCurrentView = vi.fn().mockResolvedValue(undefined);
-const mockVaultRebindUids = vi.fn().mockResolvedValue({ rebound: [] });
 // The daemon's undo of a delete (`messages.restore`). It finds the Trash copy,
 // moves it back, re-keys the header cache and the vault, and drops the bin
 // copy; the app only learns which old uid became which.
@@ -43,14 +42,13 @@ const backAs = (newUids = {}) => async (items) => ({
 const expectNoAppSideRestore = () => {
   expect(mockFindMessageId).not.toHaveBeenCalled();
   expect(mockMoveEmails).not.toHaveBeenCalled();
-  expect(mockVaultRebindUids).not.toHaveBeenCalled();
   expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
   expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   expect(mockDaemonCall).not.toHaveBeenCalledWith('deleted.discard', expect.anything());
 };
 // Clears what the delete itself called, so the undo's calls stand alone.
 const clearForUndo = () => {
-  for (const m of [mockFindMessageId, mockMoveEmails, mockVaultRebindUids, mockSaveEmailHeaders, mockAppendLocalIndex, mockGetLocalIndexEntry, mockDaemonCall, mockRestoreMessages]) m.mockClear();
+  for (const m of [mockFindMessageId, mockMoveEmails, mockSaveEmailHeaders, mockAppendLocalIndex, mockGetLocalIndexEntry, mockDaemonCall, mockRestoreMessages]) m.mockClear();
 };
 const item = (uid, extra = {}) => expect.objectContaining({ accountId: 'a1', mailbox: 'INBOX', uid, trash: 'Trash', ...extra });
 // The server holds the restored message under its new uid only: the retired
@@ -91,14 +89,12 @@ vi.mock('../../api', () => ({
   graphSetFlagged: vi.fn().mockResolvedValue(undefined),
   graphMoveEmails: vi.fn().mockResolvedValue(undefined),
   graphDeleteMessage: vi.fn().mockResolvedValue(undefined),
-  deleteEmail: (...a) => mockDeleteEmail(...a),
   deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   deleteQueueList: async () => [],
   moveEmails: (...a) => mockMoveEmails(...a),
   findMessageId: (...a) => mockFindMessageId(...a),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
-  vaultRebindUids: (...a) => mockVaultRebindUids(...a),
   restoreMessages: (...a) => mockRestoreMessages(...a),
 }));
 
@@ -233,7 +229,6 @@ beforeEach(() => {
   mockFindMessageId.mockResolvedValue({ found: [], searched: 1, failed: 0, complete: true });
   mockGetLocalIndexEntry.mockResolvedValue({ uid: 7, subject: 'm7' });
   mockUpdateEmailFlags.mockResolvedValue({ success: true, written: [] });
-  mockVaultRebindUids.mockResolvedValue({ rebound: [] });
   mockRestoreMessages.mockImplementation(backAs());
   mockDaemonCall.mockImplementation(async (method, { ids } = {}) => (method === 'deleted.recover'
     ? { recovered: ids.map(id => ({ id })), failed: [] } : {}));

@@ -81,7 +81,6 @@ vi.mock('../../api', () => ({
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
   fetchMailboxes: vi.fn().mockResolvedValue([]),
-  deleteEmail: vi.fn().mockResolvedValue(undefined),
   moveEmails: vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
 }));

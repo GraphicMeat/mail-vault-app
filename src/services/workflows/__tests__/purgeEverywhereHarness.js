@@ -6,7 +6,6 @@ if (!globalThis.window) globalThis.window = {};
 globalThis.window.addEventListener = globalThis.window.addEventListener || (() => {});
 globalThis.window.removeEventListener = globalThis.window.removeEventListener || (() => {});
 
-const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
 const mockDeleteQueueSubmit = vi.fn().mockResolvedValue({ landed: [], queued: [], dropped: [] });
 const mockMaildirDeleteMany = vi.fn().mockResolvedValue({ removed: 0 });
 const mockBackupPurgeUids = vi.fn().mockResolvedValue({ removed: 0, queued: 0 });
@@ -15,7 +14,6 @@ const mockBackupPurgeUids = vi.fn().mockResolvedValue({ removed: 0, queued: 0 })
 // existed. Tests that DO care override one side to force a mismatch.
 const mockCheckMailboxStatus = vi.fn().mockResolvedValue({ uidValidity: 1 });
 const mockMoveEmails = vi.fn().mockResolvedValue({ newUids: [171] });
-const mockVaultRebindUids = vi.fn().mockResolvedValue({ rebound: [] });
 // The daemon's undo of a delete (`messages.restore`): every item back as 171.
 const restoredAs171 = async (items) => ({ restored: items.map(i => ({ accountId: i.accountId, mailbox: i.mailbox, uid: i.uid, newUid: 171 })), failed: [] });
 const mockRestoreMessages = vi.fn(restoredAs171);
@@ -35,7 +33,6 @@ vi.mock('../../syncService', () => ({
 }));
 
 vi.mock('../../api', () => ({
-  deleteEmail: (...a) => mockDeleteEmail(...a),
   deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   maildirDeleteMany: (...a) => mockMaildirDeleteMany(...a),
   backupPurgeUids: (...a) => mockBackupPurgeUids(...a),
@@ -45,7 +42,6 @@ vi.mock('../../api', () => ({
   fetchEmailLight: vi.fn(),
   updateEmailFlags: vi.fn().mockResolvedValue(undefined),
   moveEmails: (...a) => mockMoveEmails(...a),
-  vaultRebindUids: (...a) => mockVaultRebindUids(...a),
   restoreMessages: (...a) => mockRestoreMessages(...a),
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
@@ -174,7 +170,6 @@ const serverMsg = (uid) => ({
 });
 
 function resetPurgeMocks() {
-  mockDeleteEmail.mockReset().mockResolvedValue(undefined);
   mockDeleteQueueSubmit.mockReset().mockResolvedValue({ landed: [], queued: [], dropped: [] });
   mockMaildirDeleteMany.mockReset().mockResolvedValue({ removed: 0 });
   mockBackupPurgeUids.mockReset().mockResolvedValue({ removed: 0, queued: 0 });
@@ -198,7 +193,6 @@ function resetPurgeMocks() {
   mockGetGraphMessageId.mockReset().mockReturnValue(null);
   mockRemoveSearchResults.mockReset();
   mockMoveEmails.mockReset().mockResolvedValue({ newUids: [171] });
-  mockVaultRebindUids.mockReset().mockResolvedValue({ rebound: [] });
   mockRestoreMessages.mockReset().mockImplementation(restoredAs171);
   mockGetVaultUidSets.mockReset().mockResolvedValue({ saved: new Set(), archived: new Set() });
   mockGetLocalEmails.mockReset().mockResolvedValue([]);
@@ -214,11 +208,11 @@ beforeEach(resetPurgeMocks);
 export {
   ACCOUNT, prime, serverMsg, useMailStore, purgeEverywhere, purgeEverywhereReporting, bulkDeleteFromServer,
   replayPurge, hideQueuedDeletes, showQueuedRows, mockQueueOp, mockClearOps, mockNoteOpFailure, mockReadOps,
-  setDeleteUndo, resetPurgeMocks, mockDeleteEmail, mockDeleteQueueSubmit, mockMaildirDeleteMany,
+  setDeleteUndo, resetPurgeMocks, mockDeleteQueueSubmit, mockMaildirDeleteMany,
   mockBackupPurgeUids, mockCheckMailboxStatus, mockGraphDeleteMessage,
   mockGetLocalIndexEntry, mockAppendLocalIndex, mockGetLocalIndexProvenance,
   mockGetEmailHeadersMeta, mockSaveEmailHeaders, mockIsGraphAccount,
   mockGetGraphMessageId, mockRemoveSearchResults, mockMoveEmails,
-  mockVaultRebindUids, mockRestoreMessages, mockGetVaultUidSets, mockGetLocalEmails, mockSearch,
+  mockRestoreMessages, mockGetVaultUidSets, mockGetLocalEmails, mockSearch,
   mockSyncNow, mockWaitForSync, mockGetEmailHeadersByUids,
 };

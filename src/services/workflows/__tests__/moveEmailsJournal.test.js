@@ -57,7 +57,6 @@ vi.mock('../../api', () => ({
   graphListMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
   graphCacheMime: vi.fn().mockResolvedValue(undefined),
   graphMoveEmails: (...a) => mockGraphMoveEmails(...a),
-  deleteEmail: vi.fn().mockResolvedValue(undefined),
   moveEmails: (...a) => mockMoveEmails(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
 }));

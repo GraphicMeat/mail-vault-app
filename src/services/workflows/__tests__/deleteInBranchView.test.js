@@ -63,7 +63,6 @@ vi.mock('../../api', () => ({
   fetchEmailLight: vi.fn().mockResolvedValue(null),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
-  deleteEmail: (...a) => mockDeleteEmail(...a),
   deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   deleteQueueList: async () => [],
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
@@ -119,6 +118,8 @@ vi.mock('../refreshAccounts', () => ({
   refreshAllAccounts: vi.fn().mockResolvedValue(undefined),
 }));
 
+// No search is open: the delete's result-list prune reads this store.
+vi.mock('../../../stores/searchStore', () => ({ useSearchStore: { getState: () => ({ searchActive: false }) } }));
 vi.mock('../../safeStorage', () => ({
   safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
 }));

@@ -17,7 +17,6 @@ if (!globalThis.window) {
 }
 
 const mockMoveEmails = vi.fn();
-const mockDeleteEmail = vi.fn();
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue({ success: true, written: [] });
 const mockFindMessageId = vi.fn();
 const mockGetLocalIndexEntry = vi.fn();
@@ -26,7 +25,6 @@ const mockQueueOp = vi.fn().mockResolvedValue(1);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockRefreshCurrentView = vi.fn().mockResolvedValue(undefined);
-const mockVaultRebindUids = vi.fn().mockResolvedValue({ rebound: [] });
 // The server holds the restored message under its new uid only: the retired
 // one answers "gone", as uid_still_present proves it in the app.
 const gone = () => Object.assign(new Error('gone'), { messageGone: true });
@@ -65,12 +63,10 @@ vi.mock('../../api', () => ({
   graphSetFlagged: vi.fn().mockResolvedValue(undefined),
   graphMoveEmails: vi.fn().mockResolvedValue(undefined),
   graphDeleteMessage: vi.fn().mockResolvedValue(undefined),
-  deleteEmail: (...a) => mockDeleteEmail(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   findMessageId: (...a) => mockFindMessageId(...a),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
-  vaultRebindUids: (...a) => mockVaultRebindUids(...a),
 }));
 
 // The daemon's deleted-mail bin.

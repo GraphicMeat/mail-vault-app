@@ -58,7 +58,6 @@ vi.mock('../../api', () => ({
   graphSetRead: vi.fn().mockResolvedValue(undefined),
   graphGetMessage: vi.fn().mockResolvedValue(null),
   graphCacheMime: vi.fn().mockResolvedValue(undefined),
-  deleteEmail: vi.fn().mockResolvedValue(undefined),
   moveEmails: vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
 }));

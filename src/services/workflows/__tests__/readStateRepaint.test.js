@@ -70,7 +70,6 @@ vi.mock('../../api', () => ({
   graphListFolders: vi.fn().mockResolvedValue([]),
   graphListMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
   graphCacheMime: vi.fn().mockResolvedValue(undefined),
-  deleteEmail: vi.fn().mockResolvedValue(undefined),
   moveEmails: vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
   checkMailboxStatus: vi.fn().mockResolvedValue({ exists: 0 }),

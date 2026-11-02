@@ -84,7 +84,6 @@ vi.mock('../../api', () => ({
   fetchEmailLight: vi.fn().mockResolvedValue(null),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
-  deleteEmail: (...a) => mockDeleteEmail(...a),
   deleteQueueSubmit: (...a) => mockDeleteQueueSubmit(...a),
   deleteQueueList: async () => [],
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),

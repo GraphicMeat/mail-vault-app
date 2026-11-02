@@ -24,7 +24,6 @@ if (!globalThis.window) {
   globalThis.window.addEventListener = globalThis.window.addEventListener || (() => {});
 }
 
-const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(undefined);
@@ -73,7 +72,6 @@ vi.mock('../../api', () => ({
   fetchEmailLight: vi.fn().mockResolvedValue(null),
   updateEmailFlags: vi.fn().mockResolvedValue(undefined),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
-  deleteEmail: (...a) => mockDeleteEmail(...a),
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
@@ -170,7 +168,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   netOnline = true;
   mockIsGraphAccount.mockReturnValue(false);
-  mockDeleteEmail.mockResolvedValue(undefined);
   mockSubmit.mockImplementation(answer());
 });
 

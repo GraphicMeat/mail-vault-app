@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 // Intended path: src/services/workflows/__tests__/unreadCountsCallerCapture.test.js
-// Conditional first-capture draft. It invokes the old production callers and
-// records actual setter order, row state and final settings, with synthetic IDs.
+// Invokes the production mutation and reminder callers and records the row
+// state and final settings, with synthetic IDs, against the frozen capture.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
+import { fakeDeleteQueueSubmit } from './fakeDeleteQueue.js';
 guardViewCounts();
 if (!globalThis.window) globalThis.window={addEventListener(){},removeEventListener(){}};
 else { window.addEventListener ||= (()=>{}); window.removeEventListener ||= (()=>{}); }
@@ -40,13 +42,14 @@ vi.mock('../../api',()=>({
   fetchEmailLight:vi.fn().mockResolvedValue(null),updateEmailFlags:(...a)=>apiFlags(...a),
   graphSetRead:vi.fn().mockResolvedValue(undefined),graphSetFlagged:vi.fn().mockResolvedValue(undefined),
   graphMoveEmails:vi.fn().mockResolvedValue(undefined),graphDeleteMessage:vi.fn().mockResolvedValue(undefined),
-  deleteEmail:(...a)=>apiDelete(...a),moveEmails:(...a)=>apiMove(...a),
+  // The daemon's delete queue, answering through the per-message mock above.
+  deleteQueueSubmit:(...a)=>fakeDeleteQueueSubmit((...b)=>apiDelete(...b),...a),
+  moveEmails:(...a)=>apiMove(...a),
   findMessageId:(...a)=>apiFind(...a),
   // The daemon's undo of a delete: back under the uid the old move mock named.
   restoreMessages:async items=>({restored:items.map(i=>({accountId:i.accountId,mailbox:i.mailbox,uid:i.uid,newUid:41})),failed:[]}),
   appendLocalIndex:vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex:vi.fn().mockResolvedValue(undefined),
-  vaultRebindUids:vi.fn().mockResolvedValue({rebound:[]}),
 }));
 vi.mock('../../daemonClient',async importOriginal=>({
   ...(await importOriginal()),daemonCall:(...a)=>{calls.push(['daemon',...a]);return daemon(...a);},
@@ -111,7 +114,7 @@ const copy=x=>x===undefined?{$undefined:true}
   : x&&typeof x==='object'?Object.fromEntries(Object.entries(x).map(([k,v])=>[k,copy(v)]))
   : x;
 
-it.skipIf(process.env.MAILVAULT_WRITE_UNREAD_O_FIXTURE!=='1')('captures actual old mutation and reminder callers O01-O03',async()=>{
+it('the production callers still make the frozen O01-O03 capture',async()=>{
   // The caller schedules a detached import of this real store. Finish its
   // initialization before the actions so its count timer is available.
   await import('../../../stores/viewStore');
@@ -152,9 +155,20 @@ it.skipIf(process.env.MAILVAULT_WRITE_UNREAD_O_FIXTURE!=='1')('captures actual o
     output:{before:o3Before,loaded:o3Loaded,seen:o3Seen,unread:o3Unread,after:summary()}});
 
   expect(cases.map(c=>c.id)).toEqual(['O01','O02','O03']);
+  const captured={version:1,cases:JSON.parse(JSON.stringify(copy(cases)))};
+  // What the old callers left on screen, frozen: the Rust counts oracle replays
+  // it. The counts and setter calls moved to the daemon (`counts.unread`) and
+  // are pinned there; the rows, tombstones and undo slot are still the app's.
+  const frozen=JSON.parse(readFileSync(resolve(process.cwd(),'src-core/tests/fixtures/unread-counts-o-cases.json'),'utf8'));
+  const onScreen=c=>({id:c.id,undoResult:c.output.undoResult,stages:Object.fromEntries(Object.entries(c.output)
+    .filter(([,v])=>v&&typeof v==='object'&&'rows' in v)
+    .map(([k,{rows,sorted,tombstones,undo}])=>[k,{rows,sorted,tombstones,undo}]))});
+  expect(captured.cases.map(onScreen)).toEqual(frozen.cases.filter(c=>['O01','O02','O03'].includes(c.id)).map(onScreen));
+  // Set to re-capture the fixture's first three cases from the callers as they are.
   const destination=process.env.MAILVAULT_UNREAD_O_OUTPUT;
-  if (!destination) throw Error('MAILVAULT_UNREAD_O_OUTPUT is required');
-  writeFileSync(destination,JSON.stringify({version:1,cases:copy(cases)},null,2)+'\n');
-  console.log('W4S3_UNREAD_CALLERS_DRAFT '+JSON.stringify({cases:cases.length,
-    sha256:createHash('sha256').update(readFileSync(destination)).digest('hex')}));
+  if (destination) {
+    writeFileSync(destination,JSON.stringify(captured,null,2)+'\n');
+    console.log('W4S3_UNREAD_CALLERS_DRAFT '+JSON.stringify({cases:cases.length,
+      sha256:createHash('sha256').update(readFileSync(destination)).digest('hex')}));
+  }
 });
