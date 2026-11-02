@@ -36,3 +36,24 @@ it('the demo replay pass lands what the journal owes and answers its counts', as
   expect(await demo.invoke('delete_queue.list')).toEqual([]);
   expect(await demo.invoke('delete_queue.run', {})).toEqual({ attempted: 0, done: 0, failed: 0, dropped: 0, skipped: 0, kept: 0 });
 });
+
+// The app's path: a DAEMON_OWNED name reaches the demo as `daemon_rpc`, never
+// under its own name. Every delete-queue name and the undo's restore answer
+// there exactly as they do when invoked directly.
+it('the demo answers every daemon-owned delete name the way the app sends it', async () => {
+  const demo = createDemoBackend();
+  const rpc = (method, params = {}) => demo.invoke('daemon_rpc', { method, params });
+  const target = demo.snapshot().messages.find(m => m.custody === 'server' && m.messageId);
+  const submitted = await rpc('delete_queue.submit', { accountId: target.accountId, mailbox: target.mailbox, uids: [target.uid], mode: 'trash' });
+  expect(submitted.landed).toEqual([expect.objectContaining({ kind: 'deleted', uid: target.uid, trash: 'Trash' })]);
+  const trashUid = submitted.landed[0].trashUid;
+  const restored = await rpc('messages.restore', { items: [{ accountId: target.accountId, mailbox: target.mailbox, uid: target.uid, trash: 'Trash', trashUid, messageId: target.messageId, binId: null }] });
+  expect(restored).toEqual({ restored: [{ accountId: target.accountId, mailbox: target.mailbox, uid: target.uid, newUid: trashUid }], failed: [] });
+
+  const id = await demo.invoke('op_journal_queue', { entry: { op: 'delete', accountId: 'a', mailbox: 'INBOX', uids: [1, 2], arg: {} } });
+  expect(await rpc('delete_queue.list')).toEqual([expect.objectContaining({ id, uids: [1, 2] })]);
+  await rpc('delete_queue.cancel', { id, uids: [1] });
+  expect((await rpc('delete_queue.list'))[0].uids).toEqual([2]);
+  expect(await rpc('delete_queue.run', { reason: 'manual' })).toEqual({ attempted: 1, done: 1, failed: 0, dropped: 0, skipped: 0, kept: 0 });
+  expect(await rpc('delete_queue.list')).toEqual([]);
+});

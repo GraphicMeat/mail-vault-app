@@ -750,9 +750,9 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         // 2026-09-14 §5) keep their Tauri names, not a dotted daemon method.
         if (method && !method.includes('.')) return invoke(method, args.params || {});
         if (method?.startsWith('accounts.') || method?.startsWith('credentials.')) return invoke(method, args.params || {});
-        // The undo of a delete, a DAEMON_OWNED name: it arrives here as
-        // `daemon_rpc`, answered by its case below.
-        if (method === 'messages.restore') return invoke(method, args.params || {});
+        // DAEMON_OWNED dotted names answered by their own cases below: the
+        // delete queue and the undo of a delete arrive here as `daemon_rpc`.
+        if (method === 'messages.restore' || method?.startsWith('delete_queue.')) return invoke(method, args.params || {});
         if (method === 'daemon.heartbeat') return { alive: true, version: 'browser-demo', uptime_secs: 0, online: true, simulated: true };
         if (method === 'daemon.status') return { version: 'browser-demo', uptime_secs: 0, data_dir: 'in-memory browser session', simulated: true };
         if (method === 'counts.unread') {
