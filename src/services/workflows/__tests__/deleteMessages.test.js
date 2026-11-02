@@ -482,6 +482,37 @@ describe('delete-queue-landed', () => {
     expect(useMailStore.getState().undo).toBe(slot);
   });
 
+  // Final review, Important 2: the stamp is when the submit was SENT. A move
+  // the user made while a slow reply was on its way is newer than the delete,
+  // so the delete's later landing must not take the slot from it.
+  it('an action taken while a slow submit reply was on its way is newer than the delete', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(1_000);
+      prime({ emails: [row(7), row(8)] });
+      const reply = deferred();
+      mockSubmit.mockReturnValueOnce(reply.promise);
+      const running = deleteMessages([{ key: 8 }]);
+      await vi.waitFor(() => expect(mockSubmit).toHaveBeenCalled());
+
+      vi.setSystemTime(2_000);
+      useMailStore.getState().setUndo(MOVED);
+      const slot = useMailStore.getState().undo;
+
+      vi.setSystemTime(3_000);
+      reply.resolve({ landed: [], queued: [8], refused: [], dropped: [] });
+      await running;
+
+      vi.setSystemTime(4_000);
+      await onDeleteQueueLanded(landed8);
+
+      expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|8')).toBe(false);
+      expect(useMailStore.getState().undo).toBe(slot);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a landing in a folder that is not open leaves the list alone', async () => {
     prime({ emails: [row(7)] });
     useMailStore.setState({ deleteTombstones: new Set(['a1|Work|3']) });

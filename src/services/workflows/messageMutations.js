@@ -1172,6 +1172,9 @@ async function _submitGroups(groups) {
   const answers = new Map();
   await Promise.all(groups.map(async (g) => {
     const id = (uid) => _targetId({ ...g, uid });
+    // When the user asked: a slow reply must not make the delete look newer
+    // than an action taken while it was on its way.
+    const asked = Date.now();
     let reply;
     try {
       reply = await api.deleteQueueSubmit({ accountId: g.accountId, mailbox: g.mailbox, uids: g.uids },
@@ -1181,13 +1184,13 @@ async function _submitGroups(groups) {
       return;
     }
     for (const landed of reply?.landed || []) answers.set(id(landed.uid), { landed });
-    for (const uid of reply?.queued || []) answers.set(id(uid), { queued: true });
+    for (const uid of reply?.queued || []) answers.set(id(uid), { queued: true, asked });
     for (const { uid, reason } of reply?.refused || []) {
-      if (answers.get(id(uid))?.queued) answers.set(id(uid), { queued: true, refused: reason });
+      if (answers.get(id(uid))?.queued) answers.set(id(uid), { queued: true, asked, refused: reason });
     }
     for (const { uid, reason } of reply?.dropped || []) answers.set(id(uid), { dropped: reason });
     // A uid the reply does not name is owed as far as anyone can tell.
-    for (const uid of g.uids) if (!answers.has(id(uid))) answers.set(id(uid), { queued: true });
+    for (const uid of g.uids) if (!answers.has(id(uid))) answers.set(id(uid), { queued: true, asked });
   }));
   return answers;
 }
@@ -1271,9 +1274,9 @@ function _answered(c, answer = { queued: true }, hidden) {
     // Owed: the row stays hidden by its tombstone until `delete-queue-landed`
     // settles it, with what its undo needs kept until then.
     _owedIds.add(c.tombstone);
-    // When this window asked: a later landing never takes the undo slot from a
-    // newer action.
-    _owedRows.set(c.tombstone, { ...kept, at: Date.now() });
+    // When this window asked (sent, not answered): a later landing never takes
+    // the undo slot from an action newer than the click.
+    _owedRows.set(c.tombstone, { ...kept, at: answer.asked ?? Date.now() });
     return QUEUED;
   }
   _owedIds.delete(c.tombstone);
