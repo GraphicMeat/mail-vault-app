@@ -3205,9 +3205,11 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // submit answers only after its whole retry schedule: six send
         // rounds, each uid's capture allowed 45s, plus 31s of waits, so a
         // budget would turn a slow delete into a failure the daemon is still
-        // finishing. Same explicit-None arm as archive. List and cancel are
-        // one journal read or write, the op_journal_* tier.
-        "delete_queue.submit" => None,
+        // finishing. Same explicit-None arm as archive. A run is one replay
+        // pass over every entry (one round each, uids in turn), so it is
+        // unbounded too. List and cancel are one journal read or write, the
+        // op_journal_* tier.
+        "delete_queue.submit" | "delete_queue.run" => None,
         "delete_queue.list" | "delete_queue.cancel" => Some(Duration::from_secs(30)),
 
         // One read_dir plus comparisons, same tier as the other Phase 2
@@ -4810,11 +4812,13 @@ mod tests {
         assert_eq!(crate::reply_timeout("bulk_delete_emails"), None);
     }
 
-    /// The delete queue: a submit waits out its own retry schedule (no
-    /// budget, pinned like archive's); list and cancel are journal-sized.
+    /// The delete queue: a submit waits out its own retry schedule and a
+    /// run waits out a whole replay pass (no budget, pinned like archive's);
+    /// list and cancel are journal-sized.
     #[test]
     fn reply_timeout_is_none_for_a_delete_queue_submit_and_bounds_list_and_cancel() {
         assert_eq!(crate::reply_timeout("delete_queue.submit"), None);
+        assert_eq!(crate::reply_timeout("delete_queue.run"), None);
         assert_eq!(crate::reply_timeout("delete_queue.list"), Some(std::time::Duration::from_secs(30)));
         assert_eq!(crate::reply_timeout("delete_queue.cancel"), Some(std::time::Duration::from_secs(30)));
     }

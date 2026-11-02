@@ -88,7 +88,12 @@ pub(crate) fn spawn_worker_with(state: &Arc<DaemonState>, timing: Timing) {
             let Some(state) = weak.upgrade() else { return };
             // Flips from here on are after this pass's start: one more pass.
             let _ = online.borrow_and_update();
-            pass(&state, reason).await;
+            // On its own task: a pass that panics is logged, and the next
+            // trigger still runs one (`run_now` does the same).
+            let st = Arc::clone(&state);
+            if let Err(e) = tokio::spawn(async move { pass(&st, reason).await }).await {
+                warn!("[delete-queue] {reason} pass failed, replay goes on: {e}");
+            }
             drop(state);
             wait = timing.every;
             reason = "retry";
@@ -135,6 +140,10 @@ pub(crate) async fn pass(state: &Arc<DaemonState>, reason: &str) -> PassCounts {
     let _one = state.delete_queue.pass.lock().await;
     #[cfg(test)]
     let _running = Running::start(state);
+    #[cfg(test)]
+    if state.delete_queue.panic_next_pass.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        panic!("a replay pass panicked (test)");
+    }
     let counts = replay_all(state).await;
     info!(
         "[delete-queue] {reason} pass: {} done, {} failed, {} dropped, {} skipped, {} still owed",
@@ -291,17 +300,11 @@ async fn delete_entries(state: &Arc<DaemonState>) -> Result<Vec<OpEntry>, String
     .await
 }
 
-/// Whether the entry's folder is a vault-only one (an MBOX import). No vault
-/// reachable: it cannot be (`refuse_unqueued`'s rule).
+/// Whether the entry's folder is a vault-only one (`vault_only_folder`, the
+/// rule `submit` refuses by).
 async fn vault_only(state: &Arc<DaemonState>, entry: &OpEntry) -> Result<bool, String> {
     let (st, account_id, mailbox) = (Arc::clone(state), entry.account_id.clone(), entry.mailbox.clone());
-    blocking(move || {
-        if crate::handlers::common::vault_root(&st).is_err() {
-            return Ok(false);
-        }
-        crate::bulk_worker::native_local_folder(&st, &mailvault_core::bulk::Group { account_id, mailbox, uids: Vec::new() })
-    })
-    .await?
+    blocking(move || vault_only_folder(&st, account_id, mailbox)).await?
 }
 
 /// Nothing can ever send this entry: clear it, say why in the log, and

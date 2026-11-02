@@ -179,6 +179,9 @@ pub(crate) struct QueueState {
     pub(crate) running: std::sync::atomic::AtomicUsize,
     #[cfg(test)]
     pub(crate) most_running: std::sync::atomic::AtomicUsize,
+    /// Makes the next replay pass panic (the worker's isolation test).
+    #[cfg(test)]
+    pub(crate) panic_next_pass: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Default)]
@@ -407,6 +410,7 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
         let mut dropped = Vec::new();
         let mut failed = Vec::new();
         let mut unsent = Vec::new();
+        let mut stop: Option<Halt> = None;
         match config {
             Err(e) => {
                 // Not an answer: the credentials could not be read now.
@@ -418,12 +422,26 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
             }
             Ok(config) => {
                 for &uid in &pending {
+                    if stop.is_some() {
+                        unsent.push(uid);
+                        continue;
+                    }
                     if how.yields {
                         crate::search_index::wait_foreground_quiet(&state.search_index).await;
                     }
                     // The gate shut mid-round (a send below confirmed it):
                     // the rest wait for it to open, unsent and uncounted.
                     if !state.net.is_online() {
+                        stop = Some(Halt::Offline);
+                        unsent.push(uid);
+                        continue;
+                    }
+                    // A replay re-checks the account before each uid: one
+                    // that began closing (removal, a credential change)
+                    // mid-entry keeps the rest, unsent and with no reason.
+                    // A submit is the user's own click and goes on.
+                    if !how.priority && state.account_lifecycle.capture(&s.account_id).is_err() {
+                        stop = Some(Halt::Account);
                         unsent.push(uid);
                         continue;
                     }
@@ -463,8 +481,9 @@ pub(crate) async fn send_owed(state: &Arc<DaemonState>, s: &Submit, owners: &[(u
         out.reply.dropped.extend(dropped);
         pending = failed.into_iter().map(|(uid, _)| uid).chain(unsent.iter().copied()).collect();
         if !unsent.is_empty() {
-            info!("[delete-queue] {}/{}: went offline, {} uid(s) not sent", s.account_id, s.mailbox, unsent.len());
-            out.halt = Some(Halt::Offline);
+            let why = if stop == Some(Halt::Account) { "the account began closing" } else { "went offline" };
+            info!("[delete-queue] {}/{}: {why}, {} uid(s) not sent", s.account_id, s.mailbox, unsent.len());
+            out.halt = stop;
             break;
         }
     }
@@ -516,19 +535,25 @@ async fn refuse_unqueued(state: &Arc<DaemonState>, account_id: &str, mailbox: &s
     blocking(move || {
         let listing = mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&st.app_dir));
         admit(listing, &account_id)?;
-        // No vault reachable: no local folder this delete could be in (the
-        // server delete must not wait on an unplugged drive). A reachable
-        // vault whose folder marker will not read is refused: it may be a
-        // vault-only folder, which must never be journalled.
-        if crate::handlers::common::vault_root(&st).is_ok() {
-            let group = mailvault_core::bulk::Group { account_id, mailbox, uids: Vec::new() };
-            if crate::bulk_worker::native_local_folder(&st, &group)? {
-                return Err(LOCAL_FOLDER.to_string());
-            }
+        if vault_only_folder(&st, account_id, mailbox)? {
+            return Err(LOCAL_FOLDER.to_string());
         }
         Ok(())
     })
     .await?
+}
+
+/// Whether `mailbox` is a vault-only folder (an MBOX import), which has no
+/// server to delete from. No vault reachable: no local folder this delete
+/// could be in (a server delete must not wait on an unplugged drive). A
+/// reachable vault whose folder marker will not read is an `Err`: it may be
+/// vault-only. Blocking: reads the vault. Shared by `submit` (refused before
+/// journalling) and the replay worker (dropped).
+pub(crate) fn vault_only_folder(state: &Arc<DaemonState>, account_id: String, mailbox: String) -> Result<bool, String> {
+    if crate::handlers::common::vault_root(state).is_err() {
+        return Ok(false);
+    }
+    crate::bulk_worker::native_local_folder(state, &mailvault_core::bulk::Group { account_id, mailbox, uids: Vec::new() })
 }
 
 /// The accounts listing's verdict on `account_id`, as a catalog key.

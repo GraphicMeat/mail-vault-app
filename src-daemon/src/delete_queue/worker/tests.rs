@@ -211,6 +211,46 @@ async fn a_closed_account_ends_its_pass_and_keeps_its_entries() {
     assert_eq!(entry(&f, open).unwrap().attempts, 1);
 }
 
+/// The account starts closing while its entry is being sent: the uids after
+/// that point are not sent, keep no reason, and the account's pass ends.
+#[tokio::test]
+async fn an_account_that_starts_closing_mid_entry_leaves_the_rest_unsent() {
+    let f = fixture(vec![]);
+    let closing: Arc<Mutex<Option<crate::account_lifecycle::RemovalClaim>>> = Arc::default();
+    let hold = Arc::clone(&closing);
+    script(&f.s, move |state, uid| {
+        if uid == 1 {
+            *hold.lock().unwrap() = Some(state.account_lifecycle.try_close(lease("acc1"), "acc1").expect("closing"));
+        }
+        Some(Err(Refusal::Server(format!("refused {uid}"))))
+    });
+    let id = queue(&f, "acc1", "INBOX", &[1, 2, 3], json!({"mode": "trash", "bin": true}));
+    let later = queue(&f, "acc1", "Work", &[4], json!({"mode": "trash", "bin": true}));
+    let counts = pass(&f.s, "retry").await;
+    assert_eq!(counts, PassCounts { attempted: 1, done: 0, failed: 1, dropped: 0, skipped: 3, kept: 4 });
+    assert_eq!(sends(&f), vec![(1, false)], "nothing sent after the account began closing");
+    let e = entry(&f, id).unwrap();
+    assert_eq!(e.uids, vec![1, 2, 3], "all still owed");
+    assert_eq!(e.failures.keys().copied().collect::<Vec<_>>(), vec![1], "no reason for the unsent uids");
+    assert_eq!(entry(&f, later).unwrap().attempts, 0, "the account's pass ended");
+    assert!(closing.lock().unwrap().is_some());
+}
+
+/// A pass that panics does not end background replay: the next trigger
+/// still runs one.
+#[tokio::test(start_paused = true)]
+async fn a_pass_that_panics_does_not_stop_the_worker() {
+    let s = empty_state();
+    s.delete_queue.panic_next_pass.store(true, SeqCst);
+    spawn_worker_with(&s, Timing { launch: Duration::from_secs(1), every: Duration::from_secs(2), debounce: Duration::from_secs(2) });
+    wait(Duration::from_millis(1_500)).await;
+    assert_eq!(passes(&s), 1, "the launch pass ran and panicked");
+    assert!(!s.delete_queue.panic_next_pass.load(SeqCst));
+    wait(Duration::from_millis(2_500)).await;
+    assert_eq!(passes(&s), 2, "the tick still runs a pass");
+    assert_eq!(s.delete_queue.running.load(SeqCst), 0);
+}
+
 #[tokio::test]
 async fn offline_a_pass_sends_nothing_and_the_status_says_so() {
     let f = fixture(vec![]);
