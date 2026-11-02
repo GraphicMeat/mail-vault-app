@@ -306,6 +306,10 @@ pub(crate) struct How {
 
 pub(crate) const SUBMIT: How = How { rounds: DELETE_RETRY_MS.len() + 1, priority: true, read: crate::oauth_tokens::Read::Guarded, credentials_count: true, yields: false, counts_pass: false };
 pub(crate) const REPLAY: How = How { rounds: 1, priority: false, read: crate::oauth_tokens::Read::Quiet, credentials_count: false, yields: true, counts_pass: true };
+/// `delete_queue.run` (Settings' Retry now): a replay the user asked for. It
+/// restamps a refusal's time but counts no backoff pass, so the user's own
+/// try never brings the daily wait closer.
+pub(crate) const RETRY_NOW: How = How { counts_pass: false, ..REPLAY };
 
 /// Why `send_owed` stopped before its rounds ran out.
 #[derive(Clone, Copy, Debug, PartialEq)]

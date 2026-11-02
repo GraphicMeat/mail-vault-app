@@ -35,7 +35,9 @@
 //! (`backed_off`, from the entry's durable `Failure.passes` and `at`, on
 //! `state.clock`). A timer pass skips it meanwhile (counted `skipped`, no
 //! round, no reason written); `delete_queue.run` (Settings' Retry now)
-//! sends it anyway. Any other refusal is retried every pass.
+//! sends it anyway and counts no pass (`RETRY_NOW`). A busy account
+//! (`E_BIN_CAPTURE:busy`) passes on its own and never backs off; any other
+//! refusal is retried every pass.
 
 use super::*;
 use std::time::Duration;
@@ -64,9 +66,12 @@ const HOUR_MS: u64 = 60 * 60 * 1000;
 const DAY_MS: u64 = 24 * HOUR_MS;
 /// What a refused bin capture's wire string starts with (`CaptureFailure::wire`).
 const CAPTURE_REFUSED: &str = "E_BIN_CAPTURE:";
+/// The one capture refusal that is transient (the account was busy): never
+/// backed off.
+const CAPTURE_BUSY: &str = "E_BIN_CAPTURE:busy";
 
 /// Whether a timer pass leaves `entry` for later at `now_ms`: its latest
-/// refusal (of a uid it still owes) is a bin capture, refused on at least
+/// refusal (of a uid it still owes) is a bin capture (not `busy`), refused on at least
 /// `BACKOFF_AFTER` replay passes, and the wait that count earns (an hour, a
 /// day from `DAILY_AFTER`) since that refusal is not over. A clock set back
 /// never waits longer than the wait itself.
@@ -74,7 +79,7 @@ pub(crate) fn backed_off(entry: &OpEntry, now_ms: u64) -> bool {
     let Some(last) = entry.failures.iter().filter(|(uid, _)| entry.uids.contains(uid)).map(|(_, f)| f).max_by_key(|f| f.at) else {
         return false;
     };
-    if !last.message.starts_with(CAPTURE_REFUSED) {
+    if !last.message.starts_with(CAPTURE_REFUSED) || last.message.starts_with(CAPTURE_BUSY) {
         return false;
     }
     let wait = match last.passes {
@@ -169,7 +174,7 @@ async fn next_trigger(online: &mut tokio::sync::watch::Receiver<bool>, wait: Dur
 
 /// `delete_queue.run`: a pass on its own task (a caller that stops waiting
 /// does not stop it halfway), answered with its counts. Asked for, so it
-/// ignores the backoff.
+/// ignores the backoff and counts no backoff pass (`RETRY_NOW`).
 pub(crate) async fn run_now(state: &Arc<DaemonState>, reason: String) -> Result<PassCounts, String> {
     let st = Arc::clone(state);
     tokio::spawn(async move { pass_with(&st, &reason, false).await }).await.map_err(|e| format!("delete queue pass failed: {e}"))
@@ -320,7 +325,7 @@ async fn replay_all(state: &Arc<DaemonState>, backoff: bool) -> PassCounts {
 
         let owners: Vec<(u32, u64)> = entry.uids.iter().map(|uid| (*uid, entry.id)).collect();
         let s = Submit { account_id: entry.account_id.clone(), mailbox: entry.mailbox.clone(), uids: entry.uids.clone(), mode, bin, arg: entry.arg.clone() };
-        let sent = send_owed(state, &s, &owners, REPLAY).await;
+        let sent = send_owed(state, &s, &owners, if backoff { REPLAY } else { RETRY_NOW }).await;
         let refused = n(sent.reply.refused.len());
         c.done += n(sent.reply.landed.len());
         c.dropped += n(sent.reply.dropped.len());

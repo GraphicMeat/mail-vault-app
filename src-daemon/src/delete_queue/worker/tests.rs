@@ -398,31 +398,58 @@ async fn a_capture_refused_entry_backs_off_hourly_then_daily_and_retry_now_ignor
     assert_eq!(e.attempts, 3, "a backed-off pass counts no round");
     assert!(e.failures[&1].message.starts_with("E_BIN_CAPTURE:timeout"), "{}", e.failures[&1].message);
 
-    // Retry now ignores the wait.
+    // Retry now ignores the wait, and is not a backoff pass: the count stays
+    // at three (the user's own try never brings the daily wait closer), and
+    // only the time of the last try moves.
     let r = route(&f.s, "delete_queue.run", &json!({"reason": "manual"}), json!(1)).await.unwrap();
     assert_eq!(r.result.unwrap()["failed"], 1);
     assert_eq!(sent(&f), 4);
+    let passes = |f: &Fixture| entry(f, id).unwrap().failures[&1].passes;
+    assert_eq!(passes(&f), 3, "Retry now counts no backoff pass");
 
-    // Hourly: nothing before the hour is up, one send once it is.
+    // Hourly, from the last try: nothing before the hour is up, one send once it is.
     f.s.clock.advance(HOUR - 60_000);
     pass(&f.s, "retry").await;
     assert_eq!(sent(&f), 4, "not yet an hour since the last try");
     f.s.clock.advance(60_000);
     pass(&f.s, "retry").await;
     assert_eq!(sent(&f), 5, "an hour on");
-    // Up to twelve worker passes in all, an hour apart.
-    while sent(&f) < 12 {
+    assert_eq!(passes(&f), 4);
+    // Up to twelve worker passes in all, an hour apart (bounded: a pass that
+    // stopped sending fails here instead of looping).
+    for _ in 0..20 {
+        if passes(&f) >= 12 {
+            break;
+        }
         f.s.clock.advance(HOUR);
         pass(&f.s, "retry").await;
     }
+    assert_eq!(passes(&f), 12, "twelve worker passes, an hour apart");
+    assert_eq!(sent(&f), 13, "twelve passes and the one Retry now");
     // Then daily.
     f.s.clock.advance(HOUR);
     pass(&f.s, "retry").await;
-    assert_eq!(sent(&f), 12, "after twelve, an hour is not enough");
+    assert_eq!(sent(&f), 13, "after twelve, an hour is not enough");
     f.s.clock.advance(23 * HOUR);
     pass(&f.s, "retry").await;
-    assert_eq!(sent(&f), 13, "a day on");
+    assert_eq!(sent(&f), 14, "a day on");
     assert!(entry(&f, id).is_some(), "never dropped: still owed");
+}
+
+/// A busy account (`E_BIN_CAPTURE:busy`) passes on its own: it never backs
+/// off, however many passes it took.
+#[tokio::test]
+async fn a_busy_capture_keeps_retrying_every_pass() {
+    use crate::handlers::deleted::CaptureFailure;
+    let f = fixture(vec![]);
+    f.s.clock.set(chrono::Utc::now().timestamp_millis());
+    script(&f.s, |_, _| Some(Err(Refusal::BinCapture(CaptureFailure::Busy))));
+    queue(&f, "acc1", "INBOX", &[1], json!({"mode": "permanent", "bin": true}));
+    for n in 1..=5 {
+        f.s.clock.advance(5 * 60_000);
+        assert_eq!(pass(&f.s, "retry").await.failed, 1, "pass {n}");
+    }
+    assert_eq!(sends(&f).len(), 5);
 }
 
 /// A refusal that is not a bin capture (a server error) keeps the five
@@ -459,5 +486,7 @@ fn backed_off_reads_the_latest_refusal_its_count_and_its_age() {
     let gone = OpEntry { uids: vec![2], ..e(vec![(1, capture(now, 5))]) };
     assert!(!backed_off(&gone, now), "a uid no longer owed decides nothing");
     assert!(!backed_off(&e(vec![(1, capture(now + 2 * DAY, 12))]), now), "a clock set back far never waits on it");
+    let busy = Failure { message: "E_BIN_CAPTURE:busy: the account is busy".into(), at: now, passes: 12 };
+    assert!(!backed_off(&e(vec![(1, busy)]), now), "busy is transient: never backed off");
 }
 const DAY: u64 = 24 * 3_600_000;
