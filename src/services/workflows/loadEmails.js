@@ -8,6 +8,8 @@ import { hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { oauthErrorState } from '../oauthErrors';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { pickGraphCursor, graphCursorAfter, graphPageArgs } from '../graphCursor';
+import { isJmapAccount } from '../providerKind';
+import { syncNow, waitForSync, getSyncStatus, toSyncAccount } from '../syncService';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
 import { _buildRestoreDescriptor, rebaseFlags, vaultKey, vaultKeys, vaultUids } from '../../stores/slices/unifiedHelpers';
@@ -890,6 +892,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
 // through, and Microsoft throttles by the request.
 const _graphRevalidations = new Map();
 const REVALIDATE_EVERY_MS = 5 * 60 * 1000;
+const REVALIDATE_RETRY_MS = 60 * 1000;
 const REVALIDATE_PAUSE_MS = 100;
 /** The running revalidation of a folder (resolved when none runs). */
 export const _graphRevalidationFor = (key) => _graphRevalidations.get(key)?.running ?? Promise.resolve();
@@ -898,7 +901,8 @@ export const _resetGraphRevalidation = () => _graphRevalidations.clear();
 function _revalidateGraphTail({ account, accountId, mailbox, folderId, from, floorMoment, pageUids, pageOldestMs }) {
   const key = `${accountId}:${mailbox}`;
   const entry = _graphRevalidations.get(key) || {};
-  if (entry.running || (entry.doneAt && Date.now() - entry.doneAt < REVALIDATE_EVERY_MS)) return;
+  // A walk that failed (a 429 most likely) waits a minute, not five, but it waits.
+  if (entry.running || (entry.at && Date.now() - entry.at < (entry.ok ? REVALIDATE_EVERY_MS : REVALIDATE_RETRY_MS))) return;
   _graphRevalidations.set(key, entry);
   entry.running = (async () => {
     try {
@@ -925,8 +929,10 @@ function _revalidateGraphTail({ account, accountId, mailbox, folderId, from, flo
       const stillThere = cur.activeAccountId === accountId && cur.activeMailbox === mailbox;
       const present = (uid) => listed.has(uid) || pageUids.has(uid);
       const goneUids = new Set((stillThere ? cur.emails : base)
+        // Strictly inside the stretch: Graph orders same-second mail arbitrarily, so a
+        // row tied with either edge may simply have been left off a page.
         .filter(e => e.source !== 'local' && !present(e.uid)
-          && _headerDateMs(e) > lowMs && _headerDateMs(e) <= pageOldestMs)
+          && _headerDateMs(e) > lowMs && _headerDateMs(e) < pageOldestMs)
         .map(e => e.uid));
       const incoming = rebaseFlags(base, cur.emails, [...listed.values()], cur);
       if (stillThere) {
@@ -949,11 +955,13 @@ function _revalidateGraphTail({ account, accountId, mailbox, folderId, from, flo
         });
         get().updateSortedEmails();
       }
-      await db.saveEmailHeaders(accountId, mailbox, [...listed.values()], null, { removedUids: [...goneUids] });
-      entry.doneAt = Date.now();
+      await db.saveEmailHeaders(accountId, mailbox, incoming, null, { removedUids: [...goneUids] });
+      entry.ok = true;
     } catch (e) {
+      entry.ok = false;
       console.warn('[loadEmailsViaGraph] Could not re-check the older rows:', e);
     } finally {
+      entry.at = Date.now();
       entry.running = null;
     }
   })();
@@ -1200,30 +1208,20 @@ function _mergeOptimisticSent(fresh, existing, accountId, accountEmail, sentPath
   ];
 }
 
-/**
- * Run `body` as the account's background Sent fill, unless one is running.
- * `body(tick)` calls `tick(more)` after each page it holds: the pause that keeps
- * the fill from crowding the list, and the merge into `sentEmails`, thinned to
- * pages 2, 4, 8 and so on (every merge rebuilds the threads) with a last one
- * when the fill ends. `tick` answers false once the account is gone.
- */
-function _fillSent(accountId, body, { wanted, merge, alive }) {
+/** Run `body` as the account's background Sent fill, unless one runs or it is not due. */
+function _fillSent(accountId, key, body) {
   if (_sentFills.has(accountId)) return;
-  let pages = 1;
-  const tick = async (more) => {
-    pages += 1;
-    if ((pages & (pages - 1)) === 0 && wanted()) merge();
-    if (more) await new Promise(resolve => setTimeout(resolve, SENT_FILL_PAUSE_MS));
-    return alive();
-  };
+  const last = _sentFillAt.get(key);
+  if (last && (last.ok || Date.now() - last.at < SENT_FILL_RETRY_MS)) return;
   const run = (async () => {
+    let ok = false;
     try {
-      await body(tick);
+      await body();
+      ok = true;
     } catch (e) {
       console.warn('[loadSentHeaders:fill_fail]', { accountId, error: e.message });
-    } finally {
-      if (wanted()) merge();
     }
+    _sentFillAt.set(key, { at: Date.now(), ok });
   })().finally(() => _sentFills.delete(accountId));
   _sentFills.set(accountId, run);
 }
@@ -1272,12 +1270,21 @@ export function loadSentHeaders(accountId, { cacheOnly = false } = {}) {
 const _sentFullMerges = new Map();
 
 // The background fill of each account's Sent mirror, one at a time. A second
-// load while one runs shares it instead of paging the folder twice.
+// load while one runs shares it instead of filling twice; a folder is filled
+// once per session (a failed fill is tried again after a few minutes), because
+// the server's count and the cache's never agree to the row (unparseable rows,
+// mail deleted elsewhere) and a gate on them would fill on every load.
 const _sentFills = new Map();
+const _sentFillAt = new Map();
 const SENT_PAGE = 200;
-const SENT_FILL_PAUSE_MS = 100;
+const SENT_FILL_RETRY_MS = 5 * 60 * 1000;
+export const _sentTimings = { pauseMs: 100, pollMs: 1000 };
+// The cache each account's mirror last merged (`path|rows|lastSynced`): a
+// cache-only read of an unchanged cache is not read again.
+const _sentCacheSeen = new Map();
 /** The running fill of an account's Sent mirror (resolved when none runs). */
 export const _sentFillFor = (accountId) => _sentFills.get(accountId) ?? Promise.resolve();
+export const _resetSentFills = () => { _sentFills.clear(); _sentFillAt.clear(); _sentCacheSeen.clear(); };
 
 // What a row shows, for "did this read change anything".
 const _sentRowSig = (e) => `${e.uid}|${e.messageId}|${(e.flags || []).join(',')}|${e._mailbox}|${e._optimistic ? 1 : 0}`;
@@ -1345,12 +1352,41 @@ async function _loadSentHeaders(accountId, cacheOnly) {
   // The whole cache: the mirror holds the whole Sent folder, not its newest 200.
   const cacheMeta = await db.getEmailHeadersMeta(accountId, sentPath).catch(() => null);
   const cachedCount = cacheMeta?.totalCached || 0;
+  const cacheSig = `${sentPath}|${cachedCount}|${cacheMeta?.lastSynced ?? ''}`;
+  // An unchanged cache the mirror already merged is not read again: this runs
+  // on every refresh tick, for every account, and the cache can be tens of
+  // thousands of rows.
+  // A staged reply is the exception: it waits to be replaced by its server copy.
+  if (cacheOnly && _sentCacheSeen.get(accountId) === cacheSig) {
+    const mine = (get().sentEmails || []).filter(e => e._accountId === accountId);
+    if (mine.length && !mine.some(e => e._optimistic)) return;
+  }
   const cached = await db.getEmailHeadersPartial(accountId, sentPath, Math.max(SENT_PAGE, cachedCount));
   if (!wanted()) return;
   // Every row known so far, by uid: a server page adds to it, never replaces it.
   const held = new Map((cached?.emails || []).map(e => [e.uid, e]));
   const heldRows = () => [...held.values()];
   const hold = (rows) => { for (const e of rows) held.set(e.uid, e); };
+
+  // The end of a background fill: rows ADDED to the mirror as it is now (a reply
+  // sent or a message deleted while the fill ran is not undone: a tombstoned
+  // row is not brought back), and, when the fill saw the whole folder, the rows
+  // it did not see taken out. One rebuild of the threads, not one per page.
+  const addSent = (rows, gone = []) => {
+    if (!wanted()) return;
+    const accountEmail = (get().accounts || []).find(a => a.id === accountId)?.email;
+    const current = get().sentEmails || [];
+    const have = new Set(current.filter(e => e._accountId === accountId).map(e => e.uid));
+    const tombstones = get().deleteTombstones;
+    const added = rows
+      .filter(e => !have.has(e.uid) && !tombstones?.has(`${accountId}|${sentPath}|${e.uid}`))
+      .map(e => ({ ...e, _accountId: accountId, _accountEmail: accountEmail, _mailbox: sentPath, _fromSentFolder: true }));
+    const drop = new Set(gone);
+    const kept = drop.size ? current.filter(e => !(e._accountId === accountId && !e._optimistic && drop.has(e.uid))) : current;
+    if (!added.length && kept.length === current.length) return;
+    useMailStore.setState({ sentEmails: [...kept, ...added] });
+    invalidateChatAndThreadCaches();
+  };
   console.log('[loadSentHeaders:cache]', {
     accountId,
     sentPath,
@@ -1358,6 +1394,7 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     firstCachedMessageIds: (cached?.emails || []).slice(0, 3).map(e => e.messageId),
   });
   if (cached?.emails?.length > 0) merge(cached.emails);
+  _sentCacheSeen.set(accountId, cacheSig);
   if (cacheOnly) return;
 
   const { accounts, connectionStatus } = get();
@@ -1397,20 +1434,26 @@ async function _loadSentHeaders(accountId, cacheOnly) {
           const folderTotal = sentFolder._graphTotal || 0;
           if (result.nextLink && (!folderTotal || cachedCount < folderTotal)) {
             const key = `${accountId}:${sentPath}`;
-            _fillSent(accountId, async (tick) => {
+            _fillSent(accountId, key, async () => {
+              const seen = new Map(sentHeaders.map(e => [e.uid, e]));
               let cursor = graphCursorAfter(key, sentHeaders, null);
               let more = true;
               while (more) {
                 const page = await _listGraphMessages(accountId, sentPath, account, sentFolder._graphFolderId, graphPageArgs(cursor, key, SENT_PAGE));
                 const rows = page.headers || [];
                 if (!rows.length) break;
-                hold(rows);
-                await db.saveEmailHeaders(accountId, sentPath, rows, page.nextLink ? null : held.size);
+                for (const e of rows) seen.set(e.uid, e);
+                await db.saveEmailHeaders(accountId, sentPath, rows, page.nextLink ? null : seen.size);
                 cursor = graphCursorAfter(key, rows, cursor);
                 more = !!page.nextLink;
-                if (!(await tick(more))) break;
+                if (more) await new Promise(resolve => setTimeout(resolve, _sentTimings.pauseMs));
               }
-            }, { wanted, merge: () => merge(heldRows()), alive: () => get().accounts.some(a => a.id === accountId) });
+              // Newest first by date, so a clean walk to the end saw every row the
+              // folder has: a cached row it did not see is gone from the server.
+              const gone = more ? [] : [...held.keys()].filter(uid => !seen.has(uid));
+              if (gone.length) await db.saveEmailHeaders(accountId, sentPath, [], null, { removedUids: gone });
+              addSent([...seen.values()], gone);
+            });
           }
         }
       } else {
@@ -1447,23 +1490,42 @@ async function _loadSentHeaders(accountId, cacheOnly) {
             .map(e => e.messageId),
           merged_count: merged.length,
         });
-        // The rest of the folder, page by page, unless the cache already holds
-        // as many rows as the folder does.
-        if (result.hasMore && cachedCount < (result.total || 0)) {
-          _fillSent(accountId, async (tick) => {
-            let page = 2;
-            let more = true;
-            while (more) {
-              const next = await api.fetchEmails(account, sentPath, page, SENT_PAGE);
-              const rows = next?.emails || [];
-              if (!rows.length) break;
-              hold(rows);
-              await db.saveEmailHeaders(accountId, sentPath, rows, next.total);
-              more = !!next.hasMore;
-              page += 1;
-              if (!(await tick(more))) break;
+        const key = `${accountId}:${sentPath}`;
+        if (isJmapAccount(account)) {
+          // No daemon backfill for JMAP: its older mail is listed page by page.
+          if (result.hasMore && cachedCount < (result.total || 0)) {
+            _fillSent(accountId, key, async () => {
+              const seen = new Map(result.emails.map(e => [e.uid, e]));
+              let page = 2;
+              let more = true;
+              while (more) {
+                const next = await api.fetchEmails(account, sentPath, page, SENT_PAGE);
+                const rows = next?.emails || [];
+                if (!rows.length) break;
+                for (const e of rows) seen.set(e.uid, e);
+                await db.saveEmailHeaders(accountId, sentPath, rows, next.total);
+                more = !!next.hasMore;
+                page += 1;
+                if (more) await new Promise(resolve => setTimeout(resolve, _sentTimings.pauseMs));
+              }
+              addSent([...seen.values()]);
+            });
+          }
+        } else if (cachedCount < (result.total || 0)) {
+          // IMAP: the daemon syncs the folder and backfills what the cache lacks
+          // (sync.now); the mirror reads the cache again when that is done.
+          _fillSent(accountId, key, async () => {
+            const { ticket } = await syncNow(toSyncAccount(account, accountId), sentPath);
+            await waitForSync(ticket);
+            for (let polls = 0; polls < 300; polls += 1) {
+              const status = await getSyncStatus(accountId);
+              if (!status?.backfilling) break;
+              await new Promise(resolve => setTimeout(resolve, _sentTimings.pollMs));
             }
-          }, { wanted, merge: () => merge(heldRows()), alive: () => get().accounts.some(a => a.id === accountId) });
+            const meta = await db.getEmailHeadersMeta(accountId, sentPath).catch(() => null);
+            const all = await db.getEmailHeadersPartial(accountId, sentPath, Math.max(SENT_PAGE, meta?.totalCached || 0));
+            addSent(all?.emails || []);
+          });
         }
       }
     }

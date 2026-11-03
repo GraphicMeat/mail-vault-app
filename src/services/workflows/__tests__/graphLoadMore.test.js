@@ -351,6 +351,40 @@ describe('a Graph folder bigger than one page', () => {
     for (const call of graph.listGraphMessages.mock.calls.slice(1)) expect(call[4].top).toBe(PAGE);
   });
 
+  it('a walk that failed is not restarted by the next reload at once', async () => {
+    prime({ emails: rows(1, 400), _graphCursor: { key: KEY, before: row(400).date, skip: 1 } });
+    const listing = graph.listGraphMessages.getMockImplementation();
+    graph.listGraphMessages
+      .mockImplementationOnce(listing)
+      .mockRejectedValueOnce(new Error('429'));
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+    const calls = graph.listGraphMessages.mock.calls.length;
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+
+    expect(graph.listGraphMessages.mock.calls.length).toBe(calls + 1); // page one only
+  });
+
+  it('a row tied with the page\'s oldest moment that the walk missed is not taken for deleted', async () => {
+    const T = row(190).date;
+    server = server.map(r => (r.uid >= 190 && r.uid <= 260 ? { ...r, date: T } : r));
+    prime({ emails: server.slice(0, 400).map(r => ({ ...r })), _graphCursor: cursorAfter(400) });
+    // Graph has no order inside a tie: the walk's page leaves uid 255 out.
+    const listing = graph.listGraphMessages.getMockImplementation();
+    graph.listGraphMessages
+      .mockImplementationOnce(listing)
+      .mockImplementationOnce(async (...args) => {
+        const page = await listing(...args);
+        return { ...page, headers: page.headers.filter(h => h.uid !== 255) };
+      });
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+
+    expect(useMailStore.getState().emails.some(e => e.uid === 255)).toBe(true);
+    expect(db.saveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(255))).toBe(false);
+  });
+
   it('a reload does not walk the kept rows again within minutes', async () => {
     prime({ emails: rows(1, 400), _graphCursor: { key: KEY, before: row(400).date, skip: 1 } });
     await useMailStore.getState().loadEmails();
