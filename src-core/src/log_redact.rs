@@ -253,6 +253,20 @@ mod tests {
         assert_ne!(redact("a@gmail.com", b"one"), redact("a@gmail.com", b"two"));
     }
 
+    // `read_anonymous_logs` runs the whole multi-line tail through `redact`:
+    // raw Verbose lines get masked, and lines already masked at write time
+    // come out byte for byte the same.
+    #[test]
+    fn a_mixed_raw_and_masked_tail_comes_out_fully_masked_and_stable() {
+        let masked = token("sync for me@gmail.com ok");
+        let tail = format!("{masked}\nverbose raw me@gmail.com and you@fastmail.com\n");
+        let out = redact(&tail, SALT);
+        assert!(!out.contains("me@") && !out.contains("you@"), "{out}");
+        assert_eq!(out.lines().next().unwrap(), masked);
+        assert_eq!(out.lines().nth(1).unwrap().matches("<gmail#").count(), 1, "{out}");
+        assert_eq!(redact(&out, SALT), out);
+    }
+
     // One test owns the global flag, so no other test sees it flipped.
     #[test]
     fn writer_masks_in_standard_and_passes_through_in_verbose() {

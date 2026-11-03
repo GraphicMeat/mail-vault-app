@@ -902,6 +902,22 @@ async fn read_logs(app_handle: tauri::AppHandle, lines: Option<usize>) -> Result
         .map_err(|e| e.to_string())?
 }
 
+/// `read_logs` with every address masked, whatever the log verbosity: Verbose
+/// writes raw values, and this tail leaves the machine as a bug-report
+/// attachment. Standard lines are already tokens and pass through unchanged.
+#[tauri::command]
+async fn read_anonymous_logs(app_handle: tauri::AppHandle, lines: Option<usize>) -> Result<String, String> {
+    let log_dir = get_log_dir(&app_handle);
+    let lines_to_read = lines.unwrap_or(500);
+    tauri::async_runtime::spawn_blocking(move || {
+        let data_dir = mailvault_core::paths::app_data_dir().unwrap_or_else(|_| log_dir.clone());
+        let salt = log_redact::load_or_create_salt(&data_dir);
+        read_latest_log(&log_dir, lines_to_read).map(|logs| log_redact::redact(&logs, &salt))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// The tail of the newest shell log, then of the newest daemon log, which on
 /// macOS lives in the app data dir rather than `log_dir`.
 fn read_latest_log(log_dir: &Path, lines_to_read: usize) -> Result<String, String> {
@@ -3891,6 +3907,7 @@ fn main() {
             autostart::set_autostart,
             get_credentials,
             read_logs,
+            read_anonymous_logs,
             clear_logs,
             check_network_connectivity,
             send_notification,

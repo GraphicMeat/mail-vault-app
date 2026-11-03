@@ -68,6 +68,7 @@ import { MboxUploadProgress } from './components/MboxUploadProgress';
 import { FormatMigrationProgress } from './components/FormatMigrationProgress';
 import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
+import { anonymousLogsAttachment, ANONYMOUS_LOGS_FILENAME } from './utils/anonymousLogs';
 import { FocusLock } from './components/FocusLock';
 import { PrivacyDictionaryHost } from './components/privacy/PrivacyDictionaryHost';
 import { usePrivacyStore, isPrivacyMasking } from './stores/privacyStore';
@@ -881,7 +882,10 @@ function App() {
     }
   }, [layoutMode, setListPaneSize, setListPaneHeight, sidebarCollapsed]);
 
-  const composeBugEmail = useCallback(() => {
+  const composeBugEmail = useCallback(async () => {
+    // Read before the window opens, so the logs ride along from the first
+    // frame. Null (no shell, unreadable log) opens the report without them.
+    const logs = await anonymousLogsAttachment(invoke);
     const os = navigator.platform || navigator.userAgent || 'Unknown';
     const accountCount = accounts.length;
     const activeAccount = accounts.find(a => a.id === activeAccountId);
@@ -900,12 +904,14 @@ function App() {
       initialData: {
         to: 'prime@graphicmeat.com',
         subject: `[Bug Report] MailVault v${version}`,
+        ...(logs ? { attachments: [logs] } : {}),
         body: [
           section('System info (auto-collected)',
             `App version: ${esc(version)}`,
             `Platform: ${esc(os)}`,
             `Accounts: ${accountCount}`,
-            `Active provider: ${esc(activeProvider)}`),
+            `Active provider: ${esc(activeProvider)}`,
+            ...(logs ? [`Logs: attached as ${ANONYMOUS_LOGS_FILENAME} (email addresses masked)`] : [])),
           section('What happened?', '&nbsp;'),
           section('Steps to reproduce', '1.', '2.', '3.'),
           section('What you expected instead', '&nbsp;'),

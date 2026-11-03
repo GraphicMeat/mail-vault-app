@@ -1366,6 +1366,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case ['send', 'notification'].join('_'): return { success: true, simulated: true };
       case 'check_running_from_dmg': return false;
       case 'read_logs': return '[demo] MailVault browser session — no native logs';
+      case 'read_anonymous_logs': return '[demo] MailVault browser session — no native logs';
       case 'clear_logs': return { success: true, simulated: true };
       case 'op_journal_read': return clone(journal);
       case 'op_journal_queue': { const entry = { ...(args.entry || {}), id: journal.length + 1, at: sessionNow }; journal.push(entry); emit('demo:state', { type: 'journal' }); return entry.id; }
