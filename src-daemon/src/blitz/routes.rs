@@ -12,7 +12,7 @@ use std::sync::Arc;
 /// The size message is the error code the failure view already knows.
 pub(crate) fn validate_open(p: &Value) -> Result<Value, String> {
     let html = p["html"].as_str().ok_or("html must be a string")?;
-    if html.len() > mailvault_render::MAX_HTML_BYTES {
+    if mailvault_render::exceeds_size_limits(html) {
         return Err("render_too_large".into());
     }
     let max_w = mailvault_render::MAX_CSS_WIDTH as u64;
@@ -155,6 +155,14 @@ mod tests {
             assert_eq!(validate_fold(&json!({"id": "q0", "open": open})), Err("open must be a boolean"));
         }
         assert_eq!(validate_fold(&json!({"id": "q0"})), Err("open must be a boolean"), "missing open is not close");
+    }
+
+    #[test]
+    fn inlined_image_bytes_do_not_count_against_the_markup_cap() {
+        let html = format!("<p>x</p><img src=\"data:image/jpeg;base64,{}\">", "A".repeat(mailvault_render::MAX_HTML_BYTES + 1));
+        assert!(validate_open(&json!({"html": html, "cssWidth": 300})).is_ok());
+        let huge = format!("<img src=\"data:image/jpeg;base64,{}\">", "A".repeat(mailvault_render::MAX_DOC_BYTES + 1));
+        assert_eq!(err(json!({"html": huge, "cssWidth": 300})), "render_too_large");
     }
 
     #[test]

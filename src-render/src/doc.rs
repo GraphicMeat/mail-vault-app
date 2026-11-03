@@ -9,6 +9,10 @@ use std::sync::Arc;
 
 pub const TILE_CSS_HEIGHT: u32 = 512;
 pub const MAX_HTML_BYTES: usize = 4 * 1024 * 1024;
+/// The whole document, base64 `data:` images included. The reader inlines every
+/// `cid:` part of a message as one, so a mail with a few photos is megabytes
+/// of image and a few KiB of markup: only the markup is held to MAX_HTML_BYTES.
+pub const MAX_DOC_BYTES: usize = 4 * crate::net::MAX_IMAGE_BYTES;
 pub const MAX_NODES: usize = 150_000;
 pub const MAX_CSS_HEIGHT: f32 = 200_000.0;
 /// The one source of truth for the widest document: the viewport, the reported
@@ -148,6 +152,26 @@ fn apply(doc: &mut HtmlDocument, net: Option<&Arc<BridgeNet>>) {
     }
 }
 
+/// `html`'s length without its base64 `data:` payloads: what the parser reads as
+/// markup. A payload is decoded, never parsed, and its pixels are capped on their
+/// own (`net::MAX_IMAGE_PIXELS`). Only a lowercase `;base64,` marker is honoured:
+/// anything else counts in full, the safe side.
+pub fn markup_len(html: &str) -> usize {
+    const MARK: &str = ";base64,";
+    let b = html.as_bytes();
+    let mut payload = 0;
+    for (at, _) in html.match_indices(MARK) {
+        let start = at + MARK.len();
+        payload += b[start..].iter().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, b'+' | b'/' | b'=')).count();
+    }
+    html.len() - payload
+}
+
+/// The size limits a document is refused above, `OpenError::TooLarge`.
+pub fn exceeds_size_limits(html: &str) -> bool {
+    html.len() > MAX_DOC_BYTES || markup_len(html) > MAX_HTML_BYTES
+}
+
 impl RenderDoc {
     pub fn open(html: &str, opts: RenderOptions, net: Option<Arc<BridgeNet>>) -> Result<Self, OpenError> {
         Self::open_with(html, opts, net, crate::fonts::FontLibrary::new(true).context())
@@ -156,7 +180,7 @@ impl RenderDoc {
     /// `open` with the caller's fonts: blitz-dom keeps a document's font context
     /// private, so the worker hands each document a clone of its master one.
     pub fn open_with(html: &str, opts: RenderOptions, net: Option<Arc<BridgeNet>>, fonts: FontContext) -> Result<Self, OpenError> {
-        if html.len() > MAX_HTML_BYTES {
+        if exceeds_size_limits(html) {
             return Err(OpenError::TooLarge);
         }
         // Every element costs at least one '<': far more of them than the node

@@ -1,4 +1,4 @@
-use mailvault_render::{OpenError, RenderDoc, RenderOptions, MAX_HTML_BYTES, TILE_CSS_HEIGHT};
+use mailvault_render::{OpenError, RenderDoc, RenderOptions, MAX_DOC_BYTES, MAX_HTML_BYTES, MAX_IMAGE_BYTES, TILE_CSS_HEIGHT};
 
 fn fx(name: &str) -> String {
     std::fs::read_to_string(format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
@@ -97,6 +97,35 @@ fn oversize_html_is_refused() {
     let err = RenderDoc::open(&html, RenderOptions::new(600, 1.0), None).err().unwrap();
     assert!(matches!(err, OpenError::TooLarge));
     assert_eq!(err.code(), "render_too_large");
+}
+
+// A message with photos in it: the reader inlines each `cid:` part as a base64
+// `data:` URI, so the document is far over the markup cap without being markup.
+#[test]
+fn inlined_image_bytes_do_not_count_against_the_markup_cap() {
+    let html = format!("<p>hi</p><img src=\"data:image/jpeg;base64,{}\">", "A".repeat(MAX_HTML_BYTES + 1));
+    assert!(RenderDoc::open(&html, RenderOptions::new(600, 1.0), None).is_ok());
+}
+
+#[test]
+fn a_document_has_room_for_one_largest_picture() {
+    let b64_len = MAX_IMAGE_BYTES.div_ceil(3) * 4;
+    let html = format!("<p>hi</p><img src=\"data:image/jpeg;base64,{}\">", "A".repeat(b64_len));
+    assert!(mailvault_render::exceeds_size_limits(&html) == false, "a {MAX_IMAGE_BYTES}-byte picture inlined as base64 fits");
+}
+
+#[test]
+fn markup_around_inlined_images_still_counts() {
+    let html = format!("<img src=\"data:image/jpeg;base64,AAAA\">{}", "a".repeat(MAX_HTML_BYTES + 1));
+    let err = RenderDoc::open(&html, RenderOptions::new(600, 1.0), None).err().unwrap();
+    assert!(matches!(err, OpenError::TooLarge));
+}
+
+#[test]
+fn inlined_images_have_a_ceiling_of_their_own() {
+    let html = format!("<img src=\"data:image/jpeg;base64,{}\">", "A".repeat(MAX_DOC_BYTES + 1));
+    let err = RenderDoc::open(&html, RenderOptions::new(600, 1.0), None).err().unwrap();
+    assert!(matches!(err, OpenError::TooLarge));
 }
 
 #[test]

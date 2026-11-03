@@ -4,6 +4,8 @@
 
 - A delete that hits a dropped connection to the mail server ("SELECT Trash failed: connection lost") no longer shows a "Not deleted yet" warning. The email stays gone and MailVault's background helper sends the delete again on a new connection.
 
+- An email with big pictures in it, such as the photos in a quoted reply, is now drawn by the Rust renderer with its pictures. It was refused whenever its inline pictures added up to more than 4 MB, and then shown as plain text with `[cid:image001.png@...]` where the pictures belong. Only the text and layout of an email count toward that limit now. A picture larger than the renderer paints is shown scaled down instead of being left out, for any picture up to 25 MB.
+
 - Words typed together in the search box are now searched as one phrase in your vault: `registru centras` finds emails containing those words next to each other, no longer every email that holds both words somewhere. Words in an attachment's file name still match on their own (`invoice 4471` finds `Invoice-4471.pdf`).
 
 - Delete everywhere on an email the mail server no longer holds in that folder (for example one Gmail already emptied from Trash, or one deleted in another app) now simply removes it from MailVault, instead of saying it could not be deleted and asking you to resync the folder. When a different email now sits in its place on the server, the message says so and nothing is deleted.

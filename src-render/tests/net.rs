@@ -186,6 +186,87 @@ fn data_png(w: u32, h: u32) -> String {
     format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png_header(w, h)))
 }
 
+/// Like `answer`, but the bytes the document's handler was finally given.
+fn answer_bytes(net: &BridgeNet, url: &str) -> Vec<u8> {
+    struct Keep(Arc<Mutex<Vec<u8>>>);
+    impl NetHandler for Keep {
+        fn bytes(self: Box<Self>, _url: String, bytes: Bytes) {
+            *self.0.lock().unwrap() = bytes.to_vec();
+        }
+    }
+    let got = Arc::new(Mutex::new(Vec::new()));
+    net.fetch(0, Request::get(Url::parse(url).unwrap()), Box::new(Keep(got.clone())));
+    let v = got.lock().unwrap().clone();
+    v
+}
+
+/// A real, decodable one-colour JPEG (a few KiB however large it is).
+fn solid_jpeg(w: u32, h: u32, rgb: [u8; 3]) -> Vec<u8> {
+    let img = image::RgbImage::from_pixel(w, h, image::Rgb(rgb));
+    let mut out = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Jpeg).unwrap();
+    out
+}
+fn data_jpeg(bytes: &[u8]) -> String {
+    format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+// A photo past the per-image limit is shown smaller, never dropped: whatever the
+// sender attached has to be viewable. The limit only bounds what is decoded for paint.
+#[test]
+fn an_image_over_the_per_image_limit_is_shrunk_not_refused() {
+    let net = BridgeNet::new(false);
+    let out = answer_bytes(&net, &data_jpeg(&solid_jpeg(4500, 4000, [200, 30, 30])));
+    assert!(!out.is_empty(), "an 18 MP photo is answered");
+    let size = imagesize::blob_size(&out).unwrap();
+    assert!(size.width as u64 * size.height as u64 <= 16_000_000, "{}x{}", size.width, size.height);
+    let (w, h) = (size.width as f64, size.height as f64);
+    assert!((w / h - 4500.0 / 4000.0).abs() < 0.01, "aspect ratio kept: {w}x{h}");
+}
+
+#[test]
+fn an_image_that_does_not_fit_what_is_left_of_the_budget_is_shrunk_to_it() {
+    let net = BridgeNet::new(false);
+    for _ in 0..3 {
+        assert!(answer(&net, &data_png(4000, 4000)).unwrap() > 0);
+    }
+    assert!(answer(&net, &data_png(3800, 3800)).unwrap() > 0); // 14.44 MP: 1.56 MP left
+    let out = answer_bytes(&net, &data_jpeg(&solid_jpeg(2000, 1000, [10, 200, 10])));
+    assert!(!out.is_empty(), "a 2 MP photo still gets an answer");
+    let size = imagesize::blob_size(&out).unwrap();
+    assert!(size.width as u64 * size.height as u64 <= 1_560_000, "{}x{}", size.width, size.height);
+}
+
+#[test]
+fn a_shrunk_photo_paints_in_the_document() {
+    let net = BridgeNet::new(true);
+    let html = format!(r#"<body style="margin:0"><img src="{}" width="100" height="89"></body>"#, data_jpeg(&solid_jpeg(4500, 4000, [220, 20, 20])));
+    let mut doc = RenderDoc::open(&html, opts(), Some(net)).unwrap();
+    doc.apply_resources();
+    let png = doc.tile_png(0).unwrap();
+    let mut r = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
+    let mut buf = vec![0; r.output_buffer_size()];
+    let info = r.next_frame(&mut buf).unwrap();
+    let ch = info.color_type.samples();
+    let at = (10 * info.width as usize + 10) * ch;
+    assert!(buf[at] > 180 && buf[at + 1] < 80, "the photo's red is painted, got {:?}", &buf[at..at + 3]);
+}
+
+/// A PNG header declaring a small picture, padded to `len` bytes: a file of that size, to the size check.
+fn padded_png(len: usize) -> String {
+    let mut v = png_header(100, 100);
+    v.resize(len, 0);
+    format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(v))
+}
+
+#[test]
+fn a_picture_is_viewable_up_to_25_mb_of_file() {
+    let net = BridgeNet::new(false);
+    assert!(answer(&net, &padded_png(25 * 1024 * 1024)).unwrap() > 0, "exactly 25 MB passes");
+    let net = BridgeNet::new(false);
+    assert_eq!(answer(&net, &padded_png(25 * 1024 * 1024 + 1)), Some(0), "one byte over is refused");
+}
+
 #[test]
 fn a_png_declaring_400_megapixels_is_answered_empty() {
     let net = BridgeNet::new(false);
@@ -197,7 +278,7 @@ fn the_per_image_limit_is_sixteen_megapixels() {
     let net = BridgeNet::new(false);
     assert_eq!(answer(&net, &data_png(4000, 4000)).map(|n| n > 0), Some(true), "exactly 16 MP passes");
     let net = BridgeNet::new(false);
-    assert_eq!(answer(&net, &data_png(4000, 4001)), Some(0), "one row over is refused");
+    assert_eq!(answer(&net, &data_png(4000, 4001)), Some(0), "one row over, with no pixels behind the header to shrink, is refused");
 }
 
 #[test]

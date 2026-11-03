@@ -16,7 +16,8 @@ pub mod styles;
 pub mod text;
 pub mod worker;
 
+pub use net::MAX_IMAGE_BYTES;
 pub use doc::{
-    tile_dims, DocMeta, LinkInfo, OpenError, RenderDoc, RenderOptions, TileError, MAX_CSS_HEIGHT, MAX_CSS_WIDTH, MAX_DEPTH,
-    MAX_HTML_BYTES, MAX_NODES, MAX_SCALE, MAX_TILE_PIXELS, MIN_SCALE, TILE_CSS_HEIGHT,
+    exceeds_size_limits, markup_len, tile_dims, DocMeta, LinkInfo, OpenError, RenderDoc, RenderOptions, TileError, MAX_CSS_HEIGHT, MAX_CSS_WIDTH, MAX_DEPTH,
+    MAX_DOC_BYTES, MAX_HTML_BYTES, MAX_NODES, MAX_SCALE, MAX_TILE_PIXELS, MIN_SCALE, TILE_CSS_HEIGHT,
 };

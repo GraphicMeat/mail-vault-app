@@ -30,8 +30,19 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// One decoded image may not exceed this many pixels (width x height).
+/// One image may be painted at no more than this many pixels (width x height). A
+/// bigger one is not refused: it is decoded once and shrunk to fit (`shrink`).
 pub const MAX_IMAGE_PIXELS: u64 = 16_000_000;
+/// The largest image that is decoded to be shrunk: a 25 MB JPEG reaches about 150 MP. Above it
+/// the header alone decides: refused, nothing decoded. The transient decode is the
+/// most memory the worker ever spends on one image (`MAX_DECODE_ALLOC`).
+pub const MAX_DECODE_PIXELS: u64 = 150_000_000;
+const MAX_DECODE_ALLOC: u64 = 5 * MAX_DECODE_PIXELS + (1 << 20);
+/// The largest picture file that is shown (the usual mail attachment limit). A picture's
+/// bytes are checked before its header: over this it is refused, whatever its pixels.
+pub const MAX_IMAGE_BYTES: usize = 25 * 1024 * 1024;
+/// What is left of the document's budget is not worth a decode below this.
+const MIN_SHRUNK_PIXELS: u64 = 250_000;
 /// All images of one document together may not exceed this many pixels.
 pub const MAX_DOC_IMAGE_PIXELS: u64 = 64_000_000;
 /// Bytes whose header declares no size (CSS, fonts, anything unrecognised; gzip
@@ -133,7 +144,7 @@ impl BridgeNet {
     /// Answer fetch `id`; `None` (denied, failed, not an image) answers it empty.
     pub fn complete(&self, id: u64, bytes: Option<Vec<u8>>) -> bool {
         let Some((url, handler)) = self.pending.lock().unwrap().remove(&id) else { return false };
-        let bytes = bytes.filter(|b| self.admit(b)).unwrap_or_default();
+        let bytes = bytes.map(|b| self.admit(b)).unwrap_or_default();
         if !bytes.is_empty() {
             self.cache.lock().unwrap().insert(url.clone(), bytes.clone());
         }
@@ -157,8 +168,7 @@ impl BridgeNet {
         let cached = self.cache.lock().unwrap().get(&url).cloned();
         if let Some(bytes) = cached {
             // Counted against this document's pixel budget like a fresh answer.
-            let bytes = if self.admit(&bytes) { bytes } else { Vec::new() };
-            handler.bytes(url, Bytes::from(bytes));
+            handler.bytes(url, Bytes::from(self.admit(bytes)));
             return;
         }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
@@ -166,31 +176,76 @@ impl BridgeNet {
         self.outbox.lock().unwrap().push(FetchRequest { id, url });
     }
 
-    /// May these bytes go on to a decoder? Reads only the header: an image
-    /// that declares more than MAX_IMAGE_PIXELS, or would push the document
-    /// past MAX_DOC_IMAGE_PIXELS, is refused before anything is decoded.
+    /// The bytes to hand a decoder: the image as it came, shrunk to what its
+    /// per-image and the document's pixel budget allow, or empty (refused).
+    /// Only the header is read first: nothing past MAX_DECODE_PIXELS, and nothing
+    /// that no longer fits the document's budget, is ever decoded.
     /// gzip is refused outright, whatever the URL or declared type said: see
     /// `is_gzip`. SVG markup is admitted up to MAX_SVG_BYTES.
-    fn admit(&self, bytes: &[u8]) -> bool {
-        if is_gzip(bytes) {
-            return false;
+    fn admit(&self, bytes: Vec<u8>) -> Vec<u8> {
+        if is_gzip(&bytes) || bytes.len() > MAX_IMAGE_BYTES {
+            return Vec::new();
         }
-        match imagesize::blob_size(bytes) {
+        let ok = match imagesize::blob_size(&bytes) {
             Ok(size) => {
                 let px = (size.width as u64).saturating_mul(size.height as u64);
-                if px > MAX_IMAGE_PIXELS {
-                    return false;
+                let room = MAX_DOC_IMAGE_PIXELS.saturating_sub(self.image_pixels.load(Ordering::Acquire));
+                let fit = MAX_IMAGE_PIXELS.min(room);
+                if px <= fit {
+                    return if self.spend(px) { bytes } else { Vec::new() };
                 }
-                self.image_pixels
-                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
-                        used.checked_add(px).filter(|total| *total <= MAX_DOC_IMAGE_PIXELS)
-                    })
-                    .is_ok()
+                if px > MAX_DECODE_PIXELS || fit < MIN_SHRUNK_PIXELS {
+                    return Vec::new();
+                }
+                return match shrink(&bytes, fit) {
+                    Some((small, small_px)) if self.spend(small_px) => small,
+                    _ => Vec::new(),
+                };
             }
-            Err(_) if looks_like_svg(bytes) => bytes.len() <= MAX_SVG_BYTES,
+            Err(_) if looks_like_svg(&bytes) => bytes.len() <= MAX_SVG_BYTES,
             Err(_) => bytes.len() <= MAX_UNSIZED_BYTES,
-        }
+        };
+        if ok { bytes } else { Vec::new() }
     }
+
+    /// Take `px` from the document's pixel budget, or leave it as it was.
+    fn spend(&self, px: u64) -> bool {
+        self.image_pixels
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(px).filter(|total| *total <= MAX_DOC_IMAGE_PIXELS)
+            })
+            .is_ok()
+    }
+}
+
+/// `bytes` decoded once and scaled down, aspect ratio kept, to at most `max_px`
+/// pixels, as `(encoded image, its pixels)`. JPEG stays JPEG, anything with alpha
+/// goes out as PNG. None when it cannot be decoded: it is then refused like any
+/// other bytes that are not an image.
+fn shrink(bytes: &[u8], max_px: u64) -> Option<(Vec<u8>, u64)> {
+    use image::{codecs::jpeg::JpegEncoder, imageops::FilterType, ImageFormat, ImageReader, Limits};
+    let format = image::guess_format(bytes).ok().filter(|f| matches!(f, ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Gif | ImageFormat::WebP))?;
+    let mut reader = ImageReader::with_format(std::io::Cursor::new(bytes), format);
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(MAX_DECODE_ALLOC);
+    reader.limits(limits);
+    let img = reader.decode().ok()?;
+    let (w, h) = (img.width() as u64, img.height() as u64);
+    let scale = (max_px as f64 / (w * h) as f64).sqrt();
+    let mut nw = ((w as f64 * scale).floor() as u64).max(1);
+    let mut nh = ((h as f64 * scale).floor() as u64).max(1);
+    while nw * nh > max_px {
+        if nw >= nh { nw -= 1 } else { nh -= 1 }
+    }
+    let small = img.resize_exact(nw as u32, nh as u32, FilterType::Triangle);
+    let mut out = Vec::new();
+    if format == ImageFormat::Jpeg || !small.color().has_alpha() {
+        let rgb = small.to_rgb8();
+        JpegEncoder::new_with_quality(&mut out, 90).encode_image(&rgb).ok()?;
+    } else {
+        small.write_to(&mut std::io::Cursor::new(&mut out), ImageFormat::Png).ok()?;
+    }
+    Some((out, nw * nh))
 }
 
 impl NetProvider for BridgeNet {
@@ -201,8 +256,7 @@ impl NetProvider for BridgeNet {
                 let bytes = data_url::DataUrl::process(&url)
                     .ok()
                     .and_then(|d| d.decode_to_vec().ok())
-                    .map(|(body, _)| body)
-                    .filter(|body| self.admit(body))
+                    .map(|(body, _)| self.admit(body))
                     .unwrap_or_default();
                 handler.bytes(url, Bytes::from(bytes));
             }
