@@ -23,6 +23,7 @@ import {
 import { stampIndexPreviews } from '../indexSnippet';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
+import { pickGraphCursor } from '../graphCursor';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce, isLocalMailbox } from './mailboxTree';
@@ -292,7 +293,7 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
     totalEmails: serverTotal,
     hasMoreEmails: !!result.nextLink,
     currentPage: 1,
-    _graphCursor: { key: `${accountId}:${activeMailbox}`, skip: headers.length },
+    _graphCursor: pickGraphCursor(useMailStoreRef.getState()._graphCursor, `${accountId}:${activeMailbox}`, headers),
     serverUids: serverUids(sorted.map(e => e.uid), { complete: !result.nextLink }),
   }));
 

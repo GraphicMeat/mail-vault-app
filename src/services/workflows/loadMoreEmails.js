@@ -6,6 +6,7 @@ import { resolveServerAccount } from '../authUtils';
 import { getSyncStatus } from '../syncService';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages } from '../cacheManager';
 import { isGraphAccount } from '../graphConfig';
+import { graphCursorAfter, graphPageArgs, sameGraphCursor } from '../graphCursor';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
 import { isLocalMailbox } from './mailboxTree';
@@ -115,13 +116,12 @@ async function _daemonIsBackfilling(accountId, mailbox) {
 
 
 /**
- * The next page of a Graph folder, read at the skip the listing left in
- * `_graphCursor`. The cursor counts what the SERVER returned, so rows the
- * store holds for other reasons (the cache paint, optimistic Sent rows, ghosts
- * of mail deleted elsewhere) cannot move it. A page that shifts under new mail
- * repeats rows, which the uid dedupe drops. Mail deleted elsewhere between two
- * pages pulls later rows back into the range already skipped; that is inherent
- * to `$skip` and heals on the next reload of the folder.
+ * The next page of a Graph folder, read at the position `_graphCursor` holds
+ * (graphCursor.js): a moment and a tie count over what the SERVER returned, so
+ * rows the store holds for other reasons (the cache paint, optimistic Sent
+ * rows, ghosts of mail deleted elsewhere) cannot move it, and neither can mail
+ * deleted or arriving elsewhere between two pages. A page that overlaps what
+ * is held repeats rows, which the uid dedupe drops.
  *
  * The cache is drained for its rows but never decides the end: its "nothing
  * left" is a count off a total that used to be one page long. The server's
@@ -147,13 +147,12 @@ async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
 
   const key = `${accountId}:${mailbox}`;
   const cursor = get()._graphCursor;
-  const skip = cursor?.key === key ? cursor.skip : 0;
-  const result = await listGraphMessages(accountId, mailbox, account, folder._graphFolderId, { top: PAGE_SIZE, skip });
+  const result = await listGraphMessages(accountId, mailbox, account, folder._graphFolderId, graphPageArgs(cursor, key, PAGE_SIZE));
 
   const current = get();
   if (current.activeAccountId !== accountId || current.activeMailbox !== mailbox) return done({});
   // A reload reset the list and the cursor while this page was on the wire.
-  if (current._graphCursor?.key !== (cursor?.key) || current._graphCursor?.skip !== cursor?.skip) return done({});
+  if (!sameGraphCursor(current._graphCursor, cursor)) return done({});
 
   const headers = result.headers || [];
   const held = new Set(current.emails.map(e => e.uid));
@@ -172,7 +171,7 @@ async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
     totalEmails: total,
     loadingMore: false,
     _loadMoreRetryDelay: 0,
-    _graphCursor: { key, skip: skip + headers.length },
+    _graphCursor: graphCursorAfter(key, headers, cursor),
     // Widening only, as for IMAP: this page does not make the set complete.
     serverUids: serverUids(uids, { complete: current.serverUids.complete }),
   });

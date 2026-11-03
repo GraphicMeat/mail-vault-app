@@ -43,6 +43,22 @@ pub fn is_personal_microsoft(email: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// URL of a newest-first message listing, optionally from a moment backwards.
+fn messages_list_url(base: &str, folder_id: &str, top: u32, skip: u32, before: Option<&str>) -> String {
+    let filter = before.map(|b| format!("&$filter=receivedDateTime le {b}")).unwrap_or_default();
+    format!(
+        "{base}/me/mailFolders/{folder_id}/messages?$top={top}&$skip={skip}{filter}&$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId&$orderby=receivedDateTime desc"
+    )
+}
+
+/// A `receivedDateTime` as Graph writes it (`2026-01-05T10:00:00Z`, maybe with
+/// fractional seconds or an offset). Nothing else goes into a `$filter`.
+pub fn is_graph_timestamp(text: &str) -> bool {
+    (10..=40).contains(&text.len())
+        && text.starts_with(|c: char| c.is_ascii_digit())
+        && text.chars().all(|c| c.is_ascii_digit() || matches!(c, 'T' | 'Z' | ':' | '.' | '-' | '+'))
+}
+
 // ---------------------------------------------------------------------------
 // Graph API data structures (serde deserialization from Graph JSON)
 // ---------------------------------------------------------------------------
@@ -708,12 +724,24 @@ impl GraphClient {
         top: u32,
         skip: u32,
     ) -> Result<(Vec<GraphMessage>, Option<String>), String> {
-        let url = format!(
-            "{}/me/mailFolders/{}/messages?$top={}&$skip={}&$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId&$orderby=receivedDateTime desc",
-            graph_base(), folder_id, top, skip
-        );
+        self.list_messages_at(&messages_list_url(&graph_base(), folder_id, top, skip, None)).await
+    }
 
-        self.list_messages_at(&url).await
+    /// The same listing from a moment backwards: messages received at or
+    /// before `before` (a `receivedDateTime` Graph itself returned), then
+    /// `skip` of those. A position by moment survives mail deleted or arriving
+    /// elsewhere in the folder, which a bare `skip` does not.
+    pub async fn list_messages_before(
+        &self,
+        folder_id: &str,
+        top: u32,
+        skip: u32,
+        before: &str,
+    ) -> Result<(Vec<GraphMessage>, Option<String>), String> {
+        if !is_graph_timestamp(before) {
+            return Err("Graph list_messages refused a malformed receivedDateTime".into());
+        }
+        self.list_messages_at(&messages_list_url(&graph_base(), folder_id, top, skip, Some(before))).await
     }
 
     /// Continue a full-header listing using Graph's opaque link. The same
@@ -1389,6 +1417,31 @@ impl GraphClient {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn list_url_without_a_moment_is_the_plain_newest_first_listing() {
+        let url = messages_list_url("https://g.test/v1.0", "fld", 200, 400, None);
+        assert!(url.starts_with("https://g.test/v1.0/me/mailFolders/fld/messages?$top=200&$skip=400&$select="));
+        assert!(url.ends_with("&$orderby=receivedDateTime desc"));
+        assert!(!url.contains("$filter"));
+    }
+
+    #[test]
+    fn list_url_from_a_moment_reads_at_or_before_it() {
+        let url = messages_list_url("https://g.test/v1.0", "fld", 200, 3, Some("2026-01-05T10:00:00Z"));
+        assert!(url.contains("&$skip=3&$filter=receivedDateTime le 2026-01-05T10:00:00Z&$select="));
+        assert!(url.ends_with("&$orderby=receivedDateTime desc"));
+    }
+
+    #[test]
+    fn only_a_graph_timestamp_goes_into_a_filter() {
+        for ok in ["2026-01-05T10:00:00Z", "2026-01-05T10:00:00.123Z", "2026-01-05T10:00:00+02:00"] {
+            assert!(is_graph_timestamp(ok), "{ok}");
+        }
+        for bad in ["", "yesterday", "2026-01-05 10:00:00", "2026-01-05T10:00:00Z or true", "x&$top=1", "'; drop"] {
+            assert!(!is_graph_timestamp(bad), "{bad}");
+        }
+    }
     use super::*;
 
     #[tokio::test]

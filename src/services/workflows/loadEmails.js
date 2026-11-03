@@ -7,6 +7,7 @@ import { useConnectivityStore } from '../../stores/connectivityStore';
 import { hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { oauthErrorState } from '../oauthErrors';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
+import { pickGraphCursor } from '../graphCursor';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
 import { _buildRestoreDescriptor, rebaseFlags, vaultKey, vaultKeys, vaultUids } from '../../stores/slices/unifiedHelpers';
@@ -976,23 +977,41 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     mergedEmails = rebaseFlags(priorEmails, get().emails, mergedEmails, get());
 
     const hasMoreEmails = !!result.nextLink;
+    const key = `${activeAccountId}:${activeMailbox}`;
+    const heldCursor = get()._graphCursor;
+    const cursor = pickGraphCursor(heldCursor, key, headers);
+
+    const graphUids = new Set(mergedEmails.map(e => e.uid));
+    const pageDates = mergedEmails.map(_headerDateMs).filter(Number.isFinite);
+    const pageOldestMs = pageDates.length ? Math.min(...pageDates) : Infinity;
+
+    // A reload lists the newest page. The older rows already paged in stay:
+    // dropping them cut a long list back to one page, and the scroll position
+    // with it. Only when the held cursor vouches for them (it reaches further
+    // back than this page) and the folder is longer than a page. NaN fails the
+    // comparison, so a row with no date is not kept on a guess.
+    const kept = hasMoreEmails && cursor === heldCursor
+      ? get().emails.filter(e => e.source !== 'local' && !graphUids.has(e.uid) && _headerDateMs(e) < pageOldestMs)
+      : [];
+    const listed = kept.length ? [...mergedEmails, ...kept] : mergedEmails;
+
     // One page is not the folder: with a next page behind it the total is the
     // folder's own count, or load-more has nothing to count toward.
-    const serverTotal = hasMoreEmails ? Math.max(mergedEmails.length, targetFolder._graphTotal || 0) : mergedEmails.length;
+    const serverTotal = hasMoreEmails ? Math.max(listed.length, targetFolder._graphTotal || 0) : mergedEmails.length;
 
     useMailStore.setState({
-      emails: projectDraftRows(mergedEmails, activeAccountId, activeMailbox, draftFrame),
-      loadedRanges: [{ start: 0, end: mergedEmails.length }],
+      emails: projectDraftRows(listed, activeAccountId, activeMailbox, draftFrame),
+      loadedRanges: [{ start: 0, end: listed.length }],
       connectionStatus: 'connected',
       connectionError: null,
       connectionErrorType: null,
       currentPage: 1,
-      _graphCursor: { key: `${activeAccountId}:${activeMailbox}`, skip: headers.length },
+      _graphCursor: cursor,
       hasMoreEmails,
       totalEmails: serverTotal,
       loading: false,
       loadingMore: false,
-      serverUids: serverUids(mergedEmails.map(e => e.uid), { complete: !hasMoreEmails }),
+      serverUids: serverUids(listed.map(e => e.uid), { complete: !hasMoreEmails }),
     });
 
     get().updateSortedEmails();
@@ -1008,9 +1027,6 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     // all — uid 1 is on page 1 of every mailbox, which made the old
     // `uid >= lowestGraphUid` test true for every prior row and let a
     // 200-message page delete the rest of a warm cache as server-expunged.
-    const graphUids = new Set(mergedEmails.map(e => e.uid));
-    const pageDates = mergedEmails.map(_headerDateMs).filter(Number.isFinite);
-    const pageOldestMs = pageDates.length ? Math.min(...pageDates) : Infinity;
     // NaN fails every comparison, so a row we can't date is never inside the
     // window and never deleted on a guess.
     const removedUids = priorEmails

@@ -219,9 +219,9 @@ export async function restoreGraphIdMap(accountId, mailbox) {
  * saved/archived sets) must go through here or they file today's mail under
  * yesterday's numbers.
  */
-export async function listGraphMessages(accountId, mailbox, account, folderId, { top = 200, skip = 0 } = {}) {
+export async function listGraphMessages(accountId, mailbox, account, folderId, { top = 200, skip = 0, before } = {}) {
   const api = await import('./api.js');
-  const result = await api.graphListMessages(account, folderId, top, skip, mailbox);
+  const result = await api.graphListMessages(account, folderId, top, skip, mailbox, ...(before ? [before] : []));
   const headers = await _allocateGraphUids(
     accountId, mailbox, result.headers || [], result.graphMessageIds || []
   );

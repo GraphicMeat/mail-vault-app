@@ -631,8 +631,9 @@ export async function graphProbeSignIn(accessToken, accountEmail) {
   return await tauriInvoke('graph_list_folders', { accessToken, accountEmail });
 }
 
-export async function graphListMessages(account, folderId, top, skip, mailbox) {
-  return await tauriInvoke('graph_list_messages', { ...graphAccount(account), folderId, mailbox, top, skip: skip || 0 });
+// `before`: list from that receivedDateTime backwards (see graphCursor.js).
+export async function graphListMessages(account, folderId, top, skip, mailbox, before) {
+  return await tauriInvoke('graph_list_messages', { ...graphAccount(account), folderId, mailbox, top, skip: skip || 0, ...(before ? { before } : {}) });
 }
 
 /** One uid per [graphId, internetMessageId] entry, from the ledger the backup shares. */

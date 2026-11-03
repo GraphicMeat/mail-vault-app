@@ -88,7 +88,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 crate::handlers::cache::native_header_seed(state, &identity.account_id, &identity.mailbox).await
             } else { None };
             let client = GraphClient::new(&access_token);
-            match client.list_messages(&folder_id, top, skip).await {
+            // A page read from a moment backwards (the app's cursor), else from the top.
+            let listing = match opt_str_arg(params, "before") {
+                Some(before) => client.list_messages_before(&folder_id, top, skip, &before).await,
+                None => client.list_messages(&folder_id, top, skip).await,
+            };
+            match listing {
                 Ok((messages, next_link)) => {
                     // The uid here is provisional — the message's position in a
                     // `receivedDateTime desc` listing, which moves every time mail

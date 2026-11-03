@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Deleting an email no longer reloads the folder. The row leaves the list, the count and the cache as before, and the rest of the list stays where it is; before, the reload cut a long list back to its first page and sent you to the top. An email that could not be deleted still comes back as it did.
+
+- A long Microsoft 365 or Hotmail folder keeps the emails you have scrolled to when it refreshes, and loading more no longer skips an email when mail was deleted or arrived in the folder in the meantime. Mail stamped with the same second (a migrated mailbox) loads in full too.
+
 - Report a bug by email now attaches your recent logs for you, as `anonymous-logs.txt`. Every email address in them is replaced by a short code, even when Logs are set to Verbose, so you no longer have to find, export and attach the file yourself. The report still opens if the logs cannot be read.
 
 - A picture too large for the Rust renderer to draw (over 150 megapixels, over 25 MB of file, or past what is left of a message's picture budget) now shows a framed box in its place, "Too large to show here", with an "Open Image" button. It used to leave an empty gap. The button opens an attached picture in your system viewer (Preview on a Mac) and a picture from the web through the usual link check. With privacy mode on there is no button.

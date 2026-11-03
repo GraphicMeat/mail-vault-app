@@ -5,15 +5,18 @@
 // to `imap_get_emails` for a Graph account, which cannot page it, failed
 // without a word and stopped retrying because totalEmails was the page length
 // (200) and 200 rows were already loaded.
-//   - load-more reads the next Graph page from a cursor the first listing set,
-//     not from a count of the rows held (the cache paint and the cache drain
-//     add rows that are not the server's newest N, and a count over them
-//     leaves a gap that never closes);
+//   - load-more reads the next Graph page from a cursor the first listing set
+//     (the oldest moment listed, and how many rows sit on it), not from a count
+//     of the rows held (the cache paint and the cache drain add rows that are
+//     not the server's newest N) and not from a bare skip (a message deleted
+//     elsewhere between two pages moves every row behind it up one place);
+//   - a reload keeps the older rows already paged in;
 //   - the folder total is the folder's own count, not the length of page one;
 //   - the last page (no nextLink) ends the paging, whatever the total said.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { graphFoldersToMailboxes } from '../../graphConfig';
+import { graphCursorAfter } from '../../graphCursor';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -101,11 +104,16 @@ const row = (uid) => ({
 });
 const rows = (from, n) => Array.from({ length: n }, (_, i) => row(from + i));
 
-// The server side: FOLDER_TOTAL messages, newest first, uid = position + 1.
+// The server side: newest first, `before` is "received at or before", then a skip.
+let server;
+const KEY = `${ACCOUNT.id}:INBOX`;
+const cursorAfter = (n) => graphCursorAfter(KEY, server.slice(0, n), null);
 function serveFolder() {
-  graph.listGraphMessages.mockImplementation(async (accountId, mailbox, account, folderId, { top = 200, skip = 0 } = {}) => {
-    const n = Math.max(0, Math.min(top, FOLDER_TOTAL - skip));
-    return { headers: rows(skip + 1, n), nextLink: skip + n < FOLDER_TOTAL ? `link-${skip + n}` : null };
+  server = rows(1, FOLDER_TOTAL);
+  graph.listGraphMessages.mockImplementation(async (accountId, mailbox, account, folderId, { top = 200, skip = 0, before } = {}) => {
+    const list = before ? server.filter(r => r.date <= before) : server;
+    const page = list.slice(skip, skip + top);
+    return { headers: page.map(r => ({ ...r })), nextLink: skip + page.length < list.length ? `link-${skip + page.length}` : null };
   });
 }
 
@@ -124,7 +132,7 @@ function prime(extra = {}) {
     totalEmails: FOLDER_TOTAL,
     hasMoreEmails: true,
     currentPage: 1,
-    _graphCursor: { key: `${ACCOUNT.id}:INBOX`, skip: PAGE },
+    _graphCursor: cursorAfter(PAGE),
     loadingMore: false,
     mailboxes: [INBOX, SENT],
     localFolders: {},
@@ -159,7 +167,7 @@ describe('a Graph folder bigger than one page', () => {
 
     expect(api.fetchEmails).not.toHaveBeenCalled();
     expect(graph.listGraphMessages).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: PAGE });
+      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: 1, before: row(PAGE).date });
     const s = useMailStore.getState();
     expect(s.emails.map(e => e.uid)).toEqual(rows(1, 2 * PAGE).map(e => e.uid));
     expect(s.hasMoreEmails).toBe(true);
@@ -194,7 +202,7 @@ describe('a Graph folder bigger than one page', () => {
     clearTimeout(getLoadMoreTimer());
 
     expect(graph.listGraphMessages).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: PAGE });
+      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: 1, before: row(PAGE).date });
   });
 
   it('shows the cache\'s older rows, and still asks the server for the next page', async () => {
@@ -211,7 +219,7 @@ describe('a Graph folder bigger than one page', () => {
     const s = useMailStore.getState();
     expect(s.emails.length).toBeGreaterThanOrEqual(PAGE + 800);
     expect(graph.listGraphMessages).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: PAGE });
+      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: 1, before: row(PAGE).date });
     expect(s.hasMoreEmails).toBe(true);
   });
 
@@ -232,12 +240,12 @@ describe('a Graph folder bigger than one page', () => {
     prime({ emails: [...rows(1, PAGE), ...rows(201, 100).map(e => ({ ...e, source: 'cache' }))] });
     await useMailStore.getState().loadMoreEmails();
     clearTimeout(getLoadMoreTimer());
-    expect(useMailStore.getState()._graphCursor).toEqual({ key: `${ACCOUNT.id}:INBOX`, skip: 2 * PAGE });
+    expect(useMailStore.getState()._graphCursor).toEqual({ key: KEY, before: row(2 * PAGE).date, skip: 1 });
 
     await useMailStore.getState().loadMoreEmails();
     clearTimeout(getLoadMoreTimer());
     expect(graph.listGraphMessages).toHaveBeenLastCalledWith(
-      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: 2 * PAGE });
+      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: 1, before: row(2 * PAGE).date });
     expect(new Set(useMailStore.getState().emails.map(e => e.uid)).size).toBe(FOLDER_TOTAL);
   });
 
@@ -249,11 +257,11 @@ describe('a Graph folder bigger than one page', () => {
     expect(graph.listGraphMessages).toHaveBeenCalledWith(
       ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: 0 });
     expect(useMailStore.getState().emails).toHaveLength(PAGE); // all of it already held
-    expect(useMailStore.getState()._graphCursor.skip).toBe(PAGE);
+    expect(useMailStore.getState()._graphCursor).toEqual({ key: KEY, before: row(PAGE).date, skip: 1 });
   });
 
   it('ignores a cursor that belongs to another folder', async () => {
-    prime({ _graphCursor: { key: `${ACCOUNT.id}:Sent`, skip: 3 } });
+    prime({ _graphCursor: { key: `${ACCOUNT.id}:Sent`, before: row(3).date, skip: 3 } });
     await useMailStore.getState().loadMoreEmails();
     clearTimeout(getLoadMoreTimer());
 
@@ -262,10 +270,10 @@ describe('a Graph folder bigger than one page', () => {
   });
 
   it('drops a page that a refresh outran: the refresh reset the list and the cursor', async () => {
-    prime({ emails: rows(1, 2 * PAGE), _graphCursor: { key: `${ACCOUNT.id}:INBOX`, skip: 2 * PAGE } });
+    prime({ emails: rows(1, 2 * PAGE), _graphCursor: cursorAfter(2 * PAGE) });
     graph.listGraphMessages.mockImplementationOnce(async () => {
       // A reload lands while the page is on the wire: page one again.
-      useMailStore.setState({ emails: rows(1, PAGE), _graphCursor: { key: `${ACCOUNT.id}:INBOX`, skip: PAGE } });
+      useMailStore.setState({ emails: rows(1, PAGE), _graphCursor: cursorAfter(PAGE) });
       return { headers: rows(2 * PAGE + 1, PAGE), nextLink: 'x' };
     });
     await useMailStore.getState().loadMoreEmails();
@@ -273,8 +281,63 @@ describe('a Graph folder bigger than one page', () => {
 
     const s = useMailStore.getState();
     expect(s.emails).toHaveLength(PAGE); // page three was not appended onto page one
-    expect(s._graphCursor.skip).toBe(PAGE);
+    expect(s._graphCursor).toEqual(cursorAfter(PAGE));
     expect(s.loadingMore).toBe(false);
+  });
+
+  it('a message deleted elsewhere between two pages leaves no gap', async () => {
+    prime();
+    // Gone on the server after page one was read: every row behind it moves up
+    // one place, so a bare skip of 200 would start at uid 202 and lose uid 201.
+    server.splice(9, 1);
+    for (let i = 0; i < 3; i++) {
+      await useMailStore.getState().loadMoreEmails();
+      clearTimeout(getLoadMoreTimer());
+    }
+
+    const held = new Set(useMailStore.getState().emails.map(e => e.uid));
+    for (const r of server) expect(held.has(r.uid), `uid ${r.uid}`).toBe(true);
+  });
+
+  it('pages through a run of mail that arrived at the same moment', async () => {
+    // A migrated mailbox: 200 messages stamped with one received time, wider
+    // than a page. A moment alone would never advance; the tie count does.
+    const T = row(150).date;
+    server = server.map(r => (r.uid >= 150 && r.uid <= 349 ? { ...r, date: T } : r));
+    prime({ emails: server.slice(0, PAGE).map(r => ({ ...r })), _graphCursor: cursorAfter(PAGE) });
+    for (let i = 0; i < 4; i++) {
+      await useMailStore.getState().loadMoreEmails();
+      clearTimeout(getLoadMoreTimer());
+    }
+
+    const held = new Set(useMailStore.getState().emails.map(e => e.uid));
+    for (const r of server) expect(held.has(r.uid), `uid ${r.uid}`).toBe(true);
+    expect(useMailStore.getState().hasMoreEmails).toBe(false);
+  });
+
+  it('a reload keeps the older rows already paged in, and the cursor that covers them', async () => {
+    const deep = { key: KEY, before: row(400).date, skip: 1 };
+    prime({ emails: rows(1, 400), _graphCursor: deep, totalEmails: FOLDER_TOTAL });
+    await useMailStore.getState().loadEmails();
+    clearTimeout(getLoadMoreTimer());
+
+    const s = useMailStore.getState();
+    expect(graph.listGraphMessages).toHaveBeenCalledTimes(1);
+    expect(graph.listGraphMessages).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox');
+    expect(s.emails).toHaveLength(400);
+    expect(new Set(s.emails.map(e => e.uid)).size).toBe(400);
+    expect(s._graphCursor).toEqual(deep);
+    expect(s.hasMoreEmails).toBe(true);
+  });
+
+  it('a reload with no cursor to vouch for the older rows lists page one alone', async () => {
+    prime({ emails: rows(1, 400), _graphCursor: null });
+    await useMailStore.getState().loadEmails();
+    clearTimeout(getLoadMoreTimer());
+
+    const s = useMailStore.getState();
+    expect(s.emails).toHaveLength(PAGE);
+    expect(s._graphCursor).toEqual(cursorAfter(PAGE));
   });
 
   it('a failed page is retried: the list still knows more is there', async () => {
@@ -318,7 +381,7 @@ describe('a Graph folder bigger than one page', () => {
     expect(s.emails).toHaveLength(PAGE);
     expect(s.hasMoreEmails).toBe(true);
     expect(s.totalEmails).toBe(FOLDER_TOTAL);
-    expect(s._graphCursor).toEqual({ key: `${ACCOUNT.id}:INBOX`, skip: PAGE });
+    expect(s._graphCursor).toEqual(cursorAfter(PAGE));
     const saved = db.saveEmailHeaders.mock.calls.find(c => c[1] === 'INBOX');
     expect(saved[3]).toBe(FOLDER_TOTAL);
   });
