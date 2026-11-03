@@ -355,6 +355,7 @@ export const createMessageListSlice = (set, get) => ({
 
   // Pagination
   currentPage: 1,
+  _graphCursor: null, // { key: `account:mailbox`, skip }: where the next Graph page starts
   hasMoreEmails: true,
   totalEmails: 0,
 

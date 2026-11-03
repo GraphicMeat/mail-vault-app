@@ -987,6 +987,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       connectionError: null,
       connectionErrorType: null,
       currentPage: 1,
+      _graphCursor: { key: `${activeAccountId}:${activeMailbox}`, skip: headers.length },
       hasMoreEmails,
       totalEmails: serverTotal,
       loading: false,

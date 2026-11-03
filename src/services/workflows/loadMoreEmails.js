@@ -115,9 +115,15 @@ async function _daemonIsBackfilling(accountId, mailbox) {
 
 
 /**
- * The next page of a Graph folder. Skips by the server rows already held (a
- * local draft row is not a Graph message). Overlap from a page that shifted is
- * dropped by uid, so it can repeat a row but never leave a gap.
+ * The next page of a Graph folder, read at the skip the listing left in
+ * `_graphCursor`. The cursor counts what the SERVER returned, so rows the
+ * store holds for other reasons (the cache paint, optimistic Sent rows, ghosts
+ * of mail deleted elsewhere) cannot move it. A page that shifts under new mail
+ * repeats rows, which the uid dedupe drops; it never leaves a gap.
+ *
+ * It never drains the cache first: the cache can hold more rows than the
+ * server's next page starts at, and its "nothing left" is a count off a total
+ * that used to be one page long. The server's nextLink is the only end.
  */
 async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
   const get = () => useMailStore.getState();
@@ -126,11 +132,15 @@ async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
   // No folder to page: end the paging rather than ask again for ever.
   if (!folder?._graphFolderId) return done({ hasMoreEmails: false });
 
-  const skip = get().emails.filter(e => e.source !== 'local').length;
+  const key = `${accountId}:${mailbox}`;
+  const cursor = get()._graphCursor;
+  const skip = cursor?.key === key ? cursor.skip : 0;
   const result = await listGraphMessages(accountId, mailbox, account, folder._graphFolderId, { top: PAGE_SIZE, skip });
 
   const current = get();
   if (current.activeAccountId !== accountId || current.activeMailbox !== mailbox) return done({});
+  // A reload reset the list and the cursor while this page was on the wire.
+  if (current._graphCursor?.key !== (cursor?.key) || current._graphCursor?.skip !== cursor?.skip) return done({});
 
   const headers = result.headers || [];
   const held = new Set(current.emails.map(e => e.uid));
@@ -149,6 +159,7 @@ async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
     totalEmails: total,
     loadingMore: false,
     _loadMoreRetryDelay: 0,
+    _graphCursor: { key, skip: skip + headers.length },
     // Widening only, as for IMAP: this page does not make the set complete.
     serverUids: serverUids(uids, { complete: current.serverUids.complete }),
   });
@@ -189,6 +200,12 @@ export async function loadMoreEmails() {
   useMailStore.setState({ loadingMore: true });
 
   try {
+    // Graph has no IMAP: its next page is the next skip of the same listing.
+    if (isGraphAccount(account)) {
+      await _loadMoreGraph(useMailStore, account, activeAccountId, activeMailbox);
+      return;
+    }
+
     const nextPage = currentPage + 1;
 
     // Cache-first: the sidecar cache usually already holds the whole mailbox,
@@ -246,12 +263,6 @@ export async function loadMoreEmails() {
       const timer = getLoadMoreTimer();
       if (timer) clearTimeout(timer);
       setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 1000));
-      return;
-    }
-
-    // Graph has no IMAP: its next page is the next skip of the same listing.
-    if (isGraphAccount(account)) {
-      await _loadMoreGraph(useMailStore, account, activeAccountId, activeMailbox);
       return;
     }
 

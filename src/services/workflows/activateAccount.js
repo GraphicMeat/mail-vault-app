@@ -292,6 +292,7 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
     totalEmails: serverTotal,
     hasMoreEmails: !!result.nextLink,
     currentPage: 1,
+    _graphCursor: { key: `${accountId}:${activeMailbox}`, skip: headers.length },
     serverUids: serverUids(sorted.map(e => e.uid), { complete: !result.nextLink }),
   }));
 
