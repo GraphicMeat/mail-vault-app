@@ -385,6 +385,25 @@ describe('a Graph folder bigger than one page', () => {
     expect(db.saveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(255))).toBe(false);
   });
 
+  it('a row tied with the edge between two walk pages that the walk missed is not taken for deleted', async () => {
+    const T = row(395).date;
+    server = server.map(r => (r.uid >= 395 && r.uid <= 420 ? { ...r, date: T } : r));
+    prime({ emails: server.slice(0, 450).map(r => ({ ...r })), _graphCursor: cursorAfter(450) });
+    const listing = graph.listGraphMessages.getMockImplementation();
+    graph.listGraphMessages
+      .mockImplementationOnce(listing)   // page one
+      .mockImplementationOnce(listing)   // walk page A: ends inside the run
+      .mockImplementationOnce(async (...args) => {   // walk page B: Graph leaves uid 410 off
+        const page = await listing(...args);
+        return { ...page, headers: page.headers.filter(h => h.uid !== 410) };
+      });
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+
+    expect(useMailStore.getState().emails.some(e => e.uid === 410)).toBe(true);
+    expect(db.saveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(410))).toBe(false);
+  });
+
   it('a reload does not walk the kept rows again within minutes', async () => {
     prime({ emails: rows(1, 400), _graphCursor: { key: KEY, before: row(400).date, skip: 1 } });
     await useMailStore.getState().loadEmails();
