@@ -3,6 +3,7 @@ import { flushSafeStorage } from '../stores/safeStorage';
 import { formatDateTime } from '../utils/dateFormat';
 import { t } from '../i18n/index.js';
 import { withoutSnippet } from '../utils/withoutSnippet';
+import { extractInlineImages } from '../utils/inlineImages';
 
 const unavailable = () => new Error('compose.preparationUnavailable');
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -127,6 +128,7 @@ export const composeCheckInput = ({ snapshot, mode, authoredBodyText, timeZone, 
   accountId: snapshot._accountId ?? '', fromAddress: snapshot._fromAddress ?? '',
   mode, inReplyTo: snapshot.inReplyTo, forward: !!snapshot._forward,
   to: snapshot.to, cc: snapshot.cc, bcc: snapshot.bcc, subject: snapshot.subject,
-  authoredBodyText, attachmentCount: snapshot.attachments.length,
+  // A pasted or dropped picture sits in the body as a data: <img> and goes out as an inline part.
+  authoredBodyText, attachmentCount: snapshot.attachments.length + extractInlineImages(snapshot.body).attachments.length,
   sendPlan: snapshot._sendPlan, scheduleDraft: snapshot._scheduleDraft, timeZone, sendAnyway,
 });

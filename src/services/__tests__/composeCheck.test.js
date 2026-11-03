@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 const { send, flush } = vi.hoisted(() => ({ send: vi.fn(), flush: vi.fn() }));
 vi.mock('../transport', () => ({ send }));
 vi.mock('../../stores/safeStorage', () => ({ flushSafeStorage: flush }));
@@ -85,4 +85,19 @@ it.each([
   send.mockImplementation(async (_, p) => ({ ...ready(p), route: { draft } }));
   const result = await prep.checkCompose(input());
   expect(result.route).toEqual({ draft });
+});
+describe('composeCheckInput attachmentCount', () => {
+  const snap = (body, attachments = []) => ({ _draftId: 'd', _draftRevision: 1, to: 'a@b.test', cc: '', bcc: '', subject: '', body, attachments });
+  const check = snapshot => prep.composeCheckInput({ snapshot, mode: 'new', authoredBodyText: 'see attached', timeZone: 'UTC' });
+  const png = 'data:image/png;base64,iVBORw0KGgo=';
+  it('counts a pasted inline image: it goes out as an attachment', () => {
+    expect(check(snap(`<p>see attached</p><img src="${png}" alt="shot.png">`)).attachmentCount).toBe(1);
+  });
+  it('counts a repeated image once and adds it to file attachments', () => {
+    expect(check(snap(`<img src="${png}"><img src="${png}">`, [{ filename: 'a.pdf' }])).attachmentCount).toBe(2);
+  });
+  it('ignores images that are not embedded data (remote, no images)', () => {
+    expect(check(snap('<p>hi</p><img src="https://x.test/a.png">')).attachmentCount).toBe(0);
+    expect(check(snap('<p>hi</p>')).attachmentCount).toBe(0);
+  });
 });

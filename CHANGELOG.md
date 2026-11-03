@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Sending a message with a picture pasted or dropped into it no longer asks "Forgot the attachment?" when the text says "attached". The picture goes out as an inline attachment, so it now counts as one. A picture in the quoted original never counted, and still does not.
+
 - A Sent folder row now names every person an email went to, not just the first. A message sent to two people reads `To: Anna, Arnas`, and a conversation with more than two recipients shows two names and a count (`Anna, Arnas +1`). Copied (Cc) recipients count too.
 
 - The email list no longer repaints every visible row when one email changes. A flag, a sync batch or a new email now redraws only the rows it touched; the rest stay as they were, so the list stops flickering while MailVault syncs or backs up.
