@@ -637,6 +637,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       archivedEmailIds: new Set(),
       serverUids: NO_SERVER_UIDS,
       cachedCount: 0,
+      _graphCursor: null,
       hasMoreEmails: true,
       currentPage: 1,
       loading: true,
@@ -792,6 +793,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           // with nothing loading. Only loadMoreEmails owns this flag now.
           totalEmails: cachedTotal,
           hasMoreEmails: cachedHasMore,
+          _graphCursor: null, // the list is the cache's again: no listing has set a position yet
           currentPage: Math.ceil(cachedHeaders.emails.length / 200) || 1,
           // The header cache stores a uid list but never records whether it
           // was a complete enumeration, so a restore from it can only ever be

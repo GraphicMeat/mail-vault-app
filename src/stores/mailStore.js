@@ -17,6 +17,8 @@ import { useViewHideStore } from './viewHideStore';
 import { registerRows, setIdentityStore, mapList } from './messageRows';
 import { setListStore, shiftFollowUps } from './unreadCounts';
 
+import { isGraphAccount } from '../services/graphConfig';
+
 // Re-exports for external consumers
 export { graphMessageToEmail } from '../services/graphConfig';
 export { getGraphMessageId } from '../services/cacheManager';
@@ -110,7 +112,8 @@ registerRows({ name: 'emailCache', store: useMailStore, fields: ['emailCache'],
 // When coming back online: resume header loading if it was in progress
 window.addEventListener('online', () => {
   const state = useMailStore.getState();
-  if (state._loadMorePausedOffline && state.hasMoreEmails && state.emails.length < state.totalEmails) {
+  const graph = isGraphAccount(state.accounts.find(a => a.id === state.activeAccountId));
+  if (state._loadMorePausedOffline && state.hasMoreEmails && (graph || state.emails.length < state.totalEmails)) {
     console.log('[mailStore] Back online — resuming header loading');
     useMailStore.setState({ _loadMorePausedOffline: false, _loadMoreRetryDelay: 0 });
     state.loadMoreEmails();

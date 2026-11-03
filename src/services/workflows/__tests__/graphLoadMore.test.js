@@ -87,7 +87,7 @@ vi.mock('../../syncService', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { forget: forgetMemo } = await import('../../headerMemo');
-const { getLoadMoreTimer } = await import('../../../stores/slices/messageListSlice');
+const { getLoadMoreTimer, setLoadMoreTimer } = await import('../../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct-g', email: 'g@hotmail.test', oauth2Transport: 'graph' };
 const PAGE = 200;
@@ -135,6 +135,8 @@ function prime(extra = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearTimeout(getLoadMoreTimer());
+  setLoadMoreTimer(null);
   forgetMemo(ACCOUNT.id);
   db.getCachedMailboxEntry.mockResolvedValue({ mailboxes: [INBOX, SENT], fetchedAt: Date.now() });
   db.getEmailHeadersMeta.mockResolvedValue(null);
@@ -195,18 +197,34 @@ describe('a Graph folder bigger than one page', () => {
       ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: PAGE });
   });
 
-  it('asks the server for the next page even when the cache holds more rows than the store', async () => {
+  it('shows the cache\'s older rows, and still asks the server for the next page', async () => {
+    // The cache's own "nothing left" is a count off a total that was one page
+    // long: it must neither end the paging nor hide what the cache holds when
+    // the server cannot be reached.
     db.getEmailHeadersMeta.mockResolvedValue({ totalCached: 1000, totalEmails: PAGE });
     db.listCachedUids.mockResolvedValue({ uids: Array.from({ length: 1000 }, (_, i) => i + 1) });
-    db.getEmailHeadersByUids.mockResolvedValue(rows(201, 800));
+    db.getEmailHeadersByUids.mockResolvedValue(rows(5001, 800));
     prime();
     await useMailStore.getState().loadMoreEmails();
     clearTimeout(getLoadMoreTimer());
 
-    // The cache drain says "nothing more" off a total that was one page long.
-    expect(db.listCachedUids).not.toHaveBeenCalled();
-    expect(graph.listGraphMessages).toHaveBeenCalledTimes(1);
-    expect(useMailStore.getState().hasMoreEmails).toBe(true);
+    const s = useMailStore.getState();
+    expect(s.emails.length).toBeGreaterThanOrEqual(PAGE + 800);
+    expect(graph.listGraphMessages).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', ACCOUNT, 'fld-inbox', { top: PAGE, skip: PAGE });
+    expect(s.hasMoreEmails).toBe(true);
+  });
+
+  it('keeps the cache\'s rows when the server cannot be reached', async () => {
+    db.getEmailHeadersMeta.mockResolvedValue({ totalCached: 1000, totalEmails: PAGE });
+    db.listCachedUids.mockResolvedValue({ uids: Array.from({ length: 1000 }, (_, i) => i + 1) });
+    db.getEmailHeadersByUids.mockResolvedValue(rows(5001, 800));
+    graph.listGraphMessages.mockRejectedValue(new Error('429'));
+    prime();
+    await useMailStore.getState().loadMoreEmails();
+    clearTimeout(getLoadMoreTimer());
+
+    expect(useMailStore.getState().emails.length).toBeGreaterThanOrEqual(PAGE + 800);
   });
 
   it('advances the cursor by what the server returned, repeats or not', async () => {
@@ -269,6 +287,17 @@ describe('a Graph folder bigger than one page', () => {
     expect(s.hasMoreEmails).toBe(true);
     expect(s.emails).toHaveLength(PAGE);
     // The retry timer is armed (emails 200 < folder total 450).
+    expect(getLoadMoreTimer()).toBeTruthy();
+    clearTimeout(getLoadMoreTimer());
+  });
+
+  it('retries a failed page even when the folder count is unknown', async () => {
+    // A folder list cached before _graphTotal existed: the total is the page.
+    prime({ totalEmails: PAGE, mailboxes: [{ ...INBOX, _graphTotal: undefined }, SENT] });
+    graph.listGraphMessages.mockRejectedValueOnce(new Error('429'));
+    await useMailStore.getState().loadMoreEmails();
+
+    expect(useMailStore.getState().hasMoreEmails).toBe(true);
     expect(getLoadMoreTimer()).toBeTruthy();
     clearTimeout(getLoadMoreTimer());
   });

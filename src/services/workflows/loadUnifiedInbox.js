@@ -326,6 +326,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
     activeMailbox: 'UNIFIED',
     totalEmails: total,
     ...reader,
+    _graphCursor: null,
     hasMoreEmails: false,
     currentPage: 1,
     loading: false,

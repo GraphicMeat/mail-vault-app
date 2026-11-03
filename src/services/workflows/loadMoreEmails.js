@@ -119,11 +119,13 @@ async function _daemonIsBackfilling(accountId, mailbox) {
  * `_graphCursor`. The cursor counts what the SERVER returned, so rows the
  * store holds for other reasons (the cache paint, optimistic Sent rows, ghosts
  * of mail deleted elsewhere) cannot move it. A page that shifts under new mail
- * repeats rows, which the uid dedupe drops; it never leaves a gap.
+ * repeats rows, which the uid dedupe drops. Mail deleted elsewhere between two
+ * pages pulls later rows back into the range already skipped; that is inherent
+ * to `$skip` and heals on the next reload of the folder.
  *
- * It never drains the cache first: the cache can hold more rows than the
- * server's next page starts at, and its "nothing left" is a count off a total
- * that used to be one page long. The server's nextLink is the only end.
+ * The cache is drained for its rows but never decides the end: its "nothing
+ * left" is a count off a total that used to be one page long. The server's
+ * nextLink is the only end.
  */
 async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
   const get = () => useMailStore.getState();
@@ -131,6 +133,17 @@ async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
   const folder = get().mailboxes.find(m => m.path === mailbox);
   // No folder to page: end the paging rather than ask again for ever.
   if (!folder?._graphFolderId) return done({ hasMoreEmails: false });
+
+  const drained = await _drainCache(accountId, mailbox, new Set(get().emails.map(e => e.uid)));
+  if (drained) {
+    const now = get();
+    if (now.activeAccountId !== accountId || now.activeMailbox !== mailbox) return done({});
+    const held = new Set(now.emails.map(e => e.uid));
+    useMailStore.setState({
+      emails: [...now.emails, ...drained.emails.filter(e => !held.has(e.uid))],
+      cachedCount: drained.cached,
+    });
+  }
 
   const key = `${accountId}:${mailbox}`;
   const cursor = get()._graphCursor;
@@ -335,7 +348,9 @@ export async function loadMoreEmails() {
     console.error('[loadMoreEmails] Failed to load more emails:', error);
     useMailStore.setState({ loadingMore: false });
 
-    if (get().hasMoreEmails && get().emails.length < get().totalEmails) {
+    // A Graph folder's count may be unknown (a folder list cached before it was
+    // kept), so for Graph "more is there" is the flag alone.
+    if (get().hasMoreEmails && (isGraphAccount(account) || get().emails.length < get().totalEmails)) {
       const prevDelay = get()._loadMoreRetryDelay || 0;
       const nextDelay = prevDelay === 0 ? 3000 : Math.min(prevDelay * 2, 120000);
       useMailStore.setState({ _loadMoreRetryDelay: nextDelay });
