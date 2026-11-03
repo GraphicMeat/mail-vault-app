@@ -4070,6 +4070,7 @@
   "blitz.failed.switch": "標準レンダラーを使用",
   "blitz.failed.dismiss": "閉じる",
   "blitz.linksInMessage": "このメッセージ内のリンク",
+  "blitz.bigImage.note": "大きすぎてここでは表示できません",
   "blitz.settings.title": "Rust レンダラー（試験的）",
   "blitz.settings.description": "システムの Web ビューの代わりに、Rust 製の HTML エンジン Blitz でメッセージを描画します。メールがその中でコードを実行することはありません。オフにすると標準のレンダラーに戻ります。",
   "blitz.settings.privacy": "プライバシーに有利：メッセージ自体がインターネットに接続することはありません。リンクされたスタイルシートやフレームは読み込まれないため、そこに隠れたトラッカーは動作しません。許可したリモート画像は MailVault が Cookie やリファラーなしで取得し、ネットワークアクティビティに表示します。",

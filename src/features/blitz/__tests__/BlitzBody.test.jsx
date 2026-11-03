@@ -9,6 +9,11 @@ vi.mock('../BlitzTiles', () => ({
   // BlitzBody hands its tiles a ref (the selection root), so the real one is a forwardRef; so is the stub.
   default: React.forwardRef((p, _ref) => { tilesProps.last = p; return <div data-testid="tiles-stub"><button onClick={() => p.onFailure('render_unavailable')}>fail</button></div>; }),
 }));
+const images = vi.hoisted(() => ({
+  open: vi.fn(),
+  fileFor: vi.fn((src) => (src.startsWith('data:') ? { name: 'image.png', base64: 'AAAA' } : null)),
+}));
+vi.mock('../../../utils/emailImages', () => ({ imageFileFromSrc: images.fileFor, openImageFromMail: images.open }));
 const privacy = vi.hoisted(() => ({ hold: false, active: false }));
 vi.mock('../prepass/privacyDict', () => ({ usePrivacyDict: () => ({ active: privacy.active, dict: null, hold: privacy.hold }) }));
 import BlitzBody from '../BlitzBody';
@@ -19,7 +24,7 @@ const props = (over = {}) => ({
   theme: { dark: false, palette: 'graphite' }, onLink: vi.fn(), sizing: 'content', ...over,
 });
 
-beforeEach(() => { tilesProps.last = null; privacy.hold = false; privacy.active = false; useSettingsStore.setState({ emailRenderer: 'blitz' }); });
+beforeEach(() => { images.open.mockClear(); images.fileFor.mockClear(); tilesProps.last = null; privacy.hold = false; privacy.active = false; useSettingsStore.setState({ emailRenderer: 'blitz' }); });
 afterEach(() => { cleanup(); _resetDocRegistryForTest(); });
 
 describe('BlitzBody', () => {
@@ -161,5 +166,41 @@ describe('BlitzBody', () => {
     expect(tilesProps.last.privacy).toBe(true);
     expect(tilesProps.last.html).toContain('data-mv-fold-open="true"');
     vi.useRealTimers();
+  });
+});
+
+describe('opening a picture too large to draw', () => {
+  const body = '<p>Look</p><img src="https://x.example/a.png"><img src="data:image/png;base64,AAAA">';
+  it('hands the tiles an opener', async () => {
+    render(<BlitzBody {...props({ messageKey: 'k-big-1', bodyHtml: body })} />);
+    await screen.findByTestId('tiles-stub');
+    expect(typeof tilesProps.last.onOpenImage).toBe('function');
+  });
+
+  it('an inline picture goes to the system viewer, named from the message attachments', async () => {
+    const message = { attachments: [{ filename: 'IMG_1.png', content: 'AAAA' }] };
+    render(<BlitzBody {...props({ messageKey: 'k-big-2', bodyHtml: body, message })} />);
+    await screen.findByTestId('tiles-stub');
+    act(() => tilesProps.last.onOpenImage('1'));
+    expect(images.fileFor).toHaveBeenCalledWith('data:image/png;base64,AAAA', message.attachments);
+    expect(images.open).toHaveBeenCalledWith({ name: 'image.png', base64: 'AAAA' });
+  });
+
+  it('a remote picture goes through the link handler, with its link-safety confirm', async () => {
+    const onLink = vi.fn();
+    render(<BlitzBody {...props({ messageKey: 'k-big-3', bodyHtml: body, onLink })} />);
+    await screen.findByTestId('tiles-stub');
+    act(() => tilesProps.last.onOpenImage('0'));
+    expect(onLink).toHaveBeenCalledWith({ href: 'https://x.example/a.png', text: '', alert: null, title: null });
+    expect(images.open).not.toHaveBeenCalled();
+  });
+
+  it('an id the document does not have opens nothing', async () => {
+    const onLink = vi.fn();
+    render(<BlitzBody {...props({ messageKey: 'k-big-4', bodyHtml: body, onLink })} />);
+    await screen.findByTestId('tiles-stub');
+    act(() => tilesProps.last.onOpenImage('9'));
+    expect(onLink).not.toHaveBeenCalled();
+    expect(images.open).not.toHaveBeenCalled();
   });
 });

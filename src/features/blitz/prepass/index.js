@@ -4,6 +4,7 @@ import { applyPrivacyRedaction, releasePrivacyGate } from '../../../utils/iframe
 import { markFolds } from './folds';
 import { markUnselectable } from './unselectable';
 import { markSearch } from './search';
+import { stampImages } from './images';
 
 // Everything the iframe does with script happens here, on an inert DOMParser
 // document (its scripts never run), before the HTML leaves the webview.
@@ -48,9 +49,11 @@ export async function runPrepass(props, { privacy = { active: false, dict: null 
   //    AFTER privacy, so a mark never splits a name before the redaction pass sees it.
   markUnselectable(doc);
   if (props.searchQuery) markSearch(doc, props.searchQuery);
-  // 6. Parity ids (plan B): only under the e2e harness's __MV_PARITY__.
+  // 6. Every <img> gets its number: the worker reports a picture it could not draw by it.
+  stampImages(doc);
+  // 7. Parity ids (plan B): only under the e2e harness's __MV_PARITY__.
   stampParityIds(doc);
-  // 7. Serialize.
+  // 8. Serialize.
   return { html: `<!doctype html>\n${doc.documentElement.outerHTML}`, doc };
 }
 

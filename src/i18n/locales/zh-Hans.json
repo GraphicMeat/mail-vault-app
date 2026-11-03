@@ -4070,6 +4070,7 @@
   "blitz.failed.switch": "使用标准渲染器",
   "blitz.failed.dismiss": "关闭",
   "blitz.linksInMessage": "此邮件中的链接",
+  "blitz.bigImage.note": "图像过大，无法在此显示",
   "blitz.settings.title": "Rust 渲染器（实验性）",
   "blitz.settings.description": "使用 Rust 编写的 HTML 引擎 Blitz 绘制邮件，而不是系统网页视图。邮件无法在其中运行任何代码。关闭后即可回到标准渲染器。",
   "blitz.settings.privacy": "更有利于隐私：邮件本身从不连接互联网。邮件链接的样式表和框架从不加载，因此藏在其中的跟踪器无法触发；你允许的远程图片由 MailVault 在不带 Cookie 和来源页的情况下获取，并列在网络活动中。",

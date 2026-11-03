@@ -4074,6 +4074,7 @@
   "blitz.failed.switch": "Use standard renderer",
   "blitz.failed.dismiss": "Dismiss",
   "blitz.linksInMessage": "Links in this message",
+  "blitz.bigImage.note": "Too large to show here",
   "blitz.settings.title": "Rust renderer (experimental)",
   "blitz.settings.description": "Draws messages with Blitz, a Rust HTML engine, instead of the system web view. Mail can never run code in it. Turn it off to go back to the standard renderer.",
   "blitz.settings.privacy": "Better for privacy: the message never reaches the internet itself. Its linked stylesheets and frames are never loaded, so trackers hidden there cannot fire, and the remote images you allow are fetched by MailVault without cookies or referrer and listed in Network Activity.",

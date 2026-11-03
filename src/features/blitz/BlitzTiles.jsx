@@ -37,7 +37,7 @@ function useDevicePixelRatio() {
 // `surface` names the AltBodyProps surface (root attribute; only the lazy
 // surfaces keep their doc for reuse on unmount, and the bubble draws on no
 // canvas: surfaceWorkerTheme); `style` joins the sizing box.
-const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface }, ref) {
+const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenImage, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface }, ref) {
   const t = useT();
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -73,7 +73,9 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
   const onLinkRef = useRef(onLink);
   const onFailureRef = useRef(onFailure);
   const onFoldToggledRef = useRef(onFoldToggled);
+  const onOpenImageRef = useRef(onOpenImage);
   onLinkRef.current = onLink;
+  onOpenImageRef.current = onOpenImage;
   onFailureRef.current = onFailure;
   onFoldToggledRef.current = onFoldToggled; // called with (id, open) when a fold toggle is clicked
 
@@ -376,6 +378,17 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onFailu
             shownTiles={shown}
             hover={!!hover || !!hoverFold}
           />
+          {/* A picture too large to draw is a framed box the worker reports; this is its way out. Not under privacy:
+              opening it hands the picture to a viewer the masking pass cannot reach. */}
+          {onOpenImage && !privacy && m.refusedImages?.map(r => (
+            <button key={r.id} type="button" data-testid="blitz-big-image"
+              onClick={(e) => { e.stopPropagation(); onOpenImageRef.current?.(r.id); }}
+              className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-mail-text-muted bg-transparent border-0 cursor-pointer"
+              style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h }}>
+              <span>{t('blitz.bigImage.note')}</span>
+              <span className="font-medium underline text-mail-text">{t('viewer.openImage')}</span>
+            </button>
+          ))}
           {menu && (
             <BodyContextMenu
               at={menu.at}

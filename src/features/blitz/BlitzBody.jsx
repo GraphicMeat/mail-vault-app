@@ -6,6 +6,8 @@ import { AddressText } from '../../components/email/AddressText';
 import { maskString } from '../../utils/privacy/piiDetector';
 import { emailKey } from '../../stores/slices/unifiedHelpers';
 import { runPrepass } from './prepass';
+import { imageSrcAt } from './prepass/images';
+import { imageFileFromSrc, openImageFromMail } from '../../utils/emailImages';
 import { usePrivacyDict } from './prepass/privacyDict';
 import { prepareMailFonts, useBlitzMailFonts } from './fonts/useBlitzMailFonts';
 import BlitzTiles from './BlitzTiles';
@@ -108,6 +110,18 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
   }, [key]);
 
   const priv = usePrivacyDict({ message, messageKey: key });
+  // A picture the worker could not draw is opened from its original bytes: an inline one in the system viewer,
+  // exactly like the iframe's "Open in Preview"; a remote one as a link, so the link-safety confirm still applies.
+  // Read at click time (the stamped HTML and the parts' bytes can both change after the tiles mounted).
+  const openImageRef = useRef(null);
+  openImageRef.current = (id) => {
+    const src = imageSrcAt(prepassed?.key === key ? prepassed.html : null, id);
+    if (!src) return;
+    if (/^https:/i.test(src)) { onLink?.({ href: src, text: '', alert: null, title: null }); return; }
+    const file = imageFileFromSrc(src, message?.attachments);
+    if (file) openImageFromMail(file);
+  };
+  const onOpenImage = useCallback((id) => openImageRef.current?.(id), []);
   // Derived in render, so no frame is ever painted from HTML built for another
   // privacy state: HTML pre-passed unmasked is never served once masking is on
   // (privacy turned on, a peek released, a capture mask), and masked HTML is
@@ -185,7 +199,7 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
       {/* Keyed on the privacy state: a flip unmounts the old tiles at once (closing their doc),
           so nothing built for the other state stays on screen while the new doc opens.
           A dictionary update while masking stays on does not change the key. */}
-      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onFailure={onFailure} sizing={sizing} style={style} surface={surface} privacy={priv.active} onFoldToggled={onFoldToggled} />
+      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onOpenImage={onOpenImage} onFailure={onFailure} sizing={sizing} style={style} surface={surface} privacy={priv.active} onFoldToggled={onFoldToggled} />
     </div>
   );
 });

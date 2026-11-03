@@ -4070,6 +4070,7 @@
   "blitz.failed.switch": "Utiliser le moteur de rendu standard",
   "blitz.failed.dismiss": "Ignorer",
   "blitz.linksInMessage": "Liens de ce message",
+  "blitz.bigImage.note": "Trop grande pour s’afficher ici",
   "blitz.settings.title": "Moteur de rendu Rust (expérimental)",
   "blitz.settings.description": "Affiche les messages avec Blitz, un moteur HTML en Rust, au lieu de la vue web du système. Un e-mail ne peut jamais y exécuter de code. Désactivez-le pour revenir au moteur de rendu standard.",
   "blitz.settings.privacy": "Meilleur pour la confidentialité : le message n’accède jamais lui-même à internet. Ses feuilles de style et cadres liés ne sont jamais chargés, les traceurs qui s’y cachent ne se déclenchent donc pas, et les images distantes que vous autorisez sont récupérées par MailVault sans cookies ni référent et listées dans Activité réseau.",

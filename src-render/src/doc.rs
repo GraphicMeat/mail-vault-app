@@ -72,6 +72,8 @@ pub struct DocMeta {
     pub links: Vec<LinkInfo>,
     pub plain_text: String,
     pub folds: Vec<crate::fold::FoldInfo>,
+    /// Pictures too big to draw, with the box each was given (see `refused`).
+    pub refused_images: Vec<crate::refused::RefusedImage>,
 }
 
 #[derive(Debug)]
@@ -149,6 +151,17 @@ fn apply(doc: &mut HtmlDocument, net: Option<&Arc<BridgeNet>>) {
     } else {
         doc.handle_messages();
         doc.resolve(0.0);
+    }
+}
+
+/// Give the pictures the net provider refused for size a box of their shape, and
+/// lay out again so the box is where the reader finds it.
+fn frame_refused(doc: &mut HtmlDocument, net: Option<&Arc<BridgeNet>>, css_width: f32) {
+    let Some(n) = net else { return };
+    if crate::refused::frame(doc, n, css_width) {
+        n.begin_layout();
+        doc.resolve(0.0);
+        n.end_layout();
     }
 }
 
@@ -235,6 +248,7 @@ impl RenderDoc {
         // Everything blitz asked for while parsing is decided here: images are
         // queued, stylesheets, fonts, @import and frames are answered empty.
         apply(&mut doc, net.as_ref());
+        frame_refused(&mut doc, net.as_ref(), opts.css_width as f32);
         crate::fold::apply_toggle_theme(&mut doc);
         Ok(Self { doc, opts, net, runs: RefCell::new(None) })
     }
@@ -242,6 +256,7 @@ impl RenderDoc {
     /// Apply resources the net provider delivered since the last call, then relayout.
     pub fn apply_resources(&mut self) {
         apply(&mut self.doc, self.net.as_ref());
+        frame_refused(&mut self.doc, self.net.as_ref(), self.opts.css_width as f32);
         self.invalidate_runs();
     }
 
@@ -314,6 +329,7 @@ impl RenderDoc {
             links: self.links(),
             plain_text: root.text_content(),
             folds: crate::fold::read_folds(&self.doc),
+            refused_images: self.net.as_deref().map(|n| crate::refused::read(&self.doc, n)).unwrap_or_default(),
         }
     }
 

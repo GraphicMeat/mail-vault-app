@@ -4070,6 +4070,7 @@
   "blitz.failed.switch": "Usar o renderizador padrão",
   "blitz.failed.dismiss": "Dispensar",
   "blitz.linksInMessage": "Links nesta mensagem",
+  "blitz.bigImage.note": "Grande demais para exibir aqui",
   "blitz.settings.title": "Renderizador Rust (experimental)",
   "blitz.settings.description": "Desenha as mensagens com o Blitz, um mecanismo HTML em Rust, em vez da visualização web do sistema. Um e-mail nunca consegue executar código nele. Desative para voltar ao renderizador padrão.",
   "blitz.settings.privacy": "Melhor para a privacidade: a mensagem nunca acessa a internet por conta própria. Folhas de estilo e frames vinculados nunca são carregados, então rastreadores escondidos neles não disparam, e as imagens remotas que você permite são baixadas pelo MailVault sem cookies nem referenciador e listadas em Atividade de rede.",

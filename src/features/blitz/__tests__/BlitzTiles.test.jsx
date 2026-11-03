@@ -1148,3 +1148,54 @@ describe('dark mode (interim: light menu and selection until a dark swatch probe
     expect(sel()).toBe('rgba(0, 56, 201, 0.8)');
   });
 });
+
+describe('pictures too large to draw', () => {
+  const refused = [{ id: '3', x: 20, y: 140, w: 300, h: 200 }, { id: '5', x: 0, y: 600, w: 160, h: 56 }];
+  const withRefused = (p = {}) => {
+    openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta({ refusedImages: refused }) });
+    return render(tiles({ onOpenImage: vi.fn(), ...p }));
+  };
+
+  it('lays a button over each, on the box the worker gave it', async () => {
+    withRefused();
+    const buttons = await screen.findAllByTestId('blitz-big-image');
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0].tagName).toBe('BUTTON');
+    expect([buttons[0].style.left, buttons[0].style.top, buttons[0].style.width, buttons[0].style.height]).toEqual(['20px', '140px', '300px', '200px']);
+    expect(buttons[0].textContent).toContain('Too large to show here');
+    expect(buttons[0].textContent).toContain('Open Image');
+  });
+
+  it('a click opens that picture, and neither follows a link nor toggles a fold', async () => {
+    const onOpenImage = vi.fn();
+    const onLink = vi.fn();
+    withRefused({ onOpenImage, onLink });
+    const buttons = await screen.findAllByTestId('blitz-big-image');
+    fireEvent.click(buttons[1]);
+    expect(onOpenImage).toHaveBeenCalledWith('5');
+    expect(onOpenImage).toHaveBeenCalledTimes(1);
+    expect(hitRender).not.toHaveBeenCalled();
+    expect(onLink).not.toHaveBeenCalled();
+  });
+
+  it('shows nothing when the surface cannot open a picture', async () => {
+    openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta({ refusedImages: refused }) });
+    render(tiles());
+    await screen.findAllByTestId('blitz-tile');
+    expect(screen.queryByTestId('blitz-big-image')).toBeNull();
+  });
+
+  it('shows nothing under privacy mode', async () => {
+    openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta({ refusedImages: refused }) });
+    render(tiles({ onOpenImage: vi.fn(), privacy: true }));
+    await screen.findAllByTestId('blitz-tile');
+    expect(screen.queryByTestId('blitz-big-image')).toBeNull();
+  });
+
+  it('shows nothing for a document with none', async () => {
+    openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta() });
+    render(tiles({ onOpenImage: vi.fn() }));
+    await screen.findAllByTestId('blitz-tile');
+    expect(screen.queryByTestId('blitz-big-image')).toBeNull();
+  });
+});

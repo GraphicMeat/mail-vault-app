@@ -4070,6 +4070,7 @@
   "blitz.failed.switch": "표준 렌더러 사용",
   "blitz.failed.dismiss": "닫기",
   "blitz.linksInMessage": "이 메시지의 링크",
+  "blitz.bigImage.note": "너무 커서 여기에 표시할 수 없습니다",
   "blitz.settings.title": "Rust 렌더러(실험적)",
   "blitz.settings.description": "시스템 웹 뷰 대신 Rust로 만든 HTML 엔진 Blitz로 메시지를 그립니다. 메일이 그 안에서 코드를 실행할 수는 없습니다. 끄면 표준 렌더러로 돌아갑니다.",
   "blitz.settings.privacy": "개인정보 보호에 유리: 메시지 자체는 인터넷에 접속하지 않습니다. 연결된 스타일시트와 프레임은 불러오지 않으므로 그 안에 숨은 추적기가 작동하지 않으며, 허용한 원격 이미지는 MailVault가 쿠키나 리퍼러 없이 가져와 네트워크 활동에 표시합니다.",

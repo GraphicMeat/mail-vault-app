@@ -73,6 +73,18 @@ pub struct BridgeNet {
     /// Bytes every answered https fetch delivered, by URL: a rebuild (fonts op)
     /// answers from here instead of fetching again through Network Activity.
     cache: Mutex<HashMap<String, Vec<u8>>>,
+    /// Pictures refused for size, by `url_key`, with the width and height their
+    /// header declares: the reader offers to open those at full size instead.
+    refused: Mutex<HashMap<u64, (u32, u32)>>,
+}
+
+/// A stand-in for a url in `BridgeNet::refused`: a `data:` url of a photo is
+/// tens of MB, and the map only has to answer "was this one refused".
+fn url_key(url: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    url.hash(&mut h);
+    h.finish()
 }
 
 impl BridgeNet {
@@ -92,6 +104,7 @@ impl BridgeNet {
             outbox: Mutex::default(),
             pending: Mutex::default(),
             cache: Mutex::new(cache),
+            refused: Mutex::default(),
         })
     }
 
@@ -104,6 +117,18 @@ impl BridgeNet {
     /// What the answered https fetches delivered (admitted bytes only), by URL.
     pub fn cache(&self) -> HashMap<String, Vec<u8>> {
         self.cache.lock().unwrap().clone()
+    }
+
+    /// The declared (width, height) of the picture at `url` if it was refused for
+    /// size: over the file limit, past what can be decoded, or with no room left in
+    /// the document's pixel budget. Not for a fetch that failed, gzip, or bytes that
+    /// are no picture.
+    pub fn refused(&self, url: &str) -> Option<(u32, u32)> {
+        self.refused.lock().unwrap().get(&url_key(url)).copied()
+    }
+
+    pub fn has_refused(&self) -> bool {
+        !self.refused.lock().unwrap().is_empty()
     }
 
     /// The caller is about to run `resolve()`: https requests made now are CSS images.
@@ -144,7 +169,7 @@ impl BridgeNet {
     /// Answer fetch `id`; `None` (denied, failed, not an image) answers it empty.
     pub fn complete(&self, id: u64, bytes: Option<Vec<u8>>) -> bool {
         let Some((url, handler)) = self.pending.lock().unwrap().remove(&id) else { return false };
-        let bytes = bytes.map(|b| self.admit(b)).unwrap_or_default();
+        let bytes = bytes.map(|b| self.admit(&url, b)).unwrap_or_default();
         if !bytes.is_empty() {
             self.cache.lock().unwrap().insert(url.clone(), bytes.clone());
         }
@@ -168,7 +193,7 @@ impl BridgeNet {
         let cached = self.cache.lock().unwrap().get(&url).cloned();
         if let Some(bytes) = cached {
             // Counted against this document's pixel budget like a fresh answer.
-            handler.bytes(url, Bytes::from(self.admit(bytes)));
+            handler.bytes(url.clone(), Bytes::from(self.admit(&url, bytes)));
             return;
         }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
@@ -182,30 +207,44 @@ impl BridgeNet {
     /// that no longer fits the document's budget, is ever decoded.
     /// gzip is refused outright, whatever the URL or declared type said: see
     /// `is_gzip`. SVG markup is admitted up to MAX_SVG_BYTES.
-    fn admit(&self, bytes: Vec<u8>) -> Vec<u8> {
-        if is_gzip(&bytes) || bytes.len() > MAX_IMAGE_BYTES {
+    fn admit(&self, url: &str, bytes: Vec<u8>) -> Vec<u8> {
+        if is_gzip(&bytes) {
             return Vec::new();
         }
-        let ok = match imagesize::blob_size(&bytes) {
-            Ok(size) => {
+        let size = imagesize::blob_size(&bytes).ok();
+        if bytes.len() > MAX_IMAGE_BYTES {
+            self.refuse(url, size);
+            return Vec::new();
+        }
+        let ok = match size {
+            Some(size) => {
                 let px = (size.width as u64).saturating_mul(size.height as u64);
                 let room = MAX_DOC_IMAGE_PIXELS.saturating_sub(self.image_pixels.load(Ordering::Acquire));
                 let fit = MAX_IMAGE_PIXELS.min(room);
-                if px <= fit {
-                    return if self.spend(px) { bytes } else { Vec::new() };
-                }
-                if px > MAX_DECODE_PIXELS || fit < MIN_SHRUNK_PIXELS {
-                    return Vec::new();
-                }
-                return match shrink(&bytes, fit) {
-                    Some((small, small_px)) if self.spend(small_px) => small,
-                    _ => Vec::new(),
+                let admitted = if px <= fit {
+                    self.spend(px).then_some(bytes)
+                } else if px > MAX_DECODE_PIXELS || fit < MIN_SHRUNK_PIXELS {
+                    None
+                } else {
+                    shrink(&bytes, fit).filter(|(_, small_px)| self.spend(*small_px)).map(|(small, _)| small)
                 };
+                if admitted.is_none() {
+                    self.refuse(url, Some(size));
+                }
+                return admitted.unwrap_or_default();
             }
-            Err(_) if looks_like_svg(&bytes) => bytes.len() <= MAX_SVG_BYTES,
-            Err(_) => bytes.len() <= MAX_UNSIZED_BYTES,
+            None if looks_like_svg(&bytes) => bytes.len() <= MAX_SVG_BYTES,
+            None => bytes.len() <= MAX_UNSIZED_BYTES,
         };
         if ok { bytes } else { Vec::new() }
+    }
+
+    /// Remember that the picture at `url` was refused for size, if its header says
+    /// what it is: bytes that are no picture have nothing to open.
+    fn refuse(&self, url: &str, size: Option<imagesize::ImageSize>) {
+        if let Some(size) = size {
+            self.refused.lock().unwrap().insert(url_key(url), (size.width as u32, size.height as u32));
+        }
     }
 
     /// Take `px` from the document's pixel budget, or leave it as it was.
@@ -256,7 +295,7 @@ impl NetProvider for BridgeNet {
                 let bytes = data_url::DataUrl::process(&url)
                     .ok()
                     .and_then(|d| d.decode_to_vec().ok())
-                    .map(|(body, _)| self.admit(body))
+                    .map(|(body, _)| self.admit(&url, body))
                     .unwrap_or_default();
                 handler.bytes(url, Bytes::from(bytes));
             }

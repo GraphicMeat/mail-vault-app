@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A picture too large for the Rust renderer to draw (over 150 megapixels, over 25 MB of file, or past what is left of a message's picture budget) now shows a framed box in its place, "Too large to show here", with an "Open Image" button. It used to leave an empty gap. The button opens an attached picture in your system viewer (Preview on a Mac) and a picture from the web through the usual link check. With privacy mode on there is no button.
+
 - When the Rust renderer cannot draw an email, the original shown beside your reply now falls back to the message's text. It was left blank, with only the "shown as plain text" notice above it.
 
 - Sending a message with a picture pasted or dropped into it no longer asks "Forgot the attachment?" when the text says "attached". The picture goes out as an inline attachment, so it now counts as one. A picture in the quoted original never counted, and still does not.

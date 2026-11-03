@@ -11,6 +11,7 @@ pub mod fonts;
 pub mod inspect;
 pub mod net;
 pub mod raster;
+pub mod refused;
 pub mod serialize;
 pub mod styles;
 pub mod text;
