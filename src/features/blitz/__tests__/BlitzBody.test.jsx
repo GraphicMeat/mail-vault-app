@@ -55,6 +55,13 @@ describe('BlitzBody', () => {
     expect(useSettingsStore.getState().emailRenderer).toBe('web');
     expect(document.querySelector('iframe')).toBeNull();
   });
+  it('failure of a document-only surface (reply original, pop-out) still shows the message text', async () => {
+    const documentHtml = '<!doctype html><html><head><style>p{color:red}</style></head><body><p>Yes, I did receive it</p></body></html>';
+    render(<BlitzBody {...props({ messageKey: 'k-fail-doc', surface: 'original', bodyHtml: undefined, plainText: undefined, documentHtml })} />);
+    fireEvent.click(await screen.findByText('fail'));
+    expect(screen.getByText('Yes, I did receive it')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('color:red');
+  });
   it('the bubble shows once per message per session', async () => {
     const { unmount } = render(<BlitzBody {...props({ messageKey: 'k-once' })} />);
     fireEvent.click(await screen.findByText('fail'));

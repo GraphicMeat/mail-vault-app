@@ -152,7 +152,7 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
     // maskString runs first so a name only the message knows is masked too;
     // AddressText then masks again and honours peek, linkifying and the
     // mailto href drop.
-    const shown = plainText || textOf(bodyHtml);
+    const shown = plainText || textOf(documentHtml ?? bodyHtml);
     const text = priv.active ? maskString(shown, priv.dict) : shown;
     return (
       <div ref={wrapRef} className={className} style={style}>

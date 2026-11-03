@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- When the Rust renderer cannot draw an email, the original shown beside your reply now falls back to the message's text. It was left blank, with only the "shown as plain text" notice above it.
+
 - Sending a message with a picture pasted or dropped into it no longer asks "Forgot the attachment?" when the text says "attached". The picture goes out as an inline attachment, so it now counts as one. A picture in the quoted original never counted, and still does not.
 
 - A Sent folder row now names every person an email went to, not just the first. A message sent to two people reads `To: Anna, Arnas`, and a conversation with more than two recipients shows two names and a count (`Anna, Arnas +1`). Copied (Cc) recipients count too.
