@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { displayText } from '../utils/bidiText';
-import { getRowParty, getRowPartyName, threadRowMembers } from '../utils/emailParser';
+import { getRowParties, threadRowMembers } from '../utils/emailParser';
 import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
 import { getLinkAlertLevel, getAlertsForEmails } from '../services/bodyScan';
@@ -18,7 +18,7 @@ import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIc
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { isRowArchived } from '../utils/quickActionFacts';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
-import { RowGutter, RowSnippet, WithSnippet } from './EmailRow';
+import { RowGutter, RowSnippet, WithSnippet, PartyNames } from './EmailRow';
 import { AccountBadge, useAccountHover } from './AccountBadge';
 import {
   Paperclip,
@@ -47,22 +47,10 @@ function ThreadDisclosure({ expanded, threadId, onToggleExpand }) {
   );
 }
 
-// Every distinct party in the thread, two named and the rest counted. Each
-// name masks on its own, so privacy mode keeps the separators and the count.
+// Every distinct party in the thread, every message's recipients included in
+// an outgoing folder.
 function participantsLabel(emails, outgoing) {
-  const seen = new Set();
-  const names = [];
-  for (const email of emails || []) {
-    const addr = getRowParty(email, { outgoing })?.address?.toLowerCase() || '';
-    if (!seen.has(addr)) {
-      seen.add(addr);
-      names.push(getRowPartyName(email, { outgoing }));
-    }
-  }
-  const shown = names.slice(0, 2).map((name, i) => (
-    <React.Fragment key={i}>{i ? ', ' : ''}<Private kind="name">{name}</Private></React.Fragment>
-  ));
-  return names.length <= 2 ? shown : <>{shown} +{names.length - 2}</>;
+  return <PartyNames parties={(emails || []).flatMap(email => getRowParties(email, { outgoing }))} />;
 }
 
 // Thread row for default layout — shows collapsed thread with participant names and count

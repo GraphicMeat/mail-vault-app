@@ -145,17 +145,77 @@ export function getSenderName(email) {
 }
 
 /**
- * The address a list row names: the first recipient in an outgoing folder, the
- * sender everywhere else. A message with no recipient at all falls back to the
- * sender — a row with a "To:" and no name after it reads as a rendering fault.
+ * Every address a list row names: all recipients (To, then Cc) in an outgoing
+ * folder, the sender everywhere else. A message with no recipient at all falls
+ * back to the sender — a row with a "To:" and no name after it reads as a
+ * rendering fault. Recipients are deduped on their address, case aside.
  */
-export function getRowParty(email, { outgoing } = {}) {
-  if (!outgoing) return email?.from || null;
-  return email?.to?.[0] || email?.cc?.[0] || email?.from || null;
+export function getRowParties(email, { outgoing } = {}) {
+  if (!outgoing) return email?.from ? [email.from] : [];
+  const seen = new Set();
+  const parties = [];
+  for (const addr of [...(email?.to || []), ...(email?.cc || [])]) {
+    const key = addr?.address?.toLowerCase() || '';
+    if (!addr || (key && seen.has(key))) continue;
+    seen.add(key);
+    parties.push(addr);
+  }
+  return parties.length ? parties : (email?.from ? [email.from] : []);
+}
+
+/** The first party of a row: what a single-name consumer reads. */
+export function getRowParty(email, opts) {
+  return getRowParties(email, opts)[0] || null;
 }
 
 export function getRowPartyName(email, opts) {
   return addressDisplayName(getRowParty(email, opts));
+}
+
+/** A display-friendly name for one address a row names. */
+export function partyDisplayName(addr) {
+  return addressDisplayName(addr);
+}
+
+const stampPart = v => (v == null || v === false ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+
+/**
+ * What a list row paints that its `email` identity cannot say. The derivation
+ * (deriveDisplayRows) and the verdict scans write isLocal / isArchived / source
+ * and the alert marks onto the store's OWN email objects in place, so memo sees
+ * the same object and bails over a changed row. This string is that change made
+ * visible: equal while nothing the row paints moved, different the moment it
+ * did. Takes a message, or a thread (`emails`), whose stamp covers every member.
+ */
+export function rowStamp(row) {
+  const one = e => [
+    e?.isLocal, e?.isArchived, e?.source, (e?.flags || []).join(','),
+    e?._linkAlert, e?._senderAlert, e?._replyToMismatch, e?._trackerInfo,
+  ].map(stampPart).join('|');
+  return row?.emails ? row.emails.map(one).join(';') : one(row);
+}
+
+/**
+ * Carry the previous thread objects over a rebuild. buildThreads mints every
+ * thread afresh, so after any flag flip or sync batch every row's `thread` prop
+ * was a new object and the whole visible list repainted. A thread whose
+ * members, newest message and unread count are all unchanged keeps its old
+ * object; only a thread that really changed (or arrived) takes the new one.
+ * Order is the new map's.
+ */
+export function reconcileThreads(prev, next) {
+  if (!prev || !prev.size) return next;
+  const out = new Map();
+  for (const [id, thread] of next) {
+    const old = prev.get(id);
+    const same = old
+      && old.emails.length === thread.emails.length
+      && old.lastEmail === thread.lastEmail
+      && old.unreadCount === thread.unreadCount
+      && old.emails.every((e, i) => e === thread.emails[i]);
+    out.set(id, same ? old : thread);
+  }
+  return out;
 }
 
 /**

@@ -16,7 +16,7 @@ import { useViewHideStore } from '../stores/viewHideStore';
 import { useSettingsStore, getAccountInitial, hashColor, normalizeListPreviewLines } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
 import { backfillTrackerVerdicts } from '../services/rowVerdicts';
-import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers, emailsInRowRange } from '../utils/emailParser';
+import { buildThreads, reconcileThreads, rowStamp, groupBySender, getSenderName, filterUnread, threadRowMembers, emailsInRowRange } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../services/bodyScan';
 import { listRowGround } from '../utils/listRowGround';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
@@ -247,6 +247,10 @@ function EmailListComponent({ stacked = false }) {
   const loadMoreEmails = useMessageListStore(s => s.loadMoreEmails);
   const selectEmail = useSelectionStore(s => s.selectEmail);
   const selectEmailRow = useCallback((key, email, mailbox = email._mailbox, source = email.source) =>
+    selectEmail(key, source, mailbox, null, email), [selectEmail]);
+  // One callback for every row (the row passes its own message): an inline
+  // closure per row is a new prop each render and defeats the rows' React.memo.
+  const openEmailRow = useCallback((key, source, mailbox, email) =>
     selectEmail(key, source, mailbox, null, email), [selectEmail]);
   const selectThread = useSelectionStore(s => s.selectThread);
   const syncSelectedThread = useSelectionStore(s => s.syncSelectedThread);
@@ -734,7 +738,8 @@ function EmailListComponent({ stacked = false }) {
     let cancelled = false;
     const timer = setTimeout(() => {
       if (cancelled) return; // Guard against stale callback after view change
-      const threads = buildThreads(mergedEmails);
+      // Threads that did not change keep their object, so their rows bail.
+      const threads = reconcileThreads(threadCache.current.threads, buildThreads(mergedEmails));
       threadCache.current = { fingerprint: threadFingerprint, threads };
       setDeferredThreads(threads);
       // The reader's open thread is a snapshot of one of these. This is the
@@ -839,7 +844,10 @@ function EmailListComponent({ stacked = false }) {
       if (thread.messageCount === 1) {
         rows.push({ type: 'email', email: freshen(thread.emails[0]) });
       } else {
-        thread.emails = thread.emails.map(freshen);
+        // Only a thread whose rows really were replaced gets a new array: the
+        // row reads the array's identity to know it has to repaint.
+        const fresh = thread.emails.map(freshen);
+        if (fresh.some((e, i) => e !== thread.emails[i])) thread.emails = fresh;
         thread.lastEmail = freshen(thread.lastEmail) || thread.emails[thread.emails.length - 1];
         rows.push({ type: 'thread', thread });
         if (unfold && expandedThreads.has(thread.threadId)) {
@@ -1778,18 +1786,21 @@ function EmailListComponent({ stacked = false }) {
         ) : (
           /* Virtualized chronological scroll rendering */
           /*
-            `derivedFrom` below is read by no row. It exists so React.memo can
-            see a change it structurally cannot: deriveDisplayRows writes
-            isLocal/isArchived/source onto the store's OWN email objects in place
-            (messageListSlice.js — copying every row on every derivation is what
-            this list cannot afford), so archiving a message, restoring it, or
+            `stamp` below is read by no row. It exists so React.memo can see a
+            change it structurally cannot: deriveDisplayRows writes
+            isLocal/isArchived/source onto the store's OWN email objects in
+            place (messageListSlice.js — copying every row on every derivation
+            is what this list cannot afford), and the verdict scans write the
+            alert marks the same way, so archiving a message, restoring it, or
             proving it gone from the server never changes a row's `email`
             identity. Every other row prop is referentially stable, so the memo
             bails and the row paints its mount-time state forever. A comparator
             cannot save this — with one shared object, prev.email.isArchived and
-            next.email.isArchived are the same read. `displayEmails` IS replaced
-            on every re-derivation, which makes its identity the honest stamp,
-            and covers any field the derivation starts mutating later.
+            next.email.isArchived are the same read. rowStamp reads exactly
+            those fields off the row's own message(s): it moves when this row's
+            paint moved, and for no other row. (It used to be the whole
+            `displayEmails` array, replaced on every derivation — which
+            repainted every visible row for any change to any one message.)
           */
           <div key={`${activeAccountId}-${viewMode}`} style={{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }}>
             {virtualizer.getVirtualItems().map((vr) => {
@@ -1838,7 +1849,8 @@ function EmailListComponent({ stacked = false }) {
                       isSaving={savingRowIds.has(rowId)}
                       onStartSaving={startSaving}
                       onStopSaving={stopSaving}
-                      derivedFrom={displayEmails}
+                      stamp={rowStamp(item.thread)}
+                      rowEmails={item.thread.emails}
                       expandable={threadMode === 'expandable'}
                       expanded={expandedThreads.has(item.thread.threadId)}
                       onToggleExpand={toggleThreadExpanded}
@@ -1870,7 +1882,7 @@ function EmailListComponent({ stacked = false }) {
                     isSelected={selectedEmailId === selKey(item.email)}
                     isRelated={relatedKeys.has(selKey(item.email))}
                     isChecked={selectedEmailIds.has(selKey(item.email))}
-                    onSelect={(key, source, mailbox) => selectEmailRow(key, item.email, mailbox, source)}
+                    onSelect={openEmailRow}
                     onToggleSelection={checkEmailRow}
                     style={rowStyle}
                     actions={rowActions}
@@ -1884,7 +1896,7 @@ function EmailListComponent({ stacked = false }) {
                     isSaving={savingRowIds.has(item.email.uid)}
                     onStartSaving={startSaving}
                     onStopSaving={stopSaving}
-                    derivedFrom={displayEmails}
+                    stamp={rowStamp(item.email)}
                     // The thread rows' disclosure column, reserved on every
                     // row of an unfolding list so the text lines up.
                     threadSlot={threadMode === 'expandable' && !searchActive}

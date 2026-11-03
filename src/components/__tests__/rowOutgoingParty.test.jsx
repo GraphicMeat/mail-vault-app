@@ -105,6 +105,14 @@ describe.each(messageRows)('%s names the right party', (_name, Row) => {
     expect(party()).toBe('To: Padme Amidala');
   });
 
+  it('names every recipient, not just the first', () => {
+    renderMessage(Row, email({
+      _mailbox: 'Sent',
+      to: [{ name: 'Padme Amidala', address: 'padme@naboo.gov' }, { name: '', address: 'arnas@mock.test' }],
+    }));
+    expect(party()).toBe('To: Padme Amidala, arnas@mock.test');
+  });
+
   it('falls back to the sender rather than a dangling "To:"', () => {
     renderMessage(Row, email({ _mailbox: 'Sent', to: [] }));
     expect(party()).toContain('Rare');
@@ -125,5 +133,25 @@ describe.each(threadRows)('%s names the right participants', (_name, Row) => {
       email({ uid: 44, _mailbox: 'Sent', to: [{ name: 'Yoda', address: 'yoda@mock.test' }] }),
     ]);
     expect(party()).toBe('Padme Amidala, Yoda');
+  });
+
+  it('counts recipients of one message, two named and the rest counted', () => {
+    renderThread(Row, [email({
+      _mailbox: 'Sent',
+      to: [
+        { name: 'Padme', address: 'padme@naboo.gov' },
+        { name: 'Yoda', address: 'yoda@mock.test' },
+        { name: 'Rex', address: 'rex@mock.test' },
+      ],
+    })]);
+    expect(party()).toBe('Padme, Yoda +1');
+  });
+
+  it('lists every recipient of a multi-recipient Sent thread', () => {
+    renderThread(Row, [
+      email({ _mailbox: 'Sent', to: [{ name: 'Padme', address: 'padme@naboo.gov' }] }),
+      email({ uid: 43, _mailbox: 'Sent', to: [{ name: 'Padme', address: 'padme@naboo.gov' }, { name: 'Yoda', address: 'yoda@mock.test' }] }),
+    ]);
+    expect(party()).toBe('Padme, Yoda');
   });
 });

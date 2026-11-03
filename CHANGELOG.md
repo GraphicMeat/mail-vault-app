@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- A Sent folder row now names every person an email went to, not just the first. A message sent to two people reads `To: Anna, Arnas`, and a conversation with more than two recipients shows two names and a count (`Anna, Arnas +1`). Copied (Cc) recipients count too.
+
+- The email list no longer repaints every visible row when one email changes. A flag, a sync batch or a new email now redraws only the rows it touched; the rest stay as they were, so the list stops flickering while MailVault syncs or backs up.
+
 - A delete that hits a dropped connection to the mail server ("SELECT Trash failed: connection lost") no longer shows a "Not deleted yet" warning. The email stays gone and MailVault's background helper sends the delete again on a new connection.
 
 - An email with big pictures in it, such as the photos in a quoted reply, is now drawn by the Rust renderer with its pictures. It was refused whenever its inline pictures added up to more than 4 MB, and then shown as plain text with `[cid:image001.png@...]` where the pictures belong. Only the text and layout of an email count toward that limit now. A picture larger than the renderer paints is shown scaled down instead of being left out, for any picture up to 25 MB.

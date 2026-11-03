@@ -27,7 +27,9 @@ vi.mock('@tanstack/react-virtual', () => ({
       getVirtualItems: () =>
         // Simulate windowing: return at most 15 items even if count is 500
         Array.from({ length: Math.min(15, config.count) }, (_, i) => ({
-          key: i,
+          // The key the real virtualizer hands out: identity-based, so a row
+          // that shifts down keeps its component.
+          key: config.getItemKey ? config.getItemKey(i) : i,
           index: i,
           start: i * (config.estimateSize?.() ?? 56),
           size: config.estimateSize?.() ?? 56,
@@ -301,11 +303,27 @@ vi.mock('../../utils/emailParser', async (importOriginal) => ({
   // The row fixtures here carry list-shaped `from`/`to`, so the party helpers
   // the rows read now have to be stubbed to the same shape.
   getRowParty: (e, { outgoing } = {}) => (outgoing ? e?.to?.[0] : e?.from?.[0]) || null,
+  getRowParties: (e, { outgoing } = {}) => (outgoing ? (e?.to || []) : (e?.from?.[0] ? [e.from[0]] : [])),
+  partyDisplayName: (party) => party?.name || party?.address || '',
   getRowPartyName: (e, { outgoing } = {}) => {
     const party = (outgoing ? e?.to?.[0] : e?.from?.[0]) || null;
     return party?.name || party?.address || '';
   },
 }));
+
+// Every render of a row paints its state icon, so the icon's renders are the
+// rows' renders: a memo-bailed row never reaches it.
+const stateIconRenders = vi.hoisted(() => []);
+vi.mock('../email/MessageStateIcon', async (importOriginal) => {
+  const real = await importOriginal();
+  return {
+    ...real,
+    ConnectedStateIcon: (props) => {
+      stateIconRenders.push(props.email?.uid);
+      return real.ConnectedStateIcon(props);
+    },
+  };
+});
 
 // No `globals`, so RTL registers no cleanup of its own. A list left mounted
 // keeps its timers, and whichever spec runs when one fires gets its rejection.
@@ -2855,5 +2873,79 @@ describe('the hide view mail toggle', () => {
     } finally {
       Object.assign(useSearchStore.getState(), { searchActive: false, searchResults: [] });
     }
+  });
+});
+
+// The list used to repaint every visible row on every re-derivation: a row
+// took `derivedFrom={displayEmails}`, a fresh array each time, so a flag flip
+// on one message (or a sync batch landing) re-rendered all of them and the
+// list read as constantly reloading. A row now repaints only when what it
+// paints changed.
+describe('a change to one message repaints that row only', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+  const rows = (count) =>
+    Array.from({ length: count }, (_, i) => ({
+      uid: i + 1,
+      subject: `Email ${i + 1}`,
+      from: [{ address: `sender${i}@test.com`, name: `Sender ${i}` }],
+      to: [{ address: 'me@test.com' }],
+      date: new Date(2024, 0, 1, 0, 0, i).toISOString(),
+      flags: ['\\Seen'],
+      source: 'server',
+      isArchived: false,
+    }));
+
+  const mount = async (list) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      sortedEmails: list,
+      totalEmails: list.length,
+      getChatEmails: () => useMailStore.getState().sortedEmails,
+    });
+    const { EmailList } = await import('../EmailList.jsx');
+    const view = render(React.createElement(EmailList.type));
+    await settle();
+    return { useMailStore, view, EmailList };
+  };
+
+  it('does not repaint its neighbours when one flag flips', async () => {
+    const list = rows(5);
+    const { useMailStore, view, EmailList } = await mount(list);
+    stateIconRenders.length = 0;
+
+    const next = [...list];
+    next[2] = { ...list[2], flags: [] };
+    useMailStore.setState({ sortedEmails: next, _flagSeq: useMailStore.getState()._flagSeq + 1 });
+    view.rerender(React.createElement(EmailList.type));
+    await settle();
+
+    expect([...new Set(stateIconRenders)]).toEqual([3]);
+  });
+
+  it('repaints nothing when a re-derivation hands back the same rows', async () => {
+    const list = rows(5);
+    const { useMailStore, view, EmailList } = await mount(list);
+    stateIconRenders.length = 0;
+
+    useMailStore.setState({ sortedEmails: [...list] });
+    view.rerender(React.createElement(EmailList.type));
+    await settle();
+
+    expect(stateIconRenders).toEqual([]);
+  });
+
+  it('paints only the row that arrived', async () => {
+    const list = rows(5);
+    const { useMailStore, view, EmailList } = await mount(list);
+    stateIconRenders.length = 0;
+
+    const arrived = { ...rows(6)[5], uid: 99, date: new Date(2024, 5, 1).toISOString() };
+    useMailStore.setState({ sortedEmails: [arrived, ...list], totalEmails: 6 });
+    view.rerender(React.createElement(EmailList.type));
+    await settle();
+
+    expect([...new Set(stateIconRenders)]).toEqual([99]);
   });
 });

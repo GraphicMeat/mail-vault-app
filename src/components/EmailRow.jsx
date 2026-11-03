@@ -4,7 +4,7 @@ import { cleanPreviewText } from '../utils/previewText';
 import { BimiLogo } from './email/BimiLogo';
 import { useSettingsStore, isTrackerBlockingActive, normalizeListPreviewLines } from '../stores/settingsStore';
 import { AccountBadge, useAccountHover } from './AccountBadge';
-import { getRowPartyName } from '../utils/emailParser';
+import { getRowParties, partyDisplayName } from '../utils/emailParser';
 import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
 import { getCachedAlerts } from '../services/bodyScan';
@@ -148,6 +148,24 @@ export function WithSnippet({ email, children }) {
  * lines on): the chip moves under the checkbox, so the gutter is one icon
  * wide and the text gets the room back.
  */
+// The parties a row names, deduped on their address: two named and the rest
+// counted. Each name masks on its own, so privacy mode keeps the separators and
+// the count.
+export function PartyNames({ parties }) {
+  const seen = new Set();
+  const names = [];
+  for (const party of parties || []) {
+    const key = party?.address?.toLowerCase() || party?.name || '';
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(partyDisplayName(party));
+  }
+  const shown = names.slice(0, 2).map((name, i) => (
+    <React.Fragment key={i}>{i ? ', ' : ''}<Private kind="name">{displayText(name)}</Private></React.Fragment>
+  ));
+  return names.length <= 2 ? shown : <>{shown} +{names.length - 2}</>;
+}
+
 export function RowGutter({ stacked, threadSlot, disclosure = null, checked, onToggle, state }) {
   const t = useT();
   return (
@@ -185,7 +203,9 @@ function RowDate({ email }) {
 // row's full key. A single-folder list keeps the uid: selectEmail reads its
 // first argument as a bare uid there.
 function openRow(email, onSelect) {
-  onSelect(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox);
+  // The row's own message rides along so a caller can hand one stable
+  // callback to every row instead of a closure per row.
+  onSelect(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox, email);
 }
 
 // `pinActions` shows the quick actions without a hover; `preview` and
@@ -265,7 +285,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
         {unifiedInbox && email._accountEmail && <AccountBadge email={email} accountColors={accountColors} />}
         <span data-testid="row-sender" className="truncate min-w-0" dir="auto">
-          {outgoing && `${t('email.original.to')} `}<Private kind="name">{displayText(getRowPartyName(email, { outgoing }))}</Private>
+          {outgoing && `${t('email.original.to')} `}<PartyNames parties={getRowParties(email, { outgoing })} />
         </span>
         <BimiLogo email={email} size={14} />
         <StarToggle email={email} actions={actions} size={14} />
@@ -378,7 +398,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
         <div className="flex items-center gap-1.5">
           {unifiedInbox && email._accountEmail && <AccountBadge email={email} accountColors={accountColors} />}
           <span data-testid="row-sender" dir="auto" className={`truncate min-w-0 text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {outgoing && `${t('email.original.to')} `}<Private kind="name">{displayText(getRowPartyName(email, { outgoing }))}</Private>
+            {outgoing && `${t('email.original.to')} `}<PartyNames parties={getRowParties(email, { outgoing })} />
           </span>
           <BimiLogo email={email} size={13} />
           <StarToggle email={email} actions={actions} size={13} />
