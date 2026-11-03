@@ -4,7 +4,8 @@ import * as db from '../db';
 import * as api from '../api';
 import { resolveServerAccount } from '../authUtils';
 import { getSyncStatus } from '../syncService';
-import { saveRestoreDescriptor as _saveRestore } from '../cacheManager';
+import { saveRestoreDescriptor as _saveRestore, listGraphMessages } from '../cacheManager';
+import { isGraphAccount } from '../graphConfig';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
 import { isLocalMailbox } from './mailboxTree';
@@ -113,6 +114,56 @@ async function _daemonIsBackfilling(accountId, mailbox) {
 }
 
 
+/**
+ * The next page of a Graph folder. Skips by the server rows already held (a
+ * local draft row is not a Graph message). Overlap from a page that shifted is
+ * dropped by uid, so it can repeat a row but never leave a gap.
+ */
+async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
+  const get = () => useMailStore.getState();
+  const done = (patch) => useMailStore.setState({ loadingMore: false, ...patch });
+  const folder = get().mailboxes.find(m => m.path === mailbox);
+  // No folder to page: end the paging rather than ask again for ever.
+  if (!folder?._graphFolderId) return done({ hasMoreEmails: false });
+
+  const skip = get().emails.filter(e => e.source !== 'local').length;
+  const result = await listGraphMessages(accountId, mailbox, account, folder._graphFolderId, { top: PAGE_SIZE, skip });
+
+  const current = get();
+  if (current.activeAccountId !== accountId || current.activeMailbox !== mailbox) return done({});
+
+  const headers = result.headers || [];
+  const held = new Set(current.emails.map(e => e.uid));
+  const fresh = headers.filter(e => !held.has(e.uid)).map(e => ({ ...e, source: 'server' }));
+  const emails = [...current.emails, ...fresh];
+  const hasMore = !!result.nextLink && headers.length > 0;
+  const loaded = emails.filter(e => e.source !== 'local').length;
+  const total = hasMore ? Math.max(current.totalEmails, loaded) : loaded;
+  const uids = new Set(current.serverUids.uids);
+  for (const e of headers) uids.add(e.uid);
+
+  useMailStore.setState({
+    emails,
+    currentPage: current.currentPage + 1,
+    hasMoreEmails: hasMore,
+    totalEmails: total,
+    loadingMore: false,
+    _loadMoreRetryDelay: 0,
+    // Widening only, as for IMAP: this page does not make the set complete.
+    serverUids: serverUids(uids, { complete: current.serverUids.complete }),
+  });
+  get().updateSortedEmails();
+  if (fresh.length) {
+    db.saveEmailHeaders(accountId, mailbox, fresh, total)
+      .catch(e => console.warn('[loadMoreEmails] Failed to cache Graph headers:', e));
+  }
+  if (hasMore) {
+    const timer = getLoadMoreTimer();
+    if (timer) clearTimeout(timer);
+    setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 200));
+  }
+}
+
 // ── loadMoreEmails workflow ──
 
 export async function loadMoreEmails() {
@@ -195,6 +246,12 @@ export async function loadMoreEmails() {
       const timer = getLoadMoreTimer();
       if (timer) clearTimeout(timer);
       setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 1000));
+      return;
+    }
+
+    // Graph has no IMAP: its next page is the next skip of the same listing.
+    if (isGraphAccount(account)) {
+      await _loadMoreGraph(useMailStore, account, activeAccountId, activeMailbox);
       return;
     }
 

@@ -281,7 +281,9 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
   }));
   uidMap.merge(serverEmails);
 
-  const serverTotal = serverEmails.length;
+  // One page is not the folder: with a next page behind it the total is the
+  // folder's own count, or load-more has nothing to count toward.
+  const serverTotal = result.nextLink ? Math.max(serverEmails.length, targetFolder._graphTotal || 0) : serverEmails.length;
   const sorted = uidMap.toSortedArray();
 
   if (signal.aborted) return;

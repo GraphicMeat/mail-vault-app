@@ -6,6 +6,8 @@
 
 - A picture too large for the Rust renderer to draw (over 150 megapixels, over 25 MB of file, or past what is left of a message's picture budget) now shows a framed box in its place, "Too large to show here", with an "Open Image" button. It used to leave an empty gap. The button opens an attached picture in your system viewer (Preview on a Mac) and a picture from the web through the usual link check. With privacy mode on there is no button.
 
+- A Microsoft 365 or Hotmail folder with more than 200 emails now loads in full. The list used to stop at the newest 200, with nothing to load more, and deleting an email only pulled the next older one into view. Scrolling to the bottom now fetches the next page until the whole folder is there, and the folder count shows the real total.
+
 - When the Rust renderer cannot draw an email, the original shown beside your reply now falls back to the message's text. It was left blank, with only the "shown as plain text" notice above it.
 
 - Sending a message with a picture pasted or dropped into it no longer asks "Forgot the attachment?" when the text says "attached". The picture goes out as an inline attachment, so it now counts as one. A picture in the quoted original never counted, and still does not.

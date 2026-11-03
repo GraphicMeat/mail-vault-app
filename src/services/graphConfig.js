@@ -66,6 +66,7 @@ export function graphFoldersToMailboxes(graphFolders) {
       noselect: false,
       children: [],
       _graphFolderId: f.id, // stash Graph folder ID for message fetching
+      _graphTotal: f.totalItemCount, // the folder's own count: one listing page is not the folder
     };
   });
 }

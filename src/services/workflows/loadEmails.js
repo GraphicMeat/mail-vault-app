@@ -975,8 +975,10 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     // user wrote while it was on the wire.
     mergedEmails = rebaseFlags(priorEmails, get().emails, mergedEmails, get());
 
-    const serverTotal = mergedEmails.length;
     const hasMoreEmails = !!result.nextLink;
+    // One page is not the folder: with a next page behind it the total is the
+    // folder's own count, or load-more has nothing to count toward.
+    const serverTotal = hasMoreEmails ? Math.max(mergedEmails.length, targetFolder._graphTotal || 0) : mergedEmails.length;
 
     useMailStore.setState({
       emails: projectDraftRows(mergedEmails, activeAccountId, activeMailbox, draftFrame),
