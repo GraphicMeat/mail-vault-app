@@ -14,8 +14,6 @@ pub const MAX_LIMIT: usize = 2000;
 pub struct MatchPlan {
     /// FTS string for the whole query, when ≥3 chars.
     pub whole: Option<String>,
-    /// `"t1" AND "t2"` over the long (≥3 chars) terms.
-    pub all_long: Option<String>,
     /// FTS strings for `msg_cjk`, one per CJK-short term.
     pub cjk: Vec<String>,
     /// Lowercase query when every term is Latin-short.
@@ -285,13 +283,6 @@ pub fn plan_query(query: &str) -> MatchPlan {
     if q.chars().count() >= 3 {
         plan.whole = Some(fts_string(&q));
     }
-    if !long.is_empty() {
-        let all_long = long.iter().map(|t| fts_string(t)).collect::<Vec<_>>().join(" AND ");
-        // One long word is the whole query: the same MATCH twice buys nothing.
-        if plan.whole.as_ref() != Some(&all_long) {
-            plan.all_long = Some(all_long);
-        }
-    }
     plan.cjk = cjk_short.iter().map(|t| fts_string(&cjk_units(t))).collect();
     plan.needles =
         std::iter::once(q.clone()).chain(long.iter().chain(cjk_short.iter()).map(|t| t.to_string())).collect();
@@ -478,26 +469,22 @@ fn where_clause(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<(Str
         for _ in 0..4 {
             args.push(Value::Text(like_pattern(like)));
         }
-    } else if plan.whole.is_some() || plan.all_long.is_some() || !plan.cjk.is_empty() {
+    } else if plan.whole.is_some() || !plan.cjk.is_empty() {
         let mut branches: Vec<String> = Vec::new();
         if let Some(w) = &plan.whole {
             branches.push("m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?)".into());
             args.push(Value::Text(w.clone()));
         }
-        let mut all: Vec<String> = Vec::new();
-        if let Some(l) = &plan.all_long {
-            all.push("m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?)".into());
-            args.push(Value::Text(l.clone()));
-        }
-        for c in &plan.cjk {
-            all.push("m.id IN (SELECT rowid FROM msg_cjk WHERE msg_cjk MATCH ?)".into());
-            args.push(Value::Text(c.clone()));
-        }
-        if !all.is_empty() {
+        // A query too short for a trigram is a lone CJK word; a longer one is
+        // read as typed, as one phrase.
+        if plan.whole.is_none() {
+            let all: Vec<String> = plan.cjk.iter().map(|_| "m.id IN (SELECT rowid FROM msg_cjk WHERE msg_cjk MATCH ?)".to_string()).collect();
             branches.push(format!("({})", all.join(" AND ")));
+            args.extend(plan.cjk.iter().cloned().map(Value::Text));
         }
-        // The same words in an attachment's file name: the whole query, or
-        // every word of it.
+        // The same words in an attachment's file name, where a separator is
+        // not a space (`invoice 4471` is `Invoice-4471.pdf`): the whole query,
+        // or every word of it.
         branches.push(FILENAME_SQL.into());
         args.push(Value::Text(like_pattern(&plan.needles[0])));
         let words: Vec<&String> = plan.needles.iter().skip(1).filter(|n| **n != plan.needles[0]).collect();
@@ -1000,7 +987,6 @@ mod tests {
     fn plan_routes_terms() {
         let p = plan_query("  body of Luke message 12 ");
         assert_eq!(p.whole.as_deref(), Some("\"body of luke message 12\""));
-        assert_eq!(p.all_long.as_deref(), Some("\"body\" AND \"luke\" AND \"message\""));
         assert!(p.cjk.is_empty() && p.like.is_none());
 
         let p = plan_query("会議");
@@ -1009,7 +995,7 @@ mod tests {
 
         let p = plan_query("hi");
         assert_eq!(p.like.as_deref(), Some("hi"));
-        assert!(p.whole.is_none() && p.all_long.is_none());
+        assert!(p.whole.is_none());
 
         assert_eq!(plan_query("   "), MatchPlan::default());
     }
@@ -1018,15 +1004,14 @@ mod tests {
     fn one_word_query_matches_once() {
         let p = plan_query("Invoice");
         assert_eq!(p.whole.as_deref(), Some("\"invoice\""));
-        assert_eq!(p.all_long, None, "a second identical MATCH buys nothing");
         let p = plan_query("invoice 4471");
-        assert_eq!(p.all_long.as_deref(), Some("\"invoice\" AND \"4471\""));
+        assert_eq!(p.whole.as_deref(), Some("\"invoice 4471\""), "the words stay one phrase");
     }
 
     #[test]
     fn plan_never_passes_fts_syntax_through() {
         let p = plan_query("NEAR(a b) \"x\" OR y* col:z");
-        for s in p.whole.iter().chain(p.all_long.iter()) {
+        for s in p.whole.iter() {
             // every token is inside a double-quoted string; no bare operators
             let outside: String = s.split('"').step_by(2).collect();
             assert!(outside.chars().all(|c| c == ' ' || "AND".contains(c)), "{s}");
@@ -1078,16 +1063,20 @@ mod tests {
     }
 
     fn fixture_with(parse: ParseFn) -> (tempfile::TempDir, SharedConn) {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().to_path_buf();
-        let db = Mutex::new(Some(db::open(&root).unwrap()));
-        let files = [
+        indexed(parse, [
             ("luke", "INBOX", 1, eml("Luke message 1", "Ann <ann@x.test>", "Mon, 07 Sep 2026 10:00:00 +0000", "Body of luke message 1 for luke@mock.test.")),
             ("luke", "INBOX", 2, eml("Invoice PO 4471", "Billing <billing@acme.test>", "Tue, 08 Sep 2026 10:00:00 +0000", "please find attached")),
             ("luke", "Projects_2026", 1, eml("明日の会議について", "Ken <ken@x.test>", "Wed, 09 Sep 2026 10:00:00 +0000", "資料を添付します")),
             ("luke", "INBOX", 3, eml("Réunion budget", "Zoé <zoe@x.test>", "Thu, 10 Sep 2026 10:00:00 +0000", "Ünïcödé naïve")),
             ("vader", "INBOX", 1, eml("Vader message 1", "Sid <sid@x.test>", "Fri, 11 Sep 2026 10:00:00 +0000", "Body of vader message 1 and luke message 1 quoted")),
-        ];
+        ])
+    }
+
+    /// Mail files written to a vault and indexed the way production does.
+    fn indexed(parse: ParseFn, files: impl IntoIterator<Item = (&'static str, &'static str, u32, String)>) -> (tempfile::TempDir, SharedConn) {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        let db = Mutex::new(Some(db::open(&root).unwrap()));
         for (acct, dir, uid, content) in files {
             let cur = root.join("Maildir").join(acct).join(dir).join("cur");
             std::fs::create_dir_all(&cur).unwrap();
@@ -1448,6 +1437,17 @@ mod tests {
         let (_t, db) = fixture();
         assert_eq!(uids(&db, req("luke", "of luke message 1")), vec![("INBOX".into(), 1)]);
         assert_eq!(uids(&db, req("luke", "voic")), vec![("INBOX".into(), 2)]);
+    }
+
+    #[test]
+    fn words_typed_together_are_one_phrase_not_separate_words() {
+        let (_t, db) = indexed(&parse, [
+            ("luke", "INBOX", 1, eml("Registru centras", "Ann <ann@x.test>", "Mon, 07 Sep 2026 10:00:00 +0000", "Uzsiregistruok pas mus")),
+            ("luke", "INBOX", 2, eml("Jusu uzsakymas", "Shop <shop@x.test>", "Tue, 08 Sep 2026 10:00:00 +0000", "Sutikite gauti pranesimus registruojantis, paslaugu valdymo centras")),
+            ("luke", "INBOX", 3, eml("Sveiki", "Bob <bob@x.test>", "Wed, 09 Sep 2026 10:00:00 +0000", "Kreipkites i registru centras dabar")),
+        ]);
+        // Uid 2 holds both words far apart: not the phrase.
+        assert_eq!(uids(&db, req("luke", "registru centras")), vec![("INBOX".into(), 3), ("INBOX".into(), 1)]);
     }
 
     #[test]

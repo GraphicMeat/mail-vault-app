@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Words typed together in the search box are now searched as one phrase in your vault: `registru centras` finds emails containing those words next to each other, no longer every email that holds both words somewhere. Words in an attachment's file name still match on their own (`invoice 4471` finds `Invoice-4471.pdf`).
+
 - Delete everywhere on an email the mail server no longer holds in that folder (for example one Gmail already emptied from Trash, or one deleted in another app) now simply removes it from MailVault, instead of saying it could not be deleted and asking you to resync the folder. When a different email now sits in its place on the server, the message says so and nothing is deleted.
 
 - A delete is never sent to a folder the mail server has renumbered since you chose the emails. The new numbering could point at other emails, so MailVault cancels that delete instead, shows the emails again, and keeps it in Settings > Unfinished server actions with the reason until you cancel it there.
