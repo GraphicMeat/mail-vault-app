@@ -207,3 +207,38 @@ describe('the row a delete decides its path by', () => {
     expect(mockDeleteEmail).not.toHaveBeenCalled();
   });
 });
+
+// A delete the server confirmed already took the row off the list, off the
+// count and out of the header cache. Reloading the folder after it re-listed
+// the newest page and dropped everything paged in below it: a long Graph list
+// jumped back to 200 rows on every delete. Only a delete that FAILED reloads
+// (the put-back), and that path is not this one.
+describe('a confirmed delete leaves the list where it is', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    netOnline = true;
+    mockDeleteEmail.mockResolvedValue(undefined);
+    mockGetLocalIndexEntry.mockResolvedValue(null);
+    globalThis.window.__TAURI__ = { core: { invoke: () => {} } };
+  });
+
+  it('one message: the row is gone and the folder is not reloaded', async () => {
+    prime({ emails: [row(6), row(7), row(8)] });
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCT_A, 7, 'INBOX');
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([6, 8]);
+    expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
+  });
+
+  it('a selection: the rows are gone and the folder is not reloaded', async () => {
+    prime({ emails: [row(6), row(7), row(8)] });
+    useMailStore.setState({ selectedEmailIds: new Set([7, 8]) });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([6]);
+    expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
+  });
+});

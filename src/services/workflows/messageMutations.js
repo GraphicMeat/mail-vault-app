@@ -1719,16 +1719,14 @@ async function _reconcileBatch(useMailStore, state, { isUnified, prunes, survivi
     await db.saveEmailHeaders(g.accountId, g.mailbox, [], ownFolder ? get().totalEmails : null, { removedUids: g.uids });
   }
 
-  // Reconcile with the server: restores any email whose delete failed
-  // (resilient over silently wrong).
+  // No reload: the optimistic paint, the prune above and the uid set already
+  // carry the delete, and a reload dropped every row paged in below the first
+  // page. A delete that FAILED is put back by _putBack, which reloads.
   if (isUnified) return;
-  await get().loadEmails();
 
   // Lift tombstones for messages whose local archive survived the server
-  // delete, now that loadEmails() has refreshed serverUids (and
-  // archivedEmailIds/localEmails, unchanged but re-confirmed) — lifting any
-  // earlier risks a brief flash as "still on server" before the next refresh
-  // corrects it.
+  // delete. The uid set above no longer holds them, so the row cannot flash
+  // back as "still on server".
   if (!surviving.size) return;
   const ts = new Set(get().deleteTombstones);
   for (const t of surviving) ts.delete(t);
@@ -2353,15 +2351,10 @@ export async function applyServerRemoval(uid, {
     );
   }
 
-  // Saving the sidecar is another await. The user may switch views while it
-  // runs, so validate the destination again before a reload can repaint the
-  // newly active mailbox.
-  const current = get();
-  if (!skipRefresh && !isUnified
-    && current.activeAccountId === accountId && current.activeMailbox === mailbox
-    && current.activeMailbox !== 'UNIFIED' && !current.mailboxScope) {
-    current.loadEmails();
-  }
+  // No reload here. The row, the count, the uid set and the header cache all
+  // took the removal above; a reload re-listed the newest page and dropped
+  // every row paged in below it (a long Graph list went back to one page on
+  // each delete). A delete that FAILED is put back by _putBack, which reloads.
 }
 
 

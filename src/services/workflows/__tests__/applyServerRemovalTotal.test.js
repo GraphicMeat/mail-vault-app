@@ -229,14 +229,14 @@ describe('applyServerRemoval: a merged Sent copy is another message', () => {
     expect(useMailStore.getState().sentEmails).toEqual([sentCopy]);
   });
 
-  it('leaves the Sent copy alone on the refreshing path too', async () => {
+  it('leaves the Sent copy alone, and the list is not reloaded', async () => {
     const loadEmails = vi.fn();
     useMailStore.setState({ emails: [inboxRow], sentEmails: [sentCopy], totalEmails: 1, loadEmails });
 
     await applyServerRemoval(34, { accountId: ACCOUNT.id, mailbox: 'INBOX', clearSelection: false });
 
     expect(useMailStore.getState().sentEmails).toEqual([sentCopy]);
-    expect(loadEmails).toHaveBeenCalledTimes(1);
+    expect(loadEmails).not.toHaveBeenCalled();
   });
 
 });

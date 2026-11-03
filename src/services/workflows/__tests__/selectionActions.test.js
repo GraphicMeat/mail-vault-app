@@ -685,14 +685,10 @@ describe('deleteSelectedFromServer', () => {
     const localCopy = seedThread()[0]; // uid 1, archived locally
 
     // A regression here previously threw inside the try block and got
-    // silently absorbed by the pre-existing failure-path catch — which
-    // produces the same final row state via a different, wrong mechanism
-    // (immediate lift, before the reconcile, plus a false failure log).
-    // Guard both: no error logged, and the tombstone is still present at the
-    // moment loadEmails() runs (proving the lift happens strictly after the
-    // reconcile, not synchronously in the catch block).
+    // silently absorbed by the pre-existing failure-path catch (plus a false
+    // failure log). Guard it: no error logged. The folder is not reloaded: the
+    // delete itself took uid 1 out of the uid set, which is what lifts the row.
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let tombstoneCountWhenLoadEmailsRan = null;
 
     useMailStore.setState({
       accounts: [ACCOUNT],
@@ -713,18 +709,7 @@ describe('deleteSelectedFromServer', () => {
       selectedEmailIds: new Set([1]),
       selectedEmail: null,
       selectedEmailId: null,
-      // A reconcile that re-derives but never re-enumerates. This is not a
-      // weakened stand-in — it is what the real loadEmails() does whenever
-      // its CONDSTORE flag-only or delta-noop branch matches: those return
-      // before the UID search, leaving the uid set exactly as they found it.
-      // The old version of this mock pruned the uid and set complete itself,
-      // which made the test pass while production shipped a row stuck on
-      // `local` for the rest of the session.
-      loadEmails: vi.fn(() => {
-        tombstoneCountWhenLoadEmailsRan = useMailStore.getState().deleteTombstones.size;
-        useMailStore.getState().updateSortedEmails();
-        return Promise.resolve();
-      }),
+      loadEmails: vi.fn(),
       _sortedEmailsFingerprint: '',
     });
     invalidateChatAndThreadCaches();
@@ -733,9 +718,7 @@ describe('deleteSelectedFromServer', () => {
     await useMailStore.getState().deleteSelectedFromServer();
 
     expect(consoleErrorSpy).not.toHaveBeenCalled();
-    // The tombstone must still be set when loadEmails() runs — a lift that
-    // happened earlier (e.g. from the failure-path catch) would show 0 here.
-    expect(tombstoneCountWhenLoadEmailsRan).toBe(1);
+    expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
     expect(useMailStore.getState().deleteTombstones.size).toBe(0);
     expect([...useMailStore.getState().serverUids.uids]).toEqual([2]);
     expect(useMailStore.getState().serverUids.complete).toBe(true);

@@ -601,15 +601,9 @@ describe('a batch with one stuck uid', () => {
   it('one that lands while its call is still reconciling the reply is filed in the same slot', async () => {
     prime({ emails: [row(7), row(8), row(9), row(10)] });
     mockSubmit.mockResolvedValue(earlyReply);
-    // The landing arrives during the batch's list reload, before its slot is filed.
-    let first = true;
-    useMailStore.setState({
-      loadEmails: vi.fn(async () => {
-        if (!first) return;
-        first = false;
-        await onDeleteQueueLanded(landed9);
-      }),
-    });
+    // The landing arrives during the batch's reconcile (the header-cache prune),
+    // before its slot is filed.
+    mockSaveEmailHeaders.mockImplementationOnce(async () => { await onDeleteQueueLanded(landed9); });
 
     await deleteMessages([{ key: 7 }, { key: 8 }, { key: 9 }]);
 
