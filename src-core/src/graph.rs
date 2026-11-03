@@ -52,11 +52,12 @@ fn messages_list_url(base: &str, folder_id: &str, top: u32, skip: u32, before: O
 }
 
 /// A `receivedDateTime` as Graph writes it (`2026-01-05T10:00:00Z`, maybe with
-/// fractional seconds or an offset). Nothing else goes into a `$filter`.
+/// fractional seconds). Nothing else goes into a `$filter`; `+` is left out as
+/// a query would read it as a space.
 pub fn is_graph_timestamp(text: &str) -> bool {
     (10..=40).contains(&text.len())
         && text.starts_with(|c: char| c.is_ascii_digit())
-        && text.chars().all(|c| c.is_ascii_digit() || matches!(c, 'T' | 'Z' | ':' | '.' | '-' | '+'))
+        && text.chars().all(|c| c.is_ascii_digit() || matches!(c, 'T' | 'Z' | ':' | '.' | '-'))
 }
 
 // ---------------------------------------------------------------------------
@@ -1435,10 +1436,10 @@ mod tests {
 
     #[test]
     fn only_a_graph_timestamp_goes_into_a_filter() {
-        for ok in ["2026-01-05T10:00:00Z", "2026-01-05T10:00:00.123Z", "2026-01-05T10:00:00+02:00"] {
+        for ok in ["2026-01-05T10:00:00Z", "2026-01-05T10:00:00.123Z"] {
             assert!(is_graph_timestamp(ok), "{ok}");
         }
-        for bad in ["", "yesterday", "2026-01-05 10:00:00", "2026-01-05T10:00:00Z or true", "x&$top=1", "'; drop"] {
+        for bad in ["", "yesterday", "2026-01-05 10:00:00", "2026-01-05T10:00:00+02:00", "2026-01-05T10:00:00Z or true", "x&$top=1", "'; drop"] {
             assert!(!is_graph_timestamp(bad), "{bad}");
         }
     }

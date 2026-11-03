@@ -7,7 +7,7 @@ import { useConnectivityStore } from '../../stores/connectivityStore';
 import { hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { oauthErrorState } from '../oauthErrors';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
-import { pickGraphCursor } from '../graphCursor';
+import { pickGraphCursor, graphCursorAfter } from '../graphCursor';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
 import { _buildRestoreDescriptor, rebaseFlags, vaultKey, vaultKeys, vaultUids } from '../../stores/slices/unifiedHelpers';
@@ -979,7 +979,8 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     const hasMoreEmails = !!result.nextLink;
     const key = `${activeAccountId}:${activeMailbox}`;
     const heldCursor = get()._graphCursor;
-    const cursor = pickGraphCursor(heldCursor, key, headers);
+    const pageCursor = graphCursorAfter(key, headers, null);
+    const picked = pickGraphCursor(heldCursor, key, headers);
 
     const graphUids = new Set(mergedEmails.map(e => e.uid));
     const pageDates = mergedEmails.map(_headerDateMs).filter(Number.isFinite);
@@ -987,13 +988,28 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 
     // A reload lists the newest page. The older rows already paged in stay:
     // dropping them cut a long list back to one page, and the scroll position
-    // with it. Only when the held cursor vouches for them (it reaches further
-    // back than this page) and the folder is longer than a page. NaN fails the
-    // comparison, so a row with no date is not kept on a guess.
-    const kept = hasMoreEmails && cursor === heldCursor
-      ? get().emails.filter(e => e.source !== 'local' && !graphUids.has(e.uid) && _headerDateMs(e) < pageOldestMs)
+    // with it. Only when the held cursor vouches for them and nothing can sit
+    // between them and this page: the folder is longer than a page, the held
+    // cursor reaches further back than the page does, and the page meets the
+    // rows held (one of its messages is already listed). A page that does not
+    // meet them (mail arrived while the app was away, or came back from another
+    // folder) leaves a stretch no cursor covers, so the held rows go and paging
+    // lists it. Rows tied with the page's oldest moment stay: `<=`. NaN fails
+    // the comparison, so a row with no date is not kept on a guess.
+    const heldServer = get().emails.filter(e => e.source !== 'local');
+    const meetsHeld = heldServer.some(e => graphUids.has(e.uid));
+    const vouched = hasMoreEmails && picked === heldCursor && meetsHeld;
+    const cursor = vouched ? heldCursor : pageCursor;
+    const kept = vouched
+      ? heldServer.filter(e => !graphUids.has(e.uid) && _headerDateMs(e) <= pageOldestMs)
       : [];
     const listed = kept.length ? [...mergedEmails, ...kept] : mergedEmails;
+    // The uid set says what the SERVER listed: the page, and kept rows it
+    // already vouched for (not the rows a cache paint added).
+    const confirmed = get().serverUids.uids;
+    const confirmedUids = kept.length
+      ? [...graphUids, ...kept.map(e => e.uid).filter(uid => confirmed.has(uid))]
+      : [...graphUids];
 
     // One page is not the folder: with a next page behind it the total is the
     // folder's own count, or load-more has nothing to count toward.
@@ -1011,7 +1027,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       totalEmails: serverTotal,
       loading: false,
       loadingMore: false,
-      serverUids: serverUids(listed.map(e => e.uid), { complete: !hasMoreEmails }),
+      serverUids: serverUids(confirmedUids, { complete: !hasMoreEmails }),
     });
 
     get().updateSortedEmails();
@@ -1030,7 +1046,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     // NaN fails every comparison, so a row we can't date is never inside the
     // window and never deleted on a guess.
     const removedUids = priorEmails
-      .filter(e => !graphUids.has(e.uid) && _headerDateMs(e) >= pageOldestMs)
+      .filter(e => !graphUids.has(e.uid) && _headerDateMs(e) > pageOldestMs)
       .map(e => e.uid);
 
     // Descriptor saved on switch-away, not after every load

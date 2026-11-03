@@ -1721,7 +1721,7 @@ async function _reconcileBatch(useMailStore, state, { isUnified, prunes, survivi
 
   // No reload: the optimistic paint, the prune above and the uid set already
   // carry the delete, and a reload dropped every row paged in below the first
-  // page. A delete that FAILED is put back by _putBack, which reloads.
+  // page. A delete that FAILED has its row put back (_reinsertRestored).
   if (isUnified) return;
 
   // Lift tombstones for messages whose local archive survived the server
@@ -2354,7 +2354,7 @@ export async function applyServerRemoval(uid, {
   // No reload here. The row, the count, the uid set and the header cache all
   // took the removal above; a reload re-listed the newest page and dropped
   // every row paged in below it (a long Graph list went back to one page on
-  // each delete). A delete that FAILED is put back by _putBack, which reloads.
+  // each delete). A delete that FAILED has its row put back (_reinsertRestored).
 }
 
 

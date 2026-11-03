@@ -330,6 +330,48 @@ describe('a Graph folder bigger than one page', () => {
     expect(s.hasMoreEmails).toBe(true);
   });
 
+  it('a reload that page one does not meet leaves the older rows to paging', async () => {
+    // 100 mails arrived while the app was away: page one is the newest 200, the
+    // held rows start 100 further down. Keeping them under the old cursor would
+    // never list the gap between.
+    server = server.slice(0, 450);
+    const held = server.slice(300, 450).map(r => ({ ...r }));
+    prime({ emails: held, _graphCursor: cursorAfter(450) });
+    await useMailStore.getState().loadEmails();
+    clearTimeout(getLoadMoreTimer());
+
+    const s = useMailStore.getState();
+    expect(s.emails.map(e => e.uid)).toEqual(rows(1, PAGE).map(e => e.uid));
+    expect(s._graphCursor).toEqual(cursorAfter(PAGE));
+  });
+
+  it('a reload keeps rows that tie with the last row of page one', async () => {
+    const T = row(190).date;
+    server = server.map(r => (r.uid >= 190 && r.uid <= 260 ? { ...r, date: T } : r));
+    prime({ emails: server.slice(0, 400).map(r => ({ ...r })), _graphCursor: cursorAfter(400) });
+    await useMailStore.getState().loadEmails();
+    clearTimeout(getLoadMoreTimer());
+
+    expect(new Set(useMailStore.getState().emails.map(e => e.uid)).size).toBe(400);
+  });
+
+  it('a reload does not vouch for older rows the server never listed', async () => {
+    // Rows 201-300 came from the cache paint: not in the server's uid set.
+    const cached = rows(201, 100).map(e => ({ ...e, source: 'cache' }));
+    prime({
+      emails: [...rows(1, PAGE), ...cached],
+      _graphCursor: cursorAfter(300),
+      serverUids: serverUids(rows(1, PAGE).map(e => e.uid), { complete: false }),
+    });
+    await useMailStore.getState().loadEmails();
+    clearTimeout(getLoadMoreTimer());
+
+    const s = useMailStore.getState();
+    expect(s.emails).toHaveLength(300);
+    expect(s.serverUids.uids.has(250)).toBe(false);
+    expect(s.serverUids.uids.has(150)).toBe(true);
+  });
+
   it('a reload with no cursor to vouch for the older rows lists page one alone', async () => {
     prime({ emails: rows(1, 400), _graphCursor: null });
     await useMailStore.getState().loadEmails();
