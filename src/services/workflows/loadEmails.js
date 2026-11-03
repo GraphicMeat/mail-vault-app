@@ -7,7 +7,7 @@ import { useConnectivityStore } from '../../stores/connectivityStore';
 import { hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { oauthErrorState } from '../oauthErrors';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
-import { pickGraphCursor, graphCursorAfter } from '../graphCursor';
+import { pickGraphCursor, graphCursorAfter, graphPageArgs } from '../graphCursor';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap, getAccountCacheMailboxes } from '../cacheManager';
 import { _buildRestoreDescriptor, rebaseFlags, vaultKey, vaultKeys, vaultUids } from '../../stores/slices/unifiedHelpers';
@@ -880,6 +880,85 @@ export async function loadEmails({ rereadFlags = false } = {}) {
 }
 
 
+// ── Graph tail revalidation ──
+
+// A reload lists the newest page and keeps the older rows already paged in. Those
+// were not listed, so nothing says a message in them was deleted elsewhere, read
+// elsewhere or came back from another client. This walks the stretch between the
+// page and the oldest kept row, in the background, and applies what it finds.
+// Once per folder per few minutes: it is a listing of everything the user paged
+// through, and Microsoft throttles by the request.
+const _graphRevalidations = new Map();
+const REVALIDATE_EVERY_MS = 5 * 60 * 1000;
+const REVALIDATE_PAUSE_MS = 100;
+/** The running revalidation of a folder (resolved when none runs). */
+export const _graphRevalidationFor = (key) => _graphRevalidations.get(key)?.running ?? Promise.resolve();
+export const _resetGraphRevalidation = () => _graphRevalidations.clear();
+
+function _revalidateGraphTail({ account, accountId, mailbox, folderId, from, floorMoment, pageUids, pageOldestMs }) {
+  const key = `${accountId}:${mailbox}`;
+  const entry = _graphRevalidations.get(key) || {};
+  if (entry.running || (entry.doneAt && Date.now() - entry.doneAt < REVALIDATE_EVERY_MS)) return;
+  _graphRevalidations.set(key, entry);
+  entry.running = (async () => {
+    try {
+      const { useMailStore } = await import('../../stores/mailStore');
+      const get = () => useMailStore.getState();
+      const base = get().emails;
+      const listed = new Map();
+      let cursor = from;
+      let reachedEnd = false;
+      for (;;) {
+        const page = await _listGraphMessages(accountId, mailbox, account, folderId, graphPageArgs(cursor, key, 200));
+        const rows = page.headers || [];
+        for (const r of rows) listed.set(r.uid, r);
+        cursor = graphCursorAfter(key, rows, cursor);
+        if (!rows.length || !page.nextLink) { reachedEnd = true; break; }
+        // Past the oldest kept row: everything newer than it is listed.
+        if (floorMoment && cursor.before && cursor.before <= floorMoment) break;
+        await new Promise(resolve => setTimeout(resolve, REVALIDATE_PAUSE_MS));
+      }
+      const lowMs = reachedEnd || !floorMoment ? -Infinity : Date.parse(floorMoment);
+
+      // Read and committed in one tick: nothing here awaits between them.
+      const cur = get();
+      const stillThere = cur.activeAccountId === accountId && cur.activeMailbox === mailbox;
+      const present = (uid) => listed.has(uid) || pageUids.has(uid);
+      const goneUids = new Set((stillThere ? cur.emails : base)
+        .filter(e => e.source !== 'local' && !present(e.uid)
+          && _headerDateMs(e) > lowMs && _headerDateMs(e) <= pageOldestMs)
+        .map(e => e.uid));
+      const incoming = rebaseFlags(base, cur.emails, [...listed.values()], cur);
+      if (stillThere) {
+        const held = new Map(cur.emails.map(e => [e.uid, e]));
+        // Not a message the user deleted while the walk ran: its tombstone says so.
+        const deleted = cur.deleteTombstones;
+        const fresh = incoming.filter(r => !deleted?.has(`${accountId}|${mailbox}|${r.uid}`)).map(r => ({
+          ...r, source: 'server',
+          isLocal: held.get(r.uid)?.isLocal ?? cur.savedEmailIds.has(vaultKey(accountId, mailbox, r.uid)),
+        }));
+        const byUid = new Map(fresh.map(r => [r.uid, r]));
+        const kept = cur.emails.filter(e => !goneUids.has(e.uid)).map(e => byUid.get(e.uid) ?? e);
+        const added = fresh.filter(r => !held.has(r.uid));
+        const uids = new Set(cur.serverUids.uids);
+        for (const r of fresh) uids.add(r.uid);
+        for (const uid of goneUids) uids.delete(uid);
+        useMailStore.setState({
+          emails: [...kept, ...added],
+          serverUids: serverUids(uids, { complete: cur.serverUids.complete }),
+        });
+        get().updateSortedEmails();
+      }
+      await db.saveEmailHeaders(accountId, mailbox, [...listed.values()], null, { removedUids: [...goneUids] });
+      entry.doneAt = Date.now();
+    } catch (e) {
+      console.warn('[loadEmailsViaGraph] Could not re-check the older rows:', e);
+    } finally {
+      entry.running = null;
+    }
+  })();
+}
+
 // ── _loadEmailsViaGraph workflow ──
 
 /** A header's received time in ms, or NaN when it carries no parseable date. */
@@ -1053,6 +1132,15 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal, { removedUids })
       .catch(e => console.warn('[loadEmailsViaGraph] Failed to cache headers:', e));
 
+    // The older rows this reload kept were not listed: check them against the
+    // server in the background (gone elsewhere, flags changed, restored mail).
+    if (kept.length) {
+      _revalidateGraphTail({
+        account, accountId: activeAccountId, mailbox: activeMailbox, folderId: targetFolder._graphFolderId,
+        from: pageCursor, floorMoment: heldCursor.before, pageUids: graphUids, pageOldestMs,
+      });
+    }
+
   } catch (error) {
     console.error('[loadEmailsViaGraph] Failed:', error);
 
@@ -1112,6 +1200,34 @@ function _mergeOptimisticSent(fresh, existing, accountId, accountEmail, sentPath
   ];
 }
 
+/**
+ * Run `body` as the account's background Sent fill, unless one is running.
+ * `body(tick)` calls `tick(more)` after each page it holds: the pause that keeps
+ * the fill from crowding the list, and the merge into `sentEmails`, thinned to
+ * pages 2, 4, 8 and so on (every merge rebuilds the threads) with a last one
+ * when the fill ends. `tick` answers false once the account is gone.
+ */
+function _fillSent(accountId, body, { wanted, merge, alive }) {
+  if (_sentFills.has(accountId)) return;
+  let pages = 1;
+  const tick = async (more) => {
+    pages += 1;
+    if ((pages & (pages - 1)) === 0 && wanted()) merge();
+    if (more) await new Promise(resolve => setTimeout(resolve, SENT_FILL_PAUSE_MS));
+    return alive();
+  };
+  const run = (async () => {
+    try {
+      await body(tick);
+    } catch (e) {
+      console.warn('[loadSentHeaders:fill_fail]', { accountId, error: e.message });
+    } finally {
+      if (wanted()) merge();
+    }
+  })().finally(() => _sentFills.delete(accountId));
+  _sentFills.set(accountId, run);
+}
+
 // Cache-only reads already running, per account. All inboxes asks every account
 // on every load and refresh; asks that arrive while a read is running share it,
 // and it reads once more when it is done, since the cache may have been written
@@ -1154,6 +1270,14 @@ export function loadSentHeaders(accountId, { cacheOnly = false } = {}) {
 // merging it last would put back rows the full read had just replaced (the
 // staged reply blinking out).
 const _sentFullMerges = new Map();
+
+// The background fill of each account's Sent mirror, one at a time. A second
+// load while one runs shares it instead of paging the folder twice.
+const _sentFills = new Map();
+const SENT_PAGE = 200;
+const SENT_FILL_PAUSE_MS = 100;
+/** The running fill of an account's Sent mirror (resolved when none runs). */
+export const _sentFillFor = (accountId) => _sentFills.get(accountId) ?? Promise.resolve();
 
 // What a row shows, for "did this read change anything".
 const _sentRowSig = (e) => `${e.uid}|${e.messageId}|${(e.flags || []).join(',')}|${e._mailbox}|${e._optimistic ? 1 : 0}`;
@@ -1218,8 +1342,15 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     invalidateChatAndThreadCaches();
   };
 
-  const cached = await db.getEmailHeadersPartial(accountId, sentPath, 200);
+  // The whole cache: the mirror holds the whole Sent folder, not its newest 200.
+  const cacheMeta = await db.getEmailHeadersMeta(accountId, sentPath).catch(() => null);
+  const cachedCount = cacheMeta?.totalCached || 0;
+  const cached = await db.getEmailHeadersPartial(accountId, sentPath, Math.max(SENT_PAGE, cachedCount));
   if (!wanted()) return;
+  // Every row known so far, by uid: a server page adds to it, never replaces it.
+  const held = new Map((cached?.emails || []).map(e => [e.uid, e]));
+  const heldRows = () => [...held.values()];
+  const hold = (rows) => { for (const e of rows) held.set(e.uid, e); };
   console.log('[loadSentHeaders:cache]', {
     accountId,
     sentPath,
@@ -1259,7 +1390,28 @@ async function _loadSentHeaders(accountId, cacheOnly) {
           // count mismatch on every sync. null = leave the cached total alone.
           await db.saveEmailHeaders(accountId, sentPath, sentHeaders, result.nextLink ? null : sentHeaders.length);
           if (!wanted()) return;
-          merge(sentHeaders);
+          hold(sentHeaders);
+          merge(heldRows());
+          // The rest of the folder, newest first by the date cursor, unless the
+          // cache already holds as many as the folder does.
+          const folderTotal = sentFolder._graphTotal || 0;
+          if (result.nextLink && (!folderTotal || cachedCount < folderTotal)) {
+            const key = `${accountId}:${sentPath}`;
+            _fillSent(accountId, async (tick) => {
+              let cursor = graphCursorAfter(key, sentHeaders, null);
+              let more = true;
+              while (more) {
+                const page = await _listGraphMessages(accountId, sentPath, account, sentFolder._graphFolderId, graphPageArgs(cursor, key, SENT_PAGE));
+                const rows = page.headers || [];
+                if (!rows.length) break;
+                hold(rows);
+                await db.saveEmailHeaders(accountId, sentPath, rows, page.nextLink ? null : held.size);
+                cursor = graphCursorAfter(key, rows, cursor);
+                more = !!page.nextLink;
+                if (!(await tick(more))) break;
+              }
+            }, { wanted, merge: () => merge(heldRows()), alive: () => get().accounts.some(a => a.id === accountId) });
+          }
         }
       } else {
         console.warn('[loadSentHeaders:graph_no_folder_id]', { accountId, sentPath });
@@ -1281,7 +1433,8 @@ async function _loadSentHeaders(accountId, cacheOnly) {
         await db.saveEmailHeaders(accountId, sentPath, result.emails, result.total);
         if (!wanted()) return;
         const existingOptimistic = (get().sentEmails || []).filter(e => e._optimistic && e._accountId === accountId);
-        merge(result.emails);
+        hold(result.emails);
+        merge(heldRows());
         const merged = get().sentEmails || [];
         const optimisticSurvivors = merged.filter(e => e._optimistic && e._accountId === accountId);
         console.log('[loadSentHeaders:merge_done]', {
@@ -1294,6 +1447,24 @@ async function _loadSentHeaders(accountId, cacheOnly) {
             .map(e => e.messageId),
           merged_count: merged.length,
         });
+        // The rest of the folder, page by page, unless the cache already holds
+        // as many rows as the folder does.
+        if (result.hasMore && cachedCount < (result.total || 0)) {
+          _fillSent(accountId, async (tick) => {
+            let page = 2;
+            let more = true;
+            while (more) {
+              const next = await api.fetchEmails(account, sentPath, page, SENT_PAGE);
+              const rows = next?.emails || [];
+              if (!rows.length) break;
+              hold(rows);
+              await db.saveEmailHeaders(accountId, sentPath, rows, next.total);
+              more = !!next.hasMore;
+              page += 1;
+              if (!(await tick(more))) break;
+            }
+          }, { wanted, merge: () => merge(heldRows()), alive: () => get().accounts.some(a => a.id === accountId) });
+        }
       }
     }
   } catch (e) {

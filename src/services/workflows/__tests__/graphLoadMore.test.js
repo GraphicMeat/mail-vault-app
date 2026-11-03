@@ -90,6 +90,7 @@ vi.mock('../../syncService', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { forget: forgetMemo } = await import('../../headerMemo');
+const { _graphRevalidationFor, _resetGraphRevalidation } = await import('../loadEmails');
 const { getLoadMoreTimer, setLoadMoreTimer } = await import('../../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct-g', email: 'g@hotmail.test', oauth2Transport: 'graph' };
@@ -145,6 +146,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   clearTimeout(getLoadMoreTimer());
   setLoadMoreTimer(null);
+  _resetGraphRevalidation();
   forgetMemo(ACCOUNT.id);
   db.getCachedMailboxEntry.mockResolvedValue({ mailboxes: [INBOX, SENT], fetchedAt: Date.now() });
   db.getEmailHeadersMeta.mockResolvedValue(null);
@@ -328,6 +330,56 @@ describe('a Graph folder bigger than one page', () => {
     expect(new Set(s.emails.map(e => e.uid)).size).toBe(400);
     expect(s._graphCursor).toEqual(deep);
     expect(s.hasMoreEmails).toBe(true);
+  });
+
+  it('a reload re-checks the older rows it kept: gone elsewhere leaves, a changed flag arrives', async () => {
+    const deep = { key: KEY, before: row(400).date, skip: 1 };
+    prime({ emails: rows(1, 400), _graphCursor: deep });
+    // On the server now: uid 250 deleted, uid 300 read.
+    server = server.filter(r => r.uid !== 250).map(r => (r.uid === 300 ? { ...r, flags: ['\\Seen'] } : r));
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+    clearTimeout(getLoadMoreTimer());
+
+    const s = useMailStore.getState();
+    expect(s.emails.some(e => e.uid === 250)).toBe(false);
+    expect(s.emails.find(e => e.uid === 300).flags).toContain('\\Seen');
+    expect(s.emails.some(e => e.uid === 399)).toBe(true);
+    expect(s.serverUids.uids.has(250)).toBe(false);
+    expect(db.saveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(250))).toBe(true);
+    // The walk stayed inside what was kept: it never reached uid 450's page.
+    for (const call of graph.listGraphMessages.mock.calls.slice(1)) expect(call[4].top).toBe(PAGE);
+  });
+
+  it('a reload does not walk the kept rows again within minutes', async () => {
+    prime({ emails: rows(1, 400), _graphCursor: { key: KEY, before: row(400).date, skip: 1 } });
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+    const calls = graph.listGraphMessages.mock.calls.length;
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+
+    // Only the new page one: no second walk.
+    expect(graph.listGraphMessages.mock.calls.length).toBe(calls + 1);
+  });
+
+  it('a reload that keeps nothing walks nothing', async () => {
+    prime({ emails: rows(1, PAGE), _graphCursor: cursorAfter(PAGE) });
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+
+    expect(graph.listGraphMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('a message that came back from another client is listed by the walk', async () => {
+    prime({ emails: rows(1, 400), _graphCursor: { key: KEY, before: row(400).date, skip: 1 } });
+    // uid 1000 was restored with an old receivedDateTime between 250 and 251.
+    const back = { ...row(1000), date: new Date(new Date(row(250).date).getTime() - 1000).toISOString() };
+    server = [...server.filter(r => r.date > back.date), back, ...server.filter(r => r.date <= back.date)];
+    await useMailStore.getState().loadEmails();
+    await _graphRevalidationFor(KEY);
+
+    expect(useMailStore.getState().emails.some(e => e.uid === 1000)).toBe(true);
   });
 
   it('a reload that page one does not meet leaves the older rows to paging', async () => {

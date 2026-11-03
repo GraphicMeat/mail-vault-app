@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- The Sent mail shown inside your conversations is now your whole Sent folder, for every kind of account, not its newest 200. MailVault reads all of Sent from its cache and downloads the rest in the background a page at a time, so a thread's older replies show up in it.
+
+- On a Microsoft 365 or Hotmail account, a refresh now re-checks the older emails it kept in the list: one deleted in another app drops out, a flag changed there comes through, and one restored from Deleted Items appears. It walks them in the background, at most once every few minutes.
+
 ## [2.21.1] - 2026-11-03
 
 - Deleting an email no longer reloads the folder. The row leaves the list, the count and the cache as before, and the rest of the list stays where it is; before, the reload cut a long list back to its first page and sent you to the top. An email that could not be deleted still comes back as it did.
