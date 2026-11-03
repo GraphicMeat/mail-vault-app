@@ -1436,6 +1436,8 @@ fn server_read_states(state: &DaemonState, account: &str, dir: &str, uids: &[u32
 
 pub(crate) fn matches_local_row(row: &LightEmail, request: &MailSearchStart) -> bool {
     let query = request.query.trim().to_lowercase();
+    // The index reads the same fields (`addrs`: sender and every recipient).
+    let recipients = row.to.iter().chain(&row.cc).chain(&row.bcc).flat_map(|a| [a.address.as_str(), a.name.as_deref().unwrap_or("")]);
     let haystack = [
         row.subject.as_str(),
         row.from.address.as_str(),
@@ -1443,6 +1445,9 @@ pub(crate) fn matches_local_row(row: &LightEmail, request: &MailSearchStart) -> 
         row.text.as_deref().unwrap_or(""),
         row.html.as_deref().unwrap_or(""),
     ]
+    .into_iter()
+    .chain(recipients)
+    .collect::<Vec<_>>()
     .join(" ")
     .to_lowercase();
     (query.is_empty() || haystack.contains(&query))
@@ -1776,6 +1781,39 @@ mod tests {
             .expect("a non-terminal frame with the vault lane's time");
         assert_eq!(lane_done["lane"], "local", "{frames:?}");
         assert_eq!(lane_done["localSearched"], 3, "{frames:?}");
+    }
+
+    /// The index finds an address in To, Cc or Bcc (its `addrs` column) and so
+    /// does the server's TEXT search; the scan lane, which answers for a folder
+    /// the index has not covered, has to find it too.
+    #[tokio::test]
+    async fn the_scan_lane_finds_a_recipient_the_index_and_server_find() {
+        let (tmp, state) = state();
+        let cur = tmp.path().join("Maildir").join("acct").join("Sent").join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        let eml = |to: &str, cc: &str, bcc: &str, body: &str| {
+            format!("From: Me <me@example.test>\r\nTo: {to}\r\nCc: {cc}\r\nBcc: {bcc}\r\nSubject: Sutarties nutraukimas\r\nDate: Tue, 15 Nov 1994 12:45:26 +0000\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n")
+        };
+        for (uid, content) in [
+            (1, eml("bta@bta.lt", "Bank <zalos@swedbank.lt>", "x@example.test", "Pagarbiai")),
+            (2, eml("Bank <zalos@swedbank.lt>", "y@example.test", "x@example.test", "Pagarbiai")),
+            (3, eml("bta@bta.lt", "y@example.test", "Bank <zalos@swedbank.lt>", "Pagarbiai")),
+            (4, eml("bta@bta.lt", "y@example.test", "x@example.test", "Pagarbiai")),
+        ] {
+            std::fs::write(cur.join(format!("{uid}{INFO_PREFIX}.eml")), content).unwrap();
+        }
+        let mut rx = state.events.subscribe();
+        let mut req = request_with_targets("recipient", 1, vec![target("acct", Some(vec!["Sent"]))]);
+        req["query"] = "zalos@swedbank".into();
+        assert_eq!(call(&state, "mail_search_start", req).await.result.unwrap()["started"], true);
+        let frames = collect_until_terminal(&mut rx, "recipient").await;
+        let mut uids: Vec<u64> = frames
+            .iter()
+            .flat_map(|f| f["rows"].as_array().into_iter().flatten())
+            .map(|row| row["uid"].as_u64().unwrap())
+            .collect();
+        uids.sort_unstable();
+        assert_eq!(uids, vec![1, 2, 3], "{frames:?}");
     }
 
     /// The scan lane (no index) reads vault files, whose names lag a read made
@@ -3216,6 +3254,53 @@ mod tests {
             let frames = collect_until_terminal(&mut rx, "server-after-local").await;
             assert_eq!(frames[0]["lane"], "local");
             assert!(frames.iter().any(|frame| frame["lane"] == "server"));
+        }
+
+        #[tokio::test]
+        async fn vault_rows_are_published_while_the_server_is_still_searching() {
+            plaintext();
+            let server = MockImap::start(
+                Scenario::new()
+                    .mailbox(synthetic_mailbox("INBOX", 1))
+                    .fault(Trigger::on("SEARCH"), Action::Delay(Duration::from_millis(1500))),
+            );
+            let (tmp, state) = state();
+            write_mail(tmp.path(), "acct", "INBOX", 1, "Message from the vault", "local body");
+            let mut rx = state.events.subscribe();
+            let started = call(
+                &state,
+                "mail_search_start",
+                json!({
+                    "searchId": "vault-first",
+                    "query": "Message",
+                    "location": "all",
+                    "concurrency": 1,
+                    "targets": [{
+                        "accountId": "acct",
+                        "account": account(&server),
+                        "localMailboxes": ["INBOX"],
+                        "knownMailboxes": ["INBOX"],
+                        "serverMailboxes": ["INBOX"]
+                    }]
+                }),
+            )
+            .await;
+            assert_eq!(started.result.unwrap()["started"], true);
+            let began = Instant::now();
+            let rows_frame = loop {
+                let frame = next_progress(&mut rx).await;
+                if frame["searchId"] == "vault-first"
+                    && frame["rows"].as_array().is_some_and(|rows| !rows.is_empty())
+                {
+                    break frame;
+                }
+            };
+            assert_eq!(rows_frame["lane"], "local", "{rows_frame:?}");
+            assert!(
+                began.elapsed() < Duration::from_millis(1000),
+                "vault rows waited {:?} for the 1.5 s server lane",
+                began.elapsed()
+            );
         }
 
         /// A JMAP account's server lane (Task 9c): `Email/query` with a
