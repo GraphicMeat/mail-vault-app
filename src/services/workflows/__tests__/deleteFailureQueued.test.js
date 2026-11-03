@@ -249,6 +249,26 @@ describe('a server delete the server refuses', () => {
     expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|7`)).toBe(true);
   });
 
+  // A dropped socket is as transient as a busy account: the daemon's next
+  // round opens a new one. Same wording `is_connection_lost` (pool.rs) matches.
+  it('a dropped connection says nothing; the row stays hidden while the daemon retries', async () => {
+    for (const raw of [
+      'Failed to delete email: SELECT Trash failed: connection lost',
+      'Failed to delete email: connection reset by peer (os error 54)',
+      'Failed to delete email: connection closed via error',
+      'Failed to delete email: An existing connection was forcibly closed (os error 10054)',
+    ]) {
+      prime([row(7), row(8)]);
+      useMailStore.setState({ error: null });
+      mockSubmit.mockImplementation(answer(() => true, raw));
+
+      await useMailStore.getState().deleteEmailFromServer(7);
+
+      expect(useMailStore.getState().error).toBeNull();
+      expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|7`)).toBe(true);
+    }
+  });
+
   it('a busy refusal beside another reason says the other one', async () => {
     prime([row(7), row(8), row(9)], [7, 8]);
     useMailStore.setState({ error: null });

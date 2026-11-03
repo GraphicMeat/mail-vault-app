@@ -1308,7 +1308,10 @@ async function _sendDeletes(useMailStore, ctxs, { how, hidden, waitsOffline, isU
 
 // A busy account passes on its own: the daemon's next round usually sends it,
 // and the reply comes after the first round, so it is not worth a warning.
-const _transientRefusal = (reason) => /^E_BIN_CAPTURE:busy(:|$)/.test(String(reason));
+// So does a dropped socket (the pool's `is_connection_lost` wording): the next
+// round signs in again.
+const _transientRefusal = (reason) => /^E_BIN_CAPTURE:busy(:|$)/.test(String(reason))
+  || /connection (lost|reset|aborted|closed|was aborted)|os error 1005[34]|broken pipe|unexpected end of file|not connected/i.test(String(reason));
 
 // A queued target's answer: its undo record when it landed, GONE when the
 // server no longer had it, QUEUED while it is owed. Throws a refusal for good,
