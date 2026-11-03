@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.21.1] - 2026-11-03
+
 - Deleting an email no longer reloads the folder. The row leaves the list, the count and the cache as before, and the rest of the list stays where it is; before, the reload cut a long list back to its first page and sent you to the top. An email that could not be deleted still comes back as it did.
 
 - A long Microsoft 365 or Hotmail folder keeps the emails you have scrolled to when it refreshes, and loading more no longer skips an email when mail was deleted or arrived in the folder in the meantime. Mail stamped with the same second (a migrated mailbox) loads in full too.
