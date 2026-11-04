@@ -7,6 +7,7 @@ import { daemonCall } from '../daemonClient';
 import { binCaptureError } from '../../utils/binCapture';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { isGraphAccount } from '../graphConfig';
+import { isJmapAccount } from '../providerKind';
 import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, sameMessage, rowIdentity, selectionKey, pruneSelectedThread, nextAfterRemoval, vaultKey, vaultKeys } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
@@ -3366,7 +3367,8 @@ export async function hideQueuedDeletes(ops) {
 // actions) or a purge a replay refused for good: the rows show again as
 // whatever is left of them.
 export async function showQueuedRows(entry, uids = entry.uids) {
-  if (!_hidesRows(entry) || !uids?.length) return;
+  // A move hides its rows too, until it lands: cancelled or refused, they show again.
+  if (!(_hidesRows(entry) || entry.op === 'move') || !uids?.length) return;
   const ids = new Set(uids.map(uid => _targetId({ ...entry, uid })));
   if (entry.op === 'delete') {
     for (const id of ids) {
@@ -3676,7 +3678,15 @@ export async function moveEmails(keys, targetMailbox) {
 
 // Move the messages back. The destination uids came with COPYUID; without
 // UIDPLUS they are found by Message-ID in the destination folder.
+// A record's source uids are live again: the message never left, or came back
+// under the same uid.
+function _liftTombstones(useMailStore, { accountId, from, srcUids }) {
+  const lift = new Set(srcUids.map(uid => _targetId({ accountId, mailbox: from, uid })));
+  useMailStore.setState(s => ({ deleteTombstones: new Set([...s.deleteTombstones].filter(id => !lift.has(id))) }));
+}
+
 async function _undoMove(records) {
+  const { useMailStore } = await import('../../stores/mailStore');
   // A throw on the second record must still repaint what the first one moved.
   try {
     for (const r of records) {
@@ -3685,9 +3695,7 @@ async function _undoMove(records) {
       if (r.deferred) {
         await db.clearOps({ op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids, arg: { target: r.to } });
         // The message never left: its uid is live again.
-        const { useMailStore } = await import('../../stores/mailStore');
-        const lift = new Set(r.srcUids.map(uid => _targetId({ accountId: r.accountId, mailbox: r.from, uid })));
-        useMailStore.setState(s => ({ deleteTombstones: new Set([...s.deleteTombstones].filter(id => !lift.has(id))) }));
+        _liftTombstones(useMailStore, r);
         continue;
       }
       const dst = r.dstUids ?? await _resolveDestinationUids(r.account, r.to, r.messageIds);
@@ -3695,6 +3703,9 @@ async function _undoMove(records) {
       // throws, and saying it twice reads as a bug.
       if (!dst.length) throw new Error(r.to);
       await api.moveEmails(r.account, dst, r.to, r.from);
+      // A JMAP message keeps its id, so its uid, through a move: it is back
+      // under the uid the move retired.
+      if (isJmapAccount(r.account)) _liftTombstones(useMailStore, r);
     }
   } finally {
     await reloadListInView();

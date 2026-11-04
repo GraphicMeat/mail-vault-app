@@ -88,14 +88,19 @@ export class AccountPipeline {
    * Does NOT modify Zustand active-account state — purely warms headers.json.
    * Supports both IMAP (paginated fetch) and Graph API (skip-based pagination).
    */
-  async loadHeaders(mailbox = 'INBOX') {
+  async loadHeaders(mailbox = 'INBOX', { window = false } = {}) {
     if (this._destroyed || !hasValidCredentials(this.account)) return;
 
     this._phase = 'headers';
     this.onProgress(this.state);
 
     try {
-      if (isGraphAccount(this.account)) {
+      if (window) {
+        // A folder that can hold tens of thousands of rows (Sent): the daemon
+        // syncs it, page one is listed, and nothing reads the cache or pages the
+        // folder here. The store reads the window it shows.
+        await this._refreshWindowOnly(mailbox);
+      } else if (isGraphAccount(this.account)) {
         await this._loadHeadersGraph(mailbox);
       } else {
         await this._loadHeadersImap(mailbox);
@@ -108,6 +113,32 @@ export class AccountPipeline {
     if (!this._destroyed) {
       this._phase = 'idle';
       this.onProgress(this.state);
+    }
+  }
+
+  /**
+   * Refresh one big folder without reading it: the daemon's delta sync (IMAP and
+   * JMAP), or page one from the provider (Graph, or no daemon). Touches neither
+   * `_lastLoadedEmails` (the content queue is the INBOX's) nor the whole cache.
+   */
+  async _refreshWindowOnly(mailbox) {
+    if (isGraphAccount(this.account)) {
+      await this._loadHeadersGraph(mailbox, { firstPageOnly: true });
+      return;
+    }
+    if (getDaemonHealth().alive) {
+      try {
+        const { ticket } = await syncNow(toSyncAccount(this.account, this.accountId), mailbox);
+        if (this._destroyed) return;
+        await waitForSync(ticket, 30000);
+        return;
+      } catch (e) {
+        console.warn(`[Pipeline:${this.account.email}] Daemon header sync failed for ${mailbox}:`, e.message);
+      }
+    }
+    const result = await api.fetchEmails(this.account, mailbox, 1);
+    if (result?.emails?.length > 0 && !this._destroyed) {
+      await db.saveEmailHeaders(this.accountId, mailbox, result.emails, result.hasMore ? null : result.total);
     }
   }
 
@@ -221,7 +252,7 @@ export class AccountPipeline {
   }
 
   /** Graph API header loading — uses graphListFolders + graphListMessages with skip pagination */
-  async _loadHeadersGraph(mailbox) {
+  async _loadHeadersGraph(mailbox, { firstPageOnly = false } = {}) {
     console.log(`[Pipeline:${this.account.email}] Loading Graph headers for ${mailbox}...`);
 
     // 1. Fetch folder list to find the Graph folder ID (the daemon sends the
@@ -250,12 +281,17 @@ export class AccountPipeline {
       const headers = result.headers || [];
       allHeaders.push(...headers);
 
-      hasMore = !!result.nextLink && headers.length === PAGE_SIZE;
+      hasMore = !firstPageOnly && !!result.nextLink && headers.length === PAGE_SIZE;
       skip += headers.length;
 
       if (hasMore) await new Promise(r => setTimeout(r, 0));
     }
 
+    if (firstPageOnly && allHeaders.length > 0 && !this._destroyed) {
+      // One page is not the folder: no total is claimed.
+      await db.saveEmailHeaders(this.accountId, mailbox, allHeaders, null);
+      return;
+    }
     if (allHeaders.length > 0 && !this._destroyed) {
       await db.saveEmailHeaders(this.accountId, mailbox, allHeaders, allHeaders.length);
       this._lastLoadedEmails = contentQueueRows(allHeaders);

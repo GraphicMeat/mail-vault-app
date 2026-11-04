@@ -16,6 +16,7 @@ import { paintMovedFlags } from '../../stores/messageRows';
 import { serverUids } from '../../stores/slices/serverUids';
 import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIFY_MS } from '../../stores/slices/syncSlice';
 import { createPerfTrace } from '../../utils/perfTrace';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { waitForSentMailboxPath, sentMailboxPathFor, mergesSentIntoThreads } from '../../utils/sentFolder';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import { isLocalMailbox } from './mailboxTree';
@@ -1299,35 +1300,36 @@ export const _sentFillFor = (accountId) => _sentFills.get(accountId) ?? Promise.
 const _sentFillGen = new Map();
 export const _resetSentFills = () => { _sentFills.clear(); _sentFillAt.clear(); _sentCacheSeen.clear(); _sentFillGen.clear(); _sentReach.clear(); };
 
-/** The oldest loaded INBOX row's moment: how far back the list can use Sent mail. Infinity when nothing is loaded. */
-function _sentNeedMs(state) {
-  let need = Infinity;
-  for (const e of state.emails || []) {
+/**
+ * How far back the list can use `accountId`'s Sent mail: the moment of the last
+ * dated row of that account in the loaded list (the list is newest first, so
+ * its tail is its oldest; one stray old row up the list, a message moved back
+ * to the INBOX, does not set it). Infinity when nothing is loaded, or when the
+ * list on screen does not thread Sent in.
+ */
+function _sentNeedMs(state, accountId) {
+  if (!mergesSentIntoThreads(state)) return Infinity;
+  const rows = state.emails || [];
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const e = rows[i];
+    if ((e._accountId || e._srcAccountId || state.activeAccountId) !== accountId) continue;
     const ms = _headerDateMs(e);
-    if (ms < need) need = ms;
+    if (ms === ms) return ms; // not NaN
   }
-  return need;
+  return Infinity;
 }
 
 /**
- * The newest cached Sent rows back to `reachMs`, and never fewer than 200. The
- * cache comes newest first in slices that double until one reaches back far
- * enough, so a 50,000 row folder costs what its window does.
+ * The cached Sent rows back to `reachMs`, never fewer than the newest 200: one
+ * daemon read BY DATE, whatever order the folder is kept in (an IMAP cache is
+ * by uid, and a message moved in long after it was sent holds the top uid).
+ * Null when the read failed: the caller leaves the mirror as it is.
  */
-async function _readSentWindow(accountId, sentPath, cachedCount, reachMs) {
-  for (let limit = SENT_PAGE; ; limit *= 2) {
-    const read = await db.getEmailHeadersPartial(accountId, sentPath, limit);
-    const rows = read?.emails || [];
-    const whole = rows.length < limit || (cachedCount > 0 && limit >= cachedCount);
-    let oldest = Infinity;
-    for (const e of rows) {
-      const ms = _headerDateMs(e);
-      if (ms < oldest) oldest = ms;
-    }
-    if (whole || oldest <= reachMs) {
-      return { rows: rows.filter((e, i) => i < SENT_PAGE || !(_headerDateMs(e) < reachMs)), whole };
-    }
-  }
+async function _readSentWindow(accountId, sentPath, reachMs) {
+  const since = Number.isFinite(reachMs) ? reachMs : (reachMs > 0 ? Number.MAX_SAFE_INTEGER : -1);
+  const read = await db.getEmailHeadersWindow(accountId, sentPath, since, SENT_PAGE);
+  if (!read) return null;
+  return { rows: read.emails, whole: read.emails.length >= read.totalCached, totalCached: read.totalCached };
 }
 
 /**
@@ -1338,11 +1340,12 @@ export async function extendSentWindows() {
   const { useMailStore } = await import('../../stores/mailStore');
   const state = useMailStore.getState();
   if (!mergesSentIntoThreads(state)) return;
-  const need = _sentNeedMs(state);
-  const ids = state.activeMailbox === 'UNIFIED' ? [..._sentReach.keys()] : [state.activeAccountId];
+  const hidden = useSettingsStore.getState()?.hiddenAccounts || {};
+  const live = new Set((state.accounts || []).filter(a => !hidden[a.id]).map(a => a.id));
+  const ids = state.activeMailbox === 'UNIFIED' ? [..._sentReach.keys()].filter(id => live.has(id)) : [state.activeAccountId];
   await Promise.all(ids.filter((id) => {
     const reach = _sentReach.get(id);
-    return reach && need < reach.reachMs;
+    return reach && _sentNeedMs(state, id) < reach.reachMs;
   }).map((id) => loadSentHeaders(id, { cacheOnly: true })));
 }
 
@@ -1396,20 +1399,26 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     return;
   }
 
-  const merge = (fresh) => {
-    if (cacheOnly && (_sentFullMerges.get(accountId) || 0) !== startMerges) return;
+  // True when the mirror now reflects the read (applied, or nothing to change);
+  // false when a newer write won and the read was dropped.
+  const merge = (read) => {
+    if (cacheOnly && (_sentFullMerges.get(accountId) || 0) !== startMerges) return false;
     // A fill added its rows since this load read the cache: its rows are newer.
-    if ((_sentFillGen.get(accountId) || 0) !== startFillGen) return;
+    if ((_sentFillGen.get(accountId) || 0) !== startFillGen) return false;
     if (!cacheOnly) _sentFullMerges.set(accountId, (_sentFullMerges.get(accountId) || 0) + 1);
+    // A message moved or deleted since the cache was read stays out.
+    const tombstones = get().deleteTombstones;
+    const fresh = tombstones?.size ? read.filter(e => !tombstones.has(`${accountId}|${sentPath}|${e.uid}`)) : read;
     const accountEmail = (get().accounts || []).find(a => a.id === accountId)?.email;
     const current = get().sentEmails || [];
     const next = _mergeOptimisticSent(fresh, current, accountId, accountEmail, sentPath, spansAccounts());
     // All Inboxes re-reads every account on each load; an unchanged read must
     // not rebuild the rows and every thread built from them.
     const mine = (rows) => rows.filter(e => e._accountId === accountId).map(_sentRowSig).join('\n');
-    if (next.length === current.length && mine(next) === mine(current)) return;
+    if (next.length === current.length && mine(next) === mine(current)) return true;
     useMailStore.setState({ sentEmails: next });
     invalidateChatAndThreadCaches();
+    return true;
   };
 
   // The window: the cache from the newest row back to the oldest loaded INBOX row
@@ -1421,7 +1430,7 @@ async function _loadSentHeaders(accountId, cacheOnly) {
   const cacheSig = `${sentPath}|${cachedCount}|${cacheMeta?.totalEmails ?? ''}`;
   const mine = () => (get().sentEmails || []).filter(e => e._accountId === accountId);
   const reach = mine().length > 0 ? _sentReach.get(accountId) : null;
-  const need = _sentNeedMs(get());
+  const need = _sentNeedMs(get(), accountId);
   // A cache the mirror already merged is not read again: this runs on every
   // refresh tick and every account switch. A cache-only load has nothing else to
   // do; a full load still asks the server for page one and ADDS what it brings.
@@ -1437,8 +1446,13 @@ async function _loadSentHeaders(accountId, cacheOnly) {
   // Rows join a mirror that is current; they replace one only when the cache
   // moved. Either way a read never reaches back less far than the mirror does.
   const adding = mirrorCurrent && !staged;
-  const readReach = Math.min(need, reach?.reachMs ?? Infinity);
-  const cached = alreadyMerged ? null : await _readSentWindow(accountId, sentPath, cachedCount, readReach);
+  // A mirror that is current only gains rows; one the cache moved past is
+  // rebuilt to exactly what the list reaches now, so a deep window the list has
+  // left is let go.
+  const readReach = adding ? Math.min(need, reach.reachMs) : need;
+  const cached = alreadyMerged ? null : await _readSentWindow(accountId, sentPath, readReach);
+  // A failed read says nothing about the folder: the mirror stays as it is.
+  if (!alreadyMerged && !cached) return;
   if (!wanted()) return;
   // Every row known so far, by uid: a server page adds to it, never replaces it.
   const held = new Map((cached?.rows || []).map(e => [e.uid, e]));
@@ -1449,8 +1463,8 @@ async function _loadSentHeaders(accountId, cacheOnly) {
   // sent or a message deleted or moved while the fill ran is not undone: a
   // tombstoned row is not brought back, and a server copy takes the place of its
   // staged reply), and the rows `gone` taken out. One rebuild of the threads.
-  const addSent = (rows, gone = []) => {
-    if (!wanted()) return;
+  const addSent = (rows, gone = [], { fill = false } = {}) => {
+    if (!wanted()) return false;
     const accountEmail = (get().accounts || []).find(a => a.id === accountId)?.email;
     const current = get().sentEmails || [];
     const have = new Set(current.filter(e => e._accountId === accountId).map(e => e.uid));
@@ -1462,10 +1476,12 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     const drop = new Set(gone);
     const kept = current.filter(e => e._accountId !== accountId
       || !((e._optimistic && e.messageId && arrived.has(e.messageId)) || (!e._optimistic && drop.has(e.uid))));
-    if (!added.length && kept.length === current.length) return;
-    _sentFillGen.set(accountId, (_sentFillGen.get(accountId) || 0) + 1);
+    if (!added.length && kept.length === current.length) return true;
+    // Only a fill's end outranks a load that began before it.
+    if (fill) _sentFillGen.set(accountId, (_sentFillGen.get(accountId) || 0) + 1);
     useMailStore.setState({ sentEmails: [...kept, ...added] });
     invalidateChatAndThreadCaches();
+    return true;
   };
   // Page one of the server: replaces the mirror's rows from a cold read, adds to
   // them when the mirror is current.
@@ -1477,9 +1493,12 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     cachedCount: cached?.rows?.length || 0,
     firstCachedMessageIds: (cached?.rows || []).slice(0, 3).map(e => e.messageId),
   });
-  if (cached?.rows?.length > 0) (adding ? addSent(cached.rows) : merge(cached.rows));
-  _sentCacheSeen.set(accountId, cacheSig);
-  if (cached) _sentReach.set(accountId, { reachMs: readReach, whole: cached.whole });
+  // What the mirror holds is only recorded as read when the read landed.
+  const landed = !cached?.rows?.length || (adding ? addSent(cached.rows) : merge(cached.rows));
+  if (landed) {
+    _sentCacheSeen.set(accountId, cacheSig);
+    if (cached) _sentReach.set(accountId, { reachMs: readReach, whole: cached.whole });
+  }
   if (cacheOnly) return;
 
   const { accounts, connectionStatus } = get();
@@ -1507,23 +1526,28 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     }
     const meta = await db.getEmailHeadersMeta(accountId, sentPath).catch(() => null);
     const now = _sentReach.get(accountId);
-    const rereadReach = Math.min(_sentNeedMs(get()), now?.reachMs ?? Infinity);
-    const reread = await _readSentWindow(accountId, sentPath, meta?.totalCached || 0, rereadReach);
+    // The rows the mirror held before the read: only those can be pruned, never
+    // one that arrived (a reply sent) while the read was on the wire.
+    const heldBefore = new Set(mine().filter(e => !e._optimistic).map(e => e.uid));
+    const rereadReach = Math.min(_sentNeedMs(get(), accountId), now?.reachMs ?? Infinity);
+    const reread = await _readSentWindow(accountId, sentPath, rereadReach);
+    if (!reread) throw new Error('the Sent cache could not be read');
     const readUids = new Set(reread.rows.map(e => e.uid));
     let oldestRead = Infinity;
     for (const e of reread.rows) {
       const ms = _headerDateMs(e);
       if (ms < oldestRead) oldestRead = ms;
     }
-    // A row of the window the cache no longer holds was pruned; one older than
-    // the slice just read is simply not in it.
+    // A row of the window the cache no longer holds was pruned; one at or older
+    // than the oldest row read may simply not be in the slice.
     const floor = reread.whole ? -Infinity : oldestRead;
     const gone = mine()
-      .filter(e => !e._optimistic && !readUids.has(e.uid) && _headerDateMs(e) >= floor)
+      .filter(e => heldBefore.has(e.uid) && !readUids.has(e.uid) && (reread.whole || _headerDateMs(e) > floor))
       .map(e => e.uid);
-    addSent(reread.rows, gone);
-    _sentCacheSeen.set(accountId, `${sentPath}|${meta?.totalCached || 0}|${meta?.totalEmails ?? ''}`);
-    _sentReach.set(accountId, { reachMs: rereadReach, whole: reread.whole });
+    if (addSent(reread.rows, gone, { fill: true })) {
+      _sentCacheSeen.set(accountId, `${sentPath}|${meta?.totalCached || 0}|${meta?.totalEmails ?? ''}`);
+      _sentReach.set(accountId, { reachMs: rereadReach, whole: reread.whole });
+    }
     // Still backfilling after the wait: what is there is shown, and the fill
     // counts as failed, so it is tried again later.
     if (idle < 2) throw new Error('the Sent backfill is still running');

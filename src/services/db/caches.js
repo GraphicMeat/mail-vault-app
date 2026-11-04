@@ -190,6 +190,31 @@ export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
 }
 
 /**
+ * A mailbox's newest headers BY DATE back to `sinceMs`, never fewer than
+ * `minRows`: the window a list can use. The daemon reads it in date order
+ * whatever order the folder is otherwise kept in. Null when the read failed or
+ * nothing is cached.
+ */
+export async function getEmailHeadersWindow(accountId, mailbox, sinceMs, minRows = 200) {
+  if (invoke) {
+    try {
+      const data = await invoke('load_email_cache_window', { accountId, mailbox, sinceMs, minRows });
+      if (data) {
+        const entry = safeParse(data);
+        return {
+          emails: ownRows(bindNativeBatch(entry, accountId, mailbox).emails, accountId, mailbox),
+          totalEmails: entry.totalEmails,
+          totalCached: entry.totalCached ?? 0,
+        };
+      }
+    } catch (error) {
+      console.warn('[db.js] Failed to load cache window:', error);
+    }
+  }
+  return null;
+}
+
+/**
  * The UIDs this mailbox has sidecars for, plus which of them were written after
  * `sinceMs`. Readdir only — nothing is opened or parsed, so the cost is one
  * directory scan no matter how big the mailbox is. Lets a caller holding a stale

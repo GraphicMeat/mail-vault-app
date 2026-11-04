@@ -349,4 +349,29 @@ describe('moveEmails retires the uid it moved away from', () => {
 
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
   });
+
+  // A JMAP message keeps its id, so its uid, through a move: moved back, it is
+  // back under the uid the move retired, and must not stay hidden by it.
+  it('undoing a JMAP move shows the message under its old uid again', async () => {
+    const jmap = { id: 'a1', email: 'a1@x', jmapSessionUrl: 'https://jmap.mock.test/session' };
+    primeStore({ emails: [row(7)], account: jmap });
+    await useMailStore.getState().moveEmails([7], 'Archive');
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
+
+    await useMailStore.getState().runUndo();
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
+  });
+
+  it('cancelling a journalled move shows its message again', async () => {
+    netOnline = false;
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().moveEmails([7], 'Archive');
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
+
+    const { showQueuedRows } = await import('../messageMutations');
+    await showQueuedRows({ op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7] });
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
+  });
 });

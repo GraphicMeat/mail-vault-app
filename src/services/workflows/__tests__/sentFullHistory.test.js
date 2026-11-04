@@ -24,6 +24,7 @@ const db = vi.hoisted(() => ({
   getCachedMailboxes: vi.fn(),
   getEmailHeadersMeta: vi.fn(),
   getEmailHeadersPartial: vi.fn(),
+  getEmailHeadersWindow: vi.fn(),
   getVaultUidSets: vi.fn(),
   getArchivedEmails: vi.fn(),
   readLocalEmailIndex: vi.fn(),
@@ -118,6 +119,7 @@ const sentUids = () => (useMailStore.getState().sentEmails || []).map(e => e.uid
 // The header cache the daemon keeps: newest first. A save adds rows; removedUids drops them.
 let cache;
 let cacheStamp;
+let servedMax;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -126,8 +128,16 @@ beforeEach(() => {
   cache = [];
   cacheStamp = 1;
   db.getEmailHeadersMeta.mockImplementation(async () => ({ totalCached: cache.length, totalEmails: cache.length, lastSynced: cacheStamp }));
-  db.getEmailHeadersPartial.mockImplementation(async (a, m, limit) => ({ emails: cache.slice(0, limit).map(r => ({ ...r })), totalEmails: cache.length }));
-  // A cache read is cheap only while it is small.
+  // The daemon's date window: newest by date back to `since`, at least `min`
+  // rows, whatever order the cache is kept in.
+  servedMax = 0;
+  db.getEmailHeadersWindow.mockImplementation(async (a, m, since, min) => {
+    const byDate = [...cache].sort((x, y) => (x.date < y.date ? 1 : -1));
+    const within = byDate.filter(r => Date.parse(r.date) >= since).length;
+    const emails = byDate.slice(0, Math.max(within, min)).map(r => ({ ...r }));
+    servedMax = Math.max(servedMax, emails.length);
+    return { emails, totalEmails: cache.length, totalCached: cache.length };
+  });
   db.saveEmailHeaders.mockImplementation(async (a, m, rows, total, opts = {}) => {
     const drop = new Set(opts.removedUids || []);
     const byUid = new Map(cache.filter(r => !drop.has(r.uid)).map(r => [r.uid, r]));
@@ -163,7 +173,7 @@ beforeEach(() => {
   });
 });
 
-const biggestRead = () => Math.max(0, ...db.getEmailHeadersPartial.mock.calls.map(c => c[2]));
+const biggestRead = () => servedMax;
 
 describe('the Sent mirror is a window onto the folder', () => {
   it('reads the rows from the oldest loaded INBOX row on, not the whole cache', async () => {
@@ -186,7 +196,7 @@ describe('the Sent mirror is a window onto the folder', () => {
     await _sentFillFor(IMAP.id);
 
     expect(new Set(sentUids()).size).toBe(300);
-    expect(biggestRead()).toBeLessThanOrEqual(1600);
+    expect(biggestRead()).toBeLessThanOrEqual(300);
   });
 
   it('an INBOX with nothing loaded yet shows the newest 200', async () => {
@@ -210,10 +220,10 @@ describe('the Sent mirror is a window onto the folder', () => {
     prime(IMAP, {}, { reach: 250 });
     await loadSentHeaders(IMAP.id, { cacheOnly: true });
     const first = useMailStore.getState().sentEmails[0];
-    db.getEmailHeadersPartial.mockClear();
+    db.getEmailHeadersWindow.mockClear();
 
     await extendSentWindows();
-    expect(db.getEmailHeadersPartial).not.toHaveBeenCalled();
+    expect(db.getEmailHeadersWindow).not.toHaveBeenCalled();
 
     useMailStore.setState({ emails: [{ uid: 1, subject: 'older', date: row(400).date, flags: [] }] });
     await extendSentWindows();
@@ -424,11 +434,11 @@ describe('the daemon fills the whole folder, for every provider', () => {
     await loadSentHeaders(JMAP.id);
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     useMailStore.setState({ accounts: [] });
-    db.getEmailHeadersPartial.mockClear();
+    db.getEmailHeadersWindow.mockClear();
     release();
     await _sentFillFor(JMAP.id);
 
-    expect(db.getEmailHeadersPartial).not.toHaveBeenCalled();
+    expect(db.getEmailHeadersWindow).not.toHaveBeenCalled();
   });
 });
 
@@ -440,14 +450,14 @@ describe('an unchanged cache is not read again', () => {
     expect(new Set(sentUids()).size).toBe(TOTAL);
     expect(api.fetchEmails).not.toHaveBeenCalled();
 
-    db.getEmailHeadersPartial.mockClear();
+    db.getEmailHeadersWindow.mockClear();
     await loadSentHeaders(IMAP.id, { cacheOnly: true });
-    expect(db.getEmailHeadersPartial).not.toHaveBeenCalled();
+    expect(db.getEmailHeadersWindow).not.toHaveBeenCalled();
     expect(new Set(sentUids()).size).toBe(TOTAL);
 
     cache = [{ ...row(777), date: '2026-06-01T00:00:00Z' }, ...cache]; // the cache moved
     await loadSentHeaders(IMAP.id, { cacheOnly: true });
-    expect(db.getEmailHeadersPartial).toHaveBeenCalled();
+    expect(db.getEmailHeadersWindow).toHaveBeenCalled();
     expect(sentUids()).toContain(777);
   });
 
@@ -464,12 +474,112 @@ describe('an unchanged cache is not read again', () => {
     prime(IMAP);
     await loadSentHeaders(IMAP.id);
     await _sentFillFor(IMAP.id);
-    db.getEmailHeadersPartial.mockClear();
+    db.getEmailHeadersWindow.mockClear();
     api.fetchEmails.mockClear();
     await loadSentHeaders(IMAP.id);
 
-    expect(db.getEmailHeadersPartial).not.toHaveBeenCalled();
+    expect(db.getEmailHeadersWindow).not.toHaveBeenCalled();
     expect(api.fetchEmails).toHaveBeenCalledTimes(1); // page one still checks the server
     expect(new Set(sentUids()).size).toBe(TOTAL);
+  });
+});
+
+describe('review defects of the window', () => {
+  it('a message moved in long after it was sent (top uid, old date) does not stop the window short', async () => {
+    cache = [{ ...row(9000), date: '2001-01-01T00:00:00Z' }, ...rows(1, TOTAL)];
+    prime(IMAP, {}, { reach: 250 });
+    await loadSentHeaders(IMAP.id, { cacheOnly: true });
+
+    expect(new Set(sentUids()).size).toBe(250);
+    expect(sentUids()).not.toContain(9000);
+  });
+
+  it('one stray old row at the head of the INBOX list does not set how far back the window reaches', async () => {
+    cache = rows(1, TOTAL);
+    prime(IMAP, {}, { reach: 250 });
+    useMailStore.setState({ emails: [
+      { uid: 90, subject: 'moved back', date: '2001-01-01T00:00:00Z', flags: [] },
+      { uid: 91, subject: 'oldest of the page', date: row(250).date, flags: [] },
+    ] });
+    await loadSentHeaders(IMAP.id, { cacheOnly: true });
+
+    expect(new Set(sentUids()).size).toBe(250);
+  });
+
+  it('another account\'s rows in the list do not set this account\'s reach', async () => {
+    cache = rows(1, TOTAL);
+    prime(IMAP, {}, { reach: 250 });
+    useMailStore.setState({ emails: [
+      { uid: 1, subject: 'mine', date: row(250).date, flags: [] },
+      { uid: 2, subject: 'theirs', date: '2001-01-01T00:00:00Z', flags: [], _accountId: 'someone-else' },
+    ] });
+    await loadSentHeaders(IMAP.id, { cacheOnly: true });
+
+    expect(new Set(sentUids()).size).toBe(250);
+  });
+
+  it('a list that does not thread Sent in (another folder) asks for the newest 200 only', async () => {
+    cache = rows(1, TOTAL);
+    prime(IMAP, {}, { reach: TOTAL });
+    useMailStore.setState({ activeMailbox: 'Archive' });
+    await loadSentHeaders(IMAP.id, { cacheOnly: true });
+
+    expect(new Set(sentUids()).size).toBe(PAGE);
+  });
+
+  it('a cache read that failed leaves the mirror as it was and is read again later', async () => {
+    cache = rows(1, TOTAL);
+    prime(IMAP, {}, { reach: null });
+    db.getEmailHeadersWindow.mockResolvedValueOnce(null);
+    await loadSentHeaders(IMAP.id, { cacheOnly: true });
+    expect(sentUids()).toEqual([]);
+
+    await loadSentHeaders(IMAP.id, { cacheOnly: true });
+    expect(new Set(sentUids()).size).toBe(PAGE);
+  });
+
+  it('a fill whose cache read failed does not wipe the mirror, and counts as failed', async () => {
+    prime(IMAP);
+    await loadSentHeaders(IMAP.id, { cacheOnly: false });
+    // the fill is running now; its reread fails
+    db.getEmailHeadersWindow.mockResolvedValue(null);
+    await _sentFillFor(IMAP.id);
+
+    expect(new Set(sentUids()).size).toBe(PAGE);
+    sync.syncNow.mockClear();
+    await loadSentHeaders(IMAP.id);
+    await _sentFillFor(IMAP.id);
+    expect(sync.syncNow).not.toHaveBeenCalled(); // failed fills wait out the retry window
+  });
+
+  it('a row moved away while a read was on the wire is not merged back', async () => {
+    cache = rows(1, TOTAL);
+    prime(IMAP, {}, { reach: null });
+    useMailStore.setState({ deleteTombstones: new Set([`${IMAP.id}|Sent|5`]) });
+    await loadSentHeaders(IMAP.id, { cacheOnly: true });
+
+    expect(sentUids()).not.toContain(5);
+    expect(new Set(sentUids()).size).toBe(PAGE - 1);
+  });
+
+  it('a reply that reached the mirror while the fill re-read the cache is not dropped by it', async () => {
+    prime(IMAP);
+    let reread;
+    let release;
+    // page one is read already; the fill's re-read is the next window read
+    await loadSentHeaders(IMAP.id);
+    const impl = db.getEmailHeadersWindow.getMockImplementation();
+    db.getEmailHeadersWindow.mockImplementation(async (...a) => {
+      reread = true;
+      await new Promise(resolve => { release = resolve; });
+      return impl(...a);
+    });
+    await vi.waitFor(() => expect(reread).toBe(true));
+    const sent = { uid: 90003, messageId: '<new@x>', subject: 'new', flags: [], date: row(1).date, _accountId: IMAP.id, _fromSentFolder: true };
+    useMailStore.setState(s => ({ sentEmails: [...s.sentEmails, sent] }));
+    release();
+    await _sentFillFor(IMAP.id);
+
+    expect(sentUids()).toContain(90003);
   });
 });

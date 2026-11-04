@@ -279,8 +279,8 @@ describe('Sent headers for an account that is not the active one', () => {
 
     await loadSent(YODA, pipeline);
 
-    expect(pipeline.loadHeaders).toHaveBeenCalledWith('INBOX.Sent');
-    expect(pipeline.loadHeaders).not.toHaveBeenCalledWith('[Gmail]/Sent Mail');
+    expect(pipeline.loadHeaders).toHaveBeenCalledWith('INBOX.Sent', { window: true });
+    expect(pipeline.loadHeaders).not.toHaveBeenCalledWith('[Gmail]/Sent Mail', { window: true });
   });
 
   it('falls back to the folder list saved on disk when nothing is cached in memory', async () => {
@@ -291,7 +291,7 @@ describe('Sent headers for an account that is not the active one', () => {
     await loadSent(YODA, pipeline);
 
     expect(db.getCachedMailboxes).toHaveBeenCalledWith('yoda');
-    expect(pipeline.loadHeaders).toHaveBeenCalledWith('Sent Items');
+    expect(pipeline.loadHeaders).toHaveBeenCalledWith('Sent Items', { window: true });
   });
 
   it('puts them in the store while All inboxes is showing INBOX', async () => {
@@ -336,8 +336,8 @@ describe('Sent headers for an account that is not the active one', () => {
     await Object.getPrototypeOf(pipelineManager)._startBackgroundHeadersOnly.call(pipelineManager);
 
     expect(db.saveMailboxes).toHaveBeenCalledWith('yoda', yodaBoxes);
-    expect(loadHeaders).toHaveBeenCalledWith('INBOX.Sent');
-    expect(loadHeaders).not.toHaveBeenCalledWith('[Gmail]/Sent Mail');
+    expect(loadHeaders).toHaveBeenCalledWith('INBOX.Sent', { window: true });
+    expect(loadHeaders).not.toHaveBeenCalledWith('[Gmail]/Sent Mail', { window: true });
   });
 
   it('re-reads the store when that account\'s Sent sync lands in All inboxes', async () => {

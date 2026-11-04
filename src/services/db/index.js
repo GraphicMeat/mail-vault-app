@@ -62,6 +62,7 @@ export {
   saveEmailHeaders,
   clearMailboxCache,
   getEmailHeadersPartial,
+  getEmailHeadersWindow,
   getEmailHeadersMeta,
   listCachedUids,
   getMonthHistogram,

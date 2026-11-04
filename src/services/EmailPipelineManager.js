@@ -427,7 +427,9 @@ class EmailPipelineManager {
     try {
       // Always refresh Sent headers from IMAP (Sent folder grows as user sends)
       console.log(`[PipelineManager] Loading Sent headers for ${account.email} (${sentPath})`);
-      await pipeline.loadHeaders(sentPath);
+      // Window mode: Sent can hold tens of thousands of rows, and the store
+      // reads only the window it shows.
+      await pipeline.loadHeaders(sentPath, { window: true });
       if (pipeline._destroyed) return true;
       this._publishSent(account);
     } catch (e) {

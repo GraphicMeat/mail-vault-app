@@ -29,7 +29,8 @@ vi.mock('../syncService', () => ({
   // shape itself is pinned in syncService.test.js, not here.
   toSyncAccount: (account, id = account?.id) => ({ id, email: account?.email, imapConfig: {} }),
 }));
-vi.mock('../transport', () => ({ getDaemonHealth: () => ({ alive: true }), send: vi.fn().mockResolvedValue(null) }));
+const daemon = vi.hoisted(() => ({ alive: true, fetchEmails: null }));
+vi.mock('../transport', () => ({ getDaemonHealth: () => ({ alive: daemon.alive }), send: vi.fn().mockResolvedValue(null) }));
 const graph = vi.hoisted(() => ({
   order: [],
   listFolders: null,
@@ -39,6 +40,7 @@ const graph = vi.hoisted(() => ({
 vi.mock('../api', () => ({
   prefetchAttachments: vi.fn(async () => 0),
   fetchEmailLight: vi.fn(),
+  fetchEmails: (...a) => daemon.fetchEmails(...a),
   graphListFolders: (...a) => graph.listFolders(...a),
 }));
 vi.mock('../cacheManager', () => ({ listGraphMessages: (...a) => graph.listMessages(...a) }));
@@ -288,6 +290,57 @@ describe('AccountPipeline daemon headers', () => {
 // Bodies first, attachments after: the attachment prefetch is handed the
 // mailbox only once the body pass for it is over, and only when the setting
 // asks for it. It runs newest-first on its own thread in Rust.
+// A folder that can hold tens of thousands of rows (Sent) is refreshed in
+// window mode: the daemon syncs it, nothing reads the whole cache onto the main
+// thread and nothing pages the whole folder from the provider.
+describe('AccountPipeline header load in window mode', () => {
+  const account = { id: 'acc-1', email: 'me@mock.test', password: 'pw' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    syncNow.mockResolvedValue({ started: true, accountId: 'acc-1', mailbox: 'Sent', ticket: 9 });
+    waitForSync.mockResolvedValue({ success: true });
+    db.getEmailHeadersMeta.mockResolvedValue({ totalCached: 50000, totalEmails: 50000 });
+  });
+
+  it('syncs through the daemon and reads no cache', async () => {
+    const pipeline = new AccountPipeline(account);
+    await pipeline.loadHeaders('Sent', { window: true });
+
+    expect(syncNow).toHaveBeenCalledWith(expect.objectContaining({ id: 'acc-1' }), 'Sent');
+    expect(waitForSync).toHaveBeenCalledWith(9, 30000);
+    expect(db.getEmailHeadersPartial).not.toHaveBeenCalled();
+    expect(pipeline._lastLoadedEmails).toBeNull(); // the content queue is the INBOX's
+  });
+
+  it('without a daemon it lists page one only and never every page', async () => {
+    daemon.alive = false;
+    daemon.fetchEmails = vi.fn(async () => ({ emails: [{ uid: 1 }], total: 50000, hasMore: true }));
+    const pipeline = new AccountPipeline(account);
+    try {
+      await pipeline.loadHeaders('Sent', { window: true });
+    } finally {
+      daemon.alive = true;
+    }
+
+    expect(daemon.fetchEmails).toHaveBeenCalledTimes(1);
+    expect(daemon.fetchEmails).toHaveBeenCalledWith(account, 'Sent', 1);
+  });
+
+  it('Graph: lists page one only', async () => {
+    const graphAccount = { id: 'acc-3', email: 'leia@mock.test', oauth2Transport: 'graph', oauth2AccessToken: 'tok' };
+    graph.listFolders = vi.fn(async () => [{ id: 'f2', displayName: 'Sent', wellKnownName: 'sentitems', storageKey: 'Sent' }]);
+    graph.adopt = vi.fn(async () => {});
+    graph.listMessages = vi.fn(async () => ({ headers: [{ uid: 1 }], nextLink: 'next' }));
+    const pipeline = new AccountPipeline(graphAccount, { concurrency: 1 });
+    await pipeline.loadHeaders('Sent', { window: true });
+
+    expect(graph.listMessages).toHaveBeenCalledTimes(1);
+    // One page is not the folder: no total is claimed.
+    expect(db.saveEmailHeaders).toHaveBeenCalledWith('acc-3', 'Sent', [{ uid: 1 }], null);
+  });
+});
+
 describe('AccountPipeline attachment prefetch', () => {
   // Not the active account: _finish's saved-id refresh is another test's concern.
   const account = { id: 'acc-2', email: 'me@mock.test', password: 'pw' };
