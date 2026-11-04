@@ -114,13 +114,17 @@ describe('FolderMoveProgress', () => {
     expect(buttons()).toEqual(['cancel', 'pause']);
   });
 
-  it('names the phase the daemon is in', async () => {
+  // Checking holds nothing a pause could hold, but a cancel still keeps the
+  // original until the rename; once the original is being moved, neither
+  // does anything.
+  it('names the phase the daemon is in, and offers only what still works in it', async () => {
     await mount();
     fire(ev({ state: 'verifying' }));
     expect(job().textContent).toContain(words('folderMove.titleVerifying', { name: 'Clients' }));
+    expect(buttons()).toEqual(['cancel']);
     fire(ev({ state: 'retiring' }));
     expect(job().textContent).toContain(words('folderMove.titleRetiring', { name: 'Clients' }));
-    expect(buttons()).toEqual(['cancel', 'pause']);
+    expect(buttons()).toEqual([]);
   });
 
   it('renders a burst of counts at most once per interval, and a change of state at once', async () => {

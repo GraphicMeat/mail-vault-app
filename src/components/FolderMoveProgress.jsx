@@ -172,6 +172,9 @@ function MoveRow({ job, failed, controls }) {
   const percent = job.total > 0 ? Math.min(100, Math.floor((handled * 100) / job.total)) : 0;
   // A failed job keeps the original too, and says why in its error.
   const kept = job.state === 'partial' && KEPT[job.sourceKeptReason];
+  // Checking holds nothing a pause could hold, though a cancel still keeps
+  // the original; once the original is being moved, neither does anything.
+  const checking = job.state === 'verifying' || job.state === 'retiring';
   const btn = (name, label, onClick, variant = 'secondary') => (
     <Button key={name} variant={variant} size="xs" data-testid={`folder-move-${name}`} onClick={() => onClick(job)}>{label}</Button>
   );
@@ -212,9 +215,9 @@ function MoveRow({ job, failed, controls }) {
       {failed && <p className="mt-1 text-xs text-mail-danger">{t(failed)}</p>}
       {f !== 'done' && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {f === 'running' && btn('pause', t('folderMove.pause'), controls.pause)}
+          {f === 'running' && !checking && btn('pause', t('folderMove.pause'), controls.pause)}
           {(f === 'paused' || f === 'stopped') && btn('resume', t('common.resume'), controls.resume, 'primary')}
-          {job.active && btn('cancel', t('common.cancel'), controls.cancel, 'ghost')}
+          {job.active && job.state !== 'retiring' && btn('cancel', t('common.cancel'), controls.cancel, 'ghost')}
           {f === 'stopped' && btn('discard', t('common.discard'), controls.discard, 'ghost')}
         </div>
       )}
