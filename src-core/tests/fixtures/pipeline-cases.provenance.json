@@ -5,8 +5,8 @@
  "command": "MV_PIPELINE_CAPTURE=1 npx vitest run src-core/tests/fixtures/gen/pipeline-cases.test.js",
  "note": "Answers of the real EmailPipelineManager, usePipelineCoordinator and findSentMailboxPath with only IO seams mocked. Ordinary runs compare against this corpus and the source hashes below. The coordinator trace was captured from the hook whose hash is under retiredSources; S7 replaced that hook, so only the rest is compared live.",
  "sources": {
-  "src/services/EmailPipelineManager.js": "03a5f44043385eabb3f2e0b72d05c4628df798ddb20ff5db88cac7fb006292fd",
-  "src/services/AccountPipeline.js": "87ea5785e63b8cbb43097e06ea47e009d8d0d6f560431fad358997cc29411dc5",
+  "src/services/EmailPipelineManager.js": "57cfd7bcad6f75c4ab15010c5db21204e007e02ffa51415dd841561666cbe946",
+  "src/services/AccountPipeline.js": "8028886fc6eba8c946ad40ad0b6a0da27d7a4bae77191629f074b1d9a53308b7",
   "src/services/accountPolicy.js": "845344391fd72c47e24077ac42f66eac3e89f451288ba48f8a597ae755329406",
   "src/utils/sentFolder.js": "d92e7e358c0630b8575263bdf6f3faf1730585ac2f72bc1f48b93780be3b22fe",
   "src/stores/slices/unifiedHelpers.js": "fcb80eace56c834974cc6825870d4a44004afdf1a8d2a4974a40be0cba28c41a"

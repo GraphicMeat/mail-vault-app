@@ -15,6 +15,7 @@ if (!globalThis.window) {
 const mockGetLocalEmailLight = vi.fn().mockResolvedValue(null);
 const mockGetEmailHeadersMeta = vi.fn().mockResolvedValue(null);
 const mockGetEmailHeadersPartial = vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 });
+const mockGetEmailHeadersWindow = vi.fn().mockResolvedValue({ emails: [], totalEmails: 0, totalCached: 0 });
 const mockGetArchivedEmailIds = vi.fn().mockResolvedValue(new Set());
 const mockGetSavedEmailIds = vi.fn().mockResolvedValue(new Set());
 const mockGetCachedMailboxEntry = vi.fn().mockResolvedValue(null);
@@ -32,6 +33,7 @@ vi.mock('../../services/db', () => ({
   getLocalEmailLight: (...args) => mockGetLocalEmailLight(...args),
   getEmailHeadersMeta: (...args) => mockGetEmailHeadersMeta(...args),
   getEmailHeadersPartial: (...args) => mockGetEmailHeadersPartial(...args),
+  getEmailHeadersWindow: (...args) => mockGetEmailHeadersWindow(...args),
   // The registry read the callers use now, derived from the two getters
   // above so every test's per-case values still drive it (null archived =
   // the whole read unknown).
@@ -716,12 +718,12 @@ describe('loadSentHeaders for an account that is not the active one', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAccountCacheMailboxes.mockImplementation((id) => (id === 'acct-2' ? YODA_BOXES : null));
-    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [yodaHeader], totalEmails: 1 });
+    mockGetEmailHeadersWindow.mockResolvedValue({ emails: [yodaHeader], totalEmails: 1, totalCached: 1 });
   });
 
   afterEach(() => {
     mockGetAccountCacheMailboxes.mockImplementation(() => null);
-    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
+    mockGetEmailHeadersWindow.mockResolvedValue({ emails: [], totalEmails: 0, totalCached: 0 });
     mockGetCachedMailboxes.mockResolvedValue([]);
   });
 
@@ -730,7 +732,7 @@ describe('loadSentHeaders for an account that is not the active one', () => {
 
     await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
 
-    expect(mockGetEmailHeadersPartial).toHaveBeenCalledWith('acct-2', 'INBOX.Sent', 200);
+    expect(mockGetEmailHeadersWindow).toHaveBeenCalledWith('acct-2', 'INBOX.Sent', expect.any(Number), 200);
     const sent = useMailStore.getState().sentEmails;
     expect(sent).toContain(lukeRow);
     expect(sent.find(e => e.uid === 31)).toMatchObject({
@@ -745,7 +747,7 @@ describe('loadSentHeaders for an account that is not the active one', () => {
 
     await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
 
-    expect(mockGetEmailHeadersPartial).toHaveBeenCalledWith('acct-2', 'INBOX.Sent', 200);
+    expect(mockGetEmailHeadersWindow).toHaveBeenCalledWith('acct-2', 'INBOX.Sent', expect.any(Number), 200);
   });
 
   it('keeps that account\'s staged reply until its server copy arrives', async () => {
@@ -757,7 +759,7 @@ describe('loadSentHeaders for an account that is not the active one', () => {
     expect(useMailStore.getState().getChatEmails()).toContain(staged);
 
     // The APPEND landed: the server's copy under the same Message-ID replaces it.
-    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [{ ...yodaHeader, uid: 32, messageId: '<staged@x>' }], totalEmails: 1 });
+    mockGetEmailHeadersWindow.mockResolvedValue({ emails: [{ ...yodaHeader, uid: 32, messageId: '<staged@x>' }], totalEmails: 1, totalCached: 1 });
     await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
     const sent = useMailStore.getState().sentEmails.filter(e => e._accountId === 'acct-2');
     expect(sent.map(e => e.uid)).toEqual([32]);
@@ -769,13 +771,13 @@ describe('loadSentHeaders for an account that is not the active one', () => {
   it('drops a cache read that began before a full read merged', async () => {
     let releaseOld;
     const oldRead = new Promise((resolve) => { releaseOld = resolve; });
-    mockGetEmailHeadersPartial.mockImplementationOnce(() => oldRead);
-    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [{ ...yodaHeader, uid: 40, messageId: '<fresh@x>' }], totalEmails: 1 });
+    mockGetEmailHeadersWindow.mockImplementationOnce(() => oldRead);
+    mockGetEmailHeadersWindow.mockResolvedValue({ emails: [{ ...yodaHeader, uid: 40, messageId: '<fresh@x>' }], totalEmails: 1, totalCached: 1 });
     seed();
 
     const stale = useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
     await useMailStore.getState().loadSentHeaders('acct-2');
-    releaseOld({ emails: [yodaHeader], totalEmails: 1 });
+    releaseOld({ emails: [yodaHeader], totalEmails: 1, totalCached: 1 });
     await stale;
 
     const yoda = useMailStore.getState().sentEmails.filter(e => e._accountId === 'acct-2');
@@ -799,7 +801,7 @@ describe('loadSentHeaders for an account that is not the active one', () => {
 
     await useMailStore.getState().loadSentHeaders('acct-2', { cacheOnly: true });
 
-    expect(mockGetEmailHeadersPartial).not.toHaveBeenCalledWith('acct-2', expect.anything(), expect.anything());
+    expect(mockGetEmailHeadersWindow).not.toHaveBeenCalledWith('acct-2', expect.anything(), expect.anything(), expect.anything());
     expect(useMailStore.getState().sentEmails).toEqual([lukeRow]);
   });
 
