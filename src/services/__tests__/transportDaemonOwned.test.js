@@ -33,6 +33,18 @@ describe('daemon-owned commands', () => {
     }
   });
 
+  // Move folder: the plan, the job and its controls are the daemon's alone.
+  it('routes every folder_move method straight to the daemon and propagates failure', async () => {
+    for (const method of ['folder_move.plan', 'folder_move.start', 'folder_move.pause', 'folder_move.resume',
+      'folder_move.cancel', 'folder_move.discard', 'folder_move.status']) {
+      expect(declaredDaemonOwned.has(method), method).toBe(true);
+      DAEMON_OWNED.add(method);
+      daemonCall.mockRejectedValueOnce(new Error('E_FOLDER_MOVE_RUNNING: j1'));
+      await expect(send(method, { jobId: 'j1' })).rejects.toThrow(/^E_FOLDER_MOVE_RUNNING/);
+      expect(daemonCall).toHaveBeenLastCalledWith(method, { jobId: 'j1' });
+    }
+  });
+
   it('routes sync observation methods before a heartbeat and propagates native failure', async () => {
     for (const [method, params] of [
       ['sync.probe', { op: 'check', accountId: 'a', mailbox: 'INBOX' }],
