@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::Semaphore;
 use tracing::{info, warn};
 
 use crate::graph::GraphClient;
+use crate::imap::pool::PooledSessionGuard;
 use crate::imap::{self, ImapConfig, ImapSession, MailboxInfo};
 use crate::jmap_sessions::{AccountJmap, Mailboxes};
 use crate::server::DaemonState;
@@ -15,6 +15,7 @@ use mailvault_core::jmap::client::received_at_of;
 use mailvault_core::jmap::headers::{flags_to_keywords, keywords_to_flags};
 use mailvault_core::jmap::mailbox_map::DELIMITER;
 use mailvault_core::jmap::{ImportResult, JmapError};
+use mailvault_core::maildir::{message_id_key, message_id_value_key};
 use serde_json::{json, Value};
 
 // ── Data structures ─────────────────────────────────────────────────────────
@@ -224,7 +225,8 @@ pub async fn ensure_dest_folder_graph(
 
 // ── Source Message-ID fetching (for dedup) ──────────────────────────────────
 
-/// Fetch all Message-IDs from an IMAP mailbox for deduplication.
+/// Fetch all Message-IDs from an IMAP mailbox for deduplication, bracketed
+/// (`message_id_key`).
 pub async fn fetch_dest_message_ids_imap(
     session: &mut ImapSession,
     mailbox: &str,
@@ -245,80 +247,7 @@ pub async fn fetch_dest_message_ids_imap(
         .filter_map(|r| r.ok())
         .collect();
 
-    let mut ids = HashSet::new();
-    for fetch in &fetches {
-        if let Some(header_bytes) = fetch.header() {
-            let header_str = String::from_utf8_lossy(header_bytes);
-            // Extract Message-ID from header
-            for line in header_str.lines() {
-                let lower = line.to_lowercase();
-                if lower.starts_with("message-id:") {
-                    let value = line["message-id:".len()..].trim();
-                    if !value.is_empty() {
-                        ids.insert(value.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(ids)
-}
-
-/// Fetch all internet message IDs from a Graph folder for deduplication.
-pub async fn fetch_dest_message_ids_graph(
-    client: &GraphClient,
-    folder_id: &str,
-) -> Result<HashSet<String>, String> {
-    let mut ids = HashSet::new();
-    let mut skip = 0u32;
-    let top = 1000u32;
-
-    loop {
-        let url = format!(
-            "https://graph.microsoft.com/v1.0/me/mailFolders/{}/messages?$select=internetMessageId&$top={}&$skip={}",
-            folder_id, top, skip
-        );
-
-        let resp = client.client
-            .send(client.client.get(&url).bearer_auth(&client.access_token))
-            .await
-            .map_err(|e| format!("Graph fetch message IDs failed: {}", e))?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(format!(
-                "Graph fetch message IDs failed ({}) {}",
-                status.as_u16(),
-                body
-            ));
-        }
-
-        #[derive(Deserialize)]
-        struct MsgId {
-            #[serde(rename = "internetMessageId")]
-            internet_message_id: Option<String>,
-        }
-
-        let list: crate::graph::GraphListResponse<MsgId> = resp
-            .json()
-            .await
-            .map_err(|e| format!("Graph message IDs parse error: {}", e))?;
-
-        for msg in &list.value {
-            if let Some(ref id) = msg.internet_message_id {
-                ids.insert(id.clone());
-            }
-        }
-
-        if list.next_link.is_none() || list.value.is_empty() {
-            break;
-        }
-        skip += top;
-    }
-
-    Ok(ids)
+    Ok(fetches.iter().filter_map(|f| f.header()).filter_map(message_id_key).collect())
 }
 
 // ── Message-ID extraction from raw MIME ──────────────────────────────────────
@@ -371,94 +300,15 @@ pub fn extract_message_id(mime_bytes: &[u8]) -> Option<String> {
 
 // ── Single-email migration helpers ──────────────────────────────────────────
 
-/// Migrate a single email: IMAP source -> IMAP destination.
-pub async fn migrate_email_imap_to_imap(
-    source_session: &mut ImapSession,
-    dest_session: &mut ImapSession,
-    source_mailbox: &str,
-    dest_mailbox: &str,
-    uid: u32,
-) -> Result<bool, String> {
-    use futures::StreamExt;
-
-    // Fetch raw MIME + flags from source
-    let _mbox = imap::select_mailbox(source_session, source_mailbox).await?;
-
-    let fetch_stream = source_session
-        .uid_fetch(uid.to_string(), "(UID FLAGS INTERNALDATE BODY.PEEK[])")
-        .await
-        .map_err(|e| format!("UID FETCH {} failed: {}", uid, e))?;
-
-    let fetches: Vec<_> = fetch_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
-
-    let fetch = fetches
-        .first()
-        .ok_or_else(|| format!("Email UID {} not found", uid))?;
-
-    let mime_bytes = fetch
-        .body()
-        .ok_or_else(|| format!("No body for UID {}", uid))?;
-
-    // Extract flags, convert async-imap Flag enum to IMAP flag strings
-    let flags: Vec<String> = fetch
-        .flags()
-        .filter_map(|f| {
-            use crate::imap::async_imap::types::Flag;
-            match f {
-                Flag::Seen => Some("\\Seen".to_string()),
-                Flag::Answered => Some("\\Answered".to_string()),
-                Flag::Flagged => Some("\\Flagged".to_string()),
-                Flag::Deleted => Some("\\Deleted".to_string()),
-                Flag::Draft => Some("\\Draft".to_string()),
-                Flag::Recent => None, // Recent is server-only, skip
-                _ => None,
-            }
-        })
-        .collect();
-    let flags_str = flags.join(" ");
-
-    // Append to destination, keeping the source message's INTERNALDATE, without
-    // it every migrated message lands dated "now".
-    let internal_date = fetch.internal_date().map(|d| imap::imap_date_time(&d));
-    imap::append_email(dest_session, dest_mailbox, mime_bytes, &flags_str, internal_date.as_deref())
-        .await?;
-
-    Ok(true)
-}
-
-/// Migrate a single email: Graph source -> IMAP destination.
-pub async fn migrate_email_graph_to_imap(
-    client: &GraphClient,
-    dest_session: &mut ImapSession,
-    message_id: &str,
-    dest_mailbox: &str,
-    is_read: bool,
-) -> Result<bool, String> {
-    let mime_bytes = client.get_mime_content(message_id).await?;
-
-    let flags_str = if is_read { "\\Seen".to_string() } else { String::new() };
-
-    // Graph gives no INTERNALDATE; the message's own Date header is the best source.
-    let internal_date = imap::internal_date_from_raw(&mime_bytes);
-    imap::append_email(dest_session, dest_mailbox, &mime_bytes, &flags_str, internal_date.as_deref())
-        .await?;
-
-    Ok(true)
-}
-
 /// Migrate a single email to a Graph destination (from raw MIME).
 /// Creates a draft from MIME, moves it to the target folder, sets read status.
+/// Returns the message's id in the destination folder.
 pub async fn migrate_email_to_graph(
     source_mime: &[u8],
     client: &GraphClient,
     dest_folder_id: &str,
     is_read: bool,
-) -> Result<bool, String> {
+) -> Result<String, String> {
     // Create message from MIME (lands in Drafts)
     let draft_id = client.create_message_from_mime(source_mime).await?;
 
@@ -470,7 +320,7 @@ pub async fn migrate_email_to_graph(
         client.set_read_status(&final_id, true).await?;
     }
 
-    Ok(true)
+    Ok(final_id)
 }
 
 // ── JMAP (either side) ──────────────────────────────────────────────────────
@@ -557,18 +407,14 @@ pub async fn fetch_dest_message_ids_jmap(acct: &AccountJmap, mailbox_id: &str) -
         .list
         .iter()
         .flat_map(|e| e["messageId"].as_array().cloned().unwrap_or_default())
-        .filter_map(|m| m.as_str().map(|m| format!("<{}>", mailvault_core::maildir::normalize_message_id(m))))
+        .filter_map(|m| m.as_str().and_then(message_id_value_key))
         .collect())
 }
 
 /// A JMAP source mailbox as the run's source items, oldest first: the list
-/// index, the email id (in the Graph id slot), its read state, its bracketed
-/// Message-ID (the dedupe the Graph source gets), sender and subject.
-async fn jmap_source_items(
-    state: &Arc<DaemonState>,
-    config: &ImapConfig,
-    mailbox: &str,
-) -> Result<Vec<(u32, Option<String>, bool, Option<String>, String, String)>, String> {
+/// index, the email id, its read state, its bracketed Message-ID (the dedupe
+/// the Graph source gets), sender and subject.
+async fn jmap_source_items(state: &Arc<DaemonState>, config: &ImapConfig, mailbox: &str) -> Result<Vec<SourceItem>, String> {
     let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
     let mailbox_id = acct.mailbox_id(mailbox).await.map_err(|e| e.to_string())?;
     let mut ids = acct.client.all_email_ids(&mailbox_id).await.map_err(|e| e.to_string())?;
@@ -587,12 +433,13 @@ async fn jmap_source_items(
         .iter()
         .filter_map(|id| by_id.get(id).map(|e| (id, e)))
         .enumerate()
-        .map(|(i, (id, e))| {
-            let is_read = keywords_to_flags(&e["keywords"]).iter().any(|f| f == "\\Seen");
-            let message_id = e["messageId"][0].as_str().map(|m| format!("<{}>", mailvault_core::maildir::normalize_message_id(m)));
-            let sender = e["from"][0]["email"].as_str().unwrap_or("unknown").to_string();
-            let subject = e["subject"].as_str().unwrap_or_default().to_string();
-            (i as u32, Some(id.clone()), is_read, message_id, sender, subject)
+        .map(|(i, (id, e))| SourceItem {
+            key: i as u32,
+            remote_id: Some(id.clone()),
+            is_read: keywords_to_flags(&e["keywords"]).iter().any(|f| f == "\\Seen"),
+            message_id: e["messageId"][0].as_str().and_then(message_id_value_key),
+            sender: e["from"][0]["email"].as_str().unwrap_or("unknown").to_string(),
+            subject: e["subject"].as_str().unwrap_or_default().to_string(),
         })
         .collect())
 }
@@ -604,12 +451,12 @@ async fn jmap_source_items(
 async fn fetch_imap_message(
     state: &Arc<DaemonState>,
     config: &ImapConfig,
+    lane: Lane,
     mailbox: &str,
     uid: u32,
 ) -> Result<(Vec<u8>, Vec<String>, Option<chrono::DateTime<chrono::FixedOffset>>), String> {
     use futures::StreamExt;
-    let pool = &state.imap_pool;
-    let mut guard = pool.get_priority(config).await?;
+    let mut guard = checkout(state, config, lane).await?;
     let fetched = async {
         imap::select_mailbox(&mut guard.session, mailbox).await?;
         let stream = guard
@@ -640,9 +487,9 @@ async fn fetch_imap_message(
     match &fetched {
         Ok(_) => {
             guard.last_selected = Some(mailbox.to_string());
-            pool.return_priority(config, guard).await;
+            checkin(state, config, lane, guard).await;
         }
-        Err(_) => pool.discard(config, guard).await,
+        Err(_) => state.imap_pool.discard(config, guard).await,
     }
     fetched
 }
@@ -667,56 +514,306 @@ async fn fetch_jmap_message(
     Ok((raw, keywords_to_flags(&email["keywords"]), date))
 }
 
-/// What `migrate_email_jmap` did with one message.
-enum JmapMoved {
-    Written,
-    /// The destination already held it (by Message-ID): nothing written.
-    Present,
+// ── Copy engine ─────────────────────────────────────────────────────────────
+
+/// Which pool lane a copy's IMAP sessions come from: a migration the user
+/// watches takes the priority lane, a background job the background one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Lane {
+    Priority,
+    Background,
 }
 
-/// One message of a migration with a JMAP account on either side. The
-/// source gives the raw message, its flags and its date (IMAP `UID FETCH`,
-/// a JMAP blob with its keywords and `receivedAt`, Graph MIME with its read
-/// state); a Message-ID `dest_ids` holds is `Present` before anything is
-/// written; else the destination writes it: IMAP APPEND with the flags and
-/// date, JMAP `import_raw` with the flags as keywords and the date as
-/// `receivedAt` (it asks the server about the Message-ID again, and the sync
-/// never announces what it imports), Graph draft-and-move with the read
-/// state. Also the sender and subject, for the log line.
-#[allow(clippy::too_many_arguments)]
-async fn migrate_email_jmap(
-    state: &Arc<DaemonState>,
-    source_config: &ImapConfig,
-    dest_config: &ImapConfig,
-    source_transport: &str,
-    dest_transport: &str,
+async fn checkout(state: &Arc<DaemonState>, config: &ImapConfig, lane: Lane) -> Result<PooledSessionGuard, String> {
+    match lane {
+        Lane::Priority => state.imap_pool.get_priority(config).await,
+        Lane::Background => state.imap_pool.get_background(config).await,
+    }
+}
+
+async fn checkin(state: &Arc<DaemonState>, config: &ImapConfig, lane: Lane, guard: PooledSessionGuard) {
+    match lane {
+        Lane::Priority => state.imap_pool.return_priority(config, guard).await,
+        Lane::Background => state.imap_pool.return_background(config, guard).await,
+    }
+}
+
+/// One account of a copy: its config, the transport it really speaks
+/// (`effective_transport`) and its address.
+pub(crate) struct Side {
+    pub config: ImapConfig,
+    pub transport: String,
+    pub email: String,
+}
+
+impl Side {
+    pub(crate) fn new(config: ImapConfig, transport: &str) -> Self {
+        let transport = effective_transport(&config, transport);
+        let email = config.email.clone();
+        Side { config, transport, email }
+    }
+
+    fn graph(&self) -> Result<GraphClient, String> {
+        let token = self.config.access_token.as_deref().ok_or_else(|| format!("No access token for {}", self.email))?;
+        Ok(GraphClient::new(token).for_account(&self.email))
+    }
+}
+
+/// One source message as the folder listing gives it. `key` is the IMAP uid,
+/// or the message's index in a JMAP or Graph listing (its id is `remote_id`).
+/// `message_id` is bracketed (`message_id_value_key`) when the listing has it,
+/// so a message the destination holds is skipped before it is downloaded.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SourceItem {
+    pub key: u32,
+    pub remote_id: Option<String>,
+    pub is_read: bool,
+    pub message_id: Option<String>,
+    pub sender: String,
+    pub subject: String,
+}
+
+/// What the destination said about a write: the uid (APPENDUID) or id it
+/// gave the message, or nothing (an IMAP server without UIDPLUS).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum WriteAck {
+    Uid(u32),
+    Id(String),
+    Unconfirmed,
+}
+
+/// What `copy_one` did with a message. `fingerprint` is
+/// `folder_move::fingerprint` of the bytes (0 when skipped unread).
+#[derive(Clone, Debug)]
+pub(crate) enum CopyOutcome {
+    Written { ack: WriteAck, message_id: Option<String>, fingerprint: u64, sender: String, subject: String },
+    /// The destination already held it: nothing written.
+    Present { message_id: Option<String>, fingerprint: u64, sender: String, subject: String },
+}
+
+/// What a copy runs with. `cancel`/`pause`/`notify` are the run's tokens.
+pub(crate) struct CopyCtx<'a> {
+    pub state: &'a Arc<DaemonState>,
+    pub source: &'a Side,
+    pub dest: &'a Side,
+    pub lane: Lane,
+    pub cancel: &'a AtomicBool,
+    pub pause: &'a AtomicBool,
+    pub notify: &'a tokio::sync::Notify,
+    /// Graph destination folder path -> id, filled as folders are made.
+    pub graph_folder_cache: HashMap<String, String>,
+    /// Wait for the user to go quiet before each message (a background job).
+    pub yield_to_ui: bool,
+    /// Fingerprints of Message-ID-less mail a resumed job already copied:
+    /// present, never written twice.
+    pub seen_fingerprints: Option<&'a HashSet<u64>>,
+}
+
+/// A run's message counts across its folders.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Totals {
+    pub total: u32,
+    pub migrated: u32,
+    pub skipped: u32,
+    pub failed: u32,
+}
+
+/// One folder of a copy. `started`: the destination folder was there and the
+/// source listed, so the folder's counts and status mean something.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct FolderOutcome {
+    pub migrated: u32,
+    pub skipped: u32,
+    pub failed: u32,
+    pub bandwidth_hit: bool,
+    pub cancelled: bool,
+    pub started: bool,
+}
+
+impl FolderOutcome {
+    fn progress(&self, total: u32) -> String {
+        format!("{}/{}", self.migrated + self.skipped + self.failed, total)
+    }
+}
+
+/// One moment of a copy, for the sink to report.
+pub(crate) struct ProgressTick<'a> {
+    /// "running", "paused", "rate_limited", or the run's final status.
+    pub status: &'a str,
+    pub folder: Option<&'a str>,
+    /// "done/total" within the folder.
+    pub folder_progress: Option<String>,
+    pub folders: &'a [FolderMapping],
+    pub totals: &'a Totals,
+    /// The message just handled: sender, subject and "ok", "skipped" or "failed".
+    pub log: Option<(&'a str, &'a str, &'a str)>,
+    pub rate_limited_for: Option<u64>,
+}
+
+/// Where a copy reports to: the migration's event and state file, or a
+/// folder move's.
+pub(crate) trait CopySink: Send {
+    fn progress(&mut self, tick: ProgressTick<'_>);
+    /// One message's result, before its progress tick.
+    fn message(&mut self, _folder_idx: usize, _item: &SourceItem, _result: &Result<CopyOutcome, String>) {}
+    fn checkpoint(&mut self, status: &str, folders: &[FolderMapping], totals: &Totals);
+}
+
+/// Make `m`'s destination folder, recording its JMAP or Graph id.
+pub(crate) async fn ensure_dest_folder(ctx: &mut CopyCtx<'_>, m: &mut FolderMapping) -> Result<(), String> {
+    let dest = ctx.dest;
+    match dest.transport.as_str() {
+        "imap" => {
+            let mut guard = checkout(ctx.state, &dest.config, ctx.lane).await?;
+            let made = ensure_dest_folder_imap(&mut guard.session, &m.dest_path).await;
+            guard.last_selected = None;
+            checkin(ctx.state, &dest.config, ctx.lane, guard).await;
+            made
+        }
+        "jmap" => {
+            let acct = ctx.state.jmap.get(&dest.config).await.map_err(|e| e.to_string())?;
+            m.dest_folder_id = Some(ensure_dest_folder_jmap(&acct, &m.dest_path).await.map_err(|e| e.to_string())?);
+            Ok(())
+        }
+        "graph" if dest.config.access_token.is_some() => {
+            let client = dest.graph()?;
+            m.dest_folder_id = Some(ensure_dest_folder_graph(&client, &m.dest_path, "/", &mut ctx.graph_folder_cache).await?);
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Every Message-ID the destination folder holds, bracketed
+/// (`message_id_value_key`). A failed listing is an error, never an empty set.
+pub(crate) async fn fetch_dest_ids(ctx: &CopyCtx<'_>, m: &FolderMapping) -> Result<HashSet<String>, String> {
+    let dest = ctx.dest;
+    let ids = match (dest.transport.as_str(), m.dest_folder_id.as_deref()) {
+        ("imap", _) => {
+            let mut guard = checkout(ctx.state, &dest.config, ctx.lane).await?;
+            let listed = fetch_dest_message_ids_imap(&mut guard.session, &m.dest_path).await;
+            match &listed {
+                Ok(_) => {
+                    guard.last_selected = Some(m.dest_path.clone());
+                    checkin(ctx.state, &dest.config, ctx.lane, guard).await;
+                }
+                Err(_) => ctx.state.imap_pool.discard(&dest.config, guard).await,
+            }
+            listed?
+        }
+        ("graph", Some(id)) if dest.config.access_token.is_some() => {
+            dest.graph()?.list_internet_message_ids(id).await?.into_iter().collect()
+        }
+        ("jmap", Some(id)) => {
+            let acct = ctx.state.jmap.get(&dest.config).await.map_err(|e| e.to_string())?;
+            fetch_dest_message_ids_jmap(&acct, id).await.map_err(|e| e.to_string())?
+        }
+        _ => HashSet::new(),
+    };
+    Ok(ids.iter().filter_map(|id| message_id_value_key(id)).collect())
+}
+
+/// The source folder's messages, oldest first. A Graph folder is addressed by
+/// `src_folder_id` when the caller has it, else looked up by display name.
+pub(crate) async fn list_source_items(ctx: &CopyCtx<'_>, src_path: &str, src_folder_id: Option<&str>) -> Result<Vec<SourceItem>, String> {
+    let source = ctx.source;
+    match source.transport.as_str() {
+        "imap" => {
+            let mut guard = checkout(ctx.state, &source.config, ctx.lane).await?;
+            let uids = imap::search_all_uids(&mut guard.session, src_path, false).await;
+            match &uids {
+                Ok(_) => {
+                    guard.last_selected = Some(src_path.to_string());
+                    checkin(ctx.state, &source.config, ctx.lane, guard).await;
+                }
+                Err(_) => ctx.state.imap_pool.discard(&source.config, guard).await,
+            }
+            Ok(uids?.into_iter().map(|uid| SourceItem { key: uid, ..Default::default() }).collect())
+        }
+        "jmap" => jmap_source_items(ctx.state, &source.config, src_path).await,
+        _ if source.config.access_token.is_none() => Ok(Vec::new()),
+        _ => {
+            let client = source.graph()?;
+            let folder_id = match src_folder_id {
+                Some(id) => id.to_string(),
+                None => client
+                    .list_folders()
+                    .await?
+                    .into_iter()
+                    .find(|f| f.display_name == src_path || f.display_name == normalize_graph_folder(src_path))
+                    .map(|f| f.id)
+                    .ok_or_else(|| format!("Graph folder '{}' not found", src_path))?,
+            };
+            let mut items = Vec::new();
+            let mut skip = 0u32;
+            loop {
+                let (messages, next_link) = client.list_messages(&folder_id, 100, skip).await?;
+                for (i, msg) in messages.iter().enumerate() {
+                    items.push(SourceItem {
+                        key: skip + i as u32,
+                        remote_id: Some(msg.id.clone()),
+                        is_read: msg.is_read.unwrap_or(false),
+                        message_id: msg.internet_message_id.as_deref().and_then(message_id_value_key),
+                        sender: msg.from.as_ref().and_then(|f| f.email_address.address.clone()).unwrap_or_else(|| "unknown".to_string()),
+                        subject: msg.subject.clone().unwrap_or_default(),
+                    });
+                }
+                if next_link.is_none() || messages.is_empty() {
+                    break;
+                }
+                skip += 100;
+            }
+            Ok(items)
+        }
+    }
+}
+
+/// One message, any source to any destination. The source gives the raw
+/// message, its flags and its date (IMAP `UID FETCH`, a JMAP blob with its
+/// keywords and `receivedAt`, Graph MIME with its read state); a Message-ID
+/// `dest_ids` holds (or, without one, a fingerprint `seen_fingerprints`
+/// holds) is `Present` before anything is written; else the destination
+/// writes it: IMAP APPEND with the flags and date, JMAP `import_raw` with the
+/// flags as keywords and the date as `receivedAt` (it asks the server about
+/// the Message-ID again, and the sync never announces what it imports),
+/// Graph draft-and-move with the read state. A session whose command failed
+/// is dropped, never pooled again.
+pub(crate) async fn copy_one(
+    ctx: &CopyCtx<'_>,
     src_path: &str,
     dst_path: &str,
-    uid: u32,
-    source_id: Option<&str>,
-    is_read: bool,
     dest_folder_id: Option<&str>,
+    item: &SourceItem,
     dest_ids: &HashSet<String>,
-) -> Result<(JmapMoved, String, String), String> {
-    let (raw, flags, date) = match source_transport {
-        "imap" => fetch_imap_message(state, source_config, src_path, uid).await?,
+) -> Result<CopyOutcome, String> {
+    if let Some(id) = item.message_id.as_ref().filter(|id| dest_ids.contains(*id)) {
+        return Ok(CopyOutcome::Present { message_id: Some(id.clone()), fingerprint: 0, sender: item.sender.clone(), subject: item.subject.clone() });
+    }
+    let (state, source, dest) = (ctx.state, ctx.source, ctx.dest);
+    let (raw, flags, date) = match source.transport.as_str() {
+        "imap" => fetch_imap_message(state, &source.config, ctx.lane, src_path, item.key).await?,
         "jmap" => {
-            let id = source_id.ok_or("No JMAP email id")?;
-            fetch_jmap_message(state, source_config, id).await.map_err(|e| e.to_string())?
+            let id = item.remote_id.as_deref().ok_or("No JMAP email id")?;
+            fetch_jmap_message(state, &source.config, id).await.map_err(|e| e.to_string())?
         }
         "graph" => {
-            let gid = source_id.ok_or("No Graph message ID")?;
-            let token = source_config.access_token.as_deref().ok_or("No source access token")?;
-            let raw = GraphClient::new(token).for_account(&source_config.email).get_mime_content(gid).await?;
-            (raw, if is_read { vec!["\\Seen".to_string()] } else { Vec::new() }, None)
+            let gid = item.remote_id.as_deref().ok_or("No Graph message ID")?;
+            let raw = source.graph()?.get_mime_content(gid).await?;
+            (raw, if item.is_read { vec!["\\Seen".to_string()] } else { Vec::new() }, None)
         }
-        other => return Err(format!("Unsupported transport combination: {} -> {}", other, dest_transport)),
+        other => return Err(format!("Unsupported transport combination: {} -> {}", other, dest.transport)),
     };
     let (sender, subject) = extract_sender_subject(&raw);
-    if extract_message_id(&raw).is_some_and(|id| dest_ids.contains(&id)) {
-        return Ok((JmapMoved::Present, sender, subject));
+    let message_id = extract_message_id(&raw).and_then(|v| message_id_value_key(&v));
+    let fingerprint = mailvault_core::folder_move::fingerprint(&raw);
+    let present = match &message_id {
+        Some(id) => dest_ids.contains(id),
+        None => ctx.seen_fingerprints.is_some_and(|seen| seen.contains(&fingerprint)),
+    };
+    if present {
+        return Ok(CopyOutcome::Present { message_id, fingerprint, sender, subject });
     }
-    let moved = match dest_transport {
+    let ack = match dest.transport.as_str() {
         "jmap" => {
             let mailbox_id = dest_folder_id.ok_or("No destination JMAP mailbox id")?;
             let keywords = flags_to_keywords(flags.iter().map(String::as_str));
@@ -725,42 +822,196 @@ async fn migrate_email_jmap(
                 .or_else(|| received_at_of(&raw));
             let imported = state
                 .jmap
-                .import_raw(dest_config, &raw, mailbox_id, &keywords, received_at.as_deref())
+                .import_raw(&dest.config, &raw, mailbox_id, &keywords, received_at.as_deref())
                 .await
                 .map_err(|e| e.to_string())?;
             match imported {
-                ImportResult::Created(_) => JmapMoved::Written,
+                ImportResult::Created(made) => WriteAck::Id(made.id),
                 // Present on the server, maybe only in another mailbox: that
                 // copy gets the destination mailbox's label.
                 ImportResult::AlreadyExists { existing_id } => {
-                    let acct = state.jmap.get(dest_config).await.map_err(|e| e.to_string())?;
+                    let acct = state.jmap.get(&dest.config).await.map_err(|e| e.to_string())?;
                     crate::handlers::jmap_bridge::adopt_deduped(&acct, &existing_id, mailbox_id, dst_path).await?;
-                    JmapMoved::Present
+                    return Ok(CopyOutcome::Present { message_id, fingerprint, sender, subject });
                 }
             }
         }
         "imap" => {
             let internal_date = date.map(|d| imap::imap_date_time(&d)).or_else(|| imap::internal_date_from_raw(&raw));
-            let pool = &state.imap_pool;
-            let mut guard = pool.get_priority(dest_config).await?;
+            let mut guard = checkout(state, &dest.config, ctx.lane).await?;
             let appended = imap::append_email(&mut guard.session, dst_path, &raw, &flags.join(" "), internal_date.as_deref()).await;
             match &appended {
-                Ok(_) => pool.return_priority(dest_config, guard).await,
-                Err(_) => pool.discard(dest_config, guard).await,
+                Ok(_) => {
+                    guard.last_selected = Some(dst_path.to_string());
+                    checkin(state, &dest.config, ctx.lane, guard).await;
+                }
+                Err(_) => state.imap_pool.discard(&dest.config, guard).await,
             }
-            appended?;
-            JmapMoved::Written
+            match appended? {
+                Some((_, uid)) => WriteAck::Uid(uid),
+                None => WriteAck::Unconfirmed,
+            }
         }
         "graph" => {
             let folder_id = dest_folder_id.ok_or("No destination Graph folder ID")?;
-            let token = dest_config.access_token.as_deref().ok_or("No dest access token")?;
-            let client = GraphClient::new(token).for_account(&dest_config.email);
-            migrate_email_to_graph(&raw, &client, folder_id, flags.iter().any(|f| f.eq_ignore_ascii_case("\\Seen"))).await?;
-            JmapMoved::Written
+            let is_read = flags.iter().any(|f| f.eq_ignore_ascii_case("\\Seen"));
+            WriteAck::Id(migrate_email_to_graph(&raw, &dest.graph()?, folder_id, is_read).await?)
         }
-        other => return Err(format!("Unsupported transport combination: {} -> {}", source_transport, other)),
+        other => return Err(format!("Unsupported transport combination: {} -> {}", source.transport, other)),
     };
-    Ok((moved, sender, subject))
+    Ok(CopyOutcome::Written { ack, message_id, fingerprint, sender, subject })
+}
+
+/// A tick inside folder `folder`.
+fn folder_tick<'a>(
+    status: &'a str,
+    folder: &'a str,
+    folder_progress: Option<String>,
+    folders: &'a [FolderMapping],
+    totals: &'a Totals,
+    log: Option<(&'a str, &'a str, &'a str)>,
+    rate_limited_for: Option<u64>,
+) -> ProgressTick<'a> {
+    ProgressTick { status, folder: Some(folder), folder_progress, folders, totals, log, rate_limited_for }
+}
+
+/// Copy folder `idx` of `folders`: make the destination folder, list what it
+/// holds and what the source holds, then copy each message, honouring
+/// cancel and pause between messages. A Graph 429 waits as Graph asks (up to
+/// five times, a cancel ends the wait); any other failure is tried once more
+/// after 2s, except a provider bandwidth limit, which ends the folder. A
+/// message that still fails is one failed message, never the run. The
+/// folder's counts and status land in `folders[idx]` at the end.
+pub(crate) async fn copy_folder(
+    ctx: &mut CopyCtx<'_>,
+    folders: &mut [FolderMapping],
+    idx: usize,
+    totals: &mut Totals,
+    sink: &mut dyn CopySink,
+) -> FolderOutcome {
+    let mut out = FolderOutcome::default();
+    folders[idx].status = "in_progress".to_string();
+    let src_path = folders[idx].source_path.clone();
+    let dst_path = folders[idx].dest_path.clone();
+    info!("[migration] Processing folder: {} -> {}", src_path, dst_path);
+    sink.progress(folder_tick("running", &src_path, Some("0/0".to_string()), folders, totals, None, None));
+
+    if let Err(e) = ensure_dest_folder(ctx, &mut folders[idx]).await {
+        warn!("[migration] Failed to create dest folder {}: {}", dst_path, e);
+        folders[idx].status = "failed".to_string();
+        return out;
+    }
+    let dest_ids = fetch_dest_ids(ctx, &folders[idx]).await.unwrap_or_else(|e| {
+        warn!("[migration] Failed to fetch dest Message-IDs for {}: {}", dst_path, e);
+        HashSet::new()
+    });
+    if !dest_ids.is_empty() {
+        info!("[migration] Found {} existing messages in dest '{}' for dedup", dest_ids.len(), dst_path);
+    }
+    let items = match list_source_items(ctx, &src_path, None).await {
+        Ok(items) => items,
+        Err(e) => {
+            warn!("[migration] Failed to list source folder {}: {}", src_path, e);
+            folders[idx].status = "failed".to_string();
+            return out;
+        }
+    };
+    out.started = true;
+    let folder_total = items.len() as u32;
+    folders[idx].email_count = folder_total;
+    let dest_folder_id = folders[idx].dest_folder_id.clone();
+
+    for item in &items {
+        if ctx.cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        // Pause: finish the message in hand, then park. The checkpoint
+        // carries this folder's live counters, which `folders` only gets
+        // when the folder ends.
+        if ctx.pause.load(Ordering::Relaxed) {
+            let mut snapshot = folders.to_vec();
+            (snapshot[idx].migrated, snapshot[idx].skipped, snapshot[idx].failed) = (out.migrated, out.skipped, out.failed);
+            sink.checkpoint("paused", &snapshot, totals);
+            while ctx.pause.load(Ordering::Relaxed) && !ctx.cancel.load(Ordering::Relaxed) {
+                sink.progress(folder_tick("paused", &src_path, Some(out.progress(folder_total)), folders, totals, None, None));
+                let _ = interruptible_sleep(std::time::Duration::from_millis(500), ctx.cancel, ctx.notify).await;
+            }
+            if ctx.cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            sink.checkpoint("running", &snapshot, totals);
+        }
+        if ctx.yield_to_ui {
+            crate::search_index::wait_foreground_quiet(&ctx.state.search_index).await;
+        }
+
+        let (mut rate_retries, mut retried) = (0u32, false);
+        let result = loop {
+            match copy_one(ctx, &src_path, &dst_path, dest_folder_id.as_deref(), item, &dest_ids).await {
+                Ok(done) => break Ok(done),
+                Err(e) if GraphClient::is_rate_limited(&e) && rate_retries < 5 => {
+                    rate_retries += 1;
+                    let wait_secs = parse_retry_after(&e).unwrap_or(rate_retries as u64 * 5);
+                    warn!("[migration] Rate limited, waiting {}s", wait_secs);
+                    sink.progress(folder_tick("rate_limited", &src_path, Some(out.progress(folder_total)), folders, totals, None, Some(wait_secs)));
+                    // A pause wakes the wait and the message is tried again
+                    // at once: only a cancel gives it up, and never as written.
+                    let woken = interruptible_sleep(std::time::Duration::from_secs(wait_secs), ctx.cancel, ctx.notify).await;
+                    if woken && ctx.cancel.load(Ordering::Relaxed) {
+                        break Err("Cancelled during rate-limit wait".to_string());
+                    }
+                }
+                Err(e) if !retried && !imap::is_bandwidth_limited(&e) => {
+                    warn!("[migration] Email {} failed (attempt 1): {}, retrying in 2s", item.key, e);
+                    retried = true;
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
+                Err(e) => break Err(e),
+            }
+        };
+
+        sink.message(idx, item, &result);
+        let (sender, subject, status) = match &result {
+            Ok(CopyOutcome::Present { sender, subject, .. }) => {
+                out.skipped += 1;
+                totals.skipped += 1;
+                (sender.as_str(), subject.as_str(), "skipped")
+            }
+            Ok(CopyOutcome::Written { sender, subject, .. }) => {
+                out.migrated += 1;
+                totals.migrated += 1;
+                (sender.as_str(), subject.as_str(), "ok")
+            }
+            Err(e) => {
+                warn!("migration: email {} failed, skipping: {}", item.key, e);
+                out.failed += 1;
+                totals.failed += 1;
+                folders[idx].failed_uids.push(item.key);
+                if imap::is_bandwidth_limited(e) {
+                    warn!("[migration] Email {} hit provider bandwidth limit, aborting run", item.key);
+                    out.bandwidth_hit = true;
+                }
+                (item.sender.as_str(), item.subject.as_str(), "failed")
+            }
+        };
+        sink.progress(folder_tick("running", &src_path, Some(out.progress(folder_total)), folders, totals, Some((sender, subject, status)), None));
+        if out.bandwidth_hit {
+            break;
+        }
+    }
+
+    out.cancelled = ctx.cancel.load(Ordering::Relaxed);
+    let m = &mut folders[idx];
+    (m.migrated, m.skipped, m.failed) = (out.migrated, out.skipped, out.failed);
+    m.status = if out.cancelled {
+        "cancelled"
+    } else if out.bandwidth_hit || (out.failed > 0 && out.migrated == 0) {
+        "failed"
+    } else {
+        "completed"
+    }
+    .to_string();
+    out
 }
 
 // ── Interruptible sleep & helpers ─────────────────────────────────────────────
@@ -823,6 +1074,75 @@ fn extract_sender_subject(mime_bytes: &[u8]) -> (String, String) {
 
 // ── Main migration runner ───────────────────────────────────────────────────
 
+/// `run_migration`'s sink: the `migration-progress` event and the
+/// `migration_state.json` checkpoint.
+struct MigrationSink<'a> {
+    state: &'a Arc<DaemonState>,
+    id: String,
+    source: &'a Side,
+    dest: &'a Side,
+    source_account_json: String,
+    dest_account_json: String,
+    started_at: String,
+    start: std::time::Instant,
+}
+
+impl MigrationSink<'_> {
+    fn snapshot(&self, status: &str, folders: &[FolderMapping], totals: &Totals) -> MigrationState {
+        MigrationState {
+            id: self.id.clone(),
+            source_email: self.source.email.clone(),
+            dest_email: self.dest.email.clone(),
+            source_transport: self.source.transport.clone(),
+            dest_transport: self.dest.transport.clone(),
+            source_account_json: self.source_account_json.clone(),
+            dest_account_json: self.dest_account_json.clone(),
+            status: status.to_string(),
+            folder_mappings: folders.to_vec(),
+            total_emails: totals.total,
+            migrated_emails: totals.migrated,
+            skipped_emails: totals.skipped,
+            failed_emails: totals.failed,
+            started_at: self.started_at.clone(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+}
+
+impl CopySink for MigrationSink<'_> {
+    fn progress(&mut self, tick: ProgressTick<'_>) {
+        let payload = MigrationProgress {
+            source_email: self.source.email.clone(),
+            dest_email: self.dest.email.clone(),
+            total_emails: tick.totals.total,
+            migrated_emails: tick.totals.migrated,
+            skipped_emails: tick.totals.skipped,
+            failed_emails: tick.totals.failed,
+            current_folder: tick.folder.map(str::to_string),
+            folder_progress: tick.folder_progress,
+            status: tick.status.to_string(),
+            folders: tick.folders.to_vec(),
+            started_at: self.started_at.clone(),
+            elapsed_seconds: self.start.elapsed().as_secs(),
+            last_log_entry: tick.log.map(|(sender, subject, status)| MigrationLogEntry {
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                sender: sender.to_string(),
+                subject: subject.to_string(),
+                status: status.to_string(),
+            }),
+            rate_limit_remaining: tick.rate_limited_for,
+        };
+        self.state.events.emit("migration-progress", serde_json::to_value(&payload).unwrap_or_default());
+    }
+
+    /// Persists a checkpoint (status "paused" while parked, "running" once
+    /// woken or after a folder) so migration_state.json always reflects a
+    /// mid-folder pause too.
+    fn checkpoint(&mut self, status: &str, folders: &[FolderMapping], totals: &Totals) {
+        let _ = save_migration_state(&self.state.app_dir, &self.snapshot(status, folders, totals));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn run_migration(
     state: Arc<DaemonState>,
@@ -837,15 +1157,9 @@ pub async fn run_migration(
     pause: Arc<AtomicBool>,
     notify: Arc<tokio::sync::Notify>,
 ) -> Result<MigrationState, String> {
-    let source_email = source_config.email.clone();
-    let dest_email = dest_config.email.clone();
-    let started_at = chrono::Utc::now().to_rfc3339();
-    let start_instant = std::time::Instant::now();
-
-    let migration_id = uuid::Uuid::new_v4().to_string();
     // A JMAP side is "jmap" whatever the app sent (`effective_transport`).
-    let source_transport = effective_transport(&source_config, &source_transport);
-    let dest_transport = effective_transport(&dest_config, &dest_transport);
+    let source = Side::new(source_config, &source_transport);
+    let dest = Side::new(dest_config, &dest_transport);
 
     info!(
         "[migration] run_migration tokens: cancel={:p}, pause={:p}, notify={:p}",
@@ -853,90 +1167,44 @@ pub async fn run_migration(
     );
     info!(
         "[migration] Starting {} -> {} ({} -> {}, {} folders)",
-        source_email, dest_email, source_transport, dest_transport, folder_mappings.len()
+        source.email, dest.email, source.transport, dest.transport, folder_mappings.len()
     );
 
-    let pool = &state.imap_pool;
-
+    let mut sink = MigrationSink {
+        state: &state,
+        id: uuid::Uuid::new_v4().to_string(),
+        source: &source,
+        dest: &dest,
+        source_account_json,
+        dest_account_json,
+        started_at: chrono::Utc::now().to_rfc3339(),
+        start: std::time::Instant::now(),
+    };
     // Total email count across all folders
-    let total_emails: u32 = folder_mappings.iter().map(|f| f.email_count).sum();
-    let mut migrated_total: u32 = 0;
-    let mut skipped_total: u32 = 0;
-    let mut failed_total: u32 = 0;
-
-    let emit_progress = |status: &str,
-                         current_folder: Option<String>,
-                         folder_progress: Option<String>,
-                         migrated: u32,
-                         skipped: u32,
-                         failed: u32,
-                         folders: &[FolderMapping],
-                         started_at: &str,
-                         elapsed: u64,
-                         source_email: &str,
-                         dest_email: &str,
-                         total: u32,
-                         state: &Arc<DaemonState>,
-                         last_log_entry: Option<MigrationLogEntry>,
-                         rate_limit_remaining: Option<u64>| {
-        let payload = MigrationProgress {
-            source_email: source_email.to_string(),
-            dest_email: dest_email.to_string(),
-            total_emails: total,
-            migrated_emails: migrated,
-            skipped_emails: skipped,
-            failed_emails: failed,
-            current_folder,
-            folder_progress,
-            status: status.to_string(),
-            folders: folders.to_vec(),
-            started_at: started_at.to_string(),
-            elapsed_seconds: elapsed,
-            last_log_entry,
-            rate_limit_remaining,
-        };
-        state.events.emit("migration-progress", serde_json::to_value(&payload).unwrap_or_default());
+    let mut totals = Totals { total: folder_mappings.iter().map(|f| f.email_count).sum(), ..Default::default() };
+    let mut ctx = CopyCtx {
+        state: &state,
+        source: &source,
+        dest: &dest,
+        lane: Lane::Priority,
+        cancel: &cancel,
+        pause: &pause,
+        notify: &notify,
+        graph_folder_cache: HashMap::new(),
+        yield_to_ui: false,
+        seen_fingerprints: None,
     };
 
-    // Persists a checkpoint (status "paused" while parked, "running" once
-    // woken) so migration_state.json always reflects a mid-folder pause too.
-    let save_checkpoint = |status: &str, folders: &[FolderMapping], migrated: u32, skipped: u32, failed: u32| {
-        let checkpoint = MigrationState {
-            id: migration_id.clone(),
-            source_email: source_email.clone(),
-            dest_email: dest_email.clone(),
-            source_transport: source_transport.clone(),
-            dest_transport: dest_transport.clone(),
-            source_account_json: source_account_json.clone(),
-            dest_account_json: dest_account_json.clone(),
-            status: status.to_string(),
-            folder_mappings: folders.to_vec(),
-            total_emails,
-            migrated_emails: migrated,
-            skipped_emails: skipped,
-            failed_emails: failed,
-            started_at: started_at.clone(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
-        };
-        let _ = save_migration_state(&state.app_dir, &checkpoint);
-    };
-
-    // Graph folder cache for destination
-    let mut graph_folder_cache: HashMap<String, String> = HashMap::new();
-
-    // Pre-populate Graph folder cache from existing destination folders
-    if dest_transport == "graph" {
-        if let Some(ref token) = dest_config.access_token {
-            let client = GraphClient::new(token).for_account(&dest_email);
+    // Pre-populate the Graph folder cache from existing destination folders
+    if dest.transport == "graph" {
+        if let Ok(client) = dest.graph() {
             if let Ok(folders) = client.list_folders().await {
                 for f in folders {
-                    graph_folder_cache.insert(f.display_name.clone(), f.id.clone());
+                    ctx.graph_folder_cache.insert(f.display_name.clone(), f.id.clone());
                 }
             }
         }
     }
-
-    let sem = Arc::new(Semaphore::new(3));
 
     // Set when the IMAP server reports a daily bandwidth suspension (Gmail:
     // 2500 MB/day down, 500 MB/day APPEND up), abort the run instead of
@@ -953,34 +1221,26 @@ pub async fn run_migration(
 
         // Pause loop, save state and wait
         if pause.load(Ordering::Relaxed) {
-            save_checkpoint("paused", &folder_mappings, migrated_total, skipped_total, failed_total);
+            sink.checkpoint("paused", &folder_mappings, &totals);
             info!("[migration] Paused, state saved to disk");
 
             while pause.load(Ordering::Relaxed) {
                 if cancel.load(Ordering::Relaxed) {
                     break;
                 }
-                emit_progress(
-                    "paused",
-                    Some(folder_mappings[folder_idx].source_path.clone()),
-                    None,
-                    migrated_total,
-                    skipped_total,
-                    failed_total,
-                    &folder_mappings,
-                    &started_at,
-                    start_instant.elapsed().as_secs(),
-                    &source_email,
-                    &dest_email,
-                    total_emails,
-                    &state,
-                    None,
-                    None,
-                );
+                sink.progress(ProgressTick {
+                    status: "paused",
+                    folder: Some(folder_mappings[folder_idx].source_path.as_str()),
+                    folder_progress: None,
+                    folders: &folder_mappings,
+                    totals: &totals,
+                    log: None,
+                    rate_limited_for: None,
+                });
                 let _ = interruptible_sleep(std::time::Duration::from_millis(500), &cancel, &notify).await;
             }
             if !cancel.load(Ordering::Relaxed) {
-                save_checkpoint("running", &folder_mappings, migrated_total, skipped_total, failed_total);
+                sink.checkpoint("running", &folder_mappings, &totals);
             }
         }
 
@@ -988,747 +1248,15 @@ pub async fn run_migration(
             continue;
         }
 
-        folder_mappings[folder_idx].status = "in_progress".to_string();
-        let src_path = folder_mappings[folder_idx].source_path.clone();
-        let dst_path = folder_mappings[folder_idx].dest_path.clone();
-
-        info!("[migration] Processing folder: {} -> {}", src_path, dst_path);
-
-        emit_progress(
-            "running",
-            Some(src_path.clone()),
-            Some("0/0".to_string()),
-            migrated_total,
-            skipped_total,
-            failed_total,
-            &folder_mappings,
-            &started_at,
-            start_instant.elapsed().as_secs(),
-            &source_email,
-            &dest_email,
-            total_emails,
-            &state,
-            None,
-            None,
-        );
-
-        // Ensure destination folder exists
-        if dest_transport == "imap" {
-            let mut guard = pool.get_priority(&dest_config).await?;
-            if let Err(e) = ensure_dest_folder_imap(&mut guard.session, &dst_path).await {
-                warn!("[migration] Failed to create dest folder {}: {}", dst_path, e);
-                folder_mappings[folder_idx].status = "failed".to_string();
-                guard.last_selected = None;
-                pool.return_priority(&dest_config, guard).await;
-                continue;
-            }
-            guard.last_selected = None;
-            pool.return_priority(&dest_config, guard).await;
-        } else if dest_transport == "jmap" {
-            let made = match state.jmap.get(&dest_config).await {
-                Ok(acct) => ensure_dest_folder_jmap(&acct, &dst_path).await,
-                Err(e) => Err(e),
-            };
-            match made {
-                Ok(mailbox_id) => folder_mappings[folder_idx].dest_folder_id = Some(mailbox_id),
-                Err(e) => {
-                    warn!("[migration] Failed to create JMAP dest mailbox {}: {}", dst_path, e);
-                    folder_mappings[folder_idx].status = "failed".to_string();
-                    continue;
-                }
-            }
-        } else if dest_transport == "graph" {
-            if let Some(ref token) = dest_config.access_token {
-                let client = GraphClient::new(token).for_account(&dest_email);
-                match ensure_dest_folder_graph(&client, &dst_path, "/", &mut graph_folder_cache)
-                    .await
-                {
-                    Ok(folder_id) => {
-                        folder_mappings[folder_idx].dest_folder_id = Some(folder_id);
-                    }
-                    Err(e) => {
-                        warn!(
-                            "[migration] Failed to create Graph dest folder {}: {}",
-                            dst_path, e
-                        );
-                        folder_mappings[folder_idx].status = "failed".to_string();
-                        continue;
-                    }
-                }
-            }
+        let done = copy_folder(&mut ctx, &mut folder_mappings, folder_idx, &mut totals, &mut sink).await;
+        if !done.started {
+            continue;
         }
-
-        // Fetch destination Message-IDs for deduplication
-        let dest_message_ids: HashSet<String> = if dest_transport == "imap" {
-            let mut guard = pool.get_priority(&dest_config).await?;
-            let ids = match fetch_dest_message_ids_imap(&mut guard.session, &dst_path).await {
-                Ok(ids) => ids,
-                Err(e) => {
-                    warn!("[migration] Failed to fetch dest Message-IDs for {}: {}", dst_path, e);
-                    HashSet::new()
-                }
-            };
-            guard.last_selected = Some(dst_path.clone());
-            pool.return_priority(&dest_config, guard).await;
-            ids
-        } else if dest_transport == "graph" {
-            if let Some(ref dest_folder_id) = folder_mappings[folder_idx].dest_folder_id {
-                if let Some(ref token) = dest_config.access_token {
-                    let client = GraphClient::new(token).for_account(&dest_email);
-                    match fetch_dest_message_ids_graph(&client, dest_folder_id).await {
-                        Ok(ids) => ids,
-                        Err(e) => {
-                            warn!("[migration] Failed to fetch dest Graph Message-IDs for {}: {}", dst_path, e);
-                            HashSet::new()
-                        }
-                    }
-                } else {
-                    HashSet::new()
-                }
-            } else {
-                HashSet::new()
-            }
-        } else if dest_transport == "jmap" {
-            match folder_mappings[folder_idx].dest_folder_id.clone() {
-                Some(mailbox_id) => {
-                    let listed = match state.jmap.get(&dest_config).await {
-                        Ok(acct) => fetch_dest_message_ids_jmap(&acct, &mailbox_id).await,
-                        Err(e) => Err(e),
-                    };
-                    listed.unwrap_or_else(|e| {
-                        warn!("[migration] Failed to fetch dest JMAP Message-IDs for {}: {}", dst_path, e);
-                        HashSet::new()
-                    })
-                }
-                None => HashSet::new(),
-            }
-        } else {
-            HashSet::new()
-        };
-
-        if !dest_message_ids.is_empty() {
-            info!("[migration] Found {} existing messages in dest '{}' for dedup", dest_message_ids.len(), dst_path);
-        }
-
-        // Fetch source UIDs / message IDs
-        // Tuple: (uid_or_index, graph_msg_id, is_read, internet_message_id, sender, subject)
-        let source_items: Vec<(u32, Option<String>, bool, Option<String>, String, String)>;
-
-        if source_transport == "imap" {
-            let mut guard = pool.get_priority(&source_config).await?;
-            let uids = imap::search_all_uids(&mut guard.session, &src_path, false).await?;
-            guard.last_selected = Some(src_path.clone());
-            pool.return_priority(&source_config, guard).await;
-
-            source_items = uids.into_iter().map(|uid| (uid, None, false, None, String::new(), String::new())).collect();
-        } else if source_transport == "jmap" {
-            source_items = jmap_source_items(&state, &source_config, &src_path).await?;
-        } else {
-            // Graph source, collect internetMessageId for dedup
-            if let Some(ref token) = source_config.access_token {
-                let client = GraphClient::new(token).for_account(&source_email);
-                let folders = client.list_folders().await?;
-                let folder = folders
-                    .iter()
-                    .find(|f| f.display_name == src_path || f.display_name == normalize_graph_folder(&src_path))
-                    .ok_or_else(|| format!("Graph folder '{}' not found", src_path))?;
-
-                let mut items = Vec::new();
-                let mut skip = 0u32;
-                loop {
-                    let (messages, next_link) =
-                        client.list_messages(&folder.id, 100, skip).await?;
-                    for (i, msg) in messages.iter().enumerate() {
-                        let is_read = msg.is_read.unwrap_or(false);
-                        let inet_msg_id = msg.internet_message_id.clone();
-                        let sender = msg.from.as_ref()
-                            .and_then(|f| f.email_address.address.clone())
-                            .unwrap_or_else(|| "unknown".to_string());
-                        let subject = msg.subject.clone().unwrap_or_default();
-                        items.push(((skip + i as u32), Some(msg.id.clone()), is_read, inet_msg_id, sender, subject));
-                    }
-                    if next_link.is_none() || messages.is_empty() {
-                        break;
-                    }
-                    skip += 100;
-                }
-                source_items = items;
-            } else {
-                source_items = Vec::new();
-            }
-        }
-
-        let folder_total = source_items.len() as u32;
-        folder_mappings[folder_idx].email_count = folder_total;
-        let mut folder_migrated: u32 = 0;
-        let mut folder_skipped: u32 = 0;
-        let mut folder_failed: u32 = 0;
-
-        // Process emails in batches of 50
-        for batch in source_items.chunks(50) {
-            if cancel.load(Ordering::Relaxed) {
-                break;
-            }
-
-            for (uid, graph_id, is_read, src_inet_msg_id, item_sender, item_subject) in batch {
-                let uid = *uid;
-                let is_read = *is_read;
-                if cancel.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                // Pause check, finish current email then stop
-                if pause.load(Ordering::Relaxed) {
-                    // Checkpoint with this folder's live counters: the
-                    // folder's own totals are only folded into
-                    // `folder_mappings` when it ends.
-                    let mut snapshot = folder_mappings.clone();
-                    snapshot[folder_idx].migrated = folder_migrated;
-                    snapshot[folder_idx].skipped = folder_skipped;
-                    snapshot[folder_idx].failed = folder_failed;
-                    save_checkpoint("paused", &snapshot, migrated_total, skipped_total, failed_total);
-                    while pause.load(Ordering::Relaxed) {
-                        if cancel.load(Ordering::Relaxed) {
-                            break;
-                        }
-                        emit_progress(
-                            "paused",
-                            Some(src_path.clone()),
-                            Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
-                            migrated_total, skipped_total, failed_total,
-                            &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
-                            &source_email, &dest_email, total_emails, &state, None, None,
-                        );
-                        let _ = interruptible_sleep(std::time::Duration::from_millis(500), &cancel, &notify).await;
-                    }
-                    if !cancel.load(Ordering::Relaxed) {
-                        save_checkpoint("running", &snapshot, migrated_total, skipped_total, failed_total);
-                    }
-                }
-
-                // Track sender/subject for log entries
-                let mut email_sender = item_sender.clone();
-                let mut email_subject = item_subject.clone();
-
-                // Dedup check for Graph source (has internetMessageId already)
-                if let Some(ref inet_id) = src_inet_msg_id {
-                    if !dest_message_ids.is_empty() && dest_message_ids.contains(inet_id) {
-                        folder_skipped += 1;
-                        skipped_total += 1;
-                        let log_entry = MigrationLogEntry {
-                            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                            sender: email_sender.clone(),
-                            subject: email_subject.clone(),
-                            status: "skipped".to_string(),
-                        };
-                        emit_progress(
-                            "running", Some(src_path.clone()),
-                            Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
-                            migrated_total, skipped_total, failed_total,
-                            &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
-                            &source_email, &dest_email, total_emails, &state,
-                            Some(log_entry), None,
-                        );
-                        continue;
-                    }
-                }
-
-                let _permit = sem.acquire().await.unwrap();
-
-                // For IMAP source: fetch MIME first to check dedup, then migrate
-                // For Graph source: dedup already checked above via internetMessageId
-                let migrate_result = match (source_transport.as_str(), dest_transport.as_str()) {
-                    (src, dst) if src == "jmap" || dst == "jmap" => {
-                        let moved = migrate_email_jmap(
-                            &state,
-                            &source_config,
-                            &dest_config,
-                            src,
-                            dst,
-                            &src_path,
-                            &dst_path,
-                            uid,
-                            graph_id.as_deref(),
-                            is_read,
-                            folder_mappings[folder_idx].dest_folder_id.as_deref(),
-                            &dest_message_ids,
-                        )
-                        .await;
-                        match moved {
-                            Ok((JmapMoved::Present, s, subj)) => {
-                                email_sender = s;
-                                email_subject = subj;
-                                folder_skipped += 1;
-                                skipped_total += 1;
-                                let skip_log = MigrationLogEntry {
-                                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                    sender: email_sender.clone(),
-                                    subject: email_subject.clone(),
-                                    status: "skipped".to_string(),
-                                };
-                                emit_progress(
-                                    "running", Some(src_path.clone()),
-                                    Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
-                                    migrated_total, skipped_total, failed_total,
-                                    &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
-                                    &source_email, &dest_email, total_emails, &state,
-                                    Some(skip_log), None,
-                                );
-                                continue;
-                            }
-                            Ok((JmapMoved::Written, s, subj)) => {
-                                email_sender = s;
-                                email_subject = subj;
-                                Ok(true)
-                            }
-                            Err(e) => Err(e),
-                        }
-                    }
-                    ("imap", "imap") => {
-                        let mut src_guard = pool.get_priority(&source_config).await?;
-                        let mut dst_guard = pool.get_priority(&dest_config).await?;
-
-                        // Fetch MIME + flags for dedup check and migration
-                        let fetch_result = {
-                            use futures::StreamExt;
-                            let _mbox = imap::select_mailbox(&mut src_guard.session, &src_path).await?;
-                            let fetch_stream = src_guard.session
-                                .uid_fetch(uid.to_string(), "(UID FLAGS INTERNALDATE BODY.PEEK[])")
-                                .await
-                                .map_err(|e| format!("UID FETCH {} failed: {}", uid, e))?;
-                            let fetches: Vec<_> = fetch_stream
-                                .collect::<Vec<_>>()
-                                .await
-                                .into_iter()
-                                .filter_map(|r| r.ok())
-                                .collect();
-                            fetches.into_iter().next()
-                                .ok_or_else(|| format!("Email UID {} not found", uid))
-                        };
-
-                        match fetch_result {
-                            Ok(fetch) => {
-                                // Extract sender/subject for log entry
-                                if let Some(body) = fetch.body() {
-                                    let (s, subj) = extract_sender_subject(body);
-                                    email_sender = s;
-                                    email_subject = subj;
-                                }
-                                // Dedup check via Message-ID extraction from MIME
-                                if !dest_message_ids.is_empty() {
-                                    if let Some(body) = fetch.body() {
-                                        if let Some(msg_id) = extract_message_id(body) {
-                                            if dest_message_ids.contains(&msg_id) {
-                                                src_guard.last_selected = Some(src_path.clone());
-                                                pool.return_priority(&source_config, src_guard).await;
-                                                pool.return_priority(&dest_config, dst_guard).await;
-                                                folder_skipped += 1;
-                                                skipped_total += 1;
-                                                // Emit progress and continue to next email
-                                                let skip_log = MigrationLogEntry {
-                                                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                                    sender: email_sender.clone(),
-                                                    subject: email_subject.clone(),
-                                                    status: "skipped".to_string(),
-                                                };
-                                                emit_progress(
-                                                    "running", Some(src_path.clone()),
-                                                    Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
-                                                    migrated_total, skipped_total, failed_total,
-                                                    &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
-                                                    &source_email, &dest_email, total_emails, &state,
-                                                    Some(skip_log), None,
-                                                );
-                                                continue;
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Not a duplicate, append to destination
-                                let r = if let Some(mime_bytes) = fetch.body() {
-                                    let flags: Vec<String> = fetch.flags()
-                                        .filter_map(|f| {
-                                            use crate::imap::async_imap::types::Flag;
-                                            match f {
-                                                Flag::Seen => Some("\\Seen".to_string()),
-                                                Flag::Answered => Some("\\Answered".to_string()),
-                                                Flag::Flagged => Some("\\Flagged".to_string()),
-                                                Flag::Deleted => Some("\\Deleted".to_string()),
-                                                Flag::Draft => Some("\\Draft".to_string()),
-                                                Flag::Recent => None,
-                                                _ => None,
-                                            }
-                                        })
-                                        .collect();
-                                    let flags_str = flags.join(" ");
-                                    let internal_date = fetch.internal_date().map(|d| imap::imap_date_time(&d));
-                                    imap::append_email(&mut dst_guard.session, &dst_path, mime_bytes, &flags_str, internal_date.as_deref()).await
-                                } else {
-                                    Err(format!("No body for UID {}", uid))
-                                };
-                                src_guard.last_selected = Some(src_path.clone());
-                                dst_guard.last_selected = Some(dst_path.clone());
-                                pool.return_priority(&source_config, src_guard).await;
-                                pool.return_priority(&dest_config, dst_guard).await;
-                                r.map(|_| true)
-                            }
-                            Err(e) => {
-                                src_guard.last_selected = Some(src_path.clone());
-                                pool.return_priority(&source_config, src_guard).await;
-                                pool.return_priority(&dest_config, dst_guard).await;
-                                Err(e)
-                            }
-                        }
-                    }
-                    ("graph", "imap") => {
-                        // Dedup already checked above for Graph source
-                        if let Some(ref gid) = graph_id {
-                            let src_token = source_config
-                                .access_token
-                                .as_deref()
-                                .ok_or("No source access token")?;
-                            let client = GraphClient::new(src_token).for_account(&source_email);
-                            let mut dst_guard = pool.get_priority(&dest_config).await?;
-                            let r = migrate_email_graph_to_imap(
-                                &client,
-                                &mut dst_guard.session,
-                                gid,
-                                &dst_path,
-                                is_read,
-                            )
-                            .await;
-                            dst_guard.last_selected = Some(dst_path.clone());
-                            pool.return_priority(&dest_config, dst_guard).await;
-                            r
-                        } else {
-                            Err("No Graph message ID".to_string())
-                        }
-                    }
-                    ("imap", "graph") => {
-                        let dest_folder_id = folder_mappings[folder_idx]
-                            .dest_folder_id
-                            .as_deref()
-                            .ok_or("No destination Graph folder ID")?;
-                        let dst_token = dest_config
-                            .access_token
-                            .as_deref()
-                            .ok_or("No dest access token")?;
-                        let client = GraphClient::new(dst_token).for_account(&dest_email);
-
-                        // Fetch MIME from IMAP source
-                        let mut src_guard = pool.get_priority(&source_config).await?;
-                        let mime_result = fetch_raw_mime(&mut src_guard.session, &src_path, uid).await;
-                        src_guard.last_selected = Some(src_path.clone());
-                        pool.return_priority(&source_config, src_guard).await;
-
-                        match mime_result {
-                            Ok(mime_bytes) => {
-                                // Extract sender/subject for log entry
-                                let (s, subj) = extract_sender_subject(&mime_bytes);
-                                email_sender = s;
-                                email_subject = subj;
-                                // Dedup check for IMAP source -> Graph dest
-                                if !dest_message_ids.is_empty() {
-                                    if let Some(msg_id) = extract_message_id(&mime_bytes) {
-                                        if dest_message_ids.contains(&msg_id) {
-                                            folder_skipped += 1;
-                                            skipped_total += 1;
-                                            let skip_log = MigrationLogEntry {
-                                                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                                sender: email_sender.clone(),
-                                                subject: email_subject.clone(),
-                                                status: "skipped".to_string(),
-                                            };
-                                            emit_progress(
-                                                "running", Some(src_path.clone()),
-                                                Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
-                                                migrated_total, skipped_total, failed_total,
-                                                &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
-                                                &source_email, &dest_email, total_emails, &state,
-                                                Some(skip_log), None,
-                                            );
-                                            continue;
-                                        }
-                                    }
-                                }
-
-                                let mut retries = 0;
-                                loop {
-                                    match migrate_email_to_graph(
-                                        &mime_bytes,
-                                        &client,
-                                        dest_folder_id,
-                                        is_read,
-                                    )
-                                    .await
-                                    {
-                                        Ok(v) => break Ok(v),
-                                        Err(e) if GraphClient::is_rate_limited(&e) && retries < 5 => {
-                                            retries += 1;
-                                            let wait_secs = parse_retry_after(&e).unwrap_or(retries as u64 * 5);
-                                            let wait = std::time::Duration::from_secs(wait_secs);
-                                            warn!("[migration] Rate limited, waiting {:?}", wait);
-                                            let folder_progress_str = format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total);
-                                            emit_progress("rate_limited", Some(src_path.clone()), Some(folder_progress_str), migrated_total, skipped_total, failed_total, &folder_mappings, &started_at, start_instant.elapsed().as_secs(), &source_email, &dest_email, total_emails, &state, None, Some(wait_secs));
-                                            let interrupted = interruptible_sleep(wait, &cancel, &notify).await;
-                                            if interrupted {
-                                                if cancel.load(Ordering::Relaxed) {
-                                                    break Err("Cancelled during rate-limit wait".to_string());
-                                                }
-                                                if pause.load(Ordering::Relaxed) {
-                                                    break Ok(true);
-                                                }
-                                            }
-                                        }
-                                        Err(e) => break Err(e),
-                                    }
-                                }
-                            }
-                            Err(e) => Err(e),
-                        }
-                    }
-                    ("graph", "graph") => {
-                        // Dedup already checked above for Graph source
-                        if let Some(ref gid) = graph_id {
-                            let src_token = source_config
-                                .access_token
-                                .as_deref()
-                                .ok_or("No source access token")?;
-                            let src_client = GraphClient::new(src_token).for_account(&source_email);
-                            let mime_bytes = src_client.get_mime_content(gid).await?;
-
-                            let dest_folder_id = folder_mappings[folder_idx]
-                                .dest_folder_id
-                                .as_deref()
-                                .ok_or("No destination Graph folder ID")?;
-                            let dst_token = dest_config
-                                .access_token
-                                .as_deref()
-                                .ok_or("No dest access token")?;
-                            let dst_client = GraphClient::new(dst_token).for_account(&dest_email);
-
-                            let mut retries = 0;
-                            loop {
-                                match migrate_email_to_graph(
-                                    &mime_bytes,
-                                    &dst_client,
-                                    dest_folder_id,
-                                    is_read,
-                                )
-                                .await
-                                {
-                                    Ok(v) => break Ok(v),
-                                    Err(e) if GraphClient::is_rate_limited(&e) && retries < 5 => {
-                                        retries += 1;
-                                        let wait_secs = parse_retry_after(&e).unwrap_or(retries as u64 * 5);
-                                        let wait = std::time::Duration::from_secs(wait_secs);
-                                        warn!("[migration] Rate limited, waiting {:?}", wait);
-                                        let folder_progress_str = format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total);
-                                        emit_progress("rate_limited", Some(src_path.clone()), Some(folder_progress_str), migrated_total, skipped_total, failed_total, &folder_mappings, &started_at, start_instant.elapsed().as_secs(), &source_email, &dest_email, total_emails, &state, None, Some(wait_secs));
-                                        let interrupted = interruptible_sleep(wait, &cancel, &notify).await;
-                                        if interrupted {
-                                            if cancel.load(Ordering::Relaxed) {
-                                                break Err("Cancelled during rate-limit wait".to_string());
-                                            }
-                                            if pause.load(Ordering::Relaxed) {
-                                                break Ok(true);
-                                            }
-                                        }
-                                    }
-                                    Err(e) => break Err(e),
-                                }
-                            }
-                        } else {
-                            Err("No Graph message ID".to_string())
-                        }
-                    }
-                    _ => Err(format!(
-                        "Unsupported transport combination: {} -> {}",
-                        source_transport, dest_transport
-                    )),
-                };
-
-                // Determine log status from result
-                let email_status;
-
-                // Handle result with retry-once logic for failures
-                match migrate_result {
-                    Ok(_) => {
-                        folder_migrated += 1;
-                        migrated_total += 1;
-                        email_status = "ok";
-                    }
-                    Err(ref first_err) if imap::is_bandwidth_limited(first_err) => {
-                        // Account suspended server-side, retrying is pointless
-                        warn!("[migration] Email UID {} hit provider bandwidth limit, aborting run: {}", uid, first_err);
-                        folder_failed += 1;
-                        failed_total += 1;
-                        email_status = "failed";
-                        folder_mappings[folder_idx].failed_uids.push(uid);
-                        bandwidth_hit = true;
-                    }
-                    Err(ref first_err) => {
-                        // Retry once after 2-second delay
-                        warn!(
-                            "[migration] Email UID {} failed (attempt 1): {}, retrying in 2s",
-                            uid, first_err
-                        );
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-                        // Simple retry, re-run the same migration
-                        let retry_result = match (source_transport.as_str(), dest_transport.as_str()) {
-                            (src, dst) if src == "jmap" || dst == "jmap" => migrate_email_jmap(
-                                &state,
-                                &source_config,
-                                &dest_config,
-                                src,
-                                dst,
-                                &src_path,
-                                &dst_path,
-                                uid,
-                                graph_id.as_deref(),
-                                is_read,
-                                folder_mappings[folder_idx].dest_folder_id.as_deref(),
-                                &dest_message_ids,
-                            )
-                            .await
-                            .map(|_| true),
-                            ("imap", "imap") => {
-                                let mut sg = pool.get_priority(&source_config).await?;
-                                let mut dg = pool.get_priority(&dest_config).await?;
-                                let r = migrate_email_imap_to_imap(&mut sg.session, &mut dg.session, &src_path, &dst_path, uid).await;
-                                sg.last_selected = Some(src_path.clone());
-                                dg.last_selected = Some(dst_path.clone());
-                                pool.return_priority(&source_config, sg).await;
-                                pool.return_priority(&dest_config, dg).await;
-                                r
-                            }
-                            ("graph", "imap") => {
-                                if let Some(ref gid) = graph_id {
-                                    let t = source_config.access_token.as_deref().ok_or("No source access token")?;
-                                    let c = GraphClient::new(t).for_account(&source_email);
-                                    let mut dg = pool.get_priority(&dest_config).await?;
-                                    let r = migrate_email_graph_to_imap(&c, &mut dg.session, gid, &dst_path, is_read).await;
-                                    dg.last_selected = Some(dst_path.clone());
-                                    pool.return_priority(&dest_config, dg).await;
-                                    r
-                                } else { Err("No Graph message ID".to_string()) }
-                            }
-                            ("imap", "graph") => {
-                                let dfid = folder_mappings[folder_idx].dest_folder_id.as_deref().ok_or("No destination Graph folder ID")?;
-                                let t = dest_config.access_token.as_deref().ok_or("No dest access token")?;
-                                let c = GraphClient::new(t).for_account(&dest_email);
-                                let mut sg = pool.get_priority(&source_config).await?;
-                                let mr = fetch_raw_mime(&mut sg.session, &src_path, uid).await;
-                                sg.last_selected = Some(src_path.clone());
-                                pool.return_priority(&source_config, sg).await;
-                                match mr {
-                                    Ok(mb) => migrate_email_to_graph(&mb, &c, dfid, is_read).await,
-                                    Err(e) => Err(e),
-                                }
-                            }
-                            ("graph", "graph") => {
-                                if let Some(ref gid) = graph_id {
-                                    let st = source_config.access_token.as_deref().ok_or("No source access token")?;
-                                    let sc = GraphClient::new(st).for_account(&source_email);
-                                    let mb = sc.get_mime_content(gid).await?;
-                                    let dfid = folder_mappings[folder_idx].dest_folder_id.as_deref().ok_or("No destination Graph folder ID")?;
-                                    let dt = dest_config.access_token.as_deref().ok_or("No dest access token")?;
-                                    let dc = GraphClient::new(dt).for_account(&dest_email);
-                                    migrate_email_to_graph(&mb, &dc, dfid, is_read).await
-                                } else { Err("No Graph message ID".to_string()) }
-                            }
-                            _ => Err("Unsupported transport".to_string()),
-                        };
-
-                        match retry_result {
-                            Ok(_) => {
-                                folder_migrated += 1;
-                                migrated_total += 1;
-                                email_status = "ok";
-                                info!("[migration] Email UID {} succeeded on retry", uid);
-                            }
-                            Err(e) => {
-                                warn!("migration: email UID {} failed twice, skipping: {}", uid, e);
-                                folder_failed += 1;
-                                failed_total += 1;
-                                email_status = "failed";
-                                folder_mappings[folder_idx].failed_uids.push(uid);
-                                if imap::is_bandwidth_limited(&e) {
-                                    warn!("[migration] Email UID {} hit provider bandwidth limit, aborting run", uid);
-                                    bandwidth_hit = true;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let log_entry = MigrationLogEntry {
-                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                    sender: email_sender.clone(),
-                    subject: email_subject.clone(),
-                    status: email_status.to_string(),
-                };
-                emit_progress(
-                    "running",
-                    Some(src_path.clone()),
-                    Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
-                    migrated_total,
-                    skipped_total,
-                    failed_total,
-                    &folder_mappings,
-                    &started_at,
-                    start_instant.elapsed().as_secs(),
-                    &source_email,
-                    &dest_email,
-                    total_emails,
-                    &state,
-                    Some(log_entry),
-                    None,
-                );
-                if bandwidth_hit {
-                    break;
-                }
-            }
-            if bandwidth_hit {
-                break;
-            }
-        }
-
-        // Update folder mapping
-        folder_mappings[folder_idx].migrated = folder_migrated;
-        folder_mappings[folder_idx].skipped = folder_skipped;
-        folder_mappings[folder_idx].failed = folder_failed;
-        folder_mappings[folder_idx].status = if cancel.load(Ordering::Relaxed) {
-            "cancelled".to_string()
-        } else if bandwidth_hit || (folder_failed > 0 && folder_migrated == 0) {
-            "failed".to_string()
-        } else {
-            "completed".to_string()
-        };
-
         // Save checkpoint after each folder
-        let checkpoint_state = MigrationState {
-            id: migration_id.clone(),
-            source_email: source_email.clone(),
-            dest_email: dest_email.clone(),
-            source_transport: source_transport.clone(),
-            dest_transport: dest_transport.clone(),
-            source_account_json: source_account_json.clone(),
-            dest_account_json: dest_account_json.clone(),
-            status: "running".to_string(),
-            folder_mappings: folder_mappings.clone(),
-            total_emails,
-            migrated_emails: migrated_total,
-            skipped_emails: skipped_total,
-            failed_emails: failed_total,
-            started_at: started_at.clone(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
-        };
-        let _ = save_migration_state(&state.app_dir, &checkpoint_state);
-        info!("migration: folder '{}' completed, saved checkpoint", src_path);
-        if bandwidth_hit {
+        sink.checkpoint("running", &folder_mappings, &totals);
+        info!("migration: folder '{}' completed, saved checkpoint", folder_mappings[folder_idx].source_path);
+        if done.bandwidth_hit {
+            bandwidth_hit = true;
             warn!("[migration] Provider bandwidth limit reached, stopping run; re-run after the limit resets (usually within 1 hour, up to 24 hours)");
             break;
         }
@@ -1736,29 +1264,12 @@ pub async fn run_migration(
 
     let final_status = if cancel.load(Ordering::Relaxed) {
         "cancelled"
-    } else if bandwidth_hit || (failed_total > 0 && migrated_total == 0) {
+    } else if bandwidth_hit || (totals.failed > 0 && totals.migrated == 0) {
         "failed"
     } else {
         "completed"
     };
-
-    let final_state = MigrationState {
-        id: migration_id,
-        source_email: source_email.clone(),
-        dest_email: dest_email.clone(),
-        source_transport: source_transport.clone(),
-        dest_transport: dest_transport.clone(),
-        source_account_json,
-        dest_account_json,
-        status: final_status.to_string(),
-        folder_mappings: folder_mappings.clone(),
-        total_emails,
-        migrated_emails: migrated_total,
-        skipped_emails: skipped_total,
-        failed_emails: failed_total,
-        started_at: started_at.clone(),
-        updated_at: chrono::Utc::now().to_rfc3339(),
-    };
+    let final_state = sink.snapshot(final_status, &folder_mappings, &totals);
 
     // Cancel discards persistent state; completed/failed saves final state
     if final_status == "cancelled" {
@@ -1768,63 +1279,22 @@ pub async fn run_migration(
         let _ = save_migration_state(&state.app_dir, &final_state);
     }
 
-    emit_progress(
-        final_status,
-        None,
-        None,
-        migrated_total,
-        skipped_total,
-        failed_total,
-        &folder_mappings,
-        &started_at,
-        start_instant.elapsed().as_secs(),
-        &source_email,
-        &dest_email,
-        total_emails,
-        &state,
-        None,
-        None,
-    );
+    sink.progress(ProgressTick {
+        status: final_status,
+        folder: None,
+        folder_progress: None,
+        folders: &folder_mappings,
+        totals: &totals,
+        log: None,
+        rate_limited_for: None,
+    });
 
     info!(
         "[migration] {}, migrated: {}, skipped: {}, failed: {}",
-        final_status, migrated_total, skipped_total, failed_total
+        final_status, totals.migrated, totals.skipped, totals.failed
     );
 
     Ok(final_state)
-}
-
-// ── Helper: fetch raw MIME from IMAP ────────────────────────────────────────
-
-async fn fetch_raw_mime(
-    session: &mut ImapSession,
-    mailbox: &str,
-    uid: u32,
-) -> Result<Vec<u8>, String> {
-    use futures::StreamExt;
-
-    let _mbox = imap::select_mailbox(session, mailbox).await?;
-
-    let fetch_stream = session
-        .uid_fetch(uid.to_string(), "BODY.PEEK[]")
-        .await
-        .map_err(|e| format!("UID FETCH {} BODY.PEEK[] failed: {}", uid, e))?;
-
-    let fetches: Vec<_> = fetch_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
-
-    let fetch = fetches
-        .first()
-        .ok_or_else(|| format!("Email UID {} not found", uid))?;
-
-    fetch
-        .body()
-        .map(|b| b.to_vec())
-        .ok_or_else(|| format!("No body for UID {}", uid))
 }
 
 // ── Graph folder name normalization ─────────────────────────────────────────
@@ -2375,7 +1845,6 @@ mod tests {
     /// other source does (`fetch_imap_message`), so a source `\Deleted` is no
     /// longer copied and keywords are.
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "pins step C"]
     async fn imap_to_imap_drops_deleted_flag_and_keeps_keywords() {
         let (_v, _a, s) = st();
         let mut inbox = Mailbox::new("INBOX");
@@ -2396,7 +1865,6 @@ mod tests {
     /// mid-run is dropped, not pooled again, so it costs the message in hand
     /// and the next one gets a fresh connection.
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "pins step C"]
     async fn a_dest_connection_dropped_mid_run_fails_one_message_and_emits_a_final_event() {
         let (_v, _a, s) = st();
         let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1, 2, 3])));
@@ -2413,6 +1881,103 @@ mod tests {
         assert_eq!(done.status, "completed");
         let last = progress_events(&mut rx).pop().expect("a final event");
         assert_eq!((last["status"].as_str(), last["current_folder"].as_str()), (Some("completed"), None));
+    }
+
+    /// Deliberate change of the copy engine: a source folder that cannot be
+    /// listed fails that folder, and the run goes on to the next one and ends
+    /// with its final event (it used to return an error with no final event).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_unlistable_source_folder_fails_that_folder_and_the_run_goes_on() {
+        let (_v, _a, s) = st();
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1, 2])));
+        let dest = empty_dest(mock_imap::Scenario::new());
+        let mut rx = s.events.subscribe();
+
+        let done = migrate(
+            &s,
+            &imap_config(&source, "source@example.com"),
+            &imap_config(&dest, "dest@example.com"),
+            vec![mapping("Gone", "INBOX"), mapping("INBOX", "INBOX")],
+        )
+        .await;
+
+        let statuses: Vec<&str> = done.folder_mappings.iter().map(|f| f.status.as_str()).collect();
+        assert_eq!(statuses, ["failed", "completed"]);
+        assert_eq!((done.status.as_str(), done.migrated_emails, done.failed_emails), ("completed", 2, 0));
+        let last = progress_events(&mut rx).pop().expect("a final event");
+        assert_eq!((last["status"].as_str(), last["current_folder"].as_str()), (Some("completed"), None));
+    }
+
+    /// Every tick a copy reported: status, the rate-limit wait, the log status.
+    struct Ticks(Vec<(String, Option<u64>, Option<String>)>);
+
+    impl CopySink for Ticks {
+        fn progress(&mut self, tick: ProgressTick<'_>) {
+            self.0.push((tick.status.to_string(), tick.rate_limited_for, tick.log.map(|l| l.2.to_string())));
+        }
+        fn checkpoint(&mut self, _status: &str, _folders: &[FolderMapping], _totals: &Totals) {}
+    }
+
+    fn graph_message(id: &str) -> String {
+        json!({
+            "id": id, "subject": "msg 1", "from": null, "toRecipients": null, "ccRecipients": null, "bccRecipients": null,
+            "receivedDateTime": "2026-01-01T12:00:00Z", "sentDateTime": null, "isRead": false, "hasAttachments": false,
+            "internetMessageId": "<1@example.com>", "body": null, "internetMessageHeaders": null,
+        })
+        .to_string()
+    }
+
+    /// Graph throttles the upload once: the copy reports the wait Graph asked
+    /// for, waits, and writes the message, which counts once.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn graph_dest_rate_limit_retries_then_writes() {
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+            (200, json!({"value": []}).to_string()),
+            (429, json!({"error": {"code": "TooManyRequests"}}).to_string()),
+            (200, graph_message("draft1")),
+            (200, graph_message("m1")),
+        ]);
+        let (_v, _a, s) = st();
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1])));
+        let src = Side::new(imap_config(&source, "source@example.com"), "imap");
+        let dest_config = serde_json::from_value(json!({"email": "dest@example.com", "imapHost": "outlook.office365.com", "oauth2AccessToken": "tok"})).unwrap();
+        let dest = Side::new(dest_config, "graph");
+        let (cancel, pause, notify) = (AtomicBool::new(false), AtomicBool::new(false), tokio::sync::Notify::new());
+        // The mock sends no Retry-After, so Graph's wait reads as 30s: a
+        // stored wake-up ends it early, as a pause would.
+        notify.notify_one();
+        let mut ctx = CopyCtx {
+            state: &s,
+            source: &src,
+            dest: &dest,
+            lane: Lane::Priority,
+            cancel: &cancel,
+            pause: &pause,
+            notify: &notify,
+            graph_folder_cache: HashMap::from([("Archive".to_string(), "fld-archive".to_string())]),
+            yield_to_ui: false,
+            seen_fingerprints: None,
+        };
+        let mut folders = vec![mapping("INBOX", "Archive")];
+        let mut totals = Totals::default();
+        let mut ticks = Ticks(Vec::new());
+
+        let out = copy_folder(&mut ctx, &mut folders, 0, &mut totals, &mut ticks).await;
+
+        assert_eq!((out.migrated, out.failed, totals.migrated), (1, 0, 1), "{:?}", ticks.0);
+        assert_eq!(folders[0].dest_folder_id.as_deref(), Some("fld-archive"));
+        assert_eq!(
+            ticks.0[1..],
+            [("rate_limited".to_string(), Some(30), None), ("running".to_string(), None, Some("ok".to_string()))]
+        );
+        let requests: Vec<String> = crate::handlers::graph::test_graph_requests()
+            .iter()
+            .map(|r| format!("{} {}", r.method, r.path.split('?').next().unwrap_or_default()))
+            .collect();
+        assert_eq!(
+            requests,
+            ["GET /me/mailFolders/fld-archive/messages", "POST /me/messages", "POST /me/messages", "POST /me/messages/draft1/move"]
+        );
     }
 
     fn archive_count(m: &MockJmap) -> usize {

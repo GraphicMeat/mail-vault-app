@@ -251,7 +251,8 @@ async fn restore_folder(
             Ok(b) => b,
             Err(e) => { warn!("[restore] read {:?} failed: {}", msg.path, e); failed += 1; continue; }
         };
-        if migration::extract_message_id(&raw).is_some_and(|mid| dest_ids.contains(&mid)) {
+        let mid = migration::extract_message_id(&raw).and_then(|m| mailvault_core::maildir::message_id_value_key(&m));
+        if mid.is_some_and(|mid| dest_ids.contains(&mid)) {
             skipped += 1;
             continue;
         }
