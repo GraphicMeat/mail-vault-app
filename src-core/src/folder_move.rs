@@ -203,6 +203,25 @@ pub fn plan(
     Ok(Plan { items, fast_rename })
 }
 
+/// Whether the source as listed now holds more under `root` than `plan`
+/// moves: a folder made under it since the plan, or a planned container that
+/// can now hold mail (Graph lists top-level folders only: a root that now
+/// has children). The retire's rename carries all of it, verified or not, so
+/// any of it keeps the source. A root that is not listed has changed too.
+pub fn subtree_changed(plan: &Plan, source_tree: &[MailboxInfo], root: &str, src_kind: Kind) -> bool {
+    let mut flat = Vec::new();
+    flatten(source_tree, &mut flat);
+    let Some(root_node) = flat.iter().find(|m| m.path == root) else { return true };
+    if src_kind == Kind::Graph {
+        return root_node.flags.iter().any(|f| f.eq_ignore_ascii_case("\\HasChildren"));
+    }
+    let d = delimiter_of(root_node);
+    let under = |path: &str| path == root || d.is_some_and(|d| path.strip_prefix(root).is_some_and(|r| r.starts_with(d)));
+    flat.iter()
+        .filter(|m| under(&m.path))
+        .any(|m| !plan.items.iter().any(|i| i.src_path == m.path && (!i.container || m.noselect)))
+}
+
 /// What the copy engine did with one source message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -276,8 +295,9 @@ pub fn fingerprint(raw: &[u8]) -> u64 {
     u64::from_be_bytes(Sha256::digest(raw)[..8].try_into().expect("8 bytes"))
 }
 
-/// The journal key of a message the job handled: its bracketed Message-ID,
-/// else its fingerprint in hex.
+/// The key of a message: its bracketed Message-ID, else its fingerprint in
+/// hex. The journal keeps only fingerprint keys: mail with a Message-ID is
+/// found again in the destination's listing.
 pub fn done_key(message_id: Option<&str>, fingerprint: u64) -> String {
     message_id.and_then(crate::maildir::message_id_value_key).unwrap_or_else(|| format!("{fingerprint:016x}"))
 }
@@ -302,8 +322,13 @@ pub struct JournalFolder {
     pub copied: u32,
     pub skipped: u32,
     pub failed: u32,
-    /// `done_key`s of the messages already copied or found present.
+    /// Fingerprint keys (`done_key`) of mail without a Message-ID that the
+    /// destination acknowledged or already held.
     pub done: Vec<String>,
+    /// Fingerprint keys of mail without a Message-ID the destination took
+    /// without naming it (an IMAP server without UIDPLUS): never written
+    /// again, and never verified.
+    pub unconfirmed: Vec<String>,
 }
 
 /// What a move job persists, so a stopped one resumes where it was.
@@ -319,12 +344,28 @@ pub struct Journal {
     pub folders: Vec<JournalFolder>,
 }
 
-/// The plan items a resumed job still has to work on: every one not yet
-/// verified or retired.
+/// The plan items a resumed job works on: every one not retired. A folder
+/// an earlier run verified is walked again (its copies are skipped, so it is
+/// cheap): mail may have arrived since, and the retire's rename carries
+/// whatever the folder holds then.
 pub fn resume_items(journal: &Journal) -> Vec<usize> {
-    (0..journal.plan.items.len())
-        .filter(|&i| !matches!(journal.folders.get(i).map(|f| f.phase), Some(FolderPhase::Verified | FolderPhase::Retired)))
-        .collect()
+    (0..journal.plan.items.len()).filter(|&i| journal.folders.get(i).map(|f| f.phase) != Some(FolderPhase::Retired)).collect()
+}
+
+/// `plan` as the journal's plan from now on. A folder keeps its progress
+/// (phase, counts, keys) only where both its source and its destination are
+/// the same as before: a fingerprint says what one destination folder holds.
+pub fn replan(journal: &mut Journal, plan: Plan) {
+    let old = std::mem::take(&mut journal.folders);
+    journal.folders = plan
+        .items
+        .iter()
+        .map(|item| {
+            let at = journal.plan.items.iter().position(|o| o.src_path == item.src_path && o.dest_path == item.dest_path);
+            at.and_then(|i| old.get(i).cloned()).unwrap_or_default()
+        })
+        .collect();
+    journal.plan = plan;
 }
 
 #[cfg(test)]
@@ -402,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn journal_resume_skips_verified_and_retired_folders() {
+    fn journal_resume_skips_only_retired_folders() {
         let item = |s: &str| PlanItem { src_path: s.into(), dest_path: format!("Archive/{s}"), container: false };
         let phase = |phase| JournalFolder { phase, ..Default::default() };
         let journal = Journal {
@@ -412,13 +453,69 @@ mod tests {
             folders: vec![phase(FolderPhase::Verified), phase(FolderPhase::Copying), phase(FolderPhase::Retired), phase(FolderPhase::Unverified)],
             ..Default::default()
         };
-        assert_eq!(resume_items(&journal), vec![1, 3, 4], "a folder the journal never reached is pending");
+        // A verified folder is walked again: the verdict of an earlier run
+        // says nothing about mail that arrived since, and the retire's
+        // rename carries whatever the folder holds then.
+        assert_eq!(resume_items(&journal), vec![0, 1, 3, 4], "a folder the journal never reached is pending");
 
         let text = serde_json::to_string(&journal).unwrap();
         assert!(text.contains("\"jobId\":\"j1\"") && text.contains("\"target\":{\"into\":\"Archive\"}") && text.contains("\"phase\":\"copying\""), "{text}");
         assert_eq!(serde_json::from_str::<Journal>(&text).unwrap(), journal);
         let old: Journal = serde_json::from_str(r#"{"jobId":"j0","folders":[{"phase":"verified"}]}"#).unwrap();
         assert_eq!((old.target, old.folders[0].done.len()), (Target::TopLevel, 0), "missing fields default");
+    }
+
+    fn mailbox(path: &str, noselect: bool, flags: &[&str]) -> MailboxInfo {
+        MailboxInfo {
+            name: path.rsplit('/').next().unwrap_or(path).into(),
+            path: path.into(),
+            special_use: None,
+            special_use_guessed: false,
+            flags: flags.iter().map(|f| f.to_string()).collect(),
+            delimiter: Some("/".into()),
+            noselect,
+            children: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn subtree_changed_sees_a_new_subfolder_and_a_container_that_holds_mail() {
+        let item = |s: &str, container| PlanItem { src_path: s.into(), dest_path: format!("Archive/{s}"), container };
+        let plan = Plan { items: vec![item("Clients", false), item("Clients/Old", true)], fast_rename: None };
+        let tree = |extra: Vec<MailboxInfo>| {
+            let mut t = vec![mailbox("INBOX", false, &[]), mailbox("Clients", false, &[]), mailbox("Clients/Old", true, &[]), mailbox("ClientsX", false, &[])];
+            t.extend(extra);
+            t
+        };
+        assert!(!subtree_changed(&plan, &tree(vec![]), "Clients", Kind::Imap), "a sibling that shares the prefix is not under the root");
+        assert!(subtree_changed(&plan, &tree(vec![mailbox("Clients/New", false, &[])]), "Clients", Kind::Imap));
+        assert!(subtree_changed(&plan, &tree(vec![mailbox("Clients/Old/Deep", true, &[])]), "Clients", Kind::Imap), "an unplanned container too");
+        let mut selectable = tree(vec![]);
+        selectable[2].noselect = false;
+        assert!(subtree_changed(&plan, &selectable, "Clients", Kind::Imap), "a planned container that can hold mail now");
+        assert!(subtree_changed(&plan, &[mailbox("INBOX", false, &[])], "Clients", Kind::Imap), "the root is gone");
+
+        let one = Plan { items: vec![item("Clients", false)], fast_rename: None };
+        assert!(!subtree_changed(&one, &[mailbox("Clients", false, &[])], "Clients", Kind::Graph));
+        assert!(subtree_changed(&one, &[mailbox("Clients", false, &["\\HasChildren"])], "Clients", Kind::Graph), "Graph shows children only as a flag");
+    }
+
+    #[test]
+    fn replan_keeps_progress_only_where_source_and_destination_match() {
+        let item = |s: &str, d: &str| PlanItem { src_path: s.into(), dest_path: d.into(), container: false };
+        let done = |key: &str| JournalFolder { phase: FolderPhase::Verified, copied: 1, done: vec![key.into()], ..Default::default() };
+        let mut journal = Journal {
+            plan: Plan { items: vec![item("Clients", "Archive/Clients"), item("Clients/2025", "Archive/Clients/2025")], fast_rename: None },
+            folders: vec![done("a"), done("b")],
+            ..Default::default()
+        };
+        let again = Plan {
+            items: vec![item("Clients", "Archive/Clients"), item("Clients/New", "Archive/Clients/New"), item("Clients/2025", "Elsewhere/2025")],
+            fast_rename: None,
+        };
+        replan(&mut journal, again.clone());
+        assert_eq!(journal.plan, again);
+        assert_eq!(journal.folders, vec![done("a"), JournalFolder::default(), JournalFolder::default()], "a new destination starts over");
     }
 
     #[test]
