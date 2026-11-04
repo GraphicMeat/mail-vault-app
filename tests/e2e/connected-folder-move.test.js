@@ -17,7 +17,8 @@
  *     goes to luke's Trash once every message is confirmed.
  * (b) needs a cancel inside one run's copy, a window no WebDriver round trip
  *     hits reliably, so the start and the cancel are one in-page script: the
- *     cancel goes out on the event that says the folder is copying.
+ *     cancel goes out on the event that says some messages are copied, so it
+ *     lands mid-folder, and the destination holds exactly what was copied.
  * (c) a move inside one account to the top level is one native RENAME:
  *     nothing copied, nothing in Trash.
  *
@@ -46,6 +47,7 @@ const MOVE_SUB_COUNT = 2;
 // (b)
 const CANCEL_FOLDER = 'MoveCancelE2E';
 const CANCEL_COUNT = 40;
+const CANCEL_AFTER = 3; // copied before the cancel goes out
 // (c)
 const RENAME_HOST = 'MoveHostE2E';
 const RENAME_LEAF = 'MoveRenameE2E';
@@ -349,9 +351,9 @@ describe('Move folder through the daemon', function () {
     const lukeId = accountId(LUKE);
     const params = { sourceAccountId: lukeId, sourcePath: CANCEL_FOLDER, destAccountId: accountId(VADER), destPath: null };
 
-    // Start, and cancel on the event that says the folder is copying: in the
-    // page, so no WebDriver round trip sits between the two.
-    const run = await browser.executeAsync((p, done) => {
+    // Start, and cancel on the event that says a few messages are copied: in
+    // the page, so no WebDriver round trip sits between the two.
+    const run = await browser.executeAsync((p, after, done) => {
       const invoke = (method, args) => window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method, params: args });
       const fail = (e) => done({ ok: false, __error: String((e && e.message) || e) });
       let jobId = null;
@@ -359,15 +361,15 @@ describe('Move folder through the daemon', function () {
       const early = [];
       const consider = (ev) => {
         if (sent || !jobId || ev.jobId !== jobId) return;
-        if (!(ev.folders || []).some((f) => f.phase === 'copying')) return;
+        if (!(ev.copied >= after)) return;
         sent = true;
         invoke('folder_move.cancel', { jobId }).then((v) => done({ ok: true, jobId, cancel: v, at: ev }), fail);
       };
       window.__TAURI__.event.listen('folder-move-progress', (e) => (jobId ? consider(e.payload) : early.push(e.payload)))
         .then(() => invoke('folder_move.start', p))
         .then((r) => { jobId = r.jobId; early.forEach(consider); }, fail);
-      setTimeout(() => { if (!sent) done({ ok: false, __error: `no copying event for ${jobId}` }); }, 25_000);
-    }, params);
+      setTimeout(() => { if (!sent) done({ ok: false, __error: `no event with ${after} copied for ${jobId}` }); }, 25_000);
+    }, params, CANCEL_AFTER);
     if (run.jobId) started.add(run.jobId);
     if (!run.ok) throw new Error(`start then cancel: ${run.__error}`);
     expect(run.cancel.cancelled).toBe(true);
@@ -376,8 +378,12 @@ describe('Move folder through the daemon', function () {
     expect(last.state).toBe('cancelled');
     expect(last.sourceKeptReason).toBe('cancelled');
     expect(last.retired).toBe(false);
-    // Not a run that finished before the cancel landed.
+    // Mid-folder: some copied, not a run that finished before the cancel landed.
+    expect(last.copied).toBeGreaterThanOrEqual(CANCEL_AFTER);
     expect(last.copied).toBeLessThan(CANCEL_COUNT);
+    expect(last.skipped).toBe(0);
+    // The destination holds exactly what the job says it copied.
+    expect(await messageCount(VADER_SERVER, VADER, CANCEL_FOLDER)).toBe(last.copied);
 
     // The source is where it was, with every message, and not in Trash.
     const lukePaths = await listPaths(LUKE_SERVER, LUKE);
