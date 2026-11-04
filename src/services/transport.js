@@ -203,6 +203,10 @@ export const DAEMON_OWNED = new Set([
   // "Import and restore to the server" starts a daemon job (import_mbox,
   // mode "server"); these hold, resume, end, forget and list it.
   'mbox_upload_pause', 'mbox_upload_resume', 'mbox_upload_cancel', 'mbox_upload_discard', 'mbox_upload_status',
+  // Move folder: the plan from the cached lists, then the daemon job and
+  // its controls (progress is `folder-move-progress`).
+  'folder_move.plan', 'folder_move.start', 'folder_move.pause', 'folder_move.resume', 'folder_move.cancel',
+  'folder_move.discard', 'folder_move.status',
   // Settings > Storage > Message format: the vault's format (kept in its
   // marker), the conversion job and its controls, the old files a conversion
   // set aside, and the blob sweep.
