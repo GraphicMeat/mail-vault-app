@@ -1274,6 +1274,21 @@ mod tests {
         assert_eq!(uids(&dir, "Archive"), Vec::<u32>::new());
     }
 
+    /// Gmail's own words for its cap, "exceeded command or bandwidth
+    /// limits", rest the account for the day like any bandwidth stop.
+    #[tokio::test]
+    async fn gmails_command_or_bandwidth_alert_rests_the_account_for_the_day() {
+        let mock = MockImap::start(Scenario::new().mailbox(folder("Archive", 1..=5)).fault(Trigger::on("SELECT"), Action::gmail_bandwidth_limit()));
+        let (_dir, s) = state();
+        let out = hoard_account(&s, &config(&mock), ACCT).await;
+        assert!(out.stopped.as_deref().is_some_and(|r| r.starts_with("bandwidth_limited")), "{out:?}");
+        let sent = mock.commands().len();
+
+        let next = hoard_account(&s, &config(&mock), ACCT).await;
+        assert_eq!(next.stopped.as_deref(), Some("daily_budget_spent"));
+        assert_eq!(mock.commands().len(), sent, "no server contact until the day rolls over");
+    }
+
     /// The first folder's SELECT finds the socket dead; the pool's retry
     /// signs in again and is refused. The pass ends there: the next folder
     /// is never tried (it would sign in a third time).
