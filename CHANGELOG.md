@@ -8,6 +8,8 @@
 
 - On a Microsoft 365 or Hotmail account, a refresh now re-checks the older emails it kept in the list: one deleted in another app drops out, a flag changed there comes through, and one restored from Deleted Items appears. It walks them in the background, at most once every few minutes.
 
+- Move a folder, with every folder inside it, from its right-click menu: Move folder… lets you pick an account and the folder it goes into, or the top level. Moved within one account to a place where no folder of that name exists yet, it moves on the server in one step and nothing is copied. Otherwise MailVault copies every message, checks that each one arrived, and only then moves the original folder to Trash (Deleted Items on Microsoft 365 and Hotmail). If any message could not be copied or confirmed, or you cancel, the original stays where it was. The move runs in the background with a progress chip where you can pause, resume or cancel it, and a move cut short by quitting MailVault can be resumed or discarded later. Moving a folder to another account is a Premium feature. A Microsoft 365 or Hotmail folder that has subfolders cannot be moved yet, and neither can a folder with subfolders into a Microsoft 365 or Hotmail account.
+
 ## [2.21.1] - 2026-11-03
 
 - Deleting an email no longer reloads the folder. The row leaves the list, the count and the cache as before, and the rest of the list stays where it is; before, the reload cut a long list back to its first page and sent you to the top. An email that could not be deleted still comes back as it did.
