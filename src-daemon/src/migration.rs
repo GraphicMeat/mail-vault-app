@@ -2195,6 +2195,226 @@ mod tests {
         assert!(!e2.has_flag("\\Seen"), "{:?}", e2.flags);
     }
 
+    // ── imap -> imap characterization (pinned before the copy engine) ──────
+
+    fn plain(uid: u32) -> String {
+        format!(
+            "From: sender@example.com\r\nTo: user@example.com\r\nSubject: msg {uid}\r\nDate: Thu, 01 Jan 2026 12:00:00 +0000\r\nMessage-ID: <{uid}@example.com>\r\n\r\nbody {uid}\r\n"
+        )
+    }
+
+    fn mailbox_of(name: &str, uids: &[u32]) -> Mailbox {
+        let mut mb = Mailbox::new(name);
+        for &uid in uids {
+            mb.add(mock_imap::Message::new(uid, plain(uid)));
+        }
+        mb
+    }
+
+    fn inbox_of(uids: &[u32]) -> Mailbox {
+        mailbox_of("INBOX", uids)
+    }
+
+    fn empty_dest(scenario: mock_imap::Scenario) -> MockImap {
+        MockImap::start(scenario.mailbox(Mailbox::new("INBOX")))
+    }
+
+    /// Every `migration-progress` payload the bus carried so far, oldest first.
+    fn progress_events(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<Value> {
+        let mut out = Vec::new();
+        while let Ok(line) = rx.try_recv() {
+            let v: Value = serde_json::from_str(&line).unwrap();
+            if v["params"]["name"] == "migration-progress" {
+                out.push(v["params"]["payload"].clone());
+            }
+        }
+        out
+    }
+
+    fn keys(v: &Value) -> Vec<&str> {
+        let mut k: Vec<&str> = v.as_object().expect("an object").keys().map(String::as_str).collect();
+        k.sort_unstable();
+        k
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn imap_to_imap_rerun_skips_what_the_destination_holds() {
+        let (_v, _a, s) = st();
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1, 2])));
+        let dest = empty_dest(mock_imap::Scenario::new());
+        let (src, dst) = (imap_config(&source, "source@example.com"), imap_config(&dest, "dest@example.com"));
+        let first = migrate(&s, &src, &dst, vec![mapping("INBOX", "INBOX")]).await;
+        assert_eq!((first.migrated_emails, first.skipped_emails, first.failed_emails), (2, 0, 0));
+
+        let again = migrate(&s, &src, &dst, vec![mapping("INBOX", "INBOX")]).await;
+
+        assert_eq!((again.migrated_emails, again.skipped_emails, again.failed_emails), (0, 2, 0));
+        assert_eq!(again.status, "completed");
+        assert_eq!(dest.count_commands("APPEND"), 2, "nothing appended twice");
+        assert_eq!(dest.state().find("INBOX").unwrap().messages.len(), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn imap_to_imap_keeps_internaldate_and_seen_flagged() {
+        let (_v, _a, s) = st();
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(mock_imap::Message::new(1, plain(1)).with_flags(&["\\Seen"]).with_internal_date("05-Mar-2019 09:15:00 +0100"));
+        inbox.add(mock_imap::Message::new(2, plain(2)).with_flags(&["\\Flagged"]));
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox));
+        let dest = empty_dest(mock_imap::Scenario::new());
+
+        let done = migrate(&s, &imap_config(&source, "source@example.com"), &imap_config(&dest, "dest@example.com"), vec![mapping("INBOX", "INBOX")]).await;
+
+        assert_eq!((done.status.as_str(), done.migrated_emails), ("completed", 2));
+        let state = dest.state();
+        let inbox = state.find("INBOX").unwrap();
+        let m1 = inbox.messages.iter().find(|m| String::from_utf8_lossy(&m.raw).contains("<1@example.com>")).unwrap();
+        let m2 = inbox.messages.iter().find(|m| String::from_utf8_lossy(&m.raw).contains("<2@example.com>")).unwrap();
+        assert_eq!(m1.internal_date, "05-Mar-2019 09:15:00 +0100", "the source INTERNALDATE");
+        assert!(m1.has_flag("\\Seen") && !m1.has_flag("\\Flagged"), "{:?}", m1.flags);
+        assert!(m2.has_flag("\\Flagged") && !m2.has_flag("\\Seen"), "{:?}", m2.flags);
+        assert_eq!(m1.raw, plain(1).into_bytes(), "byte for byte");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_failed_append_records_the_uid_in_failed_uids_and_the_run_completes() {
+        let (_v, _a, s) = st();
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1, 2, 3])));
+        let dest = empty_dest(mock_imap::Scenario::new().fault(
+            mock_imap::Trigger::with("APPEND", "Subject: msg 2"),
+            mock_imap::Action::RefuseWith("NO".into(), "[CANNOT] refused".into()),
+        ));
+
+        let done = migrate(&s, &imap_config(&source, "source@example.com"), &imap_config(&dest, "dest@example.com"), vec![mapping("INBOX", "INBOX")]).await;
+
+        assert_eq!(done.status, "completed");
+        assert_eq!((done.migrated_emails, done.skipped_emails, done.failed_emails), (2, 0, 1));
+        assert_eq!(done.folder_mappings[0].failed_uids, vec![2]);
+        assert_eq!(done.folder_mappings[0].status, "completed");
+        assert_eq!(dest.state().find("INBOX").unwrap().messages.len(), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bandwidth_limit_aborts_the_run_as_failed() {
+        let (_v, _a, s) = st();
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1, 2, 3])).mailbox(mailbox_of("Work", &[4])));
+        let dest = empty_dest(mock_imap::Scenario::new().fault(mock_imap::Trigger::on("APPEND"), mock_imap::Action::throttled()));
+
+        let done = migrate(
+            &s,
+            &imap_config(&source, "source@example.com"),
+            &imap_config(&dest, "dest@example.com"),
+            vec![mapping("INBOX", "INBOX"), mapping("Work", "INBOX")],
+        )
+        .await;
+
+        assert_eq!(done.status, "failed");
+        assert_eq!((done.migrated_emails, done.failed_emails), (0, 1));
+        assert_eq!(dest.count_commands("APPEND"), 1, "no retry and no further message against a suspended account");
+        assert_eq!(done.folder_mappings[0].status, "failed");
+        assert_eq!(done.folder_mappings[1].status, "pending", "the next folder never starts");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn migration_progress_payload_keeps_its_snake_case_shape() {
+        let (_v, a, s) = st();
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1, 2])));
+        let dest = empty_dest(mock_imap::Scenario::new());
+        let mut rx = s.events.subscribe();
+
+        migrate(&s, &imap_config(&source, "source@example.com"), &imap_config(&dest, "dest@example.com"), vec![mapping("INBOX", "INBOX")]).await;
+
+        let events = progress_events(&mut rx);
+        let seq: Vec<(String, Value, Value)> = events
+            .iter()
+            .map(|e| (e["status"].as_str().unwrap().to_string(), e["folder_progress"].clone(), e["last_log_entry"]["status"].clone()))
+            .collect();
+        assert_eq!(
+            seq,
+            vec![
+                ("running".to_string(), json!("0/0"), Value::Null),
+                ("running".to_string(), json!("1/2"), json!("ok")),
+                ("running".to_string(), json!("2/2"), json!("ok")),
+                ("completed".to_string(), Value::Null, Value::Null),
+            ]
+        );
+        assert_eq!(
+            keys(&events[1]),
+            [
+                "current_folder", "dest_email", "elapsed_seconds", "failed_emails", "folder_progress", "folders", "last_log_entry",
+                "migrated_emails", "rate_limit_remaining", "skipped_emails", "source_email", "started_at", "status", "total_emails",
+            ]
+        );
+        assert_eq!(
+            keys(&events[1]["folders"][0]),
+            ["dest_folder_id", "dest_path", "email_count", "failed", "failed_uids", "migrated", "skipped", "source_path", "source_special_use", "status"]
+        );
+        assert_eq!(keys(&events[1]["last_log_entry"]), ["sender", "status", "subject", "timestamp"]);
+        assert_eq!(events[1]["last_log_entry"]["sender"], "sender@example.com");
+        assert_eq!(events[1]["last_log_entry"]["subject"], "msg 1");
+        assert_eq!(events[0]["folders"][0]["status"], "in_progress");
+        assert_eq!(events[3]["folders"][0]["status"], "completed");
+        assert_eq!(events[3]["current_folder"], Value::Null);
+
+        let text = std::fs::read_to_string(a.path().join("migration_state.json")).unwrap();
+        let top: Vec<&str> = text
+            .lines()
+            .filter(|l| l.starts_with("  \"") && !l.starts_with("   "))
+            .map(|l| l.trim_start().split('"').nth(1).unwrap())
+            .collect();
+        assert_eq!(
+            top,
+            [
+                "id", "source_email", "dest_email", "source_transport", "dest_transport", "source_account_json", "dest_account_json", "status",
+                "folder_mappings", "total_emails", "migrated_emails", "skipped_emails", "failed_emails", "started_at", "updated_at",
+            ]
+        );
+    }
+
+    /// Deliberate change of the copy engine: imap -> imap maps flags as every
+    /// other source does (`fetch_imap_message`), so a source `\Deleted` is no
+    /// longer copied and keywords are.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "pins step C"]
+    async fn imap_to_imap_drops_deleted_flag_and_keeps_keywords() {
+        let (_v, _a, s) = st();
+        let mut inbox = Mailbox::new("INBOX");
+        inbox.add(mock_imap::Message::new(1, plain(1)).with_flags(&["\\Seen", "\\Deleted", "$Work"]));
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox));
+        let dest = empty_dest(mock_imap::Scenario::new());
+
+        let done = migrate(&s, &imap_config(&source, "source@example.com"), &imap_config(&dest, "dest@example.com"), vec![mapping("INBOX", "INBOX")]).await;
+
+        assert_eq!(done.migrated_emails, 1);
+        let state = dest.state();
+        let m1 = &state.find("INBOX").unwrap().messages[0];
+        assert!(m1.has_flag("\\Seen") && m1.has_flag("$Work"), "{:?}", m1.flags);
+        assert!(!m1.has_flag("\\Deleted"), "{:?}", m1.flags);
+    }
+
+    /// Deliberate change of the copy engine: a destination session that dies
+    /// mid-run is dropped, not pooled again, so it costs the message in hand
+    /// and the next one gets a fresh connection.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "pins step C"]
+    async fn a_dest_connection_dropped_mid_run_fails_one_message_and_emits_a_final_event() {
+        let (_v, _a, s) = st();
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1, 2, 3])));
+        let dest = empty_dest(
+            mock_imap::Scenario::new()
+                .fault(mock_imap::Trigger::with("APPEND", "Subject: msg 2"), mock_imap::Action::ByeAndClose("gone".into())),
+        );
+        let mut rx = s.events.subscribe();
+
+        let done = migrate(&s, &imap_config(&source, "source@example.com"), &imap_config(&dest, "dest@example.com"), vec![mapping("INBOX", "INBOX")]).await;
+
+        assert_eq!((done.migrated_emails, done.failed_emails), (2, 1), "{done:?}");
+        assert_eq!(done.folder_mappings[0].failed_uids, vec![2]);
+        assert_eq!(done.status, "completed");
+        let last = progress_events(&mut rx).pop().expect("a final event");
+        assert_eq!((last["status"].as_str(), last["current_folder"].as_str()), (Some("completed"), None));
+    }
+
     fn archive_count(m: &MockJmap) -> usize {
         m.read(|s| s.account("acc1").mailboxes.values().filter(|b| b.name == "Archive").count())
     }
