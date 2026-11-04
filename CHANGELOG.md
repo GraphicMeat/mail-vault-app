@@ -9,6 +9,7 @@
 - On a Microsoft 365 or Hotmail account, a refresh now re-checks the older emails it kept in the list: one deleted in another app drops out, a flag changed there comes through, and one restored from Deleted Items appears. It walks them in the background, at most once every few minutes.
 
 - Move a folder, with every folder inside it, from its right-click menu: Move folder… lets you pick an account and the folder it goes into, or the top level. Moved within one account to a place where no folder of that name exists yet, it moves on the server in one step and nothing is copied. Otherwise MailVault copies every message, checks that each one arrived, and only then moves the original folder to Trash (Deleted Items on Microsoft 365 and Hotmail). If any message could not be copied or confirmed, or you cancel, the original stays where it was. The move runs in the background with a progress chip where you can pause, resume or cancel it, and a move cut short by quitting MailVault can be resumed or discarded later. Moving a folder to another account is a Premium feature. A Microsoft 365 or Hotmail folder that has subfolders cannot be moved yet, and neither can a folder with subfolders into a Microsoft 365 or Hotmail account.
+- Gmail's "Account exceeded command or bandwidth limits" answer now counts as its daily bandwidth limit everywhere MailVault checks for one: archiving, migration and Move folder stop at once instead of failing message after message, and Hoarder rests that account until the next day.
 
 ## [2.21.1] - 2026-11-03
 
