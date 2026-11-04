@@ -195,9 +195,9 @@ pub fn walk_mime_parts_light(
             content_id,
         });
     } else if content_type == "text/plain" && text_body.is_none() {
-        *text_body = part.get_body().ok();
+        *text_body = crate::mime::body_text(part).ok();
     } else if content_type == "text/html" && html_body.is_none() {
-        *html_body = part.get_body().ok();
+        *html_body = crate::mime::body_text(part).ok();
     }
 }
 
@@ -443,9 +443,9 @@ pub fn walk_mime_parts(
             });
         }
     } else if content_type == "text/plain" && text_body.is_none() {
-        *text_body = part.get_body().ok();
+        *text_body = crate::mime::body_text(part).ok();
     } else if content_type == "text/html" && html_body.is_none() {
-        *html_body = part.get_body().ok();
+        *html_body = crate::mime::body_text(part).ok();
     }
 }
 
@@ -1049,5 +1049,74 @@ iVBORw0KGgo=\r\n\
         assert!(seven.flags.iter().any(|f| f == "\\Seen"));
 
         assert!(read_light_at(cur, 8, Some(&cur.join(format!("8{INFO_PREFIX}.eml")))).is_none(), "no uid-8 file anywhere");
+    }
+
+    // Lithuanian letters reached the reader as nothing at all ("Šeimos" -> "eimos")
+    // for some bodies; every charset / transfer-encoding pairing must come through whole.
+    #[test]
+    fn lithuanian_letters_survive_every_charset_and_transfer_encoding() {
+        use base64::Engine;
+        const TEXT: &str = "Šios akimirkos laukėme ilgai: čia pat žaliasis ąžuolas, įėjimas, ūkis, ęsti. ŠČŽĄĘĖĮŲŪ ščžąęėįųū";
+        // windows-1257 and iso-8859-13 agree on every Lithuanian letter.
+        let legacy = |c: char| -> u8 {
+            match c {
+                'Š' => 0xD0, 'š' => 0xF0, 'Ž' => 0xDE, 'ž' => 0xFE, 'Č' => 0xC8, 'č' => 0xE8,
+                'Ą' => 0xC0, 'ą' => 0xE0, 'Ę' => 0xC6, 'ę' => 0xE6, 'Ė' => 0xCB, 'ė' => 0xEB,
+                'Į' => 0xC1, 'į' => 0xE1, 'Ų' => 0xD8, 'ų' => 0xF8, 'Ū' => 0xDB, 'ū' => 0xFB,
+                c => c as u8,
+            }
+        };
+        let qp = |bytes: &[u8]| -> String {
+            bytes.iter().map(|b| if b.is_ascii_alphanumeric() || *b == b' ' { (*b as char).to_string() } else { format!("={b:02X}") }).collect()
+        };
+        let utf8 = TEXT.as_bytes().to_vec();
+        let one_byte: Vec<u8> = TEXT.chars().map(legacy).collect();
+        let b64 = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
+
+        let meta = |bytes: &[u8]| [b"<meta charset=\"windows-1257\">".to_vec(), bytes.to_vec()].concat();
+        let cases: Vec<(&str, &str, Vec<u8>)> = vec![
+            ("; charset=utf-8", "8bit", utf8.clone()),
+            ("; charset=utf-8", "quoted-printable", qp(&utf8).into_bytes()),
+            ("; charset=utf-8", "base64", b64(&utf8).into_bytes()),
+            ("; charset=UTF-8", "7bit", utf8.clone()),
+            ("; charset=windows-1257", "8bit", one_byte.clone()),
+            ("; charset=windows-1257", "quoted-printable", qp(&one_byte).into_bytes()),
+            ("; charset=windows-1257", "base64", b64(&one_byte).into_bytes()),
+            ("; charset=iso-8859-13", "8bit", one_byte.clone()),
+            ("; charset=iso-8859-13", "quoted-printable", qp(&one_byte).into_bytes()),
+            ("; charset=ISO-8859-13", "base64", b64(&one_byte).into_bytes()),
+            ("; charset=\"windows-1257\"", "8bit", one_byte.clone()),
+            // No usable label: a bare U+FFFD per byte is invisible in Blitz, so the
+            // letters vanish. UTF-8 bytes read as UTF-8, then the body's own <meta>.
+            ("", "8bit", utf8.clone()),
+            ("", "quoted-printable", qp(&utf8).into_bytes()),
+            ("", "base64", b64(&utf8).into_bytes()),
+            ("; charset=", "8bit", utf8.clone()),
+            ("; charset=x-unknown", "8bit", utf8.clone()),
+            ("; charset=x-unknown", "quoted-printable", qp(&utf8).into_bytes()),
+            ("; charset=us-ascii", "8bit", utf8.clone()),
+            ("; charset=us-ascii", "quoted-printable", qp(&utf8).into_bytes()),
+            ("; charset=latin-7", "8bit", one_byte.clone()),
+            ("; charset=win1257", "quoted-printable", qp(&one_byte).into_bytes()),
+            ("", "8bit", meta(&one_byte)),
+            ("; charset=x-unknown", "quoted-printable", qp(&meta(&one_byte)).into_bytes()),
+        ];
+        let mut failures = Vec::new();
+        for (cs, cte, payload) in cases {
+            for ctype in ["text/plain", "text/html"] {
+                // A <meta> only means anything to an html part.
+                if ctype == "text/plain" && payload.starts_with(b"<meta") {
+                    continue;
+                }
+                let mut raw = format!("From: a@x.test\r\nSubject: s\r\nMIME-Version: 1.0\r\nContent-Type: {ctype}{cs}\r\nContent-Transfer-Encoding: {cte}\r\n\r\n").into_bytes();
+                raw.extend_from_slice(&payload);
+                let parsed = parse_eml_bytes(&raw, 1, vec![]).unwrap();
+                let got = if ctype == "text/plain" { parsed.text } else { parsed.html };
+                if !got.as_deref().is_some_and(|g| g.contains(TEXT)) {
+                    failures.push(format!("{ctype}{cs} {cte}: {got:?}"));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "lost letters:\n{}", failures.join("\n"));
     }
 }

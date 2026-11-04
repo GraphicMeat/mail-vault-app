@@ -3764,9 +3764,9 @@ fn walk_mime_parts(
             });
         }
     } else if content_type == "text/plain" && text_body.is_none() {
-        *text_body = part.get_body().ok();
+        *text_body = crate::mime::body_text(part).ok();
     } else if content_type == "text/html" && html_body.is_none() {
-        *html_body = part.get_body().ok();
+        *html_body = crate::mime::body_text(part).ok();
     }
 }
 
@@ -3811,9 +3811,9 @@ fn walk_mime_parts_light(
             content_id,
         });
     } else if content_type == "text/plain" && text_body.is_none() {
-        *text_body = part.get_body().ok();
+        *text_body = crate::mime::body_text(part).ok();
     } else if content_type == "text/html" && html_body.is_none() {
-        *html_body = part.get_body().ok();
+        *html_body = crate::mime::body_text(part).ok();
     }
 }
 

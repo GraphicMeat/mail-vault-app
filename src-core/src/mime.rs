@@ -129,6 +129,50 @@ fn try_decode_encoded_word(bytes: &[u8], start: usize) -> Option<(String, usize)
     Some((decoded.into_owned(), text_end + 2))
 }
 
+/// A text part's body as a string, read the way a browser reads a page.
+///
+/// `mailparse` decodes an empty or unknown charset label to one U+FFFD per
+/// byte, and a missing or `us-ascii` one as windows-1252. Senders do both with
+/// plain UTF-8 bodies, and the renderer draws no glyph for U+FFFD, so every
+/// non-ASCII letter simply vanished from the reader. A usable label is still
+/// trusted; otherwise: valid UTF-8 is UTF-8, then the body's own `<meta
+/// charset>`, then windows-1252.
+pub fn body_text(part: &mailparse::ParsedMail) -> Result<String, mailparse::MailParseError> {
+    let label = part.ctype.charset.trim().to_ascii_lowercase();
+    let ascii_only = matches!(label.as_str(), "" | "us-ascii" | "ascii");
+    let bytes = part.get_body_raw()?;
+    if let Some(cs) = if ascii_only { None } else { charset_for_label(&label) } {
+        return Ok(cs.decode(&bytes).0.into_owned());
+    }
+    if let Ok(s) = std::str::from_utf8(&bytes) {
+        return Ok(s.to_string());
+    }
+    let Some(cs) = meta_charset(&bytes).or_else(|| charset::Charset::for_label(b"windows-1252")) else {
+        return Ok(String::from_utf8_lossy(&bytes).into_owned());
+    };
+    Ok(cs.decode(&bytes).0.into_owned())
+}
+
+/// The charset a label names, counting the spellings Windows and Linux mailers
+/// write for Baltic text.
+fn charset_for_label(label: &str) -> Option<charset::Charset> {
+    let label = match label {
+        "latin-7" | "latin7" | "l7" => "iso-8859-13",
+        "win1257" | "win-1257" => "windows-1257",
+        other => other,
+    };
+    charset::Charset::for_label_no_replacement(label.as_bytes())
+}
+
+/// The charset an HTML body declares near its top: `<meta charset=x>` or
+/// `<meta http-equiv=... content="text/html; charset=x">`.
+fn meta_charset(bytes: &[u8]) -> Option<charset::Charset> {
+    let head: String = bytes.iter().take(2048).map(|b| b.to_ascii_lowercase() as char).collect();
+    let at = head.find("charset=")? + "charset=".len();
+    let label: String = head[at..].trim_start_matches(['"', '\'', ' ']).chars().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':')).collect();
+    charset_for_label(&label)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

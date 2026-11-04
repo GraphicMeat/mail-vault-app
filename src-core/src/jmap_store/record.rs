@@ -190,7 +190,7 @@ fn preview(leaves: &[&ParsedMail]) -> String {
         leaves
             .iter()
             .find(|p| p.ctype.mimetype.eq_ignore_ascii_case(mime) && !is_attachment_disposition(p))
-            .and_then(|p| p.get_body().ok())
+            .and_then(|p| crate::mime::body_text(p).ok())
     };
     let text = body("text/plain")
         .or_else(|| body("text/html").map(|html| crate::search_index::text::html_to_text(&html)))
