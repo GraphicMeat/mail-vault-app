@@ -146,10 +146,13 @@ mod folder_move_plan {
         let s = Some("/");
         let mut parent = mb("Projects", s, vec![]);
         parent.flags.push("\\HasChildren".into());
-        let graph = vec![mb("INBOX", s, vec![]), parent, mb("Solo", s, vec![])];
+        let graph = vec![mb("INBOX", s, vec![]), parent, mb("Solo", s, vec![]), mb("Q1/Q2", s, vec![]), mb("Solo/Old", s, vec![])];
         let to_imap = |root: &str| plan(&graph, root, &slash_tree(), &Target::TopLevel, false, Kind::Graph, Kind::Imap);
         assert_eq!(to_imap("Projects"), Err(PlanError::GraphSubfolders));
-        assert!(to_imap("Solo").is_ok());
+        assert_eq!(pairs(&to_imap("Solo").unwrap().items), [("Solo", "Solo")], "a sibling named Solo/Old is not its child");
+        assert_eq!(to_imap("Q1/Q2"), Err(PlanError::Name), "a slash in a Graph name is part of the name");
+        let p = plan(&graph, "Q1/Q2", &dot_tree(), &Target::TopLevel, false, Kind::Graph, Kind::Imap).unwrap();
+        assert_eq!(pairs(&p.items), [("Q1/Q2", "Q1/Q2")]);
         let to_graph = plan(&slash_tree(), "Clients", &graph, &Target::TopLevel, false, Kind::Imap, Kind::Graph);
         assert_eq!(to_graph, Err(PlanError::GraphSubfolders));
         let p = plan(&slash_tree(), "Clients2", &graph, &Target::TopLevel, false, Kind::Imap, Kind::Graph).unwrap();

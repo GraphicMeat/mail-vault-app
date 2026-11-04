@@ -161,7 +161,9 @@ pub fn plan(
     flatten(source_tree, &mut src_flat);
     flatten(dest_tree, &mut dest_flat);
     let root_node = src_flat.iter().find(|m| m.path == root).ok_or(PlanError::NotFound)?;
-    let src_delim = delimiter_of(root_node);
+    // Graph lists top-level folders only: a display name is one segment,
+    // whatever `/` it holds.
+    let src_delim = if src_kind == Kind::Graph { None } else { delimiter_of(root_node) };
     let under = |path: &str| src_delim.is_some_and(|d| path.strip_prefix(root).is_some_and(|r| r.starts_with(d)));
     let mut subtree: Vec<&MailboxInfo> = src_flat.iter().copied().filter(|m| m.path == root || under(&m.path)).collect();
     let depth = |m: &&MailboxInfo| src_delim.map_or(0, |d| m.path.matches(d).count());
