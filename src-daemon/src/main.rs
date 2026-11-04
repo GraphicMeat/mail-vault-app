@@ -80,6 +80,7 @@ pub mod sync_engine;
 mod sync_observation;
 mod refresh_worker;
 mod sync_jmap;
+mod complete_fill;
 mod vault_gap;
 
 // Note: backup, external_location modules require tauri::AppHandle for data

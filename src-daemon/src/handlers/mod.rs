@@ -149,6 +149,12 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
     }
     let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
     let auto_classify = params.get("autoClassify").and_then(|v| v.as_bool()).unwrap_or(false);
+    // `complete`: after the ordinary sync, make the cache hold the WHOLE folder
+    // (every provider; `complete_fill`). The `backfilling` flag goes up here,
+    // before this returns, and comes down when the spawned task ends.
+    let complete = params.get("complete").and_then(|v| v.as_bool()).unwrap_or(false);
+    let fill = complete.then(|| state.sync_engine.begin_fill(&account.id, mailbox));
+    let graph = account.imap_config.uses_graph() && !account.imap_config.uses_jmap();
 
     // Bind optional source evidence before issuing the ticket and spawning.
     // Existing callers without a strict account origin still keep sync.now's
@@ -165,7 +171,15 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
     let account_id = account.id.clone();
     let response_account_id = account_id.clone();
     let mailbox_clone = mailbox.to_string();
-    tokio::spawn(async move {
+    // A Graph account has no IMAP sync to run: its newest page settles the
+    // ticket and the fill, if asked for, walks the rest.
+    if complete && graph {
+        tokio::spawn(Box::pin(crate::complete_fill::graph(
+            state, account, mailbox_clone, ticket, complete, fill)));
+        return RpcResponse::success(id, serde_json::json!({"started": true, "accountId": response_account_id, "mailbox": mailbox, "ticket": ticket}));
+    }
+    tokio::spawn(Box::pin(async move {
+        let _fill = fill;
         let observation_operation = operation;
         let result = state.sync_engine.run_ticket(ticket, &account, &mailbox_clone).await;
         drop(observation_operation);
@@ -193,12 +207,18 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
         // app only ever paginated part of) — fill it here, once, instead of
         // letting the app re-page the whole mailbox off the server every launch.
         if result.success {
-            let short = state.sync_engine.sidecar_shortfall(&account_id, &mailbox_clone, result.total_emails).await;
-            if short > 0 {
-                state.sync_engine.backfill_mailbox(&account, &mailbox_clone).await;
+            if _fill.as_ref().is_some_and(|fill| fill.owner()) {
+                // Asked for the whole folder: every provider, the folder the
+                // sync actually served.
+                crate::complete_fill::fill(&state, &account, &result).await;
+            } else if _fill.is_none() {
+                let short = state.sync_engine.sidecar_shortfall(&account_id, &mailbox_clone, result.total_emails).await;
+                if short > 0 {
+                    state.sync_engine.backfill_mailbox(&account, &mailbox_clone).await;
+                }
             }
         }
-    });
+    }));
 
     RpcResponse::success(id, serde_json::json!({"started": true, "accountId": response_account_id, "mailbox": mailbox, "ticket": ticket}))
 }

@@ -5804,6 +5804,358 @@ mod tests {
             assert!(trap.accept().is_err(), "JMAP account delta must not dial IMAP");
         }
 
+        // ── sync.now { complete: true }: the daemon fills the whole folder ────
+
+        async fn complete_now(state: &Arc<DaemonState>, account: Value, complete: Option<bool>) -> u64 {
+            let mut params = json!({"account": account, "mailbox": "INBOX", "autoClassify": false});
+            if let Some(complete) = complete { params["complete"] = json!(complete); }
+            let started = boxed_request(state, req("sync.now", params)).await;
+            started.result.expect("sync.now must start")["ticket"].as_u64().expect("ticket")
+        }
+
+        async fn complete_backfilling(state: &Arc<DaemonState>) -> bool {
+            let status = boxed_request(state, req("sync.status", json!({"accountId": "acc1"}))).await;
+            status.result.expect("sync.status body")["backfilling"].as_bool().expect("backfilling flag")
+        }
+
+        async fn complete_wait(state: &Arc<DaemonState>, ticket: u64) -> Value {
+            boxed_request(state, req("sync.wait", json!({"ticket": ticket, "timeoutMs": 20_000})))
+                .await.result.expect("sync.wait body")
+        }
+
+        /// The app's rule: two consecutive `backfilling:false` reads mean done.
+        async fn complete_settled(state: &Arc<DaemonState>) {
+            let mut idle = 0;
+            for _ in 0..400 {
+                if complete_backfilling(state).await { idle = 0 } else { idle += 1 }
+                if idle == 2 { return; }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            panic!("the fill never settled");
+        }
+
+        fn complete_uids(state: &Arc<DaemonState>) -> std::collections::HashSet<u32> {
+            crate::custody::with_conn(state, |conn|
+                mailvault_core::custody::cache::uid_set(conn, "acc1", "INBOX")).unwrap()
+        }
+
+        /// A row the provider does not list, under the cache's own owner.
+        fn complete_inject_stale(state: &Arc<DaemonState>, uid: u32) {
+            crate::custody::with_conn(state, |conn| {
+                let owner = mailvault_core::custody::cache::native_identity(conn, "acc1", "INBOX")?
+                    .expect("a filled cache has an owner");
+                mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX", &json!({
+                    "emails": [{"uid": uid, "subject": "stale", "flags": []}],
+                    "nativeIdentity": owner, "nativeExpectedIdentity": owner,
+                }).to_string()).map(|_| ())
+            }).unwrap();
+        }
+
+        fn complete_jmap_account(imap_port: u16, mock: &mock_jmap::MockJmap) -> Value {
+            let mut config = crate::jmap_test_support::account_json(mock, imap_port);
+            config["id"] = json!("acc1");
+            json!({"id": "acc1", "email": "alice@example.test", "imapConfig": config})
+        }
+
+        #[tokio::test]
+        async fn complete_now_jmap_flags_backfilling_at_once_and_fills_past_the_cold_page() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let _account = bind_jmap_refresh(&state, &mock, imap_port);
+            let ticket = complete_now(&state, complete_jmap_account(imap_port, &mock), Some(true)).await;
+            assert!(complete_backfilling(&state).await,
+                "the flag must already be up when sync.now has returned");
+            assert_eq!(complete_wait(&state, ticket).await["success"], json!(true));
+            complete_settled(&state).await;
+            assert_eq!(complete_uids(&state).len(), 501, "the whole folder, not the 500 cold page");
+            let positions = jmap_refresh_query_positions(&mock);
+            assert!(positions.contains(&200) && positions.contains(&400), "{positions:?}");
+            assert!(trap.accept().is_err(), "a JMAP fill never dials IMAP");
+        }
+
+        #[tokio::test]
+        async fn complete_now_off_leaves_the_jmap_cache_at_the_cold_page() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let _account = bind_jmap_refresh(&state, &mock, imap_port);
+            let ticket = complete_now(&state, complete_jmap_account(imap_port, &mock), None).await;
+            assert_eq!(complete_wait(&state, ticket).await["success"], json!(true));
+            complete_settled(&state).await;
+            assert_eq!(complete_uids(&state).len(), 500);
+            assert_eq!(mock.count_calls("Email/query"), 1, "no walk without the flag");
+        }
+
+        #[tokio::test]
+        async fn complete_now_jmap_prunes_what_the_provider_no_longer_lists_when_counts_match() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let _account = bind_jmap_refresh(&state, &mock, imap_port);
+            let account = complete_jmap_account(imap_port, &mock);
+            let ticket = complete_now(&state, account.clone(), Some(true)).await;
+            complete_wait(&state, ticket).await;
+            complete_settled(&state).await;
+            let full = complete_uids(&state);
+            assert_eq!(full.len(), 501);
+            complete_inject_stale(&state, 90_001);
+            assert_eq!(complete_uids(&state).len(), 502);
+            let ticket = complete_now(&state, account, Some(true)).await;
+            complete_wait(&state, ticket).await;
+            complete_settled(&state).await;
+            assert_eq!(complete_uids(&state), full, "only the unlisted row goes");
+        }
+
+        #[tokio::test]
+        async fn complete_now_jmap_never_prunes_or_restores_a_row_with_a_queued_delete() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let _account = bind_jmap_refresh(&state, &mock, imap_port);
+            let account = complete_jmap_account(imap_port, &mock);
+            let ticket = complete_now(&state, account.clone(), Some(true)).await;
+            complete_wait(&state, ticket).await;
+            complete_settled(&state).await;
+            let full = complete_uids(&state);
+            // The user deleted one listed message (row gone, delete queued) and
+            // the queue still owes a delete for a row the provider does not list.
+            let victim = *full.iter().max().unwrap();
+            crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::remove_headers(conn, "acc1", "INBOX", &[victim])).unwrap();
+            complete_inject_stale(&state, 90_001);
+            complete_inject_stale(&state, 90_002);
+            mailvault_core::op_journal::queue_delete(&state.app_dir, "acc1", "INBOX",
+                &[victim, 90_001], &json!({})).unwrap();
+            let ticket = complete_now(&state, account, Some(true)).await;
+            complete_wait(&state, ticket).await;
+            complete_settled(&state).await;
+            let after = complete_uids(&state);
+            assert!(!after.contains(&victim), "a queued delete is not resurrected by the walk");
+            assert!(after.contains(&90_001), "a queued delete is not double-handled by the prune");
+            assert!(!after.contains(&90_002), "an unowed unlisted row is pruned");
+        }
+
+        #[tokio::test]
+        async fn complete_now_jmap_prunes_nothing_when_the_walk_fails() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let _account = bind_jmap_refresh(&state, &mock, imap_port);
+            let account = complete_jmap_account(imap_port, &mock);
+            let ticket = complete_now(&state, account.clone(), Some(true)).await;
+            complete_wait(&state, ticket).await;
+            complete_settled(&state).await;
+            complete_inject_stale(&state, 90_001);
+            mock.mutate(|server| server.faults.push(mock_jmap::Fault::ServerFail {
+                method: "Email/get".into(),
+            }));
+            let ticket = complete_now(&state, account, Some(true)).await;
+            complete_wait(&state, ticket).await;
+            complete_settled(&state).await;
+            assert!(complete_uids(&state).contains(&90_001), "a walk that did not finish prunes nothing");
+        }
+
+        #[tokio::test]
+        async fn complete_now_jmap_walk_holds_no_account_lock_and_never_writes_a_destroyed_email() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            // The cold sync caches the newest 500; `e1`, the oldest, is on the
+            // walk's last page and has no uid yet.
+            let (entered, release) = crate::sync_jmap::source_write_test_pause::install(&state, "complete-get");
+            let ticket = complete_now(&state, complete_jmap_account(imap_port, &mock), Some(true)).await;
+            tokio::time::timeout(std::time::Duration::from_secs(20), entered).await
+                .expect("the walk must reach its last page").expect("gate signal");
+            // The walk holds the page it read; the provider destroys `e1` and a
+            // delta applies that while the walk waits. The walk is mid-provider
+            // work, so the account lock must be free.
+            mock.mutate(|server| server.destroy_email("acc1", "e1"));
+            let delta = tokio::time::timeout(std::time::Duration::from_secs(10),
+                state.sync_engine.sync_account(&account, "INBOX")).await
+                .expect("an INBOX sync must not queue behind a Sent walk");
+            assert!(delta.success, "{:?}", delta.error);
+            release.send(()).unwrap();
+            complete_wait(&state, ticket).await;
+            complete_settled(&state).await;
+            assert!(!jmap_refresh_ledger(&state).values().any(|id| id == "e1"),
+                "a destroyed email the delta already applied is not written back");
+            assert_eq!(complete_uids(&state).len(), 500);
+        }
+
+        #[tokio::test]
+        async fn complete_now_imap_flags_backfilling_at_once_and_fills() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let ticket = complete_now(&state, account, Some(true)).await;
+            assert!(complete_backfilling(&state).await,
+                "the flag must already be up when sync.now has returned");
+            assert_eq!(complete_wait(&state, ticket).await["success"], json!(true));
+            complete_settled(&state).await;
+            assert_eq!(complete_uids(&state).len(), 3);
+        }
+
+        // Graph: sync.now used to fall through to the IMAP pool.
+
+        fn complete_graph_state(dir: &std::path::Path) -> Arc<DaemonState> {
+            let state = DaemonState::for_test(dir.to_path_buf(), dir.to_path_buf(), true);
+            let row = json!({"id":"acc1", "email":"ready@example.test", "authType":"oauth2",
+                "oauth2Provider":"microsoft", "oauth2Transport":"graph"});
+            std::fs::write(state.app_dir.join("accounts.json"), json!([row.clone()]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let mut credential = row;
+            credential["oauth2AccessToken"] = json!("synthetic-graph-complete-now");
+            credential["oauth2ExpiresAt"] = json!(4_000_000_000_000i64);
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({"acc1": credential.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings": {"state": {
+                    "graphFolderKeysAdopted": {"acc1": true},
+                    "graphFolderKeysAdoptedFromListing": {"acc1": true},
+                }},
+            }), None).unwrap();
+            state
+        }
+
+        fn complete_graph_account() -> Value {
+            json!({"id": "acc1", "email": "ready@example.test", "imapConfig": {
+                "email": "ready@example.test", "imapHost": "outlook.office365.com",
+                "authType": "oauth2", "oauth2Transport": "graph",
+            }})
+        }
+
+        /// What the provider answers for one sync.now { complete: true }: the
+        /// newest page that settles the ticket, then the whole walk.
+        fn complete_graph_script(provider_total: i64) -> Vec<(u16, String)> {
+            let folders = json!({"value":[{"id": "fld-complete", "displayName": "Inbox",
+                "totalItemCount": provider_total, "unreadItemCount": 0}]});
+            let batch = json!({"responses":[{"id":"inbox", "status":200, "body":{"id":"fld-complete"}}]});
+            let first = json!({"value":[refresh_graph_message("g-one", "first")],
+                "@odata.nextLink":"{{GRAPH_BASE}}/me/mailFolders/fld-complete/messages?$skiptoken=two"});
+            let second = json!({"value":[refresh_graph_message("g-two", "second")],
+                "@odata.nextLink":null});
+            vec![
+                (200, folders.to_string()), (200, batch.to_string()), (200, first.to_string()),
+                (200, folders.to_string()), (200, batch.to_string()), (200, first.to_string()),
+                (200, second.to_string()),
+            ]
+        }
+
+        #[tokio::test]
+        async fn complete_now_graph_walks_the_whole_folder_without_dialling_imap() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = complete_graph_state(dir.path());
+            let _graph = crate::handlers::graph::test_graph_mock_with(complete_graph_script(2));
+            let ticket = complete_now(&state, complete_graph_account(), Some(true)).await;
+            assert!(complete_backfilling(&state).await,
+                "the flag must already be up when sync.now has returned");
+            let waited = complete_wait(&state, ticket).await;
+            assert_eq!(waited["success"], json!(true), "{waited:?}");
+            complete_settled(&state).await;
+            let cached = refresh_cached_headers(&state, "acc1", "INBOX").expect("Graph cache");
+            assert_eq!(cached["totalCached"], json!(2));
+            assert_eq!(cached["graphComplete"], json!(true));
+            assert_eq!(crate::handlers::graph::test_graph_requests().len(), 7);
+        }
+
+        #[tokio::test]
+        async fn complete_now_graph_prunes_only_when_the_listed_count_is_the_providers() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = complete_graph_state(dir.path());
+            {
+                let _graph = crate::handlers::graph::test_graph_mock_with(complete_graph_script(2));
+                let ticket = complete_now(&state, complete_graph_account(), Some(true)).await;
+                complete_wait(&state, ticket).await;
+                complete_settled(&state).await;
+            }
+            let full = complete_uids(&state);
+            assert_eq!(full.len(), 2);
+            // The provider reports 3 but lists 2: a row moved during the walk.
+            complete_inject_stale(&state, 90_001);
+            {
+                let _graph = crate::handlers::graph::test_graph_mock_with(complete_graph_script(3));
+                let ticket = complete_now(&state, complete_graph_account(), Some(true)).await;
+                complete_wait(&state, ticket).await;
+                complete_settled(&state).await;
+            }
+            assert!(complete_uids(&state).contains(&90_001), "a count mismatch prunes nothing");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["graphComplete"], json!(false));
+            // Counts agree now: the unlisted row goes and the folder is complete.
+            {
+                let _graph = crate::handlers::graph::test_graph_mock_with(complete_graph_script(2));
+                let ticket = complete_now(&state, complete_graph_account(), Some(true)).await;
+                complete_wait(&state, ticket).await;
+                complete_settled(&state).await;
+            }
+            assert_eq!(complete_uids(&state), full);
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["graphComplete"], json!(true));
+        }
+
+        #[tokio::test]
+        async fn complete_now_graph_leaves_a_row_with_a_queued_delete_alone() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = complete_graph_state(dir.path());
+            {
+                let _graph = crate::handlers::graph::test_graph_mock_with(complete_graph_script(2));
+                let ticket = complete_now(&state, complete_graph_account(), Some(true)).await;
+                complete_wait(&state, ticket).await;
+                complete_settled(&state).await;
+            }
+            complete_inject_stale(&state, 90_001);
+            complete_inject_stale(&state, 90_002);
+            mailvault_core::op_journal::queue_delete(&state.app_dir, "acc1", "INBOX",
+                &[90_001], &json!({})).unwrap();
+            {
+                let _graph = crate::handlers::graph::test_graph_mock_with(complete_graph_script(2));
+                let ticket = complete_now(&state, complete_graph_account(), Some(true)).await;
+                complete_wait(&state, ticket).await;
+                complete_settled(&state).await;
+            }
+            let after = complete_uids(&state);
+            assert!(after.contains(&90_001) && !after.contains(&90_002), "{after:?}");
+        }
+
         async fn refresh_graph_map(state: &Arc<DaemonState>, account: &str) -> Option<Value> {
             let response = boxed_request(state, req("load_graph_id_map", json!({
                 "accountId": account, "mailbox": "INBOX",

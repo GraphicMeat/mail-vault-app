@@ -627,15 +627,50 @@ struct GraphWarm {
     added: usize,
     arrival_uids: Vec<u32>,
     repaint: bool,
+    provider_total: i64,
+}
+
+/// What one published Graph unit did.
+pub(crate) struct GraphRun {
+    pub added: usize,
+    pub provider_total: i64,
 }
 
 pub(crate) async fn graph_headers(state: &Arc<DaemonState>, origin: &Origin, config: &crate::imap::ImapConfig,
     mailbox: &str, extent: Extent) -> Result<usize, String> {
-    graph_warm(state, origin, config, mailbox, extent).await.map(|result| result.added)
+    graph_warm(state, origin, config, mailbox, extent, false).await.map(|result| result.added)
+}
+
+/// One Graph unit end to end: walk, then publish what changed under the
+/// ticket `evidence` was issued for. The automatic refresh (`run_unit`) and the
+/// explicit `sync.now { complete: true }` fill share it; `fill` is the latter
+/// (prune, and owed deletes left alone), honoured for `Extent::Complete` only.
+pub(crate) async fn graph_unit(state: &Arc<DaemonState>, current: &Origin, config: &crate::imap::ImapConfig,
+    mailbox: &str, extent: Extent, fill: bool, evidence: &sync_observation::TicketEvidence)
+    -> Result<GraphRun, String> {
+    let id = current.original.id();
+    let before_uids = sync_observation::cached_uids(state, id, mailbox).await.ok();
+    let warmed = graph_warm(state, current, config, mailbox, extent, fill).await?;
+    #[cfg(test)]
+    test_pause_before_publication(state);
+    let source = sync_observation::complete_ticket_in_mailbox(state, evidence, mailbox).await
+        .ok_or("errors.bulkIdentityChanged")?;
+    let after_uids = sync_observation::cached_uids(state, id, mailbox).await.ok();
+    let changed = warmed.repaint || before_uids.as_ref().zip(after_uids.as_ref())
+        .is_some_and(|(before, after)| before != after);
+    #[cfg(test)]
+    test_pause_after_effect_read(state).await;
+    let changes = if changed { vec![(source, warmed.arrival_uids, 0)] } else { Vec::new() };
+    if sync_observation::publish_sources(state, evidence, changes).await.is_err() {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    if warmed.added > 0 { state.auto_tag_worker.wake(); }
+    Ok(GraphRun { added: warmed.added, provider_total: warmed.provider_total })
 }
 
 async fn graph_warm(state: &Arc<DaemonState>, origin: &Origin, config: &crate::imap::ImapConfig,
-    mailbox: &str, extent: Extent) -> Result<GraphWarm, String> {
+    mailbox: &str, extent: Extent, fill: bool) -> Result<GraphWarm, String> {
+    let fill = fill && extent == Extent::Complete;
     let settings = settings_now(state).await?;
     let id = origin.original.id();
     if settings["graphFolderKeysAdopted"][id] != true {
@@ -667,6 +702,7 @@ async fn graph_warm(state: &Arc<DaemonState>, origin: &Origin, config: &crate::i
     let mut ordered_uids = Vec::new();
     let mut added_total = 0;
     let mut repaint = false;
+    let mut protect: HashSet<u32> = HashSet::new();
     loop {
         let current = sync_observation::origin(state, origin.original.clone()).await?;
         if current.hash != origin.hash { return Err("errors.bulkIdentityChanged".into()); }
@@ -678,7 +714,12 @@ async fn graph_warm(state: &Arc<DaemonState>, origin: &Origin, config: &crate::i
         for uid in &uids {
             if listed_uids.insert(*uid) { ordered_uids.push(*uid); }
         }
-        let headers = messages.iter().zip(uids).map(|(message, uid)| message.to_email_header(uid)).collect();
+        // A message the user's queued delete or move still owes is listed (it
+        // counts) but not written: the walk must not put the row back.
+        let owed = if fill { state.sync_engine.owed_uids(id, mailbox).await? } else { HashSet::new() };
+        let headers = messages.iter().zip(uids).filter(|(_, uid)| !owed.contains(uid))
+            .map(|(message, uid)| message.to_email_header(uid)).collect();
+        protect.extend(owed);
         let had_page = !messages.is_empty();
         let added = crate::handlers::cache::graph_save_with_original(state, origin, config, mailbox,
             expected.clone(), headers).await?;
@@ -694,13 +735,17 @@ async fn graph_warm(state: &Arc<DaemonState>, origin: &Origin, config: &crate::i
         (messages, next) = client.list_messages_next(&link).await
             .map_err(|_| "errors.syncFailed".to_owned())?;
     }
-    let complete = crate::handlers::cache::graph_finish_with_original(state, origin, config,
-        mailbox, listed_uids, provider_total, next.is_none()).await?;
+    let prune = if fill {
+        protect.extend(state.sync_engine.owed_uids(id, mailbox).await?);
+        Some(crate::handlers::cache::GraphPrune { baseline: baseline.uids.clone(), protect })
+    } else { None };
+    let (complete, _pruned) = crate::handlers::cache::graph_finish_with_original(state, origin, config,
+        mailbox, listed_uids, provider_total, next.is_none(), prune).await?;
     if extent == Extent::Complete && !complete { return Err("errors.syncHeadersIncomplete".into()); }
     let arrival_uids = if comparable && complete {
         ordered_uids.into_iter().filter(|uid| *uid > highest_before && !baseline.uids.contains(uid)).collect()
     } else { Vec::new() };
-    Ok(GraphWarm { added: added_total, arrival_uids, repaint })
+    Ok(GraphWarm { added: added_total, arrival_uids, repaint, provider_total })
 }
 
 pub(crate) async fn authoritative_snapshot(state: &Arc<DaemonState>) -> Result<(accounts_doc::Listing, Value), String> {
@@ -856,35 +901,17 @@ async fn run_unit(state: Arc<DaemonState>, unit: &Unit) -> AccountResult {
     state.sync_observation.invalidate_probe(id, Some(&unit.key.mailbox));
     state.sync_observation.invalidate_folder(id);
     let evidence = state.sync_observation.issue_ticket(&current, &unit.key.mailbox);
-    let before_uids = sync_observation::cached_uids(&state, id, &unit.key.mailbox).await.ok();
     if current.graph {
-        let warmed = match graph_warm(&state, &current, &config, &unit.key.mailbox, unit.key.extent).await {
-            Ok(warmed) => warmed,
-            Err(error) => {
-                let mut result = failed(&error);
-                if error == "errors.syncGraphAdoptionRequired" { result.needs_shell_adoption = Some(true); }
-                return result;
-            }
-        };
-        #[cfg(test)]
-        test_pause_before_publication(&state);
-        let source = match sync_observation::complete_ticket_in_mailbox(&state, &evidence, &unit.key.mailbox).await {
-            Some(source) => source,
-            None => return failed("errors.bulkIdentityChanged"),
-        };
-        let after_uids = sync_observation::cached_uids(&state, id, &unit.key.mailbox).await.ok();
-        let changed = warmed.repaint || before_uids.as_ref().zip(after_uids.as_ref())
-            .is_some_and(|(before, after)| before != after);
-        #[cfg(test)]
-        test_pause_after_effect_read(&state).await;
-        let changes = if changed { vec![(source, warmed.arrival_uids, 0)] } else { Vec::new() };
-        if sync_observation::publish_sources(&state, &evidence, changes).await.is_err() {
-            return failed("errors.bulkIdentityChanged");
+        if let Err(error) = graph_unit(&state, &current, &config, &unit.key.mailbox, unit.key.extent,
+            false, &evidence).await {
+            let mut result = failed(&error);
+            if error == "errors.syncGraphAdoptionRequired" { result.needs_shell_adoption = Some(true); }
+            return result;
         }
-        if warmed.added > 0 { state.auto_tag_worker.wake(); }
         return AccountResult { account_id: id.into(), mailbox: unit.key.mailbox.clone(), success: true,
             error_key: None, needs_shell_adoption: None };
     }
+    let before_uids = sync_observation::cached_uids(&state, id, &unit.key.mailbox).await.ok();
     let account = SyncAccount { id: id.into(), email: config.email.clone(), imap_config: config };
     let result = state.sync_engine.sync_account_with_original(&account, &unit.key.mailbox,
         current.original.clone(), &evidence).await;
@@ -894,7 +921,7 @@ async fn run_unit(state: Arc<DaemonState>, unit: &Unit) -> AccountResult {
     let fill_failed = if unit.key.extent == Extent::Complete {
         let fill = if account.imap_config.uses_jmap() {
             crate::sync_jmap::complete_headers_with_stamp(&state, &account, &result.mailbox,
-                &current.original, result.total_emails).await
+                &current.original, result.total_emails, false).await
         } else {
             state.sync_engine.backfill_mailbox_with_stamp(&account, &result.mailbox,
                 &current.original, result.total_emails).await

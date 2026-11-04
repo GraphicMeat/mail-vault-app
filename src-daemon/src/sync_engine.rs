@@ -109,6 +109,30 @@ struct BackfillCompletion {
     cache_owner: Option<imap::NativeHeaderIdentity>,
 }
 
+/// One `sync.now { complete: true }` fill in flight (`SyncEngine::begin_fill`).
+/// Dropping it lowers the flag; `owner` is false for a second request that
+/// found the folder already being filled, which then leaves the walk to the
+/// first.
+pub(crate) struct FillGuard {
+    fills: Arc<std::sync::Mutex<HashMap<String, usize>>>,
+    key: String,
+    owner: bool,
+}
+
+impl FillGuard {
+    pub(crate) fn owner(&self) -> bool { self.owner }
+}
+
+impl Drop for FillGuard {
+    fn drop(&mut self) {
+        let mut fills = self.fills.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(count) = fills.get_mut(&self.key) {
+            *count -= 1;
+            if *count == 0 { fills.remove(&self.key); }
+        }
+    }
+}
+
 struct TicketEntry {
     sender: tokio::sync::watch::Sender<Option<SyncResult>>,
     observation: Option<crate::sync_observation::TicketEvidence>,
@@ -136,6 +160,12 @@ pub struct SyncEngine {
     /// The app pauses its own pagination while this is set, so it must clear
     /// the moment the backfill stops — success or failure.
     backfilling: Mutex<HashSet<String>>,
+    /// `account_id\x01mailbox` → how many `sync.now { complete: true }` fills
+    /// are in flight (`begin_fill`). Kept apart from `backfilling`, whose key
+    /// is also the backfill's own in-flight claim: raising that one early would
+    /// make the backfill believe another run owns the folder. `is_backfilling`
+    /// reads both.
+    fills: Arc<std::sync::Mutex<HashMap<String, usize>>>,
     /// Attempts that got nowhere, qualified by requested origin and cache owner.
     /// Retained for that owner so an unfetchable mailbox cannot retry in a loop;
     /// never reported as `backfilling`, or the app would wait on it forever.
@@ -216,6 +246,7 @@ impl SyncEngine {
             next_ticket: std::sync::atomic::AtomicU64::new(1),
             contacts,
             backfilling: Mutex::new(HashSet::new()),
+            fills: Arc::new(std::sync::Mutex::new(HashMap::new())),
             backfill_gave_up: Mutex::new(HashMap::new()),
             #[cfg(test)]
             backfill_pause: std::sync::Mutex::new(None),
@@ -472,6 +503,26 @@ impl SyncEngine {
     /// Run a sync, bind its result to the issued source, then wake waiters.
     pub async fn run_ticket(&self, ticket: u64, account: &SyncAccount, mailbox: &str) -> SyncResult {
         let result = self.sync_account(account, mailbox).await;
+        self.settle_ticket(ticket, &result).await;
+        result
+    }
+
+    /// Resolve a ticket whose sync ran outside `sync_account` (a Graph account's
+    /// newest page, `complete_fill::graph`), with the state `sync.status` shows.
+    pub(crate) async fn settle_external_ticket(&self, ticket: u64, result: SyncResult) {
+        self.states.lock().await.insert(result.account_id.clone(), SyncState {
+            account_id: result.account_id.clone(),
+            status: if result.success { SyncStatus::Idle } else { SyncStatus::Error },
+            last_sync: Some(unix_now()),
+            last_error: result.error.clone(),
+            new_emails: result.new_emails,
+            total_emails: result.total_emails,
+        });
+        self.settle_ticket(ticket, &result).await;
+    }
+
+    /// Bind a finished sync's result to its issued source, then wake waiters.
+    async fn settle_ticket(&self, ticket: u64, result: &SyncResult) {
         let issued = self.tickets.lock().unwrap_or_else(|error| error.into_inner())
             .get(&ticket).and_then(|entry| entry.observation.clone());
         let completed = if result.success {
@@ -485,7 +536,25 @@ impl SyncEngine {
             // `send_replace` keeps the value when nobody subscribed yet.
             entry.sender.send_replace(Some(result.clone()));
         }
-        result
+    }
+
+    /// Raise the `backfilling` flag for a `sync.now { complete: true }` fill.
+    /// Called by the RPC handler BEFORE it spawns and returns, and dropped by
+    /// the spawned task when it ends (every exit), so the flag is up from the
+    /// moment the app can ask and never outlives the work.
+    pub(crate) fn begin_fill(&self, account_id: &str, mailbox: &str) -> FillGuard {
+        let key = format!("{}\u{1}{}", account_id, mailbox);
+        let mut fills = self.fills.lock().unwrap_or_else(|e| e.into_inner());
+        let count = fills.entry(key.clone()).or_insert(0);
+        let owner = *count == 0;
+        *count += 1;
+        FillGuard { fills: Arc::clone(&self.fills), key, owner }
+    }
+
+    /// Forget a recorded give-up for this folder: the user asked for the whole
+    /// folder, so the automatic backfill's "got nowhere before" does not apply.
+    pub(crate) async fn forget_backfill_gave_up(&self, account_id: &str, mailbox: &str) {
+        self.backfill_gave_up.lock().await.remove(&format!("{}\u{1}{}", account_id, mailbox));
     }
 
     /// Only a successful, completed ticket can offer mark evidence.
@@ -1290,7 +1359,7 @@ impl SyncEngine {
     /// outcome this must never have. (Past the open, `ops::read` still answers
     /// empty on a query error and an entry's unparseable uid list reads as
     /// no uids, the same as every other journal reader.)
-    async fn owed_uids(&self, account_id: &str, mailbox: &str) -> Result<HashSet<u32>, String> {
+    pub(crate) async fn owed_uids(&self, account_id: &str, mailbox: &str) -> Result<HashSet<u32>, String> {
         let (app_dir, account_id, mailbox) = (self.app_dir.clone(), account_id.to_string(), mailbox.to_string());
         tokio::task::spawn_blocking(move || {
             mailvault_core::app_db::with(&app_dir, |conn| Ok(mailvault_core::app_db::ops::read(conn)))
@@ -1323,6 +1392,9 @@ impl SyncEngine {
     /// this the two would race, each re-downloading what the other just wrote.
     pub async fn is_backfilling(&self, account_id: &str) -> bool {
         let prefix = format!("{}\u{1}", account_id);
+        if self.fills.lock().unwrap_or_else(|e| e.into_inner()).keys().any(|k| k.starts_with(&prefix)) {
+            return true;
+        }
         self.backfilling.lock().await.iter().any(|k| k.starts_with(&prefix))
     }
 
@@ -1620,6 +1692,15 @@ impl NativeBatchSeed {
     }
 }
 
+/// What a completed walk may take out of the cache (`finish_native_walk`).
+pub(crate) struct WalkPrune {
+    /// The uids cached before the walk's first provider request: a row another
+    /// writer saved while it ran is never in it.
+    pub baseline: HashSet<u32>,
+    /// Uids the op journal owes a delete or move: not this walk's to remove.
+    pub protect: HashSet<u32>,
+}
+
 #[derive(Clone)]
 pub(crate) struct CacheCtx {
     lifecycle: crate::account_lifecycle::AccountLifecycle,
@@ -1743,19 +1824,40 @@ impl CacheCtx {
         Ok(())
     }
 
-    pub(crate) fn verify_native_coverage(&self, seed: &NativeBatchSeed, listed: &HashSet<u32>) -> Result<(), String> {
+    /// The end of a provider walk that ran to its last page: every listed uid
+    /// the walk wrote (`listed` less `unwritten`, the rows it left out on
+    /// purpose) is held under the seed's owner. With `prune`, the folder is
+    /// exactly the listed set (the caller proved the provider's own count), so
+    /// the rows that were cached before the walk (`prune.baseline`), are not
+    /// listed and are not protected leave the cache by the same removal a
+    /// provider-side disappearance uses everywhere else (`remove`): rows only,
+    /// no vault copy, no custody stamp. Returns the uids removed.
+    pub(crate) fn finish_native_walk(&self, seed: &NativeBatchSeed, listed: &HashSet<u32>,
+        unwritten: &HashSet<u32>, prune: Option<&WalkPrune>) -> Result<Vec<u32>, String> {
         let _permit = self.commit()?;
-        self.require_db(|conn| {
+        if prune.is_some() { self.vault_open()?; }
+        let gone = self.require_db(|conn| {
             let current = mailvault_core::custody::cache::native_identity(conn, &self.account, &self.mailbox)?;
             if current.as_ref() != Some(&seed.identity) {
                 return Err("errors.bulkIdentityChanged".into());
             }
             let held = mailvault_core::custody::cache::uid_set(conn, &self.account, &self.mailbox)?;
-            if !listed.is_subset(&held) {
+            if !listed.iter().filter(|uid| !unwritten.contains(uid)).all(|uid| held.contains(uid)) {
                 return Err("errors.syncHeadersIncomplete".into());
             }
-            Ok(())
-        })
+            let Some(prune) = prune else { return Ok(Vec::new()) };
+            let gone: Vec<u32> = prune.baseline.iter().copied()
+                .filter(|uid| held.contains(uid) && !listed.contains(uid) && !prune.protect.contains(uid))
+                .collect();
+            if !gone.is_empty() {
+                mailvault_core::custody::cache::remove_headers(conn, &self.account, &self.mailbox, &gone)?;
+            }
+            Ok(gone)
+        })?;
+        if !gone.is_empty() {
+            crate::classification::forget_at(&self.app_dir, &self.account, &self.mailbox, &gone);
+        }
+        Ok(gone)
     }
 
     /// Everything a sync step needs to know about what is already cached.
@@ -2428,6 +2530,28 @@ mod tests {
         engine.backfilling.lock().await.insert(key);
         assert!(engine.is_backfilling("acc1").await, "in-flight key must read as in-flight");
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A `sync.now { complete: true }` fill reads as in-flight from `begin_fill`
+    /// until its guard drops, for the whole account, without touching the
+    /// backfill's own claim; a second request does not own the walk.
+    #[tokio::test]
+    async fn a_fill_guard_raises_the_flag_until_dropped_and_only_the_first_owns_the_walk() {
+        let dir = scratch_dir("fill_flag");
+        let engine = engine_for(&dir);
+        assert!(!engine.is_backfilling("acc1").await);
+        let first = engine.begin_fill("acc1", "Sent");
+        assert!(engine.is_backfilling("acc1").await, "up before any work ran");
+        assert!(!engine.is_backfilling("acc2").await, "another account is unaffected");
+        assert!(engine.backfilling.lock().await.is_empty(), "the backfill's own claim stays free");
+        let second = engine.begin_fill("acc1", "Sent");
+        assert!(first.owner() && !second.owner());
+        drop(first);
+        assert!(engine.is_backfilling("acc1").await, "the second request still holds it");
+        drop(second);
+        assert!(!engine.is_backfilling("acc1").await, "every exit clears it");
+        assert!(engine.begin_fill("acc1", "Sent").owner(), "a finished fill leaves the folder free");
         let _ = fs::remove_dir_all(&dir);
     }
 

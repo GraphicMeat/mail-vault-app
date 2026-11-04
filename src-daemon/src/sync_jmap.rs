@@ -189,12 +189,21 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
 /// Fill every older JMAP page under the refresh's original account epoch.
 /// The regular sync has already written the newest cold page and metadata;
 /// each page below keeps its observed owner and refuses partial provider data.
+///
+/// The account lock (`jmap\x01<account>`) is taken per page, around the uid
+/// allocation and the write only: the provider calls of a walk that can take
+/// minutes never hold it, so an INBOX delta is not queued behind a Sent walk.
+///
+/// `prune` (an explicit `sync.now { complete: true }` fill): a walk that ran to
+/// the end listed exactly the provider's total, so the folder IS the listed
+/// set; rows cached before the walk that it did not list are gone from the
+/// provider and leave the cache (`CacheCtx::finish_native_walk`). A uid the op
+/// journal owes a delete or move is neither written nor pruned.
 pub(crate) async fn complete_headers_with_stamp(state: &Arc<DaemonState>, account: &SyncAccount,
-    mailbox: &str, stamp: &AccountStamp, expected_total: u32) -> Result<(), String> {
+    mailbox: &str, stamp: &AccountStamp, expected_total: u32, prune: bool) -> Result<(), String> {
     const PAGE: usize = 200;
+    const PAGE_ATTEMPTS: usize = 3;
     let engine = &state.sync_engine;
-    let lock = engine.lock_for(&account_lock_key(&account.id)).await;
-    let _account_guard = lock.lock().await;
     let cfg = &account.imap_config;
     let acct = state.jmap.get(cfg).await.map_err(|error| error.to_string())?;
     let mailbox_id = acct.mailbox_id(mailbox).await.map_err(|error| error.to_string())?;
@@ -206,50 +215,83 @@ pub(crate) async fn complete_headers_with_stamp(state: &Arc<DaemonState>, accoun
         .with_jmap_mailbox(&mailbox_id)) {
         return Err("errors.bulkIdentityChanged".into());
     }
+    // What a prune may take: the rows there were before the first provider call.
+    let baseline = if prune {
+        cache_step(state, &io, cfg, true, |io| Ok(io.cached_uids())).await?
+    } else { HashSet::new() };
+    let mut protect: HashSet<u32> = HashSet::new();
+    let mut unwritten: HashSet<u32> = HashSet::new();
     let mut listed = HashSet::new();
     let total = expected_total as usize;
+    let jmap_account = acct.client.account_id().to_string();
+    let email_state = || {
+        let (aid, ja) = (account.id.clone(), jmap_account.clone());
+        custody_read(state, move |c| Ok(JmapMeta::email_state(c, &aid, &ja)))
+    };
     for position in (0..total).step_by(PAGE) {
-        let current = crate::sync_observation::origin(state, stamp.clone()).await?;
-        if current.hash != mailvault_core::bulk_worker::origin_hash(cfg) {
-            return Err("errors.bulkIdentityChanged".into());
-        }
         let take = PAGE.min(total - position);
-        let (ids, reported) = acct.client.query_mailbox(&mailbox_id, position, take)
-            .await.map_err(|error| error.to_string())?;
-        if reported != Some(total) || ids.len() != take {
-            return Err("errors.syncHeadersIncomplete".into());
+        // A page is read with no lock held. A delta that ran meanwhile may have
+        // applied a destroy the page still lists, and never applies it again:
+        // when the account's stored Email state moved between the read and the
+        // write, the page is read again.
+        let mut settled = false;
+        for _attempt in 0..PAGE_ATTEMPTS {
+            let current = crate::sync_observation::origin(state, stamp.clone()).await?;
+            if current.hash != mailvault_core::bulk_worker::origin_hash(cfg) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            let state_before = email_state().await?;
+            let (ids, reported) = acct.client.query_mailbox(&mailbox_id, position, take)
+                .await.map_err(|error| error.to_string())?;
+            if reported != Some(total) || ids.len() != take {
+                return Err("errors.syncHeadersIncomplete".into());
+            }
+            #[cfg(test)]
+            if position + take == total {
+                source_write_test_pause::before_write(state, "complete-before-get").await;
+            }
+            let got = acct.client.get_emails(&ids, HEADER_PROPS).await.map_err(|error| error.to_string())?;
+            if !got.not_found.is_empty() || got.list.len() != ids.len() {
+                return Err("errors.syncHeadersIncomplete".into());
+            }
+            #[cfg(test)]
+            if position + take == total {
+                source_write_test_pause::before_write(state, "complete-get").await;
+            }
+            let lock = engine.lock_for(&account_lock_key(&account.id)).await;
+            let account_guard = lock.lock().await;
+            if email_state().await? != state_before { continue; }
+            let owner = state.account_lifecycle.try_operation(std::slice::from_ref(stamp))
+                .map_err(|_| "errors.keychainBusy".to_owned())?;
+            let oldest: Vec<String> = ids.iter().rev().cloned().collect();
+            let uids = acct.ids_to_uids_strict(state, stamp.clone(), &account.id, mailbox, &oldest,
+                &mailvault_core::bulk_worker::origin_hash(cfg), seed.expected_owner()?,
+                seed.identity().clone(), Some(owner)).await?;
+            let by_uid: HashMap<String, u32> = oldest.into_iter().zip(uids).collect();
+            let mut by_id: HashMap<String, Value> = got.list.into_iter().map(|email|
+                (email_id(&email), email)).collect();
+            // Read where the write is: a delete queued while the walk ran counts.
+            let owed = if prune { engine.owed_uids(&account.id, mailbox).await? } else { HashSet::new() };
+            let mut headers = Vec::with_capacity(ids.len());
+            for id in &ids {
+                let email = by_id.remove(id).ok_or("errors.syncHeadersIncomplete")?;
+                if !in_mailbox(&email, &mailbox_id) { return Err("errors.syncHeadersIncomplete".into()); }
+                let uid = *by_uid.get(id).ok_or("errors.syncHeadersIncomplete")?;
+                listed.insert(uid);
+                if owed.contains(&uid) {
+                    unwritten.insert(uid);
+                    continue;
+                }
+                headers.push(to_header(&email, uid));
+            }
+            protect.extend(owed);
+            let page_seed = seed.clone();
+            cache_step(state, &io, cfg, true, move |io| io.write_bound_headers(&headers, &page_seed, Some(1))).await?;
+            drop(account_guard);
+            settled = true;
+            break;
         }
-        #[cfg(test)]
-        if position + take == total {
-            source_write_test_pause::before_write(state, "complete-before-get").await;
-        }
-        let got = acct.client.get_emails(&ids, HEADER_PROPS).await.map_err(|error| error.to_string())?;
-        if !got.not_found.is_empty() || got.list.len() != ids.len() {
-            return Err("errors.syncHeadersIncomplete".into());
-        }
-        #[cfg(test)]
-        if position + take == total {
-            source_write_test_pause::before_write(state, "complete-get").await;
-        }
-        let owner = state.account_lifecycle.try_operation(std::slice::from_ref(stamp))
-            .map_err(|_| "errors.keychainBusy".to_owned())?;
-        let oldest: Vec<String> = ids.iter().rev().cloned().collect();
-        let uids = acct.ids_to_uids_strict(state, stamp.clone(), &account.id, mailbox, &oldest,
-            &mailvault_core::bulk_worker::origin_hash(cfg), seed.expected_owner()?,
-            seed.identity().clone(), Some(owner)).await?;
-        let by_uid: HashMap<String, u32> = oldest.into_iter().zip(uids).collect();
-        let mut by_id: HashMap<String, Value> = got.list.into_iter().map(|email|
-            (email_id(&email), email)).collect();
-        let mut headers = Vec::with_capacity(ids.len());
-        for id in &ids {
-            let email = by_id.remove(id).ok_or("errors.syncHeadersIncomplete")?;
-            if !in_mailbox(&email, &mailbox_id) { return Err("errors.syncHeadersIncomplete".into()); }
-            let uid = *by_uid.get(id).ok_or("errors.syncHeadersIncomplete")?;
-            listed.insert(uid);
-            headers.push(to_header(&email, uid));
-        }
-        let page_seed = seed.clone();
-        cache_step(state, &io, cfg, true, move |io| io.write_bound_headers(&headers, &page_seed, Some(1))).await?;
+        if !settled { return Err("errors.syncHeadersIncomplete".into()); }
         #[cfg(test)]
         if position == 0 && position + take < total {
             source_write_test_pause::before_write(state, "complete-first-page").await;
@@ -261,7 +303,17 @@ pub(crate) async fn complete_headers_with_stamp(state: &Arc<DaemonState>, accoun
         tokio::task::yield_now().await;
     }
     if listed.len() != total { return Err("errors.syncHeadersIncomplete".into()); }
-    cache_step(state, &io, cfg, true, move |io| io.verify_native_coverage(&seed, &listed)).await
+    if prune { protect.extend(engine.owed_uids(&account.id, mailbox).await?); }
+    let walk = prune.then(|| crate::sync_engine::WalkPrune { baseline, protect });
+    let gone = cache_step(state, &io, cfg, true,
+        move |io| io.finish_native_walk(&seed, &listed, &unwritten, walk.as_ref())).await?;
+    if !gone.is_empty() {
+        // The counter the status RPC reports moves: the app's probe syncs.
+        let (aid, path) = (account.id.clone(), mailbox.to_string());
+        custody_write(state, stamp, Some(mailvault_core::bulk_worker::origin_hash(cfg)),
+            move |c| JmapMeta::bump(c, &aid, &path, &gone).map(|_| ())).await?;
+    }
+    Ok(())
 }
 
 /// The account's delta, for the bridge's status RPCs: afterwards the ledger

@@ -139,11 +139,28 @@ pub(crate) async fn graph_save_with_original(state: &Arc<DaemonState>, original:
     }).await?
 }
 
+/// What a completed Graph walk may take out of the cache (see
+/// `graph_finish_with_original`).
+pub(crate) struct GraphPrune {
+    /// The uids cached before the walk's first provider request.
+    pub baseline: HashSet<u32>,
+    /// Uids the op journal owes a delete or move.
+    pub protect: HashSet<u32>,
+}
+
 /// Publish complete coverage only after every page was saved under the
 /// original owner and the provider's count matches the exact cached UID set.
+///
+/// With `prune` (an explicit fill), a walk that ran to the provider's last page
+/// and listed exactly the provider's folder total has seen the whole folder:
+/// the rows that were cached before the walk, are not listed and are not
+/// protected are gone from the provider and are removed in the same custody
+/// step, before the marker is computed from what remains. A count that differs
+/// prunes nothing (a row moved during the walk, or the provider reordered ties).
+/// Returns whether the folder is complete and how many rows were pruned.
 pub(crate) async fn graph_finish_with_original(state: &Arc<DaemonState>, original: &crate::sync_observation::Origin,
     config: &crate::imap::ImapConfig, mailbox: &str, listed_uids: HashSet<u32>,
-    provider_total: i64, provider_exhausted: bool) -> Result<bool, String> {
+    provider_total: i64, provider_exhausted: bool, prune: Option<GraphPrune>) -> Result<(bool, usize), String> {
     let owner = state.account_lifecycle.try_operation(std::slice::from_ref(&original.original))
         .map_err(|_| "errors.keychainBusy".to_owned())?;
     let (state, original, config, mailbox) = (Arc::clone(state), original.clone(), config.clone(), mailbox.to_owned());
@@ -152,20 +169,35 @@ pub(crate) async fn graph_finish_with_original(state: &Arc<DaemonState>, origina
         let _permit = original_graph_permit(&state, &original)?;
         let account_id = original.original.id();
         let identity = mailvault_core::imap::NativeHeaderIdentity::new(&config, account_id, &mailbox, None);
-        with_vault_write(&state, |_| daemon_custody::with_conn(&state, |conn| {
+        let (complete, pruned) = with_vault_write(&state, |_| daemon_custody::with_conn(&state, |conn| {
             if sql_cache::native_identity(conn, account_id, &mailbox)? != Some(identity.clone()) {
                 return Err("errors.bulkIdentityChanged".into());
             }
-            let held_uids = sql_cache::uid_set(conn, account_id, &mailbox)?;
-            let complete = provider_exhausted && usize::try_from(provider_total).ok() == Some(listed_uids.len())
-                && held_uids == listed_uids;
+            let mut held_uids = sql_cache::uid_set(conn, account_id, &mailbox)?;
+            let mut pruned: Vec<u32> = Vec::new();
+            let exact = provider_exhausted && usize::try_from(provider_total).ok() == Some(listed_uids.len());
+            if let Some(prune) = prune.as_ref().filter(|_| exact) {
+                pruned = held_uids.iter().copied()
+                    .filter(|uid| prune.baseline.contains(uid) && !listed_uids.contains(uid)
+                        && !prune.protect.contains(uid))
+                    .collect();
+                if !pruned.is_empty() {
+                    sql_cache::remove_headers(conn, account_id, &mailbox, &pruned)?;
+                    for uid in &pruned { held_uids.remove(uid); }
+                }
+            }
+            let complete = exact && held_uids == listed_uids;
             let payload = serde_json::json!({"nativeIdentity": identity,
                 "graphComplete": complete,
                 "graphCompleteTotal": if complete { provider_total } else { 0 },
                 "graphCompleteUidDigest": if complete { graph_uid_digest(&held_uids) } else { String::new() }}).to_string();
             sql_cache::save_headers(conn, account_id, &mailbox, &payload)?;
-            Ok(complete)
-        }))
+            Ok((complete, pruned))
+        }))?;
+        if !pruned.is_empty() {
+            crate::classification::forget_at(&state.app_dir, account_id, &mailbox, &pruned);
+        }
+        Ok((complete, pruned.len()))
     }).await?
 }
 
