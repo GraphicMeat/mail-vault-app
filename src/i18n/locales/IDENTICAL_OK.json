@@ -83,6 +83,7 @@
   "fields.noValue",
   "focus.min",
   "focus.minutesUnit",
+  "folderMove.account",
   "googleClient.nameMailvault",
   "googleClient.nameThunderbird",
   "hook.useKeyboardShortcuts.ctrl",
