@@ -159,5 +159,21 @@ mod tests {
             json!([{"src": "Clients", "dest": "Archive/Clients", "container": false}, {"src": "Clients/2025", "dest": "Archive/Clients/2025", "container": false}])
         );
         assert_eq!(plan["fastRename"], Value::Null, "another account is never a rename");
+        assert_eq!(plan["cached"], json!(true));
+    }
+
+    /// An account the app never opened has no cached list: the plan cannot
+    /// say what moves, but nothing refuses the move either (the job lists
+    /// both accounts live). A cached list without the folder is a refusal.
+    #[tokio::test]
+    async fn plan_without_a_cached_list_is_unknown_not_refused() {
+        let (_v, _a, s) = st();
+        cache(&s, "src", json!([node("INBOX", Some("\\Inbox")), node("Clients", None)]));
+        let params = json!({"sourceAccountId": "src", "sourcePath": "Clients", "destAccountId": "dst", "destPath": "Archive"});
+        let plan = call(&s, "folder_move.plan", params).await.result.unwrap();
+        assert_eq!((plan["refusal"].clone(), plan["items"].clone(), plan["cached"].clone()), (Value::Null, json!([]), json!(false)));
+
+        let gone = json!({"sourceAccountId": "src", "sourcePath": "Gone", "destAccountId": "src", "destPath": null});
+        assert_eq!(call(&s, "folder_move.plan", gone).await.result.unwrap()["refusal"], json!("E_FOLDER_MOVE_NOT_FOUND"));
     }
 }

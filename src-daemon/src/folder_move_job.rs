@@ -556,21 +556,22 @@ fn cached_kind(state: &DaemonState, account: &str) -> Kind {
 
 /// `folder_move.plan`: what the move would create, from the cached folder
 /// lists only. `refusal` is the code that stops it (the app disables
-/// Confirm); a Graph folder's subfolders are known only to the live listing
-/// the job makes.
+/// Confirm). An account with no cached list (never opened) is `cached:
+/// false`, no items and no refusal: the job lists both accounts live. A
+/// Graph folder's subfolders are known only to that live listing.
 pub(crate) fn plan_cached(state: &DaemonState, req: &Request) -> Value {
-    let refusal = |code: &str| json!({"items": [], "fastRename": null, "refusal": code});
+    let refusal = |code: &str| json!({"items": [], "fastRename": null, "refusal": code, "cached": true});
     if fm::is_reserved(&req.source_path, None, None) {
         return refusal(fm::PlanError::Reserved.code());
     }
     let same = req.source_account_id == req.dest_account_id;
     let (Some(src), Some(dst)) = (cached_tree(state, &req.source_account_id), cached_tree(state, &req.dest_account_id)) else {
-        return refusal(fm::PlanError::NotFound.code());
+        return json!({"items": [], "fastRename": null, "refusal": null, "cached": false});
     };
     let target = req.dest_path.clone().map_or(Target::TopLevel, Target::Into);
     let kinds = (cached_kind(state, &req.source_account_id), cached_kind(state, &req.dest_account_id));
     match fm::plan(&src, &req.source_path, &dst, &target, same, kinds.0, kinds.1) {
-        Ok(plan) => json!({"items": plan.items, "fastRename": plan.fast_rename, "refusal": null}),
+        Ok(plan) => json!({"items": plan.items, "fastRename": plan.fast_rename, "refusal": null, "cached": true}),
         Err(e) => refusal(e.code()),
     }
 }
