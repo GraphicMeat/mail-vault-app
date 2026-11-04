@@ -7,8 +7,13 @@
 //!   Message-ID against the destination, by content for mail without one.
 //!   The destination is listed again after the copy and judged
 //!   (`folder_move::verify`); a failed listing is an error, never an empty
-//!   set. Just before the retire every source folder is listed again and
-//!   mail that arrived meanwhile goes through copy and verify (two rounds at
+//!   set. The retire's rename carries whatever the source holds when it is
+//!   sent, so the last look at the source comes after the verdict, as close
+//!   to the rename as it gets: the credentials read again, the source's
+//!   folders listed (a folder made under the root since the plan keeps the
+//!   source; a resume plans again and moves it), then each folder (a Graph
+//!   or JMAP listing short of the folder's own count keeps the source; mail
+//!   that arrived goes through copy and another verdict, two rounds at
 //!   most). Only when every folder is verified, nothing failed and nothing
 //!   was cancelled is the source retired: one rename of its root under Trash
 //!   (IMAP, JMAP, with the vault's folders renamed to follow) or Graph's move
@@ -24,13 +29,22 @@
 //!   (`search_index::wait_foreground_quiet`). RPCs never wait on it.
 //! - **Control.** Pause, cancel and discard take effect between messages. A
 //!   pause holds the job, its journal checkpointed; a cancel ends it and keeps
-//!   the journal; a discard ends it and deletes the journal (never mail).
-//!   One job per account, as source or destination.
+//!   the journal; a discard ends it and deletes the journal (never mail). A
+//!   cancel is honoured up to the retire's rename; one that comes later finds
+//!   the move done, and a discard then ends it `done`. A refused sign-in reads
+//!   the credentials again and goes on; refused again, the job fails with
+//!   `E_FOLDER_MOVE_SIGN_IN`. One job per account, as source or destination.
 //! - **Journal** `<app data>/folder_moves/<jobId>.json`, atomic: the plan, each
-//!   folder's phase and counts and the keys of the messages done. A resumed
-//!   job skips verified folders and, within a folder, mail the destination
-//!   lists (Message-ID) or the journal names (content fingerprint). A daemon
-//!   restart leaves it `stopped`; it never resumes unasked.
+//!   folder's phase and counts, the content fingerprints of mail without a
+//!   Message-ID (acknowledged, and taken unnamed: never written twice, never
+//!   verified), and the target of a rename before it is sent. Written on
+//!   every change of phase or state, and between those at most every
+//!   `checkpoint_after`. A resumed job plans again from the live trees and
+//!   walks every folder not retired, verified ones too, skipping mail the
+//!   destination lists (Message-ID) or the journal names (fingerprint). A
+//!   resume that finds the root gone and a journaled rename's target listed
+//!   finishes that rename. A daemon restart leaves a job `stopped`; it never
+//!   resumes unasked.
 //! - **Progress** is the `folder-move-progress` event, at most one per
 //!   `progress_every` plus every change of state; the last has `active: false`.
 //!
@@ -90,14 +104,16 @@ const RELIST_ROUNDS: usize = 2;
 pub(crate) struct Tuning {
     /// At most one progress event per this long, changes of state aside.
     pub progress_every: Duration,
-    /// The journal is written every this many messages, and on every change
-    /// of phase or state.
+    /// The journal is written after this many messages once
+    /// `checkpoint_after` has passed since it was last written, and on every
+    /// change of phase or state: a big folder does not rewrite it per batch.
     pub checkpoint_every: u32,
+    pub checkpoint_after: Duration,
 }
 
 impl Default for Tuning {
     fn default() -> Self {
-        Tuning { progress_every: Duration::from_millis(500), checkpoint_every: 25 }
+        Tuning { progress_every: Duration::from_millis(500), checkpoint_every: 25, checkpoint_after: Duration::from_secs(2) }
     }
 }
 
@@ -304,6 +320,11 @@ pub(crate) struct JobFile {
     pub source_kept_reason: Option<String>,
     pub error: Option<String>,
     pub retired_to: Option<String>,
+    /// Where the retire renames the source root, written before the rename
+    /// is sent; a fast rename's target likewise (`renaming_to`). A run that
+    /// finds the root gone and the target listed finishes that rename.
+    pub retiring_to: Option<String>,
+    pub renaming_to: Option<String>,
     pub folders_created: u32,
     pub updated_at: u64,
 }
@@ -423,20 +444,37 @@ fn graph_client(side: &Side) -> Result<mailvault_core::graph::GraphClient, Strin
     Ok(mailvault_core::graph::GraphClient::new(token).for_account(&side.email))
 }
 
-/// An account's folders as listed now, and for Graph each folder's id by
-/// path. A Graph folder is keyed by its storage key, as the app keys it; its
-/// well-known name stands as its special use and its children as
-/// `\HasChildren` (the listing is top-level only), so `plan` reserves a
-/// localized Inbox and refuses a folder with subfolders.
-async fn live_tree(state: &Arc<DaemonState>, side: &Side) -> Result<(Vec<MailboxInfo>, HashMap<String, String>), String> {
+/// An account's folders as listed now: for Graph each folder's id by path,
+/// for JMAP and Graph each folder's message count, which a listing of its
+/// messages has to reach (an IMAP listing checks itself against EXISTS).
+#[derive(Clone, Default)]
+struct Live {
+    tree: Vec<MailboxInfo>,
+    ids: HashMap<String, String>,
+    totals: HashMap<String, u32>,
+}
+
+/// An account's folders as listed now. A Graph folder is keyed by its
+/// storage key, as the app keys it; its well-known name stands as its
+/// special use and its children as `\HasChildren` (the listing is top-level
+/// only), so `plan` reserves a localized Inbox and refuses a folder with
+/// subfolders.
+async fn live_tree(state: &Arc<DaemonState>, side: &Side) -> Result<Live, String> {
     match side.transport.as_str() {
         "jmap" => {
             let acct = state.jmap.get(&side.config).await.map_err(|e| e.to_string())?;
-            Ok((acct.refresh().await.map_err(|e| e.to_string())?.infos, HashMap::new()))
+            let boxes = acct.refresh().await.map_err(|e| e.to_string())?;
+            let totals = boxes
+                .ids
+                .iter()
+                .filter_map(|(path, id)| boxes.list.iter().find(|m| &m.id == id).map(|m| (path.clone(), m.total_emails)))
+                .collect();
+            Ok(Live { tree: boxes.infos, ids: HashMap::new(), totals })
         }
         "graph" => {
             let folders = graph_client(side)?.list_folders().await?;
             let ids = folders.iter().map(|f| (f.storage_key.clone(), f.id.clone())).collect();
+            let totals = folders.iter().map(|f| (f.storage_key.clone(), f.total_item_count.clamp(0, u32::MAX as i64) as u32)).collect();
             let boxes = folders
                 .into_iter()
                 .map(|f| MailboxInfo {
@@ -450,14 +488,14 @@ async fn live_tree(state: &Arc<DaemonState>, side: &Side) -> Result<(Vec<Mailbox
                     children: Vec::new(),
                 })
                 .collect();
-            Ok((boxes, ids))
+            Ok(Live { tree: boxes, ids, totals })
         }
         _ => {
             let mut guard = state.imap_pool.get_background(&side.config).await?;
             match imap::list_mailboxes(&mut guard.session).await {
                 Ok(boxes) => {
                     state.imap_pool.return_background(&side.config, guard).await;
-                    Ok((boxes, HashMap::new()))
+                    Ok(Live { tree: boxes, ..Default::default() })
                 }
                 Err(e) => {
                     state.imap_pool.discard(&side.config, guard).await;
@@ -486,12 +524,17 @@ fn subtree_paths(tree: &[MailboxInfo], root: &str, d: Option<&str>) -> Vec<Strin
         .collect()
 }
 
-/// A rename's vault pairs: the root and every folder under it, each to its
-/// place under `to`, as the app's own rename sends them.
-fn rename_pairs(tree: &[MailboxInfo], root: &str, to: &str, d: Option<&str>) -> Vec<mailvault_core::vault_flags::RenamePair> {
-    subtree_paths(tree, root, d)
+/// A rename's vault pairs, as the app's own rename sends them: one per
+/// folder of the subtree at `at` in `tree`, from its place under `root` to
+/// its place under `to`. `at` is `root` in a tree listed before the rename,
+/// `to` in one listed after it.
+fn rename_pairs(tree: &[MailboxInfo], at: &str, root: &str, to: &str, d: Option<&str>) -> Vec<mailvault_core::vault_flags::RenamePair> {
+    subtree_paths(tree, at, d)
         .into_iter()
-        .map(|p| mailvault_core::vault_flags::RenamePair { to: format!("{to}{}", &p[root.len()..]), from: p })
+        .map(|p| {
+            let rest = &p[at.len()..];
+            mailvault_core::vault_flags::RenamePair { from: format!("{root}{rest}"), to: format!("{to}{rest}") }
+        })
         .collect()
 }
 
@@ -748,6 +791,7 @@ fn spawn(
         file,
         stamps,
         since_checkpoint: 0,
+        checkpointed: Instant::now(),
         emitted: None,
         current: None,
         rate_limited_for: None,
@@ -778,6 +822,18 @@ enum Stop {
     Cancel,
     /// The provider's bandwidth limit: nothing more goes up today.
     Bandwidth,
+    /// An account refused its sign-in, also with its credentials read afresh.
+    SignIn,
+}
+
+impl Stop {
+    fn end(self) -> End {
+        match self {
+            Stop::Cancel => End::partial(KEPT_CANCELLED),
+            Stop::Bandwidth => End::partial(KEPT_FAILED),
+            Stop::SignIn => End::failed(E_FOLDER_MOVE_SIGN_IN.to_string()),
+        }
+    }
 }
 
 /// One folder's copy in this run.
@@ -814,15 +870,33 @@ fn mapping(src: &str, dest: &str) -> FolderMapping {
     }
 }
 
-/// Content fingerprints a journal folder says were done (mail without a
-/// Message-ID): present, never written twice.
+/// Content fingerprints a journal folder names (mail without a Message-ID,
+/// acknowledged or not): present, never written twice.
 fn fingerprints_of(folder: Option<&JournalFolder>) -> HashSet<u64> {
-    folder
-        .into_iter()
-        .flat_map(|f| f.done.iter())
-        .filter(|k| !k.starts_with('<'))
-        .filter_map(|k| u64::from_str_radix(k, 16).ok())
-        .collect()
+    folder.into_iter().flat_map(|f| f.done.iter().chain(&f.unconfirmed)).filter_map(|k| u64::from_str_radix(k, 16).ok()).collect()
+}
+
+/// A sign-in refused, as IMAP, Graph and JMAP word it.
+fn is_sign_in_refused(e: &str) -> bool {
+    crate::hoarder_worker::is_sign_in_failure(e) || mailvault_core::graph::GraphClient::is_token_expired(e) || e.starts_with("E_JMAP_AUTH:")
+}
+
+/// The move's source and destination: the same account twice for a move
+/// inside one.
+type Sides = (Side, Side);
+
+fn ctx<'a>(state: &'a Arc<DaemonState>, sides: &'a Sides, job: &'a Job, seen: Option<&'a HashSet<u64>>, graph_folder_cache: HashMap<String, String>) -> CopyCtx<'a> {
+    CopyCtx {
+        state,
+        source: &sides.0,
+        dest: &sides.1,
+        lane: Lane::Background,
+        cancel: &job.cancel,
+        pause: &job.pause,
+        notify: &job.notify,
+        graph_folder_cache,
+        seen_fingerprints: seen,
+    }
 }
 
 struct Runner {
@@ -832,6 +906,7 @@ struct Runner {
     file: JobFile,
     stamps: Vec<AccountStamp>,
     since_checkpoint: u32,
+    checkpointed: Instant,
     emitted: Option<Instant>,
     current: Option<String>,
     rate_limited_for: Option<u64>,
@@ -848,6 +923,9 @@ struct End {
 }
 
 impl End {
+    fn done() -> Self {
+        End { state: DONE, kept: None, error: None }
+    }
     fn failed(error: String) -> Self {
         End { state: FAILED, kept: Some(KEPT_FAILED), error: Some(error) }
     }
@@ -869,112 +947,87 @@ impl Runner {
     }
 
     async fn work(&mut self) -> End {
-        let (src_id, dst_id) = (self.file.journal.source_account_id.clone(), self.file.journal.dest_account_id.clone());
-        let same = src_id == dst_id;
-        let source = match quiet_config(&self.state, &src_id).await {
-            Ok(c) => side_of(c),
-            Err(_) => return End::failed(E_FOLDER_MOVE_SIGN_IN.to_string()),
+        let mut sides = match self.read_sides().await {
+            Ok(sides) => sides,
+            Err(end) => return end,
         };
-        let dest = if same {
-            side_of(source.config.clone())
-        } else {
-            match quiet_config(&self.state, &dst_id).await {
-                Ok(c) => side_of(c),
-                Err(_) => return End::failed(E_FOLDER_MOVE_SIGN_IN.to_string()),
-            }
-        };
+        let same = self.file.journal.source_account_id == self.file.journal.dest_account_id;
         let state = Arc::clone(&self.state);
-        let (src_tree, src_ids) = match live_tree(&state, &source).await {
-            Ok(t) => t,
+        let src = match live_tree(&state, &sides.0).await {
+            Ok(live) => live,
             Err(e) => return End::failed(e),
         };
-        let (dst_tree, dst_ids) = if same {
-            (src_tree.clone(), src_ids.clone())
+        let dst = if same {
+            src.clone()
         } else {
-            match live_tree(&state, &dest).await {
-                Ok(t) => t,
+            match live_tree(&state, &sides.1).await {
+                Ok(live) => live,
                 Err(e) => return End::failed(e),
             }
         };
         let root = self.file.journal.root.clone();
-        let root_listed = flatten(&src_tree).iter().any(|m| m.path == root);
-
-        if self.file.journal.plan.items.is_empty() {
-            let planned = fm::plan(&src_tree, &root, &dst_tree, &self.file.journal.target, same, kind_of(&source), kind_of(&dest));
-            match planned {
-                Ok(plan) => {
-                    self.file.journal.folders = vec![JournalFolder::default(); plan.items.len()];
-                    self.file.journal.plan = plan;
-                    self.checkpoint(RUNNING);
-                }
-                Err(e) => return End::failed(e.code().to_string()),
-            }
-        } else if !root_listed {
-            // The journal of a run whose retire landed but whose last write
-            // was lost: every folder verified and the root gone is a retire.
-            let all_verified = self.file.journal.folders.iter().all(|f| matches!(f.phase, FolderPhase::Verified | FolderPhase::Retired));
-            return if all_verified && !self.file.journal.folders.is_empty() {
-                End { state: DONE, kept: None, error: None }
-            } else {
-                End::failed(E_FOLDER_MOVE_SOURCE_MISSING.to_string())
-            };
+        if !self.file.journal.plan.items.is_empty() && !flatten(&src.tree).iter().any(|m| m.path == root) {
+            return self.landed(&sides.0, &src.tree).await;
         }
 
-        let src_d = flatten(&src_tree).into_iter().find(|m| m.path == root).and_then(|m| m.delimiter.clone()).filter(|d| !d.is_empty());
-        let src_folder_id = self.file.source_folder_id.clone().or_else(|| src_ids.get(&root).cloned());
+        // Planned from the live trees on every run: a folder made under the
+        // source since the last run joins the move, and a folder whose
+        // destination moved starts over.
+        match fm::plan(&src.tree, &root, &dst.tree, &self.file.journal.target, same, kind_of(&sides.0), kind_of(&sides.1)) {
+            Ok(plan) => {
+                fm::replan(&mut self.file.journal, plan);
+                self.checkpoint(RUNNING);
+            }
+            Err(e) => return End::failed(e.code().to_string()),
+        }
+
+        let src_d = flatten(&src.tree).into_iter().find(|m| m.path == root).and_then(|m| m.delimiter.clone()).filter(|d| !d.is_empty());
+        let src_folder_id = self.file.source_folder_id.clone().or_else(|| src.ids.get(&root).cloned());
 
         // Same account, free destination: one native rename.
         let untouched = self.file.journal.folders.iter().all(|f| f.phase == FolderPhase::Pending);
         if let (Some(to), true) = (self.file.journal.plan.fast_rename.clone(), untouched) {
             let parent_id = match &self.file.journal.target {
-                Target::Into(p) => self.file.dest_folder_id.clone().or_else(|| dst_ids.get(p).cloned()),
+                Target::Into(p) => self.file.dest_folder_id.clone().or_else(|| dst.ids.get(p).cloned()),
                 Target::TopLevel => Some("msgfolderroot".to_string()),
             };
-            match self.native_rename(&source, &root, &to, src_folder_id.as_deref(), parent_id.as_deref()).await {
+            // Journaled before it is sent: a rename that lands just before a
+            // crash is finished by the next run (`landed`).
+            self.file.renaming_to = Some(to.clone());
+            self.checkpoint(RUNNING);
+            match self.native_rename(&sides.0, &root, &to, src_folder_id.as_deref(), parent_id.as_deref()).await {
                 Ok(()) => {
-                    if source.transport != "graph" {
-                        self.rename_vault(&source, &src_tree, &root, &to, src_d.as_deref()).await;
+                    if sides.0.transport != "graph" {
+                        self.rename_vault(&sides.0, rename_pairs(&src.tree, &root, &root, &to, src_d.as_deref())).await;
                     }
-                    for f in &mut self.file.journal.folders {
-                        f.phase = FolderPhase::Retired;
-                    }
+                    self.retired_all();
                     self.file.retired_to = None;
-                    return End { state: DONE, kept: None, error: None };
+                    return End::done();
                 }
                 Err(e) => warn!("[folder_move] job {}: the native rename was refused ({e}); copying instead", self.job.id),
             }
         }
 
-        // Copy.
-        let dest_paths: HashSet<String> = flatten(&dst_tree).into_iter().map(|m| m.path.clone()).collect();
+        // Copy every folder not retired, those an earlier run verified too:
+        // their copies are skipped, and their mail is judged again below.
+        let dest_paths: HashSet<String> = flatten(&dst.tree).into_iter().map(|m| m.path.clone()).collect();
         let job = Arc::clone(&self.job);
-        let mut graph_cache: HashMap<String, String> = dst_ids.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let mut graph_cache = dst.ids.clone();
         let mut runs: Vec<FolderRun> = Vec::new();
-        let mut stop = None;
         for idx in fm::resume_items(&self.file.journal) {
             if self.cancelled() {
-                stop = Some(Stop::Cancel);
-                break;
+                return End::partial(KEPT_CANCELLED);
             }
-            let item = self.file.journal.plan.items[idx].clone();
-            let src_graph_id = if item.src_path == root { src_folder_id.clone() } else { src_ids.get(&item.src_path).cloned() };
-            let fps = fingerprints_of(self.file.journal.folders.get(idx));
-            let mut ctx = CopyCtx {
-                state: &state,
-                source: &source,
-                dest: &dest,
-                lane: Lane::Background,
-                cancel: &job.cancel,
-                pause: &job.pause,
-                notify: &job.notify,
-                graph_folder_cache: std::mem::take(&mut graph_cache),
-                yield_to_ui: true,
-                seen_fingerprints: Some(&fps),
+            // Read again for each folder: a long move outlives a token.
+            sides = match self.read_sides().await {
+                Ok(sides) => sides,
+                Err(end) => return end,
             };
+            let item = self.file.journal.plan.items[idx].clone();
             let mut run = FolderRun {
                 idx,
                 mapping: mapping(&item.src_path, &item.dest_path),
-                src_id: src_graph_id,
+                src_id: if item.src_path == root { src_folder_id.clone() } else { src.ids.get(&item.src_path).cloned() },
                 dest_ids: HashSet::new(),
                 records: Vec::new(),
                 handled: HashSet::new(),
@@ -982,141 +1035,168 @@ impl Runner {
             };
             self.current = Some(item.src_path.clone());
             self.set_phase(idx, FolderPhase::Copying, RUNNING);
-            let made = migration::ensure_dest_folder(&mut ctx, &mut run.mapping).await;
+            let made = {
+                let mut ctx = ctx(&state, &sides, &job, None, std::mem::take(&mut graph_cache));
+                let made = migration::ensure_dest_folder(&mut ctx, &mut run.mapping).await;
+                graph_cache = ctx.graph_folder_cache;
+                made
+            };
             if made.is_ok() && !dest_paths.contains(&item.dest_path) {
                 self.file.folders_created += 1;
             }
-            let outcome = match made {
+            let stop = match made {
                 Err(e) => {
                     warn!("[folder_move] job {}: a destination folder was not made: {e}", self.job.id);
                     run.broken = true;
                     None
                 }
                 Ok(()) if item.container => None,
-                Ok(()) => self.copy_folder(&ctx, &mut run).await,
+                Ok(()) => self.copy_folder(&mut sides, &mut run, &mut graph_cache).await,
             };
-            graph_cache = std::mem::take(&mut ctx.graph_folder_cache);
             runs.push(run);
-            if outcome.is_some() {
-                stop = outcome;
-                break;
+            if let Some(stop) = stop {
+                return stop.end();
             }
         }
         self.current = None;
-        match stop {
-            Some(Stop::Cancel) => return End::partial(KEPT_CANCELLED),
-            Some(Stop::Bandwidth) => return End::partial(KEPT_FAILED),
-            None => {}
-        }
 
-        // Verify: the source listed again (mail that arrived meanwhile is
-        // copied), then each destination folder listed again and judged.
+        // Settle. Each round judges every folder against its destination,
+        // then takes the last look at the source, as close to the rename as
+        // it gets: the credentials read again, the folder tree listed (a
+        // folder made under the root keeps the source), each folder listed
+        // (a listing short of the folder's own count keeps the source; mail
+        // that arrived goes through copy and another verdict, two rounds at
+        // most). The rename carries what the source holds then, so only a
+        // look that finds nothing new lets it go.
         self.emit(true, VERIFYING);
-        let mut late = false;
-        for round in 0..=RELIST_ROUNDS {
-            let mut found = false;
+        let mut round = 0;
+        let fresh = loop {
+            let verified = self.judge(&sides, &runs).await;
+            if self.cancelled() {
+                return End::partial(KEPT_CANCELLED);
+            }
+            if self.file.journal.folders.iter().any(|f| f.failed > 0) || runs.iter().any(|r| r.broken) {
+                return End::partial(KEPT_FAILED);
+            }
+            if !verified {
+                return End::partial(KEPT_UNVERIFIED);
+            }
+            sides = match self.read_sides().await {
+                Ok(sides) => sides,
+                Err(end) => return end,
+            };
+            let live = match live_tree(&state, &sides.0).await {
+                Ok(live) => live,
+                Err(e) => {
+                    warn!("[folder_move] job {}: the source's folders did not list again: {e}", self.job.id);
+                    return End::partial(KEPT_UNVERIFIED);
+                }
+            };
+            if fm::subtree_changed(&self.file.journal.plan, &live.tree, &root, kind_of(&sides.0)) {
+                info!("[folder_move] job {}: the source's folders changed during the move", self.job.id);
+                return End::partial(KEPT_UNVERIFIED);
+            }
+            let mut arrived = false;
             for run in runs.iter_mut() {
-                if run.broken || self.file.journal.plan.items[run.idx].container {
+                if self.file.journal.plan.items[run.idx].container {
                     continue;
                 }
-                let fps = fingerprints_of(self.file.journal.folders.get(run.idx));
-                let ctx = CopyCtx {
-                    state: &state,
-                    source: &source,
-                    dest: &dest,
-                    lane: Lane::Background,
-                    cancel: &job.cancel,
-                    pause: &job.pause,
-                    notify: &job.notify,
-                    graph_folder_cache: HashMap::new(),
-                    yield_to_ui: true,
-                    seen_fingerprints: Some(&fps),
+                let listed = {
+                    let ctx = ctx(&state, &sides, &job, None, HashMap::new());
+                    migration::list_source_items(&ctx, &run.mapping.source_path, run.src_id.as_deref()).await
                 };
-                let listed = match migration::list_source_items(&ctx, &run.mapping.source_path, run.src_id.as_deref()).await {
+                let listed = match listed {
                     Ok(items) => items,
                     Err(e) => {
                         warn!("[folder_move] job {}: a source folder did not list again: {e}", self.job.id);
-                        run.broken = true;
-                        continue;
+                        return End::partial(KEPT_UNVERIFIED);
                     }
                 };
+                if live.totals.get(&run.mapping.source_path).is_some_and(|&total| listed.len() < total as usize) {
+                    warn!("[folder_move] job {}: a source folder listed fewer messages than it counts", self.job.id);
+                    return End::partial(KEPT_UNVERIFIED);
+                }
                 let new: Vec<SourceItem> = listed.into_iter().filter(|i| !run.handled.contains(&identity(i))).collect();
                 if new.is_empty() {
                     continue;
                 }
-                found = true;
                 if round == RELIST_ROUNDS {
-                    continue;
+                    info!("[folder_move] job {}: mail is still arriving in the source", self.job.id);
+                    return End::partial(KEPT_UNVERIFIED);
                 }
                 info!("[folder_move] job {}: {} message(s) arrived during the move", self.job.id, new.len());
+                arrived = true;
                 self.file.journal.folders[run.idx].total += new.len() as u32;
-                if let Some(stop) = self.copy_items(&ctx, run, &new).await {
-                    return End::partial(if stop == Stop::Cancel { KEPT_CANCELLED } else { KEPT_FAILED });
+                if let Some(stop) = self.copy_signed_in(&mut sides, run, &new, &mut graph_cache).await {
+                    return stop.end();
                 }
             }
-            if !found {
-                break;
+            if !arrived {
+                break live;
             }
-            late = round == RELIST_ROUNDS;
-        }
+            round += 1;
+        };
 
-        let mut verified = true;
-        for run in &runs {
-            if self.file.journal.plan.items[run.idx].container {
-                if !run.broken {
-                    self.set_phase(run.idx, FolderPhase::Verified, VERIFYING);
-                }
-                verified &= !run.broken;
-                continue;
-            }
-            let ctx = CopyCtx {
-                state: &state,
-                source: &source,
-                dest: &dest,
-                lane: Lane::Background,
-                cancel: &job.cancel,
-                pause: &job.pause,
-                notify: &job.notify,
-                graph_folder_cache: HashMap::new(),
-                yield_to_ui: true,
-                seen_fingerprints: None,
-            };
-            let after = if run.broken { Err("the folder did not copy".to_string()) } else { migration::fetch_dest_ids(&ctx, &run.mapping).await };
-            let verdict = fm::verify(&run.records, after.as_ref().map_err(String::as_str));
-            let ok = verdict.retire_ok && !run.broken;
-            self.set_phase(run.idx, if ok { FolderPhase::Verified } else { FolderPhase::Unverified }, VERIFYING);
-            verified &= ok;
-        }
-        let failed: u32 = self.file.journal.folders.iter().map(|f| f.failed).sum();
+        // A cancel up to here keeps the source; from here on the move is done.
         if self.cancelled() {
             return End::partial(KEPT_CANCELLED);
         }
-        if failed > 0 || runs.iter().any(|r| r.broken) {
-            return End::partial(KEPT_FAILED);
-        }
-        if !verified || late || self.file.journal.folders.iter().any(|f| f.phase != FolderPhase::Verified) {
-            return End::partial(KEPT_UNVERIFIED);
-        }
-
-        // Retire.
         self.emit(true, RETIRING);
-        let source = match quiet_config(&self.state, &src_id).await {
-            Ok(c) => side_of(c),
-            Err(_) => return End::partial(KEPT_RENAME_FAILED),
-        };
-        if let Err(kept) = self.retire(&source, &src_tree, &root, src_d.as_deref(), src_folder_id.as_deref()).await {
+        if let Err(kept) = self.retire(&sides.0, &fresh.tree, &root, src_d.as_deref(), src_folder_id.as_deref()).await {
             return End::partial(kept);
         }
-        for f in &mut self.file.journal.folders {
-            f.phase = FolderPhase::Retired;
+        self.retired_all();
+        End::done()
+    }
+
+    /// Both accounts' credentials as they are now, read quietly (a
+    /// background job never raises the keychain's prompt).
+    async fn read_sides(&self) -> Result<Sides, End> {
+        let (src, dst) = (&self.file.journal.source_account_id, &self.file.journal.dest_account_id);
+        let refused = |_| End::failed(E_FOLDER_MOVE_SIGN_IN.to_string());
+        let source = side_of(quiet_config(&self.state, src).await.map_err(refused)?);
+        let dest = if src == dst { side_of(source.config.clone()) } else { side_of(quiet_config(&self.state, dst).await.map_err(refused)?) };
+        Ok((source, dest))
+    }
+
+    /// The tokens a refused sign-in may have carried are not handed out
+    /// again: the next read refreshes them.
+    fn reject_tokens(&self, sides: &Sides) {
+        let ids = [&self.file.journal.source_account_id, &self.file.journal.dest_account_id];
+        for (id, side) in ids.into_iter().zip([&sides.0, &sides.1]) {
+            if let Some(token) = side.config.access_token.as_deref() {
+                self.state.tokens.rejected(id, token);
+            }
         }
-        End { state: DONE, kept: None, error: None }
+    }
+
+    /// Each folder judged against its destination as listed now
+    /// (`folder_move::verify`), its phase set. True when every folder of
+    /// the plan is verified.
+    async fn judge(&mut self, sides: &Sides, runs: &[FolderRun]) -> bool {
+        let (state, job) = (Arc::clone(&self.state), Arc::clone(&self.job));
+        for run in runs {
+            let ok = if self.file.journal.plan.items[run.idx].container {
+                !run.broken
+            } else {
+                let after = if run.broken {
+                    Err("the folder did not copy".to_string())
+                } else {
+                    migration::fetch_dest_ids(&ctx(&state, sides, &job, None, HashMap::new()), &run.mapping).await
+                };
+                fm::verify(&run.records, after.as_ref().map_err(String::as_str)).retire_ok && !run.broken
+            };
+            self.set_phase(run.idx, if ok { FolderPhase::Verified } else { FolderPhase::Unverified }, VERIFYING);
+        }
+        self.file.journal.folders.iter().all(|f| f.phase == FolderPhase::Verified)
     }
 
     /// Copy folder `run`: list what the destination holds and what the
     /// source holds, then each message. `Some` when the job has to stop.
-    async fn copy_folder(&mut self, ctx: &CopyCtx<'_>, run: &mut FolderRun) -> Option<Stop> {
-        run.dest_ids = match migration::fetch_dest_ids(ctx, &run.mapping).await {
+    async fn copy_folder(&mut self, sides: &mut Sides, run: &mut FolderRun, cache: &mut HashMap<String, String>) -> Option<Stop> {
+        let (state, job) = (Arc::clone(&self.state), Arc::clone(&self.job));
+        let dest_ids = migration::fetch_dest_ids(&ctx(&state, sides, &job, None, HashMap::new()), &run.mapping).await;
+        run.dest_ids = match dest_ids {
             Ok(ids) => ids,
             Err(e) => {
                 warn!("[folder_move] job {}: a destination folder did not list: {e}", self.job.id);
@@ -1124,7 +1204,8 @@ impl Runner {
                 return None;
             }
         };
-        let items = match migration::list_source_items(ctx, &run.mapping.source_path, run.src_id.as_deref()).await {
+        let items = migration::list_source_items(&ctx(&state, sides, &job, None, HashMap::new()), &run.mapping.source_path, run.src_id.as_deref()).await;
+        let items = match items {
             Ok(items) => items,
             Err(e) => {
                 warn!("[folder_move] job {}: a source folder did not list: {e}", self.job.id);
@@ -1135,7 +1216,36 @@ impl Runner {
         let f = &mut self.file.journal.folders[run.idx];
         (f.total, f.copied, f.skipped, f.failed) = (items.len() as u32, 0, 0, 0);
         self.emit(true, RUNNING);
-        self.copy_items(ctx, run, &items).await
+        self.copy_signed_in(sides, run, &items, cache).await
+    }
+
+    /// Copy `items` of `run`. A refused sign-in reads both accounts'
+    /// credentials again (a token renewed, the user signed in again) and
+    /// goes on from the message in hand; refused again before a message got
+    /// through, it stops the job.
+    async fn copy_signed_in(&mut self, sides: &mut Sides, run: &mut FolderRun, items: &[SourceItem], cache: &mut HashMap<String, String>) -> Option<Stop> {
+        let (state, job) = (Arc::clone(&self.state), Arc::clone(&self.job));
+        let mut reread_at = None;
+        loop {
+            let rest: Vec<SourceItem> = items.iter().filter(|i| !run.handled.contains(&identity(i))).cloned().collect();
+            let seen = fingerprints_of(self.file.journal.folders.get(run.idx));
+            let stop = {
+                let ctx = ctx(&state, sides, &job, Some(&seen), std::mem::take(cache));
+                let stop = self.copy_items(&ctx, run, &rest).await;
+                *cache = ctx.graph_folder_cache;
+                stop
+            };
+            if stop != Some(Stop::SignIn) || reread_at == Some(run.handled.len()) {
+                return stop;
+            }
+            warn!("[folder_move] job {}: a sign-in was refused, reading the credentials again", self.job.id);
+            reread_at = Some(run.handled.len());
+            self.reject_tokens(sides);
+            *sides = match self.read_sides().await {
+                Ok(fresh) => fresh,
+                Err(_) => return Some(Stop::SignIn),
+            };
+        }
     }
 
     async fn copy_items(&mut self, ctx: &CopyCtx<'_>, run: &mut FolderRun, items: &[SourceItem]) -> Option<Stop> {
@@ -1144,7 +1254,7 @@ impl Runner {
                 return Some(Stop::Cancel);
             }
             crate::search_index::wait_foreground_quiet(&self.state.search_index).await;
-            let mut waited = None;
+            let (mut waited, mut read) = (None, None);
             let result = migration::copy_with_retries(
                 ctx,
                 &run.mapping.source_path,
@@ -1152,6 +1262,7 @@ impl Runner {
                 run.mapping.dest_folder_id.as_deref(),
                 item,
                 &run.dest_ids,
+                &mut read,
                 &mut |secs| waited = Some(secs),
             )
             .await;
@@ -1159,11 +1270,19 @@ impl Runner {
             if waited.is_some() && result.is_err() {
                 self.rate_limited_for = waited;
             }
+            if result.as_ref().is_err_and(|e| is_sign_in_refused(e)) {
+                // Not counted: the message is tried again once the
+                // credentials are read again.
+                return Some(Stop::SignIn);
+            }
             let f = &mut self.file.journal.folders[run.idx];
             let (outcome, message_id, fingerprint) = match &result {
                 Ok(CopyOutcome::Present { message_id, fingerprint, .. }) => {
                     f.skipped += 1;
-                    (Outcome::Present, message_id.clone(), *fingerprint)
+                    // An earlier run wrote it and the destination never
+                    // named it: not written again, and still unconfirmed.
+                    let unconfirmed = message_id.is_none() && f.unconfirmed.contains(&fm::done_key(None, *fingerprint));
+                    (if unconfirmed { Outcome::Copied { acked: false } } else { Outcome::Present }, message_id.clone(), *fingerprint)
                 }
                 Ok(CopyOutcome::Written { ack, message_id, fingerprint, .. }) => {
                     f.copied += 1;
@@ -1175,17 +1294,24 @@ impl Runner {
                     (Outcome::Failed, None, 0)
                 }
             };
-            // A key the journal can trust on resume: a Message-ID the
-            // destination listing proves, or content the destination
-            // acknowledged (or already held).
-            let trusted = matches!(outcome, Outcome::Present | Outcome::Copied { acked: true }) || message_id.is_some();
-            if trusted && outcome != Outcome::Failed && !(message_id.is_none() && fingerprint == 0) {
-                f.done.push(fm::done_key(message_id.as_deref(), fingerprint));
+            // The journal keys mail without a Message-ID only (the
+            // destination's listing finds the rest): content the destination
+            // acknowledged or already held, and content it took unnamed.
+            if message_id.is_none() && fingerprint != 0 {
+                let key = fm::done_key(None, fingerprint);
+                let keys = match outcome {
+                    Outcome::Present | Outcome::Copied { acked: true } => Some(&mut f.done),
+                    Outcome::Copied { acked: false } => Some(&mut f.unconfirmed),
+                    Outcome::Failed => None,
+                };
+                if let Some(keys) = keys.filter(|k| !k.contains(&key)) {
+                    keys.push(key);
+                }
             }
             run.records.push(Record { key: item.key, message_id, fingerprint, outcome });
             run.handled.insert(identity(item));
             self.since_checkpoint += 1;
-            if self.since_checkpoint >= self.tuning.checkpoint_every {
+            if self.since_checkpoint >= self.tuning.checkpoint_every && self.checkpointed.elapsed() >= self.tuning.checkpoint_after {
                 self.checkpoint(RUNNING);
             }
             self.emit(false, RUNNING);
@@ -1257,8 +1383,7 @@ impl Runner {
     /// The vault's folders of a renamed subtree follow it, as the app's own
     /// rename moves them. A half-done rename is reported, never fatal: the
     /// server rename has landed.
-    async fn rename_vault(&mut self, side: &Side, tree: &[MailboxInfo], root: &str, to: &str, d: Option<&str>) {
-        let pairs = rename_pairs(tree, root, to, d);
+    async fn rename_vault(&mut self, side: &Side, pairs: Vec<mailvault_core::vault_flags::RenamePair>) {
         let (state, account, email) = (Arc::clone(&self.state), self.file.journal.source_account_id.clone(), side.email.clone());
         let renamed = blocking(move || {
             let (moved, result) = crate::handlers::vault_flags::rename_mailbox(&state, &account, Some(&email), None, pairs);
@@ -1276,16 +1401,19 @@ impl Runner {
     }
 
     /// The source root goes under Trash (IMAP, JMAP: one rename, the vault
-    /// following) or to Deleted Items (Graph). `Err` is why it was kept.
+    /// following) or to Deleted Items (Graph), `tree` being the source as
+    /// last listed. `Err` is why it was kept. Where it goes is journaled
+    /// before the rename is sent (`landed`).
     async fn retire(&mut self, side: &Side, tree: &[MailboxInfo], root: &str, d: Option<&str>, graph_id: Option<&str>) -> Result<(), &'static str> {
         let flat = flatten(tree);
         if side.transport == "graph" {
+            let to = flat.iter().find(|m| m.special_use.as_deref() == Some("deleteditems")).map_or("deleteditems".to_string(), |m| m.path.clone());
+            self.journal_retiring(&to);
             self.native_rename(side, root, root, graph_id, Some("deleteditems")).await.map_err(|e| {
                 warn!("[folder_move] job {}: the source was not moved to Deleted Items: {e}", self.job.id);
                 KEPT_RENAME_FAILED
             })?;
-            self.file.retired_to =
-                Some(flat.iter().find(|m| m.special_use.as_deref() == Some("deleteditems")).map_or("deleteditems".to_string(), |m| m.path.clone()));
+            self.file.retired_to = Some(to);
             return Ok(());
         }
         let trash = flat.iter().find(|m| m.special_use.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("\\Trash"))).map(|m| m.path.clone());
@@ -1293,13 +1421,54 @@ impl Runner {
         let leaf = root.rsplit(d).next().unwrap_or(root);
         let existing: HashSet<String> = flat.iter().map(|m| m.path.clone()).collect();
         let to = fm::trash_target(&existing, &trash, leaf, d);
+        self.journal_retiring(&to);
         self.native_rename(side, root, &to, None, None).await.map_err(|e| {
             warn!("[folder_move] job {}: the source was not renamed under Trash: {e}", self.job.id);
             KEPT_RENAME_FAILED
         })?;
-        self.rename_vault(side, tree, root, &to, Some(d)).await;
+        self.rename_vault(side, rename_pairs(tree, root, root, &to, Some(d))).await;
         self.file.retired_to = Some(to);
         Ok(())
+    }
+
+    fn journal_retiring(&mut self, to: &str) {
+        self.file.retiring_to = Some(to.to_string());
+        self.checkpoint(RETIRING);
+    }
+
+    /// The root is gone. A rename this job journaled before sending it, whose
+    /// target the source lists, landed before the job could say so: what
+    /// came after it (the vault's folders following, the journal) is done
+    /// now. A fast rename counts only while no folder was copied (one that
+    /// was refused fell back to the copy, which makes its target too).
+    /// Anything else moved the source some other way.
+    async fn landed(&mut self, side: &Side, tree: &[MailboxInfo]) -> End {
+        let untouched = self.file.journal.folders.iter().all(|f| f.phase == FolderPhase::Pending);
+        let (to, retired) = match (self.file.retiring_to.clone(), self.file.renaming_to.clone()) {
+            (Some(to), _) => (to, true),
+            (None, Some(to)) if untouched => (to, false),
+            _ => return End::failed(E_FOLDER_MOVE_SOURCE_MISSING.to_string()),
+        };
+        // Graph lists top-level folders only, and its vault folders are
+        // named by keys a move leaves as they are.
+        if side.transport != "graph" {
+            let Some(target) = flatten(tree).into_iter().find(|m| m.path == to) else {
+                return End::failed(E_FOLDER_MOVE_SOURCE_MISSING.to_string());
+            };
+            let d = target.delimiter.clone().filter(|d| !d.is_empty());
+            let root = self.file.journal.root.clone();
+            self.rename_vault(side, rename_pairs(tree, &to, &root, &to, d.as_deref())).await;
+        }
+        info!("[folder_move] job {}: the last run's rename had landed", self.job.id);
+        self.retired_all();
+        self.file.retired_to = retired.then_some(to);
+        End::done()
+    }
+
+    fn retired_all(&mut self) {
+        for f in &mut self.file.journal.folders {
+            f.phase = FolderPhase::Retired;
+        }
     }
 
     fn set_phase(&mut self, idx: usize, phase: FolderPhase, state: &str) {
@@ -1317,6 +1486,7 @@ impl Runner {
             warn!("[folder_move] job {} not checkpointed: {e}", self.job.id);
         }
         self.since_checkpoint = 0;
+        self.checkpointed = Instant::now();
     }
 
     fn emit(&mut self, force: bool, state: &str) {
@@ -1332,12 +1502,13 @@ impl Runner {
 
     /// The end, however it came: the journal made durable (deleted when the
     /// move is done or discarded), the accounts refreshed, the job
-    /// unregistered, then the last event.
+    /// unregistered, then the last event. A discard that came too late to
+    /// stop the retire finds the move done, and says so.
     async fn finish(mut self, end: End) {
         let discard = self.job.discard.load(Ordering::SeqCst);
         self.file.source_kept_reason = end.kept.map(str::to_string);
         self.file.error = end.error;
-        let state = if discard { DISCARDED } else { end.state };
+        let state = if discard && end.state != DONE { DISCARDED } else { end.state };
         self.checkpoint(state);
         self.refresh().await;
         if discard || end.state == DONE {
@@ -1410,7 +1581,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     fn fast() -> Tuning {
-        Tuning { progress_every: Duration::ZERO, checkpoint_every: 2 }
+        Tuning { progress_every: Duration::ZERO, checkpoint_every: 2, checkpoint_after: Duration::ZERO }
     }
 
     fn raw(id: &str, subject: &str) -> String {
@@ -1458,15 +1629,62 @@ mod tests {
     }
 
     fn rig_with(src: Scenario, dst: Scenario, tuning: Tuning) -> Rig {
-        let (src, dst) = (MockImap::start(src), MockImap::start(dst));
+        let dst = MockImap::start(dst);
+        let dst_config = config(&dst, "dst@example.com");
+        rig_on(MockImap::start(src), dst, dst_config, tuning)
+    }
+
+    fn rig_on(src: MockImap, dst: MockImap, dst_config: ImapConfig, tuning: Tuning) -> Rig {
         let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
         s.seed_accounts_for_test(&["src", "dst"]);
         s.raw_messages.accounts.lock().unwrap().insert("src".into(), config(&src, "src@example.com"));
-        s.raw_messages.accounts.lock().unwrap().insert("dst".into(), config(&dst, "dst@example.com"));
+        s.raw_messages.accounts.lock().unwrap().insert("dst".into(), dst_config);
         *lock(&s.folder_moves.tuning) = Some(tuning);
         let rx = s.events.subscribe();
         Rig { src, dst, s, rx, _vault: vault, _app: app }
+    }
+
+    /// An XOAUTH2 account on `server`, signed in with `token`.
+    fn oauth_config(server: &MockImap, email: &str, token: &str) -> ImapConfig {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        serde_json::from_value(json!({"email": email, "imapHost": server.host(), "imapPort": server.port(), "authType": "oauth2", "oauth2AccessToken": token}))
+            .unwrap()
+    }
+
+    /// A provider that takes one access token at a time and ends a session
+    /// signed in with any other at its next command, as Outlook does once a
+    /// token expired.
+    struct OneToken(Mutex<String>);
+
+    impl OneToken {
+        fn rotate(&self, to: &str) {
+            *lock(&self.0) = to.to_string();
+        }
+    }
+
+    impl mock_imap::oauth::TokenCheck for OneToken {
+        fn check(&self, _service: &str, _user: &str, token: &str) -> bool {
+            *lock(&self.0) == token
+        }
+        fn ends_session(&self, token: &str) -> bool {
+            *lock(&self.0) != token
+        }
+    }
+
+    /// A journal as an older run left it on disk, written as JSON.
+    fn write_raw_journal(rig: &Rig, journal: Value) -> String {
+        let id = uuid::Uuid::new_v4().to_string();
+        let mut journal = journal;
+        journal["jobId"] = json!(id);
+        let dir = rig.s.app_dir.join(JOURNAL_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{id}.json")), journal.to_string()).unwrap();
+        id
+    }
+
+    fn trash() -> Mailbox {
+        Mailbox::new("Trash").with_attrs(&["\\HasNoChildren", "\\Trash"])
     }
 
     fn rig(src: Scenario, dst: Scenario) -> Rig {
@@ -1658,7 +1876,9 @@ mod tests {
         assert_eq!(rig.dst.count_commands("APPEND"), 1, "nothing after the message in hand");
         assert_eq!(subjects(&rig.src, "Clients"), ["one", "two"]);
         let journal = read_journal(&rig.s.app_dir, &job).expect("kept");
-        assert_eq!((journal.state.as_str(), journal.journal.folders[0].done.len()), (CANCELLED, 1));
+        // The one copied message has a Message-ID: the destination's listing
+        // proves it, so the journal keeps no key for it.
+        assert_eq!((journal.state.as_str(), journal.journal.folders[0].copied, journal.journal.folders[0].done.len()), (CANCELLED, 1, 0));
         let listed = ok(call(&rig.s, "folder_move.status", json!({})).await);
         assert_eq!((listed["jobs"][0]["state"].clone(), listed["jobs"][0]["live"].clone()), (json!(CANCELLED), json!(false)));
     }
@@ -1748,6 +1968,28 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn same_account_top_level_move_is_one_rename_no_append() {
+        let src = Scenario::new()
+            .mailbox(folder("INBOX", &[]))
+            .mailbox(trash())
+            .mailbox(Mailbox::new("Work").with_attrs(&["\\HasChildren"]))
+            .mailbox(folder("Work/Clients", &[raw("c1", "one")]).with_attrs(&["\\HasChildren"]))
+            .mailbox(folder("Work/Clients/2025", &[raw("y1", "three")]));
+        let mut rig = rig(src, dest());
+        let root = crate::handlers::common::vault_root(&rig.s).unwrap();
+        std::fs::create_dir_all(mailvault_core::message_store::mailbox_dir(&root, "src", "Work/Clients/2025").join("cur")).unwrap();
+        start(&rig, json!({"sourceAccountId": "src", "sourcePath": "Work/Clients", "destAccountId": "src", "destPath": null})).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["retiredTo"].clone()), (json!(DONE), Value::Null), "{last}");
+        assert_eq!((rig.src.count_commands("APPEND"), rig.src.count_commands("RENAME")), (0, 1));
+        assert_eq!(subjects(&rig.src, "Clients"), ["one"]);
+        assert_eq!(subjects(&rig.src, "Clients/2025"), ["three"]);
+        assert!(!has(&rig.src, "Work/Clients") && has(&rig.src, "Work"));
+        assert!(mailvault_core::message_store::mailbox_dir(&root, "src", "Clients/2025").join("cur").exists(), "the vault follows, subfolders too");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn same_account_move_into_a_free_path_is_one_rename_no_append() {
         let src = source().mailbox(Mailbox::new("Work"));
         let mut rig = rig(src, dest());
         let root = crate::handlers::common::vault_root(&rig.s).unwrap();
@@ -1822,7 +2064,7 @@ mod tests {
             .mailbox(folder("INBOX", &[]))
             .mailbox(Mailbox::new("Trash").with_attrs(&["\\HasNoChildren", "\\Trash"]))
             .mailbox(folder("Clients", &six));
-        let mut rig = rig_with(src, dest(), Tuning { progress_every: Duration::from_secs(60), checkpoint_every: 25 });
+        let mut rig = rig_with(src, dest(), Tuning { progress_every: Duration::from_secs(60), checkpoint_every: 25, checkpoint_after: Duration::ZERO });
         start(&rig, move_params("dst", None)).await;
         let events = until_done(&mut rig.rx).await;
 
@@ -1837,10 +2079,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn worker_waits_for_foreground_quiet_before_each_message() {
         let mut rig = rig(source(), dest());
+        let quiet = || rig.s.search_index.foreground_quiet_calls.load(Ordering::SeqCst);
+        let gate = rig.dst.pause_command_nth("APPEND", 2);
         start(&rig, move_params("dst", Some("Archive"))).await;
+        assert!(gate.entered(Duration::from_secs(10)), "the second APPEND went out");
+        assert_eq!(quiet(), 2, "one wait before each of the two messages written so far");
+        drop(gate);
         until_done(&mut rig.rx).await;
-        let calls = rig.s.search_index.foreground_quiet_calls.load(Ordering::SeqCst);
-        assert!(calls >= 3, "one wait per message, three messages: {calls}");
+        assert_eq!(quiet(), 3, "one wait per message, three messages, nothing else waits");
     }
 
     /// The job runs on its own `folder-move` thread: with an APPEND held on
@@ -1972,6 +2218,9 @@ mod tests {
             (200, batch.to_string()),
             (200, listing.clone()),
             (200, raw("g1", "graph one")),
+            // The look before the retire: the folders, then the messages.
+            (200, folders.to_string()),
+            (200, batch.to_string()),
             (200, listing),
             (200, graph_folder("fld-b", "Clients").to_string()),
         ]);
@@ -1992,7 +2241,7 @@ mod tests {
         assert_eq!(last["state"], json!(DONE), "{last} {lines:?}");
         assert_eq!(subjects(&rig.dst, "Archive/Clients"), ["graph one"]);
         assert_eq!(lines.iter().filter(|l| l.as_str() == "GET /me/mailFolders/fld-b/messages").count(), 2, "listed by id, then listed again before the retire: {lines:?}");
-        assert_eq!(lines.iter().filter(|l| l.as_str() == "GET /me/mailFolders").count(), 1, "no display-name lookup: {lines:?}");
+        assert_eq!(lines.iter().filter(|l| l.as_str() == "GET /me/mailFolders").count(), 2, "the plan's and the retire's live listings, no display-name lookup: {lines:?}");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -2008,5 +2257,353 @@ mod tests {
         let moved: Value = serde_json::from_str(bodies.last().unwrap()).unwrap();
         assert_eq!(moved["destinationId"], json!("deleteditems"));
         assert!(dir.join("cur").exists(), "a Graph folder keeps its name, so its vault folder stays");
+    }
+
+    // ---- the retire carries only what the destination verified ----
+
+    /// Run 1 verified `Clients` and failed `Clients/2025`. Mail then lands in
+    /// `Clients`; the resumed run must copy it before the rename carries
+    /// `Clients` into Trash, not trust the old verdict.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resume_after_partial_copies_mail_new_in_a_verified_folder() {
+        let refused = || Action::RefuseWith("NO".into(), "[CANNOT] refused".into());
+        let dst = dest()
+            .fault(Trigger::nth_with("APPEND", "Subject: three", 1), refused())
+            .fault(Trigger::nth_with("APPEND", "Subject: three", 2), refused());
+        let mut rig = rig(source(), dst);
+        let job = start(&rig, move_params("dst", Some("Archive"))).await;
+        let first = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!((first["state"].clone(), first["sourceKeptReason"].clone()), (json!(PARTIAL), json!(KEPT_FAILED)), "{first}");
+
+        rig.src.mutate(|st| {
+            st.find_mut("Clients").unwrap().add(Message::new(9, raw("late", "late")));
+        });
+        control(&rig, "folder_move.resume", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["retiredTo"].clone()), (json!(DONE), json!("Trash/Clients")), "{last}");
+        assert_eq!(subjects(&rig.dst, "Archive/Clients"), ["one", "two", "late"], "the new mail was copied before the retire");
+        assert_eq!(subjects(&rig.dst, "Archive/Clients/2025"), ["three"]);
+        assert_eq!(subjects(&rig.src, "Trash/Clients"), ["one", "two", "late"]);
+    }
+
+    /// A run kept its source for want of a Trash; meanwhile mail arrived and
+    /// the account got a Trash. The resume lists and copies before retiring.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resume_after_no_trash_lists_the_source_again_before_retiring() {
+        let src = Scenario::new().mailbox(folder("INBOX", &[])).mailbox(folder("Clients", &[raw("c1", "one")]));
+        let mut rig = rig(src, dest());
+        let job = start(&rig, move_params("dst", Some("Archive"))).await;
+        let first = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(first["sourceKeptReason"], json!(KEPT_NO_TRASH), "{first}");
+
+        rig.src.mutate(|st| {
+            st.mailboxes.push(trash());
+            st.find_mut("Clients").unwrap().add(Message::new(9, raw("late", "late")));
+        });
+        control(&rig, "folder_move.resume", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!(last["state"], json!(DONE), "{last}");
+        assert_eq!(subjects(&rig.dst, "Archive/Clients"), ["one", "late"]);
+        assert_eq!(subjects(&rig.src, "Trash/Clients"), ["one", "late"]);
+    }
+
+    /// A subfolder made under the source while the move runs is not in the
+    /// plan: the rename would carry it into Trash uncopied, so the source
+    /// stays, and the resume plans again and moves it too.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_subfolder_made_during_the_move_keeps_the_source_until_a_resume_moves_it() {
+        let mut rig = rig(source(), dest());
+        let gate = rig.dst.pause_command("APPEND");
+        let job = start(&rig, move_params("dst", Some("Archive"))).await;
+        assert!(gate.entered(Duration::from_secs(10)));
+        rig.src.mutate(|st| st.mailboxes.push(folder("Clients/New", &[raw("n1", "new")])));
+        drop(gate);
+        let first = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((first["state"].clone(), first["sourceKeptReason"].clone()), (json!(PARTIAL), json!(KEPT_UNVERIFIED)), "{first}");
+        assert_eq!(rig.src.count_commands("RENAME"), 0);
+        assert_eq!(subjects(&rig.src, "Clients/New"), ["new"]);
+
+        control(&rig, "folder_move.resume", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(last["state"], json!(DONE), "{last}");
+        assert_eq!(subjects(&rig.dst, "Archive/Clients/New"), ["new"]);
+        assert_eq!(subjects(&rig.src, "Trash/Clients/New"), ["new"]);
+    }
+
+    /// Mail that lands in the source while the destination is listed for
+    /// the verdict: the last look at the source comes after that listing,
+    /// so it is copied before the rename.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mail_arriving_during_the_destination_check_is_copied_before_retire() {
+        let src = Scenario::new().mailbox(folder("INBOX", &[])).mailbox(trash()).mailbox(folder("Clients", &[raw("c1", "one"), raw("c2", "two")]));
+        let mut rig = rig(src, dest());
+        // The destination's first Message-ID listing is before the copy; the
+        // second is the verdict's.
+        let gate = rig.dst.pause_command_nth("FETCH", 2);
+        start(&rig, move_params("dst", Some("Archive"))).await;
+        assert!(gate.entered(Duration::from_secs(10)), "the verdict's listing went out");
+        rig.src.mutate(|st| {
+            st.find_mut("Clients").unwrap().add(Message::new(9, raw("late", "late")));
+        });
+        drop(gate);
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!(subjects(&rig.dst, "Archive/Clients"), ["one", "two", "late"], "{last}");
+        assert_eq!(last["state"], json!(DONE), "{last}");
+        assert_eq!(subjects(&rig.src, "Trash/Clients"), ["one", "two", "late"]);
+    }
+
+    /// The token the move started with stops working mid-run (an expiry):
+    /// the job reads the account's credentials again and goes on, the
+    /// message in hand included.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_refused_sign_in_reads_the_credentials_again_and_goes_on() {
+        let tokens = Arc::new(OneToken(Mutex::new("tok-1".into())));
+        let dst = MockImap::start_checked(dest(), Arc::clone(&tokens) as Arc<dyn mock_imap::oauth::TokenCheck>);
+        let first = oauth_config(&dst, "dst@example.com", "tok-1");
+        let mut rig = rig_on(MockImap::start(source()), dst, first, fast());
+        let gate = rig.dst.pause_command("APPEND");
+        start(&rig, move_params("dst", Some("Archive"))).await;
+        assert!(gate.entered(Duration::from_secs(10)));
+        tokens.rotate("tok-2");
+        let renewed = oauth_config(&rig.dst, "dst@example.com", "tok-2");
+        rig.s.raw_messages.accounts.lock().unwrap().insert("dst".into(), renewed);
+        drop(gate);
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["copied"].clone(), last["failed"].clone()), (json!(DONE), json!(3), json!(0)), "{last}");
+        assert_eq!(subjects(&rig.dst, "Archive/Clients"), ["one", "two"]);
+        assert_eq!(subjects(&rig.dst, "Archive/Clients/2025"), ["three"]);
+    }
+
+    /// Refused again with the credentials read afresh: the move stops,
+    /// failed for its sign-in, and the source stays where it was.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_sign_in_refused_after_a_fresh_read_stops_the_move() {
+        let tokens = Arc::new(OneToken(Mutex::new("tok-1".into())));
+        let dst = MockImap::start_checked(dest(), Arc::clone(&tokens) as Arc<dyn mock_imap::oauth::TokenCheck>);
+        let first = oauth_config(&dst, "dst@example.com", "tok-1");
+        let mut rig = rig_on(MockImap::start(source()), dst, first, fast());
+        let gate = rig.dst.pause_command("APPEND");
+        let job = start(&rig, move_params("dst", Some("Archive"))).await;
+        assert!(gate.entered(Duration::from_secs(10)));
+        tokens.rotate("tok-2");
+        drop(gate);
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["error"].clone()), (json!(FAILED), json!(E_FOLDER_MOVE_SIGN_IN)), "{last}");
+        assert_eq!(rig.src.count_commands("RENAME"), 0);
+        assert_eq!(subjects(&rig.src, "Clients"), ["one", "two"]);
+        assert!(read_journal(&rig.s.app_dir, &job).is_some(), "kept for a resume");
+    }
+
+    /// The journal names only mail it cannot find again by Message-ID:
+    /// content fingerprints of mail without one.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_journal_keeps_fingerprints_never_message_ids() {
+        let src = Scenario::new().mailbox(folder("INBOX", &[])).mailbox(folder("Clients", &[raw("c1", "one"), idless("chat")]));
+        let mut rig = rig(src, dest());
+        let job = start(&rig, move_params("dst", Some("Archive"))).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(last["sourceKeptReason"], json!(KEPT_NO_TRASH), "{last}");
+
+        let journal = read_journal(&rig.s.app_dir, &job).unwrap();
+        assert_eq!(journal.journal.folders[0].done, [fm::done_key(None, fm::fingerprint(idless("chat").as_bytes()))]);
+    }
+
+    /// Message counts alone do not rewrite the journal: a run checkpoints at
+    /// most once per `checkpoint_after` besides its changes of phase.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn checkpoints_are_spaced_in_time_not_written_per_message() {
+        let five: Vec<String> = (1..=5).map(|i| raw(&format!("q{i}"), &format!("q{i}"))).collect();
+        let src = Scenario::new().mailbox(folder("INBOX", &[])).mailbox(trash()).mailbox(folder("Clients", &five));
+        let tuning = Tuning { progress_every: Duration::ZERO, checkpoint_every: 1, ..Tuning::default() };
+        let mut rig = rig_with(src, dest(), tuning);
+        let gate = rig.dst.pause_command_nth("APPEND", 4);
+        let job = start(&rig, move_params("dst", None)).await;
+        assert!(gate.entered(Duration::from_secs(10)));
+        let on_disk = read_journal(&rig.s.app_dir, &job).unwrap();
+        assert_eq!(on_disk.journal.folders[0].copied, 0, "three messages in well under the interval: no rewrite yet");
+        drop(gate);
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(last["state"], json!(DONE), "{last}");
+    }
+
+    /// No UIDPLUS, no Message-ID: a write the server took but never named
+    /// cannot be verified, and a resume must not write it again either.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resume_without_uidplus_never_writes_unconfirmed_mail_twice() {
+        let src = Scenario::new().mailbox(folder("INBOX", &[])).mailbox(trash()).mailbox(folder("Clients", &[idless("chat")]));
+        let mut rig = rig(src, dest().without_cap("UIDPLUS"));
+        let job = start(&rig, move_params("dst", None)).await;
+        let first = until_done(&mut rig.rx).await.pop().unwrap();
+        assert_eq!(first["sourceKeptReason"], json!(KEPT_UNVERIFIED), "{first}");
+
+        control(&rig, "folder_move.resume", &job).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!(rig.dst.count_commands("APPEND"), 1, "the unconfirmed copy is not written again");
+        assert_eq!(subjects(&rig.dst, "Clients"), ["chat"]);
+        assert_eq!((last["state"].clone(), last["sourceKeptReason"].clone()), (json!(PARTIAL), json!(KEPT_UNVERIFIED)), "{last}");
+        assert_eq!(subjects(&rig.src, "Clients"), ["chat"], "still unconfirmed: the source stays");
+    }
+
+    /// The rename under Trash landed but the daemon died before its journal
+    /// said so: the resume sees the root gone and its Trash path there, and
+    /// finishes what the rename left, the vault's folders.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_retire_whose_journal_write_was_lost_finishes_the_vault_rename() {
+        let src = Scenario::new()
+            .mailbox(folder("INBOX", &[]))
+            .mailbox(trash())
+            .mailbox(folder("Trash/Clients", &[raw("c1", "one")]))
+            .mailbox(folder("Trash/Clients/2025", &[raw("y1", "three")]));
+        let mut rig = rig(src, dest().mailbox(folder("Archive/Clients", &[raw("c1", "one")])).mailbox(folder("Archive/Clients/2025", &[raw("y1", "three")])));
+        let root = crate::handlers::common::vault_root(&rig.s).unwrap();
+        std::fs::create_dir_all(mailvault_core::message_store::mailbox_dir(&root, "src", "Clients/2025").join("cur")).unwrap();
+        let id = write_raw_journal(&rig, json!({
+            "sourceAccountId": "src", "destAccountId": "dst", "root": "Clients", "target": {"into": "Archive"},
+            "plan": {"items": [{"src": "Clients", "dest": "Archive/Clients", "container": false},
+                               {"src": "Clients/2025", "dest": "Archive/Clients/2025", "container": false}], "fastRename": null},
+            "folders": [{"phase": "verified", "copied": 1}, {"phase": "verified", "copied": 1}],
+            "state": "retiring", "retiringTo": "Trash/Clients",
+        }));
+
+        control(&rig, "folder_move.resume", &id).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["retiredTo"].clone()), (json!(DONE), json!("Trash/Clients")), "{last}");
+        assert!(mailvault_core::message_store::mailbox_dir(&root, "src", "Trash/Clients/2025").join("cur").exists(), "the vault followed");
+        assert!(!mailvault_core::message_store::mailbox_dir(&root, "src", "Clients").exists());
+        assert_eq!(rig.src.count_commands("RENAME") + rig.dst.count_commands("APPEND"), 0, "nothing done twice on a server");
+    }
+
+    /// The same for a same-account move done as one rename.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_fast_rename_whose_journal_write_was_lost_finishes_the_vault_rename() {
+        let src = Scenario::new()
+            .mailbox(folder("INBOX", &[]))
+            .mailbox(trash())
+            .mailbox(Mailbox::new("Work").with_attrs(&["\\HasChildren"]))
+            .mailbox(folder("Work/Clients", &[raw("c1", "one")]));
+        let mut rig = rig(src, dest());
+        let root = crate::handlers::common::vault_root(&rig.s).unwrap();
+        std::fs::create_dir_all(mailvault_core::message_store::mailbox_dir(&root, "src", "Clients").join("cur")).unwrap();
+        let id = write_raw_journal(&rig, json!({
+            "sourceAccountId": "src", "destAccountId": "src", "root": "Clients", "target": {"into": "Work"},
+            "plan": {"items": [{"src": "Clients", "dest": "Work/Clients", "container": false}], "fastRename": "Work/Clients"},
+            "folders": [{"phase": "pending"}],
+            "state": "running", "renamingTo": "Work/Clients",
+        }));
+
+        control(&rig, "folder_move.resume", &id).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["retiredTo"].clone()), (json!(DONE), Value::Null), "{last}");
+        assert!(mailvault_core::message_store::mailbox_dir(&root, "src", "Work/Clients").join("cur").exists(), "the vault followed");
+        assert_eq!(rig.src.count_commands("RENAME"), 0);
+    }
+
+    /// A discard that arrives while the server renames the source: the
+    /// rename landed, so the move is done, and says where the original went.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_discard_during_the_retire_rename_reports_the_move_done() {
+        let mut rig = rig(source(), dest());
+        let gate = rig.src.pause_command("RENAME");
+        let job = start(&rig, move_params("dst", Some("Archive"))).await;
+        assert!(gate.entered(Duration::from_secs(10)));
+        control(&rig, "folder_move.discard", &job).await;
+        drop(gate);
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["retiredTo"].clone()), (json!(DONE), json!("Trash/Clients")), "{last}");
+        assert!(has(&rig.src, "Trash/Clients"));
+        assert!(read_journal(&rig.s.app_dir, &job).is_none());
+    }
+
+    /// A cancel that lands during the last look at the source, before the
+    /// rename: the source stays.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_cancel_before_the_retire_rename_keeps_the_source() {
+        let mut rig = rig(source(), dest());
+        // The first LIST plans the move, the second is the look before the rename.
+        let gate = rig.src.pause_command_nth("LIST", 2);
+        let job = start(&rig, move_params("dst", Some("Archive"))).await;
+        assert!(gate.entered(Duration::from_secs(10)), "the source was listed again before the retire");
+        control(&rig, "folder_move.cancel", &job).await;
+        drop(gate);
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["sourceKeptReason"].clone()), (json!(CANCELLED), json!(KEPT_CANCELLED)), "{last}");
+        assert_eq!(rig.src.count_commands("RENAME"), 0);
+        assert_eq!(subjects(&rig.src, "Clients"), ["one", "two"]);
+    }
+
+    /// A discard of a running job ends it, deletes its journal and keeps
+    /// what was copied.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_live_discard_ends_the_job_and_keeps_copied_mail() {
+        let mut rig = rig(source(), dest());
+        let gate = rig.dst.pause_command("APPEND");
+        let job = start(&rig, move_params("dst", Some("Archive"))).await;
+        assert!(gate.entered(Duration::from_secs(10)));
+        assert_eq!(control(&rig, "folder_move.discard", &job).await["discarded"], json!(true));
+        drop(gate);
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["active"].clone()), (json!(DISCARDED), json!(false)), "{last}");
+        assert!(read_journal(&rig.s.app_dir, &job).is_none());
+        assert_eq!(subjects(&rig.dst, "Archive/Clients"), ["one"]);
+        assert_eq!(subjects(&rig.src, "Clients"), ["one", "two"]);
+        assert_eq!(rig.src.count_commands("RENAME"), 0);
+    }
+
+    /// A JMAP move inside one account to a free path is one reparent.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn jmap_same_account_move_is_one_reparent_no_import() {
+        let mut rig = rig(source(), dest());
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (_trap, port) = support::imap_trap();
+        rig.s.raw_messages.accounts.lock().unwrap().insert("src".into(), support::config(&m, port));
+
+        start(&rig, json!({"sourceAccountId": "src", "sourcePath": "Work", "destAccountId": "src", "destPath": "Trash"})).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+
+        assert_eq!((last["state"].clone(), last["copied"].clone()), (json!(DONE), json!(0)), "{last}");
+        assert_eq!(support::mailbox_named(&m, Some("Trash"), "Work"), Some("mb-work".to_string()));
+        assert!(!m.requests().iter().any(|r| r.calls.iter().any(|c| c == "Email/import")), "nothing copied");
+    }
+
+    /// Graph counts more messages in the source folder than its listing
+    /// gave: something was not listed, so the source stays.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_short_graph_listing_keeps_the_source() {
+        let mut rig = rig(source(), dest());
+        // Graph says the folder holds two messages; its listing shows one.
+        let mut clients = graph_folder("fld-b", "Clients");
+        clients["totalItemCount"] = json!(2);
+        let folders = json!({"value": [graph_folder("fld-inbox", "Posteingang"), graph_folder("fld-del", "Geloescht"), clients]});
+        let batch = json!({"responses": [{"id": "inbox", "status": 200, "body": {"id": "fld-inbox"}}, {"id": "deleteditems", "status": 200, "body": {"id": "fld-del"}}]});
+        let listing = graph_listing(&[("m1", "<g1@x>")]);
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+            (200, folders.to_string()),
+            (200, batch.to_string()),
+            (200, listing.clone()),
+            (200, raw("g1", "graph one")),
+            (200, folders.to_string()),
+            (200, batch.to_string()),
+            (200, listing),
+        ]);
+        let graph: ImapConfig = serde_json::from_value(json!({"email": "src@example.com", "imapHost": "outlook.office365.com", "oauth2AccessToken": "tok", "oauth2Transport": "graph"})).unwrap();
+        rig.s.raw_messages.accounts.lock().unwrap().insert("src".into(), graph);
+        start(&rig, json!({"sourceAccountId": "src", "sourcePath": "Clients", "sourceFolderId": "fld-b", "destAccountId": "dst", "destPath": "Archive"})).await;
+        let last = until_done(&mut rig.rx).await.pop().unwrap();
+        let lines: Vec<String> = crate::handlers::graph::test_graph_requests().iter().map(|r| format!("{} {}", r.method, r.path)).collect();
+
+        assert_eq!((last["state"].clone(), last["sourceKeptReason"].clone()), (json!(PARTIAL), json!(KEPT_UNVERIFIED)), "{last} {lines:?}");
+        assert!(!lines.iter().any(|l| l.ends_with("/move")), "the source was not moved: {lines:?}");
     }
 }

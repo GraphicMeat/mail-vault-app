@@ -602,8 +602,6 @@ pub(crate) struct CopyCtx<'a> {
     pub notify: &'a tokio::sync::Notify,
     /// Graph destination folder path -> id, filled as folders are made.
     pub graph_folder_cache: HashMap<String, String>,
-    /// Wait for the user to go quiet before each message (a background job).
-    pub yield_to_ui: bool,
     /// Fingerprints of Message-ID-less mail a resumed job already copied:
     /// present, never written twice.
     pub seen_fingerprints: Option<&'a HashSet<u64>>,
@@ -654,8 +652,6 @@ pub(crate) struct ProgressTick<'a> {
 /// folder move's.
 pub(crate) trait CopySink: Send {
     fn progress(&mut self, tick: ProgressTick<'_>);
-    /// One message's result, before its progress tick.
-    fn message(&mut self, _folder_idx: usize, _item: &SourceItem, _result: &Result<CopyOutcome, String>) {}
     fn checkpoint(&mut self, status: &str, folders: &[FolderMapping], totals: &Totals);
 }
 
@@ -744,13 +740,14 @@ pub(crate) async fn list_source_items(ctx: &CopyCtx<'_>, src_path: &str, src_fol
                     .map(|f| f.id)
                     .ok_or_else(|| format!("Graph folder '{}' not found", src_path))?,
             };
+            // Page by the link Graph gives: a `$skip` count drifts when mail
+            // arrives or goes between pages.
             let mut items = Vec::new();
-            let mut skip = 0u32;
+            let (mut messages, mut next_link) = client.list_messages(&folder_id, 100, 0).await?;
             loop {
-                let (messages, next_link) = client.list_messages(&folder_id, 100, skip).await?;
-                for (i, msg) in messages.iter().enumerate() {
+                for msg in &messages {
                     items.push(SourceItem {
-                        key: skip + i as u32,
+                        key: items.len() as u32,
                         remote_id: Some(msg.id.clone()),
                         is_read: msg.is_read.unwrap_or(false),
                         message_id: msg.internet_message_id.as_deref().and_then(message_id_value_key),
@@ -758,10 +755,10 @@ pub(crate) async fn list_source_items(ctx: &CopyCtx<'_>, src_path: &str, src_fol
                         subject: msg.subject.clone().unwrap_or_default(),
                     });
                 }
-                if next_link.is_none() || messages.is_empty() {
-                    break;
+                match next_link {
+                    Some(next) if !messages.is_empty() => (messages, next_link) = client.list_messages_next(&next).await?,
+                    _ => break,
                 }
-                skip += 100;
             }
             Ok(items)
         }
@@ -777,7 +774,8 @@ pub(crate) async fn list_source_items(ctx: &CopyCtx<'_>, src_path: &str, src_fol
 /// flags as keywords and the date as `receivedAt` (it asks the server about
 /// the Message-ID again, and the sync never announces what it imports),
 /// Graph draft-and-move with the read state. A session whose command failed
-/// is dropped, never pooled again.
+/// is dropped, never pooled again. `read` gets the sender and subject once
+/// the source's bytes are in, for a log line of a write that then failed.
 pub(crate) async fn copy_one(
     ctx: &CopyCtx<'_>,
     src_path: &str,
@@ -785,6 +783,7 @@ pub(crate) async fn copy_one(
     dest_folder_id: Option<&str>,
     item: &SourceItem,
     dest_ids: &HashSet<String>,
+    read: &mut Option<(String, String)>,
 ) -> Result<CopyOutcome, String> {
     if let Some(id) = item.message_id.as_ref().filter(|id| dest_ids.contains(*id)) {
         return Ok(CopyOutcome::Present { message_id: Some(id.clone()), fingerprint: 0, sender: item.sender.clone(), subject: item.subject.clone() });
@@ -804,6 +803,7 @@ pub(crate) async fn copy_one(
         other => return Err(format!("Unsupported transport combination: {} -> {}", other, dest.transport)),
     };
     let (sender, subject) = extract_sender_subject(&raw);
+    *read = Some((sender.clone(), subject.clone()));
     let message_id = extract_message_id(&raw).and_then(|v| message_id_value_key(&v));
     let fingerprint = mailvault_core::folder_move::fingerprint(&raw);
     let present = match &message_id {
@@ -874,11 +874,12 @@ pub(crate) async fn copy_with_retries(
     dest_folder_id: Option<&str>,
     item: &SourceItem,
     dest_ids: &HashSet<String>,
+    read: &mut Option<(String, String)>,
     on_rate_limit: &mut (dyn FnMut(u64) + Send),
 ) -> Result<CopyOutcome, String> {
     let (mut rate_retries, mut retried) = (0u32, false);
     loop {
-        match copy_one(ctx, src_path, dst_path, dest_folder_id, item, dest_ids).await {
+        match copy_one(ctx, src_path, dst_path, dest_folder_id, item, dest_ids, read).await {
             Ok(done) => return Ok(done),
             Err(e) if GraphClient::is_rate_limited(&e) && rate_retries < 5 => {
                 rate_retries += 1;
@@ -981,16 +982,12 @@ pub(crate) async fn copy_folder(
             }
             sink.checkpoint("running", &snapshot, totals);
         }
-        if ctx.yield_to_ui {
-            crate::search_index::wait_foreground_quiet(&ctx.state.search_index).await;
-        }
-
-        let result = copy_with_retries(ctx, &src_path, &dst_path, dest_folder_id.as_deref(), item, &dest_ids, &mut |wait_secs| {
+        let mut read = None;
+        let result = copy_with_retries(ctx, &src_path, &dst_path, dest_folder_id.as_deref(), item, &dest_ids, &mut read, &mut |wait_secs| {
             sink.progress(folder_tick("rate_limited", &src_path, Some(out.progress(folder_total)), folders, totals, None, Some(wait_secs)));
         })
         .await;
 
-        sink.message(idx, item, &result);
         let (sender, subject, status) = match &result {
             Ok(CopyOutcome::Present { sender, subject, .. }) => {
                 out.skipped += 1;
@@ -1011,7 +1008,11 @@ pub(crate) async fn copy_folder(
                     warn!("[migration] Email {} hit provider bandwidth limit, aborting run", item.key);
                     out.bandwidth_hit = true;
                 }
-                (item.sender.as_str(), item.subject.as_str(), "failed")
+                // What the message's own bytes said, when they were read.
+                match &read {
+                    Some((sender, subject)) => (sender.as_str(), subject.as_str(), "failed"),
+                    None => (item.sender.as_str(), item.subject.as_str(), "failed"),
+                }
             }
         };
         sink.progress(folder_tick("running", &src_path, Some(out.progress(folder_total)), folders, totals, Some((sender, subject, status)), None));
@@ -1211,7 +1212,6 @@ pub async fn run_migration(
         pause: &pause,
         notify: &notify,
         graph_folder_cache: HashMap::new(),
-        yield_to_ui: false,
         seen_fingerprints: None,
     };
 
@@ -1975,7 +1975,6 @@ mod tests {
             pause: &pause,
             notify: &notify,
             graph_folder_cache: HashMap::from([("Archive".to_string(), "fld-archive".to_string())]),
-            yield_to_ui: false,
             seen_fingerprints: None,
         };
         let mut folders = vec![mapping("INBOX", "Archive")];
@@ -2057,5 +2056,96 @@ mod tests {
         let sources: Vec<&str> = mappings.iter().map(|f| f.source_path.as_str()).collect();
         assert_eq!(sources, ["INBOX", "Work", "Sent", "Trash"], "mailbox_tree order: inbox, then sortOrder");
         assert!(trap.accept().is_err());
+    }
+
+    /// A message whose APPEND was refused after its bytes were read is
+    /// logged with the sender and subject read from those bytes: an IMAP
+    /// listing has neither.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_failed_append_logs_the_sender_and_subject_it_read() {
+        let (_v, _a, s) = st();
+        let source = MockImap::start(mock_imap::Scenario::new().mailbox(inbox_of(&[1, 2])));
+        let refused = || mock_imap::Action::RefuseWith("NO".into(), "[CANNOT] refused".into());
+        let dest = empty_dest(
+            mock_imap::Scenario::new()
+                .fault(mock_imap::Trigger::nth_with("APPEND", "Subject: msg 2", 1), refused())
+                .fault(mock_imap::Trigger::nth_with("APPEND", "Subject: msg 2", 2), refused()),
+        );
+        let mut rx = s.events.subscribe();
+
+        migrate(&s, &imap_config(&source, "source@example.com"), &imap_config(&dest, "dest@example.com"), vec![mapping("INBOX", "INBOX")]).await;
+
+        let failed: Vec<Value> = progress_events(&mut rx).into_iter().map(|e| e["last_log_entry"].clone()).filter(|l| l["status"] == json!("failed")).collect();
+        assert_eq!(failed.len(), 1, "{failed:?}");
+        assert_eq!((failed[0]["sender"].clone(), failed[0]["subject"].clone()), (json!("sender@example.com"), json!("msg 2")));
+    }
+
+    /// A Graph source folder longer than a page: the listing follows the
+    /// page link Graph gave (a `$skip` count drifts when mail arrives or
+    /// goes between pages).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn graph_source_listing_follows_the_next_link() {
+        // The mock's address, for a page link under it.
+        let base = {
+            let _probe = crate::handlers::graph::test_graph_mock_with(vec![]);
+            std::env::var("MAILVAULT_GRAPH_BASE").expect("the mock's base")
+        };
+        let page = |id: &str, next: Option<String>| {
+            let mut v: Value = serde_json::from_str(&format!("{{\"value\": [{}]}}", graph_message(id))).unwrap();
+            if let Some(next) = next {
+                v["@odata.nextLink"] = json!(next);
+            }
+            v.to_string()
+        };
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+            (200, page("m1", Some(format!("{base}/me/mailFolders/fld-src/messages?$skiptoken=p2")))),
+            (200, page("m2", None)),
+        ]);
+        let (_v, _a, s) = st();
+        let config = serde_json::from_value(json!({"email": "source@example.com", "imapHost": "outlook.office365.com", "oauth2AccessToken": "tok"})).unwrap();
+        let (src, dest) = (Side::new(config, "graph"), Side::new(imap_config(&MockImap::start(mock_imap::Scenario::new()), "d@example.com"), "imap"));
+        let (cancel, pause, notify) = (AtomicBool::new(false), AtomicBool::new(false), tokio::sync::Notify::new());
+        let ctx = CopyCtx {
+            state: &s,
+            source: &src,
+            dest: &dest,
+            lane: Lane::Priority,
+            cancel: &cancel,
+            pause: &pause,
+            notify: &notify,
+            graph_folder_cache: HashMap::new(),
+            seen_fingerprints: None,
+        };
+
+        let items = list_source_items(&ctx, "Clients", Some("fld-src")).await.unwrap();
+
+        let ids: Vec<Option<String>> = items.iter().map(|i| i.remote_id.clone()).collect();
+        assert_eq!(ids, [Some("m1".to_string()), Some("m2".to_string())]);
+        let requests: Vec<String> = crate::handlers::graph::test_graph_requests().iter().map(|r| r.path.clone()).collect();
+        assert_eq!(requests.len(), 2, "{requests:?}");
+        assert_eq!(requests[1], "/me/mailFolders/fld-src/messages?$skiptoken=p2", "{requests:?}");
+    }
+
+    /// Making `Archive/Clients` on Graph when `Clients` is already under
+    /// `Archive` (a re-run): the 409 is resolved among `Archive`'s children,
+    /// never by a top-level folder of the same name.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn graph_folder_made_again_binds_the_child_not_a_top_level_namesake() {
+        let child = json!({"value": [{"id": "fld-child", "displayName": "Clients", "totalItemCount": 0, "unreadItemCount": 0, "childFolderCount": 0}]});
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+            (409, json!({"error": {"code": "ErrorFolderExists"}}).to_string()),
+            (200, child.to_string()),
+        ]);
+        let client = GraphClient::new("tok");
+        let mut cache = HashMap::from([("Archive".to_string(), "fld-archive".to_string())]);
+
+        let id = ensure_dest_folder_graph(&client, "Archive/Clients", "/", &mut cache).await;
+
+        let requests: Vec<String> = crate::handlers::graph::test_graph_requests()
+            .iter()
+            .map(|r| format!("{} {}", r.method, r.path.split('?').next().unwrap_or_default()))
+            .collect();
+        assert_eq!(id.as_deref(), Ok("fld-child"), "{requests:?}");
+        assert_eq!(requests, ["POST /me/mailFolders/fld-archive/childFolders", "GET /me/mailFolders/fld-archive/childFolders"]);
     }
 }
