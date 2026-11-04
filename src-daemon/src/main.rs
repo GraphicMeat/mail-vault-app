@@ -43,6 +43,7 @@ mod draft_contract_tests;
 mod events;
 mod export_fetch;
 mod follow_up_worker;
+mod folder_move_job;
 mod format_migration_job;
 mod handlers;
 mod idle_watch;
@@ -648,6 +649,7 @@ async fn daemon_main() {
         raw_messages: raw_message::RawMessages::default(),
         import_rehome_running: Default::default(),
         mbox_uploads: Default::default(),
+        folder_moves: Default::default(),
         format_migration: Default::default(),
         net_log,
         abd: Default::default(),
@@ -835,6 +837,7 @@ async fn daemon_main() {
     let idle_cleanup = Arc::clone(&state.idle);
     let shutdown_cleanup = Arc::clone(&state.shutdown);
     let uploads_cleanup = Arc::clone(&state);
+    let moves_cleanup = Arc::clone(&state);
     tokio::spawn(async move {
         let ctrl_c = tokio::signal::ctrl_c();
 
@@ -873,7 +876,11 @@ async fn daemon_main() {
         // one without a Message-ID would go up again on resume.
         // A storage format conversion holds first, at its next message (one
         // message is milliseconds), its journal left `running` so the next
-        // start carries on.
+        // start carries on. Every folder move holds at its next message too
+        // (1.2s at most), its journal checkpointed for a resume.
+        let moves = tokio::task::spawn_blocking(move || {
+            folder_move_job::pause_all_and_wait(&moves_cleanup, std::time::Duration::from_millis(1200))
+        });
         let uploads = tokio::task::spawn_blocking(move || {
             format_migration_job::pause_all_and_wait(
                 &uploads_cleanup,
@@ -887,6 +894,7 @@ async fn daemon_main() {
         let _ = tokio::join!(
             tokio::time::timeout(std::time::Duration::from_secs(2), pool_cleanup.shutdown()),
             uploads,
+            moves,
         );
 
         mailvault_core::transfer_stats::global().flush(&data_dir_cleanup, "daemon");

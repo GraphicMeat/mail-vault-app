@@ -221,6 +221,9 @@ pub struct DaemonState {
     /// The mbox-to-server upload job of each account (`mbox_upload_job`):
     /// running, or held in place until a resume.
     pub(crate) mbox_uploads: crate::mbox_upload_job::Uploads,
+    /// Folder moves (`folder_move_job`): the live jobs, running or held, and
+    /// the `folder-move` thread they run on.
+    pub(crate) folder_moves: crate::folder_move_job::FolderMoves,
     /// The vault's storage format conversion (`format_migration_job`): the
     /// live job, running or held in place until a resume.
     pub(crate) format_migration: crate::format_migration_job::Migrations,
@@ -683,6 +686,10 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::folder_move::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     if let Some(resp) = crate::handlers::restore::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -1123,6 +1130,7 @@ impl DaemonState {
             raw_messages: Default::default(),
             import_rehome_running: Default::default(),
             mbox_uploads: Default::default(),
+            folder_moves: Default::default(),
             format_migration: Default::default(),
             net_log: Arc::new(mailvault_core::net_log::NetLog::start(&app_dir_for_index)),
             abd: Default::default(),

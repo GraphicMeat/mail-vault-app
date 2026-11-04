@@ -1612,7 +1612,7 @@ impl Runner {
 /// otherwise kept as it is, in one custody unit: the app lists the folders
 /// again the next time it opens the account, and the ones the upload made
 /// appear.
-fn folder_list_stale(state: &DaemonState, account: &str) -> Result<(), String> {
+pub(crate) fn folder_list_stale(state: &DaemonState, account: &str) -> Result<(), String> {
     crate::custody::with_conn(state, |c| {
         let Some(data) = cache::load_mailboxes(c, account)? else { return Ok(()) };
         let mut listing: Value = serde_json::from_str(&data).map_err(|e| format!("the cached folder list does not parse: {e}"))?;

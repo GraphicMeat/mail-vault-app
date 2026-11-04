@@ -39,6 +39,7 @@ pub(crate) mod deleted;
 pub(crate) mod dns;
 pub(crate) mod export_fetch;
 pub(crate) mod fields;
+pub(crate) mod folder_move;
 pub(crate) mod fonts;
 pub(crate) mod graph;
 pub(crate) mod imap;
