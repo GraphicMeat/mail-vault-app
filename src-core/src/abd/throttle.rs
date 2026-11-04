@@ -1,9 +1,8 @@
 //! What a server error means for a long-running job: wait, back off, pause for
 //! a sign-in, or count against one message.
 //!
-//! `imap::is_bandwidth_limited` matches "exceeded bandwidth" or "throttled",
-//! which misses Gmail's "Account exceeded command or bandwidth limits", and
-//! nothing classifies `[ALERT] Too many simultaneous connections`. This
+//! `imap::is_bandwidth_limited` answers only "provider limit or not", and
+//! nothing there classifies `[ALERT] Too many simultaneous connections`. This
 //! classifier is ABD's own so the shared IMAP helpers stay untouched.
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

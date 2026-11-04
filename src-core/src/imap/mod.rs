@@ -769,10 +769,11 @@ const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BO
 /// Gmail suspends accounts that exceed daily IMAP bandwidth caps (2500 MB down,
 /// 500 MB up) — the suspension can last up to 24h and locks webmail sign-in too.
 /// Bulk operations must stop at the first such error instead of grinding through
-/// thousands of doomed fetches against a suspended account.
+/// thousands of doomed fetches against a suspended account. Gmail words it
+/// "exceeded bandwidth limits" or "exceeded command or bandwidth limits".
 pub fn is_bandwidth_limited(error: &str) -> bool {
     let e = error.to_ascii_lowercase();
-    e.contains("exceeded bandwidth") || e.contains("throttled")
+    e.contains("exceeded bandwidth") || e.contains("bandwidth limits") || e.contains("throttled")
 }
 
 // ── UID helpers ─────────────────────────────────────────────────────────────
@@ -4154,6 +4155,13 @@ mod tests {
     fn bandwidth_limited_gmail_message() {
         assert!(is_bandwidth_limited(
             "UID FETCH 42 failed: NO Account exceeded bandwidth limits. (Failure)"
+        ));
+    }
+
+    #[test]
+    fn bandwidth_limited_gmail_command_or_bandwidth_alert() {
+        assert!(is_bandwidth_limited(
+            "APPEND failed: NO [ALERT] Account exceeded command or bandwidth limits. (Failure)"
         ));
     }
 
