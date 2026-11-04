@@ -862,6 +862,46 @@ pub(crate) async fn copy_one(
     Ok(CopyOutcome::Written { ack, message_id, fingerprint, sender, subject })
 }
 
+/// `copy_one` with the engine's retries. A Graph 429 waits as Graph asks (up
+/// to five times; `on_rate_limit` hears each wait in seconds), and a cancel
+/// ends the wait; any other failure is tried once more after 2s, except a
+/// provider bandwidth limit, which comes back at once.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn copy_with_retries(
+    ctx: &CopyCtx<'_>,
+    src_path: &str,
+    dst_path: &str,
+    dest_folder_id: Option<&str>,
+    item: &SourceItem,
+    dest_ids: &HashSet<String>,
+    on_rate_limit: &mut (dyn FnMut(u64) + Send),
+) -> Result<CopyOutcome, String> {
+    let (mut rate_retries, mut retried) = (0u32, false);
+    loop {
+        match copy_one(ctx, src_path, dst_path, dest_folder_id, item, dest_ids).await {
+            Ok(done) => return Ok(done),
+            Err(e) if GraphClient::is_rate_limited(&e) && rate_retries < 5 => {
+                rate_retries += 1;
+                let wait_secs = parse_retry_after(&e).unwrap_or(rate_retries as u64 * 5);
+                warn!("[migration] Rate limited, waiting {}s", wait_secs);
+                on_rate_limit(wait_secs);
+                // A pause wakes the wait and the message is tried again at
+                // once: only a cancel gives it up, and never as written.
+                let woken = interruptible_sleep(std::time::Duration::from_secs(wait_secs), ctx.cancel, ctx.notify).await;
+                if woken && ctx.cancel.load(Ordering::Relaxed) {
+                    return Err("Cancelled during rate-limit wait".to_string());
+                }
+            }
+            Err(e) if !retried && !imap::is_bandwidth_limited(&e) => {
+                warn!("[migration] Email {} failed (attempt 1): {}, retrying in 2s", item.key, e);
+                retried = true;
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 /// A tick inside folder `folder`.
 fn folder_tick<'a>(
     status: &'a str,
@@ -945,30 +985,10 @@ pub(crate) async fn copy_folder(
             crate::search_index::wait_foreground_quiet(&ctx.state.search_index).await;
         }
 
-        let (mut rate_retries, mut retried) = (0u32, false);
-        let result = loop {
-            match copy_one(ctx, &src_path, &dst_path, dest_folder_id.as_deref(), item, &dest_ids).await {
-                Ok(done) => break Ok(done),
-                Err(e) if GraphClient::is_rate_limited(&e) && rate_retries < 5 => {
-                    rate_retries += 1;
-                    let wait_secs = parse_retry_after(&e).unwrap_or(rate_retries as u64 * 5);
-                    warn!("[migration] Rate limited, waiting {}s", wait_secs);
-                    sink.progress(folder_tick("rate_limited", &src_path, Some(out.progress(folder_total)), folders, totals, None, Some(wait_secs)));
-                    // A pause wakes the wait and the message is tried again
-                    // at once: only a cancel gives it up, and never as written.
-                    let woken = interruptible_sleep(std::time::Duration::from_secs(wait_secs), ctx.cancel, ctx.notify).await;
-                    if woken && ctx.cancel.load(Ordering::Relaxed) {
-                        break Err("Cancelled during rate-limit wait".to_string());
-                    }
-                }
-                Err(e) if !retried && !imap::is_bandwidth_limited(&e) => {
-                    warn!("[migration] Email {} failed (attempt 1): {}, retrying in 2s", item.key, e);
-                    retried = true;
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                }
-                Err(e) => break Err(e),
-            }
-        };
+        let result = copy_with_retries(ctx, &src_path, &dst_path, dest_folder_id.as_deref(), item, &dest_ids, &mut |wait_secs| {
+            sink.progress(folder_tick("rate_limited", &src_path, Some(out.progress(folder_total)), folders, totals, None, Some(wait_secs)));
+        })
+        .await;
 
         sink.message(idx, item, &result);
         let (sender, subject, status) = match &result {
