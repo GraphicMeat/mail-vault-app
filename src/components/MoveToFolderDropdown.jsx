@@ -18,7 +18,7 @@ import { t as tr, useT  } from '../i18n/index.js';
  * The old version read `mb.children`, which is always empty — so every row came
  * back at depth 0 and ten folders called "erledigt" were ten identical buttons.
  */
-function selectableFolders(mailboxes) {
+export function selectableFolders(mailboxes) {
   const out = [];
   const walk = (nodes, trail) => {
     for (const node of nodes) {

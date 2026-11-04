@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderPlus, Pencil, Trash2 } from 'lucide-react';
+import { FolderInput, FolderPlus, Pencil, Trash2 } from 'lucide-react';
 import { Popover, MenuItem } from './ui/Popover';
 import { useT } from '../i18n/index.js';
 import { FOLDER_ICON_PALETTE } from '../utils/folderIconColor';
@@ -18,8 +18,12 @@ import { specialOrInbox, trashPathOf, folderDelimiter } from '../services/workfl
  * the deleted bin. Not while an import runs (`importRunning`): the progress
  * does not name its folder, and deleting the one being filled would leave the
  * rest of the import in a folder nothing lists.
+ *
+ * Move folder (`onMove`, when the caller can move folders) is for a custom
+ * server folder only: it retires the original, which a folder addressed by
+ * role cannot be, and a local folder is on no server to move from.
  */
-export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, onRename, onDelete, onSetColor, importRunning = false }) {
+export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, onRename, onMove, onDelete, onSetColor, importRunning = false }) {
   const t = useT();
   if (!menu) return null;
   const { node, x, y } = menu;
@@ -64,6 +68,11 @@ export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, on
       <MenuItem disabled={locked} onClick={() => { onClose(); onRename(node); }}>
         <Pencil size={14} />{t('sidebar.renameFolder')}
       </MenuItem>
+      {onMove && !locked && (
+        <MenuItem onClick={() => { onClose(); onMove(node); }}>
+          <FolderInput size={14} />{t('sidebar.moveFolder')}
+        </MenuItem>
+      )}
       <MenuItem tone="danger" disabled={locked} onClick={() => { onClose(); onDelete(node, { permanent: underTrash }); }}>
         <Trash2 size={14} />{underTrash ? t('sidebar.deleteFolderForever') : t('sidebar.deleteFolder')}
       </MenuItem>

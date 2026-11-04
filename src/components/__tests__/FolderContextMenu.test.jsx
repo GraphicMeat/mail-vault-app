@@ -125,6 +125,46 @@ describe('FolderContextMenu', () => {
   });
 });
 
+// Move folder copies a folder's mail elsewhere and retires the original: a
+// folder the app addresses by role, or one that is on no server, has none.
+describe('FolderContextMenu Move folder', () => {
+  const move = (node) => {
+    const onMove = vi.fn();
+    const onClose = vi.fn();
+    draw(node, { onMove, onClose });
+    return { onMove, onClose, item: item(t('sidebar.moveFolder')) };
+  };
+
+  it('offers Move folder for a custom folder, after Rename, and hands it the node', () => {
+    const node = { path: 'Projects', name: 'Projects' };
+    const { onMove, onClose, item: moveItem } = move(node);
+    expect(items().map(b => b.textContent)).toEqual([
+      t('sidebar.newSubfolder'), t('sidebar.renameFolder'), t('sidebar.moveFolder'), t('sidebar.deleteFolder'),
+    ]);
+    fireEvent.click(moveItem);
+    expect(onMove).toHaveBeenCalledWith(node);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('offers it for a folder under Trash too', () => {
+    expect(move({ path: 'Trash/Old', name: 'Old' }).item).toBeTruthy();
+  });
+
+  it.each([
+    ['INBOX', { path: 'INBOX', name: 'INBOX' }],
+    ['a special-use folder', { path: 'Trash', name: 'Trash', specialUse: '\\Trash' }],
+    ['a guessed special use', { path: 'Archive', name: 'Archive', specialUse: '\\Archive', specialUseGuessed: true }],
+    ['a local folder', { path: 'MBOX import', name: 'MBOX import', local: true }],
+  ])('never offers it on %s', (_, node) => {
+    expect(move(node).item).toBeUndefined();
+  });
+
+  it('shows nothing to move with when the caller cannot move folders', () => {
+    draw({ path: 'Projects', name: 'Projects' });
+    expect(item(t('sidebar.moveFolder'))).toBeUndefined();
+  });
+});
+
 describe('FolderContextMenu icon colour', () => {
   it('offers swatches and reports the picked colour', () => {
     const onSetColor = vi.fn();

@@ -31,6 +31,7 @@ import { useScheduledStore } from '../stores/scheduledStore';
 import { ScheduledFolderModal } from './scheduled/ScheduledFolderModal';
 import { FolderContextMenu } from './FolderContextMenu';
 import { FolderNameDialog } from './FolderNameDialog';
+import { MoveFolderDialog } from './MoveFolderDialog';
 import { FocusTimerButton } from './FocusTimerButton';
 import { PrivacyModeButton } from './privacy/PrivacyModeButton';
 import { buildMailboxTree, mailboxAncestors, withLocalFolders } from '../services/workflows/mailboxTree';
@@ -817,11 +818,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
   // ── Folder operations ──
   // `folderMenu` = { node, x, y }; `nameDialog` = { mode, node }; `confirmDelete`
-  // = the node whose permanent delete still needs a yes.
+  // = the node whose permanent delete still needs a yes; `moveDialog` = the
+  // node Move folder… was picked on, of the account on screen.
   const [folderMenu, setFolderMenu] = useState(null);
   const setFolderIconColor = useSettingsStore(s => s.setFolderIconColor);
   const [nameDialog, setNameDialog] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [moveDialog, setMoveDialog] = useState(null);
 
   /** Every folder op reports through the app's one error toast. */
   const runFolderOp = async (op, notice) => {
@@ -860,6 +863,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         onClose={() => setFolderMenu(null)}
         onNewSubfolder={(node) => setNameDialog({ mode: 'create', node })}
         onRename={(node) => setNameDialog({ mode: 'rename', node })}
+        onMove={(node) => setMoveDialog(node)}
         onDelete={deleteFolder}
         onSetColor={(node, color) => setFolderIconColor(activeAccountId, node.path, color)}
         importRunning={importRunning}
@@ -872,6 +876,15 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         onSubmit={submitFolderName}
         onClose={() => setNameDialog(null)}
       />
+      {moveDialog && (
+        <MoveFolderDialog
+          node={moveDialog}
+          accountId={activeAccountId}
+          mailboxes={mailboxes}
+          onClose={() => setMoveDialog(null)}
+          onUpgrade={() => onOpenSettings?.('billing')}
+        />
+      )}
       <Dialog
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
