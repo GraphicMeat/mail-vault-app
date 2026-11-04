@@ -1779,6 +1779,31 @@ pub fn utf7_encode(name: &str) -> String {
     out
 }
 
+/// `utf7_encode` undone: a folder name as a server lists it, in UTF-8. `None`
+/// for a name that is not modified UTF-7 (an unclosed `&`, bad base64, a lone
+/// surrogate).
+pub fn utf7_decode(name: &str) -> Option<String> {
+    use base64::Engine;
+    let (mut out, mut rest) = (String::with_capacity(name.len()), name);
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        let (run, after) = rest[at + 1..].split_once('-')?;
+        if run.is_empty() {
+            out.push('&');
+        } else {
+            let bytes = base64::engine::general_purpose::STANDARD_NO_PAD.decode(run.replace(',', "/")).ok()?;
+            if bytes.len() % 2 != 0 {
+                return None;
+            }
+            let units: Vec<u16> = bytes.chunks(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect();
+            out.push_str(&String::from_utf16(&units).ok()?);
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    Some(out)
+}
+
 fn uids_of(set: &[imap_proto::UidSetMember]) -> Vec<u32> {
     let mut out = Vec::new();
     for m in set {
@@ -4767,5 +4792,17 @@ mod utf7_tests {
         let encoded = utf7_encode("Evil\r\nA1 DELETE INBOX\0");
         assert_eq!(encoded, "Evil&AA0ACg-A1 DELETE INBOX&AAA-");
         assert!(!encoded.chars().any(char::is_control));
+    }
+
+    #[test]
+    fn utf7_decode_round_trips_utf7_encode() {
+        for name in ["Work/Clients", "Kunden/Übung", "~peter/mail/台北/日本語", "R&D", "Café Bar", "😀", "Evil\r\nA1\0", ""] {
+            assert_eq!(utf7_decode(&utf7_encode(name)).as_deref(), Some(name), "{name}");
+        }
+        assert_eq!(utf7_decode("Kunden/&ANw-bung").as_deref(), Some("Kunden/Übung"));
+        assert_eq!(utf7_decode("&U,BTFw-").as_deref(), Some("台北"), "`,` stands for `/`");
+        for bad in ["&ANw", "&A-", "&2D0-", "&!!-"] {
+            assert_eq!(utf7_decode(bad), None, "{bad}");
+        }
     }
 }

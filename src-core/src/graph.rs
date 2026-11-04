@@ -329,7 +329,11 @@ fn percent_encode(s: &str) -> String {
 
 /// Is `link` under the Graph base (so it is safe to send the token to it)?
 fn is_graph_link(link: &str) -> bool {
-    link.strip_prefix(graph_base()).is_some_and(|rest| rest.starts_with('/') || rest.starts_with('?'))
+    is_link_under(graph_base(), link)
+}
+
+fn is_link_under(base: &str, link: &str) -> bool {
+    link.strip_prefix(base).is_some_and(|rest| rest.starts_with('/') || rest.starts_with('?'))
 }
 
 // ---------------------------------------------------------------------------
@@ -1389,6 +1393,45 @@ impl GraphClient {
         Ok(list.value.into_iter().map(|m| m.id).collect())
     }
 
+    /// Every `internetMessageId` in the folder, as Graph stores them
+    /// (bracketed), paging by `@odata.nextLink`. A message without one is left
+    /// out; a failed page fails the listing, never shortens it.
+    pub async fn list_internet_message_ids(&self, folder_id: &str) -> Result<Vec<String>, String> {
+        self.internet_message_ids_from(graph_base(), folder_id).await
+    }
+
+    /// `list_internet_message_ids` against `base`: a nextLink is followed only
+    /// under it, since every request carries the bearer token.
+    async fn internet_message_ids_from(&self, base: &str, folder_id: &str) -> Result<Vec<String>, String> {
+        #[derive(Deserialize)]
+        struct Row {
+            #[serde(rename = "internetMessageId")]
+            internet_message_id: Option<String>,
+        }
+        let mut url = format!("{}/me/mailFolders/{}/messages?$select=internetMessageId&$top=1000", base, percent_encode(folder_id));
+        let mut ids = Vec::new();
+        loop {
+            let resp = self
+                .client
+                .send(self.client.get(&url).bearer_auth(&self.access_token))
+                .await
+                .map_err(|e| format!("Graph list_internet_message_ids request failed: {}", e))?;
+            if !resp.status().is_success() {
+                return Err(Self::failure_text(resp, "list_internet_message_ids").await);
+            }
+            let list: GraphListResponse<Row> = resp
+                .json()
+                .await
+                .map_err(|e| format!("Graph list_internet_message_ids parse error: {}", e))?;
+            ids.extend(list.value.into_iter().filter_map(|r| r.internet_message_id));
+            match list.next_link {
+                Some(next) if is_link_under(base, &next) => url = next,
+                Some(_) => return Err("Graph list_internet_message_ids refused a nextLink outside the Graph base".to_string()),
+                None => return Ok(ids),
+            }
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Error classification helpers
     // -----------------------------------------------------------------------
@@ -1971,6 +2014,47 @@ mod tests {
     }
 
     // -- A send whose connection never opens ---------------------------------
+
+    #[tokio::test]
+    async fn list_internet_message_ids_uses_graph_base_and_pages() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/v1.0", listener.local_addr().unwrap());
+        let pages = [
+            serde_json::json!({"value": [{"internetMessageId": "<a@x>"}, {"internetMessageId": null}], "@odata.nextLink": format!("{base}/me/mailFolders/f/messages?$skiptoken=2")}),
+            serde_json::json!({"value": [{"internetMessageId": "<b@x>"}]}),
+        ];
+        let server = tokio::spawn(async move {
+            let mut seen = Vec::new();
+            for page in pages {
+                let (mut s, _) = listener.accept().await.unwrap();
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = s.read(&mut chunk).await.unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                }
+                seen.push(String::from_utf8_lossy(&buf).lines().next().unwrap_or_default().to_string());
+                let body = page.to_string();
+                let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                s.write_all(resp.as_bytes()).await.unwrap();
+            }
+            seen
+        });
+
+        let ids = GraphClient::new("tok").internet_message_ids_from(&base, "fold/er").await.unwrap();
+
+        assert_eq!(ids, ["<a@x>", "<b@x>"]);
+        let seen = server.await.unwrap();
+        assert_eq!(seen[0], "GET /v1.0/me/mailFolders/fold%2Fer/messages?$select=internetMessageId&$top=1000 HTTP/1.1");
+        assert_eq!(seen[1], "GET /v1.0/me/mailFolders/f/messages?$skiptoken=2 HTTP/1.1");
+        assert!(is_link_under(&base, &format!("{base}/me?x")));
+        assert!(!is_link_under(&base, &format!("{base}.evil/me")));
+        assert!(!is_link_under(&base, "https://evil.example/v1.0/me"));
+    }
 
     /// A loopback port whose accept queue is full: nothing accepts, so the
     /// kernel drops the next SYN and a connect to it hangs. `None` where the

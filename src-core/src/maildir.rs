@@ -658,6 +658,19 @@ pub fn message_id_in(raw: &[u8]) -> Option<String> {
     message_id_of(&header_value(&String::from_utf8_lossy(header_section(raw)), "message-id:")?)
 }
 
+/// `message_id_in`, bracketed: the one form a migration or a folder move
+/// compares Message-IDs in, whichever side listed them.
+pub fn message_id_key(raw: &[u8]) -> Option<String> {
+    message_id_in(raw).map(|id| format!("<{id}>"))
+}
+
+/// A Message-ID header value as a server hands it out (Graph's
+/// `internetMessageId`, a JMAP `messageId`, a fetched header line), in
+/// `message_id_key`'s form.
+pub fn message_id_value_key(value: &str) -> Option<String> {
+    message_id_of(value).map(|id| format!("<{id}>"))
+}
+
 /// A header date as epoch seconds: RFC 2822 (`Date:`), else RFC 3339 (an
 /// IMAP INTERNALDATE as the app stores it). `None` when neither reads.
 /// mailparse's `dateparse` answers `Ok(0)` for any text it never finds a year
@@ -1088,6 +1101,19 @@ pub fn purge_orphans(mailbox_dir: &Path) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_message_id_unfolds_and_brackets() {
+        let head = b"Subject: s\r\nMessage-ID:\r\n <abc@x.test>\r\nDate: d\r\n\r\nMessage-ID: <body@x>\r\n";
+        assert_eq!(message_id_key(head).as_deref(), Some("<abc@x.test>"), "folded value joined");
+        assert_eq!(message_id_key(b"message-id:  < spaced@x >\r\n\r\n").as_deref(), Some("<spaced@x>"));
+        assert_eq!(message_id_key(b"Subject: none\r\n\r\n"), None);
+        assert_eq!(message_id_value_key("bare@x").as_deref(), Some("<bare@x>"));
+        assert_eq!(message_id_value_key(" <b@x> ").as_deref(), Some("<b@x>"));
+        assert_eq!(message_id_value_key("<a@x> (comment)").as_deref(), Some("<a@x>"));
+        assert_eq!(message_id_value_key("<>"), None);
+        assert_eq!(message_id_value_key("  "), None);
+    }
 
     #[test]
     fn mirror_builder_preserves_safe_layouts() {
