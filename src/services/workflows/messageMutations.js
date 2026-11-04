@@ -3592,9 +3592,13 @@ export async function moveEmails(keys, targetMailbox) {
   const keySet = new Set([...groups.values()].flatMap(g => g.keys));
   const filteredEmails = get().emails.filter(e => !keySet.has(selectionKey(e, state)));
   const newTotal = Math.max(0, (get().totalEmails || 0) - (get().emails.length - filteredEmails.length));
+  // The uid each moved message had is retired: the destination gave it another.
+  // A Sent fill's pages, read before the move, would put it back in the mirror.
+  const retired = [...groups.values()].flatMap(g => g.uids.map(uid => _targetId({ accountId: g.accountId, mailbox: g.mailbox, uid })));
   const updates = {
     emails: filteredEmails,
     sentEmails: get().sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
+    deleteTombstones: new Set([...get().deleteTombstones, ...retired]),
     totalEmails: newTotal,
     // Live, not the snapshot: the per-group network loop above is awaited, and
     // a row ticked across it is the user's, not this move's to drop.
@@ -3642,6 +3646,12 @@ export async function moveEmails(keys, targetMailbox) {
     await db.saveEmailHeaders(activeAccountId, activeMailbox, [], newTotal,
       own ? { removedUids: own.uids } : undefined);
   }
+  // Every other folder a moved row came from (a merged Sent row, a folder of
+  // All inboxes) loses just those uids from its own cache: a removal names the
+  // folder it is filed under, so it cannot reach the branch root's.
+  for (const g of groups.values()) {
+    if (g !== own) await db.saveEmailHeaders(g.accountId, g.mailbox, [], null, { removedUids: g.uids });
+  }
 
   _invalidateRestore(activeAccountId);
 
@@ -3674,6 +3684,10 @@ async function _undoMove(records) {
       // through the reload below — they were only hidden locally.
       if (r.deferred) {
         await db.clearOps({ op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids, arg: { target: r.to } });
+        // The message never left: its uid is live again.
+        const { useMailStore } = await import('../../stores/mailStore');
+        const lift = new Set(r.srcUids.map(uid => _targetId({ accountId: r.accountId, mailbox: r.from, uid })));
+        useMailStore.setState(s => ({ deleteTombstones: new Set([...s.deleteTombstones].filter(id => !lift.has(id))) }));
         continue;
       }
       const dst = r.dstUids ?? await _resolveDestinationUids(r.account, r.to, r.messageIds);

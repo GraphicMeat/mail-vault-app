@@ -296,3 +296,57 @@ describe('moveEmails', () => {
     expect(useMailStore.getState().emails).toEqual([]);
   });
 });
+
+// A Sent message moved to another folder leaves its old uid behind in places a
+// slow reader still holds: the Sent cache, and a background fill's pages read
+// before the move. Both would put it back in the Sent mirror, so the move
+// retires the uid at once: a tombstone for every reader, and the cache row cut.
+describe('moveEmails retires the uid it moved away from', () => {
+  const sentRow = (uid) => row(uid, { _accountId: ACCOUNT.id, _mailbox: 'Sent', _fromSentFolder: true });
+
+  it('tombstones a moved INBOX row and a merged Sent row alike', async () => {
+    mockMoveEmails.mockResolvedValue({ success: true, moved: 1, newUids: [41] });
+    primeStore({ emails: [row(7)] });
+    const sent = sentRow(5);
+    useMailStore.setState({ sentEmails: [sent] });
+
+    await useMailStore.getState().moveEmails([7, _selKey(sent)], 'Archive');
+
+    const ts = useMailStore.getState().deleteTombstones;
+    expect(ts.has('a1|INBOX|7')).toBe(true);
+    expect(ts.has('a1|Sent|5')).toBe(true);
+  });
+
+  it('cuts the moved Sent row out of the Sent cache, not only the active folder\'s', async () => {
+    mockMoveEmails.mockResolvedValue({ success: true, moved: 1, newUids: [41] });
+    primeStore({ emails: [row(7)] });
+    const sent = sentRow(5);
+    useMailStore.setState({ sentEmails: [sent] });
+
+    await useMailStore.getState().moveEmails([_selKey(sent)], 'Archive');
+
+    expect(mockSaveEmailHeaders).toHaveBeenCalledWith('a1', 'Sent', [], null, { removedUids: [5] });
+    expect(useMailStore.getState().sentEmails).toEqual([]);
+  });
+
+  it('a failed move tombstones nothing: the row never left', async () => {
+    mockMoveEmails.mockRejectedValue(new Error('server said no'));
+    primeStore({ emails: [row(7)] });
+
+    await expect(useMailStore.getState().moveEmails([7], 'Archive')).rejects.toThrow('server said no');
+
+    expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([7]);
+  });
+
+  it('undoing a move that was only journalled lifts its tombstone: the message never left', async () => {
+    netOnline = false;
+    primeStore({ emails: [row(7)] });
+    await useMailStore.getState().moveEmails([7], 'Archive');
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
+
+    await useMailStore.getState().runUndo();
+
+    expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
+  });
+});
