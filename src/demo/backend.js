@@ -349,6 +349,8 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
   // run of the daemon job, for this session only (never saved or restored).
   const uploads = new Map();
   let uploadSeq = 0;
+  const folderMoves = new Map();
+  let folderMoveSeq = 0;
   let settings = clone(initialSettings);
   let settingsVersion = 0;
   let backupRevision = 0;
@@ -498,6 +500,79 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     return [...flat, ...(accountMailboxAdds.get(forAccount) || [])];
   };
   const unsupported = command => { throw new DemoUnsupportedError(command); };
+
+  // Move folder (src-daemon/src/folder_move_job.rs): the plan from the folder
+  // lists, then a one-step job that copies the subtree's server mail to the
+  // picked parent and puts the original under Trash, or renames it in place
+  // within one account. Its events have the daemon's `folder-move-progress` shape.
+  const FOLDER_MOVE_STEP_MS = 700;
+  const planFolderMove = p => {
+    const refuse = refusal => ({ items: [], fastRename: null, refusal, cached: true });
+    const root = p.sourcePath;
+    const same = p.sourceAccountId === p.destAccountId;
+    const dest = accountMailboxes(p.destAccountId);
+    const tree = accountMailboxes(p.sourceAccountId).filter(box => box.path === root || box.path.startsWith(`${root}/`));
+    if (String(root).toUpperCase() === 'INBOX' || tree.some(box => box.specialUse)) return refuse('E_FOLDER_MOVE_RESERVED');
+    if (!tree.some(box => box.path === root)) return refuse('E_FOLDER_MOVE_NOT_FOUND');
+    const parent = p.destPath || null;
+    if (same && parent && (parent === root || parent.startsWith(`${root}/`))) return refuse('E_FOLDER_MOVE_INTO_ITSELF');
+    if (parent && !dest.some(box => box.path === parent)) return refuse('E_FOLDER_MOVE_NOT_FOUND');
+    const destRoot = parent ? `${parent}/${root.split('/').pop()}` : root.split('/').pop();
+    if (same && destRoot === root) return refuse('E_FOLDER_MOVE_INTO_ITSELF');
+    const items = tree.sort((a, b) => a.path.split('/').length - b.path.split('/').length)
+      .map(box => ({ src: box.path, dest: `${destRoot}${box.path.slice(root.length)}`, container: !!box.noselect }));
+    return { items, fastRename: same && !dest.some(box => box.path === destRoot) ? destRoot : null, refusal: null, cached: true };
+  };
+  const folderMoveView = (job, live) => ({
+    jobId: job.jobId, sourceAccountId: job.src, destAccountId: job.dst, sourcePath: job.root, destPath: job.destPath,
+    state: job.state, active: live, total: job.total, copied: job.copied, skipped: job.skipped, failed: 0, currentFolder: null,
+    folders: job.plan.items.map(item => ({ src: item.src, dest: item.dest, phase: job.state === 'done' ? 'retired' : 'pending', total: 0, copied: 0, skipped: 0, failed: 0 })),
+    retired: !!job.retiredTo, retiredTo: job.retiredTo, sourceKeptReason: job.state === 'cancelled' ? 'cancelled' : null,
+    rateLimitedFor: null, error: null, foldersCreated: job.created,
+  });
+  const folderMoveJob = jobId => {
+    const job = folderMoves.get(jobId);
+    if (!job) throw new Error(`E_FOLDER_MOVE_NOT_FOUND: ${jobId}`);
+    return job;
+  };
+  const stopFolderMove = job => { clearTimeout(job.timer); job.timer = null; };
+  const finishFolderMove = job => {
+    const { items, fastRename } = job.plan;
+    if (fastRename) invoke('imap_rename_mailbox', { accountId: job.src, from: job.root, to: fastRename });
+    else {
+      let uid = Math.max(0, ...messages.filter(row => row.accountId === job.dst).map(row => Number(row.uid) || 0)) + 1;
+      for (const item of items) {
+        if (!accountMailboxes(job.dst).some(box => box.path === item.dest)) {
+          accountMailboxAdds.set(job.dst, [...(accountMailboxAdds.get(job.dst) || []), { path: item.dest, name: item.dest.split('/').pop(), delimiter: '/', flags: [] }]);
+          job.created += 1;
+        }
+        for (const row of visible(job.src, item.src)) {
+          job.total += 1;
+          if (messages.some(other => other.accountId === job.dst && other.mailbox === item.dest && other.messageId === row.messageId)) { job.skipped += 1; continue; }
+          const copy = makeMessage({ accountId: job.dst, mailbox: item.dest, uid: uid++, from: clone(row.from), to: clone(row.to), cc: clone(row.cc), bcc: clone(row.bcc), subject: row.subject, text: row.text, htmlContent: row.html, vault: false, server: true, attachments: clone(row.attachments || []), threadId: row.threadId, inReplyTo: row.inReplyTo, references: clone(row.references || []), messageId: row.messageId }, sessionNow);
+          Object.assign(copy, { date: row.date, internalDate: row.internalDate || row.date, flags: [...(row.flags || [])], rawSource: row.rawSource, rawSourceBase64: row.rawSourceBase64 });
+          messages.push(copy);
+          job.copied += 1;
+        }
+      }
+      // The original under Trash, its leaf kept, " (2)" on a clash.
+      const leaf = job.root.split('/').pop();
+      const taken = new Set(accountMailboxes(job.src).map(box => box.path));
+      let to = `Trash/${leaf}`;
+      for (let n = 2; taken.has(to); n += 1) to = `Trash/${leaf} (${n})`;
+      invoke('imap_rename_mailbox', { accountId: job.src, from: job.root, to });
+      job.retiredTo = to;
+    }
+    job.state = 'done';
+    folderMoves.delete(job.jobId);
+    emit('folder-move-progress', folderMoveView(job, false));
+    emit('demo:state', { type: 'folder-move' });
+  };
+  const runFolderMove = job => {
+    job.state = 'running';
+    emit('folder-move-progress', folderMoveView(job, true));
+    job.timer = setTimeout(() => { job.timer = null; finishFolderMove(job); }, FOLDER_MOVE_STEP_MS);
+  };
   const downloadBrowserFile = (filename, content, type) => {
     if (typeof window === 'undefined' || !window.document || typeof Blob === 'undefined') return;
     const blob = new Blob([content], { type });
@@ -752,7 +827,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         if (method?.startsWith('accounts.') || method?.startsWith('credentials.')) return invoke(method, args.params || {});
         // DAEMON_OWNED dotted names answered by their own cases below: the
         // delete queue and the undo of a delete arrive here as `daemon_rpc`.
-        if (method === 'messages.restore' || method?.startsWith('delete_queue.')) return invoke(method, args.params || {});
+        if (method === 'messages.restore' || method?.startsWith('delete_queue.') || method?.startsWith('folder_move.')) return invoke(method, args.params || {});
         if (method === 'daemon.heartbeat') return { alive: true, version: 'browser-demo', uptime_secs: 0, online: true, simulated: true };
         if (method === 'daemon.status') return { version: 'browser-demo', uptime_secs: 0, data_dir: 'in-memory browser session', simulated: true };
         if (method === 'counts.unread') {
@@ -2048,6 +2123,45 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         emit('mbox-import-progress', kept ? { mode: 'server', jobId: job.jobId, state: 'discarded', active: false } : uploadView(job));
         return { jobId: job.jobId, discarded: true };
       }
+      case 'folder_move.plan': return planFolderMove(args);
+      case 'folder_move.start': {
+        const plan = planFolderMove(args);
+        if (plan.refusal) throw new Error(plan.refusal);
+        // One live move per account, as source or destination.
+        const running = [...folderMoves.values()].find(job => job.state !== 'cancelled' && [job.src, job.dst].some(id => id === args.sourceAccountId || id === args.destAccountId));
+        if (running) throw new Error(`E_FOLDER_MOVE_RUNNING: ${running.jobId}`);
+        const job = { jobId: `demo-folder-move-${folderMoveSeq += 1}`, src: args.sourceAccountId, dst: args.destAccountId, root: args.sourcePath, destPath: args.destPath || null, plan, state: 'running', total: 0, copied: 0, skipped: 0, created: 0, retiredTo: null, timer: null };
+        folderMoves.set(job.jobId, job);
+        runFolderMove(job);
+        return { jobId: job.jobId };
+      }
+      case 'folder_move.status': {
+        const all = [...folderMoves.values()];
+        return { jobs: [...all.filter(job => job.state !== 'cancelled').map(job => ({ ...folderMoveView(job, true), live: true })), ...all.filter(job => job.state === 'cancelled').map(job => ({ ...folderMoveView(job, false), live: false, updatedAt: sessionNow }))] };
+      }
+      case 'folder_move.pause': {
+        const job = folderMoveJob(args.jobId);
+        if (job.state === 'running') { stopFolderMove(job); job.state = 'paused'; emit('folder-move-progress', folderMoveView(job, true)); }
+        return { jobId: job.jobId, paused: true };
+      }
+      case 'folder_move.resume': {
+        const job = folderMoveJob(args.jobId);
+        if (job.state !== 'running') runFolderMove(job);
+        return { jobId: job.jobId, resumed: true };
+      }
+      case 'folder_move.cancel': {
+        const job = folderMoveJob(args.jobId);
+        if (job.state !== 'cancelled') { stopFolderMove(job); job.state = 'cancelled'; emit('folder-move-progress', folderMoveView(job, false)); }
+        return { jobId: job.jobId, cancelled: true };
+      }
+      case 'folder_move.discard': {
+        const job = folderMoveJob(args.jobId);
+        stopFolderMove(job);
+        folderMoves.delete(job.jobId);
+        job.state = 'discarded';
+        emit('folder-move-progress', folderMoveView(job, false));
+        return { jobId: job.jobId, discarded: true };
+      }
       case 'list_local_folders': return clone(localFolders.get(args.accountId) || []);
       case 'delete_local_folder': {
         const folders = localFolders.get(args.accountId) || [];
@@ -2121,7 +2235,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     restoreState,
     invoke,
     on: (event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(callback); return () => listeners.get(event)?.delete(callback); },
-    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; bulkAdmissions.clear(); migrationState = null; snapshots.clear(); draftRecords.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; accountList = seedAccountList(); syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
+    reset: () => { uploads.forEach(stopUpload); uploads.clear(); folderMoves.forEach(stopFolderMove); folderMoves.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; bulkAdmissions.clear(); migrationState = null; snapshots.clear(); draftRecords.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; accountList = seedAccountList(); syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
     DemoUnsupportedError,
   };
 }

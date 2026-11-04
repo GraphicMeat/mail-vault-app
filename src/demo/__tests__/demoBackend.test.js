@@ -507,6 +507,102 @@ describe('demo mailbox backend', () => {
     });
   });
 
+  // Move folder: the daemon job's plan, start and controls, with its event shape.
+  describe('a folder move', () => {
+    let backend;
+    let src;
+    let dst;
+    let events;
+    const rpc = (method, params) => backend.invoke('daemon_rpc', { method, params });
+    const last = () => events[events.length - 1];
+    const run = () => vi.advanceTimersByTime(10_000);
+    const rows = (accountId, mailbox) => backend.snapshot().messages.filter(m => m.accountId === accountId && m.mailbox === mailbox && m.custody !== 'local-only');
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      backend = createDemoBackend();
+      [src, dst] = backend.accounts.map(a => a.id);
+      events = [];
+      backend.on('folder-move-progress', ({ payload }) => events.push(payload));
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('plans from the folder lists, the picked folder as the parent', async () => {
+      await expect(rpc('folder_move.plan', { sourceAccountId: src, sourcePath: 'Clients/Skewer', destAccountId: dst, destPath: 'Archive' }))
+        .resolves.toEqual({ items: [{ src: 'Clients/Skewer', dest: 'Archive/Skewer', container: false }], fastRename: null, refusal: null, cached: true });
+      await expect(rpc('folder_move.plan', { sourceAccountId: src, sourcePath: 'INBOX', destAccountId: dst, destPath: 'Archive' }))
+        .resolves.toMatchObject({ items: [], refusal: 'E_FOLDER_MOVE_RESERVED' });
+      await expect(rpc('folder_move.plan', { sourceAccountId: src, sourcePath: 'Clients', destAccountId: src, destPath: 'Clients/Skewer' }))
+        .resolves.toMatchObject({ refusal: 'E_FOLDER_MOVE_INTO_ITSELF' });
+      await expect(rpc('folder_move.start', { sourceAccountId: src, sourcePath: 'Sent', destAccountId: dst, destPath: null }))
+        .rejects.toThrow(/^E_FOLDER_MOVE_RESERVED$/);
+    });
+
+    it('copies the folder to the other account, then puts the original under Trash', async () => {
+      const before = rows(src, 'Clients/Skewer').length;
+      expect(before).toBeGreaterThan(0);
+      const { jobId } = await rpc('folder_move.start', { sourceAccountId: src, sourcePath: 'Clients/Skewer', destAccountId: dst, destPath: 'Archive' });
+      expect(jobId).toMatch(/^[A-Za-z0-9-]{1,64}$/);
+      expect(last()).toMatchObject({ jobId, sourceAccountId: src, destAccountId: dst, sourcePath: 'Clients/Skewer', destPath: 'Archive', state: 'running', active: true });
+      expect((await rpc('folder_move.status', {})).jobs).toEqual([expect.objectContaining({ jobId, live: true, active: true })]);
+
+      run();
+      expect(last()).toMatchObject({ jobId, state: 'done', active: false, copied: before, retired: true, retiredTo: 'Trash/Skewer', sourceKeptReason: null });
+      expect(rows(dst, 'Archive/Skewer')).toHaveLength(before);
+      expect(rows(src, 'Trash/Skewer')).toHaveLength(before);
+      expect(rows(src, 'Clients/Skewer')).toHaveLength(0);
+      await expect(rpc('folder_move.status', {})).resolves.toEqual({ jobs: [] });
+    });
+
+    it('moves within one account to the top level as one rename', async () => {
+      const before = rows(src, 'Clients/Skewer').length;
+      await rpc('folder_move.start', { sourceAccountId: src, sourcePath: 'Clients/Skewer', destAccountId: src, destPath: null });
+      run();
+      expect(last()).toMatchObject({ state: 'done', active: false, copied: 0, retired: false, retiredTo: null });
+      expect(rows(src, 'Skewer')).toHaveLength(before);
+    });
+
+    it('holds one move per account, pauses, cancels to a journal, and discards it', async () => {
+      const { jobId } = await rpc('folder_move.start', { sourceAccountId: src, sourcePath: 'Clients/Skewer', destAccountId: dst, destPath: 'Archive' });
+      await expect(rpc('folder_move.start', { sourceAccountId: dst, sourcePath: 'Suppliers', destAccountId: src, destPath: null }))
+        .rejects.toThrow(new RegExp(`^E_FOLDER_MOVE_RUNNING: ${jobId}$`));
+      await expect(rpc('folder_move.pause', { jobId })).resolves.toEqual({ jobId, paused: true });
+      expect(last()).toMatchObject({ jobId, state: 'paused', active: true });
+      const held = events.length;
+      run();
+      expect(events).toHaveLength(held);
+
+      await expect(rpc('folder_move.cancel', { jobId })).resolves.toEqual({ jobId, cancelled: true });
+      expect(last()).toMatchObject({ jobId, state: 'cancelled', active: false, sourceKeptReason: 'cancelled' });
+      expect((await rpc('folder_move.status', {})).jobs).toEqual([expect.objectContaining({ jobId, live: false, state: 'cancelled' })]);
+
+      await expect(rpc('folder_move.discard', { jobId })).resolves.toEqual({ jobId, discarded: true });
+      expect(last()).toMatchObject({ jobId, state: 'discarded', active: false });
+      await expect(rpc('folder_move.status', {})).resolves.toEqual({ jobs: [] });
+      await expect(rpc('folder_move.resume', { jobId })).rejects.toThrow(new RegExp(`^E_FOLDER_MOVE_NOT_FOUND: ${jobId}$`));
+      // The source was never touched.
+      expect(rows(src, 'Clients/Skewer').length).toBeGreaterThan(0);
+    });
+
+    it('a cancelled move resumes from its journal', async () => {
+      const { jobId } = await rpc('folder_move.start', { sourceAccountId: src, sourcePath: 'Clients/Skewer', destAccountId: dst, destPath: 'Archive' });
+      await rpc('folder_move.cancel', { jobId });
+      await expect(rpc('folder_move.resume', { jobId })).resolves.toEqual({ jobId, resumed: true });
+      expect(last()).toMatchObject({ jobId, state: 'running', active: true });
+      run();
+      expect(last()).toMatchObject({ jobId, state: 'done', active: false });
+    });
+
+    it('reset forgets every move and its timers', async () => {
+      await rpc('folder_move.start', { sourceAccountId: src, sourcePath: 'Clients/Skewer', destAccountId: dst, destPath: 'Archive' });
+      backend.reset();
+      const before = events.length;
+      run();
+      expect(events).toHaveLength(before);
+      await expect(rpc('folder_move.status', {})).resolves.toEqual({ jobs: [] });
+    });
+  });
+
   // Settings > Backup's "not yet in your vault": the demo counts and saves
   // with the daemon's reply shapes, and the save ends on the backup's own
   // terminal frame, which is what the row waits for.
