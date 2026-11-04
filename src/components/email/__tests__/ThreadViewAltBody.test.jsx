@@ -21,7 +21,7 @@ vi.mock('../../../utils/iframeSearchHighlight', async (importOriginal) => {
   return { ...actual, applySearchHighlight: (doc, terms) => { highlighted.push({ doc, terms }); return actual.applySearchHighlight(doc, terms); } };
 });
 vi.mock('../EmailActionBar', () => ({ EmailActionBar: (p) => (
-  <div><button onClick={() => p.onReply()}>bar-reply</button><button onClick={() => p.onOpenInWindow()}>bar-window</button></div>
+  <div><button onClick={() => p.onReply()}>bar-reply</button><button onClick={() => p.onOpenInWindow()}>bar-window</button><button onClick={() => p.onViewSource()}>bar-source</button></div>
 ) }));
 vi.mock('../../../utils/replyTarget', () => ({ replyTarget: async (header, _l, _s, selectedHtml) => ({ ...header, selectedHtml }) }));
 vi.mock('../../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
@@ -187,6 +187,19 @@ describe('ThreadView with an alternative body renderer', () => {
     act(() => { useSettingsStore.setState({ emailRenderer: 'web' }); });
     const frame = container.querySelector('iframe');
     expect(frame).not.toBeNull();
+    expect(autosized).toContain(frame);
+  });
+
+  it('View Source on and off: the body remounts whole, so the new iframe has its handlers', async () => {
+    useSettingsStore.setState({ emailRenderer: 'web' });
+    const { container } = render(<ThreadView thread={thread} />);
+    const first = container.querySelector('iframe');
+    await act(async () => { fireEvent.click(screen.getByText('bar-source')); });
+    expect(container.querySelector('iframe')).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByText('bar-source')); });
+    const frame = container.querySelector('iframe');
+    expect(frame).not.toBeNull();
+    expect(frame).not.toBe(first);
     expect(autosized).toContain(frame);
   });
 

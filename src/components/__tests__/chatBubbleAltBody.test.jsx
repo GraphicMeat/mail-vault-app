@@ -99,6 +99,25 @@ describe('chat bubble on the body seam', () => {
     expect(typeof frame.onload).toBe('function');
   });
 
+  it('View Original mounts a new iframe on the same body, and it has the handlers', async () => {
+    useSettingsStore.setState({ emailRenderer: 'web', linkSafetyEnabled: true, linkSafetyClickConfirm: true });
+    const { container } = show();
+    const first = container.querySelector('iframe');
+    await act(async () => { fireEvent.click(screen.getByText(/view original/i)); });
+    const frame = container.querySelector('iframe');
+    expect(frame).not.toBe(first);
+    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+    await act(async () => { fireEvent.load(frame); });
+    const doc = frame.contentDocument;
+    const link = doc.createElement('a');
+    link.href = 'https://evil.test/';
+    link.setAttribute('data-link-alert', 'red');
+    link.textContent = 'bank';
+    doc.body.appendChild(link);
+    await act(async () => { fireEvent.click(link); });
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
   it('buildChatBubbleDocument is the iframe template', () => {
     const out = buildChatBubbleDocument({ bodyHtml: '<p>x</p>', fromUser: true, theme: 'light', palette: 'graphite', indicatorStyle: '', privacy: false, signatureDisplay: 'smart', nonce: 'abc' });
     expect(out).toContain("script-src 'nonce-abc'");

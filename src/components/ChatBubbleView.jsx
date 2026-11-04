@@ -16,6 +16,7 @@ import {
 } from '../utils/emailParser';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
+import { useFrameEffect } from '../hooks/useFrameEffect';
 import { useMailFonts } from '../hooks/useMailFonts';
 import { resolveEmailLocation, selectionKey, emailScopeKey, inLocalFolder } from '../stores/slices/unifiedHelpers';
 import { isRowArchived } from '../utils/quickActionFacts';
@@ -645,68 +646,67 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       }
     };
     window.addEventListener('message', handleMessage);
-
-    if (iframeRef.current && mergedEmail.html) {
-      const iframe = iframeRef.current;
-
-      const resizeIframe = () => {
-        try {
-          const doc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (doc && doc.body) {
-            const height = Math.max(
-              doc.body.scrollHeight,
-              doc.body.offsetHeight,
-              50
-            );
-            iframe.style.height = Math.min(height + 16, 400) + 'px';
-          }
-        } catch (e) {
-          console.error('Failed to resize iframe:', e);
-        }
-      };
-
-      iframe.onload = () => {
-        resizeIframe();
-        setTimeout(resizeIframe, 200);
-        // Prevent native context menu, intercept links, and apply dark mode overrides
-        try {
-          const doc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (doc) {
-            doc.addEventListener('contextmenu', (e) => e.preventDefault());
-            attachImageDoubleClick(doc, () => mergedEmail?.attachments);
-            doc.addEventListener('click', (e) => {
-              const link = e.target.closest('a');
-              if (!link || !link.href) return;
-              // An address in the body composes here instead of waking the OS mail
-              // client, which is not the vault this message lives in.
-              if (link.href.startsWith('mailto:')) {
-                e.preventDefault();
-                e.stopPropagation();
-                openMailtoCompose(link.href, mergedEmail?._accountId);
-                return;
-              }
-              if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
-              e.preventDefault();
-              if (linkSafetyEnabled && linkSafetyClickConfirm) {
-                const alert = checkLinkAlert(link);
-                if (alert) { setLinkSafetyAlert(alert); return; }
-              }
-              import('@tauri-apps/plugin-shell').then(({ open }) => {
-                open(link.href);
-              }).catch(() => {
-                window.open(link.href, '_blank');
-              });
-            });
-          }
-        } catch (e) { /* iframe access error */ }
-      };
-
-      setTimeout(resizeIframe, 100);
-    }
-
     return () => window.removeEventListener('message', handleMessage);
-  // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its handlers.
-  }, [mergedEmail.html, !!Alt]);
+  }, []);
+
+  // The frame element is tracked by useFrameEffect: View Original and the
+  // alternative body both mount a fresh iframe on the same html, and it needs
+  // its handlers.
+  useFrameEffect(iframeRef, (iframe) => {
+    const resizeIframe = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (doc && doc.body) {
+          const height = Math.max(
+            doc.body.scrollHeight,
+            doc.body.offsetHeight,
+            50
+          );
+          iframe.style.height = Math.min(height + 16, 400) + 'px';
+        }
+      } catch (e) {
+        console.error('Failed to resize iframe:', e);
+      }
+    };
+
+    iframe.onload = () => {
+      resizeIframe();
+      setTimeout(resizeIframe, 200);
+      // Prevent native context menu, intercept links, and apply dark mode overrides
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (doc) {
+          doc.addEventListener('contextmenu', (e) => e.preventDefault());
+          attachImageDoubleClick(doc, () => mergedEmail?.attachments);
+          doc.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (!link || !link.href) return;
+            // An address in the body composes here instead of waking the OS mail
+            // client, which is not the vault this message lives in.
+            if (link.href.startsWith('mailto:')) {
+              e.preventDefault();
+              e.stopPropagation();
+              openMailtoCompose(link.href, mergedEmail?._accountId);
+              return;
+            }
+            if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+            e.preventDefault();
+            if (linkSafetyEnabled && linkSafetyClickConfirm) {
+              const alert = checkLinkAlert(link);
+              if (alert) { setLinkSafetyAlert(alert); return; }
+            }
+            import('@tauri-apps/plugin-shell').then(({ open }) => {
+              open(link.href);
+            }).catch(() => {
+              window.open(link.href, '_blank');
+            });
+          });
+        }
+      } catch (e) { /* iframe access error */ }
+    };
+
+    setTimeout(resizeIframe, 100);
+  }, [mergedEmail.html]);
 
   // The mail's own Google Fonts, from the daemon. They change the text's
   // height after the load-time sizing above, so size once more.

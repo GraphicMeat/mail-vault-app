@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- After turning View Source off, or viewing an original in a chat bubble, the message body is protected again. The redrawn body had lost its link safety warning, so a click on a flagged link opened it with no prompt; it had also lost its context menu and stopped sizing to the mail. The same applied when moving to another message with the source open, and to a full view opened while a message was still loading.
+
 - Lithuanian letters (č, š, ž, ė, ą, ę, į, ų, ū) no longer vanish from some emails. A sender that gave no text encoding, an empty or unfamiliar one, or `us-ascii` on a UTF-8 body now reads as UTF-8, and a body in `latin-7` or `win1257` reads right too; the reader showed these gaps where the letters should be. When a body is not UTF-8 either, its own declared encoding is used. The search index and the JMAP preview read bodies the same way.
 
 - Your whole Sent folder is now kept for every kind of account, not its newest 200, and a very large one (tens of thousands of emails) no longer slows MailVault down. A background helper downloads the rest of Sent and drops what you deleted elsewhere; the conversations show the replies as far back as the inbox list reaches, and scrolling the inbox back brings the older replies in. An email you move out of Sent no longer reappears in it.

@@ -24,6 +24,7 @@ import { custodyRowFor } from '../stores/slices/custody';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { useSearchHighlight } from '../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
+import { useFrameEffect } from '../hooks/useFrameEffect';
 import { refuseWindowUnderPrivacy } from '../utils/privacy/windowBlocked';
 import { usePrivacySourceBlocked } from '../hooks/usePrivacy';
 import { Private } from './privacy/Private';
@@ -511,10 +512,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   }, [trackerSummary, scopeKey]);
 
   // Auto-resize iframe and apply dark mode overrides
-  useEffect(() => {
-    if (!iframeRef.current || !selectedEmail?.html) return;
-
-    const iframe = iframeRef.current;
+  useFrameEffect(iframeRef, (iframe) => {
     const detachAutoSize = attachEmailIframeAutoSize(iframe, { minHeight: 300 });
 
     // Named handlers so we can remove them in cleanup
@@ -634,10 +632,10 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     // Theme is NOT a dep: DR is now inlined into the iframe HTML (via the
     // iframeContent useMemo), so theme toggles don't need to tear down and
     // re-attach the load listener — which would race with the iframe reload
-    // that srcDoc changes trigger. Whether an alternative body replaces the
-    // iframe IS a dep: switching renderers mounts a fresh iframe that needs
-    // the handlers attached.
-  }, [selectedEmail?.html, !!AltBody]);
+    // that srcDoc changes trigger. The frame element itself is tracked by
+    // useFrameEffect: View Source and the alternative body both mount a fresh
+    // iframe on the same html, and it needs the handlers attached.
+  }, [selectedEmail?.html]);
 
   const openInWindow = async () => {
     const invoke = window.__TAURI__?.core?.invoke;

@@ -23,6 +23,7 @@ import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../
 import { attachImageDoubleClick } from '../../utils/emailImages';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
+import { useFrameEffect } from '../../hooks/useFrameEffect';
 import { useMailFonts } from '../../hooks/useMailFonts';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
@@ -258,9 +259,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   useSearchHighlight(iframeRef, iframeContent);
   useMailFonts(iframeRef);
 
-  useEffect(() => {
-    if (!iframeRef.current) return;
-    const iframe = iframeRef.current;
+  useFrameEffect(iframeRef, (iframe) => {
     const setup = () => {
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -295,8 +294,9 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     iframe.addEventListener('load', setup);
     setup(); // in case already loaded
     return () => iframe.removeEventListener('load', setup);
-  // !!Alt: switching the renderer swaps the iframe in or out, and a fresh iframe needs its handlers.
-  }, [email, !!Alt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The frame element is tracked by useFrameEffect: the renderer switch and the
+  // loading spinner both mount a fresh iframe on the same message.
+  }, [email]);
 
   return (
     <>

@@ -17,6 +17,7 @@ const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { useThemeStore } = await import('../../../stores/themeStore');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { usePrivacyStore } = await import('../../../stores/privacyStore');
+const { useMailStore } = await import('../../../stores/mailStore');
 
 const seen = [];
 // The handle is { selectionRoot(), selectionText() }; the text carries a newline the DOM text does not.
@@ -43,6 +44,16 @@ afterEach(() => {
 const select = (node) => { const r = document.createRange(); r.selectNodeContents(node); const s = document.getSelection(); s.removeAllRanges(); s.addRange(r); };
 
 describe('full view on the body seam', () => {
+  it('opened while the store is loading: the iframe behind the spinner has its handlers', async () => {
+    useSettingsStore.setState({ emailRenderer: 'web' });
+    useMailStore.setState({ loadingEmail: true });
+    try {
+      render(<FullViewEmailModal email={email} onClose={() => {}} />);
+      const frame = await waitFor(() => { const f = document.querySelector('iframe'); expect(f).not.toBeNull(); return f; });
+      expect(dblclick).toContain(frame.contentDocument);
+    } finally { useMailStore.setState({ loadingEmail: false }); }
+  });
+
   it('draws through Alt with the same pre-processed body and fills the dialog', () => {
     render(<FullViewEmailModal email={email} onClose={() => {}} />);
     expect(document.querySelector('iframe')).toBeNull();
