@@ -1124,7 +1124,9 @@ impl GraphClient {
     }
 
     /// Create a mail folder. If `parent_folder_id` is provided, creates a child folder.
-    /// Handles 409 Conflict (folder already exists) by listing folders and returning the match.
+    /// Handles 409 Conflict (folder already exists) by listing the folders it
+    /// would sit among (the parent's children, or the top level) and
+    /// returning the match: never a namesake elsewhere in the mailbox.
     pub async fn create_folder(
         &self,
         display_name: &str,
@@ -1151,7 +1153,10 @@ impl GraphClient {
 
         // 409 Conflict = folder already exists — find and return it
         if status.as_u16() == 409 {
-            let folders = self.list_folders().await?;
+            let folders = match parent_folder_id {
+                Some(parent_id) => self.list_child_folders(parent_id).await?,
+                None => self.list_folders().await?,
+            };
             return folders
                 .into_iter()
                 .find(|f| f.display_name.eq_ignore_ascii_case(display_name))
@@ -1184,6 +1189,32 @@ impl GraphClient {
         resp.json()
             .await
             .map_err(|e| format!("Graph create_folder parse error: {}", e))
+    }
+
+    /// The folders directly under `parent_id`, every page of them.
+    pub async fn list_child_folders(&self, parent_id: &str) -> Result<Vec<GraphMailFolder>, String> {
+        let mut url = format!("{}/me/mailFolders/{}/childFolders?$top=100", graph_base(), parent_id);
+        let mut out = Vec::new();
+        loop {
+            let resp = self
+                .client
+                .send(self.client.get(&url).bearer_auth(&self.access_token))
+                .await
+                .map_err(|e| format!("Graph list_child_folders request failed: {}", e))?;
+            let status = resp.status();
+            if !status.is_success() {
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph list_child_folders failed ({}) {}", status.as_u16(), body));
+            }
+            let page: GraphListResponse<GraphMailFolder> =
+                resp.json().await.map_err(|e| format!("Graph list_child_folders parse error: {}", e))?;
+            out.extend(page.value);
+            match page.next_link {
+                Some(next) if is_graph_link(&next) => url = next,
+                Some(_) => return Err("Graph list_child_folders refused a nextLink outside the Graph base".into()),
+                None => return Ok(out),
+            }
+        }
     }
 
     /// Rename a folder. Graph names folders, it does not path them, so this is
