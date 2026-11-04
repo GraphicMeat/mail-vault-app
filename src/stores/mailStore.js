@@ -173,6 +173,20 @@ useViewHideStore.subscribe((state, prev) => {
   if (state.keys !== prev.keys) useMailStore.getState().updateSortedEmails();
 });
 
+// The Sent mirror is a window onto the folder, as far back as the INBOX list
+// reaches: the list loading older mail adds the Sent rows it now spans. Once a
+// burst of loads is over, not on every row written.
+let _sentWindowTimer = null;
+useMailStore.subscribe((state, prev) => {
+  if (state.emails === prev.emails) return;
+  clearTimeout(_sentWindowTimer);
+  _sentWindowTimer = setTimeout(() => {
+    import('../services/workflows/loadEmails')
+      .then(({ extendSentWindows }) => extendSentWindows())
+      .catch((e) => console.warn('[mailStore] Sent window not extended:', e));
+  }, 150);
+});
+
 // A due follow-up reminder is pinned above the inbox list, never a row of it
 // (components/FollowUpPinnedRows.jsx), but an unread one counts in the
 // account's badge: one going due, opened or dismissed moves the number.

@@ -3650,7 +3650,7 @@ export async function moveEmails(keys, targetMailbox) {
   // All inboxes) loses just those uids from its own cache: a removal names the
   // folder it is filed under, so it cannot reach the branch root's.
   for (const g of groups.values()) {
-    if (g !== own) await db.saveEmailHeaders(g.accountId, g.mailbox, [], null, { removedUids: g.uids });
+    if (isUnified || g !== own) await db.saveEmailHeaders(g.accountId, g.mailbox, [], null, { removedUids: g.uids });
   }
 
   _invalidateRestore(activeAccountId);

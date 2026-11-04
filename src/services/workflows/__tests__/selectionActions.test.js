@@ -1352,7 +1352,12 @@ describe('moveEmails', () => {
 
     await state.moveEmails(state.emails.map(e => selectionKey(e, state)), 'Archive');
 
-    expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
+    // Only the moved uids, each cut from the folder it is filed in: no listing
+    // rows, no total, and nothing under the branch root's name for another folder's row.
+    expect(mockSaveEmailHeaders.mock.calls).toEqual([
+      ['acct1', 'Kunden', [], null, { removedUids: [1] }],
+      ['acct1', 'Kunden.Company XY', [], null, { removedUids: [1] }],
+    ]);
   });
 
   it('re-lists the branch after the move instead of collapsing to its root', async () => {

@@ -21,9 +21,11 @@ import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore.js';
  * @param {string} [mailbox='INBOX']
  * @returns {Promise<{ started: boolean, accountId: string, mailbox: string, ticket: number }>}
  */
-export async function syncNow(account, mailbox = 'INBOX') {
+export async function syncNow(account, mailbox = 'INBOX', { complete = false } = {}) {
   const autoClassify = hasPremiumAccess(useSettingsStore.getState().billingProfile);
-  return daemonCall('sync.now', { account, mailbox, autoClassify });
+  // `complete`: after syncing, the daemon fills the cache with every row the
+  // provider has for the folder and prunes the ones it no longer lists.
+  return daemonCall('sync.now', complete ? { account, mailbox, autoClassify, complete } : { account, mailbox, autoClassify });
 }
 
 /**

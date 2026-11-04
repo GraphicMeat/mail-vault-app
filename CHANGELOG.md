@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- The Sent mail shown inside your conversations is now your whole Sent folder, for every kind of account, not its newest 200. MailVault reads all of Sent from its cache and downloads the rest in the background a page at a time, so a thread's older replies show up in it.
+- Your whole Sent folder is now kept for every kind of account, not its newest 200, and a very large one (tens of thousands of emails) no longer slows MailVault down. A background helper downloads the rest of Sent and drops what you deleted elsewhere; the conversations show the replies as far back as the inbox list reaches, and scrolling the inbox back brings the older replies in. An email you move out of Sent no longer reappears in it.
 
 - On a Microsoft 365 or Hotmail account, a refresh now re-checks the older emails it kept in the list: one deleted in another app drops out, a flag changed there comes through, and one restored from Deleted Items appears. It walks them in the background, at most once every few minutes.
 
