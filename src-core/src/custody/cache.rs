@@ -207,6 +207,37 @@ pub fn load_headers(conn: &Connection, account: &str, mailbox: &str, limit: Opti
     serde_json::to_string(&out).map(Some).map_err(|e| e.to_string())
 }
 
+/// A mailbox's newest headers BY DATE (`sort_ms DESC, uid DESC`) back to
+/// `since_ms`, and never fewer than `min_rows`: the window a list can use, read
+/// the same whatever order the folder is otherwise read in (an IMAP cache is
+/// read by uid, where a message moved in long after it was sent holds the top uid).
+pub fn load_headers_window(conn: &Connection, account: &str, mailbox: &str, since_ms: i64, min_rows: usize) -> Result<Option<String>, String> {
+    let meta: Option<String> = conn.query_row(
+        "SELECT meta_json FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
+        params![account, mailbox], |r| r.get(0),
+    ).optional().map_err(err)?;
+    let count: i64 = conn.query_row(
+        "SELECT count(*) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get(0)
+    ).map_err(err)?;
+    if meta.is_none() && count == 0 { return Ok(None); }
+    let within: i64 = conn.query_row(
+        "SELECT count(*) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND sort_ms>=?3",
+        params![account, mailbox, since_ms], |r| r.get(0)
+    ).map_err(err)?;
+    let take = within.max(min_rows as i64);
+    let mut stmt = conn.prepare(
+        "SELECT header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 ORDER BY sort_ms DESC, uid DESC LIMIT ?3",
+    ).map_err(err)?;
+    let rows = stmt.query_map(params![account, mailbox, take], |r| r.get::<_, String>(0)).map_err(err)?
+        .collect::<Result<Vec<_>, _>>().map_err(err)?;
+    let emails = rows.into_iter().filter_map(|s| serde_json::from_str::<Value>(&s).ok()).collect::<Vec<_>>();
+    let mut out = match meta { Some(text) => serde_json::from_str::<Value>(&text).map_err(|e| format!("stored cache metadata: {e}"))?, None => json!({}) };
+    let map = out.as_object_mut().ok_or("stored cache metadata is not an object")?;
+    map.insert("emails".into(), Value::Array(emails));
+    map.insert("totalCached".into(), json!(count));
+    serde_json::to_string(&out).map(Some).map_err(|e| e.to_string())
+}
+
 pub fn load_meta(conn: &Connection, account: &str, mailbox: &str) -> Result<Option<String>, String> {
     // No rows come back at all, so the order is irrelevant here.
     let Some(text) = load_headers(conn, account, mailbox, Some(0), HeaderOrder::Arrival)? else { return Ok(None) };
@@ -1388,6 +1419,46 @@ mod tests {
                 {"ym": "2020-12", "count": 1},
             ])
         );
+    }
+
+    /// The Sent window by DATE: an IMAP cache is read by uid, and a message
+    /// moved or appended long after it was sent holds the top uid, so reading the
+    /// newest N by uid says nothing about how far back the dates reach.
+    #[test]
+    fn load_headers_window_reads_by_date_whatever_the_uid_order() {
+        let (_t, c) = store();
+        for uid in 1..=300i64 { insert(&c, "a", "Sent", uid, 1_000 + uid); }
+        insert(&c, "a", "Sent", 301, 5); // old mail with the top uid
+        insert(&c, "a", "Other", 1, 9_999); // another folder never leaks in
+
+        let uids = |text: Option<String>| -> (Vec<u64>, i64) {
+            let v: Value = serde_json::from_str(&text.unwrap()).unwrap();
+            let rows = v["emails"].as_array().unwrap();
+            (rows.iter().map(|r| r["uid"].as_u64().unwrap()).collect(), v["totalCached"].as_i64().unwrap())
+        };
+        for uid in 1..=301i64 {
+            c.execute("UPDATE header_cache SET header_json=?1 WHERE account_id='a' AND mailbox_path='Sent' AND uid=?2",
+                params![json!({"uid": uid}).to_string(), uid]).unwrap();
+        }
+
+        // Fewer than the minimum fall within the date: the minimum wins, newest by date first.
+        let (rows, total) = uids(load_headers_window(&c, "a", "Sent", 1_250, 200).unwrap());
+        assert_eq!(total, 301);
+        assert_eq!(rows.len(), 200);
+        assert_eq!((rows[0], rows[199]), (300, 101));
+        assert!(!rows.contains(&301));
+
+        // More than the minimum fall within the date: all of them, and not the old one.
+        let (rows, _) = uids(load_headers_window(&c, "a", "Sent", 1_050, 200).unwrap());
+        assert_eq!(rows.len(), 251);
+        assert_eq!((rows[0], rows[250]), (300, 50));
+
+        // Reaching back past everything takes the whole folder, old row last.
+        let (rows, _) = uids(load_headers_window(&c, "a", "Sent", 0, 200).unwrap());
+        assert_eq!(rows.len(), 301);
+        assert_eq!(rows[300], 301);
+
+        assert!(load_headers_window(&c, "a", "Empty", 0, 200).unwrap().is_none());
     }
 
     /// Past SQLite's bound-parameter limit (32766) a single `IN (...)`

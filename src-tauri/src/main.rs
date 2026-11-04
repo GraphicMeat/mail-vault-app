@@ -3123,6 +3123,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "cached_attachment_path"
         | "save_email_cache"
         | "load_email_cache_partial"
+        | "load_email_cache_window"
         | "load_email_cache_meta"
         | "load_email_cache_by_uids"
         | "list_cached_uids"
@@ -4754,7 +4755,7 @@ mod tests {
         for method in [
             "maildir_read", "maildir_read_light", "maildir_exists", "maildir_store", "maildir_delete",
             "maildir_delete_many", "maildir_set_flags", "cached_attachment_path",
-            "save_email_cache", "load_email_cache_partial", "load_email_cache_meta", "load_email_cache_by_uids",
+            "save_email_cache", "load_email_cache_partial", "load_email_cache_window", "load_email_cache_meta", "load_email_cache_by_uids",
             "list_cached_uids", "header_cache_month_histogram", "save_mailbox_cache", "load_mailbox_cache", "delete_mailbox_cache",
             "load_graph_id_map", "op_journal_queue", "op_journal_clear", "op_journal_read",
             "read_pending_operation", "save_pending_operation", "clear_pending_operation", "local_index_read",

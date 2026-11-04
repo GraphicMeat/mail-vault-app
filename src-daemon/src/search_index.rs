@@ -40,7 +40,7 @@ pub fn is_foreground_method(method: &str) -> bool {
         method,
         "maildir_read" | "maildir_read_light" | "maildir_read_light_batch" | "maildir_read_raw_source"
             | "maildir_read_attachment" | "maildir_read_attachments" | "maildir_set_flags" | "maildir_delete"
-            | "maildir_delete_many" | "load_email_cache_partial" | "load_email_cache_by_uids" | "vault_rows"
+            | "maildir_delete_many" | "load_email_cache_partial" | "load_email_cache_window" | "load_email_cache_by_uids" | "vault_rows"
             | "vault_search" | "mail_search_start" | "imap_set_flags" | "imap_delete_email" | "delete_queue.submit" | "messages.restore" | "imap_move_emails"
             | "graph_set_read" | "graph_set_flagged" | "graph_delete_message" | "graph_move_emails"
             | "archive_emails" | "bulk_delete_emails" | "search.suggest" | "views.evaluate" | "body.scan"

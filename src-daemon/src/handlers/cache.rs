@@ -389,6 +389,23 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .and_then(|r| r),
             )
         }
+        "load_email_cache_window" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let since_ms = params["sinceMs"].as_i64().unwrap_or(0);
+            let min_rows = req!(u32_arg(&id, params, "minRows")) as usize;
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    vault_root(&state)?;
+                    let text = daemon_custody::with_conn(&state, |c| sql_cache::load_headers_window(c, &account_id, &mailbox, since_ms, min_rows))?;
+                    Ok(text.map_or(Value::Null, |t| Value::String(with_snippets(&state, &account_id, &mailbox, t))))
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
         "load_email_cache_meta" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
@@ -725,6 +742,21 @@ mod tests {
         let r = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7]})).await.result.unwrap();
         assert!(r.is_array());
         assert_eq!(r[0]["subject"], "hi");
+    }
+
+    #[tokio::test]
+    async fn load_email_cache_window_answers_a_json_text_of_the_rows_back_to_the_date() {
+        let (_t, s) = st(true);
+        let rows: Vec<Value> = (1..=5).map(|uid| json!({"uid": uid, "date": format!("2026-01-0{uid}T10:00:00Z")})).collect();
+        call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "Sent", "data": json!({"emails": rows, "totalEmails": 5}).to_string()})).await;
+        let since = chrono::DateTime::parse_from_rfc3339("2026-01-04T00:00:00Z").unwrap().timestamp_millis();
+        let r = call(&s, "load_email_cache_window", json!({"accountId": "a", "mailbox": "Sent", "sinceMs": since, "minRows": 1})).await.result.unwrap();
+        let page: Value = serde_json::from_str(r.as_str().unwrap()).unwrap();
+        let uids: Vec<u64> = page["emails"].as_array().unwrap().iter().map(|e| e["uid"].as_u64().unwrap()).collect();
+        assert_eq!(uids, vec![5, 4]);
+        assert_eq!(page["totalCached"], 5);
+        let missing = call(&s, "load_email_cache_window", json!({"accountId": "a", "mailbox": "Nope", "sinceMs": 0, "minRows": 1})).await.result.unwrap();
+        assert!(missing.is_null());
     }
 
     #[tokio::test]
