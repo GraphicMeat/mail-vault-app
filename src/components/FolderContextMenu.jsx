@@ -21,7 +21,9 @@ import { specialOrInbox, trashPathOf, folderDelimiter } from '../services/workfl
  *
  * Move folder (`onMove`, when the caller can move folders) is for a custom
  * server folder only: it retires the original, which a folder addressed by
- * role cannot be, and a local folder is on no server to move from.
+ * role cannot be, and a local folder is on no server to move from. Not while
+ * an import runs either: the retire renames the original's vault folders,
+ * which the import may be filling.
  */
 export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, onRename, onMove, onDelete, onSetColor, importRunning = false }) {
   const t = useT();
@@ -69,7 +71,7 @@ export function FolderContextMenu({ menu, mailboxes, onClose, onNewSubfolder, on
         <Pencil size={14} />{t('sidebar.renameFolder')}
       </MenuItem>
       {onMove && !locked && (
-        <MenuItem onClick={() => { onClose(); onMove(node); }}>
+        <MenuItem disabled={importRunning} onClick={() => { onClose(); onMove(node); }}>
           <FolderInput size={14} />{t('sidebar.moveFolder')}
         </MenuItem>
       )}

@@ -159,6 +159,17 @@ describe('FolderContextMenu Move folder', () => {
     expect(move(node).item).toBeUndefined();
   });
 
+  // The move ends by renaming the original's vault folders, which an import
+  // may be filling.
+  it('offers it disabled while an import runs', () => {
+    const onMove = vi.fn();
+    draw({ path: 'Projects', name: 'Projects' }, { onMove, importRunning: true });
+    const moveItem = item(t('sidebar.moveFolder'));
+    expect(moveItem.disabled).toBe(true);
+    fireEvent.click(moveItem);
+    expect(onMove).not.toHaveBeenCalled();
+  });
+
   it('shows nothing to move with when the caller cannot move folders', () => {
     draw({ path: 'Projects', name: 'Projects' });
     expect(item(t('sidebar.moveFolder'))).toBeUndefined();
