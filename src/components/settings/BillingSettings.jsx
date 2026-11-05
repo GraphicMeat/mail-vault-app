@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess, selectOwnAddresses } from '../../stores/settingsStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { useBackupStore } from '../../stores/backupStore';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
@@ -134,15 +134,16 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   const setBillingEmail = useSettingsStore(s => s.setBillingEmail);
   const setBillingProfile = useSettingsStore(s => s.setBillingProfile);
   const accounts = useAccountStore(s => s.accounts);
+  const aliases = useSettingsStore(s => s.aliases);
+  const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
 
-  // Deduplicated list of account emails
+  // Deduplicated list of every account's own addresses: logins and aliases
   const accountEmails = useMemo(() => {
     const seen = new Set();
     return accounts
-      .map(a => a.email)
-      .filter(Boolean)
+      .flatMap(a => selectOwnAddresses({ aliases, sendAsAddresses }, a))
       .filter(e => { const lower = e.toLowerCase(); if (seen.has(lower)) return false; seen.add(lower); return true; });
-  }, [accounts]);
+  }, [accounts, aliases, sendAsAddresses]);
 
   // Selected email: prefer billingEmail if it matches an account, else first account
   const [selectedEmail, setSelectedEmail] = useState(() => {
@@ -527,7 +528,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
           /* Signed out: account dropdown + sign in */
           <div className="flex gap-2">
             <select aria-label={t('account.emailAddress')}
-              value={selectedEmail}
+              value={accountEmails.find(e => e.toLowerCase() === selectedEmail.toLowerCase()) ?? selectedEmail}
               onChange={e => { setSelectedEmail(e.target.value); setSignInNotice(null); }}
               className="flex-1 min-w-0 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
             >

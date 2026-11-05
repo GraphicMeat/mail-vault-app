@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Settings > Billing now lists your aliases next to your account addresses, so you can sign in to Premium or subscribe with an alias.
+
 - In the Blitz renderer, a quoted message you open with the ⋯ button now stays open. Where scrollbars stay visible (Windows, Linux, a Mac set to always show them or with a mouse attached), it appeared and vanished again when opening it made the message long enough to scroll. An open quote also stays open when the reading pane changes width or you choose Load external content.
 
 - Search terms stay highlighted in the message after you turn View Source off. The redrawn body had lost them until you changed the search or opened another message
