@@ -279,6 +279,7 @@ export const settingSearchGroups = [
   { id: 'security', settings: [
     ['settings.security.linkSafetyScanning', 'security link safety scanning phishing malicious url check'],
     ['settings.security.clickConfirmation', 'security click confirmation links warn before opening'],
+    ['settings.security.askBeforeExternalContent', 'security privacy external content remote images pictures load block ask automatically'],
   ] },
   { id: 'encryption', settings: [
     ['pgp.keyLabel', 'openpgp pgp gpg gnupg encryption encrypted decrypt secret private key import armored'],

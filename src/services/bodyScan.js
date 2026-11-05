@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { create } from 'zustand';
 import { send } from './transport';
 import { t, getLocale } from '../i18n/index.js';
 import { stripGoogleFontImports } from '../utils/mailFonts';
 import { noteFramedBody } from '../stores/netActivityStore';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { useSettingsStore } from '../stores/settingsStore';
 
 /**
  * The reader's scan of a mail body, asked of the daemon (`body.scan`,
@@ -20,6 +22,14 @@ import { emailScopeKey } from '../stores/slices/unifiedHelpers';
  * session, so a re-render or a theme toggle never asks again. A failed call is
  * not kept, and answers `scanned: false` with the body as given: the renderer
  * then frames it with remote images refused (UNSCANNED_HEAD), never as "clean".
+ *
+ * "Ask before loading external content" (`holdExternalContent`) is a decision
+ * about the frame, not about the scan: the body is never rewritten, so "Load
+ * external content" asks the daemon nothing. A scan framed under it says
+ * `holding`, and the frame refuses what the body would fetch: the CSP below in
+ * an iframe, `allowRemote` off on Blitz, which fetches images itself. `remote`,
+ * the daemon's count, only decides whether a load is worth offering, so what it
+ * misses stays out too.
  */
 
 /** The catalog keys whose templates the daemon writes reasons and markers with. */
@@ -44,6 +54,13 @@ export const bodyTexts = () => Object.fromEntries(BODY_TEXT_KEYS.map(k => [k, t(
  * fires. A second CSP <meta>: policies intersect, so it only narrows.
  */
 export const UNSCANNED_HEAD = '<meta http-equiv="Content-Security-Policy" content="img-src data: blob: cid:">';
+
+/**
+ * While a body's external content is held back: everything a frame can fetch,
+ * because a pop-out window loads from file:// and inherits no app CSP. Not
+ * default-src, which would reach script-src and stop our own nonced scripts.
+ */
+export const EXTERNAL_HELD_HEAD = `<meta http-equiv="Content-Security-Policy" content="img-src data: blob: cid:; media-src data: blob:; font-src data: blob:; style-src 'unsafe-inline'; frame-src 'none'; object-src 'none'; connect-src data: blob:">`;
 
 /** The marks on a flagged link, placed in the frame's <head> when any link is flagged. */
 export const LINK_ALERT_STYLE = `
@@ -73,11 +90,13 @@ export const LINK_ALERT_STYLE = `
   }
 `;
 
-/** What a renderer puts in the frame's <head> for this scan: the link marks, or the image refusal. */
+/** What this scan's frame must refuse, or nothing. Every frame carries this, however it builds its head. */
+export const refusalHead = (scan) => (scan?.holding ? EXTERNAL_HELD_HEAD : scan && !scan.scanned ? UNSCANNED_HEAD : '');
+
+/** What a renderer puts in the frame's <head> for this scan: the refusal, and the link marks. */
 export function scanHead(scan) {
   if (!scan) return '';
-  if (!scan.scanned) return UNSCANNED_HEAD;
-  return scan.alerts.length > 0 ? `<style>${LINK_ALERT_STYLE}</style>` : '';
+  return `${refusalHead(scan)}${scan.alerts.length > 0 ? `<style>${LINK_ALERT_STYLE}</style>` : ''}`;
 }
 
 /**
@@ -103,17 +122,64 @@ export const SCAN_BUDGET_MS = 30000;
 // The last answer per message key, for the row and header tooltips.
 const trackersByKey = new Map();
 const alertsByKey = new Map();
+// The messages the user said "load" for this session, by holdKey. Not kept
+// across launches: the next open of a message asks again, as Apple Mail does.
+const useExternalAllowed = create(() => ({ keys: new Set() }));
 
 export function _resetBodyScans() {
   answers.clear();
   trackersByKey.clear();
   alertsByKey.clear();
+  useExternalAllowed.setState({ keys: new Set() });
+}
+
+/** "Load external content" for the message a held scan names (`scan.holdKey`). */
+export function allowExternalContent(holdKey) {
+  if (!holdKey) return;
+  useExternalAllowed.setState(s => ({ keys: new Set(s.keys).add(holdKey) }));
+}
+
+// The message, or for a surface with no scoped key (a preview, a quoted
+// original), its body.
+const holdKeyOf = (html, key) => key || bodyStamp(html || '');
+
+/** How long a frame waits for its window's settings before drawing without them. */
+export const SETTINGS_WAIT_MS = 5000;
+
+/**
+ * Has this window read its settings? A detached window gets its body by event
+ * and its settings over an async RPC: framed first, a body loads under the
+ * default and its images have fired by the time "on" arrives. Bounded, because
+ * a failed read never fires the listener (adoptGraphFolderKeys HYDRATION_WAIT_MS).
+ */
+function useSettingsRead() {
+  const persist = useSettingsStore.persist;
+  const known = () => !persist?.hasHydrated || persist.hasHydrated();
+  const [read, setRead] = useState(known);
+  useEffect(() => {
+    if (read) return undefined;
+    if (known()) {
+      setRead(true);
+      return undefined;
+    }
+    const timer = setTimeout(() => setRead(true), SETTINGS_WAIT_MS);
+    const stop = persist.onFinishHydration(() => setRead(true));
+    return () => { clearTimeout(timer); stop(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return read;
+}
+
+/** A scan as its frame draws it. The setting off hands back the scan itself. */
+function scanAsFramed(scan, html, key) {
+  if (!scan || !useSettingsStore.getState().holdExternalContent) return scan;
+  const holdKey = holdKeyOf(html, key);
+  return { ...scan, holdKey, holding: !useExternalAllowed.getState().keys.has(holdKey) };
 }
 
 const idOf = (html, { key, blocking, links } = {}) =>
   `${key || ''}\u0000${bodyStamp(html)}\u0000${getLocale()}\u0000${blocking ? 1 : 0}${links ? 1 : 0}`;
 
-const emptyScan = (html) => ({ trackers: [], count: 0, https: 0, summary: null, html: html || '', alerts: [], maxAlertLevel: null, scanned: true });
+const emptyScan = (html) => ({ trackers: [], count: 0, https: 0, remote: 0, summary: null, html: html || '', alerts: [], maxAlertLevel: null, scanned: true });
 
 /** The body as given, not scanned: framed with remote images refused. */
 export const unscanned = (html) => ({ ...emptyScan(html), scanned: false });
@@ -123,6 +189,7 @@ function framed(body, ans) {
     trackers: Array.isArray(ans?.trackers) ? ans.trackers : [],
     count: ans?.count || 0,
     https: ans?.https || 0,
+    remote: ans?.remote || 0,
     summary: ans?.summary || null,
     html: typeof ans?.html === 'string' ? ans.html : body,
     alerts: Array.isArray(ans?.alerts) ? ans.alerts : [],
@@ -138,7 +205,7 @@ export function peekBodyScan(html, opts = {}) {
 }
 
 /**
- * Scan a body: `{ trackers, count, https, summary, html, alerts, maxAlertLevel, scanned }`.
+ * Scan a body: `{ trackers, count, https, remote, summary, html, alerts, maxAlertLevel, scanned }`.
  * `opts.key` is the scoped message key (`emailScopeKey`), null when the
  * message cannot be located: never a bare uid. `blocking` swaps in the cleaned
  * body (premium, `isTrackerBlockingActive`); `links` runs the link scan.
@@ -196,7 +263,7 @@ function noteFramed(scan, html, opts = {}) {
  * tracker backfill) counts nothing.
  */
 export async function scanForFrame(html, opts = {}) {
-  const scan = await scanBody(html, opts);
+  const scan = scanAsFramed(await scanBody(html, opts), html, opts.key);
   noteFramed(scan, html, opts);
   return scan;
 }
@@ -204,7 +271,9 @@ export async function scanForFrame(html, opts = {}) {
 /**
  * The scan of `html` for a renderer: the answer, or undefined while it is
  * asked. A renderer frames nothing until it has one: framing the raw body
- * first would fire the beacons blocking is about to strip.
+ * first would fire the beacons blocking is about to strip. Re-renders with the
+ * same object until the answer or the user's decision on this message changes:
+ * a frame memoizes on it, and another message's load must not reload this one.
  */
 export function useBodyScan(html, opts = {}) {
   const { key = null, blocking = false, links = false } = opts;
@@ -212,7 +281,15 @@ export function useBodyScan(html, opts = {}) {
   // The last answer this renderer got, kept here too: the shared cache may
   // drop it (500 other bodies scanned meanwhile) while the frame still shows it.
   const [held, setHeld] = useState(null);
-  const value = peekBodyScan(html, { key, blocking, links }) ?? (held?.id === id ? held.scan : undefined);
+  const answer = peekBodyScan(html, { key, blocking, links }) ?? (held?.id === id ? held.scan : undefined);
+  const settingsRead = useSettingsRead();
+  const holdOn = useSettingsStore(s => !!s.holdExternalContent);
+  const holdKey = useMemo(() => (holdOn ? holdKeyOf(html, key) : null), [holdOn, html, key]);
+  const allowed = useExternalAllowed(s => s.keys.has(holdKey));
+  const value = useMemo(() => {
+    if (!settingsRead) return undefined;
+    return answer && holdOn ? { ...answer, holdKey, holding: !allowed } : answer;
+  }, [settingsRead, answer, holdOn, holdKey, allowed]);
   useEffect(() => {
     if (!html) return undefined;
     const known = peekBodyScan(html, { key, blocking, links });

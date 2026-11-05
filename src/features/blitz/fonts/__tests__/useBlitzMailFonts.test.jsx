@@ -7,17 +7,17 @@ vi.mock('../../../../services/fontService', () => ({
   refreshFonts: vi.fn().mockResolvedValue({}),
   useFontStore: { getState: () => ({ installed: ['Lora'] }) },
 }));
-vi.mock('../../../../stores/settingsStore', () => ({ isTrackerBlockingActive: vi.fn(() => false) }));
+vi.mock('../../../../stores/settingsStore', () => ({ refusesMailFontDownloads: vi.fn(() => false) }));
 import { fontsRender } from '../../service';
 import { familyForMail, refreshFonts } from '../../../../services/fontService';
-import { isTrackerBlockingActive } from '../../../../stores/settingsStore';
+import { refusesMailFontDownloads } from '../../../../stores/settingsStore';
 import { prepareMailFonts, useBlitzMailFonts } from '../useBlitzMailFonts';
 
 const parse = (b) => new DOMParser().parseFromString(`<body>${b}</body>`, 'text/html');
 
 beforeEach(() => {
   vi.clearAllMocks();
-  isTrackerBlockingActive.mockReturnValue(false);
+  refusesMailFontDownloads.mockReturnValue(false);
 });
 
 describe('Blitz mail fonts', () => {
@@ -36,16 +36,16 @@ describe('Blitz mail fonts', () => {
     expect(familyForMail.mock.calls[0][1]()).toBe(false);
   });
 
-  it('tracker blocking: familyForMail says no, nothing is sent', async () => {
-    isTrackerBlockingActive.mockReturnValue(true);
+  it('fonts refused: familyForMail says no, nothing is sent', async () => {
+    refusesMailFontDownloads.mockReturnValue(true);
     familyForMail.mockImplementation(async (_f, blocking) => !blocking());
     renderHook(() => useBlitzMailFonts({ families: ['Merriweather'], messageKey: 'k' }));
     await waitFor(() => expect(familyForMail).toHaveBeenCalled());
     expect(fontsRender).not.toHaveBeenCalled();
   });
 
-  it('tracker blocking: the blocking probe reads the live setting, installed fonts still go through fonts.read', async () => {
-    isTrackerBlockingActive.mockReturnValue(true);
+  it('fonts refused: the blocking probe reads the live setting, installed fonts still go through fonts.read', async () => {
+    refusesMailFontDownloads.mockReturnValue(true);
     const doc = parse('<p style="font-family: Lora">a</p><p style="font-family: Merriweather">b</p>');
     const r = await prepareMailFonts(doc);
     expect(r).toEqual({ installed: ['Lora'], pending: ['Merriweather'] });

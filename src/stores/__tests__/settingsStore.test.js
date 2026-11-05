@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // Mock safeStorage (localStorage substitute)
 vi.mock('../safeStorage', () => {
@@ -15,6 +15,7 @@ vi.mock('../safeStorage', () => {
 const {
   useSettingsStore,
   isTrackerBlockingActive,
+  refusesMailFontDownloads,
   DEFAULT_SHORTCUTS,
   _mergePersistedSettings,
   effectiveSearchMailboxConcurrency,
@@ -23,6 +24,39 @@ const {
   normalizeBackupMailboxConcurrency,
   DEFAULT_AI_SETTINGS,
 } = await import('../settingsStore');
+
+describe('ask before loading external content', () => {
+  const PREMIUM = { hasSubscription: true, status: 'active', premiumAccess: true };
+  const FREE = { hasSubscription: false };
+  afterEach(() => useSettingsStore.getState().resetSettings());
+
+  it('is off by default: mail keeps loading as it always did, and a reset returns there', () => {
+    useSettingsStore.setState({ holdExternalContent: true });
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().holdExternalContent).toBe(false);
+  });
+
+  it('survives a relaunch: the persisted choice wins over the default', () => {
+    const merged = _mergePersistedSettings({ holdExternalContent: true }, useSettingsStore.getInitialState());
+    expect(merged.holdExternalContent).toBe(true);
+    expect(_mergePersistedSettings({}, useSettingsStore.getInitialState()).holdExternalContent).toBe(false);
+  });
+
+  it('is not a Premium switch: a free account can turn it on', () => {
+    useSettingsStore.setState({ billingProfile: FREE, shareGrant: null, holdExternalContent: false });
+    useSettingsStore.getState().setHoldExternalContent(true);
+    expect(useSettingsStore.getState().holdExternalContent).toBe(true);
+  });
+
+  it('refuses a mail font download, which is a request a mail would cause', () => {
+    useSettingsStore.setState({ billingProfile: FREE, shareGrant: null, trackerBlockingEnabled: true, holdExternalContent: false });
+    expect(refusesMailFontDownloads()).toBe(false);
+    useSettingsStore.setState({ holdExternalContent: true });
+    expect(refusesMailFontDownloads()).toBe(true);
+    useSettingsStore.setState({ billingProfile: PREMIUM, shareGrant: null, holdExternalContent: false });
+    expect(refusesMailFontDownloads()).toBe(true);
+  });
+});
 
 describe('settingsStore defaults', () => {
   it('has cacheLimitMB default of 128', () => {

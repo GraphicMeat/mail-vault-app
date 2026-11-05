@@ -47,7 +47,8 @@ import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
-import { useBodyScan, scanForFrame, scanHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
+import { useBodyScan, scanForFrame, scanHead, refusalHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
+import { ExternalContentBar } from './email/ExternalContentBar';
 import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder, vaultHas } from '../stores/slices/unifiedHelpers';
 import { isRowArchived, withArchivedState } from '../utils/quickActionFacts';
@@ -665,7 +666,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     const popupHtml = buildEmailIframeHtml({
       bodyHtml: popupBody,
       themeTag: effectiveEmailTheme,
-      extraHead: `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : ''}${popupScan.scanned ? '' : scanHead(popupScan)}`,
+      extraHead: `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : ''}${refusalHead(popupScan)}`,
       nonce: popupNonce,
     });
     invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
@@ -870,6 +871,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
               {t('viewer.showingPreviewWhileDownloading')}
             </p>
           )}
+          {!showRaw && selectedEmail.html && <ExternalContentBar scan={bodyScan} className="mb-2" />}
           {showRaw && (rawSource || rawError) ? (
             sourceBlocked ? <SourceBlocked /> : (
               <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all" data-testid={rawError ? 'email-raw-error' : undefined}>
@@ -894,7 +896,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
                   ref={altBodyRef} surface="reader" messageKey={scopeKey} bodyHtml={altBodyHtml} indicatorCss={indicatorCss}
                   plainText={selectedEmail.text} theme={{ dark: emailDarkMode, palette }} signatureDisplay={signatureDisplay}
                   foldQuotes privacy={privacyOn} searchQuery={searchQueryForHighlight} accountId={selectedEmail._accountId}
-                  message={selectedEmail} onLink={onAltLink} sizing="content"
+                  message={selectedEmail} onLink={onAltLink} sizing="content" allowRemote={!bodyScan.holding}
                 />
               )) : (
                 <iframe

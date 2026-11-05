@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { buildEmailIframeHtml, getEmailBodyContent } from '../../utils/emailIframeTemplate';
-import { useBodyScan, UNSCANNED_HEAD } from '../../services/bodyScan';
+import { useBodyScan, refusalHead } from '../../services/bodyScan';
+import { ExternalContentBar } from './ExternalContentBar';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
 import { useMailFonts } from '../../hooks/useMailFonts';
@@ -12,10 +13,10 @@ import { useAltBodyRenderer } from './bodyRendererRegistry';
 // Same document the reading pane builds — the nonce script CSP and, when
 // tracker blocking is active, the body with its beacons swapped out — so
 // opening a message here phones home no more than opening it in the reader.
-// `body` is the scanned body (services/bodyScan); `unscanned` refuses remote
-// images when the daemon could not scan it.
-export function buildEmailPreviewHtml(body, privacy = false, unscanned = false) {
-  return buildEmailIframeHtml({ bodyHtml: body, privacy, extraHead: unscanned ? UNSCANNED_HEAD : '' });
+// `body` is the scanned body (services/bodyScan); `refusal` is what the frame
+// must keep out (refusalHead).
+export function buildEmailPreviewHtml(body, privacy = false, refusal = '') {
+  return buildEmailIframeHtml({ bodyHtml: body, privacy, extraHead: refusal });
 }
 
 // No `allow-scripts`: nothing runs in here at all, not even our own fold or
@@ -36,7 +37,7 @@ export function EmailPreviewFrame({ html, title, message = null }) {
   const content = useMemo(() => getEmailBodyContent(html), [html]);
   const scan = useBodyScan(content, { blocking: trackerBlocking });
   const body = scan ? scan.html : '';
-  const doc = useMemo(() => (scan ? buildEmailPreviewHtml(body, privacyOn, !scan.scanned) : ''), [scan, body, privacyOn]);
+  const doc = useMemo(() => (scan ? buildEmailPreviewHtml(body, privacyOn, refusalHead(scan)) : ''), [scan, body, privacyOn]);
   // No scripts in here, but same-origin: the parent's masking pass reaches it.
   useBodyPrivacy(frameRef, doc, { message });
   const fitHeight = (frame) => {
@@ -54,6 +55,8 @@ export function EmailPreviewFrame({ html, title, message = null }) {
     // Light, capped at 2000 and scrolling past it, like the frame's height cap.
     // Links stay inert, as in the script-less frame.
     return (
+      <>
+      <ExternalContentBar scan={scan} className="mb-2" />
       <Alt
         surface="preview"
         messageKey={message?.messageId}
@@ -65,10 +68,14 @@ export function EmailPreviewFrame({ html, title, message = null }) {
         message={message}
         sizing={{ collapsedMax: 2000 }}
         style={{ width: '100%' }}
+        allowRemote={!scan.holding}
       />
+      </>
     );
   }
   return (
+    <>
+    <ExternalContentBar scan={scan} className="mb-2" />
     <iframe
       ref={frameRef}
       srcDoc={doc}
@@ -79,5 +86,6 @@ export function EmailPreviewFrame({ html, title, message = null }) {
       style={{ width: '100%', height, border: 'none' }}
       title={title}
     />
+    </>
   );
 }

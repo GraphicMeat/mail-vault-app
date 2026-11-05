@@ -771,6 +771,11 @@ export const useSettingsStore = create(
         if (!hasPremiumAccess(get().billingProfile)) return;
         set({ trackerBlockingEnabled: v });
       },
+      // Ask before a message loads anything from elsewhere (services/bodyScan).
+      // For everyone, unlike tracker blocking: that one keeps the images and
+      // removes the beacons; this one keeps everything out until asked.
+      holdExternalContent: false,
+      setHoldExternalContent: (v) => set({ holdExternalContent: v }),
       setTrackerAlert: (key, info) => set(s => (
         key && info ? { trackerAlerts: { ...s.trackerAlerts, [key]: info } } : s
       )),
@@ -1680,6 +1685,7 @@ export const useSettingsStore = create(
           linkSafetyEnabled: true,
           linkSafetyClickConfirm: true,
           trackerBlockingEnabled: true,
+          holdExternalContent: false,
           trackerAlerts: {},
           searchIndexEnabled: true,
           searchIndexReindexOffer: false,
@@ -1807,6 +1813,15 @@ export function isShareGrantActive() {
 export function isTrackerBlockingActive(state) {
   const s = state || useSettingsStore.getState();
   return !!s?.trackerBlockingEnabled && hasPremiumAccess(s?.billingProfile);
+}
+
+/**
+ * Is a mail frame kept from downloading the Google Fonts its mail chose?
+ * Installed ones draw either way: this is the request opening a mail would cause.
+ */
+export function refusesMailFontDownloads(state) {
+  const s = state || useSettingsStore.getState();
+  return isTrackerBlockingActive(s) || !!s?.holdExternalContent;
 }
 
 export function hasPremiumAccess(billingProfile) {

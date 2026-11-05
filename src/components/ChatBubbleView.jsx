@@ -39,7 +39,8 @@ import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
-import { useBodyScan, checkLinkAlert, LINK_ALERT_STYLE, UNSCANNED_HEAD } from '../services/bodyScan';
+import { useBodyScan, checkLinkAlert, LINK_ALERT_STYLE, refusalHead } from '../services/bodyScan';
+import { ExternalContentBar } from './email/ExternalContentBar';
 import { linkifyHtml } from '../utils/linkify';
 import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
@@ -67,8 +68,8 @@ import { startThreadReadTimer, cancelThreadReadTimers } from '../services/workfl
 // It carries the same CSP as buildEmailIframeHtml: script-src 'nonce-...' as
 // the first head element, and the fold scripts carry that nonce. The mail's
 // own script and inline handlers get no nonce and are blocked.
-// `unscanned`: the daemon could not scan the body, so no remote image loads.
-export function buildChatBubbleDocument({ bodyHtml, fromUser, theme, palette, indicatorStyle, privacy, signatureDisplay, nonce = emailScriptNonce(), unscanned = false }) {
+// `refusal`: what the frame must keep out (services/bodyScan refusalHead).
+export function buildChatBubbleDocument({ bodyHtml, fromUser, theme, palette, indicatorStyle, privacy, signatureDisplay, nonce = emailScriptNonce(), refusal = '' }) {
   // srcDoc is an isolated document and cannot inherit the app's CSS
   // variables. Resolve the active palette here so light chat bubbles keep
   // readable text after an Appearance change.
@@ -81,7 +82,7 @@ export function buildChatBubbleDocument({ bodyHtml, fromUser, theme, palette, in
       <!DOCTYPE html>
       <html${privacy ? PRIVACY_HTML_ATTR : ''}>
         <head>
-          <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">${unscanned ? UNSCANNED_HEAD : ''}
+          <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">${refusal}
           <meta charset="UTF-8">
           <base target="_blank">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -598,7 +599,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     if (!mergedEmail.html || !chatScan) return '';
     const indicatorStyle = chatScan.alerts.length > 0 ? LINK_ALERT_STYLE : '';
     // Chat bubbles build their own document (transparent bg, per-bubble tint).
-    const builtHtml = buildChatBubbleDocument({ bodyHtml: chatScan.html, fromUser, theme, palette, indicatorStyle, privacy: privacyOn, signatureDisplay, unscanned: !chatScan.scanned });
+    const builtHtml = buildChatBubbleDocument({ bodyHtml: chatScan.html, fromUser, theme, palette, indicatorStyle, privacy: privacyOn, signatureDisplay, refusal: refusalHead(chatScan) });
     return { html: builtHtml, alertLevel: chatScan.maxAlertLevel, trackerSummary: chatScan.summary, scopeKey: chatScopeKey };
   }, [mergedEmail.html, chatScan, chatScopeKey, fromUser, signatureDisplay, theme, palette, privacyOn]);
 
@@ -620,6 +621,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     }),
     sizing: { collapsedMax: 400 },
     className: BUBBLE_FRAME_CLASS,
+    allowRemote: !chatScan.holding,
   } : null;
   const chatScanAlert = iframeContent?.alertLevel || null;
   const chatTrackerSummary = iframeContent?.trackerSummary || null;
@@ -805,6 +807,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
               <div className="text-xs opacity-70 font-medium pb-1 border-b border-current/20">
                 {t('chat.bubble.originalMessage')}
               </div>
+              {mergedEmail.html && <ExternalContentBar scan={chatScan} />}
               {mergedEmail.html ? (
                 altProps ? (
                   <div><div aria-hidden="true" data-bubble-strut style={BUBBLE_STRUT_STYLE} /><Alt {...altProps} style={{ width: '100%', maxWidth: '100%', minHeight: 100 }} /></div>
@@ -826,6 +829,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             </div>
           ) : hasHtml ? (
             <div className="overflow-hidden">
+              <ExternalContentBar scan={chatScan} className="m-2" />
               {altProps ? (
                 <div><div aria-hidden="true" data-bubble-strut style={BUBBLE_STRUT_STYLE} /><Alt {...altProps} style={{ width: '100%', maxWidth: '100%', minHeight: 50 }} /></div>
               ) : (

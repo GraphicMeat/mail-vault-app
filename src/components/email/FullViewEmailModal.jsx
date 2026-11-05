@@ -15,7 +15,8 @@ import { X, Loader } from 'lucide-react';
 import { AttachmentItem } from '../EmailViewer';
 import { DownloadAllButton } from './AttachmentBar';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
-import { useBodyScan, scanHead, checkLinkAlert } from '../../services/bodyScan';
+import { useBodyScan, refusalHead, checkLinkAlert } from '../../services/bodyScan';
+import { ExternalContentBar } from './ExternalContentBar';
 import { recordTrackerSummary } from '../../services/rowVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
@@ -243,7 +244,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     return buildEmailIframeHtml({
       bodyHtml: frameBodyHtml,
       themeTag: theme,
-      extraHead: `${isDark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${fullScan.scanned ? '' : scanHead(fullScan)}`,
+      extraHead: `${isDark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${refusalHead(fullScan)}`,
       nonce,
       privacy: privacyOn,
     });
@@ -394,6 +395,8 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
           </p>
         )}
 
+        {email.html && <ExternalContentBar scan={fullScan} className="mx-3 my-2 shrink-0" />}
+
         {/* Email Body - Full Height iframe */}
         <div className="flex-1 min-h-0 overflow-hidden relative" style={{ backgroundColor: emailColors.background }}>
           {!fetchedEmail && loadingEmail ? (
@@ -412,7 +415,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
                 accountId: email?._accountId, linkSafetyEnabled, linkSafetyClickConfirm,
                 openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
               })}
-              sizing="fill" className="w-full h-full"
+              sizing="fill" className="w-full h-full" allowRemote={!fullScan.holding}
             />
           )) : (
             <iframe

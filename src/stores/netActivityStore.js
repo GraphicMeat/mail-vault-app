@@ -212,7 +212,8 @@ const counted = new Map();
  * means allowed to load: an https `<img>` left in the body (the app's CSP
  * allows no plain http image). A message whose preview body is later replaced
  * by the full one under the same id adds only what the full body has beyond
- * what was already counted.
+ * what was already counted. A body whose external content is held back loads
+ * nothing yet, and counts when the user loads it.
  */
 export function noteFramedBody(scan, id, blocking) {
   if (!id || !scan) return;
@@ -220,7 +221,7 @@ export function noteFramedBody(scan, id, blocking) {
   const httpsTrackers = trackers.filter(tr => /^https:/i.test(tr.url || '')).length;
   const now = {
     blocked: blocking ? trackers.length : 0,
-    loaded: (scan.https || 0) - (blocking ? httpsTrackers : 0),
+    loaded: scan.holding ? 0 : (scan.https || 0) - (blocking ? httpsTrackers : 0),
   };
   const before = counted.get(id) || { blocked: 0, loaded: 0 };
   const blocked = Math.max(0, now.blocked - before.blocked);

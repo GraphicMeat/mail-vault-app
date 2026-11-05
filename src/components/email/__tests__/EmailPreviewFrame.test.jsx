@@ -31,6 +31,7 @@ vi.mock('../../../services/bodyScan', async (orig) => {
 
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { EmailPreviewFrame, buildEmailPreviewHtml } = await import('../EmailPreviewFrame');
+const { UNSCANNED_HEAD } = await import('../../../services/bodyScan');
 const { getEmailBodyContent } = await import('../../../utils/emailIframeTemplate');
 
 const PREMIUM = { hasSubscription: true, premiumAccess: true, status: 'active' };
@@ -63,7 +64,7 @@ describe('buildEmailPreviewHtml', () => {
   });
 
   it('refuses remote images for a body the daemon could not scan', () => {
-    expect(buildEmailPreviewHtml('<p>x</p>', false, true)).toContain('content="img-src data: blob: cid:"');
+    expect(buildEmailPreviewHtml('<p>x</p>', false, UNSCANNED_HEAD)).toContain('content="img-src data: blob: cid:"');
     expect(buildEmailPreviewHtml('<p>x</p>', false)).not.toContain('img-src');
   });
 });

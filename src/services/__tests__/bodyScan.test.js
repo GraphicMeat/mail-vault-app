@@ -2,7 +2,7 @@
 // keeps, what it answers when the daemon cannot be asked. The verdicts
 // themselves are the daemon's, held to the deleted JS by
 // src-core/tests/fixtures/body-scan-cases.json.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // vitest.setup.js answers every scan at once for the renderers' tests; this is the client itself.
 vi.unmock('../bodyScan');
@@ -13,8 +13,9 @@ vi.mock('../daemonClient', () => ({
   DaemonError: class DaemonError extends Error {},
 }));
 
-const { scanBody, scanForFrame, SCAN_BUDGET_MS, peekBodyScan, getCachedAlerts, getCachedTrackers, scanHead, classifyLinks, trackerPatternCount, bodyTexts, BODY_TEXT_KEYS, UNSCANNED_HEAD, _resetBodyScans } = await import('../bodyScan');
+const { scanBody, scanForFrame, SCAN_BUDGET_MS, peekBodyScan, getCachedAlerts, getCachedTrackers, scanHead, refusalHead, classifyLinks, trackerPatternCount, bodyTexts, BODY_TEXT_KEYS, UNSCANNED_HEAD, EXTERNAL_HELD_HEAD, allowExternalContent, _resetBodyScans } = await import('../bodyScan');
 const { useNetActivityStore } = await import('../../stores/netActivityStore');
+const { useSettingsStore } = await import('../../stores/settingsStore');
 const { setLocale } = await import('../../i18n/index.js');
 
 const BEACON = '<p>hi</p><img src="https://u1.ct.sendgrid.net/wf/open?upn=abc" width="1" height="1">';
@@ -38,6 +39,74 @@ beforeEach(() => {
     };
   });
   useNetActivityStore.setState({ remoteImages: { blocked: 0, loaded: 0 } });
+});
+
+describe('external content held back', () => {
+  const MAIL = '<p>hi</p><img src="https://a.test/x.png">';
+  const answer = { scanned: true, alerts: [] };
+  beforeEach(() => useSettingsStore.setState({ holdExternalContent: true }));
+  afterEach(() => useSettingsStore.setState({ holdExternalContent: false }));
+
+  it('the policy narrows everything a frame fetches, inline styles and our nonced scripts aside', () => {
+    expect(EXTERNAL_HELD_HEAD).toContain('http-equiv="Content-Security-Policy"');
+    for (const directive of ['img-src data: blob: cid:', 'media-src data: blob:', 'font-src data: blob:', "style-src 'unsafe-inline'", "frame-src 'none'", "object-src 'none'"]) {
+      expect(EXTERNAL_HELD_HEAD).toContain(directive);
+    }
+    // A second policy only narrows, and default-src would reach script-src: our nonced scripts would stop.
+    expect(EXTERNAL_HELD_HEAD).not.toContain('default-src');
+    expect(EXTERNAL_HELD_HEAD).not.toContain('script-src');
+    expect(EXTERNAL_HELD_HEAD).not.toContain('https:');
+  });
+
+  it('a frame carries the refusal its scan asks for, whichever way it builds its head', () => {
+    expect(refusalHead({ ...answer })).toBe('');
+    expect(refusalHead({ ...answer, scanned: false })).toBe(UNSCANNED_HEAD);
+    expect(refusalHead({ ...answer, holding: true })).toBe(EXTERNAL_HELD_HEAD);
+    expect(refusalHead({ ...answer, scanned: false, holding: true })).toBe(EXTERNAL_HELD_HEAD);
+    expect(refusalHead(undefined)).toBe('');
+    expect(scanHead({ ...answer, holding: true })).toBe(EXTERNAL_HELD_HEAD);
+    expect(scanHead({ ...answer, holding: true, alerts: [alert] })).toContain(EXTERNAL_HELD_HEAD);
+    expect(scanHead({ ...answer, holding: true, alerts: [alert] })).toContain('data-link-alert');
+  });
+
+  it('scanForFrame says so, per message, and the scan itself is not asked twice', async () => {
+    const first = await scanForFrame(MAIL, { key: 'a-INBOX-40' });
+    expect(first.holding).toBe(true);
+    expect(first.holdKey).toBe('a-INBOX-40');
+    allowExternalContent('a-INBOX-40');
+    expect((await scanForFrame(MAIL, { key: 'a-INBOX-40' })).holding).toBe(false);
+    expect((await scanForFrame(MAIL, { key: 'a-INBOX-41' })).holding).toBe(true);
+    expect(scans()).toHaveLength(2);
+  });
+
+  it('with no message key the body stands for it', async () => {
+    const held = await scanForFrame(MAIL);
+    expect(held.holdKey).toBeTruthy();
+    allowExternalContent(held.holdKey);
+    expect((await scanForFrame(MAIL)).holding).toBe(false);
+    expect((await scanForFrame('<p>other</p><img src="https://a.test/y.png">')).holding).toBe(true);
+  });
+
+  it('the setting off answers the scan as it always was', async () => {
+    useSettingsStore.setState({ holdExternalContent: false });
+    const scan = await scanForFrame(MAIL, { key: 'a-INBOX-42' });
+    expect(scan.holding).toBeFalsy();
+    expect(scan).toBe(await scanBody(MAIL, { key: 'a-INBOX-42' }));
+  });
+
+  it('a body the daemon could not scan is held too', async () => {
+    harness.daemonCall.mockRejectedValueOnce(new Error('down'));
+    const scan = await scanForFrame(MAIL, { key: 'a-INBOX-43' });
+    expect(scan.scanned).toBe(false);
+    expect(scanHead(scan)).toBe(EXTERNAL_HELD_HEAD);
+  });
+
+  it('the daemon\'s count comes through, and is zero from a daemon that sent none', async () => {
+    harness.daemonCall.mockResolvedValueOnce({ remote: 3 });
+    expect((await scanBody('<p>three</p>', { key: 'a-INBOX-44' })).remote).toBe(3);
+    harness.daemonCall.mockResolvedValueOnce({});
+    expect((await scanBody('<p>none</p>', { key: 'a-INBOX-45' })).remote).toBe(0);
+  });
 });
 
 describe('scanBody', () => {

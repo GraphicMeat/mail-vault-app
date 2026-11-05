@@ -16,6 +16,8 @@ export function SecuritySettings() {
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const setLinkSafetyEnabled = useSettingsStore(s => s.setLinkSafetyEnabled);
   const setLinkSafetyClickConfirm = useSettingsStore(s => s.setLinkSafetyClickConfirm);
+  const holdExternalContent = useSettingsStore(s => s.holdExternalContent);
+  const setHoldExternalContent = useSettingsStore(s => s.setHoldExternalContent);
 
   return (
     <SettingsPageLayout>
@@ -39,6 +41,16 @@ export function SecuritySettings() {
             </div>
           </div>
           <ToggleSwitch label={t('settings.security.clickConfirmation')} active={linkSafetyClickConfirm} onClick={() => setLinkSafetyClickConfirm(!linkSafetyClickConfirm)} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-mail-text">{t('settings.security.askBeforeExternalContent')}</div>
+            <div className="text-xs text-mail-text-muted mt-0.5">
+              {t('settings.security.askBeforeExternalContentHint')}
+            </div>
+          </div>
+          <ToggleSwitch label={t('settings.security.askBeforeExternalContent')} active={!!holdExternalContent} onClick={() => setHoldExternalContent(!holdExternalContent)} testId="ask-before-external-content" />
         </div>
       </div>
 

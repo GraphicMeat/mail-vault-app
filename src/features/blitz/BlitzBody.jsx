@@ -40,7 +40,7 @@ const textOf = (html) => {
 
 /** @type {React.ForwardRefExoticComponent<import('./types').AltBodyProps & React.RefAttributes<{ selectionRoot(): HTMLElement | null, selectionText(): string }>>} */
 const BlitzBody = forwardRef(function BlitzBody(props, ref) {
-  const { bodyHtml, documentHtml, indicatorCss, plainText, message, onLink, sizing, className, style, surface } = props;
+  const { bodyHtml, documentHtml, indicatorCss, plainText, message, onLink, sizing, className, style, surface, allowRemote } = props;
   const t = useT();
   const tilesRef = useRef(null);
   // The surface's theme: bubble and preview never draw dark. Feeds the pre-pass deps (theme?.dark / palette) and the tiles.
@@ -199,7 +199,7 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
       {/* Keyed on the privacy state: a flip unmounts the old tiles at once (closing their doc),
           so nothing built for the other state stays on screen while the new doc opens.
           A dictionary update while masking stays on does not change the key. */}
-      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onOpenImage={onOpenImage} onFailure={onFailure} sizing={sizing} style={style} surface={surface} privacy={priv.active} onFoldToggled={onFoldToggled} />
+      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onOpenImage={onOpenImage} onFailure={onFailure} sizing={sizing} style={style} surface={surface} privacy={priv.active} onFoldToggled={onFoldToggled} allowRemote={allowRemote} />
     </div>
   );
 });

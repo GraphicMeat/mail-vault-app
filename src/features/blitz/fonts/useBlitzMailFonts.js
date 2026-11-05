@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { fontsRender } from '../service';
 import { familyForMail, refreshFonts, useFontStore } from '../../../services/fontService';
-import { isTrackerBlockingActive } from '../../../stores/settingsStore';
+import { refusesMailFontDownloads } from '../../../stores/settingsStore';
 import { fontSourcesOf, mailFontFamilies } from '../../../utils/mailFonts';
 
 const PREPARE_CAP_MS = 300;
@@ -41,7 +41,7 @@ export async function prepareMailFonts(doc) {
 
 /**
  * After open: download what is missing, the iframe's way (familyForMail:
- * tracker blocking and this session's failures say no, so a blocked mail
+ * a refused download and this session's failures say no, so a blocked mail
  * never makes a font request), and hand the families that are ready to the
  * worker, those landing within BATCH_MS of each other in one call. The worker
  * re-lays out every document that names a new family and emits render-updated
@@ -65,7 +65,7 @@ export function useBlitzMailFonts({ families, messageKey }) {
     const listed = refreshFonts().catch(() => null);
     for (const family of key.split('|')) {
       listed
-        .then(() => (gone ? false : familyForMail(family, () => isTrackerBlockingActive())))
+        .then(() => (gone ? false : familyForMail(family, () => refusesMailFontDownloads())))
         .then(ok => {
           if (!ok || gone) return;
           ready.push(family);

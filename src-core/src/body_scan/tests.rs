@@ -191,6 +191,64 @@ fn decode_is_as_strict_as_decode_uri_component() {
     }
 }
 
+/// `remote` decides whether the reader offers "Load external content": it counts
+/// what a frame would fetch if let, and nothing a click could not bring in.
+#[test]
+fn remote_counts_what_a_frame_would_fetch() {
+    let cases = [
+        (r#"<img src="https://a.test/x.png">"#, 1),
+        (r#"<img src="HTTPS://a.test/x.png">"#, 1),
+        (r#"<img src=" https://a.test/x.png">"#, 1),
+        (r#"<img srcset="https://a.test/1.png 1x, https://a.test/2.png 2x">"#, 1),
+        (r#"<picture><source srcset="https://a.test/1.webp"><img src="data:image/png;base64,AA"></picture>"#, 1),
+        (r#"<input type="image" src="https://a.test/b.png">"#, 1),
+        (r#"<table background="https://a.test/bg.png"><tr><td>x</td></tr></table>"#, 1),
+        (r#"<video poster="https://a.test/p.png"></video>"#, 1),
+        (r#"<svg><image href="https://a.test/i.png"></image></svg>"#, 1),
+        (r#"<svg><image xlink:href="https://a.test/i.png"></image></svg>"#, 1),
+        (r#"<div style="background:url('https://a.test/bg.png')">x</div>"#, 1),
+        (r#"<style>.a{background-image:url( "https://a.test/bg.png" )}.b{background:URL(https://a.test/c.png)}</style>"#, 2),
+        (r#"<img src="https://a.test/x.png"><div style="background:url(https://a.test/y.png)">x</div>"#, 2),
+        // Never leaves the machine.
+        (r#"<img src="cid:logo"><img src="data:image/png;base64,AA"><img src="blob:x">"#, 0),
+        (r#"<div style="background:url(data:image/png;base64,AA)">x</div>"#, 0),
+        // The app's CSP and the Blitz worker refuse these whatever the answer, so a click brings nothing.
+        (r#"<img src="http://a.test/x.png">"#, 0),
+        (r#"<img src="//a.test/x.png">"#, 0),
+        (r#"<link rel="stylesheet" href="https://a.test/s.css">"#, 0),
+        (r#"<style>@import url(https://a.test/s.css);@font-face{font-family:X;src:url(https://a.test/x.woff2)}</style>"#, 0),
+        (r#"<iframe src="https://a.test/"></iframe><video src="https://a.test/v.mp4"></video>"#, 0),
+        // Not content at all.
+        (r#"<a href="https://a.test/">go</a><p>url(https://a.test/x.png) is text</p>"#, 0),
+        ("<p>plain</p>", 0),
+        ("", 0),
+    ];
+    let mut wrong = Vec::new();
+    for (html, want) in cases {
+        let ans = scan_body(html, false, false, &Texts::default());
+        if ans["remote"] != json!(want) {
+            wrong.push(format!("{html}: got {} want {want}", ans["remote"]));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn remote_counts_the_body_tracker_blocking_leaves() {
+    let beacon = r#"<img src="https://u1.ct.sendgrid.net/wf/open?upn=abc" width="1" height="1">"#;
+    let image = r#"<img src="https://a.test/x.png">"#;
+    let both = format!("{beacon}{image}");
+    assert_eq!(scan_body(&both, false, false, &Texts::default())["remote"], 2);
+    assert_eq!(scan_body(&both, true, false, &Texts::default())["remote"], 1);
+    assert_eq!(scan_body(beacon, true, false, &Texts::default())["remote"], 0);
+}
+
+#[test]
+fn counting_remote_content_leaves_the_body_alone() {
+    let body = r#"<p>Hi<b>unclosed<img src="https://a.test/x.png">"#;
+    assert_eq!(scan_body(body, false, false, &Texts::default())["html"], Value::Null);
+}
+
 #[test]
 fn an_unchanged_body_is_not_rewritten() {
     let body = "<p>Hi<b>unclosed";

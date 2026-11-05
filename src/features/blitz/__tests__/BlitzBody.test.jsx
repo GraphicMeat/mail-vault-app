@@ -28,6 +28,15 @@ beforeEach(() => { images.open.mockClear(); images.fileFor.mockClear(); tilesPro
 afterEach(() => { cleanup(); _resetDocRegistryForTest(); });
 
 describe('BlitzBody', () => {
+  it('hands its tiles the surface\'s answer on remote images', async () => {
+    for (const allowRemote of [true, false]) {
+      const { unmount } = render(<BlitzBody {...props({ allowRemote })} />);
+      await act(async () => {});
+      expect(tilesProps.last.allowRemote).toBe(allowRemote);
+      unmount();
+    }
+  });
+
   it('hands BlitzTiles the pre-passed HTML with the body and no viewer scripts', async () => {
     render(<BlitzBody {...props()} />);
     await screen.findByTestId('tiles-stub');

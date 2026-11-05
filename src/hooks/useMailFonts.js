@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { attachMailFonts } from '../services/fontService';
-import { isTrackerBlockingActive } from '../stores/settingsStore';
+import { refusesMailFontDownloads } from '../stores/settingsStore';
 
 // Draws the mail frame `iframeRef` points at in the Google Fonts its mail
 // chose (fontService attachMailFonts). Checked after every render rather than
@@ -20,7 +20,7 @@ export function useMailFonts(iframeRef, onFonts) {
     attached.current = frame ? {
       frame,
       detach: attachMailFonts(frame, {
-        blocking: () => isTrackerBlockingActive(),
+        blocking: () => refusesMailFontDownloads(),
         onFonts: () => latest.current?.(),
       }),
     } : null;

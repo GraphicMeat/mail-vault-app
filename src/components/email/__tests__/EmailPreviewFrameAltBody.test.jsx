@@ -9,6 +9,7 @@ vi.mock('../../../services/fontService', async (importOriginal) => {
 // The daemon's scan, answered at once with nothing found (src/test/bodyScan).
 vi.mock('../../../services/bodyScan', async (orig) => (await import('../../../test/bodyScan')).stubBodyScan(orig));
 const { EmailPreviewFrame, buildEmailPreviewHtml } = await import('../EmailPreviewFrame');
+const { UNSCANNED_HEAD } = await import('../../../services/bodyScan');
 const { buildEmailIframeHtml, getEmailBodyContent } = await import('../../../utils/emailIframeTemplate');
 const { attachMailFonts } = await import('../../../services/fontService');
 const { registerBodyRenderer, _resetBodyRenderersForTest } = await import('../bodyRendererRegistry');
@@ -47,7 +48,7 @@ describe('EmailPreviewFrame on the body seam', () => {
     for (const privacy of [false, true]) {
       expect(norm(buildEmailPreviewHtml(body, privacy))).toBe(norm(buildEmailIframeHtml({ bodyHtml: body, privacy })));
     }
-    expect(buildEmailPreviewHtml(body, false, true)).toContain('content="img-src data: blob: cid:"');
+    expect(buildEmailPreviewHtml(body, false, UNSCANNED_HEAD)).toContain('content="img-src data: blob: cid:"');
   });
 
   it('switching blitz to web attaches the mail fonts to the fresh iframe', () => {

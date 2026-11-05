@@ -142,6 +142,10 @@ pub struct TrackerScan {
     pub cleaned: Option<String>,
     /// Remote images the frame may fetch (https only: the app's CSP allows no other).
     pub https: usize,
+    /// Everything external a frame of the body would fetch: see [`count_remote`].
+    pub remote: usize,
+    /// The same, of `cleaned`.
+    pub remote_cleaned: usize,
 }
 
 struct Table {
@@ -266,13 +270,54 @@ fn shape_reason(dom: &Dom, img: dom::Id, texts: &Texts) -> Option<String> {
     None
 }
 
+/// In a stylesheet, what the app's CSP and the Blitz worker refuse whatever the user answers.
+static CSS_REFUSED: LazyLock<Regex> = LazyLock::new(|| compile_i(r"@font-face\s*\{[^}]*\}|@import[^;]*;?"));
+static CSS_HTTPS_URL: LazyLock<Regex> = LazyLock::new(|| compile_i(r#"url\(\s*['"]?\s*https:"#));
+
+fn is_https(url: &str) -> bool {
+    url.trim_start().get(..6).is_some_and(|p| p.eq_ignore_ascii_case("https:"))
+}
+
+fn css_remote(css: &str) -> usize {
+    CSS_HTTPS_URL.find_iter(&CSS_REFUSED.replace_all(css, "")).count()
+}
+
+/// What a frame of this body would fetch from elsewhere if let: the references
+/// behind "Load external content", so the reader offers it only when a click
+/// brings something in. https images and CSS backgrounds are all that can load:
+/// the app's CSP refuses plain http, stylesheets, fonts, media and frames, and
+/// the Blitz worker fetches images only. Counting is not the block. A reference
+/// this misses still does not load (the frame's CSP, `allowRemote` on Blitz).
+fn count_remote(dom: &Dom) -> usize {
+    let mut found = 0;
+    for id in dom.elements() {
+        let Some((name, attrs)) = dom.element(id) else { continue };
+        let tag = &*name.local;
+        if tag == "style" {
+            found += css_remote(&dom.text_content(id));
+        }
+        for a in attrs {
+            let value = &*a.value;
+            found += match (&*a.name.local, tag) {
+                ("style", _) => css_remote(value),
+                ("src", "img" | "input") | ("poster", _) | ("background", _) | ("href", "image") => usize::from(is_https(value)),
+                ("srcset", "img" | "source") => usize::from(value.split(',').any(is_https)),
+                _ => 0,
+            };
+        }
+    }
+    found
+}
+
 /// Scan a body (inner body HTML, CID-resolved is fine) for tracking pixels.
 pub fn scan_trackers(html: &str, texts: &Texts) -> TrackerScan {
-    let mut out = TrackerScan { trackers: Vec::new(), cleaned: None, https: 0 };
+    let mut out = TrackerScan { trackers: Vec::new(), cleaned: None, https: 0, remote: 0, remote_cleaned: 0 };
     if html.is_empty() {
         return out;
     }
     let mut dom = Dom::parse_body(html);
+    out.remote = count_remote(&dom);
+    out.remote_cleaned = out.remote;
     for img in dom.select("img", "src") {
         let url = dom.attr(img, "src").unwrap_or("").to_string();
         // Inline and embedded images never leave the machine.
@@ -318,6 +363,7 @@ pub fn scan_trackers(html: &str, texts: &Texts) -> TrackerScan {
     }
     if !out.trackers.is_empty() {
         out.cleaned = Some(dom.body_inner_html());
+        out.remote_cleaned = count_remote(&dom);
     }
     out
 }
@@ -489,6 +535,7 @@ pub fn scan_body(html: &str, blocking: bool, links: bool, texts: &Texts) -> Valu
         "trackers": found.trackers,
         "count": found.trackers.len(),
         "https": found.https,
+        "remote": if blocking { found.remote_cleaned } else { found.remote },
         "summary": summarize(&found.trackers),
         "html": framed,
         "alerts": alerts,

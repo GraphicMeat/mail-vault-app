@@ -3,7 +3,8 @@ import { Sun, Moon } from 'lucide-react';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
-import { useBodyScan, UNSCANNED_HEAD } from '../services/bodyScan';
+import { useBodyScan, refusalHead } from '../services/bodyScan';
+import { ExternalContentBar } from './email/ExternalContentBar';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getEmailColors } from '../utils/mailChrome';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
@@ -38,16 +39,15 @@ export function OriginalThemeToggle({ dark, onToggle, testid = 'compose-original
 // included. Blitz draws exactly this (its pre-pass releases the gate when
 // privacy is inactive). `padding` null means no override: the template's own
 // 24px applies (the pop-out window). `html` is the scanned body
-// (services/bodyScan); `unscanned` refuses remote images when the daemon could
-// not scan it.
-export function buildOriginalFrameHtml({ html, dark, palette, padding, privacy, nonce = emailScriptNonce(), unscanned = false }) {
+// (services/bodyScan); `refusal` is what the frame must keep out (refusalHead).
+export function buildOriginalFrameHtml({ html, dark, palette, padding, privacy, nonce = emailScriptNonce(), refusal = '' }) {
   // Kept out of the extraHead template: the i18n audit cannot see a template
   // literal nested inside another one and would report "body" as JSX text.
   const paddingCss = padding ? `<style>body { padding: ${padding}; }</style>` : '';
   return buildEmailIframeHtml({
     bodyHtml: html,
     themeTag: dark ? 'dark' : 'light',
-    extraHead: `${unscanned ? UNSCANNED_HEAD : ''}${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${paddingCss}`,
+    extraHead: `${refusal}${dark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${paddingCss}`,
     nonce,
     privacy,
   });
@@ -79,7 +79,7 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
   // no scoped message key here).
   const scan = useBodyScan(html, { blocking: trackerBlocking });
   const srcDoc = useMemo(
-    () => (scan ? buildOriginalFrameHtml({ html: scan.html, dark, palette, padding, privacy: privacyOn, unscanned: !scan.scanned }) : ''),
+    () => (scan ? buildOriginalFrameHtml({ html: scan.html, dark, palette, padding, privacy: privacyOn, refusal: refusalHead(scan) }) : ''),
     [scan, dark, palette, padding, privacyOn],
   );
   useBodyPrivacy(frameRef, srcDoc, { message });
@@ -87,6 +87,8 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
     // The alternative renderer fetches images itself: it only ever gets a scanned body.
     if (!scan?.scanned) return null;
     return (
+      <>
+      <ExternalContentBar scan={scan} className="mb-2 shrink-0" />
       <Alt
         surface={surface}
         messageKey={message?.messageId}
@@ -98,10 +100,14 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
         sizing={autoSize ? 'content' : 'fill'}
         className={`block w-full rounded-md ${className}`}
         style={{ backgroundColor: getEmailColors(dark ? 'dark' : 'light', palette).background }}
+        allowRemote={!scan.holding}
       />
+      </>
     );
   }
   return (
+    <>
+    <ExternalContentBar scan={scan} className="mb-2 shrink-0" />
     <iframe
       ref={frameRef}
       sandbox={dark ? 'allow-same-origin allow-scripts' : 'allow-same-origin'}
@@ -110,5 +116,6 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
       style={{ backgroundColor: getEmailColors(dark ? 'dark' : 'light', palette).background }}
       className={`block w-full border-0 rounded-md ${className}`}
     />
+    </>
   );
 }

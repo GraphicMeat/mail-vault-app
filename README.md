@@ -140,6 +140,7 @@ Pick a year or a custom range, then archive, delete, or archive-and-delete thous
 - **Link safety** - a warning when a link's text is not where the link goes, with both URLs shown side by side before anything opens.
 - **Sender checks** - SPF, DKIM and DMARC badges, display-name impersonation warnings, and From/Reply-To mismatch alerts.
 - **Tracker blocking** *(Premium)* - the hidden pixels that report when you opened a message are found on every mail, named on the row, and stripped out of the HTML before it renders. Detection is free; removal comes with a subscription.
+- **Ask before loading external content** - a switch in Settings > Security: an email's remote images and other outside content stay unloaded until you choose Load external content for that message.
 - **Privacy mode** *(Premium)* - one click in the sidebar (Cmd/Ctrl+Shift+P) masks names, email addresses, phone numbers and postal addresses across the app, so you can record your screen or read mail in public. Hold Option (Alt) to peek. Avatars and text inside images are not masked.
 - **Redacted export** - the "Redact sensitive info" option in Export blurs or blacks out the same details in exported images and HTML, and strips links and remote images from the HTML.
 - **Credentials in the OS store** - macOS Keychain, Windows Credential Manager, Linux Secret Service. Never in a config file.

@@ -42,7 +42,7 @@ describe('BlitzTiles', () => {
 
   it('opens at container width and DPR and lays out one img per tile', async () => {
     openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta() });
-    render(tiles());
+    render(tiles({ allowRemote: true }));
     await waitFor(() => expect(screen.getAllByTestId('blitz-tile')).toHaveLength(3));
     expect(openRender).toHaveBeenCalledWith({ html: '<p>x', cssWidth: 600, scale: 2, allowRemote: true, theme: { mode: 'light' } });
     const t = screen.getAllByTestId('blitz-tile');
@@ -109,6 +109,13 @@ describe('BlitzTiles', () => {
     fireEvent.error(t[0]); // the reopened doc fails before drawing anything: now it is the user's
     expect(onFailure).toHaveBeenCalledTimes(1);
     expect(onFailure).toHaveBeenCalledWith('render_tile_failed');
+  });
+
+  it('opens with remote off unless the surface says otherwise: a surface that forgets loses images, not privacy', async () => {
+    openRender.mockResolvedValue({ docId: 9, rev: 1, meta: meta() });
+    render(tiles());
+    await waitFor(() => expect(openRender).toHaveBeenCalled());
+    expect(openRender.mock.calls[0][0].allowRemote).toBe(false);
   });
 
   it('a tile that keeps failing while its siblings draw does not reopen forever (3b)', async () => {

@@ -42,7 +42,8 @@ import { useViewBuilderStore } from '../../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
-import { useBodyScan, scanForFrame, scanHead, checkLinkAlert, LINK_ALERT_STYLE } from '../../services/bodyScan';
+import { useBodyScan, scanForFrame, scanHead, refusalHead, checkLinkAlert, LINK_ALERT_STYLE } from '../../services/bodyScan';
+import { ExternalContentBar } from './ExternalContentBar';
 import { recordTrackerSummary, recordLinkAlert } from '../../services/rowVerdicts';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName, threadRowMembers } from '../../utils/emailParser';
@@ -274,6 +275,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   return (
     <>
       <PgpDecryptedBadge email={loadedEmail} />
+      {loadedEmail.html && <ExternalContentBar scan={bodyScan} className="mt-2" />}
       {loadedEmail.html ? (
         <div
           className="rounded-lg overflow-hidden mt-2 max-w-full"
@@ -291,7 +293,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
                 // A read-only copy (the compose pane) composes nothing, as the iframe path.
                 openMailtoCompose: readOnly ? () => {} : openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
               })}
-              sizing="content" style={{ minHeight: 100 }}
+              sizing="content" style={{ minHeight: 100 }} allowRemote={!bodyScan.holding}
             />
           )) : (
             <iframe
@@ -569,7 +571,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
               const popupHtml = buildEmailIframeHtml({
                 bodyHtml: popupBody,
                 themeTag: effectiveTheme,
-                extraHead: `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : ''}${popupScan.scanned ? '' : scanHead(popupScan)}`,
+                extraHead: `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : ''}${refusalHead(popupScan)}`,
                 nonce: popupNonce,
               });
               invoke('open_email_window', { html: popupHtml, title: email.subject || 'Email' });

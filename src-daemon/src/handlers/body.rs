@@ -222,6 +222,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn scan_says_what_a_frame_would_fetch() {
+        let (_d, s) = rig();
+        let ans = call(&s, "body.scan", json!({"html": r#"<img src="https://a.test/x.png"><p style="background:url(https://a.test/y.png)">x</p>"#})).await;
+        assert_eq!(ans["remote"], 2);
+    }
+
+    #[tokio::test]
     async fn classify_links_answers_one_verdict_per_link() {
         let (_d, s) = rig();
         let f: Value = serde_json::from_str(CASES).unwrap();

@@ -6,6 +6,8 @@
 
 - Sending from an alias on an Outlook.com or Hotmail account now goes out from that alias. Microsoft replaced it with the account's main address, so the recipient saw the main address as the sender. MailVault now sends such a message through a draft set to the alias, and Scheduled Send does the same. If Microsoft would still send it from the main address, the message is not sent and MailVault says Microsoft refused to send as the alias.
 
+- Settings > Security has a new switch, Ask before loading external content, on every plan and off by default. With it on, opening an email loads no images or other content its body points to elsewhere, so a tracking image cannot tell the sender you opened it; a Load external content button above the message brings them in for that message until you quit. It covers the reading pane, conversations, chat view, the full view, quoted originals and previews, and a mail's Google Fonts wait too unless already installed. Tracker blocking stays separate: it removes known tracking pixels and leaves the other images alone.
+
 - A Microsoft 365 or Hotmail folder with more than 200 emails now shows its real count as soon as it opens, instead of 200 until you scrolled past the first page. A count that changed elsewhere also reaches the list on the next folder refresh, while the folder is still paging.
 
 - After turning View Source off, or viewing an original in a chat bubble, the message body is protected again. The redrawn body had lost its link safety warning, so a click on a flagged link opened it with no prompt; it had also lost its context menu and stopped sizing to the mail. The same applied when moving to another message with the source open, and to a full view opened while a message was still loading.

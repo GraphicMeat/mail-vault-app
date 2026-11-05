@@ -37,7 +37,8 @@ function useDevicePixelRatio() {
 // `surface` names the AltBodyProps surface (root attribute; only the lazy
 // surfaces keep their doc for reuse on unmount, and the bubble draws on no
 // canvas: surfaceWorkerTheme); `style` joins the sizing box.
-const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenImage, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface }, ref) {
+// `allowRemote` is off unless the surface says so: one that forgets loses images, not privacy.
+const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenImage, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface, allowRemote = false }, ref) {
   const t = useT();
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -110,7 +111,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
   // Under MIN_OPEN_WIDTH there is no real width yet (null params: no doc is opened).
   const cssWidth = width >= MIN_OPEN_WIDTH ? Math.min(4000, Math.max(1, Math.round(width))) : null;
   const scale = Math.min(4, Math.max(0.5, dpr));
-  const params = cssWidth ? { html, cssWidth, scale, allowRemote: true, theme: workerTheme } : null;
+  const params = cssWidth ? { html, cssWidth, scale, allowRemote, theme: workerTheme } : null;
   const { key: docKeyNow, doc, sentWidth, error, busy, retry } = useSurfaceDoc(params, { deferOnUnmount: LAZY_SURFACES.has(surface) });
   docRef.current = doc;
   docIdRef.current = doc?.docId ?? null;
