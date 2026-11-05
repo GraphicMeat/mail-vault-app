@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { collect, loadDict, LOCALES } from '../../website/i18n/i18n.mjs';
+import { buildIndex } from '../../scripts/build-search-index.mjs';
 
 const ORIGINAL_TOPICS = ['getting-started', 'storage-and-vault', 'providers', 'premium', 'backup-and-restore', 'troubleshooting'];
 const TOPICS = [...ORIGINAL_TOPICS, 'your-questions'];
@@ -79,7 +80,8 @@ describe('FAQ hub and topic pages', () => {
       const localHub = readFileSync(`website/${prefix}faq.html`, 'utf8');
       expect(localHub).toContain(`faq/your-questions.html#lifetime-purchase`);
       expect(localHub).not.toMatch(/bytemail/i);
-      const index = readFileSync(`website/${prefix}search-index.json`, 'utf8');
+      // search-index.json is gitignored and written at deploy: build the same content here.
+      const index = JSON.stringify(buildIndex(`website/${prefix}`));
       expect(index).toContain('faq/your-questions.html');
       expect(index).not.toMatch(/bytemail/i);
       dom.window.close();
