@@ -609,12 +609,6 @@ fn friendly_graph_send_error(login: &str, from_addr: &str, err: &SendMailError) 
             MAY_HAVE_GONE_OUT
         ),
         SendMailError::Transport { detail, .. } => format!("Could not reach Microsoft to send the message: {}", detail),
-        // Microsoft would have sent it as the login: the same refusal as a
-        // sender the account may not use, and as final.
-        SendMailError::SenderNotApplied { .. } => format!(
-            "Microsoft refused to send as {}. The address must be one this account is allowed to send from.",
-            from_addr
-        ),
         SendMailError::Refused { status, code, message, retry_after } => {
             let said = format!("{} {}", code.as_deref().unwrap_or(""), message.as_deref().unwrap_or("")).to_lowercase();
             // Ordered before the 403 branch: Graph refuses a sender with 403 too.
@@ -1858,8 +1852,6 @@ mod tests {
             (refused(403, Some("ErrorAccessDenied"), None), "Sign in to this account again", true),
             (refused(403, Some("ErrorSendAsDenied"), None), "refused to send as alias@outlook.com", true),
             (refused(400, Some("ErrorSendAsDenied"), None), "refused to send as alias@outlook.com", true),
-            (SendMailError::SenderNotApplied { kept: Some("me@outlook.com".into()) }, "refused to send as alias@outlook.com", true),
-            (SendMailError::SenderNotApplied { kept: None }, "refused to send as alias@outlook.com", true),
             (refused(413, None, None), "the limit is 4 MB", true),
             (SendMailError::TooLarge { encoded_bytes: 5 * 1024 * 1024 }, "5.0 MB once encoded, and the limit is 4 MB", true),
             (refused(429, Some("ApplicationThrottled"), Some(7)), "Try again in 7 seconds", false),

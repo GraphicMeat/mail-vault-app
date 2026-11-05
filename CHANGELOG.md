@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Sending from an alias of a Microsoft account no longer fails with "Microsoft refused to send as". When Microsoft will not send as the alias, the mail goes out as the account address with the alias set as Reply-To, so replies still reach the alias.
+
 - Settings > Billing now groups an account's aliases under it, indented with the account name greyed out, the same way the From picker in Compose does.
 
 ## [2.22.0] - 2026-11-05

@@ -532,10 +532,15 @@ pub enum SendMailError {
     /// Graph answered, and not with a 2xx. `code` and `message` are the error
     /// body's `error.code` / `error.message` when it had them.
     Refused { status: u16, code: Option<String>, message: Option<String>, retry_after: Option<u64> },
-    /// A draft made to go out as another address of the mailbox came back
-    /// from Graph under `kept` (or under nothing readable): Microsoft did not
-    /// apply the sender, and the draft was not sent.
-    SenderNotApplied { kept: Option<String> },
+}
+
+/// Graph's `emailAddress` object: the address, and the name when there is one.
+fn email_address(address: &str, name: Option<&str>) -> serde_json::Value {
+    let mut out = serde_json::json!({ "address": address });
+    if let Some(name) = name.map(str::trim).filter(|n| !n.is_empty()) {
+        out["name"] = serde_json::json!(name);
+    }
+    out
 }
 
 /// A reqwest error and its causes on one line, the URL left out.
@@ -1143,9 +1148,10 @@ impl GraphClient {
     /// MIME's From says (an alias comes out as the login), so the message goes
     /// through a draft instead: made from the MIME (`POST /me/messages`), its
     /// `from` set (`PATCH`), read back to make sure Microsoft took it, then
-    /// sent (`POST .../send`, 202, Sent filed by Graph). A message that would
-    /// go out as the login is never sent: whoever picked the alias did not
-    /// want the login seen.
+    /// sent (`POST .../send`, 202, Sent filed by Graph). When Microsoft will
+    /// not take the alias as sender (it keeps the login, or refuses the
+    /// PATCH), the message still goes, as the login, with the alias as
+    /// Reply-To so replies reach it: a refusal would make the alias unusable.
     ///
     /// A draft is deleted for good when nothing went out: a refusal before
     /// the send, or a 4xx from it. It stays when the send may have gone
@@ -1188,9 +1194,19 @@ impl GraphClient {
             .id;
 
         let url = format!("{}/me/messages/{}", graph_base(), percent_encode(&id));
-        if let Err(e) = self.set_draft_from(&url, from, name, timeout).await {
-            self.discard_draft(&id).await;
-            return Err(e);
+        match self.set_draft_from(&url, from, name, timeout).await {
+            Ok(true) => {}
+            Ok(false) => {
+                warn!("[send] Microsoft kept the login as sender instead of {from}; sending as the login with {from} as Reply-To");
+                if let Err(e) = self.set_draft_reply_to(&url, from, name, timeout).await {
+                    self.discard_draft(&id).await;
+                    return Err(e);
+                }
+            }
+            Err(e) => {
+                self.discard_draft(&id).await;
+                return Err(e);
+            }
         }
 
         let send_url = format!("{url}/send");
@@ -1210,30 +1226,36 @@ impl GraphClient {
         Err(refusal)
     }
 
-    /// Set a draft's `from` and read it back; `SenderNotApplied` when
-    /// Microsoft keeps another address. Nothing here can have sent the message.
+    /// Set a draft's `from` and read it back: true when Microsoft took it,
+    /// false when it keeps another address or refuses the sender
+    /// (`ErrorSendAsDenied`). Nothing here can have sent the message.
     async fn set_draft_from(
         &self,
         url: &str,
         from: &str,
         name: Option<&str>,
         timeout: std::time::Duration,
-    ) -> Result<(), SendMailError> {
-        let mut address = serde_json::json!({ "address": from });
-        if let Some(name) = name.map(str::trim).filter(|n| !n.is_empty()) {
-            address["name"] = serde_json::json!(name);
-        }
+    ) -> Result<bool, SendMailError> {
         let resp = self
             .client
             .send(self.client
                 .patch(url)
                 .bearer_auth(&self.access_token)
                 .timeout(timeout)
-                .json(&serde_json::json!({ "from": { "emailAddress": address } })))
+                .json(&serde_json::json!({ "from": { "emailAddress": email_address(from, name) } })))
             .await
             .map_err(before_send_error)?;
         if !resp.status().is_success() {
-            return Err(refused(resp).await);
+            return match refused(resp).await {
+                SendMailError::Refused { code, message, .. }
+                    if format!("{} {}", code.as_deref().unwrap_or(""), message.as_deref().unwrap_or(""))
+                        .to_lowercase()
+                        .contains("sendasdenied") =>
+                {
+                    Ok(false)
+                }
+                other => Err(other),
+            };
         }
 
         let read_url = format!("{url}?$select=from");
@@ -1246,13 +1268,33 @@ impl GraphClient {
             return Err(refused(resp).await);
         }
         // An answer that cannot be read says nothing about the sender: a
-        // fault to try again, not a refusal.
+        // fault to try again, not a reason to fall back.
         let held: serde_json::Value = resp.json().await.map_err(before_send_error)?;
-        let kept = held["from"]["emailAddress"]["address"].as_str().map(str::to_string);
-        if kept.as_deref().is_some_and(|k| k.eq_ignore_ascii_case(from)) {
+        let kept = held["from"]["emailAddress"]["address"].as_str();
+        Ok(kept.is_some_and(|k| k.eq_ignore_ascii_case(from)))
+    }
+
+    /// Point a draft's replies at `address`. Nothing here can have sent the message.
+    async fn set_draft_reply_to(
+        &self,
+        url: &str,
+        address: &str,
+        name: Option<&str>,
+        timeout: std::time::Duration,
+    ) -> Result<(), SendMailError> {
+        let resp = self
+            .client
+            .send(self.client
+                .patch(url)
+                .bearer_auth(&self.access_token)
+                .timeout(timeout)
+                .json(&serde_json::json!({ "replyTo": [{ "emailAddress": email_address(address, name) }] })))
+            .await
+            .map_err(before_send_error)?;
+        if resp.status().is_success() {
             Ok(())
         } else {
-            Err(SendMailError::SenderNotApplied { kept })
+            Err(refused(resp).await)
         }
     }
 

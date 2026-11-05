@@ -182,7 +182,7 @@ fn route(stub: &Stub, req: &Req, draft_id: Option<&str>) -> (u16, Vec<(&'static 
             };
             match (method, rest) {
                 ("PATCH", "") => {
-                    if draft.mime.contains("Subject: case-patch-denied") {
+                    if draft.mime.contains("Subject: case-patch-denied") && req.body.contains("\"from\"") {
                         return (403, vec![], error("ErrorSendAsDenied", "The user account does not have the right to send mail on behalf of the specified sending account."));
                     }
                     let patch: serde_json::Value = serde_json::from_str(&req.body).unwrap_or_default();
@@ -595,27 +595,29 @@ async fn a_graph_send_from_the_login_stays_one_send_mail() {
     }
 }
 
-/// A draft Microsoft keeps under the login after the PATCH is not sent: the
-/// user chose the alias to keep the login private, so the send is refused,
-/// with the wording of every other send-as refusal, and the draft goes.
+/// Reported after the alias fix: Microsoft keeps the login as the sender of a
+/// draft whose `from` was PATCHed, and refusing every such send made aliases
+/// unusable. The mail goes out anyway, as the login, with the alias as
+/// Reply-To so replies still reach it; the draft is sent, never left behind.
 #[tokio::test]
-async fn an_alias_microsoft_does_not_apply_is_refused_and_the_draft_removed() {
-    let err = smtp::send_email(&alias_account(), &email("case-from-ignored", None)).await.err().expect("the login must not stand in");
-    assert!(err.contains(&format!("refused to send as {ALIAS}")), "{err}");
-    assert!(smtp::is_terminal_send_error(&err), "a refused sender is never retried: {err}");
-    assert!(!err.contains("SMTP") && !err.contains('\u{2014}'), "{err}");
-    assert_eq!(trail("case-from-ignored"), vec![CREATE, PATCH, VERIFY, DISCARD]);
-    assert!(delivered_from("case-from-ignored").is_empty(), "nothing may go out as the login");
+async fn an_alias_microsoft_does_not_apply_is_sent_with_the_alias_as_reply_to() {
+    smtp::send_email(&alias_account(), &email("case-from-ignored", None)).await.expect("an alias send must not be refused");
+    assert_eq!(trail("case-from-ignored"), vec![CREATE, PATCH, VERIFY, PATCH, SEND]);
+    assert_eq!(delivered_from("case-from-ignored"), vec![ME.to_string()], "Microsoft sends it as the login");
+    let reply_to = requests_marked("case-from-ignored", "PATCH").remove(1);
+    let body: serde_json::Value = serde_json::from_str(&reply_to.body).expect("a JSON patch");
+    assert_eq!(body, serde_json::json!({"replyTo": [{"emailAddress": {"address": ALIAS, "name": "Me Myself"}}]}));
 }
 
-/// Microsoft refusing the PATCH itself says the same, and cleans up the same.
+/// Microsoft refusing the `from` PATCH itself gets the same treatment.
 #[tokio::test]
-async fn an_alias_microsoft_refuses_to_set_is_refused_and_the_draft_removed() {
-    let err = smtp::send_email(&alias_account(), &email("case-patch-denied", None)).await.err().expect("refused");
-    assert!(err.contains(&format!("refused to send as {ALIAS}")), "{err}");
-    assert!(smtp::is_terminal_send_error(&err), "{err}");
-    assert_eq!(trail("case-patch-denied"), vec![CREATE, PATCH, DISCARD]);
-    assert!(delivered_from("case-patch-denied").is_empty());
+async fn an_alias_microsoft_refuses_to_set_is_sent_with_the_alias_as_reply_to() {
+    smtp::send_email(&alias_account(), &email("case-patch-denied", None)).await.expect("an alias send must not be refused");
+    assert_eq!(trail("case-patch-denied"), vec![CREATE, PATCH, PATCH, SEND]);
+    assert_eq!(delivered_from("case-patch-denied"), vec![ME.to_string()]);
+    let reply_to = requests_marked("case-patch-denied", "PATCH").remove(1);
+    let body: serde_json::Value = serde_json::from_str(&reply_to.body).expect("a JSON patch");
+    assert_eq!(body["replyTo"][0]["emailAddress"]["address"], ALIAS);
 }
 
 /// Graph read the send and never answered: as for `sendMail`, it may have
