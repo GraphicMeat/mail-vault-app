@@ -516,6 +516,15 @@ export async function getOAuth2AuthUrl(email, provider, customClientId, tenantId
   return httpRequest(`/oauth2/auth-url${params}`, { method: 'GET' });
 }
 
+// Is this address a personal Microsoft account under its own domain (an alias
+// of an Outlook.com account)? The domain list cannot tell; Microsoft can. The
+// daemon answers false when it cannot ask. Personal accounts use Graph.
+export async function isPersonalMicrosoftAccount(email) {
+  if (!IS_TAURI) return false;
+  const { personal } = await tauriInvoke('oauth2_microsoft_personal', { email });
+  return personal === true;
+}
+
 /**
  * Which Google apps this build can sign in through.
  * `mailvault`: whether MailVault's own app is included in this build.

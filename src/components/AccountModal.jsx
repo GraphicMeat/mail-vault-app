@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useId } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
-import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings } from '../services/api';
+import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings, isPersonalMicrosoftAccount } from '../services/api';
 import { withOAuth2Exchange } from '../services/authUtils';
 import { GOOGLE_CLIENT_THUNDERBIRD, googleClientErrorText, loadGoogleClients } from '../services/googleClient';
 import { isPersonalMicrosoftEmail } from '../services/graphConfig';
@@ -529,8 +529,15 @@ export function AccountModal({ onClose, onSuccess }) {
 
     const currentProvider = providerConfig?.oauth2Provider || 'microsoft';
 
-    // Detect personal Microsoft accounts — these need Graph API scopes (IMAP OAuth broken)
-    const isPersonalMs = currentProvider === 'microsoft' && isPersonalMicrosoftEmail(userEnteredEmail);
+    // Detect personal Microsoft accounts — these need Graph API scopes (IMAP OAuth broken).
+    // Outlook.com and Hotmail addresses are known by domain; a personal account
+    // signed in under its own domain is told by Microsoft, unless a work tenant
+    // or own app was typed (then it is a work account).
+    const isPersonalMs = currentProvider === 'microsoft' && (
+      isPersonalMicrosoftEmail(userEnteredEmail)
+      || (!formData.oauth2TenantId && !formData.oauth2CustomClientId
+        && await isPersonalMicrosoftAccount(userEnteredEmail).catch(() => false))
+    );
 
     try {
       // Step 1: Get the auth URL from the server (pass email as login_hint + provider)

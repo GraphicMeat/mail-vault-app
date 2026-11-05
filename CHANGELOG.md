@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Adding a personal Microsoft account that uses your own domain (an Outlook.com account with a custom address, such as name@yourdomain.com) now works. It used to fail with "Nothing answered on outlook.office365.com, port 993". MailVault now asks Microsoft whether the address is a personal account and, if so, connects it the way it connects Outlook.com and Hotmail accounts.
 - Sending from an alias of a Microsoft account no longer fails with "Microsoft refused to send as". When Microsoft will not send as the alias, the mail goes out as the account address with the alias set as Reply-To, so replies still reach the alias.
 
 - Settings > Billing now groups an account's aliases under it, indented with the account name greyed out, the same way the From picker in Compose does.

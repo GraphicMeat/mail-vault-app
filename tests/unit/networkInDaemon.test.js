@@ -59,7 +59,7 @@ const GRAPH = [
 
 // Task 5.7: OAuth2. `OAuth2Manager` now lives once in the daemon's
 // `DaemonState`, not the app's `.manage(...)`.
-const OAUTH2 = ['oauth2_auth_url', 'oauth2_exchange', 'oauth2_refresh', 'oauth2_google_clients'];
+const OAUTH2 = ['oauth2_auth_url', 'oauth2_exchange', 'oauth2_refresh', 'oauth2_google_clients', 'oauth2_microsoft_personal'];
 
 // Task 5.8: DNS. `resolve_email_settings` was already core logic behind a
 // thin command; `dns_mail_health` moved from src-tauri/src/dns.rs (now
@@ -84,7 +84,7 @@ describe('Phase 5: IMAP/SMTP/Graph/OAuth2/DNS live in the daemon, keychain inter
     expect(IMAP.length).toBe(20);
     expect(SMTP.length).toBe(4);
     expect(GRAPH.length).toBe(12);
-    expect(OAUTH2.length).toBe(4);
+    expect(OAUTH2.length).toBe(5);
     expect(DNS.length).toBe(2);
     expect(DEAD.length).toBe(5);
   });

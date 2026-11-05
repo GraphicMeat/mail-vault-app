@@ -50,10 +50,12 @@ vi.mock('../../stores/accountStore', () => ({
 
 const mockGetOAuth2AuthUrl = vi.fn();
 const mockExchangeOAuth2Code = vi.fn();
+const mockIsPersonalMicrosoftAccount = vi.fn(async () => false);
 const mockGetGoogleClients = vi.fn(async () => ({ mailvault: false, default: 'thunderbird' }));
 vi.mock('../../services/api', () => ({
   getOAuth2AuthUrl: (...a) => mockGetOAuth2AuthUrl(...a),
   getGoogleClients: (...a) => mockGetGoogleClients(...a),
+  isPersonalMicrosoftAccount: (...a) => mockIsPersonalMicrosoftAccount(...a),
   exchangeOAuth2Code: (...a) => mockExchangeOAuth2Code(...a),
   testConnection: vi.fn(),
   resolveEmailSettings: vi.fn(),
@@ -186,6 +188,58 @@ describe('AccountModal — OAuth callback finishes the add', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sign in with Microsoft/i }));
 
     await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
+  });
+});
+
+// A personal Microsoft account signed in under its own domain (an alias of an
+// Outlook.com account) is no work account: the domain list cannot tell, so the
+// daemon asks Microsoft. Treated as a work account it is added over IMAP, which
+// a personal token cannot log in to ("Nothing answered on ... port 993").
+describe('AccountModal: a personal Microsoft account under its own domain', () => {
+  const CUSTOM = 'butcher@graphicmeat.example';
+  const SIGNED_IN = { accessToken: 'access-token', refreshToken: 'refresh-token', expiresAt: 1234567890 };
+
+  beforeEach(() => {
+    mockAddAccount.mockReset().mockResolvedValue({ id: 'acct-3', email: CUSTOM });
+    mockGetOAuth2AuthUrl.mockReset().mockResolvedValue({ authUrl: 'https://login.microsoftonline.com/x', state: 'state-1' });
+    mockExchangeOAuth2Code.mockReset().mockResolvedValue(SIGNED_IN);
+    mockIsPersonalMicrosoftAccount.mockReset();
+    vi.spyOn(window, 'open').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  async function signInWithMicrosoft() {
+    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.click(screen.getByText('Outlook / Microsoft 365'));
+    const emailInput = await screen.findByLabelText('Email Address *');
+    fireEvent.change(emailInput, { target: { name: 'email', value: CUSTOM } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Microsoft/i }));
+    await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
+  }
+
+  it('is signed in for Graph and added over Graph when Microsoft says the domain is no work tenant', async () => {
+    mockIsPersonalMicrosoftAccount.mockResolvedValue(true);
+    await signInWithMicrosoft();
+    expect(mockIsPersonalMicrosoftAccount).toHaveBeenCalledWith(CUSTOM);
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(true);
+    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('graph');
+  });
+
+  it('stays a work account when Microsoft says the domain is a tenant', async () => {
+    mockIsPersonalMicrosoftAccount.mockResolvedValue(false);
+    await signInWithMicrosoft();
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(false);
+    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('imap');
+  });
+
+  it('stays a work account, and the sign-in still goes ahead, when the lookup fails', async () => {
+    mockIsPersonalMicrosoftAccount.mockRejectedValue(new Error('offline'));
+    await signInWithMicrosoft();
+    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('imap');
   });
 });
 

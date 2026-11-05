@@ -2179,6 +2179,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'pgp.import_key': case 'pgp.remove_key': return unsupported(command);
       case 'open_file': case 'open_email_window': return unsupported(command);
       case 'oauth2_google_clients': return { mailvault: false, default: 'thunderbird' };
+      case 'oauth2_microsoft_personal': return { personal: false };
       case 'credentials.get': return invoke('get_credentials');
       case 'credentials.save': case 'credentials.update': case 'credentials.delete': return unsupported(command);
       case 'accounts.add': case 'accounts.update': case 'accounts.save': throw new Error('errors.daemonOutdated');

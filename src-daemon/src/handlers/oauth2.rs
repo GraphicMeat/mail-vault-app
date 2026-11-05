@@ -102,6 +102,15 @@ pub(crate) async fn route(
             }),
         ),
 
+        // Is this address a personal Microsoft account under its own domain
+        // (so Graph transport, not IMAP)? Asked of Microsoft; a failed ask is
+        // `false`.
+        "oauth2_microsoft_personal" => {
+            let email = params.get("email").and_then(Value::as_str).unwrap_or("");
+            let personal = mailvault_core::graph::is_personal_microsoft_account(email).await;
+            RpcResponse::success(id, json!({ "personal": personal }))
+        }
+
         "oauth2_exchange" => {
             let oauth_state = match params.get("state").and_then(Value::as_str) {
                 Some(s) => s,

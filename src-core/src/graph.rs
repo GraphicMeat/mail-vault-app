@@ -43,6 +43,34 @@ pub fn is_personal_microsoft(email: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether Microsoft's realm answer for an address says it is a personal
+/// account under its own domain: `Unknown` is a domain no work tenant owns.
+/// `Managed` and `Federated` are tenants; anything unreadable is not a yes.
+pub fn realm_is_personal(body: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v["account_type"].as_str().map(|t| t.eq_ignore_ascii_case("Unknown")))
+        .unwrap_or(false)
+}
+
+/// Ask Microsoft whether `email` is a personal account under its own domain
+/// (an alias of an Outlook.com account), which the domain list cannot tell.
+/// Personal accounts need Graph transport: their token cannot log in over
+/// IMAP. Any failure to ask is `false`, the work-account path the add flow
+/// always took.
+pub async fn is_personal_microsoft_account(email: &str) -> bool {
+    let url = format!(
+        "https://login.microsoftonline.com/common/userrealm/{}?api-version=1.0",
+        percent_encode(email.trim())
+    );
+    let client = http_client("microsoft-realm", Some(std::time::Duration::from_secs(8)));
+    let Ok(resp) = client.send(client.get(&url)).await else { return false };
+    if !resp.status().is_success() {
+        return false;
+    }
+    resp.text().await.map(|body| realm_is_personal(&body)).unwrap_or(false)
+}
+
 /// URL of a newest-first message listing, optionally from a moment backwards.
 fn messages_list_url(base: &str, folder_id: &str, top: u32, skip: u32, before: Option<&str>) -> String {
     let filter = before.map(|b| format!("&$filter=receivedDateTime le {b}")).unwrap_or_default();
@@ -1738,6 +1766,18 @@ mod tests {
         })).unwrap();
         let row = serde_json::to_value(msg.to_email_header(1)).unwrap();
         assert_eq!(row["dkimSignature"], "a=rsa-sha256; d=brand.test; s=k1");
+    }
+
+    #[test]
+    fn microsoft_realm_answer_says_whether_a_domain_is_a_work_tenant() {
+        // A work tenant's domain is Managed or Federated; a domain Microsoft
+        // does not know as a tenant is a personal account's own domain.
+        assert!(realm_is_personal(r#"{"ver":"1.0","account_type":"Unknown","cloud_instance_name":"microsoftonline.com"}"#));
+        assert!(!realm_is_personal(r#"{"account_type":"Managed","domain_name":"contoso.com"}"#));
+        assert!(!realm_is_personal(r#"{"account_type":"Federated","domain_name":"contoso.com"}"#));
+        assert!(!realm_is_personal(r#"{"something":"else"}"#));
+        assert!(!realm_is_personal("<<not json>>"));
+        assert!(!realm_is_personal(""));
     }
 
     #[test]

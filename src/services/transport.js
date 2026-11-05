@@ -287,6 +287,8 @@ export const DAEMON_OWNED = new Set([
   // Which Google apps a new sign-in can use (whether MailVault's own is in
   // this build, and the default).
   'oauth2_google_clients',
+  // Is an address a personal Microsoft account under its own domain.
+  'oauth2_microsoft_personal',
   // Native account workflows and credential completion own persistence.
   'accounts.list', 'accounts.get', 'accounts.save', 'accounts.add', 'accounts.update', 'accounts.put', 'accounts.remove_local', 'accounts.reorder', 'accounts.replace_all',
   'credentials.get', 'credentials.save', 'credentials.update', 'credentials.delete',
