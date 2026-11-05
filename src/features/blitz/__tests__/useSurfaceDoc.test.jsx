@@ -60,6 +60,39 @@ describe('useSurfaceDoc', () => {
     expect(result.current.sentWidth).toBe(480);
   });
 
+  it('beforeShow holds a new doc back: the old one stays up (busy) and what it answers is what shows', async () => {
+    const reg = fakeRegistry();
+    let finish;
+    const beforeShow = vi.fn(doc => new Promise((res) => { finish = () => res({ ...doc, rev: 9 }); }));
+    const { result, rerender } = renderHook(({ p }) => useSurfaceDoc(p, { registry: reg, beforeShow }), { initialProps: { p: P() } });
+    await land(reg, 1);
+    await act(async () => { finish(); });
+    expect(result.current.doc).toMatchObject({ docId: 1, rev: 9 });
+    rerender({ p: P({ html: '<p>next' }) });
+    await land(reg, 2);
+    expect(beforeShow).toHaveBeenCalledTimes(2);
+    expect(result.current.doc.docId).toBe(1);
+    expect(result.current.busy).toBe(true);
+    expect(reg.release).not.toHaveBeenCalled();
+    await act(async () => { finish(); });
+    expect(result.current.doc).toMatchObject({ docId: 2, rev: 9 });
+    expect(result.current.busy).toBe(false);
+    expect(reg.release).toHaveBeenCalledWith(expect.anything(), { now: true, docId: 1 });
+  });
+
+  it('a key superseded during beforeShow is released at once and never shown', async () => {
+    const reg = fakeRegistry();
+    let finish;
+    const beforeShow = vi.fn(doc => new Promise((res) => { finish = () => res(doc); }));
+    const { result, rerender } = renderHook(({ p }) => useSurfaceDoc(p, { registry: reg, beforeShow }), { initialProps: { p: P() } });
+    const firstKey = result.current.key;
+    await land(reg, 1);
+    rerender({ p: P({ html: '<p>next' }) });
+    await act(async () => { finish(); });
+    expect(result.current.doc).toBeNull();
+    expect(reg.release).toHaveBeenCalledWith(firstKey, { now: true, docId: 1 });
+  });
+
   it('a key change keeps the old doc up (busy) until the new one lands, then releases the old one now', async () => {
     const reg = fakeRegistry();
     const { result, rerender } = renderHook(({ p }) => useSurfaceDoc(p, { registry: reg }), { initialProps: { p: P() } });

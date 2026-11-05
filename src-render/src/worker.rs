@@ -308,8 +308,9 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
                     }
                     line(out, json!({"kind":"reply","req":req,"ok":{"rev":o.rev,"meta":meta}}))?;
                     // The same `updated` frame a resource arrival sends: the
-                    // frontend applies new layouts from the render-updated event
-                    // only, never from this reply.
+                    // frontend applies a click's new layout from the render-updated
+                    // event only, never from this reply. Only a doc not on screen
+                    // yet takes the reply (carryFolds, BlitzTiles.jsx).
                     if changed {
                         line(out, json!({"kind":"updated","doc":doc,"rev":o.rev,"meta":meta}))?;
                     }

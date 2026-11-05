@@ -52,6 +52,7 @@ const SUBJECT_C = 'Blitz C Merriweather fixture';
 const SUBJECT_D = 'Blitz C big fixture';
 const SUBJECT_E = 'Blitz C short fixture';
 const SUBJECT_F = 'Blitz C tall fixture';
+const SUBJECT_G = 'Blitz C tall quote fixture';
 const MSGIDS = ['blitzc-a', 'blitzc-b', 'blitzc-c', 'blitzc-d', 'blitzc-e', 'blitzc-f'].map((x) => `${x}@mock.test`);
 
 const PROBE = 'Sphinx of black quartz, judge my vow 0123456789';
@@ -129,6 +130,9 @@ const TALL = [
 ];
 const HTML_F = TALL.map((t) => `<p style="margin:0 0 20px;width:240px;font:${t.font} sans-serif">${t.needle} ${Array.from({ length: t.words }, (_, i) => `tw${i}`).join(' ')} ${t.end}</p>`).join('');
 
+// A short reply that fits the pane with its quote folded and overflows it with the quote open.
+const HTML_G = `<p>Scrollbar reply.</p><p>On Fri, Aug 21, 2026, Person A wrote:</p><blockquote>${Array.from({ length: 200 }, (_, i) => `<p>Quoted line ${i}.</p>`).join('')}</blockquote>`;
+
 const MAILS = [
   { subject: SUBJECT_A, id: 0, from: 'Blitz A <a@blitzc.test>', day: 'Thu, 02', html: HTML_A },
   { subject: SUBJECT_B, id: 1, from: 'Blitz B <b@blitzc.test>', day: 'Fri, 03', html: HTML_B },
@@ -136,6 +140,7 @@ const MAILS = [
   { subject: SUBJECT_D, id: 3, from: 'Blitz D <d@blitzc.test>', day: 'Sun, 05', html: HTML_D },
   { subject: SUBJECT_E, id: 4, from: 'Blitz E <e@blitzc.test>', day: 'Mon, 06', html: HTML_E },
   { subject: SUBJECT_F, id: 5, from: 'Blitz F <f@blitzc.test>', day: 'Tue, 07', html: HTML_F },
+  { subject: SUBJECT_G, id: 6, from: 'Blitz G <g@blitzc.test>', day: 'Wed, 08', html: HTML_G },
 ];
 
 async function withMailbox(path, fn) {
@@ -758,7 +763,7 @@ async function openRow(subject) {
   }, subject), { timeout: 60_000, interval: 400, timeoutMsg: `no row for "${subject}" in ${YODA}'s INBOX` });
 }
 
-const READY = { [SUBJECT_A]: 'Reply', [SUBJECT_B]: 'Lora.', [SUBJECT_C]: 'Merriweather.', [SUBJECT_D]: 'Paragraph 0', [SUBJECT_E]: 'Short', [SUBJECT_F]: 'Talltext' };
+const READY = { [SUBJECT_A]: 'Reply', [SUBJECT_B]: 'Lora.', [SUBJECT_C]: 'Merriweather.', [SUBJECT_D]: 'Paragraph 0', [SUBJECT_E]: 'Short', [SUBJECT_F]: 'Talltext', [SUBJECT_G]: 'Scrollbar reply' };
 
 async function waitReady(mode, subject, timeout = 60_000) {
   let last = null;
@@ -1611,6 +1616,54 @@ describe('Blitz plan C: interactions, iframe vs Blitz', function () {
       // Copy across the now OPEN quote must include it in both renderers.
       const iframeCount = await kit('iframeSeen', true);
       ck(iframeCount.now === 0 && iframeCount.seen.length === 0, `an iframe appeared in Blitz mode: ${JSON.stringify(iframeCount)}`);
+    });
+  });
+
+  // A Mac set to always show scrollbars (or with a mouse attached): the body fits with the quote folded and
+  // overflows with it open, so opening it takes the scrollbar's width from the body and the doc reopens.
+  it('fold toggles: a quote whose opening brings the pane a scrollbar stays open', async function () {
+    await section('folds.scrollbar', async (ck) => {
+      await openFixture('blitz', SUBJECT_G);
+      const pane = await browser.execute(() => {
+        const style = document.createElement('style');
+        style.id = 'mv-classic-scrollbars';
+        style.textContent = '*::-webkit-scrollbar{width:15px}*::-webkit-scrollbar-thumb{background:#888}';
+        document.head.append(style);
+        const s = document.querySelector('[data-testid="blitz-email-body"]').closest('.overflow-y-auto');
+        return { overflowing: s.scrollHeight > s.clientHeight, gutter: s.offsetWidth - s.clientWidth };
+      });
+      const b = await kit('blitz');
+      const b0 = b.cssHeight;
+      const wrote = await kit('rect', 'blitz', 'wrote:');
+      const origin = await kit('layerOrigin');
+      const scan = wrote && b.docId ? await kitAsync('hitScan', b.docId, 14, Math.round(wrote.bottom - 30 - origin.top), Math.round(wrote.bottom + 120 - origin.top), 4) : null;
+      ck(!!scan, 'no fold toggle found under "wrote:"');
+      if (!scan) return;
+      await kit('clear', 'blitz');
+      await kit('fire', 'blitz', 'click', origin.left + scan.x, scan.y + origin.top);
+      // Long enough for the debounced width change, the reopen, and any snap back.
+      const seen = [];
+      const t0 = Date.now();
+      while (Date.now() - t0 < 4000) {
+        const now = await kit('blitz');
+        const last = seen[seen.length - 1];
+        if (!last || last.docId !== now.docId || last.cssHeight !== now.cssHeight) seen.push({ ms: Date.now() - t0, docId: now.docId, cssHeight: now.cssHeight });
+        await browser.pause(100);
+      }
+      const end = await kit('blitz');
+      const after = await browser.execute(() => {
+        const s = document.querySelector('[data-testid="blitz-email-body"]').closest('.overflow-y-auto');
+        const out = { overflowing: s.scrollHeight > s.clientHeight, gutter: s.offsetWidth - s.clientWidth };
+        document.getElementById('mv-classic-scrollbars').remove();
+        return out;
+      });
+      const openHeight = Math.max(b0, ...seen.map((x) => x.cssHeight));
+      log('folds.scrollbar', { b0, openHeight, end: end.cssHeight, seen, pane, after });
+      ck(!pane.overflowing && pane.gutter === 0, `the pane already had a scrollbar with the quote folded: ${JSON.stringify(pane)}`);
+      ck(openHeight > b0, 'the quote never opened');
+      ck(new Set(seen.map((x) => x.docId)).size > 1, `no doc reopened, so the width never changed: ${JSON.stringify(seen)}`);
+      ck(end.cssHeight > b0, `the quote snapped shut: ${end.cssHeight}px, folded it is ${b0}px, it opened to ${openHeight}px`);
+      ck(after.overflowing && after.gutter > 0, `no scrollbar with the quote open: ${JSON.stringify(after)}`);
     });
   });
 

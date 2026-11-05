@@ -16,8 +16,10 @@ const DISCARDED = 'render_discarded';
  * A holder whose open is discarded by another holder's retry opens again.
  * `retry(docId)` discards the current key's doc and opens it again; the discarded
  * doc is off screen in the same render, so none of its tiles can fail the retry.
+ * `beforeShow(doc)` runs on a doc once it is open and must not reject; what it
+ * answers is what shows, and until then the doc on screen stays up.
  */
-export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDocRegistry() } = {}) {
+export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDocRegistry(), beforeShow = null } = {}) {
   // The key hashes up to 4 MiB of html: only when what it is made of changes (hover re-renders run constantly).
   const themeKey = JSON.stringify(params?.theme ?? null);
   const key = useMemo(
@@ -42,7 +44,8 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
     if (held.current?.key === key) return undefined;
     let live = true;
     const sentWidth = paramsRef.current.cssWidth;
-    registry.acquire(key, paramsRef.current).then(
+    const acquired = registry.acquire(key, paramsRef.current);
+    (beforeShow ? acquired.then(beforeShow) : acquired).then(
       (doc) => {
         if (!live) {
           // Superseded (or unmounted) before it landed: never painted. Superseded closes at once; an

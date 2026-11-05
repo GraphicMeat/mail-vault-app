@@ -723,6 +723,108 @@ describe('fold toggles', () => {
     expect(onLink).not.toHaveBeenCalled();
   });
 
+  describe('a doc opened anew comes from HTML that predates the click', () => {
+    const src = () => screen.getAllByTestId('blitz-tile')[0].getAttribute('src');
+    // A pane the test can resize after the first measure, as a scrollbar coming or going does.
+    const resizable = () => {
+      const seen = [];
+      globalThis.ResizeObserver = class { constructor(cb) { this.cb = cb; seen.push(this); } observe(el) { this.cb([{ contentRect: { width: paneWidth }, target: el }]); } disconnect() {} };
+      return (w) => act(async () => {
+        seen.forEach(r => r.cb([{ contentRect: { width: w } }]));
+        await new Promise(res => setTimeout(res, 170));
+      });
+    };
+    // Opens the body with q0 as `from`, clicks it to the other state, and lands that as the worker would.
+    const toggled = async (from, p = {}) => {
+      let push;
+      onRenderUpdated.mockImplementation(async cb => { push = cb; return () => {}; });
+      openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: foldMeta(from) }).mockResolvedValueOnce({ docId: 5, rev: 1, meta: foldMeta(from) });
+      hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+      foldRender.mockResolvedValueOnce({ rev: 2, meta: foldMeta(!from) });
+      const view = render(tiles(p));
+      fireEvent.click((await screen.findAllByTestId('blitz-tile'))[0]);
+      await waitFor(() => expect(foldRender).toHaveBeenCalledWith(4, 'q0', !from));
+      await act(async () => { push({ docId: 4, rev: 2, meta: foldMeta(!from) }); });
+      expect(src()).toContain('4%2F2%2F0');
+      return view;
+    };
+
+    it('the quote stays open when opening it brings a scrollbar: the old doc stays up until the new one is open too', async () => {
+      const resize = resizable();
+      await toggled(false);
+      let carried;
+      foldRender.mockImplementationOnce(() => new Promise((res) => { carried = res; }));
+      await resize(585);
+      await waitFor(() => expect(foldRender).toHaveBeenCalledWith(5, 'q0', true));
+      expect(openRender).toHaveBeenCalledTimes(2);
+      expect(src()).toContain('4%2F2%2F0'); // no frame of the folded doc: it would shrink the body and lose the scrollbar again
+      await act(async () => { carried({ rev: 2, meta: foldMeta(true) }); });
+      await waitFor(() => expect(src()).toContain('5%2F2%2F0'));
+      expect(foldRender).not.toHaveBeenCalledWith(5, 's0', expect.anything()); // nobody touched the signature
+    });
+
+    it('a quote the user closed stays closed when the HTML still has it open', async () => {
+      const resize = resizable();
+      await toggled(true);
+      foldRender.mockResolvedValueOnce({ rev: 2, meta: foldMeta(false) });
+      await resize(585);
+      await waitFor(() => expect(src()).toContain('5%2F2%2F0'));
+      expect(foldRender).toHaveBeenCalledWith(5, 'q0', false);
+    });
+
+    it('Load external content keeps the open quote', async () => {
+      const { rerender } = await toggled(false, { allowRemote: false });
+      foldRender.mockResolvedValueOnce({ rev: 2, meta: foldMeta(true) });
+      rerender(tiles({ allowRemote: true }));
+      await waitFor(() => expect(src()).toContain('5%2F2%2F0'));
+      expect(foldRender).toHaveBeenCalledWith(5, 'q0', true);
+    });
+
+    it('a quiet reopen after the worker lost the doc keeps the open quote', async () => {
+      await toggled(false);
+      foldRender.mockResolvedValueOnce({ rev: 2, meta: foldMeta(true) });
+      await act(async () => { reportDocGone(4, new Error('render_unknown_doc')); });
+      await waitFor(() => expect(src()).toContain('5%2F2%2F0'));
+      expect(foldRender).toHaveBeenCalledWith(5, 'q0', true);
+    });
+
+    it('a click the worker refused is not carried: the new doc shows what was on screen', async () => {
+      const resize = resizable();
+      openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: foldMeta(false) }).mockResolvedValueOnce({ docId: 5, rev: 1, meta: foldMeta(false) });
+      hitRender.mockResolvedValue({ link: null, fold: 'q0' });
+      foldRender.mockRejectedValueOnce(new Error('render_unavailable'));
+      const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      const onFoldToggled = vi.fn();
+      render(tiles({ onFoldToggled }));
+      fireEvent.click((await screen.findAllByTestId('blitz-tile'))[0]);
+      await waitFor(() => expect(onFoldToggled.mock.calls).toEqual([['q0', true], ['q0', false]]));
+      await resize(585);
+      await waitFor(() => expect(src()).toContain('5%2F1%2F0'));
+      expect(foldRender).toHaveBeenCalledTimes(1);
+      debug.mockRestore();
+    });
+
+    it('a new doc already in the state on screen costs no fold', async () => {
+      const resize = resizable();
+      openRender.mockResolvedValueOnce({ docId: 4, rev: 1, meta: foldMeta(true) }).mockResolvedValueOnce({ docId: 5, rev: 1, meta: foldMeta(true) });
+      render(tiles());
+      await screen.findAllByTestId('blitz-tile');
+      await resize(585);
+      await waitFor(() => expect(src()).toContain('5%2F1%2F0'));
+      expect(foldRender).not.toHaveBeenCalled();
+    });
+
+    it('a fold the worker refuses still shows the doc', async () => {
+      const resize = resizable();
+      await toggled(false);
+      const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      foldRender.mockRejectedValueOnce(new Error('render_unavailable'));
+      await resize(585);
+      await waitFor(() => expect(src()).toContain('5%2F1%2F0'));
+      debug.mockRestore();
+    });
+  });
+
   it('a click that ends a drag-selection never toggles a fold', async () => {
     openRender.mockResolvedValue({ docId: 4, rev: 1, meta: { ...foldMeta(false), tileCount: 1, cssHeight: 100 } });
     textRunsRender.mockResolvedValue({ runs: [{ x: 0, y: 0, w: 50, h: 20, text: 'hello', fontPx: 16, node: 1, start: 0 }] });
@@ -800,6 +902,7 @@ describe('fold toggles', () => {
     await waitFor(() => expect(foldRender).toHaveBeenCalledWith(4, 'q0', true));
     rerender(tiles({ onFoldToggled, html: '<p>B' }));
     await waitFor(() => expect(screen.getByTestId('blitz-email-body').getAttribute('data-doc-id')).toBe('5'));
+    expect(foldRender).toHaveBeenCalledTimes(1); // doc 4's meta still says closed, but the click in flight is what counts
     await act(async () => { rejectIt(new Error('render_unknown_doc')); });
     expect(onFoldToggled.mock.calls).toEqual([['q0', true]]);
     debug.mockRestore();

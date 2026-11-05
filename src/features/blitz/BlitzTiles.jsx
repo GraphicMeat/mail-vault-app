@@ -62,6 +62,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
   const tileEls = useRef([]);
   const docIdRef = useRef(null);
   const foldSeq = useRef(new Map()); // fold id -> newest toggle issued, so an older refusal cannot undo a newer click
+  const foldAsked = useRef(new Map()); // fold id -> the state the user's last click asked for (a doc's meta lags a click in flight)
   const docRef = useRef(null); // the latest doc, for a click handler that awaits a hit reply
   const failed = useRef(false);
   const hitBusy = useRef(false);
@@ -112,7 +113,22 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
   const cssWidth = width >= MIN_OPEN_WIDTH ? Math.min(4000, Math.max(1, Math.round(width))) : null;
   const scale = Math.min(4, Math.max(0.5, dpr));
   const params = cssWidth ? { html, cssWidth, scale, allowRemote, theme: workerTheme } : null;
-  const { key: docKeyNow, doc, sentWidth, error, busy, retry } = useSurfaceDoc(params, { deferOnUnmount: LAZY_SURFACES.has(surface) });
+  // A doc opened anew (width, scale, remote images, a quiet retry) comes from the pre-pass HTML, which predates any fold
+  // click since. The folds go back before it shows, as the worker's carry_folds does across a fonts rebuild: shown folded,
+  // it would come up shorter, lose the pane's scrollbar, widen and reopen, so a quote would open and snap shut.
+  const carryFolds = useCallback(async (next) => {
+    let out = next;
+    for (const f of next.meta?.folds ?? []) {
+      const asked = foldAsked.current.get(f.id);
+      if (asked === undefined || asked === f.open) continue;
+      try {
+        const r = await foldRender(next.docId, f.id, asked);
+        out = { ...out, rev: r.rev, meta: r.meta };
+      } catch (e) { console.debug('[blitz] fold not carried', f.id, e?.message || e); }
+    }
+    return out;
+  }, []);
+  const { key: docKeyNow, doc, sentWidth, error, busy, retry } = useSurfaceDoc(params, { deferOnUnmount: LAZY_SURFACES.has(surface), beforeShow: carryFolds });
   docRef.current = doc;
   docIdRef.current = doc?.docId ?? null;
 
@@ -194,6 +210,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
     const open = !f.open;
     const seq = (foldSeq.current.get(id) ?? 0) + 1;
     foldSeq.current.set(id, seq);
+    foldAsked.current.set(id, open);
     onFoldToggledRef.current?.(id, open);
     try {
       await foldRender(docId, id, open);
@@ -201,7 +218,10 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
       console.debug('[blitz] fold toggle refused', id, e?.message || e);
       // Undo only our own record: not after a newer click on this fold, and not after the doc
       // was replaced (the new open carries the state the owner recorded for it).
-      if (foldSeq.current.get(id) === seq && docIdRef.current === docId) onFoldToggledRef.current?.(id, !open);
+      if (foldSeq.current.get(id) === seq && docIdRef.current === docId) {
+        foldAsked.current.set(id, !open);
+        onFoldToggledRef.current?.(id, !open);
+      }
     }
   }, []);
 
