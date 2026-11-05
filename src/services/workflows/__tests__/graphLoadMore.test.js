@@ -533,3 +533,106 @@ describe('a Graph folder bigger than one page', () => {
     expect(saved[3]).toBe(FOLDER_TOTAL);
   });
 });
+
+// The list said 200 until a scroll: the first page counts the folder with
+// `_graphTotal`, and a folder list cached before that field existed has none.
+// Refreshing the list saved the count to disk and left the store without it,
+// because a listing with the same folders did not count as a change. The jump
+// on scroll was the cache drain filling the list, not the folder's count.
+describe('the count of a Graph folder', () => {
+  const COUNTLESS = { ...INBOX, _graphTotal: undefined };
+  const STALE_MS = 11 * 60 * 1000;
+  const listing = (total) => [
+    { id: 'fld-inbox', displayName: 'Inbox', storageKey: 'INBOX', wellKnownName: 'inbox', totalItemCount: total },
+    { id: 'fld-sent', displayName: 'Sent Items', storageKey: 'Sent', wellKnownName: 'sentitems', totalItemCount: 3 },
+  ];
+  const deferred = () => {
+    let resolve;
+    const promise = new Promise((r) => { resolve = r; });
+    return { promise, resolve };
+  };
+  const state = () => useMailStore.getState();
+  const inboxCount = () => state().mailboxes.find(m => m.path === 'INBOX')?._graphTotal;
+  const activate = () => state().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+  const cached = (inbox, fetchedAt = Date.now()) => db.getCachedMailboxEntry.mockResolvedValue({ mailboxes: [inbox, SENT], fetchedAt });
+
+  it('a reload lists the folders again when the fresh cached list has no count', async () => {
+    cached(COUNTLESS);
+    api.graphListFolders.mockResolvedValue(listing(FOLDER_TOTAL));
+    prime({ emails: [], totalEmails: 0, mailboxes: [COUNTLESS, SENT] });
+    await state().loadEmails();
+    clearTimeout(getLoadMoreTimer());
+
+    expect(state().emails).toHaveLength(PAGE);
+    expect(state().totalEmails).toBe(FOLDER_TOTAL);
+  });
+
+  it('opening a folder lists the folders again when the fresh cached list has no count', async () => {
+    cached(COUNTLESS);
+    api.graphListFolders.mockResolvedValue(listing(FOLDER_TOTAL));
+    prime({ emails: [], totalEmails: 0, mailboxes: [COUNTLESS, SENT] });
+    await activate();
+    clearTimeout(getLoadMoreTimer());
+
+    await vi.waitFor(() => expect(state().totalEmails).toBe(FOLDER_TOTAL));
+    expect(state().emails).toHaveLength(PAGE);
+    expect(inboxCount()).toBe(FOLDER_TOTAL);
+  });
+
+  it('a listing that lands after page one corrects the count while the folder still pages', async () => {
+    // A folder that grew past a page since the list was cached: 150 < 200.
+    const grew = { ...INBOX, _graphTotal: 150 };
+    cached(grew, Date.now() - STALE_MS);
+    const folders = deferred();
+    api.graphListFolders.mockReturnValue(folders.promise);
+    prime({ emails: [], totalEmails: 0, mailboxes: [grew, SENT] });
+    const opening = activate();
+    await vi.waitFor(() => expect(state().emails).toHaveLength(PAGE));
+    expect(state().totalEmails).toBe(PAGE);
+
+    folders.resolve(listing(FOLDER_TOTAL));
+    await opening;
+
+    await vi.waitFor(() => expect(state().totalEmails).toBe(FOLDER_TOTAL));
+    expect(inboxCount()).toBe(FOLDER_TOTAL);
+    expect(state().emails).toHaveLength(PAGE);
+  });
+
+  it('page one that lands after the listing counts with what the listing said', async () => {
+    cached(COUNTLESS, Date.now() - STALE_MS);
+    api.graphListFolders.mockResolvedValue(listing(FOLDER_TOTAL));
+    const page = deferred();
+    const serve = graph.listGraphMessages.getMockImplementation();
+    graph.listGraphMessages.mockImplementationOnce(async (...args) => {
+      await page.promise;
+      return serve(...args);
+    });
+    prime({ emails: [], totalEmails: 0, mailboxes: [COUNTLESS, SENT] });
+    const opening = activate();
+    await vi.waitFor(() => expect(inboxCount()).toBe(FOLDER_TOTAL));
+
+    page.resolve();
+    await opening;
+    clearTimeout(getLoadMoreTimer());
+
+    await vi.waitFor(() => expect(state().emails).toHaveLength(PAGE));
+    expect(state().totalEmails).toBe(FOLDER_TOTAL);
+  });
+
+  it('a listing leaves the total alone once the server said there is no next page', async () => {
+    // The last page ends the paging, whatever the folder count says.
+    server = rows(1, 3);
+    cached({ ...INBOX, _graphTotal: 3 }, Date.now() - STALE_MS);
+    const folders = deferred();
+    api.graphListFolders.mockReturnValue(folders.promise);
+    prime({ emails: [], totalEmails: 0, hasMoreEmails: false, mailboxes: [{ ...INBOX, _graphTotal: 3 }, SENT] });
+    const opening = activate();
+    await vi.waitFor(() => expect(state().emails).toHaveLength(3));
+
+    folders.resolve(listing(5));
+    await opening;
+
+    await vi.waitFor(() => expect(inboxCount()).toBe(5));
+    expect(state().totalEmails).toBe(3);
+  });
+});

@@ -6,6 +6,8 @@
 
 - Sending from an alias on an Outlook.com or Hotmail account now goes out from that alias. Microsoft replaced it with the account's main address, so the recipient saw the main address as the sender. MailVault now sends such a message through a draft set to the alias, and Scheduled Send does the same. If Microsoft would still send it from the main address, the message is not sent and MailVault says Microsoft refused to send as the alias.
 
+- A Microsoft 365 or Hotmail folder with more than 200 emails now shows its real count as soon as it opens, instead of 200 until you scrolled past the first page. A count that changed elsewhere also reaches the list on the next folder refresh, while the folder is still paging.
+
 - After turning View Source off, or viewing an original in a chat bubble, the message body is protected again. The redrawn body had lost its link safety warning, so a click on a flagged link opened it with no prompt; it had also lost its context menu and stopped sizing to the mail. The same applied when moving to another message with the source open, and to a full view opened while a message was still loading.
 
 - Lithuanian letters (č, š, ž, ė, ą, ę, į, ų, ū) no longer vanish from some emails. A sender that gave no text encoding, an empty or unfamiliar one, or `us-ascii` on a UTF-8 body now reads as UTF-8, and a body in `latin-7` or `win1257` reads right too; the reader showed these gaps where the letters should be. When a body is not UTF-8 either, its own declared encoding is used. The search index and the JMAP preview read bodies the same way.

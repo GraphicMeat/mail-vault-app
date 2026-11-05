@@ -55,7 +55,10 @@ function isMailboxCacheFresh(fetchedAt) {
 }
 
 function shouldUseFreshMailboxCache(entry) {
-  return isMailboxCacheFresh(entry?.fetchedAt) && isMailboxTreeComplete(entry?.mailboxes);
+  return isMailboxCacheFresh(entry?.fetchedAt) && isMailboxTreeComplete(entry?.mailboxes)
+    // A Graph list cached before folders carried a count: however young, it
+    // cannot say how long the folder is, and the list would read as one page.
+    && !entry.mailboxes.some(m => m._graphFolderId && m._graphTotal == null);
 }
 
 async function fetchAccountMailboxes(account) {
@@ -174,6 +177,13 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
             };
 
             const currentActive = useMailStoreRef.getState().activeMailbox;
+            // Page one may have been counted before this listing landed. Only
+            // while the folder still pages: past the last page the rows are the count.
+            const { hasMoreEmails, mailboxScope, emails } = useMailStoreRef.getState();
+            const folderTotal = freshMailboxes.find(m => m.path === currentActive)?._graphTotal;
+            if (folderTotal != null && hasMoreEmails && !mailboxScope) {
+              updates.totalEmails = Math.max(emails.filter(e => e.source !== 'local').length, folderTotal);
+            }
             if (currentActive !== 'INBOX' && currentActive !== 'UNIFIED' && !freshPaths.has(currentActive) && !isLocal(currentActive)) {
               console.warn(`[loadMailboxes] Active mailbox "${currentActive}" not found on server, switching to INBOX`);
               updates.activeMailbox = 'INBOX';
@@ -209,7 +219,9 @@ function _mailboxesChanged(current, fresh) {
   const pathMap = new Map();
   const walk = (nodes, map) => {
     for (const n of nodes) {
-      map.set(n.path, (n.children?.length || 0));
+      // A Graph folder's own count counts too: the store's copy is what page
+      // one is counted with, and a listing it ignored stayed on disk only.
+      map.set(n.path, `${n.children?.length || 0}|${n._graphTotal ?? ''}`);
       if (n.children?.length) walk(n.children, map);
     }
   };
@@ -219,8 +231,8 @@ function _mailboxesChanged(current, fresh) {
   walk(fresh, freshMap);
 
   if (pathMap.size !== freshMap.size) return true;
-  for (const [path, count] of pathMap) {
-    if (freshMap.get(path) !== count) return true;
+  for (const [path, shape] of pathMap) {
+    if (freshMap.get(path) !== shape) return true;
   }
   return false;
 }
@@ -283,8 +295,10 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
   uidMap.merge(serverEmails);
 
   // One page is not the folder: with a next page behind it the total is the
-  // folder's own count, or load-more has nothing to count toward.
-  const serverTotal = result.nextLink ? Math.max(serverEmails.length, targetFolder._graphTotal || 0) : serverEmails.length;
+  // folder's own count, or load-more has nothing to count toward. Read again:
+  // the folder list may have landed while this page was on the wire.
+  const folderTotal = useMailStoreRef.getState().mailboxes?.find(m => m.path === activeMailbox)?._graphTotal ?? targetFolder._graphTotal;
+  const serverTotal = result.nextLink ? Math.max(serverEmails.length, folderTotal || 0) : serverEmails.length;
   const sorted = uidMap.toSortedArray();
 
   if (signal.aborted) return;

@@ -1031,7 +1031,9 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       return isMailboxCacheFresh(entry?.fetchedAt) && isMailboxTreeComplete(entry?.mailboxes);
     };
 
-    const shouldRefreshMailboxes = takeForcedMailboxRefetch(activeAccountId) || !shouldUseFreshMailboxCacheLocal(cachedMailboxEntry) || !cachedTarget;
+    // A list cached before folders carried a count cannot say how long this
+    // folder is, however young: the total below would be the page's length.
+    const shouldRefreshMailboxes = takeForcedMailboxRefetch(activeAccountId) || !shouldUseFreshMailboxCacheLocal(cachedMailboxEntry) || cachedTarget?._graphTotal == null;
 
     if (shouldRefreshMailboxes) {
       const graphFolders = await api.graphListFolders(account);

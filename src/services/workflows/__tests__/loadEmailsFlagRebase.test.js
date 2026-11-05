@@ -34,7 +34,7 @@ vi.mock('../../db', () => ({
   clearMailboxCache: vi.fn().mockResolvedValue(undefined),
   // Graph only: a complete, fresh folder list, so the loader goes straight to the listing.
   getCachedMailboxEntry: vi.fn().mockResolvedValue({
-    mailboxes: [{ path: 'INBOX', _graphFolderId: 'gid' }, { path: 'Sent', _graphFolderId: 'gsent' }],
+    mailboxes: [{ path: 'INBOX', _graphFolderId: 'gid', _graphTotal: 1 }, { path: 'Sent', _graphFolderId: 'gsent', _graphTotal: 0 }],
     fetchedAt: Date.now(),
   }),
   saveMailboxes: vi.fn(),

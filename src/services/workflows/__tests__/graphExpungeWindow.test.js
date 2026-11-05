@@ -36,8 +36,8 @@ vi.mock('../../db', () => ({
   getCachedMailboxEntry: vi.fn().mockResolvedValue({
     fetchedAt: Date.now(),
     mailboxes: [
-      { path: 'INBOX', _graphFolderId: 'folder-inbox' },
-      { path: 'Archive', _graphFolderId: 'folder-archive' },
+      { path: 'INBOX', _graphFolderId: 'folder-inbox', _graphTotal: 3 },
+      { path: 'Archive', _graphFolderId: 'folder-archive', _graphTotal: 0 },
     ],
   }),
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
@@ -111,7 +111,7 @@ function prime(emails) {
     archivedEmailIds: new Set(),
     serverUids: serverUids(new Set(), { complete: false }),
     deleteTombstones: new Set(),
-    mailboxes: [{ path: 'INBOX', _graphFolderId: 'folder-inbox' }],
+    mailboxes: [{ path: 'INBOX', _graphFolderId: 'folder-inbox', _graphTotal: 3 }],
     totalEmails: emails.length,
   });
 }
