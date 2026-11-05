@@ -77,6 +77,12 @@ if [[ -f "$ROOT/scripts/generate-changelog.cjs" ]]; then
   echo "  website/changelog.html  → regenerated"
 fi
 
+# ── Homepage JSON-LD and the locale pages built from it ──
+# Locale homepages copy these two values, and a test compares them byte for byte.
+sed -i '' 's/"softwareVersion": *"[^"]*"/"softwareVersion": "'"$NEW"'"/; s/"datePublished": *"[^"]*"/"datePublished": "'"$TODAY"'"/' "$ROOT/website/index.html"
+cp "$ROOT/website/index.html" "$ROOT/index.html"
+node "$ROOT/website/i18n/i18n.mjs" build
+
 # ── Verify all files are consistent ──
 ERRORS=0
 verify_version() {
@@ -92,12 +98,20 @@ verify_version "$ROOT/src-tauri/Cargo.toml" "version = \"$NEW\"" "Cargo.toml"
 verify_version "$ROOT/src-tauri/tauri.conf.json" "\"version\": \"$NEW\"" "tauri.conf.json"
 verify_version "$ROOT/snap/snapcraft.yaml" "version: '$NEW'" "snapcraft.yaml"
 verify_version "$ROOT/package-lock.json" "\"version\": \"$NEW\"" "package-lock.json"
+verify_version "$ROOT/website/index.html" "\"softwareVersion\": \"$NEW\"" "website/index.html"
+# A frozen page or a broken build leaves a locale homepage on the old version.
+for page in $(git -C "$ROOT" grep -l '"softwareVersion"' -- index.html 'website/*/index.html'); do
+  verify_version "$ROOT/$page" "\"softwareVersion\": \"$NEW\"" "$page"
+done
 
 if [[ $ERRORS -gt 0 ]]; then
   echo ""
   echo "ERROR: $ERRORS file(s) have version mismatches after bump!"
   exit 1
 fi
+
+# The release commit's own file list does not name these, so they go in here.
+git -C "$ROOT" add -- 'website/*/index.html' website/sitemap.xml
 
 echo ""
 echo "Updated files:"
@@ -106,5 +120,7 @@ echo "  package-lock.json       → $NEW"
 echo "  src-tauri/Cargo.toml    → $NEW"
 echo "  src-tauri/tauri.conf.json → $NEW"
 echo "  snap/snapcraft.yaml     → $NEW"
+echo "  website/index.html, index.html → softwareVersion $NEW, datePublished $TODAY"
+echo "  website/*/index.html, website/sitemap.xml → rebuilt and staged"
 echo ""
 echo "Done! Version is now $NEW"
