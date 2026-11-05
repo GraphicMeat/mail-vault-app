@@ -593,6 +593,12 @@ fn friendly_graph_send_error(login: &str, from_addr: &str, err: &SendMailError) 
             MAY_HAVE_GONE_OUT
         ),
         SendMailError::Transport { detail, .. } => format!("Could not reach Microsoft to send the message: {}", detail),
+        // Microsoft would have sent it as the login: the same refusal as a
+        // sender the account may not use, and as final.
+        SendMailError::SenderNotApplied { .. } => format!(
+            "Microsoft refused to send as {}. The address must be one this account is allowed to send from.",
+            from_addr
+        ),
         SendMailError::Refused { status, code, message, retry_after } => {
             let said = format!("{} {}", code.as_deref().unwrap_or(""), message.as_deref().unwrap_or("")).to_lowercase();
             // Ordered before the 403 branch: Graph refuses a sender with 403 too.
@@ -779,6 +785,19 @@ fn message_id_of(raw: &[u8]) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// The display name in the From header of `raw`, as the message was built:
+/// what a draft's `from` must carry to match it. Read from the bytes, not
+/// the account, because a frozen message was built under the name of the
+/// address it was written for (an alias has its own).
+fn from_name_of(raw: &[u8]) -> Option<String> {
+    let (headers, _) = mailparse::parse_headers(raw).ok()?;
+    let from = headers.iter().find(|h| h.get_key().eq_ignore_ascii_case("From"))?;
+    match mailparse::addrparse_header(from).ok()?.first()? {
+        mailparse::MailAddr::Single(info) => info.display_name.clone().filter(|n| !n.trim().is_empty()),
+        _ => None,
+    }
+}
+
 /// Send through Microsoft Graph instead of SMTP. An Outlook.com account signed
 /// in with Microsoft holds a Graph token that SMTP refuses (discussion #22),
 /// so `send_built` and `send_raw` both branch here for it, before anything
@@ -790,13 +809,22 @@ async fn send_via_graph(account: &ImapConfig, raw: Vec<u8>, bcc: &[Mailbox]) -> 
     };
     // The SMTP path's budget: a minute, plus a second per 50 KB, capped.
     let timeout = Duration::from_secs(60 + (raw.len() / 50_000) as u64).min(Duration::from_secs(600));
-    info!("[smtp] Sending {} bytes via Microsoft Graph (sendMail)", raw.len());
-
     let client = GraphClient::for_send(token).for_account(&account.email);
-    client
-        .send_mime(&raw, timeout)
-        .await
-        .map_err(|e| friendly_graph_send_error(&account.email, account.from_address(), &e))?;
+    // `sendMail` sends as the mailbox whatever the MIME's From says: an
+    // address other than the login goes out as a draft with that `from`.
+    let from = account.from_address();
+    let as_login = from.eq_ignore_ascii_case(account.email.trim());
+    info!(
+        "[smtp] Sending {} bytes via Microsoft Graph ({})",
+        raw.len(),
+        if as_login { "sendMail" } else { "draft as an alias" }
+    );
+    let sent = if as_login {
+        client.send_mime(&raw, timeout).await
+    } else {
+        client.send_mime_as(&raw, from, from_name_of(&raw).as_deref(), timeout).await
+    };
+    sent.map_err(|e| friendly_graph_send_error(&account.email, from, &e))?;
 
     let message_id = message_id_of(&raw).unwrap_or_default();
     info!("Email sent via Microsoft Graph: {}", message_id);
@@ -1270,8 +1298,11 @@ pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc28
     }
     if account.uses_graph() {
         // The frozen bytes were built without the Bcc header; it lives in the
-        // envelope, and Graph only reads headers.
-        return send_via_graph(account, raw_rfc2822, &bcc).await;
+        // envelope, and Graph only reads headers. The identity is the frozen
+        // From's: the stored account has no send-as override (as for JMAP).
+        let mut account = account.clone();
+        account.from_email = Some(from.to_string());
+        return send_via_graph(&account, raw_rfc2822, &bcc).await;
     } else if account.uses_jmap() {
         // The identity is the frozen From's. Scheduled Send's account comes
         // from the keychain record, without the send-as override compose
@@ -1804,6 +1835,8 @@ mod tests {
             (refused(403, Some("ErrorAccessDenied"), None), "Sign in to this account again", true),
             (refused(403, Some("ErrorSendAsDenied"), None), "refused to send as alias@outlook.com", true),
             (refused(400, Some("ErrorSendAsDenied"), None), "refused to send as alias@outlook.com", true),
+            (SendMailError::SenderNotApplied { kept: Some("me@outlook.com".into()) }, "refused to send as alias@outlook.com", true),
+            (SendMailError::SenderNotApplied { kept: None }, "refused to send as alias@outlook.com", true),
             (refused(413, None, None), "the limit is 4 MB", true),
             (SendMailError::TooLarge { encoded_bytes: 5 * 1024 * 1024 }, "5.0 MB once encoded, and the limit is 4 MB", true),
             (refused(429, Some("ApplicationThrottled"), Some(7)), "Try again in 7 seconds", false),

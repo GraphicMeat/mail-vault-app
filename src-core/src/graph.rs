@@ -532,6 +532,10 @@ pub enum SendMailError {
     /// Graph answered, and not with a 2xx. `code` and `message` are the error
     /// body's `error.code` / `error.message` when it had them.
     Refused { status: u16, code: Option<String>, message: Option<String>, retry_after: Option<u64> },
+    /// A draft made to go out as another address of the mailbox came back
+    /// from Graph under `kept` (or under nothing readable): Microsoft did not
+    /// apply the sender, and the draft was not sent.
+    SenderNotApplied { kept: Option<String> },
 }
 
 /// A reqwest error and its causes on one line, the URL left out.
@@ -557,6 +561,26 @@ fn send_client(connect_timeout: std::time::Duration) -> Tracked {
 /// so anything else may have reached Graph (`SendMailError::Transport`).
 fn transport_error(e: reqwest::Error) -> SendMailError {
     SendMailError::Transport { timed_out: e.is_timeout(), maybe_sent: !e.is_connect(), detail: error_chain(e) }
+}
+
+/// A request before the send itself that got no answer. Nothing can have
+/// gone out yet (at most a draft was made), so it is never "maybe sent".
+fn before_send_error(e: reqwest::Error) -> SendMailError {
+    SendMailError::Transport { timed_out: e.is_timeout(), maybe_sent: false, detail: error_chain(e) }
+}
+
+/// What a non-2xx answer of a send request says (`SendMailError::Refused`).
+async fn refused(resp: reqwest::Response) -> SendMailError {
+    let status = resp.status();
+    let retry_after = resp
+        .headers()
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<u64>().ok());
+    let body = resp.text().await.unwrap_or_default();
+    let error: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+    let field = |k: &str| error["error"][k].as_str().map(str::to_string).filter(|s| !s.is_empty());
+    SendMailError::Refused { status: status.as_u16(), code: field("code"), message: field("message"), retry_after }
 }
 
 /// `retry-after` in whole seconds, for the one `$batch` retry. Clamped to
@@ -1108,19 +1132,139 @@ impl GraphClient {
             .await
             .map_err(transport_error)?;
 
+        if resp.status().is_success() {
+            return Ok(());
+        }
+        Err(refused(resp).await)
+    }
+
+    /// Send a complete MIME message as `from`, an address of this mailbox
+    /// other than the login. `sendMail` sends as the mailbox whatever the
+    /// MIME's From says (an alias comes out as the login), so the message goes
+    /// through a draft instead: made from the MIME (`POST /me/messages`), its
+    /// `from` set (`PATCH`), read back to make sure Microsoft took it, then
+    /// sent (`POST .../send`, 202, Sent filed by Graph). A message that would
+    /// go out as the login is never sent: whoever picked the alias did not
+    /// want the login seen.
+    ///
+    /// A draft is deleted for good when nothing went out: a refusal before
+    /// the send, or a 4xx from it. It stays when the send may have gone
+    /// (no answer, or a 5xx, which a gateway can return for a message
+    /// Exchange took): it may already be the sent message. The send is never
+    /// retried here, for the reason `send_mime` gives.
+    pub async fn send_mime_as(
+        &self,
+        mime: &[u8],
+        from: &str,
+        name: Option<&str>,
+        timeout: std::time::Duration,
+    ) -> Result<(), SendMailError> {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(mime);
+        if encoded.len() > SEND_MAIL_LIMIT_BYTES {
+            return Err(SendMailError::TooLarge { encoded_bytes: encoded.len() });
+        }
+        let create_url = format!("{}/me/messages", graph_base());
+        let resp = self
+            .client
+            .send(self.client
+                .post(&create_url)
+                .bearer_auth(&self.access_token)
+                .header("Content-Type", "text/plain")
+                .timeout(timeout)
+                .body(encoded))
+            .await
+            .map_err(before_send_error)?;
+        if !resp.status().is_success() {
+            return Err(refused(resp).await);
+        }
+        #[derive(Deserialize)]
+        struct Created {
+            id: String,
+        }
+        let id = resp
+            .json::<Created>()
+            .await
+            .map_err(|e| SendMailError::Transport { timed_out: false, maybe_sent: false, detail: format!("unreadable answer: {e}") })?
+            .id;
+
+        let url = format!("{}/me/messages/{}", graph_base(), percent_encode(&id));
+        if let Err(e) = self.set_draft_from(&url, from, name, timeout).await {
+            self.discard_draft(&id).await;
+            return Err(e);
+        }
+
+        let send_url = format!("{url}/send");
+        let resp = self
+            .client
+            .send(self.client.post(&send_url).bearer_auth(&self.access_token).timeout(timeout))
+            .await
+            .map_err(transport_error)?;
         let status = resp.status();
         if status.is_success() {
             return Ok(());
         }
-        let retry_after = resp
-            .headers()
-            .get("retry-after")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.trim().parse::<u64>().ok());
-        let body = resp.text().await.unwrap_or_default();
-        let error: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-        let field = |k: &str| error["error"][k].as_str().map(str::to_string).filter(|s| !s.is_empty());
-        Err(SendMailError::Refused { status: status.as_u16(), code: field("code"), message: field("message"), retry_after })
+        let refusal = refused(resp).await;
+        if status.is_client_error() && status != reqwest::StatusCode::REQUEST_TIMEOUT {
+            self.discard_draft(&id).await;
+        }
+        Err(refusal)
+    }
+
+    /// Set a draft's `from` and read it back; `SenderNotApplied` when
+    /// Microsoft keeps another address. Nothing here can have sent the message.
+    async fn set_draft_from(
+        &self,
+        url: &str,
+        from: &str,
+        name: Option<&str>,
+        timeout: std::time::Duration,
+    ) -> Result<(), SendMailError> {
+        let mut address = serde_json::json!({ "address": from });
+        if let Some(name) = name.map(str::trim).filter(|n| !n.is_empty()) {
+            address["name"] = serde_json::json!(name);
+        }
+        let resp = self
+            .client
+            .send(self.client
+                .patch(url)
+                .bearer_auth(&self.access_token)
+                .timeout(timeout)
+                .json(&serde_json::json!({ "from": { "emailAddress": address } })))
+            .await
+            .map_err(before_send_error)?;
+        if !resp.status().is_success() {
+            return Err(refused(resp).await);
+        }
+
+        let read_url = format!("{url}?$select=from");
+        let resp = self
+            .client
+            .send(self.client.get(&read_url).bearer_auth(&self.access_token).timeout(timeout))
+            .await
+            .map_err(before_send_error)?;
+        if !resp.status().is_success() {
+            return Err(refused(resp).await);
+        }
+        // An answer that cannot be read says nothing about the sender: a
+        // fault to try again, not a refusal.
+        let held: serde_json::Value = resp.json().await.map_err(before_send_error)?;
+        let kept = held["from"]["emailAddress"]["address"].as_str().map(str::to_string);
+        if kept.as_deref().is_some_and(|k| k.eq_ignore_ascii_case(from)) {
+            Ok(())
+        } else {
+            Err(SendMailError::SenderNotApplied { kept })
+        }
+    }
+
+    /// Delete a draft for good, best effort and bounded: the send it belonged
+    /// to is already settled, and must not wait on this.
+    async fn discard_draft(&self, id: &str) {
+        let attempt = tokio::time::timeout(std::time::Duration::from_secs(15), self.permanent_delete(id)).await;
+        match attempt {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => warn!("[send] could not delete the draft an alias send left: {e}"),
+            Err(_) => warn!("[send] deleting the draft an alias send left timed out"),
+        }
     }
 
     /// Create a mail folder. If `parent_folder_id` is provided, creates a child folder.
