@@ -4101,6 +4101,9 @@ mod tests {
                         Err(_) => return,
                     }
                 };
+                // Windows and macOS inherit the listener's nonblocking mode on
+                // accept. This request reader needs the two-second blocking read below.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
