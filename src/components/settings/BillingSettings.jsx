@@ -137,13 +137,20 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   const aliases = useSettingsStore(s => s.aliases);
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
 
-  // Deduplicated list of every account's own addresses: logins and aliases
-  const accountEmails = useMemo(() => {
+  // Every account's own addresses (login first, then aliases), each address
+  // under the first account that holds it.
+  const accountGroups = useMemo(() => {
     const seen = new Set();
     return accounts
-      .flatMap(a => selectOwnAddresses({ aliases, sendAsAddresses }, a))
-      .filter(e => { const lower = e.toLowerCase(); if (seen.has(lower)) return false; seen.add(lower); return true; });
+      .map(a => ({
+        key: a.id || a.email,
+        label: a.email,
+        addresses: selectOwnAddresses({ aliases, sendAsAddresses }, a)
+          .filter(e => { const lower = e.toLowerCase(); if (seen.has(lower)) return false; seen.add(lower); return true; }),
+      }))
+      .filter(g => g.addresses.length > 0);
   }, [accounts, aliases, sendAsAddresses]);
+  const accountEmails = useMemo(() => accountGroups.flatMap(g => g.addresses), [accountGroups]);
 
   // Selected email: prefer billingEmail if it matches an account, else first account
   const [selectedEmail, setSelectedEmail] = useState(() => {
@@ -532,9 +539,15 @@ export function BillingSettings({ onNavigate, onReportBug }) {
               onChange={e => { setSelectedEmail(e.target.value); setSignInNotice(null); }}
               className="flex-1 min-w-0 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
             >
-              {accountEmails.map(email => (
-                <option key={email} value={email}>{pa(email, 'email')}</option>
-              ))}
+              {/* Like the compose From picker: an account with aliases is a
+                  native optgroup, its label greyed and its addresses indented. */}
+              {accountGroups.map(g => g.addresses.length === 1
+                ? <option key={g.key} value={g.addresses[0]}>{pa(g.addresses[0], 'email')}</option>
+                : (
+                  <optgroup key={g.key} label={pa(g.label, 'email')}>
+                    {g.addresses.map(email => <option key={email} value={email}>{pa(email, 'email')}</option>)}
+                  </optgroup>
+                ))}
             </select>
             <button onClick={handleSignIn} disabled={signInDisabled}
               className="min-w-[140px] px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">

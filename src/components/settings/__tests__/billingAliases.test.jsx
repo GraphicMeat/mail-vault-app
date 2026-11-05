@@ -114,4 +114,41 @@ describe('Billing address selector', () => {
     fireEvent.click(cta);
     await waitFor(() => expect(startCheckout).toHaveBeenCalledWith({ email: ALIAS, planId: 'yearly' }));
   });
+
+  // Same layout as the compose From picker: an account with aliases is a
+  // native optgroup (its label greyed and unselectable, its addresses indented).
+  describe('grouping', () => {
+    const groups = () => [...selector().querySelectorAll('optgroup')];
+
+    it('puts an account and its aliases in one group labelled with the login', () => {
+      render(<BillingSettings />);
+      expect(groups().map(g => g.label)).toEqual([LOGIN]);
+      expect([...groups()[0].querySelectorAll('option')].map(o => o.value)).toEqual([LOGIN, ALIAS]);
+    });
+
+    it('leaves an account without aliases as a plain option', () => {
+      useMailStore.setState({ accounts: [{ id: 'a1', email: LOGIN }, { id: 'a2', email: 'other@mail.test' }] });
+      render(<BillingSettings />);
+      expect(groups().map(g => g.label)).toEqual([LOGIN]);
+      const other = [...selector().options].find(o => o.value === 'other@mail.test');
+      expect(other.parentElement).toBe(selector());
+    });
+
+    it('groups nothing when no account has an alias', () => {
+      useSettingsStore.setState({ aliases: {} });
+      render(<BillingSettings />);
+      expect(groups()).toEqual([]);
+    });
+
+    it('lists an address held by two accounts under the first only', () => {
+      useMailStore.setState({ accounts: [{ id: 'a1', email: LOGIN }, { id: 'a2', email: 'other@mail.test' }] });
+      useSettingsStore.setState({ aliases: {
+        a1: [{ address: ALIAS, name: '', source: 'manual' }],
+        a2: [{ address: ALIAS.toLowerCase(), name: '', source: 'manual' }],
+      } });
+      render(<BillingSettings />);
+      expect(groups().map(g => g.label)).toEqual([LOGIN]);
+      expect([...selector().options].map(o => o.value)).toEqual([LOGIN, ALIAS, 'other@mail.test']);
+    });
+  });
 });
