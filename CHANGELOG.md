@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.22.0] - 2026-11-05
+
 - Drafts now keep saving whatever you type or attach. A save that is turned away now tries again by itself instead of waiting for your next keystroke, and "The draft could not be saved" appears only if it keeps failing, then clears by itself. Half an emoji, an alias that is not an address yet and an attachment with no name or type or oddly encoded contents no longer stop a draft from saving. If the file behind an attachment cannot be read, the words still save and the window names the file left out. A line break in a sender name no longer fails a draft or a send.
 
 - Settings > Billing now lists your aliases next to your account addresses, so you can sign in to Premium or subscribe with an alias.
