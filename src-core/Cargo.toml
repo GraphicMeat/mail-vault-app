@@ -29,7 +29,6 @@ uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "macros"] }
 async-imap = { version = "0.11", features = ["compress"] }
 imap-proto = "0.16"
-async-native-tls = "0.5"
 async-std = { version = "1", features = ["attributes"] }
 # Runtime-agnostic timer for the IMAP command deadline (`CountingStream`):
 # the same sessions run under tokio (daemon) and async-std (tests).
@@ -56,6 +55,23 @@ maxminddb = "0.32"
 jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always", "tz-system"] }
 
 
+# The IMAP TLS seam (src/imap/tls.rs). Desktop and iOS use async-native-tls (target-gated below);
+# Android has no usable OpenSSL, so it always uses rustls. `tls-rustls` selects rustls on any target.
+futures-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+rustls-platform-verifier = { version = "0.6", optional = true }
+
+[features]
+tls-rustls = ["dep:futures-rustls", "dep:rustls", "dep:rustls-platform-verifier"]
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+async-native-tls = "0.5"
+
+[target.'cfg(target_os = "android")'.dependencies]
+futures-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.6"
+
 # Snap keyring (src/snap_keyring.rs): the Secret portal through oo7, plugged
 # into keyring-rs as its backend inside a snap.
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -67,5 +83,7 @@ tokio = { version = "1", features = ["rt-multi-thread"] }
 mock-imap = { path = "../src-mock-imap" }
 mock-jmap = { path = "../src-mock-jmap" }
 tempfile = "3"
+# Self-signed acceptor for tests/imap_tls_rustls.rs.
+rcgen = { version = "0.14", default-features = false, features = ["ring"] }
 # pgp 0.20 takes rand 0.8 RNGs; tests use it to make keys and encrypt fixtures.
 rand08 = { package = "rand", version = "0.8" }

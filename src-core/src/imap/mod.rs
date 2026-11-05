@@ -1,8 +1,8 @@
 pub mod abd_cmds;
 pub mod pool;
+pub mod tls;
 
 use async_imap::types::{Fetch, Flag, Mailbox, Name};
-use async_native_tls::TlsConnector;
 use async_std::net::TcpStream;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -502,8 +502,7 @@ async fn secure_transport(
             Ok((Box::new(stream), false))
         }
         ImapSecurity::Ssl => {
-            let connector = build_tls_connector(all_loopback);
-            let tls_stream = bounded_step(TLS_TIMEOUT, connector.connect(&config.host, stream))
+            let tls_stream = bounded_step(TLS_TIMEOUT, tls::connect(&config.host, stream, all_loopback))
                 .await
                 .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
             Ok((Box::new(tls_stream), false))
@@ -521,20 +520,6 @@ async fn bounded_step<T, E: std::fmt::Display>(
     match async_std::future::timeout(limit, fut).await {
         Ok(r) => r.map_err(|e| e.to_string()),
         Err(_) => Err(format!("timed out after {}s", limit.as_secs())),
-    }
-}
-
-/// Build a TLS connector, relaxing certificate validation for loopback
-/// addresses — needed for Proton Mail Bridge's self-signed cert on 127.0.0.1.
-/// Non-loopback hosts always get full validation.
-fn build_tls_connector(all_loopback: bool) -> TlsConnector {
-    let connector = TlsConnector::new();
-    if all_loopback {
-        connector
-            .danger_accept_invalid_certs(true)
-            .danger_accept_invalid_hostnames(true)
-    } else {
-        connector
     }
 }
 
@@ -587,8 +572,7 @@ async fn starttls_upgrade(
         // Untagged response (e.g. a CAPABILITY line) — keep reading.
     }
 
-    let connector = build_tls_connector(all_loopback);
-    let tls_stream = bounded_step(TLS_TIMEOUT, connector.connect(&config.host, reader.into_inner()))
+    let tls_stream = bounded_step(TLS_TIMEOUT, tls::connect(&config.host, reader.into_inner(), all_loopback))
         .await
         .map_err(|e| format!("STARTTLS TLS handshake with {} failed: {}", config.host, e))?;
 
