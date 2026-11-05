@@ -1,0 +1,124 @@
+//! The RPC dispatch table. `TABLE` is the single place a method is registered;
+//! `methods.json` must list exactly its names (a test checks it).
+
+use crate::db::{Engine, SCHEMA_VERSION};
+use serde::de::DeserializeOwned;
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::{json, Value};
+use std::fmt;
+
+const MAX_PAGE: u64 = 200;
+
+/// Serialized as `{ code: "UNSUPPORTED"|"INVALID"|"INTERNAL", message }`; the shell forwards it
+/// to JS unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RpcError {
+    Unsupported { method: String },
+    Invalid(String),
+    Internal(String),
+}
+
+impl RpcError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            RpcError::Unsupported { .. } => "UNSUPPORTED",
+            RpcError::Invalid(_) => "INVALID",
+            RpcError::Internal(_) => "INTERNAL",
+        }
+    }
+}
+
+impl fmt::Display for RpcError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RpcError::Unsupported { method } => write!(f, "unsupported method: {method}"),
+            RpcError::Invalid(m) | RpcError::Internal(m) => f.write_str(m),
+        }
+    }
+}
+
+impl std::error::Error for RpcError {}
+
+impl Serialize for RpcError {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut st = s.serialize_struct("RpcError", 2)?;
+        st.serialize_field("code", self.code())?;
+        st.serialize_field("message", &self.to_string())?;
+        st.end()
+    }
+}
+
+type Handler = fn(&Engine, Value) -> Result<Value, RpcError>;
+
+/// Keep sorted by name, like `methods.json`.
+const TABLE: &[(&str, Handler)] = &[("mobile.messages.page", messages_page), ("mobile.ping", ping)];
+
+/// Names of every implemented method, in dispatch-table order.
+pub fn methods() -> Vec<&'static str> {
+    TABLE.iter().map(|(n, _)| *n).collect()
+}
+
+impl Engine {
+    pub fn rpc(&self, method: &str, params: Value) -> Result<Value, RpcError> {
+        match TABLE.iter().find(|(n, _)| *n == method) {
+            Some((_, h)) => h(self, params),
+            None => Err(RpcError::Unsupported { method: method.to_string() }),
+        }
+    }
+}
+
+fn parse<T: DeserializeOwned>(params: Value) -> Result<T, RpcError> {
+    // A missing params object arrives as null; treat it as empty so the error names the field.
+    let params = if params.is_null() { json!({}) } else { params };
+    serde_json::from_value(params).map_err(|e| RpcError::Invalid(e.to_string()))
+}
+
+fn ping(_: &Engine, _: Value) -> Result<Value, RpcError> {
+    Ok(json!({ "engine": env!("CARGO_PKG_VERSION"), "schema": SCHEMA_VERSION }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PageParams {
+    account_id: String,
+    folder: String,
+    offset: u64,
+    limit: u64,
+}
+
+fn messages_page(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: PageParams = parse(params)?;
+    let limit = p.limit.min(MAX_PAGE) as i64;
+    let offset = i64::try_from(p.offset).map_err(|_| RpcError::Invalid("offset out of range".into()))?;
+    engine
+        .read(|c| {
+            let total: i64 = c.query_row(
+                "SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = ?2",
+                (&p.account_id, &p.folder),
+                |r| r.get(0),
+            )?;
+            let mut st = c.prepare_cached(
+                "SELECT uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments
+                 FROM messages WHERE account_id = ?1 AND folder = ?2
+                 ORDER BY date_ms DESC, uid DESC LIMIT ?3 OFFSET ?4",
+            )?;
+            let rows = st
+                .query_map((&p.account_id, &p.folder, limit, offset), |r| {
+                    Ok(json!({
+                        "uid": r.get::<_, i64>(0)?,
+                        "subject": r.get::<_, String>(1)?,
+                        "fromName": r.get::<_, String>(2)?,
+                        "fromAddress": r.get::<_, String>(3)?,
+                        "dateMs": r.get::<_, i64>(4)?,
+                        "snippet": r.get::<_, String>(5)?,
+                        "seen": r.get::<_, i64>(6)? != 0,
+                        "flagged": r.get::<_, i64>(7)? != 0,
+                        "hasAttachments": r.get::<_, i64>(8)? != 0,
+                    }))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(json!({ "total": total, "rows": rows }))
+        })
+        .map_err(|e| RpcError::Internal(e.to_string()))
+}

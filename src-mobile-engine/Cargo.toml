@@ -1,0 +1,18 @@
+[package]
+name = "mailvault-mobile-engine"
+version = "0.1.0"
+description = "In-process mobile engine: owns mobile.db and answers the mobile shell's RPCs"
+edition = "2021"
+publish = false
+
+[features]
+# Seeds mobile.db with synthetic rows for the perf gate; never in a shipping build.
+perf-gate = []
+
+[dependencies]
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "3"

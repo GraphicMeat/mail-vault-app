@@ -5344,6 +5344,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mailvault-mobile-engine"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "mailvault-render"
 version = "0.1.0"
 dependencies = [
