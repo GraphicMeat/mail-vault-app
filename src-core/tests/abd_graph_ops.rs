@@ -376,6 +376,47 @@ async fn delete_message_other_failures_still_fail() {
     assert!(e.contains("(500)"), "{e}");
 }
 
+/// Marking a message Outlook no longer holds read (deleted or moved elsewhere
+/// since the list) has nothing left to change: the vault copy already took the
+/// flag, so the server's "not found" is not an error to show.
+#[tokio::test]
+async fn set_read_status_of_a_message_already_gone_succeeds() {
+    route("/me/messages/sr-gone", |_| {
+        Resp::json(404, serde_json::json!({"error": {"code": "ErrorItemNotFound", "message": "The specified object was not found in the store., The process failed to get the correct properties."}}))
+    });
+    client().set_read_status("sr-gone", true).await.unwrap();
+    let r = seen("/me/messages/sr-gone");
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].method, "PATCH");
+}
+
+#[tokio::test]
+async fn set_flag_status_of_a_message_already_gone_succeeds() {
+    route("/me/messages/sf-gone", |_| {
+        Resp::json(404, serde_json::json!({"error": {"code": "ErrorItemNotFound"}}))
+    });
+    client().set_flag_status("sf-gone", true).await.unwrap();
+    assert_eq!(seen("/me/messages/sf-gone")[0].method, "PATCH");
+}
+
+/// Only a missing item counts as done: any other 404 or failure still fails.
+#[tokio::test]
+async fn set_read_and_flag_other_failures_still_fail() {
+    route("/me/messages/sr-nomailbox", |_| {
+        Resp::json(404, serde_json::json!({"error": {"code": "MailboxNotEnabledForRESTAPI"}}))
+    });
+    route("/me/messages/sr-500", |_| Resp::json(500, serde_json::json!({"error": {"code": "ErrorInternalServerError"}})));
+    let c = client();
+    let e = c.set_read_status("sr-nomailbox", true).await.unwrap_err();
+    assert!(e.contains("(404)") && e.contains("MailboxNotEnabledForRESTAPI"), "{e}");
+    let e = c.set_read_status("sr-500", true).await.unwrap_err();
+    assert!(e.contains("(500)"), "{e}");
+    let e = c.set_flag_status("sr-nomailbox", true).await.unwrap_err();
+    assert!(e.contains("(404)"), "{e}");
+    let e = c.set_flag_status("sr-500", true).await.unwrap_err();
+    assert!(e.contains("(500)"), "{e}");
+}
+
 #[tokio::test]
 async fn find_by_internet_message_id_filters_and_returns_every_hit() {
     route("/me/mailFolders/fb-f/messages", |r| {

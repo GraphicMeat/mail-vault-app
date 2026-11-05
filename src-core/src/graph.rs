@@ -892,6 +892,12 @@ impl GraphClient {
     }
 
     /// Mark a message as read or unread.
+    ///
+    /// A 404 `ErrorItemNotFound` is success, as for `delete_message`: the
+    /// message is no longer where the list saw it (deleted in Outlook, or moved,
+    /// which gives it a new id), so there is nothing left to mark and the vault
+    /// copy has already taken the flag. Marking many messages at once
+    /// otherwise raised one error per stale id.
     pub async fn set_read_status(
         &self,
         message_id: &str,
@@ -920,6 +926,9 @@ impl GraphClient {
                 return Err(format!("Graph set_read_status failed (429:retry_after={}) {}", retry_after, body));
             }
             let body = resp.text().await.unwrap_or_default();
+            if status == reqwest::StatusCode::NOT_FOUND && error_code(&body).as_deref() == Some("ErrorItemNotFound") {
+                return Ok(());
+            }
             return Err(format!(
                 "Graph set_read_status failed ({}) {}",
                 status.as_u16(),
@@ -934,6 +943,7 @@ impl GraphClient {
     ///
     /// Graph has exactly two of our flags — `isRead` above and this one.
     /// \Answered and keywords have no equivalent and never reach here.
+    /// A 404 `ErrorItemNotFound` is success, for the reason `set_read_status` gives.
     pub async fn set_flag_status(&self, message_id: &str, flagged: bool) -> Result<(), String> {
         let url = format!("{}/me/messages/{}", graph_base(), message_id);
 
@@ -960,6 +970,9 @@ impl GraphClient {
                 return Err(format!("Graph set_flag_status failed (429:retry_after={}) {}", retry_after, body));
             }
             let body = resp.text().await.unwrap_or_default();
+            if status == reqwest::StatusCode::NOT_FOUND && error_code(&body).as_deref() == Some("ErrorItemNotFound") {
+                return Ok(());
+            }
             return Err(format!(
                 "Graph set_flag_status failed ({}) {}",
                 status.as_u16(),
