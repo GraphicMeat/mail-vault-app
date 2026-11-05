@@ -60,6 +60,11 @@ export async function daemonCall(method, params = {}) {
     const result = await inv('daemon_rpc', { method, params, daemonMode });
     return result;
   } catch (error) {
+    // The mobile shell rejects with the engine's `{ code, message }` object; keep its code.
+    // The desktop shell rejects with strings, which take the branches below.
+    if (error && typeof error === 'object' && !(error instanceof Error) && typeof error.code === 'string') {
+      throw new DaemonError(error.message || error.code, error.code);
+    }
     const message = typeof error === 'string' ? error : error.message || 'Unknown daemon error';
 
     if (message.includes('not running') || message.includes('connection refused')) {
