@@ -5344,6 +5344,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mailvault-mobile"
+version = "0.1.0"
+dependencies = [
+ "mailvault-mobile-engine",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+]
+
+[[package]]
 name = "mailvault-mobile-engine"
 version = "0.1.0"
 dependencies = [

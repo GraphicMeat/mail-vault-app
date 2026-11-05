@@ -1,0 +1,39 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "MailVault",
+  "version": "../package.json",
+  "identifier": "com.mailvault.app",
+  "build": {
+    "beforeBuildCommand": "vite build --config vite.mobile.config.js",
+    "frontendDist": "../dist-mobile"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "url": "mobile.html",
+        "title": "MailVault"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "../src-tauri/icons/32x32.png",
+      "../src-tauri/icons/128x128.png",
+      "../src-tauri/icons/icon.png",
+      "../src-tauri/icons/icon.icns",
+      "../src-tauri/icons/icon.ico"
+    ],
+    "iOS": {
+      "minimumSystemVersion": "16.0"
+    },
+    "android": {
+      "minSdkVersion": 26
+    }
+  }
+}

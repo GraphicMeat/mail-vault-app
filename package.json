@@ -36,7 +36,11 @@
     "test:e2e:ui": "wdio run wdio.conf.js --suite ui-headless",
     "test:e2e:connected": "wdio run wdio.conf.js --suite connected-ci",
     "test:e2e:local": "wdio run wdio.conf.js --suite local-manual",
-    "test:e2e:jmap": "npm run build:e2e && wdio run wdio.jmap.conf.js"
+    "test:e2e:jmap": "npm run build:e2e && wdio run wdio.jmap.conf.js",
+    "mobile:tauri": "TAURI_APP_PATH=src-tauri-mobile tauri",
+    "mobile:build:web": "vite build --config vite.mobile.config.js",
+    "mobile:ios": "bash scripts/mobile-run.sh ios",
+    "mobile:android": "bash scripts/mobile-run.sh android"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.18",

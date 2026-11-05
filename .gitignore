@@ -93,3 +93,14 @@ __pycache__/
 # Recorded clips of the other languages live on the website host, outside git (scripts/website-clips-upload.sh)
 /website/assets/clips/*/
 !/website/assets/clips/en/
+
+# Mobile shell (src-tauri-mobile): gen/ sources are committed, build output is not
+dist-mobile/
+src-tauri-mobile/gen/apple/build/
+src-tauri-mobile/gen/apple/Externals/
+src-tauri-mobile/gen/apple/**/xcuserdata/
+src-tauri-mobile/gen/android/**/build/
+src-tauri-mobile/gen/android/.gradle/
+src-tauri-mobile/gen/android/local.properties
+src-tauri-mobile/gen/android/app/src/main/jniLibs/
+src-tauri-mobile/gen/apple/assets/

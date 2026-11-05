@@ -1,0 +1,460 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		04F8417E9D54258B5CC5E461 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B61C930FD8B5910DB5DCB1ED /* WebKit.framework */; };
+		3855628B725FD55F501C8DEA /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D895DE22C86A2978D7EDE4D /* CoreGraphics.framework */; };
+		4E41D7945C3BD50312C1298D /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 77EF40AAE4B20C73C2CDDBE4 /* QuartzCore.framework */; };
+		56E1189AEBAB887A158605E3 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6CE6EA10D6CDB43BF2D48838 /* Security.framework */; };
+		5E6702BABE57C2F99FAD8381 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 3AFBA8142B3A267A31C032DB /* LaunchScreen.storyboard */; };
+		A8B98D5B414F17DECF226500 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D238F98CBA7EFB9C2D244D6 /* libapp.a */; };
+		A939DCBA4D6CF4478FAF4288 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 85AB9789DCA20F238C3EBDB8 /* main.mm */; };
+		C137EBD69E9E208E95DA6BF7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B8083A76369BBFA179E0225A /* Assets.xcassets */; };
+		C4B8BDF4FCBEE1EF415C9FD5 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CCE959BB25EC276CB278F10A /* Metal.framework */; };
+		DF21EB79A20DF2115D531A94 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 659FB608210426C7FA18740C /* assets */; };
+		E78D8EFFC5380B35D72F8DCB /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 87A5529C0BC38409F20ECF72 /* UIKit.framework */; };
+		F7F3AE76F7E6DF98A9B92A6A /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 49535AFC16818D8F018FD95A /* MetalKit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0C677B8D15740C6F32432694 /* mailvault-mobile_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "mailvault-mobile_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		25577DA239B242EA2C49F01D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3AFBA8142B3A267A31C032DB /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		49535AFC16818D8F018FD95A /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		4D895DE22C86A2978D7EDE4D /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		61484CE530881AFAAF24957E /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		659FB608210426C7FA18740C /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
+		6CE6EA10D6CDB43BF2D48838 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		77EF40AAE4B20C73C2CDDBE4 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		85AB9789DCA20F238C3EBDB8 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		87A5529C0BC38409F20ECF72 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		8D238F98CBA7EFB9C2D244D6 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		B61C930FD8B5910DB5DCB1ED /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		B7851508C62EA0850FE691B5 /* mailvault-mobile_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "mailvault-mobile_iOS.entitlements"; sourceTree = "<group>"; };
+		B8083A76369BBFA179E0225A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C2A816B90DDEA4B047A30F8E /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		CCE959BB25EC276CB278F10A /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		FFD1D5B82561C1C011BD2AF8 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		EF02DA7549BBAAF23033D0FB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A8B98D5B414F17DECF226500 /* libapp.a in Frameworks */,
+				3855628B725FD55F501C8DEA /* CoreGraphics.framework in Frameworks */,
+				C4B8BDF4FCBEE1EF415C9FD5 /* Metal.framework in Frameworks */,
+				F7F3AE76F7E6DF98A9B92A6A /* MetalKit.framework in Frameworks */,
+				4E41D7945C3BD50312C1298D /* QuartzCore.framework in Frameworks */,
+				56E1189AEBAB887A158605E3 /* Security.framework in Frameworks */,
+				E78D8EFFC5380B35D72F8DCB /* UIKit.framework in Frameworks */,
+				04F8417E9D54258B5CC5E461 /* WebKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0474E87270B77082A610E72E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				4D895DE22C86A2978D7EDE4D /* CoreGraphics.framework */,
+				8D238F98CBA7EFB9C2D244D6 /* libapp.a */,
+				CCE959BB25EC276CB278F10A /* Metal.framework */,
+				49535AFC16818D8F018FD95A /* MetalKit.framework */,
+				77EF40AAE4B20C73C2CDDBE4 /* QuartzCore.framework */,
+				6CE6EA10D6CDB43BF2D48838 /* Security.framework */,
+				87A5529C0BC38409F20ECF72 /* UIKit.framework */,
+				B61C930FD8B5910DB5DCB1ED /* WebKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		38C32B113CBFAF5E31558966 /* bindings */ = {
+			isa = PBXGroup;
+			children = (
+				61484CE530881AFAAF24957E /* bindings.h */,
+			);
+			path = bindings;
+			sourceTree = "<group>";
+		};
+		504386049101500EB0555D3D /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				DC5EE1FB4D6DA912EC27CDBC /* mailvault-mobile */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		59B86C4C69094348F9759EA4 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				FFD1D5B82561C1C011BD2AF8 /* lib.rs */,
+				C2A816B90DDEA4B047A30F8E /* main.rs */,
+			);
+			name = src;
+			path = ../../src;
+			sourceTree = "<group>";
+		};
+		5B51E5420EE950EABA59E3D4 /* mailvault-mobile_iOS */ = {
+			isa = PBXGroup;
+			children = (
+				25577DA239B242EA2C49F01D /* Info.plist */,
+				B7851508C62EA0850FE691B5 /* mailvault-mobile_iOS.entitlements */,
+			);
+			path = "mailvault-mobile_iOS";
+			sourceTree = "<group>";
+		};
+		B58BA53366A000D6322880BF = {
+			isa = PBXGroup;
+			children = (
+				659FB608210426C7FA18740C /* assets */,
+				B8083A76369BBFA179E0225A /* Assets.xcassets */,
+				3AFBA8142B3A267A31C032DB /* LaunchScreen.storyboard */,
+				B9BEBF304C67D9DC69ABC3D6 /* Externals */,
+				5B51E5420EE950EABA59E3D4 /* mailvault-mobile_iOS */,
+				504386049101500EB0555D3D /* Sources */,
+				59B86C4C69094348F9759EA4 /* src */,
+				0474E87270B77082A610E72E /* Frameworks */,
+				BD742DD0512555E1216EED59 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B9BEBF304C67D9DC69ABC3D6 /* Externals */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Externals;
+			sourceTree = "<group>";
+		};
+		BD742DD0512555E1216EED59 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0C677B8D15740C6F32432694 /* mailvault-mobile_iOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		DC5EE1FB4D6DA912EC27CDBC /* mailvault-mobile */ = {
+			isa = PBXGroup;
+			children = (
+				85AB9789DCA20F238C3EBDB8 /* main.mm */,
+				38C32B113CBFAF5E31558966 /* bindings */,
+			);
+			path = "mailvault-mobile";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5E54E309E28229B80F05EBFF /* mailvault-mobile_iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 182D0FB54CDA8E42869F4C76 /* Build configuration list for PBXNativeTarget "mailvault-mobile_iOS" */;
+			buildPhases = (
+				A2B2AC649AB1A70946C1CDF3 /* Build Rust Code */,
+				6F3E36EB40AD9B186D4A906D /* Sources */,
+				1BC8F02B208F951A53FE6813 /* Resources */,
+				EF02DA7549BBAAF23033D0FB /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "mailvault-mobile_iOS";
+			packageProductDependencies = (
+			);
+			productName = "mailvault-mobile_iOS";
+			productReference = 0C677B8D15740C6F32432694 /* mailvault-mobile_iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D8E2098111F4AC4DC469D8BE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 102907D379E2E5421E989736 /* Build configuration list for PBXProject "mailvault-mobile" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B58BA53366A000D6322880BF;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = BD742DD0512555E1216EED59 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5E54E309E28229B80F05EBFF /* mailvault-mobile_iOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1BC8F02B208F951A53FE6813 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C137EBD69E9E208E95DA6BF7 /* Assets.xcassets in Resources */,
+				5E6702BABE57C2F99FAD8381 /* LaunchScreen.storyboard in Resources */,
+				DF21EB79A20DF2115D531A94 /* assets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A2B2AC649AB1A70946C1CDF3 /* Build Rust Code */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust Code";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a",
+				"$(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6F3E36EB40AD9B186D4A906D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A939DCBA4D6CF4478FAF4288 /* main.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2C70D69662A1D901CEEC7020 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "mailvault-mobile_iOS/mailvault-mobile_iOS.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = "mailvault-mobile_iOS/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mailvault.app;
+				PRODUCT_NAME = "MailVault";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
+		563F7D09AA063E459B5652B8 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = debug;
+		};
+		80E81661324C362E3857E1BD /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = release;
+		};
+		954F89F3EA63C663DB1FE49E /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "mailvault-mobile_iOS/mailvault-mobile_iOS.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = "mailvault-mobile_iOS/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mailvault.app;
+				PRODUCT_NAME = "MailVault";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		102907D379E2E5421E989736 /* Build configuration list for PBXProject "mailvault-mobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				563F7D09AA063E459B5652B8 /* debug */,
+				80E81661324C362E3857E1BD /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		182D0FB54CDA8E42869F4C76 /* Build configuration list for PBXNativeTarget "mailvault-mobile_iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				954F89F3EA63C663DB1FE49E /* debug */,
+				2C70D69662A1D901CEEC7020 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D8E2098111F4AC4DC469D8BE /* Project object */;
+}

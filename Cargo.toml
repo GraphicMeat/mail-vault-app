@@ -4,6 +4,7 @@ members = [
     "src-daemon",
     "src-core",
     "src-mobile-engine",
+    "src-tauri-mobile",
     "src-mock-imap",
     "src-mock-jmap",
     "vendor/imap-proto",
