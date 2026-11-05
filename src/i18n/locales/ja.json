@@ -2,6 +2,7 @@
   "compose.preparationUnavailable": "このメッセージを準備できませんでした。もう一度お試しください。",
   "compose.draftContentNotAccepted": "下書きを保存できませんでした。再試行してください。",
   "compose.draftCleanupPending": "下書きの後処理はまだ完了していません。",
+  "compose.draftAttachmentsOmitted": "下書きは保存されましたが、{{names}} は含まれていません。ファイルを読み取れませんでした。",
   "compose.draftCleanupUnknown": "下書きの後処理を確認できませんでした。再試行してください。",
   "compose.draftCleanupWorking": "下書きを破棄しています...",
   "compose.draftCleanupStorageFailed": "復元用に下書きの後処理を保存できませんでした。再試行してください。",

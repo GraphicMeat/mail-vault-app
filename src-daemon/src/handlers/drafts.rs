@@ -25,6 +25,10 @@ use std::{
     sync::{atomic::AtomicBool, Arc, LazyLock, Mutex, Weak},
 };
 const PREPARED: &str = ".mailvault-draft-prepared";
+/// Superseded copies a draft may leave behind while they refuse to retire.
+/// Newer words keep landing up to here; past it every retirement has failed
+/// in a row, and adding another copy per typing pause would fill the disk.
+const MAX_STUCK_CLEANUP: usize = 16;
 static LOCKS: LazyLock<Mutex<HashMap<(PathBuf, String), Weak<Mutex<()>>>>> =
     LazyLock::new(Default::default);
 fn draft_lock(s: &DaemonState, id: &str) -> Arc<Mutex<()>> {
@@ -735,6 +739,7 @@ fn response(record: &Record, disposition: &str) -> Value {
 
 fn resolve_attachments(s: &Arc<DaemonState>, r: &mut Save) -> Result<(), String> {
     let mut sources: HashMap<(String, String, u32), Vec<usize>> = HashMap::new();
+    let mut gone = Vec::new();
     for (index, a) in r.snapshot.attachments.iter_mut().enumerate() {
         if let Some(content) = &a.content {
             a.content = Some(STANDARD.encode(STANDARD.decode(content).map_err(|e| e.to_string())?));
@@ -753,10 +758,12 @@ fn resolve_attachments(s: &Arc<DaemonState>, r: &mut Save) -> Result<(), String>
             uid,
         };
         let i = inventory(s, &loc)?;
+        // The message it came from may be gone by now. A storage error above
+        // is worth a retry; an absent source never comes back, and it does not
+        // get to stop the words from saving.
         let raw = with_mailbox_write(s, &loc.account_id, &loc.mailbox, |root| {
             checked_bytes(s, root, &loc, &i)
-        })?
-        .ok_or("attachment source unavailable")?;
+        })?;
         let requested: Vec<_> = indices
             .iter()
             .map(|i| {
@@ -767,20 +774,50 @@ fn resolve_attachments(s: &Arc<DaemonState>, r: &mut Save) -> Result<(), String>
                     .attachment_index
             })
             .collect();
-        let bytes = vault_files::attachments_of(&raw, &requested)?;
-        for (index, content) in indices.into_iter().zip(bytes) {
-            r.snapshot.attachments[index].content =
-                Some(content.ok_or("attachment source unavailable")?);
+        let mut bytes = raw
+            .and_then(|raw| vault_files::attachments_of(&raw, &requested).ok())
+            .unwrap_or_default()
+            .into_iter();
+        for index in indices {
+            match bytes.next().flatten() {
+                Some(content) => r.snapshot.attachments[index].content = Some(content),
+                None => gone.push(index),
+            }
         }
     }
+    gone.sort_unstable();
+    for index in gone.into_iter().rev() {
+        let attachment = r.snapshot.attachments.remove(index);
+        r.omitted.push(attachment.filename);
+    }
     Ok(())
+}
+/// A newer revision outranks an older attempt that cannot finish: its copies
+/// move to cleanup, so one stuck attempt never holds back what was typed since.
+/// The attempt at this revision or above stays, since that retry is still its own.
+fn abandon_older_pending(s: &Arc<DaemonState>, id: &str, revision: u64, stamps: &[AccountStamp]) -> Result<(), String> {
+    let lock = draft_lock(s, id);
+    let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
+    let mut r = load(s, id)?;
+    if r.discarded || !r.pending.as_ref().is_some_and(|p| p.revision < revision) {
+        return Err("draft pending retry".into());
+    }
+    let _permit = admit_scoped(s, &r, stamps)?;
+    let pending = r.pending.take().expect("checked above");
+    add_cleanup(&mut r, pending.copy);
+    add_cleanup(&mut r, pending.prepared);
+    r.epoch = r.epoch.checked_add(1).ok_or("draft attempt exhausted")?;
+    persist(s, &r)
 }
 fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     let request_hash = request.request_hash();
     let original_record = load(s, &request.draft_id)?;
     let previous = if original_record.current.is_none() { request.previous_identity.as_ref() } else { None };
     let original = original_stamps(s, &original_record, Some(&request.account_id), previous)?;
-    recover(s, &request.draft_id, Some(&original))?;
+    if let Err(error) = recover(s, &request.draft_id, Some(&original)) {
+        tracing::warn!("[drafts] older attempt did not recover: {error}");
+        abandon_older_pending(s, &request.draft_id, request.revision, &original).map_err(|_| error)?;
+    }
     // Retry first reconciles retained bytes, never regenerates the pending MIME.
     {
         let lock = draft_lock(s, &request.draft_id);
@@ -816,7 +853,7 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
             }
             return Ok(response(&r, "unchanged"));
         }
-        if !r.cleanup.is_empty() {
+        if r.cleanup.len() >= MAX_STUCK_CLEANUP {
             return Err("draft cleanup pending".into());
         }
     }
@@ -911,7 +948,7 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     }
     let _permit = admit_scoped(s, &r, &original)?;
     cleanup(s, &mut r)?;
-    if !r.cleanup.is_empty() {
+    if r.cleanup.len() >= MAX_STUCK_CLEANUP {
         return Err("draft cleanup pending".into());
     }
     if r.current.is_none() {
@@ -919,8 +956,13 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
             adopt(s, &mut r, loc)?;
         }
     }
+    // A current copy that vanished or changed under us is no reason to refuse
+    // the new one. It keeps its place until the new one lands, then retires
+    // through cleanup, which still refuses to delete bytes it cannot prove.
     if let Some(current) = &r.current {
-        read_copy(s, current, true)?.ok_or("draft current body missing")?;
+        if !matches!(read_copy(s, current, true), Ok(Some(_))) {
+            tracing::warn!("[drafts] current copy unreadable; saving past it");
+        }
     }
     let target_mailbox = match &r.current {
         Some(c) if c.identity.scope.account_id == request.account_id => {
@@ -979,7 +1021,11 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     )?;
     probe(s, "after_prepared_store")?;
     finish(s, &mut r, &destination_ready)?;
-    Ok(response(&r, "saved"))
+    let mut outcome = response(&r, "saved");
+    if !request.omitted.is_empty() {
+        outcome["omittedAttachments"] = json!(request.omitted);
+    }
+    Ok(outcome)
 }
 fn discard(s: &Arc<DaemonState>, id: &str, through_revision: Option<u64>) -> Result<Value, String> {
     let lock = draft_lock(s, id);
@@ -1260,7 +1306,9 @@ pub(crate) async fn route(
     let params = params.clone();
     let method = method.to_string();
     let result = blocking(move || match method.as_str() {
-        "drafts.save" => save(&s, request.unwrap()),
+        // The window retries a refused save without a word, so this line is
+        // the only record of why a later "could not be saved" appeared.
+        "drafts.save" => save(&s, request.unwrap()).inspect_err(|error| tracing::warn!("[drafts] save refused: {error}")),
         "drafts.discard" => params["draftId"]
             .as_str()
             .filter(|s| !s.is_empty())

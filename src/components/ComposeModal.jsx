@@ -95,6 +95,12 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 const NO_ALIASES = {};
+// A refused save retries by itself for as long as the window is open. Most
+// refusals are momentary (a sync or backup holding the same mailbox), so the
+// user hears about it only once they persist. From then on the same words also
+// go out under a new revision, since some refusals are about the revision.
+const DRAFT_SAVE_QUIET_FAILURES = 3;
+const draftRetryDelay = failures => Math.min(500 * 2 ** (failures - 1), 30000);
 const SEND_SETTING_KEYS = ['aliases', 'sendAsAddresses', 'displayNames', 'attachmentReminder', 'billingProfile', 'shareGrant', 'sendDelay', 'undoSendEnabled', 'undoSendDelay'];
 // Increment at the setter boundary, before React commits or autosave publishes.
 function useSendState(initial, invalidate) {
@@ -423,6 +429,14 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [terminalState, setTerminalState] = useState(null);
   const [draftSaveError, setDraftSaveError] = useState(null);
   const [draftRetry, setDraftRetry] = useState(0);
+  const [draftOmitted, setDraftOmitted] = useState(null);
+  const draftFailuresRef = useRef(0);
+  const draftRetryTimerRef = useRef(null);
+  // Only words this window issued may go above a revision it never saw. A
+  // restored snapshot can be older than the vault (the app died before it
+  // reached disk), and resending it would overwrite the newer copy.
+  const wordsIssuedHereRef = useRef(false);
+  useEffect(() => () => clearTimeout(draftRetryTimerRef.current), []);
 
   const [formData, setFormData] = useSendState({
     to: '',
@@ -1100,6 +1114,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       }
       issuedDraftRef.current = { revision: Math.max(issued.revision, acceptedRevisionRef.current) + 1,
         signature: draftSignature, content: unchangedRecovery && recoveredContentRef.current ? recoveredContentRef.current : content };
+      wordsIssuedHereRef.current = true;
       recoveredContentRef.current = null;
       recoveredKnownRef.current = null;
     }
@@ -1199,9 +1214,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       queuedDraftRef.current = issued;
       publishSnapshot();
       saveChainRef.current = saveChainRef.current.then(async () => {
+        let superseded = false;
         try {
           if (terminalIntentRef.current) return;
           const result = await saveLocalDraft(request);
+          superseded = result?.disposition === 'superseded';
           const current = result?.current;
           const revision = current?.entry?.revision ?? result?.revision;
           if (result?.draftId === draftIdRef.current && current && revision >= acceptedRevisionRef.current) {
@@ -1216,11 +1233,28 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           acceptedContentRef.current = issued.content;
           if (issuedDraftRef.current === issued) {
             acceptanceUnknownRef.current = false;
-            setDraftSaveError(result.cleanup === 'pending' ? t('compose.draftCleanupPending') : null);
+            draftFailuresRef.current = 0;
+            // The words are saved. An old copy still waiting to retire is the
+            // daemon's to finish on a later save, not something to alarm about.
+            setDraftSaveError(null);
+            setDraftOmitted(result.omittedAttachments?.length ? result.omittedAttachments.join(', ') : null);
           }
         } catch (err) {
-          if (issuedDraftRef.current === issued && aliveRef.current) setDraftSaveError(t('compose.draftContentNotAccepted'));
           console.warn('[compose:autosave_fail]', err);
+          // Restored words the vault has already moved past: nothing is lost,
+          // and the next edit lands above the revision adopted just now.
+          if (superseded && !wordsIssuedHereRef.current) return;
+          if (issuedDraftRef.current === issued && aliveRef.current) {
+            const failures = ++draftFailuresRef.current;
+            const persisting = failures >= DRAFT_SAVE_QUIET_FAILURES;
+            // A superseded revision can never land, so it does not wait its turn.
+            if ((superseded || persisting) && wordsIssuedHereRef.current) {
+              issuedDraftRef.current = { ...issued, revision: Math.max(issued.revision, acceptedRevisionRef.current) + 1 };
+            }
+            if (persisting) setDraftSaveError(t('compose.draftContentNotAccepted'));
+            clearTimeout(draftRetryTimerRef.current);
+            draftRetryTimerRef.current = setTimeout(() => setDraftRetry(value => value + 1), draftRetryDelay(failures));
+          }
         } finally {
           if (queuedDraftRef.current === issued) queuedDraftRef.current = null;
           publishSnapshot();
@@ -1816,11 +1850,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           </div>
 
           {/* Error */}
-          {(error || draftSaveError || terminalState) && (
+          {(error || draftSaveError || draftOmitted || terminalState) && (
             <div data-testid="compose-error" role="alert"
                  className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20
                            text-mail-danger text-sm">
-              {terminalState === 'working' ? t('compose.draftCleanupWorking') : error || draftSaveError}
+              {terminalState === 'working' ? t('compose.draftCleanupWorking') : error || draftSaveError || t('compose.draftAttachmentsOmitted', { names: draftOmitted })}
               {!terminalState && preparationFailed && <button type="button" className="ml-3 underline" onClick={() => { setError(null); setPreparationRetry(value => value + 1); }}>{t('common.retry')}</button>}
               {!terminalState && draftSaveError && <button type="button" className="ml-3 underline" onClick={() => setDraftRetry(value => value + 1)}>{t('common.retry')}</button>}
             </div>

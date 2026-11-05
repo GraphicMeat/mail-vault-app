@@ -168,6 +168,19 @@ pub fn build_draft_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<B
 /// Nothing here is ever submitted: a reopened draft goes through `build_mime`
 /// like any other message, and that still refuses a bad address.
 pub fn build_local_draft_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<Vec<u8>, String> {
+    // Same for the sender: an alias that is not an address yet still saves. The
+    // draft's row keeps it as picked, and that is what a reopen reads From from.
+    let is_address = |text: &str| text.parse::<lettre::Address>().is_ok();
+    let sendable;
+    let account = if is_address(account.from_address()) {
+        account
+    } else {
+        sendable = ImapConfig {
+            from_email: (!is_address(&account.email)).then(|| "draft@mailvault.local".to_string()),
+            ..account.clone()
+        };
+        &sendable
+    };
     let built = build_mime_opts(account, email, true, true)?;
     let mut raw = built.raw_rfc2822;
     for (name, text) in [
@@ -257,7 +270,10 @@ fn build_mime_opts(
         // Purelymail rejects that header ("501 5.1.7 Invalid or unparseable
         // From address"). A name that is just an address says nothing: drop
         // it, and never let it name the login under a send-as override.
-        let name = account.name.as_deref().map(str::trim).filter(|n| {
+        // A control character in the name makes lettre panic while it writes
+        // the header (its Display impl errors), so none reach it.
+        let name = account.name.as_deref().map(|n| n.replace(char::is_control, " "));
+        let name = name.as_deref().map(str::trim).filter(|n| {
             !n.is_empty() && !n.eq_ignore_ascii_case(from_address) && !n.eq_ignore_ascii_case(&account.email)
         });
         Mailbox::new(name.map(String::from), addr)
@@ -1795,6 +1811,13 @@ mod tests {
             assert!(value.starts_with('<') && value.ends_with("@x.com>"), "id {id:?} produced {value}");
             assert!(!raw.to_lowercase().contains("evil@attacker.test"), "id {id:?} injected a header: {raw}");
         }
+    }
+
+    #[test]
+    fn a_display_name_with_a_line_break_builds_instead_of_panicking() {
+        let built = build_mime(&named("a@x.com", None, "Rokas\r\nBcc: evil@attacker.test"), &outgoing()).unwrap();
+        let raw = String::from_utf8_lossy(&built.raw_rfc2822).to_lowercase();
+        assert!(!raw.contains("\nbcc: evil@attacker.test"), "{raw}");
     }
 
     #[test]

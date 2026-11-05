@@ -2,6 +2,7 @@
   "compose.preparationUnavailable": "Impossible de préparer ce message. Réessayez.",
   "compose.draftContentNotAccepted": "Le brouillon n’a pas pu être enregistré. Réessayez.",
   "compose.draftCleanupPending": "Le nettoyage du brouillon est toujours en attente.",
+  "compose.draftAttachmentsOmitted": "Le brouillon est enregistré, mais sans {{names}}. Le fichier n'a pas pu être lu.",
   "compose.draftCleanupUnknown": "Le nettoyage du brouillon n’a pas pu être confirmé. Réessayez.",
   "compose.draftCleanupWorking": "Suppression du brouillon...",
   "compose.draftCleanupStorageFailed": "Le nettoyage du brouillon n’a pas pu être enregistré pour la reprise. Réessayez.",

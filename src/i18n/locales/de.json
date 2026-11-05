@@ -2,6 +2,7 @@
   "compose.preparationUnavailable": "Diese Nachricht konnte nicht vorbereitet werden. Bitte versuche es erneut.",
   "compose.draftContentNotAccepted": "Der Entwurf konnte nicht gespeichert werden. Bitte erneut versuchen.",
   "compose.draftCleanupPending": "Die Bereinigung des Entwurfs steht noch aus.",
+  "compose.draftAttachmentsOmitted": "Der Entwurf ist gespeichert, aber ohne {{names}}. Die Datei konnte nicht gelesen werden.",
   "compose.draftCleanupUnknown": "Die Bereinigung des Entwurfs konnte nicht bestätigt werden. Bitte erneut versuchen.",
   "compose.draftCleanupWorking": "Entwurf wird verworfen...",
   "compose.draftCleanupStorageFailed": "Die Bereinigung des Entwurfs konnte nicht für die Wiederherstellung gespeichert werden. Bitte erneut versuchen.",

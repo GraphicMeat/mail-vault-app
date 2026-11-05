@@ -451,28 +451,25 @@ async fn drafts_failed_retirement_blocks_further_copy_growth_and_keeps_every_pro
     let before = row(&h.s, "bound");
     let obligations: Vec<_> = before.cleanup.iter().map(|c| c.identity.clone()).collect();
     assert_eq!(obligations.len(), 1);
-    for rev in [3, 4, 5] {
-        assert!(rpc(&h.s, "drafts.save", req("bound", rev, "c"))
-            .await
-            .unwrap_err()
-            .contains("cleanup pending"));
+    // A copy that will not retire never stops newer words from landing.
+    let mut rev = 3;
+    while row(&h.s, "bound").cleanup.len() < MAX_STUCK_CLEANUP {
+        saved(&h.s, req("bound", rev, "c")).await;
+        rev += 1;
     }
-    let after = row(&h.s, "bound");
-    assert!(after.pending.is_none());
-    assert_eq!(
-        after.current.unwrap().identity.scope,
-        before.current.unwrap().identity.scope
-    );
-    assert_eq!(
-        after
-            .cleanup
-            .iter()
-            .map(|c| c.identity.clone())
-            .collect::<Vec<_>>(),
-        obligations
-    );
+    let held = row(&h.s, "bound");
+    assert_eq!(held.revision, rev - 1);
+    assert!(held.pending.is_none());
+    assert!(obligations.iter().all(|o| held.cleanup.iter().any(|c| &c.identity == o)));
+    // Bounded: the copy count stops at the cap instead of growing per keystroke.
+    assert!(rpc(&h.s, "drafts.save", req("bound", rev, "c"))
+        .await
+        .unwrap_err()
+        .contains("cleanup pending"));
+    assert_eq!(row(&h.s, "bound").cleanup.len(), MAX_STUCK_CLEANUP);
     h.clear();
-    saved(&h.s, req("bound", 6, "finally")).await;
+    let done = saved(&h.s, req("bound", rev + 1, "finally")).await;
+    assert_eq!(done["cleanup"], "complete");
 }
 #[tokio::test]
 async fn drafts_exact_replacement_is_never_deleted_or_overwritten() {
@@ -542,11 +539,131 @@ async fn drafts_source_attachments_are_pinned_for_retry_and_missing_source_keeps
     );
     let mut missing = req("target", 3, "missing");
     missing["snapshot"]["attachments"] = json!([{"filename":"gone","contentType":"application/octet-stream","source":{"accountId":"one","mailbox":"missing","uid":7,"attachmentIndex":0}}]);
-    assert!(rpc(&h.s, "drafts.save", missing).await.is_err());
-    assert_eq!(
-        row(&h.s, "target").current.unwrap().identity.scope.uid,
-        result["uid"].as_u64().unwrap() as u32
-    );
+    // The words still land; the reply names what could not come along.
+    let kept = saved(&h.s, missing).await;
+    assert_eq!(kept["revision"], 3);
+    assert_eq!(kept["omittedAttachments"], json!(["gone"]));
+    assert_ne!(kept["uid"], result["uid"]);
+}
+async fn reopened(s: &Arc<DaemonState>, id: &str) -> Value {
+    let list = rpc(s, "drafts.list", json!({"draftId":id,"includeContent":true})).await.unwrap();
+    list["drafts"][0]["eml"].clone()
+}
+#[tokio::test]
+async fn drafts_save_whatever_is_typed_or_pasted_into_any_field() {
+    let h = Harness::new();
+    let nasty = [
+        "line\r\nBcc: injected@example.test",
+        "nul\0byte",
+        "\u{7}\u{1b}[31mcontrol",
+        "emoji 👍🏽 ñ 日本語 مرحبا",
+        "<>\"'&;:,@\\()[]",
+        "=?utf-8?B?Zm9v?=",
+        "  ",
+    ];
+    let long = "x".repeat(5000);
+    for (n, text) in nasty.iter().copied().chain([long.as_str()]).enumerate() {
+        for field in ["to", "cc", "bcc", "subject", "html", "text", "inReplyTo", "references"] {
+            let id = format!("typed-{n}-{field}");
+            let mut p = req(&id, 1, "body");
+            p["snapshot"][field] = json!(text);
+            let result = rpc(&h.s, "drafts.save", p).await;
+            assert!(result.is_ok(), "{field} = {text:?}: {result:?}");
+        }
+        let id = format!("typed-{n}-identity");
+        let mut p = req(&id, 1, text);
+        p["displayName"] = json!(text);
+        p["fromAddress"] = json!(text);
+        let result = rpc(&h.s, "drafts.save", p).await;
+        assert!(result.is_ok(), "identity = {text:?}: {result:?}");
+    }
+}
+#[tokio::test]
+async fn drafts_save_with_an_alias_that_is_not_an_address() {
+    let h = Harness::new();
+    for (n, from) in ["not an address", "@", "a@b@c", "prime@", "<x@y>"].iter().enumerate() {
+        let id = format!("alias-{n}");
+        let mut p = req(&id, 1, "words");
+        p["fromAddress"] = json!(from);
+        let result = saved(&h.s, p).await;
+        // The address as picked survives in the row a reopen reads it from.
+        assert_eq!(result["entry"]["from"]["address"], json!(from));
+        assert_eq!(reopened(&h.s, &id).await["text"].as_str().unwrap().trim(), "words");
+    }
+}
+#[tokio::test]
+async fn drafts_save_with_any_attachment_shape() {
+    let h = Harness::new();
+    let cases = [
+        (json!({"filename":null,"contentType":"text/plain","content":"QUJD"}), true),
+        (json!({"filename":"a.bin","contentType":null,"content":"QUJD"}), true),
+        (json!({"content":"QUJD"}), true),
+        (json!({"filename":"","contentType":"","content":"QUJD"}), true),
+        (json!({"filename":"wrap.bin","contentType":"a/b","content":"QU\r\nJD\n"}), true),
+        (json!({"filename":"url.bin","contentType":"a/b","content":"-_-_"}), true),
+        (json!({"filename":"data.bin","contentType":"a/b","content":"data:a/b;base64,QUJD"}), true),
+        (json!({"filename":"short.bin","contentType":"a/b","content":"QUI"}), true),
+        (json!({"filename":"bits.bin","contentType":"a/b","content":"QR=="}), true),
+        (json!({"filename":"odd\r\n\"/\\name.pdf","contentType":"not a type","content":"QUJD","cid":"a b\r\n<c>"}), true),
+        (json!({"filename":"utf8.txt","contentType":"text/plain","content":"plain words","encoding":"utf8"}), true),
+        (json!({"filename":"garbage.bin","contentType":"a/b","content":"!!!"}), false),
+        (json!({"filename":"unread.bin","contentType":"a/b"}), false),
+        (json!({"filename":"unread2.bin","contentType":"a/b","encoding":"base64"}), false),
+    ];
+    for (n, (attachment, kept)) in cases.iter().enumerate() {
+        let id = format!("attachment-{n}");
+        let mut p = req(&id, 1, "words");
+        p["snapshot"]["attachments"] = json!([attachment]);
+        let result = rpc(&h.s, "drafts.save", p).await;
+        let result = result.unwrap_or_else(|e| panic!("{attachment}: {e}"));
+        let omitted = result["omittedAttachments"].as_array().map_or(0, Vec::len);
+        assert_eq!(omitted == 0, *kept, "{attachment}: {result}");
+        let eml = reopened(&h.s, &id).await;
+        assert_eq!(eml["text"].as_str().unwrap().trim(), "words", "{attachment}");
+        assert_eq!(eml["attachments"].as_array().map_or(0, Vec::len), usize::from(*kept), "{attachment}");
+    }
+}
+#[tokio::test]
+async fn drafts_save_after_the_current_copy_vanished_from_the_vault() {
+    let h = Harness::new();
+    saved(&h.s, req("vanished", 1, "old")).await;
+    let copy = row(&h.s, "vanished").current.unwrap();
+    let l = copy.location();
+    let i = inventory(&h.s, &l).unwrap();
+    with_mailbox_write(&h.s, &l.account_id, &l.mailbox, |root| {
+        custody::with_conn(&h.s, |c| {
+            vault_files::delete_uid_candidates(&h.s.vault_registry, root, &l.account_id, &l.mailbox, l.uid, &i.candidates)?;
+            entries::remove(c, &l.account_id, &l.mailbox, &[l.uid])?;
+            Ok(())
+        })
+    })
+    .unwrap();
+    let next = saved(&h.s, req("vanished", 2, "new")).await;
+    assert_eq!(next["revision"], 2);
+    assert_eq!(reopened(&h.s, "vanished").await["text"].as_str().unwrap().trim(), "new");
+}
+#[tokio::test]
+async fn drafts_newer_revision_lands_past_a_pending_attempt_that_will_not_recover() {
+    let h = Harness::new();
+    saved(&h.s, req("stuck", 1, "old")).await;
+    // The first attempt and its recovery both die at the destination; only
+    // the newer revision's own attempt gets through.
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = Arc::clone(&calls);
+    h.hook(move |p| {
+        if p == "before_destination" && seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 2 {
+            Err("destination unavailable".into())
+        } else {
+            Ok(())
+        }
+    });
+    assert!(rpc(&h.s, "drafts.save", req("stuck", 2, "lost")).await.is_err());
+    assert!(row(&h.s, "stuck").pending.is_some());
+    let next = saved(&h.s, req("stuck", 3, "newest")).await;
+    assert_eq!(next["revision"], 3);
+    h.clear();
+    assert!(row(&h.s, "stuck").pending.is_none());
+    assert_eq!(reopened(&h.s, "stuck").await["text"].as_str().unwrap().trim(), "newest");
 }
 #[tokio::test]
 async fn drafts_legacy_adoption_is_exclusive_and_purpose_checked() {

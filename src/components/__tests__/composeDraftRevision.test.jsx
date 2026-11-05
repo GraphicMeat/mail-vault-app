@@ -147,6 +147,8 @@ const accepted = (request, uid = 42) => ({ draftId: request.draftId, revision: r
 const seed = { to: '', cc: '', bcc: '', subject: '', body: '<p>typed</p>', attachments: [], _accountId: 'acct-1', _draftUid: 42, _draftMailbox: 'LegacyDrafts' };
 const props = { mode: 'new', onClose() {}, onMinimize() {}, onSaveState() {} };
 async function tick() { await act(async () => { await vi.advanceTimersByTimeAsync(300); }); }
+// Each step commits, so a retry's state change can start its own timer.
+async function pass(ms) { for (let t = 0; t < ms; t += 100) await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 beforeEach(() => {
   vi.useFakeTimers(); settings.lastComposeIdentity = null; settings.composeOpenMode = undefined;
   saveLocalDraft.mockReset().mockImplementation(async request => accepted(request));
@@ -254,11 +256,45 @@ describe('revision recovery at the actual component boundary', () => {
     const onSaveState = vi.fn(); const snapshotRef = { current: null };
     const view = render(<ComposeModal {...props} initialData={seed} onSaveState={onSaveState} snapshotRef={snapshotRef} />); await tick();
     const request = saveLocalDraft.mock.calls[0][0];
-    expect(screen.getByRole('alert').textContent).toContain('The draft could not be saved. Please retry.');
     const saved = await snapshotRef.current(); view.unmount();
     render(<ComposeModal {...props} initialData={saved} />); await tick();
     expect(saveLocalDraft).toHaveBeenCalledTimes(2);
     expect(saveLocalDraft.mock.calls[1][0]).toEqual(request);
+  });
+  it('retries a refused save on its own, silently, with the same request', async () => {
+    saveLocalDraft.mockRejectedValueOnce(Error('errors.keychainBusy'));
+    render(<ComposeModal {...props} initialData={seed} />); await tick();
+    const request = saveLocalDraft.mock.calls[0][0];
+    expect(screen.queryByRole('alert')).toBeNull();
+    await pass(5000);
+    expect(saveLocalDraft).toHaveBeenCalledTimes(2);
+    expect(saveLocalDraft.mock.calls[1][0]).toEqual(request);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+  it('tells the user only once refusals persist, keeps trying under a new revision, and clears itself', async () => {
+    let refuse = true;
+    saveLocalDraft.mockImplementation(async request => { if (refuse) throw Error('draft revision conflict'); return accepted(request); });
+    render(<ComposeModal {...props} initialData={seed} />); await tick();
+    const first = saveLocalDraft.mock.calls[0][0];
+    await pass(15000);
+    expect(saveLocalDraft.mock.calls.length).toBeGreaterThan(3);
+    expect(screen.getByRole('alert').textContent).toContain('The draft could not be saved.');
+    expect(saveLocalDraft.mock.calls.at(-1)[0].revision).toBeGreaterThan(first.revision);
+    expect(saveLocalDraft.mock.calls.at(-1)[0].payload).toEqual(first.payload);
+    refuse = false;
+    await pass(31000);
+    expect(screen.queryByRole('alert')).toBeNull();
+    const calls = saveLocalDraft.mock.calls.length;
+    await pass(60000);
+    expect(saveLocalDraft).toHaveBeenCalledTimes(calls);
+  });
+  it('stops retrying once the window closes', async () => {
+    saveLocalDraft.mockRejectedValue(Error('vault unavailable'));
+    const view = render(<ComposeModal {...props} initialData={seed} />); await tick();
+    const calls = saveLocalDraft.mock.calls.length;
+    view.unmount();
+    await pass(60000);
+    expect(saveLocalDraft).toHaveBeenCalledTimes(calls);
   });
   it('does not accept submitted content when native reports a superseded revision', async () => {
     const save = deferred(); saveLocalDraft.mockReturnValueOnce(save.promise);
@@ -267,11 +303,38 @@ describe('revision recovery at the actual component boundary', () => {
     const request = saveLocalDraft.mock.calls[0][0];
     await act(async () => { save.resolve({ ...accepted({ ...request, revision: 8 }, 108), disposition: 'superseded' }); });
     const saved = await snapshotRef.current();
-    expect(saved.body).toBe('<p>typed</p>'); expect(saved._draftRevision).toBe(request.revision);
+    expect(saved.body).toBe('<p>typed</p>'); expect(saved._draftRevision).toBe(9);
     expect(saved._draftAcceptedRevision).toBe(8); expect(saved._draftUid).toBe(108);
-    expect(screen.getByRole('alert')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await tick();
-    expect(saveLocalDraft.mock.calls[1][0]).toEqual(request);
+    // That revision can never land, so the same words go again above it.
+    expect(screen.queryByRole('alert')).toBeNull();
+    await pass(5000);
+    expect(saveLocalDraft.mock.calls[1][0]).toEqual({ ...request, revision: 9 });
+  });
+  it('never resends restored words over a newer saved copy this window did not write', async () => {
+    // Rev 5 landed, the app died before that snapshot reached disk, and the
+    // session came back holding rev 4. Those words are the older ones.
+    const content = { accountId: 'acct-1', fromAddress: 'me@example.test', displayName: 'Me', payload: {
+      to: '', cc: '', bcc: '', subject: '', html: '<p>typed</p>', text: 'typed', inReplyTo: '', references: '', attachments: [],
+    }, snippet: 'typed' };
+    saveLocalDraft.mockImplementation(async request => ({ ...accepted({ ...request, revision: 5 }, 105), disposition: 'superseded' }));
+    render(<ComposeModal {...props} initialData={{ ...seed, _draftId: 'managed', _draftRevision: 4, _draftAcceptedRevision: 3, _draftAccountId: 'acct-1', _draftContent: content }} />); await tick();
+    expect(saveLocalDraft).toHaveBeenCalledTimes(1);
+    await pass(60000);
+    expect(saveLocalDraft).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+  it('lets two windows on one draft settle instead of out-bidding each other forever', async () => {
+    let latest = 0;
+    saveLocalDraft.mockImplementation(async request => {
+      if (request.revision <= latest) return { ...accepted({ ...request, revision: latest }, 100 + latest), disposition: 'superseded' };
+      latest = request.revision; return accepted(request, 100 + latest);
+    });
+    render(<><ComposeModal {...props} initialData={{ ...seed, _draftId: 'shared' }} /><ComposeModal {...props} initialData={{ ...seed, _draftId: 'shared', body: '<p>other</p>' }} /></>);
+    await pass(10000);
+    const settled = saveLocalDraft.mock.calls.length;
+    await pass(60000);
+    expect(saveLocalDraft).toHaveBeenCalledTimes(settled);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
   it('allocates a stable identity for blank detach without saving a blank draft', async () => {
     const onDetach = vi.fn().mockResolvedValue(undefined);
@@ -294,16 +357,20 @@ it('saves recovered request-only bytes as revision one without adopting the orig
   expect(onSaveState.mock.calls.at(-1)[0]._draftRecovery).toBe('exact-provenance');
 });
 
-it('retains accepted location and offers the same revision retry while native cleanup is pending', async () => {
+it('retains accepted location without an alarm while native cleanup is pending, since the words are saved', async () => {
   saveLocalDraft.mockImplementationOnce(async request => ({ ...accepted(request), cleanup: 'pending', cleanupIdentities: [{ accountId: 'acct-1', mailbox: 'LegacyDrafts', uid: 40 }] }));
   const snapshotRef = { current: null };
   render(<ComposeModal {...props} initialData={seed} snapshotRef={snapshotRef} />); await tick();
   const first = saveLocalDraft.mock.calls[0][0]; const saved = await snapshotRef.current();
   expect(saved._draftAcceptedRevision).toBe(first.revision); expect(saved._draftUid).toBe(42);
-  expect(screen.getByRole('alert')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await tick();
-  expect(saveLocalDraft.mock.calls[1][0]).toEqual(first);
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('says which attachment the saved draft could not keep, and the words stay saved', async () => {
+  saveLocalDraft.mockImplementationOnce(async request => ({ ...accepted(request), omittedAttachments: ['gone.pdf'] }));
+  render(<ComposeModal {...props} initialData={seed} />); await tick();
+  expect(screen.getByRole('alert').textContent).toContain('gone.pdf');
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
 });
 
 const { useComposeSessionHydration, mergeComposeSession } = await import('../../services/composeSession');
@@ -615,8 +682,8 @@ it.each(['unknown', 'pending'])('the standalone editor freezes discard and expos
 
 
 it('translates native draft save failures without exposing identity proof fields', async () => {
-  saveLocalDraft.mockRejectedValueOnce(Error('draft receipt mismatch account=internal uid=42 sha256=private-proof'));
-  render(<ComposeModal {...props} initialData={seed} />); await tick();
+  saveLocalDraft.mockRejectedValue(Error('draft receipt mismatch account=internal uid=42 sha256=private-proof'));
+  render(<ComposeModal {...props} initialData={seed} />); await pass(5000);
   const alert = screen.getByRole('alert').textContent;
   expect(alert).toContain('The draft could not be saved. Please retry.');
   expect(alert).not.toContain('sha256'); expect(alert).not.toContain('uid=42');

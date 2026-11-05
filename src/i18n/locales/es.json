@@ -2,6 +2,7 @@
   "compose.preparationUnavailable": "No se pudo preparar este mensaje. Inténtalo de nuevo.",
   "compose.draftContentNotAccepted": "No se pudo guardar el borrador. Vuelve a intentarlo.",
   "compose.draftCleanupPending": "La limpieza del borrador sigue pendiente.",
+  "compose.draftAttachmentsOmitted": "El borrador se ha guardado, pero sin {{names}}. No se pudo leer el archivo.",
   "compose.draftCleanupUnknown": "No se pudo confirmar la limpieza del borrador. Vuelve a intentarlo.",
   "compose.draftCleanupWorking": "Descartando borrador...",
   "compose.draftCleanupStorageFailed": "No se pudo guardar la limpieza del borrador para recuperarla. Vuelve a intentarlo.",

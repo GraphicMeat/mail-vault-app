@@ -5,6 +5,28 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 pub const FLAGS: [&str; 3] = ["archived", "seen", "draft"];
+fn text_or_blank<'de, D: serde::Deserializer<'de>>(value: D) -> Result<String, D::Error> {
+    Ok(Option::<String>::deserialize(value)?.unwrap_or_default())
+}
+/// Any base64 a file or a parsed message can hand us, as the one form the
+/// builder takes: line breaks, the URL-safe alphabet, a `data:` URL prefix, no
+/// padding and stray trailing bits all decode. None only for real garbage.
+fn canonical_base64(raw: &str) -> Option<String> {
+    use base64::{alphabet, engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig}};
+    const LENIENT: GeneralPurpose = GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new()
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent)
+            .with_decode_allow_trailing_bits(true),
+    );
+    let body = if raw.starts_with("data:") { raw.split_once(',')?.1 } else { raw };
+    let clean: String = body
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .map(|c| match c { '-' => '+', '_' => '/', c => c })
+        .collect();
+    Some(STANDARD.encode(LENIENT.decode(clean).ok()?))
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Location {
@@ -23,7 +45,9 @@ pub struct Source {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Attachment {
+    #[serde(default, deserialize_with = "text_or_blank")]
     pub filename: String,
+    #[serde(default, deserialize_with = "text_or_blank")]
     pub content_type: String,
     pub content: Option<String>,
     pub encoding: Option<String>,
@@ -54,10 +78,14 @@ pub struct Save {
     pub snapshot: Snapshot,
     pub snippet: String,
     pub previous_identity: Option<Location>,
+    /// Names of attachments with no usable bytes. The words must still save,
+    /// so these are left out of the copy and reported back to the window.
+    #[serde(skip)]
+    pub omitted: Vec<String>,
 }
 impl Save {
     pub fn parse(value: Value) -> Result<Self, String> {
-        let request: Self = serde_json::from_value(value).map_err(|e| e.to_string())?;
+        let mut request: Self = serde_json::from_value(value).map_err(|e| e.to_string())?;
         if request.draft_id.is_empty()
             || request.draft_id.len() > 200
             || request.revision == 0
@@ -66,16 +94,24 @@ impl Save {
         {
             return Err("invalid draftId, revision or accountId".into());
         }
-        for a in &request.snapshot.attachments {
-            if a.encoding.as_deref().is_some_and(|e| e != "base64")
-                || (a.content.is_none() && a.source.is_none())
-            {
-                return Err("attachments require base64 content or source".into());
+        for mut a in std::mem::take(&mut request.snapshot.attachments) {
+            if a.filename.trim().is_empty() {
+                a.filename = "attachment".into();
             }
-            if let Some(content) = &a.content {
-                STANDARD
-                    .decode(content)
-                    .map_err(|_| "invalid attachment base64")?;
+            if a.content_type.trim().is_empty() {
+                a.content_type = "application/octet-stream".into();
+            }
+            let plain = a.encoding.as_deref().is_some_and(|e| !e.eq_ignore_ascii_case("base64"));
+            a.content = a.content.take().and_then(|content| {
+                if plain { Some(STANDARD.encode(content)) } else { canonical_base64(&content) }
+            });
+            if plain {
+                a.encoding = Some("base64".into());
+            }
+            if a.content.is_none() && a.source.is_none() {
+                request.omitted.push(a.filename);
+            } else {
+                request.snapshot.attachments.push(a);
             }
         }
         Ok(request)

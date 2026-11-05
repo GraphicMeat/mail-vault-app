@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Drafts now keep saving whatever you type or attach. A save that is turned away now tries again by itself instead of waiting for your next keystroke, and "The draft could not be saved" appears only if it keeps failing, then clears by itself. Half an emoji, an alias that is not an address yet and an attachment with no name or type or oddly encoded contents no longer stop a draft from saving. If the file behind an attachment cannot be read, the words still save and the window names the file left out. A line break in a sender name no longer fails a draft or a send.
+
 - Settings > Billing now lists your aliases next to your account addresses, so you can sign in to Premium or subscribe with an alias.
 
 - In the Blitz renderer, a quoted message you open with the ⋯ button now stays open. Where scrollbars stay visible (Windows, Linux, a Mac set to always show them or with a mouse attached), it appeared and vanished again when opening it made the message long enough to scroll. An open quote also stays open when the reading pane changes width or you choose Load external content.

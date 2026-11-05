@@ -48,22 +48,26 @@ export { newDraftId } from './composeSession';
 const snapshotFields = ['to', 'cc', 'bcc', 'subject', 'html', 'text', 'inReplyTo', 'references'];
 const physicalTuple = identity => ({ accountId: identity.accountId, mailbox: identity.mailbox, uid: identity.uid });
 
+// Whatever a field holds goes out as text the daemon can parse. A lone
+// surrogate (half an emoji, from a paste or a cut) is valid in a JS string but
+// serde_json refuses the whole request over it, so it becomes U+FFFD here.
+const wireText = value => (Array.isArray(value) ? value.join(' ') : String(value ?? '')).replace(/\p{Surrogate}/gu, '�');
+
 /** Serialize the complete native contract; UI descriptors never grant proof. */
 export async function saveLocalDraft({ draftId, revision, accountId, fromAddress, displayName, payload, snapshot = payload, snippet, previousIdentity }) {
-  if (!draftId || !Number.isSafeInteger(revision) || revision < 1 || !accountId
-      || snapshotFields.some(field => typeof snapshot?.[field] !== 'string') || !Array.isArray(snapshot?.attachments)) {
+  if (!draftId || !Number.isSafeInteger(revision) || revision < 1 || !accountId || !Array.isArray(snapshot?.attachments)) {
     throw new Error(t('compose.draftContentNotAccepted'));
   }
-  const request = { draftId, revision, accountId, fromAddress: fromAddress ?? '', displayName: displayName ?? '',
-    snapshot: { ...Object.fromEntries(snapshotFields.map(field => [field, snapshot[field]])),
+  const request = { draftId, revision, accountId, fromAddress: wireText(fromAddress), displayName: wireText(displayName),
+    snapshot: { ...Object.fromEntries(snapshotFields.map(field => [field, wireText(snapshot[field])])),
       attachments: snapshot.attachments.map(attachment => ({
-        filename: attachment.filename, contentType: attachment.contentType,
+        filename: wireText(attachment.filename), contentType: wireText(attachment.contentType),
         ...Object.fromEntries(['content', 'encoding', 'cid'].filter(field => attachment[field] != null).map(field => [field, attachment[field]])),
         ...((attachment.source || attachment._source) ? { source: {
           ...physicalTuple(attachment.source || attachment._source), attachmentIndex: (attachment.source || attachment._source).attachmentIndex,
         } } : {}),
       })),
-    }, snippet: snippet ?? '', ...(previousIdentity ? { previousIdentity: physicalTuple(previousIdentity) } : {}),
+    }, snippet: wireText(snippet), ...(previousIdentity ? { previousIdentity: physicalTuple(previousIdentity) } : {}),
   };
   const startedGeneration = getDraftProjection().generation;
   let response;

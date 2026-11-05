@@ -32,6 +32,34 @@ it('refuses component calls without stable identity or complete content before w
   await expect(drafts.saveLocalDraft({ draftId: 'd', revision: 1, accountId: 'a', payload: { html: 'partial' } })).rejects.toThrow();
   expect(send).not.toHaveBeenCalled();
 });
+it.each([
+  ['null', null], ['undefined', undefined], ['a number', 7],
+])('saves a header field holding %s as text instead of refusing the draft', async (_, value) => {
+  send.mockResolvedValue(reply());
+  await drafts.saveLocalDraft({ draftId: 'd', revision: 1, accountId: 'a', payload: { ...payload, inReplyTo: value, references: value, cc: value } });
+  const { snapshot } = send.mock.calls[0][1];
+  for (const field of ['inReplyTo', 'references', 'cc']) expect(snapshot[field]).toBe(value == null ? '' : String(value));
+});
+it('saves array references as one header value', async () => {
+  send.mockResolvedValue(reply());
+  await drafts.saveLocalDraft({ draftId: 'd', revision: 1, accountId: 'a', payload: { ...payload, references: ['<a@b>', '<c@d>'] } });
+  expect(send.mock.calls[0][1].snapshot.references).toBe('<a@b> <c@d>');
+});
+it('replaces lone surrogates, which the daemon JSON parser refuses, everywhere they can be typed', async () => {
+  send.mockResolvedValue(reply());
+  const broken = 'half \uD83D emoji \uDC4D 👍';
+  const fixed = 'half \uFFFD emoji \uFFFD 👍';
+  await drafts.saveLocalDraft({ draftId: 'd', revision: 1, accountId: 'a', fromAddress: broken, displayName: broken, snippet: broken,
+    payload: { ...payload, to: broken, subject: broken, html: broken, text: broken, attachments: [{ filename: broken, contentType: 'a/b', content: 'QUJD' }] } });
+  const sent = send.mock.calls[0][1];
+  expect([sent.fromAddress, sent.displayName, sent.snippet, sent.snapshot.to, sent.snapshot.subject, sent.snapshot.html, sent.snapshot.text, sent.snapshot.attachments[0].filename]).toEqual(Array(8).fill(fixed));
+  expect(() => JSON.parse(JSON.stringify(sent))).not.toThrow();
+});
+it('passes attachments with no name or type through for the daemon to name', async () => {
+  send.mockResolvedValue(reply());
+  await drafts.saveLocalDraft({ draftId: 'd', revision: 1, accountId: 'a', payload: { ...payload, attachments: [{ content: 'QUJD' }, { filename: null, contentType: null, content: 'QUJD' }] } });
+  expect(send.mock.calls[0][1].snapshot.attachments).toEqual([{ filename: '', contentType: '', content: 'QUJD' }, { filename: '', contentType: '', content: 'QUJD' }]);
+});
 it('returns superseded honestly and cannot replace a newer accepted projection', async () => {
   send.mockResolvedValueOnce(reply(3, 30)).mockResolvedValueOnce({ ...reply(2, 20), disposition: 'superseded' });
   const req = { draftId: 'd', revision: 3, accountId: 'a', fromAddress: '', displayName: '', payload, snippet: '' };
