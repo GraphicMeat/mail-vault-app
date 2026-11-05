@@ -38,6 +38,7 @@ vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: p => <button onClick
 const { useMailStore } = await import('../../stores/mailStore');
 const { useThemeStore } = await import('../../stores/themeStore');
 const { useSettingsStore } = await import('../../stores/settingsStore');
+const { useSearchStore } = await import('../../stores/searchStore');
 const { EmailViewer } = await import('../EmailViewer');
 
 const mail = (uid) => ({
@@ -95,7 +96,7 @@ async function expectHandlersOn(frame) {
   }).toEqual({ autoSize: true, linkSafety: true, contextMenu: true });
 }
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); autosized.length = 0; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); autosized.length = 0; useSearchStore.setState({ searchActive: false, searchQuery: '' }); });
 
 describe('EmailViewer frame handlers follow the mounted frame', () => {
   it('the frame a message opens in has them', async () => {
@@ -125,6 +126,18 @@ describe('EmailViewer frame handlers follow the mounted frame', () => {
     const frame = frameNow();
     expect(frame).not.toBeNull();
     await expectHandlersOn(frame);
+  });
+
+  it('View Source on and off: the new frame shows the open search', async () => {
+    useSearchStore.setState({ searchActive: true, searchQuery: 'budget' });
+    show(mail(1));
+    await toggleSource();
+    await toggleSource();
+    const frame = frameNow();
+    await settle();
+    frame.contentDocument.body.innerHTML = '<p>The budget review</p>';
+    await act(async () => { fireEvent.load(frame); });
+    expect([...frame.contentDocument.querySelectorAll('mark.mv-search-hit')].map(m => m.textContent)).toEqual(['budget']);
   });
 
   it('a theme change keeps the frame and does not tear the handlers down', async () => {

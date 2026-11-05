@@ -104,4 +104,25 @@ describe('View Source and the frame that comes back', function () {
     expect({ sized, contextMenu, linkSafety }).toEqual({ sized: true, contextMenu: true, linkSafety: true });
     await closeSafetyDialog();
   });
+
+  it('after View Source on and off, the new frame still shows the open search', async function () {
+    // From the fixture's own link text.
+    const term = 'scanner';
+    const marks = () => browser.execute(() => {
+      const frame = [...document.querySelectorAll('iframe')].find((f) => f.contentDocument?.querySelector('#mv-collision-body'));
+      return frame ? frame.contentDocument.querySelectorAll('mark.mv-search-hit').length : -1;
+    });
+    await browser.execute((q) => window.__SEARCH_STORE__.setState({ searchActive: true, searchQuery: q }), term);
+    await browser.waitUntil(async () => (await marks()) > 0, { timeout: 10_000, interval: 200, timeoutMsg: 'the first frame never showed the open search' });
+
+    // The case above left the header's More open.
+    await browser.waitUntil(() => clickHeaderButton('View Source'), { timeout: 10_000, interval: 200, timeoutMsg: 'the header never offered View Source' });
+    await browser.waitUntil(async () => (await marks()) === -1, { timeout: 15_000, interval: 200, timeoutMsg: 'View Source never replaced the frame' });
+    await browser.waitUntil(() => clickHeaderButton('Rendered'), { timeout: 10_000, interval: 200, timeoutMsg: 'the header never offered Rendered' });
+    await waitForFrame();
+
+    const painted = await browser.waitUntil(async () => (await marks()) > 0, { timeout: 5_000, interval: 200 }).catch(() => false);
+    await browser.execute(() => window.__SEARCH_STORE__.setState({ searchActive: false, searchQuery: '' }));
+    expect(painted).toBe(true);
+  });
 });

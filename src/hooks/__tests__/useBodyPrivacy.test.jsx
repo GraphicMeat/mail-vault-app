@@ -19,11 +19,11 @@ function Frame({ html, show = true }) {
   return show ? <iframe ref={ref} title="t" /> : null;
 }
 // The reader's real pairing: mask first, then the search highlight.
-function SearchFrame({ html, message = null }) {
+function SearchFrame({ html, message = null, show = true }) {
   const ref = useRef(null);
   useBodyPrivacy(ref, html, { message, readyTimeoutMs: 3000 });
   useSearchHighlight(ref, html);
-  return <iframe ref={ref} title="t" />;
+  return show ? <iframe ref={ref} title="t" /> : null;
 }
 function writeFrame(iframe, html) {
   const d = iframe.contentDocument; d.open(); d.write(html); d.close();
@@ -138,6 +138,20 @@ describe('useBodyPrivacy', () => {
     act(() => writeFrame(iframe, html));
     expect(iframe.contentDocument.getElementById(PRIVACY_GATE_ID)).toBeNull();
     expect(iframe.contentDocument.body.textContent).not.toContain('John');
+  });
+  it('a remounted frame with the same srcDoc is masked first, then shows the open search', () => {
+    setPrivacyDictionary(buildNameDictionary({ names: ['John Smith'] }), { ready: true });
+    useSearchStore.setState({ searchActive: true, searchQuery: 'smi hello' });
+    const html = buildEmailIframeHtml({ bodyHtml: '<p>John Smith hello</p>', privacy: true });
+    const { container, rerender } = render(<SearchFrame html={html} />);
+    act(() => writeFrame(container.querySelector('iframe'), html));
+    rerender(<SearchFrame html={html} show={false} />);
+    rerender(<SearchFrame html={html} />);
+    const iframe = container.querySelector('iframe');
+    act(() => writeFrame(iframe, html));
+    const doc = iframe.contentDocument;
+    expect(doc.body.textContent).not.toMatch(/John|Smith/);
+    expect([...doc.querySelectorAll('mark.mv-search-hit')].map(m => m.textContent)).toEqual(['hello']);
   });
   it('search never marks a held frame, so no name or address is split past the mask; it paints after release', () => {
     setPrivacyDictionary(EMPTY_DICTIONARY, { ready: false });

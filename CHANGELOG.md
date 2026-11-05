@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Search terms stay highlighted in the message after you turn View Source off. The redrawn body had lost them until you changed the search or opened another message
+
 - After turning View Source off, or viewing an original in a chat bubble, the message body is protected again. The redrawn body had lost its link safety warning, so a click on a flagged link opened it with no prompt; it had also lost its context menu and stopped sizing to the mail. The same applied when moving to another message with the source open, and to a full view opened while a message was still loading.
 
 - Lithuanian letters (č, š, ž, ė, ą, ę, į, ų, ū) no longer vanish from some emails. A sender that gave no text encoding, an empty or unfamiliar one, or `us-ascii` on a UTF-8 body now reads as UTF-8, and a body in `latin-7` or `win1257` reads right too; the reader showed these gaps where the letters should be. When a body is not UTF-8 either, its own declared encoding is used. The search index and the JMAP preview read bodies the same way.

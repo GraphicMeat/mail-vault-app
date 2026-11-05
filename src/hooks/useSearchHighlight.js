@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useFrameEffect } from './useFrameEffect';
 import { useSearchStore } from '../stores/searchStore';
 import { applySearchHighlight, highlightTerms } from '../utils/iframeSearchHighlight';
 import { PRIVACY_RELEASED_EVENT } from '../utils/iframePrivacyRedact';
@@ -13,14 +13,15 @@ import { PRIVACY_RELEASED_EVENT } from '../utils/iframePrivacyRedact';
  *
  * `contentKey` is whatever identifies the body currently in the frame; passing
  * the srcDoc re-paints when the reader moves to another message, and the load
- * listener covers the frame swapping its document underneath.
+ * listener covers the frame swapping its document underneath. A remounted frame
+ * with the same srcDoc (View Source off, Blitz to web) is useFrameEffect's job.
+ *
+ * MUST be called after useBodyPrivacy in the same component: see there.
  */
 export function useSearchHighlight(iframeRef, contentKey) {
   const query = useSearchStore(s => (s.searchActive ? s.searchQuery : ''));
 
-  useEffect(() => {
-    const iframe = iframeRef?.current;
-    if (!iframe) return undefined;
+  useFrameEffect(iframeRef, (iframe) => {
     const terms = highlightTerms(query);
     const paint = () => {
       try {
@@ -36,5 +37,5 @@ export function useSearchHighlight(iframeRef, contentKey) {
       iframe.removeEventListener('load', paint);
       iframe.removeEventListener(PRIVACY_RELEASED_EVENT, paint);
     };
-  }, [iframeRef, query, contentKey]);
+  }, [query, contentKey]);
 }

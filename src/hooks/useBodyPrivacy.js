@@ -36,8 +36,7 @@ export function usePrivacyFrameGate() {
  *
  * MUST be called before useSearchHighlight in the same component: both run on
  * the frame's `load`, and listeners fire in the order they were added, so the
- * mask lands first. (The mask is a layout effect, so on mount it is added
- * first anyway.)
+ * mask lands first.
  *
  * The frame arrives gated (body hidden, see buildEmailIframeHtml `privacy`).
  * The gate comes off only in applyPrivacyRedaction, so the real text never

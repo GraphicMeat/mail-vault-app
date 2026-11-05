@@ -160,9 +160,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   useBodyPrivacy(iframeRef, iframeContent, { message: loadedEmail ? { ...email, ...loadedEmail } : email });
   // The thread is a second reader of the same body — including for the search
   // highlight, or a hit opened in thread mode is marked nowhere.
-  // Under Alt there is no iframe: a null key makes the effect re-run when the iframe comes back, so a
-  // live blitz-to-web switch paints the open search into the fresh frame (iframeContent itself does not change).
-  useSearchHighlight(iframeRef, Alt ? null : iframeContent);
+  useSearchHighlight(iframeRef, iframeContent);
   useMailFonts(iframeRef);
 
   // The thread is a second reader of the same body: what it finds has to reach
