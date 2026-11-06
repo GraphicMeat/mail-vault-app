@@ -60,13 +60,49 @@ pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError>
             (ACCOUNT_ID, FOLDER),
             |r| r.get(0),
         )?;
-        if n >= count as i64 {
-            return Ok(false);
+        let wrote = n < count as i64;
+        if wrote {
+            insert_account_and_folder(c, count)?;
+            insert_rows(c, count)?;
         }
-        insert_account_and_folder(c, count)?;
-        insert_rows(c, count)?;
-        Ok(true)
+        insert_showcase_bodies(c)?;
+        Ok(wrote)
     })
+}
+
+/// A newsletter (remote images, a tracking pixel, links, an attachment) for the newest seeded row
+/// and a plain text mail with links for the next, cached as fetched bodies, so the viewer has
+/// something to draw in screenshots without a server. `INSERT OR IGNORE` on every launch.
+const SHOWCASE_HTML: &str = r##"<!doctype html><html><head><meta charset="utf-8"><title>Garden notes</title>
+<style>.wrap{max-width:600px;margin:0 auto;font-family:Georgia,serif;color:#2d2a26}
+.hero{background:#2f5d50;color:#fff;padding:28px 24px}.hero h1{margin:0;font-size:26px}
+.card{padding:20px 24px;background:#fbf8f1;border-bottom:1px solid #e7e0d2}.btn{display:inline-block;padding:10px 18px;background:#c8553d;color:#fff;border-radius:6px;text-decoration:none}
+@media (prefers-color-scheme: dark){.card{background:#171717}}</style></head>
+<body style="margin:0;background:#efe9dc"><div class="wrap">
+<a class="hero" href="https://example.com/garden" style="display:block;text-decoration:none"><h1>Garden notes, November</h1><p style="margin:8px 0 0">Bulbs, frost cloth and a soup to end the season.</p></a>
+<img src="https://images.example.test/hero-tulips.jpg" alt="Tulip bulbs on a potting bench" width="600" height="300" style="display:block;width:100%;height:auto;background:#d9cfbb">
+<div class="card"><h2 style="margin-top:0">Plant now, thank yourself in April</h2>
+<p>Tulips want cold soil. Set them three bulbs deep, pointy end up, and water once. Read the full planting guide on <a href="https://example.com/">example.com</a>.</p>
+<p><a class="btn" href="https://example.com/guide">Open the guide</a></p></div>
+<div class="card"><h2 style="margin-top:0">Frost cloth, two ways</h2>
+<img src="https://images.example.test/frost-cloth.jpg" alt="Rows covered with white cloth" width="552" height="240" style="width:100%;height:auto;background:#d9cfbb">
+<p>Drape it at dusk, weigh the edges, take it off by mid-morning.</p></div>
+<p style="padding:16px 24px;font-size:12px;color:#6b6358">You get this because you subscribed. <a href="https://example.com/unsubscribe" target="_self">Unsubscribe</a></p>
+<img src="https://t.example.test/open.gif?u=42" width="1" height="1" alt="">
+</div></body></html>"##;
+
+const SHOWCASE_TEXT: &str = "Hi,\n\nThe minutes from Tuesday are below. The shared folder is at https://example.com/minutes\nand the booking form at www.example.com/rooms.\n\nAgenda:\n  1. Budget <draft> & timeline\n  2. Ask ann@example.test about the venue\n\nThanks,\nJonas\n";
+
+fn insert_showcase_bodies(c: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+    let mut st = c.prepare("SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2 ORDER BY date_ms DESC, uid DESC LIMIT 2")?;
+    let uids = st.query_map((ACCOUNT_ID, FOLDER), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
+    if let Some(&uid) = uids.first() {
+        crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, Some(SHOWCASE_HTML), None, &[("Planting calendar 2027.pdf", "application/pdf", 245_760)])?;
+    }
+    if let Some(&uid) = uids.get(1) {
+        crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, None, Some(SHOWCASE_TEXT), &[])?;
+    }
+    Ok(())
 }
 
 /// The account and INBOX folder rows the seeded messages hang off. No secret: nothing connects.

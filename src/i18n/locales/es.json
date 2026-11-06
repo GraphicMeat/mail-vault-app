@@ -4247,5 +4247,15 @@
   "mobile.list.release": "Suelta para actualizar",
   "mobile.list.refreshing": "Actualizando…",
   "mobile.sync.syncing": "Sincronizando",
-  "mobile.sync.failed": "Error de sincronización"
+  "mobile.sync.failed": "Error de sincronización",
+  "mobile.viewer.loading": "Cargando mensaje…",
+  "mobile.viewer.gone": "Este mensaje ya no está en el servidor.",
+  "mobile.viewer.loadFailed": "No se pudo cargar este mensaje.",
+  "mobile.viewer.empty": "Este mensaje no tiene texto.",
+  "mobile.viewer.imagesBlocked": "Las imágenes están ocultas para proteger tu privacidad.",
+  "mobile.viewer.loadImages_one": "Cargar imagen ({{count}})",
+  "mobile.viewer.loadImages_other": "Cargar imágenes ({{count}})",
+  "mobile.viewer.attachment": "Adjunto",
+  "mobile.viewer.trackerBlocked": "Rastreador bloqueado",
+  "mobile.viewer.frameTitle": "Contenido del mensaje"
 }

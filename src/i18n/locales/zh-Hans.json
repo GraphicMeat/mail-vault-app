@@ -4247,5 +4247,15 @@
   "mobile.list.release": "松开刷新",
   "mobile.list.refreshing": "正在刷新…",
   "mobile.sync.syncing": "正在同步",
-  "mobile.sync.failed": "同步失败"
+  "mobile.sync.failed": "同步失败",
+  "mobile.viewer.loading": "正在加载邮件…",
+  "mobile.viewer.gone": "此邮件已不在服务器上。",
+  "mobile.viewer.loadFailed": "无法加载此邮件。",
+  "mobile.viewer.empty": "此邮件没有正文。",
+  "mobile.viewer.imagesBlocked": "为保护你的隐私，图片已隐藏。",
+  "mobile.viewer.loadImages_one": "加载图片 ({{count}})",
+  "mobile.viewer.loadImages_other": "加载图片 ({{count}})",
+  "mobile.viewer.attachment": "附件",
+  "mobile.viewer.trackerBlocked": "已拦截跟踪器",
+  "mobile.viewer.frameTitle": "邮件内容"
 }

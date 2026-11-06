@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import MessageRow, { ROW_HEIGHT } from '../MessageRow.jsx';
-import ViewerStub from '../ViewerStub.jsx';
 import { formatEmailDate, MOBILE_DATE_SETTINGS } from '../format.js';
 import { formatEmailDateWith } from '../../utils/emailDateCore.js';
 import { t, getMobileLocale } from '../i18n.js';
@@ -91,19 +90,6 @@ describe('MessageRow', () => {
     expect(src).toContain('useVirtualizer');
     expect(src).toMatch(/estimateSize:\s*\(\)\s*=>\s*ROW_HEIGHT/);
     expect(src).not.toMatch(/measureElement/);
-  });
-});
-
-describe('ViewerStub', () => {
-  it('shows subject and sender, and a back control at least 44px tall', () => {
-    const onClose = vi.fn();
-    render(<ViewerStub row={base} onClose={onClose} />);
-    expect(screen.getByText('Hello')).toBeTruthy();
-    expect(screen.getByText('Ada Lovelace')).toBeTruthy();
-    const back = screen.getByRole('button', { name: t('common.back') });
-    expect(parseInt(back.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
-    fireEvent.click(back);
-    expect(onClose).toHaveBeenCalled();
   });
 });
 

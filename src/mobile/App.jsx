@@ -1,14 +1,16 @@
 // The mobile app (mounted by main.jsx): the account header, folder drawer, account switcher, add-account
-// screen and the live message list over the mobile store (`store.js`), a viewer stub on tap, and
-// with `?perf=1` the perf probe, whose result the engine logs as `MV_MOBILE {"perf":…}`. With
-// `?probe=host:port` (perf-gate builds) it logs one `MV_MOBILE {"probe":…}` line: DNS + TLS to that
-// host and a secret store round trip. `?ui=switcher|drawer` opens that panel at start (for
-// screenshots). The `mobile.ping` line is logged first: scripts/mobile-run.sh waits for it.
+// screen and the live message list over the mobile store (`store.js`), the message viewer on tap
+// (`Viewer.jsx`), and with `?perf=1` the perf probe, whose result the engine logs as
+// `MV_MOBILE {"perf":…}`. With `?probe=host:port` (perf-gate builds) it logs one
+// `MV_MOBILE {"probe":…}` line: DNS + TLS to that host and a secret store round trip.
+// `?ui=switcher|drawer` opens that panel at start, `?ui=viewer[&row=N]` opens the list's row N
+// (default 0) in the viewer (both for screenshots). The `mobile.ping` line is logged first:
+// scripts/mobile-run.sh waits for it.
 import React, { useCallback, useEffect, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
 import MessageList from './MessageList.jsx';
-import ViewerStub from './ViewerStub.jsx';
+import Viewer from './Viewer.jsx';
 import AddAccount from './AddAccount.jsx';
 import AccountSwitcher, { Avatar } from './AccountSwitcher.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
@@ -29,6 +31,8 @@ const errorOf = (err) => ({ code: err?.code ?? null, message: err?.message ?? St
 const QUERY = new URLSearchParams(window.location.search);
 const PERF = QUERY.get('perf') === '1';
 const START_PANEL = ['switcher', 'drawer'].includes(QUERY.get('ui')) ? QUERY.get('ui') : null;
+const START_ROW = QUERY.get('ui') === 'viewer' ? Math.max(0, Number(QUERY.get('row')) || 0) : null;
+let startRowOpened = false;
 let perfStarted = false;
 
 // One probe per launch, even if the list loads twice (a retry after a failed first page).
@@ -156,6 +160,21 @@ function App() {
     if (status === 'ready' && START_PANEL && listState === 'ready') setPanel((p) => p ?? START_PANEL);
   }, [status, listState]);
 
+  // `?ui=viewer`: the asked-for row, once it has loaded (its page may need fetching first).
+  useEffect(() => {
+    if (START_ROW == null || startRowOpened || status !== 'ready' || listState !== 'ready' || !list) return undefined;
+    const tryOpen = () => {
+      const row = list.rowAt(START_ROW);
+      if (!row || startRowOpened) return;
+      startRowOpened = true;
+      const { activeAccountId: accountId, activeFolder: folder } = useMobileStore.getState();
+      setOpen({ row, accountId, folder });
+    };
+    list.ensure(START_ROW).then(tryOpen, () => {});
+    tryOpen();
+    return list.subscribe(tryOpen);
+  }, [status, listState, list]);
+
   // Back in the foreground: sync the open folder.
   useEffect(() => {
     if (PERF) return undefined;
@@ -176,7 +195,11 @@ function App() {
     setPulled(Date.now());
     useMobileStore.getState().refresh();
   }, []);
-  const onOpen = useCallback((row) => setOpen(row), []);
+  // The viewer keeps the account and folder the row was opened from, whatever the list does next.
+  const onOpen = useCallback((row) => {
+    const { activeAccountId: accountId, activeFolder: folder } = useMobileStore.getState();
+    setOpen({ row, accountId, folder });
+  }, []);
   const onClose = useCallback(() => setOpen(null), []);
   const closePanel = useCallback(() => setPanel(null), []);
   const onSelectFolder = useCallback((path) => {
@@ -281,7 +304,9 @@ function App() {
           <AddAccount onSubmit={onAdd} onCancel={closePanel} />
         </div>
       )}
-      {open && <ViewerStub key={open.uid} row={open} onClose={onClose} />}
+      {open && (
+        <Viewer key={`${open.accountId}/${open.folder}/${open.row.uid}`} accountId={open.accountId} folder={open.folder} row={open.row} onClose={onClose} />
+      )}
     </div>
   );
 }

@@ -197,13 +197,23 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-row--unread .mv-row__sender, .mv-row--unread .mv-row__subject { font-weight: 600; }
 .mv-row--unread { box-shadow: inset 2px 0 0 var(--mail-accent); }
 
+/* The viewer: the header block on top, the mail frame filling the rest and scrolling itself (a
+   sandboxed frame without scripts cannot be measured, so it cannot grow to its content). */
 .mv-viewer {
   position: fixed;
   inset: 0;
   z-index: 10;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   background: var(--mail-bg);
-  padding: 0 calc(var(--mv-safe-right) + 16px) calc(var(--mv-safe-bottom) + 16px) calc(var(--mv-safe-left) + 16px);
+  padding-bottom: var(--mv-safe-bottom);
+}
+.mv-viewer__top {
+  flex: none;
+  max-height: 50%;
+  overflow-y: auto;
+  padding: 0 calc(var(--mv-safe-right) + 16px) 8px calc(var(--mv-safe-left) + 16px);
+  border-bottom: 1px solid var(--mail-border);
 }
 .mv-viewer__bar { padding-top: var(--mv-safe-top); margin: 0 -8px; }
 .mv-viewer__back {
@@ -214,8 +224,90 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   font-weight: 500;
   padding: 0 8px;
 }
-.mv-viewer__subject { margin: 12px 0 4px; font-size: 1.25rem; font-weight: 600; overflow-wrap: anywhere; }
-.mv-viewer__sender { margin: 0; color: var(--mail-text-muted); overflow-wrap: anywhere; }
+/* At most four lines: a hostile subject must not push the sender and the body off the screen. */
+.mv-viewer__subject {
+  margin: 4px 0 8px;
+  font-size: 1.25rem;
+  line-height: 1.3;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.mv-viewer__meta { margin: 0; font-size: 0.875rem; line-height: 1.4; }
+.mv-viewer__line { display: flex; gap: 6px; min-width: 0; }
+.mv-viewer__line dt { flex: none; color: var(--mail-text-muted); }
+.mv-viewer__line dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.mv-viewer__name { font-weight: 600; }
+.mv-viewer__address { margin-inline-start: 6px; color: var(--mail-text-muted); }
+.mv-viewer__date { display: block; margin-top: 2px; font-size: 0.8125rem; color: var(--mail-text-muted); }
+.mv-viewer__chips {
+  display: flex;
+  gap: 8px;
+  margin: 10px -16px 0;
+  padding: 0 16px 2px;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mv-viewer__chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 70vw;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--mail-border);
+  border-radius: 10px;
+  background: var(--mail-surface);
+  font-size: 0.8125rem;
+}
+.mv-viewer__chip svg { flex: none; color: var(--mail-text-muted); }
+.mv-viewer__chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-viewer__chip-size { flex: none; color: var(--mail-text-muted); }
+.mv-viewer__images {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px calc(var(--mv-safe-right) + 16px) 0 calc(var(--mv-safe-left) + 16px);
+  padding: 0 4px 0 12px;
+  border-radius: 10px;
+  background: var(--mail-surface);
+  font-size: 0.8125rem;
+  color: var(--mail-text-muted);
+}
+.mv-viewer__images span { flex: 1; min-width: 0; padding: 6px 0; }
+.mv-viewer__images button,
+.mv-viewer__notice button {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: none;
+  color: var(--mail-accent-text);
+  font: inherit;
+  font-weight: 600;
+}
+.mv-viewer__notice {
+  margin: 24px calc(var(--mv-safe-right) + 16px) 0 calc(var(--mv-safe-left) + 16px);
+  text-align: center;
+  color: var(--mail-text-muted);
+}
+.mv-viewer__images + .mv-viewer__frame,
+.mv-viewer__images + .mv-viewer__notice { margin-top: 8px; }
+.mv-viewer__frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  display: block;
+  background: var(--mail-bg);
+}
 
 .mv-status {
   margin: auto;

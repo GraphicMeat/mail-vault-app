@@ -528,4 +528,32 @@ mod tests {
         assert!(took < Duration::from_millis(100), "read took {took:?} behind a writer");
         t.join().unwrap();
     }
+
+    /// The viewer's header reads the recipients from the list row: `to` is the stored address
+    /// list, and a row with none (or a value that does not read) has an empty one.
+    #[test]
+    fn page_rows_carry_their_recipients() {
+        let tmp = tempfile::tempdir().unwrap();
+        let e = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(crate::MemorySecrets::default())).unwrap();
+        e.write(|c| {
+            for (uid, to) in [(1i64, Some(r#"[{"name":"Grace","address":"grace@example.test"},{"name":"","address":"linus@example.test"}]"#)), (2, None), (3, Some("not json"))] {
+                c.execute(
+                    "INSERT INTO messages
+                     (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments, to_json)
+                     VALUES ('a','INBOX',?1,'s','n','n@example.test',?1,'',0,0,0,COALESCE(?2,'[]'))",
+                    (uid, to),
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        let p = page(&e);
+        let by_uid = |uid: i64| p["rows"].as_array().unwrap().iter().find(|r| r["uid"] == uid).unwrap()["to"].clone();
+        assert_eq!(
+            by_uid(1),
+            json!([{ "name": "Grace", "address": "grace@example.test" }, { "name": "", "address": "linus@example.test" }])
+        );
+        assert_eq!(by_uid(2), json!([]));
+        assert_eq!(by_uid(3), json!([]));
+    }
 }

@@ -188,3 +188,30 @@ fn ensure_seeded_adds_the_showcase_account_and_folders_once() {
     }
     assert_eq!(page(&e, Value::Null, 1)["total"], 50);
 }
+
+/// Screenshot fixtures: the two newest seeded rows answer `mobile.message.body` from the cache,
+/// a newsletter (remote images, a tracker, an attachment) and a plain text mail with links.
+#[test]
+fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path()).unwrap();
+    for _ in 0..2 {
+        seed::ensure_seeded(&e, 50).unwrap();
+        let rows = page(&e, Value::Null, 2)["rows"].clone();
+        let body = |uid: &Value| {
+            e.rpc("mobile.message.body", json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "uid": uid })).unwrap()
+        };
+        let news = body(&rows[0]["uid"]);
+        assert_eq!(news["gone"], false);
+        let html = news["html"].as_str().unwrap();
+        assert!(html.contains("https://"), "{html}");
+        assert!(html.contains("data-mv-tracker-blocked"), "{html}");
+        assert!(news["remoteImages"].as_u64().unwrap() >= 1, "{news}");
+        assert_eq!(news["trackers"], 1);
+        assert_eq!(news["attachments"].as_array().unwrap().len(), 1);
+        let plain = body(&rows[1]["uid"]);
+        assert!(plain["html"].is_null());
+        assert!(plain["text"].as_str().unwrap().contains("https://"));
+    }
+    assert_eq!(page(&e, Value::Null, 1)["total"], 50);
+}

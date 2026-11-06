@@ -262,6 +262,57 @@ fn scanned(html: Option<String>, text: Option<String>, parts: Vec<Part>) -> (Bod
     (Body { html, text, stored: Stored { parts, remote_images, trackers } }, snippet)
 }
 
+/// Perf-gate screenshots: caches `html` / `text` as the body of a listed message, scanned the way
+/// a fetched body is (trackers stripped, remote images counted), with `attachments` as
+/// `(filename, mime, size)` parts. `INSERT OR IGNORE`: a body already there is left alone.
+#[cfg(feature = "perf-gate")]
+pub(crate) fn seed_body(
+    c: &Connection,
+    account: &str,
+    folder: &str,
+    uid: i64,
+    html: Option<&str>,
+    text: Option<&str>,
+    attachments: &[(&str, &str, u32)],
+) -> rusqlite::Result<()> {
+    let part = |section: usize, mime: &str, filename: Option<&str>, size: usize, disposition: Option<&str>| Part {
+        section: section.to_string(),
+        mime: mime.to_string(),
+        filename: filename.map(str::to_string),
+        size: size as u32,
+        encoding: "7bit".into(),
+        charset: Some("utf-8".into()),
+        content_id: None,
+        disposition: disposition.map(str::to_string),
+    };
+    let mut parts = Vec::new();
+    if let Some(h) = html {
+        parts.push(part(parts.len() + 1, "text/html", None, h.len(), None));
+    }
+    if let Some(t) = text {
+        parts.push(part(parts.len() + 1, "text/plain", None, t.len(), None));
+    }
+    for (name, mime, size) in attachments {
+        parts.push(part(parts.len() + 1, mime, Some(name), *size as usize, Some("attachment")));
+    }
+    let (body, _) = scanned(html.map(str::to_string), text.map(str::to_string), parts);
+    let parts_json = serde_json::to_string(&body.stored).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+    let bytes = body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len) + parts_json.len();
+    for a in attachments_of(&body.stored.parts) {
+        c.execute(
+            "INSERT OR IGNORE INTO attachments (account_id, folder, uid, section, filename, mime, size, content_id, encoding)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            (account, folder, uid, &a.section, a.filename.as_deref().unwrap_or(""), &a.mime, a.size as i64, &a.content_id, &a.encoding),
+        )?;
+    }
+    c.execute(
+        "INSERT OR IGNORE INTO bodies (account_id, folder, uid, html, text, parts_json, bytes, last_access_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)",
+        (account, folder, uid, &body.html, &body.text, &parts_json, bytes as i64),
+    )?;
+    Ok(())
+}
+
 /// The list row's preview: the text (else the html's text), whitespace collapsed, 200 chars.
 fn snippet_of(html: Option<&str>, text: Option<&str>) -> String {
     let from_html;

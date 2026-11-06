@@ -135,7 +135,7 @@ struct CursorPageParams {
 /// a row deleted locally is not listed.
 const LISTED: &str = "account_id = ?1 AND folder = ?2 AND COALESCE(local_deleted, 0) = 0";
 const ROW_COLUMNS: &str = "uid, subject, from_name, from_address, date_ms, snippet,
-    COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), has_attachments";
+    COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), has_attachments, to_json";
 
 fn row_json(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     Ok(json!({
@@ -148,7 +148,16 @@ fn row_json(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
         "seen": r.get::<_, i64>(6)? != 0,
         "flagged": r.get::<_, i64>(7)? != 0,
         "hasAttachments": r.get::<_, i64>(8)? != 0,
+        "to": recipients(&r.get::<_, String>(9)?),
     }))
+}
+
+/// `to_json` as the viewer's header reads it: `[{name, address}]`, empty when it does not read.
+fn recipients(to_json: &str) -> Value {
+    match serde_json::from_str::<Value>(to_json) {
+        Ok(v @ Value::Array(_)) => v,
+        _ => Value::Array(Vec::new()),
+    }
 }
 
 fn count_listed(c: &rusqlite::Connection, account: &str, folder: &str) -> rusqlite::Result<i64> {

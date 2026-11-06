@@ -4247,5 +4247,15 @@
   "mobile.list.release": "Relâchez pour actualiser",
   "mobile.list.refreshing": "Actualisation…",
   "mobile.sync.syncing": "Synchronisation",
-  "mobile.sync.failed": "Échec de la synchro"
+  "mobile.sync.failed": "Échec de la synchro",
+  "mobile.viewer.loading": "Chargement du message…",
+  "mobile.viewer.gone": "Ce message n'est plus sur le serveur.",
+  "mobile.viewer.loadFailed": "Impossible de charger ce message.",
+  "mobile.viewer.empty": "Ce message n'a pas de texte.",
+  "mobile.viewer.imagesBlocked": "Les images sont masquées pour protéger votre vie privée.",
+  "mobile.viewer.loadImages_one": "Charger l'image ({{count}})",
+  "mobile.viewer.loadImages_other": "Charger les images ({{count}})",
+  "mobile.viewer.attachment": "Pièce jointe",
+  "mobile.viewer.trackerBlocked": "Traceur bloqué",
+  "mobile.viewer.frameTitle": "Contenu du message"
 }

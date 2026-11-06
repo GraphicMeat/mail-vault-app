@@ -4247,5 +4247,15 @@
   "mobile.list.release": "離して更新",
   "mobile.list.refreshing": "更新中…",
   "mobile.sync.syncing": "同期中",
-  "mobile.sync.failed": "同期に失敗しました"
+  "mobile.sync.failed": "同期に失敗しました",
+  "mobile.viewer.loading": "メッセージを読み込み中…",
+  "mobile.viewer.gone": "このメッセージはサーバー上にありません。",
+  "mobile.viewer.loadFailed": "このメッセージを読み込めませんでした。",
+  "mobile.viewer.empty": "このメッセージには本文がありません。",
+  "mobile.viewer.imagesBlocked": "プライバシー保護のため画像を非表示にしています。",
+  "mobile.viewer.loadImages_one": "画像を読み込む ({{count}})",
+  "mobile.viewer.loadImages_other": "画像を読み込む ({{count}})",
+  "mobile.viewer.attachment": "添付ファイル",
+  "mobile.viewer.trackerBlocked": "トラッカーをブロックしました",
+  "mobile.viewer.frameTitle": "メッセージの内容"
 }
