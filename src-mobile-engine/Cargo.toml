@@ -16,3 +16,8 @@ serde_json = "1.0"
 
 [dev-dependencies]
 tempfile = "3"
+
+[[test]]
+# The seed and the perf report exist only with perf-gate; the plain test build skips this file.
+name = "perf_gate"
+required-features = ["perf-gate"]

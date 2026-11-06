@@ -206,9 +206,10 @@ impl Engine {
     }
 
     /// Test seam for `read_not_blocked_by_writer`: runs `f` inside a write transaction that stays
-    /// open until `f` returns. Not part of the engine's API.
-    #[doc(hidden)]
-    pub fn hold_write_txn_for_test<T>(&self, f: impl FnOnce() -> T) -> Result<T, EngineError> {
+    /// open until `f` returns. Unit tests only, so no build of the crate (shipping or perf-gate)
+    /// carries it.
+    #[cfg(test)]
+    fn hold_write_txn_for_test<T>(&self, f: impl FnOnce() -> T) -> Result<T, EngineError> {
         self.write(|c| {
             // Make it a real write so the WAL has a pending writer.
             c.execute(
@@ -217,5 +218,50 @@ impl Engine {
             )?;
             Ok(f())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    fn page(e: &Engine) -> Value {
+        e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "offset": 0, "limit": 50 }))
+            .unwrap()
+    }
+
+    #[test]
+    fn read_not_blocked_by_writer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let e = Arc::new(Engine::open(tmp.path()).unwrap());
+        e.write(|c| {
+            for uid in 1..=250i64 {
+                c.execute(
+                    "INSERT INTO messages VALUES ('a','INBOX',?1,'s','n','n@example.test',?1,'',0,0,0)",
+                    [uid],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let w = Arc::clone(&e);
+        let t = std::thread::spawn(move || {
+            w.hold_write_txn_for_test(|| {
+                tx.send(()).unwrap();
+                std::thread::sleep(Duration::from_secs(2));
+            })
+            .unwrap();
+        });
+        rx.recv().unwrap();
+        let t0 = Instant::now();
+        let p = page(&e);
+        let took = t0.elapsed();
+        assert_eq!(p["rows"].as_array().unwrap().len(), 50);
+        assert!(took < Duration::from_millis(100), "read took {took:?} behind a writer");
+        t.join().unwrap();
     }
 }

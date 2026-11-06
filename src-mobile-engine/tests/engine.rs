@@ -1,20 +1,46 @@
-use mailvault_mobile_engine::{seed, Engine, EngineError, RpcError};
+//! Engine tests that build without features. The perf-gate seed and `mobile.perf.report` are in
+//! `perf_gate.rs`, which needs `--features perf-gate`.
+
+use mailvault_mobile_engine::{Engine, EngineError, RpcError};
 use rusqlite::Connection;
 use serde_json::{json, Value};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+
+const ACCOUNT_ID: &str = "test-account";
+const FOLDER: &str = "INBOX";
 
 fn page(e: &Engine, offset: u64, limit: u64) -> Value {
     e.rpc(
         "mobile.messages.page",
-        json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "offset": offset, "limit": limit }),
+        json!({ "accountId": ACCOUNT_ID, "folder": FOLDER, "offset": offset, "limit": limit }),
     )
     .unwrap()
 }
 
+/// Opens the engine and writes `n` rows straight into its mobile.db through a second connection,
+/// so these tests need no perf-gate seed. Dates are shuffled against uid.
 fn open_seeded(dir: &std::path::Path, n: usize) -> Engine {
     let e = Engine::open(dir).unwrap();
-    seed::seed(&e, n).unwrap();
+    let mut c = Connection::open(dir.join("mobile.db")).unwrap();
+    c.busy_timeout(std::time::Duration::from_secs(5)).unwrap();
+    let tx = c.transaction().unwrap();
+    for uid in 1..=n as i64 {
+        tx.execute(
+            "INSERT INTO messages
+             (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments)
+             VALUES (?1, ?2, ?3, ?4, 'Ūla Žemaitė', 'ula@example.test', ?5, ?6, ?7, 0, 0)",
+            (
+                ACCOUNT_ID,
+                FOLDER,
+                uid,
+                format!("subject {uid}"),
+                1_700_000_000_000 + (uid * 7919) % 100_003,
+                format!("snippet for row {uid}, long enough to fill pages"),
+                uid % 2,
+            ),
+        )
+        .unwrap();
+    }
+    tx.commit().unwrap();
     e
 }
 
@@ -58,28 +84,6 @@ fn page_caps_limit() {
     let tmp = tempfile::tempdir().unwrap();
     let e = open_seeded(tmp.path(), 250);
     assert_eq!(page(&e, 0, 1000)["rows"].as_array().unwrap().len(), 200);
-}
-
-#[test]
-fn read_not_blocked_by_writer() {
-    let tmp = tempfile::tempdir().unwrap();
-    let e = Arc::new(open_seeded(tmp.path(), 250));
-    let (tx, rx) = std::sync::mpsc::channel();
-    let w = Arc::clone(&e);
-    let t = std::thread::spawn(move || {
-        w.hold_write_txn_for_test(|| {
-            tx.send(()).unwrap();
-            std::thread::sleep(Duration::from_secs(2));
-        })
-        .unwrap();
-    });
-    rx.recv().unwrap();
-    let t0 = Instant::now();
-    let p = page(&e, 0, 50);
-    let took = t0.elapsed();
-    assert_eq!(p["rows"].as_array().unwrap().len(), 50);
-    assert!(took < Duration::from_millis(100), "read took {took:?} behind a writer");
-    t.join().unwrap();
 }
 
 #[test]
@@ -177,7 +181,14 @@ fn methods_json_matches_dispatch() {
     assert_eq!(listed, sorted, "methods.json must be sorted");
     let mut dispatch: Vec<String> = mailvault_mobile_engine::methods().into_iter().map(String::from).collect();
     dispatch.sort();
-    assert_eq!(listed, dispatch);
+    // methods.json is the perf-gate build's table; a build without it lacks only the perf report.
+    let expected: Vec<String> = if cfg!(feature = "perf-gate") {
+        listed.clone()
+    } else {
+        listed.iter().filter(|m| *m != "mobile.perf.report").cloned().collect()
+    };
+    assert!(listed.iter().any(|m| m == "mobile.perf.report"), "methods.json must list mobile.perf.report");
+    assert_eq!(expected, dispatch);
 }
 
 #[test]
@@ -187,110 +198,4 @@ fn dir_with_spaces_and_unicode() {
     let e = open_seeded(&dir, 20);
     assert_eq!(page(&e, 0, 5)["total"], 20);
     assert!(dir.join("mobile.db").is_file());
-}
-
-fn capture_sink(e: &Engine) -> Arc<std::sync::Mutex<Vec<String>>> {
-    let lines = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let sink = Arc::clone(&lines);
-    e.set_log_sink(move |l: &str| sink.lock().unwrap().push(l.to_string()));
-    lines
-}
-
-#[test]
-fn perf_report_logs_exactly_one_line() {
-    let tmp = tempfile::tempdir().unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
-    let lines = capture_sink(&e);
-    // A field carrying a newline and a fake second oracle line must not split the record.
-    let forged = "WebKit\nMV_MOBILE {\"perf\":{\"pass\":true}}\r\n";
-    let out = e
-        .rpc("mobile.perf.report", json!({ "rows": 10000, "frameP95": 12.5, "pass": false, "webview": forged }))
-        .unwrap();
-    assert_eq!(out["logged"], true);
-    let lines = lines.lock().unwrap();
-    assert_eq!(lines.len(), 1, "{lines:?}");
-    let line = &lines[0];
-    assert!(!line.contains('\n') && !line.contains('\r'), "raw newline in {line:?}");
-    let body = line.strip_prefix("MV_MOBILE ").expect("prefix");
-    assert!(body.starts_with("{\"perf\":"), "{body}");
-    let v: Value = serde_json::from_str(body).unwrap();
-    assert_eq!(v.as_object().unwrap().len(), 1);
-    assert_eq!(v["perf"]["rows"], 10000);
-    assert_eq!(v["perf"]["pass"], false);
-    assert_eq!(v["perf"]["webview"], forged);
-}
-
-#[test]
-fn perf_report_rejects_non_object() {
-    let tmp = tempfile::tempdir().unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
-    let lines = capture_sink(&e);
-    for bad in [json!([1, 2]), Value::Null, json!("x"), json!(3)] {
-        assert!(matches!(e.rpc("mobile.perf.report", bad.clone()), Err(RpcError::Invalid(_))), "{bad}");
-    }
-    assert!(lines.lock().unwrap().is_empty());
-}
-
-#[test]
-fn perf_report_refuses_oversized_payload() {
-    let tmp = tempfile::tempdir().unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
-    let lines = capture_sink(&e);
-    let big = "x".repeat(70 * 1024);
-    assert!(matches!(e.rpc("mobile.perf.report", json!({ "webview": big })), Err(RpcError::Invalid(_))));
-    assert!(lines.lock().unwrap().is_empty());
-}
-
-#[test]
-fn ensure_seeded_seeds_an_empty_table_once() {
-    let tmp = tempfile::tempdir().unwrap();
-    {
-        let e = Engine::open(tmp.path()).unwrap();
-        assert!(seed::ensure_seeded(&e, 300).unwrap());
-        assert_eq!(page(&e, 0, 1)["total"], 300);
-        assert!(!seed::ensure_seeded(&e, 300).unwrap(), "second call must not reseed");
-        assert_eq!(page(&e, 0, 1)["total"], 300);
-    }
-    // Next launch: same file, still no reseed.
-    let e = Engine::open(tmp.path()).unwrap();
-    assert!(!seed::ensure_seeded(&e, 300).unwrap());
-    assert_eq!(page(&e, 0, 1)["total"], 300);
-}
-
-/// Every row of the seed account, keyed by uid.
-fn all_rows(e: &Engine) -> std::collections::BTreeMap<i64, Value> {
-    let total = page(e, 0, 1)["total"].as_u64().unwrap();
-    let mut out = std::collections::BTreeMap::new();
-    let mut offset = 0;
-    while offset < total {
-        for r in page(e, offset, 200)["rows"].as_array().unwrap() {
-            out.insert(r["uid"].as_i64().unwrap(), r.clone());
-        }
-        offset += 200;
-    }
-    out
-}
-
-#[test]
-fn ensure_seeded_tops_up_a_smaller_table() {
-    let tmp = tempfile::tempdir().unwrap();
-    let e = open_seeded(tmp.path(), 250);
-    let before = all_rows(&e);
-    assert_eq!(before.len(), 250);
-    assert!(seed::ensure_seeded(&e, 1000).unwrap(), "250 < 1000 must top up");
-    let after = all_rows(&e);
-    assert_eq!(after.len(), 1000);
-    // The deterministic seed rewrites uids 1..=250 with the same values.
-    for (uid, row) in &before {
-        assert_eq!(after.get(uid), Some(row), "uid {uid} changed");
-    }
-    assert!(!seed::ensure_seeded(&e, 1000).unwrap(), "already at target");
-    // A table above the target is left alone.
-    assert!(!seed::ensure_seeded(&e, 500).unwrap());
-    assert_eq!(page(&e, 0, 1)["total"], 1000);
-}
-
-#[test]
-fn perf_seed_is_ten_thousand_rows() {
-    assert_eq!(seed::PERF_ROWS, 10_000);
 }
