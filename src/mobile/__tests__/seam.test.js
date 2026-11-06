@@ -1,0 +1,52 @@
+// @vitest-environment node
+// The mobile bundle may only reach RPC methods the mobile engine implements, the Tauri commands
+// the mobile shell implements, and no desktop-only module. Proven statically on the real entry.
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { analyzeSeam } from '../seam.js';
+
+const here = (p) => fileURLToPath(new URL(p, import.meta.url));
+const ENTRY = here('../main.jsx');
+const METHODS = JSON.parse(readFileSync(here('../../../src-mobile-engine/methods.json'), 'utf8'));
+const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_log'];
+const DESKTOP_ONLY = /plugin-shell|plugin-updater|sparkle|features\/blitz|e2eMotion/i;
+
+describe('mobile seam', () => {
+  it('every_rpc_method_is_implemented', async () => {
+    const { rpcMethods } = await analyzeSeam(ENTRY);
+    expect(rpcMethods.length).toBeGreaterThan(0);
+    expect(rpcMethods.filter((m) => !METHODS.includes(m))).toEqual([]);
+  });
+
+  it('only_daemon_rpc_is_invoked', async () => {
+    const { invokes } = await analyzeSeam(ENTRY);
+    expect(invokes.length).toBeGreaterThan(0);
+    expect(invokes.filter((c) => !ALLOWED_INVOKES.includes(c))).toEqual([]);
+  });
+
+  it('no_desktop_only_modules', async () => {
+    const { modules } = await analyzeSeam(ENTRY);
+    expect(modules.length).toBeGreaterThan(1);
+    expect(modules.filter((m) => DESKTOP_ONLY.test(m))).toEqual([]);
+  });
+
+  it('detector_really_detects', async () => {
+    const r = await analyzeSeam(here('./fixtures/desktopLeak.js'));
+    expect(r.modules.filter((m) => DESKTOP_ONLY.test(m)).length).toBeGreaterThan(0);
+    expect(r.rpcMethods).toContain('backup.run');
+    expect(r.rpcMethods.filter((m) => !METHODS.includes(m))).toContain('backup.run');
+  });
+
+  it('detector_sees_optional_chained_global_invoke', async () => {
+    const r = await analyzeSeam(ENTRY);
+    expect(r.invokes).toContain('mobile_log');
+  });
+
+  it('dynamic_calls_are_listed_empty', async () => {
+    const { dynamicCalls } = await analyzeSeam(ENTRY);
+    expect(dynamicCalls).toEqual([]);
+    const fx = await analyzeSeam(here('./fixtures/dynamicCall.js'));
+    expect(fx.dynamicCalls.length).toBeGreaterThan(0);
+  });
+});

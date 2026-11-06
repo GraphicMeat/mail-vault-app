@@ -2,7 +2,7 @@
 // daemonClient desktop uses, show the reply, and write it to the app log as `MV_MOBILE <json>`.
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { daemonCall } from '../services/daemonClient.js';
+import { daemonCall } from './transport.js';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
