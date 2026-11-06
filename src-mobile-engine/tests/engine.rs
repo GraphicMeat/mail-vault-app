@@ -1,9 +1,16 @@
 //! Engine tests that build without features. The perf-gate seed and `mobile.perf.report` are in
 //! `perf_gate.rs`, which needs `--features perf-gate`.
 
-use mailvault_mobile_engine::{Engine, EngineError, RpcError};
+use mailvault_mobile_engine::{Engine, EngineError, MemorySecrets, RpcError};
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use std::path::Path;
+use std::sync::Arc;
+
+/// Opens the engine with an in-memory secret store and the cache dir under `dir`.
+fn open(dir: &Path) -> Result<Engine, EngineError> {
+    Engine::open(dir, &dir.join("cache"), Arc::new(MemorySecrets::default()))
+}
 
 const ACCOUNT_ID: &str = "test-account";
 const FOLDER: &str = "INBOX";
@@ -19,7 +26,7 @@ fn page(e: &Engine, offset: u64, limit: u64) -> Value {
 /// Opens the engine and writes `n` rows straight into its mobile.db through a second connection,
 /// so these tests need no perf-gate seed. Dates are shuffled against uid.
 fn open_seeded(dir: &std::path::Path, n: usize) -> Engine {
-    let e = Engine::open(dir).unwrap();
+    let e = open(dir).unwrap();
     let mut c = Connection::open(dir.join("mobile.db")).unwrap();
     c.busy_timeout(std::time::Duration::from_secs(5)).unwrap();
     let tx = c.transaction().unwrap();
@@ -47,7 +54,7 @@ fn open_seeded(dir: &std::path::Path, n: usize) -> Engine {
 #[test]
 fn open_creates_schema_v1_in_wal() {
     let tmp = tempfile::tempdir().unwrap();
-    let _e = Engine::open(tmp.path()).unwrap();
+    let _e = open(tmp.path()).unwrap();
     let path = tmp.path().join("mobile.db");
     assert!(path.is_file());
     let c = Connection::open(&path).unwrap();
@@ -90,7 +97,7 @@ fn page_caps_limit() {
 fn corrupt_db_is_rebuilt() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(tmp.path().join("mobile.db"), b"this is not a sqlite database, just garbage bytes").unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
+    let e = open(tmp.path()).unwrap();
     let p = e
         .rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "offset": 0, "limit": 10 }))
         .unwrap();
@@ -114,7 +121,7 @@ fn corrupt_page_after_valid_header_is_rebuilt() {
     std::fs::write(&path, bytes).unwrap();
     let _ = std::fs::remove_file(tmp.path().join("mobile.db-wal"));
     let _ = std::fs::remove_file(tmp.path().join("mobile.db-shm"));
-    let e = Engine::open(tmp.path()).unwrap();
+    let e = open(tmp.path()).unwrap();
     assert_eq!(page(&e, 0, 10)["total"], 0);
 }
 
@@ -123,14 +130,14 @@ fn newer_schema_is_refused_and_kept() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("mobile.db");
     {
-        let _e = Engine::open(tmp.path()).unwrap();
+        let _e = open(tmp.path()).unwrap();
     }
     {
         let c = Connection::open(&path).unwrap();
         c.execute_batch("PRAGMA user_version = 2;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
-    let err = Engine::open(tmp.path()).err().expect("must refuse");
+    let err = open(tmp.path()).err().expect("must refuse");
     assert_eq!(err, EngineError::NewerSchema { found: 2, supported: 1 });
     assert_eq!(std::fs::read(&path).unwrap(), before, "a newer file must not be touched");
 }
@@ -144,14 +151,14 @@ fn newer_schema_in_rollback_mode_is_not_switched_to_wal() {
         c.execute_batch("PRAGMA journal_mode = DELETE; PRAGMA user_version = 7;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
-    assert_eq!(Engine::open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 7, supported: 1 }));
+    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 7, supported: 1 }));
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
 
 #[test]
 fn unknown_method_is_typed() {
     let tmp = tempfile::tempdir().unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
+    let e = open(tmp.path()).unwrap();
     let err = e.rpc("backup.run", json!({})).unwrap_err();
     assert_eq!(err, RpcError::Unsupported { method: "backup.run".into() });
     let ser = serde_json::to_value(&err).unwrap();
@@ -163,7 +170,7 @@ fn unknown_method_is_typed() {
 #[test]
 fn bad_params_are_typed() {
     let tmp = tempfile::tempdir().unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
+    let e = open(tmp.path()).unwrap();
     let err = e
         .rpc("mobile.messages.page", json!({ "accountId": "a", "offset": 0, "limit": 10 }))
         .unwrap_err();
@@ -181,11 +188,13 @@ fn methods_json_matches_dispatch() {
     assert_eq!(listed, sorted, "methods.json must be sorted");
     let mut dispatch: Vec<String> = mailvault_mobile_engine::methods().into_iter().map(String::from).collect();
     dispatch.sort();
-    // methods.json is the perf-gate build's table; a build without it lacks only the perf report.
+    // methods.json is the perf-gate build's table; a build without it lacks the perf report and
+    // the debug methods.
+    let perf_gate_only = |m: &str| m == "mobile.perf.report" || m.starts_with("mobile.debug.");
     let expected: Vec<String> = if cfg!(feature = "perf-gate") {
         listed.clone()
     } else {
-        listed.iter().filter(|m| *m != "mobile.perf.report").cloned().collect()
+        listed.iter().filter(|m| !perf_gate_only(m)).cloned().collect()
     };
     assert!(listed.iter().any(|m| m == "mobile.perf.report"), "methods.json must list mobile.perf.report");
     assert_eq!(expected, dispatch);

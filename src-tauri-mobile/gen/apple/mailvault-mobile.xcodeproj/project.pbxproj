@@ -11,6 +11,7 @@
 		3855628B725FD55F501C8DEA /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D895DE22C86A2978D7EDE4D /* CoreGraphics.framework */; };
 		4E41D7945C3BD50312C1298D /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 77EF40AAE4B20C73C2CDDBE4 /* QuartzCore.framework */; };
 		56E1189AEBAB887A158605E3 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6CE6EA10D6CDB43BF2D48838 /* Security.framework */; };
+		5C0F1A2B3D4E5F60718293A4 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7D1E2F3A4B5C6D7E8F901A2B /* SystemConfiguration.framework */; };
 		5E6702BABE57C2F99FAD8381 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 3AFBA8142B3A267A31C032DB /* LaunchScreen.storyboard */; };
 		A8B98D5B414F17DECF226500 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D238F98CBA7EFB9C2D244D6 /* libapp.a */; };
 		A939DCBA4D6CF4478FAF4288 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 85AB9789DCA20F238C3EBDB8 /* main.mm */; };
@@ -30,6 +31,7 @@
 		61484CE530881AFAAF24957E /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		659FB608210426C7FA18740C /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
 		6CE6EA10D6CDB43BF2D48838 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		7D1E2F3A4B5C6D7E8F901A2B /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		77EF40AAE4B20C73C2CDDBE4 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		85AB9789DCA20F238C3EBDB8 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		87A5529C0BC38409F20ECF72 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
@@ -53,6 +55,7 @@
 				F7F3AE76F7E6DF98A9B92A6A /* MetalKit.framework in Frameworks */,
 				4E41D7945C3BD50312C1298D /* QuartzCore.framework in Frameworks */,
 				56E1189AEBAB887A158605E3 /* Security.framework in Frameworks */,
+				5C0F1A2B3D4E5F60718293A4 /* SystemConfiguration.framework in Frameworks */,
 				E78D8EFFC5380B35D72F8DCB /* UIKit.framework in Frameworks */,
 				04F8417E9D54258B5CC5E461 /* WebKit.framework in Frameworks */,
 			);
@@ -70,6 +73,7 @@
 				49535AFC16818D8F018FD95A /* MetalKit.framework */,
 				77EF40AAE4B20C73C2CDDBE4 /* QuartzCore.framework */,
 				6CE6EA10D6CDB43BF2D48838 /* Security.framework */,
+				7D1E2F3A4B5C6D7E8F901A2B /* SystemConfiguration.framework */,
 				87A5529C0BC38409F20ECF72 /* UIKit.framework */,
 				B61C930FD8B5910DB5DCB1ED /* WebKit.framework */,
 			);

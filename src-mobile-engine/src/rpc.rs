@@ -52,9 +52,12 @@ impl Serialize for RpcError {
 type Handler = fn(&Engine, Value) -> Result<Value, RpcError>;
 
 /// Keep sorted by name, like `methods.json`. `methods.json` lists the perf-gate build's table;
-/// a shipping build answers `mobile.perf.report` with `Unsupported`.
+/// a shipping build answers the perf-gate-only methods (`mobile.debug.*`, `mobile.perf.report`)
+/// with `Unsupported`.
 #[cfg(feature = "perf-gate")]
 const TABLE: &[(&str, Handler)] = &[
+    ("mobile.debug.probe", debug_probe),
+    ("mobile.debug.secretsRoundTrip", debug_secrets_round_trip),
     ("mobile.messages.page", messages_page),
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
@@ -152,17 +155,41 @@ fn perf_report(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     Ok(json!({ "logged": true }))
 }
 
+#[cfg(feature = "perf-gate")]
+#[derive(Deserialize)]
+struct ProbeParams {
+    host: String,
+    port: u16,
+}
+
+/// DNS and a certificate-validating TLS handshake to `{host, port}` through core's TLS seam:
+/// `{ dns, tls, error }`. Proves the device's network and trust store, nothing more.
+#[cfg(feature = "perf-gate")]
+fn debug_probe(_: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: ProbeParams = parse(params)?;
+    serde_json::to_value(crate::net::probe(&p.host, p.port)).map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// Set, read back and delete a dummy entry in the platform secret store; booleans only.
+#[cfg(feature = "perf-gate")]
+fn debug_secrets_round_trip(engine: &Engine, _: Value) -> Result<Value, RpcError> {
+    Ok(crate::secrets::round_trip(engine.secrets()))
+}
+
 #[cfg(all(test, not(feature = "perf-gate")))]
 mod tests {
     use super::*;
 
     #[test]
-    fn perf_report_is_unsupported_without_perf_gate() {
+    fn perf_gate_methods_are_unsupported_without_perf_gate() {
         let tmp = std::env::temp_dir().join(format!("mv-engine-noperf-{}", std::process::id()));
-        let e = Engine::open(&tmp).unwrap();
+        let e = Engine::open(&tmp, &tmp.join("cache"), std::sync::Arc::new(crate::MemorySecrets::default())).unwrap();
         let err = e.rpc("mobile.perf.report", json!({ "rows": 1 })).unwrap_err();
         assert_eq!(err, RpcError::Unsupported { method: "mobile.perf.report".into() });
         assert!(!methods().contains(&"mobile.perf.report"));
+        for m in ["mobile.debug.probe", "mobile.debug.secretsRoundTrip"] {
+            assert_eq!(e.rpc(m, json!({})).unwrap_err(), RpcError::Unsupported { method: m.into() });
+        }
         drop(e);
         let _ = std::fs::remove_dir_all(&tmp);
     }

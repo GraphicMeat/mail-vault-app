@@ -1,5 +1,8 @@
-//! The mobile shell. It holds no logic: it opens the engine on Tauri's app data dir, forwards
-//! `daemon_rpc` to it off the webview thread, and writes app log lines to the platform log.
+//! The mobile shell. It holds no logic: it opens the engine on Tauri's app data and cache dirs
+//! with the platform secret store, forwards `daemon_rpc` to it off the webview thread, and writes
+//! app log lines to the platform log.
+
+mod secrets;
 
 use mailvault_mobile_engine::{Engine, RpcError};
 use serde_json::Value;
@@ -70,6 +73,29 @@ fn log_line(line: &str) {
     println!("{line}");
 }
 
+/// Android: core's rustls verifier asks the platform trust store through JNI, so it needs the
+/// JVM and the app context before the first handshake. tao stores both in ndk-context when the
+/// activity starts. A failure is logged; TLS then fails per connection with the verifier's error.
+#[cfg(target_os = "android")]
+fn init_tls_verifier() {
+    use jni::objects::JObject;
+    let result = (|| -> Result<(), jni::errors::Error> {
+        let ctx = ndk_context::android_context();
+        // SAFETY: tao put a live JavaVM pointer and a global ref to the application context in
+        // ndk-context; both outlive the process's use of them here. Neither wrapper frees them.
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }?;
+        let mut env = vm.attach_current_thread()?;
+        let context = unsafe { JObject::from_raw(ctx.context().cast()) };
+        rustls_platform_verifier::android::init_with_env(&mut env, context)
+    })();
+    if let Err(e) = result {
+        log_line(&format!("MV_MOBILE {}", serde_json::json!({ "tlsInitError": e.to_string() })));
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn init_tls_verifier() {}
+
 /// Perf gate builds only: 10k synthetic rows the first time the app opens (kept on later launches).
 #[cfg(feature = "perf-gate")]
 fn seed_for_perf_gate(engine: &Engine) {
@@ -86,9 +112,15 @@ fn seed_for_perf_gate(_: &Engine) {}
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let engine = match app.path().app_data_dir() {
-                Ok(dir) => Engine::open(&dir).map_err(|e| e.to_string()),
-                Err(e) => Err(format!("app data dir: {e}")),
+            init_tls_verifier();
+            let secrets = secrets::KeyringSecrets::new();
+            if let Some(reason) = secrets.error() {
+                log_line(&format!("MV_MOBILE {}", serde_json::json!({ "secretsError": reason })));
+            }
+            let engine = match (app.path().app_data_dir(), app.path().app_cache_dir()) {
+                (Ok(data), Ok(cache)) => Engine::open(&data, &cache, Arc::new(secrets)).map_err(|e| e.to_string()),
+                (Err(e), _) => Err(format!("app data dir: {e}")),
+                (_, Err(e)) => Err(format!("app cache dir: {e}")),
             };
             if let Ok(engine) = &engine {
                 engine.set_log_sink(log_line);

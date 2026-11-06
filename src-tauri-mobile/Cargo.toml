@@ -23,3 +23,17 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde_json = "1.0"
 mailvault-mobile-engine = { path = "../src-mobile-engine" }
+# The platform secret store behind the engine's SecretStore (src/secrets.rs).
+keyring-core = "1"
+
+[target.'cfg(target_os = "ios")'.dependencies]
+# "protected": the data-protection keychain, the one an iOS app has.
+apple-native-keyring-store = { version = "1", features = ["protected"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-native-keyring-store = "1"
+# Core's rustls verifier on Android needs the app's JNI context before the first handshake
+# (lib.rs, from the context tao stores in ndk-context). Same jni major the verifier uses.
+rustls-platform-verifier = "0.6"
+jni = "0.21"
+ndk-context = "0.1"

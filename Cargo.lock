@@ -134,6 +134,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "android-native-keyring-store"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48c6349ddff23194f8fdce2ea8849380f5a4868c1648965b70e801e104cba9b3"
+dependencies = [
+ "base64 0.22.1",
+ "jni 0.21.1",
+ "keyring-core",
+ "log",
+ "ndk-context",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -215,6 +233,17 @@ checksum = "467b60e4ee6761cd6fd4e03ea58acefc8eec0d1b1def995c1b3b783fa7be8a60"
 dependencies = [
  "num-traits",
  "serde",
+]
+
+[[package]]
+name = "apple-native-keyring-store"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b350bfd03649e07aa05c0a81b3e15934374e585c98204a57e20b9d49f49bb9a"
+dependencies = [
+ "keyring-core",
+ "log",
+ "security-framework 3.7.0",
 ]
 
 [[package]]
@@ -4880,6 +4909,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyring-core"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29fbf4b551298c67925f38cf341a1ada797a75f1837bdf8ae1fc8e2ebc6efb59"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "khronos-egl"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5356,7 +5394,13 @@ dependencies = [
 name = "mailvault-mobile"
 version = "0.1.0"
 dependencies = [
+ "android-native-keyring-store",
+ "apple-native-keyring-store",
+ "jni 0.21.1",
+ "keyring-core",
  "mailvault-mobile-engine",
+ "ndk-context",
+ "rustls-platform-verifier",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -5366,10 +5410,14 @@ dependencies = [
 name = "mailvault-mobile-engine"
 version = "0.1.0"
 dependencies = [
+ "async-std",
+ "mailvault-core",
+ "mock-imap",
  "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]

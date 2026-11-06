@@ -5,10 +5,11 @@
 //! One writer connection (writes go through `BEGIN IMMEDIATE`, as `app_db::in_txn` does) and a
 //! small pool of read-only connections, so a list read never queues behind a write.
 
+use crate::secrets::SecretStore;
 use rusqlite::{Connection, ErrorCode, OpenFlags, Transaction, TransactionBehavior};
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
 pub const SCHEMA_VERSION: u32 = 1;
@@ -60,6 +61,10 @@ pub struct Engine {
     path: PathBuf,
     writer: Mutex<Connection>,
     readers: Mutex<Vec<Connection>>,
+    /// Rebuildable files (message bodies, attachments) live here, never in `mobile.db`.
+    cache_dir: PathBuf,
+    /// Account secrets. Never copied into `mobile.db`, a log line or an event.
+    secrets: Arc<dyn SecretStore>,
     /// Where the engine's own log lines go. The shell installs its platform logger (unified log on
     /// iOS, logcat on Android); app stdout reaches neither, so stderr is only the fallback.
     log_sink: OnceLock<LogSink>,
@@ -97,7 +102,14 @@ fn read_conn(path: &Path) -> rusqlite::Result<Connection> {
     Ok(c)
 }
 
-fn try_open(path: &Path) -> Result<Engine, OpenFail> {
+/// The database half of an open engine; `Engine::open` adds the directories and the secret store.
+struct Db {
+    path: PathBuf,
+    writer: Connection,
+    readers: Vec<Connection>,
+}
+
+fn try_open(path: &Path) -> Result<Db, OpenFail> {
     let w = Connection::open(path)?;
     w.busy_timeout(std::time::Duration::from_secs(5))?;
     // Version first, before any pragma that rewrites the header (journal_mode=WAL does): a newer
@@ -128,7 +140,7 @@ fn try_open(path: &Path) -> Result<Engine, OpenFail> {
     for _ in 0..READERS {
         readers.push(read_conn(path)?);
     }
-    Ok(Engine { path: path.to_path_buf(), writer: Mutex::new(w), readers: Mutex::new(readers), log_sink: OnceLock::new() })
+    Ok(Db { path: path.to_path_buf(), writer: w, readers })
 }
 
 fn remove_db_files(path: &Path) -> Result<(), EngineError> {
@@ -145,21 +157,42 @@ fn remove_db_files(path: &Path) -> Result<(), EngineError> {
 }
 
 impl Engine {
-    pub fn open(dir: &Path) -> Result<Engine, EngineError> {
-        std::fs::create_dir_all(dir).map_err(|e| EngineError::Io(e.to_string()))?;
-        let path = dir.join(DB_FILE);
-        match try_open(&path) {
-            Ok(e) => Ok(e),
-            Err(OpenFail::Fatal(e)) => Err(e),
+    /// Opens `<data_dir>/mobile.db` (creating both directories as needed). `cache_dir` holds
+    /// rebuildable files; `secrets` is the platform store account secrets go to.
+    pub fn open(data_dir: &Path, cache_dir: &Path, secrets: Arc<dyn SecretStore>) -> Result<Engine, EngineError> {
+        std::fs::create_dir_all(data_dir).map_err(|e| EngineError::Io(e.to_string()))?;
+        std::fs::create_dir_all(cache_dir).map_err(|e| EngineError::Io(e.to_string()))?;
+        let path = data_dir.join(DB_FILE);
+        let db = match try_open(&path) {
+            Ok(db) => db,
+            Err(OpenFail::Fatal(e)) => return Err(e),
             Err(OpenFail::Corrupt) => {
                 remove_db_files(&path)?;
                 match try_open(&path) {
-                    Ok(e) => Ok(e),
-                    Err(OpenFail::Fatal(e)) => Err(e),
-                    Err(OpenFail::Corrupt) => Err(EngineError::Db("mobile.db is corrupt after a rebuild".into())),
+                    Ok(db) => db,
+                    Err(OpenFail::Fatal(e)) => return Err(e),
+                    Err(OpenFail::Corrupt) => return Err(EngineError::Db("mobile.db is corrupt after a rebuild".into())),
                 }
             }
-        }
+        };
+        Ok(Engine {
+            path: db.path,
+            writer: Mutex::new(db.writer),
+            readers: Mutex::new(db.readers),
+            cache_dir: cache_dir.to_path_buf(),
+            secrets,
+            log_sink: OnceLock::new(),
+        })
+    }
+
+    /// The directory for rebuildable files the shell passed to `open`.
+    pub fn cache_dir(&self) -> &Path {
+        &self.cache_dir
+    }
+
+    /// The platform secret store the shell passed to `open`.
+    pub fn secrets(&self) -> &dyn SecretStore {
+        self.secrets.as_ref()
     }
 
     /// Installs the sink for the engine's log lines. The first sink wins; returns false if one was
@@ -236,7 +269,7 @@ mod tests {
     #[test]
     fn read_not_blocked_by_writer() {
         let tmp = tempfile::tempdir().unwrap();
-        let e = Arc::new(Engine::open(tmp.path()).unwrap());
+        let e = Arc::new(Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(crate::MemorySecrets::default())).unwrap());
         e.write(|c| {
             for uid in 1..=250i64 {
                 c.execute(

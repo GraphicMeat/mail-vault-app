@@ -1,6 +1,8 @@
 // Mobile entry (mobile.html). Plan 1 gate: the message list over `mobile.messages.page`, a viewer
 // stub on tap, and with `?perf=1` the perf probe, whose result the engine logs as
-// `MV_MOBILE {"perf":…}`. The `mobile.ping` line is logged first: scripts/mobile-run.sh waits for it.
+// `MV_MOBILE {"perf":…}`. With `?probe=host:port` (perf-gate builds) it logs one
+// `MV_MOBILE {"probe":…}` line: DNS + TLS to that host and a secret store round trip.
+// The `mobile.ping` line is logged first: scripts/mobile-run.sh waits for it.
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/fonts.css';
@@ -45,6 +47,28 @@ async function perfRun() {
   }
 }
 
+const PROBE = new URLSearchParams(window.location.search).get('probe');
+
+// Device proof for the core link: the engine resolves and handshakes through core's TLS seam,
+// then sets, reads and deletes a dummy secret (booleans only, never the value).
+async function probeRun(target) {
+  const at = target.lastIndexOf(':');
+  const host = target.slice(0, at);
+  const port = Number(target.slice(at + 1));
+  const out = {};
+  try {
+    Object.assign(out, await daemonCall('mobile.debug.probe', { host, port }));
+  } catch (err) {
+    out.error = errorOf(err);
+  }
+  try {
+    out.secrets = await daemonCall('mobile.debug.secretsRoundTrip');
+  } catch (err) {
+    out.secrets = { error: errorOf(err) };
+  }
+  logLine({ probe: out });
+}
+
 function App() {
   const t = useT();
   const [state, setState] = useState('loading'); // 'loading' | 'ready' | 'failed'
@@ -66,6 +90,7 @@ function App() {
       (ping) => logLine({ ping }),
       (err) => logLine({ error: errorOf(err) }),
     );
+    if (PROBE) probeRun(PROBE);
     load();
   }, [load]);
 

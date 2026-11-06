@@ -1,9 +1,15 @@
 //! Perf-gate only: the synthetic seed and `mobile.perf.report`. Built only with
 //! `--features perf-gate` (`required-features` in Cargo.toml).
 
-use mailvault_mobile_engine::{seed, Engine, RpcError};
+use mailvault_mobile_engine::{seed, Engine, EngineError, MemorySecrets, RpcError};
 use serde_json::{json, Value};
+use std::path::Path;
 use std::sync::Arc;
+
+/// Opens the engine with an in-memory secret store and the cache dir under `dir`.
+fn open(dir: &Path) -> Result<Engine, EngineError> {
+    Engine::open(dir, &dir.join("cache"), Arc::new(MemorySecrets::default()))
+}
 
 fn page(e: &Engine, offset: u64, limit: u64) -> Value {
     e.rpc(
@@ -14,7 +20,7 @@ fn page(e: &Engine, offset: u64, limit: u64) -> Value {
 }
 
 fn open_seeded(dir: &std::path::Path, n: usize) -> Engine {
-    let e = Engine::open(dir).unwrap();
+    let e = open(dir).unwrap();
     seed::seed(&e, n).unwrap();
     e
 }
@@ -41,7 +47,7 @@ fn capture_sink(e: &Engine) -> Arc<std::sync::Mutex<Vec<String>>> {
 #[test]
 fn perf_report_logs_exactly_one_line() {
     let tmp = tempfile::tempdir().unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
+    let e = open(tmp.path()).unwrap();
     let lines = capture_sink(&e);
     // A field carrying a newline and a fake second oracle line must not split the record.
     let forged = "WebKit\nMV_MOBILE {\"perf\":{\"pass\":true}}\r\n";
@@ -65,7 +71,7 @@ fn perf_report_logs_exactly_one_line() {
 #[test]
 fn perf_report_rejects_non_object() {
     let tmp = tempfile::tempdir().unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
+    let e = open(tmp.path()).unwrap();
     let lines = capture_sink(&e);
     for bad in [json!([1, 2]), Value::Null, json!("x"), json!(3)] {
         assert!(matches!(e.rpc("mobile.perf.report", bad.clone()), Err(RpcError::Invalid(_))), "{bad}");
@@ -76,7 +82,7 @@ fn perf_report_rejects_non_object() {
 #[test]
 fn perf_report_refuses_oversized_payload() {
     let tmp = tempfile::tempdir().unwrap();
-    let e = Engine::open(tmp.path()).unwrap();
+    let e = open(tmp.path()).unwrap();
     let lines = capture_sink(&e);
     let big = "x".repeat(70 * 1024);
     assert!(matches!(e.rpc("mobile.perf.report", json!({ "webview": big })), Err(RpcError::Invalid(_))));
@@ -87,14 +93,14 @@ fn perf_report_refuses_oversized_payload() {
 fn ensure_seeded_seeds_an_empty_table_once() {
     let tmp = tempfile::tempdir().unwrap();
     {
-        let e = Engine::open(tmp.path()).unwrap();
+        let e = open(tmp.path()).unwrap();
         assert!(seed::ensure_seeded(&e, 300).unwrap());
         assert_eq!(page(&e, 0, 1)["total"], 300);
         assert!(!seed::ensure_seeded(&e, 300).unwrap(), "second call must not reseed");
         assert_eq!(page(&e, 0, 1)["total"], 300);
     }
     // Next launch: same file, still no reseed.
-    let e = Engine::open(tmp.path()).unwrap();
+    let e = open(tmp.path()).unwrap();
     assert!(!seed::ensure_seeded(&e, 300).unwrap());
     assert_eq!(page(&e, 0, 1)["total"], 300);
 }

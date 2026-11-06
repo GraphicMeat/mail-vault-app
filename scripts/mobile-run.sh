@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Build the mobile shell (src-tauri-mobile), boot a simulator/emulator, install, launch, and print
 # the app's `MV_MOBILE <json>` log lines to stdout. Runs on the Mac mini:
-#   ~/.claude/bin/testq ~/.claude/bin/minijob bash scripts/mobile-run.sh <ios|android> [--release] [--url-query q] [--features f]
+#   ~/.claude/bin/testq ~/.claude/bin/minijob bash scripts/mobile-run.sh <ios|android> [--release] [--url-query q] [--features f] [--probe host:port]
 #
 # --url-query q   open the window at mobile.html?q (merged into the Tauri config at build time)
 # --features f    cargo features for the shell, e.g. perf-gate (10k seeded rows, mobile.perf.report)
+# --probe h:p     perf-gate builds: the app resolves h, makes a TLS handshake to h:p through core
+#                 and round-trips a dummy secret, then logs one MV_MOBILE {"probe":…} line, which
+#                 ends the wait (adds probe=h:p to the URL query)
 # Environment:
 #   MV_MOBILE_UNTIL   ERE that ends the tail once a log line matches it
 #                     (default: the first ping, error or engineError line)
@@ -23,16 +26,17 @@
 # Everything this script starts (app, simulator, emulator, log tail) is stopped on exit.
 set -euo pipefail
 
-usage() { echo "usage: $0 <ios|android> [--release] [--url-query q] [--features f]" >&2; exit 64; }
+usage() { echo "usage: $0 <ios|android> [--release] [--url-query q] [--features f] [--probe host:port]" >&2; exit 64; }
 [ $# -ge 1 ] || usage
 platform=$1; shift
 case $platform in ios|android) ;; *) usage ;; esac
-release=; query=; features=
+release=; query=; features=; probe=
 while [ $# -gt 0 ]; do
     case $1 in
         --release) release=1 ;;
         --url-query) [ $# -ge 2 ] || usage; query=$2; shift ;;
         --features) [ $# -ge 2 ] || usage; features=$2; shift ;;
+        --probe) [ $# -ge 2 ] || usage; probe=$2; shift ;;
         *) usage ;;
     esac
     shift
@@ -47,7 +51,13 @@ source scripts/mobile-env.sh
 unset TAURI_APP_PATH
 
 BUNDLE_ID=com.mailvault.app
-UNTIL=${MV_MOBILE_UNTIL:-'^MV_MOBILE \{"(ping|error|engineError)"'}
+if [ -n "$probe" ]; then
+    case $probe in *[!A-Za-z0-9.:-]* | *: | :*) echo "mobile-run: --probe wants host:port" >&2; exit 64 ;; esac
+    query=${query:+$query&}probe=$probe
+    UNTIL=${MV_MOBILE_UNTIL:-'^MV_MOBILE \{"(probe|engineError)"'}
+else
+    UNTIL=${MV_MOBILE_UNTIL:-'^MV_MOBILE \{"(ping|error|engineError)"'}
+fi
 WAIT=${MV_MOBILE_WAIT:-180}
 LAUNCHES=${MV_MOBILE_LAUNCHES:-1}
 case $LAUNCHES in '' | *[!0-9]* | 0) echo "mobile-run: MV_MOBILE_LAUNCHES must be a positive integer" >&2; exit 64 ;; esac

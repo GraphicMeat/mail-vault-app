@@ -19,3 +19,5 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# rustls-platform-verifier's Kotlin half is reached only through JNI, which R8 cannot see.
+-keep, includedescriptorclasses class org.rustls.platformverifier.** { *; }

@@ -10,12 +10,22 @@ publish = false
 perf-gate = []
 
 [dependencies]
+# IMAP, TLS and the rest of the protocol code. Default features only: never `tls-rustls`, which
+# would move the desktop build onto rustls through workspace feature unification (Android gets
+# rustls by cfg inside core).
+mailvault-core = { path = "../src-core" }
+# Same requirement as core, so both resolve to one libsqlite3-sys.
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# Core's futures run on async-std; some of core's timeouts are tokio timers, which need a runtime
+# whose driver is running (see net::block_on).
+async-std = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "net"] }
 
 [dev-dependencies]
 tempfile = "3"
+mock-imap = { path = "../src-mock-imap" }
 
 [[test]]
 # The seed and the perf report exist only with perf-gate; the plain test build skips this file.

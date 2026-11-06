@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import java.util.Properties
 
 plugins {
@@ -57,7 +58,32 @@ rust {
     rootDirRel = "../../../"
 }
 
+// rustls-platform-verifier (core's TLS on Android) calls a small Kotlin component through JNI. It
+// ships inside the crate as a local Maven repo; `cargo metadata` says where the crate is.
+fun rustlsPlatformVerifierMaven(): File {
+    val metadata = providers.exec {
+        workingDir = File(rootDir, "../..")
+        commandLine(
+            "cargo", "metadata", "--format-version", "1",
+            "--filter-platform", "aarch64-linux-android", "--manifest-path", "Cargo.toml",
+        )
+    }.standardOutput.asText.get()
+    @Suppress("UNCHECKED_CAST")
+    val packages = (JsonSlurper().parseText(metadata) as Map<String, Any>)["packages"] as List<Map<String, Any>>
+    val manifest = packages.first { it["name"] == "rustls-platform-verifier-android" }["manifest_path"] as String
+    return File(File(manifest).parentFile, "maven")
+}
+
+repositories {
+    maven {
+        url = uri(rustlsPlatformVerifierMaven())
+        metadataSources.artifact()
+    }
+}
+
 dependencies {
+    // Kept in step with the Rust crate by cargo, so always the version the local repo holds.
+    implementation("rustls:rustls-platform-verifier:latest.release")
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
