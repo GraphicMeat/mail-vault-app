@@ -40,7 +40,10 @@ fn sentence(rng: &mut Rng, words: u64) -> String {
 
 /// Replaces nothing: adds `count` rows (uids 1..=count) for [`ACCOUNT_ID`] / [`FOLDER`].
 pub fn seed(engine: &Engine, count: usize) -> Result<(), EngineError> {
-    engine.write(|c| insert_rows(c, count))
+    engine.write(|c| {
+        insert_account_and_folder(c, count)?;
+        insert_rows(c, count)
+    })
 }
 
 /// Makes sure [`ACCOUNT_ID`] / [`FOLDER`] holds at least `count` rows, in one write transaction.
@@ -57,9 +60,25 @@ pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError>
         if n >= count as i64 {
             return Ok(false);
         }
+        insert_account_and_folder(c, count)?;
         insert_rows(c, count)?;
         Ok(true)
     })
+}
+
+/// The account and INBOX folder rows the seeded messages hang off. No secret: nothing connects.
+fn insert_account_and_folder(c: &rusqlite::Connection, count: usize) -> Result<(), rusqlite::Error> {
+    c.execute(
+        "INSERT OR IGNORE INTO accounts (id, email, display_name, imap_host, imap_port, security, created_ms)
+         VALUES (?1, 'seed@example.test', 'Seed', 'localhost', 993, 'ssl', ?2)",
+        (ACCOUNT_ID, NEWEST_MS),
+    )?;
+    c.execute(
+        "INSERT OR REPLACE INTO folders (account_id, path, name, special_use, delimiter, noselect, uid_validity, uid_next, unseen, total, synced_ms)
+         VALUES (?1, ?2, ?2, '\\Inbox', '/', 0, 1, ?3, 0, ?4, ?5)",
+        (ACCOUNT_ID, FOLDER, count as i64 + 1, count as i64, NEWEST_MS),
+    )?;
+    Ok(())
 }
 
 fn insert_rows(c: &rusqlite::Connection, count: usize) -> Result<(), rusqlite::Error> {

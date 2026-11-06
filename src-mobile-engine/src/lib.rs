@@ -2,6 +2,7 @@
 //! directory itself: the shell passes the data dir, the cache dir and the platform secret store to
 //! [`Engine::open`]. IMAP and TLS come from mailvault-core, driven through [`net`].
 
+mod accounts;
 mod db;
 pub mod net;
 mod rpc;

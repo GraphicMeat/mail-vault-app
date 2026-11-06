@@ -12,10 +12,36 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 const READERS: usize = 2;
 
-const SCHEMA_V1: &str = "
+/// Schema 2. Version 1 was the list-only prototype and held nothing the server cannot give back,
+/// so a v1 file is dropped and rebuilt rather than migrated.
+const SCHEMA_V2: &str = "
+CREATE TABLE accounts (
+  id           TEXT PRIMARY KEY,
+  email        TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  imap_host    TEXT NOT NULL,
+  imap_port    INTEGER NOT NULL,
+  security     TEXT NOT NULL,
+  created_ms   INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE UNIQUE INDEX accounts_by_email ON accounts (email COLLATE NOCASE);
+CREATE TABLE folders (
+  account_id  TEXT NOT NULL,
+  path        TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  special_use TEXT,
+  delimiter   TEXT,
+  noselect    INTEGER NOT NULL DEFAULT 0,
+  uid_validity INTEGER,
+  uid_next    INTEGER,
+  unseen      INTEGER NOT NULL DEFAULT 0,
+  total       INTEGER NOT NULL DEFAULT 0,
+  synced_ms   INTEGER,
+  PRIMARY KEY (account_id, path)
+) WITHOUT ROWID;
 CREATE TABLE messages (
   account_id      TEXT NOT NULL,
   folder          TEXT NOT NULL,
@@ -28,10 +54,55 @@ CREATE TABLE messages (
   seen            INTEGER NOT NULL,
   flagged         INTEGER NOT NULL,
   has_attachments INTEGER NOT NULL,
+  message_id      TEXT NOT NULL DEFAULT '',
+  to_json         TEXT NOT NULL DEFAULT '[]',
+  size            INTEGER NOT NULL DEFAULT 0,
+  local_seen      INTEGER,
+  local_flagged   INTEGER,
+  local_deleted   INTEGER,
+  list_gen        INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (account_id, folder, uid)
 ) WITHOUT ROWID;
 CREATE INDEX messages_by_date ON messages (account_id, folder, date_ms DESC, uid DESC);
+CREATE TABLE bodies (
+  account_id     TEXT NOT NULL,
+  folder         TEXT NOT NULL,
+  uid            INTEGER NOT NULL,
+  html           TEXT,
+  text           TEXT,
+  parts_json     TEXT,
+  bytes          INTEGER NOT NULL DEFAULT 0,
+  last_access_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, folder, uid)
+) WITHOUT ROWID;
+CREATE TABLE attachments (
+  account_id TEXT NOT NULL,
+  folder     TEXT NOT NULL,
+  uid        INTEGER NOT NULL,
+  section    TEXT NOT NULL,
+  filename   TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  size       INTEGER NOT NULL DEFAULT 0,
+  content_id TEXT,
+  encoding   TEXT,
+  PRIMARY KEY (account_id, folder, uid, section)
+) WITHOUT ROWID;
+CREATE TABLE pending_actions (
+  seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id TEXT NOT NULL,
+  folder     TEXT NOT NULL,
+  uids_json  TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  arg        TEXT,
+  state      TEXT NOT NULL DEFAULT 'queued',
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_ms INTEGER NOT NULL
+);
 ";
+
+/// Every table any schema version created; a rebuild drops them all (their indexes go with them).
+const ALL_TABLES: &[&str] = &["pending_actions", "attachments", "bodies", "messages", "folders", "accounts"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineError {
@@ -123,9 +194,13 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         return Err(OpenFail::Fatal(EngineError::Db(format!("journal_mode is {mode}, not wal"))));
     }
     w.execute_batch("PRAGMA synchronous = NORMAL;")?;
-    if found == 0 {
+    if found < SCHEMA_VERSION {
+        // New file or an older prototype schema: one transaction, so a crash leaves the old file.
         let tx = Transaction::new_unchecked(&w, TransactionBehavior::Immediate)?;
-        tx.execute_batch(SCHEMA_V1)?;
+        for t in ALL_TABLES {
+            tx.execute_batch(&format!("DROP TABLE IF EXISTS {t};"))?;
+        }
+        tx.execute_batch(SCHEMA_V2)?;
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;
     }
@@ -246,7 +321,9 @@ impl Engine {
         self.write(|c| {
             // Make it a real write so the WAL has a pending writer.
             c.execute(
-                "INSERT OR REPLACE INTO messages VALUES ('hold','hold',1,'','','',0,'',0,0,0)",
+                "INSERT OR REPLACE INTO messages
+                 (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments)
+                 VALUES ('hold','hold',1,'','','',0,'',0,0,0)",
                 [],
             )?;
             Ok(f())
@@ -273,7 +350,9 @@ mod tests {
         e.write(|c| {
             for uid in 1..=250i64 {
                 c.execute(
-                    "INSERT INTO messages VALUES ('a','INBOX',?1,'s','n','n@example.test',?1,'',0,0,0)",
+                    "INSERT INTO messages
+                     (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments)
+                     VALUES ('a','INBOX',?1,'s','n','n@example.test',?1,'',0,0,0)",
                     [uid],
                 )?;
             }

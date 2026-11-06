@@ -29,16 +29,18 @@ pub(crate) fn block_on<F: Future>(f: F) -> F::Output {
     async_std::task::block_on(f)
 }
 
-/// Signs in to `host:port` with a password and returns INBOX's message count. Test seam for the
-/// core link (`tests/net.rs`); the secret never leaves this call.
+/// Signs in to `host:port` with a password and returns INBOX's message count. `security` is
+/// `ssl`, `starttls` or `none` (core's `imapSecurity`). The one connect path for the engine's login
+/// tests (`mobile.accounts.*`, `tests/net.rs`); the secret never leaves this call, and the errors
+/// are core's strings, which carry the account address but never the password.
 #[doc(hidden)]
-pub fn test_login(host: &str, port: u16, user: &str, password: &str) -> Result<u32, String> {
+pub fn test_login(host: &str, port: u16, user: &str, password: &str, security: &str) -> Result<u32, String> {
     let config: ImapConfig = serde_json::from_value(serde_json::json!({
         "email": user,
         "password": password,
         "imapHost": host,
         "imapPort": port,
-        "imapSecure": true,
+        "imapSecurity": security,
     }))
     .map_err(|e| e.to_string())?;
     block_on(async {

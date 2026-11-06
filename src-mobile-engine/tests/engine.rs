@@ -52,7 +52,7 @@ fn open_seeded(dir: &std::path::Path, n: usize) -> Engine {
 }
 
 #[test]
-fn open_creates_schema_v1_in_wal() {
+fn open_creates_schema_v2_in_wal() {
     let tmp = tempfile::tempdir().unwrap();
     let _e = open(tmp.path()).unwrap();
     let path = tmp.path().join("mobile.db");
@@ -61,9 +61,9 @@ fn open_creates_schema_v1_in_wal() {
     let mode: String = c.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
     assert_eq!(mode, "wal");
-    assert_eq!(ver, 1);
+    assert_eq!(ver, 2);
     let pong = _e.rpc("mobile.ping", json!({})).unwrap();
-    assert_eq!(pong["schema"], 1);
+    assert_eq!(pong["schema"], 2);
     assert_eq!(pong["engine"], env!("CARGO_PKG_VERSION"));
 }
 
@@ -126,6 +126,35 @@ fn corrupt_page_after_valid_header_is_rebuilt() {
 }
 
 #[test]
+fn v1_file_is_rebuilt_as_v2() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("mobile.db");
+    {
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch(
+            "CREATE TABLE messages (
+               account_id TEXT NOT NULL, folder TEXT NOT NULL, uid INTEGER NOT NULL, subject TEXT NOT NULL,
+               from_name TEXT NOT NULL, from_address TEXT NOT NULL, date_ms INTEGER NOT NULL, snippet TEXT NOT NULL,
+               seen INTEGER NOT NULL, flagged INTEGER NOT NULL, has_attachments INTEGER NOT NULL,
+               PRIMARY KEY (account_id, folder, uid)) WITHOUT ROWID;
+             CREATE INDEX messages_by_date ON messages (account_id, folder, date_ms DESC, uid DESC);
+             INSERT INTO messages VALUES ('a','INBOX',1,'s','n','n@example.test',1,'',0,0,0);
+             PRAGMA user_version = 1;",
+        )
+        .unwrap();
+    }
+    let e = open(tmp.path()).unwrap();
+    let c = Connection::open(&path).unwrap();
+    let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+    assert_eq!(ver, 2);
+    assert_eq!(e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "offset": 0, "limit": 10 })).unwrap()["total"], 0);
+    for t in ["accounts", "folders", "messages", "bodies", "attachments", "pending_actions"] {
+        let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "{t}");
+    }
+}
+
+#[test]
 fn newer_schema_is_refused_and_kept() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("mobile.db");
@@ -134,11 +163,11 @@ fn newer_schema_is_refused_and_kept() {
     }
     {
         let c = Connection::open(&path).unwrap();
-        c.execute_batch("PRAGMA user_version = 2;").unwrap();
+        c.execute_batch("PRAGMA user_version = 3;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
     let err = open(tmp.path()).err().expect("must refuse");
-    assert_eq!(err, EngineError::NewerSchema { found: 2, supported: 1 });
+    assert_eq!(err, EngineError::NewerSchema { found: 3, supported: 2 });
     assert_eq!(std::fs::read(&path).unwrap(), before, "a newer file must not be touched");
 }
 
@@ -151,7 +180,7 @@ fn newer_schema_in_rollback_mode_is_not_switched_to_wal() {
         c.execute_batch("PRAGMA journal_mode = DELETE; PRAGMA user_version = 7;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
-    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 7, supported: 1 }));
+    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 7, supported: 2 }));
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
 

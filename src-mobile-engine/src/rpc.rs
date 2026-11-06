@@ -49,13 +49,17 @@ impl Serialize for RpcError {
     }
 }
 
-type Handler = fn(&Engine, Value) -> Result<Value, RpcError>;
+pub(crate) type Handler = fn(&Engine, Value) -> Result<Value, RpcError>;
 
 /// Keep sorted by name, like `methods.json`. `methods.json` lists the perf-gate build's table;
 /// a shipping build answers the perf-gate-only methods (`mobile.debug.*`, `mobile.perf.report`)
 /// with `Unsupported`.
 #[cfg(feature = "perf-gate")]
 const TABLE: &[(&str, Handler)] = &[
+    ("mobile.accounts.add", crate::accounts::add),
+    ("mobile.accounts.list", crate::accounts::list),
+    ("mobile.accounts.remove", crate::accounts::remove),
+    ("mobile.accounts.test", crate::accounts::test),
     ("mobile.debug.probe", debug_probe),
     ("mobile.debug.secretsRoundTrip", debug_secrets_round_trip),
     ("mobile.messages.page", messages_page),
@@ -63,7 +67,14 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.ping", ping),
 ];
 #[cfg(not(feature = "perf-gate"))]
-const TABLE: &[(&str, Handler)] = &[("mobile.messages.page", messages_page), ("mobile.ping", ping)];
+const TABLE: &[(&str, Handler)] = &[
+    ("mobile.accounts.add", crate::accounts::add),
+    ("mobile.accounts.list", crate::accounts::list),
+    ("mobile.accounts.remove", crate::accounts::remove),
+    ("mobile.accounts.test", crate::accounts::test),
+    ("mobile.messages.page", messages_page),
+    ("mobile.ping", ping),
+];
 
 /// Largest perf record accepted, serialized. The real one is a few hundred bytes.
 #[cfg(feature = "perf-gate")]
@@ -83,7 +94,7 @@ impl Engine {
     }
 }
 
-fn parse<T: DeserializeOwned>(params: Value) -> Result<T, RpcError> {
+pub(crate) fn parse<T: DeserializeOwned>(params: Value) -> Result<T, RpcError> {
     // A missing params object arrives as null; treat it as empty so the error names the field.
     let params = if params.is_null() { json!({}) } else { params };
     serde_json::from_value(params).map_err(|e| RpcError::Invalid(e.to_string()))
