@@ -4211,5 +4211,6 @@
   "settings.accounts.transportSwitching": "Changement…",
   "settings.accounts.transportExplain": "Vous vous reconnectez avec Microsoft. Vos e-mails enregistrés restent : les messages encore sur le serveur sont associés par leur identifiant, et les e-mails que seul MailVault conserve restent dans leur dossier.",
   "errors.transportSwitchPending": "Certaines modifications de ce compte attendent encore d’atteindre le serveur. Changez une fois qu’elles sont passées.",
-  "errors.transportSwitchBackupUnavailable": "Votre disque de sauvegarde est inaccessible. Branchez-le, puis changez : sa copie de ce compte est mise à jour avec vos e-mails."
+  "errors.transportSwitchBackupUnavailable": "Votre disque de sauvegarde est inaccessible. Branchez-le, puis changez : sa copie de ce compte est mise à jour avec vos e-mails.",
+  "mobile.list.loadFailed": "Impossible de charger vos messages."
 }

@@ -4211,5 +4211,6 @@
   "settings.accounts.transportSwitching": "Wird gewechselt …",
   "settings.accounts.transportExplain": "Du meldest dich erneut bei Microsoft an. Deine gespeicherten E-Mails bleiben erhalten: Nachrichten, die noch auf dem Server liegen, werden über ihre ID zugeordnet, und E-Mails, die nur noch MailVault hat, bleiben in ihrem Ordner.",
   "errors.transportSwitchPending": "Einige Änderungen an diesem Konto warten noch darauf, den Server zu erreichen. Wechsle, sobald sie durch sind.",
-  "errors.transportSwitchBackupUnavailable": "Dein Backup-Laufwerk ist nicht erreichbar. Schließe es an und wechsle dann: Seine Kopie dieses Kontos wird zusammen mit deinen E-Mails aktualisiert."
+  "errors.transportSwitchBackupUnavailable": "Dein Backup-Laufwerk ist nicht erreichbar. Schließe es an und wechsle dann: Seine Kopie dieses Kontos wird zusammen mit deinen E-Mails aktualisiert.",
+  "mobile.list.loadFailed": "Deine Nachrichten konnten nicht geladen werden."
 }

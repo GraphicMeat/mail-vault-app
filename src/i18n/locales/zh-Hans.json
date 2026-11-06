@@ -4211,5 +4211,6 @@
   "settings.accounts.transportSwitching": "正在切换…",
   "settings.accounts.transportExplain": "你将重新使用 Microsoft 登录。已保存的邮件会保留：仍在服务器上的邮件按 ID 对应，只有 MailVault 还保存的邮件留在原文件夹中。",
   "errors.transportSwitchPending": "此账户的部分更改仍在等待同步到服务器。请在同步完成后再切换。",
-  "errors.transportSwitchBackupUnavailable": "无法访问你的备份驱动器。请先连接它，然后再切换：此账户的备份副本会与邮件一同更新。"
+  "errors.transportSwitchBackupUnavailable": "无法访问你的备份驱动器。请先连接它，然后再切换：此账户的备份副本会与邮件一同更新。",
+  "mobile.list.loadFailed": "无法加载你的邮件。"
 }

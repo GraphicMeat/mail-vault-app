@@ -4211,5 +4211,6 @@
   "settings.accounts.transportSwitching": "Trocando…",
   "settings.accounts.transportExplain": "Você entra de novo com a Microsoft. Seus e-mails salvos continuam: as mensagens que ainda estão no servidor são associadas pelo ID, e os e-mails que só o MailVault ainda tem ficam na pasta deles.",
   "errors.transportSwitchPending": "Algumas alterações nesta conta ainda estão esperando chegar ao servidor. Troque quando elas forem concluídas.",
-  "errors.transportSwitchBackupUnavailable": "Não foi possível acessar sua unidade de backup. Conecte-a e depois troque: a cópia desta conta é atualizada junto com seus e-mails."
+  "errors.transportSwitchBackupUnavailable": "Não foi possível acessar sua unidade de backup. Conecte-a e depois troque: a cópia desta conta é atualizada junto com seus e-mails.",
+  "mobile.list.loadFailed": "Não foi possível carregar suas mensagens."
 }

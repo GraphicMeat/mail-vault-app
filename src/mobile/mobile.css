@@ -1,0 +1,135 @@
+/* Mobile shell styles. Tokens from DESIGN.md (src/styles/index.css is authoritative): dark is the
+   default, light follows the system. Safe areas come from env(safe-area-inset-*). */
+:root {
+  color-scheme: dark;
+  --mail-bg: #0a0a12;
+  --mail-surface: #15151f;
+  --mail-surface-hover: #1e1e2c;
+  --mail-border: #2e2e45;
+  --mail-text: #e8e8ef;
+  --mail-text-muted: #a0a0b6;
+  --mail-accent: #6366f1;
+  --mail-accent-text: #a5b4fc;
+  --mv-font: var(--app-font, "Instrument Sans", system-ui, sans-serif);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --mail-bg: #f6f7fb;
+    --mail-surface: #ffffff;
+    --mail-surface-hover: #eceef6;
+    --mail-border: #dfe3ee;
+    --mail-text: #1a1a2e;
+    --mail-text-muted: #5c5c73;
+    --mail-accent: #4f46e5;
+    --mail-accent-text: #4338ca;
+  }
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--mail-bg);
+  color: var(--mail-text);
+  font-family: var(--mv-font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+.mv-app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+.mv-header {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 16px) 8px calc(env(safe-area-inset-left) + 16px);
+  background: var(--mail-surface);
+  border-bottom: 1px solid var(--mail-border);
+}
+.mv-header__title { margin: 0; font-size: 1.25rem; font-weight: 600; }
+.mv-header__count { font-size: 0.75rem; font-weight: 500; color: var(--mail-text-muted); }
+
+.mv-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.mv-list__inner { position: relative; width: 100%; }
+
+.mv-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px calc(env(safe-area-inset-right) + 16px) 8px calc(env(safe-area-inset-left) + 16px);
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid var(--mail-border);
+  background: var(--mail-bg);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  contain: strict;
+}
+.mv-row:active { background: var(--mail-surface-hover); }
+.mv-row__top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.mv-row__sender, .mv-row__subject, .mv-row__snippet {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.mv-row__sender { flex: 1; font-weight: 500; line-height: 20px; }
+.mv-row__date { flex: none; font-size: 0.75rem; font-weight: 500; color: var(--mail-text-muted); }
+.mv-row__subject { line-height: 20px; }
+.mv-row__snippet { font-size: 0.75rem; line-height: 18px; color: var(--mail-text-muted); }
+.mv-row--unread .mv-row__sender, .mv-row--unread .mv-row__subject { font-weight: 600; }
+.mv-row--unread { box-shadow: inset 2px 0 0 var(--mail-accent); }
+
+.mv-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow-y: auto;
+  background: var(--mail-bg);
+  padding: 0 calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px);
+}
+.mv-viewer__bar { padding-top: env(safe-area-inset-top); margin: 0 -8px; }
+.mv-viewer__back {
+  border: 0;
+  background: none;
+  color: var(--mail-accent-text);
+  font: inherit;
+  font-weight: 500;
+  padding: 0 8px;
+}
+.mv-viewer__subject { margin: 12px 0 4px; font-size: 1.25rem; font-weight: 600; overflow-wrap: anywhere; }
+.mv-viewer__sender { margin: 0; color: var(--mail-text-muted); overflow-wrap: anywhere; }
+
+.mv-status {
+  margin: auto;
+  padding: 24px;
+  text-align: center;
+  color: var(--mail-text-muted);
+}
+.mv-status button {
+  margin-top: 12px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--mail-border);
+  border-radius: 8px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font: inherit;
+}
