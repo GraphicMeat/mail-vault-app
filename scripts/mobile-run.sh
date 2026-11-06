@@ -138,6 +138,9 @@ run_ios() {
 
     local rc=0 n stream_pid
     for ((n = 1; n <= LAUNCHES; n++)); do
+        # Stop the previous launch before this launch's stream starts, so a late line from launch
+        # n-1 cannot land in launch n's log.
+        if [ "$n" -gt 1 ]; then xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true; fi
         # A fresh log per launch, so tail_log's line counter starts at its first line.
         log=$work/app-$n.log
         : > "$log"
