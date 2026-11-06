@@ -32,4 +32,16 @@ describe('mobile locale', () => {
     expect(getMobileLocale()).toBe('en');
     expect(t('mobile.add.signIn')).toBe(en['mobile.add.signIn']);
   });
+
+  it('picks the plural form of the unread count', async () => {
+    expect(t('mobile.unreadCount', { count: 1 })).toBe('1 unread');
+    await loadMobileLocale(['fr-FR']);
+    expect(t('mobile.unreadCount', { count: 1 })).toBe('1 non lu');
+    expect(t('mobile.unreadCount', { count: 3 })).toBe('3 non lus');
+    await loadMobileLocale(['pt-BR']);
+    expect(t('mobile.unreadCount', { count: 1 })).toBe('1 não lida');
+    expect(t('mobile.unreadCount', { count: 2 })).toBe('2 não lidas');
+    await loadMobileLocale(['ja']);
+    expect(t('mobile.unreadCount', { count: 1 })).toBe('未読 1 件');
+  });
 });

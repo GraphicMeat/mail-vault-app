@@ -65,7 +65,7 @@ function AccountRow({ account, active, unread, onSelect, onRemove }) {
           <span className={name ? 'mv-acct__email mv-acct__email--sub' : 'mv-acct__email'} dir="auto">{account.email}</span>
         </span>
         {unread > 0 && (
-          <span className="mv-badge" aria-label={t('mobile.switcher.unread', { count: unread })}>{unread}</span>
+          <span className="mv-badge" aria-label={t('mobile.unreadCount', { count: unread })}>{unread}</span>
         )}
         <span className="mv-acct__check" aria-hidden="true">{active ? '✓' : ''}</span>
       </button>

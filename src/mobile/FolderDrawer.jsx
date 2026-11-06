@@ -37,7 +37,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
                 >
                   <span className="mv-folder__name" dir="auto">{folderLabel(f)}</span>
                   {f.unseen > 0 && (
-                    <span className="mv-folder__count" aria-label={t('mobile.switcher.unread', { count: f.unseen })}>{f.unseen}</span>
+                    <span className="mv-folder__count" aria-label={t('mobile.unreadCount', { count: f.unseen })}>{f.unseen}</span>
                   )}
                 </button>
               </li>

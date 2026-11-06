@@ -5,9 +5,11 @@
 // and are all kept, so a page that was evicted comes back with one fetch.
 //
 // `listGen` is the engine's per-folder generation. When it moves (an event, or a page that comes
-// back newer than the pages held) every page and cursor is dropped: rows of two generations are
-// never shown side by side. `invalidate` keeps the key of the top visible row as an anchor and
-// reports where that row landed once the reloaded pages reach it, so the list can hold its place.
+// back newer than the pages held) every page and cursor is dropped, so rows of two generations
+// are never shown side by side. A page labelled older than the generation held was read after
+// the newer one was announced: its rows are kept and the generation never steps back.
+// A drop keeps the key of the top visible row as an anchor and reports where that row landed
+// once the reloaded pages reach it, so the list can hold its place.
 
 export const MAX_PAGES = 20;
 export const PAGE_SIZE = 100;
@@ -63,6 +65,14 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
     listGen = gen;
   }
 
+  /** Drops every page for generation `gen`, keeping the row at `top` (if not the first) as anchor. */
+  function dropAll(gen, top) {
+    const p = Math.floor(top / pageSize);
+    const row = top > 0 ? pages.get(p)?.[top - p * pageSize] : undefined;
+    anchor = row ? { dateMs: row.dateMs, uid: row.uid, from: top, to: null } : null;
+    reset(gen);
+  }
+
   function findAnchor(p, rows) {
     if (!anchor || anchor.to != null) return;
     const j = rows.findIndex((r) => compareKeys(r, anchor) >= 0);
@@ -76,14 +86,17 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
       (res) => {
         if (mine !== epoch) return; // the list moved on while this page was on its way
         inflight.delete(p);
-        if (listGen != null && res.listGen != null && res.listGen !== listGen) {
-          // The engine's list moved under the pages held: start over in the new generation.
-          reset(res.listGen);
+        if (listGen != null && res.listGen != null && res.listGen > listGen) {
+          // The engine's list moved under the pages held: start over in the new generation,
+          // holding the row on screen like an `invalidate` does.
+          dropAll(res.listGen, topIndex);
           total = res.total;
           notify();
           return;
         }
-        listGen = res.listGen ?? listGen;
+        // A page labelled older than the generation held (an event announced the newer one
+        // first) was still read after that event: keep its rows, never step the generation back.
+        if (res.listGen != null && (listGen == null || res.listGen > listGen)) listGen = res.listGen;
         total = res.total;
         cursors.set(p + 1, res.nextCursor ?? END);
         touch(p, res.rows);
@@ -157,9 +170,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
      */
     invalidate(gen, top = topIndex) {
       if (gen != null && listGen != null && gen <= listGen) return false;
-      const row = top > 0 ? this.rowAt(top) : undefined;
-      anchor = row ? { dateMs: row.dateMs, uid: row.uid, from: top, to: null } : null;
-      reset(gen ?? listGen);
+      dropAll(gen ?? listGen, top);
       notify();
       return true;
     },

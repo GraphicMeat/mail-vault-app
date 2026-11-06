@@ -192,3 +192,32 @@ describe('createPageCache', () => {
     expect(c.rowAt(0)).toEqual({ uid: 999, dateMs: 999000 });
   });
 });
+
+describe('generation order', () => {
+  it('a page labelled older than an announced generation does not reset the cache', async () => {
+    const f = fakeFetch(listOf(300), 3);
+    const c = createPageCache(f);
+    await c.ensure(0);
+    expect(c.invalidate(5, 0)).toBe(true); // an event announced gen 5
+    // The engine still labels its pages 3 (or 4): the rows are kept, the generation stays 5.
+    await c.ensure(150);
+    expect(c.listGen).toBe(5);
+    expect(c.rowAt(0)).toBeDefined();
+    expect(c.rowAt(150)).toBeDefined();
+    expect(f).toHaveBeenCalledTimes(3);
+  });
+
+  it('a newer page restart keeps the row on screen as the anchor', async () => {
+    const f = fakeFetch(listOf(300), 1);
+    const c = createPageCache(f);
+    await c.ensure(150);
+    const top = c.rowAt(120);
+    c.topIndex = 120;
+    f.state.rows = [{ uid: 999, dateMs: 999000 }, ...listOf(300)];
+    f.state.listGen = 2;
+    await c.ensure(250); // page 2, read in gen 2: restart
+    expect(c.listGen).toBe(2);
+    await c.ensure(121);
+    expect(c.anchor).toEqual({ dateMs: top.dateMs, uid: top.uid, from: 120, to: 121 });
+  });
+});
