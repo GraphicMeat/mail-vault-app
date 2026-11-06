@@ -13,24 +13,31 @@ const PW: &str = "correct-horse-battery-staple";
 
 /// A secret store that can say whether it holds anything at all.
 #[derive(Default)]
-struct Spy(Mutex<HashMap<String, String>>);
+struct Spy {
+    map: Mutex<HashMap<String, String>>,
+    /// Runs inside `set`, to sabotage the database between the secret write and the row insert.
+    on_set: Mutex<Option<Box<dyn Fn() + Send>>>,
+}
 
 impl Spy {
     fn is_empty(&self) -> bool {
-        self.0.lock().unwrap().is_empty()
+        self.map.lock().unwrap().is_empty()
     }
 }
 
 impl SecretStore for Spy {
     fn get(&self, id: &str) -> Result<Option<String>, String> {
-        Ok(self.0.lock().unwrap().get(id).cloned())
+        Ok(self.map.lock().unwrap().get(id).cloned())
     }
     fn set(&self, id: &str, secret: &str) -> Result<(), String> {
-        self.0.lock().unwrap().insert(id.into(), secret.into());
+        if let Some(f) = self.on_set.lock().unwrap().as_ref() {
+            f();
+        }
+        self.map.lock().unwrap().insert(id.into(), secret.into());
         Ok(())
     }
     fn delete(&self, id: &str) -> Result<(), String> {
-        self.0.lock().unwrap().remove(id);
+        self.map.lock().unwrap().remove(id);
         Ok(())
     }
 }
@@ -201,4 +208,63 @@ fn invalid_form_is_typed_without_touching_the_network() {
         assert_eq!((r["ok"].clone(), r["code"].clone()), (json!(false), json!("INVALID")), "{bad}");
     }
     assert_eq!(e.rpc("mobile.accounts.remove", json!({})).unwrap_err().code(), "INVALID");
+}
+
+#[test]
+fn password_that_is_not_a_string_is_never_echoed_and_big_port_is_invalid() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    for method in ["mobile.accounts.test", "mobile.accounts.add"] {
+        let r = e
+            .rpc(method, json!({ "email": "u@example.test", "password": 12345, "imapHost": "h", "imapPort": 993, "security": "ssl" }))
+            .map_or_else(|err| serde_json::to_value(err).unwrap(), |v| v);
+        assert!(!r.to_string().contains("12345"), "{method}: {r}");
+        assert_eq!((r["ok"].clone(), r["code"].clone()), (json!(false), json!("INVALID")), "{r}");
+        let r = e
+            .rpc(method, json!({ "email": "u@example.test", "password": PW, "imapHost": "h", "imapPort": 70000, "security": "ssl" }))
+            .unwrap();
+        assert_eq!((r["ok"].clone(), r["code"].clone()), (json!(false), json!("INVALID")), "{r}");
+    }
+}
+
+fn row_count(dir: &std::path::Path) -> i64 {
+    Connection::open(dir.join("mobile.db")).unwrap().query_row("SELECT count(*) FROM accounts", [], |r| r.get(0)).unwrap()
+}
+
+#[test]
+fn losing_the_insert_race_is_duplicate_and_leaves_no_secret() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, secrets) = engine(tmp.path());
+    let server = good_server();
+    let path = tmp.path().join("mobile.db");
+    *secrets.on_set.lock().unwrap() = Some(Box::new(move || {
+        // A concurrent add of the same address lands between the pre-check and our insert.
+        let c = Connection::open(&path).unwrap();
+        c.busy_timeout(Duration::from_secs(5)).unwrap();
+        c.execute(
+            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, created_ms)
+             VALUES ('acc_rival', 'u@example.test', 'u', 'h', 993, 'ssl', 1)",
+            [],
+        )
+        .unwrap();
+    }));
+    let r = e.rpc("mobile.accounts.add", form(&server, "u@example.test", PW)).unwrap();
+    assert_eq!((r["ok"].clone(), r["code"].clone()), (json!(false), json!("DUPLICATE")), "{r}");
+    assert_eq!(row_count(tmp.path()), 1, "only the rival row");
+    assert!(secrets.is_empty(), "the new account's secret must be deleted");
+}
+
+#[test]
+fn a_failed_insert_deletes_the_secret_and_reports_internal() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, secrets) = engine(tmp.path());
+    let server = good_server();
+    let path = tmp.path().join("mobile.db");
+    *secrets.on_set.lock().unwrap() = Some(Box::new(move || {
+        Connection::open(&path).unwrap().execute_batch("DROP TABLE accounts;").unwrap();
+    }));
+    let err = e.rpc("mobile.accounts.add", form(&server, "u@example.test", PW)).unwrap_err();
+    assert_eq!(err.code(), "INTERNAL");
+    assert!(!err.to_string().contains(PW));
+    assert!(secrets.is_empty(), "the secret must be deleted when the row insert fails");
 }

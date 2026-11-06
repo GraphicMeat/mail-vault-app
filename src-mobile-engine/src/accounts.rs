@@ -84,20 +84,51 @@ fn failure(code: Code, message: impl Into<String>) -> Value {
     json!({ "ok": false, "code": code.as_str(), "message": message.into() })
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Form {
     email: String,
     password: String,
     imap_host: String,
     imap_port: u16,
     security: String,
-    #[serde(default)]
     display_name: Option<String>,
+}
+
+/// Reads the form by hand: serde's errors echo the offending value ("invalid type: integer
+/// `12345`"), which for the password field would put the secret in a reply. Every error here names
+/// the field only.
+fn read_form(params: &Value) -> Result<Form, String> {
+    let obj = params.as_object().ok_or("params must be an object")?;
+    let text = |k: &str| -> Result<String, String> {
+        match obj.get(k) {
+            Some(Value::String(s)) => Ok(s.clone()),
+            _ => Err(format!("{k} must be a string")),
+        }
+    };
+    let port = match obj.get("imapPort").and_then(Value::as_u64) {
+        Some(p) if (1..=65535).contains(&p) => p as u16,
+        _ => return Err("imapPort must be 1-65535".into()),
+    };
+    let display_name = match obj.get("displayName") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        _ => return Err("displayName must be a string".into()),
+    };
+    Ok(Form {
+        email: text("email")?,
+        password: text("password")?,
+        imap_host: text("imapHost")?,
+        imap_port: port,
+        security: text("security")?,
+        display_name,
+    })
 }
 
 impl Form {
     /// Trims the text fields; the first problem comes back as the reply's message.
+    fn from_params(params: &Value) -> Result<Form, Value> {
+        read_form(params).and_then(Form::validate).map_err(|m| failure(Code::Invalid, m))
+    }
+
     fn validate(mut self) -> Result<Form, String> {
         self.email = self.email.trim().to_string();
         self.imap_host = self.imap_host.trim().to_string();
@@ -175,10 +206,9 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
 }
 
 pub(crate) fn test(_: &Engine, params: Value) -> Result<Value, RpcError> {
-    let form: Form = parse(params)?;
-    let form = match form.validate() {
+    let form = match Form::from_params(&params) {
         Ok(f) => f,
-        Err(m) => return Ok(failure(Code::Invalid, m)),
+        Err(reply) => return Ok(reply),
     };
     Ok(match form.test_login() {
         Ok(count) => json!({ "ok": true, "messageCount": count }),
@@ -197,10 +227,9 @@ fn email_taken(engine: &Engine, email: &str) -> Result<bool, RpcError> {
 }
 
 pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
-    let form: Form = parse(params)?;
-    let form = match form.validate() {
+    let form = match Form::from_params(&params) {
         Ok(f) => f,
-        Err(m) => return Ok(failure(Code::Invalid, m)),
+        Err(reply) => return Ok(reply),
     };
     if email_taken(engine, &form.email)? {
         return Ok(failure(Code::Duplicate, "this account is already added"));
