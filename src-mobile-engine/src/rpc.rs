@@ -62,9 +62,11 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.accounts.test", crate::accounts::test),
     ("mobile.debug.probe", debug_probe),
     ("mobile.debug.secretsRoundTrip", debug_secrets_round_trip),
+    ("mobile.folders.list", crate::sync::folders_list),
     ("mobile.messages.page", messages_page),
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
+    ("mobile.sync.refresh", crate::sync::refresh),
 ];
 #[cfg(not(feature = "perf-gate"))]
 const TABLE: &[(&str, Handler)] = &[
@@ -72,8 +74,10 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.accounts.list", crate::accounts::list),
     ("mobile.accounts.remove", crate::accounts::remove),
     ("mobile.accounts.test", crate::accounts::test),
+    ("mobile.folders.list", crate::sync::folders_list),
     ("mobile.messages.page", messages_page),
     ("mobile.ping", ping),
+    ("mobile.sync.refresh", crate::sync::refresh),
 ];
 
 /// Largest perf record accepted, serialized. The real one is a few hundred bytes.
@@ -104,47 +108,121 @@ fn ping(_: &Engine, _: Value) -> Result<Value, RpcError> {
     Ok(json!({ "engine": env!("CARGO_PKG_VERSION"), "schema": SCHEMA_VERSION }))
 }
 
+/// The Plan 1 form, `{accountId, folder, offset, limit}`, which the current list still sends. Goes
+/// away when the list moves to the cursor form.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PageParams {
+struct OffsetPageParams {
     account_id: String,
     folder: String,
     offset: u64,
     limit: u64,
 }
 
+#[derive(Deserialize, Serialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+struct Cursor {
+    date_ms: i64,
+    uid: i64,
+}
+
+/// `{accountId, folder, cursor: null|{dateMs, uid}, limit}`: the rows strictly after `cursor` in
+/// `(date_ms DESC, uid DESC)` order. New mail lands above every cursor, so a page already read
+/// never shifts.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CursorPageParams {
+    account_id: String,
+    folder: String,
+    #[serde(default)]
+    cursor: Option<Cursor>,
+    limit: u64,
+}
+
+/// The list's view of a row: a pending local change (`local_*`) wins over the server's value, and
+/// a row deleted locally is not listed.
+const LISTED: &str = "account_id = ?1 AND folder = ?2 AND COALESCE(local_deleted, 0) = 0";
+const ROW_COLUMNS: &str = "uid, subject, from_name, from_address, date_ms, snippet,
+    COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), has_attachments";
+
+fn row_json(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+    Ok(json!({
+        "uid": r.get::<_, i64>(0)?,
+        "subject": r.get::<_, String>(1)?,
+        "fromName": r.get::<_, String>(2)?,
+        "fromAddress": r.get::<_, String>(3)?,
+        "dateMs": r.get::<_, i64>(4)?,
+        "snippet": r.get::<_, String>(5)?,
+        "seen": r.get::<_, i64>(6)? != 0,
+        "flagged": r.get::<_, i64>(7)? != 0,
+        "hasAttachments": r.get::<_, i64>(8)? != 0,
+    }))
+}
+
+fn count_listed(c: &rusqlite::Connection, account: &str, folder: &str) -> rusqlite::Result<i64> {
+    c.query_row(&format!("SELECT count(*) FROM messages WHERE {LISTED}"), (account, folder), |r| r.get(0))
+}
+
+/// `mobile.messages.page`: `{rows, nextCursor, total, listGen}` for the cursor form, `{rows,
+/// total, listGen}` for the legacy offset form. `listGen` is read before the rows, so it is never
+/// newer than them.
 fn messages_page(engine: &Engine, params: Value) -> Result<Value, RpcError> {
-    let p: PageParams = parse(params)?;
+    if params.get("offset").is_some() {
+        return offset_page(engine, parse(params)?);
+    }
+    let p: CursorPageParams = parse(params)?;
     let limit = p.limit.min(MAX_PAGE) as i64;
-    let offset = i64::try_from(p.offset).map_err(|_| RpcError::Invalid("offset out of range".into()))?;
+    let list_gen = engine.shared().list_gen(&p.account_id, &p.folder).map_err(|e| RpcError::Internal(e.to_string()))?;
     engine
         .read(|c| {
-            let total: i64 = c.query_row(
-                "SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = ?2",
-                (&p.account_id, &p.folder),
-                |r| r.get(0),
-            )?;
-            let mut st = c.prepare_cached(
-                "SELECT uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments
-                 FROM messages WHERE account_id = ?1 AND folder = ?2
-                 ORDER BY date_ms DESC, uid DESC LIMIT ?3 OFFSET ?4",
-            )?;
-            let rows = st
-                .query_map((&p.account_id, &p.folder, limit, offset), |r| {
-                    Ok(json!({
-                        "uid": r.get::<_, i64>(0)?,
-                        "subject": r.get::<_, String>(1)?,
-                        "fromName": r.get::<_, String>(2)?,
-                        "fromAddress": r.get::<_, String>(3)?,
-                        "dateMs": r.get::<_, i64>(4)?,
-                        "snippet": r.get::<_, String>(5)?,
-                        "seen": r.get::<_, i64>(6)? != 0,
-                        "flagged": r.get::<_, i64>(7)? != 0,
-                        "hasAttachments": r.get::<_, i64>(8)? != 0,
-                    }))
-                })?
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(json!({ "total": total, "rows": rows }))
+            let total = count_listed(c, &p.account_id, &p.folder)?;
+            // limit + 1 tells whether anything follows, so `nextCursor` is null exactly at the end.
+            let mut rows: Vec<(Cursor, Value)> = match p.cursor {
+                None => {
+                    let mut st = c.prepare_cached(&format!(
+                        "SELECT {ROW_COLUMNS} FROM messages WHERE {LISTED} ORDER BY date_ms DESC, uid DESC LIMIT ?3"
+                    ))?;
+                    let rows = st
+                        .query_map((&p.account_id, &p.folder, limit + 1), |r| {
+                            Ok((Cursor { date_ms: r.get(4)?, uid: r.get(0)? }, row_json(r)?))
+                        })?
+                        .collect::<Result<Vec<_>, _>>()?;
+                    rows
+                }
+                Some(cur) => {
+                    let mut st = c.prepare_cached(&format!(
+                        "SELECT {ROW_COLUMNS} FROM messages WHERE {LISTED} AND (date_ms, uid) < (?3, ?4)
+                         ORDER BY date_ms DESC, uid DESC LIMIT ?5"
+                    ))?;
+                    let rows = st
+                        .query_map((&p.account_id, &p.folder, cur.date_ms, cur.uid, limit + 1), |r| {
+                            Ok((Cursor { date_ms: r.get(4)?, uid: r.get(0)? }, row_json(r)?))
+                        })?
+                        .collect::<Result<Vec<_>, _>>()?;
+                    rows
+                }
+            };
+            let more = rows.len() as i64 > limit;
+            rows.truncate(limit as usize);
+            let next = if more { rows.last().map(|(k, _)| json!(k)) } else { None };
+            let rows: Vec<Value> = rows.into_iter().map(|(_, v)| v).collect();
+            Ok(json!({ "rows": rows, "nextCursor": next, "total": total, "listGen": list_gen }))
+        })
+        .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+fn offset_page(engine: &Engine, p: OffsetPageParams) -> Result<Value, RpcError> {
+    let limit = p.limit.min(MAX_PAGE) as i64;
+    let offset = i64::try_from(p.offset).map_err(|_| RpcError::Invalid("offset out of range".into()))?;
+    let list_gen = engine.shared().list_gen(&p.account_id, &p.folder).map_err(|e| RpcError::Internal(e.to_string()))?;
+    engine
+        .read(|c| {
+            let total = count_listed(c, &p.account_id, &p.folder)?;
+            let mut st = c.prepare_cached(&format!(
+                "SELECT {ROW_COLUMNS} FROM messages WHERE {LISTED} ORDER BY date_ms DESC, uid DESC LIMIT ?3 OFFSET ?4"
+            ))?;
+            let rows = st.query_map((&p.account_id, &p.folder, limit, offset), row_json)?.collect::<Result<Vec<_>, _>>()?;
+            Ok(json!({ "total": total, "rows": rows, "listGen": list_gen }))
         })
         .map_err(|e| RpcError::Internal(e.to_string()))
 }

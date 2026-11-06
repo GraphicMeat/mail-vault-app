@@ -142,3 +142,27 @@ fn ensure_seeded_tops_up_a_smaller_table() {
 fn perf_seed_is_ten_thousand_rows() {
     assert_eq!(seed::PERF_ROWS, 10_000);
 }
+
+#[test]
+fn seed_pages_by_cursor() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open_seeded(tmp.path(), 1_000);
+    let mut cursor = Value::Null;
+    let mut keys: Vec<(i64, i64)> = Vec::new();
+    loop {
+        let p = e
+            .rpc(
+                "mobile.messages.page",
+                json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "cursor": cursor, "limit": 200 }),
+            )
+            .unwrap();
+        assert_eq!(p["total"], 1_000);
+        keys.extend(p["rows"].as_array().unwrap().iter().map(|r| (r["dateMs"].as_i64().unwrap(), r["uid"].as_i64().unwrap())));
+        if p["nextCursor"].is_null() {
+            break;
+        }
+        cursor = p["nextCursor"].clone();
+    }
+    assert_eq!(keys.len(), 1_000);
+    assert!(keys.windows(2).all(|w| w[0] > w[1]), "not strictly (dateMs, uid) descending");
+}

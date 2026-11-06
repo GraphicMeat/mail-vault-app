@@ -3,10 +3,14 @@
 //! the opposite case: it is left byte-for-byte alone and `open` refuses.
 //!
 //! One writer connection (writes go through `BEGIN IMMEDIATE`, as `app_db::in_txn` does) and a
-//! small pool of read-only connections, so a list read never queues behind a write.
+//! small pool of read-only connections, so a list read never queues behind a write. The sync
+//! worker thread shares the same state ([`Shared`]) through an `Arc`.
 
+use crate::events::EventSink;
 use crate::secrets::SecretStore;
-use rusqlite::{Connection, ErrorCode, OpenFlags, Transaction, TransactionBehavior};
+use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
+use serde_json::Value;
+use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -129,19 +133,30 @@ impl std::error::Error for EngineError {}
 type LogSink = Box<dyn Fn(&str) + Send + Sync>;
 
 pub struct Engine {
+    shared: Arc<Shared>,
+    /// Rebuildable files (message bodies, attachments) live here, never in `mobile.db`.
+    cache_dir: PathBuf,
+    sync: crate::sync::Worker,
+}
+
+/// What the RPC threads and the sync worker thread both use.
+pub(crate) struct Shared {
     path: PathBuf,
     writer: Mutex<Connection>,
     readers: Mutex<Vec<Connection>>,
-    /// Rebuildable files (message bodies, attachments) live here, never in `mobile.db`.
-    cache_dir: PathBuf,
     /// Account secrets. Never copied into `mobile.db`, a log line or an event.
     secrets: Arc<dyn SecretStore>,
     /// Where the engine's own log lines go. The shell installs its platform logger (unified log on
     /// iOS, logcat on Android); app stdout reaches neither, so stderr is only the fallback.
     log_sink: OnceLock<LogSink>,
+    event_sink: OnceLock<EventSink>,
+    /// Each folder's list generation, `(account_id, folder)` -> gen. Seeded from the highest
+    /// `messages.list_gen` of the folder on first use and bumped by every sync pass that changed
+    /// the folder (a pass that only removes rows too, which no row can record).
+    list_gens: Mutex<HashMap<(String, String), i64>>,
 }
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
@@ -251,13 +266,26 @@ impl Engine {
             }
         };
         Ok(Engine {
-            path: db.path,
-            writer: Mutex::new(db.writer),
-            readers: Mutex::new(db.readers),
+            shared: Arc::new(Shared {
+                path: db.path,
+                writer: Mutex::new(db.writer),
+                readers: Mutex::new(db.readers),
+                secrets,
+                log_sink: OnceLock::new(),
+                event_sink: OnceLock::new(),
+                list_gens: Mutex::new(HashMap::new()),
+            }),
             cache_dir: cache_dir.to_path_buf(),
-            secrets,
-            log_sink: OnceLock::new(),
+            sync: crate::sync::Worker::default(),
         })
+    }
+
+    pub(crate) fn shared(&self) -> &Arc<Shared> {
+        &self.shared
+    }
+
+    pub(crate) fn sync_worker(&self) -> &crate::sync::Worker {
+        &self.sync
     }
 
     /// The directory for rebuildable files the shell passed to `open`.
@@ -267,24 +295,64 @@ impl Engine {
 
     /// The platform secret store the shell passed to `open`.
     pub fn secrets(&self) -> &dyn SecretStore {
-        self.secrets.as_ref()
+        self.shared.secrets.as_ref()
     }
 
     /// Installs the sink for the engine's log lines. The first sink wins; returns false if one was
     /// already set.
     pub fn set_log_sink(&self, sink: impl Fn(&str) + Send + Sync + 'static) -> bool {
-        self.log_sink.set(Box::new(sink)).is_ok()
+        self.shared.log_sink.set(Box::new(sink)).is_ok()
+    }
+
+    /// Installs the sink for engine events (`crate::events`): name and JSON payload. Called on the
+    /// thread that produced the event (often the sync worker), with no engine lock held. The first
+    /// sink wins; returns false if one was already set.
+    pub fn set_event_sink(&self, sink: impl Fn(&str, Value) + Send + Sync + 'static) -> bool {
+        self.shared.event_sink.set(Box::new(sink)).is_ok()
     }
 
     /// Writes one line to the installed sink, or to stderr when none is set.
     #[cfg(feature = "perf-gate")]
     pub(crate) fn log(&self, line: &str) {
-        match self.log_sink.get() {
-            Some(sink) => sink(line),
-            None => eprintln!("{line}"),
-        }
+        self.shared.log(line)
     }
 
+    /// Runs `f` inside `BEGIN IMMEDIATE` on the single writer connection.
+    pub(crate) fn write<T>(&self, f: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>) -> Result<T, EngineError> {
+        self.shared.write(f)
+    }
+
+    /// Runs `f` in one deferred read transaction on a pooled read-only connection.
+    pub(crate) fn read<T>(&self, f: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>) -> Result<T, EngineError> {
+        self.shared.read(f)
+    }
+
+    /// Test seam for `read_not_blocked_by_writer`: runs `f` inside a write transaction that stays
+    /// open until `f` returns. Unit tests only, so no build of the crate (shipping or perf-gate)
+    /// carries it.
+    #[cfg(test)]
+    fn hold_write_txn_for_test<T>(&self, f: impl FnOnce() -> T) -> Result<T, EngineError> {
+        self.write(|c| {
+            // Make it a real write so the WAL has a pending writer.
+            c.execute(
+                "INSERT OR REPLACE INTO messages
+                 (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments)
+                 VALUES ('hold','hold',1,'','','',0,'',0,0,0)",
+                [],
+            )?;
+            Ok(f())
+        })
+    }
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        // The worker finishes the pass it is in (a core timeout bounds it) and exits; nothing waits.
+        self.sync.stop();
+    }
+}
+
+impl Shared {
     /// Runs `f` inside `BEGIN IMMEDIATE` on the single writer connection.
     pub(crate) fn write<T>(&self, f: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>) -> Result<T, EngineError> {
         let w = lock(&self.writer);
@@ -313,21 +381,54 @@ impl Engine {
         out
     }
 
-    /// Test seam for `read_not_blocked_by_writer`: runs `f` inside a write transaction that stays
-    /// open until `f` returns. Unit tests only, so no build of the crate (shipping or perf-gate)
-    /// carries it.
-    #[cfg(test)]
-    fn hold_write_txn_for_test<T>(&self, f: impl FnOnce() -> T) -> Result<T, EngineError> {
-        self.write(|c| {
-            // Make it a real write so the WAL has a pending writer.
-            c.execute(
-                "INSERT OR REPLACE INTO messages
-                 (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments)
-                 VALUES ('hold','hold',1,'','','',0,'',0,0,0)",
-                [],
-            )?;
-            Ok(f())
-        })
+    pub(crate) fn secrets(&self) -> &dyn SecretStore {
+        self.secrets.as_ref()
+    }
+
+    /// Writes one line to the installed sink, or to stderr when none is set.
+    pub(crate) fn log(&self, line: &str) {
+        match self.log_sink.get() {
+            Some(sink) => sink(line),
+            None => eprintln!("{line}"),
+        }
+    }
+
+    /// Hands one event to the installed sink; dropped when none is set. Call with no engine lock
+    /// held: the sink may call back into the engine.
+    pub(crate) fn emit(&self, name: &str, payload: Value) {
+        if let Some(sink) = self.event_sink.get() {
+            sink(name, payload);
+        }
+    }
+
+    /// The folder's current list generation. A page reads it BEFORE its read transaction, so a
+    /// page is never labelled newer than the rows it holds.
+    pub(crate) fn list_gen(&self, account_id: &str, folder: &str) -> Result<i64, EngineError> {
+        let key = (account_id.to_string(), folder.to_string());
+        // Held across the seeding read (a reader connection, never the writer), so a seed and a
+        // bump cannot interleave.
+        let mut gens = lock(&self.list_gens);
+        if let Some(g) = gens.get(&key) {
+            return Ok(*g);
+        }
+        let seeded: i64 = self.read(|c| {
+            c.query_row(
+                "SELECT max(list_gen) FROM messages WHERE account_id = ?1 AND folder = ?2",
+                (account_id, folder),
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()
+            .map(|o| o.flatten().unwrap_or(0))
+        })?;
+        gens.insert(key, seeded);
+        Ok(seeded)
+    }
+
+    /// Publishes `gen` as the folder's generation, after the pass that wrote it has committed.
+    pub(crate) fn set_list_gen(&self, account_id: &str, folder: &str, gen: i64) {
+        let mut gens = lock(&self.list_gens);
+        let slot = gens.entry((account_id.to_string(), folder.to_string())).or_insert(0);
+        *slot = (*slot).max(gen);
     }
 }
 

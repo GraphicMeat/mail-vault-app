@@ -1,1 +1,1 @@
-["mobile.accounts.add","mobile.accounts.list","mobile.accounts.remove","mobile.accounts.test","mobile.debug.probe","mobile.debug.secretsRoundTrip","mobile.messages.page","mobile.perf.report","mobile.ping"]
+["mobile.accounts.add","mobile.accounts.list","mobile.accounts.remove","mobile.accounts.test","mobile.debug.probe","mobile.debug.secretsRoundTrip","mobile.folders.list","mobile.messages.page","mobile.perf.report","mobile.ping","mobile.sync.refresh"]

@@ -4,9 +4,11 @@
 
 mod accounts;
 mod db;
+pub mod events;
 pub mod net;
 mod rpc;
 pub mod secrets;
+mod sync;
 #[cfg(feature = "perf-gate")]
 pub mod seed;
 
