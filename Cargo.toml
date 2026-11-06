@@ -10,7 +10,6 @@ members = [
     "vendor/imap-proto",
     "src-render", # blitz-render
 ]
-exclude = ["vendor/wry"] # standalone: its tests need its own dev-dependencies
 resolver = "2"
 # A bare root `cargo build` / `cargo test` builds the desktop crates only. The mobile crates are
 # built with `-p` (src-tauri-mobile needs ../dist-mobile for generate_context!).
@@ -28,13 +27,8 @@ default-members = [
 # iCloud's unescaped inner quotes in ENVELOPE, non-UTF-8 bytes in BODYSTRUCTURE
 # params, and a FETCH line the grammar rejects costing one message instead of
 # the connection (async-imap closes the stream on any decoder error).
-# wry 0.55.1 with upstream's later macOS drag fix backported
-# (vendor/wry/src/wkwebview/drag_drop.rs): a drag advertising file names the
-# pasteboard cannot materialize (a screenshot thumbnail dropped on the
-# sandboxed compose window) panicked inside AppKit and quit the app.
 [patch.crates-io]
 imap-proto = { path = "vendor/imap-proto" }
-wry = { path = "vendor/wry" }
 blitz-dom = { path = "src-render/vendor/blitz-dom" } # blitz-render
 string_cache = { path = "src-render/vendor/string_cache" } # blitz-render
 anyrender_vello_cpu = { path = "src-render/vendor/anyrender_vello_cpu" } # blitz-render
