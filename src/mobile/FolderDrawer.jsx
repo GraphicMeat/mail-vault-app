@@ -22,7 +22,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
             const style = { paddingInlineStart: `calc(16px + ${Math.min(f.depth || 0, 6) * 16}px)` };
             if (f.noselect) {
               return (
-                <li key={f.path} className="mv-folder mv-folder--heading" style={style} dir="auto">{folderLabel(f, t)}</li>
+                <li key={f.path} className="mv-folder mv-folder--heading" style={style} dir="auto">{folderLabel(f)}</li>
               );
             }
             const active = f.path === activeFolder;
@@ -35,7 +35,7 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
                   aria-current={active ? 'true' : undefined}
                   onClick={() => onSelect(f.path)}
                 >
-                  <span className="mv-folder__name" dir="auto">{folderLabel(f, t)}</span>
+                  <span className="mv-folder__name" dir="auto">{folderLabel(f)}</span>
                   {f.unseen > 0 && (
                     <span className="mv-folder__count" aria-label={t('mobile.switcher.unread', { count: f.unseen })}>{f.unseen}</span>
                   )}

@@ -229,7 +229,7 @@ function App() {
           </svg>
         </button>
         <div className="mv-header__titles">
-          <h1 className="mv-header__title" dir="auto">{folderLabel(folder, t)}</h1>
+          <h1 className="mv-header__title" dir="auto">{folderLabel(folder)}</h1>
           {account && (
             <button
               type="button"
