@@ -4206,5 +4206,10 @@
   "pendingActions.reminder.body_one": "{{count}} Nachricht wartet noch darauf, dass dein Server eine Löschung oder andere Änderung annimmt. MailVault versucht es weiter.",
   "pendingActions.reminder.body_other": "{{count}} Nachrichten warten noch darauf, dass dein Server eine Löschung oder andere Änderung annimmt. MailVault versucht es weiter.",
   "pendingActions.reminder.open": "Nicht abgeschlossene Serveraktionen öffnen",
-  "pendingActions.reminder.later": "Später"
+  "pendingActions.reminder.later": "Später",
+  "settings.accounts.transportSwitch": "Wechseln und erneut anmelden",
+  "settings.accounts.transportSwitching": "Wird gewechselt …",
+  "settings.accounts.transportExplain": "Du meldest dich erneut bei Microsoft an. Deine gespeicherten E-Mails bleiben erhalten: Nachrichten, die noch auf dem Server liegen, werden über ihre ID zugeordnet, und E-Mails, die nur noch MailVault hat, bleiben in ihrem Ordner.",
+  "errors.transportSwitchPending": "Einige Änderungen an diesem Konto warten noch darauf, den Server zu erreichen. Wechsle, sobald sie durch sind.",
+  "errors.transportSwitchBackupUnavailable": "Dein Backup-Laufwerk ist nicht erreichbar. Schließe es an und wechsle dann: Seine Kopie dieses Kontos wird zusammen mit deinen E-Mails aktualisiert."
 }

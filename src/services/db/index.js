@@ -16,6 +16,7 @@ export {
   initDB,
   saveAccount,
   patchAccount,
+  switchAccountTransport,
   addAccountNative,
   updateAccountNative,
   accountExpectedContext,

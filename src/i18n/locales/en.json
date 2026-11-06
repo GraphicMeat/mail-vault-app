@@ -4206,5 +4206,10 @@
   "pendingActions.reminder.body_one": "{{count}} message is still waiting for your server to accept a delete or another change. MailVault keeps retrying it.",
   "pendingActions.reminder.body_other": "{{count}} messages are still waiting for your server to accept a delete or another change. MailVault keeps retrying them.",
   "pendingActions.reminder.open": "Open unfinished server actions",
-  "pendingActions.reminder.later": "Later"
+  "pendingActions.reminder.later": "Later",
+  "settings.accounts.transportSwitch": "Switch and sign in again",
+  "settings.accounts.transportSwitching": "Switching...",
+  "settings.accounts.transportExplain": "You sign in with Microsoft again. Your saved mail stays: messages still on the server are matched by their ID, and mail only MailVault still has stays in its folder.",
+  "errors.transportSwitchPending": "Some changes to this account are still waiting to reach the server. Switch once they have gone through.",
+  "errors.transportSwitchBackupUnavailable": "Your backup drive cannot be reached. Connect it, then switch: its copy of this account is updated along with your mail."
 }

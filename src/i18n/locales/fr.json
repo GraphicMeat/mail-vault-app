@@ -4206,5 +4206,10 @@
   "pendingActions.reminder.body_one": "{{count}} message attend encore que votre serveur accepte une suppression ou une autre modification. MailVault continue de réessayer.",
   "pendingActions.reminder.body_other": "{{count}} messages attendent encore que votre serveur accepte une suppression ou une autre modification. MailVault continue de réessayer.",
   "pendingActions.reminder.open": "Ouvrir les actions serveur inachevées",
-  "pendingActions.reminder.later": "Plus tard"
+  "pendingActions.reminder.later": "Plus tard",
+  "settings.accounts.transportSwitch": "Changer et se reconnecter",
+  "settings.accounts.transportSwitching": "Changement…",
+  "settings.accounts.transportExplain": "Vous vous reconnectez avec Microsoft. Vos e-mails enregistrés restent : les messages encore sur le serveur sont associés par leur identifiant, et les e-mails que seul MailVault conserve restent dans leur dossier.",
+  "errors.transportSwitchPending": "Certaines modifications de ce compte attendent encore d’atteindre le serveur. Changez une fois qu’elles sont passées.",
+  "errors.transportSwitchBackupUnavailable": "Votre disque de sauvegarde est inaccessible. Branchez-le, puis changez : sa copie de ce compte est mise à jour avec vos e-mails."
 }

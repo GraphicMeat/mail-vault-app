@@ -3960,6 +3960,7 @@ fn main() {
             commands::backup_migrate_legacy_path,
             backup::backup_purge_uids,
             backup::backup_copy_uids,
+            backup::accounts_switch_transport,
             backup::backup_scan_uids,
             abd::abd_summarize,
             abd::abd_start,

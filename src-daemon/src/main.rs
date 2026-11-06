@@ -81,6 +81,7 @@ pub mod sync_engine;
 mod sync_observation;
 mod refresh_worker;
 mod sync_jmap;
+mod transport_switch;
 mod complete_fill;
 mod vault_gap;
 

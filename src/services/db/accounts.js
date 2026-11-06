@@ -328,6 +328,24 @@ export async function updateAccountNative(id, fields, { unset = [], expected } =
   return accountWorkflow('accounts.update', { id, fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), ...(remove.length ? { unset: remove } : {}), expected }, id);
 }
 
+// Graph <-> IMAP for a Microsoft account, keeping its vault: the daemon
+// re-files the vault (and the backup folder, which the shell resolves and
+// holds, hence the shell command) under the new transport's numbering, then
+// saves the account with `fields` (the new grant and transport) like
+// accounts.update.
+const SWITCH_ERRORS = ['errors.transportSwitchPending', 'errors.transportSwitchBackupUnavailable'];
+export async function switchAccountTransport(id, transport, fields, { unset = [], expected } = {}) {
+  await initBasic();
+  try {
+    return await invoke('accounts_switch_transport', { params: { id, transport, fields, ...(unset.length ? { unset } : {}), expected } });
+  } catch (error) {
+    const key = error?.message ?? String(error);
+    throw new Error(SWITCH_ERRORS.includes(key) ? key : errText(error));
+  } finally {
+    invalidateCredentialsCache();
+  }
+}
+
 export async function patchAccount(id, fields, { unset = [], expected } = {}) {
   const reply = await persistAccount({ patch: { id, fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), ...(unset.length ? { unset } : {}), ...(expected ? { expected } : {}) } });
   if (reply.accepted.length !== 1 || reply.accepted[0] !== id || Object.keys(reply.skipped).length) {

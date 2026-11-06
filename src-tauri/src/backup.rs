@@ -343,6 +343,39 @@ pub async fn backup_copy_uids(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// A Microsoft account's switch between Graph and IMAP
+/// (`accounts.switch_transport`) re-files the account's backup folder with its
+/// vault, so the shell resolves the drive and holds it for the switch. A drive
+/// that is configured but will not resolve refuses the switch: the backup
+/// would keep the old numbering and copy it back into the vault.
+#[tauri::command]
+pub async fn accounts_switch_transport(app_handle: tauri::AppHandle, params: Value) -> Result<Value, String> {
+    tokio::task::spawn_blocking(move || {
+        let configured = external_location_status().as_deref().is_some_and(|s| s != "not_configured");
+        let (root, needs_release) = if configured { resolve_backup_path(&app_handle, None) } else { (None, false) };
+        if configured && root.is_none() {
+            return Err("errors.transportSwitchBackupUnavailable".to_string());
+        }
+        let mut params = params;
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("mirrorRoot".into(), json!(root));
+        }
+        let result = crate::daemon_call_blocking(&app_handle, "accounts.switch_transport", params, SWITCH_BUDGET);
+        if needs_release {
+            if let Some(ref p) = root {
+                release_backup_path(p);
+            }
+        }
+        result
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// A switch lists every folder over IMAP and re-files the vault and the
+/// backup folder before it answers.
+const SWITCH_BUDGET: std::time::Duration = std::time::Duration::from_secs(1800);
+
 /// Which uids of `<email>/<mailbox>` are present in the external mirror.
 ///
 /// `null` means "could not determine" — no backup location configured, or

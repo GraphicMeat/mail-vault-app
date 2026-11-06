@@ -4206,5 +4206,10 @@
   "pendingActions.reminder.body_one": "{{count}} 件のメッセージが、サーバーによる削除などの変更の受け付けを待っています。MailVault は再試行を続けます。",
   "pendingActions.reminder.body_other": "{{count}} 件のメッセージが、サーバーによる削除などの変更の受け付けを待っています。MailVault は再試行を続けます。",
   "pendingActions.reminder.open": "未完了のサーバー操作を開く",
-  "pendingActions.reminder.later": "後で"
+  "pendingActions.reminder.later": "後で",
+  "settings.accounts.transportSwitch": "切り替えて再サインイン",
+  "settings.accounts.transportSwitching": "切り替え中…",
+  "settings.accounts.transportExplain": "Microsoft で再度サインインします。保存済みのメールはそのまま残ります。サーバー上にあるメッセージは ID で照合され、MailVault にしか残っていないメールは元のフォルダーに残ります。",
+  "errors.transportSwitchPending": "このアカウントの変更の一部がまだサーバーへの反映を待っています。反映が終わってから切り替えてください。",
+  "errors.transportSwitchBackupUnavailable": "バックアップ用ドライブに接続できません。ドライブを接続してから切り替えてください。このアカウントのバックアップもメールと一緒に更新されます。"
 }

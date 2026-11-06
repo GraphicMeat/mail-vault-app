@@ -4206,5 +4206,10 @@
   "pendingActions.reminder.body_one": "메시지 {{count}}건이 서버가 삭제 또는 다른 변경을 받아들이기를 기다리고 있습니다. MailVault가 계속 다시 시도합니다.",
   "pendingActions.reminder.body_other": "메시지 {{count}}건이 서버가 삭제 또는 다른 변경을 받아들이기를 기다리고 있습니다. MailVault가 계속 다시 시도합니다.",
   "pendingActions.reminder.open": "완료되지 않은 서버 작업 열기",
-  "pendingActions.reminder.later": "나중에"
+  "pendingActions.reminder.later": "나중에",
+  "settings.accounts.transportSwitch": "전환하고 다시 로그인",
+  "settings.accounts.transportSwitching": "전환 중…",
+  "settings.accounts.transportExplain": "Microsoft로 다시 로그인합니다. 저장된 메일은 그대로 남습니다. 서버에 아직 있는 메시지는 ID로 연결되고, MailVault에만 남아 있는 메일은 원래 폴더에 남습니다.",
+  "errors.transportSwitchPending": "이 계정의 일부 변경 사항이 아직 서버에 반영되기를 기다리고 있습니다. 반영된 뒤에 전환하세요.",
+  "errors.transportSwitchBackupUnavailable": "백업 드라이브에 연결할 수 없습니다. 드라이브를 연결한 다음 전환하세요. 이 계정의 백업 사본도 메일과 함께 업데이트됩니다."
 }

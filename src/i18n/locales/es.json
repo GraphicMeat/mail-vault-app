@@ -4206,5 +4206,10 @@
   "pendingActions.reminder.body_one": "{{count}} mensaje sigue esperando a que tu servidor acepte una eliminación u otro cambio. MailVault sigue intentándolo.",
   "pendingActions.reminder.body_other": "{{count}} mensajes siguen esperando a que tu servidor acepte una eliminación u otro cambio. MailVault sigue intentándolo.",
   "pendingActions.reminder.open": "Abrir acciones del servidor pendientes",
-  "pendingActions.reminder.later": "Más tarde"
+  "pendingActions.reminder.later": "Más tarde",
+  "settings.accounts.transportSwitch": "Cambiar e iniciar sesión de nuevo",
+  "settings.accounts.transportSwitching": "Cambiando…",
+  "settings.accounts.transportExplain": "Vuelves a iniciar sesión con Microsoft. Tu correo guardado se conserva: los mensajes que siguen en el servidor se emparejan por su ID, y el correo que solo tiene MailVault se queda en su carpeta.",
+  "errors.transportSwitchPending": "Algunos cambios en esta cuenta aún esperan llegar al servidor. Cambia cuando se hayan completado.",
+  "errors.transportSwitchBackupUnavailable": "No se puede acceder a tu unidad de copia de seguridad. Conéctala y luego cambia: su copia de esta cuenta se actualiza junto con tu correo."
 }

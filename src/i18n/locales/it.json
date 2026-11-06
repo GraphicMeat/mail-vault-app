@@ -4206,5 +4206,10 @@
   "pendingActions.reminder.body_one": "{{count}} messaggio attende ancora che il server accetti un'eliminazione o un'altra modifica. MailVault continua a riprovare.",
   "pendingActions.reminder.body_other": "{{count}} messaggi attendono ancora che il server accetti un'eliminazione o un'altra modifica. MailVault continua a riprovare.",
   "pendingActions.reminder.open": "Apri le azioni sul server non completate",
-  "pendingActions.reminder.later": "Più tardi"
+  "pendingActions.reminder.later": "Più tardi",
+  "settings.accounts.transportSwitch": "Cambia e accedi di nuovo",
+  "settings.accounts.transportSwitching": "Cambio in corso…",
+  "settings.accounts.transportExplain": "Accedi di nuovo con Microsoft. La posta salvata resta: i messaggi ancora sul server vengono abbinati tramite il loro ID e la posta che ha solo MailVault resta nella sua cartella.",
+  "errors.transportSwitchPending": "Alcune modifiche a questo account sono ancora in attesa di raggiungere il server. Cambia quando saranno completate.",
+  "errors.transportSwitchBackupUnavailable": "L’unità di backup non è raggiungibile. Collegala, poi cambia: la sua copia di questo account viene aggiornata insieme alla posta."
 }

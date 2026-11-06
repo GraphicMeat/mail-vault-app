@@ -30,6 +30,9 @@ pub(crate) async fn route(
     params: &Value,
     id: Value,
 ) -> Option<RpcResponse> {
+    if method == "accounts.switch_transport" {
+        return Some(crate::transport_switch::route(state, params, id).await);
+    }
     if method == "accounts.remove_local" {
         return Some(crate::account_removal::route(state, params, id).await);
     }

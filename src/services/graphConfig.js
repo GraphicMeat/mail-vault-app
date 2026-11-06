@@ -27,6 +27,19 @@ export function isPersonalMicrosoftEmail(email) {
   return domain ? PERSONAL_MS_DOMAINS.includes(domain) : false;
 }
 
+/** The server fields a Microsoft account needs once it is switched to IMAP:
+ *  Microsoft 365's IMAP host, and for an Outlook.com address Outlook.com's
+ *  SMTP host (as the add flow picks). A Graph account may have none stored. */
+export function microsoftImapFields(account) {
+  const personal = isPersonalMicrosoftEmail(account?.email);
+  return {
+    imapHost: account?.imapHost || 'outlook.office365.com',
+    imapPort: account?.imapPort || 993,
+    smtpHost: personal ? 'smtp-mail.outlook.com' : (account?.smtpHost || 'smtp.office365.com'),
+    smtpPort: account?.smtpPort || 587,
+  };
+}
+
 /** What a failed XOAUTH2 sign-in tells the user: a Graph account is told to
  *  reconnect with Microsoft, any other account to reconnect. Decided by the
  *  account's transport, never its domain: Outlook.com can be added over IMAP. */

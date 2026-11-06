@@ -8,6 +8,8 @@
 
 - Adding an Outlook or Microsoft 365 account now has a Connect over choice: Automatic, Microsoft Graph or IMAP. Automatic works as before (Outlook.com and Hotmail over Microsoft Graph, work and school accounts over IMAP). An Outlook.com or Hotmail account added over IMAP now stays on IMAP; MailVault used to switch it back to Microsoft Graph every time it started, and it sends through Outlook.com's own mail server (smtp-mail.outlook.com). An account keeps the connection it was added with.
 
+- An Outlook or Microsoft 365 account can now move between Microsoft Graph and IMAP without being removed: Settings > Accounts > Connection > Connect over, then sign in with Microsoft again. The mail MailVault has saved stays. Each saved message the server still has is matched to it by its ID, so nothing is downloaded twice and no message shows under another one's number, in the archive or in the backup copy. Mail that only MailVault still has stays in its folder as local mail. A folder that IMAP names differently (Deleted Items is Trash over Microsoft Graph and Deleted over IMAP) keeps its saved mail as a local folder. While changes are still on their way to the server, the switch asks you to try again once they have gone through.
+
 - Settings > Billing now groups an account's aliases under it, indented with the account name greyed out, the same way the From picker in Compose does.
 
 ## [2.22.0] - 2026-11-05

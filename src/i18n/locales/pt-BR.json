@@ -4206,5 +4206,10 @@
   "pendingActions.reminder.body_one": "{{count}} mensagem ainda aguarda o servidor aceitar uma exclusão ou outra alteração. O MailVault continua tentando.",
   "pendingActions.reminder.body_other": "{{count}} mensagens ainda aguardam o servidor aceitar uma exclusão ou outra alteração. O MailVault continua tentando.",
   "pendingActions.reminder.open": "Abrir ações no servidor não concluídas",
-  "pendingActions.reminder.later": "Mais tarde"
+  "pendingActions.reminder.later": "Mais tarde",
+  "settings.accounts.transportSwitch": "Trocar e entrar de novo",
+  "settings.accounts.transportSwitching": "Trocando…",
+  "settings.accounts.transportExplain": "Você entra de novo com a Microsoft. Seus e-mails salvos continuam: as mensagens que ainda estão no servidor são associadas pelo ID, e os e-mails que só o MailVault ainda tem ficam na pasta deles.",
+  "errors.transportSwitchPending": "Algumas alterações nesta conta ainda estão esperando chegar ao servidor. Troque quando elas forem concluídas.",
+  "errors.transportSwitchBackupUnavailable": "Não foi possível acessar sua unidade de backup. Conecte-a e depois troque: a cópia desta conta é atualizada junto com seus e-mails."
 }
