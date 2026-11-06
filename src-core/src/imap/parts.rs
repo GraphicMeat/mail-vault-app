@@ -133,32 +133,39 @@ async fn absent(session: &mut ImapSession, mailbox: &str, uid: u32) -> Result<()
 pub async fn fetch_parts(session: &mut ImapSession, mailbox: &str, uid: u32) -> Result<(Option<Vec<PartInfo>>, Option<u32>), String> {
     let mbox = select_mailbox(session, mailbox).await?;
     let fetches = fetch_uid(session, uid, "(UID BODYSTRUCTURE)").await?;
-    let Some(f) = fetches.first() else {
+    // The reply that carries the structure, not merely the first for the uid: another client's
+    // flag change arrives as an unsolicited `FETCH (UID n FLAGS ...)` for the same uid.
+    let Some(bs) = fetches.iter().find_map(|f| f.bodystructure()) else {
         absent(session, mailbox, uid).await?;
         return Ok((None, mbox.uid_validity));
     };
-    let bs = f.bodystructure().ok_or_else(|| format!("UID FETCH {uid}: no BODYSTRUCTURE in the reply"))?;
     Ok((Some(parts_of(bs)), mbox.uid_validity))
 }
 
 /// One part's body: `UID FETCH uid (UID BODYSTRUCTURE BODY.PEEK[section])`, decoded per the
-/// part's transfer encoding (the BODYSTRUCTURE in the same reply names it). Never sets `\Seen`.
-/// `Ok(None)` when the uid is gone.
+/// part's transfer encoding, which the BODYSTRUCTURE in the same reply names. Never sets `\Seen`.
+/// `Ok(None)` when the uid is gone. A reply without the part's bytes, or whose encoding cannot be
+/// read (no BODYSTRUCTURE, or none of its parts is `section`), is an error: guessing would hand
+/// back raw base64 as text, or no text at all.
 pub async fn fetch_section(session: &mut ImapSession, mailbox: &str, uid: u32, section: &str) -> Result<Option<Vec<u8>>, String> {
-    let path = section_path(section)?;
+    let sp = SectionPath::Part(section_path(section)?, None);
     select_mailbox(session, mailbox).await?;
     let fetches = fetch_uid(session, uid, &format!("(UID BODYSTRUCTURE BODY.PEEK[{section}])")).await?;
-    let Some(f) = fetches.first() else {
+    // Each item is looked for across every reply for the uid, so an unsolicited FLAGS FETCH (or a
+    // server that splits the items over two FETCH lines) never stands in for the data.
+    let data = fetches.iter().find_map(|f| f.section(&sp));
+    let structure = fetches.iter().find_map(|f| f.bodystructure());
+    if data.is_none() && structure.is_none() {
         absent(session, mailbox, uid).await?;
         return Ok(None);
-    };
-    let encoding = f
-        .bodystructure()
-        .and_then(|bs| parts_of(bs).into_iter().find(|p| p.section == section))
+    }
+    let data = data.ok_or_else(|| format!("UID FETCH {uid}: no BODY[{section}] in the reply"))?;
+    let structure = structure.ok_or_else(|| format!("UID FETCH {uid}: no BODYSTRUCTURE in the reply, encoding of {section} unknown"))?;
+    let encoding = parts_of(structure)
+        .into_iter()
+        .find(|p| p.section == section)
         .map(|p| p.encoding)
-        .unwrap_or_else(|| "7bit".to_string());
-    // An empty part arrives as `""` or NIL; both are no bytes.
-    let data = f.section(&SectionPath::Part(path, None)).unwrap_or(&[]);
+        .ok_or_else(|| format!("UID FETCH {uid}: no part {section} in the BODYSTRUCTURE"))?;
     Ok(Some(decode_transfer(data, &encoding)))
 }
 

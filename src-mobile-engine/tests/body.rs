@@ -3,7 +3,7 @@
 
 use mailvault_mobile_engine::{Engine, MemorySecrets};
 use mock_imap::state::{Mailbox, Message};
-use mock_imap::{MockImap, Scenario};
+use mock_imap::{Action, MockImap, Scenario, Trigger};
 use serde_json::{json, Value};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -221,4 +221,44 @@ fn unknown_folder_is_invalid() {
     let f = setup(&server);
     let err = f.engine.rpc("mobile.message.body", json!({ "accountId": f.account, "folder": "Nope", "uid": 1 })).unwrap_err();
     assert_eq!(err.code(), "INVALID");
+}
+
+/// Another client marks the message read mid-fetch: an unsolicited FLAGS FETCH for the same uid
+/// arrives before each data reply. The body is still the real one, not an empty one.
+#[test]
+fn an_unsolicited_flags_fetch_does_not_empty_the_body() {
+    let flags = || Action::InjectUntagged("* 1 FETCH (UID 1 FLAGS (\\Seen))".into());
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push_msg(with_big_attachment(1)))
+            .fault(Trigger::with("FETCH", "(UID BODYSTRUCTURE)"), flags())
+            .fault(Trigger::with("FETCH", "BODY.PEEK[1.1]"), flags())
+            .fault(Trigger::with("FETCH", "BODY.PEEK[1.2]"), flags()),
+    );
+    let f = setup(&server);
+    let body = f.body(1);
+    assert_eq!(body["gone"], false, "{body}");
+    assert_eq!(body["html"].as_str().unwrap().trim_end(), "<p>Hi, the report is attached.</p>");
+    assert_eq!(body["text"].as_str().unwrap().trim_end(), "Hi,   the report   is attached. Grüße");
+    assert_eq!(f.snippet(1), "Hi, the report is attached. Grüße");
+}
+
+/// A part whose encoding the reply does not name is an error, and nothing is cached: the next
+/// open goes to the server again.
+#[test]
+fn an_undetermined_encoding_is_an_error_and_not_cached() {
+    let server = MockImap::start(
+        Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, "<p>x</p>"))).fault(
+            Trigger::with("FETCH", "BODY.PEEK[1]"),
+            Action::RespondRaw("* 1 FETCH (UID 1 BODY[1] {12}\r\nPHA+eDwvcD4=)\r\n{tag} OK FETCH completed\r\n".into()),
+        ),
+    );
+    let f = setup(&server);
+    for _ in 0..2 {
+        let n = server.commands().len();
+        let err = f.engine.rpc("mobile.message.body", json!({ "accountId": f.account, "folder": "INBOX", "uid": 1 })).unwrap_err();
+        assert_eq!(err.code(), "INTERNAL", "{err}");
+        assert!(server.commands().len() > n, "the second open was served from a cache");
+    }
+    assert_eq!(f.snippet(1), "");
 }

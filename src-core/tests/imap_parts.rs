@@ -5,7 +5,7 @@ mod common;
 use common::session;
 use mailvault_core::imap::{fetch_parts, fetch_section, parts_of, PartInfo};
 use mock_imap::state::Mailbox;
-use mock_imap::{MockImap, Scenario};
+use mock_imap::{Action, MockImap, Scenario, Trigger};
 
 fn bodystructure_of(line: &str) -> imap_proto::BodyStructure<'static> {
     let (_, resp) = imap_proto::parser::parse_response(line.as_bytes()).expect("parses");
@@ -112,4 +112,37 @@ async fn a_gone_uid_is_none() {
     assert_eq!(parts, None);
     assert_eq!(fetch_section(&mut sess, "INBOX", 99, "1").await.unwrap(), None);
     assert!(fetch_section(&mut sess, "INBOX", 1, "HEADER").await.is_err());
+}
+
+/// Another client marks the message read while we fetch: the server slips an unsolicited
+/// `FETCH (UID 1 FLAGS (\Seen))` in front of the data. The data reply is the one read.
+#[async_std::test]
+async fn an_unsolicited_flags_fetch_does_not_stand_in_for_the_data() {
+    let flags = || Action::InjectUntagged("* 1 FETCH (UID 1 FLAGS (\\Seen))".into());
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(CRAFTED))
+            .fault(Trigger::with("FETCH", "(UID BODYSTRUCTURE)"), flags())
+            .fault(Trigger::with("FETCH", "BODY.PEEK[2]"), flags()),
+    );
+    let mut sess = session(&server).await;
+    let (parts, _) = fetch_parts(&mut sess, "INBOX", 1).await.unwrap();
+    assert_eq!(parts.expect("uid 1 is there").len(), 2);
+    let html = fetch_section(&mut sess, "INBOX", 1, "2").await.unwrap().expect("html part");
+    assert_eq!(String::from_utf8(html).unwrap(), "<p>Grüße</p>");
+}
+
+/// A reply that carries the part but no BODYSTRUCTURE leaves its encoding unknown: an error,
+/// never the raw base64 handed back as if it were the text.
+#[async_std::test]
+async fn an_unknown_encoding_is_an_error() {
+    let server = MockImap::start(
+        Scenario::new().mailbox(Mailbox::new("INBOX").push(CRAFTED)).fault(
+            Trigger::with("FETCH", "BODY.PEEK[2]"),
+            Action::RespondRaw("* 1 FETCH (UID 1 BODY[2] {20}\r\nPHA+R3LDvMOfZTwvcD4=)\r\n{tag} OK FETCH completed\r\n".into()),
+        ),
+    );
+    let mut sess = session(&server).await;
+    let err = fetch_section(&mut sess, "INBOX", 1, "2").await.unwrap_err();
+    assert!(err.contains("BODYSTRUCTURE"), "{err}");
 }
