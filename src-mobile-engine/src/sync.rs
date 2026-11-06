@@ -45,7 +45,7 @@ impl Job {
     }
 }
 
-fn is_inbox(path: &str) -> bool {
+pub(crate) fn is_inbox(path: &str) -> bool {
     path.eq_ignore_ascii_case("INBOX")
 }
 
@@ -121,7 +121,7 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
 }
 
 /// Lowers the worker thread's priority: QoS utility on iOS, `nice` on Android, nothing elsewhere.
-fn background_qos() {
+pub(crate) fn background_qos() {
     #[cfg(target_os = "ios")]
     {
         extern "C" {
@@ -276,7 +276,7 @@ async fn sync_session(shared: &Shared, session: &mut ImapSession, job: &Job) -> 
 }
 
 /// The stored path of `folder` (INBOX matched case-insensitively, as RFC 3501 says).
-fn folder_path(shared: &Shared, account: &str, folder: &str) -> Result<Option<String>, EngineError> {
+pub(crate) fn folder_path(shared: &Shared, account: &str, folder: &str) -> Result<Option<String>, EngineError> {
     shared.read(|c| {
         let sql = if is_inbox(folder) {
             "SELECT path FROM folders WHERE account_id = ?1 AND path = ?2 COLLATE NOCASE"
@@ -288,7 +288,7 @@ fn folder_path(shared: &Shared, account: &str, folder: &str) -> Result<Option<St
 }
 
 /// Runs `f` in one write transaction if the account still exists; `Fail::Gone` if it does not.
-fn write_for<T>(shared: &Shared, account: &str, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T, Fail> {
+pub(crate) fn write_for<T>(shared: &Shared, account: &str, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T, Fail> {
     not_closing(shared)?;
     let out = shared.write(|c| {
         let exists = c.query_row("SELECT 1 FROM accounts WHERE id = ?1", [account], |_| Ok(())).optional()?.is_some();
@@ -302,7 +302,7 @@ fn write_for<T>(shared: &Shared, account: &str, f: impl FnOnce(&Connection) -> r
 
 /// `Fail::Closing` once the engine has been dropped. Checked before every write and every batch
 /// fetch, so a pass outliving its engine stops within one batch.
-fn not_closing(shared: &Shared) -> Result<(), Fail> {
+pub(crate) fn not_closing(shared: &Shared) -> Result<(), Fail> {
     if shared.is_closing() {
         Err(Fail::Closing)
     } else {
@@ -311,16 +311,18 @@ fn not_closing(shared: &Shared) -> Result<(), Fail> {
 }
 
 /// `uid IN (...)` for a chunk of uids (integers only, so the text is safe to inline).
-fn uid_list(uids: &[u32]) -> String {
+pub(crate) fn uid_list(uids: &[u32]) -> String {
     uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",")
 }
 
 /// Deletes the message rows of `uids` and every body and attachment row they own. Dependents
 /// first (a crash then leaves a message without its cached body, never an orphan body), each
 /// table in transactions of at most [`BATCH`] rows however many attachments a message has.
-/// Returns the number of message rows removed.
-fn delete_uids(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Result<usize, Fail> {
+/// With `keep_pending`, a uid some journaled action names is kept, checked inside each transaction
+/// (an action applied mid-pass is seen). Returns the number of message rows removed.
+pub(crate) fn delete_uids(shared: &Shared, account: &str, folder: &str, uids: &[u32], keep_pending: bool) -> Result<usize, Fail> {
     let mut removed = 0;
+    let guard = if keep_pending { format!(" AND uid NOT IN ({})", crate::actions::PENDING_UIDS) } else { String::new() };
     for chunk in uids.chunks(BATCH) {
         let list = uid_list(chunk);
         for (table, key, cols, counts) in [
@@ -330,7 +332,7 @@ fn delete_uids(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Re
         ] {
             let sql = format!(
                 "DELETE FROM {table} WHERE account_id = ?1 AND folder = ?2 AND {key} IN
-                   (SELECT {cols} FROM {table} WHERE account_id = ?1 AND folder = ?2 AND uid IN ({list}) LIMIT {BATCH})"
+                   (SELECT {cols} FROM {table} WHERE account_id = ?1 AND folder = ?2 AND uid IN ({list}){guard} LIMIT {BATCH})"
             );
             loop {
                 let n = write_for(shared, account, |c| c.execute(&sql, (account, folder)))?;
@@ -433,6 +435,8 @@ async fn sync_folder_list(shared: &Shared, session: &mut ImapSession, account: &
         })?;
     }
     for path in &gone {
+        // Its journaled actions can never replay; they drop before the rows go.
+        crate::actions::drop_folder_actions(shared, account, path, None, crate::actions::Reason::FolderGone)?;
         delete_folder_rows(shared, account, path)?;
         write_for(shared, account, |c| c.execute("DELETE FROM folders WHERE account_id = ?1 AND path = ?2", (account, path)))?;
     }
@@ -512,12 +516,12 @@ async fn sync_folder(shared: &Shared, session: &mut ImapSession, account: &str, 
     let out = sync_folder_pass(shared, session, account, folder, stored_validity, &mut pass).await;
     // Published even when the pass failed part-way: what it committed is in the table.
     if pass.changed() {
-        shared.set_list_gen(account, folder, pass.gen);
+        let gen = shared.publish_list_gen(account, folder, pass.gen);
         shared.emit(
             FOLDER_CHANGED,
             json!({
                 "accountId": account, "folder": folder,
-                "added": pass.added, "removed": pass.removed, "updated": pass.updated, "listGen": pass.gen,
+                "added": pass.added, "removed": pass.removed, "updated": pass.updated, "listGen": gen,
             }),
         );
     }
@@ -549,6 +553,9 @@ async fn sync_folder_pass(
     let mbox = imap::select_mailbox(session, folder).await?;
     let validity = mbox.uid_validity.ok_or_else(|| Fail::from(format!("SELECT {folder}: no UIDVALIDITY")))?;
     if stored_validity != Some(validity as i64) {
+        // The folder's uids now name other messages: a journaled action applied under another
+        // generation drops with GONE (it would hit someone else's message), then every row goes.
+        crate::actions::drop_folder_actions(shared, account, folder, Some(validity as i64), crate::actions::Reason::Gone)?;
         pass.removed += delete_folder_rows(shared, account, folder)?;
         write_for(shared, account, |c| {
             c.execute(
@@ -561,16 +568,27 @@ async fn sync_folder_pass(
     let window = abd_cmds::uid_search(session, folder, &since_criteria(now_ms())).await?;
     let unseen = abd_cmds::uid_search(session, folder, "UNSEEN").await?.len() as i64;
     let in_window: HashSet<u32> = window.iter().copied().collect();
-    let existing: HashMap<u32, (bool, bool)> = shared.read(|c| {
-        let mut st = c.prepare_cached("SELECT uid, seen, flagged FROM messages WHERE account_id = ?1 AND folder = ?2")?;
+    // Read before the flag FETCH: unchanged at a write, no action settled after that read.
+    let epoch = shared.action_epoch();
+    let existing: HashMap<u32, Held> = shared.read(|c| {
+        let mut st = c.prepare_cached(
+            "SELECT uid, seen, flagged, local_seen IS NOT NULL OR local_flagged IS NOT NULL OR local_deleted IS NOT NULL
+             FROM messages WHERE account_id = ?1 AND folder = ?2",
+        )?;
         let rows = st
-            .query_map((account, folder), |r| Ok((r.get::<_, i64>(0)? as u32, (r.get::<_, i64>(1)? != 0, r.get::<_, i64>(2)? != 0))))?
+            .query_map((account, folder), |r| {
+                Ok((
+                    r.get::<_, i64>(0)? as u32,
+                    Held { seen: r.get::<_, i64>(1)? != 0, flagged: r.get::<_, i64>(2)? != 0, overridden: r.get(3)? },
+                ))
+            })?
             .collect::<Result<HashMap<_, _>, _>>()?;
         Ok(rows)
     })?;
 
     // Flags of the rows already held in the window. None held (a new or emptied folder): no read,
-    // since `UID FETCH n:*` on an empty mailbox is an error on some servers.
+    // since `UID FETCH n:*` on an empty mailbox is an error on some servers. A row is written when
+    // the server's flags changed or it carries a local override that may now clear.
     let changes: Vec<(u32, bool, bool)> = match window.iter().copied().filter(|u| existing.contains_key(u)).min() {
         None => Vec::new(),
         Some(from) => {
@@ -580,30 +598,22 @@ async fn sync_folder_pass(
                 .iter()
                 .filter(|(uid, _)| in_window.contains(uid))
                 .filter_map(|(uid, fl)| {
-                    let (seen0, flagged0) = existing.get(uid)?;
+                    let held = existing.get(uid)?;
                     let (seen, flagged) = (has_flag(fl, "\\Seen"), has_flag(fl, "\\Flagged"));
-                    (seen != *seen0 || flagged != *flagged0).then_some((*uid, seen, flagged))
+                    (seen != held.seen || flagged != held.flagged || held.overridden).then_some((*uid, seen, flagged))
                 })
                 .collect()
         }
     };
     for chunk in changes.chunks(BATCH) {
-        write_for(shared, account, |c| {
-            let mut st = c.prepare_cached(
-                "UPDATE messages SET seen = ?4, flagged = ?5, list_gen = ?6 WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
-            )?;
-            for (uid, seen, flagged) in chunk {
-                st.execute((account, folder, *uid as i64, *seen as i64, *flagged as i64, pass.gen))?;
-            }
-            Ok(())
-        })?;
-        pass.updated += chunk.len();
+        pass.updated += write_for(shared, account, |c| write_flags(shared, c, account, folder, chunk, pass.gen, epoch))?;
     }
 
-    // Rows no longer in the window: expunged, moved away, or aged out of the 90 days.
+    // Rows no longer in the window: expunged, moved away, or aged out of the 90 days. A row a
+    // journaled action names stays until that action settles: replay decides (GONE removes it).
     let mut gone: Vec<u32> = existing.keys().copied().filter(|u| !in_window.contains(u)).collect();
     gone.sort_unstable();
-    pass.removed += delete_uids(shared, account, folder, &gone)?;
+    pass.removed += delete_uids(shared, account, folder, &gone, true)?;
 
     // New rows, newest uid first so the top of the list fills first. The fetch runs outside any
     // transaction; each batch then commits on its own.
@@ -625,6 +635,59 @@ async fn sync_folder_pass(
         )
     })?;
     Ok((unseen, total))
+}
+
+/// A held row as a pass starts: the server's flags and whether any `local_*` override is set.
+struct Held {
+    seen: bool,
+    flagged: bool,
+    overridden: bool,
+}
+
+/// Writes the server's flags of `chunk` (one write transaction) and settles local overrides: an
+/// override a journaled action still names is never touched; otherwise it clears when the server
+/// agrees with it, or, when no action settled since this pass read the flags (`epoch` unchanged),
+/// whatever the server says (the read is newer than every settled action, so it is the truth).
+/// Returns how many rows now list differently.
+fn write_flags(
+    shared: &Shared,
+    c: &Connection,
+    account: &str,
+    folder: &str,
+    chunk: &[(u32, bool, bool)],
+    gen: i64,
+    epoch: u64,
+) -> rusqlite::Result<usize> {
+    let pending: HashSet<u32> = {
+        let mut st = c.prepare_cached(crate::actions::PENDING_UIDS)?;
+        let rows = st.query_map((account, folder), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter().map(|u| u as u32).collect()
+    };
+    let settled = shared.action_epoch() == epoch;
+    let mut listed = c.prepare_cached(
+        "SELECT COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), COALESCE(local_deleted, 0)
+         FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
+    )?;
+    let mut update = c.prepare_cached(
+        "UPDATE messages SET seen = ?4, flagged = ?5, list_gen = ?6,
+           local_seen = CASE WHEN ?7 THEN local_seen WHEN local_seen = ?4 OR ?8 THEN NULL ELSE local_seen END,
+           local_flagged = CASE WHEN ?7 THEN local_flagged WHEN local_flagged = ?5 OR ?8 THEN NULL ELSE local_flagged END,
+           local_deleted = CASE WHEN ?7 OR NOT ?8 THEN local_deleted ELSE NULL END
+         WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
+    )?;
+    let mut n = 0;
+    for (uid, seen, flagged) in chunk {
+        let read = |st: &mut rusqlite::CachedStatement<'_>| {
+            st.query_row((account, folder, *uid as i64), |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))
+                .optional()
+        };
+        let Some(before) = read(&mut listed)? else { continue };
+        update.execute((account, folder, *uid as i64, *seen as i64, *flagged as i64, gen, pending.contains(uid), settled))?;
+        if read(&mut listed)? != Some(before) {
+            n += 1;
+        }
+    }
+    Ok(n)
 }
 
 fn has_flag(flags: &[String], flag: &str) -> bool {
@@ -781,6 +844,10 @@ pub(crate) fn refresh(engine: &Engine, params: Value) -> Result<Value, RpcError>
     let p: RefreshParams = parse(params)?;
     if !account_exists(engine, &p.account_id)? {
         return Err(RpcError::Invalid("unknown account".into()));
+    }
+    // A refresh is the user asking for the server now: queued actions go too, backoff forgiven.
+    if crate::actions::has_pending(engine.shared(), Some(&p.account_id)) {
+        engine.replay().wake(engine.shared(), Some(&p.account_id));
     }
     engine
         .sync_worker()

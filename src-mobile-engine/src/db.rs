@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
@@ -138,6 +138,7 @@ pub struct Engine {
     /// Rebuildable files (message bodies, attachments) live here, never in `mobile.db`.
     cache_dir: PathBuf,
     sync: crate::sync::Worker,
+    replay: crate::actions::Replay,
 }
 
 /// What the RPC threads and the sync worker thread both use.
@@ -157,6 +158,10 @@ pub(crate) struct Shared {
     list_gens: Mutex<HashMap<(String, String), i64>>,
     /// Set when the `Engine` is dropped; the sync worker stops at its next batch.
     closing: AtomicBool,
+    /// Bumped, inside the write transaction, each time a journaled action settles (done or
+    /// dropped). A sync pass that saw it unchanged from before its flag read to its write knows
+    /// that read is newer than every settled action (`sync.rs`, overrides).
+    action_epoch: AtomicU64,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -274,6 +279,13 @@ impl Engine {
                 }
             }
         };
+        // A journal left by the last run replays without waiting for the first action. Asked on the
+        // writer: a pooled reader that has read keeps a shared lock on the WAL index, which stops
+        // the last close from checkpointing.
+        let journal: bool = db
+            .writer
+            .query_row("SELECT EXISTS(SELECT 1 FROM pending_actions)", [], |r| r.get(0))
+            .map_err(|e| EngineError::Db(e.to_string()))?;
         Ok(Engine {
             shared: Arc::new(Shared {
                 path: db.path,
@@ -284,6 +296,7 @@ impl Engine {
                 event_sink: OnceLock::new(),
                 list_gens: Mutex::new(HashMap::new()),
                 closing: AtomicBool::new(false),
+                action_epoch: AtomicU64::new(0),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -291,6 +304,12 @@ impl Engine {
             }),
             cache_dir: cache_dir.to_path_buf(),
             sync: crate::sync::Worker::default(),
+            replay: crate::actions::Replay::default(),
+        })
+        .inspect(|e| {
+            if journal {
+                e.replay.wake(&e.shared, None);
+            }
         })
     }
 
@@ -300,6 +319,10 @@ impl Engine {
 
     pub(crate) fn sync_worker(&self) -> &crate::sync::Worker {
         &self.sync
+    }
+
+    pub(crate) fn replay(&self) -> &crate::actions::Replay {
+        &self.replay
     }
 
     /// The directory for rebuildable files the shell passed to `open`.
@@ -323,6 +346,13 @@ impl Engine {
     /// sink wins; returns false if one was already set.
     pub fn set_event_sink(&self, sink: impl Fn(&str, Value) + Send + Sync + 'static) -> bool {
         self.shared.event_sink.set(Box::new(sink)).is_ok()
+    }
+
+    /// Tests: the replay backoff, in place of 5 s doubling to 5 min. `base` is the first delay
+    /// after a failed attempt; each further failure doubles it up to `cap`.
+    #[doc(hidden)]
+    pub fn set_action_backoff(&self, base: std::time::Duration, cap: std::time::Duration) {
+        self.replay.set_backoff(base, cap);
     }
 
     /// Writes one line to the installed sink, or to stderr when none is set.
@@ -365,6 +395,7 @@ impl Drop for Engine {
         // timeouts) and exits; nothing waits for it.
         self.shared.closing.store(true, Ordering::SeqCst);
         self.sync.stop();
+        self.replay.stop();
     }
 }
 
@@ -475,11 +506,25 @@ impl Shared {
         Ok(seeded)
     }
 
-    /// Publishes `gen` as the folder's generation, after the pass that wrote it has committed.
-    pub(crate) fn set_list_gen(&self, account_id: &str, folder: &str, gen: i64) {
+    /// Publishes a new generation for the folder, after the write that stamped `gen` on its rows
+    /// has committed, and returns it: `gen`, or one past the current generation when another writer
+    /// (a sync pass and an action both stamp rows) already published `gen`. So every change gets a
+    /// generation newer than any published before it, and the list never skips one as old.
+    pub(crate) fn publish_list_gen(&self, account_id: &str, folder: &str, gen: i64) -> i64 {
         let mut gens = lock(&self.list_gens);
         let slot = gens.entry((account_id.to_string(), folder.to_string())).or_insert(0);
-        *slot = (*slot).max(gen);
+        *slot = (*slot + 1).max(gen);
+        *slot
+    }
+
+    /// The count of settled actions so far (see `action_epoch`).
+    pub(crate) fn action_epoch(&self) -> u64 {
+        self.action_epoch.load(Ordering::SeqCst)
+    }
+
+    /// Call inside the write transaction that settles an action.
+    pub(crate) fn bump_action_epoch(&self) {
+        self.action_epoch.fetch_add(1, Ordering::SeqCst);
     }
 }
 

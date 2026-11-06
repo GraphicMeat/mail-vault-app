@@ -3,6 +3,7 @@
 //! [`Engine::open`]. IMAP and TLS come from mailvault-core, driven through [`net`].
 
 mod accounts;
+mod actions;
 mod body;
 mod db;
 pub mod events;
