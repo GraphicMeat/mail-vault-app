@@ -8,7 +8,9 @@
 # the LAST launch's `MV_MOBILE {"perf":…}` line is the number of record. The verdict JSON comes
 # from scripts/mobile-perf-verdict.mjs, which recomputes it from the numbers.
 #
-# Exit 0 pass, 1 fail, 2 no measurement (timeout, build or launch failure, error line, no perf line).
+# Exit 0 pass, 1 fail (a full measurement over a limit: the only no-go), 2 no measurement, rerun
+# (timeout, build or launch failure, error line, no perf line, an unmeasured or probe-failed
+# record, a verdict script crash), 64 usage.
 # Environment: MV_MOBILE_WAIT seconds per launch (default 900 iOS, 1800 Android, which renders in
 # software); MV_PERF_LAUNCHES; MV_MOBILE_SHOTS (light/dark screenshots, see mobile-run.sh);
 # anything else mobile-run.sh reads.

@@ -10,15 +10,26 @@
 // The verdict is recomputed from the numbers with src/mobile/gate.js, the same limits the app
 // uses, and the app's own `pass` must agree with it.
 //
-// Exit 0: pass. Exit 1: the measurement fails the gate (or the app and the numbers disagree).
-// Exit 2: no measurement: no perf line, fewer perf lines than --expect, a line that is not JSON, a
-// seedError / engineError line, or --run-status non-zero (the run timed out or failed, so even a
-// passing line already in the log does not count).
-import { gateVerdict, wholeRunReasons } from '../src/mobile/gate.js';
-
+// Exit 0: pass. Exit 1: a full measurement fails the gate (or the app and the numbers disagree);
+// this is the only no-go.
+// Exit 2: no measurement, rerun: no perf line, fewer perf lines than --expect, a line that is not
+// JSON, a seedError / engineError / error line, --run-status non-zero (the run timed out or
+// failed, so even a passing line already in the log does not count), a record with a number that
+// is missing, -1 or not finite, or a record whose app reasons say "probe failed". A bad argument or
+// any crash of this script also exits 2, so 1 always means a measured fail.
 const PASS = 0;
 const FAIL = 1;
 const NO_MEASUREMENT = 2;
+
+function fatal(err) {
+  console.error(`mobile-perf-verdict: ${err?.stack ?? err}`);
+  process.exit(NO_MEASUREMENT);
+}
+process.on('uncaughtException', fatal);
+process.on('unhandledRejection', fatal);
+
+// Loaded after the handlers above, so a missing or broken gate.js exits 2 like any other crash.
+const { gateVerdict, wholeRunReasons } = await import('../src/mobile/gate.js');
 
 function parseArgs(argv) {
   const args = { expect: 1, runStatus: 0 };
@@ -35,12 +46,17 @@ function parseArgs(argv) {
 
 const measured = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
-/** The gate for one perf object, from its numbers. */
+/** The gate for one perf object, from its numbers. `unmeasured` marks a run that cannot decide. */
 export function judgeRun(perf) {
   const reasons = [];
+  let unmeasured = false;
   for (const key of ['frameP95', 'tapToPaint', 'rows', 'blankFrames']) {
-    if (!measured(perf[key])) reasons.push(`${key} not measured (${JSON.stringify(perf[key] ?? null)})`);
+    if (!measured(perf[key])) {
+      unmeasured = true;
+      reasons.push(`${key} not measured (${JSON.stringify(perf[key] ?? null)})`);
+    }
   }
+  if (Array.isArray(perf.reasons) && perf.reasons.some((r) => String(r).startsWith('probe failed'))) unmeasured = true;
   if (perf.tapStat !== 'max') reasons.push(`tapStat is ${JSON.stringify(perf.tapStat ?? null)}, the gate needs "max"`);
   // An unmeasured number already failed above; 0 keeps the limit check from repeating it.
   reasons.push(...gateVerdict({
@@ -53,7 +69,7 @@ export function judgeRun(perf) {
     reasons.push(`app and numbers disagree: app pass ${JSON.stringify(perf.pass ?? null)}, numbers say ${computed}`);
   }
   if (Array.isArray(perf.reasons)) for (const r of perf.reasons) reasons.push(`app: ${r}`);
-  return { pass: computed && perf.pass === true, reasons };
+  return { pass: computed && perf.pass === true, unmeasured, reasons };
 }
 
 export function decide(text, { expect = 1, runStatus = 0 } = {}) {
@@ -74,7 +90,7 @@ export function decide(text, { expect = 1, runStatus = 0 } = {}) {
       noMeasurement.push(`a MV_MOBILE line is not a JSON object: ${body.slice(0, 120)}`);
       continue;
     }
-    for (const key of ['seedError', 'engineError']) {
+    for (const key of ['seedError', 'engineError', 'error']) {
       if (key in msg) noMeasurement.push(`${key}: ${JSON.stringify(msg[key])}`);
     }
     if ('perf' in msg) {
@@ -91,6 +107,8 @@ export function decide(text, { expect = 1, runStatus = 0 } = {}) {
   else if (runs.length < expect) noMeasurement.push(`${runs.length} perf line(s), expected ${expect} (a later launch never reported)`);
 
   const last = runs.at(-1);
+  // Only the record decides, so an unmeasured first launch does not block a measured second one.
+  if (last?.unmeasured) noMeasurement.push('the record was not measured (rerun)', ...last.reasons);
   const summary = runs.map((r) => ({
     pass: r.pass, frameP95: r.perf.frameP95 ?? null, tapToPaint: r.perf.tapToPaint ?? null, reasons: r.reasons,
   }));
@@ -113,7 +131,9 @@ async function main() {
     args = parseArgs(process.argv.slice(2));
   } catch (e) {
     console.error(`mobile-perf-verdict: ${e.message}`);
-    process.exit(64);
+    const out = { verdict: 'no-measurement', pass: false, reasons: [`bad arguments: ${e.message}`], record: null, runs: [] };
+    process.stdout.write(`${JSON.stringify({ ...out, exit: NO_MEASUREMENT }, null, 2)}\n`);
+    process.exit(NO_MEASUREMENT);
   }
   let text = '';
   process.stdin.setEncoding('utf8');
@@ -124,4 +144,4 @@ async function main() {
   process.exitCode = exit;
 }
 
-main();
+await main();

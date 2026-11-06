@@ -1,11 +1,13 @@
 // @vitest-environment node
 // scripts/mobile-perf-verdict.mjs reads a log on stdin and decides the perf gate from the last
-// `MV_MOBILE {"perf":…}` line: exit 0 pass, 1 fail, 2 no measurement. It recomputes the verdict
-// from the numbers (src/mobile/gate.js) and never trusts the app's `pass` alone.
+// `MV_MOBILE {"perf":…}` line: exit 0 pass, 1 fail, 2 no measurement (rerun; also any script
+// error). It recomputes the verdict from the numbers (src/mobile/gate.js) and never trusts the
+// app's `pass` alone.
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { FRAME_P95_LIMIT_MS, TAP_LIMIT_MS, PERF_ROWS } from '../perf.js';
 import * as gate from '../gate.js';
@@ -68,12 +70,29 @@ describe('mobile-perf-verdict', () => {
     expect(code).toBe(1);
   });
 
-  it('unmeasured numbers (-1) never pass, even though -1 is under every limit', () => {
+  it('unmeasured numbers (-1) never pass, even though -1 is under every limit: no measurement, exit 2', () => {
     const { code, out } = verdict([perfLine({ frameP95: -1, tapToPaint: -1, pass: true })]);
-    expect(out.pass).toBe(false);
+    expect(out).toMatchObject({ verdict: 'no-measurement', pass: false });
     expect(out.reasons.join(' ')).toMatch(/frameP95 not measured/);
     expect(out.reasons.join(' ')).toMatch(/tapToPaint not measured/);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
+  });
+
+  it('a missing number is no measurement, exit 2', () => {
+    const { rows: _rows, ...noRows } = PASSING;
+    const { code, out } = verdict([`MV_MOBILE ${JSON.stringify({ perf: noRows })}`]);
+    expect(out.verdict).toBe('no-measurement');
+    expect(out.reasons.join(' ')).toMatch(/rows not measured/);
+    expect(code).toBe(2);
+  });
+
+  it('a non-finite number (1e999 parses to Infinity) is no measurement, exit 2', () => {
+    const line = perfLine().replace('"blankFrames":0', '"blankFrames":1e999');
+    expect(line).toContain('1e999');
+    const { code, out } = verdict([line]);
+    expect(out.verdict).toBe('no-measurement');
+    expect(out.reasons.join(' ')).toMatch(/blankFrames not measured/);
+    expect(code).toBe(2);
   });
 
   it('a whole run is required: rows, reachedEnd, blankFrames, tapStat max', () => {
@@ -86,12 +105,26 @@ describe('mobile-perf-verdict', () => {
     expect(code).toBe(1);
   });
 
-  it('a probe-failed line (no numbers) exits 1 with the app reason kept', () => {
+  it('a probe-failed line (no numbers) is no measurement, exit 2, with the app reason kept', () => {
     const line = `MV_MOBILE ${JSON.stringify({ perf: { pass: false, reasons: ['probe failed: list not mounted'], webview: 'x' } })}`;
     const { code, out } = verdict([line]);
-    expect(out.pass).toBe(false);
+    expect(out).toMatchObject({ verdict: 'no-measurement', pass: false });
     expect(out.reasons.join(' ')).toMatch(/probe failed: list not mounted/);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
+  });
+
+  it('a probe-failed reason makes even a line with numbers no measurement, exit 2', () => {
+    const { code, out } = verdict([perfLine({ pass: false, reasons: ['probe failed: timeout'] })]);
+    expect(out.verdict).toBe('no-measurement');
+    expect(out.reasons.join(' ')).toMatch(/probe failed: timeout/);
+    expect(code).toBe(2);
+  });
+
+  it('an unmeasured first launch does not decide: a measured last line still does', () => {
+    const { code, out } = verdict([perfLine({ frameP95: -1, pass: false }), perfLine()], ['--expect', '2']);
+    expect(out.verdict).toBe('pass');
+    expect(out.runs[0].pass).toBe(false);
+    expect(code).toBe(0);
   });
 
   it('the last perf line is the record: a passing first run does not rescue a failing second', () => {
@@ -149,6 +182,38 @@ describe('mobile-perf-verdict', () => {
     expect(code).toBe(2);
   });
 
+  it('a bare error line (perf.report or a page load failed) exits 2', () => {
+    const { code, out } = verdict([PING, `MV_MOBILE ${JSON.stringify({ error: { code: 'INTERNAL', message: 'boom' } })}`]);
+    expect(out.verdict).toBe('no-measurement');
+    expect(out.reasons.join(' ')).toMatch(/error.*boom/);
+    expect(code).toBe(2);
+  });
+
+  it('an unknown argument exits 2, never 1', () => {
+    const { code, out, stderr } = verdict([perfLine()], ['--expcet', '2']);
+    expect(stderr).toMatch(/unknown argument --expcet/);
+    expect(out).toMatchObject({ verdict: 'no-measurement', pass: false });
+    expect(code).toBe(2);
+  });
+
+  it('a bad --expect value exits 2', () => {
+    const { code } = verdict([perfLine()], ['--expect', 'two']);
+    expect(code).toBe(2);
+  });
+
+  it('a crash (gate.js cannot be loaded) exits 2, never 1', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mv-verdict-'));
+    try {
+      const copy = join(dir, 'mobile-perf-verdict.mjs');
+      copyFileSync(SCRIPT, copy);
+      const r = spawnSync(process.execPath, [copy], { input: `${perfLine()}\n`, encoding: 'utf8' });
+      expect(r.stderr).toMatch(/mobile-perf-verdict/);
+      expect(r.status).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('a perf value that is not an object exits 2', () => {
     const { code, out } = verdict(['MV_MOBILE {"perf":"fast"}']);
     expect(out.verdict).toBe('no-measurement');
@@ -165,7 +230,7 @@ describe('one source of thresholds', () => {
 
   it('the verdict script imports gate.js instead of restating the limits', () => {
     const src = readFileSync(SCRIPT, 'utf8');
-    expect(src).toMatch(/from ['"]\.\.\/src\/mobile\/gate\.js['"]/);
+    expect(src).toMatch(/import\(['"]\.\.\/src\/mobile\/gate\.js['"]\)/);
     expect(src).not.toMatch(/\b(20|100|10_?000)\b/);
   });
 
