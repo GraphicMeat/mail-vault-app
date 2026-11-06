@@ -4,13 +4,17 @@
 //   - this CSP, the first element in <head>: nothing loads but inline styles and data: or cid:
 //     images (https: images too once the user asked), no script source at all, no form posts;
 //   - a pass over the parsed mail that takes out what a CSP does not cover or that could sit
-//     before it: refresh and every other http-equiv <meta>, the mail's own <base>, <link>
-//     (a dns-prefetch is not governed by the CSP), <script>, link `ping` attributes, any link
-//     that is not http(s), mailto, tel or an in-page anchor (a `javascript:` popup), and every
-//     explicit link target, so a link always leaves the frame (`_blank`, the system browser)
-//     instead of loading a page inside it; only an in-page `#anchor` stays in the frame.
-// The mail is parsed with DOMParser (scripting off: nothing runs, nothing loads), the CSP, our
-// <base> and our stylesheet are put in front of everything in <head>, and the document is
+//     before it: refresh and every other http-equiv <meta>, a referrer <meta>, the mail's own
+//     <base>, <link> (a dns-prefetch is not governed by the CSP), <script>, <template> (a
+//     declarative shadow root the frame would attach), frames and plugins, every `ping`, any
+//     link that is not http(s), mailto, tel or an in-page anchor (a `javascript:` popup), SVG
+//     and MathML references that leave the document, and every explicit link target, so a link
+//     always leaves the frame (`_blank`) instead of loading a page inside it; only an in-page
+//     `#anchor` stays in the frame. The pass repeats on a re-parse of its own output until
+//     nothing changes (mXSS shapes reshape on a second parse); a mail that never settles, or
+//     still holds something forbidden, is shown as text.
+// The mail is parsed with DOMParser (scripting off: nothing runs, nothing loads), the CSP, a
+// no-referrer policy, our <base> and our stylesheet are put in front of everything in <head>, and the document is
 // serialized again. Whatever the mail has (its own <html>, <head>, a comment first, or none), the
 // parser gives it exactly one head, and ours comes first in it.
 //
@@ -101,21 +105,68 @@ function frameCss({ colors, trackerLabel }) {
   ].join('\n');
 }
 
+const XLINK = 'http://www.w3.org/1999/xlink';
+const HTML_NS = 'http://www.w3.org/1999/xhtml';
+/** Gone with everything in them: scripts, frames and plugins, a declarative shadow root (whose
+ *  children a DOMParser leaves in `template.content`, out of `querySelectorAll`'s reach, while the
+ *  frame's own parse would attach them), and what can load or redirect before or beside the CSP. */
+const FORBIDDEN = 'template, script, iframe, frame, frameset, object, embed, applet, portal, base, link, meta[http-equiv]';
+/** A reference an SVG or MathML element may keep: inside the document, or an inline image. */
+const LOCAL_REF = /^\s*(?:#|data:image\/)/i;
+
+const isReferrerMeta = (el) => el.localName === 'meta' && /^\s*referrer\s*$/i.test(el.getAttribute('name') || '');
+const isHtmlLink = (el) => el.namespaceURI === HTML_NS && (el.localName === 'a' || el.localName === 'area');
+const isSvgLink = (el) => el.namespaceURI !== HTML_NS && el.localName === 'a';
+
+/** Whether an `href` / `xlink:href` value may stay on this element. */
+function hrefAllowed(el, value) {
+  return isHtmlLink(el) || isSvgLink(el) ? SAFE_HREF.test(value) : LOCAL_REF.test(value);
+}
+
+function hrefsOf(el) {
+  const out = [];
+  if (el.hasAttribute('href')) out.push(['href', null, el.getAttribute('href')]);
+  if (el.hasAttributeNS(XLINK, 'href')) out.push(['href', XLINK, el.getAttributeNS(XLINK, 'href')]);
+  return out;
+}
+
+/** What the cleaning pass removes, still in `doc`: empty for a clean document. */
+function violations(doc) {
+  const found = [...doc.querySelectorAll(FORBIDDEN)].map((el) => el.localName);
+  for (const el of doc.querySelectorAll('*')) {
+    if (isReferrerMeta(el)) found.push('meta referrer');
+    if (el.hasAttribute('ping')) found.push('ping');
+    if (el.hasAttribute('shadowrootmode') || el.hasAttribute('shadowroot')) found.push('shadowroot');
+    for (const [, , value] of hrefsOf(el)) if (!hrefAllowed(el, value)) found.push(`${el.localName} href`);
+  }
+  return found;
+}
+
 function cleanMail(doc) {
-  for (const el of doc.querySelectorAll('meta[http-equiv], base, link, script')) el.remove();
-  for (const a of doc.querySelectorAll('a, area')) {
-    a.removeAttribute('ping');
-    // Only web, mail and phone links and in-page anchors stay links: a `javascript:` or `data:`
-    // URL must never reach a popup, which the sandbox lets escape.
-    if (a.hasAttribute('href') && !SAFE_HREF.test(a.getAttribute('href'))) a.removeAttribute('href');
-    if (/^\s*#/.test(a.getAttribute('href') || '')) {
+  for (const el of doc.querySelectorAll(FORBIDDEN)) el.remove();
+  for (const el of doc.querySelectorAll('*')) {
+    if (isReferrerMeta(el)) { el.remove(); continue; }
+    el.removeAttribute('ping');
+    el.removeAttribute('shadowrootmode');
+    el.removeAttribute('shadowroot');
+    // Only web, mail and phone links and in-page anchors stay links (a `javascript:` or `data:`
+    // URL must never reach a popup, which the sandbox lets escape); any other SVG or MathML
+    // reference stays inside the document.
+    for (const [name, ns, value] of hrefsOf(el)) {
+      if (hrefAllowed(el, value)) continue;
+      if (ns) el.removeAttributeNS(ns, name);
+      else el.removeAttribute(name);
+    }
+    if (!isHtmlLink(el) && !isSvgLink(el)) continue;
+    const href = el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href');
+    if (href != null && /^\s*#/.test(href)) {
       // An in-page anchor (a newsletter's table of contents) scrolls the frame; it loads nothing.
-      a.setAttribute('target', '_self');
-    } else if (a.hasAttribute('href')) {
-      a.setAttribute('target', '_blank');
-      a.setAttribute('rel', 'noopener noreferrer');
+      el.setAttribute('target', '_self');
+    } else if (href != null) {
+      el.setAttribute('target', '_blank');
+      el.setAttribute('rel', 'noopener noreferrer');
     } else {
-      a.removeAttribute('target');
+      el.removeAttribute('target');
     }
   }
   for (const form of doc.querySelectorAll('form')) form.setAttribute('target', '_blank');
@@ -126,27 +177,65 @@ function cleanMail(doc) {
   }
 }
 
+const parseHtml = (source) => new DOMParser().parseFromString(source, 'text/html');
+const MAX_PASSES = 4;
+
+/**
+ * The mail's html cleaned until a parse of the serialization gives back the same serialization
+ * (the frame parses the string, not our DOM, and some markup reshapes itself on a second parse),
+ * then checked once more; `null` when it never settles or something forbidden is still there.
+ * `parse` is for tests.
+ */
+export function cleanToFixpoint(source, parse = parseHtml) {
+  let previous = null;
+  let current = source;
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    const doc = parse(current);
+    cleanMail(doc);
+    previous = current;
+    current = doc.documentElement.outerHTML;
+    if (current === previous) break;
+  }
+  if (current !== previous) return null;
+  return violations(parse(current)).length === 0 ? current : null;
+}
+
+/** The text of a mail the cleaner refused: its text part, else what its html says, as text. */
+function fallbackText(html, text) {
+  if (typeof text === 'string' && text.trim()) return text;
+  const doc = parseHtml(html);
+  for (const el of doc.querySelectorAll('script, style, template, title, noscript')) el.remove();
+  return doc.body?.textContent?.trim() ?? '';
+}
+
+const preOf = (text) => `<pre class="mv-text">${linkifyTextHtml(text)}</pre>`;
+
 /**
  * The frame's whole document for one message body: `html` if it has any, else `text` escaped
  * into a `<pre>`. `allowRemote` adds https: to the image sources; `theme` ('light' | 'dark') is
- * the app's. `trackerLabel` names the engine's tracker marker in the UI language.
+ * the app's. `trackerLabel` names the engine's tracker marker in the UI language. An html body
+ * the cleaner cannot settle is shown as text instead (`fallbackText`).
  */
-export function buildMailFrame({ html, text, allowRemote = false, theme = 'light', trackerLabel = '' }) {
+export function buildMailFrame({ html, text, allowRemote = false, theme = 'light', trackerLabel = '', parse = parseHtml }) {
   const isHtml = typeof html === 'string' && html.trim() !== '';
-  const source = isHtml ? html : `<pre class="mv-text">${linkifyTextHtml(typeof text === 'string' ? text : '')}</pre>`;
-  const doc = new DOMParser().parseFromString(source, 'text/html');
-  if (isHtml) cleanMail(doc);
+  const cleaned = isHtml ? cleanToFixpoint(html, parse) : null;
+  const asHtml = cleaned != null;
+  const source = asHtml ? cleaned : preOf(isHtml ? fallbackText(html, text) : typeof text === 'string' ? text : '');
+  const doc = parseHtml(source);
 
   const head = doc.head;
   const csp = doc.createElement('meta');
   csp.setAttribute('http-equiv', 'Content-Security-Policy');
   csp.setAttribute('content', frameCsp(allowRemote));
+  const referrer = doc.createElement('meta');
+  referrer.setAttribute('name', 'referrer');
+  referrer.setAttribute('content', 'no-referrer');
   const base = doc.createElement('base');
   base.setAttribute('target', '_blank');
   const style = doc.createElement('style');
   style.setAttribute('data-mv-frame', '');
-  style.textContent = frameCss({ colors: isHtml ? PAPER : THEMES[theme] || THEMES.light, trackerLabel });
-  head.prepend(csp, base, style);
+  style.textContent = frameCss({ colors: asHtml ? PAPER : THEMES[theme] || THEMES.light, trackerLabel });
+  head.prepend(csp, referrer, base, style);
 
   return `<!doctype html>${doc.documentElement.outerHTML}`;
 }

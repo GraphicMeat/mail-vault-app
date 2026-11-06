@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 // The mail frame's document: hostile mail goes in, and what comes out is a page whose first
 // element in <head> is the CSP, whose links all leave the frame, and that can never refresh,
-// rebase or run anything. Every check re-parses the output the way the webview will.
+// rebase or run anything. Every check re-parses the output with jsdom's parser (parse5). That is
+// a spec parser, but not the webview's: it attaches no declarative shadow roots and runs nothing,
+// so the module itself re-parses to a fixpoint and refuses anything that still looks forbidden.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { buildMailFrame, FRAME_CSP } from '../mailFrame.js';
+import { buildMailFrame, cleanToFixpoint, FRAME_CSP } from '../mailFrame.js';
 
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: cid:; font-src data:; form-action 'none'";
 const CSP_REMOTE = "default-src 'none'; style-src 'unsafe-inline'; img-src data: cid: https:; font-src data:; form-action 'none'";
@@ -169,6 +171,98 @@ describe('buildMailFrame', () => {
     expect(css).toContain('content: "Tracker \\"blocked\\" \\3c /style>\\3c script>"');
     expect(doc.querySelectorAll('script').length).toBe(0);
     expect(doc.querySelectorAll('style').length).toBe(1);
+  });
+
+  it('drops declarative shadow roots and everything inside them', () => {
+    const payload = [
+      '<link rel="dns-prefetch" href="https://evil.test/sr1">',
+      '<meta http-equiv="refresh" content="0;url=https://evil.test/sr2">',
+      '<base href="https://evil.test/sr3">',
+      '<a href="javascript:alert(1)" ping="https://evil.test/sr4" target="_self">js</a>',
+      '<a href="data:text/html,x">data</a>',
+      '<script>alert(1)</script>',
+    ].join('');
+    for (const attr of ['shadowrootmode="open"', 'shadowroot="open"', 'shadowrootmode="closed"']) {
+      const out = build({ html: `<div><template ${attr}>${payload}</template><p>after</p></div>` });
+      expect(out, attr).not.toMatch(/<template|shadowroot|evil\.test|javascript:|data:text/i);
+      expect(parse(out).body.textContent, attr).toContain('after');
+    }
+  });
+
+  it('removes nested browsing contexts and plugins', () => {
+    const html = [
+      '<iframe srcdoc="&lt;meta http-equiv=refresh content=0;url=https://evil.test/n1&gt;"></iframe>',
+      '<iframe src="https://evil.test/n2"></iframe>',
+      '<object data="https://evil.test/n4"><param name="x" value="y"></object>',
+      '<embed src="https://evil.test/n5"><applet code="https://evil.test/n6"></applet>',
+      '<portal src="https://evil.test/n7"></portal><p>kept</p>',
+    ].join('');
+    const out = build({ html });
+    expect(out).not.toMatch(/<(iframe|frame|frameset|object|embed|applet|portal)\b|evil\.test/i);
+    expect(parse(out).body.textContent).toContain('kept');
+    const frames = build({ html: '<frameset><frame src="https://evil.test/f1"></frameset>' });
+    expect(frames).not.toMatch(/<frame|evil\.test/i);
+  });
+
+  it('re-parses to a fixpoint: an mXSS shape cannot bring a removed element back', () => {
+    const html = '<form><math><mtext></form><form><mglyph><style></math><img src=x>'
+      + '<link rel="dns-prefetch" href="https://evil.test/m1"><meta http-equiv="refresh" content="0;url=https://evil.test/m2">'
+      + '<iframe src="https://evil.test/m3"></iframe>';
+    const out = build({ html });
+    // What the frame parses is the serialization: parse it as the frame would, then again.
+    for (const doc of [parse(out), parse(parse(out).documentElement.outerHTML)]) {
+      expect(doc.querySelectorAll('link, iframe, script').length).toBe(0);
+      expect([...doc.querySelectorAll('meta[http-equiv]')].map((m) => m.getAttribute('http-equiv'))).toEqual(['Content-Security-Policy']);
+    }
+  });
+
+  it('falls back to the text body when the html never settles', () => {
+    // A parser that keeps producing a script is a mail the cleaner cannot trust.
+    const hostile = (src) => {
+      const doc = new DOMParser().parseFromString(src, 'text/html');
+      doc.body.append(doc.createElement('script'));
+      return doc;
+    };
+    expect(cleanToFixpoint('<p>x</p>', hostile)).toBeNull();
+    expect(cleanToFixpoint('<p>x</p>')).toContain('<p>x</p>');
+    const doc = parse(buildMailFrame({ html: '<p>H</p>', text: 'plain T', theme: 'light', parse: hostile }));
+    expect(doc.querySelector('pre').textContent).toBe('plain T');
+    expect(doc.head.firstElementChild.getAttribute('content')).toBe(CSP);
+    // No text part: the html's own text, escaped.
+    const bare = parse(buildMailFrame({ html: '<p>only <b>html</b></p>', text: null, theme: 'light', parse: hostile }));
+    expect(bare.querySelector('pre').textContent).toBe('only html');
+    expect(bare.querySelector('b')).toBeNull();
+  });
+
+  it('strips ping everywhere and filters SVG links like html ones', () => {
+    const html = [
+      '<p ping="https://evil.test/p1">p</p><img src="data:image/png;base64,AAAA" ping="https://evil.test/p2">',
+      '<svg><a xlink:href="javascript:alert(1)"><text>x</text></a>',
+      '<a href="data:text/html,x"><text>y</text></a>',
+      '<a xlink:href="https://ok.test/svg" target="_self"><text>z</text></a>',
+      '<a href="#local"><text>w</text></a>',
+      '<use href="https://evil.test/s1#x"/><image href="https://evil.test/s2.png"/>',
+      '<image xlink:href="data:image/png;base64,AAAA"/><use href="#sym"/></svg>',
+    ].join('');
+    const out = build({ html });
+    const doc = parse(out);
+    expect(doc.querySelectorAll('[ping]').length).toBe(0);
+    expect(out).not.toMatch(/javascript:|data:text|evil\.test/i);
+    const ok = [...doc.querySelectorAll('svg a')].find((a) => a.textContent === 'z');
+    expect(ok.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || ok.getAttribute('href')).toBe('https://ok.test/svg');
+    expect(ok.getAttribute('target')).toBe('_blank');
+    expect(out).toContain('data:image/png;base64,AAAA');
+    expect(out).toMatch(/href="#sym"/);
+  });
+
+  it('sends no referrer: the mail cannot ask for one', () => {
+    const html = '<head><meta name="referrer" content="unsafe-url"><META NAME="Referrer" CONTENT="origin"></head><p>x</p>';
+    const doc = parse(build({ html }));
+    const metas = [...doc.querySelectorAll('meta')].filter((m) => /referrer/i.test(m.getAttribute('name') || ''));
+    expect(metas.map((m) => m.getAttribute('content'))).toEqual(['no-referrer']);
+    expect(doc.head.children[0].getAttribute('http-equiv')).toBe('Content-Security-Policy');
+    expect(doc.head.children[1].getAttribute('name')).toBe('referrer');
+    expect(parse(build({ text: 'x' })).head.children[1].getAttribute('content')).toBe('no-referrer');
   });
 
   it('prefers html over text and copes with neither', () => {

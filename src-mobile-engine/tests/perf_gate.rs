@@ -197,7 +197,7 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
     let e = open(tmp.path()).unwrap();
     for _ in 0..2 {
         seed::ensure_seeded(&e, 50).unwrap();
-        let rows = page(&e, Value::Null, 2)["rows"].clone();
+        let rows = page(&e, Value::Null, 3)["rows"].clone();
         let body = |uid: &Value| {
             e.rpc("mobile.message.body", json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "uid": uid })).unwrap()
         };
@@ -212,6 +212,12 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
         let plain = body(&rows[1]["uid"]);
         assert!(plain["html"].is_null());
         assert!(plain["text"].as_str().unwrap().contains("https://"));
+        let probe = body(&rows[2]["uid"]);
+        let html = probe["html"].as_str().unwrap();
+        for host in ["127.0.0.1", "10.0.2.2"] {
+            assert!(html.contains(&format!("https://{host}:8443/img.png")), "{html}");
+        }
+        assert!(probe["remoteImages"].as_u64().unwrap() >= 2, "{probe}");
     }
     assert_eq!(page(&e, Value::Null, 1)["total"], 50);
 }

@@ -4250,7 +4250,7 @@
   "mobile.sync.failed": "동기화 실패",
   "mobile.viewer.loading": "메시지 불러오는 중…",
   "mobile.viewer.gone": "이 메시지는 더 이상 서버에 없습니다.",
-  "mobile.viewer.loadFailed": "이 메시지를 불러오지 못했습니다.",
+  "mobile.viewer.loadFailed": "이 메시지를 불러오지 못했습니다. {{reason}}",
   "mobile.viewer.empty": "이 메시지에는 본문이 없습니다.",
   "mobile.viewer.imagesBlocked": "개인정보 보호를 위해 이미지를 숨겼습니다.",
   "mobile.viewer.loadImages_one": "이미지 불러오기 ({{count}})",

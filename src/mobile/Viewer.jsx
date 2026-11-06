@@ -39,15 +39,6 @@ function failureCode(err) {
   return err?.code;
 }
 
-/** Attachments to list: an inline image the html shows by `cid:` is part of the body, not a chip. */
-function listedAttachments(body) {
-  const html = (body?.html || '').toLowerCase();
-  return (body?.attachments || []).filter((a) => {
-    const cid = String(a.contentId || '').replace(/^<|>$/g, '').toLowerCase();
-    return !cid || !html.includes(`cid:${cid}`);
-  });
-}
-
 function recipientsOf(row) {
   const to = Array.isArray(row.to) ? row.to : [];
   return to.map((a) => displayText(a?.name, '') || displayText(a?.address, '')).filter(Boolean).join(', ');
@@ -134,7 +125,8 @@ export default function Viewer({ accountId, folder, row, onClose }) {
     () => (hasContent ? buildMailFrame({ html: body.html, text: body.text, allowRemote, theme, trackerLabel }) : null),
     [body, hasContent, allowRemote, theme, trackerLabel],
   );
-  const attachments = useMemo(() => listedAttachments(body), [body]);
+  // Every part is a chip, inline `cid:` images too: the frame does not draw those yet.
+  const attachments = body?.attachments || [];
   const remoteImages = body?.remoteImages || 0;
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
@@ -152,7 +144,7 @@ export default function Viewer({ accountId, folder, row, onClose }) {
       {remoteImages > 0 && !allowRemote && (
         <div className="mv-viewer__images">
           <span>{t('mobile.viewer.imagesBlocked')}</span>
-          <button type="button" style={{ minHeight: '44px' }} onClick={() => setAllowRemote(true)}>
+          <button type="button" data-mv-load-images style={{ minHeight: '44px' }} onClick={() => setAllowRemote(true)}>
             {t('mobile.viewer.loadImages', { count: remoteImages })}
           </button>
         </div>
@@ -161,7 +153,7 @@ export default function Viewer({ accountId, folder, row, onClose }) {
       {state.phase === 'gone' && <p className="mv-viewer__notice">{t('mobile.viewer.gone')}</p>}
       {state.phase === 'failed' && (
         <div className="mv-viewer__notice" role="alert">
-          <p>{`${t('mobile.viewer.loadFailed')} ${t(errorKey(state.code))}`}</p>
+          <p>{t('mobile.viewer.loadFailed', { reason: t(errorKey(state.code)) })}</p>
           <button type="button" style={{ minHeight: '44px' }} onClick={retry}>{t('common.retry')}</button>
         </div>
       )}

@@ -124,12 +124,14 @@ describe('Viewer', () => {
       ],
     });
     renderViewer();
-    const list = await screen.findByRole('list', { name: t('common.attachmentCount', { count: 2 }) });
+    // Every part is a chip, an inline `cid:` image too: the frame does not draw those yet.
+    const list = await screen.findByRole('list', { name: t('common.attachmentCount', { count: 3 }) });
     const items = list.querySelectorAll('li');
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(3);
     expect(items[0].textContent).toContain('report.pdf');
     expect(items[0].textContent).toMatch(/240 kB|240 KB/);
     expect(items[1].textContent).toContain(t('mobile.viewer.attachment'));
+    expect(items[2].textContent).toContain('logo.png');
     // Static in this slice: nothing to tap yet.
     expect(list.querySelector('button, a')).toBeNull();
   });
@@ -138,7 +140,10 @@ describe('Viewer', () => {
     engine.reply = Object.assign(new Error('HOST_UNREACHABLE'), { code: 'INTERNAL' });
     renderViewer();
     const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain(t('mobile.viewer.loadFailed'));
+    // One sentence from one key, the reason interpolated: no two strings glued by a space.
+    expect(alert.querySelector('p').textContent).toBe(t('mobile.viewer.loadFailed', { reason: t('mobile.error.HOST_UNREACHABLE') }));
+    expect(alert.querySelector('p').textContent).toContain(t('mobile.error.HOST_UNREACHABLE'));
+    expect(alert.querySelector('p').textContent).not.toContain('{{');
     engine.reply = body();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.retry') })); });
     await waitFor(() => expect(frame()).toBeTruthy());

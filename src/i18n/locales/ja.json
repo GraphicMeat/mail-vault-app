@@ -4250,7 +4250,7 @@
   "mobile.sync.failed": "同期に失敗しました",
   "mobile.viewer.loading": "メッセージを読み込み中…",
   "mobile.viewer.gone": "このメッセージはサーバー上にありません。",
-  "mobile.viewer.loadFailed": "このメッセージを読み込めませんでした。",
+  "mobile.viewer.loadFailed": "このメッセージを読み込めませんでした。{{reason}}",
   "mobile.viewer.empty": "このメッセージには本文がありません。",
   "mobile.viewer.imagesBlocked": "プライバシー保護のため画像を非表示にしています。",
   "mobile.viewer.loadImages_one": "画像を読み込む ({{count}})",

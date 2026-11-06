@@ -4,7 +4,7 @@
 // `MV_MOBILE {"perf":…}`. With `?probe=host:port` (perf-gate builds) it logs one
 // `MV_MOBILE {"probe":…}` line: DNS + TLS to that host and a secret store round trip.
 // `?ui=switcher|drawer` opens that panel at start, `?ui=viewer[&row=N]` opens the list's row N
-// (default 0) in the viewer (both for screenshots). The `mobile.ping` line is logged first:
+// (default 0) in the viewer (both for screenshots; `&loadImagesAfter=S` below for the network proof). The `mobile.ping` line is logged first:
 // scripts/mobile-run.sh waits for it.
 import React, { useCallback, useEffect, useState } from 'react';
 import { daemonCall } from './transport.js';
@@ -33,6 +33,11 @@ const PERF = QUERY.get('perf') === '1';
 const START_PANEL = ['switcher', 'drawer'].includes(QUERY.get('ui')) ? QUERY.get('ui') : null;
 const START_ROW = QUERY.get('ui') === 'viewer' ? Math.max(0, Number(QUERY.get('row')) || 0) : null;
 let startRowOpened = false;
+// `&loadImagesAfter=S` (with `?ui=viewer`, for the on-device network proof): S seconds after the
+// viewer opens, log `{"viewerProbe":"loadImages", at}` (the device clock), tap Load images, and 12 s later log
+// `{"viewerProbe":"done"}`, so a script can tell requests made before the tap from those after.
+const LOAD_IMAGES_AFTER = START_ROW != null ? Math.max(0, Number(QUERY.get('loadImagesAfter')) || 0) : 0;
+let viewerProbeStarted = false;
 let perfStarted = false;
 
 // One probe per launch, even if the list loads twice (a retry after a failed first page).
@@ -174,6 +179,17 @@ function App() {
     tryOpen();
     return list.subscribe(tryOpen);
   }, [status, listState, list]);
+
+  useEffect(() => {
+    if (!open || !LOAD_IMAGES_AFTER || viewerProbeStarted) return;
+    viewerProbeStarted = true;
+    setTimeout(() => {
+      const button = document.querySelector('[data-mv-load-images]');
+      logLine({ viewerProbe: 'loadImages', clicked: Boolean(button), at: Date.now() });
+      button?.click();
+      setTimeout(() => logLine({ viewerProbe: 'done' }), 12_000);
+    }, LOAD_IMAGES_AFTER * 1000);
+  }, [open]);
 
   // Back in the foreground: sync the open folder.
   useEffect(() => {

@@ -4250,7 +4250,7 @@
   "mobile.sync.failed": "Falha na sincronização",
   "mobile.viewer.loading": "Carregando mensagem…",
   "mobile.viewer.gone": "Esta mensagem não está mais no servidor.",
-  "mobile.viewer.loadFailed": "Não foi possível carregar esta mensagem.",
+  "mobile.viewer.loadFailed": "Não foi possível carregar esta mensagem. {{reason}}",
   "mobile.viewer.empty": "Esta mensagem não tem texto.",
   "mobile.viewer.imagesBlocked": "As imagens estão ocultas para proteger sua privacidade.",
   "mobile.viewer.loadImages_one": "Carregar imagem ({{count}})",

@@ -70,8 +70,8 @@ pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError>
     })
 }
 
-/// A newsletter (remote images, a tracking pixel, links, an attachment) for the newest seeded row
-/// and a plain text mail with links for the next, cached as fetched bodies, so the viewer has
+/// A newsletter (remote images, a tracking pixel, links, an attachment) for the newest seeded row,
+/// a plain text mail with links for the next and the network probe for the third, cached as fetched bodies, so the viewer has
 /// something to draw in screenshots without a server. `INSERT OR IGNORE` on every launch.
 const SHOWCASE_HTML: &str = r##"<!doctype html><html><head><meta charset="utf-8"><title>Garden notes</title>
 <style>.wrap{max-width:600px;margin:0 auto;font-family:Georgia,serif;color:#2d2a26}
@@ -93,14 +93,40 @@ const SHOWCASE_HTML: &str = r##"<!doctype html><html><head><meta charset="utf-8"
 
 const SHOWCASE_TEXT: &str = "Hi,\n\nThe minutes from Tuesday are below. The shared folder is at https://example.com/minutes\nand the booking form at www.example.com/rooms.\n\nAgenda:\n  1. Budget <draft> & timeline\n  2. Ask ann@example.test about the venue\n\nThanks,\nJonas\n";
 
+/// The network probe (third newest row): every way a mail can try to reach a server, aimed at a
+/// request logger on the host the device run starts: `127.0.0.1` from the iOS simulator,
+/// `10.0.2.2` from the Android emulator. Plain http on 8765 must never be reached; the https
+/// image (8443) only after Load images.
+const PROBE_HEAD: &str = r##"<meta http-equiv="refresh" content="0;url=http://HOST:8765/refresh">
+<link rel="dns-prefetch" href="//HOST:8765"><link rel="preconnect" href="http://HOST:8765"><link rel="stylesheet" href="http://HOST:8765/link.css">
+<style>@import url(http://HOST:8765/import.css); @font-face{font-family:Probe;src:url(http://HOST:8765/font.woff)} body{font-family:Probe,serif} .bg{background:url(http://HOST:8765/bg.png)}</style>"##;
+const PROBE_BODY: &str = r##"<p class="bg">Probe for HOST</p>
+<img src="https://HOST:8443/img.png" width="40" height="40" alt="https image">
+<img src="http://HOST:8765/img-http.png" width="40" height="40" alt="http image">
+<div style="width:40px;height:40px;background:url(http://HOST:8765/inline-bg.png)"></div>
+<template shadowrootmode="open"><link rel="stylesheet" href="http://HOST:8765/shadow.css"><img src="http://HOST:8765/shadow.png"></template>
+<iframe src="http://HOST:8765/iframe"></iframe><object data="http://HOST:8765/object"></object><embed src="http://HOST:8765/embed">
+<video poster="http://HOST:8765/poster.png" src="http://HOST:8765/video.mp4"></video>
+<a href="https://HOST:8443/link" ping="http://HOST:8765/ping">a link</a>
+<form action="http://HOST:8765/form" method="post"><input name="a" value="b"><button>Send</button></form>"##;
+const PROBE_HOSTS: [&str; 2] = ["127.0.0.1", "10.0.2.2"];
+
+fn probe_html() -> String {
+    let each = |t: &str| PROBE_HOSTS.iter().map(|h| t.replace("HOST", h)).collect::<String>();
+    format!("<!doctype html><html><head><title>Network probe</title>{}</head><body><h1>Network probe</h1>{}</body></html>", each(PROBE_HEAD), each(PROBE_BODY))
+}
+
 fn insert_showcase_bodies(c: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
-    let mut st = c.prepare("SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2 ORDER BY date_ms DESC, uid DESC LIMIT 2")?;
+    let mut st = c.prepare("SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2 ORDER BY date_ms DESC, uid DESC LIMIT 3")?;
     let uids = st.query_map((ACCOUNT_ID, FOLDER), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
     if let Some(&uid) = uids.first() {
         crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, Some(SHOWCASE_HTML), None, &[("Planting calendar 2027.pdf", "application/pdf", 245_760)])?;
     }
     if let Some(&uid) = uids.get(1) {
         crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, None, Some(SHOWCASE_TEXT), &[])?;
+    }
+    if let Some(&uid) = uids.get(2) {
+        crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, Some(&probe_html()), None, &[])?;
     }
     Ok(())
 }
