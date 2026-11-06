@@ -11,4 +11,8 @@ pub const FOLDERS_CHANGED: &str = "mobile.folders.changed";
 /// `{accountId, state: "idle"|"syncing"|"error", code?}`; `code` is an accounts error code.
 pub const SYNC_STATE: &str = "mobile.sync.state";
 
+/// Every event name the engine emits: the one list `events.json` must match (a test checks it) and
+/// the page's `listen('…')` names are checked against.
+pub const EVENTS: &[&str] = &[FOLDER_CHANGED, FOLDERS_CHANGED, SYNC_STATE];
+
 pub(crate) type EventSink = Box<dyn Fn(&str, Value) + Send + Sync>;

@@ -29,3 +29,24 @@ export async function daemonCall(method, params = {}) {
     throw new DaemonError(message, 'RPC_ERROR');
   }
 }
+
+// Engine events reach the page as one Tauri event, `mobile-event` `{ name, payload }`. This is the
+// only place mobile code subscribes; `handler` gets the payload of events called `name`. Returns
+// the unsubscribe, safe to call twice or before the bridge has answered.
+export function listen(name, handler) {
+  const bridge = typeof window !== 'undefined' && window.__TAURI__?.event?.listen;
+  if (!bridge) throw new DaemonError('Tauri event bridge not available', 'NO_TAURI');
+  let detach = null;
+  let stopped = false;
+  bridge('mobile-event', (event) => {
+    const message = event?.payload;
+    if (!stopped && message && message.name === name) handler(message.payload);
+  }).then(
+    (unlisten) => { if (stopped) unlisten(); else detach = unlisten; },
+    () => {},
+  );
+  return () => {
+    stopped = true;
+    if (detach) { detach(); detach = null; }
+  };
+}

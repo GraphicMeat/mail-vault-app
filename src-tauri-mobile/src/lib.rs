@@ -7,7 +7,7 @@ mod secrets;
 use mailvault_mobile_engine::{Engine, RpcError};
 use serde_json::Value;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// The engine, or why it failed to open. The app starts either way; every RPC then answers
 /// `INTERNAL` with the reason.
@@ -124,6 +124,12 @@ pub fn run() {
             };
             if let Ok(engine) = &engine {
                 engine.set_log_sink(log_line);
+                // The sink runs on the engine's sync thread inside its block_on: only hand the
+                // event to Tauri and return, never call back into the engine (no nested block_on).
+                let handle = app.handle().clone();
+                engine.set_event_sink(move |name, payload| {
+                    let _ = handle.emit("mobile-event", serde_json::json!({ "name": name, "payload": payload }));
+                });
                 seed_for_perf_gate(engine);
             }
             if let Err(reason) = &engine {

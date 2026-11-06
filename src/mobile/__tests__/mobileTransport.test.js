@@ -32,3 +32,37 @@ describe('mobile transport module', () => {
     await expect(daemonCall('mobile.ping')).rejects.toMatchObject({ code: 'RPC_ERROR', message: 'boom' });
   });
 });
+
+describe('mobile transport listen', () => {
+  it('listen_filters_by_name_and_unsubscribes', async () => {
+    const { listen } = await import('../transport.js');
+    const unlisten = vi.fn();
+    let bridge;
+    const tauriListen = vi.fn(async (event, cb) => { bridge = { event, cb }; return unlisten; });
+    globalThis.window.__TAURI__.event = { listen: tauriListen };
+    const seen = [];
+    const off = listen('mobile.sync.state', (p) => seen.push(p));
+    await Promise.resolve();
+    expect(bridge.event).toBe('mobile-event');
+    const send = (name, payload) => bridge.cb({ event: 'mobile-event', id: 1, payload: { name, payload } });
+    send('mobile.folders.changed', { accountId: 'a' });
+    send('mobile.sync.state', { accountId: 'a', state: 'idle' });
+    expect(seen).toEqual([{ accountId: 'a', state: 'idle' }]);
+    off();
+    expect(unlisten).toHaveBeenCalledTimes(1);
+    off();
+    expect(unlisten).toHaveBeenCalledTimes(1);
+    send('mobile.sync.state', { accountId: 'a', state: 'syncing' });
+    expect(seen).toHaveLength(1);
+  });
+
+  it('unsubscribing before the bridge answers still detaches', async () => {
+    const { listen } = await import('../transport.js');
+    const unlisten = vi.fn();
+    globalThis.window.__TAURI__.event = { listen: async () => unlisten };
+    listen('mobile.sync.state', () => {})();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(unlisten).toHaveBeenCalledTimes(1);
+  });
+});

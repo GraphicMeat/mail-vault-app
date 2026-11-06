@@ -9,6 +9,7 @@ import { analyzeSeam } from '../seam.js';
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const ENTRY = here('../main.jsx');
 const METHODS = JSON.parse(readFileSync(here('../../../src-mobile-engine/methods.json'), 'utf8'));
+const EVENTS = JSON.parse(readFileSync(here('../../../src-mobile-engine/events.json'), 'utf8'));
 const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_log'];
 const DESKTOP_ONLY = /plugin-shell|plugin-updater|sparkle|features\/blitz|e2eMotion/i;
 
@@ -48,5 +49,22 @@ describe('mobile seam', () => {
     expect(dynamicCalls).toEqual([]);
     const fx = await analyzeSeam(here('./fixtures/dynamicCall.js'));
     expect(fx.dynamicCalls.length).toBeGreaterThan(0);
+  });
+
+  it('every_listened_event_is_emitted', async () => {
+    const real = await analyzeSeam(ENTRY);
+    expect(real.listens.filter((n) => !EVENTS.includes(n))).toEqual([]);
+    const fx = await analyzeSeam(here('./fixtures/listenEvents.js'));
+    expect(fx.listens).toEqual(['mobile.nope', 'mobile.sync.state']);
+    expect(fx.listens.filter((n) => !EVENTS.includes(n))).toEqual(['mobile.nope']);
+  });
+
+  it('aliased_calls_are_caught', async () => {
+    const fx = await analyzeSeam(here('./fixtures/aliasedCall.js'));
+    const text = fx.dynamicCalls.join('\n');
+    expect(text).toMatch(/daemonCall/);
+    expect(text).toMatch(/invoke/);
+    expect(text).toMatch(/listen/);
+    expect(fx.dynamicCalls.length).toBeGreaterThanOrEqual(4);
   });
 });

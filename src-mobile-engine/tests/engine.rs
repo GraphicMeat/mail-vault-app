@@ -237,3 +237,18 @@ fn dir_with_spaces_and_unicode() {
     assert_eq!(page(&e, 0, 5)["total"], 20);
     assert!(dir.join("mobile.db").is_file());
 }
+
+#[test]
+fn events_json_matches_emitted_names() {
+    let raw = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/events.json")).unwrap();
+    let listed: Vec<String> = serde_json::from_str(&raw).unwrap();
+    let mut sorted = listed.clone();
+    sorted.sort();
+    assert_eq!(listed, sorted, "events.json must be sorted");
+    let mut emitted: Vec<String> = mailvault_mobile_engine::events::EVENTS.iter().map(|s| s.to_string()).collect();
+    emitted.sort();
+    assert_eq!(listed, emitted);
+    // Every name the sync worker emits is one of them: emit sites take the named constants.
+    let sync = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/sync.rs")).unwrap();
+    assert!(!sync.contains("emit(\""), "emit with a string literal bypasses events::EVENTS");
+}
