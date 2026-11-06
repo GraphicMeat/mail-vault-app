@@ -23,13 +23,11 @@
 // bottom (`reachedEnd`), and no blank frame. Anything less is reported as a reason, never a pass.
 
 import { ROW_HEIGHT } from './MessageRow.jsx';
+import { FRAME_P95_LIMIT_MS, TAP_LIMIT_MS, PERF_ROWS, gateVerdict, wholeRunReasons } from './gate.js';
 
-export const FRAME_P95_LIMIT_MS = 20;
-export const TAP_LIMIT_MS = 100;
+export { FRAME_P95_LIMIT_MS, TAP_LIMIT_MS, PERF_ROWS, gateVerdict, wholeRunReasons };
 export const SCROLL_PX_PER_FRAME = 100;
 export const TAP_COUNT = 20;
-/** Rows the gate needs on screen; the perf-gate seed (`seed::PERF_ROWS`) writes this many. */
-export const PERF_ROWS = 10_000;
 
 /** Nearest-rank percentile. An empty sample is Infinity, so it can never pass a gate. */
 export function percentile(values, p) {
@@ -37,14 +35,6 @@ export function percentile(values, p) {
   const sorted = [...values].sort((a, b) => a - b);
   const rank = Math.min(sorted.length, Math.max(1, Math.ceil((p / 100) * sorted.length)));
   return sorted[rank - 1];
-}
-
-/** Both limits are strict "under", as the spec states them. */
-export function gateVerdict({ frameP95, tapToPaint } = {}) {
-  const reasons = [];
-  if (!(frameP95 < FRAME_P95_LIMIT_MS)) reasons.push(`frame p95 ${frameP95} ms is not under ${FRAME_P95_LIMIT_MS} ms`);
-  if (!(tapToPaint < TAP_LIMIT_MS)) reasons.push(`tap to paint ${tapToPaint} ms is not under ${TAP_LIMIT_MS} ms`);
-  return { pass: reasons.length === 0, reasons };
 }
 
 /** Rows to tap: TAP_COUNT indices spread evenly from 0 to rows - 1. */
@@ -64,10 +54,7 @@ export function summarizePerf({ frames, taps, rows, webview, blankFrames = 0, re
   const tapMax = taps.length ? Math.max(...taps) : Infinity;
   const tapToPaint = taps.length < TAP_COUNT ? Infinity : tapMax;
   const verdict = gateVerdict({ frameP95, tapToPaint });
-  const reasons = [...verdict.reasons];
-  if (!(rows >= PERF_ROWS)) reasons.push(`only ${rows} rows, the gate needs ${PERF_ROWS}`);
-  if (!reachedEnd) reasons.push('the scroll did not reach the last row');
-  if (blankFrames !== 0) reasons.push(`${blankFrames} scroll frames showed unloaded rows`);
+  const reasons = [...verdict.reasons, ...wholeRunReasons({ rows, reachedEnd, blankFrames })];
   return {
     rows,
     frames: frames.length,
