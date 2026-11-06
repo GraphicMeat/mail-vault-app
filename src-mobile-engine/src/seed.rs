@@ -71,7 +71,8 @@ pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError>
 }
 
 /// A newsletter (remote images, a tracking pixel, links, an attachment) for the newest seeded row,
-/// a plain text mail with links for the next and the network probe for the third, cached as fetched bodies, so the viewer has
+/// a plain text mail with links for the next, the network probe for the third and a large
+/// newsletter for the fourth, cached as fetched bodies, so the viewer has
 /// something to draw in screenshots without a server. `INSERT OR IGNORE` on every launch.
 const SHOWCASE_HTML: &str = r##"<!doctype html><html><head><meta charset="utf-8"><title>Garden notes</title>
 <style>.wrap{max-width:600px;margin:0 auto;font-family:Georgia,serif;color:#2d2a26}
@@ -93,22 +94,26 @@ const SHOWCASE_HTML: &str = r##"<!doctype html><html><head><meta charset="utf-8"
 
 const SHOWCASE_TEXT: &str = "Hi,\n\nThe minutes from Tuesday are below. The shared folder is at https://example.com/minutes\nand the booking form at www.example.com/rooms.\n\nAgenda:\n  1. Budget <draft> & timeline\n  2. Ask ann@example.test about the venue\n\nThanks,\nJonas\n";
 
-/// The network probe (third newest row): every way a mail can try to reach a server, aimed at a
-/// request logger on the host the device run starts: `127.0.0.1` from the iOS simulator,
-/// `10.0.2.2` from the Android emulator. Plain http on 8765 must never be reached; the https
-/// image (8443) only after Load images.
-const PROBE_HEAD: &str = r##"<meta http-equiv="refresh" content="0;url=http://HOST:8765/refresh">
-<link rel="dns-prefetch" href="//HOST:8765"><link rel="preconnect" href="http://HOST:8765"><link rel="stylesheet" href="http://HOST:8765/link.css">
-<style>@import url(http://HOST:8765/import.css); @font-face{font-family:Probe;src:url(http://HOST:8765/font.woff)} body{font-family:Probe,serif} .bg{background:url(http://HOST:8765/bg.png)}</style>"##;
+/// The network probe (third newest row): every way a mail can try to reach a server, each on its
+/// own https port of a request logger the device run starts on the host (`127.0.0.1` from the
+/// iOS simulator, `10.0.2.2` from the Android emulator). https throughout, so the platform's
+/// cleartext policy blocks nothing: what stays quiet is held by the frame. A TLS hello on a port
+/// names the vector. Before Load images no port may be reached; after it only image loads
+/// (9007, 9008, 9014, 9020).
+const PROBE_HEAD: &str = r##"<meta http-equiv="refresh" content="0;url=https://HOST:9001/refresh">
+<link rel="dns-prefetch" href="https://HOST:9002/"><link rel="preconnect" href="https://HOST:9003/"><link rel="stylesheet" href="https://HOST:9004/link.css">
+<style>@import url(https://HOST:9005/import.css); @font-face{font-family:Probe;src:url(https://HOST:9006/font.woff)} body{font-family:Probe,serif} .bg{background:url(https://HOST:9007/bg.png)}</style>"##;
 const PROBE_BODY: &str = r##"<p class="bg">Probe for HOST</p>
-<img src="https://HOST:8443/img.png" width="40" height="40" alt="https image">
-<img src="http://HOST:8765/img-http.png" width="40" height="40" alt="http image">
-<div style="width:40px;height:40px;background:url(http://HOST:8765/inline-bg.png)"></div>
-<template shadowrootmode="open"><link rel="stylesheet" href="http://HOST:8765/shadow.css"><img src="http://HOST:8765/shadow.png"></template>
-<iframe src="http://HOST:8765/iframe"></iframe><object data="http://HOST:8765/object"></object><embed src="http://HOST:8765/embed">
-<video poster="http://HOST:8765/poster.png" src="http://HOST:8765/video.mp4"></video>
-<a href="https://HOST:8443/link" ping="http://HOST:8765/ping">a link</a>
-<form action="http://HOST:8765/form" method="post"><input name="a" value="b"><button>Send</button></form>"##;
+<div style="width:40px;height:40px;background:url(https://HOST:9008/inline-bg.png)"></div>
+<template shadowrootmode="open"><link rel="stylesheet" href="https://HOST:9009/shadow.css"><img src="https://HOST:9010/shadow.png"></template>
+<iframe src="https://HOST:9011/iframe"></iframe><object data="https://HOST:9012/object"></object><embed src="https://HOST:9013/embed">
+<video poster="https://HOST:9014/poster.png" src="https://HOST:9015/video.mp4"></video>
+<a href="#top" ping="https://HOST:9016/ping">a ping link</a>
+<form action="https://HOST:9017/form" method="post"><input name="a" value="b"><button>Send</button></form>
+<svg width="20" height="20"><image href="https://HOST:9018/svg.png" width="20" height="20"/></svg>
+<audio src="https://HOST:9019/audio.mp3"></audio>
+<img src="https://HOST:9020/img.png" width="40" height="40" alt="https image">
+<a href="https://HOST:9021/link">a link (never tapped)</a>"##;
 const PROBE_HOSTS: [&str; 2] = ["127.0.0.1", "10.0.2.2"];
 
 fn probe_html() -> String {
@@ -116,8 +121,31 @@ fn probe_html() -> String {
     format!("<!doctype html><html><head><title>Network probe</title>{}</head><body><h1>Network probe</h1>{}</body></html>", each(PROBE_HEAD), each(PROBE_BODY))
 }
 
+/// A real-world-sized newsletter (about 250 KB of html: a stylesheet and some 130 story cards,
+/// each a table with an image, a paragraph and a link), for timing a large open.
+fn large_newsletter() -> String {
+    const PARA: &str = "Our gardens changed a lot this season, and so did the way we plan them. We moved the beds closer to the house, swapped half the lawn for clover, and kept a log of what the frost took and what it spared. The notes below are the short version: what to sow, what to cover, what to leave alone until spring, and which tools earned their place in the shed. Every story links to the long version with photos, measurements and the mistakes we made along the way, so you can skip the ones you already know and dig into the ones you do not. ";
+    let mut out = String::from(r##"<!doctype html><html><head><meta charset="utf-8"><title>Weekly digest</title><style>
+.wrap{max-width:600px;margin:0 auto;background:#ffffff}.card td{padding:16px 20px;font:15px/1.55 Georgia,serif;color:#2d2a26}
+.card h2{margin:0 0 8px;font-size:20px}.more{display:inline-block;margin-top:8px;color:#c8553d;font-weight:bold}
+@media (max-width:480px){.card td{padding:12px}}</style></head><body style="margin:0;background:#efe9dc"><div class="wrap">"##);
+    let mut n = 0;
+    while out.len() < 250_000 {
+        n += 1;
+        out.push_str(&format!(
+            r##"<table class="card" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-bottom:1px solid #e7e0d2"><tr><td>
+<h2>Story {n}: notes from the beds</h2>
+<img src="https://images.example.test/story-{n}.jpg" width="560" height="220" alt="Story {n}" style="display:block;width:100%;height:auto;background:#d9cfbb">
+<p>{PARA}{PARA}</p><a class="more" href="https://example.com/story/{n}">Read story {n}</a></td></tr></table>
+"##
+        ));
+    }
+    out.push_str("</div></body></html>");
+    out
+}
+
 fn insert_showcase_bodies(c: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
-    let mut st = c.prepare("SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2 ORDER BY date_ms DESC, uid DESC LIMIT 3")?;
+    let mut st = c.prepare("SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2 ORDER BY date_ms DESC, uid DESC LIMIT 4")?;
     let uids = st.query_map((ACCOUNT_ID, FOLDER), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
     if let Some(&uid) = uids.first() {
         crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, Some(SHOWCASE_HTML), None, &[("Planting calendar 2027.pdf", "application/pdf", 245_760)])?;
@@ -127,6 +155,9 @@ fn insert_showcase_bodies(c: &rusqlite::Connection) -> Result<(), rusqlite::Erro
     }
     if let Some(&uid) = uids.get(2) {
         crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, Some(&probe_html()), None, &[])?;
+    }
+    if let Some(&uid) = uids.get(3) {
+        crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, Some(&large_newsletter()), None, &[])?;
     }
     Ok(())
 }

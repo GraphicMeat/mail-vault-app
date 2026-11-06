@@ -76,9 +76,26 @@ export function summarizePerf({ frames, taps, rows, webview, blankFrames = 0, re
   };
 }
 
+// What the last viewer open took (viewerProbe.js reads it in perf-gate builds): when its header
+// painted, when its frame's document loaded, and how long preparing the body took.
+const timings = { headerAt: null, bodyAt: null, prepareMs: null, bytes: null };
+export function resetViewerTimings() {
+  Object.assign(timings, { headerAt: null, bodyAt: null, prepareMs: null, bytes: null });
+}
+export function viewerTimings() {
+  return { ...timings };
+}
+export function notePrepare(prepareMs, bytes) {
+  Object.assign(timings, { prepareMs: Math.round(prepareMs * 10) / 10, bytes });
+}
+export function bodyLoaded(t) {
+  if (timings.bodyAt == null) timings.bodyAt = t;
+}
+
 // The viewer calls `viewerPainted()` after its first paint; a tap sample waits on it.
 let paintWaiters = [];
 export function viewerPainted(t) {
+  if (timings.headerAt == null) timings.headerAt = t;
   const waiters = paintWaiters;
   paintWaiters = [];
   for (const resolve of waiters) resolve(t);

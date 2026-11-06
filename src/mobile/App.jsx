@@ -3,9 +3,9 @@
 // (`Viewer.jsx`), and with `?perf=1` the perf probe, whose result the engine logs as
 // `MV_MOBILE {"perf":…}`. With `?probe=host:port` (perf-gate builds) it logs one
 // `MV_MOBILE {"probe":…}` line: DNS + TLS to that host and a secret store round trip.
-// `?ui=switcher|drawer` opens that panel at start, `?ui=viewer[&row=N]` opens the list's row N
-// (default 0) in the viewer (both for screenshots; `&loadImagesAfter=S` below for the network proof). The `mobile.ping` line is logged first:
-// scripts/mobile-run.sh waits for it.
+// `?ui=switcher|drawer` opens that panel at start (for screenshots); `?ui=viewer` runs the
+// scripted viewer in `viewerProbe.js` (perf-gate builds only). The `mobile.ping` line is logged
+// first: scripts/mobile-run.sh waits for it.
 import React, { useCallback, useEffect, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
@@ -17,6 +17,7 @@ import FolderDrawer from './FolderDrawer.jsx';
 import { folderLabel } from './folders.js';
 import { errorKey } from './errors.js';
 import { runPerfGate } from './perf.js';
+import { runViewerProbe } from './viewerProbe.js';
 import { useT } from './i18n.js';
 
 function logLine(payload) {
@@ -31,13 +32,10 @@ const errorOf = (err) => ({ code: err?.code ?? null, message: err?.message ?? St
 const QUERY = new URLSearchParams(window.location.search);
 const PERF = QUERY.get('perf') === '1';
 const START_PANEL = ['switcher', 'drawer'].includes(QUERY.get('ui')) ? QUERY.get('ui') : null;
-const START_ROW = QUERY.get('ui') === 'viewer' ? Math.max(0, Number(QUERY.get('row')) || 0) : null;
-let startRowOpened = false;
-// `&loadImagesAfter=S` (with `?ui=viewer`, for the on-device network proof): S seconds after the
-// viewer opens, log `{"viewerProbe":"loadImages", at}` (the device clock), tap Load images, and 12 s later log
-// `{"viewerProbe":"done"}`, so a script can tell requests made before the tap from those after.
-const LOAD_IMAGES_AFTER = START_ROW != null ? Math.max(0, Number(QUERY.get('loadImagesAfter')) || 0) : 0;
-let viewerProbeStarted = false;
+// `?ui=viewer` (viewerProbe.js): a scripted viewer for screenshots, the timing of large opens
+// and the on-device network proof. Perf-gate builds only: the engine's ping says which.
+const VIEWER_SCRIPT = QUERY.get('ui') === 'viewer';
+let viewerScriptStarted = false;
 let perfStarted = false;
 
 // One probe per launch, even if the list loads twice (a retry after a failed first page).
@@ -119,6 +117,7 @@ function App() {
   const [open, setOpen] = useState(null);
   const [pulled, setPulled] = useState(false);
   const [total, setTotal] = useState(null);
+  const [perfGate, setPerfGate] = useState(false);
 
   // Stable: the store's actions never change, so this never re-runs the mount effect below.
   // (`getState()` itself returns a new object after every `set`; it must not be a dependency.)
@@ -129,7 +128,10 @@ function App() {
   // Once per mount: the ping line scripts wait for, the optional device probe, and the first load.
   useEffect(() => {
     daemonCall('mobile.ping').then(
-      (ping) => logLine({ ping }),
+      (ping) => {
+        logLine({ ping });
+        setPerfGate(ping?.perfGate === true);
+      },
       (err) => logLine({ error: errorOf(err) }),
     );
     if (PROBE) probeRun(PROBE);
@@ -165,31 +167,16 @@ function App() {
     if (status === 'ready' && START_PANEL && listState === 'ready') setPanel((p) => p ?? START_PANEL);
   }, [status, listState]);
 
-  // `?ui=viewer`: the asked-for row, once it has loaded (its page may need fetching first).
   useEffect(() => {
-    if (START_ROW == null || startRowOpened || status !== 'ready' || listState !== 'ready' || !list) return undefined;
-    const tryOpen = () => {
-      const row = list.rowAt(START_ROW);
-      if (!row || startRowOpened) return;
-      startRowOpened = true;
+    if (!VIEWER_SCRIPT || !perfGate || viewerScriptStarted || status !== 'ready' || listState !== 'ready' || !list) return;
+    viewerScriptStarted = true;
+    const openRow = (row) => {
       const { activeAccountId: accountId, activeFolder: folder } = useMobileStore.getState();
       setOpen({ row, accountId, folder });
     };
-    list.ensure(START_ROW).then(tryOpen, () => {});
-    tryOpen();
-    return list.subscribe(tryOpen);
-  }, [status, listState, list]);
-
-  useEffect(() => {
-    if (!open || !LOAD_IMAGES_AFTER || viewerProbeStarted) return;
-    viewerProbeStarted = true;
-    setTimeout(() => {
-      const button = document.querySelector('[data-mv-load-images]');
-      logLine({ viewerProbe: 'loadImages', clicked: Boolean(button), at: Date.now() });
-      button?.click();
-      setTimeout(() => logLine({ viewerProbe: 'done' }), 12_000);
-    }, LOAD_IMAGES_AFTER * 1000);
-  }, [open]);
+    runViewerProbe({ query: QUERY, list, open: openRow, close: () => setOpen(null), log: logLine })
+      .catch((err) => logLine({ error: errorOf(err) }));
+  }, [perfGate, status, listState, list]);
 
   // Back in the foreground: sync the open folder.
   useEffect(() => {

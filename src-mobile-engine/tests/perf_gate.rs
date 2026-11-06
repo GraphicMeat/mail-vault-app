@@ -197,7 +197,7 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
     let e = open(tmp.path()).unwrap();
     for _ in 0..2 {
         seed::ensure_seeded(&e, 50).unwrap();
-        let rows = page(&e, Value::Null, 3)["rows"].clone();
+        let rows = page(&e, Value::Null, 4)["rows"].clone();
         let body = |uid: &Value| {
             e.rpc("mobile.message.body", json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "uid": uid })).unwrap()
         };
@@ -215,9 +215,25 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
         let probe = body(&rows[2]["uid"]);
         let html = probe["html"].as_str().unwrap();
         for host in ["127.0.0.1", "10.0.2.2"] {
-            assert!(html.contains(&format!("https://{host}:8443/img.png")), "{html}");
+            assert!(html.contains(&format!("https://{host}:9020/img.png")), "{html}");
         }
         assert!(probe["remoteImages"].as_u64().unwrap() >= 2, "{probe}");
+        // Every vector on its own https port, so a logger can tell them apart.
+        for port in 9001..=9021 {
+            assert!(html.contains(&format!(":{port}/")), "port {port} missing: {html}");
+        }
+        assert!(!html.contains("http://"), "a plain-http vector would be blocked by the platform, not the frame");
+        // A real-world-sized newsletter for the timing of a large open.
+        let large = body(&rows[3]["uid"]);
+        let large_html = large["html"].as_str().unwrap();
+        assert!((200_000..=320_000).contains(&large_html.len()), "{}", large_html.len());
     }
     assert_eq!(page(&e, Value::Null, 1)["total"], 50);
+}
+
+#[test]
+fn ping_says_perf_gate() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path()).unwrap();
+    assert_eq!(e.rpc("mobile.ping", json!({})).unwrap()["perfGate"], true);
 }

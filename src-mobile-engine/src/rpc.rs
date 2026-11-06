@@ -107,7 +107,8 @@ pub(crate) fn parse<T: DeserializeOwned>(params: Value) -> Result<T, RpcError> {
 }
 
 fn ping(_: &Engine, _: Value) -> Result<Value, RpcError> {
-    Ok(json!({ "engine": env!("CARGO_PKG_VERSION"), "schema": SCHEMA_VERSION }))
+    // `perfGate`: the page enables its test hooks (`?ui=viewer`, the network probe) only then.
+    Ok(json!({ "engine": env!("CARGO_PKG_VERSION"), "schema": SCHEMA_VERSION, "perfGate": cfg!(feature = "perf-gate") }))
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy)]

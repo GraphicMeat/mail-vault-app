@@ -99,6 +99,19 @@ describe('Viewer', () => {
     expect(engine.calls).toHaveLength(1);
   });
 
+  it('cleans the mail once: Load images reuses it and parses nothing', async () => {
+    engine.reply = body({ remoteImages: 2 });
+    const spy = vi.spyOn(DOMParser.prototype, 'parseFromString');
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const afterOpen = spy.mock.calls.length;
+    expect(afterOpen).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.viewer.loadImages', { count: 2 }) }));
+    expect(frame().getAttribute('srcdoc')).toContain('img-src data: cid: https:;');
+    expect(spy.mock.calls.length).toBe(afterOpen);
+    spy.mockRestore();
+  });
+
   it('no load-images bar when nothing remote is in the mail', async () => {
     renderViewer();
     await waitFor(() => expect(frame()).toBeTruthy());

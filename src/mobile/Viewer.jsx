@@ -1,6 +1,6 @@
 // The message viewer. The header (subject, sender, recipients, date) comes from the list row, so it
 // paints on the tap; the body follows from `mobile.message.body` and is drawn in an iframe whose
-// document `buildMailFrame` builds (mailFrame.js: CSP first, links out of the frame, hostile parts
+// document `prepareMailBody` + `assembleMailFrame` build (mailFrame.js: CSP first, links out of the frame, hostile parts
 // taken out). The frame is sandboxed with popups only, so a link opens in the system browser and
 // the mail can never run script or reach the app's origin. Remote images stay blocked by the CSP
 // until the user taps "Load images", which mounts a new frame with https: images allowed.
@@ -9,10 +9,10 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
-import { buildMailFrame } from './mailFrame.js';
+import { assembleMailFrame, prepareMailBody } from './mailFrame.js';
 import { formatFullDate, formatSize } from './format.js';
 import { ERROR_KEYS, errorKey } from './errors.js';
-import { afterNextPaint, viewerPainted } from './perf.js';
+import { afterNextPaint, bodyLoaded, notePrepare, viewerPainted } from './perf.js';
 import { useT } from './i18n.js';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
@@ -121,9 +121,20 @@ export default function Viewer({ accountId, folder, row, onClose }) {
   const body = state.phase === 'ready' ? state.body : null;
   const hasContent = Boolean(body && ((body.html && body.html.trim()) || (body.text && body.text.trim())));
   const trackerLabel = t('mobile.viewer.trackerBlocked');
+  // The expensive part (parse, clean, re-parse to a fixpoint, check) once per body; Load images
+  // and a theme change only re-assemble our head around it (string work).
+  const html = body?.html;
+  const text = body?.text;
+  const prepared = useMemo(() => {
+    if (!hasContent) return null;
+    const t0 = performance.now();
+    const out = prepareMailBody({ html, text });
+    notePrepare(performance.now() - t0, (html || text || '').length);
+    return out;
+  }, [html, text, hasContent]);
   const srcDoc = useMemo(
-    () => (hasContent ? buildMailFrame({ html: body.html, text: body.text, allowRemote, theme, trackerLabel }) : null),
-    [body, hasContent, allowRemote, theme, trackerLabel],
+    () => (prepared ? assembleMailFrame(prepared, { allowRemote, theme, trackerLabel }) : null),
+    [prepared, allowRemote, theme, trackerLabel],
   );
   // Every part is a chip, inline `cid:` images too: the frame does not draw those yet.
   const attachments = body?.attachments || [];
@@ -166,6 +177,7 @@ export default function Viewer({ accountId, folder, row, onClose }) {
           sandbox={FRAME_SANDBOX}
           referrerPolicy="no-referrer"
           srcDoc={srcDoc}
+          onLoad={() => bodyLoaded(performance.now())}
         />
       )}
     </section>

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { buildMailFrame, cleanToFixpoint, FRAME_CSP } from '../mailFrame.js';
+import { buildMailFrame, cleanToFixpoint, prepareMailBody, assembleMailFrame, FRAME_CSP } from '../mailFrame.js';
 
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: cid:; font-src data:; form-action 'none'";
 const CSP_REMOTE = "default-src 'none'; style-src 'unsafe-inline'; img-src data: cid: https:; font-src data:; form-action 'none'";
@@ -263,6 +263,62 @@ describe('buildMailFrame', () => {
     expect(doc.head.children[0].getAttribute('http-equiv')).toBe('Content-Security-Policy');
     expect(doc.head.children[1].getAttribute('name')).toBe('referrer');
     expect(parse(build({ text: 'x' })).head.children[1].getAttribute('content')).toBe('no-referrer');
+  });
+
+  it('drops SVG animation, which could rewrite a link at runtime without script', () => {
+    const html = '<svg><a href="https://ok.test/"><set attributeName="href" to="javascript:alert(1)"/>'
+      + '<animate attributeName="xlink:href" values="javascript:alert(2)"/><animateMotion dur="1s"/>'
+      + '<animateTransform attributeName="transform" type="rotate"/><discard begin="0s"/><text>x</text></a></svg>';
+    const out = build({ html });
+    expect(out).not.toMatch(/<(set|animate|animatemotion|animatetransform|discard)\b|javascript:/i);
+    expect(parse(out).querySelector('svg a').getAttribute('href')).toBe('https://ok.test/');
+  });
+
+  it('cleans in the mode the frame parses in, and returns its own fixpoint', () => {
+    // Quirks mode keeps a <table> inside a <p>; the frame's no-quirks parse closes the <p> first.
+    for (const html of ['<p><table><tr><td>cell</td></tr></table>', SHAPES.ownHead, SHAPES.fragment, '<p>a<p>b<table><tr><td><p>c</table>']) {
+      expect(cleanToFixpoint(html)).toMatch(/^<!doctype html>/);
+      const out = build({ html });
+      expect(`<!doctype html>${parse(out).documentElement.outerHTML}`, html).toBe(out);
+    }
+  });
+
+  it('checks the string it returns, not an earlier tree', () => {
+    // A parser that misbehaves only on the assembled document (the one carrying our CSP).
+    const late = (src) => {
+      const doc = new DOMParser().parseFromString(src, 'text/html');
+      if (src.includes('Content-Security-Policy')) doc.body.append(doc.createElement('script'));
+      return doc;
+    };
+    const doc = parse(buildMailFrame({ html: '<p>H</p>', text: 'plain T', theme: 'light', parse: late }));
+    expect(doc.querySelector('pre').textContent).toBe('plain T');
+  });
+
+  it('cheap hardening: referrerpolicy, attributionsrc, MathML href, fencedframe, form overrides', () => {
+    const html = [
+      '<img src="data:image/png;base64,AAAA" referrerpolicy="unsafe-url" attributionsrc="https://evil.test/a1">',
+      '<a href="https://ok.test/" referrerpolicy="unsafe-url" attributionsrc>ok</a>',
+      '<math><mi href="https://evil.test/mm">x</mi><mtext href="javascript:alert(1)">y</mtext><mrow href="#in">z</mrow></math>',
+      '<fencedframe src="https://evil.test/ff"></fencedframe>',
+      '<form><button formaction="https://evil.test/fa" formtarget="_self">go</button>',
+      '<input type="submit" formaction="javascript:x" formtarget="_top"></form>',
+    ].join('');
+    const out = build({ html });
+    expect(out).not.toMatch(/evil\.test|javascript:|referrerpolicy|attributionsrc|formaction|formtarget|fencedframe/i);
+    expect([...parse(out).querySelectorAll('math *')].filter((el) => el.hasAttribute('href'))).toEqual([]);
+  });
+
+  it('prepares once and assembles cheaply: the same document as buildMailFrame', () => {
+    const html = SHAPES.ownHead + '<img src="https://img.test/a.png">';
+    const prepared = prepareMailBody({ html, text: null });
+    for (const allowRemote of [false, true]) {
+      for (const theme of ['light', 'dark']) {
+        expect(assembleMailFrame(prepared, { allowRemote, theme, trackerLabel: 'T' }))
+          .toBe(buildMailFrame({ html, text: null, allowRemote, theme, trackerLabel: 'T' }));
+      }
+    }
+    const text = prepareMailBody({ html: null, text: 'hi https://x.test/' });
+    expect(assembleMailFrame(text, { theme: 'dark' })).toBe(buildMailFrame({ html: null, text: 'hi https://x.test/', theme: 'dark' }));
   });
 
   it('prefers html over text and copes with neither', () => {

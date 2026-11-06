@@ -66,6 +66,8 @@ fn open_creates_schema_v2_in_wal() {
     let pong = _e.rpc("mobile.ping", json!({})).unwrap();
     assert_eq!(pong["schema"], 2);
     assert_eq!(pong["engine"], env!("CARGO_PKG_VERSION"));
+    // The page enables its test hooks (`?ui=viewer`, the network probe) only on a perf-gate build.
+    assert_eq!(pong["perfGate"], cfg!(feature = "perf-gate"));
 }
 
 #[test]
