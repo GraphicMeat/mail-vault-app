@@ -418,3 +418,89 @@ describe('AccountModal native workflow classification',()=>{
     } finally {cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();}
   });
 });
+
+// Microsoft fixed personal Outlook.com IMAP over OAuth, so the transport is a
+// choice: Automatic keeps today's detection (personal -> Graph, work -> IMAP),
+// an explicit pick wins over the domain and skips the lookup.
+describe('AccountModal: choosing Graph or IMAP for a Microsoft account', () => {
+  const SIGNED_IN = { accessToken: 'access-token', refreshToken: 'refresh-token', expiresAt: 1234567890 };
+  let personalByDomain;
+
+  beforeEach(async () => {
+    const graphConfig = await import('../../services/graphConfig');
+    personalByDomain = vi.mocked(graphConfig.isPersonalMicrosoftEmail);
+    mockAddAccount.mockReset().mockResolvedValue({ id: 'acct-9', email: 'x' });
+    mockGetOAuth2AuthUrl.mockReset().mockResolvedValue({ authUrl: 'https://login.microsoftonline.com/x', state: 'state-1' });
+    mockExchangeOAuth2Code.mockReset().mockResolvedValue(SIGNED_IN);
+    mockIsPersonalMicrosoftAccount.mockReset().mockResolvedValue(false);
+    vi.spyOn(window, 'open').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    personalByDomain.mockReturnValue(false);
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  async function signIn(email, transport) {
+    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.click(screen.getByText('Outlook / Microsoft 365'));
+    const emailInput = await screen.findByLabelText('Email Address *');
+    fireEvent.change(emailInput, { target: { name: 'email', value: email } });
+    if (transport) fireEvent.change(screen.getByLabelText('Connect over'), { target: { value: transport } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Microsoft/i }));
+    await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
+  }
+
+  it('offers Automatic, Microsoft Graph and IMAP, Automatic first', async () => {
+    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.click(screen.getByText('Outlook / Microsoft 365'));
+    const select = await screen.findByLabelText('Connect over');
+    expect([...select.options].map(o => o.value)).toEqual(['auto', 'graph', 'imap']);
+    expect(select.value).toBe('auto');
+  });
+
+  it('Automatic keeps an outlook.com address on Graph', async () => {
+    personalByDomain.mockReturnValue(true);
+    await signIn('someone@outlook.com');
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(true);
+    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('graph');
+  });
+
+  it('IMAP picked: an outlook.com address signs in for IMAP scopes and is added over IMAP', async () => {
+    personalByDomain.mockReturnValue(true);
+    await signIn('someone@outlook.com', 'imap');
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(false);
+    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('imap');
+  });
+
+  // Microsoft's Outlook.com settings: SMTP is smtp-mail.outlook.com:587;
+  // smtp.office365.com is the Microsoft 365 (work) host.
+  it('IMAP picked: an outlook.com address sends through Outlook.com SMTP', async () => {
+    personalByDomain.mockReturnValue(true);
+    await signIn('someone@outlook.com', 'imap');
+    const added = mockAddAccount.mock.calls[0][0];
+    expect(added.imapHost).toBe('outlook.office365.com');
+    expect(added.smtpHost).toBe('smtp-mail.outlook.com');
+    expect(added.smtpPort).toBe(587);
+  });
+
+  it('a work address over IMAP keeps the Microsoft 365 SMTP host', async () => {
+    await signIn('someone@contoso.example', 'imap');
+    expect(mockAddAccount.mock.calls[0][0].smtpHost).toBe('smtp.office365.com');
+  });
+
+  it('IMAP picked: an own-domain address skips the personal-account lookup', async () => {
+    mockIsPersonalMicrosoftAccount.mockResolvedValue(true);
+    await signIn('butcher@graphicmeat.example', 'imap');
+    expect(mockIsPersonalMicrosoftAccount).not.toHaveBeenCalled();
+    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('imap');
+  });
+
+  it('Graph picked: a work address signs in for Graph scopes and is added over Graph', async () => {
+    await signIn('someone@contoso.example', 'graph');
+    expect(mockIsPersonalMicrosoftAccount).not.toHaveBeenCalled();
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(true);
+    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('graph');
+  });
+});

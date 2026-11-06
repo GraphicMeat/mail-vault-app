@@ -5,7 +5,6 @@
 
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
-import { isPersonalMicrosoftEmail } from '../graphConfig.js';
 import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, deleteCredentials, markNativeMutationUncertain, assertAccountCreateOutcomeKnown, invalidateCredentialsCache } from './keychain.js';
 import * as keychainSession from '../keychainSession.js';
 import { t } from '../../i18n/index.js';
@@ -287,12 +286,10 @@ const identityContext = ['email', 'authType', 'imapHost', 'oauth2Provider', 'oau
 const oauthContext = [...identityContext, 'oauth2ClientId', 'oauth2CustomClientId', 'oauth2TenantId'];
 const serverContext = [...identityContext, 'imapPort', 'imapSecure', 'imapSecurity', 'smtpHost', 'smtpPort', 'smtpSecure', 'jmapSessionUrl', 'jmapAuth', 'jmapUsername'];
 export function accountExpectedContext(account, kind = 'server') {
-  const keys = kind === 'oauth' ? oauthContext : kind === 'all' ? [...new Set([...serverContext, ...oauthContext])]
-    : kind === 'repair' ? ['email', 'authType', 'oauth2Transport'] : serverContext;
+  const keys = kind === 'oauth' ? oauthContext : kind === 'all' ? [...new Set([...serverContext, ...oauthContext])] : serverContext;
   return {
     fields: Object.fromEntries(keys.filter(k => account[k] !== undefined).map(k => [k, account[k]])),
     absent: keys.filter(k => account[k] === undefined),
-    ...(kind === 'repair' ? { credentialPresent: true } : {}),
   };
 }
 async function persistAccount(params) {
@@ -499,18 +496,6 @@ export async function getAccounts() {
 
   } else {
     accounts = deduplicateAccounts(await readAccountsFile());
-  }
-
-  // Auto-repair: personal Microsoft accounts must use Graph transport.
-  // Older saved accounts may have oauth2Transport: 'imap' which fails with XOAUTH2.
-  for (const account of accounts) {
-    if (account.authType === 'oauth2' && isPersonalMicrosoftEmail(account.email) && account.oauth2Transport !== 'graph') {
-      const expected = accountExpectedContext(account, 'repair');
-      // Retain the display fallback; only native confirmation proves repair.
-      account.oauth2Transport = 'graph';
-      try { await patchAccount(account.id, { oauth2Transport: 'graph' }, { expected }); }
-      catch { console.warn('[db.js] Transport repair was not confirmed'); }
-    }
   }
 
   return accounts;

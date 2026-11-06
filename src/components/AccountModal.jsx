@@ -226,6 +226,8 @@ export function AccountModal({ onClose, onSuccess }) {
   const [detectedProvider, setDetectedProvider] = useState(null);
   const [showManualConfig, setShowManualConfig] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Microsoft only: 'auto' (personal -> Graph, work -> IMAP), 'graph' or 'imap'.
+  const [msTransport, setMsTransport] = useState('auto');
   // 'imap' | 'jmap'. JMAP is on offer for a preset that has it (Fastmail),
   // after autodetect found a session, and on "Other" for a URL typed by hand.
   const [protocol, setProtocol] = useState('imap');
@@ -529,14 +531,17 @@ export function AccountModal({ onClose, onSuccess }) {
 
     const currentProvider = providerConfig?.oauth2Provider || 'microsoft';
 
-    // Detect personal Microsoft accounts — these need Graph API scopes (IMAP OAuth broken).
-    // Outlook.com and Hotmail addresses are known by domain; a personal account
-    // signed in under its own domain is told by Microsoft, unless a work tenant
-    // or own app was typed (then it is a work account).
+    // Graph or IMAP for a Microsoft account: the user's pick wins. Automatic
+    // keeps personal accounts on Graph: Outlook.com and Hotmail addresses are
+    // known by domain; a personal account signed in under its own domain is
+    // told by Microsoft, unless a work tenant or own app was typed (then it is
+    // a work account, over IMAP).
     const isPersonalMs = currentProvider === 'microsoft' && (
-      isPersonalMicrosoftEmail(userEnteredEmail)
-      || (!formData.oauth2TenantId && !formData.oauth2CustomClientId
-        && await isPersonalMicrosoftAccount(userEnteredEmail).catch(() => false))
+      msTransport !== 'auto' ? msTransport === 'graph' : (
+        isPersonalMicrosoftEmail(userEnteredEmail)
+        || (!formData.oauth2TenantId && !formData.oauth2CustomClientId
+          && await isPersonalMicrosoftAccount(userEnteredEmail).catch(() => false))
+      )
     );
 
     try {
@@ -591,6 +596,10 @@ export function AccountModal({ onClose, onSuccess }) {
         authType: 'oauth2',
         oauth2Provider: currentProvider,
         oauth2Transport: isPersonalMs ? 'graph' : 'imap',
+        // Outlook.com over IMAP sends through Outlook.com's SMTP host, not
+        // Microsoft 365's (Microsoft's published Outlook.com settings).
+        ...(currentProvider === 'microsoft' && !isPersonalMs && isPersonalMicrosoftEmail(userEnteredEmail)
+          ? { smtpHost: 'smtp-mail.outlook.com', smtpPort: 587 } : {}),
         password: '' // Clear password — not needed for OAuth2
       }, tokenData);
       setFormData(next);
@@ -898,6 +907,19 @@ export function AccountModal({ onClose, onSuccess }) {
                   {/* Advanced (Corporate) section for Microsoft OAuth2 */}
                   {authType === 'oauth2' && providerConfig?.oauth2Provider === 'microsoft' && (
                     <div className="mt-2">
+                      <label className="flex items-center justify-between gap-2 mb-2 text-xs text-mail-text-muted">
+                        {t('account.msTransport')}
+                        <select
+                          value={msTransport}
+                          onChange={e => setMsTransport(e.target.value)}
+                          disabled={oauthLoading || oauthConnected}
+                          className="px-2 py-1 text-xs bg-mail-bg border border-mail-border rounded text-mail-text"
+                        >
+                          <option value="auto">{t('account.msTransportAuto')}</option>
+                          <option value="graph">{t('account.msTransportGraph')}</option>
+                          <option value="imap">{t('account.msTransportImap')}</option>
+                        </select>
+                      </label>
                       <button
                         type="button"
                         onClick={() => setShowAdvanced(!showAdvanced)}

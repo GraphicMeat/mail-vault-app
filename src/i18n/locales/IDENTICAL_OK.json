@@ -1,6 +1,8 @@
 [
   "account.aolMail",
   "account.imapExampleCom",
+  "account.msTransportGraph",
+  "account.msTransportImap",
   "account.outlookCom",
   "account.outlookMicrosoft365",
   "account.passwordRequired",

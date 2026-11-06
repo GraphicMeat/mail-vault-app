@@ -845,13 +845,8 @@ export async function loadEmails({ rereadFlags = false } = {}) {
       errorMessage = 'Microsoft IMAP connection failed. This is a known Microsoft server issue affecting personal Outlook.com accounts with OAuth2. See FAQ for details.';
     } else if (error.message?.includes('XOAUTH2 auth failed')) {
       errorType = 'oauthExpired';
-      const { isPersonalMicrosoftEmail: isPersonalMs } = await import('../graphConfig');
-      const activeAccount = get().accounts.find(a => a.id === get().activeAccountId);
-      if (isPersonalMs(activeAccount?.email)) {
-        errorMessage = 'This Outlook account uses Graph API. Please reconnect with Microsoft in Settings to fix authentication.';
-      } else {
-        errorMessage = 'OAuth2 authentication failed. Please reconnect your account in Settings.';
-      }
+      const { oauthSignInFailedMessage } = await import('../graphConfig');
+      errorMessage = oauthSignInFailedMessage(get().accounts.find(a => a.id === get().activeAccountId));
     } else if (error.message?.includes('password') || error.message?.includes('authentication') || error.message?.includes('No password') || error.message?.includes('Login failed') || error.message?.includes('auth failed')) {
       errorType = 'passwordMissing';
       errorMessage = 'Authentication failed. Please check your password in Settings.';

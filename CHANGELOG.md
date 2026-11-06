@@ -6,6 +6,8 @@
 - Sending from an alias of a Microsoft account no longer fails with "Microsoft refused to send as". When Microsoft will not send as the alias, the mail goes out as the account address with the alias set as Reply-To, so replies still reach the alias.
 - Marking Outlook mail read or starring it no longer shows "Could not update the flag on the server" for a message Outlook no longer has, because it was deleted or moved in Outlook after the list loaded. Marking many messages read at once raised one such error per missing message. Other server refusals are still reported.
 
+- Adding an Outlook or Microsoft 365 account now has a Connect over choice: Automatic, Microsoft Graph or IMAP. Automatic works as before (Outlook.com and Hotmail over Microsoft Graph, work and school accounts over IMAP). An Outlook.com or Hotmail account added over IMAP now stays on IMAP; MailVault used to switch it back to Microsoft Graph every time it started, and it sends through Outlook.com's own mail server (smtp-mail.outlook.com). An account keeps the connection it was added with.
+
 - Settings > Billing now groups an account's aliases under it, indented with the account name greyed out, the same way the From picker in Compose does.
 
 ## [2.22.0] - 2026-11-05

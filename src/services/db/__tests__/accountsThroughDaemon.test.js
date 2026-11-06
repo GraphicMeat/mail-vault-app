@@ -194,15 +194,14 @@ describe('the account list goes through the daemon', () => {
     expect(JSON.parse(file)).toEqual([]);
   });
 
-  it('a transport repair saves the repaired records only, never a whole blob', async () => {
+  // Personal Outlook.com IMAP over OAuth works again, so IMAP on a personal
+  // domain is a choice the user made, not a broken record to rewrite to Graph.
+  it('a personal Microsoft account stored over IMAP stays IMAP, and nothing is written', async () => {
     blob.ms = JSON.stringify({ id: 'ms', email: 'me@outlook.test', authType: 'oauth2', oauth2Transport: 'imap', oauth2RefreshToken: 'rt' });
-    file = JSON.stringify([{ id: 'fileonly', email: 'f@outlook.test', authType: 'oauth2', oauth2Transport: 'imap' }]);
-    await accounts.getAccounts();
-    expect(names()).not.toContain('store_credentials');
-    expect(sent('credentials.save')).toHaveLength(0);
-    expect(sent('accounts.save').every(([,a])=>Object.keys(a.patch.fields).join(',')==='oauth2Transport'&&a.patch.expected.credentialPresent)).toBe(true);
-    expect(JSON.parse(blob.ms).oauth2Transport).toBe('graph');
-    expect(JSON.parse(blob.old).password).toBe('keep');
+    const listed = await accounts.getAccounts();
+    expect(listed.find(a => a.id === 'ms').oauth2Transport).toBe('imap');
+    expect(sent('accounts.save')).toHaveLength(0);
+    expect(JSON.parse(blob.ms).oauth2Transport).toBe('imap');
   });
 });
 
@@ -646,26 +645,6 @@ describe('account intent persistence regressions', () => {
     const saved = JSON.parse(blob.g);
     expect(saved.oauth2AccessToken === 'synthetic-new-at' && saved.oauth2RefreshToken === 'synthetic-new-rt' && saved.oauth2ExpiresAt === 9, 'new native pair must survive stale caller').toBe(true);
     expect(JSON.parse(file).find(a => a.id === 'g').sentFolderOverride).toBe('Sent custom');
-  });
-
-  it('Microsoft repair preserves a rotation committed after its cached read', async () => {
-    const stale = { id: 'ms', email: 'me@outlook.test', imapHost: 'h', authType: 'oauth2', oauth2Transport: 'imap', oauth2RefreshToken: 'synthetic-old-rt', oauth2AccessToken: 'synthetic-old-at', oauth2ExpiresAt: 1 };
-    blob.ms = JSON.stringify(stale);
-    await keychain.loadKeychain();
-    useDaemon();
-    const real = h.handler;
-    h.handler = async (cmd, args) => {
-      if (cmd === 'accounts.save') {
-        blob.ms = JSON.stringify({ ...stale, oauth2RefreshToken: 'synthetic-new-rt', oauth2AccessToken: 'synthetic-new-at', oauth2ExpiresAt: 9 });
-        useDaemon();
-        return h.handler(cmd, args);
-      }
-      return real(cmd, args);
-    };
-    await accounts.getAccounts();
-    const saved = JSON.parse(blob.ms);
-    expect(saved.oauth2AccessToken === 'synthetic-new-at' && saved.oauth2RefreshToken === 'synthetic-new-rt' && saved.oauth2ExpiresAt === 9, 'new native pair must survive stale caller').toBe(true);
-    expect(saved.oauth2Transport).toBe('graph');
   });
 });
 

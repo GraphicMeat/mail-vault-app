@@ -438,14 +438,6 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     return;
   }
 
-  if (account.authType === 'oauth2' && account.oauth2Transport !== 'graph') {
-    const { isPersonalMicrosoftEmail: isPersonalMs } = await import('../graphConfig');
-    if (isPersonalMs(account.email)) {
-      console.log('[activateAccount] Auto-repairing transport for', account.email, '-> graph');
-      account = { ...account, oauth2Transport: 'graph' };
-    }
-  }
-
   // Skip descriptor restore on background refresh — it must do a full load,
   // otherwise it re-enters the descriptor path and loops infinitely.
   const isBackgroundRefresh = options._backgroundRefresh === true;
@@ -1363,12 +1355,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         errorMessage = 'Microsoft IMAP connection failed. This is a known Microsoft server issue affecting personal Outlook.com accounts with OAuth2. See FAQ for details.';
       } else if (error.message?.includes('XOAUTH2 auth failed')) {
         errorType = 'oauthExpired';
-        const { isPersonalMicrosoftEmail: isPersonalMs } = await import('../graphConfig');
-        if (isPersonalMs(account?.email)) {
-          errorMessage = 'This Outlook account uses Graph API. Please reconnect with Microsoft in Settings to fix authentication.';
-        } else {
-          errorMessage = 'OAuth2 authentication failed. Please reconnect your account in Settings.';
-        }
+        const { oauthSignInFailedMessage } = await import('../graphConfig');
+        errorMessage = oauthSignInFailedMessage(account);
       } else if (error.message?.includes('password') || error.message?.includes('authentication') || error.message?.includes('No password') || error.message?.includes('Login failed') || error.message?.includes('auth failed')) {
         errorType = 'passwordMissing';
         errorMessage = 'Authentication failed. Please check your password in Settings.';

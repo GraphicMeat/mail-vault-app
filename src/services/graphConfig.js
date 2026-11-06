@@ -8,8 +8,9 @@ export function isGraphAccount(account) {
 }
 
 /**
- * Personal Microsoft domains that require Graph transport (IMAP XOAUTH2 is broken).
- * Shared source of truth — used by AccountModal, db.js auto-repair, and error handling.
+ * Personal Microsoft domains: the add-account flow's Automatic choice puts
+ * these on Graph. Only AccountModal reads it; the transport stored on the
+ * account is the answer after that.
  */
 export const PERSONAL_MS_DOMAINS = [
   'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
@@ -19,14 +20,20 @@ export const PERSONAL_MS_DOMAINS = [
   'outlook.jp', 'hotmail.co.jp', 'live.jp',
 ];
 
-/**
- * Check if an email address belongs to a personal Microsoft domain.
- * These accounts must use Graph transport, not IMAP XOAUTH2.
- */
+/** Check if an email address belongs to a personal Microsoft domain. */
 export function isPersonalMicrosoftEmail(email) {
   if (!email) return false;
   const domain = email.toLowerCase().split('@')[1];
   return domain ? PERSONAL_MS_DOMAINS.includes(domain) : false;
+}
+
+/** What a failed XOAUTH2 sign-in tells the user: a Graph account is told to
+ *  reconnect with Microsoft, any other account to reconnect. Decided by the
+ *  account's transport, never its domain: Outlook.com can be added over IMAP. */
+export function oauthSignInFailedMessage(account) {
+  return isGraphAccount(account)
+    ? 'This Outlook account uses Graph API. Please reconnect with Microsoft in Settings to fix authentication.'
+    : 'OAuth2 authentication failed. Please reconnect your account in Settings.';
 }
 
 // ── Folder keys ───────────────────────────────────────────────────────────
