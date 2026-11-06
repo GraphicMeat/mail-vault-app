@@ -491,7 +491,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     fn page(e: &Engine) -> Value {
-        e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "offset": 0, "limit": 50 }))
+        e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "cursor": null, "limit": 50 }))
             .unwrap()
     }
 

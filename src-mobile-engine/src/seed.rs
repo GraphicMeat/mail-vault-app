@@ -6,6 +6,8 @@ use crate::db::{Engine, EngineError};
 
 pub const ACCOUNT_ID: &str = "seed-account";
 pub const FOLDER: &str = "INBOX";
+/// A second account with an empty inbox, for the account switcher (no messages, no secret).
+pub const SECOND_ACCOUNT_ID: &str = "seed-account-2";
 /// Rows the perf gate scrolls through; the shell seeds this many on first open.
 pub const PERF_ROWS: usize = 10_000;
 const SEED: u64 = 0x4D41_494C_5641_554C;
@@ -52,6 +54,7 @@ pub fn seed(engine: &Engine, count: usize) -> Result<(), EngineError> {
 /// and adds the rest. Returns whether it wrote anything; a second launch writes nothing.
 pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError> {
     engine.write(|c| {
+        insert_showcase(c)?;
         let n: i64 = c.query_row(
             "SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = ?2",
             (ACCOUNT_ID, FOLDER),
@@ -78,6 +81,36 @@ fn insert_account_and_folder(c: &rusqlite::Connection, count: usize) -> Result<(
          VALUES (?1, ?2, ?2, '\\Inbox', '/', 0, 1, ?3, 0, ?4, ?5)",
         (ACCOUNT_ID, FOLDER, count as i64 + 1, count as i64, NEWEST_MS),
     )?;
+    Ok(())
+}
+
+/// A second account and a few more folders, so the account switcher and the folder drawer have
+/// something to show in screenshots. Rows only, no messages: nothing here can sync (no secret).
+/// `INSERT OR IGNORE`, so every launch may run it and an existing install gains them too.
+fn insert_showcase(c: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+    c.execute(
+        "INSERT OR IGNORE INTO accounts (id, email, display_name, imap_host, imap_port, security, created_ms)
+         VALUES (?1, 'work@example.test', 'Work', 'localhost', 993, 'ssl', ?2)",
+        (SECOND_ACCOUNT_ID, NEWEST_MS + 1),
+    )?;
+    let folders: &[(&str, &str, &str, Option<&str>, i64, i64)] = &[
+        (ACCOUNT_ID, "Drafts", "Drafts", Some("\\Drafts"), 0, 0),
+        (ACCOUNT_ID, "Sent", "Sent", Some("\\Sent"), 0, 0),
+        (ACCOUNT_ID, "Archive", "Archive", Some("\\Archive"), 0, 0),
+        (ACCOUNT_ID, "Junk", "Junk", Some("\\Junk"), 12, 0),
+        (ACCOUNT_ID, "Trash", "Trash", Some("\\Trash"), 0, 0),
+        (ACCOUNT_ID, "Projects", "Projects", None, 0, 1),
+        (ACCOUNT_ID, "Projects/Garden", "Garden", None, 3, 0),
+        (ACCOUNT_ID, "Projects/Taxes 2026", "Taxes 2026", None, 0, 0),
+        (SECOND_ACCOUNT_ID, "INBOX", "INBOX", Some("\\Inbox"), 4, 0),
+    ];
+    for (account, path, name, special, unseen, noselect) in folders {
+        c.execute(
+            "INSERT OR IGNORE INTO folders (account_id, path, name, special_use, delimiter, noselect, uid_validity, uid_next, unseen, total, synced_ms)
+             VALUES (?1, ?2, ?3, ?4, '/', ?5, 1, 1, ?6, 0, ?7)",
+            (account, path, name, special, noselect, unseen, NEWEST_MS),
+        )?;
+    }
     Ok(())
 }
 

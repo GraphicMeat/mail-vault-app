@@ -11,10 +11,11 @@ fn open(dir: &Path) -> Result<Engine, EngineError> {
     Engine::open(dir, &dir.join("cache"), Arc::new(MemorySecrets::default()))
 }
 
-fn page(e: &Engine, offset: u64, limit: u64) -> Value {
+/// One cursor page of the seed list; `cursor` is `null` for the first.
+fn page(e: &Engine, cursor: Value, limit: u64) -> Value {
     e.rpc(
         "mobile.messages.page",
-        json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "offset": offset, "limit": limit }),
+        json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "cursor": cursor, "limit": limit }),
     )
     .unwrap()
 }
@@ -29,7 +30,7 @@ fn open_seeded(dir: &std::path::Path, n: usize) -> Engine {
 fn seeded_page_is_newest_first() {
     let tmp = tempfile::tempdir().unwrap();
     let e = open_seeded(tmp.path(), 250);
-    let p = page(&e, 0, 200);
+    let p = page(&e, Value::Null, 200);
     let rows = p["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 200);
     assert_eq!(p["total"], 250);
@@ -95,26 +96,29 @@ fn ensure_seeded_seeds_an_empty_table_once() {
     {
         let e = open(tmp.path()).unwrap();
         assert!(seed::ensure_seeded(&e, 300).unwrap());
-        assert_eq!(page(&e, 0, 1)["total"], 300);
+        assert_eq!(page(&e, Value::Null, 1)["total"], 300);
         assert!(!seed::ensure_seeded(&e, 300).unwrap(), "second call must not reseed");
-        assert_eq!(page(&e, 0, 1)["total"], 300);
+        assert_eq!(page(&e, Value::Null, 1)["total"], 300);
     }
     // Next launch: same file, still no reseed.
     let e = open(tmp.path()).unwrap();
     assert!(!seed::ensure_seeded(&e, 300).unwrap());
-    assert_eq!(page(&e, 0, 1)["total"], 300);
+    assert_eq!(page(&e, Value::Null, 1)["total"], 300);
 }
 
 /// Every row of the seed account, keyed by uid.
 fn all_rows(e: &Engine) -> std::collections::BTreeMap<i64, Value> {
-    let total = page(e, 0, 1)["total"].as_u64().unwrap();
     let mut out = std::collections::BTreeMap::new();
-    let mut offset = 0;
-    while offset < total {
-        for r in page(e, offset, 200)["rows"].as_array().unwrap() {
+    let mut cursor = Value::Null;
+    loop {
+        let p = page(e, cursor, 200);
+        for r in p["rows"].as_array().unwrap() {
             out.insert(r["uid"].as_i64().unwrap(), r.clone());
         }
-        offset += 200;
+        if p["nextCursor"].is_null() {
+            break;
+        }
+        cursor = p["nextCursor"].clone();
     }
     out
 }
@@ -135,7 +139,7 @@ fn ensure_seeded_tops_up_a_smaller_table() {
     assert!(!seed::ensure_seeded(&e, 1000).unwrap(), "already at target");
     // A table above the target is left alone.
     assert!(!seed::ensure_seeded(&e, 500).unwrap());
-    assert_eq!(page(&e, 0, 1)["total"], 1000);
+    assert_eq!(page(&e, Value::Null, 1)["total"], 1000);
 }
 
 #[test]
@@ -165,4 +169,22 @@ fn seed_pages_by_cursor() {
     }
     assert_eq!(keys.len(), 1_000);
     assert!(keys.windows(2).all(|w| w[0] > w[1]), "not strictly (dateMs, uid) descending");
+}
+
+#[test]
+fn ensure_seeded_adds_the_showcase_account_and_folders_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path()).unwrap();
+    for _ in 0..2 {
+        seed::ensure_seeded(&e, 50).unwrap();
+        let accounts = e.rpc("mobile.accounts.list", json!({})).unwrap();
+        let ids: Vec<&str> = accounts["accounts"].as_array().unwrap().iter().map(|a| a["id"].as_str().unwrap()).collect();
+        // The perf list's account stays first: the app opens the first account.
+        assert_eq!(ids, vec![seed::ACCOUNT_ID, seed::SECOND_ACCOUNT_ID]);
+        let folders = e.rpc("mobile.folders.list", json!({ "accountId": seed::ACCOUNT_ID })).unwrap();
+        let paths: Vec<&str> = folders["folders"].as_array().unwrap().iter().map(|f| f["path"].as_str().unwrap()).collect();
+        assert_eq!(paths.len(), 9, "{paths:?}");
+        assert_eq!(paths[0], "INBOX");
+    }
+    assert_eq!(page(&e, Value::Null, 1)["total"], 50);
 }

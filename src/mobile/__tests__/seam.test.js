@@ -11,7 +11,8 @@ const ENTRY = here('../main.jsx');
 const METHODS = JSON.parse(readFileSync(here('../../../src-mobile-engine/methods.json'), 'utf8'));
 const EVENTS = JSON.parse(readFileSync(here('../../../src-mobile-engine/events.json'), 'utf8'));
 const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_log'];
-const DESKTOP_ONLY = /plugin-shell|plugin-updater|sparkle|features\/blitz|e2eMotion/i;
+// Desktop stores (and `plugin-fs`) would bring the desktop RPC graph with them.
+const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|sparkle|features\/blitz|e2eMotion|src\/stores\//i;
 
 describe('mobile seam', () => {
   it('every_rpc_method_is_implemented', async () => {
@@ -35,6 +36,8 @@ describe('mobile seam', () => {
   it('detector_really_detects', async () => {
     const r = await analyzeSeam(here('./fixtures/desktopLeak.js'));
     expect(r.modules.filter((m) => DESKTOP_ONLY.test(m)).length).toBeGreaterThan(0);
+    // daemonClient lazy-loads the desktop settings store: the store pattern sees it too.
+    expect(r.modules.filter((m) => /src\/stores\//.test(m)).length).toBeGreaterThan(0);
     expect(r.rpcMethods).toContain('backup.run');
     expect(r.rpcMethods.filter((m) => !METHODS.includes(m))).toContain('backup.run');
   });
@@ -53,6 +56,7 @@ describe('mobile seam', () => {
 
   it('every_listened_event_is_emitted', async () => {
     const real = await analyzeSeam(ENTRY);
+    expect(real.listens.length).toBeGreaterThan(0);
     expect(real.listens.filter((n) => !EVENTS.includes(n))).toEqual([]);
     const fx = await analyzeSeam(here('./fixtures/listenEvents.js'));
     expect(fx.listens).toEqual(['mobile.nope', 'mobile.sync.state']);

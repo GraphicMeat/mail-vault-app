@@ -15,10 +15,11 @@ fn open(dir: &Path) -> Result<Engine, EngineError> {
 const ACCOUNT_ID: &str = "test-account";
 const FOLDER: &str = "INBOX";
 
-fn page(e: &Engine, offset: u64, limit: u64) -> Value {
+/// One cursor page of [`ACCOUNT_ID`] / [`FOLDER`]; `cursor` is `null` for the first.
+fn page(e: &Engine, cursor: Value, limit: u64) -> Value {
     e.rpc(
         "mobile.messages.page",
-        json!({ "accountId": ACCOUNT_ID, "folder": FOLDER, "offset": offset, "limit": limit }),
+        json!({ "accountId": ACCOUNT_ID, "folder": FOLDER, "cursor": cursor, "limit": limit }),
     )
     .unwrap()
 }
@@ -71,15 +72,20 @@ fn open_creates_schema_v2_in_wal() {
 fn page_returns_newest_first_and_total() {
     let tmp = tempfile::tempdir().unwrap();
     let e = open_seeded(tmp.path(), 250);
-    let p = page(&e, 0, 50);
+    let p = page(&e, Value::Null, 60);
     let rows = p["rows"].as_array().unwrap();
-    assert_eq!(rows.len(), 50);
+    assert_eq!(rows.len(), 60);
     assert_eq!(p["total"], 250);
     let dates: Vec<i64> = rows.iter().map(|r| r["dateMs"].as_i64().unwrap()).collect();
     assert!(dates.windows(2).all(|w| w[0] >= w[1]), "not newest first: {dates:?}");
-    let last = page(&e, 240, 50);
+    // 60 + 60 + 60 + 60 + 10: the last page is short and has no next cursor.
+    let mut last = p.clone();
+    for _ in 0..4 {
+        last = page(&e, last["nextCursor"].clone(), 60);
+    }
     assert_eq!(last["rows"].as_array().unwrap().len(), 10);
     assert_eq!(last["total"], 250);
+    assert!(last["nextCursor"].is_null());
     let r = &rows[0];
     for k in ["uid", "subject", "fromName", "fromAddress", "dateMs", "snippet", "seen", "flagged", "hasAttachments"] {
         assert!(r.get(k).is_some(), "missing {k}");
@@ -90,7 +96,7 @@ fn page_returns_newest_first_and_total() {
 fn page_caps_limit() {
     let tmp = tempfile::tempdir().unwrap();
     let e = open_seeded(tmp.path(), 250);
-    assert_eq!(page(&e, 0, 1000)["rows"].as_array().unwrap().len(), 200);
+    assert_eq!(page(&e, Value::Null, 1000)["rows"].as_array().unwrap().len(), 200);
 }
 
 #[test]
@@ -99,7 +105,7 @@ fn corrupt_db_is_rebuilt() {
     std::fs::write(tmp.path().join("mobile.db"), b"this is not a sqlite database, just garbage bytes").unwrap();
     let e = open(tmp.path()).unwrap();
     let p = e
-        .rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "offset": 0, "limit": 10 }))
+        .rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "cursor": null, "limit": 10 }))
         .unwrap();
     assert_eq!(p["total"], 0);
 }
@@ -122,7 +128,7 @@ fn corrupt_page_after_valid_header_is_rebuilt() {
     let _ = std::fs::remove_file(tmp.path().join("mobile.db-wal"));
     let _ = std::fs::remove_file(tmp.path().join("mobile.db-shm"));
     let e = open(tmp.path()).unwrap();
-    assert_eq!(page(&e, 0, 10)["total"], 0);
+    assert_eq!(page(&e, Value::Null, 10)["total"], 0);
 }
 
 #[test]
@@ -147,7 +153,7 @@ fn v1_file_is_rebuilt_as_v2() {
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
     assert_eq!(ver, 2);
-    assert_eq!(e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "offset": 0, "limit": 10 })).unwrap()["total"], 0);
+    assert_eq!(e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "cursor": null, "limit": 10 })).unwrap()["total"], 0);
     for t in ["accounts", "folders", "messages", "bodies", "attachments", "pending_actions"] {
         let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "{t}");
@@ -201,11 +207,27 @@ fn bad_params_are_typed() {
     let tmp = tempfile::tempdir().unwrap();
     let e = open(tmp.path()).unwrap();
     let err = e
-        .rpc("mobile.messages.page", json!({ "accountId": "a", "offset": 0, "limit": 10 }))
+        .rpc("mobile.messages.page", json!({ "accountId": "a", "cursor": null, "limit": 10 }))
         .unwrap_err();
     assert!(matches!(err, RpcError::Invalid(_)), "{err:?}");
     assert_eq!(serde_json::to_value(&err).unwrap()["code"], "INVALID");
     assert!(matches!(e.rpc("mobile.messages.page", Value::Null), Err(RpcError::Invalid(_))));
+}
+
+#[test]
+fn offset_form_is_refused() {
+    // The Plan 1 `{offset, limit}` form is gone. A caller still sending it must fail loudly, not
+    // get the first page back on every call.
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open_seeded(tmp.path(), 20);
+    for params in [
+        json!({ "accountId": ACCOUNT_ID, "folder": FOLDER, "offset": 0, "limit": 10 }),
+        json!({ "accountId": ACCOUNT_ID, "folder": FOLDER, "offset": null, "limit": 10 }),
+        json!({ "accountId": ACCOUNT_ID, "folder": FOLDER, "cursor": null, "offset": 10, "limit": 10 }),
+    ] {
+        let err = e.rpc("mobile.messages.page", params.clone()).unwrap_err();
+        assert!(matches!(err, RpcError::Invalid(_)), "{params}: {err:?}");
+    }
 }
 
 #[test]
@@ -234,7 +256,7 @@ fn dir_with_spaces_and_unicode() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("Äpp Data");
     let e = open_seeded(&dir, 20);
-    assert_eq!(page(&e, 0, 5)["total"], 20);
+    assert_eq!(page(&e, Value::Null, 5)["total"], 20);
     assert!(dir.join("mobile.db").is_file());
 }
 

@@ -8,7 +8,7 @@ import MessageRow, { ROW_HEIGHT } from '../MessageRow.jsx';
 import ViewerStub from '../ViewerStub.jsx';
 import { formatEmailDate, MOBILE_DATE_SETTINGS } from '../format.js';
 import { formatEmailDateWith } from '../../utils/emailDateCore.js';
-import { t, MOBILE_LOCALE } from '../i18n.js';
+import { t, getMobileLocale } from '../i18n.js';
 import en from '../../i18n/locales/en.json';
 
 afterEach(cleanup);
@@ -109,7 +109,7 @@ describe('ViewerStub', () => {
 
 describe('mobile wrappers supply mobile defaults to the shared cores', () => {
   it('t() is the shared lookup over the English catalog', () => {
-    expect(MOBILE_LOCALE).toBe('en');
+    expect(getMobileLocale()).toBe('en');
     for (const k of ['common.noSubject', 'explorer.unknownSender', 'common.back', 'sidebar.inbox', 'common.retry', 'mobile.list.loadFailed', 'explorer.loading']) {
       expect(t(k)).toBe(en[k]);
     }
