@@ -502,7 +502,10 @@ async fn secure_transport(
             Ok((Box::new(stream), false))
         }
         ImapSecurity::Ssl => {
-            let tls_stream = bounded_step(TLS_TIMEOUT, tls::connect(&config.host, stream, all_loopback))
+            // Boxed: inlined, the handshake future grew every session future past the
+            // daemon's 2 MiB worker stack (tests/imap_future_size.rs).
+            let handshake = Box::pin(tls::connect(&config.host, stream, all_loopback));
+            let tls_stream = bounded_step(TLS_TIMEOUT, handshake)
                 .await
                 .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
             Ok((Box::new(tls_stream), false))
@@ -572,7 +575,9 @@ async fn starttls_upgrade(
         // Untagged response (e.g. a CAPABILITY line) — keep reading.
     }
 
-    let tls_stream = bounded_step(TLS_TIMEOUT, tls::connect(&config.host, reader.into_inner(), all_loopback))
+    // Boxed for the same reason as in `secure_transport`.
+    let handshake = Box::pin(tls::connect(&config.host, reader.into_inner(), all_loopback));
+    let tls_stream = bounded_step(TLS_TIMEOUT, handshake)
         .await
         .map_err(|e| format!("STARTTLS TLS handshake with {} failed: {}", config.host, e))?;
 
