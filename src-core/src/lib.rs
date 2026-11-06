@@ -29,6 +29,7 @@ pub mod message_store;
 pub mod notes_to_self;
 pub mod search_index;
 pub mod takeout;
+pub mod transport_switch;
 pub mod folder_overlap;
 pub mod folder_move;
 pub mod vault_eml;

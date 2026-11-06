@@ -100,6 +100,7 @@ const ALLOWED: &[(&str, &str, &str)] = &[
     ("src-core/src/import_rehome.rs", "carry_out", "moves or sets aside the files record planned; its daemon caller rehome_pass invalidates per chunk when anything moved or failed"),
     ("src-core/src/import_rehome.rs", "replay_into", "replays the rehome ledger onto the vault and the backup mirror; it returns whether the vault moved and its caller vault_uids_after_presync invalidates on that"),
     ("src-core/src/maildir.rs", "migrate_add_eml_extension", "startup rename sweep; daemon main runs it before the registry opens"),
+    ("src-core/src/transport_switch.rs", "rekey_to_server", "re-files a folder under the server's uids on a Graph/IMAP switch; its caller accounts.switch_transport invalidates the folder after it"),
     ("src-core/src/maildir.rs", "repair_generation", "renames and orphans wholesale; its caller maildir_repair_generation invalidates when anything moved"),
     ("src-core/src/maildir.rs", "rebind_uids", "re-files undone deletes under their new uids; its caller vault_rebind_uids invalidates when anything moved"),
     ("src-core/src/pgp.rs", "write_copy", "writes the decrypted copy into .decrypted/ beside cur/, which holds no registry row"),

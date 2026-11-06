@@ -447,6 +447,26 @@ pub fn record(mailbox_dir: &Path, plan: &Plan) -> Result<(Vec<Step>, u32), Strin
     Ok((steps, skipped))
 }
 
+/// Add `(from, to, message_id)` entries to the folder's ledger, for a pass
+/// that renumbers files itself (`transport_switch`): `replay` then carries the
+/// same moves to the backup folder. Written before any file moves, like
+/// `record`.
+pub(crate) fn append_entries(mailbox_dir: &Path, entries: &[(u32, Option<u32>, String)]) -> Result<(), String> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let mut ledger = read_ledger(mailbox_dir)?;
+    ledger.extend(entries.iter().map(|(from, to, id)| LedgerEntry { from: *from, to: *to, message_id: id.clone() }));
+    let json = serde_json::to_vec(&ledger).map_err(|e| e.to_string())?;
+    crate::fsx::write_atomic(&mailbox_dir.join(LEDGER_FILE), &json).map_err(|e| format!("Failed to write {LEDGER_FILE}: {e}"))
+}
+
+/// One past every import-range uid in `cur/` and in the folder's ledger: the
+/// first a pass that moves files into the range may hand out.
+pub(crate) fn next_free_import_uid(mailbox_dir: &Path) -> Result<Option<u32>, String> {
+    Ok(next_import_uid(mailbox_dir, &read_ledger(mailbox_dir)?))
+}
+
 /// The second half: the renames of `steps`, all of `record`'s or one chunk
 /// of them, under the mailbox lock the caller holds. It writes no ledger. A
 /// name gone since `record` is skipped. A move whose target uid another
@@ -521,7 +541,7 @@ fn set_aside(mailbox_dir: &Path, path: &Path, name: &str) -> Result<(), String> 
 /// An OpenPGP message's decrypted copy follows its file: renamed with a move,
 /// into `orphaned/.decrypted/` with a set-aside. Left behind, it would open as
 /// the body of whatever message lands on the old uid next.
-fn move_decrypted(mailbox_dir: &Path, from: u32, to: Option<u32>) {
+pub(crate) fn move_decrypted(mailbox_dir: &Path, from: u32, to: Option<u32>) {
     let dir = mailbox_dir.join(DECRYPTED_DIR);
     let src = dir.join(format!("{from}.eml"));
     if !src.exists() {

@@ -2269,6 +2269,26 @@ fn vault_uids_after_presync_at(
     scan_cur_uids(vault_cur_dir)
 }
 
+/// The pre-sync of one folder with its backup folder (`replay`, then the
+/// copy both ways), for a caller that re-files the folder next: a Graph/IMAP
+/// switch (`transport_switch`) must see the uids only the mirror still holds,
+/// or the mirror copies them back under the old numbering afterwards.
+pub fn presync_folder(reg: &VaultRegistry, root: &Path, account_id: &str, email: &str, mailbox: &str, mirror_root: &Path) -> Result<(), String> {
+    let cur = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(root, account_id, mailbox));
+    let mirror = crate::maildir::mirror_cur(mirror_root, email, mailbox)?;
+    vault_uids_after_presync_at(reg, account_id, mailbox, &cur, Some(mirror_root), Some(&mirror)).map(|_| ())
+}
+
+/// The folder's rehome ledger replayed onto its backup folder now, rather
+/// than at the next backup run's pre-sync.
+pub fn replay_folder(root: &Path, account_id: &str, email: &str, mailbox: &str, mirror_root: &Path) -> Result<(), String> {
+    let mirror = crate::maildir::mirror_cur(mirror_root, email, mailbox)?;
+    if let Some(mirror_mailbox) = mirror.parent() {
+        crate::import_rehome::replay_at(&crate::message_store::mailbox_dir(root, account_id, mailbox), mirror_root, mirror_mailbox);
+    }
+    Ok(())
+}
+
 /// Every uid a file in the vault's Maildir message directory `cur_dir`
 /// carries, by the mirror's loose rule (`message_store::loose_uids_in`).
 fn scan_cur_uids(cur_dir: &Path) -> Result<HashSet<u32>, String> {
