@@ -1,0 +1,23 @@
+{
+  "defaultBranch": "main",
+  "targets": {
+    "app": {
+      "kind": "tauri",
+      "test": "~/.claude/bin/testq ~/.claude/bin/minijob cargo test -p imap-proto -p mailvault-core -p mailvault-daemon -p mock-imap",
+      "screens": [{ "name": "Launch", "launchArg": "" }]
+    },
+    "web": {
+      "kind": "site",
+      "test": "~/.claude/bin/testq ~/.claude/bin/minijob bash -c 'npm ci --ignore-scripts && node scripts/build-search-index.mjs website && npm test'",
+      "demo": {
+        "cmd": "python3 -m http.server 4174 --bind 127.0.0.1 --directory website",
+        "port": 4174,
+        "routes": ["/", "/privacy.html"]
+      },
+      "deploy": {
+        "workflow": "deploy-website.yml",
+        "healthUrl": "https://mailvaultapp.com/"
+      }
+    }
+  }
+}
