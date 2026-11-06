@@ -1,6 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect } from 'vitest';
-import { percentile, gateVerdict, summarizePerf, SCROLL_PX_PER_FRAME, TAP_COUNT, tapIndices } from '../perf.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  percentile, gateVerdict, summarizePerf, scrollThrough, tapIndices,
+  SCROLL_PX_PER_FRAME, TAP_COUNT, PERF_ROWS,
+} from '../perf.js';
 
 const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -48,37 +53,100 @@ describe('gateVerdict', () => {
   });
 });
 
+const whole = { frames: Array(200).fill(16.7), rows: PERF_ROWS, webview: 'UA', blankFrames: 0, reachedEnd: true };
+const fastTaps = range(20).map((n) => n * 4); // 4..80
+
 describe('summarizePerf', () => {
-  it('reports p95 of the taps as tapToPaint, with the fixed speed and the webview', () => {
-    const frames = Array(200).fill(16.7);
-    const taps = range(20).map((n) => n * 4); // 4..80
-    const r = summarizePerf({ frames, taps, rows: 10000, webview: 'UA', blankFrames: 3 });
-    expect(r.rows).toBe(10000);
-    expect(r.blankFrames).toBe(3);
-    expect(r.webview).toBe('UA');
-    expect(r.frameP95).toBe(16.7);
-    expect(r.frameMax).toBe(16.7);
-    expect(r.frames).toBe(200);
-    expect(r.tapStat).toBe('p95');
-    expect(r.tapToPaint).toBe(76);
-    expect(r.tapP50).toBe(40);
-    expect(r.tapMax).toBe(80);
-    expect(r.taps).toBe(20);
-    expect(r.scrollPxPerFrame).toBe(SCROLL_PX_PER_FRAME);
-    expect(r.pass).toBe(true);
+  it('a whole fast run passes; tapToPaint is the slowest tap (Ruling 8)', () => {
+    const r = summarizePerf({ ...whole, taps: fastTaps });
+    expect(r).toMatchObject({
+      rows: 10000, webview: 'UA', frames: 200, frameP95: 16.7, frameMax: 16.7, reachedEnd: true, blankFrames: 0,
+      taps: 20, tapStat: 'max', tapToPaint: 80, tapP50: 40, tapP95: 76, scrollPxPerFrame: SCROLL_PX_PER_FRAME,
+      pass: true, reasons: [],
+    });
+  });
+
+  it('one slow tap fails the gate even when p95 is fast', () => {
+    const taps = [...range(19).map(() => 10), 100];
+    const r = summarizePerf({ ...whole, taps });
+    expect(r.tapP95).toBe(10);
+    expect(r.tapToPaint).toBe(100);
+    expect(r.pass).toBe(false);
+    expect(r.reasons.join(' ')).toMatch(/tap/i);
+  });
+
+  it('a stalled scroll (reachedEnd false) fails', () => {
+    const r = summarizePerf({ ...whole, taps: fastTaps, reachedEnd: false });
+    expect(r.pass).toBe(false);
+    expect(r.reasons).toEqual(['the scroll did not reach the last row']);
+  });
+
+  it('a frame showing unloaded rows fails', () => {
+    const r = summarizePerf({ ...whole, taps: fastTaps, blankFrames: 1 });
+    expect(r.pass).toBe(false);
+    expect(r.reasons).toHaveLength(1);
+    expect(r.reasons[0]).toMatch(/unloaded/);
+  });
+
+  it('fewer than 10,000 rows fails', () => {
+    const r = summarizePerf({ ...whole, taps: fastTaps, rows: 250 });
+    expect(r.pass).toBe(false);
+    expect(r.reasons).toHaveLength(1);
+    expect(r.reasons[0]).toMatch(/250 rows/);
   });
 
   it('no frames or no taps cannot pass', () => {
     const r = summarizePerf({ frames: [], taps: [], rows: 0, webview: 'UA' });
     expect(r.pass).toBe(false);
-    expect(r.reasons.length).toBe(2);
+    expect(r.reasons.length).toBe(4); // frame, tap, rows, reachedEnd (defaults false)
     expect(JSON.stringify(r)).not.toContain('null');
   });
 
   it('fewer taps than asked for fails even when fast', () => {
-    const r = summarizePerf({ frames: Array(100).fill(10), taps: [5, 5], rows: 10000, webview: 'UA' });
+    const r = summarizePerf({ ...whole, taps: [5, 5] });
     expect(r.pass).toBe(false);
     expect(r.reasons.join(' ')).toMatch(/tap/i);
+  });
+
+  it('PERF_ROWS matches the engine seed', () => {
+    const seedRs = readFileSync(resolve(process.cwd(), 'src-mobile-engine/src/seed.rs'), 'utf8');
+    expect(PERF_ROWS).toBe(10000);
+    expect(seedRs).toContain('pub const PERF_ROWS: usize = 10_000;');
+  });
+});
+
+describe('scrollThrough', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubRaf() {
+    let ts = 0;
+    vi.stubGlobal('requestAnimationFrame', (cb) => setTimeout(() => cb((ts += 16)), 0));
+  }
+  function fakeList({ max, moves = true, blankAt = -1 }) {
+    let top = 0;
+    return {
+      clientHeight: 100,
+      scrollHeight: max + 100,
+      get scrollTop() { return top; },
+      set scrollTop(v) { if (moves || v === 0) top = v; },
+      querySelector: () => (blankAt >= 0 && top === blankAt ? {} : null),
+    };
+  }
+
+  it('reaches the end at the fixed speed and counts blank frames', async () => {
+    stubRaf();
+    const r = await scrollThrough(fakeList({ max: 1000, blankAt: 300 }));
+    expect(r.reachedEnd).toBe(true);
+    expect(r.deltas.length).toBe(Math.ceil(1000 / SCROLL_PX_PER_FRAME));
+    expect(r.deltas.every((d) => d === 16)).toBe(true);
+    expect(r.blank).toBe(1);
+  });
+
+  it('a scroller that will not move gives up with reachedEnd false', async () => {
+    stubRaf();
+    const r = await scrollThrough(fakeList({ max: 1000, moves: false }));
+    expect(r.reachedEnd).toBe(false);
+    expect(r.deltas.length).toBe(60); // gives up on the 61st unmoved frame
   });
 });
 

@@ -6,10 +6,10 @@ import { resolve } from 'node:path';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import MessageRow, { ROW_HEIGHT } from '../MessageRow.jsx';
 import ViewerStub from '../ViewerStub.jsx';
-import { formatEmailDate } from '../format.js';
-import { formatEmailDate as desktopFormatEmailDate } from '../../utils/dateFormat.js';
-import { t as desktopT } from '../../i18n/index.js';
-import { t } from '../i18n.js';
+import { formatEmailDate, MOBILE_DATE_SETTINGS } from '../format.js';
+import { formatEmailDateWith } from '../../utils/emailDateCore.js';
+import { t, MOBILE_LOCALE } from '../i18n.js';
+import en from '../../i18n/locales/en.json';
 
 afterEach(cleanup);
 
@@ -61,7 +61,7 @@ describe('MessageRow', () => {
     expect(container.querySelectorAll('[dir="auto"]').length).toBe(3);
   });
 
-  it('shows the date the desktop list would', () => {
+  it('shows the date from the shared formatter', () => {
     renderRow(base);
     expect(screen.getByText(formatEmailDate(base.dateMs))).toBeTruthy();
   });
@@ -107,30 +107,27 @@ describe('ViewerStub', () => {
   });
 });
 
-describe('desktop parity', () => {
-  it('mobile t() matches desktop t() on the keys the mobile UI uses', () => {
+describe('mobile wrappers supply mobile defaults to the shared cores', () => {
+  it('t() is the shared lookup over the English catalog', () => {
+    expect(MOBILE_LOCALE).toBe('en');
     for (const k of ['common.noSubject', 'explorer.unknownSender', 'common.back', 'sidebar.inbox', 'common.retry', 'mobile.list.loadFailed', 'explorer.loading']) {
-      expect(t(k)).toBe(desktopT(k));
-      expect(t(k)).not.toBe(k);
+      expect(t(k)).toBe(en[k]);
     }
-    expect(t('common.messageCount', { count: 3 })).toBe(desktopT('common.messageCount', { count: 3 }));
+    expect(t('common.messageCount', { count: 1 })).toBe('1 message');
+    expect(t('common.messageCount', { count: 3 })).toBe('3 messages');
   });
 
-  it('formatEmailDate matches desktop default settings across date ranges', () => {
-    const now = new Date();
+  it('formatEmailDate passes auto settings, English and now to the core', () => {
+    expect(MOBILE_DATE_SETTINGS).toEqual({ dateFormat: 'auto', customDateFormat: '', timeFormat: 'auto' });
+    const now = new Date(2026, 10, 4, 15, 0); // Wednesday
     const day = 24 * 3600 * 1000;
-    const dates = [
-      now.getTime() - 60 * 1000,
-      now.getTime() - day,
-      now.getTime() - 3 * day,
-      now.getTime() - 40 * day,
-      now.getTime() - 400 * day,
-      Date.UTC(2019, 11, 31, 23, 59),
-    ];
-    for (const d of dates) {
-      expect(formatEmailDate(d)).toBe(desktopFormatEmailDate(d));
+    for (const d of [now.getTime() - 60000, now.getTime() - day, now.getTime() - 2 * day, new Date(2025, 0, 2).getTime()]) {
+      expect(formatEmailDate(d, now)).toBe(
+        formatEmailDateWith(d, { dateFormat: 'auto', customDateFormat: '', timeFormat: 'auto', appLocale: 'en', translate: t, now }),
+      );
     }
-    expect(formatEmailDate(null)).toBe('');
-    expect(formatEmailDate(NaN)).toBe('');
+    expect(formatEmailDate(now.getTime() - day, now)).toBe('Yesterday');
+    expect(formatEmailDate(null, now)).toBe('');
+    expect(formatEmailDate(NaN, now)).toBe('');
   });
 });

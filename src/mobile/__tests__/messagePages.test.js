@@ -78,7 +78,17 @@ describe('createPageCache', () => {
     expect(seen).toHaveBeenCalledTimes(1);
   });
 
-  it('honours a custom page size', async () => {
+  it('a throwing listener does not reject ensure', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const c = createPageCache(fakeFetch());
+    c.subscribe(() => { throw new Error('listener broke'); });
+    await expect(c.ensure(0)).resolves.toBeUndefined();
+    expect(c.rowAt(0)).toEqual({ uid: 0 });
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
+  });
+
+    it('honours a custom page size', async () => {
     const f = fakeFetch();
     const c = createPageCache(f, 50);
     await c.ensure(120);

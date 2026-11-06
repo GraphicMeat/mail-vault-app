@@ -1,22 +1,13 @@
-// Mobile `t()`. Same catalog and the same lookup as `src/i18n/index.js`, which the mobile bundle
-// cannot import: it pulls in the desktop settings store (and with it desktop RPCs) for language
-// switching. Plan 1 is English only; a parity test keeps this in step with desktop `t()`.
+// Mobile `t()`: the shared catalog lookup (`src/i18n/core.js`) over the English catalog. Desktop
+// `src/i18n/index.js` cannot be imported here: its language switching lives in the desktop
+// settings store, which would bring desktop RPCs into the mobile bundle. Plan 1 is English only.
 import en from '../i18n/locales/en.json';
+import { translate } from '../i18n/core.js';
 
-const interp = (s, vars) =>
-  vars ? s.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : s;
-
-function resolve(key, vars) {
-  if (vars && typeof vars.count === 'number') {
-    const cat = new Intl.PluralRules('en').select(vars.count);
-    const hit = en[`${key}_${cat}`] ?? en[`${key}_other`];
-    if (hit !== undefined) return hit;
-  }
-  return en[key] ?? key;
-}
+export const MOBILE_LOCALE = 'en';
 
 export function t(key, vars) {
-  return interp(resolve(key, vars), vars);
+  return translate(en, en, MOBILE_LOCALE, key, vars);
 }
 
 /**

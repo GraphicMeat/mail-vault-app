@@ -257,6 +257,39 @@ fn ensure_seeded_seeds_an_empty_table_once() {
     assert_eq!(page(&e, 0, 1)["total"], 300);
 }
 
+/// Every row of the seed account, keyed by uid.
+fn all_rows(e: &Engine) -> std::collections::BTreeMap<i64, Value> {
+    let total = page(e, 0, 1)["total"].as_u64().unwrap();
+    let mut out = std::collections::BTreeMap::new();
+    let mut offset = 0;
+    while offset < total {
+        for r in page(e, offset, 200)["rows"].as_array().unwrap() {
+            out.insert(r["uid"].as_i64().unwrap(), r.clone());
+        }
+        offset += 200;
+    }
+    out
+}
+
+#[test]
+fn ensure_seeded_tops_up_a_smaller_table() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open_seeded(tmp.path(), 250);
+    let before = all_rows(&e);
+    assert_eq!(before.len(), 250);
+    assert!(seed::ensure_seeded(&e, 1000).unwrap(), "250 < 1000 must top up");
+    let after = all_rows(&e);
+    assert_eq!(after.len(), 1000);
+    // The deterministic seed rewrites uids 1..=250 with the same values.
+    for (uid, row) in &before {
+        assert_eq!(after.get(uid), Some(row), "uid {uid} changed");
+    }
+    assert!(!seed::ensure_seeded(&e, 1000).unwrap(), "already at target");
+    // A table above the target is left alone.
+    assert!(!seed::ensure_seeded(&e, 500).unwrap());
+    assert_eq!(page(&e, 0, 1)["total"], 1000);
+}
+
 #[test]
 fn perf_seed_is_ten_thousand_rows() {
     assert_eq!(seed::PERF_ROWS, 10_000);

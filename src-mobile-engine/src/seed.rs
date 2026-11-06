@@ -43,8 +43,10 @@ pub fn seed(engine: &Engine, count: usize) -> Result<(), EngineError> {
     engine.write(|c| insert_rows(c, count))
 }
 
-/// Seeds `count` rows only if [`ACCOUNT_ID`] / [`FOLDER`] holds none, in one write transaction, so
-/// a second launch keeps the table as it is. Returns whether it seeded.
+/// Makes sure [`ACCOUNT_ID`] / [`FOLDER`] holds at least `count` rows, in one write transaction.
+/// Fewer (an empty table, or one left by an older, smaller seed) are topped up by re-running the
+/// deterministic seed over uids 1..=count, which rewrites the rows that exist with the same values
+/// and adds the rest. Returns whether it wrote anything; a second launch writes nothing.
 pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError> {
     engine.write(|c| {
         let n: i64 = c.query_row(
@@ -52,7 +54,7 @@ pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError>
             (ACCOUNT_ID, FOLDER),
             |r| r.get(0),
         )?;
-        if n > 0 {
+        if n >= count as i64 {
             return Ok(false);
         }
         insert_rows(c, count)?;

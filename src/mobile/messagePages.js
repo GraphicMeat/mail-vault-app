@@ -31,7 +31,14 @@ export function createPageCache(fetchPage, pageSize = 100) {
         total = res.total;
         touch(p, res.rows);
         while (pages.size > MAX_PAGES) pages.delete(pages.keys().next().value);
-        for (const fn of listeners) fn();
+        // A listener's own failure must not turn a fetched page into a rejected `ensure`.
+        for (const fn of listeners) {
+          try {
+            fn();
+          } catch (err) {
+            console.error('[mobile] page listener failed', err);
+          }
+        }
       },
       (err) => {
         inflight.delete(p);

@@ -11,12 +11,16 @@
 // of the viewer: the viewer reports from a message posted inside the rAF after its commit, which
 // runs once that frame has been painted.
 //
-// `tapToPaint` is the p95 of those samples (named in `tapStat`); `tapP50` and `tapMax` ride along.
+// `tapToPaint` is the slowest of those samples (`tapStat: "max"`): every tap must be under the
+// limit. `tapP50` and `tapP95` ride along.
 // Each click is dispatched right after a rAF, at the start of a frame, so the viewer's paint lands
 // on the next vsync: a sample carries up to one extra frame over a real tap (conservative).
 //
 // `blankFrames` counts scroll frames in which any row was still a placeholder (page not loaded),
 // since those frames are cheaper and would flatter frameP95.
+//
+// A pass also needs the run itself to be whole: at least PERF_ROWS rows, the scroll reached the
+// bottom (`reachedEnd`), and no blank frame. Anything less is reported as a reason, never a pass.
 
 import { ROW_HEIGHT } from './MessageRow.jsx';
 
@@ -24,6 +28,8 @@ export const FRAME_P95_LIMIT_MS = 20;
 export const TAP_LIMIT_MS = 100;
 export const SCROLL_PX_PER_FRAME = 100;
 export const TAP_COUNT = 20;
+/** Rows the gate needs on screen; the perf-gate seed (`seed::PERF_ROWS`) writes this many. */
+export const PERF_ROWS = 10_000;
 
 /** Nearest-rank percentile. An empty sample is Infinity, so it can never pass a gate. */
 export function percentile(values, p) {
@@ -52,27 +58,33 @@ export function tapIndices(rows) {
 // JSON has no Infinity: a missing measurement is reported as -1 and never passes.
 const ms = (v) => (Number.isFinite(v) ? Math.round(v * 10) / 10 : -1);
 
-export function summarizePerf({ frames, taps, rows, webview, blankFrames = 0 }) {
+export function summarizePerf({ frames, taps, rows, webview, blankFrames = 0, reachedEnd = false }) {
   const frameP95 = percentile(frames, 95);
   // Fewer taps than asked for means some never reached the viewer: not a measurement.
-  const tapToPaint = taps.length < TAP_COUNT ? Infinity : percentile(taps, 95);
+  const tapMax = taps.length ? Math.max(...taps) : Infinity;
+  const tapToPaint = taps.length < TAP_COUNT ? Infinity : tapMax;
   const verdict = gateVerdict({ frameP95, tapToPaint });
+  const reasons = [...verdict.reasons];
+  if (!(rows >= PERF_ROWS)) reasons.push(`only ${rows} rows, the gate needs ${PERF_ROWS}`);
+  if (!reachedEnd) reasons.push('the scroll did not reach the last row');
+  if (blankFrames !== 0) reasons.push(`${blankFrames} scroll frames showed unloaded rows`);
   return {
     rows,
     frames: frames.length,
+    reachedEnd,
     blankFrames,
     frameP50: ms(percentile(frames, 50)),
     frameP95: ms(frameP95),
     frameMax: ms(frames.length ? Math.max(...frames) : Infinity),
     taps: taps.length,
-    tapStat: 'p95',
+    tapStat: 'max',
     tapToPaint: ms(tapToPaint),
     tapP50: ms(percentile(taps, 50)),
-    tapMax: ms(taps.length ? Math.max(...taps) : Infinity),
+    tapP95: ms(percentile(taps, 95)),
     scrollPxPerFrame: SCROLL_PX_PER_FRAME,
     rowHeight: ROW_HEIGHT,
-    pass: verdict.pass,
-    reasons: verdict.reasons,
+    pass: reasons.length === 0,
+    reasons,
     webview,
   };
 }
@@ -117,9 +129,10 @@ const withTimeout = (p, msLimit) =>
 
 const click = () => new MouseEvent('click', { bubbles: true, cancelable: true });
 
-async function scrollThrough(list) {
+export async function scrollThrough(list) {
   const deltas = [];
   let blank = 0;
+  let reachedEnd = false;
   list.scrollTop = 0;
   await frames(10);
   await new Promise((resolve) => {
@@ -131,7 +144,10 @@ async function scrollThrough(list) {
       // A placeholder row is cheaper to paint than a real one: count frames that showed any.
       if (list.querySelector('[data-loaded="0"]')) blank++;
       const max = list.scrollHeight - list.clientHeight;
-      if (list.scrollTop >= max - 1) return resolve();
+      if (list.scrollTop >= max - 1) {
+        reachedEnd = true;
+        return resolve();
+      }
       const before = list.scrollTop;
       list.scrollTop = Math.min(max, before + SCROLL_PX_PER_FRAME);
       // A scroller that will not move would loop forever; give up after a second of frames.
@@ -141,7 +157,7 @@ async function scrollThrough(list) {
     };
     requestAnimationFrame(step);
   });
-  return { deltas, blank };
+  return { deltas, blank, reachedEnd };
 }
 
 async function tapRows(list, rows) {
@@ -174,5 +190,7 @@ export async function runPerfGate() {
   const taps = await tapRows(list, rows);
   list.scrollTop = 0;
   await frames(5);
-  return summarizePerf({ frames: scroll.deltas, blankFrames: scroll.blank, taps, rows, webview: navigator.userAgent });
+  return summarizePerf({
+    frames: scroll.deltas, blankFrames: scroll.blank, reachedEnd: scroll.reachedEnd, taps, rows, webview: navigator.userAgent,
+  });
 }
