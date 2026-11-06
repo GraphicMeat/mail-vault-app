@@ -9,7 +9,14 @@
 #   MV_MOBILE_UNTIL   ERE that ends the tail once a log line matches it
 #                     (default: the first ping, error or engineError line)
 #   MV_MOBILE_WAIT    seconds to wait for that line (default 180); exit 1 on timeout
+#   MV_MOBILE_LAUNCHES  launch the installed app this many times (default 1), waiting for the
+#                     line each time; app data (the perf-gate seed) survives between launches
+#   MV_MOBILE_BUILD_ONLY  directory: build (Android release: also sign), copy the .app / .apk
+#                     there and exit 0 without booting anything
 #   MV_MOBILE_SHOT    write a PNG screenshot here once the line arrived
+#   MV_MOBILE_SHOTS   directory: after the last launch, write <platform>-light.png and
+#                     <platform>-dark.png (system appearance switched, restored on exit; Android
+#                     screen set to 375x750 px at its 160 dpi, i.e. 375 dp wide)
 #   MV_IOS_SIM        simulator name or UDID (default: first available iPhone)
 #   MV_AVD            Android virtual device (default mv-mobile)
 #   MV_EMU_BOOT_WAIT  seconds to wait for the emulator to boot (default 300); exit 3 on timeout
@@ -42,6 +49,8 @@ unset TAURI_APP_PATH
 BUNDLE_ID=com.mailvault.app
 UNTIL=${MV_MOBILE_UNTIL:-'^MV_MOBILE \{"(ping|error|engineError)"'}
 WAIT=${MV_MOBILE_WAIT:-180}
+LAUNCHES=${MV_MOBILE_LAUNCHES:-1}
+case $LAUNCHES in '' | *[!0-9]* | 0) echo "mobile-run: MV_MOBILE_LAUNCHES must be a positive integer" >&2; exit 64 ;; esac
 work=$(mktemp -d)
 log=$work/app.log
 : > "$log"
@@ -103,6 +112,10 @@ run_ios() {
     [ -n "$app" ] || app=$(find src-tauri-mobile/gen/apple/build -type d -name '*.app' 2>/dev/null | head -n 1)
     [ -n "$app" ] || { echo "mobile-run: no .app under src-tauri-mobile/gen/apple/build" >&2; exit 2; }
     echo "mobile-run: app $app" >&2
+    if [ -n "${MV_MOBILE_BUILD_ONLY:-}" ]; then
+        mkdir -p "$MV_MOBILE_BUILD_ONLY" && cp -R "$app" "$MV_MOBILE_BUILD_ONLY/"
+        return 0
+    fi
 
     local udid state
     if [ -n "${MV_IOS_SIM:-}" ]; then
@@ -122,18 +135,36 @@ run_ios() {
     xcrun simctl install "$udid" "$app"
     cleanup_cmds+=("xcrun simctl uninstall $udid $BUNDLE_ID")
     cleanup_cmds+=("xcrun simctl terminate $udid $BUNDLE_ID")
-    # The shell writes its lines to the unified log (syslog, see src-tauri-mobile/src/lib.rs).
-    xcrun simctl spawn "$udid" log stream --style compact --predicate 'process == "MailVault"' > "$log" 2>&1 &
-    local stream_pid=$!
-    cleanup_cmds+=("kill $stream_pid")
-    sleep 1
-    xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE_ID" >&2
 
-    local rc=0
-    tail_log || rc=$?
+    local rc=0 n stream_pid
+    for ((n = 1; n <= LAUNCHES; n++)); do
+        # A fresh log per launch, so tail_log's line counter starts at its first line.
+        log=$work/app-$n.log
+        : > "$log"
+        # The shell writes its lines to the unified log (syslog, see src-tauri-mobile/src/lib.rs).
+        xcrun simctl spawn "$udid" log stream --style compact --predicate 'process == "MailVault"' > "$log" 2>&1 &
+        stream_pid=$!
+        cleanup_cmds+=("kill $stream_pid")
+        sleep 1
+        echo "mobile-run: launch $n of $LAUNCHES" >&2
+        xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE_ID" >&2
+        tail_log || { rc=$?; break; }
+        kill "$stream_pid" 2>/dev/null || true
+    done
     if [ -n "${MV_MOBILE_SHOT:-}" ]; then
         sleep 2
         xcrun simctl io "$udid" screenshot "$MV_MOBILE_SHOT" >&2 || rc=1
+    fi
+    if [ $rc -eq 0 ] && [ -n "${MV_MOBILE_SHOTS:-}" ]; then
+        local was mode
+        was=$(xcrun simctl ui "$udid" appearance 2>/dev/null || echo light)
+        cleanup_cmds+=("xcrun simctl ui $udid appearance $was")
+        mkdir -p "$MV_MOBILE_SHOTS"
+        for mode in light dark; do
+            xcrun simctl ui "$udid" appearance "$mode"
+            sleep 3
+            xcrun simctl io "$udid" screenshot "$MV_MOBILE_SHOTS/ios-$mode.png" >&2 || rc=1
+        done
     fi
     return $rc
 }
@@ -149,19 +180,21 @@ run_android() {
     apk=$(find src-tauri-mobile/gen/android/app/build/outputs/apk -name '*.apk' 2>/dev/null | head -n 1)
     [ -n "$apk" ] || { echo "mobile-run: no .apk under gen/android/app/build/outputs/apk" >&2; exit 2; }
     if [ -n "$release" ]; then
-        # An unsigned release APK will not install; sign it with the debug key (simulator use only).
-        local bt signed=$work/app-release-signed.apk ks=$HOME/.android/debug.keystore
+        # An unsigned release APK will not install; sign it with a throwaway key made for this run
+        # (emulator use only; nothing is written outside the run's temp dir).
+        local bt signed=$work/app-release-signed.apk ks=$work/run.keystore
         bt=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort | tail -n 1)
-        if [ ! -f "$ks" ]; then
-            mkdir -p "$HOME/.android"
-            keytool -genkeypair -keystore "$ks" -storepass android -keypass android -alias androiddebugkey \
-                -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -validity 10000 >&2
-        fi
+        keytool -genkeypair -keystore "$ks" -storepass android -keypass android -alias run \
+            -dname "CN=MailVault run,O=MailVault,C=US" -keyalg RSA -validity 30 >&2
         "$bt/zipalign" -f 4 "$apk" "$work/aligned.apk"
         "$bt/apksigner" sign --ks "$ks" --ks-pass pass:android --out "$signed" "$work/aligned.apk"
         apk=$signed
     fi
     echo "mobile-run: apk $apk" >&2
+    if [ -n "${MV_MOBILE_BUILD_ONLY:-}" ]; then
+        mkdir -p "$MV_MOBILE_BUILD_ONLY" && cp "$apk" "$MV_MOBILE_BUILD_ONLY/mailvault-$mode.apk"
+        return 0
+    fi
 
     if ! "$adb" devices | grep -q '^emulator-'; then
         echo "mobile-run: booting emulator $avd (headless)" >&2
@@ -184,22 +217,49 @@ run_android() {
         fi
         echo "mobile-run: emulator booted after $((SECONDS - deadline + boot_wait))s" >&2
     fi
+    # Software rendering (swiftshader) makes frame times say little about a phone: show which.
+    echo "mobile-run: ro.hardware.egl=$("$adb" shell getprop ro.hardware.egl 2>/dev/null | tr -d '\r')" >&2
+    "$adb" shell dumpsys SurfaceFlinger 2>/dev/null | tr -d '\r' | grep -m 1 -E '^GLES:' | sed 's/^/mobile-run: /' >&2 || true
 
+    # A copy left by an earlier run may carry another signature, which `install -r` refuses.
+    "$adb" uninstall "$BUNDLE_ID" >/dev/null 2>&1 || true
     "$adb" install -r "$apk" >&2
     cleanup_cmds+=("$adb uninstall $BUNDLE_ID")
     cleanup_cmds+=("$adb shell am force-stop $BUNDLE_ID")
-    "$adb" logcat -c
-    # The shell writes its lines to logcat under the MailVault tag (see src-tauri-mobile/src/lib.rs).
-    "$adb" logcat -v raw -s MailVault:I > "$log" 2>&1 &
-    local logcat_pid=$!
-    cleanup_cmds+=("kill $logcat_pid")
-    "$adb" shell am start -W -n "$BUNDLE_ID/.MainActivity" >&2
 
-    local rc=0
-    tail_log || rc=$?
+    local rc=0 n logcat_pid
+    for ((n = 1; n <= LAUNCHES; n++)); do
+        "$adb" shell am force-stop "$BUNDLE_ID"
+        "$adb" logcat -c
+        log=$work/app-$n.log
+        : > "$log"
+        # The shell writes its lines to logcat under the MailVault tag (see src-tauri-mobile/src/lib.rs).
+        "$adb" logcat -v raw -s MailVault:I > "$log" 2>&1 &
+        logcat_pid=$!
+        cleanup_cmds+=("kill $logcat_pid")
+        echo "mobile-run: launch $n of $LAUNCHES" >&2
+        "$adb" shell am start -W -n "$BUNDLE_ID/.MainActivity" >&2
+        tail_log || { rc=$?; break; }
+        kill "$logcat_pid" 2>/dev/null || true
+    done
     if [ -n "${MV_MOBILE_SHOT:-}" ]; then
         sleep 2
         "$adb" exec-out screencap -p > "$MV_MOBILE_SHOT" || rc=1
+    fi
+    if [ $rc -eq 0 ] && [ -n "${MV_MOBILE_SHOTS:-}" ]; then
+        local was mode
+        was=$("$adb" shell cmd uimode night 2>/dev/null | tr -d '\r' | sed -n 's/^Night mode: //p')
+        cleanup_cmds+=("$adb shell cmd uimode night ${was:-no}")
+        cleanup_cmds+=("$adb shell wm size reset")
+        mkdir -p "$MV_MOBILE_SHOTS"
+        # The activity handles screenSize and uiMode changes itself (AndroidManifest configChanges),
+        # so neither restarts the app; density would, so it stays at the AVD's 160 dpi.
+        "$adb" shell wm size 375x750
+        for mode in light dark; do
+            if [ "$mode" = dark ]; then "$adb" shell cmd uimode night yes; else "$adb" shell cmd uimode night no; fi
+            sleep 4
+            "$adb" exec-out screencap -p > "$MV_MOBILE_SHOTS/android-$mode.png" || rc=1
+        done
     fi
     if [ $rc -ne 0 ]; then "$adb" logcat -d -t 80 >&2 || true; fi
     return $rc
