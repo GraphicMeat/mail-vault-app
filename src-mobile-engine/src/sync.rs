@@ -152,6 +152,8 @@ fn background_qos() {
 enum Fail {
     /// The account was removed while the pass ran: stop quietly.
     Gone,
+    /// The engine was dropped: stop before the next network call or write.
+    Closing,
     /// A typed failure; the text is for the log only and never reaches an event.
     Code(Code, String),
 }
@@ -171,7 +173,7 @@ impl From<EngineError> for Fail {
 fn run_job(shared: &Shared, job: &Job) {
     shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "syncing" }));
     let end = match sync_job(shared, job) {
-        Ok(()) | Err(Fail::Gone) => json!({ "accountId": job.account, "state": "idle" }),
+        Ok(()) | Err(Fail::Gone) | Err(Fail::Closing) => json!({ "accountId": job.account, "state": "idle" }),
         Err(Fail::Code(code, why)) => {
             shared.log(&format!("[sync] {} {:?}: {} {}", job.account, job.folder, code.as_str(), why));
             json!({ "accountId": job.account, "state": "error", "code": code.as_str() })
@@ -256,6 +258,7 @@ fn folder_path(shared: &Shared, account: &str, folder: &str) -> Result<Option<St
 
 /// Runs `f` in one write transaction if the account still exists; `Fail::Gone` if it does not.
 fn write_for<T>(shared: &Shared, account: &str, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T, Fail> {
+    not_closing(shared)?;
     let out = shared.write(|c| {
         let exists = c.query_row("SELECT 1 FROM accounts WHERE id = ?1", [account], |_| Ok(())).optional()?.is_some();
         if !exists {
@@ -264,6 +267,52 @@ fn write_for<T>(shared: &Shared, account: &str, f: impl FnOnce(&Connection) -> r
         f(c).map(Some)
     })?;
     out.ok_or(Fail::Gone)
+}
+
+/// `Fail::Closing` once the engine has been dropped. Checked before every write and every batch
+/// fetch, so a pass outliving its engine stops within one batch.
+fn not_closing(shared: &Shared) -> Result<(), Fail> {
+    if shared.is_closing() {
+        Err(Fail::Closing)
+    } else {
+        Ok(())
+    }
+}
+
+/// `uid IN (...)` for a chunk of uids (integers only, so the text is safe to inline).
+fn uid_list(uids: &[u32]) -> String {
+    uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",")
+}
+
+/// Deletes the message rows of `uids` and every body and attachment row they own. Dependents
+/// first (a crash then leaves a message without its cached body, never an orphan body), each
+/// table in transactions of at most [`BATCH`] rows however many attachments a message has.
+/// Returns the number of message rows removed.
+fn delete_uids(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Result<usize, Fail> {
+    let mut removed = 0;
+    for chunk in uids.chunks(BATCH) {
+        let list = uid_list(chunk);
+        for (table, key, cols, counts) in [
+            ("attachments", "(uid, section)", "uid, section", false),
+            ("bodies", "uid", "uid", false),
+            ("messages", "uid", "uid", true),
+        ] {
+            let sql = format!(
+                "DELETE FROM {table} WHERE account_id = ?1 AND folder = ?2 AND {key} IN
+                   (SELECT {cols} FROM {table} WHERE account_id = ?1 AND folder = ?2 AND uid IN ({list}) LIMIT {BATCH})"
+            );
+            loop {
+                let n = write_for(shared, account, |c| c.execute(&sql, (account, folder)))?;
+                if counts {
+                    removed += n;
+                }
+                if n == 0 {
+                    break;
+                }
+            }
+        }
+    }
+    Ok(removed)
 }
 
 // ── Folder list ─────────────────────────────────────────────────────────────
@@ -325,7 +374,16 @@ async fn sync_folder_list(shared: &Shared, session: &mut ImapSession, account: &
         }
     }
     let listed: HashSet<&str> = infos.iter().map(|m| m.path.as_str()).collect();
-    let mut gone: Vec<&String> = existing.keys().filter(|p| !listed.contains(p.as_str())).collect();
+    // Every server lists INBOX. A reply without it is short (a dropped or truncated LIST), not a
+    // mailbox whose folders were all deleted: keep what is stored rather than wipe it.
+    let mut gone: Vec<&String> = if infos.iter().any(|m| is_inbox(&m.path)) {
+        existing.keys().filter(|p| !listed.contains(p.as_str())).collect()
+    } else {
+        if !existing.is_empty() {
+            shared.log(&format!("[sync] {account}: LIST without INBOX ({} names); no folder removed", infos.len()));
+        }
+        Vec::new()
+    };
     gone.sort();
 
     for chunk in upserts.chunks(BATCH) {
@@ -480,19 +538,24 @@ async fn sync_folder_pass(
         Ok(rows)
     })?;
 
-    // Flags of the rows already held.
-    let from = window.first().copied().unwrap_or_else(|| mbox.uid_next.unwrap_or(1)).max(1);
-    let (got, flags) = imap::uid_flags_from_in_generation(session, folder, from).await?;
-    check_validity(got, validity, folder)?;
-    let changes: Vec<(u32, bool, bool)> = flags
-        .iter()
-        .filter(|(uid, _)| in_window.contains(uid))
-        .filter_map(|(uid, fl)| {
-            let (seen0, flagged0) = existing.get(uid)?;
-            let (seen, flagged) = (has_flag(fl, "\\Seen"), has_flag(fl, "\\Flagged"));
-            (seen != *seen0 || flagged != *flagged0).then_some((*uid, seen, flagged))
-        })
-        .collect();
+    // Flags of the rows already held in the window. None held (a new or emptied folder): no read,
+    // since `UID FETCH n:*` on an empty mailbox is an error on some servers.
+    let changes: Vec<(u32, bool, bool)> = match window.iter().copied().filter(|u| existing.contains_key(u)).min() {
+        None => Vec::new(),
+        Some(from) => {
+            let (got, flags) = imap::uid_flags_from_in_generation(session, folder, from).await?;
+            check_validity(got, validity, folder)?;
+            flags
+                .iter()
+                .filter(|(uid, _)| in_window.contains(uid))
+                .filter_map(|(uid, fl)| {
+                    let (seen0, flagged0) = existing.get(uid)?;
+                    let (seen, flagged) = (has_flag(fl, "\\Seen"), has_flag(fl, "\\Flagged"));
+                    (seen != *seen0 || flagged != *flagged0).then_some((*uid, seen, flagged))
+                })
+                .collect()
+        }
+    };
     for chunk in changes.chunks(BATCH) {
         write_for(shared, account, |c| {
             let mut st = c.prepare_cached(
@@ -509,25 +572,14 @@ async fn sync_folder_pass(
     // Rows no longer in the window: expunged, moved away, or aged out of the 90 days.
     let mut gone: Vec<u32> = existing.keys().copied().filter(|u| !in_window.contains(u)).collect();
     gone.sort_unstable();
-    for chunk in gone.chunks(BATCH) {
-        let n = write_for(shared, account, |c| {
-            let mut n = 0;
-            for uid in chunk {
-                let key = (account, folder, *uid as i64);
-                n += c.execute("DELETE FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3", key)?;
-                c.execute("DELETE FROM bodies WHERE account_id = ?1 AND folder = ?2 AND uid = ?3", key)?;
-                c.execute("DELETE FROM attachments WHERE account_id = ?1 AND folder = ?2 AND uid = ?3", key)?;
-            }
-            Ok(n)
-        })?;
-        pass.removed += n;
-    }
+    pass.removed += delete_uids(shared, account, folder, &gone)?;
 
     // New rows, newest uid first so the top of the list fills first. The fetch runs outside any
     // transaction; each batch then commits on its own.
     let mut new: Vec<u32> = window.iter().copied().filter(|u| !existing.contains_key(u)).collect();
     new.sort_unstable_by(|a, b| b.cmp(a));
     for chunk in new.chunks(BATCH) {
+        not_closing(shared)?;
         let ((headers, _), got) = imap::fetch_headers_by_uids_bound(session, folder, chunk).await?;
         check_validity(got, validity, folder)?;
         let n = write_for(shared, account, |c| insert_headers(c, account, folder, &headers, pass.gen))?;
@@ -832,6 +884,75 @@ mod tests {
         assert_eq!(rfc3339_ms("2026-01-01T12:00:00.250Z"), Some(base + 250));
         assert_eq!(rfc3339_ms("Thu, 01 Jan 2026 12:00:00 +0000"), None);
         assert_eq!(rfc3339_ms(""), None);
+    }
+
+    fn count(e: &Engine, table: &str) -> i64 {
+        e.read(|c| c.query_row(&format!("SELECT count(*) FROM {table} WHERE folder = 'INBOX'"), [], |r| r.get(0))).unwrap()
+    }
+
+    fn sync_ok(e: &Engine, account: &str, folder: Option<&str>) {
+        let job = Job { account: account.into(), folder: folder.map(String::from) };
+        match sync_job(e.shared(), &job) {
+            Ok(()) => {}
+            Err(Fail::Code(code, why)) => panic!("sync failed: {} {why}", code.as_str()),
+            Err(_) => panic!("sync stopped early"),
+        }
+    }
+
+    /// Removing a window whose messages own more than 200 body and attachment rows stays inside
+    /// 200 rows per write transaction, and leaves nothing behind.
+    #[test]
+    fn removal_with_many_dependents_keeps_transactions_small() {
+        use mock_imap::state::{Mailbox, Message};
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let recent = now_ms() - 2 * DAY_MS;
+        let mut mb = Mailbox::new("INBOX");
+        for uid in 1..=250u32 {
+            mb.add(
+                Message::new(uid, format!("From: a{uid} <a{uid}@example.com>\nSubject: s{uid}\nMessage-ID: <r{uid}@x>\n\nbody\n"))
+                    .with_internal_ms(recent + uid as i64),
+            );
+        }
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(mb));
+        let tmp = tempfile::tempdir().unwrap();
+        let e = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(crate::MemorySecrets::default())).unwrap();
+        let added = e
+            .rpc(
+                "mobile.accounts.add",
+                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none" }),
+            )
+            .unwrap();
+        let account = added["account"]["id"].as_str().unwrap().to_string();
+
+        e.shared().max_txn_rows(true);
+        sync_ok(&e, &account, None);
+        assert_eq!(count(&e, "messages"), 250);
+        let first = e.shared().max_txn_rows(false);
+        assert!(first <= 200, "the first sync wrote {first} rows in one transaction");
+
+        // A cached body and three attachments for every message: 1000 dependent rows.
+        e.write(|c| {
+            for uid in 1..=250i64 {
+                c.execute("INSERT INTO bodies (account_id, folder, uid, text) VALUES (?1, 'INBOX', ?2, 'b')", (&account, uid))?;
+                for section in ["2", "3", "4"] {
+                    c.execute(
+                        "INSERT INTO attachments (account_id, folder, uid, section, filename, mime) VALUES (?1, 'INBOX', ?2, ?3, 'f', 'x/y')",
+                        (&account, uid, section),
+                    )?;
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+        server.mutate(|s| s.find_mut("INBOX").unwrap().expunge(&(1..=250).collect::<Vec<_>>(), false));
+
+        e.shared().max_txn_rows(true);
+        sync_ok(&e, &account, Some("INBOX"));
+        let max = e.shared().max_txn_rows(false);
+        assert!(max > 0 && max <= 200, "a removal transaction changed {max} rows");
+        for t in ["messages", "bodies", "attachments"] {
+            assert_eq!(count(&e, t), 0, "{t}");
+        }
     }
 
     #[test]

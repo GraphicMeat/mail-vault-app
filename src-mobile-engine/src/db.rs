@@ -13,6 +13,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
@@ -154,6 +155,11 @@ pub(crate) struct Shared {
     /// `messages.list_gen` of the folder on first use and bumped by every sync pass that changed
     /// the folder (a pass that only removes rows too, which no row can record).
     list_gens: Mutex<HashMap<(String, String), i64>>,
+    /// Set when the `Engine` is dropped; the sync worker stops at its next batch.
+    closing: AtomicBool,
+    /// Unit tests: the most rows any one write transaction changed.
+    #[cfg(test)]
+    max_txn_rows: std::sync::atomic::AtomicU64,
 }
 
 pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -274,6 +280,9 @@ impl Engine {
                 log_sink: OnceLock::new(),
                 event_sink: OnceLock::new(),
                 list_gens: Mutex::new(HashMap::new()),
+                closing: AtomicBool::new(false),
+                #[cfg(test)]
+                max_txn_rows: std::sync::atomic::AtomicU64::new(0),
             }),
             cache_dir: cache_dir.to_path_buf(),
             sync: crate::sync::Worker::default(),
@@ -347,7 +356,9 @@ impl Engine {
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        // The worker finishes the pass it is in (a core timeout bounds it) and exits; nothing waits.
+        // The worker stops at its next batch (a network call in flight is bounded by core's
+        // timeouts) and exits; nothing waits for it.
+        self.shared.closing.store(true, Ordering::SeqCst);
         self.sync.stop();
     }
 }
@@ -357,7 +368,11 @@ impl Shared {
     pub(crate) fn write<T>(&self, f: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>) -> Result<T, EngineError> {
         let w = lock(&self.writer);
         let tx = Transaction::new_unchecked(&w, TransactionBehavior::Immediate).map_err(|e| EngineError::Db(e.to_string()))?;
+        #[cfg(test)]
+        let before = w.total_changes();
         let out = f(&w).map_err(|e| EngineError::Db(e.to_string()))?;
+        #[cfg(test)]
+        self.max_txn_rows.fetch_max(w.total_changes() - before, Ordering::SeqCst);
         tx.commit().map_err(|e| EngineError::Db(e.to_string()))?;
         Ok(out)
     }
@@ -383,6 +398,21 @@ impl Shared {
 
     pub(crate) fn secrets(&self) -> &dyn SecretStore {
         self.secrets.as_ref()
+    }
+
+    /// The engine was dropped; background work should stop.
+    pub(crate) fn is_closing(&self) -> bool {
+        self.closing.load(Ordering::SeqCst)
+    }
+
+    /// Unit tests: the most rows one write transaction has changed; `reset` starts a new count.
+    #[cfg(test)]
+    pub(crate) fn max_txn_rows(&self, reset: bool) -> u64 {
+        if reset {
+            self.max_txn_rows.swap(0, Ordering::SeqCst)
+        } else {
+            self.max_txn_rows.load(Ordering::SeqCst)
+        }
     }
 
     /// Writes one line to the installed sink, or to stderr when none is set.

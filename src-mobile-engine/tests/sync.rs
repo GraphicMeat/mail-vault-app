@@ -464,3 +464,71 @@ fn wrong_password_ends_in_error_state() {
     let end = f.events.wait(from, "sync end", |n, v| n == "mobile.sync.state" && (v["state"] == "idle" || v["state"] == "error"));
     assert_eq!(end, json!({ "accountId": f.account, "state": "error", "code": "AUTH_FAILED" }));
 }
+
+#[test]
+fn dropped_engine_stops_the_pass_at_the_next_batch() {
+    let base = now_ms() - 20 * DAY;
+    let mut mb = Mailbox::new("INBOX");
+    for uid in 1..=1_000u32 {
+        mb.add(msg_at(uid, &format!("m{uid}"), base + uid as i64 * 60_000));
+    }
+    let server = MockImap::start(Scenario::new().mailbox(mb));
+    let Fixture { _tmp: tmp, engine, events, account } = setup(&server);
+    // A first pass holds no rows, so it reads no flags: FETCH 1 is the first header batch, 2 the
+    // second.
+    let mut pause = server.pause_command_nth("FETCH", 2);
+    let from = events.len();
+    engine.rpc("mobile.sync.refresh", json!({ "accountId": account })).unwrap();
+    assert!(pause.entered(WAIT), "the second header batch was never fetched");
+    drop(engine);
+    pause.release();
+    events.wait(from, "sync end", |n, v| n == "mobile.sync.state" && v["state"] != "syncing");
+
+    let db = rusqlite::Connection::open(tmp.path().join("mobile.db")).unwrap();
+    let rows = || -> i64 { db.query_row("SELECT count(*) FROM messages", [], |r| r.get(0)).unwrap() };
+    assert_eq!(rows(), 200, "only the batch committed before the drop is written");
+    assert_eq!(server.count_commands("FETCH"), 2, "no batch is fetched after the drop: {:?}", server.commands());
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(rows(), 200);
+    // A reopened engine writes at once: nothing holds a write transaction.
+    let t0 = Instant::now();
+    let again = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(MemorySecrets::default())).unwrap();
+    assert_eq!(again.rpc("mobile.accounts.remove", json!({ "accountId": account })).unwrap()["removed"], true);
+    assert!(t0.elapsed() < Duration::from_secs(1), "reopen and write took {:?}", t0.elapsed());
+}
+
+fn inbox_and_work() -> Scenario {
+    let mut work = Mailbox::new("Work");
+    work.add(msg(1, "work mail", 2));
+    Scenario::new().mailbox(inbox(vec![msg(1, "a", 2), msg(2, "b", 1)])).mailbox(work)
+}
+
+#[test]
+fn list_without_inbox_removes_no_folder() {
+    let server = MockImap::start(inbox_and_work());
+    let f = setup(&server);
+    f.sync(None);
+    f.sync(Some("Work"));
+    let work_total = |f: &Fixture| {
+        f.engine
+            .rpc("mobile.messages.page", json!({ "accountId": f.account, "folder": "Work", "cursor": null, "limit": 50 }))
+            .unwrap()["total"]
+            .clone()
+    };
+    assert_eq!(work_total(&f), 1);
+
+    // A short LIST reply that lost INBOX (core already refuses a wholly empty one): INBOX is
+    // still on the server and must keep its folder row and its messages.
+    server.reset_scenario(inbox_and_work().fault(
+        mock_imap::Trigger::on("LIST"),
+        mock_imap::Action::RespondRaw("* LIST (\\HasNoChildren) \"/\" \"Work\"\r\n{tag} OK LIST completed\r\n".into()),
+    ));
+    f.sync(None);
+    assert!(server.count_commands("LIST") >= 1);
+
+    let folders = f.engine.rpc("mobile.folders.list", json!({ "accountId": f.account })).unwrap();
+    let paths: Vec<&str> = folders["folders"].as_array().unwrap().iter().map(|x| x["path"].as_str().unwrap()).collect();
+    assert_eq!(paths, vec!["INBOX", "Work"], "{folders}");
+    assert_eq!(f.page(Value::Null, 50)["total"], 2);
+    assert_eq!(work_total(&f), 1);
+}
