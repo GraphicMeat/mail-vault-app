@@ -52,7 +52,9 @@ pub fn map_error(msg: &str) -> Code {
         Code::TlsFailed
     } else if has(&["timed out", "timeout"]) {
         Code::Timeout
-    } else if has(&["connection lost"]) || mailvault_core::imap::pool::is_connection_lost(msg) {
+    } else if has(&["connection lost", "connection abort", "not connected", "broken pipe", "connection reset"])
+        || mailvault_core::imap::pool::is_connection_lost(msg)
+    {
         Code::HostUnreachable
     } else if has(&["login failed", "auth failed", "authenticationfailed", "invalid credentials", "authentication failed"]) {
         Code::AuthFailed
@@ -299,6 +301,18 @@ mod tests {
     fn auth_failed() {
         assert_eq!(map_error("Login failed for u@example.test: NO [AUTHENTICATIONFAILED] Invalid credentials"), Code::AuthFailed);
         assert_eq!(map_error("XOAUTH2 auth failed for u@x: NO Invalid credentials"), Code::AuthFailed);
+    }
+
+    #[test]
+    fn socket_errors_are_network() {
+        for e in [
+            "STORE flags failed: io: Software caused connection abort (os error 53)",
+            "UID MOVE 1 failed: io: Socket is not connected (os error 57)",
+            "SEARCH failed: io: Broken pipe (os error 32)",
+            "STORE flags failed: io: Connection reset by peer (os error 54)",
+        ] {
+            assert_eq!(map_error(e), Code::HostUnreachable, "{e}");
+        }
     }
 
     #[test]

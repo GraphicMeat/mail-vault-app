@@ -602,24 +602,28 @@ impl Fixture {
 /// An action that settles while a sync pass is reading flags, from a server whose replicas lag
 /// (they keep reporting the old flags for a while): the override holds through that pass and the
 /// next full one, and clears on the second consecutive pass that started after the settle.
+///
+/// The override exists before pass A starts and the folder already has one clean pass, so in pass
+/// A only the "nothing settled since this pass started" term keeps the override.
 #[test]
 fn a_settle_mid_pass_clears_only_after_two_clean_passes() {
-    let server = MockImap::start(scenario(&[1, 2]));
+    // Every STORE waits 1.5 s before it runs: replay is still in flight when pass A starts.
+    let server = MockImap::start(scenario(&[1, 2]).fault(Trigger::on("STORE"), Action::Delay(Duration::from_millis(1500))));
     let f = setup(&server);
     f.sync(None);
-    // Pass A is held at its flag FETCH; the action is applied and settles meanwhile.
     let mut pause = server.pause_command("FETCH");
+    let seq = f.apply("seen", "INBOX", &[1], None);
     let from = f.events.len();
     f.refresh("INBOX");
     assert!(pause.entered(WAIT), "the pass never reached its flag FETCH");
-    let seq = f.apply("seen", "INBOX", &[1], None);
+    assert_eq!(f.pending().len(), 1, "the action settled before pass A read its state");
     assert_eq!(f.events.final_result(seq)["outcome"], "done");
     assert!(has(&server_flags(&server, "INBOX", 1), "\\Seen"));
     // A lagging replica answers the reads with the old flags.
     server.mutate(|s| s.find_mut("INBOX").unwrap().by_uid_mut(1).unwrap().flags.retain(|x| !x.eq_ignore_ascii_case("\\Seen")));
     pause.release();
     f.events.wait_idle(from, &f.account);
-    assert_eq!(f.row(1).unwrap()["seen"], true, "pass A undid a settled mark-read");
+    assert_eq!(f.row(1).unwrap()["seen"], true, "pass A cleared an override after a mid-pass settle");
     assert_eq!(f.overrides(1), Some((Some(1), None, None)));
 
     // Pass B, the first that started after the settle: still the old flags, still kept.
@@ -797,4 +801,50 @@ fn a_move_done_before_a_crash_reports_done() {
     assert!(f.pending().is_empty());
     assert_eq!(f.overrides(1), None);
     assert_eq!(f.uids("INBOX"), vec![2]);
+}
+
+/// Failures that are not the server's tagged NO or BAD (a dropped link here) are never counted as
+/// refusals: three of them leave the action retrying, and it completes once the link holds.
+#[test]
+fn transport_failures_are_never_refusals() {
+    let server = MockImap::start(scenario(&[1, 2]).fault(Trigger::on("MOVE"), Action::DropConnection));
+    let f = setup(&server);
+    f.sync(None);
+    f.engine.set_action_backoff(Duration::from_millis(30), Duration::from_millis(60));
+    let seq = f.apply("move", "INBOX", &[1], Some("Archive"));
+    let retrying = |f: &Fixture| {
+        f.events.all().iter().filter(|(n, v)| n == "mobile.action.result" && v["seq"] == seq && v["outcome"] == "retrying").count()
+    };
+    let deadline = Instant::now() + WAIT;
+    while retrying(&f) < 4 {
+        assert!(Instant::now() < deadline, "{:?}", f.events.all());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        !f.events.all().iter().any(|(n, v)| n == "mobile.action.result" && v["seq"] == seq && v["outcome"] == "dropped"),
+        "a transport failure dropped the move: {:?}",
+        f.events.all()
+    );
+    assert_eq!(f.pending()[0]["lastError"], "HOST_UNREACHABLE");
+    assert_eq!(f.uids("INBOX"), vec![2], "the moved row stays hidden");
+    server.reset_scenario(scenario(&[1, 2]));
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+}
+
+/// A refusal of a move that already went on the wire keeps its `sent` mark, so a later attempt
+/// that finds the uid gone still reads as done.
+#[test]
+fn a_refusal_keeps_the_sent_mark() {
+    let server = MockImap::start(scenario(&[1, 2]).fault(Trigger::on("MOVE"), Action::RefuseWith("NO".into(), "[CANNOT] not now".into())));
+    let f = setup(&server);
+    f.sync(None);
+    f.engine.set_action_backoff(Duration::from_secs(30), Duration::from_secs(30));
+    let from = f.events.len();
+    let seq = f.apply("move", "INBOX", &[1], Some("Archive"));
+    assert_eq!(f.events.result(from, seq)["reason"], "REFUSED");
+    let db = rusqlite::Connection::open(f.tmp.path().join("mobile.db")).unwrap();
+    let arg: String = db.query_row("SELECT arg FROM pending_actions WHERE seq = ?1", [seq], |r| r.get(0)).unwrap();
+    let arg: Value = serde_json::from_str(&arg).unwrap();
+    assert_eq!(arg["sent"], true, "{arg}");
+    assert_eq!(arg["refused"], 1, "{arg}");
 }

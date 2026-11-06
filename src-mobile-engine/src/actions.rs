@@ -186,12 +186,14 @@ struct ApplyParams {
     target: Option<String>,
 }
 
-/// `mobile.actions.apply {accountId, folder, uids, kind, target?}` -> `{queued: seq}`. Applies
-/// locally and journals in one write transaction, emits `mobile.folder.changed`, wakes replay.
 /// What the apply transaction did: the journal seq (none when every uid was skipped), the rows
 /// changed, and the skipped uids.
 type Applied = (Option<i64>, usize, Vec<u32>);
 
+/// `mobile.actions.apply {accountId, folder, uids, kind, target?}` -> `{queued: seq|null,
+/// skipped: [uid]}`. Applies locally and journals in one write transaction the uids that have a
+/// row in the folder (the rest are `skipped`; with none left nothing is journaled), emits
+/// `mobile.folder.changed`, wakes replay.
 pub(crate) fn apply(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: ApplyParams = parse(params)?;
     let kind = Kind::parse(&p.kind).ok_or_else(|| RpcError::Invalid(format!("unknown action kind {}", p.kind)))?;
@@ -648,10 +650,20 @@ enum Outcome {
     Refused(String),
 }
 
-/// An IMAP step's failure: the server's refusal becomes [`Outcome::Refused`]; the network, a
-/// timeout or the sign-in stay failures (retried with backoff, never dropped).
+/// Core's rendering of a command the server answered with a tagged NO or BAD: async-imap's
+/// `no response: …` / `bad response: …`, or core's own `… failed: No …` / `… failed: Bad …` where it
+/// reads the tag itself (COPYUID, SEARCH).
+fn is_tagged_refusal(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("no response:") || lower.contains("bad response:") || err.contains("failed: No ") || err.contains("failed: Bad ")
+}
+
+/// An IMAP step's failure: only the server's tagged NO or BAD (and not one the network, a
+/// timeout or the sign-in explains) becomes [`Outcome::Refused`]. Anything else, including a
+/// transport error whose words no needle knows, stays a failure: retried with backoff, never
+/// dropped, since three of them would otherwise throw away a delete the user made.
 fn refused_or_fail(err: String) -> Result<Outcome, Fail> {
-    if map_error(&err) == Code::Invalid {
+    if map_error(&err) == Code::Invalid && is_tagged_refusal(&err) {
         Ok(Outcome::Refused(err))
     } else {
         Err(Fail::from(err))
@@ -685,23 +697,34 @@ async fn drain(shared: &Shared, session: &mut ImapSession, account: &str) -> Res
 /// Counts a refusal of the head. Below [`MAX_REFUSALS`] it is marked `retrying` with `REFUSED`
 /// (false: back off); at the limit it drops with `REFUSED` (true: go on with the next action).
 fn refuse(shared: &Shared, account: &str, a: &Journaled, why: &str) -> Result<bool, Fail> {
-    let mut arg = a.arg.clone();
-    arg.refused += 1;
-    let text = serde_json::to_string(&arg).unwrap_or_default();
-    shared.log(&format!("[actions] {account} seq {}: REFUSED ({} of {MAX_REFUSALS}) {why}", a.seq, arg.refused));
-    if arg.refused >= MAX_REFUSALS {
+    // The stored `arg`, not the head snapshot: `mark_sent` may have written it in this attempt.
+    let refused = sync::write_for(shared, account, |c| {
+        let Some(stored) = c
+            .query_row("SELECT arg FROM pending_actions WHERE seq = ?1", [a.seq], |r| r.get::<_, Option<String>>(0))
+            .optional()?
+        else {
+            return Ok(None);
+        };
+        let mut arg = Arg::read(stored);
+        arg.refused += 1;
+        if arg.refused < MAX_REFUSALS {
+            c.execute(
+                "UPDATE pending_actions SET state = 'retrying', attempts = attempts + 1, last_error = 'REFUSED', arg = ?2 WHERE seq = ?1",
+                (a.seq, serde_json::to_string(&arg).unwrap_or_default()),
+            )?;
+        }
+        Ok(Some(arg.refused))
+    })?;
+    // Gone meanwhile (sync dropped it, or the account went): nothing to report.
+    let Some(refused) = refused else {
+        return Ok(true);
+    };
+    shared.log(&format!("[actions] {account} seq {}: REFUSED ({refused} of {MAX_REFUSALS}) {why}", a.seq));
+    if refused >= MAX_REFUSALS {
         record(shared, account, a, Outcome::Dropped { reason: Reason::Refused, uids_gone: false })?;
         return Ok(true);
     }
-    let marked = sync::write_for(shared, account, |c| {
-        c.execute(
-            "UPDATE pending_actions SET state = 'retrying', attempts = attempts + 1, last_error = 'REFUSED', arg = ?2 WHERE seq = ?1",
-            (a.seq, &text),
-        )
-    })?;
-    if marked > 0 {
-        emit_result(shared, account, a.seq, "retrying", Some(Reason::Refused.as_str()));
-    }
+    emit_result(shared, account, a.seq, "retrying", Some(Reason::Refused.as_str()));
     Ok(false)
 }
 
@@ -721,7 +744,7 @@ fn mark_sent(shared: &Shared, account: &str, a: &Journaled) -> Result<(), Fail> 
 /// answer (not the network) followed by a whole LIST (one that includes INBOX) without it proves;
 /// `Ok(false)` when the server refused but still lists the folder. A network failure stays one.
 async fn confirm_folder_gone(session: &mut ImapSession, path: &str, err: &str) -> Result<bool, Fail> {
-    if map_error(err) != Code::Invalid {
+    if map_error(err) != Code::Invalid || !is_tagged_refusal(err) {
         return Err(Fail::from(err.to_string()));
     }
     let boxes = imap::list_mailboxes(session).await?;
@@ -962,6 +985,30 @@ mod tests {
             d = Some(next);
         }
         assert_eq!(seen, vec![5, 10, 20, 40, 80, 160, 300, 300, 300]);
+    }
+
+    /// Only the server's tagged NO or BAD, as core renders it, is a refusal; anything else
+    /// (a transport error whose words miss the network needles, an unknown failure) stays a
+    /// retryable failure.
+    #[test]
+    fn refusal_needs_a_tagged_no_or_bad() {
+        let refused = |e: &str| matches!(refused_or_fail(e.to_string()), Ok(Outcome::Refused(_)));
+        assert!(refused("STORE flags failed: no response: [CANNOT] read only"));
+        assert!(refused("SELECT Work failed: bad response: unknown mailbox"));
+        assert!(refused("SEARCH failed: No [THROTTLED] slow down"));
+        assert!(refused("UID MOVE 1 \"Archive\" failed: No [TRYCREATE] no such mailbox"));
+        assert!(refused("UID COPY 1 \"Trash\" failed: Bad command"));
+        for e in [
+            "STORE flags failed: io: Software caused connection abort (os error 53)",
+            "UID MOVE 1 \"Archive\" failed: io: Socket is not connected (os error 57)",
+            "SEARCH failed: io: Broken pipe (os error 32)",
+            "STORE flags failed: io: Connection reset by peer (os error 54)",
+            "STORE flags failed: parse: something odd",
+            "TCP connect to h:993 failed: No route to host (os error 65)",
+            "something nobody has seen before",
+        ] {
+            assert!(!refused(e), "{e} counted as a refusal");
+        }
     }
 
     #[test]
