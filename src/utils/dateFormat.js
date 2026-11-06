@@ -1,52 +1,11 @@
-import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
-import { es, fr, it as itIT, de, ptBR, ja, ko, zhCN } from 'date-fns/locale';
 import { useSettingsStore } from '../stores/settingsStore';
 import { getLocale, t as tr } from '../i18n/index.js';
+import { DATE_PRESETS, formatPattern, intlLocaleFor, formatTimeOf, formatEmailDateWith } from './emailDateCore.js';
 
-/**
- * date-fns writes month names and AM/PM in English unless it is handed a locale
- * object. The `EEEE` weekday branch below was moved to Intl, but `MMM`, `MMMM`
- * and the `a` of `h:mm a` still came out English from every preset and from any
- * custom pattern the user typed. `undefined` is the right value for `en`:
- * date-fns falls back to its own en-US default.
- */
-const DFNS = { es, fr, it: itIT, de, 'pt-BR': ptBR, ja, ko, 'zh-Hans': zhCN };
-const _fmt = (date, pattern) => format(date, pattern, { locale: DFNS[getLocale()] });
-
-const DATE_PRESETS = {
-  'MM/dd/yyyy': { withYear: 'MM/dd/yyyy', withoutYear: 'MM/dd' },
-  'dd/MM/yyyy': { withYear: 'dd/MM/yyyy', withoutYear: 'dd/MM' },
-  'yyyy-MM-dd': { withYear: 'yyyy-MM-dd', withoutYear: 'MM-dd' },
-  'dd MMM yyyy': { withYear: 'dd MMM yyyy', withoutYear: 'dd MMM' },
-};
-
-/**
- * Locale for Intl, or undefined to let the runtime pick its default.
- *
- * The app's chosen language wins: someone reading MailVault in German wants
- * German dates. It is always one of our nine hardcoded codes, so it needs no
- * validation. Only the `navigator` fallback — which applies while the language
- * is still the default `en` — can carry junk.
- *
- * `navigator` is a browser global. Node exposes it from 21 onwards, so touching
- * it directly passed on a new local Node and threw `navigator is not defined`
- * on CI's Node 20.
- */
-const _locale = () => {
-  const chosen = getLocale();
-  if (chosen && chosen !== 'en') return chosen;
-
-  const lang = typeof navigator !== 'undefined' ? navigator.language : undefined;
-  if (!lang) return undefined;
-  // WebKitGTK reports the raw POSIX locale — "C" on systems without LANG set —
-  // which is not a BCP 47 tag and makes every Intl constructor throw RangeError,
-  // crashing the app into the error boundary. Fall back to the runtime default.
-  try {
-    return Intl.DateTimeFormat.supportedLocalesOf([lang]).length ? lang : undefined;
-  } catch {
-    return undefined;
-  }
-};
+// The store-free logic lives in emailDateCore.js (shared with the mobile shell); this module
+// feeds it the settings store and the active app language.
+const _fmt = (date, pattern) => formatPattern(date, pattern, getLocale());
+const _locale = () => intlLocaleFor(getLocale());
 
 /** The same locale every formatter here uses, for a component formatting its own. */
 export const intlLocale = () => _locale();
@@ -74,16 +33,7 @@ export function formatTime(dateInput) {
   if (isNaN(date.getTime())) return '';
 
   const { timeFormat } = useSettingsStore.getState();
-
-  // date-fns path for explicit 12h/24h (avoids locale ambiguity)
-  if (timeFormat === '24h') return _fmt(date, 'HH:mm');
-  if (timeFormat === '12h') return _fmt(date, 'h:mm a');
-
-  // 'auto' — use Intl with the browser locale
-  return new Intl.DateTimeFormat(_locale(), {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
+  return formatTimeOf(date, { timeFormat, appLocale: getLocale() });
 }
 
 /**
@@ -176,42 +126,8 @@ export function formatMonthYear(y, m) {
 }
 
 export function formatEmailDate(dateStr) {
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return '';
-
-  const { dateFormat, customDateFormat } = useSettingsStore.getState();
-
-  if (isToday(date)) return formatTime(date);
-  if (isYesterday(date)) return tr('bulk.ops.yesterday');
-  // This used the date-fns day-name pattern with no locale argument, which is
-  // always English — an English weekday in the middle of a translated list.
-  if (isThisWeek(date)) return new Intl.DateTimeFormat(_locale(), { weekday: 'long' }).format(date);
-
-  const isPreviousYear = date.getFullYear() !== new Date().getFullYear();
-
-  if (dateFormat === 'auto' || !dateFormat) {
-    const options = isPreviousYear
-      ? { month: 'short', day: 'numeric', year: 'numeric' }
-      : { month: 'short', day: 'numeric' };
-    return new Intl.DateTimeFormat(_locale(), options).format(date);
-  }
-
-  if (dateFormat === 'custom' && customDateFormat) {
-    try {
-      return _fmt(date, customDateFormat);
-    } catch {
-      return _fmt(date, 'MMM d, yyyy');
-    }
-  }
-
-  // Preset formats
-  const preset = DATE_PRESETS[dateFormat];
-  if (preset) {
-    return _fmt(date, isPreviousYear ? preset.withYear : preset.withoutYear);
-  }
-
-  // Unknown format — fallback
-  return _fmt(date, isPreviousYear ? 'MMM d, yyyy' : 'MMM d');
+  const { dateFormat, customDateFormat, timeFormat } = useSettingsStore.getState();
+  return formatEmailDateWith(dateStr, { dateFormat, customDateFormat, timeFormat, appLocale: getLocale(), translate: tr });
 }
 
 /**
