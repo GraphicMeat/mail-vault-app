@@ -32,9 +32,10 @@ done
 cd "$(dirname "$0")/.."
 # shellcheck source=scripts/mobile-env.sh
 source scripts/mobile-env.sh
-# The repo has two Tauri apps; every CLI call, including the ones Xcode and Gradle make back into
-# `npm run tauri`, inherits this and picks the mobile shell.
-export TAURI_APP_PATH=src-tauri-mobile
+# The repo has two Tauri apps. `npm run mobile:tauri` sets TAURI_APP_PATH=src-tauri-mobile itself,
+# and the generated Xcode/Gradle projects call back through the same script, so nothing here relies
+# on an inherited value. Drop any stray one so a wrong value cannot leak in either.
+unset TAURI_APP_PATH
 
 BUNDLE_ID=com.mailvault.app
 UNTIL=${MV_MOBILE_UNTIL:-'^MV_MOBILE \{"(ping|error|engineError)"'}
@@ -92,7 +93,7 @@ run_ios() {
     fi
 
     echo "mobile-run: building iOS (simulator, $mode)" >&2
-    npm run tauri -- ios build --target aarch64-sim ${tauri_args[@]+"${tauri_args[@]}"} >&2
+    npm run mobile:tauri -- ios build --target aarch64-sim ${tauri_args[@]+"${tauri_args[@]}"} >&2
 
     local app
     app=$(find src-tauri-mobile/gen/apple/build -type d -name '*.app' -path '*sim*' 2>/dev/null | head -n 1)
@@ -139,7 +140,7 @@ run_android() {
     local avd=${MV_AVD:-mv-mobile} boot_wait=${MV_EMU_BOOT_WAIT:-300}
 
     echo "mobile-run: building Android (aarch64, $mode)" >&2
-    npm run tauri -- android build --apk --target aarch64 ${tauri_args[@]+"${tauri_args[@]}"} >&2
+    npm run mobile:tauri -- android build --apk --target aarch64 ${tauri_args[@]+"${tauri_args[@]}"} >&2
 
     local apk
     apk=$(find src-tauri-mobile/gen/android/app/build/outputs/apk -name '*.apk' 2>/dev/null | head -n 1)
