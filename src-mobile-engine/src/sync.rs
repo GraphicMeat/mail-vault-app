@@ -568,8 +568,9 @@ async fn sync_folder_pass(
     let window = abd_cmds::uid_search(session, folder, &since_criteria(now_ms())).await?;
     let unseen = abd_cmds::uid_search(session, folder, "UNSEEN").await?.len() as i64;
     let in_window: HashSet<u32> = window.iter().copied().collect();
-    // Read before the flag FETCH: unchanged at a write, no action settled after that read.
-    let epoch = shared.action_epoch();
+    // Read before the flag FETCH: whether this pass may clear a disagreeing override (see
+    // `write_flags`) is judged against it.
+    let at = shared.settles(account, folder);
     let existing: HashMap<u32, Held> = shared.read(|c| {
         let mut st = c.prepare_cached(
             "SELECT uid, seen, flagged, local_seen IS NOT NULL OR local_flagged IS NOT NULL OR local_deleted IS NOT NULL
@@ -606,7 +607,7 @@ async fn sync_folder_pass(
         }
     };
     for chunk in changes.chunks(BATCH) {
-        pass.updated += write_for(shared, account, |c| write_flags(shared, c, account, folder, chunk, pass.gen, epoch))?;
+        pass.updated += write_for(shared, account, |c| write_flags(shared, c, account, folder, chunk, pass.gen, at))?;
     }
 
     // Rows no longer in the window: expunged, moved away, or aged out of the 90 days. A row a
@@ -634,6 +635,7 @@ async fn sync_folder_pass(
             (account, folder, mbox.uid_next.map(i64::from), unseen, total, now_ms()),
         )
     })?;
+    shared.pass_completed(account, folder, at);
     Ok((unseen, total))
 }
 
@@ -646,9 +648,10 @@ struct Held {
 
 /// Writes the server's flags of `chunk` (one write transaction) and settles local overrides: an
 /// override a journaled action still names is never touched; otherwise it clears when the server
-/// agrees with it, or, when no action settled since this pass read the flags (`epoch` unchanged),
-/// whatever the server says (the read is newer than every settled action, so it is the truth).
-/// Returns how many rows now list differently.
+/// agrees with it. One the server disagrees with clears only on the second consecutive pass that
+/// started after the folder's last settled action, with none settling during it
+/// (`Shared::may_clear_disagreeing`): a server whose replicas lag may report the old flags for a
+/// pass or so after it accepted the change. Returns how many rows now list differently.
 fn write_flags(
     shared: &Shared,
     c: &Connection,
@@ -656,14 +659,14 @@ fn write_flags(
     folder: &str,
     chunk: &[(u32, bool, bool)],
     gen: i64,
-    epoch: u64,
+    at: crate::db::Settles,
 ) -> rusqlite::Result<usize> {
     let pending: HashSet<u32> = {
         let mut st = c.prepare_cached(crate::actions::PENDING_UIDS)?;
         let rows = st.query_map((account, folder), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
         rows.into_iter().map(|u| u as u32).collect()
     };
-    let settled = shared.action_epoch() == epoch;
+    let settled = shared.may_clear_disagreeing(account, folder, at);
     let mut listed = c.prepare_cached(
         "SELECT COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), COALESCE(local_deleted, 0)
          FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",

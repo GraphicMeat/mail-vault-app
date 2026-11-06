@@ -97,6 +97,8 @@ pub fn methods() -> Vec<&'static str> {
 
 impl Engine {
     pub fn rpc(&self, method: &str, params: Value) -> Result<Value, RpcError> {
+        // A journal found by `open` replays from the first call on, if no sink came first.
+        self.start_startup_replay();
         match TABLE.iter().find(|(n, _)| *n == method) {
             Some((_, h)) => h(self, params),
             None => Err(RpcError::Unsupported { method: method.to_string() }),

@@ -589,3 +589,212 @@ fn apply_returns_fast_while_sync_writes() {
     assert!(max < Duration::from_millis(20), "max apply latency {max:?} (p99 {p99:?})");
     assert_eq!(f.page("INBOX")["total"], 5_001);
 }
+
+// ── Fix round 1 ─────────────────────────────────────────────────────────────
+
+impl Fixture {
+    /// Queues a refresh of `folder` without waiting for it.
+    fn refresh(&self, folder: &str) {
+        self.engine.rpc("mobile.sync.refresh", json!({ "accountId": self.account, "folder": folder })).unwrap();
+    }
+}
+
+/// An action that settles while a sync pass is reading flags, from a server whose replicas lag
+/// (they keep reporting the old flags for a while): the override holds through that pass and the
+/// next full one, and clears on the second consecutive pass that started after the settle.
+#[test]
+fn a_settle_mid_pass_clears_only_after_two_clean_passes() {
+    let server = MockImap::start(scenario(&[1, 2]));
+    let f = setup(&server);
+    f.sync(None);
+    // Pass A is held at its flag FETCH; the action is applied and settles meanwhile.
+    let mut pause = server.pause_command("FETCH");
+    let from = f.events.len();
+    f.refresh("INBOX");
+    assert!(pause.entered(WAIT), "the pass never reached its flag FETCH");
+    let seq = f.apply("seen", "INBOX", &[1], None);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert!(has(&server_flags(&server, "INBOX", 1), "\\Seen"));
+    // A lagging replica answers the reads with the old flags.
+    server.mutate(|s| s.find_mut("INBOX").unwrap().by_uid_mut(1).unwrap().flags.retain(|x| !x.eq_ignore_ascii_case("\\Seen")));
+    pause.release();
+    f.events.wait_idle(from, &f.account);
+    assert_eq!(f.row(1).unwrap()["seen"], true, "pass A undid a settled mark-read");
+    assert_eq!(f.overrides(1), Some((Some(1), None, None)));
+
+    // Pass B, the first that started after the settle: still the old flags, still kept.
+    f.sync(Some("INBOX"));
+    assert_eq!(f.row(1).unwrap()["seen"], true, "pass B cleared the override");
+    assert_eq!(f.overrides(1), Some((Some(1), None, None)));
+
+    // Pass C, the second consecutive clean pass: the server is the truth.
+    f.sync(Some("INBOX"));
+    assert_eq!(f.row(1).unwrap()["seen"], false, "pass C kept a disagreeing override");
+    assert_eq!(f.overrides(1), Some((None, None, None)));
+}
+
+/// After a UIDVALIDITY wipe, a tap on a row the list still showed names a uid with no local row:
+/// apply skips it, journals nothing, and nothing reaches the server.
+#[test]
+fn apply_after_a_uidvalidity_wipe_skips_the_old_uid() {
+    let server = MockImap::start(scenario(&[1, 2]));
+    let f = setup(&server);
+    f.sync(None);
+    server.mutate(|s| {
+        let mb = s.find_mut("INBOX").unwrap();
+        mb.uid_validity = 77;
+        mb.messages.clear();
+        mb.uid_next = 10;
+        mb.add(msg(10, "new generation", 3));
+    });
+    // The pass wipes, then is held at its first header FETCH: the old rows are gone.
+    let mut pause = server.pause_command("FETCH");
+    let from = f.events.len();
+    f.refresh("INBOX");
+    assert!(pause.entered(WAIT));
+    let r = f.try_apply("delete", "INBOX", &[1], None).unwrap();
+    assert_eq!(r, json!({ "queued": null, "skipped": [1] }));
+    assert!(f.pending().is_empty());
+    pause.release();
+    f.events.wait_idle(from, &f.account);
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(server.count_commands("MOVE") + server.count_commands("STORE"), 0, "{:?}", server.commands());
+    assert!(server.state().find("Trash").unwrap().messages.is_empty());
+    assert_eq!(f.uids("INBOX"), vec![10]);
+    // A mixed selection journals the uids it has and reports the rest.
+    let r = f.try_apply("seen", "INBOX", &[2, 10], None).unwrap();
+    assert_eq!(r["skipped"], json!([2]));
+    let seq = r["queued"].as_i64().unwrap();
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert!(has(&server_flags(&server, "INBOX", 10), "\\Seen"));
+}
+
+/// A server that refuses the STORE (not network, not auth) drops it with REFUSED after three
+/// attempts, and the account's next action then runs.
+#[test]
+fn a_refused_store_drops_after_three_attempts() {
+    let server = MockImap::start(
+        scenario(&[1, 2]).fault(Trigger::on("STORE"), Action::RefuseWith("NO".into(), "[CANNOT] flags are read only here".into())),
+    );
+    let f = setup(&server);
+    f.sync(None);
+    f.engine.set_action_backoff(Duration::from_millis(30), Duration::from_millis(100));
+    let s1 = f.apply("flag", "INBOX", &[1], None);
+    let s2 = f.apply("move", "INBOX", &[2], Some("Archive"));
+    let r1 = f.events.final_result(s1);
+    assert_eq!((r1["outcome"].as_str(), r1["reason"].as_str()), (Some("dropped"), Some("REFUSED")), "{r1}");
+    let retries: Vec<Value> = f
+        .events
+        .all()
+        .into_iter()
+        .filter(|(n, v)| n == "mobile.action.result" && v["seq"] == s1 && v["outcome"] == "retrying")
+        .map(|(_, v)| v)
+        .collect();
+    assert_eq!(retries.len(), 2, "{retries:?}");
+    assert!(retries.iter().all(|v| v["reason"] == "REFUSED"), "{retries:?}");
+    assert_eq!(server.count_commands("STORE"), 3, "{:?}", server.commands());
+    assert_eq!(f.row(1).unwrap()["flagged"], false, "the dropped flag is withdrawn locally");
+    assert_eq!(f.events.final_result(s2)["outcome"], "done");
+    assert_eq!(server.state().find("Archive").unwrap().messages.len(), 1);
+    assert!(f.pending().is_empty());
+}
+
+/// A head that failed to sign in keeps its backoff: further applies queue behind it without a
+/// login each.
+#[test]
+fn auth_failure_backoff_is_not_reset_by_applies() {
+    let server = MockImap::start(scenario(&[1]));
+    let f = setup(&server);
+    f.sync(None);
+    f.engine.set_action_backoff(Duration::from_secs(3), Duration::from_secs(3));
+    server.reset_scenario(scenario(&[1]).fault(
+        Trigger::on("LOGIN"),
+        Action::Respond("NO".into(), "[AUTHENTICATIONFAILED] Invalid credentials".into()),
+    ));
+    let from = f.events.len();
+    let seq = f.apply("flag", "INBOX", &[1], None);
+    assert_eq!(f.events.result(from, seq)["reason"], "AUTH_FAILED");
+    for kind in ["seen", "unseen", "seen", "unflag", "flag"] {
+        f.apply(kind, "INBOX", &[1], None);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(server.count_commands("LOGIN"), 1, "applies bypassed the backoff: {:?}", server.commands());
+    assert_eq!(f.pending().len(), 6);
+}
+
+fn offline_seen_then_drop(server: &MockImap) -> (tempfile::TempDir, Arc<MemorySecrets>, String, i64) {
+    let f = setup(server);
+    f.sync(None);
+    server.reset_scenario(scenario(&[1, 2]).fault(Trigger::OnConnect, Action::DropConnection));
+    let from = f.events.len();
+    let seq = f.apply("seen", "INBOX", &[1], None);
+    assert_eq!(f.events.result(from, seq)["outcome"], "retrying");
+    let Fixture { tmp, secrets, engine, events: _, account } = f;
+    drop(engine);
+    server.reset_scenario(scenario(&[1, 2]));
+    (tmp, secrets, account, seq)
+}
+
+/// A journal found at startup replays only once the shell has installed its event sink, so its
+/// results are not lost.
+#[test]
+fn a_startup_journal_waits_for_the_event_sink() {
+    let server = MockImap::start(scenario(&[1, 2]));
+    let (tmp, secrets, _account, seq) = offline_seen_then_drop(&server);
+    let engine = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::clone(&secrets) as _).unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!has(&server_flags(&server, "INBOX", 1), "\\Seen"), "replay ran before the event sink was installed");
+    let events = Arc::new(Events::default());
+    let sink = Arc::clone(&events);
+    assert!(engine.set_event_sink(move |name, payload| {
+        sink.list.lock().unwrap().push((name.to_string(), payload));
+        sink.cv.notify_all();
+    }));
+    assert_eq!(events.final_result(seq)["outcome"], "done");
+    assert!(has(&server_flags(&server, "INBOX", 1), "\\Seen"));
+}
+
+/// With no sink at all (a test, a shell that never installs one), the first RPC starts replay.
+#[test]
+fn a_startup_journal_starts_on_the_first_rpc() {
+    let server = MockImap::start(scenario(&[1, 2]));
+    let (tmp, secrets, account, _seq) = offline_seen_then_drop(&server);
+    let engine = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::clone(&secrets) as _).unwrap();
+    engine.rpc("mobile.ping", json!({})).unwrap();
+    let deadline = Instant::now() + WAIT;
+    while !engine.rpc("mobile.actions.pending", json!({ "accountId": account })).unwrap()["pending"].as_array().unwrap().is_empty() {
+        assert!(Instant::now() < deadline, "the journal never drained");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(has(&server_flags(&server, "INBOX", 1), "\\Seen"));
+}
+
+/// A move the server carried out while the engine died before hearing the reply: on replay the
+/// uid is absent from the source, which for a move that was sent means it is done.
+#[test]
+fn a_move_done_before_a_crash_reports_done() {
+    let server = MockImap::start(scenario(&[1, 2]));
+    let f = setup(&server);
+    f.sync(None);
+    let mut pause = server.pause_command("MOVE");
+    let seq = f.apply("move", "INBOX", &[1], Some("Archive"));
+    assert!(pause.entered(WAIT), "the move was never sent");
+    let Fixture { tmp, secrets, engine, events: _, account } = f;
+    drop(engine);
+    // The server did it; the reply never arrived.
+    server.mutate(|s| {
+        let inbox = s.find_mut("INBOX").unwrap();
+        let i = inbox.messages.iter().position(|m| m.uid == 1).unwrap();
+        let m = inbox.messages.remove(i);
+        s.find_mut("Archive").unwrap().add(m);
+    });
+    let (engine, events) = open(tmp.path(), &secrets);
+    let f = Fixture { tmp, secrets, engine, events, account };
+    let r = f.events.final_result(seq);
+    assert_eq!(r["outcome"], "done", "{r}");
+    pause.release();
+    assert!(f.pending().is_empty());
+    assert_eq!(f.overrides(1), None);
+    assert_eq!(f.uids("INBOX"), vec![2]);
+}

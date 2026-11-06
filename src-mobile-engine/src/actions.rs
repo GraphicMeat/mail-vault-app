@@ -35,6 +35,9 @@ pub(crate) const MAX_UIDS: usize = 199;
 /// First retry after a refused or failed attempt; doubles per failure up to [`BACKOFF_CAP`].
 const BACKOFF_BASE: Duration = Duration::from_secs(5);
 const BACKOFF_CAP: Duration = Duration::from_secs(300);
+/// A server refusal (a tagged NO or BAD that is not the network, a timeout or the sign-in) is tried
+/// this many times; then the action drops with `REFUSED`, so it cannot block the account for ever.
+const MAX_REFUSALS: u32 = 3;
 
 /// `uid IN` the uids any journal row of `(?1 account, ?2 folder)` names.
 pub(crate) const PENDING_UIDS: &str =
@@ -104,6 +107,17 @@ struct Arg {
     target: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     uid_validity: Option<i64>,
+    /// Set before a move or delete goes on the wire: if its uids are then all absent from the
+    /// source on a later attempt (the engine died before the reply), the server did it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    sent: bool,
+    /// Attempts the server refused so far (see [`MAX_REFUSALS`]).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    refused: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 impl Arg {
@@ -120,6 +134,8 @@ pub(crate) enum Reason {
     Gone,
     /// The folder (or a move's target) no longer exists.
     FolderGone,
+    /// The server refused it [`MAX_REFUSALS`] times.
+    Refused,
 }
 
 impl Reason {
@@ -127,6 +143,7 @@ impl Reason {
         match self {
             Reason::Gone => "GONE",
             Reason::FolderGone => "FOLDER_GONE",
+            Reason::Refused => "REFUSED",
         }
     }
 }
@@ -171,6 +188,10 @@ struct ApplyParams {
 
 /// `mobile.actions.apply {accountId, folder, uids, kind, target?}` -> `{queued: seq}`. Applies
 /// locally and journals in one write transaction, emits `mobile.folder.changed`, wakes replay.
+/// What the apply transaction did: the journal seq (none when every uid was skipped), the rows
+/// changed, and the skipped uids.
+type Applied = (Option<i64>, usize, Vec<u32>);
+
 pub(crate) fn apply(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: ApplyParams = parse(params)?;
     let kind = Kind::parse(&p.kind).ok_or_else(|| RpcError::Invalid(format!("unknown action kind {}", p.kind)))?;
@@ -194,11 +215,10 @@ pub(crate) fn apply(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         return Err(RpcError::Invalid("unknown folder".into()));
     };
     let gen = shared.list_gen(&p.account_id, &folder).map_err(internal)? + 1;
-    let uids_json = serde_json::to_string(&uids).map_err(internal)?;
     let list = sync::uid_list(&uids);
     let account = p.account_id;
     let out = shared
-        .write(|c| -> rusqlite::Result<Result<(i64, usize), RpcError>> {
+        .write(|c| -> rusqlite::Result<Result<Applied, RpcError>> {
             let exists = c.query_row("SELECT 1 FROM accounts WHERE id = ?1", [&account], |_| Ok(())).optional()?.is_some();
             if !exists {
                 return Ok(Err(RpcError::Invalid("unknown account".into())));
@@ -218,7 +238,24 @@ pub(crate) fn apply(engine: &Engine, params: Value) -> Result<Value, RpcError> {
                     return Ok(Err(RpcError::Invalid("unknown move target".into())));
                 }
             }
-            let arg = serde_json::to_string(&Arg { target: target.clone(), uid_validity: validity }).unwrap_or_default();
+            // Only uids the list can show here: a row in this folder that is visible, or hidden by
+            // an action still pending (a follow-up on a moved row reaches the moved copy). A uid
+            // with no row may name another message after a UIDVALIDITY change: it is skipped.
+            let held: HashSet<u32> = {
+                let mut st = c.prepare(&format!(
+                    "SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid IN ({list})
+                       AND (COALESCE(local_deleted, 0) = 0 OR uid IN ({PENDING_UIDS}))"
+                ))?;
+                let rows = st.query_map((&account, &folder), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
+                rows.into_iter().map(|u| u as u32).collect()
+            };
+            let (kept, skipped): (Vec<u32>, Vec<u32>) = uids.iter().partition(|u| held.contains(u));
+            if kept.is_empty() {
+                return Ok(Ok((None, 0, skipped)));
+            }
+            let uids_json = serde_json::to_string(&kept).unwrap_or_default();
+            let list = sync::uid_list(&kept);
+            let arg = serde_json::to_string(&Arg { target: target.clone(), uid_validity: validity, ..Arg::default() }).unwrap_or_default();
             c.execute(
                 "INSERT INTO pending_actions (account_id, folder, uids_json, kind, arg, state, attempts, created_ms)
                  VALUES (?1, ?2, ?3, ?4, ?5, 'queued', 0, ?6)",
@@ -233,16 +270,18 @@ pub(crate) fn apply(engine: &Engine, params: Value) -> Result<Value, RpcError> {
                 ),
                 (&account, &folder, kind.value(), gen),
             )?;
-            Ok(Ok((seq, n)))
+            Ok(Ok((Some(seq), n, skipped)))
         })
         .map_err(internal)?;
-    let (seq, n) = out?;
+    let (seq, n, skipped) = out?;
     if n > 0 {
         let (removed, updated) = if kind.hides() { (n, 0) } else { (0, n) };
         emit_folder_changed(shared, &account, &folder, gen, removed, updated);
     }
-    engine.replay().wake(shared, Some(&account));
-    Ok(json!({ "queued": seq }))
+    if seq.is_some() {
+        engine.replay().wake(shared, Some(&account));
+    }
+    Ok(json!({ "queued": seq, "skipped": skipped }))
 }
 
 #[derive(Deserialize)]
@@ -323,7 +362,7 @@ pub(crate) fn drop_folder_actions(
                 }
             }
             if !out.is_empty() {
-                shared.bump_action_epoch();
+                shared.bump_settle(account, folder);
             }
             Ok(out)
         })?;
@@ -339,6 +378,9 @@ pub(crate) fn drop_folder_actions(
 struct Retry {
     at: Instant,
     delay: Duration,
+    /// The head failed to sign in. A new apply or a refresh does not forgive this backoff: each
+    /// would be one more login with a password the server already refused.
+    auth: bool,
 }
 
 struct ReplayState {
@@ -381,7 +423,8 @@ fn next_delay(prev: Option<Duration>, base: Duration, cap: Duration) -> Duration
 
 impl Replay {
     /// Starts the worker if needed and makes it look at the journal now. With `account`, that
-    /// account's backoff is forgiven: the user just acted (or refreshed), so try at once.
+    /// account's backoff is forgiven (the user just acted or refreshed, so try at once), unless its
+    /// head last failed to sign in.
     pub(crate) fn wake(&self, shared: &Arc<Shared>, account: Option<&str>) {
         let mut st = lock(&self.queue.state);
         if st.stop {
@@ -398,7 +441,9 @@ impl Replay {
             }
         }
         if let Some(a) = account {
-            st.retry.remove(a);
+            if !st.retry.get(a).is_some_and(|r| r.auth) {
+                st.retry.remove(a);
+            }
         }
         st.kicked = true;
         self.queue.cv.notify_all();
@@ -461,13 +506,16 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
             if shared.is_closing() || lock(&queue.state).stop {
                 return;
             }
-            let ok = replay_account(&shared, account);
+            let out = replay_account(&shared, account);
             let mut st = lock(&queue.state);
-            if ok {
-                st.retry.remove(account);
-            } else {
-                let delay = next_delay(st.retry.get(account).map(|r| r.delay), st.base, st.cap);
-                st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, delay });
+            match out {
+                Ok(()) => {
+                    st.retry.remove(account);
+                }
+                Err(code) => {
+                    let delay = next_delay(st.retry.get(account).map(|r| r.delay), st.base, st.cap);
+                    st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, delay, auth: code == Code::AuthFailed });
+                }
             }
         }
         if !ready.is_empty() {
@@ -527,15 +575,15 @@ fn head(shared: &Shared, account: &str) -> Result<Option<Journaled>, Fail> {
     })?)
 }
 
-/// Replays `account`'s journal through one session until it is empty. False when an attempt
+/// Replays `account`'s journal through one session until it is empty. `Err(code)` when an attempt
 /// failed: the head stays queued as `retrying` and the account backs off.
-fn replay_account(shared: &Shared, account: &str) -> bool {
+fn replay_account(shared: &Shared, account: &str) -> Result<(), Code> {
     let sc = match sync::session_config(shared, account) {
         Ok(sc) => sc,
-        Err(Fail::Gone) | Err(Fail::Closing) => return true,
+        Err(Fail::Gone) | Err(Fail::Closing) => return Ok(()),
         Err(Fail::Code(code, why)) => {
             fail_head(shared, account, code, &why);
-            return false;
+            return Err(code);
         }
     };
     let out = crate::net::block_on(async {
@@ -546,10 +594,12 @@ fn replay_account(shared: &Shared, account: &str) -> bool {
         out
     });
     match out.map_err(|f| sc.scrub(f)) {
-        Ok(()) | Err(Fail::Gone) | Err(Fail::Closing) => true,
+        Ok(true) | Err(Fail::Gone) | Err(Fail::Closing) => Ok(()),
+        // The head was refused and marked already.
+        Ok(false) => Err(Code::Invalid),
         Err(Fail::Code(code, why)) => {
             fail_head(shared, account, code, &why);
-            false
+            Err(code)
         }
     }
 }
@@ -594,38 +644,94 @@ enum Outcome {
     /// Not done and never will be. `uids_gone`: the uids are proven absent from the folder, so
     /// their rows go too; otherwise the action's overrides are withdrawn.
     Dropped { reason: Reason, uids_gone: bool },
+    /// The server answered the command with a refusal (core's text, for the log).
+    Refused(String),
 }
 
-async fn drain(shared: &Shared, session: &mut ImapSession, account: &str) -> Result<(), Fail> {
+/// An IMAP step's failure: the server's refusal becomes [`Outcome::Refused`]; the network, a
+/// timeout or the sign-in stay failures (retried with backoff, never dropped).
+fn refused_or_fail(err: String) -> Result<Outcome, Fail> {
+    if map_error(&err) == Code::Invalid {
+        Ok(Outcome::Refused(err))
+    } else {
+        Err(Fail::from(err))
+    }
+}
+
+/// Replays the account's actions until the journal is empty (`Ok(true)`) or the head was refused
+/// and must back off (`Ok(false)`, already marked).
+async fn drain(shared: &Shared, session: &mut ImapSession, account: &str) -> Result<bool, Fail> {
     let caps = abd_cmds::capabilities(session).await?;
     loop {
         sync::not_closing(shared)?;
         let Some(a) = head(shared, account)? else {
-            return Ok(());
+            return Ok(true);
         };
         let outcome = match a.kind {
             Some(kind) => run_action(shared, session, &caps, account, &a, kind).await?,
             // A kind this build does not know: nothing can replay it.
             None => Outcome::Dropped { reason: Reason::Gone, uids_gone: false },
         };
+        if let Outcome::Refused(why) = outcome {
+            if !refuse(shared, account, &a, &why)? {
+                return Ok(false);
+            }
+            continue;
+        }
         record(shared, account, &a, outcome)?;
     }
 }
 
-/// Whether `path` is really gone: only when the failure was the server's answer (not the network)
-/// and a LIST that includes INBOX (a whole reply) does not name it. Otherwise the failure stands.
-async fn confirm_folder_gone(session: &mut ImapSession, path: &str, err: String) -> Result<(), Fail> {
-    if map_error(&err) != Code::Invalid {
-        return Err(Fail::from(err));
+/// Counts a refusal of the head. Below [`MAX_REFUSALS`] it is marked `retrying` with `REFUSED`
+/// (false: back off); at the limit it drops with `REFUSED` (true: go on with the next action).
+fn refuse(shared: &Shared, account: &str, a: &Journaled, why: &str) -> Result<bool, Fail> {
+    let mut arg = a.arg.clone();
+    arg.refused += 1;
+    let text = serde_json::to_string(&arg).unwrap_or_default();
+    shared.log(&format!("[actions] {account} seq {}: REFUSED ({} of {MAX_REFUSALS}) {why}", a.seq, arg.refused));
+    if arg.refused >= MAX_REFUSALS {
+        record(shared, account, a, Outcome::Dropped { reason: Reason::Refused, uids_gone: false })?;
+        return Ok(true);
+    }
+    let marked = sync::write_for(shared, account, |c| {
+        c.execute(
+            "UPDATE pending_actions SET state = 'retrying', attempts = attempts + 1, last_error = 'REFUSED', arg = ?2 WHERE seq = ?1",
+            (a.seq, &text),
+        )
+    })?;
+    if marked > 0 {
+        emit_result(shared, account, a.seq, "retrying", Some(Reason::Refused.as_str()));
+    }
+    Ok(false)
+}
+
+/// Records, before a move or delete goes on the wire, that it may have happened.
+fn mark_sent(shared: &Shared, account: &str, a: &Journaled) -> Result<(), Fail> {
+    if a.arg.sent {
+        return Ok(());
+    }
+    let mut arg = a.arg.clone();
+    arg.sent = true;
+    let text = serde_json::to_string(&arg).unwrap_or_default();
+    sync::write_for(shared, account, |c| c.execute("UPDATE pending_actions SET arg = ?2 WHERE seq = ?1", (a.seq, &text)))?;
+    Ok(())
+}
+
+/// After a failed SELECT or MOVE: `Ok(true)` when `path` is really gone, which only the server's
+/// answer (not the network) followed by a whole LIST (one that includes INBOX) without it proves;
+/// `Ok(false)` when the server refused but still lists the folder. A network failure stays one.
+async fn confirm_folder_gone(session: &mut ImapSession, path: &str, err: &str) -> Result<bool, Fail> {
+    if map_error(err) != Code::Invalid {
+        return Err(Fail::from(err.to_string()));
     }
     let boxes = imap::list_mailboxes(session).await?;
     let whole = boxes.iter().any(|b| sync::is_inbox(&b.path));
     let listed = boxes.iter().any(|b| b.path == path || (sync::is_inbox(path) && sync::is_inbox(&b.path)));
-    if whole && !listed {
-        Ok(())
-    } else {
-        Err(Fail::from(err))
+    if !whole {
+        // A short LIST proves nothing either way.
+        return Err(Fail::from(err.to_string()));
     }
+    Ok(!listed)
 }
 
 fn folder_is_trash(shared: &Shared, account: &str, folder: &str) -> Result<bool, Fail> {
@@ -647,8 +753,10 @@ async fn run_action(
     let mbox = match imap::select_mailbox(session, &a.folder).await {
         Ok(m) => m,
         Err(e) => {
-            confirm_folder_gone(session, &a.folder, e).await?;
-            return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false });
+            if confirm_folder_gone(session, &a.folder, &e).await? {
+                return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false });
+            }
+            return Ok(Outcome::Refused(e));
         }
     };
     if let Some(v) = a.arg.uid_validity {
@@ -659,10 +767,17 @@ async fn run_action(
     }
     // Absence is proven by the server's tagged answer, never inferred: a STORE or MOVE on a uid
     // that is gone answers OK too.
-    let found: HashSet<u32> =
-        abd_cmds::uid_search(session, &a.folder, &format!("UID {}", sync::uid_list(&a.uids))).await?.into_iter().collect();
+    let found: HashSet<u32> = match abd_cmds::uid_search(session, &a.folder, &format!("UID {}", sync::uid_list(&a.uids))).await {
+        Ok(f) => f.into_iter().collect(),
+        Err(e) => return refused_or_fail(e),
+    };
     let (present, gone): (Vec<u32>, Vec<u32>) = a.uids.iter().partition(|u| found.contains(u));
     if present.is_empty() {
+        if kind.hides() && a.arg.sent {
+            // A move or delete that went on the wire before, and every uid has left the source:
+            // the server did it, and only the reply was lost (the engine died or the link dropped).
+            return Ok(Outcome::Done { gone: Vec::new(), remap: None });
+        }
         return Ok(Outcome::Dropped { reason: Reason::Gone, uids_gone: true });
     }
     let mut remap = None;
@@ -671,20 +786,23 @@ async fn run_action(
             let flag = if matches!(kind, Kind::Seen | Kind::Unseen) { "\\Seen" } else { "\\Flagged" };
             let op = if kind.value() == 1 { "add" } else { "remove" };
             for uid in &present {
-                imap::set_flags(session, &a.folder, *uid, &[flag.to_string()], op).await?;
+                if let Err(e) = imap::set_flags(session, &a.folder, *uid, &[flag.to_string()], op).await {
+                    return refused_or_fail(e);
+                }
             }
         }
         Kind::Delete => {
             // In Trash already: a delete is permanent. Elsewhere core moves it to Trash.
             let permanent = folder_is_trash(shared, account, &a.folder)?;
             let expected = a.arg.uid_validity.map(|v| v as u32);
+            mark_sent(shared, account, a)?;
             for uid in &present {
                 match imap::delete_email_in(session, &a.folder, *uid, permanent, caps.uidplus, expected).await {
                     Ok(_) => {}
                     Err(e) if e == "errors.bulkIdentityChanged" => {
                         return Ok(Outcome::Dropped { reason: Reason::Gone, uids_gone: false });
                     }
-                    Err(e) => return Err(e.into()),
+                    Err(e) => return refused_or_fail(e),
                 }
             }
         }
@@ -692,6 +810,7 @@ async fn run_action(
             let Some(target) = a.arg.target.as_deref() else {
                 return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false });
             };
+            mark_sent(shared, account, a)?;
             match imap::move_uids(session, &a.folder, target, &present, caps.move_cmd, caps.uidplus).await {
                 Ok(out) => {
                     // COPYUID pairs the source set, ascending, with the new uids in order.
@@ -701,8 +820,10 @@ async fn run_action(
                     }
                 }
                 Err(e) => {
-                    confirm_folder_gone(session, target, e).await?;
-                    return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false });
+                    if confirm_folder_gone(session, target, &e).await? {
+                        return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false });
+                    }
+                    return Ok(Outcome::Refused(e));
                 }
             }
         }
@@ -730,6 +851,8 @@ fn remap_later(c: &Connection, account: &str, a: &Journaled, remap: &Remap) -> r
         new.sort_unstable();
         let mut arg = Arg::read(arg);
         arg.uid_validity = validity;
+        arg.sent = false;
+        arg.refused = 0;
         if arg.target.as_deref() == Some(target) {
             continue;
         }
@@ -760,12 +883,14 @@ fn remove_rows(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Re
 fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Result<(), Fail> {
     let kind = a.kind;
     match outcome {
+        // Counted by `refuse`, which records the drop at the limit.
+        Outcome::Refused(why) => refuse(shared, account, a, &why).map(|_| ()),
         Outcome::Done { gone, remap } => {
             let settled = sync::write_for(shared, account, |c| {
                 if c.execute("DELETE FROM pending_actions WHERE seq = ?1", [a.seq])? == 0 {
                     return Ok(false);
                 }
-                shared.bump_action_epoch();
+                shared.bump_settle(account, &a.folder);
                 if let Some(remap) = &remap {
                     remap_later(c, account, a, remap)?;
                 }
@@ -789,7 +914,7 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
                 if c.execute("DELETE FROM pending_actions WHERE seq = ?1", [a.seq])? == 0 {
                     return Ok(None);
                 }
-                shared.bump_action_epoch();
+                shared.bump_settle(account, &a.folder);
                 let mut n = 0;
                 if let (false, Some(kind)) = (uids_gone, kind) {
                     // Withdraw this action's override where no other pending action holds one.

@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
@@ -139,6 +139,9 @@ pub struct Engine {
     cache_dir: PathBuf,
     sync: crate::sync::Worker,
     replay: crate::actions::Replay,
+    /// `open` found a journal: replay starts once the shell can hear its results, when the event
+    /// sink is installed or the first RPC arrives, whichever is first.
+    startup_replay: AtomicBool,
 }
 
 /// What the RPC threads and the sync worker thread both use.
@@ -158,16 +161,23 @@ pub(crate) struct Shared {
     list_gens: Mutex<HashMap<(String, String), i64>>,
     /// Set when the `Engine` is dropped; the sync worker stops at its next batch.
     closing: AtomicBool,
-    /// Bumped, inside the write transaction, each time a journaled action settles (done or
-    /// dropped). A sync pass that saw it unchanged from before its flag read to its write knows
-    /// that read is newer than every settled action (`sync.rs`, overrides).
-    action_epoch: AtomicU64,
+    /// Per folder `(account_id, folder)`: how many actions have settled there, and how many
+    /// consecutive sync passes completed since the last one without another settling meanwhile.
+    /// Sync clears an override the server disagrees with only on the second such pass (`sync.rs`).
+    settles: Mutex<HashMap<(String, String), Settles>>,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
     /// Unit tests: the body cache cap, in place of [`crate::body::CACHE_CAP`].
     #[cfg(test)]
     pub(crate) body_cap: std::sync::atomic::AtomicU64,
+}
+
+/// A folder's settled-action count and the clean sync passes since the last settle.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(crate) struct Settles {
+    pub(crate) settled: u64,
+    pub(crate) clean_passes: u32,
 }
 
 pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -296,7 +306,7 @@ impl Engine {
                 event_sink: OnceLock::new(),
                 list_gens: Mutex::new(HashMap::new()),
                 closing: AtomicBool::new(false),
-                action_epoch: AtomicU64::new(0),
+                settles: Mutex::new(HashMap::new()),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -305,12 +315,15 @@ impl Engine {
             cache_dir: cache_dir.to_path_buf(),
             sync: crate::sync::Worker::default(),
             replay: crate::actions::Replay::default(),
+            startup_replay: AtomicBool::new(journal),
         })
-        .inspect(|e| {
-            if journal {
-                e.replay.wake(&e.shared, None);
-            }
-        })
+    }
+
+    /// Starts the replay `open` held back, once.
+    pub(crate) fn start_startup_replay(&self) {
+        if self.startup_replay.swap(false, Ordering::SeqCst) {
+            self.replay.wake(&self.shared, None);
+        }
     }
 
     pub(crate) fn shared(&self) -> &Arc<Shared> {
@@ -345,7 +358,9 @@ impl Engine {
     /// thread that produced the event (often the sync worker), with no engine lock held. The first
     /// sink wins; returns false if one was already set.
     pub fn set_event_sink(&self, sink: impl Fn(&str, Value) + Send + Sync + 'static) -> bool {
-        self.shared.event_sink.set(Box::new(sink)).is_ok()
+        let set = self.shared.event_sink.set(Box::new(sink)).is_ok();
+        self.start_startup_replay();
+        set
     }
 
     /// Tests: the replay backoff, in place of 5 s doubling to 5 min. `base` is the first delay
@@ -517,14 +532,34 @@ impl Shared {
         *slot
     }
 
-    /// The count of settled actions so far (see `action_epoch`).
-    pub(crate) fn action_epoch(&self) -> u64 {
-        self.action_epoch.load(Ordering::SeqCst)
+    /// Call inside the write transaction that settles an action on `folder`: the folder's clean
+    /// pass count starts again from zero.
+    pub(crate) fn bump_settle(&self, account_id: &str, folder: &str) {
+        let mut m = lock(&self.settles);
+        let e = m.entry((account_id.to_string(), folder.to_string())).or_default();
+        e.settled += 1;
+        e.clean_passes = 0;
     }
 
-    /// Call inside the write transaction that settles an action.
-    pub(crate) fn bump_action_epoch(&self) {
-        self.action_epoch.fetch_add(1, Ordering::SeqCst);
+    /// The folder's settle state as a sync pass starts (before its flag read).
+    pub(crate) fn settles(&self, account_id: &str, folder: &str) -> Settles {
+        lock(&self.settles).get(&(account_id.to_string(), folder.to_string())).copied().unwrap_or_default()
+    }
+
+    /// May a pass that started at `at` clear an override the server disagrees with? Only when
+    /// nothing settled in the folder since it started and one whole clean pass came before it, so
+    /// two consecutive passes that both started after the last settle have read the same truth.
+    pub(crate) fn may_clear_disagreeing(&self, account_id: &str, folder: &str, at: Settles) -> bool {
+        at.clean_passes >= 1 && self.settles(account_id, folder).settled == at.settled
+    }
+
+    /// A pass that started at `at` completed: it counts as clean when nothing settled meanwhile.
+    pub(crate) fn pass_completed(&self, account_id: &str, folder: &str, at: Settles) {
+        let mut m = lock(&self.settles);
+        let e = m.entry((account_id.to_string(), folder.to_string())).or_default();
+        if e.settled == at.settled {
+            e.clean_passes = e.clean_passes.max(at.clean_passes + 1);
+        }
     }
 }
 
