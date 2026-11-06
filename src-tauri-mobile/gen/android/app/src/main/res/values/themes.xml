@@ -1,6 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.mailvault_mobile" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- The page background (mail-bg token), shown before the WebView paints. -->
+        <item name="android:windowBackground">@color/mv_window_bg</item>
     </style>
 </resources>

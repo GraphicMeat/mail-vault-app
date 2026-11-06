@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The dark mail-bg token. -->
+    <color name="mv_window_bg">#FF0A0A12</color>
+</resources>

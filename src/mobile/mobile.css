@@ -1,6 +1,12 @@
 /* Mobile shell styles. Tokens from DESIGN.md (src/styles/index.css is authoritative): dark is the
-   default, light follows the system. Safe areas come from env(safe-area-inset-*). */
+   default, light follows the system. Safe areas: env(safe-area-inset-*) on iOS; the Android
+   WebView reports 0 there, so the shell (gen/android MainActivity) sets --mv-inset-* instead.
+   --mv-safe-* takes the larger of the two. */
 :root {
+  --mv-safe-top: max(env(safe-area-inset-top), var(--mv-inset-top, 0px));
+  --mv-safe-right: max(env(safe-area-inset-right), var(--mv-inset-right, 0px));
+  --mv-safe-bottom: max(env(safe-area-inset-bottom), var(--mv-inset-bottom, 0px));
+  --mv-safe-left: max(env(safe-area-inset-left), var(--mv-inset-left, 0px));
   color-scheme: dark;
   --mail-bg: #0a0a12;
   --mail-surface: #15151f;
@@ -46,7 +52,7 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 16px) 8px calc(env(safe-area-inset-left) + 16px);
+  padding: calc(var(--mv-safe-top) + 8px) calc(var(--mv-safe-right) + 16px) 8px calc(var(--mv-safe-left) + 16px);
   background: var(--mail-surface);
   border-bottom: 1px solid var(--mail-border);
 }
@@ -58,7 +64,7 @@ body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--mv-safe-bottom);
 }
 .mv-list__inner { position: relative; width: 100%; }
 
@@ -71,7 +77,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 8px calc(env(safe-area-inset-right) + 16px) 8px calc(env(safe-area-inset-left) + 16px);
+  padding: 8px calc(var(--mv-safe-right) + 16px) 8px calc(var(--mv-safe-left) + 16px);
   overflow: hidden;
   border: 0;
   border-bottom: 1px solid var(--mail-border);
@@ -103,9 +109,9 @@ body {
   z-index: 10;
   overflow-y: auto;
   background: var(--mail-bg);
-  padding: 0 calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px);
+  padding: 0 calc(var(--mv-safe-right) + 16px) calc(var(--mv-safe-bottom) + 16px) calc(var(--mv-safe-left) + 16px);
 }
-.mv-viewer__bar { padding-top: env(safe-area-inset-top); margin: 0 -8px; }
+.mv-viewer__bar { padding-top: var(--mv-safe-top); margin: 0 -8px; }
 .mv-viewer__back {
   border: 0;
   background: none;

@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- The light mail-bg token; values-night/colors.xml holds the dark one. -->
+    <color name="mv_window_bg">#FFF6F7FB</color>
 </resources>
