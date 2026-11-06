@@ -70,6 +70,18 @@ fn log_line(line: &str) {
     println!("{line}");
 }
 
+/// Perf gate builds only: 10k synthetic rows the first time the app opens (kept on later launches).
+#[cfg(feature = "perf-gate")]
+fn seed_for_perf_gate(engine: &Engine) {
+    use mailvault_mobile_engine::seed;
+    if let Err(e) = seed::ensure_seeded(engine, seed::PERF_ROWS) {
+        log_line(&format!("MV_MOBILE {}", serde_json::json!({ "seedError": e.to_string() })));
+    }
+}
+
+#[cfg(not(feature = "perf-gate"))]
+fn seed_for_perf_gate(_: &Engine) {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -78,6 +90,10 @@ pub fn run() {
                 Ok(dir) => Engine::open(&dir).map_err(|e| e.to_string()),
                 Err(e) => Err(format!("app data dir: {e}")),
             };
+            if let Ok(engine) = &engine {
+                engine.set_log_sink(log_line);
+                seed_for_perf_gate(engine);
+            }
             if let Err(reason) = &engine {
                 log_line(&format!("MV_MOBILE {}", serde_json::json!({ "engineError": reason })));
             }

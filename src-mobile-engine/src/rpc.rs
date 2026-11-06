@@ -51,8 +51,20 @@ impl Serialize for RpcError {
 
 type Handler = fn(&Engine, Value) -> Result<Value, RpcError>;
 
-/// Keep sorted by name, like `methods.json`.
+/// Keep sorted by name, like `methods.json`. `methods.json` lists the perf-gate build's table;
+/// a shipping build answers `mobile.perf.report` with `Unsupported`.
+#[cfg(feature = "perf-gate")]
+const TABLE: &[(&str, Handler)] = &[
+    ("mobile.messages.page", messages_page),
+    ("mobile.perf.report", perf_report),
+    ("mobile.ping", ping),
+];
+#[cfg(not(feature = "perf-gate"))]
 const TABLE: &[(&str, Handler)] = &[("mobile.messages.page", messages_page), ("mobile.ping", ping)];
+
+/// Largest perf record accepted, serialized. The real one is a few hundred bytes.
+#[cfg(feature = "perf-gate")]
+const MAX_PERF_LINE: usize = 64 * 1024;
 
 /// Names of every implemented method, in dispatch-table order.
 pub fn methods() -> Vec<&'static str> {
@@ -121,4 +133,37 @@ fn messages_page(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             Ok(json!({ "total": total, "rows": rows }))
         })
         .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// Logs the in-app perf probe's result as exactly one `MV_MOBILE {"perf":<object>}` line, the line
+/// the gate script reads. Compact JSON escapes every control character inside a string, so no
+/// field can start a second line.
+#[cfg(feature = "perf-gate")]
+fn perf_report(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    if !params.is_object() {
+        return Err(RpcError::Invalid("perf report must be an object".into()));
+    }
+    let body = serde_json::to_string(&json!({ "perf": params })).map_err(|e| RpcError::Internal(e.to_string()))?;
+    if body.len() > MAX_PERF_LINE {
+        return Err(RpcError::Invalid(format!("perf report is {} bytes, limit {MAX_PERF_LINE}", body.len())));
+    }
+    debug_assert!(!body.contains('\n') && !body.contains('\r'));
+    engine.log(&format!("MV_MOBILE {body}"));
+    Ok(json!({ "logged": true }))
+}
+
+#[cfg(all(test, not(feature = "perf-gate")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn perf_report_is_unsupported_without_perf_gate() {
+        let tmp = std::env::temp_dir().join(format!("mv-engine-noperf-{}", std::process::id()));
+        let e = Engine::open(&tmp).unwrap();
+        let err = e.rpc("mobile.perf.report", json!({ "rows": 1 })).unwrap_err();
+        assert_eq!(err, RpcError::Unsupported { method: "mobile.perf.report".into() });
+        assert!(!methods().contains(&"mobile.perf.report"));
+        drop(e);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

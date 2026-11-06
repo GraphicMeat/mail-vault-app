@@ -8,7 +8,7 @@
 use rusqlite::{Connection, ErrorCode, OpenFlags, Transaction, TransactionBehavior};
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
 pub const SCHEMA_VERSION: u32 = 1;
@@ -54,10 +54,15 @@ impl fmt::Display for EngineError {
 
 impl std::error::Error for EngineError {}
 
+type LogSink = Box<dyn Fn(&str) + Send + Sync>;
+
 pub struct Engine {
     path: PathBuf,
     writer: Mutex<Connection>,
     readers: Mutex<Vec<Connection>>,
+    /// Where the engine's own log lines go. The shell installs its platform logger (unified log on
+    /// iOS, logcat on Android); app stdout reaches neither, so stderr is only the fallback.
+    log_sink: OnceLock<LogSink>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -123,7 +128,7 @@ fn try_open(path: &Path) -> Result<Engine, OpenFail> {
     for _ in 0..READERS {
         readers.push(read_conn(path)?);
     }
-    Ok(Engine { path: path.to_path_buf(), writer: Mutex::new(w), readers: Mutex::new(readers) })
+    Ok(Engine { path: path.to_path_buf(), writer: Mutex::new(w), readers: Mutex::new(readers), log_sink: OnceLock::new() })
 }
 
 fn remove_db_files(path: &Path) -> Result<(), EngineError> {
@@ -154,6 +159,21 @@ impl Engine {
                     Err(OpenFail::Corrupt) => Err(EngineError::Db("mobile.db is corrupt after a rebuild".into())),
                 }
             }
+        }
+    }
+
+    /// Installs the sink for the engine's log lines. The first sink wins; returns false if one was
+    /// already set.
+    pub fn set_log_sink(&self, sink: impl Fn(&str) + Send + Sync + 'static) -> bool {
+        self.log_sink.set(Box::new(sink)).is_ok()
+    }
+
+    /// Writes one line to the installed sink, or to stderr when none is set.
+    #[cfg(feature = "perf-gate")]
+    pub(crate) fn log(&self, line: &str) {
+        match self.log_sink.get() {
+            Some(sink) => sink(line),
+            None => eprintln!("{line}"),
         }
     }
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Build the mobile shell (src-tauri-mobile), boot a simulator/emulator, install, launch, and print
 # the app's `MV_MOBILE <json>` log lines to stdout. Runs on the Mac mini:
-#   ~/.claude/bin/testq ~/.claude/bin/minijob bash scripts/mobile-run.sh <ios|android> [--release] [--url-query q]
+#   ~/.claude/bin/testq ~/.claude/bin/minijob bash scripts/mobile-run.sh <ios|android> [--release] [--url-query q] [--features f]
 #
 # --url-query q   open the window at mobile.html?q (merged into the Tauri config at build time)
+# --features f    cargo features for the shell, e.g. perf-gate (10k seeded rows, mobile.perf.report)
 # Environment:
 #   MV_MOBILE_UNTIL   ERE that ends the tail once a log line matches it
 #                     (default: the first ping, error or engineError line)
@@ -15,15 +16,16 @@
 # Everything this script starts (app, simulator, emulator, log tail) is stopped on exit.
 set -euo pipefail
 
-usage() { echo "usage: $0 <ios|android> [--release] [--url-query q]" >&2; exit 64; }
+usage() { echo "usage: $0 <ios|android> [--release] [--url-query q] [--features f]" >&2; exit 64; }
 [ $# -ge 1 ] || usage
 platform=$1; shift
 case $platform in ios|android) ;; *) usage ;; esac
-release=; query=
+release=; query=; features=
 while [ $# -gt 0 ]; do
     case $1 in
         --release) release=1 ;;
         --url-query) [ $# -ge 2 ] || usage; query=$2; shift ;;
+        --features) [ $# -ge 2 ] || usage; features=$2; shift ;;
         *) usage ;;
     esac
     shift
@@ -48,6 +50,7 @@ tauri_args=()
 if [ -n "$query" ]; then
     tauri_args+=(--config "{\"app\":{\"windows\":[{\"label\":\"main\",\"url\":\"mobile.html?$query\",\"title\":\"MailVault\"}]}}")
 fi
+if [ -n "$features" ]; then tauri_args+=(--features "$features"); fi
 if [ -z "$release" ]; then tauri_args+=(--debug); mode=debug; else mode=release; fi
 
 cleanup_cmds=()
