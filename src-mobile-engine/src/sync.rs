@@ -148,8 +148,8 @@ fn background_qos() {
 
 // ── One pass ────────────────────────────────────────────────────────────────
 
-/// Why a pass stopped early.
-enum Fail {
+/// Why a pass (or a body fetch) stopped early.
+pub(crate) enum Fail {
     /// The account was removed while the pass ran: stop quietly.
     Gone,
     /// The engine was dropped: stop before the next network call or write.
@@ -198,29 +198,60 @@ fn load_account(shared: &Shared, id: &str) -> Result<Option<Account>, EngineErro
     })
 }
 
-fn sync_job(shared: &Shared, job: &Job) -> Result<(), Fail> {
-    let Some(acct) = load_account(shared, &job.account)? else {
+/// What signing in to an account takes: core's settings and the password (kept only to scrub it
+/// out of an error before that error is logged). The one place the engine builds a session's
+/// settings from an account row and its secret; `Fail::Gone` when the account does not exist.
+pub(crate) struct SessionConfig {
+    pub(crate) config: imap::ImapConfig,
+    password: String,
+}
+
+impl SessionConfig {
+    /// Removes the password from a failure's log text. Core's text names the address, never the
+    /// password; this is the belt to that brace.
+    pub(crate) fn scrub(&self, f: Fail) -> Fail {
+        match f {
+            Fail::Code(code, why) if !self.password.is_empty() => Fail::Code(code, why.replace(&self.password, "***")),
+            other => other,
+        }
+    }
+}
+
+pub(crate) fn session_config(shared: &Shared, account: &str) -> Result<SessionConfig, Fail> {
+    let Some(acct) = load_account(shared, account)? else {
         return Err(Fail::Gone);
     };
-    let password = match shared.secrets().get(&job.account) {
+    let password = match shared.secrets().get(account) {
         Ok(Some(p)) => p,
         Ok(None) => return Err(Fail::Code(Code::AuthFailed, "no password stored for the account".into())),
         Err(e) => return Err(Fail::Code(Code::Invalid, format!("secret store: {e}"))),
     };
     let config = crate::net::imap_config(&acct.host, acct.port, &acct.email, &password, &acct.security)
         .map_err(|e| Fail::Code(Code::Invalid, e))?;
+    Ok(SessionConfig { config, password })
+}
+
+fn sync_job(shared: &Shared, job: &Job) -> Result<(), Fail> {
+    let sc = session_config(shared, &job.account)?;
     let out = crate::net::block_on(async {
         let pool = ImapPool::new();
-        let mut session = imap::create_imap_session(&config, &pool).await?;
+        let mut session = imap::create_imap_session(&sc.config, &pool).await?;
         let out = sync_session(shared, &mut session, job).await;
         let _ = session.logout().await;
         out
     });
-    // Core's text names the address, never the password; strip it anyway before it is logged.
-    out.map_err(|f| match f {
-        Fail::Code(code, why) if !password.is_empty() => Fail::Code(code, why.replace(&password, "***")),
-        other => other,
-    })
+    out.map_err(|f| sc.scrub(f))
+}
+
+/// Unit tests: runs one sync pass on the calling thread and panics unless it ends cleanly.
+#[cfg(test)]
+pub(crate) fn sync_now_for_test(shared: &Shared, account: &str, folder: Option<&str>) {
+    let job = Job { account: account.into(), folder: folder.map(String::from) };
+    match sync_job(shared, &job) {
+        Ok(()) => {}
+        Err(Fail::Code(code, why)) => panic!("sync failed: {} {why}", code.as_str()),
+        Err(_) => panic!("sync stopped early"),
+    }
 }
 
 async fn sync_session(shared: &Shared, session: &mut ImapSession, job: &Job) -> Result<(), Fail> {

@@ -1,4 +1,5 @@
 pub mod abd_cmds;
+pub mod parts;
 pub mod pool;
 pub mod tls;
 
@@ -12,6 +13,7 @@ use tracing::{info, warn};
 use crate::net_activity::{NetEvent, Protocol};
 use crate::transfer_stats::CountingStream;
 
+pub use parts::{fetch_parts, fetch_section, parts_of, PartInfo};
 pub use pool::{ImapPool, ImapSession, ImapTransport};
 
 /// The IMAP client itself, so the daemon can name `IdleResponse` without a

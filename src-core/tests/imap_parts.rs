@@ -1,0 +1,115 @@
+//! BODYSTRUCTURE part listing and single-part fetch (`imap::parts`).
+
+mod common;
+
+use common::session;
+use mailvault_core::imap::{fetch_parts, fetch_section, parts_of, PartInfo};
+use mock_imap::state::Mailbox;
+use mock_imap::{MockImap, Scenario};
+
+fn bodystructure_of(line: &str) -> imap_proto::BodyStructure<'static> {
+    let (_, resp) = imap_proto::parser::parse_response(line.as_bytes()).expect("parses");
+    match resp {
+        imap_proto::Response::Fetch(_, attrs) => attrs
+            .into_iter()
+            .find_map(|a| match a {
+                imap_proto::AttributeValue::BodyStructure(bs) => Some(bs.into_owned()),
+                _ => None,
+            })
+            .expect("a BODYSTRUCTURE"),
+        other => panic!("not a FETCH: {other:?}"),
+    }
+}
+
+#[test]
+fn parts_of_multipart_alternative_with_attachment() {
+    let bs = bodystructure_of(
+        "* 1 FETCH (UID 7 BODYSTRUCTURE (((\"TEXT\" \"PLAIN\" (\"CHARSET\" \"UTF-8\") NIL NIL \"QUOTED-PRINTABLE\" 120 4 NIL NIL NIL)\
+         (\"TEXT\" \"HTML\" (\"CHARSET\" \"iso-8859-1\") NIL NIL \"BASE64\" 900 12 NIL NIL NIL) \"ALTERNATIVE\" (\"BOUNDARY\" \"b2\") NIL NIL)\
+         (\"APPLICATION\" \"PDF\" (\"NAME\" \"report.pdf\") \"<pdf1@x>\" NIL \"BASE64\" 5242880 NIL (\"ATTACHMENT\" (\"FILENAME\" \"Report Q3.pdf\")) NIL) \
+         \"MIXED\" (\"BOUNDARY\" \"b1\") NIL NIL))\r\n",
+    );
+    let parts = parts_of(&bs);
+    let sections: Vec<&str> = parts.iter().map(|p| p.section.as_str()).collect();
+    assert_eq!(sections, ["1.1", "1.2", "2"]);
+    assert_eq!(parts[0].mime, "text/plain");
+    assert_eq!(parts[0].encoding, "quoted-printable");
+    assert_eq!(parts[0].charset.as_deref(), Some("UTF-8"));
+    assert_eq!(parts[1].mime, "text/html");
+    assert_eq!(parts[1].encoding, "base64");
+    assert_eq!(
+        parts[2],
+        PartInfo {
+            section: "2".into(),
+            mime: "application/pdf".into(),
+            filename: Some("Report Q3.pdf".into()),
+            size: 5_242_880,
+            encoding: "base64".into(),
+            charset: None,
+            content_id: Some("pdf1@x".into()),
+            disposition: Some("attachment".into()),
+        }
+    );
+}
+
+#[test]
+fn a_single_part_message_is_section_1() {
+    let bs = bodystructure_of("* 1 FETCH (BODYSTRUCTURE (\"TEXT\" \"PLAIN\" (\"CHARSET\" \"us-ascii\") NIL NIL \"7BIT\" 12 1 NIL NIL NIL))\r\n");
+    let parts = parts_of(&bs);
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].section, "1");
+    assert_eq!(parts[0].filename, None);
+}
+
+const CRAFTED: &str = "From: Ana <ana@example.com>\r\n\
+To: user@example.com\r\n\
+Subject: Encoded parts\r\n\
+Date: Thu, 01 Jan 2026 12:00:00 +0000\r\n\
+Message-ID: <parts@example.com>\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: multipart/alternative; boundary=\"alt\"\r\n\
+\r\n\
+--alt\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\
+Content-Transfer-Encoding: quoted-printable\r\n\
+\r\n\
+Gr=C3=BC=C3=9Fe aus =\r\n\
+Vilnius\r\n\
+--alt\r\n\
+Content-Type: text/html; charset=utf-8\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+PHA+R3LDvMOfZTwvcD4=\r\n\
+--alt--\r\n";
+
+#[async_std::test]
+async fn fetch_section_decodes_base64_and_qp() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push(CRAFTED)));
+    let mut sess = session(&server).await;
+
+    let (parts, validity) = fetch_parts(&mut sess, "INBOX", 1).await.unwrap();
+    assert!(validity.is_some());
+    let parts = parts.expect("uid 1 is there");
+    let sections: Vec<&str> = parts.iter().map(|p| p.section.as_str()).collect();
+    assert_eq!(sections, ["1", "2"]);
+
+    let text = fetch_section(&mut sess, "INBOX", 1, "1").await.unwrap().expect("text part");
+    assert_eq!(String::from_utf8(text).unwrap().trim_end(), "Grüße aus Vilnius");
+    let html = fetch_section(&mut sess, "INBOX", 1, "2").await.unwrap().expect("html part");
+    assert_eq!(String::from_utf8(html).unwrap(), "<p>Grüße</p>");
+
+    let fetches: Vec<String> = server.commands().into_iter().filter(|c| c.to_ascii_uppercase().contains("FETCH")).collect();
+    assert!(fetches.iter().any(|c| c.contains("BODY.PEEK[1]")), "{fetches:?}");
+    assert!(fetches.iter().any(|c| c.contains("BODY.PEEK[2]")), "{fetches:?}");
+    assert!(!fetches.iter().any(|c| c.contains("BODY.PEEK[]") || c.contains("BODY[]")), "{fetches:?}");
+}
+
+#[async_std::test]
+async fn a_gone_uid_is_none() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push(CRAFTED)));
+    let mut sess = session(&server).await;
+    let (parts, _) = fetch_parts(&mut sess, "INBOX", 99).await.unwrap();
+    assert_eq!(parts, None);
+    assert_eq!(fetch_section(&mut sess, "INBOX", 99, "1").await.unwrap(), None);
+    assert!(fetch_section(&mut sess, "INBOX", 1, "HEADER").await.is_err());
+}

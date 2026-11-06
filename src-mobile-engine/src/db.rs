@@ -160,6 +160,9 @@ pub(crate) struct Shared {
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
+    /// Unit tests: the body cache cap, in place of [`crate::body::CACHE_CAP`].
+    #[cfg(test)]
+    pub(crate) body_cap: std::sync::atomic::AtomicU64,
 }
 
 pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -283,6 +286,8 @@ impl Engine {
                 closing: AtomicBool::new(false),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
+                #[cfg(test)]
+                body_cap: std::sync::atomic::AtomicU64::new(crate::body::CACHE_CAP),
             }),
             cache_dir: cache_dir.to_path_buf(),
             sync: crate::sync::Worker::default(),
@@ -367,10 +372,26 @@ impl Shared {
     /// Runs `f` inside `BEGIN IMMEDIATE` on the single writer connection.
     pub(crate) fn write<T>(&self, f: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>) -> Result<T, EngineError> {
         let w = lock(&self.writer);
-        let tx = Transaction::new_unchecked(&w, TransactionBehavior::Immediate).map_err(|e| EngineError::Db(e.to_string()))?;
+        self.write_on(&w, f)
+    }
+
+    /// [`Shared::write`] when the writer is free right now; `None` (and `f` not run) when another
+    /// write holds it. For writes that may be skipped rather than wait, such as an LRU touch on
+    /// the path that opens a message.
+    pub(crate) fn try_write<T>(&self, f: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>) -> Option<Result<T, EngineError>> {
+        let w = match self.writer.try_lock() {
+            Ok(w) => w,
+            Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => return None,
+        };
+        Some(self.write_on(&w, f))
+    }
+
+    fn write_on<T>(&self, w: &Connection, f: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>) -> Result<T, EngineError> {
+        let tx = Transaction::new_unchecked(w, TransactionBehavior::Immediate).map_err(|e| EngineError::Db(e.to_string()))?;
         #[cfg(test)]
         let before = w.total_changes();
-        let out = f(&w).map_err(|e| EngineError::Db(e.to_string()))?;
+        let out = f(w).map_err(|e| EngineError::Db(e.to_string()))?;
         #[cfg(test)]
         self.max_txn_rows.fetch_max(w.total_changes() - before, Ordering::SeqCst);
         tx.commit().map_err(|e| EngineError::Db(e.to_string()))?;

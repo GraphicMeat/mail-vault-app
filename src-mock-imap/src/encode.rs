@@ -292,6 +292,22 @@ pub fn header_fields(raw: &[u8], wanted: &[String]) -> Vec<u8> {
     out.into_bytes()
 }
 
+/// The part at an RFC 3501 section path: children of a multipart by 1-based
+/// index; a non-multipart part's only part is `1`, itself.
+pub fn part_at<'a>(mail: &'a ParsedMail<'a>, path: &[u32]) -> Option<&'a ParsedMail<'a>> {
+    let mut cur = mail;
+    for &n in path {
+        if cur.subparts.is_empty() {
+            if n != 1 {
+                return None;
+            }
+        } else {
+            cur = cur.subparts.get(n.checked_sub(1)? as usize)?;
+        }
+    }
+    Some(cur)
+}
+
 // ── FETCH item assembly ─────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -311,6 +327,9 @@ pub enum FetchItem {
     BodyFull { peek: bool },
     /// BODY[HEADER.FIELDS (...)]
     BodyHeaderFields { peek: bool, fields: Vec<String> },
+    /// BODY[1.2] / BODY.PEEK[1.2] — one MIME part's body, still transfer-encoded
+    /// (RFC 3501 section numbering; a non-multipart message's body is part 1).
+    BodyPart { peek: bool, path: Vec<u32> },
 }
 
 /// Parse a FETCH spec such as
@@ -391,6 +410,10 @@ fn parse_fetch_item(token: &str) -> Option<FetchItem> {
             .map(|f| f.to_string())
             .collect();
         return Some(FetchItem::BodyHeaderFields { peek, fields });
+    }
+    let path: Option<Vec<u32>> = section.split('.').map(|n| n.parse::<u32>().ok().filter(|n| *n > 0)).collect();
+    if let Some(path) = path {
+        return Some(FetchItem::BodyPart { peek, path });
     }
     // Unsupported section — treat as whole message rather than dropping the item.
     Some(FetchItem::BodyFull { peek })
@@ -479,6 +502,17 @@ pub fn render_items_with_labels(msg: &Message, items: &[FetchItem], force_uid: b
                     &format!("BODY[HEADER.FIELDS ({})] {{{}}}\r\n", names, data.len()),
                 );
                 out.extend_from_slice(&data);
+            }
+            FetchItem::BodyPart { path, .. } => {
+                let name = path.iter().map(u32::to_string).collect::<Vec<_>>().join(".");
+                match parsed.as_ref().and_then(|p| part_at(p, path)) {
+                    Some(part) => {
+                        let data = body_bytes(part);
+                        push(&mut out, &format!("BODY[{}] {{{}}}\r\n", name, data.len()));
+                        out.extend_from_slice(data);
+                    }
+                    None => push(&mut out, &format!("BODY[{}] NIL", name)),
+                }
             }
         }
     }
