@@ -6,10 +6,8 @@
 //! Only leaves are listed. A `message/rfc822` part is a leaf here (a forwarded message is an
 //! attachment); its insides are not walked.
 
-use super::{select_mailbox, uid_still_present, ImapSession};
-use async_imap::types::Fetch;
-use futures::StreamExt;
-use imap_proto::types::{BodyContentCommon, BodyContentSinglePart, BodyStructure, ContentEncoding, SectionPath};
+use super::{patient, select_mailbox, uid_still_present, ImapSession};
+use imap_proto::types::{AttributeValue, BodyContentCommon, BodyContentSinglePart, BodyStructure, ContentEncoding, SectionPath};
 
 /// One leaf part of a message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,19 +102,58 @@ fn section_path(section: &str) -> Result<Vec<u32>, String> {
         .ok_or_else(|| format!("not a part section: {section}"))
 }
 
-/// The FETCH replies for one uid. Errors in the stream are the server refusing, never absence.
-async fn fetch_uid(session: &mut ImapSession, uid: u32, spec: &str) -> Result<Vec<Fetch>, String> {
-    let stream = session.uid_fetch(uid.to_string(), spec).await.map_err(|e| format!("UID FETCH {uid} failed: {e}"))?;
-    let mut out = Vec::new();
-    for item in stream.collect::<Vec<_>>().await {
-        match item {
-            // A server may slip in an unsolicited FETCH (a flag change) for another message.
-            Ok(f) if f.uid == Some(uid) => out.push(f),
-            Ok(_) => {}
-            Err(e) => return Err(format!("UID FETCH {uid} failed: {e}")),
+/// What one `* n FETCH` line for the uid carried.
+#[derive(Default)]
+struct Reply {
+    /// The BODYSTRUCTURE's parts, when the line had one.
+    parts: Option<Vec<PartInfo>>,
+    /// The `BODY[section]` item, when the line had one: `Some(None)` for NIL.
+    section: Option<Option<Vec<u8>>>,
+}
+
+/// `UID FETCH uid <spec>`, read up to its tagged status (a NO or BAD is an error with the
+/// server's words, never an empty answer). Every line for the uid comes back, items as sent;
+/// lines for other messages (a server's unsolicited flag news) are skipped. async-imap's
+/// `Fetch` would hide the difference between a `BODY[n] NIL` item and no item at all.
+async fn fetch_uid(session: &mut ImapSession, uid: u32, spec: &str, want: Option<&SectionPath>) -> Result<Vec<Reply>, String> {
+    use imap_proto::{Response, Status};
+    let command = format!("UID FETCH {uid} {spec}");
+    patient(async {
+        let id = session.run_command(&command).await.map_err(|e| format!("{command} failed: {e}"))?;
+        let mut out = Vec::new();
+        loop {
+            let Some(rd) = session.read_response().await.map_err(|e| format!("{command} failed: {e}"))? else {
+                return Err(format!("{command} failed: connection lost"));
+            };
+            match rd.parsed() {
+                Response::Done { tag, status, information, .. } if *tag == id => {
+                    return match status {
+                        Status::Ok => Ok(out),
+                        other => Err(format!("{command} failed: {other:?} {}", information.as_deref().unwrap_or(""))),
+                    };
+                }
+                Response::Fetch(_, attrs) => {
+                    let mut r = Reply::default();
+                    let mut this_uid = None;
+                    for a in attrs {
+                        match a {
+                            AttributeValue::Uid(u) => this_uid = Some(*u),
+                            AttributeValue::BodyStructure(bs) => r.parts = Some(parts_of(bs)),
+                            AttributeValue::BodySection { section: Some(sp), data, .. } if Some(sp) == want => {
+                                r.section = Some(data.as_ref().map(|d| d.to_vec()));
+                            }
+                            _ => {}
+                        }
+                    }
+                    if this_uid == Some(uid) {
+                        out.push(r);
+                    }
+                }
+                _ => {}
+            }
         }
-    }
-    Ok(out)
+    })
+    .await
 }
 
 /// `Ok(None)` when the server says the uid is not in the mailbox; an empty reply alone is not
@@ -132,41 +169,49 @@ async fn absent(session: &mut ImapSession, mailbox: &str, uid: u32) -> Result<()
 /// mailbox's UIDVALIDITY comes back too, so a caller can tell a uid that now names another message.
 pub async fn fetch_parts(session: &mut ImapSession, mailbox: &str, uid: u32) -> Result<(Option<Vec<PartInfo>>, Option<u32>), String> {
     let mbox = select_mailbox(session, mailbox).await?;
-    let fetches = fetch_uid(session, uid, "(UID BODYSTRUCTURE)").await?;
-    // The reply that carries the structure, not merely the first for the uid: another client's
+    let replies = fetch_uid(session, uid, "(UID BODYSTRUCTURE)", None).await?;
+    // The line that carries the structure, not merely the first for the uid: another client's
     // flag change arrives as an unsolicited `FETCH (UID n FLAGS ...)` for the same uid.
-    let Some(bs) = fetches.iter().find_map(|f| f.bodystructure()) else {
+    let Some(parts) = replies.into_iter().find_map(|r| r.parts) else {
         absent(session, mailbox, uid).await?;
         return Ok((None, mbox.uid_validity));
     };
-    Ok((Some(parts_of(bs)), mbox.uid_validity))
+    Ok((Some(parts), mbox.uid_validity))
 }
 
 /// One part's body: `UID FETCH uid (UID BODYSTRUCTURE BODY.PEEK[section])`, decoded per the
 /// part's transfer encoding, which the BODYSTRUCTURE in the same reply names. Never sets `\Seen`.
-/// `Ok(None)` when the uid is gone. A reply without the part's bytes, or whose encoding cannot be
-/// read (no BODYSTRUCTURE, or none of its parts is `section`), is an error: guessing would hand
-/// back raw base64 as text, or no text at all.
+/// `Ok(None)` when the uid is gone. An empty part (`""` or NIL) is no bytes. A reply with no
+/// `BODY[section]` item, or whose encoding cannot be read (no BODYSTRUCTURE, or none of its parts
+/// is `section`), is an error: guessing would hand back raw base64 as text, or no text at all.
 pub async fn fetch_section(session: &mut ImapSession, mailbox: &str, uid: u32, section: &str) -> Result<Option<Vec<u8>>, String> {
     let sp = SectionPath::Part(section_path(section)?, None);
     select_mailbox(session, mailbox).await?;
-    let fetches = fetch_uid(session, uid, &format!("(UID BODYSTRUCTURE BODY.PEEK[{section}])")).await?;
-    // Each item is looked for across every reply for the uid, so an unsolicited FLAGS FETCH (or a
+    let replies = fetch_uid(session, uid, &format!("(UID BODYSTRUCTURE BODY.PEEK[{section}])"), Some(&sp)).await?;
+    // Each item is looked for across every line for the uid, so an unsolicited FLAGS FETCH (or a
     // server that splits the items over two FETCH lines) never stands in for the data.
-    let data = fetches.iter().find_map(|f| f.section(&sp));
-    let structure = fetches.iter().find_map(|f| f.bodystructure());
-    if data.is_none() && structure.is_none() {
+    let mut data: Option<Option<Vec<u8>>> = None;
+    let mut parts: Option<Vec<PartInfo>> = None;
+    for r in replies {
+        if data.is_none() {
+            data = r.section;
+        }
+        if parts.is_none() {
+            parts = r.parts;
+        }
+    }
+    if data.is_none() && parts.is_none() {
         absent(session, mailbox, uid).await?;
         return Ok(None);
     }
     let data = data.ok_or_else(|| format!("UID FETCH {uid}: no BODY[{section}] in the reply"))?;
-    let structure = structure.ok_or_else(|| format!("UID FETCH {uid}: no BODYSTRUCTURE in the reply, encoding of {section} unknown"))?;
-    let encoding = parts_of(structure)
+    let parts = parts.ok_or_else(|| format!("UID FETCH {uid}: no BODYSTRUCTURE in the reply, encoding of {section} unknown"))?;
+    let encoding = parts
         .into_iter()
         .find(|p| p.section == section)
         .map(|p| p.encoding)
         .ok_or_else(|| format!("UID FETCH {uid}: no part {section} in the BODYSTRUCTURE"))?;
-    Ok(Some(decode_transfer(data, &encoding)))
+    Ok(Some(decode_transfer(&data.unwrap_or_default(), &encoding)))
 }
 
 /// Undoes base64 or quoted-printable through mailparse (lenient about line breaks and stray

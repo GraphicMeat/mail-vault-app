@@ -146,3 +146,58 @@ async fn an_unknown_encoding_is_an_error() {
     let err = fetch_section(&mut sess, "INBOX", 1, "2").await.unwrap_err();
     assert!(err.contains("BODYSTRUCTURE"), "{err}");
 }
+
+/// CRAFTED's BODYSTRUCTURE, for replies written by hand.
+const CRAFTED_BS: &str = "((\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"QUOTED-PRINTABLE\" 0 0 NIL NIL NIL)\
+    (\"TEXT\" \"HTML\" (\"CHARSET\" \"utf-8\") NIL NIL \"BASE64\" 0 0 NIL NIL NIL) \"ALTERNATIVE\" (\"BOUNDARY\" \"alt\") NIL NIL)";
+
+async fn section_with_reply(raw: String) -> Result<Option<Vec<u8>>, String> {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(CRAFTED))
+            .fault(Trigger::with("FETCH", "BODY.PEEK[2]"), Action::RespondRaw(raw)),
+    );
+    let mut sess = session(&server).await;
+    fetch_section(&mut sess, "INBOX", 1, "2").await
+}
+
+/// An empty part may come as `""` or as NIL: both are no bytes, not an error.
+#[async_std::test]
+async fn an_empty_part_is_no_bytes() {
+    for item in ["\"\"", "NIL"] {
+        let got = section_with_reply(format!("* 1 FETCH (UID 1 BODYSTRUCTURE {CRAFTED_BS} BODY[2] {item})\r\n{{tag}} OK FETCH completed\r\n")).await;
+        assert_eq!(got, Ok(Some(Vec::new())), "BODY[2] {item}");
+    }
+}
+
+/// The BODYSTRUCTURE and the section may arrive on two FETCH lines for the uid.
+#[async_std::test]
+async fn items_split_over_two_fetch_lines_are_joined() {
+    let got = section_with_reply(format!(
+        "* 1 FETCH (UID 1 BODYSTRUCTURE {CRAFTED_BS})\r\n* 1 FETCH (UID 1 BODY[2] {{20}}\r\nPHA+R3LDvMOfZTwvcD4=)\r\n{{tag}} OK FETCH completed\r\n"
+    ))
+    .await;
+    assert_eq!(got.unwrap().map(String::from_utf8).unwrap().unwrap(), "<p>Grüße</p>");
+}
+
+/// A reply with no BODY[section] item at all is an error, not an empty part.
+#[async_std::test]
+async fn a_reply_without_the_section_item_is_an_error() {
+    let got = section_with_reply(format!("* 1 FETCH (UID 1 BODYSTRUCTURE {CRAFTED_BS})\r\n{{tag}} OK FETCH completed\r\n")).await;
+    assert!(got.unwrap_err().contains("no BODY[2]"));
+}
+
+/// A gone uid stays gone when an unsolicited FLAGS FETCH for it slips into the reply.
+#[async_std::test]
+async fn a_gone_uid_with_a_flags_fetch_is_none() {
+    let flags = || Action::InjectUntagged("* 1 FETCH (UID 99 FLAGS ())".into());
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(CRAFTED))
+            .fault(Trigger::with("FETCH", "(UID BODYSTRUCTURE)"), flags())
+            .fault(Trigger::with("FETCH", "BODY.PEEK[1]"), flags()),
+    );
+    let mut sess = session(&server).await;
+    assert_eq!(fetch_parts(&mut sess, "INBOX", 99).await.unwrap().0, None);
+    assert_eq!(fetch_section(&mut sess, "INBOX", 99, "1").await.unwrap(), None);
+}
