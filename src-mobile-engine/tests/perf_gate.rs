@@ -208,7 +208,7 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
         assert!(html.contains("data-mv-tracker-blocked"), "{html}");
         assert!(news["remoteImages"].as_u64().unwrap() >= 1, "{news}");
         assert_eq!(news["trackers"], 1);
-        assert_eq!(news["attachments"].as_array().unwrap().len(), 1);
+        assert_eq!(news["attachments"].as_array().unwrap().len(), 2);
         let plain = body(&rows[1]["uid"]);
         assert!(plain["html"].is_null());
         assert!(plain["text"].as_str().unwrap().contains("https://"));
@@ -229,6 +229,28 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
         assert!((200_000..=320_000).contains(&large_html.len()), "{}", large_html.len());
     }
     assert_eq!(page(&e, Value::Null, 1)["total"], 50);
+}
+
+#[test]
+fn ensure_seeded_caches_the_showcase_pdf_only() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path()).unwrap();
+    for _ in 0..2 {
+        seed::ensure_seeded(&e, 50).unwrap();
+        let uid = page(&e, Value::Null, 1)["rows"][0]["uid"].clone();
+        let local = |section: &str| {
+            e.rpc("mobile.attachment.local", json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "uid": uid, "section": section }))
+                .unwrap()["path"]
+                .clone()
+        };
+        let path = local("2");
+        let bytes = std::fs::read(path.as_str().expect("the pdf is cached")).unwrap();
+        assert!(bytes.starts_with(b"%PDF-1.4") && bytes.ends_with(b"%%EOF\n"));
+        // The text attachment is left for a real fetch (which fails: no server).
+        assert_eq!(local("3"), Value::Null);
+        // A finished cache file: the shell may lease it for a share.
+        assert!(e.rpc("mobile.attachment.lease", json!({ "path": path })).is_ok());
+    }
 }
 
 #[test]

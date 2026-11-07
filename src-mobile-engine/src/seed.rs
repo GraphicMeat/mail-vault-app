@@ -53,7 +53,7 @@ pub fn seed(engine: &Engine, count: usize) -> Result<(), EngineError> {
 /// deterministic seed over uids 1..=count, which rewrites the rows that exist with the same values
 /// and adds the rest. Returns whether it wrote anything; a second launch writes nothing.
 pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError> {
-    engine.write(|c| {
+    let (wrote, showcase) = engine.write(|c| {
         insert_showcase(c)?;
         let n: i64 = c.query_row(
             "SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = ?2",
@@ -65,10 +65,20 @@ pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError>
             insert_account_and_folder(c, count)?;
             insert_rows(c, count)?;
         }
-        insert_showcase_bodies(c)?;
-        Ok(wrote)
-    })
+        Ok((wrote, insert_showcase_bodies(c)?))
+    })?;
+    // The newsletter's PDF is already "downloaded", so the device check can open and share it
+    // with no server behind the seed account. Its text file is not: tapping it fails (no server).
+    if let Some(uid) = showcase {
+        if let Err(e) = crate::attachments::seed_file(engine, ACCOUNT_ID, FOLDER, uid as u32, "2", SHOWCASE_PDF) {
+            engine.shared().log(&format!("[seed] showcase pdf: {e}"));
+        }
+    }
+    Ok(wrote)
 }
+
+/// A one-page PDF, the newsletter's cached attachment.
+const SHOWCASE_PDF: &[u8] = include_bytes!("seed_calendar.pdf");
 
 /// A newsletter (remote images, a tracking pixel, links, an attachment) for the newest seeded row,
 /// a plain text mail with links for the next, the network probe for the third and a large
@@ -144,11 +154,20 @@ fn large_newsletter() -> String {
     out
 }
 
-fn insert_showcase_bodies(c: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+/// Bodies for the four newest rows; the newest row's uid (the newsletter), if any.
+fn insert_showcase_bodies(c: &rusqlite::Connection) -> Result<Option<i64>, rusqlite::Error> {
     let mut st = c.prepare("SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2 ORDER BY date_ms DESC, uid DESC LIMIT 4")?;
     let uids = st.query_map((ACCOUNT_ID, FOLDER), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
     if let Some(&uid) = uids.first() {
-        crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, Some(SHOWCASE_HTML), None, &[("Planting calendar 2027.pdf", "application/pdf", 245_760)])?;
+        crate::body::seed_body(
+            c,
+            ACCOUNT_ID,
+            FOLDER,
+            uid,
+            Some(SHOWCASE_HTML),
+            None,
+            &[("Planting calendar 2027.pdf", "application/pdf", 245_760), ("Frost dates.txt", "text/plain", 2_048)],
+        )?;
     }
     if let Some(&uid) = uids.get(1) {
         crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, None, Some(SHOWCASE_TEXT), &[])?;
@@ -159,7 +178,7 @@ fn insert_showcase_bodies(c: &rusqlite::Connection) -> Result<(), rusqlite::Erro
     if let Some(&uid) = uids.get(3) {
         crate::body::seed_body(c, ACCOUNT_ID, FOLDER, uid, Some(&large_newsletter()), None, &[])?;
     }
-    Ok(())
+    Ok(uids.first().copied())
 }
 
 /// The account and INBOX folder rows the seeded messages hang off. No secret: nothing connects.

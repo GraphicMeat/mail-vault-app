@@ -947,6 +947,24 @@ pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     }
 }
 
+/// Perf-gate seed only: `bytes` as the finished cache file of one part, as if it had been fetched
+/// (no server stands behind the seed account), so the device check can open and share it. Written
+/// beside the final name and renamed into place. A file already there is left alone.
+#[cfg(feature = "perf-gate")]
+pub(crate) fn seed_file(engine: &Engine, account_id: &str, folder: &str, uid: u32, section: &str, bytes: &[u8]) -> Result<(), String> {
+    let key = PartKey { account_id: account_id.into(), folder: folder.into(), uid, section: section.into() };
+    let Some((name, _)) = name_of(engine.shared(), &key).map_err(|e| e.to_string())? else {
+        return Err("the folder has no UIDVALIDITY".into());
+    };
+    let state = &engine.attachments().state;
+    let path = state.path(&name);
+    if path.is_file() {
+        return Ok(());
+    }
+    let tmp = state.with_suffix(&name, TMP);
+    fs::write(&tmp, bytes).and_then(|()| fs::rename(&tmp, &path)).map_err(|e| e.to_string())
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LeaseParams {
