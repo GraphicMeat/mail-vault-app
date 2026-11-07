@@ -10,6 +10,7 @@
 //! (plan Ruling 13).
 
 use mailvault_core::imap::PartInfo;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -18,6 +19,10 @@ use std::path::Path;
 const MAX_HEADER: usize = 256 * 1024;
 /// Most bytes of a body line kept to compare with a boundary (RFC 2046 caps a boundary at 70).
 const LINE_KEEP: usize = 256;
+/// Most multiparts nested inside each other; a deeper one is read as a leaf part.
+const MAX_DEPTH: usize = 32;
+/// Most parts split out of one message; the rest of the file is one last part.
+const MAX_PARTS: usize = 1000;
 
 /// One leaf part and where its raw body is in the file.
 #[derive(Clone, Debug)]
@@ -144,15 +149,14 @@ fn entity(header: &[u8], section: String) -> Entity {
     Entity { info, boundary }
 }
 
-/// `Some(closing)` when `line` is a delimiter of `boundary` (`--b`, or `--b--` closing),
-/// transport padding allowed after it.
-fn delimiter(line: &[u8], boundary: &[u8]) -> Option<bool> {
-    let rest = line.strip_prefix(b"--")?.strip_prefix(boundary)?;
-    let (closing, rest) = match rest.strip_prefix(b"--") {
-        Some(r) => (true, r),
-        None => (false, rest),
-    };
-    rest.iter().all(|b| *b == b' ' || *b == b'\t').then_some(closing)
+/// The boundary a `--` line names and whether it closes (`--b--`), transport padding allowed
+/// after it: the candidates to look up, the opening reading first. A line that is not `--…` names
+/// none.
+fn delimiter_candidates(line: &[u8]) -> Option<(&[u8], Option<&[u8]>)> {
+    let rest = line.strip_prefix(b"--")?;
+    let end = rest.iter().rposition(|b| *b != b' ' && *b != b'\t').map_or(0, |i| i + 1);
+    let rest = &rest[..end];
+    Some((rest, rest.strip_suffix(b"--")))
 }
 
 struct Frame {
@@ -170,10 +174,25 @@ fn child_section(prefix: &str, n: u32) -> String {
 }
 
 /// Every leaf part of the message in `path`, in section order.
+///
+/// Bounded for a hostile message: at most [`MAX_DEPTH`] nested multiparts (a deeper one is a leaf
+/// part) and [`MAX_PARTS`] parts (past that the rest of the file is one last leaf and the scan
+/// stops), and each line costs one map lookup however deep the nesting.
 pub(crate) fn index(path: &Path) -> io::Result<Vec<Located>> {
-    let mut lines = Lines { reader: BufReader::with_capacity(64 * 1024, File::open(path)?), pos: 0, last: None };
+    let file = File::open(path)?;
+    let file_len = file.metadata()?.len();
+    let mut lines = Lines { reader: BufReader::with_capacity(64 * 1024, file), pos: 0, last: None };
     let mut out: Vec<Located> = Vec::new();
     let mut frames: Vec<Frame> = Vec::new();
+    // Boundary -> the innermost open frame that has it; rebuilt (at most MAX_DEPTH entries) only
+    // when the frames change.
+    let mut active: HashMap<Vec<u8>, usize> = HashMap::new();
+    let rebuild = |frames: &[Frame], active: &mut HashMap<Vec<u8>, usize>| {
+        active.clear();
+        for (i, f) in frames.iter().enumerate() {
+            active.insert(f.boundary.clone(), i);
+        }
+    };
     // The leaf whose body is being read, and where that body starts.
     let mut open: Option<(PartInfo, u64)> = None;
     let close = |open: &mut Option<(PartInfo, u64)>, end: u64, out: &mut Vec<Located>| {
@@ -190,33 +209,58 @@ pub(crate) fn index(path: &Path) -> io::Result<Vec<Located>> {
         Some(b) => frames.push(Frame { boundary: b, section: String::new(), children: 0 }),
         None => open = Some((PartInfo { section: "1".into(), ..top.info }, lines.pos)),
     }
+    rebuild(&frames, &mut active);
+    let mut parts = 0usize;
 
     while let Some(line) = lines.next(LINE_KEEP)? {
-        let hit = if line.keep.starts_with(b"--") {
-            frames.iter().enumerate().rev().find_map(|(i, f)| delimiter(&line.keep, &f.boundary).map(|c| (i, c)))
-        } else {
-            None
-        };
+        let hit = delimiter_candidates(&line.keep).and_then(|(whole, closing)| {
+            active.get(whole).map(|i| (*i, false)).or_else(|| closing.and_then(|b| active.get(b)).map(|i| (*i, true)))
+        });
         let Some((i, closing)) = hit else {
             prev_term = line.term;
             continue;
         };
         close(&mut open, line.start.saturating_sub(prev_term), &mut out);
         // A delimiter of an outer part ends every part nested in it (a malformed inner one).
-        frames.truncate(i + 1);
+        if frames.len() > i + 1 {
+            frames.truncate(i + 1);
+            rebuild(&frames, &mut active);
+        }
         if closing {
             frames.pop();
+            rebuild(&frames, &mut active);
             prev_term = line.term;
             continue;
         }
         let frame = &mut frames[i];
         frame.children += 1;
         let section = child_section(&frame.section, frame.children);
+        parts += 1;
+        if parts > MAX_PARTS {
+            // Enough: the rest of the file, from this delimiter on, is one last part.
+            let info = PartInfo {
+                section,
+                mime: "application/octet-stream".into(),
+                filename: None,
+                size: 0,
+                encoding: "7bit".into(),
+                charset: None,
+                content_id: None,
+                disposition: None,
+            };
+            open = Some((info, line.start));
+            close(&mut open, file_len, &mut out);
+            return Ok(out);
+        }
         let (header, blank) = lines.header()?;
         let child = entity(&header, section.clone());
         match child.boundary {
-            Some(b) => frames.push(Frame { boundary: b, section, children: 0 }),
-            None => open = Some((child.info, lines.pos)),
+            Some(b) if frames.len() < MAX_DEPTH => {
+                frames.push(Frame { boundary: b, section, children: 0 });
+                rebuild(&frames, &mut active);
+            }
+            // Too deep: the multipart is read as one leaf part.
+            _ => open = Some((child.info, lines.pos)),
         }
         prev_term = blank;
     }
@@ -290,6 +334,40 @@ mod tests {
         assert_eq!(read_range(f.path(), pdf, 4, 4).unwrap(), b"\r\nRE");
         assert_eq!(read_range(f.path(), pdf, 8, 100).unwrap(), b"VG");
         assert!(read_range(f.path(), pdf, 10, 100).unwrap().is_empty());
+    }
+
+    #[test]
+    fn hostile_nesting_and_part_counts_stay_bounded() {
+        // 10k multiparts nested inside each other.
+        let mut raw = String::from("Content-Type: multipart/mixed; boundary=\"b0\"\r\n\r\n");
+        for i in 0..10_000 {
+            raw.push_str(&format!("--b{i}\r\nContent-Type: multipart/mixed; boundary=\"b{}\"\r\n\r\n", i + 1));
+        }
+        raw.push_str("--b10000\r\nContent-Type: text/plain\r\n\r\nleaf\r\n");
+        for i in (0..=10_000).rev() {
+            raw.push_str(&format!("--b{i}--\r\n"));
+        }
+        let t0 = std::time::Instant::now();
+        let (_f, parts) = indexed(&raw);
+        assert!(t0.elapsed() < std::time::Duration::from_secs(2), "{:?}", t0.elapsed());
+        assert_eq!(parts.len(), 1, "the multipart past the depth cap is one leaf");
+        assert_eq!(parts[0].info.section.split('.').count(), MAX_DEPTH);
+        assert!(parts[0].info.mime.starts_with("multipart/"));
+
+        // 100k parts in one multipart.
+        let mut raw = String::from("Content-Type: multipart/mixed; boundary=\"p\"\r\n\r\n");
+        for i in 0..100_000 {
+            raw.push_str(&format!("--p\r\nContent-Type: text/plain\r\n\r\npart {i}\r\n"));
+        }
+        raw.push_str("--p--\r\n");
+        let t0 = std::time::Instant::now();
+        let (f, parts) = indexed(&raw);
+        assert!(t0.elapsed() < std::time::Duration::from_secs(2), "{:?}", t0.elapsed());
+        assert_eq!(parts.len(), MAX_PARTS + 1, "the parts up to the cap, then the rest as one");
+        assert_eq!(body(&f, &parts[999]), "part 999");
+        let rest = &parts[MAX_PARTS];
+        assert_eq!(rest.info.section, "1001");
+        assert_eq!(rest.start + rest.len, raw.len() as u64, "the last part runs to the end of the file");
     }
 
     #[test]

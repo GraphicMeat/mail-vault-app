@@ -678,6 +678,17 @@ impl GraphClient {
         Self { client: send_client(SEND_CONNECT_TIMEOUT), access_token: access_token.to_string() }
     }
 
+    /// A client whose connection gives up after `connect` and whose every
+    /// read (headers, then each chunk of a body) gives up after `read` of
+    /// silence: a half-open socket fails instead of holding its caller, and a
+    /// long download that keeps moving is never cut. The mobile engine's.
+    pub fn with_stall_limits(access_token: &str, purpose: &str, connect: std::time::Duration, read: std::time::Duration) -> Self {
+        Self {
+            client: http_client_with(purpose, reqwest::Client::builder().connect_timeout(connect).read_timeout(read)),
+            access_token: access_token.to_string(),
+        }
+    }
+
     /// Its requests shown as `email`'s (`Tracked::for_account`).
     pub fn for_account(mut self, email: &str) -> Self {
         self.client = self.client.for_account(email);

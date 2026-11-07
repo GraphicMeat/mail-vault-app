@@ -43,6 +43,15 @@ const THROTTLE_WAITS: u32 = 3;
 const MAX_RETRY_AFTER: u64 = 30;
 /// The wait when a 429 named none.
 const DEFAULT_RETRY_AFTER: u64 = 5;
+/// A connection that has not opened by then fails (as no answer: retried).
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+/// Silence on an open request (before the answer, or between chunks of a body) that fails it,
+/// so a half-open socket after a network switch never holds a worker or the RPC thread.
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
+
+fn client(token: &str) -> GraphClient {
+    GraphClient::with_stall_limits(token, "sync", CONNECT_TIMEOUT, READ_TIMEOUT)
+}
 /// New mappings per write transaction (plus the one `uid_seq` row: at most 200 rows).
 const BATCH: usize = 199;
 /// Moves remapped per write transaction (a forget and an insert each, plus `uid_seq`).
@@ -175,7 +184,7 @@ impl<'a> GraphBackend<'a> {
         let mut backend = GraphBackend {
             shared,
             account: account.to_string(),
-            client: GraphClient::new(&token),
+            client: client(&token),
             token: String::new(),
             secrets: Vec::new(),
             selected: None,
@@ -188,7 +197,7 @@ impl<'a> GraphBackend<'a> {
     }
 
     fn set_token(&mut self, token: String) {
-        self.client = GraphClient::new(&token);
+        self.client = client(&token);
         let mut secrets: Vec<String> = match self.shared.secrets().get(&self.account) {
             Ok(Some(s)) => Credential::parse(&s).secrets().into_iter().map(String::from).collect(),
             _ => Vec::new(),
