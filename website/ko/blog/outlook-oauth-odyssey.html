@@ -183,6 +183,10 @@
             개인 계정에서는 앱 비밀번호가 여전히 작동하지만, 그러면 OAuth2를 쓰는 의미가 사라집니다. 전혀 다른 접근이 필요했습니다.
           </p>
 
+          <p>
+            <strong>업데이트, 2026년 11월:</strong> 2026년 11월 테스트에서 개인용 Outlook.com, Hotmail, Live.com 계정은 MailVault 자체 Microsoft 앱을 통한 OAuth2 로그인으로 IMAP에서 작동합니다. 필요한 것은 Outlook.com 설정 <strong>디바이스 및 앱에서 IMAP 사용 허용</strong>뿐입니다. 이 설정이 꺼져 있으면 로그인에 성공한 뒤 서버가 “User is authenticated but not connected”라고 응답합니다. MailVault는 여전히 기본적으로 이 계정들을 Microsoft Graph로 연결하며, 대신 IMAP을 선택할 수도 있습니다. <a href="/ko/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:text-primary-600 underline">Outlook.com에서 IMAP을 켜는 방법</a>을 참고하십시오.
+          </p>
+
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">최후의 수단: Microsoft Graph API</h3>
 
           <p>

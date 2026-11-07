@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>疑难解答 — MailVault 常见问题</title>
-  <meta name="description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。">
+  <meta name="description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线、服务器上新建的文件夹尚未出现，以及 Outlook.com 拒绝 IMAP。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/faq/troubleshooting.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/troubleshooting.html">
   <meta property="og:title" content="疑难解答 — MailVault 常见问题">
-  <meta property="og:description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。">
+  <meta property="og:description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线、服务器上新建的文件夹尚未出现，以及 Outlook.com 拒绝 IMAP。">
   <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="疑难解答 — MailVault 常见问题">
-  <meta name="twitter:description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。">
+  <meta name="twitter:description" content="修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线、服务器上新建的文件夹尚未出现，以及 Outlook.com 拒绝 IMAP。">
   <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -85,6 +85,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "当与邮件服务器的连接以看起来像网络问题的方式失败时，MailVault 会自己检查互联网，只有在没有任何回应时才显示没有互联网连接。你的邮件在这台电脑上仍然可读，后台同步会暂停，检查一成功横幅就会自动消失。以前的检查只在 DNS 端口上询问三个公共 DNS 服务器，而很多公司网络、VPN 和网络服务商会拦截这个端口。现在它还会在 443 端口上尝试这些服务器，并尝试你自己的邮件服务器，只要有一个回应就说明你在线；这台电脑或本地网络上的邮件服务器，例如 Proton Mail Bridge，不计入检查。如果网络是通的，但防火墙或 VPN 拦截了某个邮件服务器使用的端口，MailVault 不会说互联网断了，而是指出没有响应的服务器和端口，例如 imap.example.com 的 993 端口，方便 IT 部门放行。无论横幅怎么说，打开或删除邮件都照常进行。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault 提示 Outlook 拒绝了 IMAP（“User is authenticated but not connected”）。怎么解决？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Outlook.com、Hotmail 和 Live.com 有一项网页设置：允许设备和应用使用 IMAP。如果它是关闭的，Microsoft 会接受你的登录和 MailVault 请求的 IMAP 权限，随后其 IMAP 服务器以 User is authenticated but not connected 拒绝连接。你的密码没有问题，MailVault 也工作正常。解决方法：打开 Outlook 网页版，进入设置、邮件、转发和 IMAP，在 POP 和 IMAP 下打开允许设备和应用使用 IMAP，然后点击保存。直接链接是 https://outlook.live.com/mail/options/mail/forwarding。然后在 MailVault 中重试。这只与通过 IMAP 连接的 Outlook.com 账户有关：添加时连接方式设为 IMAP 的账户，或在设置、账户、连接中从 Microsoft Graph 切换到 IMAP 的账户。被拒绝的切换不会改变任何东西，账户仍使用 Microsoft Graph。使用 Microsoft Graph 的账户，也就是 Outlook.com 的默认自动方式，不需要这项设置。"
       }
     }
   ]
@@ -193,8 +201,8 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">疑难解答</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">Gmail 的带宽限制是多少？备份触发限制时会怎样？</a></li><li><a href="#help-section-2">为什么 Linux 上的拼写检查不给任何单词加下划线？</a></li><li><a href="#help-section-3">我在服务器上新建了文件夹 — MailVault 多久会显示它？</a></li><li><a href="#help-section-4">MailVault 提示“没有互联网连接”，但我的网络是通的。为什么？</a></li></ul></details><!-- help-contents:end -->
-      <p class="text-slate-500 dark:text-slate-400 mb-10">修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。</p>
+      <h1 class="text-4xl font-bold mb-2">疑难解答</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">Gmail 的带宽限制是多少？备份触发限制时会怎样？</a></li><li><a href="#help-section-2">为什么 Linux 上的拼写检查不给任何单词加下划线？</a></li><li><a href="#help-section-3">我在服务器上新建了文件夹 — MailVault 多久会显示它？</a></li><li><a href="#help-section-4">MailVault 提示“没有互联网连接”，但我的网络是通的。为什么？</a></li><li><a href="#help-section-5">MailVault 提示 Outlook 拒绝了 IMAP（“User is authenticated but not connected”）。怎么解决？</a></li></ul></details><!-- help-contents:end -->
+      <p class="text-slate-500 dark:text-slate-400 mb-10">修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线、服务器上新建的文件夹尚未出现，以及 Outlook.com 拒绝 IMAP。</p>
 
       <div class="space-y-4">
 
@@ -301,6 +309,32 @@
               </p>
               <p>
                 <strong>你要求的操作不会被拦下。</strong>无论横幅怎么说，打开或删除邮件都照常进行，因为判断错误绝不应该让你无法访问自己的邮件。
+              </p>
+            </div>
+        </article>
+
+        <article id="outlook-imap-not-connected" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">MailVault 提示 Outlook 拒绝了 IMAP（“User is authenticated but not connected”）。怎么解决？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>这是什么意思。</strong>Outlook.com、Hotmail 和 Live.com 有一项网页设置：<strong>允许设备和应用使用 IMAP</strong>。如果它是关闭的，Microsoft 会接受你的登录和 MailVault 请求的 IMAP 权限，随后其 IMAP 服务器以这条消息拒绝连接：<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">User is authenticated but not connected.</code> 你的密码没有问题，MailVault 也工作正常：打开这项设置后立即就能解决。
+              </p>
+              <p>
+                <strong>什么时候会出现。</strong>只在 Outlook.com 账户通过 IMAP 连接时：添加账户时把<strong>连接方式</strong>设为 <strong>IMAP</strong>，或者在<strong>设置 &rarr; 账户 &rarr; 连接 &rarr; 连接方式</strong>中用<strong>切换并重新登录</strong>把账户从 Microsoft Graph 切换到 IMAP。被拒绝的切换不会改变任何东西：账户仍使用 Microsoft Graph，MailVault 会显示这些步骤和指向该设置的链接。
+              </p>
+              <p class="font-medium text-slate-700 dark:text-slate-300">在 Outlook.com 中开启 IMAP：</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>用同一个 Microsoft 账户登录，打开<a href="https://outlook.live.com/mail/options/mail/forwarding" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Outlook 网页版 &rarr; 设置 &rarr; 邮件 &rarr; 转发和 IMAP</a>。</li>
+                <li>在 <strong>POP 和 IMAP</strong> 下，打开<strong>允许设备和应用使用 IMAP</strong>。</li>
+                <li>点击<strong>保存</strong>。</li>
+                <li>回到 MailVault，重新添加账户，或再次选择<strong>切换并重新登录</strong>。</li>
+              </ol>
+              <figure>
+                <a data-help-image="" aria-haspopup="dialog" href="/assets/help/outlook-imap-setting.webp"><img src="/assets/help/outlook-imap-setting.webp" alt="Outlook.com 设置中的 POP 和 IMAP 部分，允许设备和应用使用 IMAP 已打开" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1210" height="250" loading="lazy" decoding="async"></a>
+                <figcaption class="text-sm mt-2">Outlook.com 中的这项设置，已打开。</figcaption>
+              </figure>
+              <p>
+                <strong>继续使用 Microsoft Graph 无需任何更改。</strong>Outlook.com 账户默认通过 Microsoft Graph 连接，连接方式为自动，而 Graph 不使用这项设置。如果不需要 IMAP，可以让它保持关闭。
               </p>
             </div>
         </article>

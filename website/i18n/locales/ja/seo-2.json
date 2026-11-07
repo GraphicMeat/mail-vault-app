@@ -1,13 +1,10 @@
 {
-  "149641179cbb": "MailVault は、個人の Outlook.com、Hotmail、Live.com のアカウントを <strong>Microsoft Graph API</strong> 経由で接続します。アカウントを追加し、「Microsoft でサインイン」を選んで、ブラウザでサインインを完了してください。MailVault は個人の Microsoft アカウントを認識して自動的に Graph を使うので、入力する IMAP の設定はありません。",
   "ddd9e381040a": "削除したメールの<strong>サーバーに復元</strong>。ローカルに復元は、すでにこのコンピュータにあるメールに対して使えます",
   "db3b0e57e997": "接続テストの後にアカウント追加ウインドウが表示する<strong>受信トレイの件数</strong>",
   "072358fa5619": "Microsoft 365 Business と Enterprise のアカウントは OAuth2 による IMAP を使うため、これらの制限は受けません。このサインインは <a href=\"https://www.thunderbird.net/\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Mozilla Thunderbird</a> と同じ方式で、PKCE と XOAUTH2 の認証を使います。",
-  "9c886b5d1835": "これらのアカウントで IMAP を使わないのは、2024 年後半に始まった、OAuth2 でのサインインに関する Microsoft の IMAP の問題があるためです。メールの閲覧、削除、既読・未読の設定、移動、バックアップは、ほかのアカウントと同じように使えます。",
   "d8b695a6bb4c": "Graph のアカウントでまだ使えないもの：",
   "e2b51688f4b0": "スヌーズ",
   "db3d9a0b5360": "MBOX ファイルをサーバーに復元すること",
-  "cf795413fdca": "MailVault は、個人の Outlook.com、Hotmail、Live.com のアカウントを Microsoft Graph API 経由で接続します。アカウントを追加し、「Microsoft でサインイン」を選んで、ブラウザでサインインを完了してください。MailVault は個人の Microsoft アカウントを認識して自動的に Graph を使うので、入力する IMAP の設定はありません。これらのアカウントで IMAP を使わないのは、2024 年後半に始まった、OAuth2 でのサインインに関する Microsoft の IMAP の問題があるためです。メールの閲覧、削除、既読・未読の設定、移動、バックアップは、ほかのアカウントと同じように使えます。IMAP に依存するいくつかの機能は、Graph のアカウントではまだ使えません。スヌーズ、MBOX ファイルをサーバーに復元すること、削除したメールのサーバーに復元（ローカルに復元は、すでにこのコンピュータにあるメールに対して使えます）、そしてアカウントを追加するときに受信トレイの件数を表示する行です。Microsoft 365 Business と Enterprise のアカウントは OAuth2 による IMAP を使うため、これらの制限は受けません。",
   "6556465c8152": "メールクライアント",
   "828dd000d306": "オープンソースのカスタマイズ性",
   "fa666325cc1f": "Thunderbird と MailVault を比較：無料のデスクトップメール、オフラインアクセス、プロファイルのバックアップ、持ち運べるアーカイブ、日々の使いやすさ。",

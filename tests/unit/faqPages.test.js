@@ -28,8 +28,53 @@ describe('FAQ hub and topic pages', () => {
     const all = ORIGINAL_TOPICS.flatMap(t => questionsIn(topic(t)));
     // 23 from the original single-page FAQ, plus later answers including
     // iCloud across the six original topics; new topics have separate coverage below.
-    expect(all.length).toBe(39);
-    expect(new Set(all).size).toBe(39);
+    expect(all.length).toBe(40);
+    expect(new Set(all).size).toBe(40);
+  });
+
+  // MailVault links here when Outlook.com refuses an IMAP session because
+  // "Let devices and apps use IMAP" is off; the Outlook.com setup answer points here too.
+  it('answers the Outlook.com "User is authenticated but not connected" refusal and links to it', () => {
+    const id = 'outlook-imap-not-connected';
+    const question = 'MailVault says Outlook refused IMAP ("User is authenticated but not connected"). How do I fix it?';
+    expect(hub()).toContain(`href="faq/troubleshooting.html#${id}"`);
+    expect(topic('troubleshooting')).toContain(`id="${id}"`);
+    expect(questionsIn(topic('troubleshooting'))).toContain(question);
+    const settings = 'https://outlook.live.com/mail/options/mail/forwarding';
+    const shot = '/assets/help/outlook-imap-setting.webp';
+    for (const loc of [{ dir: '' }, ...LOCALES]) {
+      const prefix = loc.dir ? `${loc.dir}/` : '';
+      const doc = new JSDOM(readFileSync(`website/${prefix}faq/troubleshooting.html`, 'utf8')).window.document;
+      const article = doc.getElementById(id);
+      expect(article, `${loc.dir || 'en'} article`).toBeTruthy();
+      const link = article.querySelector(`a[href="${settings}"]`);
+      expect(link, `${loc.dir || 'en'} settings link`).toBeTruthy();
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toContain('noopener');
+      const img = article.querySelector(`img[src="${shot}"]`);
+      expect(img, `${loc.dir || 'en'} screenshot`).toBeTruthy();
+      expect(img.getAttribute('alt').length).toBeGreaterThan(20);
+      expect(article.textContent).toContain('User is authenticated but not connected.');
+      const providers = new JSDOM(readFileSync(`website/${prefix}faq/providers.html`, 'utf8')).window.document;
+      expect(providers.querySelector(`#microsoft-outlook-oauth2 a[href="/${prefix}faq/troubleshooting.html#${id}"]`),
+        `${loc.dir || 'en'} providers link`).toBeTruthy();
+      // Outlook.com IMAP works once the setting is on: no answer may still blame a 2024 Microsoft problem.
+      const providersHtml = readFileSync(`website/${prefix}faq/providers.html`, 'utf8');
+      expect(providersHtml, `${loc.dir || 'en'} providers`).not.toMatch(/2024/);
+      expect(questionsIn(providersHtml).length).toBeGreaterThan(0);
+      // The dated engineering post keeps its history but carries a note pointing here.
+      expect(readFileSync(`website/${prefix}blog/outlook-oauth-odyssey.html`, 'utf8'),
+        `${loc.dir || 'en'} odyssey update note`).toContain(`href="/${prefix}faq/troubleshooting.html#${id}"`);
+      if (loc.dir) {
+        const dict = loadDict(loc);
+        // Raw source slices, not a DOM re-serialization: the keys hash entities such as &rarr; as written.
+        const slice = (html, articleId) => html.match(new RegExp(`<article id="${articleId}"[\\s\\S]*?</article>`))[0];
+        for (const html of [slice(topic('troubleshooting'), id), slice(topic('providers'), 'microsoft-outlook-oauth2')]) {
+          for (const entry of collect(html)) expect(dict[entry.key], `${loc.dir}: ${entry.text}`).toBeTruthy();
+        }
+        expect(questionsIn(doc.documentElement.outerHTML)).not.toContain(question);
+      }
+    }
   });
 
   // Every answer on a topic page has its row in the hub's index, which the

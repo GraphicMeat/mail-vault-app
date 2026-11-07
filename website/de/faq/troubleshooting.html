@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fehlerbehebung — MailVault FAQ</title>
-  <meta name="description" content="Korrekturen für die Probleme, die Menschen am häufigsten haben: das tägliche Gmail-Bandbreitenlimit, eine Rechtschreibprüfung, die unter Linux nichts unterstreicht, und ein auf dem Server hinzugefügter Ordner, der noch nicht angezeigt wird.">
+  <meta name="description" content="Korrekturen für die Probleme, die Menschen am häufigsten haben: das tägliche Gmail-Bandbreitenlimit, eine Rechtschreibprüfung, die unter Linux nichts unterstreicht, ein auf dem Server hinzugefügter Ordner, der noch nicht angezeigt wird, und Outlook.com, das IMAP ablehnt.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/de/faq/troubleshooting.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/de/faq/troubleshooting.html">
   <meta property="og:title" content="Fehlerbehebung — MailVault FAQ">
-  <meta property="og:description" content="Korrekturen für die Probleme, die Menschen am häufigsten haben: das tägliche Gmail-Bandbreitenlimit, eine Rechtschreibprüfung, die unter Linux nichts unterstreicht, und ein auf dem Server hinzugefügter Ordner, der noch nicht angezeigt wird.">
+  <meta property="og:description" content="Korrekturen für die Probleme, die Menschen am häufigsten haben: das tägliche Gmail-Bandbreitenlimit, eine Rechtschreibprüfung, die unter Linux nichts unterstreicht, ein auf dem Server hinzugefügter Ordner, der noch nicht angezeigt wird, und Outlook.com, das IMAP ablehnt.">
   <meta property="og:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Fehlerbehebung — MailVault FAQ">
-  <meta name="twitter:description" content="Korrekturen für die Probleme, die Menschen am häufigsten haben: das tägliche Gmail-Bandbreitenlimit, eine Rechtschreibprüfung, die unter Linux nichts unterstreicht, und ein auf dem Server hinzugefügter Ordner, der noch nicht angezeigt wird.">
+  <meta name="twitter:description" content="Korrekturen für die Probleme, die Menschen am häufigsten haben: das tägliche Gmail-Bandbreitenlimit, eine Rechtschreibprüfung, die unter Linux nichts unterstreicht, ein auf dem Server hinzugefügter Ordner, der noch nicht angezeigt wird, und Outlook.com, das IMAP ablehnt.">
   <meta name="twitter:image:alt" content="MailVault: Schnelle Suche. Private E-Mails. Bleibt bei dir. Kostenlos für macOS, Windows und Linux, mit einer Vorschau der App.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -85,6 +85,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Wenn eine Verbindung zu einem Mailserver so scheitert, dass es nach dem Netzwerk aussieht, prüft MailVault das Internet selbst und zeigt Keine Internetverbindung nur, wenn nichts antwortet. Deine Mail bleibt auf diesem Computer lesbar, die Synchronisierung im Hintergrund pausiert, und das Banner verschwindet von selbst, sobald die Prüfung gelingt. Früher fragte die Prüfung nur drei öffentliche DNS-Server auf dem DNS-Port, den viele Firmennetzwerke, VPNs und Internetanbieter blockieren. Jetzt versucht sie diese Server auch auf Port 443 und deine eigenen Mailserver, und sobald einer antwortet, bist du online; Mailserver auf diesem Computer oder in deinem lokalen Netzwerk, etwa Proton Mail Bridge, bleiben außen vor. Funktioniert das Internet, aber eine Firewall oder ein VPN blockiert den Port eines Mailservers, sagt MailVault nicht, dass das Internet weg ist: Es nennt den Server und den Port, die nicht geantwortet haben, zum Beispiel imap.example.com, Port 993, damit dein IT-Team ihn freigeben kann. Was das Banner auch sagt, eine Nachricht öffnen oder löschen funktioniert weiterhin."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault meldet, dass Outlook IMAP abgelehnt hat („User is authenticated but not connected“). Wie behebe ich das?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Outlook.com, Hotmail und Live.com haben eine Web-Einstellung namens Geräten und Apps die Verwendung von IMAP erlauben. Ist sie aus, akzeptiert Microsoft deine Anmeldung und die IMAP-Berechtigung, die MailVault anfragt, doch der IMAP-Server lehnt die Verbindung dann ab mit: User is authenticated but not connected. Dein Passwort stimmt und MailVault funktioniert. Zur Behebung öffne Outlook im Web, gehe zu Einstellungen, E-Mail, Weiterleitung und IMAP, schalte unter POP und IMAP die Option Geräten und Apps die Verwendung von IMAP erlauben ein und klicke auf Speichern. Der direkte Link ist https://outlook.live.com/mail/options/mail/forwarding. Versuche es dann in MailVault erneut. Das betrifft nur ein Outlook.com-Konto, das sich über IMAP verbindet: eines, das mit Verbinden über auf IMAP hinzugefügt wird, oder eines, das unter Einstellungen, Konten, Verbindung von Microsoft Graph auf IMAP umgestellt wird. Ein abgelehnter Wechsel ändert nichts, das Konto bleibt bei Microsoft Graph. Konten auf Microsoft Graph, der Standardeinstellung Automatisch für Outlook.com, brauchen diese Einstellung nicht."
       }
     }
   ]
@@ -193,8 +201,8 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Fehlerbehebung</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Auf dieser Seite</summary><ul><li><a href="#help-section-1">Was sind die Bandbreitenlimits von Gmail, und was passiert, wenn ein Backup sie erreicht?</a></li><li><a href="#help-section-2">Warum unterstreicht die Rechtschreibprüfung unter Linux nichts?</a></li><li><a href="#help-section-3">Ich habe auf dem Server einen Ordner hinzugefügt — wann zeigt MailVault ihn an?</a></li><li><a href="#help-section-4">MailVault meldet „Keine Internetverbindung“, aber mein Internet funktioniert. Warum?</a></li></ul></details><!-- help-contents:end -->
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Korrekturen für die Probleme, die Menschen am häufigsten haben: das tägliche Gmail-Bandbreitenlimit, eine Rechtschreibprüfung, die unter Linux nichts unterstreicht, und ein auf dem Server hinzugefügter Ordner, der noch nicht angezeigt wird.</p>
+      <h1 class="text-4xl font-bold mb-2">Fehlerbehebung</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Auf dieser Seite</summary><ul><li><a href="#help-section-1">Was sind die Bandbreitenlimits von Gmail, und was passiert, wenn ein Backup sie erreicht?</a></li><li><a href="#help-section-2">Warum unterstreicht die Rechtschreibprüfung unter Linux nichts?</a></li><li><a href="#help-section-3">Ich habe auf dem Server einen Ordner hinzugefügt — wann zeigt MailVault ihn an?</a></li><li><a href="#help-section-4">MailVault meldet „Keine Internetverbindung“, aber mein Internet funktioniert. Warum?</a></li><li><a href="#help-section-5">MailVault meldet, dass Outlook IMAP abgelehnt hat („User is authenticated but not connected“). Wie behebe ich das?</a></li></ul></details><!-- help-contents:end -->
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Korrekturen für die Probleme, die Menschen am häufigsten haben: das tägliche Gmail-Bandbreitenlimit, eine Rechtschreibprüfung, die unter Linux nichts unterstreicht, ein auf dem Server hinzugefügter Ordner, der noch nicht angezeigt wird, und Outlook.com, das IMAP ablehnt.</p>
 
       <div class="space-y-4">
 
@@ -301,6 +309,32 @@
               </p>
               <p>
                 <strong>Nichts, worum du bittest, wird zurückgehalten.</strong> Was das Banner auch sagt, eine Nachricht öffnen oder löschen funktioniert weiterhin, denn ein falsches Urteil darf dich nie aus deiner eigenen Mail aussperren.
+              </p>
+            </div>
+        </article>
+
+        <article id="outlook-imap-not-connected" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">MailVault meldet, dass Outlook IMAP abgelehnt hat („User is authenticated but not connected“). Wie behebe ich das?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>Was das bedeutet.</strong> Outlook.com, Hotmail und Live.com haben eine Web-Einstellung namens <strong>Geräten und Apps die Verwendung von IMAP erlauben</strong>. Ist sie aus, akzeptiert Microsoft deine Anmeldung und die IMAP-Berechtigung, die MailVault anfragt, doch der IMAP-Server lehnt die Verbindung dann ab mit: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">User is authenticated but not connected.</code> Dein Passwort stimmt und MailVault funktioniert: Sobald du die Einstellung einschaltest, ist das Problem behoben.
+              </p>
+              <p>
+                <strong>Wann das vorkommt.</strong> Nur wenn sich ein Outlook.com-Konto über IMAP verbindet: wenn du eines mit <strong>Verbinden über</strong> auf <strong>IMAP</strong> hinzufügst oder wenn du eines unter <strong>Einstellungen &rarr; Konten &rarr; Verbindung &rarr; Verbinden über</strong> mit <strong>Wechseln und erneut anmelden</strong> von Microsoft Graph auf IMAP umstellst. Ein abgelehnter Wechsel ändert nichts: Das Konto bleibt bei Microsoft Graph, und MailVault zeigt diese Schritte und einen Link zur Einstellung.
+              </p>
+              <p class="font-medium text-slate-700 dark:text-slate-300">IMAP in Outlook.com einschalten:</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>Öffne <a href="https://outlook.live.com/mail/options/mail/forwarding" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Outlook im Web &rarr; Einstellungen &rarr; E-Mail &rarr; Weiterleitung und IMAP</a> und melde dich mit demselben Microsoft-Konto an.</li>
+                <li>Schalte unter <strong>POP und IMAP</strong> die Option <strong>Geräten und Apps die Verwendung von IMAP erlauben</strong> ein.</li>
+                <li>Klicke auf <strong>Speichern</strong>.</li>
+                <li>Füge das Konto in MailVault erneut hinzu oder wähle noch einmal <strong>Wechseln und erneut anmelden</strong>.</li>
+              </ol>
+              <figure>
+                <a data-help-image="" aria-haspopup="dialog" href="/assets/help/outlook-imap-setting.webp"><img src="/assets/help/outlook-imap-setting.webp" alt="Outlook.com-Einstellungen, Abschnitt POP und IMAP, mit eingeschalteter Option Geräten und Apps die Verwendung von IMAP erlauben" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1210" height="250" loading="lazy" decoding="async"></a>
+                <figcaption class="text-sm mt-2">Die Einstellung in Outlook.com, eingeschaltet.</figcaption>
+              </figure>
+              <p>
+                <strong>Wer bei Microsoft Graph bleibt, muss nichts ändern.</strong> Outlook.com-Konten verbinden sich standardmäßig über Microsoft Graph, mit Verbinden über auf Automatisch, und Graph nutzt diese Einstellung nicht. Brauchst du kein IMAP, kannst du sie ausgeschaltet lassen.
               </p>
             </div>
         </article>

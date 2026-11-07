@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>문제 해결 — MailVault FAQ</title>
-  <meta name="description" content="사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제입니다.">
+  <meta name="description" content="사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제, Outlook.com이 IMAP을 거부하는 문제입니다.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ko/faq/troubleshooting.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/ko/faq/troubleshooting.html">
   <meta property="og:title" content="문제 해결 — MailVault FAQ">
-  <meta property="og:description" content="사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제입니다.">
+  <meta property="og:description" content="사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제, Outlook.com이 IMAP을 거부하는 문제입니다.">
   <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="문제 해결 — MailVault FAQ">
-  <meta name="twitter:description" content="사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제입니다.">
+  <meta name="twitter:description" content="사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제, Outlook.com이 IMAP을 거부하는 문제입니다.">
   <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -85,6 +85,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "메일 서버 연결이 네트워크 문제로 보이는 방식으로 실패하면 MailVault가 직접 인터넷을 확인하고, 아무것도 응답하지 않을 때만 인터넷에 연결되어 있지 않다고 표시합니다. 메일은 이 컴퓨터에서 계속 읽을 수 있고, 백그라운드 동기화는 일시 중지되며, 확인에 성공하면 배너는 저절로 사라집니다. 예전에는 공용 DNS 서버 세 곳에 DNS 포트로만 확인했는데, 이 포트는 많은 회사 네트워크, VPN, 인터넷 제공업체가 차단합니다. 이제는 그 서버들에 443 포트로도 연결해 보고 사용자의 메일 서버에도 연결해 보며, 하나라도 응답하면 온라인입니다. 이 컴퓨터나 로컬 네트워크에 있는 메일 서버(Proton Mail Bridge 등)는 제외됩니다. 인터넷은 되지만 방화벽이나 VPN이 어떤 메일 서버의 포트를 차단하고 있다면, MailVault는 인터넷이 끊겼다고 하지 않고 응답하지 않은 서버와 포트(예: imap.example.com, 993 포트)를 알려 주므로 IT 팀에 허용을 요청할 수 있습니다. 배너가 무엇이라고 하든 메시지를 열거나 삭제하는 작업은 그대로 진행됩니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault에 Outlook이 IMAP을 거부했다고 나옵니다(“User is authenticated but not connected”). 어떻게 해결합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Outlook.com, Hotmail, Live.com에는 디바이스 및 앱에서 IMAP 사용 허용이라는 웹 설정이 있습니다. 이 설정이 꺼져 있으면 Microsoft는 로그인과 MailVault가 요청하는 IMAP 권한을 받아들인 뒤, IMAP 서버가 User is authenticated but not connected라는 메시지로 연결을 거부합니다. 비밀번호는 맞고 MailVault도 정상입니다. 해결하려면 웹용 Outlook을 열고 설정, 메일, 전달 및 IMAP으로 가서 POP 및 IMAP의 디바이스 및 앱에서 IMAP 사용 허용을 켠 다음 저장을 클릭합니다. 바로 가기 링크는 https://outlook.live.com/mail/options/mail/forwarding 입니다. 그런 다음 MailVault에서 다시 시도합니다. 이 설정은 IMAP으로 연결하는 Outlook.com 계정에만 해당합니다. 연결 방식을 IMAP으로 정해 추가한 계정이나, 설정, 계정, 연결에서 Microsoft Graph에서 IMAP으로 전환하는 계정입니다. 거부된 전환은 아무것도 바꾸지 않으며 계정은 Microsoft Graph에 남습니다. Outlook.com의 기본값인 자동으로 Microsoft Graph를 쓰는 계정에는 이 설정이 필요 없습니다."
       }
     }
   ]
@@ -193,8 +201,8 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">문제 해결</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">Gmail의 대역폭 제한은 무엇이며, 백업이 그 한도에 걸리면 어떻게 됩니까?</a></li><li><a href="#help-section-2">Linux에서 맞춤법 검사가 왜 아무것도 밑줄 치지 않습니까?</a></li><li><a href="#help-section-3">서버에 폴더를 추가했는데 MailVault에는 언제 표시되나요?</a></li><li><a href="#help-section-4">MailVault에 “인터넷에 연결되어 있지 않습니다”라고 나오는데 인터넷은 됩니다. 왜 그렇습니까?</a></li></ul></details><!-- help-contents:end -->
-      <p class="text-slate-500 dark:text-slate-400 mb-10">사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제입니다.</p>
+      <h1 class="text-4xl font-bold mb-2">문제 해결</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">Gmail의 대역폭 제한은 무엇이며, 백업이 그 한도에 걸리면 어떻게 됩니까?</a></li><li><a href="#help-section-2">Linux에서 맞춤법 검사가 왜 아무것도 밑줄 치지 않습니까?</a></li><li><a href="#help-section-3">서버에 폴더를 추가했는데 MailVault에는 언제 표시되나요?</a></li><li><a href="#help-section-4">MailVault에 “인터넷에 연결되어 있지 않습니다”라고 나오는데 인터넷은 됩니다. 왜 그렇습니까?</a></li><li><a href="#help-section-5">MailVault에 Outlook이 IMAP을 거부했다고 나옵니다(“User is authenticated but not connected”). 어떻게 해결합니까?</a></li></ul></details><!-- help-contents:end -->
+      <p class="text-slate-500 dark:text-slate-400 mb-10">사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제, Outlook.com이 IMAP을 거부하는 문제입니다.</p>
 
       <div class="space-y-4">
 
@@ -301,6 +309,32 @@
               </p>
               <p>
                 <strong>요청한 작업은 막히지 않습니다.</strong> 배너가 무엇이라고 하든 메시지를 열거나 삭제하는 작업은 그대로 진행됩니다. 판단이 틀렸다고 해서 자신의 메일에서 쫓겨나서는 안 되기 때문입니다.
+              </p>
+            </div>
+        </article>
+
+        <article id="outlook-imap-not-connected" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">MailVault에 Outlook이 IMAP을 거부했다고 나옵니다(“User is authenticated but not connected”). 어떻게 해결합니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>무슨 뜻입니까.</strong> Outlook.com, Hotmail, Live.com에는 <strong>디바이스 및 앱에서 IMAP 사용 허용</strong>이라는 웹 설정이 있습니다. 이 설정이 꺼져 있으면 Microsoft는 로그인과 MailVault가 요청하는 IMAP 권한을 받아들인 뒤, IMAP 서버가 다음 메시지로 연결을 거부합니다. <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">User is authenticated but not connected.</code> 비밀번호는 맞고 MailVault도 정상입니다. 설정을 켜면 바로 해결됩니다.
+              </p>
+              <p>
+                <strong>언제 나타납니까.</strong> Outlook.com 계정이 IMAP으로 연결할 때만입니다. <strong>연결 방식</strong>을 <strong>IMAP</strong>으로 정해 계정을 추가할 때, 또는 <strong>설정 &rarr; 계정 &rarr; 연결 &rarr; 연결 방식</strong>에서 <strong>전환하고 다시 로그인</strong>으로 Microsoft Graph에서 IMAP으로 바꿀 때입니다. 거부된 전환은 아무것도 바꾸지 않습니다. 계정은 Microsoft Graph에 그대로 남고, MailVault가 이 단계와 설정 링크를 보여 줍니다.
+              </p>
+              <p class="font-medium text-slate-700 dark:text-slate-300">Outlook.com에서 IMAP 켜기:</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>같은 Microsoft 계정으로 로그인한 상태에서 <a href="https://outlook.live.com/mail/options/mail/forwarding" target="_blank" rel="noopener" class="text-primary-500 hover:underline">웹용 Outlook &rarr; 설정 &rarr; 메일 &rarr; 전달 및 IMAP</a>을 엽니다.</li>
+                <li><strong>POP 및 IMAP</strong>에서 <strong>디바이스 및 앱에서 IMAP 사용 허용</strong>을 켭니다.</li>
+                <li><strong>저장</strong>을 클릭합니다.</li>
+                <li>MailVault로 돌아와 계정을 다시 추가하거나 <strong>전환하고 다시 로그인</strong>을 한 번 더 선택합니다.</li>
+              </ol>
+              <figure>
+                <a data-help-image="" aria-haspopup="dialog" href="/assets/help/outlook-imap-setting.webp"><img src="/assets/help/outlook-imap-setting.webp" alt="Outlook.com 설정의 POP 및 IMAP 섹션에서 디바이스 및 앱에서 IMAP 사용 허용이 켜져 있는 화면" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1210" height="250" loading="lazy" decoding="async"></a>
+                <figcaption class="text-sm mt-2">Outlook.com에서 이 설정을 켠 모습입니다.</figcaption>
+              </figure>
+              <p>
+                <strong>Microsoft Graph를 계속 쓰면 바꿀 것이 없습니다.</strong> Outlook.com 계정은 기본적으로 연결 방식이 자동이며 Microsoft Graph로 연결하고, Graph는 이 설정을 쓰지 않습니다. IMAP이 필요 없다면 꺼 두어도 됩니다.
               </p>
             </div>
         </article>

@@ -183,6 +183,10 @@
             Las contraseñas de aplicación siguen funcionando en las cuentas personales, pero eso desvirtúa el propósito de OAuth2. Necesitábamos un enfoque totalmente distinto.
           </p>
 
+          <p>
+            <strong>Actualización, noviembre de 2026:</strong> en nuestras pruebas de noviembre de 2026, las cuentas personales de Outlook.com, Hotmail y Live.com funcionan por IMAP con inicio de sesión OAuth2 a través de la aplicación de Microsoft propia de MailVault. El único requisito es el ajuste de Outlook.com <strong>Permitir que los dispositivos y las aplicaciones usen IMAP</strong>: si está desactivado, el servidor responde “User is authenticated but not connected” tras un inicio de sesión correcto. MailVault sigue conectando estas cuentas mediante Microsoft Graph por defecto, y puedes elegir IMAP en su lugar. Consulta <a href="/es/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:text-primary-600 underline">cómo activar IMAP en Outlook.com</a>.
+          </p>
+
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">La opción nuclear: la Microsoft Graph API</h3>
 
           <p>

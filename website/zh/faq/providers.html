@@ -60,7 +60,7 @@
       "name": "MailVault 支持 Gmail 和 Outlook 吗？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录。个人 Outlook.com、Hotmail 和 Live.com 账户通过 Microsoft Graph API 连接。"
+        "text": "可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录。个人 Outlook.com、Hotmail 和 Live.com 账户默认通过 Microsoft Graph API 连接，也可以选择通过 IMAP 连接。"
       }
     },
     {
@@ -68,7 +68,7 @@
       "name": "如何连接我的 Outlook.com 账户？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault 通过 Microsoft Graph API 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。它不对这些账户使用 IMAP，原因是 Microsoft 的 IMAP 从 2024 年底开始在 OAuth2 登录上出现问题。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。少数依赖 IMAP 的功能在 Graph 账户上暂不支持：稍后提醒；把 MBOX 文件恢复到服务器；对已删除邮件使用「恢复到服务器」（「恢复到本地」可以使用，适用于已经在这台电脑上的邮件）；以及添加账户时报告收件箱数量的那一行。Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。"
+        "text": "MailVault 默认通过 Microsoft Graph API 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。连接方式保持为自动时，MailVault 会识别出个人 Microsoft 账户并使用 Graph，所以无需在 Outlook.com 中做任何设置。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。也可以使用 IMAP：添加账户时在连接方式中选择 IMAP，或者之后在设置、账户、连接中切换。登录仍通过 Microsoft 使用 OAuth2，但只有在 Outlook.com 设置中打开允许设备和应用使用 IMAP 后，它才接受 IMAP。少数依赖 IMAP 的功能在 Graph 账户上暂不支持：稍后提醒；把 MBOX 文件恢复到服务器；对已删除邮件使用「恢复到服务器」（「恢复到本地」可以使用，适用于已经在这台电脑上的邮件）；以及添加账户时报告收件箱数量的那一行。Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。"
       }
     },
     {
@@ -225,15 +225,15 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVault 支持 Gmail 和 Outlook 吗？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录，并顺畅支持双重身份验证。个人 Outlook.com、Hotmail 和 Live.com 账户<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">通过 Microsoft Graph API 连接</a>。
+              可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录，并顺畅支持双重身份验证。个人 Outlook.com、Hotmail 和 Live.com 账户<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">默认通过 Microsoft Graph API 连接，也可以选择通过 IMAP 连接</a>。
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">如何连接我的 Outlook.com 账户？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">MailVault 通过 <strong>Microsoft Graph API</strong> 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。</p>
-              <p class="mb-4">它不对这些账户使用 IMAP，原因是 Microsoft 的 IMAP 从 2024 年底开始在 OAuth2 登录上出现问题。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。</p>
+              <p class="mb-4">MailVault 默认通过 <strong>Microsoft Graph API</strong> 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。<strong>连接方式</strong>保持为<strong>自动</strong>时，MailVault 会识别出个人 Microsoft 账户并使用 Graph，所以无需在 Outlook.com 中做任何设置。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。</p>
+              <p class="mb-4">也可以使用 IMAP。添加账户时在<strong>连接方式</strong>中选择 <strong>IMAP</strong>，或者之后在<strong>设置 &rarr; 账户 &rarr; 连接</strong>中切换。登录仍通过 Microsoft 使用 OAuth2，但只有在 Outlook.com 设置中打开<strong>允许设备和应用使用 IMAP</strong>后，它才接受 IMAP，具体见<a href="/zh/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">MailVault 提示 Outlook 拒绝了 IMAP</a>。</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Graph 账户暂不支持：</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>稍后提醒</strong></li>

@@ -1,13 +1,10 @@
 {
-  "149641179cbb": "MailVault collega gli account personali Outlook.com, Hotmail e Live.com tramite la <strong>Microsoft Graph API</strong>. Aggiungi l'account, scegli Accedi con Microsoft e completa l'accesso nel browser. MailVault riconosce un account Microsoft personale e usa Graph da solo, quindi non ci sono impostazioni IMAP da inserire.",
   "ddd9e381040a": "<strong>Recupera sul server</strong> per le email eliminate. Recupera in locale funziona, per la posta già presente su questo computer",
   "db3b0e57e997": "<strong>Il conteggio della Posta in arrivo</strong> che la finestra di aggiunta account riporta dopo il test di connessione",
   "072358fa5619": "Gli account Microsoft 365 Business ed Enterprise usano IMAP con OAuth2 e non sono interessati da questi limiti. Quell'accesso segue lo stesso approccio di <a href=\"https://www.thunderbird.net/\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Mozilla Thunderbird</a>, con autenticazione PKCE e XOAUTH2.",
-  "9c886b5d1835": "Per questi account non usa IMAP a causa di un problema dell'IMAP di Microsoft con l'accesso OAuth2 iniziato a fine 2024. Lettura, eliminazione, segna come letto o da leggere, spostamento e backup della posta funzionano come sugli altri account.",
   "d8b695a6bb4c": "Non ancora disponibile sugli account Graph:",
   "e2b51688f4b0": "Posticipa",
   "db3d9a0b5360": "Ripristino di un file MBOX sul server",
-  "cf795413fdca": "MailVault collega gli account personali Outlook.com, Hotmail e Live.com tramite la Microsoft Graph API. Aggiungi l'account, scegli Accedi con Microsoft e completa l'accesso nel browser. MailVault riconosce un account Microsoft personale e usa Graph da solo, quindi non ci sono impostazioni IMAP da inserire. Per questi account non usa IMAP a causa di un problema dell'IMAP di Microsoft con l'accesso OAuth2 iniziato a fine 2024. Lettura, eliminazione, segna come letto o da leggere, spostamento e backup della posta funzionano come sugli altri account. Alcune cose che dipendono da IMAP non sono ancora disponibili sugli account Graph: Posticipa; il ripristino di un file MBOX sul server; Recupera sul server per le email eliminate (Recupera in locale funziona, per la posta già presente su questo computer); e la riga che riporta il conteggio della Posta in arrivo quando aggiungi un account. Gli account Microsoft 365 Business ed Enterprise usano IMAP con OAuth2 e non sono interessati da questi limiti.",
   "6556465c8152": "Client email",
   "828dd000d306": "Personalizzazione open source",
   "fa666325cc1f": "Thunderbird o MailVault: confronto tra email desktop gratuita, accesso offline, backup del profilo, archivi portatili e facilità d'uso quotidiana.",

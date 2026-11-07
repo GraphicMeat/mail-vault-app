@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Solução de problemas — MailVault FAQ</title>
-  <meta name="description" content="Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux e uma pasta adicionada no servidor que ainda não aparece.">
+  <meta name="description" content="Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux, uma pasta adicionada no servidor que ainda não aparece e o Outlook.com recusando IMAP.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
   <meta property="og:title" content="Solução de problemas — MailVault FAQ">
-  <meta property="og:description" content="Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux e uma pasta adicionada no servidor que ainda não aparece.">
+  <meta property="og:description" content="Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux, uma pasta adicionada no servidor que ainda não aparece e o Outlook.com recusando IMAP.">
   <meta property="og:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar. Grátis para macOS, Windows e Linux, com uma prévia do app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Solução de problemas — MailVault FAQ">
-  <meta name="twitter:description" content="Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux e uma pasta adicionada no servidor que ainda não aparece.">
+  <meta name="twitter:description" content="Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux, uma pasta adicionada no servidor que ainda não aparece e o Outlook.com recusando IMAP.">
   <meta name="twitter:image:alt" content="MailVault: busca rápida. E-mail privado. Seu para guardar. Grátis para macOS, Windows e Linux, com uma prévia do app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -85,6 +85,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Quando uma conexão com um servidor de e-mail falha de um jeito que aponta para a rede, o MailVault verifica a internet por conta própria e só mostra Sem conexão com a internet quando nada responde. Seus e-mails continuam legíveis neste computador, a sincronização em segundo plano pausa e o aviso some sozinho assim que a verificação dá certo. Antes, a verificação consultava três servidores DNS públicos apenas na porta DNS, que muitas redes corporativas, VPNs e provedores de internet bloqueiam. Agora ela também tenta esses servidores na porta 443 e os seus próprios servidores de e-mail, e basta um responder para você estar online; servidores de e-mail neste computador ou na sua rede local, como o Proton Mail Bridge, ficam de fora. Se a internet funciona mas um firewall ou VPN bloqueia a porta de um servidor de e-mail, o MailVault não diz que a internet caiu: ele indica o servidor e a porta que não responderam, por exemplo imap.example.com, porta 993, para a sua equipe de TI liberar. Seja o que for que o aviso diga, abrir ou excluir uma mensagem continua funcionando."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O MailVault diz que o Outlook recusou o IMAP (“User is authenticated but not connected”). Como resolvo?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O Outlook.com, o Hotmail e o Live.com têm uma configuração na web, Permitir que dispositivos e aplicativos usem IMAP. Quando ela está desativada, a Microsoft aceita seu login e a permissão de IMAP que o MailVault pede, e depois o servidor IMAP recusa a conexão com esta mensagem: User is authenticated but not connected. Sua senha está certa e o MailVault está funcionando. Para resolver, abra o Outlook na web, vá em Configurações, Email, Encaminhamento e IMAP, ative Permitir que dispositivos e aplicativos usem IMAP em POP e IMAP e clique em Salvar. O link direto é https://outlook.live.com/mail/options/mail/forwarding. Depois tente de novo no MailVault. Isso só importa para uma conta do Outlook.com que se conecta por IMAP: uma adicionada com Conectar via em IMAP, ou uma trocada do Microsoft Graph para IMAP em Configurações, Contas, Conexão. Uma troca recusada não muda nada, e a conta continua no Microsoft Graph. Contas no Microsoft Graph, a opção Automático padrão para o Outlook.com, não precisam dessa configuração."
       }
     }
   ]
@@ -193,8 +201,8 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Solução de problemas</h1><!-- help-intro:start --><form class="mv-help-search" action="/pt-br/docs.html" method="get" role="search"><label for="help-q">Pesquisar na documentação, nas perguntas frequentes e nos artigos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Pesquisar em todos os guias e respostas" required><button type="submit">Pesquisa</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Nesta página</summary><ul><li><a href="#help-section-1">Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?</a></li><li><a href="#help-section-2">Por que o corretor ortográfico não sublinha nada no Linux?</a></li><li><a href="#help-section-3">Adicionei uma pasta no servidor — quanto tempo o MailVault leva para mostrá-la?</a></li><li><a href="#help-section-4">O MailVault diz “Sem conexão com a internet”, mas minha internet funciona. Por quê?</a></li></ul></details><!-- help-contents:end -->
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux e uma pasta adicionada no servidor que ainda não aparece.</p>
+      <h1 class="text-4xl font-bold mb-2">Solução de problemas</h1><!-- help-intro:start --><form class="mv-help-search" action="/pt-br/docs.html" method="get" role="search"><label for="help-q">Pesquisar na documentação, nas perguntas frequentes e nos artigos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Pesquisar em todos os guias e respostas" required><button type="submit">Pesquisa</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Nesta página</summary><ul><li><a href="#help-section-1">Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?</a></li><li><a href="#help-section-2">Por que o corretor ortográfico não sublinha nada no Linux?</a></li><li><a href="#help-section-3">Adicionei uma pasta no servidor — quanto tempo o MailVault leva para mostrá-la?</a></li><li><a href="#help-section-4">O MailVault diz “Sem conexão com a internet”, mas minha internet funciona. Por quê?</a></li><li><a href="#help-section-5">O MailVault diz que o Outlook recusou o IMAP (“User is authenticated but not connected”). Como resolvo?</a></li></ul></details><!-- help-contents:end -->
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux, uma pasta adicionada no servidor que ainda não aparece e o Outlook.com recusando IMAP.</p>
 
       <div class="space-y-4">
 
@@ -301,6 +309,32 @@
               </p>
               <p>
                 <strong>Nada do que você pede fica travado.</strong> Seja o que for que o aviso diga, abrir ou excluir uma mensagem continua funcionando, porque um diagnóstico errado nunca deve impedir você de acessar seus próprios e-mails.
+              </p>
+            </div>
+        </article>
+
+        <article id="outlook-imap-not-connected" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">O MailVault diz que o Outlook recusou o IMAP (“User is authenticated but not connected”). Como resolvo?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>O que significa.</strong> O Outlook.com, o Hotmail e o Live.com têm uma configuração na web, <strong>Permitir que dispositivos e aplicativos usem IMAP</strong>. Quando ela está desativada, a Microsoft aceita seu login e a permissão de IMAP que o MailVault pede, e depois o servidor IMAP recusa a conexão com esta mensagem: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">User is authenticated but not connected.</code> Sua senha está certa e o MailVault está funcionando: ativar a configuração resolve na hora.
+              </p>
+              <p>
+                <strong>Quando acontece.</strong> Só quando uma conta do Outlook.com se conecta por IMAP: quando você adiciona uma com <strong>Conectar via</strong> em <strong>IMAP</strong>, ou quando troca uma do Microsoft Graph para IMAP em <strong>Configurações &rarr; Contas &rarr; Conexão &rarr; Conectar via</strong> com <strong>Trocar e entrar de novo</strong>. Uma troca recusada não muda nada: a conta continua no Microsoft Graph, e o MailVault mostra estes passos e um link para a configuração.
+              </p>
+              <p class="font-medium text-slate-700 dark:text-slate-300">Ativar o IMAP no Outlook.com:</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>Abra <a href="https://outlook.live.com/mail/options/mail/forwarding" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Outlook na web &rarr; Configurações &rarr; Email &rarr; Encaminhamento e IMAP</a> conectado com a mesma conta Microsoft.</li>
+                <li>Em <strong>POP e IMAP</strong>, ative <strong>Permitir que dispositivos e aplicativos usem IMAP</strong>.</li>
+                <li>Clique em <strong>Salvar</strong>.</li>
+                <li>De volta ao MailVault, adicione a conta de novo ou escolha outra vez <strong>Trocar e entrar de novo</strong>.</li>
+              </ol>
+              <figure>
+                <a data-help-image="" aria-haspopup="dialog" href="/assets/help/outlook-imap-setting.webp"><img src="/assets/help/outlook-imap-setting.webp" alt="Configurações do Outlook.com, seção POP e IMAP, com Permitir que dispositivos e aplicativos usem IMAP ativado" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1210" height="250" loading="lazy" decoding="async"></a>
+                <figcaption class="text-sm mt-2">A configuração no Outlook.com, ativada.</figcaption>
+              </figure>
+              <p>
+                <strong>Continuar no Microsoft Graph não exige mudança.</strong> Contas do Outlook.com se conectam por padrão pelo Microsoft Graph, com Conectar via em Automático, e o Graph não usa essa configuração. Se você não precisa de IMAP, pode deixá-la desativada.
               </p>
             </div>
         </article>

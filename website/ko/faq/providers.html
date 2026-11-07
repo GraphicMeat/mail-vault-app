@@ -60,7 +60,7 @@
       "name": "MailVault는 Gmail과 Outlook에서도 작동합니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "네. MailVault는 Gmail, Outlook, Fastmail 같은 JMAP 서버 및 IMAP을 지원하는 모든 이메일 서비스에서 사용할 수 있습니다. Gmail은 OAuth2를 통해 Google 계정으로 직접 로그인하므로 IMAP을 수동으로 설정할 필요가 없습니다. Microsoft 365 Business 및 Enterprise 계정은 OAuth2를 통해 Microsoft 계정으로 직접 로그인할 수 있습니다. 개인용 Outlook.com, Hotmail 및 Live.com 계정은 Microsoft Graph API를 통해 연결합니다."
+        "text": "네. MailVault는 Gmail, Outlook, Fastmail 같은 JMAP 서버 및 IMAP을 지원하는 모든 이메일 서비스에서 사용할 수 있습니다. Gmail은 OAuth2를 통해 Google 계정으로 직접 로그인하므로 IMAP을 수동으로 설정할 필요가 없습니다. Microsoft 365 Business 및 Enterprise 계정은 OAuth2를 통해 Microsoft 계정으로 직접 로그인할 수 있습니다. 개인용 Outlook.com, Hotmail 및 Live.com 계정은 기본적으로 Microsoft Graph API를 통해 연결하며, 원하면 IMAP으로도 연결할 수 있습니다."
       }
     },
     {
@@ -68,7 +68,7 @@
       "name": "Outlook.com 계정은 어떻게 연결합니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault는 개인용 Outlook.com, Hotmail, Live.com 계정을 Microsoft Graph API로 연결합니다. 계정을 추가하고 Microsoft 계정으로 로그인을 고른 다음 브라우저에서 로그인을 마치십시오. MailVault가 개인 Microsoft 계정을 알아보고 알아서 Graph를 쓰므로 입력할 IMAP 설정이 없습니다. 이 계정들에 IMAP을 쓰지 않는 것은 2024년 말부터 이어진 Microsoft IMAP의 OAuth2 로그인 문제 때문입니다. 메일 읽기, 삭제, 읽음 또는 읽지 않음 표시, 이동, 백업은 다른 계정과 똑같이 작동합니다. IMAP에 기대는 몇 가지 기능은 Graph 계정에서 아직 쓸 수 없습니다. 다시 알림, MBOX 파일을 서버로 복원하기, 삭제한 메일의 서버로 복구(이 컴퓨터에 이미 있는 메일이라면 로컬로 복구는 작동함), 그리고 계정을 추가할 때 받은편지함 메일 수를 알려 주는 줄입니다. Microsoft 365 Business와 Enterprise 계정은 OAuth2와 함께 IMAP을 쓰며 이 제한의 영향을 받지 않습니다."
+        "text": "MailVault는 개인용 Outlook.com, Hotmail, Live.com 계정을 기본적으로 Microsoft Graph API로 연결합니다. 계정을 추가하고 Microsoft 계정으로 로그인을 고른 다음 브라우저에서 로그인을 마치십시오. 연결 방식이 자동이면 MailVault가 개인 Microsoft 계정을 알아보고 Graph를 쓰므로 Outlook.com에서 설정할 것이 없습니다. 메일 읽기, 삭제, 읽음 또는 읽지 않음 표시, 이동, 백업은 다른 계정과 똑같이 작동합니다. IMAP도 선택할 수 있습니다. 계정을 추가할 때 연결 방식에서 IMAP을 고르거나, 나중에 설정, 계정, 연결에서 바꾸십시오. 로그인은 여전히 OAuth2로 Microsoft를 거치지만, Outlook.com은 설정에서 디바이스 및 앱에서 IMAP 사용 허용을 켠 뒤에야 IMAP을 받아들입니다. IMAP에 기대는 몇 가지 기능은 Graph 계정에서 아직 쓸 수 없습니다. 다시 알림, MBOX 파일을 서버로 복원하기, 삭제한 메일의 서버로 복구(이 컴퓨터에 이미 있는 메일이라면 로컬로 복구는 작동함), 그리고 계정을 추가할 때 받은편지함 메일 수를 알려 주는 줄입니다. Microsoft 365 Business와 Enterprise 계정은 OAuth2와 함께 IMAP을 쓰며 이 제한의 영향을 받지 않습니다."
       }
     },
     {
@@ -225,15 +225,15 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVault는 Gmail과 Outlook에서도 작동합니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              네. MailVault는 Gmail, Outlook, Fastmail 같은 JMAP 서버 및 IMAP을 지원하는 모든 이메일 서비스에서 사용할 수 있습니다. Gmail은 OAuth2를 통해 Google 계정으로 직접 로그인하므로 IMAP을 수동으로 설정할 필요가 없습니다. Microsoft 365 Business 및 Enterprise 계정은 OAuth2를 통해 Microsoft 계정으로 직접 로그인할 수 있으며, 2단계 인증도 원활하게 지원합니다. 개인용 Outlook.com, Hotmail 및 Live.com 계정은 <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">Microsoft Graph API를 통해 연결합니다</a>.
+              네. MailVault는 Gmail, Outlook, Fastmail 같은 JMAP 서버 및 IMAP을 지원하는 모든 이메일 서비스에서 사용할 수 있습니다. Gmail은 OAuth2를 통해 Google 계정으로 직접 로그인하므로 IMAP을 수동으로 설정할 필요가 없습니다. Microsoft 365 Business 및 Enterprise 계정은 OAuth2를 통해 Microsoft 계정으로 직접 로그인할 수 있으며, 2단계 인증도 원활하게 지원합니다. 개인용 Outlook.com, Hotmail 및 Live.com 계정은 <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">기본적으로 Microsoft Graph API를 통해 연결하며, 원하면 IMAP으로도 연결할 수 있습니다</a>.
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Outlook.com 계정은 어떻게 연결합니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">MailVault는 개인용 Outlook.com, Hotmail, Live.com 계정을 <strong>Microsoft Graph API</strong>로 연결합니다. 계정을 추가하고 Microsoft 계정으로 로그인을 고른 다음 브라우저에서 로그인을 마치십시오. MailVault가 개인 Microsoft 계정을 알아보고 알아서 Graph를 쓰므로 입력할 IMAP 설정이 없습니다.</p>
-              <p class="mb-4">이 계정들에 IMAP을 쓰지 않는 것은 2024년 말부터 이어진 Microsoft IMAP의 OAuth2 로그인 문제 때문입니다. 메일 읽기, 삭제, 읽음 또는 읽지 않음 표시, 이동, 백업은 다른 계정과 똑같이 작동합니다.</p>
+              <p class="mb-4">MailVault는 개인용 Outlook.com, Hotmail, Live.com 계정을 기본적으로 <strong>Microsoft Graph API</strong>로 연결합니다. 계정을 추가하고 Microsoft 계정으로 로그인을 고른 다음 브라우저에서 로그인을 마치십시오. <strong>연결 방식</strong>이 <strong>자동</strong>이면 MailVault가 개인 Microsoft 계정을 알아보고 Graph를 쓰므로 Outlook.com에서 설정할 것이 없습니다. 메일 읽기, 삭제, 읽음 또는 읽지 않음 표시, 이동, 백업은 다른 계정과 똑같이 작동합니다.</p>
+              <p class="mb-4">IMAP도 선택할 수 있습니다. 계정을 추가할 때 <strong>연결 방식</strong>에서 <strong>IMAP</strong>을 고르거나, 나중에 <strong>설정 &rarr; 계정 &rarr; 연결</strong>에서 바꾸십시오. 로그인은 여전히 OAuth2로 Microsoft를 거치지만, Outlook.com은 설정에서 <strong>디바이스 및 앱에서 IMAP 사용 허용</strong>을 켠 뒤에야 IMAP을 받아들입니다. <a href="/ko/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">MailVault에 Outlook이 IMAP을 거부했다고 나올 때</a>를 참고하십시오.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Graph 계정에서 아직 쓸 수 없는 기능:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>다시 알림</strong></li>

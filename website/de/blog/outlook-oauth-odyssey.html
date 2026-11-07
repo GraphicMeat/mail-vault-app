@@ -183,6 +183,10 @@
             App-Passwörter funktionieren für private Konten weiterhin, aber das untergräbt den Sinn von OAuth2. Wir brauchten einen ganz anderen Ansatz.
           </p>
 
+          <p>
+            <strong>Update, November 2026:</strong> In unseren Tests im November 2026 funktionieren private Konten von Outlook.com, Hotmail und Live.com über IMAP mit OAuth2-Anmeldung über MailVaults eigene Microsoft-App. Die einzige Voraussetzung ist die Outlook.com-Einstellung <strong>Geräten und Apps die Verwendung von IMAP erlauben</strong>: Ist sie aus, antwortet der Server nach erfolgreicher Anmeldung mit „User is authenticated but not connected“. MailVault verbindet diese Konten weiterhin standardmäßig über Microsoft Graph, und du kannst stattdessen IMAP wählen. Siehe <a href="/de/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:text-primary-600 underline">IMAP in Outlook.com einschalten</a>.
+          </p>
+
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Die radikale Option: die Microsoft Graph API</h3>
 
           <p>

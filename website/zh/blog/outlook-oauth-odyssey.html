@@ -183,6 +183,10 @@
             个人账户上应用专用密码仍然能用，但那就失去了 OAuth2 的意义。我们需要一条完全不同的路。
           </p>
 
+          <p>
+            <strong>更新（2026 年 11 月）：</strong>在我们 2026 年 11 月的测试中，个人 Outlook.com、Hotmail 和 Live.com 账户可以通过 MailVault 自己的 Microsoft 应用以 OAuth2 登录并使用 IMAP。唯一的要求是 Outlook.com 设置<strong>允许设备和应用使用 IMAP</strong>：如果它是关闭的，服务器会在登录成功后回复“User is authenticated but not connected”。MailVault 默认仍通过 Microsoft Graph 连接这些账户，你也可以改选 IMAP。参见<a href="/zh/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:text-primary-600 underline">如何在 Outlook.com 中开启 IMAP</a>。
+          </p>
+
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">核选项：Microsoft Graph API</h3>
 
           <p>

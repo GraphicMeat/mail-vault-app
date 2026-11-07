@@ -1,13 +1,10 @@
 {
-  "149641179cbb": "MailVault 通过 <strong>Microsoft Graph API</strong> 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。",
   "ddd9e381040a": "对已删除邮件使用<strong>恢复到服务器</strong>。「恢复到本地」可以使用，适用于已经在这台电脑上的邮件",
   "db3b0e57e997": "添加账户窗口在连接测试后报告的<strong>收件箱数量</strong>",
   "072358fa5619": "Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。这种登录方式与 <a href=\"https://www.thunderbird.net/\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Mozilla Thunderbird</a> 的做法相同，使用 PKCE 和 XOAUTH2 身份验证。",
-  "9c886b5d1835": "它不对这些账户使用 IMAP，原因是 Microsoft 的 IMAP 从 2024 年底开始在 OAuth2 登录上出现问题。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。",
   "d8b695a6bb4c": "Graph 账户暂不支持：",
   "e2b51688f4b0": "稍后提醒",
   "db3d9a0b5360": "把 MBOX 文件恢复到服务器",
-  "cf795413fdca": "MailVault 通过 Microsoft Graph API 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。它不对这些账户使用 IMAP，原因是 Microsoft 的 IMAP 从 2024 年底开始在 OAuth2 登录上出现问题。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。少数依赖 IMAP 的功能在 Graph 账户上暂不支持：稍后提醒；把 MBOX 文件恢复到服务器；对已删除邮件使用「恢复到服务器」（「恢复到本地」可以使用，适用于已经在这台电脑上的邮件）；以及添加账户时报告收件箱数量的那一行。Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。",
   "6556465c8152": "邮件客户端",
   "828dd000d306": "开源、可深度定制",
   "fa666325cc1f": "Thunderbird 与 MailVault 对比：免费桌面邮件、离线访问、配置文件备份、可迁移归档和日常易用性。",
