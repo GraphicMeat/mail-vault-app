@@ -165,6 +165,26 @@ async fn hand_out(
 /// Emptied after each pick and at start (a pick killed with the app leaves its dir behind).
 const PICK_SCRATCH: &str = "pick";
 
+/// One pick at a time, on both platforms: the native side keeps one pending pick (Android one
+/// scratch dir), so a second call while a picker is up answers `BUSY`.
+static PICKING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Holds [`PICKING`]; dropping it (any return, error or panic) lets the next pick in.
+struct PickGuard;
+
+impl PickGuard {
+    fn take() -> Option<PickGuard> {
+        use std::sync::atomic::Ordering;
+        PICKING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).ok().map(|_| PickGuard)
+    }
+}
+
+impl Drop for PickGuard {
+    fn drop(&mut self) {
+        PICKING.store(false, std::sync::atomic::Ordering::Release);
+    }
+}
+
 /// Runs the system picker for outgoing attachments: `kind` is `files` (the document picker) or
 /// `photos` (the photo picker; no photo library permission on either platform). Answers when the
 /// picker closes, `[]` on cancel. Each pick is copied into `<cache>/out/<16 hex>/<sanitized name>`
@@ -180,8 +200,10 @@ async fn mobile_pick_files(app: tauri::AppHandle, kind: String) -> Result<Vec<Va
         "photos" => PickKind::Photos,
         _ => return Err(NativeError::new("INVALID", "unknown picker")),
     };
+    let guard = PickGuard::take().ok_or_else(|| NativeError::new("BUSY", "a picker is already open"))?;
     // Off the webview thread: the native call answers only when the picker closes.
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
         let cache = app.path().app_cache_dir().map_err(|e| NativeError::new("INTERNAL", e.to_string()))?;
         let native = app
             .try_state::<MvNative<tauri::Wry>>()

@@ -115,7 +115,7 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     // Where the picks of the running pick go; set before the picker starts, read in its callback.
-    // One picker covers the screen at a time, so one field is enough.
+    // The shell lets one pick run at a time (`PickGuard`), so one field is enough.
     @Volatile private var pickDir: File? = null
 
     @Command
@@ -162,8 +162,13 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
     fun pickResult(invoke: Invoke, result: ActivityResult) {
         val dir = pickDir
         val data = result.data
-        if (result.resultCode != Activity.RESULT_OK || data == null || dir == null) {
+        if (result.resultCode != Activity.RESULT_OK || data == null) {
             invoke.resolve(JSObject().put("items", JSArray()))
+            return
+        }
+        // Picks made but nowhere to put them: an error, never something that looks like a cancel.
+        if (dir == null) {
+            invoke.reject("the pick directory is gone", "INTERNAL")
             return
         }
         val uris = mutableListOf<Uri>()
