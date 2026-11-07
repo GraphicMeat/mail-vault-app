@@ -362,7 +362,7 @@ impl Backend for ImapBackend {
             let Some(text) = read_part(session, &folder.path, uid, text_part).await? else {
                 return Ok(None);
             };
-            Ok(Some(RawBody { parts, html, text }))
+            Ok(Some(RawBody { parts, html, text, attachments_unknown: false }))
         })
     }
 

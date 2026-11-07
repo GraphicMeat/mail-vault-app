@@ -99,7 +99,7 @@ fn is_final_name(name: &str) -> bool {
 /// (base64 and URL-safe base64), at most 1024 of them, never only dots (a dot segment in the
 /// request URL would climb out of the attachment). `name_of` also wants it among the message's
 /// listed attachments.
-fn valid_section(s: &str, graph: bool) -> bool {
+pub(crate) fn valid_section(s: &str, graph: bool) -> bool {
     if graph {
         !s.is_empty()
             && s.len() <= 1024

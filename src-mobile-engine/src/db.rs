@@ -442,6 +442,9 @@ impl Engine {
             startup_replay: AtomicBool::new(journal || queued),
         };
         crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
+        if let Err(e) = crate::body::drop_stale_graph_bodies(&engine.shared) {
+            engine.shared.log(&format!("[body] dropping stale Graph bodies: {e}"));
+        }
         Ok(engine)
     }
 

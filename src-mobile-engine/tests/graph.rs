@@ -407,14 +407,28 @@ fn the_attachment_listing_selects_only_base_properties_and_its_failure_spares_th
     assert_eq!(f.g.raw_get(&format!("/me/messages/{id}/attachments?$select=id,contentBytes"), &access), 400);
     assert_eq!(f.g.raw_get(&format!("/me/messages/{id}/attachments?$select=id,name,contentType,size,isInline"), &access), 200);
 
-    // A listing that fails: the body still opens, with no attachments, and the log says why.
+    // A listing that fails: the body still opens, says its attachments are unknown, is not
+    // cached, and the log says why.
     f.sync(None);
     let uid = f.uids("INBOX")["Plain"];
+    let cached = || -> i64 { f.db().query_row("SELECT count(*) FROM bodies WHERE uid = ?1", [uid], |r| r.get(0)).unwrap() };
     f.g.fail_attachments(true);
     let body = f.body(uid);
     assert!(body["html"].as_str().unwrap_or("").contains("Still readable"), "{body}");
     assert_eq!(body["attachments"].as_array().unwrap().len(), 0, "{body}");
+    assert_eq!(body["attachmentsUnknown"], true, "{body}");
+    assert_eq!(cached(), 0, "not cached as a message with no attachments");
     assert!(f.logs.lock().unwrap().iter().any(|l| l.contains("attachments were not listed")), "{:?}", f.logs.lock().unwrap());
+
+    // Graph recovers: the next open lists them and caches the body; the one after needs no server.
+    f.g.fail_attachments(false);
+    let body = f.body(uid);
+    assert_eq!(body["attachmentsUnknown"], false, "{body}");
+    assert_eq!(body["attachments"].as_array().unwrap().len(), 1, "{body}");
+    assert_eq!(cached(), 1);
+    f.g.clear_requests();
+    assert_eq!(f.body(uid)["attachments"].as_array().unwrap().len(), 1);
+    assert!(f.g.requests().is_empty(), "served from the cache: {:?}", f.g.requests());
 }
 
 #[test]
@@ -625,4 +639,64 @@ fn microsoft_sign_in_adds_a_graph_account_that_syncs() {
     for s in f.g.authority.issued() {
         assert!(!hay.windows(s.len()).any(|w| w == s.as_bytes()), "a token leaked");
     }
+}
+
+#[test]
+fn opening_an_engine_drops_graph_bodies_cached_by_an_earlier_build_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let secrets = Arc::new(MemorySecrets::default());
+    let open = || Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::clone(&secrets) as _).unwrap();
+    let db = || rusqlite::Connection::open(tmp.path().join("mobile.db")).unwrap();
+    let body = |uid: i64, parts: &str| {
+        db().execute(
+            "INSERT INTO bodies (account_id, folder, uid, html, text, parts_json, bytes, last_access_ms) VALUES (?1, 'INBOX', ?2, '<p>x</p>', NULL, ?3, 10, 1)",
+            (ACCOUNT, uid, parts),
+        )
+        .unwrap();
+    };
+    let att = |uid: i64, section: &str, encoding: &str| {
+        db().execute(
+            "INSERT INTO attachments (account_id, folder, uid, section, filename, mime, size, content_id, encoding) VALUES (?1, 'INBOX', ?2, ?3, 'f', 'application/pdf', 1, NULL, ?4)",
+            (ACCOUNT, uid, section, encoding),
+        )
+        .unwrap();
+    };
+    let part = |section: &str, encoding: &str| {
+        format!(r#"{{"section":"{section}","mime":"application/pdf","filename":"f","size":1,"encoding":"{encoding}","charset":null,"contentId":null,"disposition":"attachment"}}"#)
+    };
+    let stored = |parts: Vec<String>| format!(r#"{{"parts":[{}],"remoteImages":0,"trackers":0}}"#, parts.join(","));
+    let bodies = || -> Vec<i64> {
+        let c = db();
+        let mut st = c.prepare("SELECT uid FROM bodies ORDER BY uid").unwrap();
+        st.query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect()
+    };
+    {
+        let e = open();
+        drop(e);
+    }
+    let marks = || -> i64 { db().query_row("SELECT count(*) FROM settings", [], |r| r.get(0)).unwrap() };
+    assert_eq!(marks(), 0, "nothing to check, nothing written");
+    db().execute(
+        "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, kind, auth, provider, needs_auth, created_ms)
+         VALUES (?1, ?2, ?2, 'outlook.office365.com', 993, 'ssl', 'graph', 'oauth2', 'microsoft', 0, 1)",
+        [ACCOUNT, ME],
+    )
+    .unwrap();
+    // 1: read from a MIME file (IMAP part numbers, base64); 2: a body as this build lists it;
+    // 4: parts that do not read.
+    body(1, &stored(vec![part("1.2", "7bit"), part("2", "base64")]));
+    att(1, "2", "base64");
+    body(2, &stored(vec![part("AAMkAtt1=", "binary"), part("AAMkLink=", "link")]));
+    att(2, "AAMkAtt1=", "binary");
+    body(4, "not json");
+    assert_eq!(bodies(), vec![1, 2, 4]);
+    drop(open());
+    assert_eq!(bodies(), vec![2], "only the body that fits the current rules stays");
+    assert_eq!(marks(), 1, "checked once");
+    let left: i64 = db().query_row("SELECT count(*) FROM attachments WHERE uid = 1", [], |r| r.get(0)).unwrap();
+    assert_eq!(left, 0, "its attachment rows went with it");
+    // Once: a later open leaves the cache alone.
+    body(5, &stored(vec![part("3", "base64")]));
+    drop(open());
+    assert_eq!(bodies(), vec![2, 5]);
 }

@@ -559,13 +559,14 @@ impl Backend for GraphBackend<'_> {
             Err(CallErr::Text(e)) if status_of(&e) == Some(404) => return Ok(None),
             Err(e) => return Err(e.into()),
         };
-        // The body shows without its attachments rather than not at all.
-        let parts = match self.attachments(&id) {
-            Ok(Some(parts)) => parts,
+        // The body shows without its attachments rather than not at all, marked so it is not
+        // cached as a message with none.
+        let (parts, attachments_unknown) = match self.attachments(&id) {
+            Ok(Some(parts)) => (parts, false),
             Ok(None) => return Ok(None),
             Err(Fail::Code(code, why)) if code != Code::NeedsAuth => {
                 self.shared.log(&format!("[graph] {}: the message's attachments were not listed: {} {why}", self.account, code.as_str()));
-                Vec::new()
+                (Vec::new(), true)
             }
             Err(f) => return Err(f),
         };
@@ -577,7 +578,7 @@ impl Backend for GraphBackend<'_> {
         } else {
             (None, Some(content))
         };
-        Ok(Some(RawBody { parts, html, text }))
+        Ok(Some(RawBody { parts, html, text, attachments_unknown }))
     }
 
     fn part_range(&mut self, folder: &FolderRow, uid: u32, section: &str, offset: u64, len: u32) -> Result<Option<Vec<u8>>, Fail> {

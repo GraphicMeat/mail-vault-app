@@ -74,6 +74,23 @@ describe('Viewer', () => {
     expect(frame()).toBeTruthy();
   });
 
+  it('says when the attachments could not be loaded and retries the body', async () => {
+    engine.reply = body({ attachmentsUnknown: true });
+    renderViewer();
+    await waitFor(() => expect(screen.getByText(t('mobile.viewer.attachmentsUnknown'))).toBeTruthy());
+    expect(t('mobile.viewer.attachmentsUnknown')).not.toBe('mobile.viewer.attachmentsUnknown');
+    engine.reply = body({ attachmentsUnknown: false });
+    fireEvent.click(screen.getByRole('button', { name: t('common.retry') }));
+    await waitFor(() => expect(screen.queryByText(t('mobile.viewer.attachmentsUnknown'))).toBeNull());
+    expect(engine.calls.filter(([m]) => m === 'mobile.message.body').length).toBe(2);
+  });
+
+  it('shows no attachments note for a body whose list is known', async () => {
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    expect(screen.queryByText(t('mobile.viewer.attachmentsUnknown'))).toBeNull();
+  });
+
   it('gone_message_shows_notice', async () => {
     engine.reply = body({ html: null, gone: true });
     renderViewer();

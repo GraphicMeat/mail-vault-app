@@ -100,6 +100,9 @@ pub(crate) struct RawBody {
     pub(crate) parts: Vec<PartInfo>,
     pub(crate) html: Option<String>,
     pub(crate) text: Option<String>,
+    /// The server could not list the attachments this time (`parts` is empty for that, not
+    /// because there are none): the body is shown but not cached, and the next open asks again.
+    pub(crate) attachments_unknown: bool,
 }
 
 /// Where a move put its messages, when the server said: `(old uid, new uid)` pairs and the

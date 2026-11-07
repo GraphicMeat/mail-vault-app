@@ -79,6 +79,8 @@ struct Body {
     html: Option<String>,
     text: Option<String>,
     stored: Stored,
+    /// The attachments could not be listed this time: shown, never cached.
+    attachments_unknown: bool,
 }
 
 impl Body {
@@ -97,6 +99,7 @@ impl Body {
         json!({
             "html": self.html, "text": self.text, "attachments": attachments,
             "remoteImages": self.stored.remote_images, "trackers": self.stored.trackers, "gone": false,
+            "attachmentsUnknown": self.attachments_unknown,
         })
     }
 }
@@ -159,8 +162,10 @@ fn cap(shared: &Shared) -> u64 {
 }
 
 /// `mobile.message.body {accountId, folder, uid}` -> `{html, text, attachments: [{section,
-/// filename, mime, size, contentId, kind}], remoteImages, trackers, gone}`. `kind` is `file`, or
-/// `link` for a Graph cloud link (`size` null; it cannot be fetched). A network failure is an
+/// filename, mime, size, contentId, kind}], remoteImages, trackers, gone, attachmentsUnknown}`.
+/// `kind` is `file`, or `link` for a Graph cloud link (`size` null; it cannot be fetched).
+/// `attachmentsUnknown`: the server could not list the attachments this time, so the list is
+/// empty for that reason and the body was not cached (the next open asks again). A network failure is an
 /// `INTERNAL` error whose message is the accounts error code (`TIMEOUT`, `HOST_UNREACHABLE`, ...);
 /// the detail goes to the log only.
 pub(crate) fn message_body(engine: &Engine, params: Value) -> Result<Value, RpcError> {
@@ -195,8 +200,12 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
             return Err(RpcError::Internal(code.as_str().into()));
         }
     };
-    store(shared, &p, &body, &snippet).map_err(internal)?;
-    evict(shared, cap(shared), &p).map_err(internal)?;
+    // A body whose attachments could not be listed is shown but not cached: cached, it would
+    // read as a message with none (its sections refused, a forward without them) until evicted.
+    if !body.attachments_unknown {
+        store(shared, &p, &body, &snippet).map_err(internal)?;
+        evict(shared, cap(shared), &p).map_err(internal)?;
+    }
     Ok(body.reply())
 }
 
@@ -218,7 +227,7 @@ fn cached(shared: &Shared, p: &BodyParams) -> Result<Option<Body>, EngineError> 
     // A row whose parts no longer read is refetched (and replaced) rather than trusted.
     Ok(row.and_then(|(html, text, parts)| {
         let stored: Stored = serde_json::from_str(parts.as_deref()?).ok()?;
-        Some(Body { html, text, stored })
+        Some(Body { html, text, stored, attachments_unknown: false })
     }))
 }
 
@@ -229,7 +238,11 @@ fn fetch(shared: &Shared, p: &BodyParams, stored_validity: Option<i64>) -> Resul
     let out = backend.body(&FolderRow::new(&p.folder, stored_validity), p.uid);
     // Signs out.
     drop(backend);
-    Ok(out?.map(|RawBody { parts, html, text }| scanned(html, text, parts.into_iter().map(Part::from).collect())))
+    Ok(out?.map(|RawBody { parts, html, text, attachments_unknown }| {
+        let (mut body, snippet) = scanned(html, text, parts.into_iter().map(Part::from).collect());
+        body.attachments_unknown = attachments_unknown;
+        (body, snippet)
+    }))
 }
 
 /// Strips the html's tracking pixels and counts the remote images the cleaned html would load.
@@ -247,7 +260,7 @@ fn scanned(html: Option<String>, text: Option<String>, parts: Vec<Part>) -> (Bod
         trackers = scan.trackers.len() as u32;
         scan.cleaned.unwrap_or(h)
     });
-    (Body { html, text, stored: Stored { parts, remote_images, trackers } }, snippet)
+    (Body { html, text, stored: Stored { parts, remote_images, trackers }, attachments_unknown: false }, snippet)
 }
 
 /// Perf-gate screenshots: caches `html` / `text` as the body of a listed message, scanned the way
@@ -299,6 +312,61 @@ pub(crate) fn seed_body(
         (account, folder, uid, &body.html, &body.text, &parts_json, bytes as i64),
     )?;
     Ok(())
+}
+
+/// The `settings` key that records [`drop_stale_graph_bodies`] ran on this database.
+pub(crate) const GRAPH_BODIES_CHECKED: &str = "engine.graphBodiesChecked.v1";
+
+/// Once per database that holds any cached Graph body: deletes the cached bodies of Graph accounts
+/// written by an earlier build
+/// whose parts do not satisfy the current rules (a part's section is not a Graph attachment id,
+/// or its encoding is neither `binary` nor [`crate::backend::graph::LINK`]: a body read from a
+/// MIME file), with their attachment rows, 20 bodies per transaction. The next
+/// open fetches them again. Returns how many went. The [`GRAPH_BODIES_CHECKED`] mark is written
+/// only once there was a Graph body to look at, so a database without one is never written to
+/// here (the check costs one empty query per open until then).
+pub(crate) fn drop_stale_graph_bodies(shared: &Shared) -> Result<usize, EngineError> {
+    // Read on the writer, as `Engine::open` reads: a pooled reader that has read keeps a shared
+    // lock on the WAL index, which stops the last close from checkpointing.
+    let done: Option<Option<String>> =
+        shared.write(|c| c.query_row("SELECT value FROM settings WHERE key = ?1", [GRAPH_BODIES_CHECKED], |r| r.get(0)).optional())?;
+    if done.is_some() {
+        return Ok(0);
+    }
+    let rows: Vec<(String, String, i64, Option<String>)> = shared.write(|c| {
+        let mut st = c.prepare(
+            "SELECT b.account_id, b.folder, b.uid, b.parts_json FROM bodies b
+             JOIN accounts a ON a.id = b.account_id WHERE a.kind = 'graph'",
+        )?;
+        let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    })?;
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    let fits = |p: &Part| crate::attachments::valid_section(&p.section, true)
+        && !p.section.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+        && (p.encoding == "binary" || p.encoding == crate::backend::graph::LINK);
+    let stale: Vec<(String, String, i64)> = rows
+        .into_iter()
+        .filter(|(_, _, _, parts)| match parts.as_deref().and_then(|j| serde_json::from_str::<Stored>(j).ok()) {
+            Some(stored) => !stored.parts.iter().all(fits),
+            None => true,
+        })
+        .map(|(a, f, u, _)| (a, f, u))
+        .collect();
+    // Few bodies per transaction: each takes its attachment rows with it.
+    for chunk in stale.chunks(20) {
+        shared.write(|c| {
+            for (account, folder, uid) in chunk {
+                c.execute("DELETE FROM attachments WHERE account_id = ?1 AND folder = ?2 AND uid = ?3", (account, folder, uid))?;
+                c.execute("DELETE FROM bodies WHERE account_id = ?1 AND folder = ?2 AND uid = ?3", (account, folder, uid))?;
+            }
+            Ok(())
+        })?;
+    }
+    shared.write(|c| c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, '1')", [GRAPH_BODIES_CHECKED]))?;
+    Ok(stale.len())
 }
 
 /// The list row's preview: the text (else the html's text), whitespace collapsed, 200 chars.

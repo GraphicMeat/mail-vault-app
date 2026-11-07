@@ -4376,5 +4376,6 @@
   "mobile.error.SIGNIN_BUSY": "C’è già un accesso aperto. Completalo o annullalo prima.",
   "mobile.compose.error.TOO_LARGE_LIMIT": "Gli allegati sono troppo grandi per l'invio da questo account. Il suo limite è {{size}} MB.",
   "mobile.attachment.link": "Link, aprilo in Outlook",
-  "mobile.attachment.labelLink": "{{name}}, allegato collegamento, aprilo in Outlook"
+  "mobile.attachment.labelLink": "{{name}}, allegato collegamento, aprilo in Outlook",
+  "mobile.viewer.attachmentsUnknown": "Non è stato possibile caricare gli allegati."
 }

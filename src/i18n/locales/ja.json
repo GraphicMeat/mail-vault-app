@@ -4376,5 +4376,6 @@
   "mobile.error.SIGNIN_BUSY": "サインインはすでに開いています。先に完了するかキャンセルしてください。",
   "mobile.compose.error.TOO_LARGE_LIMIT": "添付ファイルが大きすぎて、このアカウントからは送信できません。上限は {{size}} MB です。",
   "mobile.attachment.link": "リンク、Outlook で開く",
-  "mobile.attachment.labelLink": "{{name}}、リンクの添付ファイル、Outlook で開いてください"
+  "mobile.attachment.labelLink": "{{name}}、リンクの添付ファイル、Outlook で開いてください",
+  "mobile.viewer.attachmentsUnknown": "添付ファイルを読み込めませんでした。"
 }

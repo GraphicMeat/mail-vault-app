@@ -4376,5 +4376,6 @@
   "mobile.error.SIGNIN_BUSY": "Eine Anmeldung ist bereits geöffnet. Schließe sie zuerst ab oder brich sie ab.",
   "mobile.compose.error.TOO_LARGE_LIMIT": "Die Anhänge sind zu groß zum Senden von diesem Konto. Seine Grenze liegt bei {{size}} MB.",
   "mobile.attachment.link": "Link, in Outlook öffnen",
-  "mobile.attachment.labelLink": "{{name}}, Link-Anhang, in Outlook öffnen"
+  "mobile.attachment.labelLink": "{{name}}, Link-Anhang, in Outlook öffnen",
+  "mobile.viewer.attachmentsUnknown": "Die Anhänge konnten nicht geladen werden."
 }

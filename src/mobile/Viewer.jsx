@@ -231,6 +231,14 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
         <Header row={row} />
         <Attachments accountId={accountId} folder={folder} uid={row.uid} items={attachments} />
       </div>
+      {body?.attachmentsUnknown && (
+        // The server could not list the attachments this time; the body was not cached, so a
+        // retry asks again.
+        <div className="mv-viewer__images" data-mv-attachments-unknown role="status">
+          <span>{t('mobile.viewer.attachmentsUnknown')}</span>
+          <button type="button" style={{ minHeight: '44px' }} onClick={retry}>{t('common.retry')}</button>
+        </div>
+      )}
       {remoteImages > 0 && !allowRemote && (
         <div className="mv-viewer__images">
           <span>{t('mobile.viewer.imagesBlocked')}</span>
