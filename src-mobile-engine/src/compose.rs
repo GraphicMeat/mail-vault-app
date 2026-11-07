@@ -16,7 +16,6 @@
 //! deleted or sent; a send moves them to the outbox row, which deletes them once sent.
 
 use crate::accounts::{load_account, AccountRow};
-use crate::backend::{self, FolderRow};
 use crate::db::{Engine, Shared};
 use crate::outbox;
 use crate::outgoing::resolve_outgoing;
@@ -31,11 +30,14 @@ use serde_json::{json, Value};
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Most bytes of attachments one message takes: the common server limit (Gmail and Outlook
 /// refuse above it). Checked on the picked files' sizes before anything is journaled.
 pub(crate) const MAX_ATTACHMENT_BYTES: u64 = 25 * 1024 * 1024;
+/// How long a reply or forward waits for a body that is not cached.
+const BODY_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// A string field the page may send as `null`.
 fn nullable<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
@@ -284,51 +286,62 @@ struct PrepareParams {
     date_label: Option<String>,
 }
 
-/// The stored list row of the original.
+/// The stored list row of the original, with what sync kept for a reply (`thread_json`).
 struct Stored {
     subject: String,
     from_name: String,
     from_address: String,
     message_id: String,
     to_json: String,
+    thread_json: String,
 }
 
 fn address(name: Option<&str>, address: &str) -> Value {
     json!({ "address": address, "name": name.filter(|n| !n.is_empty()) })
 }
 
-/// The original's header as core's `reply_context` reads it, from the server's headers when it
-/// answered, else from the stored row (which has no Cc, Reply-To or References).
-fn original_header(stored: &Stored, fresh: Option<&backend::Header>) -> Value {
-    match fresh {
-        Some(h) => {
-            let list = |l: &[mailvault_core::imap::EmailAddress]| -> Vec<Value> {
-                l.iter().map(|a| address(a.name.as_deref(), &a.address)).collect()
-            };
-            json!({
-                "from": address(h.from.name.as_deref(), &h.from.address),
-                "to": list(&h.to),
-                "cc": list(&h.cc),
-                "replyTo": h.reply_to.iter().map(|a| address(a.name.as_deref(), &a.address)).collect::<Vec<_>>(),
-                "subject": h.subject,
-                "date": h.date.clone().or_else(|| h.message_date.clone()).unwrap_or_default(),
-                "messageId": h.message_id.clone().unwrap_or_else(|| stored.message_id.clone()),
-                "references": h.references.clone().unwrap_or_default(),
-            })
-        }
-        None => {
-            let to: Vec<Value> = serde_json::from_str::<Vec<Value>>(&stored.to_json)
-                .unwrap_or_default()
-                .iter()
-                .filter_map(|a| a["address"].as_str().map(|s| address(a["name"].as_str(), s)))
-                .collect();
-            json!({
-                "from": address(Some(&stored.from_name), &stored.from_address),
-                "to": to,
-                "subject": stored.subject,
-                "messageId": stored.message_id,
-            })
-        }
+/// `[{name, address}]` as stored, as core's `reply_context` reads an address list.
+fn stored_list(v: &Value) -> Vec<Value> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["address"].as_str().filter(|s| !s.is_empty()).map(|s| address(a["name"].as_str(), s)))
+        .collect()
+}
+
+/// The original's header as core's `reply_context` reads it, from mobile.db only: the list row
+/// plus `thread_json` (Cc, Reply-To, References and the Date header, kept by sync).
+fn original_header(stored: &Stored) -> Value {
+    let to: Value = serde_json::from_str(&stored.to_json).unwrap_or(Value::Null);
+    let thread: Value = serde_json::from_str(&stored.thread_json).unwrap_or(Value::Null);
+    json!({
+        "from": address(Some(&stored.from_name), &stored.from_address),
+        "to": stored_list(&to),
+        "cc": stored_list(&thread["cc"]),
+        "replyTo": stored_list(&thread["replyTo"]),
+        "subject": stored.subject,
+        "date": thread["date"].as_str().unwrap_or(""),
+        "messageId": stored.message_id,
+        "references": thread["references"].as_array().cloned().unwrap_or_default(),
+    })
+}
+
+/// The body for the quote: from the cache at once, else fetched for at most [`BODY_WAIT`]. A fetch
+/// that takes longer goes on in the background (and lands in the cache); the reply then has no
+/// quote yet (`quotePending`).
+fn body_within(shared: &Arc<Shared>, account: &str, folder: &str, uid: u32) -> Option<Value> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let sh = Arc::clone(shared);
+    let params = json!({ "accountId": account, "folder": folder, "uid": uid });
+    let spawned = std::thread::Builder::new().name("mv-engine-quote".into()).spawn(move || {
+        let _ = tx.send(crate::body::body_for(&sh, params));
+    });
+    if spawned.is_err() {
+        return None;
+    }
+    match rx.recv_timeout(BODY_WAIT) {
+        Ok(Ok(v)) if v["gone"] != true => Some(v),
+        _ => None,
     }
 }
 
@@ -373,8 +386,13 @@ fn without_own(list: &str, own: &[String]) -> String {
 
 /// A server's attachment name made safe as the last component of a handle.
 fn safe_name(name: &str) -> String {
-    let cleaned: String = name.chars().map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':') { '_' } else { c }).take(200).collect();
-    let cleaned = cleaned.trim().to_string();
+    let mapped: String = name.chars().map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':') { '_' } else { c }).collect();
+    // At most 200 bytes, cut on a character boundary: file systems count bytes (255 at most).
+    let mut end = mapped.len().min(200);
+    while !mapped.is_char_boundary(end) {
+        end -= 1;
+    }
+    let cleaned = mapped[..end].trim().to_string();
     if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
         "attachment".into()
     } else {
@@ -384,8 +402,11 @@ fn safe_name(name: &str) -> String {
 
 /// `mobile.compose.prepare {accountId, mode: "new"|"reply"|"replyAll"|"forward", folder?, uid?,
 /// originalLabel?, dateLabel?}` -> `{to, cc, subject, quote, quoteText, inReplyTo, references,
-/// attachments: [{handle, name, size, mime}], pending: [{section, filename, mime, size}]}`.
-/// `quote` is core's quoted HTML, `quoteText` the same as plain text for a text body. Forward
+/// quotePending, attachments: [{handle, name, size, mime}], pending: [{section, filename, mime,
+/// size}]}`. Answered from mobile.db (sync keeps Cc, Reply-To and References in `thread_json`);
+/// no sign-in on the tap. `quote` is core's quoted HTML, `quoteText` the same as plain text for a
+/// text body. A body not cached is fetched for at most 3 s; past that `quotePending` is true and
+/// the quote is empty (prepare again once the body is in the cache). Forward
 /// copies each original attachment already in the attachment cache into `<cache>/out`;
 /// `pending` lists the ones not downloaded yet (fetch them, then prepare again).
 pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError> {
@@ -395,8 +416,8 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
     let mode = match p.mode.as_str() {
         "new" => {
             return Ok(json!({
-                "to": "", "cc": "", "subject": "", "quote": "", "quoteText": "", "inReplyTo": "", "references": "",
-                "attachments": [], "pending": [],
+                "to": "", "cc": "", "subject": "", "quote": "", "quoteText": "", "quotePending": false, "inReplyTo": "",
+                "references": "", "attachments": [], "pending": [],
             }))
         }
         m @ ("reply" | "replyAll" | "forward") => m,
@@ -409,35 +430,31 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
     let row = shared
         .read(|c| {
             c.query_row(
-                "SELECT m.subject, m.from_name, m.from_address, m.message_id, m.to_json, f.uid_validity
-                 FROM messages m JOIN folders f ON f.account_id = m.account_id AND f.path = m.folder
-                 WHERE m.account_id = ?1 AND m.folder = ?2 AND m.uid = ?3",
+                "SELECT subject, from_name, from_address, message_id, to_json, thread_json
+                 FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
                 (&p.account_id, &folder, uid as i64),
                 |r| {
-                    Ok((
-                        Stored { subject: r.get(0)?, from_name: r.get(1)?, from_address: r.get(2)?, message_id: r.get(3)?, to_json: r.get(4)? },
-                        r.get::<_, Option<i64>>(5)?,
-                    ))
+                    Ok(Stored {
+                        subject: r.get(0)?,
+                        from_name: r.get(1)?,
+                        from_address: r.get(2)?,
+                        message_id: r.get(3)?,
+                        to_json: r.get(4)?,
+                        thread_json: r.get(5)?,
+                    })
                 },
             )
             .optional()
         })
         .map_err(internal)?;
-    let Some((stored, validity)) = row else {
+    let Some(stored) = row else {
         return Err(RpcError::Invalid("unknown message".into()));
     };
-    // The body (cached, or fetched now). Offline, a reply still gets its addresses.
-    let body = crate::body::message_body(engine, json!({ "accountId": p.account_id, "folder": folder, "uid": uid })).unwrap_or(Value::Null);
-    // Cc, Reply-To and References are not stored: ask the server, and do without when it does
-    // not answer.
-    let fresh = validity.and_then(|v| match backend::open(shared, &p.account_id) {
-        Ok(mut b) => match b.headers(&FolderRow::new(&folder, Some(v)), &[uid]) {
-            Ok(mut h) => h.pop(),
-            Err(_) => None,
-        },
-        Err(_) => None,
-    });
-    let header = original_header(&stored, fresh.as_ref());
+    // Addresses and threading come from mobile.db; only an uncached body waits, and briefly.
+    let body = body_within(shared, &p.account_id, &folder, uid);
+    let quote_pending = body.is_none();
+    let body = body.unwrap_or(Value::Null);
+    let header = original_header(&stored);
     let date = p.date_label.unwrap_or_else(|| header["date"].as_str().unwrap_or("").to_string());
     let label = p.original_label.unwrap_or_else(|| "Original message".into());
     let html = body["html"].as_str().map(String::from);
@@ -500,7 +517,8 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
         "cc": without_own(&str_of("cc"), &own),
         "subject": str_of("subject"),
         "quote": str_of("quotedHtml"),
-        "quoteText": quote_text(&label, &header, &date, &quote_body),
+        "quoteText": if quote_pending { String::new() } else { quote_text(&label, &header, &date, &quote_body) },
+        "quotePending": quote_pending,
         "inReplyTo": str_of("inReplyTo"),
         "references": str_of("references"),
         "attachments": attachments,
@@ -660,5 +678,8 @@ mod tests {
         assert_eq!(safe_name(".."), "attachment");
         assert_eq!(safe_name("a:b\\c\0d.pdf"), "a_b_c_d.pdf");
         assert_eq!(safe_name("  "), "attachment");
+        let long = "ж".repeat(150) + ".pdf";
+        let cut = safe_name(&long);
+        assert!(cut.len() <= 200 && cut.chars().all(|c| c == 'ж'), "{} bytes", cut.len());
     }
 }

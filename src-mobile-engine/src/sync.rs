@@ -632,17 +632,19 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
     let mut st = c.prepare_cached(
         "INSERT INTO messages
            (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged,
-            has_attachments, message_id, to_json, size, list_gen)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '', ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            has_attachments, message_id, to_json, size, list_gen, thread_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '', ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT (account_id, folder, uid) DO UPDATE SET
            subject = excluded.subject, from_name = excluded.from_name, from_address = excluded.from_address,
            date_ms = excluded.date_ms, seen = excluded.seen, flagged = excluded.flagged,
            has_attachments = excluded.has_attachments, message_id = excluded.message_id,
-           to_json = excluded.to_json, size = excluded.size, list_gen = excluded.list_gen",
+           to_json = excluded.to_json, size = excluded.size, list_gen = excluded.list_gen,
+           thread_json = excluded.thread_json",
     )?;
     let mut n = 0;
     for h in headers {
         let to: Vec<Value> = h.to.iter().map(|a| json!({ "name": a.name, "address": a.address })).collect();
+        let thread = thread_json(h);
         n += st.execute((
             account,
             folder,
@@ -658,9 +660,25 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
             Value::Array(to).to_string(),
             h.size.unwrap_or(0) as i64,
             gen,
+            thread,
         ))?;
     }
     Ok(n)
+}
+
+/// What a reply needs beyond the list row (`messages.thread_json`): `{cc, replyTo: [{name,
+/// address}], references: [id], date}`, so preparing a reply needs no server.
+fn thread_json(h: &Header) -> String {
+    let list = |l: &[mailvault_core::imap::EmailAddress]| -> Vec<Value> {
+        l.iter().map(|a| json!({ "name": a.name, "address": a.address })).collect()
+    };
+    json!({
+        "cc": list(&h.cc),
+        "replyTo": h.reply_to.iter().map(|a| json!({ "name": a.name, "address": a.address })).collect::<Vec<_>>(),
+        "references": h.references.clone().unwrap_or_default(),
+        "date": h.date.clone().or_else(|| h.message_date.clone()),
+    })
+    .to_string()
 }
 
 /// When the message arrived (INTERNALDATE, which the window is judged by too), else its `Date:`.

@@ -250,6 +250,24 @@ fn columns(c: &Connection) -> Vec<(String, String, String, bool, Option<String>)
     out
 }
 
+/// A v3 file from before `messages.thread_json` joined the v3 step gains the column on open and
+/// keeps its rows.
+#[test]
+fn an_early_v3_file_gains_thread_json() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("mobile.db");
+    drop(open_seeded(tmp.path(), 3));
+    {
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch("ALTER TABLE messages DROP COLUMN thread_json;").unwrap();
+    }
+    let e = open(tmp.path()).unwrap();
+    assert_eq!(page(&e, Value::Null, 10)["total"], 3);
+    let c = Connection::open(&path).unwrap();
+    let thread: String = c.query_row("SELECT thread_json FROM messages LIMIT 1", [], |r| r.get(0)).unwrap();
+    assert_eq!(thread, "{}");
+}
+
 #[test]
 fn a_v2_file_migrates_to_v3_and_keeps_its_accounts() {
     let tmp = tempfile::tempdir().unwrap();

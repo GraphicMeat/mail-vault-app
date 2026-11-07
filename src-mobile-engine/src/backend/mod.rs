@@ -137,6 +137,16 @@ pub(crate) struct SendOutcome {
     pub(crate) server_saved_sent: bool,
 }
 
+/// A send that did not go through. `may_have_sent`: the failure came after the message could have
+/// been accepted (a broken connection or timeout during or after the upload), so it must never be
+/// sent again on its own. `terminal`: the server's answer was final (a permanent refusal, a
+/// sign-in it refused), so a retry cannot help. Neither: nothing reached the server, try again.
+pub(crate) struct SendFail {
+    pub(crate) fail: Fail,
+    pub(crate) may_have_sent: bool,
+    pub(crate) terminal: bool,
+}
+
 /// What ended a [`Backend::wait_for_change`] (Task 11).
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -203,9 +213,9 @@ pub(crate) trait Backend: Send {
         before_wire: BeforeWire<'_>,
     ) -> Result<ApplyOutcome, Fail>;
     /// Builds `email` (core's `smtp::build_mime`, under `email.message_id`) and submits it.
-    /// `Ok` means the server accepted it; nothing is filed in Sent yet. A failure's text is core's
-    /// (scrubbed), which `smtp::is_terminal_send_error` reads.
-    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, Fail>;
+    /// `Ok` means the server accepted it; nothing is filed in Sent yet. A failure says whether
+    /// the message may have gone out anyway ([`SendFail`]); its text is scrubbed, for the log.
+    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail>;
     /// Files the bytes of an accepted send in the account's Sent folder, read, unless the server
     /// does that itself (`server_saved_sent`, Gmail over SMTP). Called after the outbox row is
     /// committed `sent`, so a failure here never sends the message again.

@@ -320,6 +320,33 @@ fn a_send_interrupted_after_accept_is_uncertain_not_resent() {
     assert!(text(&sent[1]).contains(&first_id), "a retry reuses the Message-ID {first_id}");
 }
 
+/// The phone loses the network after the server took the message but before its reply came:
+/// the row is `uncertain` and is never sent again on its own.
+#[test]
+fn a_send_cut_off_after_data_is_uncertain_not_resent() {
+    let server = MockImap::start(scenario().smtp_drop_after_data("CUT-OFF-AFTER-DATA"));
+    let f = setup(&server);
+    let from = f.events.len();
+    let id = f.send(json!({ "to": "rcpt@example.test", "subject": "Cut", "text": "CUT-OFF-AFTER-DATA" })).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let r = f.events.send_result(from, &id, "uncertain");
+    assert!(r["reason"].is_string(), "{r}");
+    assert_eq!(server.sent_messages().len(), 1, "the server took it once");
+    // Well past the test backoff (50 ms doubling to 200 ms): nothing is sent again.
+    std::thread::sleep(Duration::from_secs(3));
+    assert_eq!(server.sent_messages().len(), 1, "an uncertain send is never repeated on its own");
+    assert_eq!(f.row(&id).unwrap().0, "uncertain");
+    let listed = f.outbox();
+    assert_eq!(listed[0]["state"], "uncertain", "{listed:?}");
+    assert!(
+        !f.events.all().iter().any(|(n, v)| n == "mobile.send.result" && v["id"] == id.as_str() && v["outcome"] != "uncertain"),
+        "{:?}",
+        f.events.all()
+    );
+}
+
 #[test]
 fn over_25_mb_of_attachments_is_too_large_before_any_network() {
     let server = MockImap::start(scenario());
@@ -403,6 +430,22 @@ fn reply_prepare_quotes_and_threads() {
     assert_eq!(fwd["inReplyTo"], "");
     assert!(fwd["quote"].as_str().unwrap().contains("Original body line 1."), "{fwd}");
 
+    assert_eq!(r["quotePending"], false);
+
+    // Once the body is cached, a reply needs no server at all: everything else is in mobile.db.
+    let connections = server.connection_count();
+    let again = f.prepare("replyAll", 1);
+    assert_eq!(server.connection_count(), connections, "prepare signed in to the server");
+    assert_eq!(again["cc"], "carol@example.com", "{again}");
+    assert_eq!(again["references"], "<root@example.com> <orig-1@example.com>", "{again}");
+    assert!(again["quoteText"].as_str().unwrap().contains("> Original body line 1."), "{again}");
+    server.reset_scenario(scenario().fault(Trigger::OnConnect, Action::DropConnection));
+    let offline = f.prepare("reply", 1);
+    assert_eq!(offline["to"], "alice@example.com", "{offline}");
+    assert_eq!(offline["inReplyTo"], "<orig-1@example.com>", "{offline}");
+    assert_eq!(offline["quotePending"], false, "{offline}");
+    server.reset_scenario(scenario());
+
     let new = f.engine.rpc("mobile.compose.prepare", json!({ "accountId": f.account, "mode": "new" })).unwrap();
     assert_eq!((new["to"].clone(), new["subject"].clone(), new["quote"].clone()), (json!(""), json!(""), json!("")));
 }
@@ -414,7 +457,7 @@ fn a_terminal_smtp_refusal_fails_without_retrying() {
     let from = f.events.len();
     let id = f.send(json!({ "to": "nobody-reject@example.test", "subject": "Refused" })).unwrap()["id"].as_str().unwrap().to_string();
     let failed = f.events.send_result(from, &id, "failed");
-    assert!(failed["reason"].is_string(), "{failed}");
+    assert_eq!(failed["reason"], "REFUSED", "{failed}");
     std::thread::sleep(Duration::from_secs(2));
     let rcpts = server.smtp_commands().into_iter().filter(|c| c.to_ascii_uppercase().starts_with("RCPT")).count();
     assert_eq!(rcpts, 1, "a refused send is not retried: {:?}", server.smtp_commands());
@@ -422,7 +465,7 @@ fn a_terminal_smtp_refusal_fails_without_retrying() {
     let listed = f.outbox();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0]["state"], "failed");
-    assert!(listed[0]["lastError"].is_string());
+    assert_eq!(listed[0]["lastError"], "REFUSED");
     assert!(!f.events.all().iter().any(|(n, v)| n == "mobile.send.result" && v["id"] == id.as_str() && v["outcome"] == "queued"));
     // Discard removes it.
     f.engine.rpc("mobile.outbox.discard", json!({ "id": id })).unwrap();

@@ -129,12 +129,19 @@ fn handle_conn(
                 }
                 reply(&mut out, "354 End data with <CR><LF>.<CR><LF>")?;
                 let message = read_message(&mut reader)?;
+                let drop_reply = config
+                    .drop_after_data
+                    .as_deref()
+                    .is_some_and(|needle| !needle.is_empty() && message.windows(needle.len()).any(|w| w == needle.as_bytes()));
                 let n = {
                     let mut accepted = recorder.accepted.lock().unwrap();
                     accepted.push(message);
                     accepted.len()
                 };
                 recipients.clear();
+                if drop_reply {
+                    return Ok(());
+                }
                 reply(&mut out, &format!("250 2.0.0 Ok: queued as MOCK{}", n))?;
             }
             "RSET" => {
@@ -290,7 +297,7 @@ mod tests {
 
     #[test]
     fn refuses_matches_the_needle_case_insensitively() {
-        let config = SmtpScenario { refuse_recipient: Some("@Refused.test".into()) };
+        let config = SmtpScenario { refuse_recipient: Some("@Refused.test".into()), ..Default::default() };
         assert!(refuses(&config, "bounce@refused.TEST"));
         assert!(!refuses(&config, "partner@example.com"));
         assert!(!refuses(&SmtpScenario::default(), "bounce@refused.test"));

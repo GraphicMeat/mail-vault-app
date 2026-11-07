@@ -156,8 +156,12 @@ fn cap(shared: &Shared) -> u64 {
 /// `INTERNAL` error whose message is the accounts error code (`TIMEOUT`, `HOST_UNREACHABLE`, ...);
 /// the detail goes to the log only.
 pub(crate) fn message_body(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    body_for(engine.shared(), params)
+}
+
+/// [`message_body`] on the shared state, for a caller on another thread (compose's bounded wait).
+pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError> {
     let p: BodyParams = parse(params)?;
-    let shared = engine.shared();
     if let Some(hit) = cached(shared, &p).map_err(internal)? {
         // Skipped when a sync write holds the writer: a stale stamp only makes the row an
         // earlier eviction candidate.

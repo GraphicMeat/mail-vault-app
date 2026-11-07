@@ -10,9 +10,12 @@
 //! may have gone out: it becomes `uncertain` and is never sent again on its own (the user's
 //! Retry sends it again under the same Message-ID, Discard drops it).
 //!
-//! A refusal that no retry can change (`smtp::is_terminal_send_error`, or a permanent 5xx SMTP
-//! reply) makes the row `failed`; anything else (the network, a timeout, a sign-in) puts it back
-//! to `queued`, and the account backs off: 5 s, doubling, at most 300 s, like the action replay.
+//! The backend says where a failure fell ([`SendFail`], from core's `send_built_phased`): one
+//! that may have followed an acceptance (the connection broke or timed out during or after the
+//! upload) makes the row `uncertain`, never resent on its own, exactly like a crash; a refusal no
+//! retry can change (a permanent 5xx, `smtp::is_terminal_send_error`) makes it `failed`; anything
+//! that proves nothing was sent (connect, TLS, sign-in, MAIL/RCPT/DATA, a 4xx) puts it back to
+//! `queued`, and the account backs off: 5 s, doubling, at most 300 s, like the action replay.
 //! `lastError` and an event's `reason` are codes, never core's text.
 //!
 //! Picked files: `<cache>/out/<dir>/` is deleted once no draft and no unsent outbox row names it
@@ -20,7 +23,7 @@
 //! at engine open, the dirs older than a day that nothing names (a pick the page never saved).
 
 use crate::accounts::{load_account, Code};
-use crate::backend::{self, Backend};
+use crate::backend::{self, Backend, SendFail};
 use crate::compose::{self, Fields};
 use crate::db::{lock, Engine, Shared};
 use crate::events::SEND_RESULT;
@@ -28,7 +31,7 @@ use crate::outgoing::resolve_outgoing;
 use crate::rpc::{parse, RpcError};
 use crate::sync::{self, Fail};
 use base64::Engine as _;
-use mailvault_core::smtp::{self, OutgoingAttachment};
+use mailvault_core::smtp::OutgoingAttachment;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -466,12 +469,6 @@ fn read_attachments(cache_dir: &Path, fields: &Fields) -> Result<Vec<OutgoingAtt
     Ok(out)
 }
 
-/// Whether no retry can change the failure: core's terminal send errors, and a permanent (5xx)
-/// SMTP reply, which lettre renders as `permanent error (5xx)`.
-fn is_terminal(why: &str) -> bool {
-    smtp::is_terminal_send_error(why) || why.contains("permanent error (")
-}
-
 /// One attempt at row `id`. `false` when the account must back off (the row is `queued` again).
 fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, account: &str, id: &str) -> bool {
     let row: Option<(String, Option<String>)> = shared
@@ -514,22 +511,31 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
             }
             true
         }
-        Err(Fail::Code(code, why)) => {
-            shared.log(&format!("[outbox] {account} {id}: {} {why}", code.as_str()));
-            if is_terminal(&why) {
+        Err(SendFail { fail, may_have_sent, terminal }) => {
+            let code = match &fail {
+                Fail::Code(code, why) => {
+                    shared.log(&format!("[outbox] {account} {id}: {} {why}", code.as_str()));
+                    *code
+                }
+                Fail::Gone | Fail::Closing => Code::HostUnreachable,
+            };
+            if may_have_sent {
+                // The server may have it: never again on its own (Retry or Discard in the UI).
+                if transition(shared, id, "sending", "uncertain", Some(code.as_str()), true) {
+                    emit_result(shared, id, account, "uncertain", Some(code.as_str()));
+                }
+                false
+            } else if terminal {
                 let reason = if code == Code::AuthFailed { "AUTH_FAILED" } else { "REFUSED" };
                 fail_row(shared, account, id, "sending", reason);
                 true
             } else {
+                // Proven not sent: back to the queue, and the account backs off.
                 if transition(shared, id, "sending", "queued", Some(code.as_str()), true) {
                     emit_result(shared, id, account, "queued", Some(code.as_str()));
                 }
                 false
             }
-        }
-        Err(Fail::Gone) | Err(Fail::Closing) => {
-            transition(shared, id, "sending", "queued", None, false);
-            true
         }
     }
 }
@@ -544,14 +550,6 @@ mod tests {
         for bad in ["out/a", "out//a", "att/x/a", "out/x/a/b", "out/../a", ""] {
             assert_eq!(dir_of(bad), None, "{bad}");
         }
-    }
-
-    #[test]
-    fn permanent_smtp_replies_are_terminal() {
-        assert!(is_terminal("SMTP connection to h:25 failed: permanent error (550): 5.7.1 <x@y>: Recipient address rejected"));
-        assert!(is_terminal("Authentication failed for h:587 — check your email and password."));
-        assert!(!is_terminal("SMTP connection to h:25 failed: transient error (451): try later"));
-        assert!(!is_terminal("Connection to h:587 timed out."));
     }
 
     #[test]

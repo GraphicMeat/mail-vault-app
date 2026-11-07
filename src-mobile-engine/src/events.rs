@@ -28,7 +28,8 @@ pub const ATTACHMENT_FAILED: &str = "mobile.attachment.failed";
 
 /// `{id, accountId, outcome: "sent"|"queued"|"failed"|"uncertain", reason?}`: one attempt at an
 /// outbox row ended. `reason` is a code: an accounts error code for `queued` (it waits and tries
-/// again), `REFUSED`, `AUTH_FAILED`, `ATTACHMENT_MISSING` or `INVALID` for `failed`.
+/// again), `REFUSED`, `AUTH_FAILED`, `ATTACHMENT_MISSING` or `INVALID` for `failed`, and for
+/// `uncertain` (the connection broke after the server may have taken it) the accounts error code.
 pub const SEND_RESULT: &str = "mobile.send.result";
 
 /// Every event name the engine emits: the one list `events.json` must match (a test checks it) and

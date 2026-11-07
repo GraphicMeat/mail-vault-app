@@ -1222,6 +1222,161 @@ pub async fn send_built(
     Ok(SendResult { message_id, raw_rfc2822, server_saved_sent: false })
 }
 
+/// Which side of the point of no return a send failed on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SendPhase {
+    /// The server never had the whole message: the connection, TLS, the
+    /// sign-in, MAIL/RCPT/DATA, or an explicit refusal of the message. A
+    /// retry cannot send it twice.
+    NotSent,
+    /// The message may have been accepted: the connection broke or timed out
+    /// after the payload started, or the reply to it never came (Graph's
+    /// `MAY_HAVE_GONE_OUT`). Never sent again on its own.
+    MayHaveSent,
+}
+
+/// A failed [`send_built_phased`]: where it failed, whether the server gave a
+/// permanent (5xx) answer, and the same text `send_built` would give.
+#[derive(Debug, Clone)]
+pub struct PhasedSendError {
+    pub phase: SendPhase,
+    pub permanent: bool,
+    pub message: String,
+}
+
+impl PhasedSendError {
+    fn not_sent(message: String) -> Self {
+        PhasedSendError { phase: SendPhase::NotSent, permanent: false, message }
+    }
+}
+
+/// [`send_built`], with the failure placed before or after the point of no
+/// return. Over SMTP the session is driven step by step (connect, TLS,
+/// AUTH, MAIL, RCPT, DATA, then the payload) so a failure before the payload
+/// is `NotSent`, and an I/O error or timeout during the payload or while
+/// waiting for its reply is `MayHaveSent`; a 4xx/5xx reply to the payload is
+/// a refusal (`NotSent`). Graph and JMAP go through `send_built`, and only
+/// their "may have gone out" text is `MayHaveSent`. Additive: `send_built`
+/// and every desktop caller are unchanged.
+pub async fn send_built_phased(
+    account: &ImapConfig,
+    email: &OutgoingEmail,
+    built: BuiltMime,
+) -> Result<SendResult, PhasedSendError> {
+    if account.uses_graph() || account.uses_jmap() {
+        return send_built(account, email, built).await.map_err(|message| PhasedSendError {
+            phase: if message.contains(MAY_HAVE_GONE_OUT) { SendPhase::MayHaveSent } else { SendPhase::NotSent },
+            permanent: false,
+            message,
+        });
+    }
+    use lettre::transport::smtp::client::AsyncSmtpConnection;
+    use lettre::transport::smtp::commands::{Data, Mail, Quit, Rcpt};
+    use lettre::transport::smtp::extension::{ClientId, Extension, MailBodyParameter, MailParameter};
+
+    let smtp_host = account
+        .smtp_host
+        .as_deref()
+        .ok_or_else(|| PhasedSendError::not_sent("SMTP host not configured".to_string()))?;
+    let smtp_port = account.smtp_port.unwrap_or(587);
+    let from_addr = account.from_address().to_string();
+    let friendly = |e: &lettre::transport::smtp::Error| friendly_smtp_error(smtp_host, smtp_port, &from_addr, &e.to_string());
+    let attachment_bytes: usize = email.attachments.as_ref().map(|v| v.iter().map(|a| a.content.len()).sum()).unwrap_or(0);
+    let io_timeout = Duration::from_secs(60 + (attachment_bytes / 50_000) as u64).min(Duration::from_secs(600));
+    let credentials = if account.is_oauth2() {
+        let token = account
+            .access_token
+            .as_deref()
+            .ok_or_else(|| PhasedSendError::not_sent("OAuth2 access token missing for SMTP".to_string()))?;
+        (Credentials::new(account.email.clone(), token.to_string()), vec![Mechanism::Xoauth2])
+    } else {
+        let password = account
+            .password
+            .as_deref()
+            .ok_or_else(|| PhasedSendError::not_sent("Password missing for SMTP".to_string()))?;
+        (
+            Credentials::new(account.email.clone(), password.to_string()),
+            lettre::transport::smtp::authentication::DEFAULT_MECHANISMS.to_vec(),
+        )
+    };
+    let hello = ClientId::default();
+    let BuiltMime { message, raw_rfc2822 } = built;
+    let envelope = message.envelope().clone();
+    drop(message);
+
+    let conn_event = smtp_event(account, smtp_host, smtp_port, "send", raw_rfc2822.len() as u64);
+    let out: Result<SendResult, PhasedSendError> = async {
+        // Everything up to and including DATA: a failure here sent nothing.
+        let before = |e: lettre::transport::smtp::Error| PhasedSendError {
+            phase: SendPhase::NotSent,
+            permanent: e.is_permanent(),
+            message: friendly(&e),
+        };
+        let plaintext = plaintext_requested() && is_loopback_host(smtp_host);
+        let mut conn = if plaintext {
+            warn!("[smtp] MAILVAULT_SMTP_PLAINTEXT=1 — TLS DISABLED for loopback {}:{}", smtp_host, smtp_port);
+            AsyncSmtpConnection::connect_tokio1((smtp_host, smtp_port), Some(io_timeout), &hello, None, None).await.map_err(before)?
+        } else {
+            let mut tls_builder = TlsParameters::builder(smtp_host.to_string());
+            if is_loopback_host(smtp_host) {
+                tls_builder = tls_builder.dangerous_accept_invalid_certs(true);
+            }
+            let tls = tls_builder.build_rustls().map_err(|e| PhasedSendError::not_sent(format!("TLS params error: {}", e)))?;
+            if use_implicit_tls(account.smtp_secure, smtp_port) {
+                AsyncSmtpConnection::connect_tokio1((smtp_host, smtp_port), Some(io_timeout), &hello, Some(tls), None)
+                    .await
+                    .map_err(before)?
+            } else {
+                let mut c = AsyncSmtpConnection::connect_tokio1((smtp_host, smtp_port), Some(io_timeout), &hello, None, None)
+                    .await
+                    .map_err(before)?;
+                c.starttls(tls, &hello).await.map_err(before)?;
+                c
+            }
+        };
+        conn.auth(&credentials.1, &credentials.0).await.map_err(before)?;
+        let mut options = Vec::new();
+        let non_ascii = envelope.from().is_some_and(|a| !AsRef::<str>::as_ref(a).is_ascii())
+            || envelope.to().iter().any(|a| !AsRef::<str>::as_ref(a).is_ascii());
+        if non_ascii {
+            if !conn.server_info().supports_feature(Extension::SmtpUtfEight) {
+                return Err(PhasedSendError::not_sent(format!(
+                    "SMTP server {}:{} does not accept non-ASCII addresses (no SMTPUTF8).",
+                    smtp_host, smtp_port
+                )));
+            }
+            options.push(MailParameter::SmtpUtfEight);
+        }
+        if !raw_rfc2822.is_ascii() {
+            if !conn.server_info().supports_feature(Extension::EightBitMime) {
+                return Err(PhasedSendError::not_sent(format!(
+                    "SMTP server {}:{} does not accept 8-bit messages (no 8BITMIME).",
+                    smtp_host, smtp_port
+                )));
+            }
+            options.push(MailParameter::Body(MailBodyParameter::EightBitMime));
+        }
+        conn.command(Mail::new(envelope.from().cloned(), options)).await.map_err(before)?;
+        for to in envelope.to() {
+            conn.command(Rcpt::new(to.clone(), vec![])).await.map_err(before)?;
+        }
+        conn.command(Data).await.map_err(before)?;
+        // The payload: from here a broken connection may follow an acceptance.
+        let response = conn.message(&raw_rfc2822).await.map_err(|e| PhasedSendError {
+            phase: if e.is_transient() || e.is_permanent() { SendPhase::NotSent } else { SendPhase::MayHaveSent },
+            permanent: e.is_permanent(),
+            message: friendly(&e),
+        })?;
+        let _ = conn.command(Quit).await;
+        let message_id = response.message().collect::<Vec<_>>().join("");
+        info!("Email sent via SMTP (phased): {}", message_id);
+        Ok(SendResult { message_id, raw_rfc2822, server_saved_sent: false })
+    }
+    .await;
+    settle(conn_event, &out.as_ref().map_err(|e| e.message.clone()));
+    out
+}
+
 /// Convenience: build + send in one call. Preserved for callers that don't
 /// need Drafts staging.
 pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<SendResult, String> {

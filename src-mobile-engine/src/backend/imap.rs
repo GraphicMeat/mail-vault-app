@@ -1,7 +1,7 @@
 //! [`Backend`] over IMAP, through mailvault-core. One signed-in session per backend; every method
 //! runs core's futures on the calling thread through [`crate::net::block_on`].
 
-use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendOutcome, StopFlag, Window};
+use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Window};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -349,11 +349,23 @@ impl Backend for ImapBackend {
         self.step(async |session| apply_in(session, &caps, folder, kind, uids, target, before_wire).await)
     }
 
-    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, Fail> {
+    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {
         let config = &self.config;
-        let built = smtp::build_mime(config, email).map_err(|e| scrub(&self.secrets, Fail::Code(Code::Invalid, e)))?;
-        let sent = block_on(smtp::send_built(config, email, built)).map_err(|e| scrub(&self.secrets, Fail::from(e)))?;
-        Ok(SendOutcome { raw: sent.raw_rfc2822, server_saved_sent: sent.server_saved_sent || self.gmail })
+        let built = smtp::build_mime(config, email).map_err(|e| SendFail {
+            fail: scrub(&self.secrets, Fail::Code(Code::Invalid, e)),
+            may_have_sent: false,
+            terminal: true,
+        })?;
+        // Phased: core says whether a failure came before or after the point of no return, which
+        // its message text alone cannot (a connect timeout and a lost final reply read the same).
+        match block_on(smtp::send_built_phased(config, email, built)) {
+            Ok(sent) => Ok(SendOutcome { raw: sent.raw_rfc2822, server_saved_sent: sent.server_saved_sent || self.gmail }),
+            Err(e) => Err(SendFail {
+                terminal: e.permanent || smtp::is_terminal_send_error(&e.message),
+                may_have_sent: e.phase == smtp::SendPhase::MayHaveSent,
+                fail: scrub(&self.secrets, Fail::from(e.message)),
+            }),
+        }
     }
 
     fn file_sent(&mut self, sent: &SendOutcome) -> Result<(), Fail> {

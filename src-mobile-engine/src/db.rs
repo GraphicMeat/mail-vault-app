@@ -122,6 +122,7 @@ ALTER TABLE accounts ADD COLUMN smtp_port INTEGER;
 ALTER TABLE accounts ADD COLUMN smtp_security TEXT;
 ALTER TABLE accounts ADD COLUMN jmap_url TEXT;
 ALTER TABLE accounts ADD COLUMN needs_auth INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE messages ADD COLUMN thread_json TEXT NOT NULL DEFAULT '{}';
 CREATE TABLE remote_ids (
   account_id TEXT NOT NULL,
   folder     TEXT NOT NULL,
@@ -346,6 +347,8 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;
+    } else {
+        repair_early_v3(&w)?;
     }
     // A header can be fine while a page is not: touch the table and the index.
     let _: i64 = w.query_row("SELECT count(*) FROM messages", [], |r| r.get(0))?;
@@ -359,6 +362,16 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         readers.push(read_conn(path)?);
     }
     Ok(Db { path: path.to_path_buf(), writer: w, readers })
+}
+
+/// A v3 file written before `messages.thread_json` joined the v3 step (unreleased builds only)
+/// gains the column; nothing else changes. The next sync fills it.
+fn repair_early_v3(w: &Connection) -> rusqlite::Result<()> {
+    let has: bool = w.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('messages') WHERE name = 'thread_json')", [], |r| r.get(0))?;
+    if !has {
+        w.execute_batch("ALTER TABLE messages ADD COLUMN thread_json TEXT NOT NULL DEFAULT '{}';")?;
+    }
+    Ok(())
 }
 
 fn remove_db_files(path: &Path) -> Result<(), EngineError> {

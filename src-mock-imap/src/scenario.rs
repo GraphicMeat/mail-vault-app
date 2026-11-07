@@ -200,6 +200,12 @@ pub struct SmtpScenario {
     /// serves a whole e2e run: a per-run switch cannot be flipped by a single
     /// spec, but the address a spec types is its own.
     pub refuse_recipient: Option<String>,
+    /// A message whose bytes contain this needle is recorded as accepted and
+    /// the connection is then closed with no reply to DATA: the server took
+    /// it, the client never heard (a phone that lost its network after the
+    /// upload). `None` answers every message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drop_after_data: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -319,6 +325,13 @@ impl Scenario {
     /// Refuse any SMTP recipient whose address contains `needle`.
     pub fn smtp_refuse(mut self, needle: &str) -> Self {
         self.smtp.refuse_recipient = Some(needle.to_string());
+        self
+    }
+
+    /// Accept any SMTP message containing `needle`, then hang up without the
+    /// final reply.
+    pub fn smtp_drop_after_data(mut self, needle: &str) -> Self {
+        self.smtp.drop_after_data = Some(needle.to_string());
         self
     }
 
