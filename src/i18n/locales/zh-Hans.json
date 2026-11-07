@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "要删除草稿 {{subject}} 吗？此操作无法撤销。",
   "mobile.drafts.noRecipients": "没有收件人",
   "mobile.drafts.loadFailed": "无法打开此草稿。",
-  "mobile.drafts.deleteFailed": "无法删除草稿。请重试。"
+  "mobile.drafts.deleteFailed": "无法删除草稿。请重试。",
+  "mobile.drafts.loading": "正在加载草稿"
 }

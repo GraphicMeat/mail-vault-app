@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "Supprimer le brouillon {{subject}} ? Cette action est définitive.",
   "mobile.drafts.noRecipients": "Aucun destinataire",
   "mobile.drafts.loadFailed": "Impossible d'ouvrir ce brouillon.",
-  "mobile.drafts.deleteFailed": "Impossible de supprimer le brouillon. Réessayez."
+  "mobile.drafts.deleteFailed": "Impossible de supprimer le brouillon. Réessayez.",
+  "mobile.drafts.loading": "Chargement du brouillon"
 }

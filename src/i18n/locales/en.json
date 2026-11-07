@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "Delete the draft {{subject}}? This can't be undone.",
   "mobile.drafts.noRecipients": "No recipients",
   "mobile.drafts.loadFailed": "Couldn't open this draft.",
-  "mobile.drafts.deleteFailed": "Couldn't delete the draft. Try again."
+  "mobile.drafts.deleteFailed": "Couldn't delete the draft. Try again.",
+  "mobile.drafts.loading": "Loading the draft"
 }

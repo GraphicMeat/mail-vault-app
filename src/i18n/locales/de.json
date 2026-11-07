@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "Entwurf {{subject}} löschen? Das lässt sich nicht rückgängig machen.",
   "mobile.drafts.noRecipients": "Keine Empfänger",
   "mobile.drafts.loadFailed": "Dieser Entwurf konnte nicht geöffnet werden.",
-  "mobile.drafts.deleteFailed": "Der Entwurf konnte nicht gelöscht werden. Erneut versuchen."
+  "mobile.drafts.deleteFailed": "Der Entwurf konnte nicht gelöscht werden. Erneut versuchen.",
+  "mobile.drafts.loading": "Entwurf wird geladen"
 }

@@ -52,7 +52,7 @@ vi.mock('../transport.js', () => ({
       case 'mobile.drafts.get':
         return engine.draft;
       case 'mobile.attachment.fetch':
-        return { jobId: 41 };
+        return { jobId: 40 + Number(params.section) };
       case 'mobile.attachment.cancel':
         return { cancelled: true };
       case 'mobile.outbox.list':
@@ -185,7 +185,7 @@ describe('Compose', () => {
     await act(async () => { vi.advanceTimersByTime(1); });
     await flush();
     expect(callsOf('mobile.drafts.save')).toEqual([{
-      accountId: 'a1', to: '', cc: '', bcc: '', subject: '', text: 'Hello', inReplyTo: '', references: '', attachments: [],
+      accountId: 'a1', to: '', cc: '', bcc: '', subject: '', text: 'Hello', inReplyTo: '', references: '', attachments: [], mode: 'new',
     }]);
     // The next save replaces the same draft.
     typeInto(body(), 'Hello there');
@@ -215,7 +215,7 @@ describe('Compose', () => {
     fireEvent.click(screen.getByRole('button', { name: t('mobile.compose.saveDraft') }));
     await flush();
     expect(callsOf('mobile.drafts.save')).toEqual([{
-      accountId: 'a1', to: '', cc: '', bcc: '', subject: '', text: 'Draft text', inReplyTo: '', references: '', attachments: [],
+      accountId: 'a1', to: '', cc: '', bcc: '', subject: '', text: 'Draft text', inReplyTo: '', references: '', attachments: [], mode: 'new',
     }]);
     expect(onClose).toHaveBeenCalled();
   });
@@ -309,7 +309,7 @@ describe('Compose, fix round 1', () => {
     expect(sendButton().disabled).toBe(true);
     await act(async () => { vi.advanceTimersByTime(1); });
     await flush();
-    expect(callsOf('mobile.attachment.cancel')).toEqual([{ jobId: 41 }]);
+    expect(callsOf('mobile.attachment.cancel')).toEqual([{ jobId: 42 }]);
     expect(screen.getByText(t('mobile.compose.forwardMissing', { name: 'plan.pdf' }))).toBeTruthy();
     expect(sendButton().disabled).toBe(false);
   });
@@ -330,12 +330,14 @@ describe('Compose, fix round 1', () => {
     const id = 'drf_00000000000000aa';
     engine.draft = {
       id, accountId: 'a1', updatedMs: 1, to: 'bob@example.test', cc: '', bcc: 'carol@example.test', subject: 'Plans',
-      text: 'Half done', inReplyTo: '<m1@example.test>', references: '<m1@example.test>',
+      text: 'Half done', inReplyTo: '<m1@example.test>', references: '<m1@example.test>', mode: 'reply',
       attachments: [{ handle: 'out/0123456789abcdef/a.pdf', name: 'a.pdf', size: 2048, mime: 'application/pdf' }],
     };
     const { onClose } = renderCompose({ draftId: id });
     await flush();
     expect(callsOf('mobile.drafts.get')).toEqual([{ id }]);
+    // A reply draft keeps its title.
+    expect(screen.getByRole('dialog', { name: t('emailActionBar.reply') })).toBeTruthy();
     expect(field(t('compose.subject')).value).toBe('Plans');
     expect(body().value).toBe('Half done');
     expect(screen.getByText('bob@example.test')).toBeTruthy();
@@ -347,9 +349,86 @@ describe('Compose, fix round 1', () => {
     expect(callsOf('mobile.drafts.save')).toEqual([{
       id, accountId: 'a1', to: 'bob@example.test', cc: '', bcc: 'carol@example.test', subject: 'Plans',
       text: 'Half done, now more', inReplyTo: '<m1@example.test>', references: '<m1@example.test>',
-      attachments: [{ handle: 'out/0123456789abcdef/a.pdf' }],
+      attachments: [{ handle: 'out/0123456789abcdef/a.pdf' }], mode: 'reply',
     }]);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('a draft that cannot be loaded is never saved over or deleted', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    engine.draft = null; // the engine answers nothing usable
+    const { onClose } = renderCompose({ draftId: 'drf_00000000000000aa' });
+    await flush();
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.drafts.loadFailed'));
+    expect(body().readOnly).toBe(true);
+    typeInto(body(), 'Typed over');
+    typeInto(toInput(), 'bob@example.test,');
+    expect(body().value).toBe('');
+    expect(sendButton().disabled).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(5000); });
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    await flush();
+    expect(onClose).toHaveBeenCalled();
+    expect(callsOf('mobile.drafts.save')).toEqual([]);
+    expect(callsOf('mobile.drafts.delete')).toEqual([]);
+  });
+
+  it('typing before the draft is loaded changes nothing; the stored draft fills in, then autosave runs', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const id = 'drf_00000000000000aa';
+    let answer;
+    engine.draft = new Promise((r) => { answer = r; });
+    renderCompose({ draftId: id });
+    await flush();
+    expect(body().readOnly).toBe(true);
+    typeInto(body(), 'Early');
+    typeInto(field(t('compose.subject')), 'Early subject');
+    expect(body().value).toBe('');
+    await act(async () => { vi.advanceTimersByTime(5000); });
+    expect(callsOf('mobile.drafts.save')).toEqual([]);
+    await act(async () => {
+      answer({ id, accountId: 'a1', updatedMs: 1, to: 'bob@example.test', cc: '', bcc: '', subject: 'Stored', text: 'Stored body', inReplyTo: '', references: '', mode: 'forward', attachments: [{ handle: 'out/0123456789abcdef/a.pdf', name: 'a.pdf', size: 1, mime: 'application/pdf' }] });
+    });
+    await flush();
+    expect(body().readOnly).toBe(false);
+    expect(body().value).toBe('Stored body');
+    expect(field(t('compose.subject')).value).toBe('Stored');
+    expect(screen.getByRole('dialog', { name: t('emailActionBar.forward') })).toBeTruthy();
+    typeInto(body(), 'Stored body, more');
+    await act(async () => { vi.advanceTimersByTime(1500); });
+    await flush();
+    expect(callsOf('mobile.drafts.save')).toEqual([expect.objectContaining({
+      id, subject: 'Stored', text: 'Stored body, more', mode: 'forward', attachments: [{ handle: 'out/0123456789abcdef/a.pdf' }],
+    })]);
+  });
+
+  it('a forwarded part removed while it downloads is cancelled and stays out after prepare runs again', async () => {
+    const part = { section: '2', filename: 'Q3: plan.pdf', mime: 'application/pdf', size: 10 };
+    const other = { section: '3', filename: 'b.txt', mime: 'text/plain', size: 5 };
+    let prepares = 0;
+    engine.prepare = () => {
+      prepares++;
+      if (prepares === 1) return { ...EMPTY, subject: 'Fwd: Plans', pending: [part, other] };
+      // The engine names the copy after safe_name(filename): not the raw name.
+      return {
+        ...EMPTY, subject: 'Fwd: Plans', pending: [],
+        attachments: [
+          { handle: 'out/aaaaaaaaaaaaaaaa/Q3_ plan.pdf', name: 'Q3_ plan.pdf', size: 10, mime: 'application/pdf', section: '2' },
+          { handle: 'out/bbbbbbbbbbbbbbbb/b.txt', name: 'b.txt', size: 5, mime: 'text/plain', section: '3' },
+        ],
+      };
+    };
+    renderCompose({ mode: 'forward', original: { folder: 'INBOX', uid: 7, dateMs: DATE_MS } });
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.compose.removeAttachment', { name: 'Q3: plan.pdf' }) }));
+    await flush();
+    expect(callsOf('mobile.attachment.cancel')).toEqual([{ jobId: 42 }]);
+    // The other part finishes; prepare runs again and lists both.
+    await act(async () => { emit('mobile.attachment.done', { jobId: 43 }); });
+    await flush();
+    expect(prepares).toBe(2);
+    expect(screen.getByText('b.txt')).toBeTruthy();
+    expect(screen.queryByText('Q3_ plan.pdf')).toBeNull();
   });
 
   it('leaving a reopened draft untouched keeps it', async () => {

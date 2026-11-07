@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "임시 저장 {{subject}}을(를) 삭제할까요? 되돌릴 수 없습니다.",
   "mobile.drafts.noRecipients": "받는 사람 없음",
   "mobile.drafts.loadFailed": "이 임시 저장을 열지 못했습니다.",
-  "mobile.drafts.deleteFailed": "임시 저장을 삭제하지 못했습니다. 다시 시도하세요."
+  "mobile.drafts.deleteFailed": "임시 저장을 삭제하지 못했습니다. 다시 시도하세요.",
+  "mobile.drafts.loading": "임시 저장을 불러오는 중"
 }

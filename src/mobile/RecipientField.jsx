@@ -36,7 +36,7 @@ export function commitText(entries, text, { all = false } = {}) {
   return { entries: done.length ? [...entries, ...done] : entries, text: raw.slice(cut).replace(/^[,;\s]+/, '') };
 }
 
-export default function RecipientField({ label, entries, text, onChange, onFocus }) {
+export default function RecipientField({ label, entries, text, onChange, onFocus, readOnly = false }) {
   const t = useT();
   const id = useId();
 
@@ -73,7 +73,7 @@ export default function RecipientField({ label, entries, text, onChange, onFocus
             // eslint-disable-next-line react/no-array-index-key -- the same address may be typed twice
             <li key={`${i}:${entry}`} className={`mv-rcpt${valid ? '' : ' mv-rcpt--invalid'}`} data-mv-chip aria-invalid={valid ? undefined : 'true'} title={entry}>
               <span className="mv-rcpt__text" dir="auto">{shown}</span>
-              <button type="button" className="mv-rcpt__remove" aria-label={t('mobile.compose.removeRecipient', { address: address || entry })} onClick={() => remove(i)}>
+              <button type="button" className="mv-rcpt__remove" disabled={readOnly} aria-label={t('mobile.compose.removeRecipient', { address: address || entry })} onClick={() => remove(i)}>
                 <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
                   <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
@@ -92,6 +92,7 @@ export default function RecipientField({ label, entries, text, onChange, onFocus
             autoComplete="email"
             spellCheck={false}
             value={text}
+            readOnly={readOnly}
             onChange={onInput}
             onKeyDown={onKeyDown}
             onBlur={onBlur}

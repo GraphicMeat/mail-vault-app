@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "Excluir o rascunho {{subject}}? Não é possível desfazer.",
   "mobile.drafts.noRecipients": "Sem destinatários",
   "mobile.drafts.loadFailed": "Não foi possível abrir este rascunho.",
-  "mobile.drafts.deleteFailed": "Não foi possível excluir o rascunho. Tente de novo."
+  "mobile.drafts.deleteFailed": "Não foi possível excluir o rascunho. Tente de novo.",
+  "mobile.drafts.loading": "Carregando o rascunho"
 }

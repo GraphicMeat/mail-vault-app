@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "¿Eliminar el borrador {{subject}}? No se puede deshacer.",
   "mobile.drafts.noRecipients": "Sin destinatarios",
   "mobile.drafts.loadFailed": "No se pudo abrir este borrador.",
-  "mobile.drafts.deleteFailed": "No se pudo eliminar el borrador. Inténtalo de nuevo."
+  "mobile.drafts.deleteFailed": "No se pudo eliminar el borrador. Inténtalo de nuevo.",
+  "mobile.drafts.loading": "Cargando el borrador"
 }

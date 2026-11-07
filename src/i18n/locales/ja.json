@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "下書き {{subject}} を削除しますか？元に戻せません。",
   "mobile.drafts.noRecipients": "宛先なし",
   "mobile.drafts.loadFailed": "この下書きを開けませんでした。",
-  "mobile.drafts.deleteFailed": "下書きを削除できませんでした。もう一度お試しください。"
+  "mobile.drafts.deleteFailed": "下書きを削除できませんでした。もう一度お試しください。",
+  "mobile.drafts.loading": "下書きを読み込み中"
 }

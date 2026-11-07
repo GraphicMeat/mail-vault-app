@@ -4360,5 +4360,6 @@
   "mobile.drafts.confirmDelete": "Eliminare la bozza {{subject}}? L'operazione non si può annullare.",
   "mobile.drafts.noRecipients": "Nessun destinatario",
   "mobile.drafts.loadFailed": "Impossibile aprire questa bozza.",
-  "mobile.drafts.deleteFailed": "Impossibile eliminare la bozza. Riprova."
+  "mobile.drafts.deleteFailed": "Impossibile eliminare la bozza. Riprova.",
+  "mobile.drafts.loading": "Caricamento della bozza"
 }
