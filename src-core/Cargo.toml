@@ -85,5 +85,7 @@ mock-jmap = { path = "../src-mock-jmap" }
 tempfile = "3"
 # Self-signed acceptor for tests/imap_tls_rustls.rs.
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }
+# Log output for examples/ms_imap_probe.rs.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # pgp 0.20 takes rand 0.8 RNGs; tests use it to make keys and encrypt fixtures.
 rand08 = { package = "rand", version = "0.8" }
