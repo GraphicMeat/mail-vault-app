@@ -5,6 +5,12 @@ import react from '@vitejs/plugin-react';
 // and its own output dir, so a mobile build never touches the desktop `dist`.
 export default defineConfig({
   plugins: [react()],
+  // A build constant: '1' only in perf-gate builds (scripts/mobile-run.sh sets MV_PERF_GATE=1 for
+  // --features perf-gate). App.jsx loads the scripted viewer probe behind it, so a shipping bundle
+  // does not contain the probe at all.
+  define: {
+    'import.meta.env.MV_PERF_GATE': JSON.stringify(process.env.MV_PERF_GATE === '1' ? '1' : '0'),
+  },
   root: '.',
   worker: {
     format: 'es'

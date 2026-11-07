@@ -4,6 +4,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { render, cleanup, waitFor, screen, act } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const engine = vi.hoisted(() => ({ perfGate: false }));
 
@@ -48,6 +50,7 @@ async function mount(perfGate) {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   window.history.replaceState({}, '', '/');
 });
 
@@ -58,7 +61,24 @@ describe('test query hooks', () => {
   });
 
   it('a perf-gate build opens the asked-for row', async () => {
+    vi.stubEnv('MV_PERF_GATE', '1');
     await mount(true);
     await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+  });
+
+  it('a bundle built without MV_PERF_GATE never runs the viewer script, whatever the ping says', async () => {
+    vi.stubEnv('MV_PERF_GATE', '0');
+    await mount(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('a shipping bundle has no viewer probe: the import sits behind the build constant', () => {
+    const app = readFileSync(resolve(process.cwd(), 'src/mobile/App.jsx'), 'utf8');
+    expect(app).not.toMatch(/^import[^;]*viewerProbe/m);
+    expect(app).toMatch(/import\.meta\.env\.MV_PERF_GATE !== '1'\) return;[\s\S]*import\('\.\/viewerProbe\.js'\)/);
+    const config = readFileSync(resolve(process.cwd(), 'vite.mobile.config.js'), 'utf8');
+    expect(config).toMatch(/'import\.meta\.env\.MV_PERF_GATE'/);
+    const run = readFileSync(resolve(process.cwd(), 'scripts/mobile-run.sh'), 'utf8');
+    expect(run).toMatch(/\*,perf-gate,\*\) export MV_PERF_GATE=1/);
   });
 });

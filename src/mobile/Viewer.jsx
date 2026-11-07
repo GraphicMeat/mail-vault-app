@@ -6,6 +6,8 @@
 // until the user taps "Load images", which mounts a new frame with https: images allowed.
 // The perf probe's tap-to-paint mark (`viewerPainted`) is raised after the first paint of the
 // header, never on the body: the gate measures navigation, not the network.
+// The toolbar at the bottom acts on the message: read or unread, flag, move (MovePicker.jsx over
+// the account's folders) and delete; App.jsx sends the actions (store `act`).
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
@@ -14,6 +16,9 @@ import { formatFullDate, formatSize } from './format.js';
 import { ERROR_KEYS, errorKey } from './errors.js';
 import { afterNextPaint, bodyLoaded, notePrepare, viewerPainted } from './perf.js';
 import { useT } from './i18n.js';
+import MovePicker from './MovePicker.jsx';
+import { useBackLayer } from './backStack.js';
+import { EnvelopeIcon, FlagIcon, MoveIcon, TrashIcon } from './icons.jsx';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
 export const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
@@ -91,8 +96,47 @@ function Attachments({ items }) {
   );
 }
 
-export default function Viewer({ accountId, folder, row, onClose }) {
+function Toolbar({ seen, flagged, onSeen, onFlag, onMove, onDelete }) {
   const t = useT();
+  return (
+    <div className="mv-viewer__toolbar" role="toolbar" aria-label={t('mobile.actions.toolbar')}>
+      <button type="button" className="mv-tool" data-mv-tool="seen" aria-label={seen ? t('mobile.actions.markUnread') : t('mobile.actions.markRead')} onClick={onSeen}>
+        <EnvelopeIcon open={seen} />
+      </button>
+      <button type="button" className="mv-tool" data-mv-tool="flag" aria-pressed={flagged ? 'true' : 'false'} aria-label={flagged ? t('mobile.actions.unflag') : t('mobile.actions.flag')} onClick={onFlag}>
+        <FlagIcon filled={flagged} />
+      </button>
+      <button type="button" className="mv-tool" data-mv-tool="move" aria-label={t('mobile.actions.move')} onClick={onMove}>
+        <MoveIcon />
+      </button>
+      <button type="button" className="mv-tool mv-tool--danger" data-mv-tool="delete" aria-label={t('common.delete')} onClick={onDelete}>
+        <TrashIcon />
+      </button>
+    </div>
+  );
+}
+
+const noop = () => {};
+
+export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, initialPicking = false }) {
+  const t = useT();
+  const [seen, setSeen] = useState(row.seen !== false);
+  const [flagged, setFlagged] = useState(Boolean(row.flagged));
+  const [picking, setPicking] = useState(initialPicking);
+  const closePicker = useCallback(() => setPicking(false), []);
+  useBackLayer(picking, closePicker);
+  const toggleSeen = () => {
+    onAction(seen ? 'unseen' : 'seen');
+    setSeen(!seen);
+  };
+  const toggleFlag = () => {
+    onAction(flagged ? 'unflag' : 'flag');
+    setFlagged(!flagged);
+  };
+  const pick = (target) => {
+    setPicking(false);
+    onMove(target);
+  };
   const theme = useAppTheme();
   const [state, setState] = useState({ phase: 'loading' }); // loading | ready | gone | failed
   const [allowRemote, setAllowRemote] = useState(false);
@@ -180,6 +224,9 @@ export default function Viewer({ accountId, folder, row, onClose }) {
           onLoad={() => bodyLoaded(performance.now())}
         />
       )}
+      {!srcDoc && <div className="mv-viewer__fill" />}
+      <Toolbar seen={seen} flagged={flagged} onSeen={toggleSeen} onFlag={toggleFlag} onMove={() => setPicking(true)} onDelete={onDelete} />
+      {picking && <MovePicker folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
     </section>
   );
 }

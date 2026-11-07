@@ -20,6 +20,9 @@
 #   MV_MOBILE_SHOTS   directory: after the last launch, write <platform>-light.png and
 #                     <platform>-dark.png (system appearance switched, restored on exit; Android
 #                     screen set to 375x750 px at its 160 dpi, i.e. 375 dp wide)
+#   MV_MOBILE_THEN    shell command run after the screenshots, before anything is stopped, with
+#                     MV_UDID (iOS simulator) or MV_ADB (Android: the adb binary) set; for a check
+#                     that drives the running app, e.g. pressing Back
 #   MV_IOS_SIM        simulator name or UDID (default: first available iPhone)
 #   MV_AVD            Android virtual device (default mv-mobile)
 #   MV_EMU_BOOT_WAIT  seconds to wait for the emulator to boot (default 300); exit 3 on timeout
@@ -70,6 +73,12 @@ if [ -n "$query" ]; then
     tauri_args+=(--config "{\"app\":{\"windows\":[{\"label\":\"main\",\"url\":\"mobile.html?$query\",\"title\":\"MailVault\"}]}}")
 fi
 if [ -n "$features" ]; then tauri_args+=(--features "$features"); fi
+# A perf-gate build also bundles the page's perf-gate-only code (vite.mobile.config.js); anything
+# else is a shipping bundle without it.
+case ",$features," in
+    *,perf-gate,*) export MV_PERF_GATE=1 ;;
+    *) unset MV_PERF_GATE ;;
+esac
 if [ -z "$release" ]; then tauri_args+=(--debug); mode=debug; else mode=release; fi
 
 cleanup_cmds=()
@@ -179,6 +188,9 @@ run_ios() {
             xcrun simctl io "$udid" screenshot "$MV_MOBILE_SHOTS/ios-$mode.png" >&2 || rc=1
         done
     fi
+    if [ $rc -eq 0 ] && [ -n "${MV_MOBILE_THEN:-}" ]; then
+        MV_UDID=$udid bash -c "$MV_MOBILE_THEN" >&2 || rc=1
+    fi
     return $rc
 }
 
@@ -273,6 +285,9 @@ run_android() {
             sleep 4
             "$adb" exec-out screencap -p > "$MV_MOBILE_SHOTS/android-$mode.png" || rc=1
         done
+    fi
+    if [ $rc -eq 0 ] && [ -n "${MV_MOBILE_THEN:-}" ]; then
+        MV_ADB=$adb bash -c "$MV_MOBILE_THEN" >&2 || rc=1
     fi
     if [ $rc -ne 0 ]; then "$adb" logcat -d -t 80 >&2 || true; fi
     return $rc

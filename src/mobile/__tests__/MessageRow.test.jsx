@@ -82,7 +82,7 @@ describe('MessageRow', () => {
     const onOpen = vi.fn();
     const { container } = renderRow(base, { onOpen });
     fireEvent.click(container.querySelector('[data-index="3"]'));
-    expect(onOpen).toHaveBeenCalledWith(base);
+    expect(onOpen).toHaveBeenCalledWith(base, 3);
   });
 
   it('the list sizes rows by estimate only: no measured elements', () => {

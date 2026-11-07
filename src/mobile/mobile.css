@@ -18,6 +18,12 @@
   --mail-accent-text: #a5b4fc;
   --mv-danger: #f87171;
   --mv-scrim: rgba(0, 0, 0, 0.55);
+  --mv-swipe-read: #4f46e5;
+  --mv-swipe-delete: #dc2626;
+  --mv-flag: #f59e0b;
+  --mv-toast-bg: #e8e8ef;
+  --mv-toast-text: #15151f;
+  --mv-toast-action: #4338ca;
   --mv-font: var(--app-font, "Instrument Sans", system-ui, sans-serif);
 }
 @media (prefers-color-scheme: light) {
@@ -33,6 +39,12 @@
     --mail-accent-text: #4338ca;
     --mv-danger: #b91c1c;
     --mv-scrim: rgba(15, 15, 30, 0.35);
+    --mv-swipe-read: #4f46e5;
+    --mv-swipe-delete: #b91c1c;
+    --mv-flag: #b45309;
+    --mv-toast-bg: #1a1a2e;
+    --mv-toast-text: #f6f7fb;
+    --mv-toast-action: #a5b4fc;
   }
 }
 
@@ -162,11 +174,51 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-list__inner { position: relative; width: 100%; }
 
-.mv-row {
+/* A row's slot: placed by the virtualizer (translateY), fixed height. The row inside slides over
+   its two swipe actions (SwipeRow.jsx) by transform only. */
+.mv-row-slot {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
+  contain: strict;
+}
+.mv-swipe { position: relative; height: 100%; overflow: hidden; }
+.mv-swipe__act {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  color: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.mv-swipe__act--leading { inset-inline-start: 0; align-items: flex-start; padding-inline-start: calc(var(--mv-safe-left) + 12px); }
+.mv-swipe__act--trailing { inset-inline-end: 0; align-items: flex-end; padding-inline-end: calc(var(--mv-safe-right) + 12px); }
+.mv-swipe__act--read { background: var(--mv-swipe-read); }
+.mv-swipe__act--delete { background: var(--mv-swipe-delete); }
+/* The side not being revealed stays out of sight: the row only covers it while at rest. */
+.mv-swipe[data-side="left"] .mv-swipe__act:not(:first-child),
+.mv-swipe[data-side="right"] .mv-swipe__act:first-child { visibility: hidden; }
+[dir="rtl"] .mv-swipe[data-side="left"] .mv-swipe__act:not(:first-child),
+[dir="rtl"] .mv-swipe[data-side="right"] .mv-swipe__act:first-child { visibility: visible; }
+[dir="rtl"] .mv-swipe[data-side="left"] .mv-swipe__act:first-child,
+[dir="rtl"] .mv-swipe[data-side="right"] .mv-swipe__act:not(:first-child) { visibility: hidden; }
+.mv-swipe__act svg { flex: none; }
+.mv-swipe__label { max-width: 76px; text-align: center; line-height: 1.2; }
+.mv-row {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  touch-action: pan-y;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -179,9 +231,12 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   color: inherit;
   font: inherit;
   text-align: start;
-  contain: strict;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mv-row { transition: none; }
 }
 .mv-row:active { background: var(--mail-surface-hover); }
+.mv-row__flag { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mv-flag); align-self: center; }
 .mv-row__top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .mv-row__sender, .mv-row__subject, .mv-row__snippet {
   display: block;
@@ -300,6 +355,79 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-viewer__images + .mv-viewer__frame,
 .mv-viewer__images + .mv-viewer__notice { margin-top: 8px; }
+.mv-viewer__fill { flex: 1; min-height: 0; }
+.mv-viewer__toolbar {
+  flex: none;
+  display: flex;
+  justify-content: space-around;
+  padding: 4px calc(var(--mv-safe-right) + 8px) 0 calc(var(--mv-safe-left) + 8px);
+  border-top: 1px solid var(--mail-border);
+  background: var(--mail-bg);
+}
+.mv-tool {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--mail-accent-text);
+}
+.mv-tool:active { background: var(--mail-surface-hover); }
+.mv-tool[aria-pressed="true"] { color: var(--mv-flag); }
+.mv-tool--danger { color: var(--mv-danger); }
+
+/* Toasts sit above the viewer and the sheets, over the bottom safe area. */
+.mv-toasts {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--mv-safe-bottom) + 60px);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 calc(var(--mv-safe-right) + 12px) 0 calc(var(--mv-safe-left) + 12px);
+  pointer-events: none;
+}
+.mv-toast {
+  pointer-events: auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 480px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 2px 16px;
+  border-radius: 12px;
+  background: var(--mv-toast-bg);
+  color: var(--mv-toast-text);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  animation: mv-rise-small 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.mv-toast__text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mv-toast__btn {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--mv-toast-action);
+  font: inherit;
+  font-weight: 600;
+}
+@keyframes mv-rise-small { from { transform: translateY(12px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .mv-toast { animation: none; }
+}
+.mv-chip--pending { margin-inline-end: 4px; }
+
 .mv-viewer__frame {
   flex: 1;
   min-height: 0;

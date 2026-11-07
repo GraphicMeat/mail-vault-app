@@ -3,9 +3,14 @@
 // (`Viewer.jsx`), and with `?perf=1` the perf probe, whose result the engine logs as
 // `MV_MOBILE {"perf":…}`. With `?probe=host:port` (perf-gate builds) it logs one
 // `MV_MOBILE {"probe":…}` line: DNS + TLS to that host and a secret store round trip.
-// `?ui=switcher|drawer` opens that panel at start (for screenshots); `?ui=viewer` runs the
-// scripted viewer in `viewerProbe.js` (perf-gate builds only). The `mobile.ping` line is logged
-// first: scripts/mobile-run.sh waits for it.
+// `?ui=switcher|drawer` opens that panel at start (for screenshots); `?ui=swipe` and
+// `?ui=swipe-trailing` show the first row slid open, `?ui=toast` (or `&toast=1` with another `ui`)
+// the undo toast and the pending chip (display only, nothing is sent); `?ui=viewer` runs the scripted viewer in `viewerProbe.js`
+// (perf-gate builds only: the bundle has it only when built with MV_PERF_GATE=1, and it runs only
+// when the engine's ping says `perfGate`), with `&move=1` the move picker open. The `mobile.ping`
+// line is logged first: scripts/mobile-run.sh waits for it.
+//
+// Back (Android) closes the top layer (viewer, picker, sheet) through `backStack.js`.
 import React, { useCallback, useEffect, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
@@ -17,8 +22,9 @@ import FolderDrawer from './FolderDrawer.jsx';
 import { folderLabel } from './folders.js';
 import { errorKey } from './errors.js';
 import { runPerfGate } from './perf.js';
-import { runViewerProbe } from './viewerProbe.js';
 import { useT } from './i18n.js';
+import { useBackLayer } from './backStack.js';
+import Toasts from './Toasts.jsx';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -35,6 +41,9 @@ const START_PANEL = ['switcher', 'drawer'].includes(QUERY.get('ui')) ? QUERY.get
 // `?ui=viewer` (viewerProbe.js): a scripted viewer for screenshots, the timing of large opens
 // and the on-device network proof. Perf-gate builds only: the engine's ping says which.
 const VIEWER_SCRIPT = QUERY.get('ui') === 'viewer';
+const DEMO_SWIPE = { swipe: { index: 0, side: 'leading' }, 'swipe-trailing': { index: 0, side: 'trailing' } }[QUERY.get('ui')] || null;
+const DEMO_TOAST = QUERY.get('ui') === 'toast' || QUERY.get('toast') === '1';
+const DEMO_MOVE = VIEWER_SCRIPT && QUERY.get('move') === '1';
 let viewerScriptStarted = false;
 let perfStarted = false;
 
@@ -79,6 +88,13 @@ async function probeRun(target) {
 
 /** How long a pull-to-refresh spinner waits for the engine's sync state before giving up. */
 const REFRESH_SPIN_MS = 20_000;
+
+function PendingChip() {
+  const t = useT();
+  const pending = useMobileStore((s) => s.pending);
+  if (!pending) return null;
+  return <span className="mv-chip mv-chip--pending" role="status">{t('mobile.actions.waiting', { count: pending })}</span>;
+}
 
 function SyncChip({ sync, total, onRetry }) {
   const t = useT();
@@ -168,15 +184,23 @@ function App() {
   }, [status, listState]);
 
   useEffect(() => {
+    // MV_PERF_GATE is a build constant (vite.mobile.config.js): a shipping bundle drops this branch
+    // and with it the probe module.
+    if (import.meta.env.MV_PERF_GATE !== '1') return;
     if (!VIEWER_SCRIPT || !perfGate || viewerScriptStarted || status !== 'ready' || listState !== 'ready' || !list) return;
     viewerScriptStarted = true;
     const openRow = (row) => {
       const { activeAccountId: accountId, activeFolder: folder } = useMobileStore.getState();
       setOpen({ row, accountId, folder });
     };
-    runViewerProbe({ query: QUERY, list, open: openRow, close: () => setOpen(null), log: logLine })
+    import('./viewerProbe.js')
+      .then(({ runViewerProbe }) => runViewerProbe({ query: QUERY, list, open: openRow, close: () => setOpen(null), log: logLine }))
       .catch((err) => logLine({ error: errorOf(err) }));
   }, [perfGate, status, listState, list]);
+
+  useEffect(() => {
+    if (DEMO_TOAST && status === 'ready') useMobileStore.setState({ undo: { id: -1, kind: 'delete', count: 1, target: null }, pending: 2 });
+  }, [status]);
 
   // Back in the foreground: sync the open folder.
   useEffect(() => {
@@ -199,12 +223,48 @@ function App() {
     useMobileStore.getState().refresh();
   }, []);
   // The viewer keeps the account and folder the row was opened from, whatever the list does next.
-  const onOpen = useCallback((row) => {
-    const { activeAccountId: accountId, activeFolder: folder } = useMobileStore.getState();
-    setOpen({ row, accountId, folder });
+  // Opening a message sends a deferred move or delete first, and marks the message read.
+  const onOpen = useCallback((row, index) => {
+    const s = useMobileStore.getState();
+    const { activeAccountId: accountId, activeFolder: folder } = s;
+    s.flush();
+    s.markSeen(accountId, folder, row);
+    setOpen({ row: row.seen ? row : { ...row, seen: true }, index, accountId, folder });
   }, []);
   const onClose = useCallback(() => setOpen(null), []);
   const closePanel = useCallback(() => setPanel(null), []);
+  useBackLayer(Boolean(open), onClose);
+  useBackLayer(Boolean(panel), closePanel);
+
+  const onSwipe = useCallback((kind, row) => {
+    const s = useMobileStore.getState();
+    s.act(kind, { accountId: s.activeAccountId, folder: s.activeFolder, uids: [row.uid] });
+  }, []);
+  const onViewerAction = useCallback((kind) => {
+    if (!open) return;
+    useMobileStore.getState().act(kind, { accountId: open.accountId, folder: open.folder, uids: [open.row.uid] });
+  }, [open]);
+  const onViewerMove = useCallback((target) => {
+    if (!open) return;
+    useMobileStore.getState().act('move', { accountId: open.accountId, folder: open.folder, uids: [open.row.uid], target });
+    setOpen(null);
+  }, [open]);
+  // Delete closes the message and opens the next row of the list (the one below it), if any.
+  // The delete waits out its undo toast; opening the next row this way does not send it.
+  const onViewerDelete = useCallback(() => {
+    if (!open) return;
+    const s = useMobileStore.getState();
+    const { accountId, folder, index } = open;
+    const sameList = s.list && s.activeAccountId === accountId && s.activeFolder === folder;
+    const next = sameList && Number.isInteger(index) ? s.list.rowAt(index + 1) : undefined;
+    s.act('delete', { accountId, folder, uids: [open.row.uid] });
+    if (next) {
+      s.markSeen(accountId, folder, next);
+      setOpen({ row: next.seen ? next : { ...next, seen: true }, index, accountId, folder });
+    } else {
+      setOpen(null);
+    }
+  }, [open]);
   const onSelectFolder = useCallback((path) => {
     setPanel(null);
     useMobileStore.getState().selectFolder(path);
@@ -270,6 +330,7 @@ function App() {
             </button>
           )}
         </div>
+        <PendingChip />
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
       {listState === 'ready' && list && (
@@ -277,8 +338,10 @@ function App() {
           key={listKey}
           cache={list}
           onOpen={onOpen}
+          onSwipe={onSwipe}
           onRefresh={onRefresh}
           refreshing={Boolean(pulled)}
+          demoSwipe={DEMO_SWIPE}
         />
       )}
       {listState === 'loading' && <p className="mv-status">{t('explorer.loading')}</p>}
@@ -308,8 +371,20 @@ function App() {
         </div>
       )}
       {open && (
-        <Viewer key={`${open.accountId}/${open.folder}/${open.row.uid}`} accountId={open.accountId} folder={open.folder} row={open.row} onClose={onClose} />
+        <Viewer
+          key={`${open.accountId}/${open.folder}/${open.row.uid}`}
+          accountId={open.accountId}
+          folder={open.folder}
+          row={open.row}
+          folders={open.accountId === activeAccountId ? folders : []}
+          onClose={onClose}
+          onAction={onViewerAction}
+          onMove={onViewerMove}
+          onDelete={onViewerDelete}
+          initialPicking={DEMO_MOVE}
+        />
       )}
+      <Toasts />
     </div>
   );
 }

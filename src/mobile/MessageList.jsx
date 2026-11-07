@@ -83,7 +83,7 @@ const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh, refres
   );
 });
 
-function MessageList({ cache, onOpen, onRefresh, refreshing = false }) {
+function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, demoSwipe = null }) {
   const t = useT();
   const scrollRef = useRef(null);
   const [, rerender] = useReducer((n) => n + 1, 0);
@@ -127,7 +127,15 @@ function MessageList({ cache, onOpen, onRefresh, refreshing = false }) {
         ) : (
           <div className="mv-list__inner" style={{ height: `${virtualizer.getTotalSize()}px` }}>
             {items.map((it) => (
-              <MessageRow key={it.index} index={it.index} start={it.start} row={cache.rowAt(it.index)} onOpen={onOpen} />
+              <MessageRow
+                key={it.index}
+                index={it.index}
+                start={it.start}
+                row={cache.rowAt(it.index)}
+                onOpen={onOpen}
+                onSwipe={onSwipe}
+                initialSwipe={demoSwipe && demoSwipe.index === it.index ? demoSwipe.side : null}
+              />
             ))}
           </div>
         )}
