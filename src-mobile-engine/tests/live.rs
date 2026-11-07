@@ -425,6 +425,29 @@ fn a_resume_replaces_the_listening_connection() {
 }
 
 #[test]
+fn a_stale_shell_lifecycle_call_is_ignored() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
+    f.app_state(true, Some(&account));
+    wait_until(QUICK, "the live thread idles", || server.count_commands("IDLE") >= 1);
+    std::thread::sleep(Duration::from_millis(1100));
+    // A notification-shade pull: suspend (1) then resume (2), delivered resume first.
+    let rpc = |p: Value| f.engine.rpc("mobile.app.state", p).unwrap();
+    assert_eq!(rpc(json!({ "foreground": true, "resumed": true, "seq": 2 }))["live"], true);
+    assert_eq!(rpc(json!({ "foreground": false, "seq": 1 })), json!({ "live": false, "stale": true }));
+    let idles = server.count_commands("IDLE");
+    std::thread::sleep(Duration::from_millis(800));
+    assert!(f.engine.live_running(), "the stale suspend turned live mail off while in front");
+    wait_until(QUICK, "still listening", || server.count_commands("IDLE") >= idles);
+    // In order, both apply; the page's calls (no seq) are never stale.
+    assert_eq!(rpc(json!({ "foreground": false, "seq": 3 }))["live"], false);
+    wait_until(Duration::from_secs(2), "suspended", || !f.engine.live_running());
+    assert_eq!(f.app_state(true, Some(&account))["live"], true);
+    wait_until(QUICK, "listening again", || f.engine.live_running() && server.count_commands("IDLE") > idles);
+}
+
+#[test]
 fn a_thread_stopped_during_its_sign_in_does_nothing_after_it() {
     let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
     let f = imap_engine();

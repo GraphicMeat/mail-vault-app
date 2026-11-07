@@ -481,11 +481,16 @@ pub fn run() {
 fn on_run_event(slot: &Arc<EngineSlot>, event: &tauri::RunEvent) {
     #[cfg(mobile)]
     {
-        let params = match event {
+        /// Numbers the lifecycle calls here, on the event loop, in the OS's order: each goes out
+        /// on its own thread, and the engine ignores one older than the newest it applied (a
+        /// Control Center pull is a suspend and a resume a moment apart).
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let mut params = match event {
             tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::Suspended, .. } => json!({ "foreground": false }),
             tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::Resumed, .. } => json!({ "foreground": true, "resumed": true }),
             _ => return,
         };
+        params["seq"] = json!(SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1);
         // Not before setup opened the engine, and never on the UI thread.
         let Some(opened) = slot.engine.lock().unwrap_or_else(|e| e.into_inner()).clone() else { return };
         std::thread::spawn(move || {

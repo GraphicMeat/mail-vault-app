@@ -79,6 +79,8 @@ pub(crate) struct Live {
     current: Mutex<Option<Current>>,
     /// The account the last foreground named: what a resume without one (the shell's) resumes.
     last: Mutex<Option<String>>,
+    /// Serializes `mobile.app.state`; holds the highest shell `seq` applied.
+    order: Mutex<u64>,
     timing: Mutex<Timing>,
     /// Live threads not yet exited, a stopping one included.
     alive: Arc<AtomicUsize>,
@@ -252,15 +254,30 @@ struct AppStateParams {
     /// The app came back to the front (not a repeat while it stayed there).
     #[serde(default)]
     resumed: bool,
+    /// The shell's OS lifecycle events number themselves in the order the OS sent them; each is
+    /// delivered on its own thread, so a suspend can arrive after the resume that followed it. A
+    /// numbered call at or below the highest one applied is stale and ignored. The page's calls
+    /// carry none.
+    #[serde(default)]
+    seq: Option<u64>,
 }
 
-/// `mobile.app.state {foreground, accountId?, resumed?}` -> `{live}`: the page went to the
+/// `mobile.app.state {foreground, accountId?, resumed?, seq?}` -> `{live}`: the page went to the
 /// foreground (on `accountId`) or the background. `resumed`: the app came back to the front, so a
 /// thread already listening on the account is replaced (its socket may be dead), and with no
 /// `accountId` (the shell's OS resume) the account last put in front is resumed. Starts or stops
 /// the live thread and returns at once; `live` says whether a thread was asked to listen.
 pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: AppStateParams = parse(params)?;
+    // One call at a time, check and action together: a stale call can neither pass the check
+    // nor act after a newer one (each call only flips flags and spawns, so the hold is short).
+    let mut applied = lock(&engine.live().order);
+    if let Some(seq) = p.seq {
+        if seq <= *applied {
+            return Ok(json!({ "live": false, "stale": true }));
+        }
+        *applied = seq;
+    }
     let account = match (p.foreground, p.account_id) {
         (true, Some(a)) => a,
         // The shell's OS resume: the account the page last put in front.
