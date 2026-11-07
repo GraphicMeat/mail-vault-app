@@ -219,9 +219,10 @@ pub async fn fetch_section(session: &mut ImapSession, mailbox: &str, uid: u32, s
 
 /// `len` octets of one part from `offset` on, still transfer-encoded: `UID FETCH uid
 /// (UID BODY.PEEK[section]<offset.len>)` after selecting `mailbox`. Never sets `\Seen`.
-/// `Ok(None)` when the uid is gone. Fewer than `len` bytes (none at all past the end, `""` or NIL)
-/// means the part ends there. A reply without the `<origin>` (a server that ignored the range
-/// and sent the whole part) is an error. Each call selects `mailbox`; a caller fetching many slices in a row
+/// `Ok(None)` when the uid is gone. Fewer than `len` bytes means the part ends there; past the
+/// end the answer is empty (`""` or NIL), with or without its `<origin>`. A reply that carries
+/// bytes without the `<origin>` (a server that ignored the range and sent the whole part) is an
+/// error. Each call selects `mailbox`; a caller fetching many slices in a row
 /// selects once and uses [`fetch_selected_section_range`].
 pub async fn fetch_section_range(session: &mut ImapSession, mailbox: &str, uid: u32, section: &str, offset: u64, len: u32) -> Result<Option<Vec<u8>>, String> {
     section_path(section)?;
@@ -252,6 +253,9 @@ pub async fn fetch_selected_section_range(
     match got_origin {
         Some(o) if o == origin => Ok(Some(data)),
         Some(o) => Err(format!("UID FETCH {uid}: asked for BODY[{section}]<{offset}>, got <{o}>")),
+        // No bytes need no origin: NIL or `""` (a server past the end that drops the label) is
+        // the end, whatever the offset.
+        None if data.is_empty() => Ok(Some(data)),
         // A server that ignored the range sends the whole part, labelled without an origin. It
         // is refused rather than sliced: a caller reading slice by slice would download (and
         // hold) the whole part once per slice.

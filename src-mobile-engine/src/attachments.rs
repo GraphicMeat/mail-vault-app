@@ -149,6 +149,9 @@ struct State {
     /// Unit tests: runs with the job id after the finished `.part` is synced, before the rename.
     #[cfg(test)]
     before_finish: Mutex<Option<Box<dyn Fn(u64) + Send>>>,
+    /// Unit tests: runs in an eviction pass after the scan, before the first delete.
+    #[cfg(test)]
+    after_scan: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
 
 impl State {
@@ -206,6 +209,8 @@ impl Attachments {
                 lease_ttl_ms: AtomicU64::new(LEASE_TTL.as_millis() as u64),
                 #[cfg(test)]
                 before_finish: Mutex::new(None),
+                #[cfg(test)]
+                after_scan: Mutex::new(None),
             }),
         }
     }
@@ -575,10 +580,10 @@ fn cleanup(dir: &Path, stale: Duration) {
 /// Deletes the least recently opened finished files until the total is at most the cap, never
 /// `keep` (the file just finished) and never a leased one.
 fn evict(state: &State, keep: &str) -> usize {
-    // Held to the end: a lease (taken under this lock, after checking the file is there) either
-    // comes before the delete loop, which then skips the file, or finds the file gone.
-    let mut t = lock(&state.table);
-    let leased = t.leased();
+    // The scan and the sort run without the table lock, so a foreground fetch or lease never
+    // waits on a directory pass. Each delete takes the lock for that one file and re-checks the
+    // leases there: a lease (taken under the lock after checking the file is there) either lands
+    // first and the file is skipped, or finds the file gone.
     let Ok(rd) = fs::read_dir(&state.dir) else {
         return 0;
     };
@@ -599,20 +604,28 @@ fn evict(state: &State, keep: &str) -> usize {
         return 0;
     }
     files.sort();
+    #[cfg(test)]
+    if let Some(hook) = lock(&state.after_scan).as_ref() {
+        hook();
+    }
     let mut removed = 0;
     for (_, len, name) in files {
         if total <= cap {
             break;
         }
-        if name == keep || leased.contains(&name) {
+        if name == keep {
+            continue;
+        }
+        let mut t = lock(&state.table);
+        if t.leased().contains(&name) {
             continue;
         }
         if fs::remove_file(state.path(&name)).is_ok() {
             total -= len;
             removed += 1;
         }
+        drop(t);
     }
-    drop(t);
     removed
 }
 
@@ -1141,15 +1154,15 @@ mod tests {
     fn leasing_again_renews_the_lease() {
         let (_tmp, e) = engine();
         let state = &e.attachments().state;
-        state.lease_ttl_ms.store(300, Ordering::SeqCst);
+        state.lease_ttl_ms.store(1_000, Ordering::SeqCst);
         let (_, p1) = finished(state, 1, 1_000, Duration::from_secs(60));
         let (n2, _p2) = finished(state, 2, 1_000, Duration::ZERO);
         let lease = |p: &Path| e.rpc("mobile.attachment.lease", json!({ "path": p.to_string_lossy() })).unwrap()["leaseId"].as_u64().unwrap();
         let l = lease(&p1);
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(600));
         assert_eq!(lease(&p1), l, "a second lease of a leased file is the same lease");
-        std::thread::sleep(Duration::from_millis(200));
-        // 400 ms after the first lease, 200 ms after the renewal: still protected.
+        std::thread::sleep(Duration::from_millis(600));
+        // 1.2 s after the first lease (past its 1 s), 0.6 s after the renewal: still protected.
         set_age(&p1, Duration::from_secs(60));
         state.cap.store(0, Ordering::SeqCst);
         assert_eq!(evict(state, &n2), 0);
@@ -1157,6 +1170,29 @@ mod tests {
         assert_eq!(e.rpc("mobile.attachment.release", json!({ "leaseId": l })).unwrap()["released"], true);
         assert_eq!(evict(state, &n2), 1);
         assert!(!p1.exists());
+    }
+
+    /// A lease that lands after an eviction pass scanned the directory but before it deletes is
+    /// still respected: the lease is re-checked per file under the lock.
+    #[test]
+    fn a_lease_between_scan_and_delete_is_respected() {
+        let (_tmp, e) = engine();
+        let state = &e.attachments().state;
+        state.cap.store(1_000, Ordering::SeqCst);
+        let (n1, p1) = finished(state, 1, 1_000, Duration::from_secs(60));
+        let (_n2, p2) = finished(state, 2, 1_000, Duration::from_secs(30));
+        let (n3, p3) = finished(state, 3, 1_000, Duration::ZERO);
+        let weak = Arc::downgrade(&e.attachments().state);
+        *lock(&state.after_scan) = Some(Box::new(move || {
+            let st = weak.upgrade().unwrap();
+            let mut t = lock(&st.table);
+            t.next_lease += 1;
+            let id = t.next_lease;
+            t.leases.insert(id, Lease { name: n1.clone(), until: Instant::now() + Duration::from_secs(60) });
+        }));
+        assert_eq!(evict(state, &n3), 1);
+        assert!(p1.is_file(), "the file leased mid-pass was deleted");
+        assert!(!p2.exists() && p3.is_file());
     }
 
     /// A cancel that lands after the last slice is written but before the rename wins: no

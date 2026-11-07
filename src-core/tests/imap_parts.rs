@@ -264,3 +264,17 @@ async fn range_fetch_refuses_a_reply_without_origin() {
         assert!(err.contains("origin"), "offset {offset}: {err}");
     }
 }
+
+/// Past the end, a server may answer NIL or `""` and drop the origin: that is the end (no bytes),
+/// not an error.
+#[async_std::test]
+async fn range_fetch_past_the_end_without_origin_is_empty() {
+    for item in ["NIL", "\"\""] {
+        let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push(CRAFTED)).fault(
+            Trigger::with("FETCH", "BODY.PEEK[2]<4096.4>"),
+            Action::RespondRaw(format!("* 1 FETCH (UID 1 BODY[2] {item})\r\n{{tag}} OK FETCH completed\r\n")),
+        ));
+        let mut sess = session(&server).await;
+        assert_eq!(fetch_section_range(&mut sess, "INBOX", 1, "2", 4096, 4).await.unwrap(), Some(Vec::new()), "{item}");
+    }
+}

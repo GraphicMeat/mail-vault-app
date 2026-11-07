@@ -514,3 +514,33 @@ fn resume_starts_over_on_a_meta_that_does_not_match() {
     std::fs::OpenOptions::new().write(true).open(&part).unwrap().set_len(len - 1).unwrap();
     assert_eq!(k.finish()[0].0, 0, "a .part shorter than the meta");
 }
+
+/// The server over-reports the part's size: the last slice is short before that size, the probe
+/// at its end comes back empty (labelled `<origin>`, or NIL with no origin), and the file is
+/// finished whole.
+#[test]
+fn an_empty_probe_past_an_over_reported_size_is_the_end() {
+    let data = source(3_000, 12);
+    let end = base64_lines(&data).len();
+    // The real structure, with the attachment's size inflated.
+    let bs = "((\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"7BIT\" 15 1 NIL NIL NIL)\
+              (\"APPLICATION\" \"OCTET-STREAM\" (\"NAME\" \"data.bin\") NIL NIL \"BASE64\" 999999 NIL \
+              (\"ATTACHMENT\" (\"FILENAME\" \"data.bin\")) NIL) \"MIXED\" (\"BOUNDARY\" \"mix\") NIL NIL)";
+    for nil_probe in [false, true] {
+        let mut scenario = Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(binary_message(1, &data))).fault(
+            Trigger::with("FETCH", "(UID BODYSTRUCTURE)"),
+            Action::RespondRaw(format!("* 1 FETCH (UID 1 BODYSTRUCTURE {bs})\r\n{{tag}} OK FETCH completed\r\n")),
+        );
+        if nil_probe {
+            scenario = scenario.fault(
+                Trigger::with("FETCH", &format!("{RANGE}{end}.")),
+                Action::RespondRaw("* 1 FETCH (UID 1 BODY[2] NIL)\r\n{tag} OK FETCH completed\r\n".into()),
+            );
+        }
+        let server = MockImap::start(scenario);
+        let f = setup(&server);
+        let path = f.done(f.fetch(1));
+        assert!(std::fs::read(&path).unwrap() == data, "nil probe {nil_probe}: the file differs from the source");
+        assert_eq!(ranges(&server), [(0, CHUNK as u64), (end as u64, CHUNK as u64)], "nil probe {nil_probe}");
+    }
+}
