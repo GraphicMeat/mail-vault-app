@@ -247,10 +247,16 @@ fn seed_for_perf_gate(_: &Engine) {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Managed before any webview exists, so a call never finds no state; filled in setup.
+    let slot = Arc::new(EngineSlot::default());
+    let setup_slot = Arc::clone(&slot);
     tauri::Builder::default()
-        .setup(|app| {
-            let slot = Arc::new(EngineSlot::default());
-            app.manage(EngineState(Arc::clone(&slot)));
+        .manage(EngineState(slot))
+        // On the builder, before any page loads: every navigation is decided from the start, and
+        // if the native plugin below fails to load, links stay cancelled (nothing opens).
+        .plugin(tauri_plugin_mv_native::nav_guard(NAV_LOG))
+        .setup(move |app| {
+            let slot = setup_slot;
             init_tls_verifier();
             let secrets = secrets::KeyringSecrets::new();
             if let Some(reason) = secrets.error() {
@@ -284,10 +290,10 @@ pub fn run() {
                 let ttl = if cfg!(target_os = "android") { STAGE_TTL } else { Duration::ZERO };
                 std::thread::spawn(move || files::sweep(&cache.join("share"), ttl));
             }
-            // After the engine is open: on Android registering the plugin waits until the webview
-            // exists, and the page's first calls wait for the engine meanwhile.
-            // Without it attachments cannot open and links stay put; the rest of the app works.
-            if let Err(e) = app.handle().plugin(tauri_plugin_mv_native::init(NAV_LOG)) {
+            // The native plugin, after the engine is open: on Android registering it waits until the
+            // webview exists, and the page's first calls wait for the engine meanwhile. Without it attachments cannot open and links stay cancelled (the guard above denies
+            // them all the same); the rest of the app works.
+            if let Err(e) = app.handle().plugin(tauri_plugin_mv_native::init()) {
                 log_line(&format!("MV_MOBILE {}", json!({ "nativePluginError": e.to_string() })));
             }
             Ok(())

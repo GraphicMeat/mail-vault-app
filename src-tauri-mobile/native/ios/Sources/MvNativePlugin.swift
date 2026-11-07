@@ -17,16 +17,21 @@ struct UrlArgs: Decodable {
 }
 
 class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
-  // One preview at a time; only touched on the main queue.
+  // One preview and one share sheet at a time; only touched on the main queue.
   private var previewItem: URL?
   private var previewInvoke: Invoke?
+  private var sharing = false
 
-  /// The controller to present from: the root's topmost presented controller.
+  /// The controller to present from: the root's topmost presented controller. Nil while anything
+  /// is still animating in or out, since UIKit then refuses a presentation with only a console
+  /// warning and the call would never be answered.
   private func presenter() -> UIViewController? {
     var top = manager.viewController
-    while let next = top?.presentedViewController, !next.isBeingDismissed {
+    while let next = top?.presentedViewController {
+      if next.isBeingDismissed || next.isBeingPresented { return nil }
       top = next
     }
+    if let top = top, top.isBeingPresented || top.isBeingDismissed { return nil }
     return top
   }
 
@@ -50,12 +55,12 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
         invoke.reject("a preview is already open", code: "BUSY")
         return
       }
-      guard let from = self.presenter() else {
-        invoke.reject("no view controller", code: "INTERNAL")
-        return
-      }
       guard QLPreviewController.canPreview(url as NSURL) else {
         invoke.reject("no previewer for this file", code: "NO_APP")
+        return
+      }
+      guard let from = self.presenter() else {
+        invoke.reject("another screen is opening or closing", code: "BUSY")
         return
       }
       self.previewItem = url
@@ -63,7 +68,14 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
       let preview = QLPreviewController()
       preview.dataSource = self
       preview.delegate = self
-      from.present(preview, animated: true)
+      from.present(preview, animated: true) {
+        // A refused presentation calls this too, with nothing presented: answer and reset.
+        if preview.presentingViewController == nil, let pending = self.previewInvoke {
+          self.previewInvoke = nil
+          self.previewItem = nil
+          pending.reject("the previewer could not be shown", code: "BUSY")
+        }
+      }
     }
   }
 
@@ -95,17 +107,22 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
   @objc public func shareFile(_ invoke: Invoke) throws {
     guard let url = fileURL(invoke) else { return }
     DispatchQueue.main.async {
-      guard let from = self.presenter() else {
-        invoke.reject("no view controller", code: "INTERNAL")
+      guard !self.sharing, let from = self.presenter() else {
+        invoke.reject("another screen is opening or closing", code: "BUSY")
         return
       }
+      self.sharing = true
       let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
       var answered = false
-      sheet.completionWithItemsHandler = { _, _, _, _ in
-        // Called once when the sheet goes away (after the chosen activity, if any).
+      let answer: (String?) -> Void = { error in
         if answered { return }
         answered = true
-        invoke.resolve()
+        self.sharing = false
+        if let error = error { invoke.reject(error, code: "BUSY") } else { invoke.resolve() }
+      }
+      sheet.completionWithItemsHandler = { _, _, _, _ in
+        // Called once when the sheet goes away (after the chosen activity, if any).
+        answer(nil)
       }
       // iPad presents the sheet as a popover, which needs an anchor or it raises.
       if let popover = sheet.popoverPresentationController {
@@ -114,7 +131,9 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
           x: from.view.bounds.midX, y: from.view.bounds.midY, width: 0, height: 0)
         popover.permittedArrowDirections = []
       }
-      from.present(sheet, animated: true)
+      from.present(sheet, animated: true) {
+        if sheet.presentingViewController == nil { answer("the share sheet could not be shown") }
+      }
     }
   }
 

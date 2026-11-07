@@ -120,23 +120,13 @@ impl<R: Runtime> MvNative<R> {
 /// How the shell hears about a navigation verdict: `(scheme, verdict)`, never the URL.
 pub type NavLog = fn(&str, &str);
 
-/// The plugin. `log` (perf-gate builds) hears each cancelled navigation.
-pub fn init<R: Runtime>(log: Option<NavLog>) -> TauriPlugin<R> {
-    Builder::new("mv-native")
-        .setup(|app, api| {
-            #[cfg(target_os = "android")]
-            let handle = api.register_android_plugin("com.mailvault.mvnative", "MvNativePlugin")?;
-            #[cfg(target_os = "ios")]
-            let handle = api.register_ios_plugin(init_plugin_mv_native)?;
-            #[cfg(mobile)]
-            app.manage(MvNative::<R> { handle });
-            #[cfg(not(mobile))]
-            {
-                let _ = api;
-                app.manage(MvNative::<R> { _runtime: std::marker::PhantomData });
-            }
-            Ok(())
-        })
+/// The navigation guard, a plugin of its own with no native part, so registering it cannot fail
+/// or wait: the shell adds it on the builder, before any webview loads. Every navigation is
+/// decided by [`links::decide`] (deny unless allowed). A web or mail link is cancelled and, if the
+/// native plugin ([`init`]) is loaded, handed to the system; without it nothing opens.
+/// `log` (perf-gate builds) hears each cancelled navigation.
+pub fn nav_guard<R: Runtime>(log: Option<NavLog>) -> TauriPlugin<R> {
+    Builder::new("mv-nav")
         .on_navigation(move |webview, url| {
             let verdict = links::decide(url, links::AppOrigin::current());
             if let Some(log) = log {
@@ -161,6 +151,27 @@ pub fn init<R: Runtime>(log: Option<NavLog>) -> TauriPlugin<R> {
                     false
                 }
             }
+        })
+        .build()
+}
+
+/// The native plugin (previewer, share sheet, links out). On Android registering it waits until
+/// the webview exists, so the shell adds it at the end of its setup.
+pub fn init<R: Runtime>() -> TauriPlugin<R> {
+    Builder::new("mv-native")
+        .setup(|app, api| {
+            #[cfg(target_os = "android")]
+            let handle = api.register_android_plugin("com.mailvault.mvnative", "MvNativePlugin")?;
+            #[cfg(target_os = "ios")]
+            let handle = api.register_ios_plugin(init_plugin_mv_native)?;
+            #[cfg(mobile)]
+            app.manage(MvNative::<R> { handle });
+            #[cfg(not(mobile))]
+            {
+                let _ = api;
+                app.manage(MvNative::<R> { _runtime: std::marker::PhantomData });
+            }
+            Ok(())
         })
         .build()
 }
