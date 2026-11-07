@@ -240,6 +240,67 @@ pub fn sweep(share_root: &Path, older_than: Duration) -> usize {
     removed
 }
 
+/// A file the user picked, moved to its outgoing place: `handle` is `out/<16 hex>/<name>`,
+/// relative to the cache dir (the page never sees an absolute path).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Picked {
+    pub handle: String,
+    pub name: String,
+    pub size: u64,
+    pub mime: String,
+}
+
+/// A new, empty `<out_root>/<16 lowercase hex>` directory. Returns the hex and the directory.
+pub fn new_out_dir(out_root: &Path) -> io::Result<(String, PathBuf)> {
+    use std::hash::{BuildHasher, Hasher};
+    fs::create_dir_all(out_root)?;
+    for _ in 0..16 {
+        // RandomState is seeded per process from the OS; time and a counter make each call differ.
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write_u128(SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+        h.write_u64(COUNTER.fetch_add(1, Ordering::Relaxed));
+        h.write_u32(std::process::id());
+        let hex = format!("{:016x}", h.finish());
+        let dir = out_root.join(&hex);
+        match fs::create_dir(&dir) {
+            Ok(()) => return Ok((hex, dir)),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::AlreadyExists, "no free outgoing directory"))
+}
+
+/// Takes one copy the native picker wrote as `<scratch>/<file>` (`file` is the decimal index the
+/// native side used) and moves it to `<cache>/out/<16 hex>/<sanitized name>`.
+/// The display name and MIME type come from the picker and are cleaned here
+/// ([`sanitize_filename`], [`sanitize_mime`]); the size is the copy's own.
+pub fn finish_pick(cache: &Path, scratch: &Path, file: &str, name: &str, mime: &str) -> Result<Picked, PathError> {
+    if file.is_empty() || file.len() > 6 || !file.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(PathError::Invalid("not a pick"));
+    }
+    let src = scratch.join(file);
+    let meta = match fs::symlink_metadata(&src) {
+        Ok(m) => m,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(PathError::Gone),
+        Err(_) => return Err(PathError::Invalid("unreadable")),
+    };
+    if !meta.file_type().is_file() {
+        return Err(PathError::Invalid("not a regular file"));
+    }
+    let mime = sanitize_mime(mime);
+    let name = sanitize_filename(name, &mime);
+    let (hex, dir) = new_out_dir(&cache.join("out")).map_err(|_| PathError::Invalid("no outgoing directory"))?;
+    let target = dir.join(&name);
+    let moved = fs::rename(&src, &target).or_else(|_| fs::copy(&src, &target).map(|_| ()));
+    let size = moved.and_then(|()| fs::metadata(&target)).map(|m| m.len());
+    let Ok(size) = size else {
+        let _ = fs::remove_dir_all(&dir);
+        return Err(PathError::Invalid("could not move the pick"));
+    };
+    Ok(Picked { handle: format!("out/{hex}/{name}"), name, size, mime })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,5 +514,78 @@ mod tests {
         assert!(!a.exists());
         assert!(real.exists(), "the cache file is never swept");
         assert_eq!(sweep(&t.0.join("missing"), Duration::ZERO), 0);
+    }
+
+    fn is_handle(h: &str, name: &str) -> bool {
+        let parts: Vec<&str> = h.split('/').collect();
+        parts.len() == 3
+            && parts[0] == "out"
+            && parts[1].len() == 16
+            && parts[1].bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+            && parts[2] == name
+    }
+
+    #[test]
+    fn out_dirs_are_fresh_16_hex_names() {
+        let t = Tmp::new("outdir");
+        let out = t.0.join("out");
+        let (a, da) = new_out_dir(&out).unwrap();
+        let (b, db) = new_out_dir(&out).unwrap();
+        assert_ne!(a, b);
+        for (hex, dir) in [(&a, &da), (&b, &db)] {
+            assert_eq!(hex.len(), 16, "{hex}");
+            assert!(hex.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')), "{hex}");
+            assert_eq!(dir, &out.join(hex));
+            assert!(dir.is_dir() && fs::read_dir(dir).unwrap().next().is_none());
+        }
+    }
+
+    #[test]
+    fn a_pick_moves_to_out_under_a_sanitised_name() {
+        let t = Tmp::new("pick");
+        let cache = t.0.join("cache");
+        let scratch = cache.join("pick").join("s1");
+        fs::create_dir_all(&scratch).unwrap();
+        fs::write(scratch.join("0"), b"%PDF-1.4 picked").unwrap();
+        fs::write(scratch.join("1"), b"jpeg bytes").unwrap();
+        fs::write(scratch.join("2"), b"same name").unwrap();
+        let a = finish_pick(&cache, &scratch, "0", "Plan.pdf", "Application/PDF; x=y").unwrap();
+        assert!(is_handle(&a.handle, "Plan.pdf"), "{}", a.handle);
+        assert_eq!((a.name.as_str(), a.size, a.mime.as_str()), ("Plan.pdf", 15, "application/pdf"));
+        assert_eq!(fs::read(cache.join(&a.handle)).unwrap(), b"%PDF-1.4 picked");
+        assert!(!scratch.join("0").exists(), "moved, not copied");
+        // A hostile display name cannot climb out: it is sanitised before it becomes a path.
+        let b = finish_pick(&cache, &scratch, "1", "../../IMG_1.jpeg", "image/jpeg").unwrap();
+        assert!(is_handle(&b.handle, "_.._IMG_1.jpeg"), "{}", b.handle);
+        assert_eq!(b.size, 10);
+        // Two picks of one name never collide.
+        let c = finish_pick(&cache, &scratch, "2", "Plan.pdf", "application/pdf").unwrap();
+        assert_ne!(a.handle, c.handle);
+        assert_eq!(fs::read(cache.join(&a.handle)).unwrap(), b"%PDF-1.4 picked");
+    }
+
+    #[test]
+    fn a_pick_must_be_a_numbered_file_of_the_scratch_dir() {
+        let t = Tmp::new("pickbad");
+        let cache = t.0.join("cache");
+        let scratch = cache.join("pick").join("s1");
+        fs::create_dir_all(scratch.join("3")).unwrap();
+        fs::write(cache.join("secret"), b"x").unwrap();
+        for file in ["../../secret", "/etc/passwd", "", "a", "0/..", "3", "9"] {
+            assert!(finish_pick(&cache, &scratch, file, "a.pdf", "application/pdf").is_err(), "{file:?}");
+        }
+        assert!(!cache.join("out").exists() || fs::read_dir(cache.join("out")).unwrap().next().is_none(), "no out dir left behind");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_pick_is_refused() {
+        let t = Tmp::new("picklink");
+        let cache = t.0.join("cache");
+        let scratch = cache.join("pick").join("s1");
+        fs::create_dir_all(&scratch).unwrap();
+        fs::write(cache.join("secret"), b"x").unwrap();
+        std::os::unix::fs::symlink(cache.join("secret"), scratch.join("0")).unwrap();
+        assert!(finish_pick(&cache, &scratch, "0", "a.pdf", "application/pdf").is_err());
     }
 }

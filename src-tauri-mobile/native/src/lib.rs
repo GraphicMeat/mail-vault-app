@@ -7,6 +7,9 @@
 //! - `share_file`: `UIActivityViewController` on iOS, an `ACTION_SEND` chooser on Android.
 //! - `open_url`: the system browser or mail app (`UIApplication.open`, `ACTION_VIEW` +
 //!   `CATEGORY_BROWSABLE`).
+//! - `pick_files`: the system document picker or photo picker for outgoing attachments. The
+//!   native side copies each pick into a scratch dir the shell names; the shell names and moves the
+//!   copies ([`files::finish_pick`]).
 //! - A navigation hook: every navigation of the webview goes through [`links::decide`]. Web and
 //!   mail links are cancelled and handed to `open_url`; anything but the app page and the mail
 //!   frame's own document is cancelled. A popup never becomes a Tauri webview: iOS opens none
@@ -20,7 +23,7 @@
 pub mod files;
 pub mod links;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tauri::plugin::{Builder, TauriPlugin};
 use tauri::{Manager, Runtime};
@@ -29,7 +32,7 @@ use tauri::{Manager, Runtime};
 tauri::ios_plugin_binding!(init_plugin_mv_native);
 
 /// Why a native call failed. `code` is one the page translates: `NO_APP` (nothing on the device
-/// opens this), `BUSY` (a previewer is already up), `UNSUPPORTED` (not a phone), else `INTERNAL`.
+/// opens this), `BUSY` (a previewer, sheet or picker is already up), `UNSUPPORTED` (not a phone), else `INTERNAL`.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct NativeError {
     pub code: String,
@@ -61,7 +64,8 @@ impl From<tauri::plugin::mobile::PluginInvokeError> for NativeError {
 }
 
 /// The native side. Every method blocks until the native call answers: on iOS `open_file` and
-/// `share_file` answer when the previewer or sheet is dismissed. Never call one on the main thread.
+/// `share_file` answer when the previewer or sheet is dismissed, and `pick_files` on both
+/// platforms when the picker closes. Never call one on the main thread.
 pub struct MvNative<R: Runtime> {
     #[cfg(mobile)]
     handle: tauri::plugin::PluginHandle<R>,
@@ -78,6 +82,42 @@ struct FileArgs<'a> {
 #[derive(Serialize)]
 struct UrlArgs<'a> {
     url: &'a str,
+}
+
+/// Which system picker [`MvNative::pick_files`] shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PickKind {
+    /// The document picker (Files on iOS, the storage access framework on Android).
+    Files,
+    /// The photo picker; no photo library or storage permission on either platform.
+    Photos,
+}
+
+#[derive(Serialize)]
+struct PickArgs<'a> {
+    kind: &'a str,
+    dir: &'a str,
+}
+
+/// One pick as the native side reports it: `file` is the copy's name in the scratch dir (its
+/// decimal index), `name` and `mime` what the provider said. `error` (`UNREADABLE`) instead of
+/// `file` when the provider could not hand over every byte. Nothing here is trusted.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RawPick {
+    #[serde(default)]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub mime: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PickReply {
+    #[serde(default)]
+    items: Vec<RawPick>,
 }
 
 impl<R: Runtime> MvNative<R> {
@@ -100,6 +140,18 @@ impl<R: Runtime> MvNative<R> {
         self.call("openUrl", UrlArgs { url })
     }
 
+    /// Shows the system picker and blocks until it closes. Each pick is copied into `dir` (an
+    /// existing, empty scratch directory) as `<dir>/<index>`; cancel is an empty list.
+    pub fn pick_files(&self, kind: PickKind, dir: &Path) -> Result<Vec<RawPick>, NativeError> {
+        let dir = dir.to_str().ok_or_else(|| NativeError::new("INTERNAL", "path is not UTF-8"))?;
+        let kind = match kind {
+            PickKind::Files => "files",
+            PickKind::Photos => "photos",
+        };
+        let reply: PickReply = self.call_for("pickFiles", PickArgs { kind, dir })?;
+        Ok(reply.items)
+    }
+
     fn file_call(&self, method: &str, path: &Path, mime: &str) -> Result<(), NativeError> {
         let path = path.to_str().ok_or_else(|| NativeError::new("INTERNAL", "path is not UTF-8"))?;
         let mime = files::sanitize_mime(mime);
@@ -113,6 +165,16 @@ impl<R: Runtime> MvNative<R> {
 
     #[cfg(not(mobile))]
     fn call<A: Serialize>(&self, method: &str, _args: A) -> Result<(), NativeError> {
+        Err(NativeError::new("UNSUPPORTED", format!("{method}: phones only")))
+    }
+
+    #[cfg(mobile)]
+    fn call_for<A: Serialize, T: serde::de::DeserializeOwned>(&self, method: &str, args: A) -> Result<T, NativeError> {
+        self.handle.run_mobile_plugin::<T>(method, args).map_err(NativeError::from)
+    }
+
+    #[cfg(not(mobile))]
+    fn call_for<A: Serialize, T: serde::de::DeserializeOwned>(&self, method: &str, _args: A) -> Result<T, NativeError> {
         Err(NativeError::new("UNSUPPORTED", format!("{method}: phones only")))
     }
 }

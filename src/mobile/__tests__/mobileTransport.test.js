@@ -50,6 +50,33 @@ describe('mobile transport file commands', () => {
   });
 });
 
+describe('mobile transport pick', () => {
+  it('pickFiles invokes mobile_pick_files and returns handles only', async () => {
+    const { pickFiles } = await import('../transport.js');
+    invoke.mockResolvedValue([
+      { handle: 'out/0123456789abcdef/Plan.pdf', name: 'Plan.pdf', size: 15, mime: 'application/pdf', path: '/var/c/out/0123456789abcdef/Plan.pdf' },
+      { name: 'Cloud.key', error: 'UNREADABLE', path: '/x' },
+    ]);
+    const picked = await pickFiles('photos');
+    expect(invoke.mock.calls).toEqual([['mobile_pick_files', { kind: 'photos' }]]);
+    expect(picked).toEqual([
+      { handle: 'out/0123456789abcdef/Plan.pdf', name: 'Plan.pdf', size: 15, mime: 'application/pdf' },
+      { name: 'Cloud.key', error: 'UNREADABLE' },
+    ]);
+    for (const item of picked) expect(item).not.toHaveProperty('path');
+  });
+
+  it('a cancelled pick is an empty list and a refusal keeps its code', async () => {
+    const { pickFiles } = await import('../transport.js');
+    invoke.mockResolvedValue([]);
+    await expect(pickFiles('files')).resolves.toEqual([]);
+    invoke.mockResolvedValue(null);
+    await expect(pickFiles('files')).resolves.toEqual([]);
+    invoke.mockRejectedValue({ code: 'BUSY', message: 'a picker is already open' });
+    await expect(pickFiles('files')).rejects.toMatchObject({ code: 'BUSY' });
+  });
+});
+
 describe('mobile transport listen', () => {
   it('listen_filters_by_name_and_unsubscribes', async () => {
     const { listen } = await import('../transport.js');

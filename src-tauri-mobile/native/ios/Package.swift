@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
   name: "tauri-plugin-mv-native",
   platforms: [
-    .iOS(.v13)
+    .iOS(.v14)
   ],
   products: [
     .library(

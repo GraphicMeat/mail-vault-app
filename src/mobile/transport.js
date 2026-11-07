@@ -65,6 +65,27 @@ export async function shareFile({ path, name, mime }) {
   }
 }
 
+// The system picker for outgoing attachments: `kind` is 'files' (the document picker) or 'photos'
+// (the photo picker, no library permission). The shell copies each pick into its cache and answers
+// a handle relative to the cache dir, never a path: `{ handle, name, size, mime }`, or
+// `{ name, error: 'UNREADABLE' }` for a pick it could not read in full. Cancel is `[]`. Only the
+// listed fields are passed on. Rejects with the shell's code: `BUSY`, `NO_APP`, `INVALID`,
+// `INTERNAL`.
+export async function pickFiles(kind) {
+  const invoke = requireInvoke();
+  let reply;
+  try {
+    reply = await invoke('mobile_pick_files', { kind });
+  } catch (error) {
+    throw shellError(error);
+  }
+  return (Array.isArray(reply) ? reply : []).map((item) => (
+    typeof item?.error === 'string'
+      ? { name: item.name, error: item.error }
+      : { handle: item.handle, name: item.name, size: item.size, mime: item.mime }
+  ));
+}
+
 // Engine events reach the page as one Tauri event, `mobile-event` `{ name, payload }`. This is the
 // only place mobile code subscribes; `handler` gets the payload of events called `name`. Returns
 // the unsubscribe, safe to call twice or before the bridge has answered.

@@ -29,6 +29,8 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.9.0")
+    // `ActivityResult` for the picker callback; the version tauri-android itself uses.
+    implementation("androidx.appcompat:appcompat:1.6.0")
     implementation(project(":tauri-android"))
     testImplementation("junit:junit:4.13.2")
 }

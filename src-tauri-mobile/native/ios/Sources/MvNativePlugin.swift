@@ -1,10 +1,15 @@
 // MailVault mobile: the system previewer, share sheet and browser for the shell (see ../../src/lib.rs).
 // Called only from Rust, never from JS. `openFile` and `shareFile` answer when the previewer or the
-// sheet is dismissed, so the shell knows when it may delete the staged copy.
+// sheet is dismissed, so the shell knows when it may delete the staged copy. `pickFiles` runs the
+// document picker or the photo picker and copies each pick into the directory Rust named, as
+// `<dir>/<index>`; Rust names and moves the copies (../../src/files.rs `finish_pick`). It answers
+// when the picker closes; cancel is an empty list.
 
+import PhotosUI
 import QuickLook
 import Tauri
 import UIKit
+import UniformTypeIdentifiers
 import WebKit
 
 struct FileArgs: Decodable {
@@ -16,11 +21,37 @@ struct UrlArgs: Decodable {
   let url: String
 }
 
-class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
-  // One preview and one share sheet at a time; only touched on the main queue.
+struct PickArgs: Decodable {
+  let kind: String
+  let dir: String
+}
+
+/// One pick: `file` (the copy's name in the pick directory), `name` and `mime`; or `name` and
+/// `error` ("UNREADABLE") when it could not be read in full. Nil fields are left out.
+struct PickItem: Encodable {
+  let file: String?
+  let name: String
+  let mime: String?
+  let error: String?
+
+  static func unreadable(_ name: String) -> PickItem {
+    return PickItem(file: nil, name: name, mime: nil, error: "UNREADABLE")
+  }
+}
+
+struct PickReply: Encodable {
+  let items: [PickItem]
+}
+
+class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewControllerDelegate,
+  UIDocumentPickerDelegate, PHPickerViewControllerDelegate
+{
+  // One preview, one share sheet and one picker at a time; only touched on the main queue.
   private var previewItem: URL?
   private var previewInvoke: Invoke?
   private var sharing = false
+  private var pickInvoke: Invoke?
+  private var pickDir: URL?
 
   /// The controller to present from: the root's topmost presented controller. Nil while anything
   /// is still animating in or out, since UIKit then refuses a presentation with only a console
@@ -153,6 +184,146 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
         }
       }
     }
+  }
+
+  @objc public func pickFiles(_ invoke: Invoke) throws {
+    guard let args = try? invoke.parseArgs(PickArgs.self), args.dir.hasPrefix("/"),
+      args.kind == "files" || args.kind == "photos"
+    else {
+      invoke.reject("bad arguments", code: "INTERNAL")
+      return
+    }
+    let dir = URL(fileURLWithPath: args.dir, isDirectory: true)
+    DispatchQueue.main.async {
+      guard self.pickInvoke == nil, let from = self.presenter() else {
+        invoke.reject("a picker is already open", code: "BUSY")
+        return
+      }
+      let picker: UIViewController
+      if args.kind == "photos" {
+        // No photo library access: the picker runs out of process and hands over copies only.
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 0
+        // JPEG rather than HEIC where the photo is HEIC: the recipient may not read HEIC.
+        config.preferredAssetRepresentationMode = .compatible
+        if #available(iOS 15.0, *) { config.selection = .ordered }
+        let photos = PHPickerViewController(configuration: config)
+        photos.delegate = self
+        picker = photos
+      } else {
+        // asCopy: the picker downloads a cloud file and hands over a copy in our sandbox.
+        let documents = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+        documents.allowsMultipleSelection = true
+        documents.delegate = self
+        picker = documents
+      }
+      self.pickInvoke = invoke
+      self.pickDir = dir
+      from.present(picker, animated: true) {
+        if picker.presentingViewController == nil, let pending = self.pickInvoke {
+          self.pickInvoke = nil
+          self.pickDir = nil
+          pending.reject("the picker could not be shown", code: "BUSY")
+        }
+      }
+    }
+  }
+
+  /// Answers the running pick (main queue).
+  private func answerPick(_ items: [PickItem]) {
+    let invoke = pickInvoke
+    pickInvoke = nil
+    pickDir = nil
+    invoke?.resolve(PickReply(items: items))
+  }
+
+  /// Puts `src` at `<dir>/<index>`: moved when it is already our own copy, else copied.
+  private static func place(
+    _ src: URL, name: String, mime: String?, index: Int, dir: URL, move: Bool
+  ) -> PickItem {
+    let target = dir.appendingPathComponent(String(index), isDirectory: false)
+    let fm = FileManager.default
+    do {
+      if move {
+        do { try fm.moveItem(at: src, to: target) } catch { try fm.copyItem(at: src, to: target) }
+      } else {
+        try fm.copyItem(at: src, to: target)
+      }
+    } catch {
+      try? fm.removeItem(at: target)
+      return PickItem.unreadable(name)
+    }
+    let type = mime ?? UTType(filenameExtension: src.pathExtension)?.preferredMIMEType
+    return PickItem(
+      file: String(index), name: name, mime: type ?? "application/octet-stream", error: nil)
+  }
+
+  public func documentPicker(
+    _ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]
+  ) {
+    guard let dir = pickDir else { return answerPick([]) }
+    // Moving a large file is quick, but a copy across volumes is not: off the main queue.
+    DispatchQueue.global(qos: .userInitiated).async {
+      var items: [PickItem] = []
+      for (i, url) in urls.enumerated() {
+        let scoped = url.startAccessingSecurityScopedResource()
+        items.append(
+          MvNativePlugin.place(
+            url, name: url.lastPathComponent, mime: nil, index: i, dir: dir, move: true))
+        if scoped { url.stopAccessingSecurityScopedResource() }
+      }
+      DispatchQueue.main.async { self.answerPick(items) }
+    }
+  }
+
+  public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    answerPick([])
+  }
+
+  public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+    // The photo picker does not close itself. Cancel (or a swipe down) is an empty result.
+    picker.dismiss(animated: true)
+    guard let dir = pickDir, !results.isEmpty else { return answerPick([]) }
+    var items = [PickItem?](repeating: nil, count: results.count)
+    let lock = NSLock()
+    let group = DispatchGroup()
+    for (i, result) in results.enumerated() {
+      let provider = result.itemProvider
+      let suggested = provider.suggestedName ?? ""
+      let typeId =
+        provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .image) ?? false }
+        ?? provider.registeredTypeIdentifiers.first
+      guard let typeId = typeId else {
+        lock.lock()
+        items[i] = PickItem.unreadable(suggested)
+        lock.unlock()
+        continue
+      }
+      group.enter()
+      // The URL lives only until this handler returns: copy inside it.
+      provider.loadFileRepresentation(forTypeIdentifier: typeId) { url, _ in
+        let item: PickItem
+        if let url = url {
+          let type = UTType(typeId)
+          var name = suggested.isEmpty ? url.deletingPathExtension().lastPathComponent : suggested
+          if let ext = type?.preferredFilenameExtension ?? (url.pathExtension.isEmpty ? nil : url.pathExtension),
+            !name.lowercased().hasSuffix("." + ext.lowercased())
+          {
+            name += "." + ext
+          }
+          item = MvNativePlugin.place(
+            url, name: name, mime: type?.preferredMIMEType, index: i, dir: dir, move: false)
+        } else {
+          item = PickItem.unreadable(suggested)
+        }
+        lock.lock()
+        items[i] = item
+        lock.unlock()
+        group.leave()
+      }
+    }
+    group.notify(queue: .main) { self.answerPick(items.compactMap { $0 }) }
   }
 }
 

@@ -1,7 +1,8 @@
 //! The mobile shell. It holds no logic: it opens the engine on Tauri's app data and cache dirs
 //! with the platform secret store, forwards `daemon_rpc` to it off the webview thread, and writes
 //! app log lines to the platform log. It also hands a cached attachment to the system previewer
-//! or share sheet (`mobile_open_file` / `mobile_share_file`) and, through the `mv-native` plugin's
+//! or share sheet (`mobile_open_file` / `mobile_share_file`), runs the system file and photo
+//! pickers for outgoing attachments (`mobile_pick_files`) and, through the `mv-native` plugin's
 //! navigation hook, sends links tapped in a mail to the system browser.
 
 mod secrets;
@@ -13,7 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_mv_native::files::{self, PathError};
-use tauri_plugin_mv_native::{MvNative, NativeError};
+use tauri_plugin_mv_native::{MvNative, NativeError, PickKind};
 
 /// The engine, or why it failed to open. The app starts either way; every RPC then answers
 /// `INTERNAL` with the reason. Managed empty at the start of setup and filled once the engine is
@@ -155,6 +156,56 @@ async fn hand_out(
             files::unstage(&staged, &share);
         }
         result
+    })
+    .await
+    .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
+}
+
+/// Where a running pick's copies land before they are named: `<cache>/pick/<fresh dir>/<index>`.
+/// Emptied after each pick and at start (a pick killed with the app leaves its dir behind).
+const PICK_SCRATCH: &str = "pick";
+
+/// Runs the system picker for outgoing attachments: `kind` is `files` (the document picker) or
+/// `photos` (the photo picker; no photo library permission on either platform). Answers when the
+/// picker closes, `[]` on cancel. Each pick is copied into `<cache>/out/<16 hex>/<sanitized name>`
+/// and answered as `{handle, name, size, mime}` with `handle` = `out/<16 hex>/<name>`, relative to
+/// the cache dir: the page never sees a path, and the engine checks the handle
+/// (`resolve_outgoing`) before it reads one. A pick that could not be read in full is
+/// `{name, error: "UNREADABLE"}`. Rejects with `{code, message}`: `INVALID` (unknown kind),
+/// `BUSY` (a picker or another sheet is up), `NO_APP`, `INTERNAL`.
+#[tauri::command]
+async fn mobile_pick_files(app: tauri::AppHandle, kind: String) -> Result<Vec<Value>, NativeError> {
+    let kind = match kind.as_str() {
+        "files" => PickKind::Files,
+        "photos" => PickKind::Photos,
+        _ => return Err(NativeError::new("INVALID", "unknown picker")),
+    };
+    // Off the webview thread: the native call answers only when the picker closes.
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = app.path().app_cache_dir().map_err(|e| NativeError::new("INTERNAL", e.to_string()))?;
+        let native = app
+            .try_state::<MvNative<tauri::Wry>>()
+            .ok_or_else(|| NativeError::new("INTERNAL", "the native plugin is not loaded"))?;
+        let scratch = files::new_stage_dir(&cache.join(PICK_SCRATCH)).map_err(|e| NativeError::new("INTERNAL", e.to_string()))?;
+        let picks = native.pick_files(kind, &scratch);
+        let reply = picks.map(|picks| {
+            picks
+                .into_iter()
+                .map(|pick| {
+                    let finished = pick
+                        .file
+                        .as_deref()
+                        .filter(|_| pick.error.is_none())
+                        .and_then(|file| files::finish_pick(&cache, &scratch, file, &pick.name, pick.mime.as_deref().unwrap_or("")).ok());
+                    match finished {
+                        Some(p) => json!({ "handle": p.handle, "name": p.name, "size": p.size, "mime": p.mime }),
+                        None => json!({ "name": files::sanitize_filename(&pick.name, ""), "error": "UNREADABLE" }),
+                    }
+                })
+                .collect()
+        });
+        let _ = std::fs::remove_dir_all(&scratch);
+        reply
     })
     .await
     .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
@@ -307,9 +358,14 @@ pub fn run() {
             slot.fill(Arc::new(engine));
             // Copies left by an earlier run: all of them on iOS (its previewer went with the app),
             // the stale ones on Android (another app may still be reading a fresh one).
+            // A pick's scratch copies never outlive the pick. `<cache>/out/` is left alone: drafts
+            // and the outbox hold its handles.
             if let Ok(cache) = cache_dir {
                 let ttl = if cfg!(target_os = "android") { STAGE_TTL } else { Duration::ZERO };
-                std::thread::spawn(move || files::sweep(&cache.join("share"), ttl));
+                std::thread::spawn(move || {
+                    files::sweep(&cache.join("share"), ttl);
+                    files::sweep(&cache.join(PICK_SCRATCH), Duration::ZERO);
+                });
             }
             // The native plugin, after the engine is open: on Android registering it waits until the
             // webview exists, and the page's first calls wait for the engine meanwhile. Without it attachments cannot open and links stay cancelled (the guard above denies
@@ -319,7 +375,13 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![daemon_rpc, mobile_log, mobile_open_file, mobile_share_file])
+        .invoke_handler(tauri::generate_handler![
+            daemon_rpc,
+            mobile_log,
+            mobile_open_file,
+            mobile_share_file,
+            mobile_pick_files
+        ])
         .run(tauri::generate_context!())
         .expect("error while running the MailVault mobile shell");
 }
