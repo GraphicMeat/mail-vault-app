@@ -57,10 +57,11 @@ pub(crate) const STALE_PART: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 /// Downloads that run at once; more wait in the queue.
 const WORKERS: usize = 2;
 const DIR: &str = "att";
-/// Graph accounts' downloaded messages (`<cache>/mime/<hash>.eml`, plan Ruling 13), counted with
-/// the attachments against [`CACHE_CAP`] and evicted by the same LRU.
-const MIME_DIR: &str = "mime";
-const EML: &str = ".eml";
+/// Graph attachments as Graph sends them (`<cache>/graph/<hash>.bin`), staged whole because Graph
+/// serves no byte ranges; the range reads of a download come from here. Counted with the
+/// attachments against [`CACHE_CAP`] and evicted by the same LRU.
+const STAGE_DIR: &str = "graph";
+const STAGED: &str = ".bin";
 const PART: &str = ".part";
 const META: &str = ".part.meta";
 const TMP: &str = ".tmp";
@@ -98,14 +99,21 @@ fn is_final_name(name: &str) -> bool {
     name.len() == 64 && name.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// A whole Graph MIME file: `<64 hex>.eml`.
-fn is_mime_name(name: &str) -> bool {
-    name.strip_suffix(EML).is_some_and(is_final_name)
+/// A whole staged Graph attachment: `<64 hex>.bin`.
+fn is_staged_name(name: &str) -> bool {
+    name.strip_suffix(STAGED).is_some_and(is_final_name)
 }
 
-/// `1.2` and the like: dot-separated positive numbers, which is all core will send.
-fn valid_section(s: &str) -> bool {
-    !s.is_empty() && s.split('.').all(|n| n.parse::<u32>().is_ok_and(|n| n > 0))
+/// An IMAP part: `1.2` and the like, dot-separated positive numbers, which is all core will send.
+/// A Graph part is the attachment's id (`graph`): an opaque token of the characters Graph ids use
+/// (base64 and URL-safe base64), at most 1024 of them; it only ever reaches a request URL
+/// percent-encoded.
+fn valid_section(s: &str, graph: bool) -> bool {
+    if graph {
+        !s.is_empty() && s.len() <= 1024 && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'+' | b'/' | b'=' | b'.'))
+    } else {
+        !s.is_empty() && s.split('.').all(|n| n.parse::<u32>().is_ok_and(|n| n > 0))
+    }
 }
 
 // ── The job table and workers ───────────────────────────────────────────────
@@ -146,8 +154,8 @@ impl Table {
 
 struct State {
     dir: PathBuf,
-    /// `<cache>/mime`.
-    mime_dir: PathBuf,
+    /// `<cache>/graph`.
+    stage_dir: PathBuf,
     table: Mutex<Table>,
     cv: Condvar,
     /// Tests: the largest buffer one job held (raw chunk in, decoded bytes out).
@@ -202,14 +210,14 @@ impl Attachments {
         let dir = cache_dir.join(DIR);
         let _ = fs::create_dir_all(&dir);
         cleanup(&dir, STALE_PART);
-        let mime_dir = cache_dir.join(MIME_DIR);
-        let _ = fs::create_dir_all(&mime_dir);
-        // An unfinished download (`<hash>.eml.tmp`) never resumes.
-        cleanup(&mime_dir, STALE_PART);
+        let stage_dir = cache_dir.join(STAGE_DIR);
+        let _ = fs::create_dir_all(&stage_dir);
+        // An unfinished download (`<hash>.bin.<pid>-<n>.tmp`) never resumes.
+        cleanup(&stage_dir, STALE_PART);
         Attachments {
             state: Arc::new(State {
                 dir,
-                mime_dir,
+                stage_dir,
                 table: Mutex::new(Table::default()),
                 cv: Condvar::new(),
                 peak_buffer: AtomicU64::new(0),
@@ -238,30 +246,31 @@ impl Attachments {
         self.state.cap.store(bytes, Ordering::SeqCst);
     }
 
-    /// The handle a backend uses for the MIME files it keeps in the cache.
-    pub(crate) fn mime_cache(&self) -> MimeCache {
-        MimeCache(Arc::clone(&self.state))
+    /// The handle a backend uses for the files it stages in the cache.
+    pub(crate) fn stage_cache(&self) -> StageCache {
+        StageCache(Arc::clone(&self.state))
     }
 }
 
-/// A Graph backend's way into the cache: where a message's MIME file goes, and the LRU pass after
-/// it wrote one. The files are named by a SHA-256 of account and remote id (a moved message has a
-/// new id, so a new file), live in `<cache>/mime`, and count against the attachment cap.
+/// A Graph backend's way into the cache: where an attachment it downloads whole is staged, and
+/// the LRU pass after it wrote one. The files are named by a SHA-256 of account, message id and
+/// attachment id (a moved message has a new id, so a new file), live in `<cache>/graph`, and count
+/// against the attachment cap.
 #[derive(Clone)]
-pub(crate) struct MimeCache(Arc<State>);
+pub(crate) struct StageCache(Arc<State>);
 
-impl MimeCache {
-    /// `<cache>/mime/<64 hex>.eml` for `remote_id` of `account`.
-    pub(crate) fn path(&self, account: &str, remote_id: &str) -> PathBuf {
+impl StageCache {
+    /// `<cache>/graph/<64 hex>.bin` for attachment `part` of message `remote_id` of `account`.
+    pub(crate) fn path(&self, account: &str, remote_id: &str, part: &str) -> PathBuf {
         let mut h = Sha256::new();
-        h.update(b"mv-graph-mime-v1");
-        for field in [account.as_bytes(), remote_id.as_bytes()] {
+        h.update(b"mv-graph-stage-v1");
+        for field in [account.as_bytes(), remote_id.as_bytes(), part.as_bytes()] {
             h.update((field.len() as u64).to_le_bytes());
             h.update(field);
         }
         let hex: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
-        let _ = fs::create_dir_all(&self.0.mime_dir);
-        self.0.mime_dir.join(format!("{hex}{EML}"))
+        let _ = fs::create_dir_all(&self.0.stage_dir);
+        self.0.stage_dir.join(format!("{hex}{STAGED}"))
     }
 
     /// Marks `path` as just used (its LRU position).
@@ -628,9 +637,9 @@ fn evict(state: &State, keep: &str) -> usize {
     // waits on a directory pass. Each delete takes the lock for that one file and re-checks the
     // leases there: a lease (taken under the lock after checking the file is there) either lands
     // first and the file is skipped, or finds the file gone.
-    // Finished attachments and Graph MIME files share the cap.
+    // Finished attachments and staged Graph attachments share the cap.
     let mut files: Vec<(SystemTime, u64, String, PathBuf)> = Vec::new();
-    for (dir, counted) in [(&state.dir, is_final_name as fn(&str) -> bool), (&state.mime_dir, is_mime_name)] {
+    for (dir, counted) in [(&state.dir, is_final_name as fn(&str) -> bool), (&state.stage_dir, is_staged_name)] {
         let Ok(rd) = fs::read_dir(dir) else {
             continue;
         };
@@ -926,7 +935,10 @@ fn internal(e: impl ToString) -> RpcError {
 /// The part's file name under the folder's stored UIDVALIDITY. `INVALID` for a bad section or a
 /// folder the engine does not know; `Ok(None)` for a folder never selected (no UIDVALIDITY yet).
 fn name_of(shared: &Shared, key: &PartKey) -> Result<Option<(String, i64)>, RpcError> {
-    if !valid_section(&key.section) {
+    let kind: Option<String> = shared
+        .read(|c| c.query_row("SELECT kind FROM accounts WHERE id = ?1", [&key.account_id], |r| r.get(0)).optional())
+        .map_err(internal)?;
+    if !valid_section(&key.section, kind.as_deref() == Some("graph")) {
         return Err(RpcError::Invalid(format!("not a part section: {}", key.section)));
     }
     let row: Option<Option<i64>> = shared
@@ -1155,7 +1167,9 @@ mod tests {
         assert_eq!(n, file_name(&k("acct", "INBOX", 7, "2"), 42));
         assert_ne!(n, file_name(&k("acct", "INBOX", 7, "2"), 43), "UIDVALIDITY is part of the name");
         assert_ne!(file_name(&k("ab", "c", 1, "1"), 1), file_name(&k("a", "bc", 1, "1"), 1));
-        assert!(valid_section("1.2") && !valid_section("") && !valid_section("0") && !valid_section("2 BODY[]"));
+        assert!(valid_section("1.2", false) && !valid_section("", false) && !valid_section("0", false) && !valid_section("2 BODY[]", false));
+        assert!(!valid_section("AAMkAD=", false), "an IMAP account takes part numbers only");
+        assert!(valid_section("AAMkADk0-_+/x=", true) && !valid_section("", true) && !valid_section("a b", true) && !valid_section("a]", true));
     }
 
     fn engine() -> (tempfile::TempDir, Engine) {

@@ -5415,7 +5415,6 @@ dependencies = [
  "async-std",
  "base64 0.22.1",
  "libc",
- "mailparse",
  "mailvault-core",
  "mock-imap",
  "rusqlite",

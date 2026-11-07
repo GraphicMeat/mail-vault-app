@@ -10,7 +10,6 @@ mod body;
 mod compose;
 mod db;
 pub mod events;
-mod mime_file;
 pub mod net;
 mod oauth;
 pub mod outgoing;

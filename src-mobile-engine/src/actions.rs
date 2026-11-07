@@ -642,7 +642,8 @@ struct Remap {
 /// What one attempt at an action came to, when it did not fail.
 enum Outcome {
     /// Done on the server. `gone`: uids the server no longer had (skipped).
-    Done { gone: Vec<u32>, remap: Option<Remap> },
+    /// `kept`: uids the action was not done for and never will be (left where they were).
+    Done { gone: Vec<u32>, remap: Option<Remap>, kept: Vec<u32> },
     /// Not done and never will be. `uids_gone`: the uids are proven absent from the folder, so
     /// their rows go too; otherwise the action's overrides are withdrawn.
     Dropped { reason: Reason, uids_gone: bool },
@@ -726,13 +727,14 @@ fn run_action(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jou
     let target = a.arg.target.as_deref();
     let mut before_wire = || mark_sent(shared, account, a);
     Ok(match backend.apply(&folder, kind, &a.uids, target, &mut before_wire)? {
-        ApplyOutcome::Done { gone, moved } => Outcome::Done {
+        ApplyOutcome::Done { gone, moved, kept } => Outcome::Done {
             gone,
+            kept,
             remap: moved.map(|m| Remap { target: target.unwrap_or_default().to_string(), pairs: m.pairs, validity: m.uid_validity }),
         },
         // A move or delete that went on the wire before, and every uid has left the source: the
         // server did it, and only the reply was lost (the engine died or the link dropped).
-        ApplyOutcome::NonePresent if kind.hides() && a.arg.sent => Outcome::Done { gone: Vec::new(), remap: None },
+        ApplyOutcome::NonePresent if kind.hides() && a.arg.sent => Outcome::Done { gone: Vec::new(), remap: None, kept: Vec::new() },
         ApplyOutcome::NonePresent => Outcome::Dropped { reason: Reason::Gone, uids_gone: true },
         ApplyOutcome::FolderGone => Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false },
         // Another generation: the journaled uids name other messages, or none.
@@ -795,24 +797,43 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
     match outcome {
         // Counted by `refuse`, which records the drop at the limit.
         Outcome::Refused(why) => refuse(shared, account, a, &why).map(|_| ()),
-        Outcome::Done { gone, remap } => {
+        Outcome::Done { gone, remap, kept } => {
+            let gen = shared.list_gen(account, &a.folder)? + 1;
             let settled = sync::write_for(shared, account, |c| {
                 if c.execute("DELETE FROM pending_actions WHERE seq = ?1", [a.seq])? == 0 {
-                    return Ok(false);
+                    return Ok(None);
                 }
                 shared.bump_settle(account, &a.folder);
                 if let Some(remap) = &remap {
                     remap_later(c, account, a, remap)?;
                 }
-                Ok(true)
+                // The uids the action was not done for show again: their override is withdrawn
+                // where no other pending action holds one.
+                let mut shown = 0;
+                if let (false, Some(kind)) = (kept.is_empty(), kind) {
+                    let col = kind.column();
+                    let list = sync::uid_list(&kept);
+                    shown = c.execute(
+                        &format!(
+                            "UPDATE messages SET {col} = NULL, list_gen = ?3
+                             WHERE account_id = ?1 AND folder = ?2 AND uid IN ({list}) AND {col} IS NOT NULL
+                               AND uid NOT IN ({PENDING_UIDS})"
+                        ),
+                        (account, &a.folder, gen),
+                    )?;
+                }
+                Ok(Some(shown))
             })?;
-            if !settled {
+            let Some(shown) = settled else {
                 return Ok(());
+            };
+            if shown > 0 {
+                emit_folder_changed(shared, account, &a.folder, gen, 0, shown);
             }
             // A flag override stays until a later sync agrees (see sync.rs); a moved or deleted
             // row has left the folder on the server, and so leaves it here. The result goes out
             // after the rows, so a listener never sees a settled action with rows still to go.
-            let doomed = if kind.is_some_and(Kind::hides) { a.uids.clone() } else { gone };
+            let doomed = if kind.is_some_and(Kind::hides) { a.uids.iter().copied().filter(|u| !kept.contains(u)).collect() } else { gone };
             let out = remove_rows(shared, account, &a.folder, &doomed);
             emit_result(shared, account, a.seq, "done", None);
             out

@@ -284,7 +284,7 @@ async fn apply_in(
             }
         }
     }
-    Ok(ApplyOutcome::Done { gone, moved })
+    Ok(ApplyOutcome::Done { gone, moved, kept: Vec::new() })
 }
 
 impl Backend for ImapBackend {

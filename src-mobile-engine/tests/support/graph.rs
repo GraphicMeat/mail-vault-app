@@ -47,7 +47,19 @@ pub struct Msg {
     pub flagged: bool,
     pub has_attachments: bool,
     pub internet_message_id: String,
-    pub mime: Vec<u8>,
+    /// The body as Graph serves it (HTML).
+    pub body_html: String,
+    pub attachments: Vec<Att>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Att {
+    pub id: String,
+    pub name: String,
+    pub content_type: String,
+    pub bytes: Vec<u8>,
+    pub inline: bool,
+    pub content_id: Option<String>,
 }
 
 #[derive(Default)]
@@ -64,6 +76,12 @@ pub struct State {
     pub codes: Vec<String>,
     /// The address `/me` names.
     pub me: String,
+    /// Every Graph request is refused with 401, valid tokens too.
+    pub refuse_tokens: bool,
+    /// `sendMail` reads the whole request, then closes the connection with no answer.
+    pub drop_send: bool,
+    /// `(n, folder id)`: after `n` more successful moves, the folder is deleted.
+    pub delete_after_moves: Option<(u32, String)>,
     next_id: u64,
 }
 
@@ -208,12 +226,11 @@ impl GraphMock {
     }
 
     /// A message in `folder` (an id or well-known name); its id.
-    pub fn add_message(&self, folder: &str, subject: &str, received_ms: i64, mime: Vec<u8>) -> String {
+    pub fn add_message(&self, folder: &str, subject: &str, received_ms: i64, body_html: &str) -> String {
         let mut st = self.st();
         let folder = st.folder(folder).unwrap_or_else(|| panic!("no folder {folder}")).id.clone();
         let id = st.new_id("msg");
         let n = st.next_id;
-        let has_attachments = String::from_utf8_lossy(&mime).to_ascii_lowercase().contains("content-disposition: attachment");
         st.messages.push(Msg {
             id: id.clone(),
             folder,
@@ -222,11 +239,35 @@ impl GraphMock {
             received_ms,
             is_read: false,
             flagged: false,
-            has_attachments,
+            has_attachments: false,
             internet_message_id: format!("<m{n}@example.com>"),
-            mime,
+            body_html: body_html.to_string(),
+            attachments: Vec::new(),
         });
         id
+    }
+
+    /// An attachment of message `msg`; its id.
+    pub fn add_attachment(&self, msg: &str, name: &str, content_type: &str, bytes: Vec<u8>, inline: bool, content_id: Option<&str>) -> String {
+        let mut st = self.st();
+        let id = st.new_id("att");
+        let m = st.messages.iter_mut().find(|m| m.id == msg).unwrap_or_else(|| panic!("no message {msg}"));
+        m.attachments.push(Att { id: id.clone(), name: name.into(), content_type: content_type.into(), bytes, inline, content_id: content_id.map(String::from) });
+        m.has_attachments |= !inline;
+        id
+    }
+
+    pub fn refuse_tokens(&self, on: bool) {
+        self.st().refuse_tokens = on;
+    }
+
+    pub fn drop_send(&self, on: bool) {
+        self.st().drop_send = on;
+    }
+
+    /// After `n` more successful moves, folder `id` is deleted (with what is in it).
+    pub fn delete_folder_after_moves(&self, n: u32, id: &str) {
+        self.st().delete_after_moves = Some((n, id.to_string()));
     }
 
     pub fn message(&self, id: &str) -> Option<Msg> {
@@ -311,6 +352,8 @@ fn message_json(m: &Msg, me: &str) -> Value {
         "internetMessageId": m.internet_message_id,
         "flag": { "flagStatus": if m.flagged { "flagged" } else { "notFlagged" } },
         "parentFolderId": m.folder,
+        "body": { "contentType": "html", "content": m.body_html },
+        "bodyPreview": m.body_html.chars().take(255).collect::<String>(),
     })
 }
 
@@ -366,6 +409,10 @@ fn serve(conn: TcpStream, state: &Mutex<State>, authority: &TokenAuthority, addr
     // Keep-alive: reqwest reuses connections.
     while let Some(req) = read_request(&mut reader)? {
         let (status, body, headers) = answer(&req, state, authority, addr);
+        if status == 0 {
+            // Took the whole request, answers nothing: a connection lost after the upload.
+            return Ok(());
+        }
         let reason = match status {
             200 => "OK",
             201 => "Created",
@@ -420,6 +467,10 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
     st.requests.push(line);
     if !req.bearer.as_deref().is_some_and(|t| authority.is_valid(t)) {
         let body = json!({ "error": { "code": "InvalidAuthenticationToken", "message": "Access token has expired or is not yet valid." } });
+        return (401, body.to_string().into_bytes(), Vec::new());
+    }
+    if st.refuse_tokens {
+        let body = json!({ "error": { "code": "InvalidAuthenticationToken", "message": "Access token validation failure." } });
         return (401, body.to_string().into_bytes(), Vec::new());
     }
     if let Some(secs) = st.throttle.pop_front() {
@@ -491,10 +542,24 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             Some(m) => ok_json(message_json(m, &me)),
             None => not_found(),
         },
-        ("GET", ["me", "messages", id, "$value"]) => match st.messages.iter().find(|m| m.id == *id) {
-            Some(m) => (200, m.mime.clone(), vec![("Content-Type".into(), "message/rfc822".into())]),
+        ("GET", ["me", "messages", id, "attachments"]) => match st.messages.iter().find(|m| m.id == *id) {
+            Some(m) => {
+                // Metadata only: no contentBytes, as the $select asks.
+                let v: Vec<Value> = m
+                    .attachments
+                    .iter()
+                    .map(|a| json!({ "id": a.id, "name": a.name, "contentType": a.content_type, "size": a.bytes.len() + 120, "isInline": a.inline, "contentId": a.content_id }))
+                    .collect();
+                ok_json(json!({ "value": v }))
+            }
             None => not_found(),
         },
+        ("GET", ["me", "messages", id, "attachments", att, "$value"]) => {
+            match st.messages.iter().find(|m| m.id == *id).and_then(|m| m.attachments.iter().find(|a| a.id == *att)) {
+                Some(a) => (200, a.bytes.clone(), vec![("Content-Type".into(), a.content_type.clone())]),
+                None => not_found(),
+            }
+        }
         ("PATCH", ["me", "messages", id]) => {
             let body: Value = serde_json::from_slice(&req.body).unwrap_or_default();
             let Some(m) = st.messages.iter_mut().find(|m| m.id == *id) else { return not_found() };
@@ -518,6 +583,15 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             m.id = new_id;
             m.folder = target;
             let v = message_json(m, &me);
+            if let Some((n, gone)) = st.delete_after_moves.clone() {
+                if n <= 1 {
+                    st.delete_after_moves = None;
+                    st.folders.retain(|f| f.id != gone);
+                    st.messages.retain(|m| m.folder != gone);
+                } else {
+                    st.delete_after_moves = Some((n - 1, gone));
+                }
+            }
             (201, v.to_string().into_bytes(), Vec::new())
         }
         ("POST", ["me", "messages", id, "permanentDelete"]) => match st.messages.iter().position(|m| m.id == *id) {
@@ -540,7 +614,10 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             let Ok(mime) = base64::engine::general_purpose::STANDARD.decode(text.as_bytes()) else {
                 return (400, json!({ "error": { "code": "ErrorMimeContentInvalid" } }).to_string().into_bytes(), Vec::new());
             };
-            st.sent.push(mime.clone());
+            st.sent.push(mime);
+            if st.drop_send {
+                return (0, Vec::new(), Vec::new());
+            }
             // Graph files its own copy in Sent Items.
             if let Some(sent) = st.folder("sentitems").map(|f| f.id.clone()) {
                 let id = st.new_id("msg");
@@ -554,7 +631,8 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
                     flagged: false,
                     has_attachments: false,
                     internet_message_id: String::new(),
-                    mime,
+                    body_html: String::new(),
+                    attachments: Vec::new(),
                 });
             }
             (202, Vec::new(), Vec::new())

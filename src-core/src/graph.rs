@@ -292,6 +292,30 @@ pub struct GraphListed {
     pub size: Option<u32>,
 }
 
+/// `GraphClient::get_body`: the body (HTML where the message has one) and Graph's
+/// plain-text preview.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphBodyOnly {
+    pub body: Option<GraphBody>,
+    pub body_preview: Option<String>,
+}
+
+/// One row of `GraphClient::list_attachments`: metadata, no bytes. `content_id` is
+/// set on an inline file attachment.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphAttachmentInfo {
+    pub id: String,
+    pub name: Option<String>,
+    pub content_type: Option<String>,
+    #[serde(default)]
+    pub size: i64,
+    #[serde(default)]
+    pub is_inline: bool,
+    pub content_id: Option<String>,
+}
+
 /// One row of `GraphClient::list_since`: the message as the full-header
 /// listing reads it, and whether Outlook's flag is set (`flag.flagStatus`).
 #[derive(Debug)]
@@ -1608,7 +1632,7 @@ impl GraphClient {
     }
 
     // -----------------------------------------------------------------------
-    // Mobile engine: a header window, one folder, the MIME as a file
+    // Mobile engine: a header window, one folder, a body, attachments one by one
     // -----------------------------------------------------------------------
 
     /// One page of a folder's messages received at or after `since` (a Graph timestamp, see
@@ -1683,36 +1707,87 @@ impl GraphClient {
         resp.json().await.map_err(|e| format!("Graph get_folder parse error: {}", e))
     }
 
-    /// Streams the message's raw MIME (`$value`) into `path`, never holding it in memory: written
-    /// to a `<path>.<pid>-<n>.tmp` of its own chunk by chunk, synced, then renamed, so `path` only ever holds a whole
-    /// message. Returns the byte count. A refused answer is `failure_text`
-    /// (`Graph download_mime failed (404) …` when the message is gone).
-    pub async fn download_mime_to(&self, message_id: &str, path: &std::path::Path) -> Result<u64, String> {
+    /// The message's body and preview only (`$select=body,bodyPreview`), the body as
+    /// HTML where the message has one (`Prefer: outlook.body-content-type="html"`): what a
+    /// reader shows, with no attachment bytes. A refused answer is `failure_text`
+    /// (`(404)` when the message is gone).
+    pub async fn get_body(&self, message_id: &str) -> Result<GraphBodyOnly, String> {
+        let url = format!("{}/me/messages/{}?$select=body,bodyPreview", graph_base(), percent_encode(message_id));
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token).header("Prefer", "outlook.body-content-type=\"html\""))
+            .await
+            .map_err(|e| format!("Graph get_body request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "get_body").await);
+        }
+        resp.json().await.map_err(|e| format!("Graph get_body parse error: {}", e))
+    }
+
+    /// The message's attachments, metadata only (`$select=id,name,contentType,size,isInline,contentId`,
+    /// never `contentBytes`), every page of them.
+    pub async fn list_attachments(&self, message_id: &str) -> Result<Vec<GraphAttachmentInfo>, String> {
+        let mut url = format!(
+            "{}/me/messages/{}/attachments?$select=id,name,contentType,size,isInline,contentId",
+            graph_base(),
+            percent_encode(message_id)
+        );
+        let mut out = Vec::new();
+        loop {
+            let resp = self
+                .client
+                .send(self.client.get(&url).bearer_auth(&self.access_token))
+                .await
+                .map_err(|e| format!("Graph list_attachments request failed: {}", e))?;
+            if !resp.status().is_success() {
+                return Err(Self::failure_text(resp, "list_attachments").await);
+            }
+            let page: GraphListResponse<GraphAttachmentInfo> =
+                resp.json().await.map_err(|e| format!("Graph list_attachments parse error: {}", e))?;
+            out.extend(page.value);
+            match page.next_link {
+                Some(next) if is_graph_link(&next) => url = next,
+                Some(_) => return Err("Graph list_attachments refused a nextLink outside the Graph base".into()),
+                None => return Ok(out),
+            }
+        }
+    }
+
+    /// Streams one attachment's bytes (`/attachments/{id}/$value`) into `path`, never
+    /// holding them in memory: written to a `<path>.<pid>-<n>.tmp` of its own chunk by
+    /// chunk, synced, then renamed, so `path` only ever holds the whole attachment.
+    /// Returns the byte count. A refused answer is `failure_text` (`(404)` when gone).
+    pub async fn download_attachment_to(&self, message_id: &str, attachment_id: &str, path: &std::path::Path) -> Result<u64, String> {
         use std::io::Write;
-        let url = format!("{}/me/messages/{}/$value", graph_base(), percent_encode(message_id));
+        let url = format!(
+            "{}/me/messages/{}/attachments/{}/$value",
+            graph_base(),
+            percent_encode(message_id),
+            percent_encode(attachment_id)
+        );
         let mut resp = self
             .client
             .send(self.client.get(&url).bearer_auth(&self.access_token))
             .await
-            .map_err(|e| format!("Graph download_mime request failed: {}", e))?;
+            .map_err(|e| format!("Graph download_attachment request failed: {}", e))?;
         if !resp.status().is_success() {
-            return Err(Self::failure_text(resp, "download_mime").await);
+            return Err(Self::failure_text(resp, "download_attachment").await);
         }
-        // A name of its own per download: two downloads of one message (a body and an
-        // attachment at once) never write into the same file; the last rename wins, whole.
+        // A name of its own per download: two downloads of one attachment never write into
+        // the same file; the last rename wins, whole.
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let mut tmp = path.as_os_str().to_owned();
         tmp.push(format!(".{}-{}.tmp", std::process::id(), n));
         let tmp = std::path::PathBuf::from(tmp);
         let written = async {
-            let mut file = std::fs::File::create(&tmp).map_err(|e| format!("Graph download_mime write error: {}", e))?;
+            let mut file = std::fs::File::create(&tmp).map_err(|e| format!("Graph download_attachment write error: {}", e))?;
             let mut n: u64 = 0;
-            while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Graph download_mime read error: {}", e))? {
-                file.write_all(&chunk).map_err(|e| format!("Graph download_mime write error: {}", e))?;
+            while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Graph download_attachment read error: {}", e))? {
+                file.write_all(&chunk).map_err(|e| format!("Graph download_attachment write error: {}", e))?;
                 n += chunk.len() as u64;
             }
-            file.sync_all().map_err(|e| format!("Graph download_mime write error: {}", e))?;
+            file.sync_all().map_err(|e| format!("Graph download_attachment write error: {}", e))?;
             Ok::<u64, String>(n)
         }
         .await;
@@ -1725,7 +1800,7 @@ impl GraphClient {
         };
         if let Err(e) = std::fs::rename(&tmp, path) {
             let _ = std::fs::remove_file(&tmp);
-            return Err(format!("Graph download_mime write error: {}", e));
+            return Err(format!("Graph download_attachment write error: {}", e));
         }
         Ok(n)
     }
@@ -1898,6 +1973,27 @@ impl GraphClient {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_body_and_attachment_metadata_read() {
+        let b: super::GraphBodyOnly = serde_json::from_value(serde_json::json!({
+            "body": { "contentType": "html", "content": "<p>x</p>" }, "bodyPreview": "x"
+        }))
+        .unwrap();
+        assert_eq!(b.body.unwrap().content.as_deref(), Some("<p>x</p>"));
+        assert_eq!(b.body_preview.as_deref(), Some("x"));
+        let page: super::GraphListResponse<super::GraphAttachmentInfo> = serde_json::from_value(serde_json::json!({
+            "value": [
+                { "@odata.type": "#microsoft.graph.fileAttachment", "id": "a=", "name": "doc.pdf", "contentType": "application/pdf", "size": 1234, "isInline": false, "contentId": null },
+                { "id": "b=", "isInline": true, "contentId": "logo@x" }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(page.value[0].size, 1234);
+        assert_eq!(page.value[0].name.as_deref(), Some("doc.pdf"));
+        assert!(page.value[1].is_inline && page.value[1].size == 0);
+        assert_eq!(page.value[1].content_id.as_deref(), Some("logo@x"));
+    }
 
     #[test]
     fn a_window_row_reads_the_message_and_its_flag() {

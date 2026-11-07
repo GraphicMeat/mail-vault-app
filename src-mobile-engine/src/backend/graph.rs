@@ -8,10 +8,15 @@
 //! folder's generation is the constant [`GENERATION`].
 //!
 //! A pass lists the folder's 90-day window once (`GraphClient::list_since`, newest first, with the
-//! read and flag state) and serves `headers` and `flags` from that listing. Bodies and attachment
-//! ranges come from one MIME file per message (Ruling 13): `GraphClient::download_mime_to` streams
-//! it into `<cache>/mime`, [`crate::mime_file`] indexes its parts in one pass, and a range is a
-//! seek and a read; the file counts against the attachment cache's cap and LRU.
+//! read and flag state) and serves `headers` and `flags` from that listing.
+//!
+//! Opening a message never downloads an attachment (Ruling 13 as revised): the body comes from
+//! the message resource (`GraphClient::get_body`, HTML where there is one), the parts are the
+//! attachments' metadata (`list_attachments`, no bytes), each part's section being its Graph
+//! attachment id. A tapped attachment is streamed whole (Graph serves no byte ranges) into
+//! `<cache>/graph` (`download_attachment_to`, counted in the attachment cache's cap and LRU), and
+//! the attachment worker's range reads come from that file; it goes once the last range was read.
+//! A download that resumes after its staged file was evicted starts that file again from 0.
 //!
 //! Every request goes through [`GraphBackend::call`]: a 401 gets one token refresh and one retry
 //! (a second 401 is handled as `ImapBackend::open` handles a fresh token refused), and a 429 waits
@@ -22,13 +27,12 @@ use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Fl
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
-use crate::mime_file::{self, Located};
 use crate::net::block_on;
 use crate::remote_ids;
 use crate::secrets::Credential;
 use crate::sync::{self, Fail};
-use mailvault_core::graph::{GraphClient, GraphMailFolder, GraphSynced};
-use mailvault_core::imap::{parts, PartInfo};
+use mailvault_core::graph::{GraphAttachmentInfo, GraphClient, GraphMailFolder, GraphSynced};
+use mailvault_core::imap::PartInfo;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
@@ -131,6 +135,35 @@ fn folder_info(f: &GraphMailFolder) -> FolderInfo {
     }
 }
 
+/// A Graph attachment as a part: its id is the section; its bytes come as Graph stores them
+/// (`binary`, nothing to undo).
+fn part_info(a: GraphAttachmentInfo) -> PartInfo {
+    PartInfo {
+        section: a.id,
+        mime: a.content_type.map(|t| t.to_ascii_lowercase()).filter(|t| !t.is_empty()).unwrap_or_else(|| "application/octet-stream".into()),
+        filename: a.name.filter(|n| !n.trim().is_empty()),
+        size: u32::try_from(a.size.max(0)).unwrap_or(u32::MAX),
+        encoding: "binary".into(),
+        charset: None,
+        content_id: a.content_id.map(|id| id.trim().trim_start_matches('<').trim_end_matches('>').to_string()).filter(|id| !id.is_empty()),
+        disposition: Some(if a.is_inline { "inline" } else { "attachment" }.to_string()),
+    }
+}
+
+/// Bytes `offset..offset + len` of `file` (fewer at its end) and the file's length.
+fn read_range(file: &std::path::Path, offset: u64, len: u32) -> std::io::Result<(Vec<u8>, u64)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(file)?;
+    let size = f.metadata()?.len();
+    let want = size.saturating_sub(offset).min(len as u64);
+    let mut buf = Vec::with_capacity(want as usize);
+    if want > 0 {
+        f.seek(SeekFrom::Start(offset))?;
+        f.take(want).read_to_end(&mut buf)?;
+    }
+    Ok((buf, size))
+}
+
 /// Why a call did not return a value.
 enum CallErr {
     /// Final: the account must sign in again, it is gone, or the engine is closing.
@@ -148,12 +181,15 @@ impl From<CallErr> for Fail {
     }
 }
 
-/// The MIME file of one message and its parts.
-struct Mime {
+/// The attachment `part_range` is reading: its message, section and staged file.
+struct Staged {
     folder: String,
     uid: u32,
+    section: String,
     file: PathBuf,
-    parts: Vec<Located>,
+    /// The file's length once the last range was read (the file is gone then; a probe past the
+    /// end needs no download).
+    ended: Option<u64>,
 }
 
 pub(crate) struct GraphBackend<'a> {
@@ -167,8 +203,8 @@ pub(crate) struct GraphBackend<'a> {
     selected: Option<(String, (i64, i64))>,
     /// The last `window`: the folder's path and its listed messages by uid.
     listed: Option<(String, HashMap<u32, GraphSynced>)>,
-    /// The message `parts`/`body`/`part_range` last read.
-    mime: Option<Mime>,
+    /// The attachment `part_range` last read.
+    staged: Option<Staged>,
     /// A request went through since `open`.
     worked: bool,
 }
@@ -189,7 +225,7 @@ impl<'a> GraphBackend<'a> {
             secrets: Vec::new(),
             selected: None,
             listed: None,
-            mime: None,
+            staged: None,
             worked: false,
         };
         backend.set_token(token);
@@ -295,64 +331,73 @@ impl<'a> GraphBackend<'a> {
         Ok(self.shared.read(|c| uids.iter().map(|u| Ok((*u, remote_ids::remote_for(c, account, folder, *u)?))).collect::<rusqlite::Result<Vec<_>>>())?)
     }
 
-    /// The MIME file of `uid` in `folder` and its parts, downloaded unless the cache has it.
-    /// `None` when the message is gone (no mapping, or Graph no longer has the id).
-    fn mime(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<&Mime>, Fail> {
+    /// The remote id of `uid` in `folder`; `None` when it has none or the generation is not
+    /// [`GENERATION`].
+    fn remote_id(&self, folder: &FolderRow, uid: u32) -> Result<Option<String>, Fail> {
         if folder.uid_validity.is_some_and(|v| v != GENERATION) {
             return Ok(None);
         }
-        let held = self.mime.as_ref().is_some_and(|m| m.folder == folder.path && m.uid == uid && m.file.is_file());
-        if !held {
-            self.mime = None;
-            let Some(id) = self.remote_ids(&folder.path, &[uid])?.pop().and_then(|(_, id)| id) else {
-                return Ok(None);
-            };
-            let file = self.shared.mime.path(&self.account, &id);
-            if file.is_file() {
-                self.shared.mime.touch(&file);
-            } else {
-                let target = file.clone();
-                match self.call(async |c| c.download_mime_to(&id, &target).await) {
-                    Ok(_) => self.shared.mime.written(&file),
-                    Err(CallErr::Text(e)) if status_of(&e) == Some(404) => return Ok(None),
-                    Err(e) => return Err(e.into()),
-                }
-            }
-            let parts = mime_file::index(&file).map_err(|e| Fail::Code(Code::Invalid, format!("mime file: {e}")))?;
-            self.mime = Some(Mime { folder: folder.path.clone(), uid, file, parts });
-        }
-        Ok(self.mime.as_ref())
+        Ok(self.remote_ids(&folder.path, &[uid])?.pop().and_then(|(_, id)| id))
     }
 
-    /// Raw octets of `section` from the message's MIME file. A file the LRU removed meanwhile is
-    /// downloaded again (once).
+    /// The message's attachments as parts (metadata, no bytes); `None` when the message is gone.
+    fn attachments(&mut self, id: &str) -> Result<Option<Vec<PartInfo>>, Fail> {
+        match self.call(async |c| c.list_attachments(id).await) {
+            Ok(list) => Ok(Some(list.into_iter().map(part_info).collect())),
+            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Raw octets `offset..offset + len` of attachment `section`, from its staged file, staged
+    /// first when it is not (a whole download). `None` when the message or attachment is gone.
     fn read(&mut self, folder: &FolderRow, uid: u32, section: &str, offset: u64, len: u32) -> Result<Option<Vec<u8>>, Fail> {
-        for _ in 0..2 {
-            let Some(m) = self.mime(folder, uid)? else {
-                return Ok(None);
-            };
-            let Some(part) = m.parts.iter().find(|p| p.info.section == section) else {
+        let same = |s: &Staged| s.folder == folder.path && s.uid == uid && s.section == section;
+        if let Some(end) = self.staged.as_ref().filter(|s| same(s)).and_then(|s| s.ended) {
+            if offset >= end {
                 return Ok(Some(Vec::new()));
-            };
-            match mime_file::read_range(&m.file, part, offset, len) {
-                Ok(bytes) => return Ok(Some(bytes)),
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.mime = None,
-                Err(e) => return Err(Fail::Code(Code::Invalid, format!("mime file: {e}"))),
             }
         }
-        Err(Fail::Code(Code::Invalid, "the MIME file went away twice".into()))
-    }
-
-    /// A body part's decoded text: `Some(None)` when there is no such part.
-    fn text(&mut self, folder: &FolderRow, uid: u32, part: Option<&PartInfo>) -> Result<Option<Option<String>>, Fail> {
-        let Some(part) = part else {
-            return Ok(Some(None));
-        };
-        let Some(raw) = self.read(folder, uid, &part.section, 0, u32::MAX)? else {
-            return Ok(None);
-        };
-        let bytes = parts::decode_transfer(&raw, &part.encoding);
-        Ok(Some(Some(parts::decode_text(&bytes, part.charset.as_deref()))))
+        for _ in 0..2 {
+            let file = match self.staged.as_ref().filter(|s| same(s) && s.ended.is_none() && s.file.is_file()) {
+                Some(s) => s.file.clone(),
+                None => {
+                    self.staged = None;
+                    let Some(id) = self.remote_id(folder, uid)? else {
+                        return Ok(None);
+                    };
+                    let file = self.shared.stage.path(&self.account, &id, section);
+                    if file.is_file() {
+                        self.shared.stage.touch(&file);
+                    } else {
+                        let target = file.clone();
+                        match self.call(async |c| c.download_attachment_to(&id, section, &target).await) {
+                            Ok(_) => self.shared.stage.written(&file),
+                            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => return Ok(None),
+                            Err(e) => return Err(e.into()),
+                        }
+                    }
+                    self.staged = Some(Staged { folder: folder.path.clone(), uid, section: section.to_string(), file: file.clone(), ended: None });
+                    file
+                }
+            };
+            match read_range(&file, offset, len) {
+                Ok((bytes, file_len)) => {
+                    if bytes.len() < len as usize {
+                        // The last range: the attachment cache has it now.
+                        let _ = std::fs::remove_file(&file);
+                        if let Some(s) = self.staged.as_mut() {
+                            s.ended = Some(file_len);
+                        }
+                    }
+                    return Ok(Some(bytes));
+                }
+                // Evicted meanwhile: staged again from 0.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.staged = None,
+                Err(e) => return Err(Fail::Code(Code::Invalid, format!("staged attachment: {e}"))),
+            }
+        }
+        Err(Fail::Code(Code::Invalid, "the staged attachment went away twice".into()))
     }
 
     /// Writes the mapping changes of an apply: `forget` drops `(folder, uid)`, `moved` maps a new
@@ -478,20 +523,31 @@ impl Backend for GraphBackend<'_> {
     }
 
     fn parts(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<Vec<PartInfo>>, Fail> {
-        Ok(self.mime(folder, uid)?.map(|m| m.parts.iter().map(|p| p.info.clone()).collect()))
+        let Some(id) = self.remote_id(folder, uid)? else {
+            return Ok(None);
+        };
+        self.attachments(&id)
     }
 
     fn body(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<RawBody>, Fail> {
-        let Some(parts) = self.parts(folder, uid)? else {
+        let Some(id) = self.remote_id(folder, uid)? else {
             return Ok(None);
         };
-        let (html_part, text_part) = crate::body::body_part_infos(&parts);
-        let (html_part, text_part) = (html_part.cloned(), text_part.cloned());
-        let Some(html) = self.text(folder, uid, html_part.as_ref())? else {
+        let got = match self.call(async |c| c.get_body(&id).await) {
+            Ok(b) => b,
+            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        let Some(parts) = self.attachments(&id)? else {
             return Ok(None);
         };
-        let Some(text) = self.text(folder, uid, text_part.as_ref())? else {
-            return Ok(None);
+        let (kind, content) = got.body.map(|b| (b.content_type.unwrap_or_default(), b.content.unwrap_or_default())).unwrap_or_default();
+        let (html, text) = if kind.eq_ignore_ascii_case("html") {
+            (Some(content), None)
+        } else if content.is_empty() {
+            (None, got.body_preview.filter(|p| !p.is_empty()))
+        } else {
+            (None, Some(content))
         };
         Ok(Some(RawBody { parts, html, text }))
     }
@@ -541,7 +597,7 @@ impl Backend for GraphBackend<'_> {
                         Err(CallErr::Text(e)) => return refused_or_fail(e),
                     }
                 }
-                Ok(ApplyOutcome::Done { gone, moved: None })
+                Ok(ApplyOutcome::Done { gone, moved: None, kept: Vec::new() })
             }
             Kind::Delete => {
                 // In Deleted Items already: a delete is permanent. Its `\Trash` comes only from
@@ -579,7 +635,7 @@ impl Backend for GraphBackend<'_> {
                     Some(CallErr::Fail(f)) => Err(f),
                     Some(CallErr::Text(e)) => refused_or_fail(e),
                     None if done.is_empty() && gone.len() >= asked => Ok(ApplyOutcome::NonePresent),
-                    None => Ok(ApplyOutcome::Done { gone, moved: None }),
+                    None => Ok(ApplyOutcome::Done { gone, moved: None, kept: Vec::new() }),
                 }
             }
             Kind::Move => {
@@ -620,7 +676,15 @@ impl Backend for GraphBackend<'_> {
                     Some(CallErr::Text(e)) => refused_or_fail(e),
                     None if target_gone && moved.is_empty() => Ok(ApplyOutcome::FolderGone),
                     None if moved.is_empty() && gone.len() >= asked => Ok(ApplyOutcome::NonePresent),
-                    None => Ok(ApplyOutcome::Done { gone, moved: Some(Moved { pairs, uid_validity: Some(GENERATION) }) }),
+                    None => {
+                        // The target went away part way: what did not move stays where it was.
+                        let kept: Vec<u32> = if target_gone {
+                            present.iter().map(|(u, _)| *u).filter(|u| !gone.contains(u) && !moved.iter().any(|(m, _)| m == u)).collect()
+                        } else {
+                            Vec::new()
+                        };
+                        Ok(ApplyOutcome::Done { gone, moved: Some(Moved { pairs, uid_validity: Some(GENERATION) }), kept })
+                    }
                 }
             }
         }

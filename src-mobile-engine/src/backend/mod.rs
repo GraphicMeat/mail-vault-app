@@ -114,8 +114,10 @@ pub(crate) struct Moved {
 /// means for the action (`actions::run_action`).
 #[derive(Debug)]
 pub(crate) enum ApplyOutcome {
-    /// Done. `gone`: uids the server no longer had (skipped).
-    Done { gone: Vec<u32>, moved: Option<Moved> },
+    /// Done. `gone`: uids the server no longer had (skipped). `kept`: uids the server still has
+    /// where they were, the action not done for them (a move whose target went away part way):
+    /// their rows stay and show again.
+    Done { gone: Vec<u32>, moved: Option<Moved>, kept: Vec<u32> },
     /// None of the uids is in the folder (proven by the server's answer); nothing was sent.
     NonePresent,
     /// The folder, or a move's target, is proven gone.

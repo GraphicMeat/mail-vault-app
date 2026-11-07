@@ -1,8 +1,9 @@
 //! Microsoft Graph accounts (`kind = graph`) end to end against the routed Graph mock in
 //! `support/graph.rs`: folders and the 90-day header window with local uids from `remote_ids`,
-//! read/flag/move/delete through the journal, bodies and attachment ranges served from one MIME
-//! file in `<cache>/mime`, sends through `sendMail` with no Sent append, throttling, an expired
-//! token, and the Microsoft sign-in that creates the account.
+//! read/flag/move/delete through the journal, bodies from the message resource and attachments
+//! fetched one by one on a tap, sends through `sendMail` with no Sent append (and the 4 MB
+//! limit checked before anything is journalled), throttling, an expired token, a token Graph keeps
+//! refusing, and the Microsoft sign-in that creates the account.
 //!
 //! `MAILVAULT_GRAPH_BASE` is read once per process, so every test shares one mock and holds
 //! [`serial`] for its whole run.
@@ -10,7 +11,6 @@
 #[path = "support/graph.rs"]
 mod graph_mock;
 
-use base64::Engine as _;
 use graph_mock::{mock, serial, GraphMock};
 use mailvault_mobile_engine::{Credential, Engine, MemorySecrets, SecretStore};
 use serde_json::{json, Value};
@@ -29,9 +29,8 @@ fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64
 }
 
-fn plain(subject: &str) -> Vec<u8> {
-    format!("From: Alice <alice@example.com>\r\nTo: {ME}\r\nSubject: {subject}\r\nMessage-ID: <{}@example.com>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nBody of {subject}.\r\n", subject.replace(' ', "-"))
-        .into_bytes()
+fn plain(subject: &str) -> String {
+    format!("<p>Body of {subject}.</p>")
 }
 
 /// Deterministic bytes that do not repeat on a line boundary.
@@ -43,32 +42,6 @@ fn source(n: usize, seed: u64) -> Vec<u8> {
             (x >> 56) as u8
         })
         .collect()
-}
-
-fn base64_lines(data: &[u8]) -> String {
-    let flat = base64::engine::general_purpose::STANDARD.encode(data);
-    let mut out = String::new();
-    for line in flat.as_bytes().chunks(76) {
-        out.push_str(std::str::from_utf8(line).unwrap());
-        out.push_str("\r\n");
-    }
-    out
-}
-
-/// multipart/mixed: (multipart/alternative: text 1.1, html 1.2) and a base64 PDF as part 2.
-fn with_attachment(subject: &str, pdf: &[u8]) -> Vec<u8> {
-    format!(
-        "From: Alice <alice@example.com>\r\nTo: {ME}\r\nSubject: {subject}\r\nMessage-ID: <att@example.com>\r\nMIME-Version: 1.0\r\n\
-Content-Type: multipart/mixed; boundary=\"outer-b\"\r\n\r\nThis is a multi-part message.\r\n\
---outer-b\r\nContent-Type: multipart/alternative; boundary=\"inner-b\"\r\n\r\n\
---inner-b\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nPlain body Gr=C3=BC=C3=9Fe\r\n\
---inner-b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Html body</p>\r\n\
---inner-b--\r\n\r\n\
---outer-b\r\nContent-Type: application/pdf; name=\"doc.pdf\"\r\nContent-Disposition: attachment; filename=\"doc.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\n{}\
---outer-b--\r\n",
-        base64_lines(pdf)
-    )
-    .into_bytes()
 }
 
 #[derive(Default)]
@@ -219,11 +192,33 @@ impl Fx {
         self.tmp.path().join("cache")
     }
 
-    fn mime_files(&self) -> Vec<String> {
-        match std::fs::read_dir(self.cache().join("mime")) {
-            Ok(rd) => rd.map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".eml")).collect(),
+    /// Attachments staged whole in `<cache>/graph`.
+    fn staged_files(&self) -> Vec<String> {
+        match std::fs::read_dir(self.cache().join("graph")) {
+            Ok(rd) => rd.map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect(),
             Err(_) => Vec::new(),
         }
+    }
+
+    /// A picked file of `len` bytes that takes no disk space; its handle.
+    fn pick_sparse(&self, name: &str, len: u64) -> String {
+        let d = self.cache().join("out").join("0123456789abcdef");
+        std::fs::create_dir_all(&d).unwrap();
+        let f = std::fs::File::create(d.join(name)).unwrap();
+        f.set_len(len).unwrap();
+        format!("out/0123456789abcdef/{name}")
+    }
+
+    fn send(&self, extra: Value) -> Result<Value, mailvault_mobile_engine::RpcError> {
+        let mut p = json!({ "accountId": ACCOUNT, "to": "rcpt@example.test", "cc": "", "bcc": "", "subject": "Hello Graph", "text": "Body over Graph", "attachments": [] });
+        for (k, v) in extra.as_object().unwrap() {
+            p[k] = v.clone();
+        }
+        self.engine.rpc("mobile.compose.send", p)
+    }
+
+    fn needs_auth(&self) -> i64 {
+        self.db().query_row("SELECT needs_auth FROM accounts WHERE id = ?1", [ACCOUNT], |r| r.get(0)).unwrap()
     }
 }
 
@@ -238,9 +233,9 @@ fn graph_sync_lists_folders_and_pages_inbox_with_stable_uids() {
     // More than one listing page (the backend asks for 100 at a time), and one message outside
     // the 90 days.
     for i in 0..105 {
-        f.g.add_message("inbox", &format!("Mail {i:03}"), now - (200 - i) * HOUR / 10, plain(&format!("Mail {i:03}")));
+        f.g.add_message("inbox", &format!("Mail {i:03}"), now - (200 - i) * HOUR / 10, &plain(&format!("Mail {i:03}")));
     }
-    f.g.add_message("inbox", "Too old", now - 100 * DAY, plain("Too old"));
+    f.g.add_message("inbox", "Too old", now - 100 * DAY, &plain("Too old"));
 
     f.sync(None);
 
@@ -264,7 +259,7 @@ fn graph_sync_lists_folders_and_pages_inbox_with_stable_uids() {
     // Stable across passes; a new message gets a higher uid; the server's read state arrives.
     let read_id = f.g.messages_in("inbox").iter().find(|m| m.subject == "Mail 010").unwrap().id.clone();
     f.g.set_read(&read_id, true);
-    f.g.add_message("inbox", "Newest", now - 1000, plain("Newest"));
+    f.g.add_message("inbox", "Newest", now - 1000, &plain("Newest"));
     f.sync(Some("INBOX"));
     let second = f.uids("INBOX");
     for (subject, uid) in &first {
@@ -285,7 +280,7 @@ fn graph_read_flag_move_delete_round_trip() {
     let projects = f.g.add_folder("Projects", None);
     let now = now_ms();
     for (i, s) in ["Alpha", "Bravo", "Charlie"].iter().enumerate() {
-        f.g.add_message("inbox", s, now - (10 - i as i64) * HOUR, plain(s));
+        f.g.add_message("inbox", s, now - (10 - i as i64) * HOUR, &plain(s));
     }
     f.sync(None);
     let uids = f.uids("INBOX");
@@ -342,37 +337,128 @@ fn graph_read_flag_move_delete_round_trip() {
 }
 
 #[test]
-fn graph_body_and_attachment_come_from_one_mime_file() {
+fn opening_a_graph_message_fetches_no_attachment_and_a_tap_fetches_one() {
     let f = setup();
     let pdf = source(600 * 1024, 7);
-    f.g.add_message("inbox", "With file", now_ms() - HOUR, with_attachment("With file", &pdf));
+    let other = source(300 * 1024, 9);
+    let id = f.g.add_message("inbox", "With files", now_ms() - HOUR, "<p>Html body <img src=\"cid:logo@x\"></p>");
+    let pdf_id = f.g.add_attachment(&id, "doc.pdf", "application/pdf", pdf.clone(), false, None);
+    let other_id = f.g.add_attachment(&id, "big.zip", "application/zip", other, false, None);
+    f.g.add_attachment(&id, "logo.png", "image/png", source(100, 3), true, Some("<logo@x>"));
     f.sync(None);
-    let uid = f.uids("INBOX")["With file"];
+    let uid = f.uids("INBOX")["With files"];
     f.g.clear_requests();
 
+    // Opening: the body and the attachments' metadata, no bytes of any attachment.
     let body = f.rpc("mobile.message.body", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid }));
     assert!(body["html"].as_str().unwrap_or("").contains("Html body"), "{body}");
-    assert!(body["text"].as_str().unwrap_or("").contains("Plain body Grüße"), "{body}");
     let atts = body["attachments"].as_array().unwrap();
-    assert_eq!(atts.len(), 1, "{body}");
-    assert_eq!(atts[0]["section"], "2");
-    assert_eq!(atts[0]["filename"], "doc.pdf");
-    assert_eq!(f.g.count("$value"), 1, "the MIME came down once: {:?}", f.g.requests());
-    assert_eq!(f.mime_files().len(), 1, "one MIME file in <cache>/mime");
+    assert_eq!(atts.len(), 3, "{body}");
+    let pdf_part = atts.iter().find(|a| a["filename"] == "doc.pdf").unwrap();
+    assert_eq!(pdf_part["section"], pdf_id.as_str(), "a part's section is its Graph attachment id");
+    assert_eq!(pdf_part["mime"], "application/pdf");
+    assert!(atts.iter().any(|a| a["contentId"] == "logo@x"), "an inline image keeps its Content-ID: {body}");
+    let requests = f.g.requests();
+    assert!(!requests.iter().any(|r| r.contains("$value")), "no bytes on open: {requests:?}");
+    assert!(requests.iter().any(|r| r.contains("$select=body,bodyPreview")), "{requests:?}");
 
-    // The attachment streams from the same file: no further HTTP for the MIME. Then the cap
-    // (one byte here) evicts the MIME file as it evicts any cached attachment, never the file
-    // that just finished.
-    f.engine.set_attachment_cache_cap(1);
+    // A tap fetches that attachment only, through the attachment worker's range reads.
     let from = f.events.len();
-    let job = f.rpc("mobile.attachment.fetch", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid, "section": "2" }))["jobId"].as_u64().unwrap();
+    let job = f.rpc("mobile.attachment.fetch", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid, "section": pdf_id }))["jobId"].as_u64().unwrap();
     let (name, v) = f.events.wait(from, "attachment end", |n, v| (n == "mobile.attachment.done" || n == "mobile.attachment.failed") && v["jobId"] == job);
     assert_eq!(name, "mobile.attachment.done", "{v}; logs {:?}", f.logs.lock().unwrap());
     let path = PathBuf::from(v["path"].as_str().unwrap());
-    assert!(std::fs::read(&path).unwrap() == pdf, "the decoded attachment is the PDF");
-    assert_eq!(f.g.count("$value"), 1, "the part came from the MIME file: {:?}", f.g.requests());
-    assert!(f.mime_files().is_empty(), "the MIME file left by the LRU: {:?}", f.mime_files());
-    assert!(path.is_file(), "the file that just finished stays");
+    assert!(std::fs::read(&path).unwrap() == pdf, "the attachment is the PDF");
+    assert_eq!(f.g.count(&format!("/attachments/{pdf_id}/$value")), 1, "{:?}", f.g.requests());
+    assert_eq!(f.g.count(&format!("/attachments/{other_id}/$value")), 0, "only the tapped attachment");
+    assert!(f.staged_files().is_empty(), "the staged copy went once read: {:?}", f.staged_files());
+    // A section that is not an attachment id shape is refused before any work.
+    assert!(f.engine.rpc("mobile.attachment.fetch", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid, "section": "a b" })).is_err());
+}
+
+#[test]
+fn a_graph_send_over_the_sendmail_limit_is_refused_before_the_journal() {
+    let f = setup();
+    f.sync(None);
+    f.g.clear_requests();
+    let handle = f.pick_sparse("photo.jpg", 5 * 1024 * 1024);
+    let err = f.send(json!({ "attachments": [{ "handle": handle }] })).unwrap_err();
+    assert_eq!(err.code(), "TOO_LARGE");
+    let v = serde_json::to_value(&err).unwrap();
+    let limit = v["data"]["limitBytes"].as_u64().unwrap_or_else(|| panic!("no limit: {v}"));
+    assert!(limit > 1_000_000 && limit < 3 * 1024 * 1024, "the attachments that fit a 4 MB sendMail: {limit}");
+    let rows: i64 = f.db().query_row("SELECT count(*) FROM outbox", [], |r| r.get(0)).unwrap();
+    assert_eq!(rows, 0, "nothing journalled");
+    assert!(f.g.requests().is_empty(), "no HTTP: {:?}", f.g.requests());
+    // Under the limit it goes.
+    let small = f.pick_sparse("note.txt", 100 * 1024);
+    assert!(f.send(json!({ "attachments": [{ "handle": small }] })).is_ok());
+}
+
+#[test]
+fn a_graph_send_whose_answer_is_lost_is_uncertain_and_never_resent() {
+    let f = setup();
+    f.sync(None);
+    f.g.drop_send(true);
+    let from = f.events.len();
+    let id = f.send(json!({})).unwrap()["id"].as_str().unwrap().to_string();
+    let (_, done) = f.events.wait(from, "send result", |n, v| n == "mobile.send.result" && v["id"] == id.as_str() && v["outcome"] != "queued");
+    assert_eq!(done["outcome"], "uncertain", "{done}; logs {:?}", f.logs.lock().unwrap());
+    let state: String = f.db().query_row("SELECT state FROM outbox WHERE id = ?1", [id.as_str()], |r| r.get(0)).unwrap();
+    assert_eq!(state, "uncertain");
+    // The outbox does not try again on its own.
+    std::thread::sleep(Duration::from_millis(600));
+    assert_eq!(f.g.sent().len(), 1, "sent once, never again");
+}
+
+#[test]
+fn a_token_graph_keeps_refusing_parks_the_account_after_three_passes() {
+    let f = setup();
+    f.g.refuse_tokens(true);
+    for pass in 1..=3 {
+        f.g.clear_requests();
+        let end = f.try_sync(None);
+        assert_eq!(end["state"], "error", "{end}");
+        // Each pass: refused, one refresh, refused again with the fresh token.
+        assert_eq!(f.g.count("POST /oauth/token refresh"), 1, "pass {pass}: {:?}", f.g.requests());
+        if pass < 3 {
+            assert_eq!(end["code"], "AUTH_FAILED", "pass {pass}: {end}");
+            assert_eq!(f.needs_auth(), 0);
+        } else {
+            assert_eq!(end["code"], "NEEDS_AUTH", "{end}");
+            assert_eq!(f.needs_auth(), 1, "parked");
+        }
+    }
+    // Parked: no request at all until a new sign-in.
+    f.g.clear_requests();
+    let end = f.try_sync(None);
+    assert_eq!(end["code"], "NEEDS_AUTH");
+    assert!(f.g.requests().is_empty(), "{:?}", f.g.requests());
+}
+
+#[test]
+fn a_move_whose_target_goes_part_way_keeps_the_rest_where_they_were() {
+    let f = setup();
+    let projects = f.g.add_folder("Projects", None);
+    let now = now_ms();
+    for (i, s) in ["Alpha", "Bravo", "Charlie"].iter().enumerate() {
+        f.g.add_message("inbox", s, now - (10 - i as i64) * HOUR, &plain(s));
+    }
+    f.sync(None);
+    let uids = f.uids("INBOX");
+    let all: Vec<i64> = ["Alpha", "Bravo", "Charlie"].iter().map(|s| uids[*s]).collect();
+    // The first move lands, then the target is deleted.
+    f.g.delete_folder_after_moves(1, &projects);
+    f.apply("move", "INBOX", &all, Some(&projects));
+    f.wait_pending_empty();
+    let left: Vec<String> = f.g.messages_in("inbox").into_iter().map(|m| m.subject).collect();
+    assert_eq!(left.len(), 2, "one moved before the target went: {left:?}");
+    let shown: Vec<String> = f.rows("INBOX").into_iter().map(|r| r["subject"].as_str().unwrap().to_string()).collect();
+    let mut shown_sorted = shown.clone();
+    shown_sorted.sort();
+    let mut left_sorted = left.clone();
+    left_sorted.sort();
+    assert_eq!(shown_sorted, left_sorted, "the unmoved ones show again, the moved one does not");
 }
 
 #[test]
@@ -404,12 +490,12 @@ fn graph_send_does_not_append_to_sent() {
 fn a_429_waits_retry_after_and_is_not_an_error() {
     let f = setup();
     let now = now_ms();
-    f.g.add_message("inbox", "One", now - 2 * HOUR, plain("One"));
-    f.g.add_message("inbox", "Two", now - HOUR, plain("Two"));
+    f.g.add_message("inbox", "One", now - 2 * HOUR, &plain("One"));
+    f.g.add_message("inbox", "Two", now - HOUR, &plain("Two"));
     f.sync(None);
     // The next two Graph requests (the INBOX pass's first) are throttled for a second each.
     f.g.clear_requests();
-    f.g.add_message("inbox", "Three", now - 1000, plain("Three"));
+    f.g.add_message("inbox", "Three", now - 1000, &plain("Three"));
     f.g.throttle(2, 1);
     let t0 = Instant::now();
     f.sync(Some("INBOX"));
@@ -428,7 +514,7 @@ fn a_429_waits_retry_after_and_is_not_an_error() {
 #[test]
 fn an_expired_token_is_refreshed_once_and_the_call_retried() {
     let f = setup();
-    f.g.add_message("inbox", "One", now_ms() - HOUR, plain("One"));
+    f.g.add_message("inbox", "One", now_ms() - HOUR, &plain("One"));
     // The stored access token claims an hour left, but Graph no longer takes it.
     let mut cred = Credential::parse(&f.secrets.get(ACCOUNT).unwrap().unwrap());
     cred.access = Some("revoked-access-token".into());
@@ -444,7 +530,7 @@ fn an_expired_token_is_refreshed_once_and_the_call_retried() {
 #[test]
 fn microsoft_sign_in_adds_a_graph_account_that_syncs() {
     let f = engine_only();
-    f.g.add_message("inbox", "Welcome", now_ms() - HOUR, plain("Welcome"));
+    f.g.add_message("inbox", "Welcome", now_ms() - HOUR, &plain("Welcome"));
     let begun = f.rpc("mobile.oauth.begin", json!({ "provider": "microsoft", "loginHint": "typed@outlook.com" }));
     let flow = begun["flowId"].as_str().unwrap().to_string();
     f.g.expect_code("authcode-ms-ok-0001");

@@ -265,8 +265,9 @@ pub(crate) struct Shared {
     settles: Mutex<HashMap<(String, String), Settles>>,
     /// OAuth sign-in flows, the loopback listener and token refreshes (`oauth.rs`).
     pub(crate) oauth: crate::oauth::OAuth,
-    /// Where a Graph backend keeps a message's MIME file, under the attachment cache's cap.
-    pub(crate) mime: crate::attachments::MimeCache,
+    /// Where a Graph backend stages an attachment it downloads whole, under the attachment cache's
+    /// cap.
+    pub(crate) stage: crate::attachments::StageCache,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -432,7 +433,7 @@ impl Engine {
                 closing: AtomicBool::new(false),
                 settles: Mutex::new(HashMap::new()),
                 oauth: crate::oauth::OAuth::default(),
-                mime: attachments.mime_cache(),
+                stage: attachments.stage_cache(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -484,7 +485,7 @@ impl Engine {
         self.attachments.peak_buffer()
     }
 
-    /// Tests: the byte cap of the attachment cache (attachments and Graph MIME files), in place of
+    /// Tests: the byte cap of the attachment cache (attachments and staged Graph attachments), in place of
     /// 500 MB.
     #[doc(hidden)]
     pub fn set_attachment_cache_cap(&self, bytes: u64) {
