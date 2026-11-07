@@ -24,7 +24,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall, pickFiles } from './transport.js';
 import { ensureAttachmentEvents, watchJob } from './attachmentJobs.js';
-import { fieldsOf, initialText, isEmpty, isValidEntry, sendErrorKey, splitList } from './compose.js';
+import { fieldsOf, initialText, isEmpty, isValidEntry, sendError, splitList } from './compose.js';
 import RecipientField, { commitText } from './RecipientField.jsx';
 import Sheet from './Sheet.jsx';
 import { formatFullDate, formatSize } from './format.js';
@@ -135,7 +135,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const [attachments, setAttachments] = useState([]); // [{ handle, name, size, mime, forwarded? }]
   const [fetching, setFetching] = useState([]); // forwarded parts: [{ section, filename, size, failed? }]
   const [notes, setNotes] = useState([]); // translated one-liners: a left-out forward, an unreadable pick
-  const [error, setError] = useState(null); // a send refusal's message key
+  const [error, setError] = useState(null); // a message key, or a send refusal's { key, vars }
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -402,7 +402,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       if (!live.current) return;
       stopped.current = false;
       setSending(false);
-      setError(sendErrorKey(err?.code));
+      setError(sendError(err));
       scroller.current?.scrollTo?.({ top: 0 });
       return;
     }
@@ -481,7 +481,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
         </button>
       </header>
       <div ref={scroller} className="mv-compose__scroll">
-        {error && <p className="mv-compose__error" role="alert">{t(error)}</p>}
+        {error && <p className="mv-compose__error" role="alert">{typeof error === 'string' ? t(error) : t(error.key, error.vars)}</p>}
         <div className="mv-compose__line">
           <span className="mv-compose__label">{t('common.from')}</span>
           <span className="mv-compose__from" dir="auto">{fromEmail}</span>

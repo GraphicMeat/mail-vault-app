@@ -4373,5 +4373,6 @@
   "mobile.error.NEEDS_AUTH": "Reconnectez-vous pour continuer à recevoir les e-mails de ce compte.",
   "mobile.error.CANCELLED": "La connexion a été annulée.",
   "mobile.error.NO_BROWSER": "Aucun navigateur de cet appareil ne peut afficher la page de connexion.",
-  "mobile.error.SIGNIN_BUSY": "Une connexion est déjà en cours. Terminez-la ou annulez-la d’abord."
+  "mobile.error.SIGNIN_BUSY": "Une connexion est déjà en cours. Terminez-la ou annulez-la d’abord.",
+  "mobile.compose.error.TOO_LARGE_LIMIT": "Les pièces jointes sont trop lourdes pour l'envoi depuis ce compte. Sa limite est de {{size}} Mo."
 }

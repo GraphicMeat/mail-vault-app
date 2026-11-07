@@ -11,14 +11,15 @@ use std::fmt;
 const MAX_PAGE: u64 = 200;
 
 /// Serialized as `{ code: "UNSUPPORTED"|"INVALID"|"INTERNAL"|"TOO_LARGE"|"ATTACHMENT_MISSING",
-/// message }`; the shell forwards it to JS unchanged.
+/// message }`, and `TOO_LARGE` with `data: { limitBytes }`; the shell forwards it to JS unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RpcError {
     Unsupported { method: String },
     Invalid(String),
     Internal(String),
-    /// A send's attachments are over the limit (`compose::MAX_ATTACHMENT_BYTES`).
-    TooLarge(String),
+    /// A send's attachments are over the account's limit: `limit_bytes` of attachments
+    /// (`compose::attachment_limit`).
+    TooLarge { message: String, limit_bytes: u64 },
     /// A send or draft names an attachment handle that does not resolve to a picked file.
     AttachmentMissing(String),
 }
@@ -29,7 +30,7 @@ impl RpcError {
             RpcError::Unsupported { .. } => "UNSUPPORTED",
             RpcError::Invalid(_) => "INVALID",
             RpcError::Internal(_) => "INTERNAL",
-            RpcError::TooLarge(_) => "TOO_LARGE",
+            RpcError::TooLarge { .. } => "TOO_LARGE",
             RpcError::AttachmentMissing(_) => "ATTACHMENT_MISSING",
         }
     }
@@ -39,7 +40,9 @@ impl fmt::Display for RpcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RpcError::Unsupported { method } => write!(f, "unsupported method: {method}"),
-            RpcError::Invalid(m) | RpcError::Internal(m) | RpcError::TooLarge(m) | RpcError::AttachmentMissing(m) => f.write_str(m),
+            RpcError::Invalid(m) | RpcError::Internal(m) | RpcError::TooLarge { message: m, .. } | RpcError::AttachmentMissing(m) => {
+                f.write_str(m)
+            }
         }
     }
 }
@@ -48,9 +51,16 @@ impl std::error::Error for RpcError {}
 
 impl Serialize for RpcError {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut st = s.serialize_struct("RpcError", 2)?;
+        let limit = match self {
+            RpcError::TooLarge { limit_bytes, .. } => Some(*limit_bytes),
+            _ => None,
+        };
+        let mut st = s.serialize_struct("RpcError", if limit.is_some() { 3 } else { 2 })?;
         st.serialize_field("code", self.code())?;
         st.serialize_field("message", &self.to_string())?;
+        if let Some(limit) = limit {
+            st.serialize_field("data", &json!({ "limitBytes": limit }))?;
+        }
         st.end()
     }
 }

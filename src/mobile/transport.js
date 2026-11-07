@@ -1,13 +1,15 @@
 // Mobile RPC transport. The mobile shell answers the `daemon_rpc` Tauri command with the
-// engine's reply, or rejects with the engine's `RpcError` object `{ code, message }`.
+// engine's reply, or rejects with the engine's `RpcError` object `{ code, message, data? }`.
 // Deliberately free of desktop `daemonClient.js`, which lazy-loads the desktop settings store
 // (for `daemonMode`) and with it the whole desktop module graph.
 
 export class DaemonError extends Error {
-  constructor(message, code) {
+  constructor(message, code, data) {
     super(message);
     this.name = 'DaemonError';
     this.code = code;
+    // What the code needs to be explained (`TOO_LARGE`: `{ limitBytes }`).
+    if (data !== undefined) this.data = data;
   }
 }
 
@@ -19,7 +21,7 @@ function resolveInvoke() {
 /** A rejection of the shell, `{ code, message }` or a string, as a `DaemonError`. */
 function shellError(error) {
   if (error && typeof error === 'object' && typeof error.code === 'string') {
-    return new DaemonError(error.message || error.code, error.code);
+    return new DaemonError(error.message || error.code, error.code, error.data ?? undefined);
   }
   const message = typeof error === 'string' ? error : error?.message || 'Unknown daemon error';
   return new DaemonError(message, 'RPC_ERROR');

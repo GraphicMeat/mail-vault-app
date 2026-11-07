@@ -4373,5 +4373,6 @@
   "mobile.error.NEEDS_AUTH": "Sign in again to keep getting mail for this account.",
   "mobile.error.CANCELLED": "The sign-in was cancelled.",
   "mobile.error.NO_BROWSER": "No browser on this device can show the sign-in page.",
-  "mobile.error.SIGNIN_BUSY": "A sign-in is already open. Finish or cancel it first."
+  "mobile.error.SIGNIN_BUSY": "A sign-in is already open. Finish or cancel it first.",
+  "mobile.compose.error.TOO_LARGE_LIMIT": "Attachments are too large to send from this account. Its limit is {{size}} MB."
 }

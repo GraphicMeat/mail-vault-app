@@ -14,6 +14,21 @@ export function sendErrorKey(code) {
 }
 
 /**
+ * A refused send as what Compose shows: a catalog key, with `vars` when the engine named the
+ * account's attachment limit (`TOO_LARGE` with `data.limitBytes`; a Microsoft account's is about
+ * 2 MB, others 25 MB).
+ */
+export function sendError(err) {
+  const limit = err?.data?.limitBytes;
+  if (err?.code === 'TOO_LARGE' && Number.isFinite(limit) && limit > 0) {
+    const mb = limit / (1024 * 1024);
+    const size = mb >= 10 ? String(Math.floor(mb)) : String(Math.floor(mb * 10) / 10);
+    return { key: 'mobile.compose.error.TOO_LARGE_LIMIT', vars: { size } };
+  }
+  return { key: sendErrorKey(err?.code) };
+}
+
+/**
  * A comma-separated list (`a@x, "Doe, John" <j@x>`) as its entries, raw and trimmed. A comma
  * inside quotes or angle brackets belongs to the entry.
  */

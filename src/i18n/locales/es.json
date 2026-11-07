@@ -4373,5 +4373,6 @@
   "mobile.error.NEEDS_AUTH": "Vuelve a iniciar sesión para seguir recibiendo correo en esta cuenta.",
   "mobile.error.CANCELLED": "Se canceló el inicio de sesión.",
   "mobile.error.NO_BROWSER": "Ningún navegador de este dispositivo puede mostrar la página de inicio de sesión.",
-  "mobile.error.SIGNIN_BUSY": "Ya hay un inicio de sesión abierto. Termínalo o cancélalo primero."
+  "mobile.error.SIGNIN_BUSY": "Ya hay un inicio de sesión abierto. Termínalo o cancélalo primero.",
+  "mobile.compose.error.TOO_LARGE_LIMIT": "Los adjuntos son demasiado grandes para enviarlos desde esta cuenta. Su límite es {{size}} MB."
 }

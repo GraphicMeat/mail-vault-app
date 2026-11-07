@@ -27,6 +27,13 @@ describe('mobile transport module', () => {
     expect(err.message).toBe('unsupported method: mobile.nope');
   });
 
+  it('keeps the data of a rejected { code, message, data }', async () => {
+    invoke.mockRejectedValue({ code: 'TOO_LARGE', message: 'attachments are 9 bytes, the limit is 5', data: { limitBytes: 5 } });
+    const err = await daemonCall('mobile.compose.send').catch(e => e);
+    expect(err.code).toBe('TOO_LARGE');
+    expect(err.data).toEqual({ limitBytes: 5 });
+  });
+
   it('maps a string rejection to RPC_ERROR', async () => {
     invoke.mockRejectedValue('boom');
     await expect(daemonCall('mobile.ping')).rejects.toMatchObject({ code: 'RPC_ERROR', message: 'boom' });

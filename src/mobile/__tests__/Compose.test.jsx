@@ -11,7 +11,7 @@ import { formatFullDate } from '../format.js';
 const DRAFT_ID = 'drf_0123456789abcdef';
 
 const engine = vi.hoisted(() => ({
-  calls: [], handlers: new Map(), prepare: null, sendError: null, outbox: [], drafts: 0,
+  calls: [], handlers: new Map(), prepare: null, sendError: null, sendErrorData: undefined, outbox: [], drafts: 0,
   draftList: [], draft: null, saveError: false, sendGate: null,
 }));
 
@@ -38,7 +38,7 @@ vi.mock('../transport.js', () => ({
         return typeof engine.prepare === 'function' ? engine.prepare(params) : engine.prepare;
       case 'mobile.compose.send':
         if (engine.sendGate) await engine.sendGate;
-        if (engine.sendError) throw Object.assign(new Error(engine.sendError), { code: engine.sendError });
+        if (engine.sendError) throw Object.assign(new Error(engine.sendError), { code: engine.sendError, data: engine.sendErrorData });
         return { id: 'out_1', state: 'queued' };
       case 'mobile.drafts.save':
         if (engine.saveError) throw Object.assign(new Error('disk'), { code: 'INTERNAL' });
@@ -110,6 +110,7 @@ beforeEach(() => {
   engine.calls = [];
   engine.prepare = EMPTY;
   engine.sendError = null;
+  engine.sendErrorData = undefined;
   engine.outbox = [];
   engine.drafts = 0;
   engine.draftList = [];
@@ -252,6 +253,14 @@ describe('Compose', () => {
       expect(screen.getByLabelText(t('mobile.compose.body'))).toBeTruthy();
     }
     expect(t('mobile.compose.error.TOO_LARGE')).not.toBe('mobile.compose.error.TOO_LARGE');
+    // The engine named the account's limit (a Microsoft account's is about 2 MB): it is shown.
+    engine.sendError = 'TOO_LARGE';
+    engine.sendErrorData = { limitBytes: 2_400_000 };
+    fireEvent.click(sendButton());
+    await flush();
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.compose.error.TOO_LARGE_LIMIT', { size: '2.2' }));
+    expect(screen.getByRole('alert').textContent).toContain('2.2');
+    expect(onClose).not.toHaveBeenCalled();
     // Autosave runs again after a refused send.
     typeInto(body(), 'Still here');
     await act(async () => { vi.advanceTimersByTime(1500); });

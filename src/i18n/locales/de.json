@@ -4373,5 +4373,6 @@
   "mobile.error.NEEDS_AUTH": "Melde dich erneut an, um weiter E-Mails für dieses Konto zu erhalten.",
   "mobile.error.CANCELLED": "Die Anmeldung wurde abgebrochen.",
   "mobile.error.NO_BROWSER": "Kein Browser auf diesem Gerät kann die Anmeldeseite anzeigen.",
-  "mobile.error.SIGNIN_BUSY": "Eine Anmeldung ist bereits geöffnet. Schließe sie zuerst ab oder brich sie ab."
+  "mobile.error.SIGNIN_BUSY": "Eine Anmeldung ist bereits geöffnet. Schließe sie zuerst ab oder brich sie ab.",
+  "mobile.compose.error.TOO_LARGE_LIMIT": "Die Anhänge sind zu groß zum Senden von diesem Konto. Seine Grenze liegt bei {{size}} MB."
 }
