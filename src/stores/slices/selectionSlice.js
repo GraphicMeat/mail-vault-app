@@ -24,9 +24,23 @@ import {
 import { t } from '../../i18n/index.js';
 import { captureSelectionSnapshot } from '../../services/headerIdentity.js';
 
+// A row that carries none of the evidence a delete is proved by: the list
+// checkbox passes just {uid, _accountId, _mailbox}.
+const isBare = row => !row || !(Object.hasOwn(row, 'messageId') || Object.hasOwn(row, 'message_id')
+  || row._nativeIdentity || typeof row.source === 'string');
+
 function replaceSelection(state, keys, rows, priorSnapshots) {
   const selectedEmailIds = new Set(keys);
-  const available = new Map((rows || [...(state.sortedEmails || []), ...(state.emails || []), ...(state.sentEmails || []), ...(state.localEmails || [])]).map(row => [selectionKey(row, state), row]));
+  const pool = () => [...(state.sortedEmails || []), ...(state.emails || []), ...(state.sentEmails || []), ...(state.localEmails || [])];
+  const available = new Map((rows || pool()).map(row => [selectionKey(row, state), row]));
+  // A bare row snapshots to a hint the daemon must refuse, so it takes the row
+  // on screen under the same key. A row with evidence of its own is kept.
+  if (rows?.some(isBare)) {
+    for (const row of pool()) {
+      const key = selectionKey(row, state);
+      if (available.has(key) && isBare(available.get(key))) available.set(key, row);
+    }
+  }
   const selectedEmailSnapshots = new Map();
   for (const key of selectedEmailIds) {
     if (state.selectedEmailIds.has(key)) {

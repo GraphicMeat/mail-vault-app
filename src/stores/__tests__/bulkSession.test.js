@@ -253,6 +253,25 @@ describe('original bulk selection snapshots', () => {
     useMailStore.getState().setEmailsSelected([replacement], true);
     expect(useMailStore.getState().selectedEmailSnapshots.get(key).messageId).toBe('<replacement@test>');
   });
+  // The list checkbox hands the store a bare {uid, _accountId, _mailbox}. A
+  // snapshot of that carries no Message-ID and no native identity, and the
+  // daemon refuses every such target ("could not be deleted from the server").
+  it('a bare checkbox row takes its evidence from the row on screen', () => {
+    useMailStore.setState({ sortedEmails: [{ ...row(), source: 'server' }] });
+    useMailStore.getState().setEmailsSelected([{ uid: 7, _accountId: 'acct-1', _mailbox: 'Work:Clients' }], true);
+    const captured = useMailStore.getState().selectedEmailSnapshots.get('acct-1:Work:Clients:7');
+    expect(captured?.messageId).toBe('<selected@test>');
+    expect(captured?.nativeIdentity).toEqual(proof);
+    expect(captured?.localIdentity.source).toBe('server');
+  });
+  it('a bare toggle in a single mailbox takes its evidence from the row on screen', () => {
+    useMailStore.setState({ unifiedInbox: false, activeAccountId: 'acct-1', activeMailbox: 'Work:Clients',
+      sortedEmails: [{ ...row(), _accountId: undefined, _mailbox: undefined, source: 'server' }] });
+    useMailStore.getState().toggleEmailSelection(7, null, null, { uid: 7 });
+    const [captured] = useMailStore.getState().selectedEmailSnapshots.values();
+    expect(captured?.messageId).toBe('<selected@test>');
+    expect(captured?.nativeIdentity).toEqual(proof);
+  });
   it('captures explicit offscreen range rows and never repairs an unresolved key from later cache', () => {
     useMailStore.getState().setSelection(['acct-1:Work:Clients:7'], [row()]);
     expect(useMailStore.getState().selectedEmailSnapshots.get('acct-1:Work:Clients:7')?.nativeIdentity).toEqual(proof);

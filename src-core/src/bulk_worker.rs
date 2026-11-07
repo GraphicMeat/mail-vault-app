@@ -587,6 +587,9 @@ async fn run_purge(p: &mut impl Ports,w: &mut Workflow,cancel: Arc<AtomicBool>,r
                 w.purge_targets[i].already_gone = true;
             }
             Err(error) => {
+                // Refused before any server command: without this line the log
+                // shows nothing for a purge the user saw fail.
+                tracing::warn!("bulk purge: refused uid {} in {}: {error}",w.purge_targets[i].uid,w.purge_targets[i].mailbox);
                 w.purge_targets[i].refused = true;
                 w.purge_targets[i].needs_resync = error.contains("Identity") || error.contains("LocalFolders");
                 w.purge_targets[i].last_error = Some(error);
@@ -607,7 +610,10 @@ async fn run_purge(p: &mut impl Ports,w: &mut Workflow,cancel: Arc<AtomicBool>,r
         let result = p.purge_server(&w.purge_targets[i],cancel.clone()).await;
         match result {
             Ok(()) => w.purge_targets[i].server = PurgeEffect::Complete,
-            Err(error) => { w.purge_targets[i].server = PurgeEffect::Failed; w.purge_targets[i].needs_resync=error.contains("Identity");w.purge_targets[i].last_error = Some(error); }
+            Err(error) => {
+                tracing::warn!("bulk purge: server delete failed for uid {} in {}: {error}",w.purge_targets[i].uid,w.purge_targets[i].mailbox);
+                w.purge_targets[i].server = PurgeEffect::Failed; w.purge_targets[i].needs_resync=error.contains("Identity");w.purge_targets[i].last_error = Some(error);
+            }
         }
         // Cancellation cannot bypass recording a completed remote effect.
         purge_checkpoint(p,w).await?;
