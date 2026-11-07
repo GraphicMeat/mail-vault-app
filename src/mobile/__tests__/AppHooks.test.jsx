@@ -127,8 +127,9 @@ describe('live mail', () => {
 
     setVisibility('hidden');
     await waitFor(() => expect(states().at(-1)).toEqual({ foreground: false, accountId: 'a1' }));
+    // Visible again is a resume: the engine replaces a listener that may have died meanwhile.
     setVisibility('visible');
-    await waitFor(() => expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a1' }));
+    await waitFor(() => expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a1', resumed: true }));
 
     await act(async () => { await useMobileStore.getState().selectAccount('a2'); });
     await waitFor(() => expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a2' }));

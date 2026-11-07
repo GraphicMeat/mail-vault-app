@@ -274,7 +274,7 @@ function App() {
     const onVisible = () => {
       const store = useMobileStore.getState();
       const visible = document.visibilityState === 'visible';
-      store.appState(visible);
+      store.appState(visible, visible);
       if (visible) store.refresh();
     };
     document.addEventListener('visibilitychange', onVisible);

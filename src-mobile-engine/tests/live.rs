@@ -165,6 +165,14 @@ impl Fx {
         self.engine.rpc("mobile.app.state", p).unwrap()
     }
 
+    fn app_state_resumed(&self, account: Option<&str>) -> Value {
+        let mut p = json!({ "foreground": true, "resumed": true });
+        if let Some(a) = account {
+            p["accountId"] = json!(a);
+        }
+        self.engine.rpc("mobile.app.state", p).unwrap()
+    }
+
     fn subjects(&self, account: &str) -> Vec<String> {
         let page = self
             .engine
@@ -316,7 +324,7 @@ fn a_server_without_idle_polls_instead() {
 }
 
 #[test]
-fn a_refused_sign_in_backs_off_and_a_parked_account_stops_the_thread() {
+fn a_refused_password_is_tried_once_per_foreground() {
     let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
     let f = imap_engine();
     let account = f.add_imap(&server);
@@ -328,27 +336,110 @@ fn a_refused_sign_in_backs_off_and_a_parked_account_stops_the_thread() {
     );
     let logins = server.count_commands("LOGIN");
 
+    // Servers ban an address after a few failed logins: one try, then nothing while in front.
+    f.app_state(true, Some(&account));
+    wait_until(Duration::from_secs(2), "the thread gave up on the refused password", || !f.engine.live_running());
+    std::thread::sleep(Duration::from_millis(1500));
+    assert_eq!(server.count_commands("LOGIN") - logins, 1, "logs {:?}", f.logs());
+    // A return to the front is the next chance, once.
+    f.app_state_resumed(Some(&account));
+    wait_until(Duration::from_secs(2), "the resumed try ended", || !f.engine.live_running());
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(server.count_commands("LOGIN") - logins, 2);
+}
+
+#[test]
+fn a_failing_listener_backs_off() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
+    f.sync(&account);
+    // Sign-in works, the listen fails every time.
+    server.reset_scenario(
+        Scenario::new().mailbox(inbox(vec![msg(1, "first")])).fault(Trigger::on("SELECT"), Action::Respond("NO".into(), "[UNAVAILABLE] try later".into())),
+    );
+    let logins = server.count_commands("LOGIN");
     f.app_state(true, Some(&account));
     std::thread::sleep(Duration::from_millis(2000));
     let tried = server.count_commands("LOGIN") - logins;
-    // 100 ms doubling to 400 ms: about 6 tries in 2 s. A fast reconnect loop would be hundreds.
+    // 100 ms doubling to 400 ms: about 6 connects in 2 s, each with its catch-up pass's own
+    // sign-in. A fast reconnect loop would be hundreds.
     assert!(tried >= 2, "it retried {tried} times; logs {:?}", f.logs());
-    assert!(tried <= 10, "it retried {tried} times in 2 s: no backoff");
-    assert!(f.engine.live_running(), "a refused password keeps trying (on the backoff)");
+    assert!(tried <= 20, "it retried {tried} times in 2 s: no backoff");
+    assert!(f.engine.live_running());
+    f.app_state(false, None);
+    wait_until(Duration::from_secs(2), "stopped", || !f.engine.live_running());
+}
 
-    // Parked (needs a new sign-in): the thread stops and the network stays quiet.
+#[test]
+fn a_parked_account_is_never_dialled() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
     let db = rusqlite::Connection::open(f.tmp.path().join("mobile.db")).unwrap();
     db.execute("UPDATE accounts SET needs_auth = 1 WHERE id = ?1", [&account]).unwrap();
-    wait_until(Duration::from_secs(2), "the live thread stopped for a parked account", || !f.engine.live_running());
-    let after = server.count_commands("LOGIN");
-    std::thread::sleep(Duration::from_millis(1000));
-    assert_eq!(server.count_commands("LOGIN"), after, "a parked account is never dialled");
-
-    // A foreground on a parked account starts nothing that dials.
+    let logins = server.count_commands("LOGIN");
     f.app_state(true, Some(&account));
     std::thread::sleep(Duration::from_millis(600));
-    assert_eq!(server.count_commands("LOGIN"), after);
+    assert_eq!(server.count_commands("LOGIN"), logins);
     assert!(!f.engine.live_running());
+}
+
+#[test]
+fn a_park_by_another_worker_ends_a_healthy_idle_within_a_second() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
+    f.app_state(true, Some(&account));
+    wait_until(QUICK, "the live thread idles", || server.count_commands("IDLE") >= 1);
+    let t0 = Instant::now();
+    // As a refused grant parks it: no mail arrives to wake the IDLE.
+    f.engine.park_account_for_tests(&account);
+    wait_until(Duration::from_secs(2), "the IDLE ended", || server.count_commands("DONE") >= 1);
+    wait_until(Duration::from_secs(2), "the listener stopped", || !f.engine.live_running());
+    assert!(t0.elapsed() < Duration::from_millis(1500), "took {:?}", t0.elapsed());
+}
+
+#[test]
+fn a_resume_replaces_the_listening_connection() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
+    f.app_state(true, Some(&account));
+    wait_until(QUICK, "the live thread idles", || server.count_commands("IDLE") >= 1);
+    std::thread::sleep(Duration::from_millis(1100));
+    // Back to the front: the socket may have died silently while away; it is replaced.
+    let conns = server.connection_count();
+    f.app_state_resumed(Some(&account));
+    wait_until(QUICK, "a new connection idles", || server.connection_count() > conns && server.count_commands("IDLE") >= 2);
+    // The shell's OS events name no account: suspend stops, resume picks the last one again.
+    std::thread::sleep(Duration::from_millis(1100));
+    f.app_state(false, None);
+    wait_until(Duration::from_secs(2), "suspended", || !f.engine.live_running());
+    let idles = server.count_commands("IDLE");
+    f.app_state_resumed(None);
+    wait_until(QUICK, "resumed on the last account", || server.count_commands("IDLE") > idles);
+    let from = f.events.len();
+    deliver(&server, "after resume");
+    f.events.inbox_added(from, &account, QUICK);
+}
+
+#[test]
+fn a_thread_stopped_during_its_sign_in_does_nothing_after_it() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
+    server.reset_scenario(Scenario::new().mailbox(inbox(vec![msg(1, "first")])).fault(Trigger::on("LOGIN"), Action::Delay(Duration::from_millis(800))));
+    let from = f.events.len();
+    f.app_state(true, Some(&account));
+    wait_until(QUICK, "the sign-in is on the wire", || server.count_commands("LOGIN") >= 1);
+    f.app_state(false, None);
+    wait_until(Duration::from_secs(3), "the thread ended", || !f.engine.live_running());
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(server.count_commands("SELECT"), 0, "{:?}", server.commands());
+    assert_eq!(server.count_commands("IDLE"), 0);
+    let queued = f.events.list.lock().unwrap().iter().skip(from).filter(|(n, v)| n == "mobile.sync.state" && v["accountId"] == account).count();
+    assert_eq!(queued, 0, "a stopped thread queued its catch-up pass");
 }
 
 // ── JMAP ────────────────────────────────────────────────────────────────────

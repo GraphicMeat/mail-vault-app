@@ -555,12 +555,17 @@ export function createMobileStore() {
       /**
        * Tells the engine whether the page is in front and on which account, so it listens for new
        * mail on that account's INBOX while the app is open (and on nothing in the background).
-       * Sent on every visibility change and account switch; a failure is left to the next one.
+       * Sent on every visibility change (`resumed` when visible again) and account switch; a
+       * failure is left to the next one.
        */
-      async appState(foreground = isForeground()) {
+      async appState(foreground = isForeground(), resumed = false) {
         const { activeAccountId: accountId } = get();
+        const params = accountId ? { foreground, accountId } : { foreground };
+        // Back in the front after being away: the engine replaces a listener whose connection may
+        // have died silently meanwhile (a network change, a carrier NAT timeout).
+        if (foreground && resumed) params.resumed = true;
         try {
-          await daemonCall('mobile.app.state', accountId ? { foreground, accountId } : { foreground });
+          await daemonCall('mobile.app.state', params);
         } catch {
           // Nothing to show: the list still refreshes by hand and on the next foreground.
         }

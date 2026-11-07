@@ -1,23 +1,29 @@
 //! New mail while the app is open (plan Ruling 8): one `mv-engine-live` thread listens on the
 //! foreground account's INBOX, and a change queues the normal INBOX pass on the sync worker, so
-//! every write stays in `sync.rs`. IMAP idles (IDLE issued again every 25 min; a server without
-//! IDLE gets a STATUS poll every 60 s), JMAP reads its EventSource (`Email,Mailbox`, ping 60),
-//! Graph asks for its newest message every 60 s and syncs only when that differs
-//! ([`crate::backend::Backend::wait_for_change`]).
+//! every write stays in `sync.rs`. IMAP idles (IDLE issued again every 10 min, so a socket a
+//! carrier NAT dropped silently is found; a server without IDLE gets a STATUS poll every 60 s),
+//! JMAP reads its EventSource (`Email,Mailbox`, ping 60), Graph asks for its newest message every
+//! 60 s and syncs only when that differs ([`crate::backend::Backend::wait_for_change`]).
 //!
-//! The page drives it with `mobile.app.state {foreground, accountId?}`: foreground on an account
-//! starts its thread (a repeat for the account already listening changes nothing), background or
-//! another account stops it. Stopping sets the thread's [`StopFlag`] and returns at once; the
-//! thread notices within a second, ends its IDLE with DONE (or drops its stream) and exits, well
-//! inside 2 s unless a connect or sign-in is already on the wire (core's own timeouts bound that
-//! one). The RPC never waits for the thread, and the thread holds no lock across the network: the
-//! engine's other workers and foreground reads never wait on it.
+//! The page drives it with `mobile.app.state {foreground, accountId?, resumed?}`: foreground on an
+//! account starts its thread (a repeat for the account already listening changes nothing, but
+//! `resumed`, sent when the app comes back to the front, replaces it, since its connection may
+//! have died while the app was away), background or another account stops it. The shell sends the
+//! same on the OS's suspend and resume, for a WebView that never reports `hidden`. Stopping sets
+//! the thread's [`StopFlag`] and returns at once; the thread notices within a second, ends its
+//! IDLE with DONE (or drops its stream) and exits, well inside 2 s unless a connect or sign-in is
+//! already on the wire (core's own timeouts bound that one). The RPC never waits for the thread,
+//! and the thread holds no lock across the network: the engine's other workers and foreground
+//! reads never wait on it.
 //!
-//! A connect that fails waits before the next (5 s doubling to 300 s, as replay does), whatever
-//! the cause: a refused sign-in never turns into a fast reconnect loop. An account that waits for a
-//! new sign-in (`needs_auth = 1`) ends the thread for good, at its next wake when it is parked while
-//! listening; the page's next foreground starts it again. After a connect the thread queues one INBOX pass: what arrived while nobody listened
-//! raises no push on the new connection.
+//! A connect that fails waits before the next (5 s doubling to 300 s, as replay does): a failure
+//! never turns into a fast reconnect loop. A refused sign-in of a password (or app password, or
+//! JMAP token) account ends the thread until the next foreground, resume or account switch: those
+//! servers often ban an address after a few failed logins. An OAuth account keeps its refresh and
+//! parking path: parked (`needs_auth = 1`), whether found at a connect or by another worker while
+//! the thread listens (seen within a second), the thread ends until the next foreground. After a
+//! connect the thread queues one INBOX pass: what arrived while nobody listened raises no push on
+//! the new connection.
 
 use crate::accounts::Code;
 use crate::backend::{self, Change, FolderRow, StopFlag, Watch};
@@ -27,14 +33,15 @@ use crate::sync::{self, Fail, Worker};
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Between two cheap checks of a server that cannot push.
 const POLL: Duration = Duration::from_secs(60);
-/// The longest one IMAP IDLE runs (RFC 2177 asks for less than 29 minutes).
-const REISSUE: Duration = Duration::from_secs(25 * 60);
+/// The longest one IMAP IDLE runs. RFC 2177 allows up to 29 minutes, but carrier NATs drop an
+/// idle mapping well before that, and a dead IDLE socket shows nothing until it is used.
+const REISSUE: Duration = Duration::from_secs(10 * 60);
 /// First wait after a failed connect; doubles per failure up to [`BACKOFF_CAP`].
 const BACKOFF_BASE: Duration = Duration::from_secs(5);
 const BACKOFF_CAP: Duration = Duration::from_secs(300);
@@ -59,24 +66,34 @@ struct Current {
     stop: Arc<StopFlag>,
     /// Set by the thread as it exits (a parked or removed account ends it on its own).
     done: Arc<AtomicBool>,
+    started: Instant,
 }
+
+/// A resume within this long of the thread's start keeps it: the page's `visibilitychange` and
+/// the shell's OS resume both report one return to the front.
+const RESUME_SETTLE: Duration = Duration::from_secs(1);
 
 /// The engine's live listener: at most one current thread.
 #[derive(Default)]
 pub(crate) struct Live {
     current: Mutex<Option<Current>>,
+    /// The account the last foreground named: what a resume without one (the shell's) resumes.
+    last: Mutex<Option<String>>,
     timing: Mutex<Timing>,
     /// Live threads not yet exited, a stopping one included.
     alive: Arc<AtomicUsize>,
 }
 
 impl Live {
-    /// Listens on `account`'s INBOX: nothing to do when its thread is already running; otherwise
-    /// stops the current thread (without waiting for it) and starts one for `account`.
-    fn foreground(&self, shared: &Arc<Shared>, sync: &Worker, account: &str) -> Result<(), String> {
+    /// Listens on `account`'s INBOX: nothing to do when its thread is already running, unless
+    /// `resumed` (the app came back to the front: its connection may have died silently while it
+    /// was away, so it is replaced); otherwise stops the current thread (without waiting for it)
+    /// and starts one for `account`.
+    fn foreground(&self, shared: &Arc<Shared>, sync: &Worker, account: &str, resumed: bool) -> Result<(), String> {
         let mut current = lock(&self.current);
         if let Some(c) = current.as_ref() {
-            if c.account == account && !c.done.load(Ordering::SeqCst) {
+            let fresh = !resumed || c.started.elapsed() < RESUME_SETTLE;
+            if c.account == account && !c.done.load(Ordering::SeqCst) && fresh {
                 return Ok(());
             }
             c.stop.stop();
@@ -85,7 +102,15 @@ impl Live {
         let timing = *lock(&self.timing);
         let stop = Arc::new(StopFlag::default());
         let done = Arc::new(AtomicBool::new(false));
-        let watch = Watch { stop: Arc::clone(&stop), shared: Arc::clone(shared), poll: timing.poll, reissue: timing.reissue };
+        let watch = Watch {
+            stop: Arc::clone(&stop),
+            shared: Arc::clone(shared),
+            account: account.to_string(),
+            parks_seen: AtomicU64::new(shared.parks.load(Ordering::SeqCst)),
+            parked: AtomicBool::new(false),
+            poll: timing.poll,
+            reissue: timing.reissue,
+        };
         let (shared, sync, id, exited, alive) =
             (Arc::clone(shared), sync.clone(), account.to_string(), Arc::clone(&done), Arc::clone(&self.alive));
         alive.fetch_add(1, Ordering::SeqCst);
@@ -99,7 +124,8 @@ impl Live {
             self.alive.fetch_sub(1, Ordering::SeqCst);
             return Err(format!("live thread: {e}"));
         }
-        *current = Some(Current { account: account.to_string(), stop, done });
+        *current = Some(Current { account: account.to_string(), stop, done, started: Instant::now() });
+        *lock(&self.last) = Some(account.to_string());
         Ok(())
     }
 
@@ -110,6 +136,10 @@ impl Live {
             if let Some(c) = current.take() {
                 c.stop.stop();
             }
+        }
+        let mut last = lock(&self.last);
+        if last.as_deref() == Some(account) {
+            *last = None;
         }
     }
 
@@ -136,6 +166,14 @@ fn parked(shared: &Shared, account: &str) -> bool {
 /// The thread: connect, catch up, wait for changes; on a failure wait the backoff and connect
 /// again; return when stopped, closing, or the account is gone or parked.
 fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing: Timing) {
+    // Only an OAuth account has a refresh and parking path for a refused sign-in. A refused
+    // password (or app password, or JMAP token) is not retried while the app stays in front:
+    // repeated LOGIN failures get the phone's address banned (fail2ban-style rules).
+    let oauth = shared
+        .read(|c| c.query_row("SELECT auth FROM accounts WHERE id = ?1", [account], |r| r.get::<_, String>(0)).optional())
+        .ok()
+        .flatten()
+        .is_some_and(|a| a == "oauth2");
     let mut backoff = timing.backoff_base;
     // The last connect failed with a sign-in refusal: its catch-up pass would fail the same way.
     let mut refused = false;
@@ -146,6 +184,10 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
         }
         let failure = match backend::open(shared, account) {
             Ok(mut backend) => {
+                // Stopped while the sign-in was on the wire: queue nothing, listen to nothing.
+                if watch.stopped() {
+                    return;
+                }
                 if !refused {
                     let _ = sync.enqueue_inbox(shared, account);
                 }
@@ -187,6 +229,10 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
                     return;
                 }
                 refused = code == Code::AuthFailed;
+                if refused && !oauth {
+                    shared.log(&format!("[live] {account}: {} {why}; not again until the next foreground", code.as_str()));
+                    return;
+                }
                 shared.log(&format!("[live] {account}: {} {why}; again in {:?}", code.as_str(), backoff));
             }
         }
@@ -203,15 +249,25 @@ struct AppStateParams {
     foreground: bool,
     #[serde(default)]
     account_id: Option<String>,
+    /// The app came back to the front (not a repeat while it stayed there).
+    #[serde(default)]
+    resumed: bool,
 }
 
-/// `mobile.app.state {foreground, accountId?}` -> `{live}`: the page went to the foreground (on
-/// `accountId`) or the background. Starts or stops the live thread and returns at once; `live`
-/// says whether a thread now listens.
+/// `mobile.app.state {foreground, accountId?, resumed?}` -> `{live}`: the page went to the
+/// foreground (on `accountId`) or the background. `resumed`: the app came back to the front, so a
+/// thread already listening on the account is replaced (its socket may be dead), and with no
+/// `accountId` (the shell's OS resume) the account last put in front is resumed. Starts or stops
+/// the live thread and returns at once; `live` says whether a thread was asked to listen.
 pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: AppStateParams = parse(params)?;
     let account = match (p.foreground, p.account_id) {
         (true, Some(a)) => a,
+        // The shell's OS resume: the account the page last put in front.
+        (true, None) if p.resumed => match lock(&engine.live().last).clone() {
+            Some(a) => a,
+            None => return Ok(json!({ "live": false })),
+        },
         _ => {
             engine.live().stop();
             return Ok(json!({ "live": false }));
@@ -225,7 +281,7 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
         engine.live().stop();
         return Err(RpcError::Invalid("unknown account".into()));
     }
-    engine.live().foreground(engine.shared(), engine.sync_worker(), &account).map_err(RpcError::Internal)?;
+    engine.live().foreground(engine.shared(), engine.sync_worker(), &account, p.resumed).map_err(RpcError::Internal)?;
     Ok(json!({ "live": true }))
 }
 
@@ -249,10 +305,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_app_timing_is_a_minute_poll_and_a_25_minute_idle() {
+    fn the_app_timing_is_a_minute_poll_and_a_10_minute_idle() {
         let t = Timing::default();
         assert_eq!(t.poll, Duration::from_secs(60));
-        assert_eq!(t.reissue, Duration::from_secs(25 * 60));
+        assert_eq!(t.reissue, Duration::from_secs(10 * 60));
         assert_eq!((t.backoff_base, t.backoff_cap), (Duration::from_secs(5), Duration::from_secs(300)));
     }
 

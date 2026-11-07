@@ -404,6 +404,7 @@ pub fn run() {
     // Managed before any webview exists, so a call never finds no state; filled in setup.
     let slot = Arc::new(EngineSlot::default());
     let setup_slot = Arc::clone(&slot);
+    let run_slot = Arc::clone(&slot);
     tauri::Builder::default()
         .manage(EngineState(slot))
         // On the builder, before any page loads: every navigation is decided from the start, and
@@ -468,6 +469,31 @@ pub fn run() {
             mobile_auth_open,
             mobile_auth_close
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the MailVault mobile shell");
+        .build(tauri::generate_context!())
+        .expect("error while running the MailVault mobile shell")
+        .run(move |_app, event| on_run_event(&run_slot, &event));
+}
+
+/// The OS's suspend and resume (Android `onPause`/`onResume`, iOS resign/enter foreground) reach
+/// the engine's live listener directly, as `mobile.app.state`: a backstop for a WebView that never
+/// reports `visibilitychange: hidden`. A resume names no account: the engine resumes the one it
+/// last listened on, and replaces its connection, which may have died while the app was away.
+fn on_run_event(slot: &Arc<EngineSlot>, event: &tauri::RunEvent) {
+    #[cfg(mobile)]
+    {
+        let params = match event {
+            tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::Suspended, .. } => json!({ "foreground": false }),
+            tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::Resumed, .. } => json!({ "foreground": true, "resumed": true }),
+            _ => return,
+        };
+        // Not before setup opened the engine, and never on the UI thread.
+        let Some(opened) = slot.engine.lock().unwrap_or_else(|e| e.into_inner()).clone() else { return };
+        std::thread::spawn(move || {
+            if let Ok(engine) = opened.as_ref() {
+                let _ = engine.rpc("mobile.app.state", params);
+            }
+        });
+    }
+    #[cfg(not(mobile))]
+    let _ = (slot, event);
 }

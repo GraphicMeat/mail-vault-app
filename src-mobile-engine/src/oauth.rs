@@ -304,7 +304,11 @@ fn is_refused_grant(e: &str) -> bool {
 fn mark_needs_auth(shared: &Shared, account: &str, why: &str) {
     shared.log(&format!("[oauth] {account}: NEEDS_AUTH {why}"));
     match shared.write(|c| c.execute("UPDATE accounts SET needs_auth = 1 WHERE id = ?1 AND needs_auth = 0", [account])) {
-        Ok(1) => shared.emit(SYNC_STATE, json!({ "accountId": account, "state": "error", "code": Code::NeedsAuth.as_str() })),
+        Ok(1) => {
+            // A live listener on the account hangs up at its next stop check.
+            shared.parks.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            shared.emit(SYNC_STATE, json!({ "accountId": account, "state": "error", "code": Code::NeedsAuth.as_str() }))
+        }
         Ok(_) => {}
         Err(e) => shared.log(&format!("[oauth] {account}: marking needs_auth failed: {e}")),
     }
@@ -680,6 +684,13 @@ impl Engine {
             imap: (imap.0.into(), imap.1, imap.2.into()),
             smtp: (smtp.0.into(), smtp.1, smtp.2.into()),
         };
+    }
+
+    /// Tests: parks `account_id` as a refused grant does (`needs_auth = 1`, the event, the live
+    /// listener told).
+    #[doc(hidden)]
+    pub fn park_account_for_tests(&self, account_id: &str) {
+        mark_needs_auth(self.shared(), account_id, "parked by a test");
     }
 
     /// Tests: how long `finish` waits, in place of 300 s.

@@ -27,7 +27,7 @@ use crate::sync::{self, Fail};
 use mailvault_core::imap::{EmailHeader, PartInfo};
 use mailvault_core::smtp::OutgoingEmail;
 use rusqlite::OptionalExtension;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -189,10 +189,15 @@ pub(crate) const STOP_CHECK: Duration = Duration::from_millis(250);
 
 /// What a [`Backend::wait_for_change`] runs under: the flag that ends it, the engine (whose
 /// closing ends it too), and its timing (`live.rs` holds the defaults; tests shorten them).
-#[derive(Clone)]
 pub(crate) struct Watch {
     pub(crate) stop: Arc<StopFlag>,
     pub(crate) shared: Arc<Shared>,
+    /// The account listened on: parking it (another worker refused its grant) ends the watch.
+    pub(crate) account: String,
+    /// The park generation (`Shared::parks`) last checked against the database.
+    pub(crate) parks_seen: AtomicU64,
+    /// The account was found parked.
+    pub(crate) parked: AtomicBool,
     /// Between two cheap checks of a server that cannot push (Graph, IMAP without IDLE).
     pub(crate) poll: Duration,
     /// The longest one IMAP IDLE runs before it is ended and issued again.
@@ -216,9 +221,27 @@ impl Watch {
         }
     }
 
-    /// Stopped, or the engine is closing.
+    /// Stopped, the engine is closing, or the account was parked. One atomic read per check;
+    /// the database is read only after some account was parked.
     pub(crate) fn stopped(&self) -> bool {
-        self.stop.is_stopped() || sync::not_closing(&self.shared).is_err()
+        if self.stop.is_stopped() || sync::not_closing(&self.shared).is_err() || self.parked.load(Ordering::SeqCst) {
+            return true;
+        }
+        let parks = self.shared.parks.load(Ordering::SeqCst);
+        if parks != self.parks_seen.swap(parks, Ordering::SeqCst) && self.is_parked_now() {
+            self.parked.store(true, Ordering::SeqCst);
+            return true;
+        }
+        false
+    }
+
+    /// `needs_auth` of the account, from the database.
+    pub(crate) fn is_parked_now(&self) -> bool {
+        self.shared
+            .read(|c| c.query_row("SELECT needs_auth FROM accounts WHERE id = ?1", [&self.account], |r| r.get::<_, i64>(0)).optional())
+            .ok()
+            .flatten()
+            .is_some_and(|n| n != 0)
     }
 }
 
@@ -275,7 +298,8 @@ pub(crate) trait Backend: Send {
     fn file_sent(&mut self, sent: &SendOutcome) -> Result<(), Fail>;
     /// Waits until `folder` changes on the server ([`Change::Changed`]) or the wait ends without
     /// news ([`Change::Quiet`]: `watch` was stopped, or an IMAP IDLE reached `watch.reissue`).
-    /// Checks the stop flag at least once a second. IMAP idles (or, without IDLE, polls a STATUS
+    /// Checks `watch` at least once a second between requests (a request on the wire, such as
+    /// the first SELECT or stream open, is bounded by core's timeouts, not by the stop). IMAP idles (or, without IDLE, polls a STATUS
     /// every `watch.poll`), JMAP reads its EventSource, Graph polls the newest message. A backend
     /// keeps what it listens on across calls; after an `Err` the caller drops it.
     fn wait_for_change(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail>;

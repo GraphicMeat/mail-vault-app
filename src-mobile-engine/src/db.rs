@@ -269,6 +269,9 @@ pub(crate) struct Shared {
     pub(crate) oauth: crate::oauth::OAuth,
     /// JMAP sessions, one per account (`backend::jmap`).
     pub(crate) jmap: crate::backend::jmap::Sessions,
+    /// Bumped each time an account is parked (`needs_auth = 1`): a live listener reads it on
+    /// every stop check and reads the database only when it moved.
+    pub(crate) parks: std::sync::atomic::AtomicU64,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -434,6 +437,7 @@ impl Engine {
                 settles: Mutex::new(HashMap::new()),
                 oauth: crate::oauth::OAuth::default(),
                 jmap: crate::backend::jmap::Sessions::default(),
+                parks: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
