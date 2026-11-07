@@ -510,7 +510,12 @@ impl Backend for ImapBackend {
                 };
                 match response {
                     Ok(IdleResponse::NewData(_)) => break Change::Changed,
-                    Ok(_) => {}
+                    Ok(IdleResponse::Timeout) => {}
+                    // Our interrupt is held for the slice, so this is the stream ending: the
+                    // server closed the connection. Treated as more waiting it would spin.
+                    Ok(IdleResponse::ManualInterrupt) => {
+                        return Err(Fail::Code(Code::HostUnreachable, "the server closed the IDLE connection".into()))
+                    }
                     Err(e) => return Err(Fail::from(format!("IDLE ended: {e}"))),
                 }
             };

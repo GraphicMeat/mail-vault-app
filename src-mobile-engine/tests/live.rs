@@ -250,6 +250,41 @@ fn backgrounding_stops_idle_within_two_seconds() {
 }
 
 #[test]
+fn an_idle_the_server_drops_reconnects_without_spinning() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
+    f.app_state(true, Some(&account));
+    wait_until(QUICK, "the live thread idles", || server.count_commands("IDLE") >= 1);
+    let conns = server.connection_count();
+    // The server hangs up on its idlers (a restart, a NAT timeout).
+    server.mutate(|st| st.idle_drops += 1);
+    wait_until(QUICK, "a new connection that idles again", || server.connection_count() > conns && server.count_commands("IDLE") >= 2);
+    let from = f.events.len();
+    deliver(&server, "after the drop");
+    f.events.inbox_added(from, &account, QUICK);
+    assert!(f.engine.live_running(), "logs {:?}", f.logs());
+}
+
+#[test]
+fn a_listening_account_that_gets_parked_stops_at_its_next_wake() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
+    f.sync(&account);
+    f.app_state(true, Some(&account));
+    wait_until(QUICK, "the live thread idles", || server.count_commands("IDLE") >= 1);
+    // Another worker parks the account (a grant revoked) while the IDLE itself is healthy.
+    let db = rusqlite::Connection::open(f.tmp.path().join("mobile.db")).unwrap();
+    db.execute("UPDATE accounts SET needs_auth = 1 WHERE id = ?1", [&account]).unwrap();
+    let logins = server.count_commands("LOGIN");
+    deliver(&server, "wakes the listener");
+    wait_until(Duration::from_secs(2), "the parked account's listener stopped", || !f.engine.live_running());
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(server.count_commands("LOGIN"), logins, "a parked account is never dialled");
+}
+
+#[test]
 fn removing_the_listening_account_stops_its_thread() {
     let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
     let f = imap_engine();

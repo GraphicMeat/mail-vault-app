@@ -15,8 +15,8 @@
 //!
 //! A connect that fails waits before the next (5 s doubling to 300 s, as replay does), whatever
 //! the cause: a refused sign-in never turns into a fast reconnect loop. An account that waits for a
-//! new sign-in (`needs_auth = 1`) ends the thread for good; the page's next foreground starts it
-//! again. After a connect the thread queues one INBOX pass: what arrived while nobody listened
+//! new sign-in (`needs_auth = 1`) ends the thread for good, at its next wake when it is parked while
+//! listening; the page's next foreground starts it again. After a connect the thread queues one INBOX pass: what arrived while nobody listened
 //! raises no push on the new connection.
 
 use crate::accounts::Code;
@@ -150,7 +150,14 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
                     let _ = sync.enqueue_inbox(shared, account);
                 }
                 let failure = loop {
-                    match backend.wait_for_change(&inbox, watch) {
+                    let change = backend.wait_for_change(&inbox, watch);
+                    // Parked by another worker while this connection still works: stop at the
+                    // next wake (a change, a re-issue, a poll), never listen on for a sync that
+                    // can only report NEEDS_AUTH.
+                    if change.is_ok() && parked(shared, account) {
+                        return;
+                    }
+                    match change {
                         Ok(Change::Changed) => {
                             backoff = timing.backoff_base;
                             if let Err(e) = sync.enqueue_inbox(shared, account) {
