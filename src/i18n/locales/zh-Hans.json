@@ -4374,5 +4374,7 @@
   "mobile.error.CANCELLED": "登录已取消。",
   "mobile.error.NO_BROWSER": "这台设备上没有可以显示登录页面的浏览器。",
   "mobile.error.SIGNIN_BUSY": "已有一个登录正在进行。请先完成或取消它。",
-  "mobile.compose.error.TOO_LARGE_LIMIT": "附件太大，无法从此账户发送。上限为 {{size}} MB。"
+  "mobile.compose.error.TOO_LARGE_LIMIT": "附件太大，无法从此账户发送。上限为 {{size}} MB。",
+  "mobile.attachment.link": "链接，请在 Outlook 中打开",
+  "mobile.attachment.labelLink": "{{name}}，链接附件，请在 Outlook 中打开"
 }

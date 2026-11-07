@@ -76,6 +76,19 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('AttachmentChip', () => {
+  it('a_link_attachment_is_a_disabled_chip_that_never_fetches', async () => {
+    renderChip({ section: 'AAMkLink=', filename: 'Plan.docx', mime: 'application/octet-stream', size: null, contentId: null, kind: 'link' });
+    expect(chip().disabled).toBe(true);
+    expect(chip().textContent).toContain('Plan.docx');
+    expect(chip().textContent).toContain(t('mobile.attachment.link'));
+    expect(chip().getAttribute('aria-label')).toBe(t('mobile.attachment.labelLink', { name: 'Plan.docx' }));
+    expect(t('mobile.attachment.link')).not.toBe('mobile.attachment.link');
+    fireEvent.click(chip());
+    await act(async () => {});
+    expect(calls('mobile.attachment.fetch')).toEqual([]);
+    expect(calls('mobile.attachment.local')).toEqual([]);
+  });
+
   it('idle_shows_name_and_size', async () => {
     renderChip();
     await waitFor(() => expect(calls('mobile.attachment.local')).toEqual([key]));

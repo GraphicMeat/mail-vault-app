@@ -4374,5 +4374,7 @@
   "mobile.error.CANCELLED": "로그인이 취소되었습니다.",
   "mobile.error.NO_BROWSER": "이 기기에는 로그인 페이지를 표시할 수 있는 브라우저가 없습니다.",
   "mobile.error.SIGNIN_BUSY": "이미 로그인 창이 열려 있습니다. 먼저 완료하거나 취소하세요.",
-  "mobile.compose.error.TOO_LARGE_LIMIT": "첨부 파일이 너무 커서 이 계정에서 보낼 수 없습니다. 한도는 {{size}}MB입니다."
+  "mobile.compose.error.TOO_LARGE_LIMIT": "첨부 파일이 너무 커서 이 계정에서 보낼 수 없습니다. 한도는 {{size}}MB입니다.",
+  "mobile.attachment.link": "링크, Outlook에서 열기",
+  "mobile.attachment.labelLink": "{{name}}, 링크 첨부 파일, Outlook에서 여세요"
 }

@@ -4374,5 +4374,7 @@
   "mobile.error.CANCELLED": "Se canceló el inicio de sesión.",
   "mobile.error.NO_BROWSER": "Ningún navegador de este dispositivo puede mostrar la página de inicio de sesión.",
   "mobile.error.SIGNIN_BUSY": "Ya hay un inicio de sesión abierto. Termínalo o cancélalo primero.",
-  "mobile.compose.error.TOO_LARGE_LIMIT": "Los adjuntos son demasiado grandes para enviarlos desde esta cuenta. Su límite es {{size}} MB."
+  "mobile.compose.error.TOO_LARGE_LIMIT": "Los adjuntos son demasiado grandes para enviarlos desde esta cuenta. Su límite es {{size}} MB.",
+  "mobile.attachment.link": "Enlace, ábrelo en Outlook",
+  "mobile.attachment.labelLink": "{{name}}, adjunto de enlace, ábrelo en Outlook"
 }

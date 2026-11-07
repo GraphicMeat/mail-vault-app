@@ -4374,5 +4374,7 @@
   "mobile.error.CANCELLED": "A entrada foi cancelada.",
   "mobile.error.NO_BROWSER": "Nenhum navegador neste dispositivo consegue mostrar a página de entrada.",
   "mobile.error.SIGNIN_BUSY": "Já há uma entrada aberta. Termine ou cancele essa primeiro.",
-  "mobile.compose.error.TOO_LARGE_LIMIT": "Os anexos são grandes demais para enviar desta conta. O limite dela é {{size}} MB."
+  "mobile.compose.error.TOO_LARGE_LIMIT": "Os anexos são grandes demais para enviar desta conta. O limite dela é {{size}} MB.",
+  "mobile.attachment.link": "Link, abra no Outlook",
+  "mobile.attachment.labelLink": "{{name}}, anexo de link, abra no Outlook"
 }

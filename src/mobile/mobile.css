@@ -338,6 +338,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-viewer__chip--downloading svg,
 .mv-viewer__chip--ready svg { color: var(--mail-accent-text); }
 .mv-viewer__chip--failed svg { color: var(--mv-danger); }
+/* A cloud link: nothing to download, so it reads as inert. */
+.mv-viewer__chip--link { opacity: 0.6; cursor: default; }
 .mv-viewer__chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mv-viewer__chip-size { flex: none; color: var(--mail-text-muted); font-variant-numeric: tabular-nums; }
 .mv-viewer__chip-size--alert { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mv-danger); }

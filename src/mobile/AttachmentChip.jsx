@@ -3,6 +3,8 @@
 //   downloading  a progress ring from `mobile.attachment.progress`; tap cancels
 //   ready        tap opens it in the system previewer, a long press offers the share sheet
 //   failed       the reason, translated; tap tries again
+// A cloud link (`kind: "link"`, a Microsoft account's reference attachment) has no bytes to fetch:
+// it shows as a disabled chip that says to open it in Outlook.
 // The file never crosses the bridge: the shell is handed the path `mobile.attachment.local`
 // answers right before each open or share (a file evicted meanwhile answers null: fetch again),
 // checks it is a file of the attachment cache, and gives the previewer a named copy.
@@ -83,7 +85,33 @@ function ChipIcon({ phase, fraction }) {
   return <svg {...common}><path {...stroke} d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7L9.2 17.2a1.7 1.7 0 0 1-2.4-2.4L14.5 7" /></svg>;
 }
 
-export default function AttachmentChip({ accountId, folder, uid, attachment }) {
+export default function AttachmentChip(props) {
+  return props.attachment?.kind === 'link' ? <LinkChip attachment={props.attachment} /> : <FileChip {...props} />;
+}
+
+function LinkChip({ attachment }) {
+  const t = useT();
+  const name = displayText(attachment.filename, '') || t('mobile.viewer.attachment');
+  const note = t('mobile.attachment.link');
+  return (
+    <li className="mv-viewer__chip-item">
+      <button
+        type="button"
+        className="mv-viewer__chip mv-viewer__chip--link"
+        data-mv-attachment={attachment.section}
+        data-mv-attachment-state="link"
+        aria-label={t('mobile.attachment.labelLink', { name })}
+        disabled
+      >
+        <ChipIcon phase="idle" fraction={null} />
+        <span className="mv-viewer__chip-name" dir="auto">{name}</span>
+        <span className="mv-viewer__chip-size" aria-hidden="true">{note}</span>
+      </button>
+    </li>
+  );
+}
+
+function FileChip({ accountId, folder, uid, attachment }) {
   const t = useT();
   const { section, filename, mime, size } = attachment;
   const key = useMemo(() => ({ accountId, folder, uid, section }), [accountId, folder, uid, section]);

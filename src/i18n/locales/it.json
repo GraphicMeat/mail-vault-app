@@ -4374,5 +4374,7 @@
   "mobile.error.CANCELLED": "L’accesso è stato annullato.",
   "mobile.error.NO_BROWSER": "Nessun browser su questo dispositivo può mostrare la pagina di accesso.",
   "mobile.error.SIGNIN_BUSY": "C’è già un accesso aperto. Completalo o annullalo prima.",
-  "mobile.compose.error.TOO_LARGE_LIMIT": "Gli allegati sono troppo grandi per l'invio da questo account. Il suo limite è {{size}} MB."
+  "mobile.compose.error.TOO_LARGE_LIMIT": "Gli allegati sono troppo grandi per l'invio da questo account. Il suo limite è {{size}} MB.",
+  "mobile.attachment.link": "Link, aprilo in Outlook",
+  "mobile.attachment.labelLink": "{{name}}, allegato collegamento, aprilo in Outlook"
 }
