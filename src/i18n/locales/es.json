@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "No se pudo aplicar un cambio: el mensaje ya no está en el servidor.",
   "mobile.actions.dropped.FOLDER_GONE": "No se pudo aplicar un cambio: la carpeta ya no existe.",
   "mobile.actions.dropped.REFUSED": "No se pudo aplicar un cambio: el servidor lo rechazó.",
-  "mobile.actions.dismiss": "Cerrar"
+  "mobile.actions.dismiss": "Cerrar",
+  "mobile.attachment.labelIdle": "{{name}}, {{size}}. Descargar",
+  "mobile.attachment.labelDownloading": "{{name}}, descargando, {{percent}}. Cancelar descarga",
+  "mobile.attachment.labelReady": "{{name}}, {{size}}. Abrir, o mantén pulsado para compartir",
+  "mobile.attachment.labelReadyNotice": "{{name}}. {{reason}}. Abrir, o mantén pulsado para compartir",
+  "mobile.attachment.labelFailed": "{{name}}. {{reason}}. Reintentar",
+  "mobile.attachment.error.network": "No se pudo conectar con el servidor",
+  "mobile.attachment.error.auth": "El servidor rechazó el inicio de sesión",
+  "mobile.attachment.error.gone": "Ya no está en el servidor",
+  "mobile.attachment.error.storage": "No se pudo guardar en este dispositivo",
+  "mobile.attachment.error.internal": "Algo salió mal",
+  "mobile.attachment.error.noApp": "Ninguna app de este dispositivo abre este archivo",
+  "mobile.attachment.error.openFailed": "No se pudo abrir"
 }

@@ -5,6 +5,7 @@ members = [
     "src-core",
     "src-mobile-engine",
     "src-tauri-mobile",
+    "src-tauri-mobile/native",
     "src-mock-imap",
     "src-mock-jmap",
     "vendor/imap-proto",

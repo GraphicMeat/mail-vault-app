@@ -5404,6 +5404,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-mv-native",
 ]
 
 [[package]]
@@ -9944,6 +9945,17 @@ dependencies = [
  "tauri-utils",
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
+ "url",
+]
+
+[[package]]
+name = "tauri-plugin-mv-native"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
  "url",
 ]
 

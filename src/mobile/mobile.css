@@ -307,6 +307,9 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   overflow-x: auto;
   scrollbar-width: none;
 }
+.mv-viewer__chip-item { flex: none; display: flex; max-width: 70vw; }
+/* A button: tap downloads, cancels, opens or retries; a long press on a ready chip shares. No
+   text selection or iOS callout on the long press. */
 .mv-viewer__chip {
   flex: none;
   display: flex;
@@ -314,16 +317,42 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   gap: 6px;
   max-width: 70vw;
   min-height: 44px;
+  min-width: 44px;
   box-sizing: border-box;
+  margin: 0;
   padding: 0 12px;
   border: 1px solid var(--mail-border);
   border-radius: 10px;
   background: var(--mail-surface);
+  color: inherit;
+  font: inherit;
   font-size: 0.8125rem;
+  text-align: start;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
+.mv-viewer__chip:active { background: var(--mail-border); }
 .mv-viewer__chip svg { flex: none; color: var(--mail-text-muted); }
-.mv-viewer__chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mv-viewer__chip-size { flex: none; color: var(--mail-text-muted); }
+.mv-viewer__chip--downloading svg,
+.mv-viewer__chip--ready svg { color: var(--mail-accent-text); }
+.mv-viewer__chip--failed svg { color: var(--mv-danger); }
+.mv-viewer__chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-viewer__chip-size { flex: none; color: var(--mail-text-muted); font-variant-numeric: tabular-nums; }
+.mv-viewer__chip-size--alert { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mv-danger); }
+.mv-attach__ring-spin { transform-origin: 12px 12px; animation: mv-spin 1.2s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .mv-attach__ring-spin { animation-duration: 3s; }
+}
+.mv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .mv-viewer__images {
   flex: none;
   display: flex;

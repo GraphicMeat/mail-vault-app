@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- What the app's FileProvider may hand out: only the per-open copies of attachments the shell
+     stages under <cache>/share/ (tauri-plugin-mv-native). Nothing else of the app's storage. -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-  <external-path name="my_images" path="." />
-  <cache-path name="my_cache_images" path="." />
+  <cache-path name="share" path="share/" />
 </paths>

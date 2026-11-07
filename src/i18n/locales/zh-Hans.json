@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "无法完成一项更改：邮件已不在服务器上。",
   "mobile.actions.dropped.FOLDER_GONE": "无法完成一项更改：文件夹已不存在。",
   "mobile.actions.dropped.REFUSED": "无法完成一项更改：服务器拒绝了它。",
-  "mobile.actions.dismiss": "关闭"
+  "mobile.actions.dismiss": "关闭",
+  "mobile.attachment.labelIdle": "{{name}}，{{size}}。下载",
+  "mobile.attachment.labelDownloading": "{{name}}，正在下载 {{percent}}。取消下载",
+  "mobile.attachment.labelReady": "{{name}}，{{size}}。打开，长按可共享",
+  "mobile.attachment.labelReadyNotice": "{{name}}。{{reason}}。打开，长按可共享",
+  "mobile.attachment.labelFailed": "{{name}}。{{reason}}。重试",
+  "mobile.attachment.error.network": "无法连接服务器",
+  "mobile.attachment.error.auth": "服务器拒绝了登录",
+  "mobile.attachment.error.gone": "已不在服务器上",
+  "mobile.attachment.error.storage": "无法保存到此设备",
+  "mobile.attachment.error.internal": "出了点问题",
+  "mobile.attachment.error.noApp": "此设备上没有可打开此文件的应用",
+  "mobile.attachment.error.openFailed": "无法打开"
 }

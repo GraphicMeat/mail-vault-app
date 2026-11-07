@@ -1,0 +1,20 @@
+[package]
+name = "tauri-plugin-mv-native"
+version = "0.1.0"
+description = "MailVault mobile: hands a cached attachment to the system previewer or share sheet and mail links to the system browser"
+edition = "2021"
+publish = false
+# tauri-plugin's build requires `links` to match the package name.
+links = "tauri-plugin-mv-native"
+
+[lib]
+name = "tauri_plugin_mv_native"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+url = "2"

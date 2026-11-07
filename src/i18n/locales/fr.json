@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "Une modification n'a pas pu être faite : le message n'est plus sur le serveur.",
   "mobile.actions.dropped.FOLDER_GONE": "Une modification n'a pas pu être faite : le dossier n'existe plus.",
   "mobile.actions.dropped.REFUSED": "Une modification n'a pas pu être faite : le serveur l'a refusée.",
-  "mobile.actions.dismiss": "Fermer"
+  "mobile.actions.dismiss": "Fermer",
+  "mobile.attachment.labelIdle": "{{name}}, {{size}}. Télécharger",
+  "mobile.attachment.labelDownloading": "{{name}}, téléchargement, {{percent}}. Annuler le téléchargement",
+  "mobile.attachment.labelReady": "{{name}}, {{size}}. Ouvrir, ou appui long pour partager",
+  "mobile.attachment.labelReadyNotice": "{{name}}. {{reason}}. Ouvrir, ou appui long pour partager",
+  "mobile.attachment.labelFailed": "{{name}}. {{reason}}. Réessayer",
+  "mobile.attachment.error.network": "Impossible de joindre le serveur",
+  "mobile.attachment.error.auth": "Le serveur a refusé la connexion",
+  "mobile.attachment.error.gone": "N'est plus sur le serveur",
+  "mobile.attachment.error.storage": "Impossible de l'enregistrer sur cet appareil",
+  "mobile.attachment.error.internal": "Une erreur s'est produite",
+  "mobile.attachment.error.noApp": "Aucune app de cet appareil n'ouvre ce fichier",
+  "mobile.attachment.error.openFailed": "Impossible de l'ouvrir"
 }

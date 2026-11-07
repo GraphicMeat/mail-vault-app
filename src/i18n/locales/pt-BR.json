@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "Não foi possível fazer uma alteração: a mensagem não está mais no servidor.",
   "mobile.actions.dropped.FOLDER_GONE": "Não foi possível fazer uma alteração: a pasta não existe mais.",
   "mobile.actions.dropped.REFUSED": "Não foi possível fazer uma alteração: o servidor a recusou.",
-  "mobile.actions.dismiss": "Fechar"
+  "mobile.actions.dismiss": "Fechar",
+  "mobile.attachment.labelIdle": "{{name}}, {{size}}. Baixar",
+  "mobile.attachment.labelDownloading": "{{name}}, baixando, {{percent}}. Cancelar download",
+  "mobile.attachment.labelReady": "{{name}}, {{size}}. Abrir, ou toque e segure para compartilhar",
+  "mobile.attachment.labelReadyNotice": "{{name}}. {{reason}}. Abrir, ou toque e segure para compartilhar",
+  "mobile.attachment.labelFailed": "{{name}}. {{reason}}. Tentar de novo",
+  "mobile.attachment.error.network": "Não foi possível acessar o servidor",
+  "mobile.attachment.error.auth": "O servidor recusou o login",
+  "mobile.attachment.error.gone": "Não está mais no servidor",
+  "mobile.attachment.error.storage": "Não foi possível salvar neste dispositivo",
+  "mobile.attachment.error.internal": "Algo deu errado",
+  "mobile.attachment.error.noApp": "Nenhum app deste dispositivo abre este arquivo",
+  "mobile.attachment.error.openFailed": "Não foi possível abrir"
 }

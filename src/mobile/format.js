@@ -34,3 +34,9 @@ export function formatSize(bytes) {
     style: 'unit', unit: SIZE_UNITS[i], unitDisplay: 'short', maximumFractionDigits: digits,
   }).format(value);
 }
+
+/** A share of a download (0..1) as a whole percent in the mobile language. */
+export function formatPercent(fraction) {
+  const value = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
+  return new Intl.NumberFormat(getMobileLocale(), { style: 'percent', maximumFractionDigits: 0 }).format(value);
+}

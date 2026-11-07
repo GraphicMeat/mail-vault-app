@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "Impossibile applicare una modifica: il messaggio non è più sul server.",
   "mobile.actions.dropped.FOLDER_GONE": "Impossibile applicare una modifica: la cartella non esiste più.",
   "mobile.actions.dropped.REFUSED": "Impossibile applicare una modifica: il server l'ha rifiutata.",
-  "mobile.actions.dismiss": "Chiudi"
+  "mobile.actions.dismiss": "Chiudi",
+  "mobile.attachment.labelIdle": "{{name}}, {{size}}. Scarica",
+  "mobile.attachment.labelDownloading": "{{name}}, download in corso, {{percent}}. Annulla download",
+  "mobile.attachment.labelReady": "{{name}}, {{size}}. Apri, o tieni premuto per condividere",
+  "mobile.attachment.labelReadyNotice": "{{name}}. {{reason}}. Apri, o tieni premuto per condividere",
+  "mobile.attachment.labelFailed": "{{name}}. {{reason}}. Riprova",
+  "mobile.attachment.error.network": "Impossibile raggiungere il server",
+  "mobile.attachment.error.auth": "Il server ha rifiutato l'accesso",
+  "mobile.attachment.error.gone": "Non è più sul server",
+  "mobile.attachment.error.storage": "Impossibile salvarlo su questo dispositivo",
+  "mobile.attachment.error.internal": "Qualcosa è andato storto",
+  "mobile.attachment.error.noApp": "Nessuna app su questo dispositivo apre questo file",
+  "mobile.attachment.error.openFailed": "Impossibile aprirlo"
 }

@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "Eine Änderung war nicht möglich: Die Nachricht ist nicht mehr auf dem Server.",
   "mobile.actions.dropped.FOLDER_GONE": "Eine Änderung war nicht möglich: Der Ordner existiert nicht mehr.",
   "mobile.actions.dropped.REFUSED": "Eine Änderung war nicht möglich: Der Server hat sie abgelehnt.",
-  "mobile.actions.dismiss": "Schließen"
+  "mobile.actions.dismiss": "Schließen",
+  "mobile.attachment.labelIdle": "{{name}}, {{size}}. Herunterladen",
+  "mobile.attachment.labelDownloading": "{{name}}, wird geladen, {{percent}}. Download abbrechen",
+  "mobile.attachment.labelReady": "{{name}}, {{size}}. Öffnen, oder lange drücken zum Teilen",
+  "mobile.attachment.labelReadyNotice": "{{name}}. {{reason}}. Öffnen, oder lange drücken zum Teilen",
+  "mobile.attachment.labelFailed": "{{name}}. {{reason}}. Erneut versuchen",
+  "mobile.attachment.error.network": "Server nicht erreichbar",
+  "mobile.attachment.error.auth": "Der Server hat die Anmeldung abgelehnt",
+  "mobile.attachment.error.gone": "Nicht mehr auf dem Server",
+  "mobile.attachment.error.storage": "Konnte nicht auf diesem Gerät gespeichert werden",
+  "mobile.attachment.error.internal": "Etwas ist schiefgelaufen",
+  "mobile.attachment.error.noApp": "Keine App auf diesem Gerät öffnet diese Datei",
+  "mobile.attachment.error.openFailed": "Konnte nicht geöffnet werden"
 }

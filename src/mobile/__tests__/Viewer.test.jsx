@@ -16,6 +16,9 @@ vi.mock('../transport.js', () => ({
     if (r instanceof Error) throw r;
     return r;
   }),
+  listen: vi.fn(() => () => {}),
+  openFile: vi.fn(async () => {}),
+  shareFile: vi.fn(async () => {}),
 }));
 
 const { default: Viewer } = await import('../Viewer.jsx');
@@ -127,7 +130,7 @@ describe('Viewer', () => {
     expect(doc).toContain('<a href="https://example.test/" rel="noopener noreferrer">');
   });
 
-  it('lists attachments as static chips with name and size', async () => {
+  it('lists attachments as chips with name and size', async () => {
     engine.reply = body({
       html: '<p>See <img src="cid:logo@x"></p>',
       attachments: [
@@ -145,8 +148,10 @@ describe('Viewer', () => {
     expect(items[0].textContent).toMatch(/240 kB|240 KB/);
     expect(items[1].textContent).toContain(t('mobile.viewer.attachment'));
     expect(items[2].textContent).toContain('logo.png');
-    // Static in this slice: nothing to tap yet.
-    expect(list.querySelector('button, a')).toBeNull();
+    // One button per chip (AttachmentChip.test.jsx has the states), each for its own part.
+    const buttons = list.querySelectorAll('button');
+    expect([...buttons].map((b) => b.getAttribute('data-mv-attachment'))).toEqual(['2', '3', '4']);
+    expect(list.querySelector('a')).toBeNull();
   });
 
   it('an error shows the reason and retries', async () => {

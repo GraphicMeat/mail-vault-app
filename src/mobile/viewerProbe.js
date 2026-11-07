@@ -9,6 +9,16 @@
 //   controlPorts=A-B    then log `{"viewerProbe":"controls","at"}` and load an https image from
 //                       every port A..B on 127.0.0.1 and 10.0.2.2 from the app page itself: the
 //                       positive control that the device reaches each port of a request logger
+//   attach=A[,B...]     then, 3 s apart, act on the open message's attachments and links (the
+//                       iOS simulator has no tap tool): `open` taps the first ready chip, `share`
+//                       long-presses it, `fetch` taps the first idle chip, `link` sends the app page
+//                       itself to https://example.com/ (the shell must cancel it and open the
+//                       browser; a link inside the sandboxed frame cannot be scripted). Logs
+//                       `{"viewerProbe":"attach","action","found"}` per action, and
+//                       `{"viewerProbe":"visible","path","viewer"}` whenever the page comes back
+//                       to the foreground (the app stayed put after a link)
+//   holdAfter=S         wait S s before `done` (default 6 with `attach`), so the previewer, sheet
+//                       or browser is on screen for a screenshot
 // Ends with `{"viewerProbe":"done"}`.
 import { resetViewerTimings, viewerTimings } from './perf.js';
 
@@ -28,6 +38,32 @@ function parsePorts(value) {
 }
 
 const ms = (at, t0) => (at == null ? null : Math.round(at - t0));
+
+/** One scripted `attach=` action on the open viewer; whether its target was there. */
+async function attachAction(action) {
+  const chip = (state) => document.querySelector(`[data-mv-attachment-state="${state}"]`);
+  if (action === 'open' || action === 'fetch') {
+    const el = chip(action === 'open' ? 'ready' : 'idle');
+    el?.click();
+    return Boolean(el);
+  }
+  if (action === 'share') {
+    const el = chip('ready');
+    if (!el) return false;
+    const at = el.getBoundingClientRect();
+    const point = { bubbles: true, clientX: at.left + 10, clientY: at.top + 10, pointerId: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', point));
+    await sleep(800);
+    el.dispatchEvent(new PointerEvent('pointerup', point));
+    el.dispatchEvent(new MouseEvent('click', point));
+    return true;
+  }
+  if (action === 'link') {
+    window.location.href = 'https://example.com/';
+    return true;
+  }
+  return false;
+}
 
 export async function runViewerProbe({ query, list, open, close, log }) {
   const rowAt = async (i) => {
@@ -56,6 +92,20 @@ export async function runViewerProbe({ query, list, open, close, log }) {
     log({ viewerProbe: 'tap', clicked: Boolean(button), at: Date.now() });
     button?.click();
     await sleep(12_000);
+  }
+  const actions = String(query.get('attach') || '').split(',').filter(Boolean);
+  if (actions.length) {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        log({ viewerProbe: 'visible', path: location.pathname, viewer: Boolean(document.querySelector('.mv-viewer')) });
+      }
+    });
+    await sleep(3000);
+    for (const action of actions) {
+      log({ viewerProbe: 'attach', action, found: await attachAction(action) });
+      await sleep(3000);
+    }
+    await sleep((Number(query.get('holdAfter')) || 6) * 1000);
   }
   const ports = parsePorts(query.get('controlPorts'));
   if (ports.length) {

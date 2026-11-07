@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "변경하지 못했습니다: 메시지가 더 이상 서버에 없습니다.",
   "mobile.actions.dropped.FOLDER_GONE": "변경하지 못했습니다: 폴더가 더 이상 없습니다.",
   "mobile.actions.dropped.REFUSED": "변경하지 못했습니다: 서버가 거부했습니다.",
-  "mobile.actions.dismiss": "닫기"
+  "mobile.actions.dismiss": "닫기",
+  "mobile.attachment.labelIdle": "{{name}}, {{size}}. 다운로드",
+  "mobile.attachment.labelDownloading": "{{name}}, 다운로드 중 {{percent}}. 다운로드 취소",
+  "mobile.attachment.labelReady": "{{name}}, {{size}}. 열기, 길게 눌러 공유",
+  "mobile.attachment.labelReadyNotice": "{{name}}. {{reason}}. 열기, 길게 눌러 공유",
+  "mobile.attachment.labelFailed": "{{name}}. {{reason}}. 다시 시도",
+  "mobile.attachment.error.network": "서버에 연결할 수 없습니다",
+  "mobile.attachment.error.auth": "서버가 로그인을 거부했습니다",
+  "mobile.attachment.error.gone": "더 이상 서버에 없습니다",
+  "mobile.attachment.error.storage": "이 기기에 저장할 수 없습니다",
+  "mobile.attachment.error.internal": "문제가 발생했습니다",
+  "mobile.attachment.error.noApp": "이 파일을 열 수 있는 앱이 없습니다",
+  "mobile.attachment.error.openFailed": "열 수 없습니다"
 }

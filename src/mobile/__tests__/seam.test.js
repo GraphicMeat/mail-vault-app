@@ -10,7 +10,7 @@ const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const ENTRY = here('../main.jsx');
 const METHODS = JSON.parse(readFileSync(here('../../../src-mobile-engine/methods.json'), 'utf8'));
 const EVENTS = JSON.parse(readFileSync(here('../../../src-mobile-engine/events.json'), 'utf8'));
-const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_log'];
+const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_log', 'mobile_open_file', 'mobile_share_file'];
 // Desktop stores (and `plugin-fs`) would bring the desktop RPC graph with them.
 const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|sparkle|features\/blitz|e2eMotion|src\/stores\//i;
 
@@ -25,6 +25,13 @@ describe('mobile seam', () => {
     const { invokes } = await analyzeSeam(ENTRY);
     expect(invokes.length).toBeGreaterThan(0);
     expect(invokes.filter((c) => !ALLOWED_INVOKES.includes(c))).toEqual([]);
+  });
+
+  it('open_and_share_are_the_only_file_commands', async () => {
+    const { invokes } = await analyzeSeam(ENTRY);
+    expect(invokes.filter((c) => c.startsWith('mobile_') && c.endsWith('_file')).sort()).toEqual(['mobile_open_file', 'mobile_share_file']);
+    // The shell's own plugin registers no commands JS could reach.
+    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
   });
 
   it('no_desktop_only_modules', async () => {

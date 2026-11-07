@@ -18,9 +18,11 @@ perf-gate = ["mailvault-mobile-engine/perf-gate"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# No plugins beyond core. Never add mailvault-core here with `tls-rustls`: workspace feature
-# unification would move the desktop build onto rustls.
+# Core plus one in-repo plugin (native/: system previewer, share sheet, links out). Never add
+# mailvault-core here with `tls-rustls`: workspace feature unification would move the desktop
+# build onto rustls.
 tauri = { version = "2", features = [] }
+tauri-plugin-mv-native = { path = "native" }
 serde_json = "1.0"
 mailvault-mobile-engine = { path = "../src-mobile-engine" }
 # The platform secret store behind the engine's SecretStore (src/secrets.rs).

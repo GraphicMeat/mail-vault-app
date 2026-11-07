@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "変更を適用できませんでした: メッセージはもうサーバーにありません。",
   "mobile.actions.dropped.FOLDER_GONE": "変更を適用できませんでした: フォルダはもう存在しません。",
   "mobile.actions.dropped.REFUSED": "変更を適用できませんでした: サーバーに拒否されました。",
-  "mobile.actions.dismiss": "閉じる"
+  "mobile.actions.dismiss": "閉じる",
+  "mobile.attachment.labelIdle": "{{name}}、{{size}}。ダウンロード",
+  "mobile.attachment.labelDownloading": "{{name}}、ダウンロード中 {{percent}}。ダウンロードをキャンセル",
+  "mobile.attachment.labelReady": "{{name}}、{{size}}。開く（長押しで共有）",
+  "mobile.attachment.labelReadyNotice": "{{name}}。{{reason}}。開く（長押しで共有）",
+  "mobile.attachment.labelFailed": "{{name}}。{{reason}}。再試行",
+  "mobile.attachment.error.network": "サーバーに接続できません",
+  "mobile.attachment.error.auth": "サーバーがサインインを拒否しました",
+  "mobile.attachment.error.gone": "サーバー上にありません",
+  "mobile.attachment.error.storage": "このデバイスに保存できませんでした",
+  "mobile.attachment.error.internal": "問題が発生しました",
+  "mobile.attachment.error.noApp": "このファイルを開けるアプリがありません",
+  "mobile.attachment.error.openFailed": "開けませんでした"
 }

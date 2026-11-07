@@ -4278,5 +4278,17 @@
   "mobile.actions.dropped.GONE": "A change couldn't be made: the message is no longer on the server.",
   "mobile.actions.dropped.FOLDER_GONE": "A change couldn't be made: the folder no longer exists.",
   "mobile.actions.dropped.REFUSED": "A change couldn't be made: the server refused it.",
-  "mobile.actions.dismiss": "Dismiss"
+  "mobile.actions.dismiss": "Dismiss",
+  "mobile.attachment.labelIdle": "{{name}}, {{size}}. Download",
+  "mobile.attachment.labelDownloading": "{{name}}, downloading, {{percent}}. Cancel download",
+  "mobile.attachment.labelReady": "{{name}}, {{size}}. Open, or long press to share",
+  "mobile.attachment.labelReadyNotice": "{{name}}. {{reason}}. Open, or long press to share",
+  "mobile.attachment.labelFailed": "{{name}}. {{reason}}. Try again",
+  "mobile.attachment.error.network": "Couldn't reach the server",
+  "mobile.attachment.error.auth": "The server refused the sign-in",
+  "mobile.attachment.error.gone": "No longer on the server",
+  "mobile.attachment.error.storage": "Couldn't save it on this device",
+  "mobile.attachment.error.internal": "Something went wrong",
+  "mobile.attachment.error.noApp": "No app on this device opens this file",
+  "mobile.attachment.error.openFailed": "Couldn't open it"
 }

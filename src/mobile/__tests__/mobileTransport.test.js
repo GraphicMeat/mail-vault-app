@@ -33,6 +33,23 @@ describe('mobile transport module', () => {
   });
 });
 
+describe('mobile transport file commands', () => {
+  it('open_and_share_send_exactly_path_name_mime', async () => {
+    const { openFile, shareFile } = await import('../transport.js');
+    invoke.mockResolvedValue(null);
+    const args = { path: '/c/att/x', name: 'a.pdf', mime: 'application/pdf' };
+    await openFile({ ...args, extra: 'dropped' });
+    await shareFile(args);
+    expect(invoke.mock.calls).toEqual([['mobile_open_file', args], ['mobile_share_file', args]]);
+  });
+
+  it('keeps the shell code of a refused open', async () => {
+    const { openFile } = await import('../transport.js');
+    invoke.mockRejectedValue({ code: 'GONE', message: 'the file is gone' });
+    await expect(openFile({ path: '/p', name: '', mime: '' })).rejects.toMatchObject({ code: 'GONE', message: 'the file is gone' });
+  });
+});
+
 describe('mobile transport listen', () => {
   it('listen_filters_by_name_and_unsubscribes', async () => {
     const { listen } = await import('../transport.js');

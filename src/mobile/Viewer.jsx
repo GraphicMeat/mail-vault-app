@@ -6,17 +6,21 @@
 // until the user taps "Load images", which mounts a new frame with https: images allowed.
 // The perf probe's tap-to-paint mark (`viewerPainted`) is raised after the first paint of the
 // header, never on the body: the gate measures navigation, not the network.
+// Each attachment is a chip (AttachmentChip.jsx): tap downloads, opens or retries, a long press
+// shares. A link tapped in the mail leaves the frame for the system browser: the shell's
+// navigation hook (src-tauri-mobile/native) cancels it in the webview and hands the URL out.
 // The toolbar at the bottom acts on the message: read or unread, flag, move (MovePicker.jsx over
 // the account's folders) and delete; App.jsx sends the actions (store `act`).
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
 import { assembleMailFrame, prepareMailBody } from './mailFrame.js';
-import { formatFullDate, formatSize } from './format.js';
+import { formatFullDate } from './format.js';
 import { ERROR_KEYS, errorKey } from './errors.js';
 import { afterNextPaint, bodyLoaded, notePrepare, viewerPainted } from './perf.js';
 import { useT } from './i18n.js';
 import MovePicker from './MovePicker.jsx';
+import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
 import { EnvelopeIcon, FlagIcon, MoveIcon, TrashIcon } from './icons.jsx';
 
@@ -78,19 +82,13 @@ function Header({ row }) {
   );
 }
 
-function Attachments({ items }) {
+function Attachments({ accountId, folder, uid, items }) {
   const t = useT();
   if (items.length === 0) return null;
   return (
     <ul className="mv-viewer__chips" aria-label={t('common.attachmentCount', { count: items.length })}>
       {items.map((a) => (
-        <li key={a.section} className="mv-viewer__chip">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7L9.2 17.2a1.7 1.7 0 0 1-2.4-2.4L14.5 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="mv-viewer__chip-name" dir="auto">{displayText(a.filename, '') || t('mobile.viewer.attachment')}</span>
-          <span className="mv-viewer__chip-size">{formatSize(a.size)}</span>
-        </li>
+        <AttachmentChip key={a.section} accountId={accountId} folder={folder} uid={uid} attachment={a} />
       ))}
     </ul>
   );
@@ -197,7 +195,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
           </button>
         </header>
         <Header row={row} />
-        <Attachments items={attachments} />
+        <Attachments accountId={accountId} folder={folder} uid={row.uid} items={attachments} />
       </div>
       {remoteImages > 0 && !allowRemote && (
         <div className="mv-viewer__images">
