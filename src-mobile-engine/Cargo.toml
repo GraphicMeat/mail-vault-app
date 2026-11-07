@@ -24,6 +24,8 @@ async-std = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "net"] }
 # Attachment cache file names (the same sha2 core already builds).
 sha2 = "0.10"
+# Outgoing attachments as core's builder takes them (the same base64 core already builds).
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"

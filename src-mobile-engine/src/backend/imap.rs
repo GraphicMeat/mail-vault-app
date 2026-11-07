@@ -1,7 +1,7 @@
 //! [`Backend`] over IMAP, through mailvault-core. One signed-in session per backend; every method
 //! runs core's futures on the calling thread through [`crate::net::block_on`].
 
-use super::{ApplyOutcome, Backend, BeforeWire, Change, Envelope, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendOutcome, StopFlag, Window};
+use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendOutcome, StopFlag, Window};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -10,6 +10,7 @@ use crate::secrets::Credential;
 use crate::sync::{self, Fail};
 use mailvault_core::abd::ops::Caps;
 use mailvault_core::imap::{self, abd_cmds, ImapPool, ImapSession, PartInfo};
+use mailvault_core::smtp::{self, OutgoingEmail};
 use std::collections::{HashMap, HashSet};
 
 /// What signing in to an account takes: core's settings and the account's secrets (kept only to
@@ -19,6 +20,8 @@ use std::collections::{HashMap, HashSet};
 struct SessionConfig {
     config: imap::ImapConfig,
     secrets: Vec<String>,
+    /// Gmail files what its SMTP server accepted in Sent itself.
+    gmail: bool,
 }
 
 impl SessionConfig {
@@ -46,7 +49,8 @@ fn session_config(shared: &Shared, account: &str) -> Result<SessionConfig, Fail>
         Err(e) => return Err(Fail::Code(Code::Invalid, format!("secret store: {e}"))),
     };
     let config = crate::net::core_config(&acct, &cred).map_err(|e| Fail::Code(Code::Invalid, e))?;
-    Ok(SessionConfig { config, secrets: cred.secrets().into_iter().map(String::from).collect() })
+    let gmail = acct.provider.as_deref() == Some("google") || acct.imap_host.eq_ignore_ascii_case("imap.gmail.com");
+    Ok(SessionConfig { config, secrets: cred.secrets().into_iter().map(String::from).collect(), gmail })
 }
 
 pub(crate) struct ImapBackend {
@@ -56,6 +60,9 @@ pub(crate) struct ImapBackend {
     secrets: Vec<String>,
     /// CAPABILITY, asked once per session, on the first action.
     caps: Option<Caps>,
+    /// The settings the session signed in with; a send's SMTP side uses them too.
+    config: imap::ImapConfig,
+    gmail: bool,
 }
 
 impl ImapBackend {
@@ -64,7 +71,7 @@ impl ImapBackend {
         let sc = session_config(shared, account)?;
         let pool = ImapPool::new();
         let session = block_on(imap::create_imap_session(&sc.config, &pool)).map_err(|e| sc.scrub(Fail::from(e)))?;
-        Ok(ImapBackend { session: Some(session), _pool: pool, secrets: sc.secrets, caps: None })
+        Ok(ImapBackend { session: Some(session), _pool: pool, secrets: sc.secrets, caps: None, config: sc.config, gmail: sc.gmail })
     }
 
     fn session(&mut self) -> &mut ImapSession {
@@ -342,8 +349,22 @@ impl Backend for ImapBackend {
         self.step(async |session| apply_in(session, &caps, folder, kind, uids, target, before_wire).await)
     }
 
-    fn send(&mut self, _raw: &[u8], _envelope: &Envelope) -> Result<SendOutcome, Fail> {
-        Err(Fail::unsupported("send"))
+    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, Fail> {
+        let config = &self.config;
+        let built = smtp::build_mime(config, email).map_err(|e| scrub(&self.secrets, Fail::Code(Code::Invalid, e)))?;
+        let sent = block_on(smtp::send_built(config, email, built)).map_err(|e| scrub(&self.secrets, Fail::from(e)))?;
+        Ok(SendOutcome { raw: sent.raw_rfc2822, server_saved_sent: sent.server_saved_sent || self.gmail })
+    }
+
+    fn file_sent(&mut self, sent: &SendOutcome) -> Result<(), Fail> {
+        if sent.server_saved_sent {
+            return Ok(());
+        }
+        self.step(async |session| {
+            let sent_box = imap::ensure_sent_mailbox(session).await?;
+            imap::append_email(session, &sent_box, &sent.raw, "\\Seen", None).await?;
+            Ok(())
+        })
     }
 
     fn wait_for_change(&mut self, _folder: &FolderRow, _stop: &StopFlag) -> Result<Change, Fail> {

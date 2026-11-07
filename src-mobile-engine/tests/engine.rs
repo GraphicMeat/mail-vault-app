@@ -449,6 +449,19 @@ fn methods_json_matches_dispatch() {
         listed.iter().filter(|m| !perf_gate_only(m)).cloned().collect()
     };
     assert!(listed.iter().any(|m| m == "mobile.perf.report"), "methods.json must list mobile.perf.report");
+    for m in [
+        "mobile.compose.prepare",
+        "mobile.compose.send",
+        "mobile.drafts.delete",
+        "mobile.drafts.get",
+        "mobile.drafts.list",
+        "mobile.drafts.save",
+        "mobile.outbox.discard",
+        "mobile.outbox.list",
+        "mobile.outbox.retry",
+    ] {
+        assert!(listed.iter().any(|l| l == m), "methods.json must list {m}");
+    }
     assert_eq!(expected, dispatch);
 }
 
@@ -471,7 +484,10 @@ fn events_json_matches_emitted_names() {
     let mut emitted: Vec<String> = mailvault_mobile_engine::events::EVENTS.iter().map(|s| s.to_string()).collect();
     emitted.sort();
     assert_eq!(listed, emitted);
-    // Every name the sync worker emits is one of them: emit sites take the named constants.
-    let sync = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/sync.rs")).unwrap();
-    assert!(!sync.contains("emit(\""), "emit with a string literal bypasses events::EVENTS");
+    assert!(listed.iter().any(|e| e == "mobile.send.result"), "events.json must list mobile.send.result");
+    // Every name a worker emits is one of them: emit sites take the named constants.
+    for file in ["sync.rs", "actions.rs", "attachments.rs", "outbox.rs", "compose.rs"] {
+        let src = std::fs::read_to_string(format!("{}/src/{file}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        assert!(!src.contains("emit(\""), "{file}: emit with a string literal bypasses events::EVENTS");
+    }
 }

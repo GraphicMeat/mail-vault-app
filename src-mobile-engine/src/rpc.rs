@@ -10,13 +10,17 @@ use std::fmt;
 
 const MAX_PAGE: u64 = 200;
 
-/// Serialized as `{ code: "UNSUPPORTED"|"INVALID"|"INTERNAL", message }`; the shell forwards it
-/// to JS unchanged.
+/// Serialized as `{ code: "UNSUPPORTED"|"INVALID"|"INTERNAL"|"TOO_LARGE"|"ATTACHMENT_MISSING",
+/// message }`; the shell forwards it to JS unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RpcError {
     Unsupported { method: String },
     Invalid(String),
     Internal(String),
+    /// A send's attachments are over the limit (`compose::MAX_ATTACHMENT_BYTES`).
+    TooLarge(String),
+    /// A send or draft names an attachment handle that does not resolve to a picked file.
+    AttachmentMissing(String),
 }
 
 impl RpcError {
@@ -25,6 +29,8 @@ impl RpcError {
             RpcError::Unsupported { .. } => "UNSUPPORTED",
             RpcError::Invalid(_) => "INVALID",
             RpcError::Internal(_) => "INTERNAL",
+            RpcError::TooLarge(_) => "TOO_LARGE",
+            RpcError::AttachmentMissing(_) => "ATTACHMENT_MISSING",
         }
     }
 }
@@ -33,7 +39,7 @@ impl fmt::Display for RpcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RpcError::Unsupported { method } => write!(f, "unsupported method: {method}"),
-            RpcError::Invalid(m) | RpcError::Internal(m) => f.write_str(m),
+            RpcError::Invalid(m) | RpcError::Internal(m) | RpcError::TooLarge(m) | RpcError::AttachmentMissing(m) => f.write_str(m),
         }
     }
 }
@@ -67,11 +73,20 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.attachment.lease", crate::attachments::lease),
     ("mobile.attachment.local", crate::attachments::local),
     ("mobile.attachment.release", crate::attachments::release),
+    ("mobile.compose.prepare", crate::compose::prepare),
+    ("mobile.compose.send", crate::compose::send),
     ("mobile.debug.probe", debug_probe),
     ("mobile.debug.secretsRoundTrip", debug_secrets_round_trip),
+    ("mobile.drafts.delete", crate::compose::drafts_delete),
+    ("mobile.drafts.get", crate::compose::drafts_get),
+    ("mobile.drafts.list", crate::compose::drafts_list),
+    ("mobile.drafts.save", crate::compose::drafts_save),
     ("mobile.folders.list", crate::sync::folders_list),
     ("mobile.message.body", crate::body::message_body),
     ("mobile.messages.page", messages_page),
+    ("mobile.outbox.discard", crate::outbox::discard),
+    ("mobile.outbox.list", crate::outbox::list),
+    ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
     ("mobile.sync.refresh", crate::sync::refresh),
@@ -89,9 +104,18 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.attachment.lease", crate::attachments::lease),
     ("mobile.attachment.local", crate::attachments::local),
     ("mobile.attachment.release", crate::attachments::release),
+    ("mobile.compose.prepare", crate::compose::prepare),
+    ("mobile.compose.send", crate::compose::send),
+    ("mobile.drafts.delete", crate::compose::drafts_delete),
+    ("mobile.drafts.get", crate::compose::drafts_get),
+    ("mobile.drafts.list", crate::compose::drafts_list),
+    ("mobile.drafts.save", crate::compose::drafts_save),
     ("mobile.folders.list", crate::sync::folders_list),
     ("mobile.message.body", crate::body::message_body),
     ("mobile.messages.page", messages_page),
+    ("mobile.outbox.discard", crate::outbox::discard),
+    ("mobile.outbox.list", crate::outbox::list),
+    ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.ping", ping),
     ("mobile.sync.refresh", crate::sync::refresh),
 ];

@@ -22,6 +22,7 @@ use crate::actions::Kind;
 use crate::db::Shared;
 use crate::sync::Fail;
 use mailvault_core::imap::{EmailHeader, PartInfo};
+use mailvault_core::smtp::OutgoingEmail;
 use rusqlite::OptionalExtension;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -128,19 +129,12 @@ pub(crate) enum ApplyOutcome {
 /// moves or deletes goes on the wire, to record that it may have happened.
 pub(crate) type BeforeWire<'a> = &'a mut dyn FnMut() -> Result<(), Fail>;
 
-/// An outgoing message's SMTP envelope. Filled by compose (Task 5).
-#[allow(dead_code)]
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Envelope {
-    pub(crate) from: String,
-    pub(crate) to: Vec<String>,
-}
-
-/// What a send came to. Filled by compose (Task 5).
-#[allow(dead_code)]
+/// What a send came to: the bytes that went out, and whether the server filed its own Sent copy
+/// (then [`Backend::file_sent`] has nothing to do).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct SendOutcome {
-    pub(crate) message_id: Option<String>,
+    pub(crate) raw: Vec<u8>,
+    pub(crate) server_saved_sent: bool,
 }
 
 /// What ended a [`Backend::wait_for_change`] (Task 11).
@@ -208,9 +202,14 @@ pub(crate) trait Backend: Send {
         target: Option<&str>,
         before_wire: BeforeWire<'_>,
     ) -> Result<ApplyOutcome, Fail>;
-    /// Sends one message (Task 5).
-    #[allow(dead_code)]
-    fn send(&mut self, raw: &[u8], envelope: &Envelope) -> Result<SendOutcome, Fail>;
+    /// Builds `email` (core's `smtp::build_mime`, under `email.message_id`) and submits it.
+    /// `Ok` means the server accepted it; nothing is filed in Sent yet. A failure's text is core's
+    /// (scrubbed), which `smtp::is_terminal_send_error` reads.
+    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, Fail>;
+    /// Files the bytes of an accepted send in the account's Sent folder, read, unless the server
+    /// does that itself (`server_saved_sent`, Gmail over SMTP). Called after the outbox row is
+    /// committed `sent`, so a failure here never sends the message again.
+    fn file_sent(&mut self, sent: &SendOutcome) -> Result<(), Fail>;
     /// Waits until `folder` changes on the server or `stop` is set (Task 11). Checks `stop` at
     /// least once a second (see [`StopFlag`]).
     #[allow(dead_code)]

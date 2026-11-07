@@ -232,9 +232,11 @@ pub struct Engine {
     cache_dir: PathBuf,
     sync: crate::sync::Worker,
     replay: crate::actions::Replay,
+    /// Sends the outbox (`outbox.rs`).
+    outbox: crate::outbox::Outbox,
     /// Attachment downloads into `<cache_dir>/att`.
     attachments: crate::attachments::Attachments,
-    /// `open` found a journal: replay starts once the shell can hear its results, when the event
+    /// `open` found a journal or queued sends: replay starts once the shell can hear its results, when the event
     /// sink is installed or the first RPC arrives, whichever is first.
     startup_replay: AtomicBool,
 }
@@ -398,7 +400,9 @@ impl Engine {
             .writer
             .query_row("SELECT EXISTS(SELECT 1 FROM pending_actions)", [], |r| r.get(0))
             .map_err(|e| EngineError::Db(e.to_string()))?;
-        Ok(Engine {
+        // A send that was on the wire when the engine died may have gone out: `uncertain`.
+        let queued = crate::outbox::on_open(&db.writer, crate::compose::now_ms()).map_err(|e| EngineError::Db(e.to_string()))?;
+        let engine = Engine {
             shared: Arc::new(Shared {
                 path: db.path,
                 writer: Mutex::new(db.writer),
@@ -418,14 +422,18 @@ impl Engine {
             cache_dir: cache_dir.to_path_buf(),
             sync: crate::sync::Worker::default(),
             replay: crate::actions::Replay::default(),
-            startup_replay: AtomicBool::new(journal),
-        })
+            outbox: crate::outbox::Outbox::new(cache_dir),
+            startup_replay: AtomicBool::new(journal || queued),
+        };
+        crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
+        Ok(engine)
     }
 
-    /// Starts the replay `open` held back, once.
+    /// Starts the replay and the outbox `open` held back, once.
     pub(crate) fn start_startup_replay(&self) {
         if self.startup_replay.swap(false, Ordering::SeqCst) {
             self.replay.wake(&self.shared, None);
+            self.outbox.wake(&self.shared, None);
         }
     }
 
@@ -439,6 +447,10 @@ impl Engine {
 
     pub(crate) fn replay(&self) -> &crate::actions::Replay {
         &self.replay
+    }
+
+    pub(crate) fn outbox(&self) -> &crate::outbox::Outbox {
+        &self.outbox
     }
 
     pub(crate) fn attachments(&self) -> &crate::attachments::Attachments {
@@ -482,6 +494,18 @@ impl Engine {
     #[doc(hidden)]
     pub fn set_action_backoff(&self, base: std::time::Duration, cap: std::time::Duration) {
         self.replay.set_backoff(base, cap);
+    }
+
+    /// Tests: the outbox's per-account backoff, in place of 5 s doubling to 5 min.
+    #[doc(hidden)]
+    pub fn set_outbox_backoff(&self, base: std::time::Duration, cap: std::time::Duration) {
+        self.outbox.set_backoff(base, cap);
+    }
+
+    /// Tests: the open-time sweep of `<cache>/out`, for dirs at least `older_than` old.
+    #[doc(hidden)]
+    pub fn sweep_outgoing(&self, older_than: std::time::Duration) {
+        crate::outbox::sweep(&self.shared, &self.cache_dir, older_than);
     }
 
     /// The `settings` value under `key`, `None` when unset. Never a secret.
@@ -545,6 +569,7 @@ impl Drop for Engine {
         self.shared.closing.store(true, Ordering::SeqCst);
         self.sync.stop();
         self.replay.stop();
+        self.outbox.stop();
         self.attachments.stop();
     }
 }

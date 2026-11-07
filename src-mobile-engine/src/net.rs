@@ -43,6 +43,9 @@ pub(crate) fn imap_config(account: &AccountRow, cred: &Credential) -> Value {
         "imapPort": account.imap_port,
         "imapSecurity": account.security,
     });
+    if !account.display_name.trim().is_empty() {
+        v["name"] = json!(account.display_name);
+    }
     if account.auth == "oauth2" {
         v["authType"] = json!("oauth2");
         v["oauth2AccessToken"] = json!(cred.access);

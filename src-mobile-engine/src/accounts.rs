@@ -102,6 +102,10 @@ pub(crate) struct AccountRow {
     pub(crate) smtp_host: Option<String>,
     pub(crate) smtp_port: Option<u16>,
     pub(crate) smtp_security: Option<String>,
+    /// The name outgoing mail is from; empty for none.
+    pub(crate) display_name: String,
+    /// `google`, `microsoft`, ... when the account was added through a provider.
+    pub(crate) provider: Option<String>,
 }
 
 impl AccountRow {
@@ -116,6 +120,8 @@ impl AccountRow {
             smtp_host: None,
             smtp_port: None,
             smtp_security: None,
+            display_name: String::new(),
+            provider: None,
         }
     }
 }
@@ -124,7 +130,8 @@ impl AccountRow {
 pub(crate) fn load_account(shared: &Shared, id: &str) -> Result<Option<AccountRow>, EngineError> {
     shared.read(|c| {
         c.query_row(
-            "SELECT email, auth, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security FROM accounts WHERE id = ?1",
+            "SELECT email, auth, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, display_name, provider
+             FROM accounts WHERE id = ?1",
             [id],
             |r| {
                 Ok(AccountRow {
@@ -136,6 +143,8 @@ pub(crate) fn load_account(shared: &Shared, id: &str) -> Result<Option<AccountRo
                     smtp_host: r.get(5)?,
                     smtp_port: r.get::<_, Option<i64>>(6)?.map(|p| p as u16),
                     smtp_security: r.get(7)?,
+                    display_name: r.get(8)?,
+                    provider: r.get(9)?,
                 })
             },
         )

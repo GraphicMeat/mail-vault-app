@@ -938,6 +938,15 @@ pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     }
 }
 
+/// The finished cache file of one part, if there is one (a hit counts as opening it for the
+/// LRU). Compose copies a forwarded attachment from here.
+pub(crate) fn cached_part(engine: &Engine, account_id: &str, folder: &str, uid: u32, section: &str) -> Option<PathBuf> {
+    let key = PartKey { account_id: account_id.into(), folder: folder.into(), uid, section: section.into() };
+    let (name, _) = name_of(engine.shared(), &key).ok()??;
+    let path = engine.attachments().state.path(&name);
+    touch(&path).ok().map(|()| path)
+}
+
 /// Perf-gate seed only: `bytes` as the finished cache file of one part, as if it had been fetched
 /// (no server stands behind the seed account), so the device check can open and share it. Written
 /// beside the final name and renamed into place. A file already there is left alone.

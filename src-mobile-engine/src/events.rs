@@ -26,6 +26,11 @@ pub const ATTACHMENT_DONE: &str = "mobile.attachment.done";
 /// is no longer there), `CANCELLED`, or an accounts error code (the `.part` stays for a resume).
 pub const ATTACHMENT_FAILED: &str = "mobile.attachment.failed";
 
+/// `{id, accountId, outcome: "sent"|"queued"|"failed"|"uncertain", reason?}`: one attempt at an
+/// outbox row ended. `reason` is a code: an accounts error code for `queued` (it waits and tries
+/// again), `REFUSED`, `AUTH_FAILED`, `ATTACHMENT_MISSING` or `INVALID` for `failed`.
+pub const SEND_RESULT: &str = "mobile.send.result";
+
 /// Every event name the engine emits: the one list `events.json` must match (a test checks it) and
 /// the page's `listen('…')` names are checked against.
 pub const EVENTS: &[&str] = &[
@@ -35,6 +40,7 @@ pub const EVENTS: &[&str] = &[
     ATTACHMENT_PROGRESS,
     FOLDER_CHANGED,
     FOLDERS_CHANGED,
+    SEND_RESULT,
     SYNC_STATE,
 ];
 
