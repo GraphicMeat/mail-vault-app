@@ -1,7 +1,8 @@
 // Add an IMAP account: email and password first, then the server, prefilled from the address's
 // domain (`imap.<domain>`, 993, SSL/TLS) and editable. The engine signs in before it saves, so the
 // one `onSubmit` call is the test. The form lives in this component only: the password is sent once
-// and cleared on every submit, and never reaches the store, storage or a log.
+// per submit and never reaches the store, storage or a log. A refused sign-in clears it; a network
+// or server mistake keeps it, so fixing the host is not a retype.
 import React, { useState } from 'react';
 import { useT } from './i18n.js';
 import { errorKey } from './errors.js';
@@ -65,7 +66,6 @@ export default function AddAccount({ onSubmit, onCancel }) {
     setBusy(true);
     setErrorCode(null);
     const form = { email: email.trim(), password, imapHost: host.trim(), imapPort: portNumber, security };
-    setPassword('');
     let result;
     try {
       result = await onSubmit(form);
@@ -73,6 +73,7 @@ export default function AddAccount({ onSubmit, onCancel }) {
       result = { ok: false, code: 'INTERNAL' };
     }
     setBusy(false);
+    if (result?.ok || result?.code === 'AUTH_FAILED') setPassword('');
     if (!result?.ok) setErrorCode(result?.code ?? 'INTERNAL');
   };
 
@@ -119,7 +120,7 @@ export default function AddAccount({ onSubmit, onCancel }) {
       ) : (
         <form className="mv-add__form" onSubmit={submit} noValidate>
           <p className="mv-add__who" dir="auto">{email.trim()}</p>
-          {/* Here too: a failed sign-in clears it, and the retry needs it typed again. */}
+          {/* Here too: a refused sign-in clears it, and the retry needs it typed again. */}
           <Field id="mv-add-password" label={t('mobile.add.password')}>
             <input
               id="mv-add-password"

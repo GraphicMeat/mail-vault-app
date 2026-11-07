@@ -80,6 +80,28 @@ describe('AddAccount', () => {
     expect(field('mobile.add.email').value).toBe('ada@example.test');
   });
 
+  it('a network error keeps the password for the retry', async () => {
+    for (const code of ['HOST_UNREACHABLE', 'TLS_FAILED', 'TIMEOUT']) {
+      const onSubmit = vi.fn(async () => ({ ok: false, code }));
+      render(<AddAccount onSubmit={onSubmit} />);
+      fillFirstStep();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: t('mobile.add.signIn') }));
+      });
+      expect(screen.getByRole('alert').textContent).toBe(t(errorKey(code)));
+      expect(field('mobile.add.password').value, code).toBe('secret-pw');
+      // Fix the server and try again without retyping.
+      fireEvent.change(field('mobile.add.host'), { target: { value: 'mx.example.test' } });
+      const retry = screen.getByRole('button', { name: t('mobile.add.signIn') });
+      expect(retry.disabled).toBe(false);
+      await act(async () => { fireEvent.click(retry); });
+      expect(onSubmit).toHaveBeenLastCalledWith({
+        email: 'ada@example.test', password: 'secret-pw', imapHost: 'mx.example.test', imapPort: 993, security: 'ssl',
+      });
+      cleanup();
+    }
+  });
+
   it('a thrown submit shows the generic error', async () => {
     const onSubmit = vi.fn(async () => { throw new Error('bridge gone'); });
     render(<AddAccount onSubmit={onSubmit} />);
