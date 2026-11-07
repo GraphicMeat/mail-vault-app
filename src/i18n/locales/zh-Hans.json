@@ -4302,5 +4302,10 @@
   "help.outlookImap.imageAlt": "Outlook.com 设置的“POP 和 IMAP”部分，已开启“允许设备和应用使用 IMAP”",
   "help.outlookImap.hint": "通过 IMAP 使用 Outlook.com 需要在 Outlook.com 设置中开启 IMAP。",
   "errors.conn.problem.outlookImapOff": "Outlook.com 已接受你的登录，但此邮箱已关闭 IMAP。",
-  "errors.conn.recovery.turnOnOutlookImap": "请在 Outlook.com 设置中开启 IMAP 后重试，或改用 Microsoft Graph 连接。"
+  "errors.conn.recovery.turnOnOutlookImap": "请在 Outlook.com 设置中开启 IMAP 后重试，或改用 Microsoft Graph 连接。",
+  "mobile.add.smtpServer": "发件服务器",
+  "mobile.add.smtpHost": "SMTP 服务器",
+  "mobile.add.smtpPort": "SMTP 端口",
+  "mobile.add.smtpSecurity": "SMTP 安全",
+  "mobile.error.SMTP_FAILED": "无法登录发件服务器。请检查 SMTP 服务器、端口和安全设置。"
 }

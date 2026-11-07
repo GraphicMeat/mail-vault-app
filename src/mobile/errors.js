@@ -8,6 +8,7 @@ export const ERROR_KEYS = Object.freeze({
   TIMEOUT: 'mobile.error.TIMEOUT',
   DUPLICATE: 'mobile.error.DUPLICATE',
   INVALID: 'mobile.error.INVALID',
+  SMTP_FAILED: 'mobile.error.SMTP_FAILED',
   INTERNAL: 'mobile.error.INTERNAL',
 });
 

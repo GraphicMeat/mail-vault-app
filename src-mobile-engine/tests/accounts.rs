@@ -44,13 +44,17 @@ impl SecretStore for Spy {
 
 fn engine(dir: &std::path::Path) -> (Engine, Arc<Spy>) {
     std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
     let secrets = Arc::new(Spy::default());
     let e = Engine::open(dir, &dir.join("cache"), secrets.clone()).unwrap();
     (e, secrets)
 }
 
 fn form(server: &MockImap, email: &str, password: &str) -> Value {
-    json!({ "email": email, "password": password, "imapHost": server.host(), "imapPort": server.port(), "security": "none" })
+    json!({
+        "email": email, "password": password, "imapHost": server.host(), "imapPort": server.port(), "security": "none",
+        "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecurity": "starttls",
+    })
 }
 
 fn good_server() -> MockImap {
@@ -426,4 +430,59 @@ fn the_credential_envelope_round_trips_without_reaching_the_db() {
             assert!(!bytes.windows(PW.len()).any(|w| w == PW.as_bytes()), "mobile.db{suffix} holds the password");
         }
     }
+}
+
+fn closed_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+}
+
+#[test]
+fn add_tests_smtp_too_and_writes_nothing_when_smtp_refuses() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, secrets) = engine(tmp.path());
+    let server = good_server();
+    let mut f = form(&server, "u@example.test", PW);
+    f["smtpPort"] = json!(closed_port());
+    for method in ["mobile.accounts.add", "mobile.accounts.test"] {
+        let r = e.rpc(method, f.clone()).unwrap();
+        assert_eq!((r["ok"].clone(), r["code"].clone()), (json!(false), json!("SMTP_FAILED")), "{method}: {r}");
+        assert!(!r.to_string().contains(PW));
+    }
+    assert!(list(&e).is_empty());
+    assert_eq!(row_count(tmp.path()), 0);
+    assert!(secrets.is_empty(), "a refused SMTP login must leave no secret");
+}
+
+#[test]
+fn add_stores_the_smtp_server_beside_the_imap_one() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    let server = good_server();
+    let added = e.rpc("mobile.accounts.add", form(&server, "u@example.test", PW)).unwrap();
+    assert_eq!(added["ok"], true, "{added}");
+    assert_eq!(added["account"]["smtpHost"], server.host().as_str());
+    let c = Connection::open(tmp.path().join("mobile.db")).unwrap();
+    let row: (String, i64, String) = c
+        .query_row("SELECT smtp_host, smtp_port, smtp_security FROM accounts", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap();
+    assert_eq!(row, (server.host(), server.smtp_port() as i64, "starttls".to_string()));
+    let a = &list(&e)[0];
+    assert_eq!((a["smtpPort"].clone(), a["smtpSecurity"].clone()), (json!(server.smtp_port()), json!("starttls")));
+}
+
+#[test]
+fn smtp_defaults_come_from_the_address_domain_and_a_bad_mode_is_invalid() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    let server = good_server();
+    let mut f = form(&server, "u@mail.example.test", PW);
+    for k in ["smtpHost", "smtpPort", "smtpSecurity"] {
+        f.as_object_mut().unwrap().remove(k);
+    }
+    // Nothing listens on smtp.mail.example.test:465, so the add fails at SMTP, never as INVALID.
+    let r = e.rpc("mobile.accounts.add", f.clone()).unwrap();
+    assert_eq!(r["code"], "SMTP_FAILED", "{r}");
+    f["smtpSecurity"] = json!("none");
+    let r = e.rpc("mobile.accounts.add", f).unwrap();
+    assert_eq!(r["code"], "INVALID", "{r}");
 }

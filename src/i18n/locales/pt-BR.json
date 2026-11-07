@@ -4302,5 +4302,10 @@
   "help.outlookImap.imageAlt": "Configurações do Outlook.com, seção POP e IMAP, com \"Permitir que dispositivos e aplicativos usem IMAP\" ativado",
   "help.outlookImap.hint": "O Outlook.com por IMAP precisa que o IMAP esteja ativado nas configurações do Outlook.com.",
   "errors.conn.problem.outlookImapOff": "O Outlook.com aceitou seu login, mas o IMAP está desativado para esta caixa de correio.",
-  "errors.conn.recovery.turnOnOutlookImap": "Ative o IMAP nas configurações do Outlook.com e tente novamente, ou conecte pelo Microsoft Graph."
+  "errors.conn.recovery.turnOnOutlookImap": "Ative o IMAP nas configurações do Outlook.com e tente novamente, ou conecte pelo Microsoft Graph.",
+  "mobile.add.smtpServer": "Servidor de saída",
+  "mobile.add.smtpHost": "Servidor SMTP",
+  "mobile.add.smtpPort": "Porta SMTP",
+  "mobile.add.smtpSecurity": "Segurança SMTP",
+  "mobile.error.SMTP_FAILED": "Não foi possível entrar no servidor de saída. Confira o servidor SMTP, a porta e a segurança."
 }

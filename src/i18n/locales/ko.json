@@ -4302,5 +4302,10 @@
   "help.outlookImap.imageAlt": "Outlook.com 설정의 POP 및 IMAP 섹션에서 \"디바이스 및 앱에서 IMAP 사용 허용\"이 켜진 화면",
   "help.outlookImap.hint": "Outlook.com을 IMAP으로 사용하려면 Outlook.com 설정에서 IMAP을 켜야 합니다.",
   "errors.conn.problem.outlookImapOff": "Outlook.com이 로그인을 수락했지만 이 사서함은 IMAP이 꺼져 있습니다.",
-  "errors.conn.recovery.turnOnOutlookImap": "Outlook.com 설정에서 IMAP을 켠 뒤 다시 시도하거나 Microsoft Graph로 연결하세요."
+  "errors.conn.recovery.turnOnOutlookImap": "Outlook.com 설정에서 IMAP을 켠 뒤 다시 시도하거나 Microsoft Graph로 연결하세요.",
+  "mobile.add.smtpServer": "발신 메일 서버",
+  "mobile.add.smtpHost": "SMTP 서버",
+  "mobile.add.smtpPort": "SMTP 포트",
+  "mobile.add.smtpSecurity": "SMTP 보안",
+  "mobile.error.SMTP_FAILED": "발신 메일 서버에 로그인하지 못했습니다. SMTP 서버, 포트, 보안 설정을 확인하세요."
 }

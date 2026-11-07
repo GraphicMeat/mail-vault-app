@@ -479,6 +479,7 @@ mod tests {
     #[test]
     fn body_cache_evicts_lru_past_cap() {
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
         let mut mb = Mailbox::new("INBOX");
         for uid in 1..=4 {
             mb.add(html_message(uid, 10));
@@ -489,7 +490,7 @@ mod tests {
         let added = e
             .rpc(
                 "mobile.accounts.add",
-                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none" }),
+                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none", "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecurity": "starttls" }),
             )
             .unwrap();
         let account = added["account"]["id"].as_str().unwrap().to_string();

@@ -4302,5 +4302,10 @@
   "help.outlookImap.imageAlt": "Outlook.com の設定の [POP と IMAP] セクションで「デバイスとアプリで IMAP を使用できるようにする」がオンになっている画面",
   "help.outlookImap.hint": "Outlook.com を IMAP で使うには、Outlook.com の設定で IMAP を有効にする必要があります。",
   "errors.conn.problem.outlookImapOff": "Outlook.com はサインインを受け付けましたが、このメールボックスでは IMAP がオフになっています。",
-  "errors.conn.recovery.turnOnOutlookImap": "Outlook.com の設定で IMAP を有効にしてからもう一度お試しいただくか、Microsoft Graph で接続してください。"
+  "errors.conn.recovery.turnOnOutlookImap": "Outlook.com の設定で IMAP を有効にしてからもう一度お試しいただくか、Microsoft Graph で接続してください。",
+  "mobile.add.smtpServer": "送信メールサーバー",
+  "mobile.add.smtpHost": "SMTP サーバー",
+  "mobile.add.smtpPort": "SMTP ポート",
+  "mobile.add.smtpSecurity": "SMTP のセキュリティ",
+  "mobile.error.SMTP_FAILED": "送信メールサーバーにサインインできませんでした。SMTP サーバー、ポート、セキュリティ設定を確認してください。"
 }

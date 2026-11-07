@@ -4302,5 +4302,10 @@
   "help.outlookImap.imageAlt": "Configuración de Outlook.com, sección POP e IMAP, con «Permitir que los dispositivos y las aplicaciones usen IMAP» activado",
   "help.outlookImap.hint": "Outlook.com por IMAP necesita que IMAP esté activado en la configuración de Outlook.com.",
   "errors.conn.problem.outlookImapOff": "Outlook.com aceptó tu inicio de sesión, pero IMAP está desactivado para este buzón.",
-  "errors.conn.recovery.turnOnOutlookImap": "Activa IMAP en la configuración de Outlook.com y vuelve a intentarlo, o conéctate mediante Microsoft Graph."
+  "errors.conn.recovery.turnOnOutlookImap": "Activa IMAP en la configuración de Outlook.com y vuelve a intentarlo, o conéctate mediante Microsoft Graph.",
+  "mobile.add.smtpServer": "Servidor de correo saliente",
+  "mobile.add.smtpHost": "Servidor SMTP",
+  "mobile.add.smtpPort": "Puerto SMTP",
+  "mobile.add.smtpSecurity": "Seguridad SMTP",
+  "mobile.error.SMTP_FAILED": "No se pudo iniciar sesión en el servidor de correo saliente. Revisa el servidor SMTP, el puerto y la seguridad."
 }

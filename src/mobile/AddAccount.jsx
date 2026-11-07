@@ -1,5 +1,5 @@
 // Add an IMAP account: email and password first, then the server, prefilled from the address's
-// domain (`imap.<domain>`, 993, SSL/TLS) and editable. The engine signs in before it saves, so the
+// domain (`imap.<domain>`, 993, SSL/TLS; `smtp.<domain>`, 465, SSL/TLS) and editable. The engine signs in before it saves, so the
 // one `onSubmit` call is the test. The form lives in this component only: the password is sent once
 // per submit and never reaches the store, storage or a log. A refused sign-in clears it; a network
 // or server mistake keeps it, so fixing the host is not a retype.
@@ -8,6 +8,11 @@ import { useT } from './i18n.js';
 import { errorKey } from './errors.js';
 
 const DEFAULT_PORT = { ssl: 993, starttls: 143, none: 143 };
+const DEFAULT_SMTP_PORT = { ssl: 465, starttls: 587 };
+const SMTP_SECURITY = [
+  ['ssl', 'account.sslTls'],
+  ['starttls', 'account.starttls'],
+];
 const SECURITY = [
   ['ssl', 'account.sslTls'],
   ['starttls', 'account.starttls'],
@@ -38,18 +43,25 @@ export default function AddAccount({ onSubmit, onCancel }) {
   const [hostEdited, setHostEdited] = useState(false);
   const [port, setPort] = useState('993');
   const [security, setSecurity] = useState('ssl');
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpHostEdited, setSmtpHostEdited] = useState(false);
+  const [smtpPort, setSmtpPort] = useState('465');
+  const [smtpSecurity, setSmtpSecurity] = useState('ssl');
   const [busy, setBusy] = useState(false);
   const [errorCode, setErrorCode] = useState(null);
 
   const portNumber = Number(port);
   const portOk = Number.isInteger(portNumber) && portNumber > 0 && portNumber < 65536;
+  const smtpPortNumber = Number(smtpPort);
+  const smtpPortOk = Number.isInteger(smtpPortNumber) && smtpPortNumber > 0 && smtpPortNumber < 65536;
   const canNext = looksLikeEmail(email) && password.length > 0;
-  const canSubmit = !busy && canNext && host.trim().length > 0 && portOk;
+  const canSubmit = !busy && canNext && host.trim().length > 0 && portOk && smtpHost.trim().length > 0 && smtpPortOk;
 
   const next = (e) => {
     e.preventDefault();
     if (!canNext) return;
     if (!hostEdited) setHost(`imap.${domainOf(email)}`);
+    if (!smtpHostEdited) setSmtpHost(`smtp.${domainOf(email)}`);
     setErrorCode(null);
     setStep('server');
   };
@@ -60,12 +72,18 @@ export default function AddAccount({ onSubmit, onCancel }) {
     setSecurity(value);
   };
 
+  const changeSmtpSecurity = (value) => {
+    if (Number(smtpPort) === DEFAULT_SMTP_PORT[smtpSecurity]) setSmtpPort(String(DEFAULT_SMTP_PORT[value]));
+    setSmtpSecurity(value);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
     setBusy(true);
     setErrorCode(null);
-    const form = { email: email.trim(), password, imapHost: host.trim(), imapPort: portNumber, security };
+    const form = { email: email.trim(), password, imapHost: host.trim(), imapPort: portNumber, security,
+      smtpHost: smtpHost.trim(), smtpPort: smtpPortNumber, smtpSecurity };
     let result;
     try {
       result = await onSubmit(form);
@@ -169,6 +187,46 @@ export default function AddAccount({ onSubmit, onCancel }) {
                 onChange={(e) => changeSecurity(e.target.value)}
               >
                 {SECURITY.map(([value, key]) => <option key={value} value={value}>{t(key)}</option>)}
+              </select>
+            </Field>
+          </div>
+          <h2 className="mv-add__section">{t('mobile.add.smtpServer')}</h2>
+          <Field id="mv-add-smtp-host" label={t('mobile.add.smtpHost')}>
+            <input
+              id="mv-add-smtp-host"
+              className="mv-input"
+              type="text"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={smtpHost}
+              disabled={busy}
+              onChange={(e) => { setSmtpHost(e.target.value); setSmtpHostEdited(true); }}
+            />
+          </Field>
+          <div className="mv-add__row">
+            <Field id="mv-add-smtp-port" label={t('mobile.add.smtpPort')}>
+              <input
+                id="mv-add-smtp-port"
+                className="mv-input"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={smtpPort}
+                disabled={busy}
+                onChange={(e) => setSmtpPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
+              />
+            </Field>
+            <Field id="mv-add-smtp-security" label={t('mobile.add.smtpSecurity')}>
+              <select
+                id="mv-add-smtp-security"
+                className="mv-input"
+                value={smtpSecurity}
+                disabled={busy}
+                onChange={(e) => changeSmtpSecurity(e.target.value)}
+              >
+                {SMTP_SECURITY.map(([value, key]) => <option key={value} value={value}>{t(key)}</option>)}
               </select>
             </Field>
           </div>

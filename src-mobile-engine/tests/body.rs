@@ -84,6 +84,7 @@ struct Fixture {
 
 fn setup(server: &MockImap) -> Fixture {
     std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
     let tmp = tempfile::tempdir().unwrap();
     let engine = Arc::new(Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(MemorySecrets::default())).unwrap());
     let events = Arc::new(Events::default());
@@ -95,7 +96,7 @@ fn setup(server: &MockImap) -> Fixture {
     let added = engine
         .rpc(
             "mobile.accounts.add",
-            json!({ "email": "u@example.test", "password": "pw-body-test", "imapHost": server.host(), "imapPort": server.port(), "security": "none" }),
+            json!({ "email": "u@example.test", "password": "pw-body-test", "imapHost": server.host(), "imapPort": server.port(), "security": "none", "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecurity": "starttls" }),
         )
         .unwrap();
     assert_eq!(added["ok"], true, "{added}");

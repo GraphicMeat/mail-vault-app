@@ -942,6 +942,7 @@ mod tests {
     fn removal_with_many_dependents_keeps_transactions_small() {
         use mock_imap::state::{Mailbox, Message};
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
         let recent = now_ms() - 2 * DAY_MS;
         let mut mb = Mailbox::new("INBOX");
         for uid in 1..=250u32 {
@@ -956,7 +957,7 @@ mod tests {
         let added = e
             .rpc(
                 "mobile.accounts.add",
-                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none" }),
+                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none", "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecurity": "starttls" }),
             )
             .unwrap();
         let account = added["account"]["id"].as_str().unwrap().to_string();

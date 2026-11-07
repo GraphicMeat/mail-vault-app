@@ -4302,5 +4302,10 @@
   "help.outlookImap.imageAlt": "Outlook.com settings, POP and IMAP section, with \"Let devices and apps use IMAP\" turned on",
   "help.outlookImap.hint": "Outlook.com over IMAP needs IMAP turned on in your Outlook.com settings.",
   "errors.conn.problem.outlookImapOff": "Outlook.com accepted your sign-in but has IMAP turned off for this mailbox.",
-  "errors.conn.recovery.turnOnOutlookImap": "Turn on IMAP in your Outlook.com settings, then try again, or connect over Microsoft Graph."
+  "errors.conn.recovery.turnOnOutlookImap": "Turn on IMAP in your Outlook.com settings, then try again, or connect over Microsoft Graph.",
+  "mobile.add.smtpServer": "Outgoing mail server",
+  "mobile.add.smtpHost": "SMTP server",
+  "mobile.add.smtpPort": "SMTP port",
+  "mobile.add.smtpSecurity": "SMTP security",
+  "mobile.error.SMTP_FAILED": "Couldn't sign in to the outgoing mail server. Check the SMTP server, port and security setting."
 }

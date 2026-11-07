@@ -4302,5 +4302,10 @@
   "help.outlookImap.imageAlt": "Outlook.com-Einstellungen, Abschnitt POP und IMAP, mit aktiviertem „Geräten und Apps die Verwendung von IMAP erlauben“",
   "help.outlookImap.hint": "Outlook.com über IMAP setzt voraus, dass IMAP in deinen Outlook.com-Einstellungen aktiviert ist.",
   "errors.conn.problem.outlookImapOff": "Outlook.com hat deine Anmeldung akzeptiert, aber IMAP ist für dieses Postfach deaktiviert.",
-  "errors.conn.recovery.turnOnOutlookImap": "Aktiviere IMAP in deinen Outlook.com-Einstellungen und versuche es erneut, oder verbinde über Microsoft Graph."
+  "errors.conn.recovery.turnOnOutlookImap": "Aktiviere IMAP in deinen Outlook.com-Einstellungen und versuche es erneut, oder verbinde über Microsoft Graph.",
+  "mobile.add.smtpServer": "Postausgangsserver",
+  "mobile.add.smtpHost": "SMTP-Server",
+  "mobile.add.smtpPort": "SMTP-Port",
+  "mobile.add.smtpSecurity": "SMTP-Sicherheit",
+  "mobile.error.SMTP_FAILED": "Die Anmeldung am Postausgangsserver ist fehlgeschlagen. Prüfe SMTP-Server, Port und Sicherheitseinstellung."
 }

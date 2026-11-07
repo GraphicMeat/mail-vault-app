@@ -314,6 +314,9 @@ export function createMobileStore() {
             imapHost: form.imapHost,
             imapPort: form.imapPort,
             security: form.security,
+            smtpHost: form.smtpHost,
+            smtpPort: form.smtpPort,
+            smtpSecurity: form.smtpSecurity,
             ...(form.displayName ? { displayName: form.displayName } : {}),
           });
         } catch (err) {

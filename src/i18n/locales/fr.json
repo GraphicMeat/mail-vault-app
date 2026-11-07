@@ -4302,5 +4302,10 @@
   "help.outlookImap.imageAlt": "Paramètres Outlook.com, section POP et IMAP, avec « Autoriser les appareils et applications à utiliser IMAP » activé",
   "help.outlookImap.hint": "Outlook.com en IMAP nécessite qu’IMAP soit activé dans vos paramètres Outlook.com.",
   "errors.conn.problem.outlookImapOff": "Outlook.com a accepté votre connexion, mais IMAP est désactivé pour cette boîte aux lettres.",
-  "errors.conn.recovery.turnOnOutlookImap": "Activez IMAP dans vos paramètres Outlook.com puis réessayez, ou connectez-vous via Microsoft Graph."
+  "errors.conn.recovery.turnOnOutlookImap": "Activez IMAP dans vos paramètres Outlook.com puis réessayez, ou connectez-vous via Microsoft Graph.",
+  "mobile.add.smtpServer": "Serveur d’envoi",
+  "mobile.add.smtpHost": "Serveur SMTP",
+  "mobile.add.smtpPort": "Port SMTP",
+  "mobile.add.smtpSecurity": "Sécurité SMTP",
+  "mobile.error.SMTP_FAILED": "Connexion impossible au serveur d’envoi. Vérifiez le serveur SMTP, le port et la sécurité."
 }

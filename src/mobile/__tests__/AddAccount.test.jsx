@@ -38,6 +38,34 @@ describe('AddAccount', () => {
     expect(field('mobile.add.port').value).toBe('143');
   });
 
+  it('prefills smtp from the address domain and shows the smtp fields on the server step', () => {
+    render(<AddAccount onSubmit={vi.fn()} />);
+    fillFirstStep('ada@mail.example.test');
+    expect(field('mobile.add.smtpHost').value).toBe('smtp.mail.example.test');
+    expect(field('mobile.add.smtpPort').value).toBe('465');
+    expect(field('mobile.add.smtpSecurity').value).toBe('ssl');
+    // STARTTLS moves the default SMTP port to 587; a typed host is kept.
+    fireEvent.change(field('mobile.add.smtpSecurity'), { target: { value: 'starttls' } });
+    expect(field('mobile.add.smtpPort').value).toBe('587');
+    fireEvent.change(field('mobile.add.smtpHost'), { target: { value: 'out.example.test' } });
+    expect(field('mobile.add.smtpHost').value).toBe('out.example.test');
+    // The IMAP host changing does not touch the SMTP one.
+    fireEvent.change(field('mobile.add.host'), { target: { value: 'mx.example.test' } });
+    expect(field('mobile.add.smtpHost').value).toBe('out.example.test');
+  });
+
+  it('shows the translated SMTP_FAILED error and keeps the password', async () => {
+    const onSubmit = vi.fn(async () => ({ ok: false, code: 'SMTP_FAILED' }));
+    render(<AddAccount onSubmit={onSubmit} />);
+    fillFirstStep();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: t('mobile.add.signIn') }));
+    });
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.error.SMTP_FAILED'));
+    expect(t('mobile.error.SMTP_FAILED')).not.toBe('mobile.error.SMTP_FAILED');
+    expect(field('mobile.add.password').value).toBe('secret-pw');
+  });
+
   it('submit_disabled_while_testing', async () => {
     const pending = deferred();
     const onSubmit = vi.fn(() => pending.promise);
@@ -48,6 +76,7 @@ describe('AddAccount', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledWith({
       email: 'ada@example.test', password: 'secret-pw', imapHost: 'imap.example.test', imapPort: 993, security: 'ssl',
+      smtpHost: 'smtp.example.test', smtpPort: 465, smtpSecurity: 'ssl',
     });
     const busy = screen.getByRole('button', { name: t('mobile.add.signingIn') });
     expect(busy.disabled).toBe(true);
@@ -97,6 +126,7 @@ describe('AddAccount', () => {
       await act(async () => { fireEvent.click(retry); });
       expect(onSubmit).toHaveBeenLastCalledWith({
         email: 'ada@example.test', password: 'secret-pw', imapHost: 'mx.example.test', imapPort: 993, security: 'ssl',
+        smtpHost: 'smtp.example.test', smtpPort: 465, smtpSecurity: 'ssl',
       });
       cleanup();
     }
@@ -113,7 +143,7 @@ describe('AddAccount', () => {
   });
 
   it('every engine code has a translated message, and an unknown one falls back', () => {
-    for (const code of ['AUTH_FAILED', 'HOST_UNREACHABLE', 'TLS_FAILED', 'TIMEOUT', 'DUPLICATE', 'INVALID', 'INTERNAL']) {
+    for (const code of ['AUTH_FAILED', 'HOST_UNREACHABLE', 'TLS_FAILED', 'TIMEOUT', 'DUPLICATE', 'INVALID', 'SMTP_FAILED', 'INTERNAL']) {
       expect(ERROR_KEYS[code], code).toBeDefined();
       expect(en[ERROR_KEYS[code]], code).toBeTruthy();
     }

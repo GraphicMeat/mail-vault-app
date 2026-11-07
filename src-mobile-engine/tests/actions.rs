@@ -128,13 +128,14 @@ fn open(dir: &Path, secrets: &Arc<MemorySecrets>) -> (Arc<Engine>, Arc<Events>) 
 
 fn setup(server: &MockImap) -> Fixture {
     std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
     let tmp = tempfile::tempdir().unwrap();
     let secrets = Arc::new(MemorySecrets::default());
     let (engine, events) = open(tmp.path(), &secrets);
     let added = engine
         .rpc(
             "mobile.accounts.add",
-            json!({ "email": "u@example.test", "password": PASSWORD, "imapHost": server.host(), "imapPort": server.port(), "security": "none" }),
+            json!({ "email": "u@example.test", "password": PASSWORD, "imapHost": server.host(), "imapPort": server.port(), "security": "none", "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecurity": "starttls" }),
         )
         .unwrap();
     assert_eq!(added["ok"], true, "{added}");

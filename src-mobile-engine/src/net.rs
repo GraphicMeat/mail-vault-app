@@ -77,6 +77,14 @@ pub(crate) fn login(account: &AccountRow, cred: &Credential) -> Result<u32, Stri
     })
 }
 
+/// Signs in to `account`'s SMTP server (connect, TLS, AUTH; no mail sent) through core's probe.
+/// `smtp_security = ssl` is core's implicit TLS (`smtpSecure`); `starttls` upgrades in the
+/// session, and core also takes port 465 as implicit TLS whatever the flag says.
+pub(crate) fn test_smtp(account: &AccountRow, cred: &Credential) -> Result<(), String> {
+    let config = core_config(account, cred)?;
+    block_on(mailvault_core::smtp::test_connection(&config))
+}
+
 /// [`login`] for a password account given by its fields. `security` is `ssl`, `starttls` or
 /// `none` (core's `imapSecurity`).
 #[doc(hidden)]

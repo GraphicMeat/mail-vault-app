@@ -253,8 +253,9 @@ describe('mobile store', () => {
   it('addAccount selects the new account and keeps no password', async () => {
     const store = createMobileStore();
     await store.getState().init();
-    const form = { email: 'new@example.test', password: 'right', imapHost: 'imap.example.test', imapPort: 993, security: 'ssl' };
+    const form = { email: 'new@example.test', password: 'right', imapHost: 'imap.example.test', imapPort: 993, security: 'ssl', smtpHost: 'smtp.example.test', smtpPort: 587, smtpSecurity: 'starttls' };
     await expect(store.getState().addAccount(form)).resolves.toEqual({ ok: true });
+    expect(callsOf('mobile.accounts.add')[0]).toMatchObject({ smtpHost: 'smtp.example.test', smtpPort: 587, smtpSecurity: 'starttls' });
     const s = store.getState();
     expect(s.activeAccountId).toBe('acc_new@example.test');
     expect(s.accounts).toHaveLength(4);

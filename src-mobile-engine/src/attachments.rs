@@ -1210,6 +1210,7 @@ mod tests {
     fn a_cancel_just_before_the_rename_wins() {
         use mock_imap::state::{Mailbox, Message};
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
         let raw = "From: a <a@example.com>\r\nSubject: s\r\nMessage-ID: <c@x>\r\nMIME-Version: 1.0\r\n\
              Content-Type: multipart/mixed; boundary=\"m\"\r\n\r\n--m\r\nContent-Type: text/plain\r\n\r\nhi\r\n\
              --m\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=\"x.bin\"\r\n\
@@ -1228,7 +1229,7 @@ mod tests {
         let added = e
             .rpc(
                 "mobile.accounts.add",
-                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none" }),
+                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none", "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecurity": "starttls" }),
             )
             .unwrap();
         let account = added["account"]["id"].as_str().unwrap().to_string();

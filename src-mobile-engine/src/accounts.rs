@@ -26,6 +26,7 @@ pub enum Code {
     Timeout,
     Duplicate,
     Invalid,
+    SmtpFailed,
 }
 
 impl Code {
@@ -37,6 +38,7 @@ impl Code {
             Code::Timeout => "TIMEOUT",
             Code::Duplicate => "DUPLICATE",
             Code::Invalid => "INVALID",
+            Code::SmtpFailed => "SMTP_FAILED",
         }
     }
 }
@@ -160,6 +162,9 @@ struct Form {
     imap_host: String,
     imap_port: u16,
     security: String,
+    smtp_host: String,
+    smtp_port: u16,
+    smtp_security: String,
     display_name: Option<String>,
 }
 
@@ -178,17 +183,37 @@ fn read_form(params: &Value) -> Result<Form, String> {
         Some(p) if (1..=65535).contains(&p) => p as u16,
         _ => return Err("imapPort must be 1-65535".into()),
     };
+    let smtp_port = match obj.get("smtpPort") {
+        None | Some(Value::Null) => 465,
+        Some(v) => match v.as_u64() {
+            Some(p) if (1..=65535).contains(&p) => p as u16,
+            _ => return Err("smtpPort must be 1-65535".into()),
+        },
+    };
+    let optional_text = |k: &str, default: &str| -> Result<String, String> {
+        match obj.get(k) {
+            None | Some(Value::Null) => Ok(default.to_string()),
+            Some(Value::String(s)) => Ok(s.clone()),
+            _ => Err(format!("{k} must be a string")),
+        }
+    };
+    let email = text("email")?;
+    // `smtp.<domain>` unless given; an address with no `@` is rejected by `validate`.
+    let default_smtp = email.rsplit_once('@').map(|(_, d)| format!("smtp.{}", d.trim())).unwrap_or_default();
     let display_name = match obj.get("displayName") {
         None | Some(Value::Null) => None,
         Some(Value::String(s)) => Some(s.clone()),
         _ => return Err("displayName must be a string".into()),
     };
     Ok(Form {
-        email: text("email")?,
+        email,
         password: text("password")?,
         imap_host: text("imapHost")?,
         imap_port: port,
         security: text("security")?,
+        smtp_host: optional_text("smtpHost", &default_smtp)?,
+        smtp_port,
+        smtp_security: optional_text("smtpSecurity", "ssl")?,
         display_name,
     })
 }
@@ -218,17 +243,27 @@ impl Form {
         if !matches!(self.security.as_str(), "ssl" | "starttls" | "none") {
             return Err("security must be ssl, starttls or none".into());
         }
+        self.smtp_host = self.smtp_host.trim().to_string();
+        if self.smtp_host.is_empty() {
+            return Err("smtpHost is empty".into());
+        }
+        if !matches!(self.smtp_security.as_str(), "ssl" | "starttls") {
+            return Err("smtpSecurity must be ssl or starttls".into());
+        }
         Ok(self)
     }
 
-    /// Signs in with the form's values. `Err` is the reply to send.
+    /// Signs in to IMAP, then to SMTP, with the form's values. `Err` is the reply to send: IMAP
+    /// failures keep their own codes, any SMTP failure is `SMTP_FAILED`.
     fn test_login(&self) -> Result<u32, Value> {
-        let row = AccountRow::password(&self.email, &self.imap_host, self.imap_port, &self.security);
-        crate::net::login(&row, &Credential::from_password(&self.password)).map_err(|e| {
-            let code = map_error(&e);
-            let message = scrub(&e, &self.password);
-            failure(code, message)
-        })
+        let mut row = AccountRow::password(&self.email, &self.imap_host, self.imap_port, &self.security);
+        row.smtp_host = Some(self.smtp_host.clone());
+        row.smtp_port = Some(self.smtp_port);
+        row.smtp_security = Some(self.smtp_security.clone());
+        let cred = Credential::from_password(&self.password);
+        let count = crate::net::login(&row, &cred).map_err(|e| failure(map_error(&e), scrub(&e, &self.password)))?;
+        crate::net::test_smtp(&row, &cred).map_err(|e| failure(Code::SmtpFailed, scrub(&e, &self.password)))?;
+        Ok(count)
     }
 }
 
@@ -244,8 +279,11 @@ fn new_account_id() -> String {
     format!("acc_{:016x}", h.finish())
 }
 
-fn account_json(id: &str, email: &str, display_name: &str, host: &str, port: i64, security: &str) -> Value {
-    json!({ "id": id, "email": email, "displayName": display_name, "imapHost": host, "imapPort": port, "security": security })
+fn account_json(id: &str, email: &str, display_name: &str, host: &str, port: i64, security: &str, smtp: (Option<String>, Option<i64>, Option<String>)) -> Value {
+    json!({
+        "id": id, "email": email, "displayName": display_name, "imapHost": host, "imapPort": port, "security": security,
+        "smtpHost": smtp.0, "smtpPort": smtp.1, "smtpSecurity": smtp.2,
+    })
 }
 
 fn internal(e: impl ToString) -> RpcError {
@@ -256,7 +294,7 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
     let accounts = engine
         .read(|c| {
             let mut st = c.prepare_cached(
-                "SELECT id, email, display_name, imap_host, imap_port, security FROM accounts ORDER BY created_ms, id",
+                "SELECT id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security FROM accounts ORDER BY created_ms, id",
             )?;
             let rows = st
                 .query_map([], |r| {
@@ -267,6 +305,7 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
                         &r.get::<_, String>(3)?,
                         r.get(4)?,
                         &r.get::<_, String>(5)?,
+                        (r.get(6)?, r.get(7)?, r.get(8)?),
                     ))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -315,9 +354,20 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let display_name = form.display_name.as_deref().map(str::trim).filter(|d| !d.is_empty()).unwrap_or(&form.email).to_string();
     let inserted = engine.write(|c| {
         c.execute(
-            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, created_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            (&id, &form.email, &display_name, &form.imap_host, form.imap_port as i64, &form.security, now_ms()),
+            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, created_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            (
+                &id,
+                &form.email,
+                &display_name,
+                &form.imap_host,
+                form.imap_port as i64,
+                &form.security,
+                &form.smtp_host,
+                form.smtp_port as i64,
+                &form.smtp_security,
+                now_ms(),
+            ),
         )?;
         Ok(())
     });
@@ -333,7 +383,15 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     }
     Ok(json!({
         "ok": true,
-        "account": account_json(&id, &form.email, &display_name, &form.imap_host, form.imap_port as i64, &form.security),
+        "account": account_json(
+            &id,
+            &form.email,
+            &display_name,
+            &form.imap_host,
+            form.imap_port as i64,
+            &form.security,
+            (Some(form.smtp_host.clone()), Some(form.smtp_port as i64), Some(form.smtp_security.clone())),
+        ),
     }))
 }
 
