@@ -334,6 +334,50 @@ fn delete_moves_to_trash_then_purges_there() {
     assert!(f.uids("Trash").is_empty());
 }
 
+/// A server without SPECIAL-USE: Trash is found by name, as core's delete finds it. A delete there
+/// is permanent, and the message does not come back on the next sync.
+#[test]
+fn delete_in_a_name_only_trash_is_permanent() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(mailbox("INBOX", &[], vec![msg(1, "m1", 2)]))
+            .mailbox(mailbox("Trash", &["\\HasNoChildren"], vec![])),
+    );
+    let f = setup(&server);
+    f.sync(None);
+    let seq = f.apply("delete", "INBOX", &[1], None);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert_eq!(server.state().find("Trash").unwrap().messages.len(), 1, "the first delete moves to Trash");
+
+    f.sync(Some("Trash"));
+    let trash_uid = f.uids("Trash")[0] as u32;
+    let seq = f.apply("delete", "Trash", &[trash_uid], None);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert!(server.state().find("Trash").unwrap().messages.is_empty(), "a delete in a name-only Trash is permanent");
+    f.sync(Some("Trash"));
+    assert!(f.uids("Trash").is_empty(), "the message came back");
+}
+
+/// A folder whose name only looks like Trash is not the Trash core moves to: a delete there moves
+/// the message to Trash rather than expunging it.
+#[test]
+fn delete_in_a_trash_lookalike_moves_to_trash() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(mailbox("INBOX", &[], vec![]))
+            .mailbox(mailbox("Trash", &["\\HasNoChildren"], vec![]))
+            .mailbox(mailbox("Trash-old", &["\\HasNoChildren"], vec![msg(5, "kept", 2)])),
+    );
+    let f = setup(&server);
+    f.sync(None);
+    f.sync(Some("Trash-old"));
+    assert_eq!(f.uids("Trash-old"), vec![5]);
+    let seq = f.apply("delete", "Trash-old", &[5], None);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert!(server.state().find("Trash-old").unwrap().messages.is_empty());
+    assert_eq!(server.state().find("Trash").unwrap().messages.len(), 1, "expunged instead of moved to Trash");
+}
+
 #[test]
 fn auth_failure_stays_queued() {
     let server = MockImap::start(scenario(&[1]));

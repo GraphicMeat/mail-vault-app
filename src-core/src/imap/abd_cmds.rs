@@ -49,7 +49,7 @@ pub fn resolve_trash(boxes: &[MailboxInfo]) -> Option<String> {
     if let Some(b) = boxes.iter().filter(usable).find(|b| has_attr(&b.flags, "Trash")) {
         return Some(b.path.clone());
     }
-    for cand in ["Trash", "Deleted Items", "Deleted", "[Gmail]/Trash"] {
+    for cand in super::TRASH_CANDIDATES {
         if let Some(b) = boxes.iter().filter(usable).find(|b| b.path.eq_ignore_ascii_case(cand)) {
             return Some(b.path.clone());
         }

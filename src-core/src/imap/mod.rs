@@ -2046,13 +2046,7 @@ pub async fn delete_email_in(
         // Resolve the real Trash path via SPECIAL-USE/LIST — hardcoded names
         // miss namespaced servers (Dovecot/Hostinger use INBOX.Trash), which
         // left mail \Deleted-flagged but visible: delete looked like a no-op.
-        let trash = ensure_role_mailbox(
-            session,
-            "trash",
-            "Trash",
-            &["Trash", "Deleted Items", "Deleted", "[Gmail]/Trash"],
-        )
-        .await?;
+        let trash = ensure_role_mailbox(session, "trash", "Trash", TRASH_CANDIDATES).await?;
         info!("[delete_email] uid={} resolved trash='{}'", uid, trash);
 
         // `run_collecting_copyuid` asks the tagged-OK question the old `uid_mv`
@@ -2122,6 +2116,55 @@ fn create_error(e: async_imap::error::Error, message: String) -> RoleMailboxErro
     }
 }
 
+/// The names a Trash folder goes by on a server that declares none (no
+/// SPECIAL-USE), in the order `delete_email_in` tries them.
+pub const TRASH_CANDIDATES: &[&str] = &["Trash", "Deleted Items", "Deleted", "[Gmail]/Trash"];
+
+/// The lookup half of `ensure_role_mailbox`, over LIST entries `(path, attrs)`
+/// (`attrs` as the `{:?}` of each name attribute): the first folder with an
+/// attribute containing `attr_substring`, else the first candidate by whole
+/// path, then by its last `/` or `.` segment, case-insensitive. `None` is
+/// where `ensure_role_mailbox` would CREATE one.
+pub fn find_role_mailbox(entries: &[(String, Vec<String>)], attr_substring: &str, candidates: &[&str]) -> Option<String> {
+    for (path, attrs) in entries {
+        if attrs.iter().any(|a| a.to_lowercase().contains(attr_substring)) {
+            return Some(path.clone());
+        }
+    }
+    for cand in candidates {
+        if let Some((path, _)) = entries.iter().find(|(p, _)| p.eq_ignore_ascii_case(cand)) {
+            return Some(path.clone());
+        }
+        if let Some((path, _)) = entries.iter().find(|(p, _)| {
+            p.rsplit_once(|c: char| c == '/' || c == '.').map(|(_, t)| t).unwrap_or(p)
+                .eq_ignore_ascii_case(cand)
+        }) {
+            return Some(path.clone());
+        }
+    }
+    None
+}
+
+fn role_entries(names: &[Name]) -> Vec<(String, Vec<String>)> {
+    names
+        .iter()
+        .map(|n| {
+            let path = unescape_quoted(n.name());
+            let attrs: Vec<String> = n.attributes().iter().map(|a| format!("{:?}", a)).collect();
+            (path, attrs)
+        })
+        .collect()
+}
+
+/// The folder a non-permanent `delete_email_in` moves to, by the same lookup.
+/// `None` when it would CREATE one. Never CREATEs. A caller deciding whether a
+/// delete is permanent ("already in Trash") asks this, so it never moves a
+/// message onto itself.
+pub async fn resolve_trash_path(session: &mut ImapSession) -> Result<Option<String>, String> {
+    let names = list_names(session).await?;
+    Ok(find_role_mailbox(&role_entries(&names), "trash", TRASH_CANDIDATES))
+}
+
 async fn ensure_role_mailbox(
     session: &mut ImapSession,
     attr_substring: &str,
@@ -2129,31 +2172,8 @@ async fn ensure_role_mailbox(
     candidates: &[&str],
 ) -> Result<String, RoleMailboxError> {
     let names = list_names(session).await.map_err(RoleMailboxError::Failed)?;
-
-    let entries: Vec<(String, Vec<String>)> = names
-        .iter()
-        .map(|n| {
-            let path = unescape_quoted(n.name());
-            let attrs: Vec<String> = n.attributes().iter().map(|a| format!("{:?}", a)).collect();
-            (path, attrs)
-        })
-        .collect();
-
-    for (path, attrs) in &entries {
-        if attrs.iter().any(|a| a.to_lowercase().contains(attr_substring)) {
-            return Ok(path.clone());
-        }
-    }
-    for cand in candidates {
-        if let Some((path, _)) = entries.iter().find(|(p, _)| p.eq_ignore_ascii_case(cand)) {
-            return Ok(path.clone());
-        }
-        if let Some((path, _)) = entries.iter().find(|(p, _)| {
-            p.rsplit_once(|c: char| c == '/' || c == '.').map(|(_, t)| t).unwrap_or(p)
-                .eq_ignore_ascii_case(cand)
-        }) {
-            return Ok(path.clone());
-        }
+    if let Some(path) = find_role_mailbox(&role_entries(&names), attr_substring, candidates) {
+        return Ok(path);
     }
 
     // A server whose personal namespace is `INBOX.` (Dovecot/Courier on many
@@ -4334,6 +4354,30 @@ pub fn is_missing_mailbox(err: &str) -> bool {
     ];
     let lowered = err.to_ascii_lowercase();
     NEEDLES.iter().any(|n| lowered.contains(n))
+}
+
+#[cfg(test)]
+mod find_role_mailbox_tests {
+    use super::*;
+
+    fn e(path: &str, attrs: &[&str]) -> (String, Vec<String>) {
+        (path.to_string(), attrs.iter().map(|a| a.to_string()).collect())
+    }
+
+    #[test]
+    fn a_declared_trash_wins_over_names() {
+        let entries = [e("Trash", &[]), e("[Gmail]/Bin", &["HasNoChildren", "Trash"])];
+        assert_eq!(find_role_mailbox(&entries, "trash", TRASH_CANDIDATES).as_deref(), Some("[Gmail]/Bin"));
+    }
+
+    #[test]
+    fn without_special_use_the_name_decides_never_a_lookalike() {
+        let entries = [e("INBOX", &[]), e("Trash-old", &[]), e("INBOX.Trash", &[])];
+        assert_eq!(find_role_mailbox(&entries, "trash", TRASH_CANDIDATES).as_deref(), Some("INBOX.Trash"));
+        let entries = [e("Deleted Items", &[]), e("Trash", &[])];
+        assert_eq!(find_role_mailbox(&entries, "trash", TRASH_CANDIDATES).as_deref(), Some("Trash"));
+        assert_eq!(find_role_mailbox(&[e("INBOX", &[]), e("Trash-old", &[])], "trash", TRASH_CANDIDATES), None);
+    }
 }
 
 #[cfg(test)]

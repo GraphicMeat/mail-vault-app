@@ -757,14 +757,6 @@ async fn confirm_folder_gone(session: &mut ImapSession, path: &str, err: &str) -
     Ok(!listed)
 }
 
-fn folder_is_trash(shared: &Shared, account: &str, folder: &str) -> Result<bool, Fail> {
-    let special: Option<Option<String>> = shared.read(|c| {
-        c.query_row("SELECT special_use FROM folders WHERE account_id = ?1 AND path = ?2", (account, folder), |r| r.get(0))
-            .optional()
-    })?;
-    Ok(special.flatten().is_some_and(|s| s.eq_ignore_ascii_case("\\Trash")))
-}
-
 async fn run_action(
     shared: &Shared,
     session: &mut ImapSession,
@@ -815,8 +807,12 @@ async fn run_action(
             }
         }
         Kind::Delete => {
-            // In Trash already: a delete is permanent. Elsewhere core moves it to Trash.
-            let permanent = folder_is_trash(shared, account, &a.folder)?;
+            // In Trash already: a delete is permanent. Elsewhere core moves it to Trash. "Trash" is
+            // the folder core's delete would move to (SPECIAL-USE, then by name), not the stored
+            // `special_use`, whose name guess also matches "Trash-old": asking anything else either
+            // expunges outside Trash or moves a message onto itself. A LIST failure is a `Fail`.
+            let trash = imap::resolve_trash_path(session).await?;
+            let permanent = trash.as_deref() == Some(a.folder.as_str());
             let expected = a.arg.uid_validity.map(|v| v as u32);
             mark_sent(shared, account, a)?;
             for uid in &present {
