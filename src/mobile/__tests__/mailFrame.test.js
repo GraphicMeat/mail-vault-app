@@ -126,7 +126,8 @@ describe('buildMailFrame', () => {
     const refresh = [...doc.querySelectorAll('meta')].filter((m) => /refresh/i.test(m.getAttribute('http-equiv') || ''));
     expect(refresh).toEqual([]);
     expect(out).not.toMatch(/evil\.test\/[1-6]/);
-    expect(doc.querySelectorAll('meta[http-equiv]').length).toBe(1);
+    // Ours only: the CSP and DNS prefetch off.
+    expect(doc.querySelectorAll('meta[http-equiv]').length).toBe(2);
     expect(doc.querySelectorAll('script').length).toBe(0);
     expect(doc.querySelectorAll('link').length).toBe(0);
     const bases = doc.querySelectorAll('base');
@@ -212,7 +213,7 @@ describe('buildMailFrame', () => {
     // What the frame parses is the serialization: parse it as the frame would, then again.
     for (const doc of [parse(out), parse(parse(out).documentElement.outerHTML)]) {
       expect(doc.querySelectorAll('link, iframe, script').length).toBe(0);
-      expect([...doc.querySelectorAll('meta[http-equiv]')].map((m) => m.getAttribute('http-equiv'))).toEqual(['Content-Security-Policy']);
+      expect([...doc.querySelectorAll('meta[http-equiv]')].map((m) => m.getAttribute('http-equiv'))).toEqual(['Content-Security-Policy', 'x-dns-prefetch-control']);
     }
   });
 
@@ -263,6 +264,24 @@ describe('buildMailFrame', () => {
     expect(doc.head.children[0].getAttribute('http-equiv')).toBe('Content-Security-Policy');
     expect(doc.head.children[1].getAttribute('name')).toBe('referrer');
     expect(parse(build({ text: 'x' })).head.children[1].getAttribute('content')).toBe('no-referrer');
+  });
+
+  it('turns DNS prefetch off right after the CSP and the referrer policy', () => {
+    const html = '<head><meta http-equiv="x-dns-prefetch-control" content="on"></head><p><a href="https://far.test/">x</a></p>';
+    for (const doc of [parse(build({ html })), parse(build({ text: 'see https://far.test/' }))]) {
+      const [csp, referrer, dns, base] = doc.head.children;
+      expect(csp.getAttribute('http-equiv')).toBe('Content-Security-Policy');
+      expect(referrer.getAttribute('name')).toBe('referrer');
+      expect(dns.localName).toBe('meta');
+      expect(dns.getAttribute('http-equiv')).toBe('x-dns-prefetch-control');
+      expect(dns.getAttribute('content')).toBe('off');
+      expect(base.localName).toBe('base');
+      // The mail's own "on" is gone: ours is the only one.
+      expect([...doc.querySelectorAll('meta[http-equiv]')].map((m) => m.getAttribute('http-equiv').toLowerCase()))
+        .toEqual(['content-security-policy', 'x-dns-prefetch-control']);
+    }
+    // The cleaned html is still accepted (the assembled-document check knows the new head).
+    expect(prepareMailBody({ html: '<p>hi</p>' }).kind).toBe('html');
   });
 
   it('drops SVG animation, which could rewrite a link at runtime without script', () => {

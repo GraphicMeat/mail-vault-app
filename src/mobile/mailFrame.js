@@ -14,7 +14,9 @@
 //     nothing changes (mXSS shapes reshape on a second parse); a mail that never settles, or
 //     still holds something forbidden, is shown as text.
 // The mail is parsed with DOMParser (scripting off: nothing runs, nothing loads), the CSP, a
-// no-referrer policy, our <base> and our stylesheet are put in front of everything in <head>, and the document is
+// no-referrer policy, DNS prefetch turned off (`x-dns-prefetch-control: off`, so a link's host is
+// not resolved ahead of a tap), our <base> and our stylesheet are put in front of everything in
+// <head>, and the document is
 // serialized again. Whatever the mail has (its own <html>, <head>, a comment first, or none), the
 // parser gives it exactly one head, and ours comes first in it.
 //
@@ -233,7 +235,8 @@ const PREFIX = /^<!doctype html><html(?: (?:lang|dir)="[A-Za-z0-9-]*")*><head>/;
 function frameHead(prepared, { allowRemote = false, theme = 'light', trackerLabel = '' }) {
   const colors = prepared.kind === 'html' ? PAPER : THEMES[theme] || THEMES.light;
   return `<meta http-equiv="Content-Security-Policy" content="${frameCsp(allowRemote)}">`
-    + '<meta name="referrer" content="no-referrer"><base target="_blank">'
+    + '<meta name="referrer" content="no-referrer"><meta http-equiv="x-dns-prefetch-control" content="off">'
+    + '<base target="_blank">'
     + `<style data-mv-frame="">${frameCss({ colors, trackerLabel })}</style>`;
 }
 
@@ -243,16 +246,17 @@ export function assembleMailFrame(prepared, options = {}) {
   return prepared.markup.slice(0, at) + frameHead(prepared, options) + prepared.markup.slice(at);
 }
 
-/** Whether the frame's parse of an assembled document is exactly ours and clean: our four head
+/** Whether the frame's parse of an assembled document is exactly ours and clean: our five head
  *  elements first, nothing forbidden anywhere else. */
 function assembledClean(doc) {
-  const [csp, referrer, base, style] = doc.head.children;
+  const [csp, referrer, dns, base, style] = doc.head.children;
   const ours = csp?.getAttribute('http-equiv') === 'Content-Security-Policy'
     && referrer?.getAttribute('name') === 'referrer' && referrer.getAttribute('content') === 'no-referrer'
+    && dns?.localName === 'meta' && dns.getAttribute('http-equiv') === 'x-dns-prefetch-control' && dns.getAttribute('content') === 'off'
     && base?.localName === 'base' && base.attributes.length === 1 && base.getAttribute('target') === '_blank'
     && style?.localName === 'style' && style.hasAttribute('data-mv-frame');
   if (!ours) return false;
-  for (const el of [csp, referrer, base]) el.remove();
+  for (const el of [csp, referrer, dns, base]) el.remove();
   return violations(doc).length === 0;
 }
 
