@@ -10,6 +10,11 @@
 //! - `pick_files`: the system document picker or photo picker for outgoing attachments. The
 //!   native side copies each pick into a scratch dir the shell names; the shell names and moves the
 //!   copies ([`files::finish_pick`]).
+//! - `open_auth` / `close_auth`: the system sign-in sheet for an OAuth flow
+//!   (`ASWebAuthenticationSession` on iOS, a Custom Tab on Android), only for a URL
+//!   [`links::auth_url_ok`] accepts. The provider redirects to the engine's loopback listener, so the
+//!   sheet never hands a code back here: `open_auth` answers when the sheet closes, by the user's
+//!   cancel (`cancelled`) or by `close_auth`.
 //! - A navigation hook: every navigation of the webview goes through [`links::decide`]. Web and
 //!   mail links are cancelled and handed to `open_url`; anything but the app page and the mail
 //!   frame's own document is cancelled. A popup never becomes a Tauri webview: iOS opens none
@@ -100,6 +105,14 @@ struct PickArgs<'a> {
     dir: &'a str,
 }
 
+/// How the sign-in sheet closed: `cancelled` when the user closed it (or it was replaced by a newer
+/// one), not when `close_auth` did.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct AuthReply {
+    #[serde(default)]
+    pub cancelled: bool,
+}
+
 /// One pick as the native side reports it: `file` is the copy's name in the scratch dir (its
 /// decimal index), `name` and `mime` what the provider said. `error` (`UNREADABLE`) instead of
 /// `file` when the provider could not hand over every byte. Nothing here is trusted.
@@ -151,6 +164,21 @@ impl<R: Runtime> MvNative<R> {
         };
         let reply: PickReply = self.call_for("pickFiles", PickArgs { kind, dir })?;
         Ok(reply.items)
+    }
+
+    /// Shows the provider's sign-in page in the system sign-in sheet and blocks until it closes.
+    /// Refuses (`INVALID`) anything [`links::auth_url_ok`] does not accept.
+    pub fn open_auth(&self, url: &str) -> Result<AuthReply, NativeError> {
+        if !links::auth_url_ok(url) {
+            return Err(NativeError::new("INVALID", "not a sign-in page this app opens"));
+        }
+        self.call_for("openAuth", UrlArgs { url })
+    }
+
+    /// Closes the sign-in sheet if one is up (its `open_auth` then answers `cancelled: false`);
+    /// nothing otherwise. Answers at once.
+    pub fn close_auth(&self) -> Result<(), NativeError> {
+        self.call("closeAuth", serde_json::json!({}))
     }
 
     fn file_call(&self, method: &str, path: &Path, mime: &str) -> Result<(), NativeError> {
@@ -218,7 +246,7 @@ pub fn nav_guard<R: Runtime>(log: Option<NavLog>) -> TauriPlugin<R> {
         .build()
 }
 
-/// The native plugin (previewer, share sheet, links out). On Android registering it waits until
+/// The native plugin (previewer, share sheet, pickers, sign-in sheet, links out). On Android registering it waits until
 /// the webview exists, so the shell adds it at the end of its setup.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("mv-native")

@@ -10,7 +10,7 @@ const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const ENTRY = here('../main.jsx');
 const METHODS = JSON.parse(readFileSync(here('../../../src-mobile-engine/methods.json'), 'utf8'));
 const EVENTS = JSON.parse(readFileSync(here('../../../src-mobile-engine/events.json'), 'utf8'));
-const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_log', 'mobile_open_file', 'mobile_pick_files', 'mobile_share_file'];
+const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_auth_close', 'mobile_auth_open', 'mobile_log', 'mobile_open_file', 'mobile_pick_files', 'mobile_share_file'];
 // Desktop stores (and `plugin-fs`) would bring the desktop RPC graph with them.
 const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|sparkle|features\/blitz|e2eMotion|src\/stores\//i;
 
@@ -39,6 +39,12 @@ describe('mobile seam', () => {
     expect(invokes).toContain('mobile_pick_files');
     expect(invokes.filter((c) => /pick/.test(c))).toEqual(['mobile_pick_files']);
     // Still no plugin command: the picker is reached through the shell only.
+    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
+  });
+
+  it('the_auth_sheet_is_opened_and_closed_through_the_shell_only', async () => {
+    const { invokes } = await analyzeSeam(ENTRY);
+    expect(invokes.filter((c) => /auth/.test(c))).toEqual(['mobile_auth_close', 'mobile_auth_open']);
     expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
   });
 

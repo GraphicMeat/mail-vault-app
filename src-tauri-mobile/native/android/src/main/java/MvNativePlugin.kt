@@ -3,6 +3,9 @@
 // (authority <applicationId>.fileprovider, which exposes only <cache>/share/), with a read grant.
 // `pickFiles` runs the system document or photo picker and copies each pick into the directory
 // Rust named; Rust names and moves the copies (see ../../../../src/files.rs `finish_pick`).
+// `openAuth` shows a provider's sign-in page in a Custom Tab and answers when the tab goes away:
+// the user closed it (`{cancelled: true}`) or `closeAuth` brought MainActivity back over it
+// (`{cancelled: false}`).
 
 package com.mailvault.mvnative
 
@@ -17,6 +20,7 @@ import android.provider.OpenableColumns
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.activity.result.ActivityResult
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import app.tauri.annotation.ActivityCallback
@@ -116,6 +120,88 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
         start(invoke, intent)
     }
 
+    // The running sign-in tab. Custom Tabs report nothing back, so the tab's end is read from the
+    // activity's lifecycle: launching it pauses MainActivity (`authAway`), and MainActivity resuming
+    // after that means the tab is gone, closed by the user unless `closeAuth` asked first
+    // (`authClosing`). Main thread only, like the lifecycle callbacks.
+    private var authInvoke: Invoke? = null
+    private var authAway = false
+    private var authClosing = false
+    private var authActivity: Activity? = null
+
+    private fun answerAuth(cancelled: Boolean) {
+        val invoke = authInvoke ?: return
+        authInvoke = null
+        authAway = false
+        authClosing = false
+        authActivity = null
+        invoke.resolve(JSObject().put("cancelled", cancelled))
+    }
+
+    @Command
+    fun openAuth(invoke: Invoke) {
+        val args = invoke.parseArgs(UrlArgs::class.java)
+        if (!PopupUrlPolicy.authUrlOk(args.url)) {
+            invoke.reject("not a sign-in page", "INTERNAL")
+            return
+        }
+        activity.runOnUiThread {
+            if (authInvoke != null) {
+                invoke.reject("a sign-in sheet is already open", "BUSY")
+                return@runOnUiThread
+            }
+            authInvoke = invoke
+            authAway = false
+            authClosing = false
+            authActivity = PluginManager.activity
+            try {
+                // In this task (no NEW_TASK), so `closeAuth`'s CLEAR_TOP takes the tab off the top.
+                CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(activity, Uri.parse(args.url))
+            } catch (e: ActivityNotFoundException) {
+                authInvoke = null
+                authActivity = null
+                invoke.reject("no browser on this device", "NO_APP")
+            } catch (e: Exception) {
+                authInvoke = null
+                authActivity = null
+                invoke.reject(e.message ?: e.javaClass.simpleName, "INTERNAL")
+            }
+        }
+    }
+
+    // Brings MainActivity back to the front, which finishes the tab above it; its `openAuth` then
+    // answers from `onResume`. Answers at once; nothing to close is not an error.
+    @Command
+    fun closeAuth(invoke: Invoke) {
+        activity.runOnUiThread {
+            if (authInvoke != null) {
+                authClosing = true
+                if (authAway) {
+                    try {
+                        val front = Intent(activity, activity.javaClass)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        activity.startActivity(front)
+                    } catch (e: Exception) {
+                        // Still answered: the page goes on, the tab stays until the user closes it.
+                        answerAuth(false)
+                    }
+                } else {
+                    // The tab never covered the app (it failed to show, or is still starting).
+                    answerAuth(false)
+                }
+            }
+            invoke.resolve()
+        }
+    }
+
+    override fun onPause(activity: AppCompatActivity) {
+        if (authInvoke != null) authAway = true
+    }
+
+    override fun onResume(activity: AppCompatActivity) {
+        if (authInvoke != null && authAway) answerAuth(!authClosing)
+    }
+
     // Where the picks of the running pick go; set before the picker starts, read in its callback.
     // The shell lets one pick run at a time (`PickGuard`), so one field is enough.
     @Volatile private var pickDir: File? = null
@@ -138,6 +224,10 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     override fun onDestroy(activity: AppCompatActivity) {
+        // The sheet's activity gone for good: answer as a cancel, so the page cancels the flow.
+        if (authInvoke != null && authActivity === activity && !activity.isChangingConfigurations) {
+            answerAuth(true)
+        }
         val lost = synchronized(pickLock) {
             pickActivity === activity && !activity.isChangingConfigurations
         }

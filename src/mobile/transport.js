@@ -86,6 +86,33 @@ export async function pickFiles(kind) {
   ));
 }
 
+// The system sign-in sheet for an OAuth flow (iOS ASWebAuthenticationSession, Android a Custom
+// Tab). `url` is the one `mobile.oauth.begin` / `.reauth` answered; the shell opens only Google's
+// and Microsoft's sign-in hosts. The provider hands its code to the engine, never to the page, so
+// the caller does not wait on this for the code: it answers `{ cancelled }` when the sheet closes
+// (`true` when the user closed it). Rejects with the shell's code: `INVALID`, `BUSY`, `NO_APP`,
+// `INTERNAL`. See oauth.js for the whole flow.
+export async function openAuthSheet(url) {
+  const invoke = requireInvoke();
+  let reply;
+  try {
+    reply = await invoke('mobile_auth_open', { url });
+  } catch (error) {
+    throw shellError(error);
+  }
+  return { cancelled: reply?.cancelled === true };
+}
+
+/** Closes the sign-in sheet once `mobile.oauth.finish` has answered; nothing when none is up. */
+export async function closeAuthSheet() {
+  const invoke = requireInvoke();
+  try {
+    await invoke('mobile_auth_close');
+  } catch (error) {
+    throw shellError(error);
+  }
+}
+
 // Engine events reach the page as one Tauri event, `mobile-event` `{ name, payload }`. This is the
 // only place mobile code subscribes; `handler` gets the payload of events called `name`. Returns
 // the unsubscribe, safe to call twice or before the bridge has answered.

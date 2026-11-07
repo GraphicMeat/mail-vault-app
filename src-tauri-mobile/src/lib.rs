@@ -2,8 +2,9 @@
 //! with the platform secret store, forwards `daemon_rpc` to it off the webview thread, and writes
 //! app log lines to the platform log. It also hands a cached attachment to the system previewer
 //! or share sheet (`mobile_open_file` / `mobile_share_file`), runs the system file and photo
-//! pickers for outgoing attachments (`mobile_pick_files`) and, through the `mv-native` plugin's
-//! navigation hook, sends links tapped in a mail to the system browser.
+//! pickers for outgoing attachments (`mobile_pick_files`), opens and closes the system sign-in
+//! sheet for an OAuth flow (`mobile_auth_open` / `mobile_auth_close`) and, through the `mv-native`
+//! plugin's navigation hook, sends links tapped in a mail to the system browser.
 
 mod secrets;
 
@@ -244,6 +245,56 @@ async fn mobile_pick_files(app: tauri::AppHandle, kind: String) -> Result<Vec<Va
     .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
 }
 
+/// One sign-in sheet at a time. A sheet whose native answer was lost (Android drops it when the
+/// activity goes) is given up after [`AUTH_STALE`], just over the engine's 300 s `finish` wait:
+/// by then its flow is over anyway.
+static AUTH_LOCK: pick::PickLock = pick::PickLock::new();
+const AUTH_STALE: Duration = Duration::from_secs(330);
+
+/// Shows `url`, the provider sign-in page `mobile.oauth.begin` (or `.reauth`) answered, in the
+/// system sign-in sheet (iOS `ASWebAuthenticationSession`, Android a Custom Tab). Only
+/// `https://accounts.google.com/...` and `https://login.microsoftonline.com/...` open
+/// (`links::auth_url_ok`). The provider redirects to the engine's loopback listener, never back
+/// here: the page does not wait on this for the code, it waits on `mobile.oauth.finish`. Answers
+/// when the sheet closes, `{cancelled: true}` when the user closed it, `{cancelled: false}` when
+/// `mobile_auth_close` did. Rejects with `{code, message}`: `INVALID` (not a sign-in page),
+/// `BUSY` (a sheet is already up), `NO_APP` (no browser), `INTERNAL`. The URL is never logged.
+#[tauri::command]
+async fn mobile_auth_open(app: tauri::AppHandle, url: String) -> Result<Value, NativeError> {
+    if !tauri_plugin_mv_native::links::auth_url_ok(&url) {
+        return Err(NativeError::new("INVALID", "not a sign-in page this app opens"));
+    }
+    let generation = AUTH_LOCK
+        .take(std::time::Instant::now(), AUTH_STALE)
+        .ok_or_else(|| NativeError::new("BUSY", "a sign-in sheet is already open"))?;
+    // Off the webview thread: the native call answers only when the sheet closes.
+    let answer = tauri::async_runtime::spawn_blocking(move || {
+        let native = app
+            .try_state::<MvNative<tauri::Wry>>()
+            .ok_or_else(|| NativeError::new("INTERNAL", "the native plugin is not loaded"))?;
+        native.open_auth(&url)
+    })
+    .await
+    .map_err(|e| NativeError::new("INTERNAL", e.to_string()));
+    AUTH_LOCK.release(generation);
+    let reply = answer??;
+    Ok(json!({ "cancelled": reply.cancelled }))
+}
+
+/// Closes the sign-in sheet, once `mobile.oauth.finish` has answered; nothing when none is up.
+/// Never waits for the sheet's lock: it runs while `mobile_auth_open` is still waiting.
+#[tauri::command]
+async fn mobile_auth_close(app: tauri::AppHandle) -> Result<(), NativeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let native = app
+            .try_state::<MvNative<tauri::Wry>>()
+            .ok_or_else(|| NativeError::new("INTERNAL", "the native plugin is not loaded"))?;
+        native.close_auth()
+    })
+    .await
+    .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
+}
+
 /// Perf-gate builds log each cancelled navigation of the webview (scheme and verdict, never the
 /// URL), so the on-device link check can see it.
 #[cfg(feature = "perf-gate")]
@@ -413,7 +464,9 @@ pub fn run() {
             mobile_log,
             mobile_open_file,
             mobile_share_file,
-            mobile_pick_files
+            mobile_pick_files,
+            mobile_auth_open,
+            mobile_auth_close
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MailVault mobile shell");

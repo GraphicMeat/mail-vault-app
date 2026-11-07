@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "Sem destinatários",
   "mobile.drafts.loadFailed": "Não foi possível abrir este rascunho.",
   "mobile.drafts.deleteFailed": "Não foi possível excluir o rascunho. Tente de novo.",
-  "mobile.drafts.loading": "Carregando o rascunho"
+  "mobile.drafts.loading": "Carregando o rascunho",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail e outros JMAP",
+  "mobile.add.imap": "Outro (IMAP)",
+  "mobile.add.pickProvider": "Provedor de e-mail",
+  "mobile.add.waiting": "Termine de entrar na página que foi aberta.",
+  "mobile.reauth.banner": "{{email}} precisa que você entre de novo para receber novos e-mails.",
+  "mobile.reauth.action": "Entrar de novo",
+  "mobile.error.NEEDS_AUTH": "Entre de novo para continuar recebendo e-mails desta conta.",
+  "mobile.error.CANCELLED": "A entrada foi cancelada.",
+  "mobile.error.NO_BROWSER": "Nenhum navegador neste dispositivo consegue mostrar a página de entrada."
 }

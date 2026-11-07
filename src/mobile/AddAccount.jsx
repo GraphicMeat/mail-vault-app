@@ -1,9 +1,12 @@
-// Add an IMAP account: email and password first, then the server, prefilled from the address's
+// Add an account. The first screen picks the provider: Google and Microsoft sign in through the
+// system sign-in sheet (`onOAuth(provider)`, oauth.js), "Fastmail and other JMAP" is shown disabled
+// until the JMAP form exists, and "Other (IMAP)" opens the IMAP form below.
+// The IMAP form: email and password first, then the server, prefilled from the address's
 // domain (`imap.<domain>`, 993, SSL/TLS; `smtp.<domain>`, 465, SSL/TLS) and editable. The engine signs in before it saves, so the
 // one `onSubmit` call is the test. The form lives in this component only: the password is sent once
 // per submit and never reaches the store, storage or a log. A refused sign-in clears it; a network
 // or server mistake keeps it, so fixing the host is not a retype.
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useT } from './i18n.js';
 import { errorKey } from './errors.js';
 
@@ -34,9 +37,17 @@ function Field({ id, label, children }) {
   );
 }
 
-export default function AddAccount({ onSubmit, onCancel }) {
+/** The providers, in the order the first screen offers them. */
+const PROVIDERS = [
+  ['google', 'mobile.add.google'],
+  ['microsoft', 'mobile.add.microsoft'],
+  ['jmap', 'mobile.add.jmap'],
+  ['imap', 'mobile.add.imap'],
+];
+
+export default function AddAccount({ onSubmit, onOAuth, onCancel, autoStart = null }) {
   const t = useT();
-  const [step, setStep] = useState('credentials'); // 'credentials' | 'server'
+  const [step, setStep] = useState('picker'); // 'picker' | 'waiting' | 'credentials' | 'server'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [host, setHost] = useState('');
@@ -56,6 +67,41 @@ export default function AddAccount({ onSubmit, onCancel }) {
   const smtpPortOk = Number.isInteger(smtpPortNumber) && smtpPortNumber > 0 && smtpPortNumber < 65536;
   const canNext = looksLikeEmail(email) && password.length > 0;
   const canSubmit = !busy && canNext && host.trim().length > 0 && portOk && smtpHost.trim().length > 0 && smtpPortOk;
+
+  const signInWith = async (provider) => {
+    if (step !== 'picker' || !onOAuth) return;
+    setErrorCode(null);
+    setStep('waiting');
+    let result;
+    try {
+      result = await onOAuth(provider);
+    } catch {
+      result = { ok: false, code: 'INTERNAL' };
+    }
+    // Added: the caller moves on (this screen goes away). Otherwise back to the picker; a cancel is
+    // the user's own choice and says nothing.
+    if (result?.ok) return;
+    setStep('picker');
+    if (result?.code !== 'CANCELLED') setErrorCode(result?.code ?? 'INTERNAL');
+  };
+
+  const choose = (provider) => {
+    if (provider === 'imap') {
+      setErrorCode(null);
+      setStep('credentials');
+    } else if (provider === 'google' || provider === 'microsoft') {
+      signInWith(provider);
+    }
+  };
+
+  // Perf-gate screenshot hook (App.jsx `?ui=signin`): starts that provider's sign-in once.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStart && !autoStarted.current) {
+      autoStarted.current = true;
+      choose(autoStart);
+    }
+  });
 
   const next = (e) => {
     e.preventDefault();
@@ -99,7 +145,7 @@ export default function AddAccount({ onSubmit, onCancel }) {
     <section className="mv-add" aria-labelledby="mv-add-title">
       <div className="mv-add__bar">
         {onCancel && (
-          <button type="button" className="mv-textbtn" onClick={onCancel} disabled={busy}>
+          <button type="button" className="mv-textbtn" onClick={onCancel} disabled={busy || step === 'waiting'}>
             {t('common.cancel')}
           </button>
         )}
@@ -107,7 +153,27 @@ export default function AddAccount({ onSubmit, onCancel }) {
       <h1 id="mv-add-title" className="mv-add__title">{t('mobile.add.title')}</h1>
       <p className="mv-add__lead">{t('mobile.add.lead')}</p>
 
-      {step === 'credentials' ? (
+      {step === 'picker' || step === 'waiting' ? (
+        <div className="mv-add__form">
+          <ul className="mv-providers" aria-label={t('mobile.add.pickProvider')}>
+            {PROVIDERS.map(([id, key]) => (
+              <li key={id}>
+                <button
+                  type="button"
+                  className="mv-provider"
+                  data-provider={id}
+                  disabled={step === 'waiting' || id === 'jmap' || (id !== 'imap' && !onOAuth)}
+                  onClick={() => choose(id)}
+                >
+                  {t(key)}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {step === 'waiting' && <p className="mv-add__waiting" role="status">{t('mobile.add.waiting')}</p>}
+          {errorCode && <p className="mv-add__error" role="alert">{t(errorKey(errorCode))}</p>}
+        </div>
+      ) : step === 'credentials' ? (
         <form className="mv-add__form" onSubmit={next} noValidate>
           <Field id="mv-add-email" label={t('mobile.add.email')}>
             <input
@@ -134,6 +200,9 @@ export default function AddAccount({ onSubmit, onCancel }) {
             />
           </Field>
           <button type="submit" className="mv-primary" disabled={!canNext}>{t('common.next')}</button>
+          <button type="button" className="mv-textbtn" onClick={() => setStep('picker')}>
+            {t('common.back')}
+          </button>
         </form>
       ) : (
         <form className="mv-add__form" onSubmit={submit} noValidate>

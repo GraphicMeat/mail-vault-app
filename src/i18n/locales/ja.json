@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "宛先なし",
   "mobile.drafts.loadFailed": "この下書きを開けませんでした。",
   "mobile.drafts.deleteFailed": "下書きを削除できませんでした。もう一度お試しください。",
-  "mobile.drafts.loading": "下書きを読み込み中"
+  "mobile.drafts.loading": "下書きを読み込み中",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail などの JMAP",
+  "mobile.add.imap": "その他 (IMAP)",
+  "mobile.add.pickProvider": "メールプロバイダ",
+  "mobile.add.waiting": "開いたページでサインインを完了してください。",
+  "mobile.reauth.banner": "新着メールを受信するには {{email}} に再度サインインしてください。",
+  "mobile.reauth.action": "再度サインイン",
+  "mobile.error.NEEDS_AUTH": "このアカウントのメールを引き続き受信するには、再度サインインしてください。",
+  "mobile.error.CANCELLED": "サインインはキャンセルされました。",
+  "mobile.error.NO_BROWSER": "この端末にはサインインページを表示できるブラウザがありません。"
 }

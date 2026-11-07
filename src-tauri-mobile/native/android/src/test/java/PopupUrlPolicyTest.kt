@@ -170,4 +170,37 @@ class PopupUrlPolicyTest {
         assertNull(PopupUrlPolicy.allow("https://exa mple.com/"))
         assertNull(PopupUrlPolicy.allow("ht!tp://example.com/"))
     }
+    // The same rows as links.rs `auth_urls_are_limited_to_the_two_provider_hosts`.
+    @Test
+    fun auth_urls_are_limited_to_the_two_provider_hosts() {
+        for (url in listOf(
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y",
+            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x",
+            "https://ACCOUNTS.GOOGLE.COM/o/oauth2/v2/auth",
+            "https://accounts.google.com:443/o/oauth2/v2/auth",
+        )) {
+            assertEquals(url, true, PopupUrlPolicy.authUrlOk(url))
+        }
+        for (url in listOf(
+            "http://accounts.google.com/o/oauth2/v2/auth",
+            "https://accounts.google.com.evil.com/o/oauth2/v2/auth",
+            "https://user@accounts.google.com/",
+            "https://user:pw@login.microsoftonline.com/",
+            "https://localhost/",
+            "https://accounts.google.com./",
+            "https://accounts.google.com:8443/",
+            "https://evil.com/accounts.google.com",
+            "https://google.com/",
+            "https://mail.google.com/",
+            "https://login.microsoftonline.com.evil.com/",
+            "https://127.0.0.1/",
+            "javascript:alert(1)",
+            "mailvault-auth://callback",
+            "not a url",
+            "",
+        )) {
+            assertEquals(url, false, PopupUrlPolicy.authUrlOk(url))
+        }
+        assertEquals(false, PopupUrlPolicy.authUrlOk("https://accounts.google.com/" + "a".repeat(PopupUrlPolicy.MAX_URL_LEN)))
+    }
 }

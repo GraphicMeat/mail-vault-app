@@ -18,6 +18,7 @@ import { create } from 'zustand';
 import { daemonCall, listen } from './transport.js';
 import { createPageCache, PAGE_SIZE } from './messagePages.js';
 import { errorCodeOf } from './errors.js';
+import { oauthSignIn, oauthReauth } from './oauth.js';
 
 export const STORAGE_ACCOUNT = 'mv.mobile.activeAccount';
 export const STORAGE_FOLDER = 'mv.mobile.activeFolder';
@@ -232,13 +233,25 @@ export function createMobileStore() {
       loadFoldersQuietly(p.accountId);
     }
 
+    /** A newly added account: listed, then opened at its inbox. */
+    async function adopt(account) {
+      set((s) => ({ accounts: [...s.accounts.filter((a) => a.id !== account.id), account], unread: { ...s.unread, [account.id]: 0 } }));
+      await activate(account.id, INBOX);
+    }
+
     function subscribe() {
       const on = [
         ['mobile.folder.changed', () => listen('mobile.folder.changed', onFolderChanged)],
         ['mobile.folders.changed', () => listen('mobile.folders.changed', (p) => p?.accountId && loadFoldersQuietly(p.accountId))],
         ['mobile.sync.state', () => listen('mobile.sync.state', (p) => {
           if (!p?.accountId) return;
-          set((s) => ({ syncState: { ...s.syncState, [p.accountId]: { state: p.state, code: p.code ?? null, at: Date.now() } } }));
+          set((s) => ({
+            syncState: { ...s.syncState, [p.accountId]: { state: p.state, code: p.code ?? null, at: Date.now() } },
+            // A lapsed provider sign-in parks the account: the banner and the switcher say so now.
+            accounts: p.code === 'NEEDS_AUTH'
+              ? s.accounts.map((a) => (a.id === p.accountId ? { ...a, needsAuth: true } : a))
+              : s.accounts,
+          }));
         })],
         // Results sent before this subscribed are lost: the chip is re-read on start and resume.
         ['mobile.action.result', () => listen('mobile.action.result', onActionResult)],
@@ -429,9 +442,34 @@ export function createMobileStore() {
           return { ok: false, code: errorCodeOf(err?.code) };
         }
         if (!reply?.ok) return { ok: false, code: errorCodeOf(reply?.code) };
-        const account = reply.account;
-        set((s) => ({ accounts: [...s.accounts.filter((a) => a.id !== account.id), account], unread: { ...s.unread, [account.id]: 0 } }));
-        await activate(account.id, INBOX);
+        await adopt(reply.account);
+        return { ok: true };
+      },
+
+      /**
+       * Adds an account through the provider's sign-in sheet (`google` | `microsoft`, oauth.js)
+       * and opens it. `{ok}` or `{ok: false, code}`; `CANCELLED` when the user closed the sheet.
+       */
+      async signIn(provider) {
+        const result = await oauthSignIn(provider);
+        if (!result.ok) return result;
+        await adopt(result.account);
+        return { ok: true };
+      },
+
+      /**
+       * Signs a parked (`needsAuth`) account in again. On success the row is replaced, its sync
+       * error cleared, and the open account syncs.
+       */
+      async reauth(accountId) {
+        const result = await oauthReauth(accountId);
+        if (!result.ok) return result;
+        const account = { ...result.account, needsAuth: false };
+        set((s) => {
+          const { [accountId]: _state, ...syncState } = s.syncState;
+          return { accounts: s.accounts.map((a) => (a.id === accountId ? { ...a, ...account } : a)), syncState };
+        });
+        if (get().activeAccountId === accountId) await get().refresh();
         return { ok: true };
       },
 

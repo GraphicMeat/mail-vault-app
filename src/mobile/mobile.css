@@ -664,6 +664,24 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-add__section { margin: 8px 0 0; font-size: 0.8125rem; font-weight: 600; color: var(--mail-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .mv-add__row { display: grid; grid-template-columns: 7rem 1fr; gap: 12px; }
 .mv-add__error { margin: 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
+/* The provider picker: one full-width row per provider. */
+.mv-providers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.mv-provider {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 16px;
+  border: 1px solid var(--mail-border);
+  border-radius: 12px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
+}
+.mv-provider:active { background: var(--mail-surface-hover); }
+.mv-provider:disabled { opacity: 0.5; }
+.mv-add__waiting { margin: 0; color: var(--mail-text-muted); }
 .mv-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .mv-field__label { font-size: 0.8125rem; font-weight: 500; color: var(--mail-text-muted); }
 .mv-input {
@@ -702,6 +720,33 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-fab:active { transform: scale(0.96); }
 [dir="rtl"] .mv-fab { right: auto; left: calc(var(--mv-safe-left) + 16px); }
+
+/* A parked account's banner between the header and the list: sign in again. */
+.mv-reauth {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px calc(var(--mv-safe-right) + 16px) 8px calc(var(--mv-safe-left) + 16px);
+  border-bottom: 1px solid var(--mail-border);
+  background: color-mix(in srgb, var(--mv-danger) 10%, var(--mail-surface));
+  color: var(--mail-text);
+}
+.mv-reauth__text { flex: 1 1 12rem; margin: 0; overflow-wrap: anywhere; }
+.mv-reauth__error { flex-basis: 100%; margin: 0; color: var(--mv-danger); }
+.mv-reauth__btn {
+  flex: none;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--mail-accent-text);
+  font: inherit;
+  font-weight: 600;
+}
+.mv-reauth__btn:disabled { opacity: 0.5; }
+.mv-acct__reauth { flex: none; color: var(--mail-accent-text); font-weight: 600; }
 
 /* The outbox row between the header and the list (never inside the virtual scroller). */
 .mv-outbox-row {

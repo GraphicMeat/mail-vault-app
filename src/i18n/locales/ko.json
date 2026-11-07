@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "받는 사람 없음",
   "mobile.drafts.loadFailed": "이 임시 저장을 열지 못했습니다.",
   "mobile.drafts.deleteFailed": "임시 저장을 삭제하지 못했습니다. 다시 시도하세요.",
-  "mobile.drafts.loading": "임시 저장을 불러오는 중"
+  "mobile.drafts.loading": "임시 저장을 불러오는 중",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail 및 기타 JMAP",
+  "mobile.add.imap": "기타 (IMAP)",
+  "mobile.add.pickProvider": "이메일 제공업체",
+  "mobile.add.waiting": "열린 페이지에서 로그인을 완료하세요.",
+  "mobile.reauth.banner": "새 메일을 받으려면 {{email}}에 다시 로그인해야 합니다.",
+  "mobile.reauth.action": "다시 로그인",
+  "mobile.error.NEEDS_AUTH": "이 계정의 메일을 계속 받으려면 다시 로그인하세요.",
+  "mobile.error.CANCELLED": "로그인이 취소되었습니다.",
+  "mobile.error.NO_BROWSER": "이 기기에는 로그인 페이지를 표시할 수 있는 브라우저가 없습니다."
 }

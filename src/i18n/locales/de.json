@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "Keine Empfänger",
   "mobile.drafts.loadFailed": "Dieser Entwurf konnte nicht geöffnet werden.",
   "mobile.drafts.deleteFailed": "Der Entwurf konnte nicht gelöscht werden. Erneut versuchen.",
-  "mobile.drafts.loading": "Entwurf wird geladen"
+  "mobile.drafts.loading": "Entwurf wird geladen",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail und andere JMAP-Anbieter",
+  "mobile.add.imap": "Andere (IMAP)",
+  "mobile.add.pickProvider": "E-Mail-Anbieter",
+  "mobile.add.waiting": "Schließe die Anmeldung auf der geöffneten Seite ab.",
+  "mobile.reauth.banner": "Melde dich bei {{email}} erneut an, damit neue E-Mails ankommen.",
+  "mobile.reauth.action": "Erneut anmelden",
+  "mobile.error.NEEDS_AUTH": "Melde dich erneut an, um weiter E-Mails für dieses Konto zu erhalten.",
+  "mobile.error.CANCELLED": "Die Anmeldung wurde abgebrochen.",
+  "mobile.error.NO_BROWSER": "Kein Browser auf diesem Gerät kann die Anmeldeseite anzeigen."
 }

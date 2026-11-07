@@ -3,8 +3,10 @@
 // sheet is dismissed, so the shell knows when it may delete the staged copy. `pickFiles` runs the
 // document picker or the photo picker and copies each pick into the directory Rust named, as
 // `<dir>/<index>`; Rust names and moves the copies (../../src/files.rs `finish_pick`). It answers
-// when the picker closes; cancel is an empty list.
+// when the picker closes; cancel is an empty list. `openAuth` shows a provider's sign-in page in
+// `ASWebAuthenticationSession` and answers when it closes (`closeAuth`, or the user's cancel).
 
+import AuthenticationServices
 import PhotosUI
 import QuickLook
 import Tauri
@@ -44,7 +46,8 @@ struct PickReply: Encodable {
 }
 
 class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewControllerDelegate,
-  UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate
+  UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate,
+  ASWebAuthenticationPresentationContextProviding
 {
   // One preview, one share sheet and one picker at a time; only touched on the main queue.
   private var previewItem: URL?
@@ -57,6 +60,15 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
   private var pickAnswering = false
   // The picker on screen for the running pick: callbacks from any other controller are ignored.
   private var pickController: UIViewController?
+
+  // The running sign-in sheet and its invoke; only touched on the main queue. Kept strongly: a
+  // session nothing holds is deallocated and its sheet goes away unanswered.
+  private var authSession: ASWebAuthenticationSession?
+  private var authInvoke: Invoke?
+
+  /// The hosts `openAuth` opens; the shell has already checked the whole URL (links.rs
+  /// `auth_url_ok`), this is the native side's own floor.
+  private static let authHosts: Set<String> = ["accounts.google.com", "login.microsoftonline.com"]
 
   /// The controller to present from: the root's topmost presented controller. Nil while anything
   /// is still animating in or out, since UIKit then refuses a presentation with only a console
@@ -345,6 +357,79 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
       }
     }
     group.notify(queue: .main) { self.answerPick(items.compactMap { $0 }) }
+  }
+}
+
+extension MvNativePlugin {
+  /// Answers the running sheet once (main queue) and forgets it.
+  private func answerAuth(cancelled: Bool) {
+    let invoke = authInvoke
+    authInvoke = nil
+    authSession = nil
+    invoke?.resolve(["cancelled": cancelled])
+  }
+
+  /// `openAuth {url}`: the provider's sign-in page. The callback scheme never matches (the provider
+  /// redirects to the engine's loopback listener), so the session ends only by the user's cancel
+  /// (`{cancelled: true}`) or by `closeAuth` (`{cancelled: false}`). Shares Safari's cookies
+  /// (`prefersEphemeralWebBrowserSession = false`), so a signed-in Google or Microsoft user just
+  /// picks the account.
+  @objc public func openAuth(_ invoke: Invoke) throws {
+    guard let args = try? invoke.parseArgs(UrlArgs.self), let url = URL(string: args.url),
+      url.scheme?.lowercased() == "https", let host = url.host?.lowercased(),
+      MvNativePlugin.authHosts.contains(host)
+    else {
+      invoke.reject("not a sign-in page", code: "INTERNAL")
+      return
+    }
+    DispatchQueue.main.async {
+      guard self.authInvoke == nil else {
+        invoke.reject("a sign-in sheet is already open", code: "BUSY")
+        return
+      }
+      var session: ASWebAuthenticationSession?
+      session = ASWebAuthenticationSession(url: url, callbackURLScheme: "mailvault-auth") {
+        _, _ in
+        DispatchQueue.main.async {
+          // Only the running session answers: one `closeAuth` already answered, or a newer one,
+          // changes nothing. Any end that `closeAuth` did not cause is the user's cancel.
+          guard let current = self.authSession, current === session else { return }
+          self.answerAuth(cancelled: true)
+        }
+      }
+      guard let started = session else { return }
+      started.presentationContextProvider = self
+      started.prefersEphemeralWebBrowserSession = false
+      self.authSession = started
+      self.authInvoke = invoke
+      if !started.start() {
+        self.authSession = nil
+        self.authInvoke = nil
+        invoke.reject("the sign-in sheet could not be shown", code: "BUSY")
+      }
+    }
+  }
+
+  /// `closeAuth`: closes the running sheet, whose `openAuth` answers `{cancelled: false}`. Answers
+  /// at once; nothing to close is not an error.
+  @objc public func closeAuth(_ invoke: Invoke) throws {
+    DispatchQueue.main.async {
+      if let session = self.authSession {
+        // Answer first: `cancel()` calls the completion, which must find nothing left to answer.
+        self.answerAuth(cancelled: false)
+        session.cancel()
+      }
+      invoke.resolve()
+    }
+  }
+
+  /// The key window of the app's foreground scene: the sheet's anchor.
+  public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+    let windows = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+    return windows.first { $0.isKeyWindow } ?? manager.viewController?.view.window ?? windows.first
+      ?? ASPresentationAnchor()
   }
 }
 

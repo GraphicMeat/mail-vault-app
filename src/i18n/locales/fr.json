@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "Aucun destinataire",
   "mobile.drafts.loadFailed": "Impossible d'ouvrir ce brouillon.",
   "mobile.drafts.deleteFailed": "Impossible de supprimer le brouillon. Réessayez.",
-  "mobile.drafts.loading": "Chargement du brouillon"
+  "mobile.drafts.loading": "Chargement du brouillon",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail et autres JMAP",
+  "mobile.add.imap": "Autre (IMAP)",
+  "mobile.add.pickProvider": "Fournisseur de messagerie",
+  "mobile.add.waiting": "Terminez la connexion sur la page qui s’est ouverte.",
+  "mobile.reauth.banner": "{{email}} demande une nouvelle connexion avant de recevoir de nouveaux e-mails.",
+  "mobile.reauth.action": "Se reconnecter",
+  "mobile.error.NEEDS_AUTH": "Reconnectez-vous pour continuer à recevoir les e-mails de ce compte.",
+  "mobile.error.CANCELLED": "La connexion a été annulée.",
+  "mobile.error.NO_BROWSER": "Aucun navigateur de cet appareil ne peut afficher la page de connexion."
 }

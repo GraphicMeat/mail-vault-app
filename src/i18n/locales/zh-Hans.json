@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "没有收件人",
   "mobile.drafts.loadFailed": "无法打开此草稿。",
   "mobile.drafts.deleteFailed": "无法删除草稿。请重试。",
-  "mobile.drafts.loading": "正在加载草稿"
+  "mobile.drafts.loading": "正在加载草稿",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail 及其他 JMAP",
+  "mobile.add.imap": "其他 (IMAP)",
+  "mobile.add.pickProvider": "邮件服务商",
+  "mobile.add.waiting": "请在打开的页面中完成登录。",
+  "mobile.reauth.banner": "{{email}} 需要重新登录才能收到新邮件。",
+  "mobile.reauth.action": "重新登录",
+  "mobile.error.NEEDS_AUTH": "重新登录以继续接收此账户的邮件。",
+  "mobile.error.CANCELLED": "登录已取消。",
+  "mobile.error.NO_BROWSER": "这台设备上没有可以显示登录页面的浏览器。"
 }

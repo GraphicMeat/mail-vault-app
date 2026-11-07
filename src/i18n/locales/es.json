@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "Sin destinatarios",
   "mobile.drafts.loadFailed": "No se pudo abrir este borrador.",
   "mobile.drafts.deleteFailed": "No se pudo eliminar el borrador. Inténtalo de nuevo.",
-  "mobile.drafts.loading": "Cargando el borrador"
+  "mobile.drafts.loading": "Cargando el borrador",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail y otros JMAP",
+  "mobile.add.imap": "Otro (IMAP)",
+  "mobile.add.pickProvider": "Proveedor de correo",
+  "mobile.add.waiting": "Termina de iniciar sesión en la página que se abrió.",
+  "mobile.reauth.banner": "{{email}} necesita que vuelvas a iniciar sesión para recibir correo nuevo.",
+  "mobile.reauth.action": "Volver a iniciar sesión",
+  "mobile.error.NEEDS_AUTH": "Vuelve a iniciar sesión para seguir recibiendo correo en esta cuenta.",
+  "mobile.error.CANCELLED": "Se canceló el inicio de sesión.",
+  "mobile.error.NO_BROWSER": "Ningún navegador de este dispositivo puede mostrar la página de inicio de sesión."
 }

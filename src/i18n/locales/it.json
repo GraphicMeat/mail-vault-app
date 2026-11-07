@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "Nessun destinatario",
   "mobile.drafts.loadFailed": "Impossibile aprire questa bozza.",
   "mobile.drafts.deleteFailed": "Impossibile eliminare la bozza. Riprova.",
-  "mobile.drafts.loading": "Caricamento della bozza"
+  "mobile.drafts.loading": "Caricamento della bozza",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail e altri JMAP",
+  "mobile.add.imap": "Altro (IMAP)",
+  "mobile.add.pickProvider": "Provider di posta",
+  "mobile.add.waiting": "Completa l’accesso nella pagina che si è aperta.",
+  "mobile.reauth.banner": "{{email}} richiede un nuovo accesso prima di ricevere nuova posta.",
+  "mobile.reauth.action": "Accedi di nuovo",
+  "mobile.error.NEEDS_AUTH": "Accedi di nuovo per continuare a ricevere la posta di questo account.",
+  "mobile.error.CANCELLED": "L’accesso è stato annullato.",
+  "mobile.error.NO_BROWSER": "Nessun browser su questo dispositivo può mostrare la pagina di accesso."
 }

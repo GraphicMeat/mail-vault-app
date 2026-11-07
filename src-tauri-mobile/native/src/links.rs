@@ -194,6 +194,27 @@ fn pct_encode(s: &str, address: bool) -> String {
     out
 }
 
+/// The two hosts the system sign-in sheet may open: Google's and Microsoft's authorize pages
+/// (mailvault-core `oauth2.rs` builds exactly these).
+pub const AUTH_HOSTS: [&str; 2] = ["accounts.google.com", "login.microsoftonline.com"];
+
+/// Whether `url` may be opened in the system sign-in sheet (`mobile_auth_open`): `https` only, the
+/// host exactly one of [`AUTH_HOSTS`] (no subdomain, no trailing dot, no IP), no user info, no port
+/// but the default (`:443` is the default and parses as none), at most [`MAX_URL_LEN`] long.
+pub fn auth_url_ok(url: &str) -> bool {
+    if url.len() > MAX_URL_LEN {
+        return false;
+    }
+    let Ok(u) = Url::parse(url) else { return false };
+    if u.scheme() != "https" || !u.username().is_empty() || u.password().is_some() || u.port().is_some() {
+        return false;
+    }
+    match u.host() {
+        Some(Host::Domain(d)) => AUTH_HOSTS.contains(&d),
+        _ => false,
+    }
+}
+
 /// `decide` on a raw string, for callers that hold one. A string that does not parse is denied.
 pub fn decide_str(url: &str, app: AppOrigin) -> Nav {
     match Url::parse(url) {
@@ -437,6 +458,40 @@ mod tests {
         } else if !cfg!(windows) {
             assert_eq!(AppOrigin::current(), IOS);
         }
+    }
+
+    #[test]
+    fn auth_urls_are_limited_to_the_two_provider_hosts() {
+        for url in [
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y",
+            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x",
+            "https://ACCOUNTS.GOOGLE.COM/o/oauth2/v2/auth",
+            "https://accounts.google.com:443/o/oauth2/v2/auth",
+        ] {
+            assert!(auth_url_ok(url), "{url}");
+        }
+        for url in [
+            "http://accounts.google.com/o/oauth2/v2/auth",
+            "https://accounts.google.com.evil.com/o/oauth2/v2/auth",
+            "https://user@accounts.google.com/",
+            "https://user:pw@login.microsoftonline.com/",
+            "https://localhost/",
+            "https://accounts.google.com./",
+            "https://accounts.google.com:8443/",
+            "https://evil.com/accounts.google.com",
+            "https://google.com/",
+            "https://mail.google.com/",
+            "https://login.microsoftonline.com.evil.com/",
+            "https://127.0.0.1/",
+            "javascript:alert(1)",
+            "mailvault-auth://callback",
+            "not a url",
+            "",
+        ] {
+            assert!(!auth_url_ok(url), "{url}");
+        }
+        let long = format!("https://accounts.google.com/{}", "a".repeat(MAX_URL_LEN));
+        assert!(!auth_url_ok(&long));
     }
 
     #[test]

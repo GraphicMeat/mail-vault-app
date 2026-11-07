@@ -1,8 +1,11 @@
 // The account switcher: a bottom sheet listing every account with its inbox unread count, the
-// active one checked, plus "Add account". Removing asks for a second tap on the same row.
+// active one checked, plus "Add account". Removing asks for a second tap on the same row. An account
+// whose provider sign-in lapsed (`needsAuth`) offers "Sign in again"; `ReauthBanner` says the same
+// above the message list.
 import React, { useState } from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
+import { errorKey } from './errors.js';
 
 /** The avatar letter: the display name's first letter, else the address's. */
 export function initialOf(account) {
@@ -14,7 +17,7 @@ export function Avatar({ account, small = false }) {
   return <span className={small ? 'mv-avatar mv-avatar--small' : 'mv-avatar'} aria-hidden="true">{initialOf(account)}</span>;
 }
 
-function AccountRow({ account, active, unread, onSelect, onRemove }) {
+function AccountRow({ account, active, unread, onSelect, onRemove, onReauth }) {
   const t = useT();
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -69,6 +72,11 @@ function AccountRow({ account, active, unread, onSelect, onRemove }) {
         )}
         <span className="mv-acct__check" aria-hidden="true">{active ? '✓' : ''}</span>
       </button>
+      {account.needsAuth && onReauth && (
+        <button type="button" className="mv-textbtn mv-acct__reauth" onClick={() => onReauth(account.id)}>
+          {t('mobile.reauth.action')}
+        </button>
+      )}
       <button
         type="button"
         className="mv-iconbtn mv-acct__remove"
@@ -83,7 +91,7 @@ function AccountRow({ account, active, unread, onSelect, onRemove }) {
   );
 }
 
-export default function AccountSwitcher({ accounts, activeAccountId, unread, onSelect, onAdd, onRemove, onClose }) {
+export default function AccountSwitcher({ accounts, activeAccountId, unread, onSelect, onAdd, onRemove, onReauth, onClose }) {
   const t = useT();
   return (
     <Sheet kind="sheet" label={t('mobile.switcher.title')} onClose={onClose}>
@@ -98,6 +106,7 @@ export default function AccountSwitcher({ accounts, activeAccountId, unread, onS
             unread={unread[a.id] || 0}
             onSelect={onSelect}
             onRemove={onRemove}
+            onReauth={onReauth}
           />
         ))}
       </ul>
@@ -106,5 +115,38 @@ export default function AccountSwitcher({ accounts, activeAccountId, unread, onS
         {t('sidebar.addAccount')}
       </button>
     </Sheet>
+  );
+}
+
+/**
+ * The banner above the list while `account` is parked (`needsAuth`): its provider no longer
+ * honours the sign-in, so nothing syncs until the user signs in again. `onReauth(id)` runs the
+ * flow and answers `{ok}` or `{ok: false, code}`; a cancel is the user's own choice and says nothing.
+ */
+export function ReauthBanner({ account, onReauth }) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [errorCode, setErrorCode] = useState(null);
+  if (!account?.needsAuth) return null;
+  const start = async () => {
+    setBusy(true);
+    setErrorCode(null);
+    let result;
+    try {
+      result = await onReauth(account.id);
+    } catch {
+      result = { ok: false, code: 'INTERNAL' };
+    }
+    setBusy(false);
+    if (!result?.ok && result?.code !== 'CANCELLED') setErrorCode(result?.code ?? 'INTERNAL');
+  };
+  return (
+    <div className="mv-reauth">
+      <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.reauth.banner', { email: account.email })}</p>
+      {errorCode && <p className="mv-reauth__error" role="alert">{t(errorKey(errorCode))}</p>}
+      <button type="button" className="mv-reauth__btn" disabled={busy} aria-busy={busy} onClick={start}>
+        {busy ? t('mobile.add.signingIn') : t('mobile.reauth.action')}
+      </button>
+    </div>
   );
 }

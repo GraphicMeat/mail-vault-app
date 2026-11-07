@@ -7,7 +7,9 @@
 // `?ui=swipe-trailing` show the first row slid open, `?ui=toast` (or `&toast=1` with another `ui`)
 // the undo toast and the pending chip (display only, nothing is sent; these two in a perf-gate
 // bundle only; so are `?ui=compose` (a new message), `?ui=reply` (a reply to the newest row) and
-// `?ui=outbox` (the outbox sheet over two made-up unsent rows, display only)); `?ui=viewer` runs the scripted viewer in `viewerProbe.js`
+// `?ui=outbox` (the outbox sheet over two made-up unsent rows, display only)), `?ui=signin` (the
+// add-account screen, which starts the Google sign-in sheet at once; `?ui=signin-close` also closes
+// the sheet 20 s later, as a finished sign-in would)); `?ui=viewer` runs the scripted viewer in `viewerProbe.js`
 // (perf-gate builds only: the bundle has it only when built with MV_PERF_GATE=1, and it runs only
 // when the engine's ping says `perfGate`), with `&move=1` the move picker open. The `mobile.ping`
 // line is logged first: scripts/mobile-run.sh waits for it.
@@ -19,12 +21,12 @@
 //
 // Back (Android) closes the top layer (viewer, picker, sheet, compose) through `backStack.js`.
 import React, { useCallback, useEffect, useState } from 'react';
-import { daemonCall } from './transport.js';
+import { daemonCall, closeAuthSheet } from './transport.js';
 import { useMobileStore } from './store.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
 import AddAccount from './AddAccount.jsx';
-import AccountSwitcher, { Avatar } from './AccountSwitcher.jsx';
+import AccountSwitcher, { Avatar, ReauthBanner } from './AccountSwitcher.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
 import { folderLabel } from './folders.js';
 import { errorKey } from './errors.js';
@@ -60,6 +62,9 @@ const DEMO_COMPOSE = (PERF_BUILD && { compose: 'new', reply: 'reply' }[QUERY.get
 const DEMO_OUTBOX = PERF_BUILD && QUERY.get('ui') === 'outbox';
 // `?ui=drafts` (perf-gate only): the drafts list over two saved drafts of the seed account.
 const DEMO_DRAFTS = PERF_BUILD && QUERY.get('ui') === 'drafts';
+// `?ui=signin` / `?ui=signin-close` (perf-gate only): the device check of the sign-in sheet. No
+// credentials are ever entered; the close variant proves `mobile_auth_close` takes the sheet down.
+const DEMO_SIGNIN = (PERF_BUILD && { signin: 'open', 'signin-close': 'close' }[QUERY.get('ui')]) || null;
 let demoComposeStarted = false;
 let viewerScriptStarted = false;
 let perfStarted = false;
@@ -369,11 +374,33 @@ function App() {
     if (result.ok) setPanel(null);
     return result;
   }, []);
+  const onOAuth = useCallback(async (provider) => {
+    if (DEMO_SIGNIN === 'close') {
+      setTimeout(() => {
+        logLine({ signinDemo: 'close' });
+        closeAuthSheet().catch((err) => logLine({ signinDemo: 'closeFailed', error: errorOf(err) }));
+      }, 20000);
+    }
+    const result = await useMobileStore.getState().signIn(provider);
+    if (DEMO_SIGNIN) logLine({ signinDemo: 'finished', ok: result.ok, code: result.code ?? null });
+    if (result.ok) setPanel(null);
+    return result;
+  }, []);
+  const onReauth = useCallback((id) => useMobileStore.getState().reauth(id), []);
+  const onSwitcherReauth = useCallback(async (id) => {
+    setPanel(null);
+    const store = useMobileStore.getState();
+    if (store.activeAccountId !== id) await store.selectAccount(id);
+    return store.reauth(id);
+  }, []);
+  useEffect(() => {
+    if (DEMO_SIGNIN && status === 'ready') setPanel('add');
+  }, [status]);
 
   if (status === 'noAccount') {
     return (
       <div className="mv-app">
-        <AddAccount onSubmit={onAdd} />
+        <AddAccount onSubmit={onAdd} onOAuth={onOAuth} autoStart={DEMO_SIGNIN ? 'google' : null} />
       </div>
     );
   }
@@ -424,6 +451,7 @@ function App() {
         <PendingChip />
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
+      <ReauthBanner account={account} onReauth={onReauth} />
       <OutboxRow initialOpen={DEMO_OUTBOX} />
       {listState === 'ready' && list && (
         <MessageList
@@ -469,12 +497,13 @@ function App() {
           onSelect={onSelectAccount}
           onAdd={() => setPanel('add')}
           onRemove={(id) => useMobileStore.getState().removeAccount(id)}
+          onReauth={onSwitcherReauth}
           onClose={closePanel}
         />
       )}
       {panel === 'add' && (
         <div className="mv-add-overlay">
-          <AddAccount onSubmit={onAdd} onCancel={closePanel} />
+          <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onCancel={closePanel} autoStart={DEMO_SIGNIN ? 'google' : null} />
         </div>
       )}
       {open && (

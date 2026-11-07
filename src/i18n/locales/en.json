@@ -4361,5 +4361,16 @@
   "mobile.drafts.noRecipients": "No recipients",
   "mobile.drafts.loadFailed": "Couldn't open this draft.",
   "mobile.drafts.deleteFailed": "Couldn't delete the draft. Try again.",
-  "mobile.drafts.loading": "Loading the draft"
+  "mobile.drafts.loading": "Loading the draft",
+  "mobile.add.google": "Google",
+  "mobile.add.microsoft": "Microsoft (Outlook, Hotmail, Microsoft 365)",
+  "mobile.add.jmap": "Fastmail and other JMAP",
+  "mobile.add.imap": "Other (IMAP)",
+  "mobile.add.pickProvider": "Email provider",
+  "mobile.add.waiting": "Finish signing in on the page that opened.",
+  "mobile.reauth.banner": "{{email}} needs you to sign in again before new mail can arrive.",
+  "mobile.reauth.action": "Sign in again",
+  "mobile.error.NEEDS_AUTH": "Sign in again to keep getting mail for this account.",
+  "mobile.error.CANCELLED": "The sign-in was cancelled.",
+  "mobile.error.NO_BROWSER": "No browser on this device can show the sign-in page."
 }

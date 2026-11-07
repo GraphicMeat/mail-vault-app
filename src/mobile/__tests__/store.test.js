@@ -52,7 +52,10 @@ vi.mock('../transport.js', () => ({
   }),
 }));
 
+vi.mock('../oauth.js', () => ({ oauthSignIn: vi.fn(), oauthReauth: vi.fn() }));
+
 import { createMobileStore, STORAGE_ACCOUNT, STORAGE_FOLDER } from '../store.js';
+import { oauthSignIn, oauthReauth } from '../oauth.js';
 
 const emit = (name, payload) => { for (const h of engine.handlers.get(name) || []) h(payload); };
 const callsOf = (method) => engine.calls.filter(([m]) => m === method).map(([, p]) => p);
@@ -261,6 +264,42 @@ describe('mobile store', () => {
     expect(s.accounts).toHaveLength(4);
     expect(JSON.stringify(s)).not.toContain('right');
     expect(JSON.stringify({ ...localStorage })).not.toContain('right');
+  });
+
+  it('signIn adds and opens the provider account; a cancel changes nothing', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    oauthSignIn.mockResolvedValueOnce({ ok: false, code: 'CANCELLED' });
+    expect(await store.getState().signIn('google')).toEqual({ ok: false, code: 'CANCELLED' });
+    expect(store.getState().accounts).toHaveLength(3);
+    const account = { id: 'g1', email: 'ada@gmail.test', displayName: 'ada@gmail.test', kind: 'imap', provider: 'google', needsAuth: false };
+    engine.folders.g1 = [inbox(0)];
+    oauthSignIn.mockResolvedValueOnce({ ok: true, account });
+    expect(await store.getState().signIn('google')).toEqual({ ok: true });
+    expect(oauthSignIn).toHaveBeenLastCalledWith('google');
+    expect(store.getState().activeAccountId).toBe('g1');
+    expect(store.getState().accounts.map((a) => a.id)).toContain('g1');
+  });
+
+  it('a NEEDS_AUTH sync state parks the account until reauth succeeds', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    emit('mobile.sync.state', { accountId: 'a1', state: 'error', code: 'NEEDS_AUTH' });
+    expect(store.getState().accounts.find((a) => a.id === 'a1').needsAuth).toBe(true);
+    expect(store.getState().accounts.find((a) => a.id === 'a2').needsAuth).toBeUndefined();
+    // Another error code parks nothing.
+    emit('mobile.sync.state', { accountId: 'a2', state: 'error', code: 'TIMEOUT' });
+    expect(store.getState().accounts.find((a) => a.id === 'a2').needsAuth).toBeUndefined();
+    oauthReauth.mockResolvedValueOnce({ ok: false, code: 'AUTH_FAILED' });
+    expect(await store.getState().reauth('a1')).toEqual({ ok: false, code: 'AUTH_FAILED' });
+    expect(store.getState().accounts.find((a) => a.id === 'a1').needsAuth).toBe(true);
+    const refreshes = callsOf('mobile.sync.refresh').length;
+    oauthReauth.mockResolvedValueOnce({ ok: true, account: { ...acct('a1'), needsAuth: false } });
+    expect(await store.getState().reauth('a1')).toEqual({ ok: true });
+    expect(oauthReauth).toHaveBeenLastCalledWith('a1');
+    expect(store.getState().accounts.find((a) => a.id === 'a1').needsAuth).toBe(false);
+    expect(store.getState().syncState.a1).toBeUndefined();
+    expect(callsOf('mobile.sync.refresh').length).toBe(refreshes + 1);
   });
 
   it('addAccount reports the engine code, and a thrown error as a code too', async () => {

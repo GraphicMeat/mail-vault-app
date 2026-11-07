@@ -179,4 +179,21 @@ object PopupUrlPolicy {
             null
         }
     }
+    /** The two hosts the sign-in sheet opens, as links.rs `AUTH_HOSTS`. */
+    private val AUTH_HOSTS = setOf("accounts.google.com", "login.microsoftonline.com")
+
+    /**
+     * Whether `url` may open in the sign-in sheet (`openAuth`): the same rule as links.rs
+     * `auth_url_ok`, with the same test rows. `https` only, the host exactly one of the two (no
+     * subdomain, no trailing dot), no user info, no port but the default 443.
+     */
+    fun authUrlOk(url: String?): Boolean {
+        if (url.isNullOrEmpty() || url.length > MAX_URL_LEN) return false
+        val uri = try { URI(url) } catch (e: Exception) { return false }
+        if (uri.isOpaque || uri.scheme?.lowercase() != "https") return false
+        if (uri.rawUserInfo != null) return false
+        if (uri.port != -1 && uri.port != 443) return false
+        val host = uri.host?.lowercase() ?: return false
+        return host in AUTH_HOSTS
+    }
 }

@@ -1,5 +1,6 @@
 // The accounts error codes the engine answers with (`mobile.accounts.add` / `.test` replies and
-// `mobile.sync.state` events), each to its translated message. Literal keys, so the catalog tests
+// `mobile.sync.state` events, `mobile.oauth.finish` replies), each to its translated message.
+// `NO_BROWSER` is the page's own: the sign-in sheet could not open (the shell's `NO_APP`). Literal keys, so the catalog tests
 // can see every one; an unknown code reads as the generic failure.
 export const ERROR_KEYS = Object.freeze({
   AUTH_FAILED: 'mobile.error.AUTH_FAILED',
@@ -10,6 +11,9 @@ export const ERROR_KEYS = Object.freeze({
   INVALID: 'mobile.error.INVALID',
   SMTP_FAILED: 'mobile.error.SMTP_FAILED',
   INTERNAL: 'mobile.error.INTERNAL',
+  NEEDS_AUTH: 'mobile.error.NEEDS_AUTH',
+  CANCELLED: 'mobile.error.CANCELLED',
+  NO_BROWSER: 'mobile.error.NO_BROWSER',
 });
 
 /** A code the UI knows, or `INTERNAL` for anything else (a transport failure, a new code). */
