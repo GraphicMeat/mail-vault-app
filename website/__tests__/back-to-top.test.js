@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve('website');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PAGES = ['404','ai-setup','billing-cancel','billing-success','blog','changelog','docs','download-stats','faq','features','get-started','index','mentioned-in','pricing','privacy','start','terms','thank-you','updates-confirm','use-cases','windows-download'].map(n => n + '.html');
 const load = (path) => new JSDOM(readFileSync(path, 'utf8')).window.document;
 const english = (file) => load(resolve(root, file));
@@ -34,17 +35,18 @@ describe('footer Back to top', () => {
   });
 
   it('keeps root index.html footer in sync with website/index.html', () => {
-    const rootDoc = load(resolve('index.html'));
+    const rootDoc = load(resolve(root, '..', 'index.html'));
     expect(rootDoc.querySelector('.mv-footer-bottom').outerHTML).toBe(english('index.html').querySelector('.mv-footer-bottom').outerHTML);
     expect(rootDoc.body.id).toBe('top');
   });
 
   it('enables smooth scroll only for pages with the top anchor', () => {
-    expect(css).toMatch(/html:has\(body#top\)\s*\{\s*scroll-behavior:smooth;?\s*\}/);
-    expect(css).toMatch(/@media\(prefers-reduced-motion:reduce\)\s*\{\s*html:has\(body#top\)\s*\{\s*scroll-behavior:auto;?\s*\}\s*\}/);
+    expect(css).toMatch(/html:has\(body#top\)\s*\{\s*scroll-behavior:\s*smooth;?\s*\}/);
+    expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*html:has\(body#top\)\s*\{\s*scroll-behavior:\s*auto;?\s*\}\s*\}/);
   });
 
-  it.each(['blog/notion-mail-closing.html'])('leaves %s untouched', (file) => {
+  const LOCALES = ['de','es','fr','it','ja','ko','pt-br','zh'];
+  it.each([...LOCALES.map(l => `${l}/pricing.html`), 'blog/notion-mail-closing.html'])('leaves %s untouched', (file) => {
     const doc = english(file);
     expect(doc.querySelector('a[href="#top"]')).toBeNull();
     expect(doc.querySelector('body#top')).toBeNull();
