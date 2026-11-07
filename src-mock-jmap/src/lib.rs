@@ -100,6 +100,9 @@ pub enum Fault {
     HangUpEventSourceAfterOneEvent,
     /// This method name answers `["error", {"type":"serverFail"}, tag]`.
     ServerFail { method: String },
+    /// Like `ServerFail`, only for a call of `method` whose arguments (as JSON text) contain
+    /// `needle`: one kind of `Email/get` fails while the others answer.
+    ServerFailIf { method: String, needle: String },
     /// `Email/set` answers this email's update `notUpdated`/`notFound` and applies nothing,
     /// though the email is still there: a server whose index is behind its store.
     UpdateNotFound { id: String },

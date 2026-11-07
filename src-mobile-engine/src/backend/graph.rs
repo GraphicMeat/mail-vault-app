@@ -578,7 +578,7 @@ impl Backend for GraphBackend<'_> {
         } else {
             (None, Some(content))
         };
-        Ok(Some(RawBody { parts, html, text, attachments_unknown }))
+        Ok(Some(RawBody { parts, html, text, attachments_unknown, truncated: false }))
     }
 
     fn part_range(&mut self, folder: &FolderRow, uid: u32, section: &str, offset: u64, len: u32) -> Result<Option<Vec<u8>>, Fail> {

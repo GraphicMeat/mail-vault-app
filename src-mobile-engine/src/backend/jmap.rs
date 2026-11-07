@@ -138,14 +138,16 @@ fn part_info(v: &Value) -> Option<(PartInfo, String)> {
 }
 
 /// The first part of `list` of type `mime` whose value `values` holds.
-fn first_value(list: &Value, values: &Value, mime: &str) -> Option<String> {
+/// The text, and whether the server cut it short (`isTruncated`).
+fn first_value(list: &Value, values: &Value, mime: &str) -> Option<(String, bool)> {
     list.as_array()?.iter().find_map(|p| {
         let is = p["type"].as_str().is_some_and(|t| t.eq_ignore_ascii_case(mime));
         let id = p["partId"].as_str()?;
         if !is {
             return None;
         }
-        values[id]["value"].as_str().map(str::to_string)
+        let v = &values[id];
+        v["value"].as_str().map(|text| (text.to_string(), v["isTruncated"].as_bool() == Some(true)))
     })
 }
 
@@ -379,8 +381,11 @@ pub(crate) struct JmapBackend<'a> {
     mailboxes: Option<Vec<JMailbox>>,
     /// The last `window`: the folder's path and its listed email ids by uid.
     listed: Option<(String, HashMap<u32, String>)>,
-    /// The Email state read before the last `window`, and its folder: stored by `flags`.
+    /// The Email state read before the last `window`, and its folder.
     pass_state: Option<(String, String)>,
+    /// The state `flags` read changes against the stored one up to, and its folder: stored by
+    /// `pass_done`, once sync has written every flag it vouches for.
+    pending_state: Option<(String, String)>,
     /// The last parts read: folder, uid, and each part with its blob id.
     parts: Option<(String, u32, Vec<ListedPart>)>,
     streaming: Option<Streaming>,
@@ -412,6 +417,7 @@ impl<'a> JmapBackend<'a> {
             mailboxes: None,
             listed: None,
             pass_state: None,
+            pending_state: None,
             parts: None,
             streaming: None,
         })
@@ -736,6 +742,15 @@ impl Backend for JmapBackend<'_> {
             uids.extend(chunk.iter().cloned().zip(got));
         }
         let listed: HashMap<u32, String> = ids.into_iter().filter_map(|id| uids.get(&key(folder, &id)).map(|u| (*u, id))).collect();
+        // A mapping no longer listed and with no row (its headers never came): nothing else
+        // would ever remove it. One with a row goes with the row (`sync::delete_uids`).
+        let rows: HashSet<u32> = self.shared.read(|c| {
+            let mut st = c.prepare_cached("SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2")?;
+            let rows = st.query_map((&account, folder), |r| r.get::<_, i64>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows.into_iter().map(|u| u as u32).collect())
+        })?;
+        let orphans: Vec<u32> = uids.values().copied().filter(|u| !listed.contains_key(u) && !rows.contains(u)).collect();
+        self.remap(folder, &orphans, None, &[])?;
         let window: Vec<u32> = listed.keys().copied().collect();
         self.listed = Some((folder.to_string(), listed));
         self.pass_state = Some((folder.to_string(), state));
@@ -752,7 +767,11 @@ impl Backend for JmapBackend<'_> {
         let ids: Vec<String> = wanted.iter().map(|(_, id)| id.clone()).collect();
         let got = self.call(async |c| c.get_emails(&ids, HEADER_PROPS).await)?;
         let by_id: HashMap<&str, &Value> = got.list.iter().filter_map(|e| Some((e["id"].as_str()?, e))).collect();
-        Ok(wanted.iter().filter_map(|(uid, id)| by_id.get(id.as_str()).map(|e| to_header(e, *uid))).collect())
+        // Listed, then gone before its headers came: no row will hold its mapping, so it goes now.
+        let missing: Vec<u32> = wanted.iter().filter(|(_, id)| !by_id.contains_key(id.as_str())).map(|(u, _)| *u).collect();
+        let headers = wanted.iter().filter_map(|(uid, id)| by_id.get(id.as_str()).map(|e| to_header(e, *uid))).collect();
+        self.remap(&folder.path, &missing, None, &[])?;
+        Ok(headers)
     }
 
     fn flags(&mut self, folder: &FolderRow, uids: &[u32]) -> Result<Vec<(u32, Flags)>, Fail> {
@@ -781,9 +800,9 @@ impl Backend for JmapBackend<'_> {
             };
             self.keyword_flags(wanted)?
         };
-        if let Some(state) = state.filter(|s| !s.is_empty()) {
-            self.store_state(&folder.path, &state)?;
-        }
+        // Stored only when the pass has written these flags (`pass_done`): stored now, a pass that
+        // stopped before its flag writes would leave those changes behind for good.
+        self.pending_state = state.filter(|s| !s.is_empty()).map(|s| (folder.path.clone(), s));
         Ok(out)
     }
 
@@ -801,6 +820,9 @@ impl Backend for JmapBackend<'_> {
         };
         let html = first_value(&v["htmlBody"], &v["bodyValues"], "text/html");
         let text = first_value(&v["textBody"], &v["bodyValues"], "text/plain");
+        // A value over `MAX_BODY_VALUE_BYTES` arrives cut: shown with a note, never cached.
+        let truncated = html.as_ref().or(text.as_ref()).is_some_and(|(_, cut)| *cut);
+        let (html, text) = (html.map(|(h, _)| h), text.map(|(t, _)| t));
         // An answer without the attachments list says nothing about them: shown, never cached.
         let (parts, attachments_unknown) = match Self::attachments_of(&v) {
             Some(parts) => {
@@ -809,7 +831,7 @@ impl Backend for JmapBackend<'_> {
             }
             None => (Vec::new(), true),
         };
-        Ok(Some(RawBody { parts, html, text, attachments_unknown }))
+        Ok(Some(RawBody { parts, html, text, attachments_unknown, truncated }))
     }
 
     fn part_range(&mut self, folder: &FolderRow, uid: u32, section: &str, offset: u64, len: u32) -> Result<Option<Vec<u8>>, Fail> {
@@ -924,6 +946,15 @@ impl Backend for JmapBackend<'_> {
                 }
             }
         }
+    }
+
+    fn pass_done(&mut self, folder: &str) -> Result<(), Fail> {
+        if let Some((f, state)) = self.pending_state.take() {
+            if f == folder {
+                self.store_state(folder, &state)?;
+            }
+        }
+        Ok(())
     }
 
     fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {
@@ -1170,6 +1201,16 @@ mod tests {
         let (p, _) = part_info(&json!({"partId": "4", "blobId": "B", "type": "image/png", "cid": "<img1@x>"})).unwrap();
         assert_eq!((p.content_id.as_deref(), p.disposition.as_deref()), (Some("img1@x"), Some("inline")));
         assert!(part_info(&json!({"blobId": "B"})).is_none(), "no partId: nothing to name it by");
+    }
+
+    #[test]
+    fn a_cut_body_value_says_so() {
+        let parts = json!([{"partId": "1", "type": "text/html"}]);
+        let cut = json!({"1": {"value": "<p>start", "isTruncated": true}});
+        assert_eq!(first_value(&parts, &cut, "text/html"), Some(("<p>start".to_string(), true)));
+        let whole = json!({"1": {"value": "<p>all</p>", "isTruncated": false}});
+        assert_eq!(first_value(&parts, &whole, "text/html"), Some(("<p>all</p>".to_string(), false)));
+        assert_eq!(first_value(&parts, &whole, "text/plain"), None);
     }
 
     #[test]

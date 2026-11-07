@@ -466,6 +466,11 @@ impl State {
         self.faults.iter().any(|f| matches!(f, Fault::HangUpEventSourceAfterOneEvent))
     }
 
+    pub fn server_fails_for(&self, method: &str, args: &Value) -> bool {
+        let text = args.to_string();
+        self.faults.iter().any(|f| matches!(f, Fault::ServerFailIf { method: m, needle } if m == method && text.contains(needle.as_str())))
+    }
+
     pub fn server_fails(&self, method: &str) -> bool {
         self.faults.iter().any(|f| matches!(f, Fault::ServerFail { method: m } if m == method))
     }

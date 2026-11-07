@@ -239,6 +239,12 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
           <button type="button" style={{ minHeight: '44px' }} onClick={retry}>{t('common.retry')}</button>
         </div>
       )}
+      {body?.truncated && (
+        // The server sent only the start of a very long message; the body was not cached.
+        <div className="mv-viewer__images" data-mv-truncated role="status">
+          <span>{t('mobile.viewer.truncated')}</span>
+        </div>
+      )}
       {remoteImages > 0 && !allowRemote && (
         <div className="mv-viewer__images">
           <span>{t('mobile.viewer.imagesBlocked')}</span>

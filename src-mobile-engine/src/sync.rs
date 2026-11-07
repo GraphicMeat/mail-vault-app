@@ -605,6 +605,7 @@ fn sync_folder_pass(
             (account, folder, mbox.uid_next, unseen, total, now_ms()),
         )
     })?;
+    backend.pass_done(folder)?;
     shared.pass_completed(account, folder, at);
     Ok((unseen, total))
 }

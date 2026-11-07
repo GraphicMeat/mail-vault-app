@@ -620,3 +620,65 @@ fn an_expired_jmap_session_connects_again_once() {
     assert_eq!((end["state"].as_str(), end["code"].as_str()), (Some("error"), Some("AUTH_FAILED")), "{end}");
     assert!(f.secrets.get(&f.account).unwrap().is_some());
 }
+
+#[test]
+fn a_pass_that_stops_after_its_flags_keeps_the_state_and_reads_them_again() {
+    let now = now_secs();
+    let f = setup(scenario(vec![email("a", "Alpha", now - 400), email("b", "Bravo", now - 300)]));
+    f.sync(None);
+    let token = || -> Option<String> {
+        f.db().query_row("SELECT token FROM sync_state WHERE account_id = ?1 AND folder = 'INBOX'", [&f.account], |r| r.get(0)).unwrap()
+    };
+    let before = token().expect("a first pass stores the state");
+
+    // Alpha is read on the server and a new email arrives; the pass reads the flags, then its
+    // header read fails, so the pass stops before it completes.
+    f.m.mutate(|s| {
+        s.set_keywords(ACC, "a", &["$seen"]);
+        s.add_email(ACC, "mb-inbox", email("c", "Charlie", now - 10));
+        s.faults.push(Fault::ServerFailIf { method: "Email/get".into(), needle: "header:List-Id".into() });
+    });
+    let end = f.try_sync(Some("INBOX"));
+    assert_eq!(end["state"], "error", "{end}");
+    assert_eq!(token().as_deref(), Some(before.as_str()), "the state waits for a pass that wrote everything");
+
+    // Those flag writes lost (an engine killed mid-pass): the next pass reads Alpha again.
+    f.db().execute("UPDATE messages SET seen = 0 WHERE account_id = ?1 AND subject = 'Alpha'", [&f.account]).unwrap();
+    f.m.mutate(|s| s.faults.clear());
+    f.sync(Some("INBOX"));
+    let row = f.rows("INBOX").into_iter().find(|r| r["subject"] == "Alpha").unwrap();
+    assert_eq!(row["seen"], true, "{row}");
+    assert!(f.uids("INBOX").contains_key("Charlie"));
+    assert_ne!(token().as_deref(), Some(before.as_str()), "stored once the pass completed");
+}
+
+#[test]
+fn a_mapping_with_no_row_is_cleaned_up_by_the_next_pass() {
+    let f = setup(scenario(vec![email("a", "Alpha", now_secs() - 400)]));
+    f.sync(None);
+    f.db()
+        .execute("INSERT INTO remote_ids (account_id, folder, uid, remote_id) VALUES (?1, 'INBOX', 9999, 'INBOX|ghost')", [&f.account])
+        .unwrap();
+    f.sync(Some("INBOX"));
+    let left: i64 = f.db().query_row("SELECT count(*) FROM remote_ids WHERE remote_id = 'INBOX|ghost'", [], |r| r.get(0)).unwrap();
+    assert_eq!(left, 0);
+    let kept: i64 = f.db().query_row("SELECT count(*) FROM remote_ids WHERE remote_id = 'INBOX|a'", [], |r| r.get(0)).unwrap();
+    assert_eq!(kept, 1, "a mapping with its row stays");
+}
+
+#[test]
+fn a_body_the_server_cuts_short_is_marked_and_not_cached() {
+    let long = "x".repeat(2 * 1024 * 1024 + 4096);
+    let raw = format!("From: Alice <alice@example.test>\r\nTo: {ME}\r\nSubject: Long\r\nMessage-ID: <long@example.test>\r\nDate: Mon, 05 Jan 2026 10:00:00 +0000\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{long}\r\n");
+    let e = ScenarioEmail { id: "long".into(), raw, keywords: vec![], received_at: iso(now_secs() - 60), also_in: vec![] };
+    let f = setup(scenario(vec![e, email("s", "Short", now_secs() - 30)]));
+    f.sync(None);
+    let uids = f.uids("INBOX");
+    let cached = |uid: i64| -> i64 { f.db().query_row("SELECT count(*) FROM bodies WHERE uid = ?1", [uid], |r| r.get(0)).unwrap() };
+    let body = f.body("INBOX", uids["Long"]);
+    assert_eq!(body["truncated"], true);
+    assert!(body["text"].as_str().unwrap_or("").len() <= 2 * 1024 * 1024);
+    assert_eq!(cached(uids["Long"]), 0, "never cached as the whole message");
+    assert_eq!(f.body("INBOX", uids["Short"])["truncated"], false);
+    assert_eq!(cached(uids["Short"]), 1);
+}

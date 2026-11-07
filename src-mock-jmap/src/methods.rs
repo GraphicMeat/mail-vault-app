@@ -76,7 +76,7 @@ pub fn handle_request(state: &mut State, account: &str, body: &[u8]) -> Result<V
             _ => return Err(problem(400, "urn:ietf:params:jmap:error:notRequest", "malformed method call")),
         };
         let out = resolve_refs(&args, &responses).and_then(|args| {
-            if state.server_fails(&name) {
+            if state.server_fails(&name) || state.server_fails_for(&name, &Value::Object(args.clone())) {
                 return Err(merr("serverFail", "injected ServerFail"));
             }
             dispatch(state, account, &name, &args)

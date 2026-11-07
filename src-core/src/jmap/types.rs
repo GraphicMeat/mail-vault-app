@@ -122,8 +122,17 @@ pub struct Session {
     /// The accounts the credentials reach, by id, as the server described them
     /// (`accountCapabilities` holds per-account limits such as
     /// `maxSizeAttachmentsPerEmail`).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "object_or_empty")]
     pub accounts: Map<String, Value>,
+}
+
+/// An object, or empty for anything else (`null`, a string, a list): a
+/// server's odd `accounts` never fails the session it came in.
+fn object_or_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Map<String, Value>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::Object(m) => m,
+        _ => Map::new(),
+    })
 }
 
 /// `urn:ietf:params:jmap:core` limits the client honours.
@@ -215,4 +224,20 @@ pub enum ImportResult {
     Created(Imported),
     /// The server already holds this message: a dedupe, not a failure.
     AlreadyExists { existing_id: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_session_reads_whatever_its_accounts_holds() {
+        let base = r#""apiUrl":"https://h/api","downloadUrl":"https://h/d","uploadUrl":"https://h/u""#;
+        for accounts in ["", r#","accounts":null"#, r#","accounts":"x""#, r#","accounts":[1]"#] {
+            let s: Session = serde_json::from_str(&format!("{{{base}{accounts}}}")).unwrap_or_else(|e| panic!("{accounts}: {e}"));
+            assert!(s.accounts.is_empty(), "{accounts}");
+        }
+        let s: Session = serde_json::from_str(&format!(r#"{{{base},"accounts":{{"a1":{{"name":"x"}}}}}}"#)).unwrap();
+        assert_eq!(s.accounts["a1"]["name"], "x");
+    }
 }

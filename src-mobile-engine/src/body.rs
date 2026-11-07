@@ -81,6 +81,8 @@ struct Body {
     stored: Stored,
     /// The attachments could not be listed this time: shown, never cached.
     attachments_unknown: bool,
+    /// Only the start of the text came: shown with a note, never cached.
+    truncated: bool,
 }
 
 impl Body {
@@ -99,7 +101,7 @@ impl Body {
         json!({
             "html": self.html, "text": self.text, "attachments": attachments,
             "remoteImages": self.stored.remote_images, "trackers": self.stored.trackers, "gone": false,
-            "attachmentsUnknown": self.attachments_unknown,
+            "attachmentsUnknown": self.attachments_unknown, "truncated": self.truncated,
         })
     }
 }
@@ -162,7 +164,8 @@ fn cap(shared: &Shared) -> u64 {
 }
 
 /// `mobile.message.body {accountId, folder, uid}` -> `{html, text, attachments: [{section,
-/// filename, mime, size, contentId, kind}], remoteImages, trackers, gone, attachmentsUnknown}`.
+/// filename, mime, size, contentId, kind}], remoteImages, trackers, gone, attachmentsUnknown,
+/// truncated}`. `truncated`: the server sent only the start of the text (shown, not cached).
 /// `kind` is `file`, or `link` for a Graph cloud link (`size` null; it cannot be fetched).
 /// `attachmentsUnknown`: the server could not list the attachments this time, so the list is
 /// empty for that reason and the body was not cached (the next open asks again). A network failure is an
@@ -202,7 +205,8 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
     };
     // A body whose attachments could not be listed is shown but not cached: cached, it would
     // read as a message with none (its sections refused, a forward without them) until evicted.
-    if !body.attachments_unknown {
+    // Nor is a body the server cut short: cached, it would read as the whole message.
+    if !body.attachments_unknown && !body.truncated {
         store(shared, &p, &body, &snippet).map_err(internal)?;
         evict(shared, cap(shared), &p).map_err(internal)?;
     }
@@ -227,7 +231,7 @@ fn cached(shared: &Shared, p: &BodyParams) -> Result<Option<Body>, EngineError> 
     // A row whose parts no longer read is refetched (and replaced) rather than trusted.
     Ok(row.and_then(|(html, text, parts)| {
         let stored: Stored = serde_json::from_str(parts.as_deref()?).ok()?;
-        Some(Body { html, text, stored, attachments_unknown: false })
+        Some(Body { html, text, stored, attachments_unknown: false, truncated: false })
     }))
 }
 
@@ -238,9 +242,10 @@ fn fetch(shared: &Shared, p: &BodyParams, stored_validity: Option<i64>) -> Resul
     let out = backend.body(&FolderRow::new(&p.folder, stored_validity), p.uid);
     // Signs out.
     drop(backend);
-    Ok(out?.map(|RawBody { parts, html, text, attachments_unknown }| {
+    Ok(out?.map(|RawBody { parts, html, text, attachments_unknown, truncated }| {
         let (mut body, snippet) = scanned(html, text, parts.into_iter().map(Part::from).collect());
         body.attachments_unknown = attachments_unknown;
+        body.truncated = truncated;
         (body, snippet)
     }))
 }
@@ -260,7 +265,7 @@ fn scanned(html: Option<String>, text: Option<String>, parts: Vec<Part>) -> (Bod
         trackers = scan.trackers.len() as u32;
         scan.cleaned.unwrap_or(h)
     });
-    (Body { html, text, stored: Stored { parts, remote_images, trackers }, attachments_unknown: false }, snippet)
+    (Body { html, text, stored: Stored { parts, remote_images, trackers }, attachments_unknown: false, truncated: false }, snippet)
 }
 
 /// Perf-gate screenshots: caches `html` / `text` as the body of a listed message, scanned the way

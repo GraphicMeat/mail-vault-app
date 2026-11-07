@@ -32,6 +32,8 @@ const MAX_REDIRECTS: usize = 5;
 const MAX_CHANGES: u64 = 500;
 /// The ids `all_email_ids` asks for per `Email/query`.
 const ID_PAGE: usize = 500;
+/// The most pages `query_mailbox_since` reads (`ID_PAGE` ids each when the server allows).
+const MAX_WINDOW_PAGES: usize = 200;
 /// The most hits a Message-ID lookup reads back (`find_message_id_in`).
 const MESSAGE_ID_HITS: usize = 50;
 
@@ -458,14 +460,20 @@ impl JmapClient {
     /// holds (a server may cap `limit`) until an empty page or the total; if
     /// the `queryState` moves between pages the run starts over once, then
     /// accepts the moving state. An id a shifting window hands out twice is
-    /// kept once.
+    /// kept once. Stops at `MAX_WINDOW_PAGES` requests, or at a page that
+    /// brings no id not seen already (a server that ignores `position`).
     pub async fn query_mailbox_since(&self, mailbox_id: &str, after: &str) -> Result<Vec<String>, JmapError> {
         let mut ids: Vec<String> = Vec::new();
         let mut seen: HashSet<String> = HashSet::new();
         let mut pos = 0usize;
         let mut query_state: Option<String> = None;
         let mut restarted = false;
+        let mut pages = 0usize;
         loop {
+            pages += 1;
+            if pages > MAX_WINDOW_PAGES {
+                break;
+            }
             let r = self
                 .method(
                     "Email/query",
@@ -499,8 +507,9 @@ impl JmapClient {
                 break;
             }
             pos += page.len();
+            let before = ids.len();
             ids.extend(page.into_iter().filter(|id| seen.insert(id.clone())));
-            if total.is_some_and(|t| pos >= t) {
+            if ids.len() == before || total.is_some_and(|t| pos >= t) {
                 break;
             }
         }

@@ -105,6 +105,9 @@ pub(crate) struct RawBody {
     /// The server could not list the attachments this time (`parts` is empty for that, not
     /// because there are none): the body is shown but not cached, and the next open asks again.
     pub(crate) attachments_unknown: bool,
+    /// The server sent only the start of the text (a JMAP body value over its cap): shown, never
+    /// cached as the whole message.
+    pub(crate) truncated: bool,
 }
 
 /// Where a move put its messages, when the server said: `(old uid, new uid)` pairs and the
@@ -220,6 +223,12 @@ pub(crate) trait Backend: Send {
         target: Option<&str>,
         before_wire: BeforeWire<'_>,
     ) -> Result<ApplyOutcome, Fail>;
+    /// The pass over `folder` wrote everything it read (flags, removals, new rows). A backend
+    /// commits here what must never run ahead of those writes (JMAP: the Email state its next
+    /// `flags` follows). Not called when the pass failed or stopped part way.
+    fn pass_done(&mut self, _folder: &str) -> Result<(), Fail> {
+        Ok(())
+    }
     /// Builds `email` (core's `smtp::build_mime`, under `email.message_id`) and submits it.
     /// `Ok` means the server accepted it; nothing is filed in Sent yet. A failure says whether
     /// the message may have gone out anyway ([`SendFail`]); its text is scrubbed, for the log.

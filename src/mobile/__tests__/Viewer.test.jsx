@@ -85,6 +85,14 @@ describe('Viewer', () => {
     expect(engine.calls.filter(([m]) => m === 'mobile.message.body').length).toBe(2);
   });
 
+  it('says when the server sent only the start of the message', async () => {
+    engine.reply = body({ truncated: true });
+    renderViewer();
+    await waitFor(() => expect(screen.getByText(t('mobile.viewer.truncated'))).toBeTruthy());
+    expect(t('mobile.viewer.truncated')).not.toBe('mobile.viewer.truncated');
+    expect(frame()).toBeTruthy();
+  });
+
   it('shows no attachments note for a body whose list is known', async () => {
     renderViewer();
     await waitFor(() => expect(frame()).toBeTruthy());

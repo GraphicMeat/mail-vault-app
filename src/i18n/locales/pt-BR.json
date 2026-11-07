@@ -4386,5 +4386,6 @@
   "mobile.add.confirmHostYes": "Enviar e entrar",
   "mobile.error.HTTPS_REQUIRED": "A URL do servidor precisa começar com https://.",
   "mobile.error.JMAP_NOT_FOUND": "Nenhum servidor JMAP encontrado para este endereço. Digite a URL do servidor em Avançado.",
-  "mobile.error.CONFIRM_HOST": "Confira o endereço do servidor antes de entrar."
+  "mobile.error.CONFIRM_HOST": "Confira o endereço do servidor antes de entrar.",
+  "mobile.viewer.truncated": "Esta mensagem é longa demais para ser exibida por completo."
 }
