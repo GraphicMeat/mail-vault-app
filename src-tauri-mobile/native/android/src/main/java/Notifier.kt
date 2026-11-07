@@ -85,7 +85,9 @@ object Notifier {
 
     /** Hands the tap in `intent`, if any, to the shell, once (the extra is removed). */
     fun takeTap(activity: Activity, intent: Intent?) {
-        val payload = intent?.getStringExtra(EXTRA) ?: return
+        val payload = intent?.getStringExtra(EXTRA)
+        Log.i("MailVault", "MV_MOBILE {\"notificationIntent\":{\"tap\":${payload != null}}}")
+        if (payload == null) return
         intent.removeExtra(EXTRA)
         activity.intent?.removeExtra(EXTRA)
         nativeTapped(payload)

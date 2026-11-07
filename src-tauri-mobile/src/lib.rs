@@ -59,7 +59,7 @@ fn schedule_background(app: &tauri::AppHandle, on: bool) {
 /// uid?}` or `null`. The page calls it on mount (a cold launch's tap came before it existed) and
 /// on each `mobile.notification.open`; each tap is answered once.
 #[tauri::command]
-fn mobile_notification_take() -> Option<background::Tap> {
+async fn mobile_notification_take() -> Option<background::Tap> {
     background::take_tap()
 }
 
@@ -422,6 +422,8 @@ pub fn run() {
             let engine = match (app.path().app_data_dir(), &cache_dir) {
                 (Ok(data), Ok(cache)) => {
                     background::check_dirs(&data, cache);
+                    #[cfg(all(feature = "perf-gate", target_os = "ios"))]
+                    background::watch_device_check(cache.clone());
                     background::engine_with(&data, cache, background::open_platform)
                 }
                 (Err(e), _) => background::engine_failed(format!("app data dir: {e}")),

@@ -234,6 +234,7 @@ pub(crate) fn tapped(json: &str) {
         return;
     };
     *TAP.lock().unwrap_or_else(|e| e.into_inner()) = Some(tap.clone());
+    crate::log_line(&format!("MV_MOBILE {}", json!({ "notificationTap": { "held": true, "announced": APP.get().is_some() } })));
     if let Some(app) = APP.get() {
         let _ = app.emit("mobile-event", json!({ "name": NOTIFICATION_OPEN, "payload": tap }));
     }
@@ -331,6 +332,29 @@ pub unsafe extern "C" fn mv_set_languages(csv: *const std::ffi::c_char) {
     // SAFETY: a NUL-terminated string the caller keeps alive for the call.
     let text = unsafe { std::ffi::CStr::from_ptr(csv) }.to_string_lossy().into_owned();
     set_languages(text.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect());
+}
+
+/// Perf-gate iOS builds only: the device check's trigger, since the simulator launches no
+/// background task and lldb cannot attach from an ssh session. A file `device-check-run` in the
+/// cache dir starts the same run a `BGAppRefreshTask` does (`mv_ios_background_run_now`), and
+/// `device-check-tap` (a payload JSON) is handed over as a notification tap.
+#[cfg(all(feature = "perf-gate", target_os = "ios"))]
+pub(crate) fn watch_device_check(cache: PathBuf) {
+    extern "C" {
+        fn mv_ios_background_run_now();
+    }
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(1));
+        if std::fs::remove_file(cache.join("device-check-run")).is_ok() {
+            // SAFETY: a Swift function with no arguments, exported with `@_cdecl`.
+            unsafe { mv_ios_background_run_now() };
+        }
+        let tap = cache.join("device-check-tap");
+        if let Ok(text) = std::fs::read_to_string(&tap) {
+            let _ = std::fs::remove_file(&tap);
+            tapped(text.trim());
+        }
+    });
 }
 
 pub(crate) fn set_languages(languages: Vec<String>) {

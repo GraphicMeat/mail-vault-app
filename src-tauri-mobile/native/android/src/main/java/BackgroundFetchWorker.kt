@@ -9,6 +9,7 @@
 package com.mailvault.mvnative
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -24,6 +25,8 @@ class BackgroundFetchWorker(context: Context, params: WorkerParameters) : Worker
         val json = try {
             nativeFetch(app.dataDir.absolutePath, app.cacheDir.absolutePath, BUDGET_MS)
         } catch (e: Throwable) {
+            // The class only, never a message that could carry mail.
+            Log.w("MailVault", "MV_MOBILE {\"backgroundError\":\"${e.javaClass.simpleName}\"}")
             return Result.success()
         }
         Notifier.post(app, json)

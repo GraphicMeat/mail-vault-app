@@ -1,5 +1,6 @@
 package com.mailvault.app
 
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.webkit.WebView
@@ -33,6 +34,14 @@ class MainActivity : TauriActivity() {
       nativeAfterActivity()
     }
     applySystemBarAppearance(resources.configuration)
+  }
+
+  // A notification tap while the app's task still exists (in recents, process gone) re-creates
+  // the activity from the task's first intent and hands the tap's intent here, before the native
+  // plugin is registered: keep it as the activity's intent so the plugin's load() finds it.
+  override fun onNewIntent(intent: Intent) {
+    setIntent(intent)
+    super.onNewIntent(intent)
   }
 
   private external fun nativeBeforeActivity()

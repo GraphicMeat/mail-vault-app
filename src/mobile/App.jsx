@@ -197,7 +197,12 @@ function App() {
     let live = true;
     const take = () => {
       takeNotificationTap().then(
-        (next) => { if (live && next) setTap(next); },
+        (next) => {
+          if (live && next) {
+            logLine({ notificationOpen: 'taken' });
+            setTap(next);
+          }
+        },
         (err) => logLine({ error: errorOf(err) }),
       );
     };
@@ -214,6 +219,7 @@ function App() {
   useEffect(() => {
     if (!DEMO_NOTIFY || status !== 'ready') return;
     (async () => {
+      logLine({ demo: 'notify-start' });
       const imap = QUERY.get('imap');
       if (imap) {
         const at = imap.lastIndexOf(':');
@@ -387,7 +393,9 @@ function App() {
         logLine({ error: errorOf(err) });
       }
       const row = index >= 0 ? list.rowAt(index) : undefined;
-      if (row && row.uid === tap.uid) onOpen(row, index);
+      const found = Boolean(row && row.uid === tap.uid);
+      logLine({ notificationOpen: found ? 'message' : 'gone' });
+      if (found) onOpen(row, index);
       else useMobileStore.getState().showNotice('mobile.viewer.gone');
     })();
   }, [tap, status, onOpen]);
