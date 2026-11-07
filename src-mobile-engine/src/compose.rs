@@ -76,6 +76,10 @@ pub(crate) struct Fields {
     #[serde(deserialize_with = "nullable")]
     pub(crate) references: String,
     pub(crate) attachments: Vec<Attached>,
+    /// What the page started the message as (`new`, `reply`, `replyAll`, `forward`), so a
+    /// reopened draft keeps its title. Not used for sending.
+    #[serde(deserialize_with = "nullable", skip_serializing_if = "String::is_empty")]
+    pub(crate) mode: String,
 }
 
 impl Fields {
@@ -422,7 +426,7 @@ fn safe_name(name: &str) -> String {
 
 /// `mobile.compose.prepare {accountId, mode: "new"|"reply"|"replyAll"|"forward", folder?, uid?,
 /// originalLabel?, dateLabel?, fromLabel?, dateFieldLabel?, subjectLabel?}` -> `{to, cc, subject, quote, quoteText, inReplyTo, references,
-/// quotePending, attachments: [{handle, name, size, mime}], pending: [{section, filename, mime,
+/// quotePending, attachments: [{handle, name, size, mime, section}], pending: [{section, filename, mime,
 /// size}]}`. Answered from mobile.db (sync keeps Cc, Reply-To and References in `thread_json`);
 /// no sign-in on the tap. `quote` is core's quoted HTML, `quoteText` the same as plain text for a
 /// text body. A body not cached is fetched for at most 3 s; past that `quotePending` is true and
@@ -527,7 +531,7 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
                         Ok(size) => {
                             let handle = format!("out/{}/{}", dir.file_name().and_then(|d| d.to_str()).unwrap_or(""), name);
                             let mime = a["mime"].as_str().filter(|m| !m.is_empty()).unwrap_or_else(|| mime_of(&name));
-                            attachments.push(json!({ "handle": handle, "name": name, "size": size, "mime": mime }));
+                            attachments.push(json!({ "handle": handle, "name": name, "size": size, "mime": mime, "section": section }));
                         }
                         Err(e) => {
                             let _ = std::fs::remove_dir_all(&dir);

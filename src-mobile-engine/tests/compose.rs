@@ -508,7 +508,7 @@ fn drafts_save_and_reload_with_handles() {
         .engine
         .rpc(
             "mobile.drafts.save",
-            json!({ "id": id, "accountId": f.account, "to": "rcpt@example.test", "subject": "Draft two", "text": "More written", "attachments": [{ "handle": handle }] }),
+            json!({ "id": id, "accountId": f.account, "to": "rcpt@example.test", "subject": "Draft two", "text": "More written", "mode": "forward", "attachments": [{ "handle": handle }] }),
         )
         .unwrap();
     assert_eq!(again["id"], id.as_str(), "saving with an id updates that draft");
@@ -523,6 +523,7 @@ fn drafts_save_and_reload_with_handles() {
     assert_eq!(d["accountId"], f.account.as_str());
     assert_eq!(d["to"], "rcpt@example.test");
     assert_eq!(d["text"], "More written");
+    assert_eq!(d["mode"], "forward", "a reopened draft keeps what it was started as: {d}");
     assert_eq!(d["attachments"][0]["handle"], handle.as_str(), "{d}");
     assert_eq!(d["attachments"][0]["name"], "plan.pdf");
     assert_eq!(d["attachments"][0]["size"], 14);
