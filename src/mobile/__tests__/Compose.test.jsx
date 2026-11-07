@@ -74,6 +74,7 @@ vi.mock('../transport.js', () => ({
   pickFiles: vi.fn(async () => []),
   openFile: vi.fn(async () => {}),
   shareFile: vi.fn(async () => {}),
+  takeNotificationTap: vi.fn(async () => null),
 }));
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };

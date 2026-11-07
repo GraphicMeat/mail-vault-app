@@ -61,6 +61,7 @@ vi.mock('../transport.js', () => ({
     engine.handlers.get(name).add(handler);
     return () => engine.handlers.get(name)?.delete(handler);
   }),
+  takeNotificationTap: vi.fn(async () => null),
 }));
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };

@@ -20,8 +20,13 @@
 // The outbox row (Outbox.jsx) sits between the header and the list while anything is unsent.
 //
 // Back (Android) closes the top layer (viewer, picker, sheet, compose) through `backStack.js`.
+//
+// A tapped new-mail notification (`{accountId, folder, uid?}`, held by the shell) is taken on
+// mount (a cold launch's tap came before the page) and on each `mobile.notification.open`: the app
+// opens that account and folder and the message, or says the message is gone. `?ui=notify`
+// (perf-gate only) turns notifications on and asks for the permission, for the device check.
 import React, { useCallback, useEffect, useState } from 'react';
-import { daemonCall, closeAuthSheet } from './transport.js';
+import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, takeNotificationTap } from './transport.js';
 import { useMobileStore } from './store.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
@@ -65,6 +70,11 @@ const DEMO_DRAFTS = PERF_BUILD && QUERY.get('ui') === 'drafts';
 // `?ui=signin` / `?ui=signin-close` (perf-gate only): the device check of the sign-in sheet. No
 // credentials are ever entered; the close variant proves `mobile_auth_close` takes the sheet down.
 const DEMO_SIGNIN = (PERF_BUILD && { signin: 'open', 'signin-close': 'close' }[QUERY.get('ui')]) || null;
+// `?ui=notify` (perf-gate only): notifications on and the permission asked, as the Settings
+// screen will (the device check of background fetch). With `&imap=127.0.0.1:port&smtp=port` it
+// first adds a password account on that local mock server (perf-gate shells allow plaintext to
+// loopback only).
+const DEMO_NOTIFY = PERF_BUILD && QUERY.get('ui') === 'notify';
 let demoComposeStarted = false;
 let viewerScriptStarted = false;
 let perfStarted = false;
@@ -159,6 +169,7 @@ function App() {
   const [pulled, setPulled] = useState(false);
   const [total, setTotal] = useState(null);
   const [perfGate, setPerfGate] = useState(false);
+  const [tap, setTap] = useState(null); // a notification tap waiting for the app to be ready
 
   // Stable: the store's actions never change, so this never re-runs the mount effect below.
   // (`getState()` itself returns a new object after every `set`; it must not be a dependency.)
@@ -178,6 +189,50 @@ function App() {
     if (PROBE) probeRun(PROBE);
     start();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notification taps: the shell's held one on mount, then each one it announces. Taking it is
+  // what opens it, so a tap announced and also taken on mount opens once.
+  useEffect(() => {
+    if (PERF) return undefined;
+    let live = true;
+    const take = () => {
+      takeNotificationTap().then(
+        (next) => { if (live && next) setTap(next); },
+        (err) => logLine({ error: errorOf(err) }),
+      );
+    };
+    take();
+    let off = () => {};
+    try {
+      off = listen('mobile.notification.open', take);
+    } catch {
+      // No event bridge (not in the shell): the mount take is all there is.
+    }
+    return () => { live = false; off(); };
+  }, []);
+
+  useEffect(() => {
+    if (!DEMO_NOTIFY || status !== 'ready') return;
+    (async () => {
+      const imap = QUERY.get('imap');
+      if (imap) {
+        const at = imap.lastIndexOf(':');
+        const host = imap.slice(0, at);
+        const added = await useMobileStore.getState().addAccount({
+          email: 'device-check@example.test', password: 'device-check', imapHost: host, imapPort: Number(imap.slice(at + 1)),
+          security: 'none', smtpHost: host, smtpPort: Number(QUERY.get('smtp')), smtpSecurity: 'starttls',
+        });
+        logLine({ demo: 'notify-account', ok: added.ok, code: added.code ?? null });
+      }
+      // The prompt answers only once someone taps it: not waited for.
+      requestNotificationPermission().then(
+        (permission) => logLine({ demo: 'notify-permission', permission }),
+        (err) => logLine({ demo: 'notify-permission', error: errorOf(err) }),
+      );
+      const settings = await daemonCall('mobile.settings.set', { notifications: 'on' }).catch((err) => ({ error: errorOf(err) }));
+      logLine({ demo: 'notify', settings });
+    })();
+  }, [status]);
 
   // The open folder's first page decides between the list, a spinner and a retry.
   const loadList = useCallback(() => {
@@ -303,6 +358,39 @@ function App() {
   }, []);
   const onClose = useCallback(() => setOpen(null), []);
   const closePanel = useCallback(() => setPanel(null), []);
+
+  // A tap opens its account and folder, then the message: from the list's first page (asked
+  // again once, in case the page held is older than the run that found the mail). A message no
+  // longer there says so; a summary's tap (no uid) stops at the folder.
+  useEffect(() => {
+    if (!tap || status !== 'ready') return;
+    setTap(null);
+    (async () => {
+      const store = useMobileStore.getState();
+      if (!(await store.openAt(tap.accountId, tap.folder))) return;
+      setPanel(null);
+      setDraftsOpen(false);
+      setOpen(null);
+      if (tap.uid == null) return;
+      const { list, activeAccountId, activeFolder } = useMobileStore.getState();
+      if (!list || activeAccountId !== tap.accountId || activeFolder !== tap.folder) return;
+      let index = -1;
+      try {
+        await list.ensure(0);
+        index = list.indexOfUid(tap.uid);
+        if (index < 0) {
+          list.invalidate(null, 0);
+          await list.ensure(0);
+          index = list.indexOfUid(tap.uid);
+        }
+      } catch (err) {
+        logLine({ error: errorOf(err) });
+      }
+      const row = index >= 0 ? list.rowAt(index) : undefined;
+      if (row && row.uid === tap.uid) onOpen(row, index);
+      else useMobileStore.getState().showNotice('mobile.viewer.gone');
+    })();
+  }, [tap, status, onOpen]);
   useBackLayer(Boolean(open), onClose);
   useBackLayer(Boolean(panel), closePanel);
 

@@ -394,6 +394,11 @@ export function createMobileStore() {
         if (get().notice?.id === id) set({ notice: null });
       },
 
+      /** Shows a one-line notice (a catalog key), as a dropped action does. */
+      showNotice(key) {
+        notice(key);
+      },
+
       /**
        * Loads accounts and opens the remembered (or first) account's folder, then refreshes it
        * (unless `sync` is false). Safe to call twice.
@@ -543,6 +548,17 @@ export function createMobileStore() {
       async selectAccount(id) {
         if (!get().accounts.some((a) => a.id === id)) return;
         await activate(id, savedFolder(id));
+      },
+
+      /**
+       * Opens `folder` of `accountId` (a notification tap): the account in front, then the folder,
+       * INBOX when the account has no such folder. Resolves once the list is the new one.
+       */
+      async openAt(accountId, folder) {
+        if (!get().accounts.some((a) => a.id === accountId)) return false;
+        if (get().activeAccountId !== accountId) await activate(accountId, folder);
+        else await get().selectFolder(folder);
+        return get().activeAccountId === accountId;
       },
 
       async selectFolder(path) {

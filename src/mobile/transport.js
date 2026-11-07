@@ -115,6 +115,37 @@ export async function closeAuthSheet() {
   }
 }
 
+// A tapped new-mail notification, `{ accountId, folder, uid? }` (`uid` absent for a summary), or
+// null. The shell holds the latest tap until it is taken, so the page asks on mount (a cold
+// launch's tap came before it) and on each `mobile.notification.open`; each tap is answered once.
+// Only the listed fields are passed on. Rejects with the shell's code: `INTERNAL`.
+export async function takeNotificationTap() {
+  const invoke = requireInvoke();
+  let tap;
+  try {
+    tap = await invoke('mobile_notification_take');
+  } catch (error) {
+    throw shellError(error);
+  }
+  if (!tap || typeof tap.accountId !== 'string' || typeof tap.folder !== 'string') return null;
+  return Number.isInteger(tap.uid)
+    ? { accountId: tap.accountId, folder: tap.folder, uid: tap.uid }
+    : { accountId: tap.accountId, folder: tap.folder };
+}
+
+// The system's notification permission prompt (iOS; Android 13 and later), answered
+// `{ granted }`. Turning notifications on in Settings asks this first. Rejects with the shell's
+// code: `INTERNAL`.
+export async function requestNotificationPermission() {
+  const invoke = requireInvoke();
+  try {
+    const reply = await invoke('mobile_notifications_permission');
+    return { granted: reply?.granted === true };
+  } catch (error) {
+    throw shellError(error);
+  }
+}
+
 // Engine events reach the page as one Tauri event, `mobile-event` `{ name, payload }`. This is the
 // only place mobile code subscribes; `handler` gets the payload of events called `name`. Returns
 // the unsubscribe, safe to call twice or before the bridge has answered.
