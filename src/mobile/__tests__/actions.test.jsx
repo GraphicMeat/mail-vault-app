@@ -371,21 +371,42 @@ describe('App', () => {
     expect(screen.getByText('a1@example.test')).toBeTruthy();
   });
 
-  it('viewer delete opens the next message; undo brings the deleted one back and sends nothing', async () => {
+  it('viewer delete closing onto the next message sends the delete at once', async () => {
     await mount();
     fireEvent.click(document.querySelector('[data-index="1"]')); // uid 4, read
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Mail 4' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: t('common.delete') }));
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Mail 3' })).toBeTruthy());
+    // The viewer moved on: no undo, the delete went; uid 3 was unread, so opening it marked it read.
+    expect(screen.queryByText(t('mobile.actions.deleted', { count: 1 }))).toBeNull();
+    await waitFor(() => expect(applies()).toEqual([
+      { accountId: 'a1', folder: 'INBOX', uids: [4], kind: 'delete' },
+      { accountId: 'a1', folder: 'INBOX', uids: [3], kind: 'seen' },
+    ]));
+  });
+
+  it('viewer delete of the last row closes to the list; undo brings it back and sends nothing', async () => {
+    await mount();
+    fireEvent.click(document.querySelector('[data-index="4"]')); // uid 1, the last row
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Mail 1' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('common.delete') }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Mail 1' })).toBeNull());
+    expect(screen.queryByText('Mail 1')).toBeNull();
     expect(screen.getByText(t('mobile.actions.deleted', { count: 1 }))).toBeTruthy();
-    // uid 3 was unread: opening it marked it read. The delete waits for its toast.
-    expect(applies()).toEqual([{ accountId: 'a1', folder: 'INBOX', uids: [3], kind: 'seen' }]);
     fireEvent.click(screen.getByRole('button', { name: t('mobile.actions.undo') }));
     expect(screen.queryByText(t('mobile.actions.deleted', { count: 1 }))).toBeNull();
+    await waitFor(() => expect(screen.getByText('Mail 1')).toBeTruthy());
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     expect(applies().filter((p) => p.kind === 'delete')).toEqual([]);
+  });
+
+  it('Back closes the folder drawer, not the app', async () => {
+    await mount();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
+    expect(screen.getByRole('dialog', { name: t('mobile.drawer.title') })).toBeTruthy();
     await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
-    await waitFor(() => expect(screen.getByText('Mail 4')).toBeTruthy());
+    expect(screen.queryByRole('dialog', { name: t('mobile.drawer.title') })).toBeNull();
+    expect(screen.getByText('a1@example.test')).toBeTruthy();
   });
 
   it('the toolbar flag goes to the engine at once', async () => {

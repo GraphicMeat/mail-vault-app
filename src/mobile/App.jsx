@@ -223,11 +223,10 @@ function App() {
     useMobileStore.getState().refresh();
   }, []);
   // The viewer keeps the account and folder the row was opened from, whatever the list does next.
-  // Opening a message sends a deferred move or delete first, and marks the message read.
+  // Opening a message marks it read.
   const onOpen = useCallback((row, index) => {
     const s = useMobileStore.getState();
     const { activeAccountId: accountId, activeFolder: folder } = s;
-    s.flush();
     s.markSeen(accountId, folder, row);
     setOpen({ row: row.seen ? row : { ...row, seen: true }, index, accountId, folder });
   }, []);
@@ -250,7 +249,8 @@ function App() {
     setOpen(null);
   }, [open]);
   // Delete closes the message and opens the next row of the list (the one below it), if any.
-  // The delete waits out its undo toast; opening the next row this way does not send it.
+  // Closing onto another message sends the delete at once (no undo); with no next row the viewer
+  // closes to the list and the delete waits out its undo toast.
   const onViewerDelete = useCallback(() => {
     if (!open) return;
     const s = useMobileStore.getState();
@@ -259,6 +259,7 @@ function App() {
     const next = sameList && Number.isInteger(index) ? s.list.rowAt(index + 1) : undefined;
     s.act('delete', { accountId, folder, uids: [open.row.uid] });
     if (next) {
+      s.flush();
       s.markSeen(accountId, folder, next);
       setOpen({ row: next.seen ? next : { ...next, seen: true }, index, accountId, folder });
     } else {
