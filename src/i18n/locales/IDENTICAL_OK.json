@@ -106,6 +106,8 @@
   "mobile.compose.pickPhotos",
   "mobile.compose.quoteDate",
   "mobile.compose.showCc",
+  "mobile.settings.notifications",
+  "mobile.settings.version",
   "netActivity.account",
   "netActivity.host",
   "netActivity.ok",

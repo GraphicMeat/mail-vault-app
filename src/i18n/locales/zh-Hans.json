@@ -4391,5 +4391,18 @@
   "mobile.notify.newMessage": "新邮件",
   "mobile.notify.summary_one": "{{count}} 封新邮件",
   "mobile.notify.summary_other": "{{count}} 封新邮件",
-  "mobile.notify.channel": "新邮件通知"
+  "mobile.notify.channel": "新邮件通知",
+  "mobile.settings.title": "设置",
+  "mobile.settings.accounts": "账户",
+  "mobile.settings.notifications": "通知",
+  "mobile.settings.notifyToggle": "新邮件通知",
+  "mobile.settings.notifyHint": "MailVault 关闭时有新邮件到达会通知你。检查时间由系统决定，最快约每 15 分钟一次。",
+  "mobile.settings.notifyDenied": "MailVault 的通知已被屏蔽。请在手机的系统设置中开启，然后重试。",
+  "mobile.settings.preview": "显示预览",
+  "mobile.settings.previewHint": "显示发件人和主题。关闭后只显示“新邮件”和账户。",
+  "mobile.settings.about": "关于",
+  "mobile.settings.version": "版本 {{version}}",
+  "mobile.settings.source": "源代码已在 GitHub 公开",
+  "mobile.settings.loadFailed": "无法加载设置。",
+  "mobile.settings.saveFailed": "无法保存该设置，请重试。"
 }

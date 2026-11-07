@@ -4391,5 +4391,18 @@
   "mobile.notify.newMessage": "New message",
   "mobile.notify.summary_one": "{{count}} new message",
   "mobile.notify.summary_other": "{{count}} new messages",
-  "mobile.notify.channel": "New mail"
+  "mobile.notify.channel": "New mail",
+  "mobile.settings.title": "Settings",
+  "mobile.settings.accounts": "Accounts",
+  "mobile.settings.notifications": "Notifications",
+  "mobile.settings.notifyToggle": "New mail notifications",
+  "mobile.settings.notifyHint": "Get a notification when new mail arrives while MailVault is closed. The system decides when to check, about every 15 minutes at best.",
+  "mobile.settings.notifyDenied": "Notifications are blocked for MailVault. Turn them on in your phone's system settings, then try again.",
+  "mobile.settings.preview": "Show preview",
+  "mobile.settings.previewHint": "Show the sender and subject. Off shows only \"New message\" and the account.",
+  "mobile.settings.about": "About",
+  "mobile.settings.version": "Version {{version}}",
+  "mobile.settings.source": "Source is live on GitHub",
+  "mobile.settings.loadFailed": "Couldn't load the settings.",
+  "mobile.settings.saveFailed": "Couldn't save the setting. Try again."
 }

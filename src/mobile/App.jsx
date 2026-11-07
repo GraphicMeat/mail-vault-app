@@ -42,6 +42,7 @@ import Toasts from './Toasts.jsx';
 import Compose from './Compose.jsx';
 import OutboxRow from './Outbox.jsx';
 import DraftsList from './DraftsList.jsx';
+import Settings from './Settings.jsx';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -67,6 +68,8 @@ const DEMO_COMPOSE = (PERF_BUILD && { compose: 'new', reply: 'reply' }[QUERY.get
 const DEMO_OUTBOX = PERF_BUILD && QUERY.get('ui') === 'outbox';
 // `?ui=drafts` (perf-gate only): the drafts list over two saved drafts of the seed account.
 const DEMO_DRAFTS = PERF_BUILD && QUERY.get('ui') === 'drafts';
+// `?ui=settings` (perf-gate only): the settings screen open, for screenshots.
+const DEMO_SETTINGS = PERF_BUILD && QUERY.get('ui') === 'settings';
 // `?ui=signin` / `?ui=signin-close` (perf-gate only): the device check of the sign-in sheet. No
 // credentials are ever entered; the close variant proves `mobile_auth_close` takes the sheet down.
 const DEMO_SIGNIN = (PERF_BUILD && { signin: 'open', 'signin-close': 'close' }[QUERY.get('ui')]) || null;
@@ -165,6 +168,7 @@ function App() {
   const [open, setOpen] = useState(null);
   const [compose, setCompose] = useState(null); // { key, accountId, mode, original?, draftId? }
   const [draftsOpen, setDraftsOpen] = useState(DEMO_DRAFTS);
+  const [settingsOpen, setSettingsOpen] = useState(DEMO_SETTINGS);
   const drafts = useMobileStore((s) => s.drafts);
   const [pulled, setPulled] = useState(false);
   const [total, setTotal] = useState(null);
@@ -462,7 +466,13 @@ function App() {
     const { activeAccountId: accountId } = useMobileStore.getState();
     if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new', draftId: id });
   }, []);
+  const onSettings = useCallback(() => {
+    setPanel(null);
+    setSettingsOpen(true);
+  }, []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
   useBackLayer(draftsOpen, closeDrafts);
+  useBackLayer(settingsOpen, closeSettings);
   const onSelectFolder = useCallback((path) => {
     setPanel(null);
     useMobileStore.getState().selectFolder(path);
@@ -594,6 +604,7 @@ function App() {
           onClose={closePanel}
           drafts={drafts.length}
           onDrafts={onDrafts}
+          onSettings={onSettings}
         />
       )}
       {panel === 'switcher' && (
@@ -630,6 +641,7 @@ function App() {
         />
       )}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
+      {settingsOpen && <Settings onClose={closeSettings} />}
       {compose && (
         <Compose
           key={compose.key}

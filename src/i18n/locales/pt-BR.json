@@ -4391,5 +4391,18 @@
   "mobile.notify.newMessage": "Nova mensagem",
   "mobile.notify.summary_one": "{{count}} nova mensagem",
   "mobile.notify.summary_other": "{{count}} novas mensagens",
-  "mobile.notify.channel": "Novos e-mails"
+  "mobile.notify.channel": "Novos e-mails",
+  "mobile.settings.title": "Configurações",
+  "mobile.settings.accounts": "Contas",
+  "mobile.settings.notifications": "Notificações",
+  "mobile.settings.notifyToggle": "Notificações de novos e-mails",
+  "mobile.settings.notifyHint": "Receba uma notificação quando chegar um novo e-mail com o MailVault fechado. O sistema decide quando verificar, no máximo a cada 15 minutos.",
+  "mobile.settings.notifyDenied": "As notificações estão bloqueadas para o MailVault. Ative-as nas configurações do sistema do telefone e tente de novo.",
+  "mobile.settings.preview": "Mostrar prévia",
+  "mobile.settings.previewHint": "Mostra o remetente e o assunto. Desativado, mostra apenas “Nova mensagem” e a conta.",
+  "mobile.settings.about": "Sobre",
+  "mobile.settings.version": "Versão {{version}}",
+  "mobile.settings.source": "O código-fonte está no GitHub",
+  "mobile.settings.loadFailed": "Não foi possível carregar as configurações.",
+  "mobile.settings.saveFailed": "Não foi possível salvar a configuração. Tente de novo."
 }

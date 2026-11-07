@@ -1,13 +1,14 @@
 // The folder drawer: the active account's folders, depth first as the engine lists them, with
 // unread counts. Special-use folders get their translated name; a folder that cannot be opened
 // (`noselect`) is shown as a heading for its children. Names come from `folders.js`. Below the
-// folders, Drafts (the account's local drafts, with their count) opens the drafts list.
+// folders, Drafts (the account's local drafts, with their count) opens the drafts list; the footer's
+// Settings opens the settings screen.
 import React from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
 import { folderLabel } from './folders.js';
 
-export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts }) {
+export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, onSettings }) {
   const t = useT();
   return (
     <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
@@ -53,6 +54,13 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
             {drafts > 0 && (
               <span className="mv-folder__count" aria-label={t('mobile.drafts.count', { count: drafts })}>{drafts}</span>
             )}
+          </button>
+        </div>
+      )}
+      {onSettings && (
+        <div className="mv-drawer__local mv-drawer__footer">
+          <button type="button" className="mv-folder" data-mv-settings onClick={onSettings}>
+            <span className="mv-folder__name">{t('mobile.settings.title')}</span>
           </button>
         </div>
       )}
