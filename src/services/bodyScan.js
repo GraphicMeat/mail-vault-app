@@ -90,6 +90,14 @@ export const LINK_ALERT_STYLE = `
   }
 `;
 
+/**
+ * Whether a renderer that fetches images itself (Blitz) may load remote content
+ * for this scan. An unscanned body is still drawn, with remote content off: the
+ * same refusal UNSCANNED_HEAD gives the iframe. Drawing nothing left the reader
+ * empty whenever a scan failed or ran out of time.
+ */
+export const remoteAllowed = (scan) => !!scan?.scanned && !scan.holding;
+
 /** What this scan's frame must refuse, or nothing. Every frame carries this, however it builds its head. */
 export const refusalHead = (scan) => (scan?.holding ? EXTERNAL_HELD_HEAD : scan && !scan.scanned ? UNSCANNED_HEAD : '');
 

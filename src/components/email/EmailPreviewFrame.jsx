@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { buildEmailIframeHtml, getEmailBodyContent } from '../../utils/emailIframeTemplate';
-import { useBodyScan, refusalHead } from '../../services/bodyScan';
+import { useBodyScan, refusalHead, remoteAllowed } from '../../services/bodyScan';
 import { ExternalContentBar } from './ExternalContentBar';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../../hooks/useBodyPrivacy';
@@ -50,8 +50,8 @@ export function EmailPreviewFrame({ html, title, message = null }) {
   useMailFonts(frameRef, () => fitHeight(frameRef.current));
 
   if (Alt) {
-    // The alternative renderer fetches images itself: it only ever gets a scanned body.
-    if (!scan?.scanned) return null;
+    // Blitz fetches images itself: an unscanned body is drawn with remote content off (remoteAllowed).
+    if (!scan) return null;
     // Light, capped at 2000 and scrolling past it, like the frame's height cap.
     // Links stay inert, as in the script-less frame.
     return (
@@ -68,7 +68,7 @@ export function EmailPreviewFrame({ html, title, message = null }) {
         message={message}
         sizing={{ collapsedMax: 2000 }}
         style={{ width: '100%' }}
-        allowRemote={!scan.holding}
+        allowRemote={remoteAllowed(scan)}
       />
       </>
     );

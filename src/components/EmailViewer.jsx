@@ -47,7 +47,7 @@ import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
-import { useBodyScan, scanForFrame, scanHead, refusalHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
+import { useBodyScan, remoteAllowed, scanForFrame, scanHead, refusalHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
 import { ExternalContentBar } from './email/ExternalContentBar';
 import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder, vaultHas } from '../stores/slices/unifiedHelpers';
@@ -890,13 +890,13 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
                 backgroundColor: emailColors.background,
               }}
             >
-              {/* The alternative renderer fetches images itself: it only ever gets a scanned body. */}
-              {AltBody ? (!bodyScan?.scanned ? null : (
+              {/* Blitz fetches images itself: an unscanned body is drawn with remote content off (remoteAllowed). */}
+              {AltBody ? (!bodyScan ? null : (
                 <AltBody
                   ref={altBodyRef} surface="reader" messageKey={scopeKey} bodyHtml={altBodyHtml} indicatorCss={indicatorCss}
                   plainText={selectedEmail.text} theme={{ dark: emailDarkMode, palette }} signatureDisplay={signatureDisplay}
                   foldQuotes privacy={privacyOn} searchQuery={searchQueryForHighlight} accountId={selectedEmail._accountId}
-                  message={selectedEmail} onLink={onAltLink} sizing="content" allowRemote={!bodyScan.holding}
+                  message={selectedEmail} onLink={onAltLink} sizing="content" allowRemote={remoteAllowed(bodyScan)}
                 />
               )) : (
                 <iframe

@@ -42,7 +42,7 @@ import { useViewBuilderStore } from '../../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
-import { useBodyScan, scanForFrame, scanHead, refusalHead, checkLinkAlert, LINK_ALERT_STYLE } from '../../services/bodyScan';
+import { useBodyScan, remoteAllowed, scanForFrame, scanHead, refusalHead, checkLinkAlert, LINK_ALERT_STYLE } from '../../services/bodyScan';
 import { ExternalContentBar } from './ExternalContentBar';
 import { recordTrackerSummary, recordLinkAlert } from '../../services/rowVerdicts';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
@@ -281,8 +281,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
           className="rounded-lg overflow-hidden mt-2 max-w-full"
           style={{ backgroundColor: emailColors.background }}
         >
-          {/* The alternative renderer fetches images itself: it only ever gets a scanned body. */}
-          {Alt ? (!bodyScan?.scanned ? null : (
+          {/* Blitz fetches images itself: an unscanned body is drawn with remote content off (remoteAllowed). */}
+          {Alt ? (!bodyScan ? null : (
             <Alt
               ref={altRef} surface="thread" messageKey={scopeKey} bodyHtml={altBody} indicatorCss={altIndicator}
               plainText={loadedEmail.text || loadedEmail.textBody || ''} theme={{ dark: isDark, palette }}
@@ -293,7 +293,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
                 // A read-only copy (the compose pane) composes nothing, as the iframe path.
                 openMailtoCompose: readOnly ? () => {} : openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
               })}
-              sizing="content" style={{ minHeight: 100 }} allowRemote={!bodyScan.holding}
+              sizing="content" style={{ minHeight: 100 }} allowRemote={remoteAllowed(bodyScan)}
             />
           )) : (
             <iframe

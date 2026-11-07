@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- In the Blitz renderer, a message no longer opens to an empty reading pane when MailVault could not check it for trackers in time, as could happen right after you clicked a new-mail notification. It now shows with remote images held back, as the Web renderer already did. The same applies to threads, the full view, original messages and previews.
 - On macOS, MailVault no longer quits when you drag a screenshot thumbnail into a Compose window before macOS has finished saving the file. A drag that brings no file in now does nothing.
 - Adding a personal Microsoft account that uses your own domain (an Outlook.com account with a custom address, such as name@yourdomain.com) now works. It used to fail with "Nothing answered on outlook.office365.com, port 993". MailVault now asks Microsoft whether the address is a personal account and, if so, connects it the way it connects Outlook.com and Hotmail accounts.
 - Sending from an alias of a Microsoft account no longer fails with "Microsoft refused to send as". When Microsoft will not send as the alias, the mail goes out as the account address with the alias set as Reply-To, so replies still reach the alias.

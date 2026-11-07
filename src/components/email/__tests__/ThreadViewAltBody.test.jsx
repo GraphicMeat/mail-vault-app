@@ -29,8 +29,10 @@ vi.mock('../../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 // one link flagged, so the alternative renderer gets the scanned body and the marks.
 vi.mock('../../../services/bodyScan', async (orig) => {
   const { stubBodyScan, bodyScanAnswer } = await import('../../../test/bodyScan');
-  return stubBodyScan(orig, (html, opts) => bodyScanAnswer(html, opts.links
-    ? { html: `${html}<!--scanned-->`, alerts: [{ level: 'red' }], maxAlertLevel: 'red' } : {}));
+  // A body marked `unscanned-body` gets the answer of a failed or timed-out scan.
+  return stubBodyScan(orig, (html, opts) => (html.includes('unscanned-body') ? bodyScanAnswer(html, { scanned: false })
+    : bodyScanAnswer(html, opts.links
+      ? { html: `${html}<!--scanned-->`, alerts: [{ level: 'red' }], maxAlertLevel: 'red' } : {})));
 });
 
 const { ThreadView } = await import('../ThreadView');
@@ -100,6 +102,15 @@ describe('ThreadView with an alternative body renderer', () => {
     expect(p.signatureDisplay).toBe('smart');
     expect(p.message.uid).toBe(2);
     expect(p.messageKey).toBeTruthy();
+  });
+
+  it('draws an unscanned body through Alt with remote content refused', () => {
+    bodies.set(emailKey(newest), { status: 'loaded', email: { ...newest, html: '<p class="unscanned-body">Newest body</p>', text: 'Newest body' } });
+    const { container } = render(<ThreadView thread={thread} />);
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(screen.getAllByTestId('alt-body')).toHaveLength(1);
+    expect(last().bodyHtml).toContain('Newest body');
+    expect(last().allowRemote).toBe(false);
   });
 
   it('web keeps the iframe', () => {

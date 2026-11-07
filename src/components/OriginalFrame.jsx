@@ -3,7 +3,7 @@ import { Sun, Moon } from 'lucide-react';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
-import { useBodyScan, refusalHead } from '../services/bodyScan';
+import { useBodyScan, refusalHead, remoteAllowed } from '../services/bodyScan';
 import { ExternalContentBar } from './email/ExternalContentBar';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getEmailColors } from '../utils/mailChrome';
@@ -84,8 +84,8 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
   );
   useBodyPrivacy(frameRef, srcDoc, { message });
   if (Alt) {
-    // The alternative renderer fetches images itself: it only ever gets a scanned body.
-    if (!scan?.scanned) return null;
+    // Blitz fetches images itself: an unscanned body is drawn with remote content off (remoteAllowed).
+    if (!scan) return null;
     return (
       <>
       <ExternalContentBar scan={scan} className="mb-2 shrink-0" />
@@ -100,7 +100,7 @@ export function OriginalFrame({ html, dark, padding = '12px 16px', title, classN
         sizing={autoSize ? 'content' : 'fill'}
         className={`block w-full rounded-md ${className}`}
         style={{ backgroundColor: getEmailColors(dark ? 'dark' : 'light', palette).background }}
-        allowRemote={!scan.holding}
+        allowRemote={remoteAllowed(scan)}
       />
       </>
     );

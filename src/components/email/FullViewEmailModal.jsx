@@ -15,7 +15,7 @@ import { X, Loader } from 'lucide-react';
 import { AttachmentItem } from '../EmailViewer';
 import { DownloadAllButton } from './AttachmentBar';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
-import { useBodyScan, refusalHead, checkLinkAlert } from '../../services/bodyScan';
+import { useBodyScan, refusalHead, checkLinkAlert, remoteAllowed } from '../../services/bodyScan';
 import { ExternalContentBar } from './ExternalContentBar';
 import { recordTrackerSummary } from '../../services/rowVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
@@ -406,7 +406,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
                 <span className="text-sm text-mail-text-muted">{t('email.fullView.loadingEmailContent')}</span>
               </div>
             </div>
-          ) : Alt ? (!fullScan?.scanned ? null : (
+          ) : Alt ? (!fullScan ? null : (
             <Alt
               ref={altRef} surface="fullView" messageKey={emailScopeKey(email, useMailStore.getState())} bodyHtml={frameBodyHtml}
               plainText={email.text || email.textBody || ''} theme={{ dark: isDark, palette }} foldQuotes={false}
@@ -415,7 +415,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
                 accountId: email?._accountId, linkSafetyEnabled, linkSafetyClickConfirm,
                 openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
               })}
-              sizing="fill" className="w-full h-full" allowRemote={!fullScan.holding}
+              sizing="fill" className="w-full h-full" allowRemote={remoteAllowed(fullScan)}
             />
           )) : (
             <iframe
