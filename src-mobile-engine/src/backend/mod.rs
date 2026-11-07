@@ -2,13 +2,19 @@
 //! a [`Backend`], never to a protocol: [`open`] picks the implementation from `accounts.kind`
 //! (`imap` today; Graph and JMAP later) and signs in.
 //!
-//! A backend does network work only: no `mobile.db` write, no event, no log line. The callers keep
-//! every write, its chunking and its order between the network steps. Every method blocks the
+//! A backend does the network work and nothing the list shows: no event, no log line, and no write
+//! to `messages`, `folders`, `bodies`, `attachments` or the journal. The callers keep those writes,
+//! their chunking and their order between the network steps. A backend may write its own mapping
+//! state, through the `&Shared` it was opened with: `remote_ids` and `uid_seq` (local uids for
+//! remote ids) and `sync_state` (delta tokens), at most 200 rows per write transaction, and never
+//! holding the writer across network I/O (fetch first, then write). Every method blocks the
 //! calling thread (the sync, replay or attachment worker; the RPC thread for a body) until the
 //! server answered. A failure's text has had the account's secrets scrubbed out already.
 //!
 //! Identity is `(account, folder path, u32 uid)` for every backend: IMAP's own uids, and for Graph
-//! and JMAP a local uid from `remote_ids`, with the remote folder id in `folders.path`.
+//! and JMAP a local uid from `remote_ids`, with the remote folder id in `folders.path`. A backend
+//! that assigns local uids assigns them in ascending received-date order, so sync's
+//! newest-uid-first fill matches the list's order.
 
 pub(crate) mod imap;
 
@@ -49,6 +55,8 @@ pub(crate) struct FolderInfo {
 /// A folder as a pass opens it.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Selected {
+    /// IMAP's UIDVALIDITY. A backend without one returns a stable constant (1): any value that
+    /// changes between passes makes sync wipe and refetch the folder every pass.
     pub(crate) uid_validity: i64,
     pub(crate) uid_next: Option<i64>,
     pub(crate) total: i64,
@@ -145,7 +153,9 @@ pub(crate) enum Change {
     Quiet,
 }
 
-/// Ends a [`Backend::wait_for_change`] from another thread.
+/// Ends a [`Backend::wait_for_change`] from another thread. Setting it cannot wake a blocked read:
+/// an implementation waits in short cycles (at most 1 s) and checks the flag between them, unless
+/// Task 11 adds a notifier.
 #[allow(dead_code)]
 #[derive(Debug, Default)]
 pub(crate) struct StopFlag(AtomicBool);
@@ -171,7 +181,8 @@ pub(crate) trait Backend: Send {
     /// count.
     fn window(&mut self, folder: &str, window_start_ms: i64) -> Result<Window, Fail>;
     /// The headers of `uids` (at most one write chunk). A uid the server no longer has is left out;
-    /// a generation other than `folder.uid_validity` fails the call.
+    /// a generation other than `folder.uid_validity` fails the call. May rely on state the backend
+    /// kept from the preceding [`Backend::window`] of the same pass (headers it already listed).
     fn headers(&mut self, folder: &FolderRow, uids: &[u32]) -> Result<Vec<Header>, Fail>;
     /// The flags of `uids`. A uid missing from the reply is not reported (the window decides what is
     /// gone); a generation other than `folder.uid_validity` fails the call.
@@ -200,14 +211,15 @@ pub(crate) trait Backend: Send {
     /// Sends one message (Task 5).
     #[allow(dead_code)]
     fn send(&mut self, raw: &[u8], envelope: &Envelope) -> Result<SendOutcome, Fail>;
-    /// Waits until `folder` changes on the server or `stop` is set (Task 11).
+    /// Waits until `folder` changes on the server or `stop` is set (Task 11). Checks `stop` at
+    /// least once a second (see [`StopFlag`]).
     #[allow(dead_code)]
     fn wait_for_change(&mut self, folder: &FolderRow, stop: &StopFlag) -> Result<Change, Fail>;
 }
 
 /// Signs in to `account_id` with the backend its `kind` names. `Fail::Gone` when the account does
-/// not exist.
-pub(crate) fn open(shared: &Shared, account_id: &str) -> Result<Box<dyn Backend>, Fail> {
+/// not exist. The backend may keep `shared` for its mapping writes (see the module doc).
+pub(crate) fn open<'a>(shared: &'a Shared, account_id: &str) -> Result<Box<dyn Backend + 'a>, Fail> {
     let kind: Option<String> =
         shared.read(|c| c.query_row("SELECT kind FROM accounts WHERE id = ?1", [account_id], |r| r.get(0)).optional())?;
     match kind.as_deref() {
