@@ -449,6 +449,8 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
         })
         .map_err(internal)?;
     engine.shared().jmap.forget(&p.account_id);
+    // Its live listener, if it has one, hangs up now rather than at its next failed connect.
+    engine.live().stop_account(&p.account_id);
     // Rows first: a failure here leaves a secret for an account that is gone, and repeating the
     // call (which still reaches this line) removes it.
     engine.secrets().delete(&p.account_id).map_err(internal)?;

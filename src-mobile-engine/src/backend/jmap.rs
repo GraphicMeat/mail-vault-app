@@ -35,7 +35,7 @@
 //! server's `Retry-After` (capped) a few times as a transient condition. One session per account
 //! is kept in [`Sessions`] so a message open does not fetch the session again.
 
-use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Window};
+use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
 use crate::accounts::{self, failure, load_account, map_error, AccountRow, Code};
 use crate::actions::Kind;
 use crate::db::{lock, Engine, Shared};
@@ -396,6 +396,8 @@ pub(crate) struct JmapBackend<'a> {
     /// The last parts read: folder, uid, and each part with its blob id.
     parts: Option<(String, u32, Vec<ListedPart>)>,
     streaming: Option<Streaming>,
+    /// The live EventSource stream, open across waits.
+    events: Option<EventStream>,
 }
 
 impl<'a> JmapBackend<'a> {
@@ -427,6 +429,7 @@ impl<'a> JmapBackend<'a> {
             pending_state: None,
             parts: None,
             streaming: None,
+            events: None,
         })
     }
 
@@ -1007,8 +1010,139 @@ impl Backend for JmapBackend<'_> {
         Ok(())
     }
 
-    fn wait_for_change(&mut self, _folder: &FolderRow, _stop: &StopFlag) -> Result<Change, Fail> {
-        Err(Fail::unsupported("wait for change"))
+    fn wait_for_change(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail> {
+        if self.client.event_source_url().is_none() {
+            // No push: the Email state every `watch.poll`, against the one the last pass stored.
+            if !watch.nap(watch.poll) {
+                return Ok(Change::Quiet);
+            }
+            let state = self.call(async |c| c.email_state().await)?;
+            return Ok(if self.stored_state(&folder.path)?.as_deref() == Some(state.as_str()) { Change::Quiet } else { Change::Changed });
+        }
+        if self.events.is_none() {
+            let resp = self.call(async |c| c.open_event_source(EVENT_TYPES, EVENT_PING_SECS).await)?;
+            self.events = Some(EventStream { resp, parser: Sse::default() });
+        }
+        loop {
+            if watch.stopped() {
+                return Ok(Change::Quiet);
+            }
+            let stream = self.events.as_mut().expect("opened above");
+            // Short reads, so a stop is seen within one. A dead stream ends on core's read-idle
+            // timeout (the server pings every minute).
+            let read = block_on(async { async_std::future::timeout(STOP_CHECK, stream.resp.chunk()).await });
+            let bytes = match read {
+                Err(_) => continue,
+                Ok(Ok(Some(bytes))) => bytes,
+                Ok(Ok(None)) => {
+                    self.events = None;
+                    return Err(Fail::Code(Code::HostUnreachable, "the EventSource stream closed".into()));
+                }
+                Ok(Err(e)) => {
+                    self.events = None;
+                    let text = self.scrub(format!("EventSource read failed: {e}"));
+                    return Err(Fail::Code(Code::HostUnreachable, text));
+                }
+            };
+            let events = stream.parser.feed(&bytes);
+            for (kind, data) in events {
+                if kind == "state" && self.pushed_email_change(&folder.path, &data)? {
+                    return Ok(Change::Changed);
+                }
+            }
+        }
+    }
+}
+
+impl JmapBackend<'_> {
+    /// A pushed StateChange names an Email state for this JMAP account other than the one the
+    /// last pass of `folder` stored. Another account's entry, or an unreadable one, is no change.
+    fn pushed_email_change(&self, folder: &str, data: &str) -> Result<bool, Fail> {
+        let Ok(change) = serde_json::from_str::<Value>(data) else {
+            return Ok(false);
+        };
+        let Some(pushed) = change["changed"][self.client.account_id()]["Email"].as_str() else {
+            return Ok(false);
+        };
+        Ok(self.stored_state(folder)?.as_deref() != Some(pushed))
+    }
+}
+
+/// What the live stream asks to hear about.
+const EVENT_TYPES: &str = "Email,Mailbox";
+/// The server's keep-alive interval on the live stream.
+const EVENT_PING_SECS: u32 = 60;
+/// The most one event's lines may hold before the parser drops it (a server that never ends an
+/// event must not grow memory without bound).
+const MAX_EVENT_BYTES: usize = 1024 * 1024;
+
+/// The live EventSource response and what has been read of it.
+struct EventStream {
+    resp: reqwest::Response,
+    parser: Sse,
+}
+
+/// A Server-Sent Events reader (the parts JMAP uses: `event:`, `data:`, comments, the blank line
+/// that ends an event). An event over [`MAX_EVENT_BYTES`] is dropped whole.
+#[derive(Default)]
+struct Sse {
+    /// The current line, not yet ended.
+    line: Vec<u8>,
+    kind: String,
+    data: Vec<String>,
+    /// Bytes held for the current event (its line included).
+    held: usize,
+    /// The current event went over the cap: skip it to its end.
+    skipping: bool,
+}
+
+impl Sse {
+    /// Feeds bytes; returns every event they ended, as `(type, data)` (`message` when no type).
+    fn feed(&mut self, bytes: &[u8]) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for &b in bytes {
+            if b != b'\n' {
+                self.held += 1;
+                if self.held > MAX_EVENT_BYTES {
+                    self.skipping = true;
+                    self.line.clear();
+                    self.kind.clear();
+                    self.data.clear();
+                } else if !self.skipping {
+                    self.line.push(b);
+                }
+                continue;
+            }
+            let mut line = std::mem::take(&mut self.line);
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            if line.is_empty() {
+                if !self.skipping && (!self.data.is_empty() || !self.kind.is_empty()) {
+                    let kind = if self.kind.is_empty() { "message".to_string() } else { std::mem::take(&mut self.kind) };
+                    out.push((kind, self.data.join("\n")));
+                }
+                self.kind.clear();
+                self.data.clear();
+                self.held = 0;
+                self.skipping = false;
+                continue;
+            }
+            if self.skipping || line[0] == b':' {
+                continue;
+            }
+            let line = String::from_utf8_lossy(&line);
+            let (field, value) = match line.split_once(':') {
+                Some((f, v)) => (f, v.strip_prefix(' ').unwrap_or(v)),
+                None => (line.as_ref(), ""),
+            };
+            match field {
+                "event" => self.kind = value.to_string(),
+                "data" => self.data.push(value.to_string()),
+                _ => {}
+            }
+        }
+        out
     }
 }
 
@@ -1199,6 +1333,29 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn server_sent_events_split_across_reads() {
+        let mut p = Sse::default();
+        assert!(p.feed(b"event: st").is_empty());
+        assert!(p.feed(b"ate\r\ndata: {\"a\":").is_empty());
+        let got = p.feed(b"1}\r\n\r\n: a comment\n\nevent: ping\ndata: {}\n\ndata: x\ndata: y\n\n");
+        assert_eq!(
+            got,
+            vec![("state".to_string(), "{\"a\":1}".to_string()), ("ping".to_string(), "{}".to_string()), ("message".to_string(), "x\ny".to_string())]
+        );
+    }
+
+    #[test]
+    fn an_endless_event_is_dropped_and_the_next_one_read() {
+        let mut p = Sse::default();
+        let big = vec![b'x'; MAX_EVENT_BYTES + 10];
+        assert!(p.feed(b"event: state\ndata: ").is_empty());
+        assert!(p.feed(&big).is_empty());
+        assert!(p.line.len() <= MAX_EVENT_BYTES, "held {}", p.line.len());
+        assert!(p.feed(b"\n\n").is_empty(), "the oversized event is dropped");
+        assert_eq!(p.feed(b"event: state\ndata: {}\n\n"), vec![("state".to_string(), "{}".to_string())]);
+    }
 
     #[test]
     fn keys_are_folder_qualified_and_split_back() {

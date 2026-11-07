@@ -28,6 +28,9 @@ sha2 = "0.10"
 base64 = "0.22"
 # JMAP session URLs as typed (the same url core already builds).
 url = "2"
+# The type of core's JMAP EventSource response, read chunk by chunk by the live thread (the same
+# reqwest core already builds; no features of its own).
+reqwest = { version = "0.12", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

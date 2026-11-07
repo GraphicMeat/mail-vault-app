@@ -1706,6 +1706,36 @@ impl GraphClient {
         Ok((rows, list.next_link))
     }
 
+    /// The newest message of a folder (by received time) as `(id, lastModifiedDateTime)`, `None`
+    /// for an empty folder: one small request, the mobile engine's live poll compares it with the
+    /// last one and syncs only on a difference. A failure is `failure_text`.
+    pub async fn newest_in(&self, folder_id: &str) -> Result<Option<(String, Option<String>)>, String> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Newest {
+            id: String,
+            last_modified_date_time: Option<String>,
+        }
+        let url = format!(
+            "{}/me/mailFolders/{}/messages?$top=1&$orderby=receivedDateTime desc&$select=id,lastModifiedDateTime",
+            graph_base(),
+            percent_encode(folder_id)
+        );
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph newest_in request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "newest_in").await);
+        }
+        let list: GraphListResponse<Newest> = resp
+            .json()
+            .await
+            .map_err(|e| format!("Graph newest_in parse error: {}", e))?;
+        Ok(list.value.into_iter().next().map(|m| (m.id, m.last_modified_date_time)))
+    }
+
     /// One folder by its id or a well-known name (`inbox`): its name and counts.
     /// `well_known_name` and `storage_key` are left empty (no `$batch` here).
     pub async fn get_folder(&self, folder_id: &str) -> Result<GraphMailFolder, String> {

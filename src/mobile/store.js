@@ -221,7 +221,10 @@ export function createMobileStore() {
       const wanted = folder && folders.some((f) => f.path === folder && !f.noselect) ? folder : INBOX;
       open(accountId, wanted);
       set({ status: 'ready' });
-      if (get().autoSync) await get().refresh();
+      if (!get().autoSync) return;
+      // New mail live on the account now in front (the engine stops the previous one's listener).
+      get().appState();
+      await get().refresh();
     }
 
     function onFolderChanged(p) {
@@ -492,7 +495,11 @@ export function createMobileStore() {
           const { [accountId]: _state, ...syncState } = s.syncState;
           return { accounts: s.accounts.map((a) => (a.id === accountId ? { ...a, ...account } : a)), syncState };
         });
-        if (get().activeAccountId === accountId) await get().refresh();
+        if (get().activeAccountId === accountId) {
+          // A parked account's live listener ended; signed in again, it listens again.
+          if (get().autoSync) get().appState();
+          await get().refresh();
+        }
         return { ok: true };
       },
 
@@ -525,6 +532,7 @@ export function createMobileStore() {
           writeStorage(STORAGE_ACCOUNT, null);
           writeStorage(STORAGE_FOLDER, null);
           set({ status: 'noAccount', activeAccountId: null, activeFolder: null, folders: [], list: null, listGen: null });
+          get().appState();
           return;
         }
         // The next account in the list, or the one before when the last was removed.
@@ -545,6 +553,20 @@ export function createMobileStore() {
       },
 
       /**
+       * Tells the engine whether the page is in front and on which account, so it listens for new
+       * mail on that account's INBOX while the app is open (and on nothing in the background).
+       * Sent on every visibility change and account switch; a failure is left to the next one.
+       */
+      async appState(foreground = isForeground()) {
+        const { activeAccountId: accountId } = get();
+        try {
+          await daemonCall('mobile.app.state', accountId ? { foreground, accountId } : { foreground });
+        } catch {
+          // Nothing to show: the list still refreshes by hand and on the next foreground.
+        }
+      },
+
+      /**
        * Syncs the open folder. A refresh without a folder is the engine's folder list plus INBOX,
        * so the inbox gets that form (the folder list stays fresh) and any other folder is named.
        */
@@ -559,6 +581,11 @@ export function createMobileStore() {
       },
     };
   });
+}
+
+/** The page is on screen (no document, as in a unit test without jsdom: assume so). */
+function isForeground() {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
 }
 
 /** The app's one store. */

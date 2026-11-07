@@ -1,7 +1,7 @@
 //! [`Backend`] over IMAP, through mailvault-core. One signed-in session per backend; every method
 //! runs core's futures on the calling thread through [`crate::net::block_on`].
 
-use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Window};
+use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -9,9 +9,12 @@ use crate::net::block_on;
 use crate::secrets::Credential;
 use crate::sync::{self, Fail};
 use mailvault_core::abd::ops::Caps;
+use mailvault_core::imap::async_imap::extensions::idle::IdleResponse;
 use mailvault_core::imap::{self, abd_cmds, ImapPool, ImapSession, PartInfo};
 use mailvault_core::smtp::{self, OutgoingEmail};
+use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 /// What signing in to an account takes: core's settings and the account's secrets (kept only to
 /// scrub them out of an error before that error is logged). The one place the engine builds a
@@ -67,14 +70,17 @@ fn session_config(shared: &Shared, account: &str, refused: Option<&str>) -> Resu
 
 pub(crate) struct ImapBackend {
     session: Option<ImapSession>,
-    /// Outlives the session it made.
-    _pool: ImapPool,
+    /// Outlives the session it made; holds the server's CAPABILITY from the sign-in.
+    pool: ImapPool,
     secrets: Vec<String>,
     /// CAPABILITY, asked once per session, on the first action.
     caps: Option<Caps>,
     /// The settings the session signed in with; a send's SMTP side uses them too.
     config: imap::ImapConfig,
     gmail: bool,
+    /// The last no-IDLE poll's STATUS ([`ImapBackend::poll_change`]).
+    polled: Option<Polled>,
+    account: String,
 }
 
 impl ImapBackend {
@@ -97,10 +103,11 @@ impl ImapBackend {
             }
             other => other.map_err(|(f, _)| f),
         };
-        if out.is_ok() {
+        out.map(|mut b| {
             crate::oauth::sign_in_worked(shared, account);
-        }
-        out
+            b.account = account.to_string();
+            b
+        })
     }
 
     /// One sign-in; a failure comes back scrubbed, with the OAuth token it used.
@@ -108,7 +115,16 @@ impl ImapBackend {
         let pool = ImapPool::new();
         match block_on(imap::create_imap_session(&sc.config, &pool)) {
             Ok(session) => {
-                Ok(ImapBackend { session: Some(session), _pool: pool, secrets: sc.secrets, caps: None, config: sc.config, gmail: sc.gmail })
+                Ok(ImapBackend {
+                    session: Some(session),
+                    pool,
+                    secrets: sc.secrets,
+                    caps: None,
+                    config: sc.config,
+                    gmail: sc.gmail,
+                    polled: None,
+                    account: String::new(),
+                })
             }
             Err(e) => Err((sc.scrub(Fail::from(e)), sc.oauth_token)),
         }
@@ -287,6 +303,51 @@ async fn apply_in(
     Ok(ApplyOutcome::Done { gone, moved, kept: Vec::new() })
 }
 
+impl ImapBackend {
+    /// A server without IDLE: a STATUS of `folder` every `watch.poll`, a change when its counts
+    /// or next uid moved. The first one is held against what the last sync stored, so mail that
+    /// came in before the watch began is not taken as the baseline.
+    fn poll_change(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail> {
+        if self.polled.is_none() {
+            let now = self.status(&folder.path)?;
+            self.polled = Some(now);
+            let stored: Option<(Option<i64>, Option<i64>, i64)> = watch.shared.read(|c| {
+                c.query_row(
+                    "SELECT uid_validity, uid_next, total FROM folders WHERE account_id = ?1 AND path = ?2",
+                    (&self.account, &folder.path),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .optional()
+            })?;
+            let (validity, next, total) = (now.0.map(i64::from), now.1.map(i64::from), i64::from(now.2));
+            if stored != Some((validity, next, total)) {
+                return Ok(Change::Changed);
+            }
+        }
+        if !watch.nap(watch.poll) {
+            return Ok(Change::Quiet);
+        }
+        let now = self.status(&folder.path)?;
+        Ok(if self.polled.replace(now) == Some(now) { Change::Quiet } else { Change::Changed })
+    }
+
+    /// `(UIDVALIDITY, UIDNEXT, MESSAGES, UNSEEN)` of `path`.
+    fn status(&mut self, path: &str) -> Result<Polled, Fail> {
+        self.step(async |session| {
+            let st = imap::mailbox_status(session, path).await?;
+            Ok((st.uid_validity, st.uid_next, st.messages, st.unseen))
+        })
+    }
+}
+
+/// What a no-IDLE poll compares: `(UIDVALIDITY, UIDNEXT, MESSAGES, UNSEEN)`.
+type Polled = (Option<u32>, Option<u32>, u32, Option<u32>);
+
+/// The longest a stop waits for the server's answer to DONE.
+const DONE_WAIT_STOPPING: Duration = Duration::from_secs(1);
+/// The longest DONE may take after a change or before a re-issue (a slow link, not a dead one).
+const DONE_WAIT: Duration = Duration::from_secs(20);
+
 impl Backend for ImapBackend {
     fn folders(&mut self) -> Result<Vec<FolderInfo>, Fail> {
         self.step(async |session| {
@@ -419,7 +480,54 @@ impl Backend for ImapBackend {
         })
     }
 
-    fn wait_for_change(&mut self, _folder: &FolderRow, _stop: &StopFlag) -> Result<Change, Fail> {
-        Err(Fail::unsupported("wait for change"))
+    fn wait_for_change(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail> {
+        if self.session.is_none() {
+            return Err(Fail::Code(Code::HostUnreachable, "the IMAP session ended".into()));
+        }
+        // Filled at sign-in from the server's CAPABILITY.
+        if !block_on(self.pool.has_capability(&self.config, "IDLE")) {
+            return self.poll_change(folder, watch);
+        }
+        let mut session = self.session.take().expect("checked above");
+        let path = folder.path.clone();
+        // On a failure the session is dropped (the connection closes); the caller drops this
+        // backend and connects again.
+        let out = block_on(async move {
+            imap::select_mailbox(&mut session, &path).await?;
+            let mut handle = session.idle();
+            handle.init().await.map_err(|e| Fail::from(format!("IDLE failed: {e}")))?;
+            let started = Instant::now();
+            let change = loop {
+                let left = watch.reissue.saturating_sub(started.elapsed());
+                if watch.stopped() || left.is_zero() {
+                    break Change::Quiet;
+                }
+                // Short slices on the one IDLE, so a stop is seen within a slice. Silence is the
+                // normal state of an IDLE: core's stall deadline is off for the wait.
+                let response = {
+                    let (wait, _interrupt) = handle.wait_with_timeout(left.min(STOP_CHECK));
+                    imap::expecting_silence(wait).await
+                };
+                match response {
+                    Ok(IdleResponse::NewData(_)) => break Change::Changed,
+                    Ok(_) => {}
+                    Err(e) => return Err(Fail::from(format!("IDLE ended: {e}"))),
+                }
+            };
+            // Bounded: a stop must not hang on a connection that went away.
+            let done_wait = if watch.stopped() { DONE_WAIT_STOPPING } else { DONE_WAIT };
+            match async_std::future::timeout(done_wait, handle.done()).await {
+                Ok(Ok(session)) => Ok((session, change)),
+                Ok(Err(e)) => Err(Fail::from(format!("DONE failed: {e}"))),
+                Err(_) => Err(Fail::Code(Code::Timeout, "DONE got no answer".into())),
+            }
+        });
+        match out {
+            Ok((session, change)) => {
+                self.session = Some(session);
+                Ok(change)
+            }
+            Err(f) => Err(scrub(&self.secrets, f)),
+        }
     }
 }

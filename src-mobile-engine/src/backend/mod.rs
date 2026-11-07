@@ -23,11 +23,13 @@ pub(crate) mod jmap;
 
 use crate::actions::Kind;
 use crate::db::Shared;
-use crate::sync::Fail;
+use crate::sync::{self, Fail};
 use mailvault_core::imap::{EmailHeader, PartInfo};
 use mailvault_core::smtp::OutgoingEmail;
 use rusqlite::OptionalExtension;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// A folder as a backend call names it: its stored path (the remote id) and the generation the
 /// caller's uids belong to (IMAP's UIDVALIDITY). What `None` means is up to each method.
@@ -158,8 +160,7 @@ pub(crate) struct SendFail {
     pub(crate) terminal: bool,
 }
 
-/// What ended a [`Backend::wait_for_change`] (Task 11).
-#[allow(dead_code)]
+/// What ended a [`Backend::wait_for_change`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Change {
     /// The folder changed on the server: sync it.
@@ -169,13 +170,10 @@ pub(crate) enum Change {
 }
 
 /// Ends a [`Backend::wait_for_change`] from another thread. Setting it cannot wake a blocked read:
-/// an implementation waits in short cycles (at most 1 s) and checks the flag between them, unless
-/// Task 11 adds a notifier.
-#[allow(dead_code)]
+/// an implementation waits in short cycles (at most 1 s) and checks the flag between them.
 #[derive(Debug, Default)]
 pub(crate) struct StopFlag(AtomicBool);
 
-#[allow(dead_code)]
 impl StopFlag {
     pub(crate) fn stop(&self) {
         self.0.store(true, Ordering::SeqCst);
@@ -183,6 +181,44 @@ impl StopFlag {
 
     pub(crate) fn is_stopped(&self) -> bool {
         self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// How often a wait checks its [`StopFlag`] (and the engine closing) while it sleeps or listens.
+pub(crate) const STOP_CHECK: Duration = Duration::from_millis(250);
+
+/// What a [`Backend::wait_for_change`] runs under: the flag that ends it, the engine (whose
+/// closing ends it too), and its timing (`live.rs` holds the defaults; tests shorten them).
+#[derive(Clone)]
+pub(crate) struct Watch {
+    pub(crate) stop: Arc<StopFlag>,
+    pub(crate) shared: Arc<Shared>,
+    /// Between two cheap checks of a server that cannot push (Graph, IMAP without IDLE).
+    pub(crate) poll: Duration,
+    /// The longest one IMAP IDLE runs before it is ended and issued again.
+    pub(crate) reissue: Duration,
+}
+
+impl Watch {
+    /// Sleeps `wait` in [`STOP_CHECK`] slices; `false` as soon as the watch is stopped or the
+    /// engine closes.
+    pub(crate) fn nap(&self, wait: Duration) -> bool {
+        let until = Instant::now() + wait;
+        loop {
+            if self.stopped() {
+                return false;
+            }
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return true;
+            }
+            std::thread::sleep(left.min(STOP_CHECK));
+        }
+    }
+
+    /// Stopped, or the engine is closing.
+    pub(crate) fn stopped(&self) -> bool {
+        self.stop.is_stopped() || sync::not_closing(&self.shared).is_err()
     }
 }
 
@@ -237,10 +273,12 @@ pub(crate) trait Backend: Send {
     /// does that itself (`server_saved_sent`, Gmail over SMTP). Called after the outbox row is
     /// committed `sent`, so a failure here never sends the message again.
     fn file_sent(&mut self, sent: &SendOutcome) -> Result<(), Fail>;
-    /// Waits until `folder` changes on the server or `stop` is set (Task 11). Checks `stop` at
-    /// least once a second (see [`StopFlag`]).
-    #[allow(dead_code)]
-    fn wait_for_change(&mut self, folder: &FolderRow, stop: &StopFlag) -> Result<Change, Fail>;
+    /// Waits until `folder` changes on the server ([`Change::Changed`]) or the wait ends without
+    /// news ([`Change::Quiet`]: `watch` was stopped, or an IMAP IDLE reached `watch.reissue`).
+    /// Checks the stop flag at least once a second. IMAP idles (or, without IDLE, polls a STATUS
+    /// every `watch.poll`), JMAP reads its EventSource, Graph polls the newest message. A backend
+    /// keeps what it listens on across calls; after an `Err` the caller drops it.
+    fn wait_for_change(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail>;
 }
 
 /// Signs in to `account_id` with the backend its `kind` names. `Fail::Gone` when the account does

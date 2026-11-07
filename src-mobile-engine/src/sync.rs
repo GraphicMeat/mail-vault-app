@@ -64,8 +64,9 @@ struct Queue {
     cv: Condvar,
 }
 
-/// The engine's sync worker. The thread starts with the first job.
-#[derive(Default)]
+/// The engine's sync worker. The thread starts with the first job. A clone queues on the same
+/// worker (the live thread holds one).
+#[derive(Clone, Default)]
 pub(crate) struct Worker {
     queue: Arc<Queue>,
 }
@@ -92,6 +93,11 @@ impl Worker {
         st.pending.push_back(job);
         self.queue.cv.notify_one();
         Ok(())
+    }
+
+    /// Queues the normal INBOX pass of `account` (coalesced with one already queued).
+    pub(crate) fn enqueue_inbox(&self, shared: &Arc<Shared>, account: &str) -> Result<(), String> {
+        self.enqueue(shared, Job { account: account.to_string(), folder: Some("INBOX".into()) })
     }
 
     /// Asks the thread to exit after the pass it is in. Does not wait for it.

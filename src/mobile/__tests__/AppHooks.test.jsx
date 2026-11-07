@@ -7,7 +7,8 @@ import { render, cleanup, waitFor, screen, act } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const engine = vi.hoisted(() => ({ perfGate: false }));
+const engine = vi.hoisted(() => ({ perfGate: false, accounts: null }));
+const A1 = { id: 'a1', email: 'a1@example.test', displayName: 'A' };
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method) => {
@@ -15,7 +16,9 @@ vi.mock('../transport.js', () => ({
       case 'mobile.ping':
         return { engine: 'test', schema: 2, perfGate: engine.perfGate };
       case 'mobile.accounts.list':
-        return { accounts: [{ id: 'a1', email: 'a1@example.test', displayName: 'A' }] };
+        return { accounts: engine.accounts ?? [{ id: 'a1', email: 'a1@example.test', displayName: 'A' }] };
+      case 'mobile.app.state':
+        return { live: true };
       case 'mobile.folders.list':
         return { folders: [{ path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: 0, total: 1, depth: 0, noselect: false }] };
       case 'mobile.sync.refresh':
@@ -48,6 +51,8 @@ async function mount(perfGate) {
 }
 
 afterEach(() => {
+  engine.accounts = null;
+  delete document.visibilityState;
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -97,5 +102,36 @@ describe('test query hooks', () => {
     expect(config).toMatch(/'import\.meta\.env\.MV_PERF_GATE'/);
     const run = readFileSync(resolve(process.cwd(), 'scripts/mobile-run.sh'), 'utf8');
     expect(run).toMatch(/\*,perf-gate,\*\) export MV_PERF_GATE=1/);
+  });
+});
+
+describe('live mail', () => {
+  function setVisibility(state) {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+
+  it('sends mobile.app.state on visibility change and account switch', async () => {
+    engine.accounts = [A1, { id: 'a2', email: 'a2@example.test', displayName: 'B' }];
+    window.history.replaceState({}, '', '/mobile.html');
+    vi.resetModules();
+    const { daemonCall } = await import('../transport.js');
+    const { useMobileStore } = await import('../store.js');
+    const { default: App } = await import('../App.jsx');
+    daemonCall.mockClear(); // the mock outlives the module reset: earlier tests' calls are on it
+    render(<App />);
+    const states = () => daemonCall.mock.calls.filter(([m]) => m === 'mobile.app.state').map(([, p]) => p);
+
+    // At launch: listening on the account in front, with no visibility change yet.
+    await waitFor(() => expect(states()).toEqual([{ foreground: true, accountId: 'a1' }]));
+
+    setVisibility('hidden');
+    await waitFor(() => expect(states().at(-1)).toEqual({ foreground: false, accountId: 'a1' }));
+    setVisibility('visible');
+    await waitFor(() => expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a1' }));
+
+    await act(async () => { await useMobileStore.getState().selectAccount('a2'); });
+    await waitFor(() => expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a2' }));
+    expect(states()).toHaveLength(4);
   });
 });

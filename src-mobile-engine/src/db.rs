@@ -237,6 +237,8 @@ pub struct Engine {
     outbox: crate::outbox::Outbox,
     /// Attachment downloads into `<cache_dir>/att`.
     attachments: crate::attachments::Attachments,
+    /// New mail while the app is open: the foreground account's listener (`live.rs`).
+    live: crate::live::Live,
     /// `open` found a journal or queued sends: replay starts once the shell can hear its results, when the event
     /// sink is installed or the first RPC arrives, whichever is first.
     startup_replay: AtomicBool,
@@ -442,6 +444,7 @@ impl Engine {
             sync: crate::sync::Worker::default(),
             replay: crate::actions::Replay::default(),
             outbox: crate::outbox::Outbox::new(cache_dir),
+            live: crate::live::Live::default(),
             startup_replay: AtomicBool::new(journal || queued),
         };
         crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
@@ -477,6 +480,10 @@ impl Engine {
 
     pub(crate) fn attachments(&self) -> &crate::attachments::Attachments {
         &self.attachments
+    }
+
+    pub(crate) fn live(&self) -> &crate::live::Live {
+        &self.live
     }
 
     /// Tests: the most bytes one attachment job has held in a buffer at once (a raw chunk in, or
@@ -593,6 +600,7 @@ impl Drop for Engine {
         self.replay.stop();
         self.outbox.stop();
         self.attachments.stop();
+        self.live.stop();
         // Frees the loopback port if a sign-in was still open; flows are forgotten.
         self.shared.oauth.close();
     }

@@ -28,7 +28,7 @@
 //! the server's `Retry-After` (capped) and retries, a few times, as a transient condition and
 //! never as an error. `open` makes no request.
 
-use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Window};
+use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Watch, Window};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -41,6 +41,7 @@ use mailvault_core::imap::PartInfo;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Graph has no UIDVALIDITY: every folder's generation, constant so sync never wipes.
@@ -216,9 +217,50 @@ pub(crate) struct GraphBackend<'a> {
     streaming: Option<Streaming>,
     /// A request went through since `open`.
     worked: bool,
+    /// The live poll's last look at the inbox's newest message: `(id, lastModifiedDateTime)`,
+    /// `Some(None)` for an empty folder.
+    newest: Option<Option<(String, Option<String>)>>,
+    /// While a live wait runs: its stop, which also ends a throttle's wait.
+    stop: Option<Arc<StopFlag>>,
 }
 
 impl<'a> GraphBackend<'a> {
+    /// The live poll: every `watch.poll`, the folder's newest message (`$top=1`, id and
+    /// `lastModifiedDateTime`) against the last one seen; a change only when they differ, so a
+    /// quiet minute costs one small request and never a listing of the window. The first look
+    /// is a change when that newest message has no local uid yet (it came in since the last
+    /// sync).
+    fn poll_newest(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail> {
+        let remote = remote_folder(&folder.path).to_string();
+        if self.newest.is_none() {
+            let now = self.call(async |c| c.newest_in(&remote).await)?;
+            let known = match &now {
+                None => true,
+                Some((id, _)) => {
+                    let (account, path) = (self.account.as_str(), folder.path.as_str());
+                    self.shared.read(|c| {
+                        c.query_row(
+                            "SELECT 1 FROM remote_ids WHERE account_id = ?1 AND folder = ?2 AND remote_id = ?3",
+                            (account, path, id.as_str()),
+                            |_| Ok(()),
+                        )
+                        .optional()
+                    })?
+                    .is_some()
+                }
+            };
+            self.newest = Some(now);
+            if !known {
+                return Ok(Change::Changed);
+            }
+        }
+        if !watch.nap(watch.poll) {
+            return Ok(Change::Quiet);
+        }
+        let now = self.call(async |c| c.newest_in(&remote).await)?;
+        Ok(if self.newest.replace(now.clone()) == Some(now) { Change::Quiet } else { Change::Changed })
+    }
+
     /// The account's backend with its current token (refreshed when about to expire). No request:
     /// the first call proves the token.
     pub(crate) fn open(shared: &'a Shared, account: &str) -> Result<GraphBackend<'a>, Fail> {
@@ -236,6 +278,8 @@ impl<'a> GraphBackend<'a> {
             listed: None,
             streaming: None,
             worked: false,
+            newest: None,
+            stop: None,
         };
         backend.set_token(token);
         Ok(backend)
@@ -261,6 +305,9 @@ impl<'a> GraphBackend<'a> {
         let mut left = wait;
         while !left.is_zero() {
             sync::not_closing(self.shared).map_err(CallErr::Fail)?;
+            if self.stop.as_ref().is_some_and(|s| s.is_stopped()) {
+                return Err(CallErr::Fail(Fail::Closing));
+            }
             let step = left.min(Duration::from_secs(1));
             std::thread::sleep(step);
             left -= step;
@@ -762,8 +809,12 @@ impl Backend for GraphBackend<'_> {
         Ok(())
     }
 
-    fn wait_for_change(&mut self, _folder: &FolderRow, _stop: &StopFlag) -> Result<Change, Fail> {
-        Err(Fail::unsupported("wait for change"))
+    fn wait_for_change(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail> {
+        // A throttle's wait inside a call ends on the stop too.
+        self.stop = Some(Arc::clone(&watch.stop));
+        let out = self.poll_newest(folder, watch);
+        self.stop = None;
+        out
     }
 }
 

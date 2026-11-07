@@ -5418,6 +5418,7 @@ dependencies = [
  "mailvault-core",
  "mock-imap",
  "mock-jmap",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",

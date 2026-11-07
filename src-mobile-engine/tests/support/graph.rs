@@ -44,6 +44,8 @@ pub struct Msg {
     pub subject: String,
     pub from: String,
     pub received_ms: i64,
+    /// `lastModifiedDateTime`: set on arrival, moved on by every change.
+    pub modified_ms: i64,
     pub is_read: bool,
     pub flagged: bool,
     pub has_attachments: bool,
@@ -247,6 +249,7 @@ impl GraphMock {
             subject: subject.into(),
             from: "alice@example.com".into(),
             received_ms,
+            modified_ms: received_ms,
             is_read: false,
             flagged: false,
             has_attachments: false,
@@ -320,6 +323,7 @@ impl GraphMock {
     pub fn set_read(&self, id: &str, read: bool) {
         if let Some(m) = self.st().messages.iter_mut().find(|m| m.id == id) {
             m.is_read = read;
+            m.modified_ms += 1000;
         }
     }
 
@@ -381,6 +385,7 @@ fn message_json(m: &Msg, me: &str) -> Value {
         "ccRecipients": [],
         "receivedDateTime": rfc3339(m.received_ms),
         "sentDateTime": rfc3339(m.received_ms),
+        "lastModifiedDateTime": rfc3339(m.modified_ms),
         "isRead": m.is_read,
         "hasAttachments": m.has_attachments,
         "internetMessageId": m.internet_message_id,
@@ -644,6 +649,7 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             if let Some(s) = body["flag"]["flagStatus"].as_str() {
                 m.flagged = s == "flagged";
             }
+            m.modified_ms += 1000;
             let v = message_json(m, &me);
             ok_json(v)
         }
@@ -702,6 +708,7 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
                     subject: "(sent)".into(),
                     from: me.clone(),
                     received_ms: 0,
+                    modified_ms: 0,
                     is_read: true,
                     flagged: false,
                     has_attachments: false,

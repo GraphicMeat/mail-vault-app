@@ -267,10 +267,16 @@ function App() {
     })();
   }, [status]);
 
-  // Back in the foreground: sync the open folder.
+  // Back in the foreground: sync the open folder. Either way the engine hears it: it listens for
+  // new mail only while the app is in front.
   useEffect(() => {
     if (PERF) return undefined;
-    const onVisible = () => { if (document.visibilityState === 'visible') useMobileStore.getState().refresh(); };
+    const onVisible = () => {
+      const store = useMobileStore.getState();
+      const visible = document.visibilityState === 'visible';
+      store.appState(visible);
+      if (visible) store.refresh();
+    };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);

@@ -9,6 +9,7 @@ mod backend;
 mod body;
 mod compose;
 mod db;
+mod live;
 pub mod events;
 pub mod net;
 mod oauth;
