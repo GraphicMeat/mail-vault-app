@@ -14,6 +14,7 @@
 //
 // Compose (Compose.jsx) is a full-screen layer over the list or the viewer: the button at the
 // bottom right starts a new message, the viewer's More sheet a reply, reply to all or forward.
+// The drawer's Drafts entry opens the drafts list (DraftsList.jsx); a draft reopens in Compose.
 // The outbox row (Outbox.jsx) sits between the header and the list while anything is unsent.
 //
 // Back (Android) closes the top layer (viewer, picker, sheet, compose) through `backStack.js`.
@@ -33,6 +34,7 @@ import { useBackLayer } from './backStack.js';
 import Toasts from './Toasts.jsx';
 import Compose from './Compose.jsx';
 import OutboxRow from './Outbox.jsx';
+import DraftsList from './DraftsList.jsx';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -56,6 +58,8 @@ const DEMO_TOAST = PERF_BUILD && (QUERY.get('ui') === 'toast' || QUERY.get('toas
 const DEMO_MOVE = VIEWER_SCRIPT && QUERY.get('move') === '1';
 const DEMO_COMPOSE = (PERF_BUILD && { compose: 'new', reply: 'reply' }[QUERY.get('ui')]) || null;
 const DEMO_OUTBOX = PERF_BUILD && QUERY.get('ui') === 'outbox';
+// `?ui=drafts` (perf-gate only): the drafts list over two saved drafts of the seed account.
+const DEMO_DRAFTS = PERF_BUILD && QUERY.get('ui') === 'drafts';
 let demoComposeStarted = false;
 let viewerScriptStarted = false;
 let perfStarted = false;
@@ -144,7 +148,9 @@ function App() {
   const [listState, setListState] = useState('loading'); // 'loading' | 'ready' | 'failed'
   const [panel, setPanel] = useState(null); // null | 'switcher' | 'drawer' | 'add'
   const [open, setOpen] = useState(null);
-  const [compose, setCompose] = useState(null); // { key, accountId, mode, original? }
+  const [compose, setCompose] = useState(null); // { key, accountId, mode, original?, draftId? }
+  const [draftsOpen, setDraftsOpen] = useState(DEMO_DRAFTS);
+  const drafts = useMobileStore((s) => s.drafts);
   const [pulled, setPulled] = useState(false);
   const [total, setTotal] = useState(null);
   const [perfGate, setPerfGate] = useState(false);
@@ -240,6 +246,22 @@ function App() {
     setTimeout(() => logLine({ demo: 'outbox' }), 1000);
   }, [status]);
 
+  useEffect(() => {
+    if (!DEMO_DRAFTS || status !== 'ready') return;
+    // Two real drafts of the seed account (perf-gate data only), saved once.
+    (async () => {
+      const accountId = useMobileStore.getState().activeAccountId;
+      const have = await daemonCall('mobile.drafts.list').catch(() => []);
+      if (!have.some((d) => d.accountId === accountId)) {
+        const base = { accountId, cc: '', bcc: '', inReplyTo: '', references: '', attachments: [] };
+        await daemonCall('mobile.drafts.save', { ...base, to: 'grace@example.test', subject: 'Notes from Tuesday', text: 'Here are the notes.' }).catch(() => {});
+        await daemonCall('mobile.drafts.save', { ...base, to: '', subject: '', text: 'Remember to' }).catch(() => {});
+      }
+      await useMobileStore.getState().loadDrafts();
+      setTimeout(() => logLine({ demo: 'drafts' }), 1000);
+    })();
+  }, [status]);
+
   // Back in the foreground: sync the open folder.
   useEffect(() => {
     if (PERF) return undefined;
@@ -319,7 +341,21 @@ function App() {
       original: { folder: open.folder, uid: open.row.uid, dateMs: open.row.dateMs },
     });
   }, [open]);
-  const closeCompose = useCallback(() => setCompose(null), []);
+  const closeCompose = useCallback(() => {
+    setCompose(null);
+    // A draft may have been saved, sent or deleted: the drawer count and the list follow.
+    useMobileStore.getState().loadDrafts();
+  }, []);
+  const onDrafts = useCallback(() => {
+    setPanel(null);
+    setDraftsOpen(true);
+  }, []);
+  const closeDrafts = useCallback(() => setDraftsOpen(false), []);
+  const onOpenDraft = useCallback((id) => {
+    const { activeAccountId: accountId } = useMobileStore.getState();
+    if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new', draftId: id });
+  }, []);
+  useBackLayer(draftsOpen, closeDrafts);
   const onSelectFolder = useCallback((path) => {
     setPanel(null);
     useMobileStore.getState().selectFolder(path);
@@ -415,7 +451,15 @@ function App() {
         </button>
       )}
       {panel === 'drawer' && (
-        <FolderDrawer account={account} folders={folders} activeFolder={activeFolder} onSelect={onSelectFolder} onClose={closePanel} />
+        <FolderDrawer
+          account={account}
+          folders={folders}
+          activeFolder={activeFolder}
+          onSelect={onSelectFolder}
+          onClose={closePanel}
+          drafts={drafts.length}
+          onDrafts={onDrafts}
+        />
       )}
       {panel === 'switcher' && (
         <AccountSwitcher
@@ -448,6 +492,7 @@ function App() {
           initialPicking={DEMO_MOVE}
         />
       )}
+      {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {compose && (
         <Compose
           key={compose.key}
@@ -455,6 +500,7 @@ function App() {
           fromEmail={accounts.find((a) => a.id === compose.accountId)?.email || ''}
           mode={compose.mode}
           original={compose.original || null}
+          draftId={compose.draftId || null}
           onClose={closeCompose}
         />
       )}
