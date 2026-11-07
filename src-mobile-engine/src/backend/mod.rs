@@ -227,13 +227,16 @@ pub(crate) trait Backend: Send {
 }
 
 /// Signs in to `account_id` with the backend its `kind` names. `Fail::Gone` when the account does
-/// not exist. The backend may keep `shared` for its mapping writes (see the module doc).
+/// not exist, [`Fail::auth`] with no network at all while it waits for a new sign-in
+/// (`needs_auth = 1`). The backend may keep `shared` for its mapping writes (see the module doc).
 pub(crate) fn open<'a>(shared: &'a Shared, account_id: &str) -> Result<Box<dyn Backend + 'a>, Fail> {
-    let kind: Option<String> =
-        shared.read(|c| c.query_row("SELECT kind FROM accounts WHERE id = ?1", [account_id], |r| r.get(0)).optional())?;
-    match kind.as_deref() {
+    let row: Option<(String, i64)> = shared.read(|c| {
+        c.query_row("SELECT kind, needs_auth FROM accounts WHERE id = ?1", [account_id], |r| Ok((r.get(0)?, r.get(1)?))).optional()
+    })?;
+    match row {
         None => Err(Fail::Gone),
-        Some("imap") => Ok(Box::new(imap::ImapBackend::open(shared, account_id)?)),
-        Some(other) => Err(Fail::unsupported(&format!("account kind {other}"))),
+        Some((_, needs_auth)) if needs_auth != 0 => Err(Fail::auth()),
+        Some((kind, _)) if kind == "imap" => Ok(Box::new(imap::ImapBackend::open(shared, account_id)?)),
+        Some((other, _)) => Err(Fail::unsupported(&format!("account kind {other}"))),
     }
 }

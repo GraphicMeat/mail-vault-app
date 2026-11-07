@@ -1590,6 +1590,29 @@ impl GraphClient {
         Ok(true)
     }
 
+    /// The signed-in user's address: `GET /me`'s `mail`, else its
+    /// `userPrincipalName`. Needs `User.Read` in the grant (the mobile
+    /// engine's sign-in asks for it). `Err` (`Graph me failed (<status>)`)
+    /// when Graph refuses, or when it names neither.
+    pub async fn me_address(&self) -> Result<String, String> {
+        let url = format!("{}/me?$select=mail,userPrincipalName", graph_base());
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph me request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "me").await);
+        }
+        let m: serde_json::Value = resp.json().await.map_err(|e| format!("Graph me parse error: {}", e))?;
+        ["mail", "userPrincipalName"]
+            .iter()
+            .filter_map(|k| m.get(*k).and_then(|v| v.as_str()).map(str::trim))
+            .find(|a| a.contains('@'))
+            .map(str::to_string)
+            .ok_or_else(|| "Graph me named no address".to_string())
+    }
+
     /// The message's `internetMessageId` as Graph stores it (bracketed), or
     /// `None` when it has none. 404 is `Err` (`Graph message_internet_id failed (404)`).
     pub async fn message_internet_id(&self, id: &str) -> Result<Option<String>, String> {

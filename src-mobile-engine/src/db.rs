@@ -263,6 +263,8 @@ pub(crate) struct Shared {
     /// consecutive sync passes completed since the last one without another settling meanwhile.
     /// Sync clears an override the server disagrees with only on the second such pass (`sync.rs`).
     settles: Mutex<HashMap<(String, String), Settles>>,
+    /// OAuth sign-in flows, the loopback listener and token refreshes (`oauth.rs`).
+    pub(crate) oauth: crate::oauth::OAuth,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -426,6 +428,7 @@ impl Engine {
                 list_gens: Mutex::new(HashMap::new()),
                 closing: AtomicBool::new(false),
                 settles: Mutex::new(HashMap::new()),
+                oauth: crate::oauth::OAuth::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -584,6 +587,8 @@ impl Drop for Engine {
         self.replay.stop();
         self.outbox.stop();
         self.attachments.stop();
+        // Frees the loopback port if a sign-in was still open; flows are forgotten.
+        self.shared.oauth.close();
     }
 }
 

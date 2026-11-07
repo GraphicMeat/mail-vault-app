@@ -467,7 +467,12 @@ impl Replay {
 fn pending_accounts(shared: &Shared) -> Vec<String> {
     shared
         .read(|c| {
-            let mut st = c.prepare_cached("SELECT account_id FROM pending_actions GROUP BY account_id ORDER BY min(seq)")?;
+            // An account waiting for a new sign-in is parked: its journal stays until reauth wakes it.
+            let mut st = c.prepare_cached(
+                "SELECT account_id FROM pending_actions p
+                 WHERE NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = p.account_id AND a.needs_auth != 0)
+                 GROUP BY account_id ORDER BY min(seq)",
+            )?;
             let rows = st.query_map([], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
             Ok(rows)
         })

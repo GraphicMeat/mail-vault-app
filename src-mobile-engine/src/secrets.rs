@@ -9,7 +9,7 @@ use std::sync::Mutex;
 
 /// What one account's secret string holds: a password (IMAP password, JMAP app password or bearer
 /// token), or OAuth tokens. Stored as `{"v":1,"password":..}` or
-/// `{"v":1,"refresh":..,"access":..,"expiresMs":..}`; a Plan 2 install stored the bare password,
+/// `{"v":1,"refresh":..,"access":..,"expiresMs":..,"clientId":..}`; a Plan 2 install stored the bare password,
 /// which [`Credential::parse`] still reads. `Debug` prints which fields are set, never a value.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +23,10 @@ pub struct Credential {
     /// When `access` expires, in Unix ms.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_ms: Option<i64>,
+    /// The OAuth client the refresh token was issued to (public, not a secret): a refresh token
+    /// works only with that client, so the refresh posts it (core's `refresh_token` `client_id`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
 }
 
 /// The stored form: the version beside the fields.
@@ -41,7 +45,7 @@ impl Credential {
     }
 
     pub fn from_tokens(refresh: &str, access: &str, expires_ms: i64) -> Credential {
-        Credential { refresh: Some(refresh.into()), access: Some(access.into()), expires_ms: Some(expires_ms), password: None }
+        Credential { refresh: Some(refresh.into()), access: Some(access.into()), expires_ms: Some(expires_ms), ..Credential::default() }
     }
 
     /// Reads a stored secret. Anything that is not a version 1 envelope holding at least one secret
@@ -74,6 +78,7 @@ impl fmt::Debug for Credential {
             .field("refresh", &set(&self.refresh))
             .field("access", &set(&self.access))
             .field("expires_ms", &self.expires_ms)
+            .field("client_id", &self.client_id)
             .finish()
     }
 }

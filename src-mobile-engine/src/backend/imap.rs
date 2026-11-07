@@ -22,6 +22,8 @@ struct SessionConfig {
     secrets: Vec<String>,
     /// Gmail files what its SMTP server accepted in Sent itself.
     gmail: bool,
+    /// The access token an OAuth account signs in with; `None` for a password account.
+    oauth_token: Option<String>,
 }
 
 impl SessionConfig {
@@ -39,18 +41,28 @@ fn scrub(secrets: &[String], f: Fail) -> Fail {
     }
 }
 
-fn session_config(shared: &Shared, account: &str) -> Result<SessionConfig, Fail> {
+fn session_config(shared: &Shared, account: &str, refused: Option<&str>) -> Result<SessionConfig, Fail> {
     let Some(acct) = load_account(shared, account)? else {
         return Err(Fail::Gone);
     };
-    let cred = match shared.secrets().get(account) {
+    let mut cred = match shared.secrets().get(account) {
         Ok(Some(s)) => Credential::parse(&s),
         Ok(None) => return Err(Fail::Code(Code::AuthFailed, "no secret stored for the account".into())),
         Err(e) => return Err(Fail::Code(Code::Invalid, format!("secret store: {e}"))),
     };
+    if acct.auth == "oauth2" {
+        // Never the stored token as is: a fresh one, refreshed when it is about to expire (and
+        // refused with `Fail::auth()` once the grant is gone). `refused` is the token the server
+        // just turned away, which forces a refresh unless another caller already did one.
+        cred.access = Some(match refused {
+            None => crate::oauth::access_token(shared, account)?,
+            Some(t) => crate::oauth::access_token_after_refusal(shared, account, t)?,
+        });
+    }
     let config = crate::net::core_config(&acct, &cred).map_err(|e| Fail::Code(Code::Invalid, e))?;
     let gmail = acct.provider.as_deref() == Some("google") || acct.imap_host.eq_ignore_ascii_case("imap.gmail.com");
-    Ok(SessionConfig { config, secrets: cred.secrets().into_iter().map(String::from).collect(), gmail })
+    let oauth_token = if acct.auth == "oauth2" { cred.access.clone() } else { None };
+    Ok(SessionConfig { config, secrets: cred.secrets().into_iter().map(String::from).collect(), gmail, oauth_token })
 }
 
 pub(crate) struct ImapBackend {
@@ -66,12 +78,29 @@ pub(crate) struct ImapBackend {
 }
 
 impl ImapBackend {
-    /// Signs in to `account`.
+    /// Signs in to `account`. An OAuth account whose token the server refuses (revoked or expired
+    /// early) gets one refresh and one more try; a grant the provider refuses too ends as
+    /// [`Fail::auth`].
     pub(crate) fn open(shared: &Shared, account: &str) -> Result<ImapBackend, Fail> {
-        let sc = session_config(shared, account)?;
+        let sc = session_config(shared, account, None)?;
+        match Self::sign_in(sc) {
+            Err((Fail::Code(Code::AuthFailed, _), Some(token))) => {
+                let sc = session_config(shared, account, Some(&token))?;
+                Self::sign_in(sc).map_err(|(f, _)| f)
+            }
+            other => other.map_err(|(f, _)| f),
+        }
+    }
+
+    /// One sign-in; a failure comes back scrubbed, with the OAuth token it used.
+    fn sign_in(sc: SessionConfig) -> Result<ImapBackend, (Fail, Option<String>)> {
         let pool = ImapPool::new();
-        let session = block_on(imap::create_imap_session(&sc.config, &pool)).map_err(|e| sc.scrub(Fail::from(e)))?;
-        Ok(ImapBackend { session: Some(session), _pool: pool, secrets: sc.secrets, caps: None, config: sc.config, gmail: sc.gmail })
+        match block_on(imap::create_imap_session(&sc.config, &pool)) {
+            Ok(session) => {
+                Ok(ImapBackend { session: Some(session), _pool: pool, secrets: sc.secrets, caps: None, config: sc.config, gmail: sc.gmail })
+            }
+            Err(e) => Err((sc.scrub(Fail::from(e)), sc.oauth_token)),
+        }
     }
 
     fn session(&mut self) -> &mut ImapSession {

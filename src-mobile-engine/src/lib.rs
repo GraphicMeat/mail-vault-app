@@ -11,6 +11,7 @@ mod compose;
 mod db;
 pub mod events;
 pub mod net;
+mod oauth;
 pub mod outgoing;
 mod outbox;
 mod rpc;

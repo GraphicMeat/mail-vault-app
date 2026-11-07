@@ -403,6 +403,9 @@ fn issued_flow_config(
 pub struct OAuth2Manager {
     pending: Arc<Mutex<HashMap<String, PendingOAuth>>>,
     callback_running: Arc<Mutex<bool>>,
+    /// The accept loop's task, so [`OAuth2Manager::shutdown_callback_server`]
+    /// can end it and free the port. Desktop never shuts it down.
+    callback_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     senders: SenderMap,
     /// Debug builds only: a loopback token endpoint this manager posts to
     /// instead of the provider's, set by a test for its own manager (the env
@@ -416,6 +419,7 @@ impl OAuth2Manager {
         Self {
             pending: Arc::new(Mutex::new(HashMap::new())),
             callback_running: Arc::new(Mutex::new(false)),
+            callback_task: Arc::new(Mutex::new(None)),
             senders: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(debug_assertions)]
             token_endpoint: std::sync::Mutex::new(None),
@@ -448,6 +452,25 @@ impl OAuth2Manager {
         use_graph: bool,
         google_client: Option<&str>,
     ) -> Result<AuthUrlResponse, String> {
+        self.generate_auth_url_scoped(login_hint, provider, custom_client_id, tenant_id, use_graph, google_client, None).await
+    }
+
+    /// [`OAuth2Manager::generate_auth_url`] asking for `extra_scope` (space
+    /// separated) beside the provider's scopes. The mobile engine asks for
+    /// Microsoft's `User.Read`, so Graph `/me` can name the signed-in address;
+    /// the refresh keeps asking for the provider's scopes only (a subset of
+    /// the grant, which the token endpoint accepts).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn generate_auth_url_scoped(
+        &self,
+        login_hint: Option<String>,
+        provider: Option<String>,
+        custom_client_id: Option<String>,
+        tenant_id: Option<String>,
+        use_graph: bool,
+        google_client: Option<&str>,
+        extra_scope: Option<&str>,
+    ) -> Result<AuthUrlResponse, String> {
         let provider_name = provider.as_deref().unwrap_or("microsoft");
         // Chosen once here (`google_client`: "thunderbird" or "mailvault",
         // Google only); the exchange reuses the id stored below.
@@ -467,6 +490,9 @@ impl OAuth2Manager {
         // widening the refresh request risks `invalid_scope` for all of them.
         if provider_name == "google" {
             config.scopes = format!("{} openid email", config.scopes);
+        }
+        if let Some(extra) = extra_scope.map(str::trim).filter(|e| !e.is_empty()) {
+            config.scopes = format!("{} {}", config.scopes, extra);
         }
 
         let code_verifier = generate_code_verifier();
@@ -751,15 +777,64 @@ impl OAuth2Manager {
         let senders = Arc::clone(&self.senders);
         let running_flag = Arc::clone(&self.callback_running);
 
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             if let Err(e) = run_callback_server(senders).await {
                 error!("OAuth callback server error: {}", e);
                 // Reset flag so next OAuth attempt can retry
                 *running_flag.lock().await = false;
             }
         });
+        *self.callback_task.lock().await = Some(task);
 
         info!("OAuth callback server started on port {}", CALLBACK_PORT);
+    }
+
+    /// Binds the loopback callback listener now, unless it is running, and
+    /// says whether the bind worked (`ensure_callback_server`, which
+    /// `generate_auth_url` calls, only logs a failed bind). The mobile engine
+    /// calls it before `generate_auth_url`, whose own start is then a no-op.
+    pub async fn start_callback_server(&self) -> Result<(), String> {
+        let mut running = self.callback_running.lock().await;
+        if *running {
+            return Ok(());
+        }
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", CALLBACK_PORT))
+            .await
+            .map_err(|e| format!("Failed to bind callback server: {}", e))?;
+        let senders = Arc::clone(&self.senders);
+        let running_flag = Arc::clone(&self.callback_running);
+        let task = tokio::spawn(async move {
+            if let Err(e) = serve_callbacks(listener, senders).await {
+                error!("OAuth callback server error: {}", e);
+                *running_flag.lock().await = false;
+            }
+        });
+        *self.callback_task.lock().await = Some(task);
+        *running = true;
+        info!("OAuth callback server started on port {}", CALLBACK_PORT);
+        Ok(())
+    }
+
+    /// Ends the callback listener and waits until its socket is closed, so
+    /// the port is free when this returns. A later `generate_auth_url` or
+    /// `start_callback_server` binds it again. The desktop never calls it.
+    pub async fn shutdown_callback_server(&self) {
+        let mut running = self.callback_running.lock().await;
+        if let Some(task) = self.callback_task.lock().await.take() {
+            task.abort();
+            let _ = task.await;
+        }
+        *running = false;
+    }
+
+    /// Forgets the flow `state` and fails a pending `exchange_code` on it at
+    /// once ("OAuth callback error: OAuth flow cancelled"). Unknown states
+    /// are ignored.
+    pub async fn cancel_flow(&self, state: &str) {
+        self.pending.lock().await.remove(state);
+        if let Some(tx) = self.senders.lock().await.remove(state) {
+            let _ = tx.send(Err("OAuth flow cancelled".to_string()));
+        }
     }
 }
 

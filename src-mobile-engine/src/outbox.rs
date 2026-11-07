@@ -306,7 +306,12 @@ impl Outbox {
 fn queued_accounts(shared: &Shared) -> Vec<String> {
     shared
         .read(|c| {
-            let mut st = c.prepare_cached("SELECT account_id FROM outbox WHERE state = 'queued' GROUP BY account_id ORDER BY min(created_ms)")?;
+            // An account waiting for a new sign-in is parked: its rows stay queued until reauth.
+            let mut st = c.prepare_cached(
+                "SELECT account_id FROM outbox o WHERE state = 'queued'
+                 AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = o.account_id AND a.needs_auth != 0)
+                 GROUP BY account_id ORDER BY min(created_ms)",
+            )?;
             let rows = st.query_map([], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
             Ok(rows)
         })

@@ -27,6 +27,11 @@ pub enum Code {
     Duplicate,
     Invalid,
     SmtpFailed,
+    /// An OAuth account whose grant the provider no longer honours: nothing reaches its server
+    /// until the user signs in again (`mobile.oauth.reauth`).
+    NeedsAuth,
+    /// The user closed the sign-in sheet or cancelled the flow.
+    Cancelled,
 }
 
 impl Code {
@@ -39,6 +44,8 @@ impl Code {
             Code::Duplicate => "DUPLICATE",
             Code::Invalid => "INVALID",
             Code::SmtpFailed => "SMTP_FAILED",
+            Code::NeedsAuth => "NEEDS_AUTH",
+            Code::Cancelled => "CANCELLED",
         }
     }
 }
@@ -87,7 +94,7 @@ fn scrub(msg: &str, password: &str) -> String {
     }
 }
 
-fn failure(code: Code, message: impl Into<String>) -> Value {
+pub(crate) fn failure(code: Code, message: impl Into<String>) -> Value {
     json!({ "ok": false, "code": code.as_str(), "message": message.into() })
 }
 
@@ -95,6 +102,8 @@ fn failure(code: Code, message: impl Into<String>) -> Value {
 /// `security` and `smtp_security` are `ssl`, `starttls` or `none`.
 pub(crate) struct AccountRow {
     pub(crate) email: String,
+    /// `imap`, `graph` or `jmap`: the backend the account talks through.
+    pub(crate) kind: String,
     pub(crate) auth: String,
     pub(crate) imap_host: String,
     pub(crate) imap_port: u16,
@@ -113,6 +122,7 @@ impl AccountRow {
     pub(crate) fn password(email: &str, imap_host: &str, imap_port: u16, security: &str) -> AccountRow {
         AccountRow {
             email: email.into(),
+            kind: "imap".into(),
             auth: "password".into(),
             imap_host: imap_host.into(),
             imap_port,
@@ -130,12 +140,13 @@ impl AccountRow {
 pub(crate) fn load_account(shared: &Shared, id: &str) -> Result<Option<AccountRow>, EngineError> {
     shared.read(|c| {
         c.query_row(
-            "SELECT email, auth, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, display_name, provider
+            "SELECT email, auth, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, display_name, provider, kind
              FROM accounts WHERE id = ?1",
             [id],
             |r| {
                 Ok(AccountRow {
                     email: r.get(0)?,
+                    kind: r.get(10)?,
                     auth: r.get(1)?,
                     imap_host: r.get(2)?,
                     imap_port: r.get::<_, i64>(3)? as u16,
@@ -276,19 +287,19 @@ impl Form {
     }
 }
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 /// `acc_` + 16 hex chars from a random u64: the per-process `RandomState` keys come from the OS,
 /// mixed with the clock so two ids in one process differ. Never derived from the email.
-fn new_account_id() -> String {
+pub(crate) fn new_account_id() -> String {
     let mut h = RandomState::new().build_hasher();
     h.write_u128(SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
     format!("acc_{:016x}", h.finish())
 }
 
-fn account_json(id: &str, email: &str, display_name: &str, host: &str, port: i64, security: &str, smtp: (Option<String>, Option<i64>, Option<String>)) -> Value {
+pub(crate) fn account_json(id: &str, email: &str, display_name: &str, host: &str, port: i64, security: &str, smtp: (Option<String>, Option<i64>, Option<String>)) -> Value {
     json!({
         "id": id, "email": email, "displayName": display_name, "imapHost": host, "imapPort": port, "security": security,
         "smtpHost": smtp.0, "smtpPort": smtp.1, "smtpSecurity": smtp.2,
@@ -303,11 +314,12 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
     let accounts = engine
         .read(|c| {
             let mut st = c.prepare_cached(
-                "SELECT id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security FROM accounts ORDER BY created_ms, id",
+                "SELECT id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, kind, provider, needs_auth
+                 FROM accounts ORDER BY created_ms, id",
             )?;
             let rows = st
                 .query_map([], |r| {
-                    Ok(account_json(
+                    let mut a = account_json(
                         &r.get::<_, String>(0)?,
                         &r.get::<_, String>(1)?,
                         &r.get::<_, String>(2)?,
@@ -315,7 +327,11 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
                         r.get(4)?,
                         &r.get::<_, String>(5)?,
                         (r.get(6)?, r.get(7)?, r.get(8)?),
-                    ))
+                    );
+                    a["kind"] = json!(r.get::<_, String>(9)?);
+                    a["provider"] = json!(r.get::<_, Option<String>>(10)?);
+                    a["needsAuth"] = json!(r.get::<_, i64>(11)? != 0);
+                    Ok(a)
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
@@ -335,7 +351,7 @@ pub(crate) fn test(_: &Engine, params: Value) -> Result<Value, RpcError> {
     })
 }
 
-fn email_taken(engine: &Engine, email: &str) -> Result<bool, RpcError> {
+pub(crate) fn email_taken(engine: &Engine, email: &str) -> Result<bool, RpcError> {
     engine
         .read(|c| {
             c.query_row("SELECT 1 FROM accounts WHERE email = ?1 COLLATE NOCASE", [email], |_| Ok(()))
@@ -404,7 +420,7 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     }))
 }
 
-fn is_unique_violation(db_error: &str) -> bool {
+pub(crate) fn is_unique_violation(db_error: &str) -> bool {
     db_error.contains("UNIQUE constraint failed")
 }
 

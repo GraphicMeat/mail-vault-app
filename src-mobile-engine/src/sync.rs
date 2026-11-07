@@ -175,6 +175,13 @@ impl Fail {
     pub(crate) fn unsupported(what: &str) -> Fail {
         Fail::Code(Code::Invalid, format!("{what} is not supported for this account"))
     }
+
+    /// The account must sign in again (`accounts.needs_auth = 1`). Terminal for that account in
+    /// every worker until `mobile.oauth.reauth` clears it: nothing retries, nothing touches the
+    /// network.
+    pub(crate) fn auth() -> Fail {
+        Fail::Code(Code::NeedsAuth, "the account needs to sign in again".into())
+    }
 }
 
 fn run_job(shared: &Shared, job: &Job) {
