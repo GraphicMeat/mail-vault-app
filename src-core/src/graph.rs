@@ -292,6 +292,28 @@ pub struct GraphListed {
     pub size: Option<u32>,
 }
 
+/// One row of `GraphClient::list_since`: the message as the full-header
+/// listing reads it, and whether Outlook's flag is set (`flag.flagStatus`).
+#[derive(Debug)]
+pub struct GraphSynced {
+    pub message: GraphMessage,
+    pub flagged: bool,
+}
+
+#[derive(Deserialize)]
+struct RawSynced {
+    #[serde(flatten)]
+    message: GraphMessage,
+    #[serde(default)]
+    flag: Option<RawFlag>,
+}
+
+#[derive(Deserialize)]
+struct RawFlag {
+    #[serde(rename = "flagStatus")]
+    flag_status: Option<String>,
+}
+
 /// The MAPI property `PR_MESSAGE_SIZE` (Integer 0x0E08), read as an extended
 /// property because `message` has no size field.
 const SIZE_PROPERTY_ID: &str = "Integer 0x0E08";
@@ -1574,6 +1596,129 @@ impl GraphClient {
         Ok((rows, list.next_link))
     }
 
+    // -----------------------------------------------------------------------
+    // Mobile engine: a header window, one folder, the MIME as a file
+    // -----------------------------------------------------------------------
+
+    /// One page of a folder's messages received at or after `since` (a Graph timestamp, see
+    /// `is_graph_timestamp`), newest first, with the list fields and Outlook's flag: the mobile
+    /// engine's header window. `next` is the previous page's link (`None` = first page), followed
+    /// only under the Graph base since every request carries the token. A failure is
+    /// `failure_text` (`(429:retry_after=N)` when throttled).
+    pub async fn list_since(
+        &self,
+        folder_id: &str,
+        since: &str,
+        next: Option<&str>,
+    ) -> Result<(Vec<GraphSynced>, Option<String>), String> {
+        let url = match next {
+            Some(link) => {
+                if !is_graph_link(link) {
+                    return Err("Graph list_since refused a nextLink outside the Graph base".to_string());
+                }
+                link.to_string()
+            }
+            None => {
+                if !is_graph_timestamp(since) {
+                    return Err("Graph list_since refused a malformed receivedDateTime".to_string());
+                }
+                format!(
+                    "{}/me/mailFolders/{}/messages?$top=100&$filter=receivedDateTime ge {}&$orderby=receivedDateTime desc&$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,flag",
+                    graph_base(),
+                    percent_encode(folder_id),
+                    since
+                )
+            }
+        };
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph list_since request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "list_since").await);
+        }
+        let list: GraphListResponse<RawSynced> = resp
+            .json()
+            .await
+            .map_err(|e| format!("Graph list_since parse error: {}", e))?;
+        let rows = list
+            .value
+            .into_iter()
+            .map(|r| GraphSynced {
+                flagged: r.flag.and_then(|f| f.flag_status).is_some_and(|s| s.eq_ignore_ascii_case("flagged")),
+                message: r.message,
+            })
+            .collect();
+        Ok((rows, list.next_link))
+    }
+
+    /// One folder by its id or a well-known name (`inbox`): its name and counts.
+    /// `well_known_name` and `storage_key` are left empty (no `$batch` here).
+    pub async fn get_folder(&self, folder_id: &str) -> Result<GraphMailFolder, String> {
+        let url = format!(
+            "{}/me/mailFolders/{}?$select=id,displayName,totalItemCount,unreadItemCount,childFolderCount",
+            graph_base(),
+            percent_encode(folder_id)
+        );
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph get_folder request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "get_folder").await);
+        }
+        resp.json().await.map_err(|e| format!("Graph get_folder parse error: {}", e))
+    }
+
+    /// Streams the message's raw MIME (`$value`) into `path`, never holding it in memory: written
+    /// to a `<path>.<pid>-<n>.tmp` of its own chunk by chunk, synced, then renamed, so `path` only ever holds a whole
+    /// message. Returns the byte count. A refused answer is `failure_text`
+    /// (`Graph download_mime failed (404) …` when the message is gone).
+    pub async fn download_mime_to(&self, message_id: &str, path: &std::path::Path) -> Result<u64, String> {
+        use std::io::Write;
+        let url = format!("{}/me/messages/{}/$value", graph_base(), percent_encode(message_id));
+        let mut resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph download_mime request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "download_mime").await);
+        }
+        // A name of its own per download: two downloads of one message (a body and an
+        // attachment at once) never write into the same file; the last rename wins, whole.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut tmp = path.as_os_str().to_owned();
+        tmp.push(format!(".{}-{}.tmp", std::process::id(), n));
+        let tmp = std::path::PathBuf::from(tmp);
+        let written = async {
+            let mut file = std::fs::File::create(&tmp).map_err(|e| format!("Graph download_mime write error: {}", e))?;
+            let mut n: u64 = 0;
+            while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Graph download_mime read error: {}", e))? {
+                file.write_all(&chunk).map_err(|e| format!("Graph download_mime write error: {}", e))?;
+                n += chunk.len() as u64;
+            }
+            file.sync_all().map_err(|e| format!("Graph download_mime write error: {}", e))?;
+            Ok::<u64, String>(n)
+        }
+        .await;
+        let n = match written {
+            Ok(n) => n,
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(e);
+            }
+        };
+        if let Err(e) = std::fs::rename(&tmp, path) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(format!("Graph download_mime write error: {}", e));
+        }
+        Ok(n)
+    }
+
     /// Does the message still exist (under this id)? A moved message gets a new
     /// id, so the old one answers 404.
     pub async fn message_exists(&self, id: &str) -> Result<bool, String> {
@@ -1742,6 +1887,24 @@ impl GraphClient {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_window_row_reads_the_message_and_its_flag() {
+        let page: super::GraphListResponse<super::RawSynced> = serde_json::from_value(serde_json::json!({
+            "value": [
+                { "id": "a=", "subject": "One", "isRead": true, "receivedDateTime": "2026-01-05T10:00:00Z", "flag": { "flagStatus": "flagged" } },
+                { "id": "b=", "subject": "Two", "flag": { "flagStatus": "notFlagged" } },
+                { "id": "c=" }
+            ],
+            "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/mailFolders/x/messages?$skip=100"
+        }))
+        .unwrap();
+        let flags: Vec<(String, bool)> = page.value.iter().map(|r| (r.message.id.clone(), r.flag.as_ref().and_then(|f| f.flag_status.as_deref()) == Some("flagged"))).collect();
+        assert_eq!(flags, vec![("a=".into(), true), ("b=".into(), false), ("c=".into(), false)]);
+        assert_eq!(page.value[0].message.is_read, Some(true));
+        assert_eq!(page.value[0].message.subject.as_deref(), Some("One"));
+        assert!(page.next_link.is_some());
+    }
 
     #[test]
     fn list_url_without_a_moment_is_the_plain_newest_first_listing() {

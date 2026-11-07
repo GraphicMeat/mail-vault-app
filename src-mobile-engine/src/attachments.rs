@@ -57,6 +57,10 @@ pub(crate) const STALE_PART: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 /// Downloads that run at once; more wait in the queue.
 const WORKERS: usize = 2;
 const DIR: &str = "att";
+/// Graph accounts' downloaded messages (`<cache>/mime/<hash>.eml`, plan Ruling 13), counted with
+/// the attachments against [`CACHE_CAP`] and evicted by the same LRU.
+const MIME_DIR: &str = "mime";
+const EML: &str = ".eml";
 const PART: &str = ".part";
 const META: &str = ".part.meta";
 const TMP: &str = ".tmp";
@@ -92,6 +96,11 @@ fn file_name(k: &PartKey, uid_validity: i64) -> String {
 
 fn is_final_name(name: &str) -> bool {
     name.len() == 64 && name.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// A whole Graph MIME file: `<64 hex>.eml`.
+fn is_mime_name(name: &str) -> bool {
+    name.strip_suffix(EML).is_some_and(is_final_name)
 }
 
 /// `1.2` and the like: dot-separated positive numbers, which is all core will send.
@@ -137,13 +146,16 @@ impl Table {
 
 struct State {
     dir: PathBuf,
+    /// `<cache>/mime`.
+    mime_dir: PathBuf,
     table: Mutex<Table>,
     cv: Condvar,
     /// Tests: the largest buffer one job held (raw chunk in, decoded bytes out).
     peak_buffer: AtomicU64,
-    /// Unit tests: the cap and the lease lifetime, in place of [`CACHE_CAP`] and [`LEASE_TTL`].
-    #[cfg(test)]
+    /// The byte cap of finished files: [`CACHE_CAP`], lowered only by tests
+    /// (`Engine::set_attachment_cache_cap`).
     cap: AtomicU64,
+    /// Unit tests: the lease lifetime, in place of [`LEASE_TTL`].
     #[cfg(test)]
     lease_ttl_ms: AtomicU64,
     /// Unit tests: runs with the job id after the finished `.part` is synced, before the rename.
@@ -156,14 +168,7 @@ struct State {
 
 impl State {
     fn cap(&self) -> u64 {
-        #[cfg(test)]
-        {
-            self.cap.load(Ordering::SeqCst)
-        }
-        #[cfg(not(test))]
-        {
-            CACHE_CAP
-        }
+        self.cap.load(Ordering::SeqCst)
     }
 
     fn lease_ttl(&self) -> Duration {
@@ -197,13 +202,17 @@ impl Attachments {
         let dir = cache_dir.join(DIR);
         let _ = fs::create_dir_all(&dir);
         cleanup(&dir, STALE_PART);
+        let mime_dir = cache_dir.join(MIME_DIR);
+        let _ = fs::create_dir_all(&mime_dir);
+        // An unfinished download (`<hash>.eml.tmp`) never resumes.
+        cleanup(&mime_dir, STALE_PART);
         Attachments {
             state: Arc::new(State {
                 dir,
+                mime_dir,
                 table: Mutex::new(Table::default()),
                 cv: Condvar::new(),
                 peak_buffer: AtomicU64::new(0),
-                #[cfg(test)]
                 cap: AtomicU64::new(CACHE_CAP),
                 #[cfg(test)]
                 lease_ttl_ms: AtomicU64::new(LEASE_TTL.as_millis() as u64),
@@ -224,6 +233,50 @@ impl Attachments {
     pub(crate) fn peak_buffer(&self) -> u64 {
         self.state.peak_buffer.load(Ordering::SeqCst)
     }
+
+    pub(crate) fn set_cap(&self, bytes: u64) {
+        self.state.cap.store(bytes, Ordering::SeqCst);
+    }
+
+    /// The handle a backend uses for the MIME files it keeps in the cache.
+    pub(crate) fn mime_cache(&self) -> MimeCache {
+        MimeCache(Arc::clone(&self.state))
+    }
+}
+
+/// A Graph backend's way into the cache: where a message's MIME file goes, and the LRU pass after
+/// it wrote one. The files are named by a SHA-256 of account and remote id (a moved message has a
+/// new id, so a new file), live in `<cache>/mime`, and count against the attachment cap.
+#[derive(Clone)]
+pub(crate) struct MimeCache(Arc<State>);
+
+impl MimeCache {
+    /// `<cache>/mime/<64 hex>.eml` for `remote_id` of `account`.
+    pub(crate) fn path(&self, account: &str, remote_id: &str) -> PathBuf {
+        let mut h = Sha256::new();
+        h.update(b"mv-graph-mime-v1");
+        for field in [account.as_bytes(), remote_id.as_bytes()] {
+            h.update((field.len() as u64).to_le_bytes());
+            h.update(field);
+        }
+        let hex: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        let _ = fs::create_dir_all(&self.0.mime_dir);
+        self.0.mime_dir.join(format!("{hex}{EML}"))
+    }
+
+    /// Marks `path` as just used (its LRU position).
+    pub(crate) fn touch(&self, path: &Path) {
+        let _ = touch(path);
+    }
+
+    /// The LRU pass after `path` was written: everything but it may go.
+    pub(crate) fn written(&self, path: &Path) {
+        let keep = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        evict(&self.0, &keep);
+    }
+}
+
+impl Attachments {
 
     /// Queues a download of `key` (file `name`) unless one is queued or running; its job id.
     fn enqueue(&self, shared: &Arc<Shared>, key: PartKey, name: String, uid_validity: i64) -> Result<u64, String> {
@@ -575,20 +628,21 @@ fn evict(state: &State, keep: &str) -> usize {
     // waits on a directory pass. Each delete takes the lock for that one file and re-checks the
     // leases there: a lease (taken under the lock after checking the file is there) either lands
     // first and the file is skipped, or finds the file gone.
-    let Ok(rd) = fs::read_dir(&state.dir) else {
-        return 0;
-    };
-    let mut files: Vec<(SystemTime, u64, String)> = rd
-        .filter_map(|e| e.ok())
-        .filter_map(|e| {
+    // Finished attachments and Graph MIME files share the cap.
+    let mut files: Vec<(SystemTime, u64, String, PathBuf)> = Vec::new();
+    for (dir, counted) in [(&state.dir, is_final_name as fn(&str) -> bool), (&state.mime_dir, is_mime_name)] {
+        let Ok(rd) = fs::read_dir(dir) else {
+            continue;
+        };
+        files.extend(rd.filter_map(|e| e.ok()).filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            if !is_final_name(&name) {
+            if !counted(&name) {
                 return None;
             }
             let m = e.metadata().ok()?;
-            Some((m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), name))
-        })
-        .collect();
+            Some((m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), name, e.path()))
+        }));
+    }
     let mut total: u64 = files.iter().map(|f| f.1).sum();
     let cap = state.cap();
     if total <= cap {
@@ -600,7 +654,7 @@ fn evict(state: &State, keep: &str) -> usize {
         hook();
     }
     let mut removed = 0;
-    for (_, len, name) in files {
+    for (_, len, name, path) in files {
         if total <= cap {
             break;
         }
@@ -611,7 +665,7 @@ fn evict(state: &State, keep: &str) -> usize {
         if t.leased().contains(&name) {
             continue;
         }
-        if fs::remove_file(state.path(&name)).is_ok() {
+        if fs::remove_file(&path).is_ok() {
             total -= len;
             removed += 1;
         }

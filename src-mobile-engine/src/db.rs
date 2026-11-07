@@ -265,6 +265,8 @@ pub(crate) struct Shared {
     settles: Mutex<HashMap<(String, String), Settles>>,
     /// OAuth sign-in flows, the loopback listener and token refreshes (`oauth.rs`).
     pub(crate) oauth: crate::oauth::OAuth,
+    /// Where a Graph backend keeps a message's MIME file, under the attachment cache's cap.
+    pub(crate) mime: crate::attachments::MimeCache,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -417,6 +419,7 @@ impl Engine {
             .map_err(|e| EngineError::Db(e.to_string()))?;
         // A send that was on the wire when the engine died may have gone out: `uncertain`.
         let queued = crate::outbox::on_open(&db.writer, crate::compose::now_ms()).map_err(|e| EngineError::Db(e.to_string()))?;
+        let attachments = crate::attachments::Attachments::open(cache_dir);
         let engine = Engine {
             shared: Arc::new(Shared {
                 path: db.path,
@@ -429,12 +432,13 @@ impl Engine {
                 closing: AtomicBool::new(false),
                 settles: Mutex::new(HashMap::new()),
                 oauth: crate::oauth::OAuth::default(),
+                mime: attachments.mime_cache(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
                 body_cap: std::sync::atomic::AtomicU64::new(crate::body::CACHE_CAP),
             }),
-            attachments: crate::attachments::Attachments::open(cache_dir),
+            attachments,
             cache_dir: cache_dir.to_path_buf(),
             sync: crate::sync::Worker::default(),
             replay: crate::actions::Replay::default(),
@@ -478,6 +482,13 @@ impl Engine {
     #[doc(hidden)]
     pub fn attachment_peak_buffer(&self) -> u64 {
         self.attachments.peak_buffer()
+    }
+
+    /// Tests: the byte cap of the attachment cache (attachments and Graph MIME files), in place of
+    /// 500 MB.
+    #[doc(hidden)]
+    pub fn set_attachment_cache_cap(&self, bytes: u64) {
+        self.attachments.set_cap(bytes);
     }
 
     /// The directory for rebuildable files the shell passed to `open`.

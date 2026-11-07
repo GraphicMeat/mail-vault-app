@@ -33,7 +33,8 @@ pub(crate) fn block_on<F: Future>(f: F) -> F::Output {
 }
 
 /// Core's connection settings (`ImapConfig`'s JSON) for `account` signed in with `cred`: the
-/// password, or for `auth = oauth2` the access token (`authType`/`oauth2AccessToken`), plus the
+/// password, or for `auth = oauth2` the access token (`authType`/`oauth2AccessToken`, and
+/// `oauth2Transport = graph` for a Graph account), plus the
 /// SMTP fields when the row has an SMTP host. Core reads `smtpSecure` as implicit TLS, so only
 /// `smtp_security = ssl` sets it.
 pub(crate) fn imap_config(account: &AccountRow, cred: &Credential) -> Value {
@@ -49,6 +50,10 @@ pub(crate) fn imap_config(account: &AccountRow, cred: &Credential) -> Value {
     if account.auth == "oauth2" {
         v["authType"] = json!("oauth2");
         v["oauth2AccessToken"] = json!(cred.access);
+        if account.kind == "graph" {
+            // Core sends through Graph's sendMail (`ImapConfig::uses_graph`).
+            v["oauth2Transport"] = json!("graph");
+        }
     } else {
         v["password"] = json!(cred.password);
     }

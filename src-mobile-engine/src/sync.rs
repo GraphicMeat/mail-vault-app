@@ -286,7 +286,7 @@ pub(crate) fn uid_list(uids: &[u32]) -> String {
     uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",")
 }
 
-/// Deletes the message rows of `uids` and every body and attachment row they own. Dependents
+/// Deletes the message rows of `uids` and every body, attachment and remote id row they own. Dependents
 /// first (a crash then leaves a message without its cached body, never an orphan body), each
 /// table in transactions of at most [`BATCH`] rows however many attachments a message has.
 /// With `keep_pending`, a uid some journaled action names is kept, checked inside each transaction
@@ -296,10 +296,13 @@ pub(crate) fn delete_uids(shared: &Shared, account: &str, folder: &str, uids: &[
     let guard = if keep_pending { format!(" AND uid NOT IN ({})", crate::actions::PENDING_UIDS) } else { String::new() };
     for chunk in uids.chunks(BATCH) {
         let list = uid_list(chunk);
+        // `remote_ids` last: a crash before it leaves a mapping without a row, which the next pass
+        // finds again under the same uid, never a row without its remote id.
         for (table, key, cols, counts) in [
             ("attachments", "(uid, section)", "uid, section", false),
             ("bodies", "uid", "uid", false),
             ("messages", "uid", "uid", true),
+            ("remote_ids", "uid", "uid", false),
         ] {
             let sql = format!(
                 "DELETE FROM {table} WHERE account_id = ?1 AND folder = ?2 AND {key} IN
@@ -405,6 +408,21 @@ fn sync_folder_list(shared: &Shared, backend: &mut dyn Backend, account: &str) -
         // Its journaled actions can never replay; they drop before the rows go.
         crate::actions::drop_folder_actions(shared, account, path, None, crate::actions::Reason::FolderGone)?;
         delete_folder_rows(shared, account, path)?;
+        // Its remote ids too. Not in `delete_folder_rows`: a Graph or JMAP folder's first pass
+        // (no stored generation yet) wipes through it, and must keep the uids a move into the
+        // folder already gave.
+        loop {
+            let n = write_for(shared, account, |c| {
+                c.execute(
+                    "DELETE FROM remote_ids WHERE account_id = ?1 AND folder = ?2 AND uid IN
+                       (SELECT uid FROM remote_ids WHERE account_id = ?1 AND folder = ?2 LIMIT 200)",
+                    (account, path),
+                )
+            })?;
+            if n == 0 {
+                break;
+            }
+        }
         write_for(shared, account, |c| c.execute("DELETE FROM folders WHERE account_id = ?1 AND path = ?2", (account, path)))?;
     }
     if !upserts.is_empty() || !gone.is_empty() {
@@ -725,7 +743,7 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 }
 
 /// `(year, month 1-12, day 1-31)` of a day count since 1970-01-01.
-fn civil_from_days(z: i64) -> (i64, i64, i64) {
+pub(crate) fn civil_from_days(z: i64) -> (i64, i64, i64) {
     let z = z + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let doe = z - era * 146_097;
@@ -738,7 +756,7 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 }
 
 /// The first instant of the sync window's first day (UTC): [`WINDOW_DAYS`] days before today.
-fn window_start_ms(now_ms: i64) -> i64 {
+pub(crate) fn window_start_ms(now_ms: i64) -> i64 {
     (now_ms.div_euclid(DAY_MS) - WINDOW_DAYS) * DAY_MS
 }
 
@@ -751,7 +769,7 @@ pub(crate) fn since_criteria(start_ms: i64) -> String {
 
 /// Epoch ms of the RFC 3339 form core writes an INTERNALDATE in (`2026-01-01T12:00:00+02:00`,
 /// optional fraction, `Z` accepted).
-fn rfc3339_ms(s: &str) -> Option<i64> {
+pub(crate) fn rfc3339_ms(s: &str) -> Option<i64> {
     let s = s.trim();
     if !s.is_ascii() {
         return None;

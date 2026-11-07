@@ -1,6 +1,6 @@
 //! The engine's one door to a mail server. Sync, replay, bodies and attachment downloads talk to
 //! a [`Backend`], never to a protocol: [`open`] picks the implementation from `accounts.kind`
-//! (`imap` today; Graph and JMAP later) and signs in.
+//! (`imap`, `graph`; JMAP later) and signs in.
 //!
 //! A backend does the network work and nothing the list shows: no event, no log line, and no write
 //! to `messages`, `folders`, `bodies`, `attachments` or the journal. The callers keep those writes,
@@ -16,6 +16,7 @@
 //! that assigns local uids assigns them in ascending received-date order, so sync's
 //! newest-uid-first fill matches the list's order.
 
+pub(crate) mod graph;
 pub(crate) mod imap;
 
 use crate::actions::Kind;
@@ -237,6 +238,7 @@ pub(crate) fn open<'a>(shared: &'a Shared, account_id: &str) -> Result<Box<dyn B
         None => Err(Fail::Gone),
         Some((_, needs_auth)) if needs_auth != 0 => Err(Fail::auth()),
         Some((kind, _)) if kind == "imap" => Ok(Box::new(imap::ImapBackend::open(shared, account_id)?)),
+        Some((kind, _)) if kind == "graph" => Ok(Box::new(graph::GraphBackend::open(shared, account_id)?)),
         Some((other, _)) => Err(Fail::unsupported(&format!("account kind {other}"))),
     }
 }

@@ -26,6 +26,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "net"] }
 sha2 = "0.10"
 # Outgoing attachments as core's builder takes them (the same base64 core already builds).
 base64 = "0.22"
+# Header fields of a Graph message's MIME file (the same mailparse core already builds).
+mailparse = "0.15"
 
 [dev-dependencies]
 tempfile = "3"
