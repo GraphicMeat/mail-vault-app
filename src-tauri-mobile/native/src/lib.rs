@@ -9,7 +9,10 @@
 //!   `CATEGORY_BROWSABLE`).
 //! - A navigation hook: every navigation of the webview goes through [`links::decide`]. Web and
 //!   mail links are cancelled and handed to `open_url`; anything but the app page and the mail
-//!   frame's own document is cancelled. A popup can never become a webview of its own.
+//!   frame's own document is cancelled. A popup never becomes a Tauri webview: iOS opens none
+//!   (wry has no `createWebView` there), Android catches it in a bare, unshown WebView without
+//!   JavaScript that only reads the URL and is destroyed (`android/.../PopupChromeClient.kt`); an
+//!   accepted URL (`PopupUrlPolicy`) goes straight to the system, never to the app's WebView.
 //!
 //! The plugin registers no commands, so JS cannot call it: the shell calls it from Rust, after
 //! checking the path it was given (`files`).

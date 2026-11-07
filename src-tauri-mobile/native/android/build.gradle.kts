@@ -30,4 +30,5 @@ kotlin {
 dependencies {
     implementation("androidx.core:core-ktx:1.9.0")
     implementation(project(":tauri-android"))
+    testImplementation("junit:junit:4.13.2")
 }

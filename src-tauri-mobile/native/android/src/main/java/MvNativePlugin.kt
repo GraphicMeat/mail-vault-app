@@ -36,7 +36,7 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
     override fun load(webView: WebView) {
         val inner = webView.webChromeClient ?: WebChromeClient()
         webView.settings.setSupportMultipleWindows(true)
-        webView.webChromeClient = PopupChromeClient(inner)
+        webView.webChromeClient = PopupChromeClient(activity, inner)
     }
     private fun contentUri(path: String): Uri {
         return FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", File(path))

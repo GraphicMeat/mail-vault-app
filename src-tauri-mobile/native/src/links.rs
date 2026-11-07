@@ -1,9 +1,11 @@
 //! What a navigation of the app's webview may do. Every navigation the webview asks about comes
 //! here: the app page's own load, the mail frame's `srcdoc`, and a link tapped in the mail, which
-//! the frame's `<base target="_blank">` turns into a new-window request (iOS asks with no target
-//! frame; Android, with multiple windows off, loads it as a main-frame navigation). Nothing but the
-//! app's own page and the frame's document ever loads in the webview: a web or mail link is handed
-//! to the system (browser, mail app) and the navigation is cancelled, everything else is cancelled.
+//! the frame's `<base target="_blank">` turns into a new-window request (iOS asks about it here,
+//! with no target frame). Android never asks: its popup is caught in a bare, unshown WebView by the
+//! plugin's `PopupChromeClient`, which applies the same rule in Kotlin (`PopupUrlPolicy`) and hands
+//! the URL straight to the system, never to the app's WebView. Nothing but the app's own page and
+//! the frame's document ever loads in the webview: a web or mail link is handed to the system
+//! (browser, mail app) and the navigation is cancelled, everything else is cancelled.
 //! The mail cleaner already keeps only http(s) and mailto links; this is the shell's own check.
 
 use url::Url;

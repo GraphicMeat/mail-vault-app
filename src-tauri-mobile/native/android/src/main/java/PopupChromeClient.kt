@@ -3,19 +3,23 @@
 // The frame's links open in a new window (`<base target="_blank">`, sandbox `allow-popups`). With
 // multiple windows off (the WebView default) Chromium would have to load such a link in the top
 // window, which the sandbox forbids, so the tap did nothing. With multiple windows on, the popup
-// asks `onCreateWindow`: we hand it a bare, never-shown WebView (no Tauri IPC, no JavaScript)
-// that only catches the URL it was asked to load and cancels that load, then ask the app's own
-// WebView to load the URL. That load goes through the shell's navigation hook
-// (`tauri-plugin-mv-native` links.rs): a web or mail link is cancelled there and handed to the
-// system, anything else is just cancelled. A popup without a user gesture is refused.
+// asks `onCreateWindow` (a popup without a user gesture is refused). We hand it a bare, never-shown
+// WebView (never a Tauri webview: no IPC, no JavaScript) that only catches the URL it was asked to
+// load, cancels that load and is destroyed. The URL never goes near the app's own WebView: if
+// `PopupUrlPolicy` accepts it (http(s) off this device, or mailto) it goes straight to the system
+// as `ACTION_VIEW` + `CATEGORY_BROWSABLE`; anything else is dropped.
 //
 // Every other callback is passed to the WebChromeClient that was there before (wry's, final).
 
 package com.mailvault.mvnative
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Message
+import android.util.Log
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.GeolocationPermissions
@@ -28,18 +32,20 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 
-class PopupChromeClient(private val inner: WebChromeClient) : WebChromeClient() {
+class PopupChromeClient(private val activity: Activity, private val inner: WebChromeClient) : WebChromeClient() {
     override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
         if (!isUserGesture) return false
         val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
         val catcher = WebView(view.context)
         var caught = false
         fun hand(url: String?) {
+            // The catcher's own first page is about:blank; wait for the real one.
             if (caught || url.isNullOrEmpty() || url == "about:blank") return
             caught = true
-            // The app's WebView decides: RustWebView.loadUrl asks the shell's navigation hook first.
-            view.post { view.loadUrl(url) }
             catcher.post { catcher.stopLoading(); catcher.destroy() }
+            val accepted = PopupUrlPolicy.allow(url)
+            Log.i("MailVault", "MV_MOBILE {\"nav\":{\"via\":\"popup\",\"verdict\":\"${if (accepted != null) "external" else "deny"}\"}}")
+            if (accepted != null) openOutside(accepted)
         }
         catcher.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean {
@@ -55,6 +61,23 @@ class PopupChromeClient(private val inner: WebChromeClient) : WebChromeClient() 
         transport.webView = catcher
         resultMsg.sendToTarget()
         return true
+    }
+
+    /** The system browser or mail app; never this app's WebView. */
+    private fun openOutside(url: String) {
+        val uri = Uri.parse(url)
+        // Second gate on Android's own parse of the string the policy accepted.
+        if (uri.scheme?.lowercase() !in setOf("http", "https", "mailto")) return
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.selector = null
+        intent.component = null
+        try {
+            activity.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            // No browser or mail app: nothing opens.
+        }
     }
 
     override fun onCloseWindow(window: WebView) = inner.onCloseWindow(window)
