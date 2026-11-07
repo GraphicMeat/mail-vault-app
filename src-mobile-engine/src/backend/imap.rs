@@ -83,13 +83,24 @@ impl ImapBackend {
     /// [`Fail::auth`].
     pub(crate) fn open(shared: &Shared, account: &str) -> Result<ImapBackend, Fail> {
         let sc = session_config(shared, account, None)?;
-        match Self::sign_in(sc) {
+        let out = match Self::sign_in(sc) {
             Err((Fail::Code(Code::AuthFailed, _), Some(token))) => {
                 let sc = session_config(shared, account, Some(&token))?;
-                Self::sign_in(sc).map_err(|(f, _)| f)
+                match Self::sign_in(sc) {
+                    // Refused with a token minted just now: the grant is fine but the mailbox
+                    // will not take it. Parked after a few such attempts in a row.
+                    Err((f @ Fail::Code(Code::AuthFailed, _), Some(_))) => {
+                        Err(crate::oauth::fresh_token_refused(shared, account).unwrap_or(f))
+                    }
+                    other => other.map_err(|(f, _)| f),
+                }
             }
             other => other.map_err(|(f, _)| f),
+        };
+        if out.is_ok() {
+            crate::oauth::sign_in_worked(shared, account);
         }
+        out
     }
 
     /// One sign-in; a failure comes back scrubbed, with the OAuth token it used.

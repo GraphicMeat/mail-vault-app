@@ -185,6 +185,16 @@ impl Fail {
 }
 
 fn run_job(shared: &Shared, job: &Job) {
+    // A parked account never shows a pass starting: only that it needs a new sign-in.
+    let parked = shared
+        .read(|c| c.query_row("SELECT needs_auth FROM accounts WHERE id = ?1", [&job.account], |r| r.get::<_, i64>(0)).optional())
+        .ok()
+        .flatten()
+        .is_some_and(|n| n != 0);
+    if parked {
+        shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "error", "code": Code::NeedsAuth.as_str() }));
+        return;
+    }
     shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "syncing" }));
     let end = match sync_job(shared, job) {
         Ok(()) | Err(Fail::Gone) | Err(Fail::Closing) => json!({ "accountId": job.account, "state": "idle" }),

@@ -35,12 +35,16 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// How long `finish` waits for the browser to come back with a code.
 const FINISH_TIMEOUT: Duration = Duration::from_secs(300);
 /// A stored access token is used only while it has at least this long left.
 const REFRESH_MARGIN_MS: i64 = 60_000;
+/// Consecutive server refusals of a freshly refreshed token before the account is parked: the
+/// grant is valid, but the mailbox will not take it (IMAP turned off, a tenant policy), and every
+/// further attempt would cost a refresh and two logins.
+const MAX_FRESH_REFUSALS: u32 = 3;
 /// Microsoft's Graph grant also asks for this, so `/me` can name the address.
 const MICROSOFT_EXTRA_SCOPE: &str = "User.Read";
 
@@ -89,11 +93,13 @@ struct Flow {
     /// Core's `state` for the flow (also in the auth URL).
     state: String,
     provider: Provider,
-    login_hint: Option<String>,
     /// The account a `reauth` flow signs in again.
     reauth: Option<String>,
     /// Set by `cancel`, so `finish` reads the failure it causes as `CANCELLED`.
     cancelled: AtomicBool,
+    /// A `finish` is waiting on it (that wait has its own timeout, so it is never pruned).
+    finishing: AtomicBool,
+    started: Instant,
 }
 
 /// The engine's OAuth state, in [`Shared`].
@@ -109,6 +115,9 @@ pub(crate) struct OAuth {
     refresh_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     finish_timeout: Mutex<Duration>,
     google_servers: Mutex<Servers>,
+    /// Per account: sign-ins the server refused in a row although the token had just been
+    /// refreshed. At [`MAX_FRESH_REFUSALS`] the account is parked like a refused grant.
+    fresh_refusals: Mutex<HashMap<String, u32>>,
 }
 
 impl Default for OAuth {
@@ -121,6 +130,7 @@ impl Default for OAuth {
             refresh_locks: Mutex::new(HashMap::new()),
             finish_timeout: Mutex::new(FINISH_TIMEOUT),
             google_servers: Mutex::new(Servers::default()),
+            fresh_refusals: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -137,8 +147,27 @@ impl OAuth {
         if let Some(flow) = flow {
             block_on(self.manager.cancel_flow(&flow.state));
         }
+        self.prune();
         if lock(&self.flows).is_empty() && self.listening.swap(false, Ordering::SeqCst) {
             block_on(self.manager.shutdown_callback_server());
+        }
+    }
+
+    /// Drops flows begun longer ago than the finish window that no `finish` waits on: a page that
+    /// called `begin` and then went away. Called with the listener gate held.
+    fn prune(&self) {
+        let window = *lock(&self.finish_timeout);
+        let stale: Vec<Arc<Flow>> = {
+            let mut flows = lock(&self.flows);
+            let ids: Vec<String> = flows
+                .iter()
+                .filter(|(_, f)| !f.finishing.load(Ordering::SeqCst) && f.started.elapsed() > window)
+                .map(|(id, _)| id.clone())
+                .collect();
+            ids.iter().filter_map(|id| flows.remove(id)).collect()
+        };
+        for f in stale {
+            block_on(self.manager.cancel_flow(&f.state));
         }
     }
 
@@ -281,6 +310,31 @@ fn mark_needs_auth(shared: &Shared, account: &str, why: &str) {
     }
 }
 
+/// The server refused `account`'s freshly refreshed token. Parks the account (and returns
+/// [`Fail::auth`]) at the [`MAX_FRESH_REFUSALS`]th refusal in a row; `None` below it.
+pub(crate) fn fresh_token_refused(shared: &Shared, account: &str) -> Option<Fail> {
+    let n = {
+        let mut m = lock(&shared.oauth.fresh_refusals);
+        let n = m.entry(account.to_string()).or_insert(0);
+        *n += 1;
+        *n
+    };
+    if n < MAX_FRESH_REFUSALS {
+        return None;
+    }
+    lock(&shared.oauth.fresh_refusals).remove(account);
+    mark_needs_auth(shared, account, &format!("the server refused a fresh token {n} times in a row"));
+    Some(Fail::auth())
+}
+
+/// `account` signed in: its run of refusals ends.
+pub(crate) fn sign_in_worked(shared: &Shared, account: &str) {
+    let mut m = lock(&shared.oauth.fresh_refusals);
+    if !m.is_empty() {
+        m.remove(account);
+    }
+}
+
 // ── The flow RPCs ───────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -307,6 +361,7 @@ struct ReauthParams {
 fn start(shared: &Shared, provider: Provider, login_hint: Option<String>, reauth: Option<String>) -> Result<Value, RpcError> {
     let oauth = &shared.oauth;
     let _gate = lock(&oauth.listener);
+    oauth.prune();
     block_on(oauth.manager.start_callback_server()).map_err(|e| internal(format!("sign-in listener: {e}")))?;
     oauth.listening.store(true, Ordering::SeqCst);
     let extra = (provider == Provider::Microsoft).then_some(MICROSOFT_EXTRA_SCOPE);
@@ -329,7 +384,14 @@ fn start(shared: &Shared, provider: Provider, login_hint: Option<String>, reauth
         }
     };
     let id = new_flow_id();
-    let flow = Flow { state: url.state, provider, login_hint, reauth, cancelled: AtomicBool::new(false) };
+    let flow = Flow {
+        state: url.state,
+        provider,
+        reauth,
+        cancelled: AtomicBool::new(false),
+        finishing: AtomicBool::new(false),
+        started: Instant::now(),
+    };
     lock(&oauth.flows).insert(id.clone(), Arc::new(flow));
     Ok(json!({ "flowId": id, "url": url.auth_url }))
 }
@@ -395,6 +457,7 @@ pub(crate) fn finish(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     let p: FlowParams = parse(params)?;
     let oauth = &engine.shared().oauth;
     let flow = lock(&oauth.flows).get(&p.flow_id).cloned().ok_or_else(|| RpcError::Invalid("unknown flow".into()))?;
+    flow.finishing.store(true, Ordering::SeqCst);
     let wait = *lock(&oauth.finish_timeout);
     let got = block_on(async { tokio::time::timeout(wait, oauth.manager.exchange_code(&flow.state)).await });
     // The listener has done its part, whatever came of it.
@@ -435,18 +498,17 @@ fn graph_code(e: &str) -> Code {
 }
 
 /// The address the grant belongs to.
-fn signed_in_address(engine: &Engine, flow: &Flow, tokens: &TokenResponse) -> Result<String, Refusal> {
+fn signed_in_address(flow: &Flow, tokens: &TokenResponse) -> Result<String, Refusal> {
     let address = match flow.provider {
         Provider::Google => tokens.email.clone(),
         Provider::Microsoft => {
             let client = mailvault_core::graph::GraphClient::for_purpose(&tokens.access_token, "sign-in");
+            // Never the address the user typed: only one Microsoft confirms identifies the
+            // mailbox (a reauth's identity check and the DUPLICATE check depend on it). A /me that
+            // fails ends the sign-in, with nothing stored.
             match block_on(client.me_address()) {
                 Ok(a) => Some(a),
-                Err(e) => {
-                    // A tenant that withholds User.Read: the address the user typed, if any.
-                    engine.shared().log(&format!("[oauth] finish: Graph /me: {}", scrub(&e, &[&tokens.access_token])));
-                    flow.login_hint.clone()
-                }
+                Err(e) => return Err((graph_code(&e), format!("Graph /me: {e}"))),
             }
         }
     };
@@ -492,7 +554,7 @@ fn verify(row: &AccountRow, cred: &Credential) -> Result<(), Refusal> {
 }
 
 fn complete(engine: &Engine, flow: &Flow, tokens: &TokenResponse) -> Result<Value, Refusal> {
-    let address = signed_in_address(engine, flow, tokens)?;
+    let address = signed_in_address(flow, tokens)?;
     let mut cred = Credential {
         refresh: tokens.refresh_token.clone().filter(|r| !r.is_empty()),
         access: Some(tokens.access_token.clone()),
@@ -526,6 +588,7 @@ fn complete(engine: &Engine, flow: &Flow, tokens: &TokenResponse) -> Result<Valu
                     .write(|c| c.execute("UPDATE accounts SET needs_auth = 0 WHERE id = ?1", [id]))
                     .map_err(|e| (Code::Invalid, e.to_string()))?;
             }
+            lock(&shared.oauth.fresh_refusals).remove(id);
             // Resume: the parked journal and outbox, and a sync of the account.
             engine.replay().wake(shared, Some(id));
             engine.outbox().wake(shared, Some(id));

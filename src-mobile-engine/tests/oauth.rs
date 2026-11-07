@@ -216,9 +216,29 @@ fn scenario() -> Scenario {
     Scenario::new().mailbox(inbox).mailbox(Mailbox::new("Sent").with_attrs(&["\\HasNoChildren", "\\Sent"]))
 }
 
+/// The engine's secret store, counting the secrets it was given.
+#[derive(Default)]
+struct Spy {
+    inner: MemorySecrets,
+    sets: std::sync::atomic::AtomicUsize,
+}
+
+impl SecretStore for Spy {
+    fn get(&self, id: &str) -> Result<Option<String>, String> {
+        self.inner.get(id)
+    }
+    fn set(&self, id: &str, secret: &str) -> Result<(), String> {
+        self.sets.fetch_add(1, Ordering::SeqCst);
+        self.inner.set(id, secret)
+    }
+    fn delete(&self, id: &str) -> Result<(), String> {
+        self.inner.delete(id)
+    }
+}
+
 struct Fx {
     tmp: tempfile::TempDir,
-    secrets: Arc<MemorySecrets>,
+    secrets: Arc<Spy>,
     engine: Engine,
     events: Arc<Events>,
     logs: Arc<Mutex<Vec<String>>>,
@@ -236,7 +256,7 @@ fn setup() -> Fx {
     let imap = MockImap::start_checked(scenario(), Arc::new(authority.clone()));
     let tokens = TokenServer::start(authority.clone());
     let tmp = tempfile::tempdir().unwrap();
-    let secrets = Arc::new(MemorySecrets::default());
+    let secrets = Arc::new(Spy::default());
     let engine = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::clone(&secrets) as _).unwrap();
     engine.set_action_backoff(Duration::from_millis(50), Duration::from_millis(200));
     engine.set_outbox_backoff(Duration::from_millis(50), Duration::from_millis(200));
@@ -449,8 +469,11 @@ fn a_revoked_refresh_token_marks_the_account_and_stops() {
         json!({ "accountId": id, "to": "rcpt@example.test", "cc": "", "bcc": "", "subject": "Held", "text": "Body", "attachments": [] }),
     );
     let out_id = sent["id"].as_str().unwrap().to_string();
+    let before = f.events.len();
     let again = f.sync(&id);
     assert_eq!(again["code"], "NEEDS_AUTH", "{again}");
+    let flashed = f.events.all()[before..].iter().any(|(n, v)| n == "mobile.sync.state" && v["state"] == "syncing");
+    assert!(!flashed, "a parked account never reports a pass starting");
     assert_eq!(f.engine.oauth_access_token(&id), Err("NEEDS_AUTH".to_string()));
     // Many backoff periods (50 ms, capped at 200 ms) pass.
     std::thread::sleep(Duration::from_millis(1500));
@@ -602,5 +625,176 @@ fn the_auth_url_targets_only_the_provider_host() {
     for flow in [&g["flowId"], &m["flowId"]] {
         f.rpc("mobile.oauth.cancel", json!({ "flowId": flow }));
     }
+    assert!(port_is_free());
+}
+
+// ── Graph stub for the Microsoft address check ─────────────────────────────
+
+/// A Graph base on this machine (`MAILVAULT_GRAPH_BASE`, read once per process). `"me401"`:
+/// `/me` is refused with 401 while the mailbox itself answers (a folder list with an Inbox), so
+/// only the address is missing. `"drop"`: every connection is closed unanswered.
+struct GraphStub {
+    mode: Arc<Mutex<&'static str>>,
+}
+
+fn graph_stub() -> &'static GraphStub {
+    static STUB: std::sync::OnceLock<GraphStub> = std::sync::OnceLock::new();
+    STUB.get_or_init(|| {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("MAILVAULT_GRAPH_BASE", format!("http://{addr}"));
+        let mode: Arc<Mutex<&'static str>> = Arc::new(Mutex::new("me401"));
+        let m = Arc::clone(&mode);
+        std::thread::spawn(move || {
+            for conn in listener.incoming() {
+                let Ok(conn) = conn else { continue };
+                let mode = *m.lock().unwrap();
+                let mut out = conn.try_clone().unwrap();
+                let mut reader = BufReader::new(conn);
+                let mut request = String::new();
+                let _ = reader.read_line(&mut request);
+                let mut len = 0usize;
+                loop {
+                    let mut h = String::new();
+                    if reader.read_line(&mut h).unwrap_or(0) == 0 || h.trim().is_empty() {
+                        break;
+                    }
+                    if let Some((k, v)) = h.split_once(':') {
+                        if k.eq_ignore_ascii_case("content-length") {
+                            len = v.trim().parse().unwrap_or(0);
+                        }
+                    }
+                }
+                let mut body = vec![0u8; len];
+                let _ = reader.read_exact(&mut body);
+                if mode == "me401" {
+                    let path = request.split_whitespace().nth(1).unwrap_or("");
+                    let (status, body) = if path.starts_with("/me/mailFolders") {
+                        ("200 OK", json!({ "value": [{ "id": "inbox-id", "displayName": "Inbox", "totalItemCount": 0, "unreadItemCount": 0 }] }).to_string())
+                    } else if path.starts_with("/$batch") {
+                        ("200 OK", json!({ "responses": [{ "id": "inbox", "status": 200, "body": { "id": "inbox-id" } }] }).to_string())
+                    } else {
+                        ("401 Unauthorized", json!({ "error": { "code": "Authorization_RequestDenied", "message": "Insufficient privileges" } }).to_string())
+                    };
+                    let _ = write!(out, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                }
+                // "drop": closed with no answer.
+            }
+        });
+        GraphStub { mode }
+    })
+}
+
+/// A Microsoft flow (or a reauth of `reauth`) whose code redeems; the finish reply.
+fn microsoft_flow(f: &Fx, reauth: Option<&str>, code: &str) -> Value {
+    let begun = match reauth {
+        None => f.rpc("mobile.oauth.begin", json!({ "provider": "microsoft", "loginHint": "typed@outlook.com" })),
+        Some(id) => f.rpc("mobile.oauth.reauth", json!({ "accountId": id })),
+    };
+    let flow = begun["flowId"].as_str().unwrap().to_string();
+    f.tokens.expect_code(code, "ignored@outlook.com");
+    assert!(f.engine.oauth_deliver_code(&flow, code));
+    f.rpc("mobile.oauth.finish", json!({ "flowId": flow }))
+}
+
+#[test]
+fn microsoft_finish_refuses_when_graph_cannot_name_the_address() {
+    let _port = port();
+    let stub = graph_stub();
+    let f = setup();
+
+    // Graph will not name the address (the mailbox itself answers): AUTH_FAILED, and the typed
+    // address is never taken instead.
+    *stub.mode.lock().unwrap() = "me401";
+    let r = microsoft_flow(&f, None, "authcode-ms-0005");
+    assert_eq!((r["ok"].clone(), r["code"].clone()), (json!(false), json!("AUTH_FAILED")), "{r}");
+    // Graph cannot be reached: a network code the user can retry on.
+    *stub.mode.lock().unwrap() = "drop";
+    let r = microsoft_flow(&f, None, "authcode-ms-0006");
+    assert_eq!((r["ok"].clone(), r["code"].clone()), (json!(false), json!("HOST_UNREACHABLE")), "{r}");
+    assert!(port_is_free(), "the flows ended");
+    let rows: i64 = f.db().query_row("SELECT count(*) FROM accounts", [], |r| r.get(0)).unwrap();
+    assert_eq!(rows, 0, "nothing stored");
+    assert_eq!(f.secrets.sets.load(Ordering::SeqCst), 0, "no secret stored");
+
+    // A reauth whose /me fails leaves the account and its credential as they were.
+    f.db()
+        .execute(
+            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, kind, auth, provider, needs_auth, created_ms)
+             VALUES ('acc_00000000000000aa', 'owner@outlook.com', 'owner@outlook.com', 'outlook.office365.com', 993, 'ssl', 'graph', 'oauth2', 'microsoft', 1, 1)",
+            [],
+        )
+        .unwrap();
+    let old = Credential::from_tokens("old-rt-ms", "old-at-ms", 1);
+    f.secrets.set("acc_00000000000000aa", &old.to_secret()).unwrap();
+    for mode in ["me401", "drop"] {
+        *stub.mode.lock().unwrap() = mode;
+        let r = microsoft_flow(&f, Some("acc_00000000000000aa"), &format!("authcode-ms-re-{mode}"));
+        assert_eq!(r["ok"], false, "{r}");
+        assert_eq!(f.cred("acc_00000000000000aa"), old, "the stored credential is untouched");
+        assert_eq!(f.needs_auth("acc_00000000000000aa"), 1);
+    }
+    assert!(port_is_free());
+    f.assert_no_secret_leaked(&["authcode-ms-0005", "authcode-ms-0006", "authcode-ms-re-me401", "authcode-ms-re-drop"]);
+}
+
+#[test]
+fn a_token_the_server_keeps_refusing_parks_the_account() {
+    let _port = port();
+    let f = setup();
+    let id = f.sign_in();
+    assert_eq!(f.sync(&id)["state"], "idle");
+
+    // The grant refreshes fine, but the mailbox refuses every token (IMAP turned off).
+    f.authority.refuse_valid_tokens(true);
+    for _ in 0..2 {
+        let end = f.sync(&id);
+        assert_eq!(end["code"], "AUTH_FAILED", "{end}");
+    }
+    assert_eq!(f.needs_auth(&id), 0, "two refusals do not park it");
+    // A sign-in that works ends the run.
+    f.authority.refuse_valid_tokens(false);
+    assert_eq!(f.sync(&id)["state"], "idle");
+    f.authority.refuse_valid_tokens(true);
+    for _ in 0..2 {
+        assert_eq!(f.sync(&id)["code"], "AUTH_FAILED");
+    }
+    assert_eq!(f.needs_auth(&id), 0, "the count started again");
+    let posts = f.refresh_posts();
+    let end = f.sync(&id);
+    assert_eq!(end["code"], "NEEDS_AUTH", "the third refusal in a row parks the account: {end}");
+    assert_eq!(f.needs_auth(&id), 1);
+    assert_eq!(f.refresh_posts(), posts + 1, "one refresh per attempt");
+
+    // Parked: no more logins or refreshes.
+    let connections = f.imap.connection_count();
+    let posts = f.refresh_posts();
+    assert_eq!(f.sync(&id)["code"], "NEEDS_AUTH");
+    assert_eq!(f.imap.connection_count(), connections);
+    assert_eq!(f.refresh_posts(), posts);
+    f.assert_no_secret_leaked(&[]);
+}
+
+#[test]
+fn a_stale_flow_releases_the_listener() {
+    let _port = port();
+    let f = setup();
+    f.engine.set_oauth_finish_timeout(Duration::from_millis(200));
+
+    // Begun and abandoned: the next flow call past the finish window drops it and frees the port.
+    let a = f.rpc("mobile.oauth.begin", json!({ "provider": "google" }))["flowId"].as_str().unwrap().to_string();
+    assert!(!port_is_free());
+    std::thread::sleep(Duration::from_millis(400));
+    assert_eq!(f.rpc("mobile.oauth.cancel", json!({ "flowId": "flow_0000000000000000" })), json!({ "cancelled": false }));
+    assert!(port_is_free(), "the stale flow was dropped and the listener shut");
+    assert!(!f.engine.oauth_deliver_code(&a, "late"), "a dropped flow takes no code");
+
+    // A new begin drops a stale flow too, and the listener stays for the new one.
+    let b = f.rpc("mobile.oauth.begin", json!({ "provider": "google" }))["flowId"].as_str().unwrap().to_string();
+    std::thread::sleep(Duration::from_millis(400));
+    let c = f.rpc("mobile.oauth.begin", json!({ "provider": "google" }))["flowId"].clone();
+    assert!(!f.engine.oauth_deliver_code(&b, "late"), "the stale flow is gone");
+    assert!(!port_is_free(), "the new flow keeps the listener");
+    assert_eq!(f.rpc("mobile.oauth.cancel", json!({ "flowId": c })), json!({ "cancelled": true }));
     assert!(port_is_free());
 }
