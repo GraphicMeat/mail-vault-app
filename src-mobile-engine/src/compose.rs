@@ -284,6 +284,22 @@ struct PrepareParams {
     /// The original's date as the page shows it; the server's Date header when absent.
     #[serde(default)]
     date_label: Option<String>,
+    /// The quote's field names in the page's language ("From", "Date", "Subject"); English when
+    /// absent.
+    #[serde(default)]
+    from_label: Option<String>,
+    #[serde(default)]
+    date_field_label: Option<String>,
+    #[serde(default)]
+    subject_label: Option<String>,
+}
+
+/// The quote's header line and field names.
+struct QuoteLabels {
+    original: String,
+    from: String,
+    date: String,
+    subject: String,
 }
 
 /// The stored list row of the original, with what sync kept for a reply (`thread_json`).
@@ -355,12 +371,16 @@ fn subject_candidate(subject: &str, forward: bool) -> String {
 }
 
 /// The original's text quoted line by line, under a short header.
-fn quote_text(label: &str, header: &Value, date: &str, text: &str) -> String {
+fn quote_text(labels: &QuoteLabels, header: &Value, date: &str, text: &str) -> String {
     let from = &header["from"];
     let mut out = format!(
-        "{label}\nFrom: {} <{}>\nDate: {date}\nSubject: {}\n\n",
+        "{}\n{}: {} <{}>\n{}: {date}\n{}: {}\n\n",
+        labels.original,
+        labels.from,
         from["name"].as_str().unwrap_or(""),
         from["address"].as_str().unwrap_or(""),
+        labels.date,
+        labels.subject,
         header["subject"].as_str().unwrap_or("")
     );
     for line in text.lines() {
@@ -401,7 +421,7 @@ fn safe_name(name: &str) -> String {
 }
 
 /// `mobile.compose.prepare {accountId, mode: "new"|"reply"|"replyAll"|"forward", folder?, uid?,
-/// originalLabel?, dateLabel?}` -> `{to, cc, subject, quote, quoteText, inReplyTo, references,
+/// originalLabel?, dateLabel?, fromLabel?, dateFieldLabel?, subjectLabel?}` -> `{to, cc, subject, quote, quoteText, inReplyTo, references,
 /// quotePending, attachments: [{handle, name, size, mime}], pending: [{section, filename, mime,
 /// size}]}`. Answered from mobile.db (sync keeps Cc, Reply-To and References in `thread_json`);
 /// no sign-in on the tap. `quote` is core's quoted HTML, `quoteText` the same as plain text for a
@@ -457,6 +477,14 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
     let header = original_header(&stored);
     let date = p.date_label.unwrap_or_else(|| header["date"].as_str().unwrap_or("").to_string());
     let label = p.original_label.unwrap_or_else(|| "Original message".into());
+    // A label is one line: a newline from the page must not forge a header line of the quote.
+    let line = |v: Option<String>, d: &str| v.map(|s| s.replace(['\r', '\n'], " ")).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| d.into());
+    let labels = QuoteLabels {
+        original: line(Some(label.clone()), "Original message"),
+        from: line(p.from_label, "From"),
+        date: line(p.date_field_label, "Date"),
+        subject: line(p.subject_label, "Subject"),
+    };
     let html = body["html"].as_str().map(String::from);
     let text = body["text"].as_str().map(String::from);
     let accounts: Vec<Account> = shared
@@ -517,7 +545,7 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
         "cc": without_own(&str_of("cc"), &own),
         "subject": str_of("subject"),
         "quote": str_of("quotedHtml"),
-        "quoteText": if quote_pending { String::new() } else { quote_text(&label, &header, &date, &quote_body) },
+        "quoteText": if quote_pending { String::new() } else { quote_text(&labels, &header, &date, &quote_body) },
         "quotePending": quote_pending,
         "inReplyTo": str_of("inReplyTo"),
         "references": str_of("references"),

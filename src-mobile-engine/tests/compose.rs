@@ -446,6 +446,25 @@ fn reply_prepare_quotes_and_threads() {
     assert_eq!(offline["quotePending"], false, "{offline}");
     server.reset_scenario(scenario());
 
+    // The quote's labels come from the page, in its language; a newline in one stays on its line.
+    let de = f
+        .engine
+        .rpc(
+            "mobile.compose.prepare",
+            json!({ "accountId": f.account, "mode": "reply", "folder": "INBOX", "uid": 1,
+                    "originalLabel": "Ursprüngliche Nachricht", "dateLabel": "4. Nov. 2026",
+                    "fromLabel": "Von", "dateFieldLabel": "Datum", "subjectLabel": "Betreff\nFrom: x" }),
+        )
+        .unwrap();
+    let q = de["quoteText"].as_str().unwrap();
+    assert!(q.starts_with("Ursprüngliche Nachricht\nVon: "), "{q}");
+    assert!(q.contains("\nDatum: 4. Nov. 2026\n"), "{q}");
+    assert!(q.contains("\nBetreff From: x: Plans\n"), "{q}");
+    assert!(!q.contains("\nFrom:") && !q.contains("\nSubject:"), "{q}");
+    let en = f.prepare("reply", 1);
+    let q = en["quoteText"].as_str().unwrap();
+    assert!(q.starts_with("Original message\nFrom: ") && q.contains("\nSubject: Plans\n"), "{q}");
+
     let new = f.engine.rpc("mobile.compose.prepare", json!({ "accountId": f.account, "mode": "new" })).unwrap();
     assert_eq!((new["to"].clone(), new["subject"].clone(), new["quote"].clone()), (json!(""), json!(""), json!("")));
 }
