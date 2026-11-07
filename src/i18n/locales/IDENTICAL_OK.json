@@ -102,6 +102,7 @@
   "mobile.compose.body",
   "mobile.compose.cc",
   "mobile.compose.pickPhotos",
+  "mobile.compose.quoteDate",
   "mobile.compose.showCc",
   "netActivity.account",
   "netActivity.host",

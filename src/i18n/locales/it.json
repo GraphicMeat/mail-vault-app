@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "Elimina {{subject}}",
   "mobile.outbox.toast.failed": "Un messaggio non è stato inviato. Apri la posta in uscita per riprovare.",
   "mobile.outbox.toast.uncertain": "Un messaggio potrebbe non essere stato inviato. Apri la posta in uscita per controllare.",
-  "mobile.outbox.actionFailed": "Impossibile modificare la posta in uscita. Riprova."
+  "mobile.outbox.actionFailed": "Impossibile modificare la posta in uscita. Riprova.",
+  "mobile.compose.quoteDate": "Data",
+  "mobile.compose.sending": "Invio",
+  "mobile.compose.saveFailed": "Impossibile salvare la bozza. Riprova, oppure copia il testo prima di uscire.",
+  "mobile.compose.downloadFailed": "Download non riuscito",
+  "mobile.drafts.title": "Bozze",
+  "mobile.drafts.empty": "Nessuna bozza.",
+  "mobile.drafts.count_one": "{{count}} bozza",
+  "mobile.drafts.count_other": "{{count}} bozze",
+  "mobile.drafts.delete": "Elimina bozza {{subject}}",
+  "mobile.drafts.confirmDelete": "Eliminare la bozza {{subject}}? L'operazione non si può annullare.",
+  "mobile.drafts.noRecipients": "Nessun destinatario",
+  "mobile.drafts.loadFailed": "Impossibile aprire questa bozza.",
+  "mobile.drafts.deleteFailed": "Impossibile eliminare la bozza. Riprova."
 }

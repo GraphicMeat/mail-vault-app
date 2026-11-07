@@ -2,7 +2,7 @@
 // sending, failed or uncertain), and on tap a sheet with each message, its state and, for one
 // that failed or may have gone out, Retry and Discard. An uncertain send says so plainly: Retry
 // may deliver it twice, which is the user's call (the engine never resends it on its own).
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import Sheet from './Sheet.jsx';
 import { useMobileStore } from './store.js';
@@ -61,8 +61,18 @@ export function OutboxSheet({ rows, onClose }) {
 export default function OutboxRow({ initialOpen = false }) {
   const t = useT();
   const rows = useMobileStore((s) => s.outbox);
-  const [open, setOpen] = useState(initialOpen);
+  const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
+  const opened = useRef(false);
+  // An emptied outbox closes the sheet for good: it never comes back by itself with the next row.
+  // (`initialOpen`, a screenshot hook, opens it once, when the first rows are there.)
+  useEffect(() => {
+    if (!rows.length) setOpen(false);
+    else if (initialOpen && !opened.current) {
+      opened.current = true;
+      setOpen(true);
+    }
+  }, [rows.length, initialOpen]);
   useBackLayer(open && rows.length > 0, close);
   if (!rows.length) return null;
   const attention = rows.some((r) => r.state === 'failed' || r.state === 'uncertain');

@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "Descartar {{subject}}",
   "mobile.outbox.toast.failed": "No se pudo enviar un mensaje. Abre la bandeja de salida para reintentar.",
   "mobile.outbox.toast.uncertain": "Puede que un mensaje no se haya enviado. Abre la bandeja de salida para comprobarlo.",
-  "mobile.outbox.actionFailed": "No se pudo cambiar la bandeja de salida. Inténtalo de nuevo."
+  "mobile.outbox.actionFailed": "No se pudo cambiar la bandeja de salida. Inténtalo de nuevo.",
+  "mobile.compose.quoteDate": "Fecha",
+  "mobile.compose.sending": "Enviando",
+  "mobile.compose.saveFailed": "No se pudo guardar el borrador. Inténtalo de nuevo o copia el texto antes de salir.",
+  "mobile.compose.downloadFailed": "No se pudo descargar",
+  "mobile.drafts.title": "Borradores",
+  "mobile.drafts.empty": "No hay borradores.",
+  "mobile.drafts.count_one": "{{count}} borrador",
+  "mobile.drafts.count_other": "{{count}} borradores",
+  "mobile.drafts.delete": "Eliminar borrador {{subject}}",
+  "mobile.drafts.confirmDelete": "¿Eliminar el borrador {{subject}}? No se puede deshacer.",
+  "mobile.drafts.noRecipients": "Sin destinatarios",
+  "mobile.drafts.loadFailed": "No se pudo abrir este borrador.",
+  "mobile.drafts.deleteFailed": "No se pudo eliminar el borrador. Inténtalo de nuevo."
 }

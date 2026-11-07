@@ -5,7 +5,9 @@
 // user already touched are never overwritten by a late answer. The quote goes under the body as
 // plain text (`quoteText`; the HTML `quote` is not used). A forward's attachments not yet
 // downloaded (`pending`) are fetched through the attachment jobs, then prepare is asked again;
-// one that fails is left out with a note.
+// one that fails, or shows no progress for STALL_MS, is marked failed and left out with a note;
+// a part still downloading can be removed. `draftId` reopens a saved draft (`mobile.drafts.get`):
+// autosave then updates that same draft.
 //
 // Drafts are local (`mobile.drafts.*`): saved 1.5 s after the last edit, when the app goes to the
 // background and when the user leaves with "Save draft"; a draft emptied and left is deleted.
@@ -29,6 +31,8 @@ import { useT } from './i18n.js';
 
 /** Quiet time after the last edit before the draft is saved. */
 export const AUTOSAVE_MS = 1500;
+/** A forwarded part with no progress for this long is given up on. */
+export const STALL_MS = 60_000;
 
 const TITLE_KEYS = Object.freeze({
   new: 'mobile.compose.newTitle',
@@ -45,7 +49,7 @@ function PaperclipIcon() {
   );
 }
 
-/** Waits for one attachment job: true once it is in the cache, false when it failed. */
+/** Waits for one attachment job: true once it is in the cache, false when it failed or stalled. */
 function fetchPart(accountId, folder, uid, section) {
   return daemonCall('mobile.attachment.fetch', { accountId, folder, uid, section }).then(
     (reply) => new Promise((resolve) => {
@@ -56,11 +60,25 @@ function fetchPart(accountId, folder, uid, section) {
       }
       let stop = null;
       let ended = false;
-      stop = watchJob(jobId, (kind) => {
-        if (ended || kind === 'progress') return;
+      let stall = null;
+      const end = (ok) => {
+        if (ended) return;
         ended = true;
+        clearTimeout(stall);
         stop?.();
-        resolve(kind === 'done');
+        resolve(ok);
+      };
+      const arm = () => {
+        clearTimeout(stall);
+        stall = setTimeout(() => {
+          daemonCall('mobile.attachment.cancel', { jobId }).catch(() => {});
+          end(false);
+        }, STALL_MS);
+      };
+      arm();
+      stop = watchJob(jobId, (kind) => {
+        if (kind === 'progress') arm();
+        else end(kind === 'done');
       });
       if (ended) stop();
     }),
@@ -95,7 +113,7 @@ function useKeyboardInset(ref) {
   }, [ref]);
 }
 
-export default function Compose({ accountId, fromEmail, mode = 'new', original = null, onClose }) {
+export default function Compose({ accountId, fromEmail, mode = 'new', original = null, draftId: openDraft = null, onClose }) {
   const t = useT();
   const [to, setTo] = useState({ entries: [], text: '' });
   const [cc, setCc] = useState({ entries: [], text: '' });
@@ -104,7 +122,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const [subject, setSubject] = useState('');
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState([]); // [{ handle, name, size, mime, forwarded? }]
-  const [fetching, setFetching] = useState([]); // forwarded parts being downloaded: [{ section, filename, size }]
+  const [fetching, setFetching] = useState([]); // forwarded parts: [{ section, filename, size, failed? }]
   const [notes, setNotes] = useState([]); // translated one-liners: a left-out forward, an unreadable pick
   const [error, setError] = useState(null); // a send refusal's message key
   const [sending, setSending] = useState(false);
@@ -114,11 +132,12 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
 
   const threading = useRef({ inReplyTo: '', references: '' });
   const touched = useRef(new Set());
-  const draftId = useRef(null);
+  const draftId = useRef(openDraft);
   const timer = useRef(null);
   const stopped = useRef(false);
   const chain = useRef(Promise.resolve());
   const removedForwards = useRef([]);
+  const removedSections = useRef(new Set());
   const live = useRef(true);
   const scroller = useRef(null);
 
@@ -144,10 +163,11 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   // ── Drafts ────────────────────────────────────────────────────────────────
   const saveNow = useCallback(() => {
     clearTimeout(timer.current);
-    chain.current = chain.current.then(async () => {
-      if (stopped.current) return;
+    // Resolves true once saved (or nothing needed saving), false when the engine refused.
+    const run = chain.current.then(async () => {
+      if (stopped.current) return true;
       const fields = current();
-      if (isEmpty(fields)) return; // leaving deletes it; nothing worth a row meanwhile
+      if (isEmpty(fields)) return true; // leaving deletes it; nothing worth a row meanwhile
       try {
         const reply = await daemonCall('mobile.drafts.save', {
           ...(draftId.current ? { id: draftId.current } : {}),
@@ -155,11 +175,14 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           ...fieldsOf(fields),
         });
         if (reply?.id) draftId.current = reply.id;
+        return true;
       } catch {
         // Autosave is a safety net: the next edit tries again.
+        return false;
       }
     });
-    return chain.current;
+    chain.current = run.then(() => undefined);
+    return run;
   }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Stops autosave for good (until a refused send re-arms it) and waits for a save in flight. */
@@ -201,6 +224,31 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     };
   }, [saveNow]);
 
+  // ── A saved draft, reopened ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!openDraft) return;
+    (async () => {
+      let d;
+      try {
+        d = await daemonCall('mobile.drafts.get', { id: openDraft });
+      } catch {
+        if (live.current) setNotes((n) => [...n, t('mobile.drafts.loadFailed')]);
+        return;
+      }
+      if (!live.current || !d) return;
+      const fill = (field, value, setter) => { if (!touched.current.has(field)) setter(value); };
+      threading.current = { inReplyTo: d.inReplyTo || '', references: d.references || '' };
+      fill('to', { entries: splitList(d.to), text: '' }, setTo);
+      fill('cc', { entries: splitList(d.cc), text: '' }, setCc);
+      fill('bcc', { entries: splitList(d.bcc), text: '' }, setBcc);
+      if (splitList(d.cc).length || splitList(d.bcc).length) setShowCc(true);
+      fill('subject', d.subject || '', setSubject);
+      fill('text', d.text || '', setText);
+      const files = (Array.isArray(d.attachments) ? d.attachments : []).map((a) => ({ handle: a.handle, name: a.name, size: a.size, mime: a.mime }));
+      fill('attachments', files, setAttachments);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Prepare (reply, reply all, forward) ───────────────────────────────────
   useEffect(() => {
     if (mode === 'new' || !original) return undefined;
@@ -212,6 +260,9 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       uid: original.uid,
       originalLabel: t('mobile.compose.originalMessage'),
       ...(original.dateMs ? { dateLabel: formatFullDate(original.dateMs) } : {}),
+      fromLabel: t('common.from'),
+      dateFieldLabel: t('mobile.compose.quoteDate'),
+      subjectLabel: t('compose.subject'),
     };
     const fill = (field, value, setter) => { if (!touched.current.has(field)) setter(value); };
     const forwardsOf = (list) => (Array.isArray(list) ? list : []).map((a) => ({ handle: a.handle, name: a.name, size: a.size, mime: a.mime, forwarded: true }));
@@ -236,8 +287,12 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       const pending = Array.isArray(p.pending) ? p.pending : [];
       if (!pending.length) return;
 
-      setFetching(pending);
-      const results = await Promise.all(pending.map((a) => fetchPart(accountId, original.folder, original.uid, a.section)));
+      setFetching(pending.map((a) => ({ section: a.section, filename: a.filename, size: a.size })));
+      const results = await Promise.all(pending.map((a) => fetchPart(accountId, original.folder, original.uid, a.section).then((ok) => {
+        // A failed or stalled part shows as failed at once (removable); Send waits for no one.
+        if (!ok && live.current) setFetching((list) => list.map((f) => (f.section === a.section ? { ...f, failed: true } : f)));
+        return ok;
+      })));
       if (!live.current) return;
       let again = null;
       if (results.some(Boolean)) {
@@ -260,7 +315,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
         });
         setAttachments((list) => [...list.filter((a) => !a.forwarded), ...kept]);
       }
-      const left = pending.filter((a) => missing.includes(a.section));
+      const left = pending.filter((a) => missing.includes(a.section) && !removedSections.current.has(a.section));
       if (left.length) {
         setNotes((n) => [...n, ...left.map((a) => t('mobile.compose.forwardMissing', { name: displayText(a.filename, '') || t('mobile.viewer.attachment') }))]);
       }
@@ -288,6 +343,11 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       edit('attachments');
     }
   };
+  const removeFetching = (part) => {
+    removedSections.current.add(part.section);
+    removedForwards.current.push(part.filename || '');
+    setFetching((list) => list.filter((f) => f.section !== part.section));
+  };
   const removeAttachment = (at) => {
     const gone = attachments[at];
     if (gone?.forwarded) removedForwards.current.push(gone.name);
@@ -301,7 +361,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const bccAll = useMemo(() => commitText(bcc.entries, bcc.text, { all: true }).entries, [bcc]);
   const invalid = [...toAll, ...ccAll, ...bccAll].some((e) => !isValidEntry(e));
   const noTo = toAll.length === 0;
-  const canSend = !sending && !noTo && !invalid && fetching.length === 0;
+  const canSend = !sending && !noTo && !invalid && !fetching.some((f) => !f.failed);
 
   const send = async () => {
     if (!canSend) return;
@@ -339,16 +399,28 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
 
   const saveAndLeave = useCallback(async () => {
     setConfirming(false);
-    await saveNow();
+    setError(null);
+    const ok = await saveNow();
+    if (!live.current) return;
+    if (!ok) {
+      // Leaving now would lose the message: stay, and say why.
+      setError('mobile.compose.saveFailed');
+      scroller.current?.scrollTo?.({ top: 0 });
+      return;
+    }
     stopped.current = true;
     onClose();
   }, [saveNow, onClose]);
 
   const requestLeave = useCallback(() => {
-    const worth = touched.current.size > 0 && !isEmpty(current());
-    if (worth) setConfirming(true);
-    else discard();
-  }, [discard]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (touched.current.size === 0) {
+      // Nothing changed here: a reopened draft stays as it was.
+      stopSaving().then(onClose);
+      return;
+    }
+    if (isEmpty(current())) discard();
+    else setConfirming(true);
+  }, [discard, stopSaving, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
   const keepEditing = useCallback(() => setConfirming(false), []);
   const closeAttach = useCallback(() => setAttaching(false), []);
 
@@ -372,8 +444,17 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
         <button type="button" className="mv-iconbtn" aria-label={t('mobile.compose.attach')} onClick={() => setAttaching(true)}>
           <PaperclipIcon />
         </button>
-        <button type="button" className="mv-compose__send" data-mv-send disabled={!canSend} onClick={send}>
-          {t('compose.send')}
+        <button
+          type="button"
+          className={`mv-compose__send${sending ? ' mv-compose__send--busy' : ''}`}
+          data-mv-send
+          aria-label={sending ? t('mobile.compose.sending') : t('compose.send')}
+          aria-busy={sending ? 'true' : undefined}
+          disabled={!canSend}
+          onClick={send}
+        >
+          {sending && <span className="mv-chip__spinner" aria-hidden="true" />}
+          {sending ? t('mobile.compose.sending') : t('compose.send')}
         </button>
       </header>
       <div ref={scroller} className="mv-compose__scroll">
@@ -415,12 +496,20 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
                 </button>
               </li>
             ))}
-            {fetching.map((a) => (
-              <li key={`fetch:${a.section}`} className="mv-compose__file mv-compose__file--pending" role="status">
-                <span className="mv-compose__file-name" dir="auto">{displayText(a.filename, '') || t('mobile.viewer.attachment')}</span>
-                <span className="mv-compose__file-size">{t('mobile.compose.downloading')}</span>
-              </li>
-            ))}
+            {fetching.map((a) => {
+              const name = displayText(a.filename, '') || t('mobile.viewer.attachment');
+              return (
+                <li key={`fetch:${a.section}`} className={`mv-compose__file mv-compose__file--pending${a.failed ? ' mv-compose__file--failed' : ''}`} data-mv-fetching={a.section}>
+                  <span className="mv-compose__file-name" dir="auto">{name}</span>
+                  <span className="mv-compose__file-size" role="status">{a.failed ? t('mobile.compose.downloadFailed') : t('mobile.compose.downloading')}</span>
+                  <button type="button" className="mv-rcpt__remove mv-compose__file-remove" aria-label={t('mobile.compose.removeAttachment', { name })} onClick={() => removeFetching(a)}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
+                      <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
         {notes.map((note, i) => (

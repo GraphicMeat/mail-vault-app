@@ -101,6 +101,20 @@ export function createMobileStore() {
       set({ outbox });
     }
 
+    /** The active account's local drafts, newest first (the drawer's Drafts entry and list). */
+    async function loadDrafts() {
+      const accountId = get().activeAccountId;
+      if (!accountId) return;
+      let rows;
+      try {
+        rows = await daemonCall('mobile.drafts.list');
+      } catch {
+        return; // a hint: a failed read keeps the last list
+      }
+      if (get().activeAccountId !== accountId) return;
+      set({ drafts: (Array.isArray(rows) ? rows : []).filter((d) => d.accountId === accountId) });
+    }
+
     function onSendResult(p) {
       if (!p?.id) return;
       if (p.outcome === 'sent') set((s) => ({ outbox: s.outbox.filter((r) => r.id !== p.id) }));
@@ -193,8 +207,9 @@ export function createMobileStore() {
 
     async function activate(accountId, folder) {
       flush();
-      set({ activeAccountId: accountId, folders: [], pending: 0 });
+      set({ activeAccountId: accountId, folders: [], pending: 0, drafts: [] });
       loadPending();
+      loadDrafts();
       let folders = [];
       try {
         folders = await loadFolders(accountId);
@@ -271,6 +286,7 @@ export function createMobileStore() {
       undo: null, // the deferred move or delete's toast: { id, kind, count, target }
       notice: null, // a one-line toast: { id, key }
       outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError }]
+      drafts: [], // the active account's drafts: [{ id, accountId, to, subject, updatedMs }]
 
       /**
        * Applies `kind` (seen|unseen|flag|unflag|move|delete) to `uids` of `folder`. A move or
@@ -310,6 +326,21 @@ export function createMobileStore() {
       flush,
       loadPending,
       loadOutbox,
+      loadDrafts,
+
+      /** Deletes a draft (and the files only it held). False when the engine refused. */
+      async deleteDraft(id) {
+        try {
+          await daemonCall('mobile.drafts.delete', { id });
+          set((s) => ({ drafts: s.drafts.filter((d) => d.id !== id) }));
+          return true;
+        } catch {
+          notice('mobile.drafts.deleteFailed');
+          return false;
+        } finally {
+          loadDrafts();
+        }
+      },
 
       /** Sends a failed or uncertain message again. False when the engine refused. */
       async retryOutbox(id) {

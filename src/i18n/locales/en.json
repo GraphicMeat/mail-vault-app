@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "Discard {{subject}}",
   "mobile.outbox.toast.failed": "A message couldn't be sent. Open the outbox to retry.",
   "mobile.outbox.toast.uncertain": "A message may not have been sent. Open the outbox to check.",
-  "mobile.outbox.actionFailed": "Couldn't change the outbox. Try again."
+  "mobile.outbox.actionFailed": "Couldn't change the outbox. Try again.",
+  "mobile.compose.quoteDate": "Date",
+  "mobile.compose.sending": "Sending",
+  "mobile.compose.saveFailed": "Couldn't save the draft. Try again, or copy your text before leaving.",
+  "mobile.compose.downloadFailed": "Couldn't download",
+  "mobile.drafts.title": "Drafts",
+  "mobile.drafts.empty": "No drafts.",
+  "mobile.drafts.count_one": "{{count}} draft",
+  "mobile.drafts.count_other": "{{count}} drafts",
+  "mobile.drafts.delete": "Delete draft {{subject}}",
+  "mobile.drafts.confirmDelete": "Delete the draft {{subject}}? This can't be undone.",
+  "mobile.drafts.noRecipients": "No recipients",
+  "mobile.drafts.loadFailed": "Couldn't open this draft.",
+  "mobile.drafts.deleteFailed": "Couldn't delete the draft. Try again."
 }

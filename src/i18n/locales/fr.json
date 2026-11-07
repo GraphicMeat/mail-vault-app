@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "Supprimer {{subject}}",
   "mobile.outbox.toast.failed": "Un message n'a pas pu être envoyé. Ouvrez la boîte d'envoi pour réessayer.",
   "mobile.outbox.toast.uncertain": "Un message n'a peut-être pas été envoyé. Ouvrez la boîte d'envoi pour vérifier.",
-  "mobile.outbox.actionFailed": "Impossible de modifier la boîte d'envoi. Réessayez."
+  "mobile.outbox.actionFailed": "Impossible de modifier la boîte d'envoi. Réessayez.",
+  "mobile.compose.quoteDate": "Date",
+  "mobile.compose.sending": "Envoi",
+  "mobile.compose.saveFailed": "Impossible d'enregistrer le brouillon. Réessayez, ou copiez votre texte avant de quitter.",
+  "mobile.compose.downloadFailed": "Téléchargement impossible",
+  "mobile.drafts.title": "Brouillons",
+  "mobile.drafts.empty": "Aucun brouillon.",
+  "mobile.drafts.count_one": "{{count}} brouillon",
+  "mobile.drafts.count_other": "{{count}} brouillons",
+  "mobile.drafts.delete": "Supprimer le brouillon {{subject}}",
+  "mobile.drafts.confirmDelete": "Supprimer le brouillon {{subject}} ? Cette action est définitive.",
+  "mobile.drafts.noRecipients": "Aucun destinataire",
+  "mobile.drafts.loadFailed": "Impossible d'ouvrir ce brouillon.",
+  "mobile.drafts.deleteFailed": "Impossible de supprimer le brouillon. Réessayez."
 }

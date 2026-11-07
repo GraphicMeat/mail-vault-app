@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "{{subject}} を破棄",
   "mobile.outbox.toast.failed": "メッセージを送信できませんでした。送信トレイを開いて再試行してください。",
   "mobile.outbox.toast.uncertain": "メッセージが送信されていない可能性があります。送信トレイを開いて確認してください。",
-  "mobile.outbox.actionFailed": "送信トレイを変更できませんでした。もう一度お試しください。"
+  "mobile.outbox.actionFailed": "送信トレイを変更できませんでした。もう一度お試しください。",
+  "mobile.compose.quoteDate": "日付",
+  "mobile.compose.sending": "送信中",
+  "mobile.compose.saveFailed": "下書きを保存できませんでした。もう一度試すか、閉じる前にテキストをコピーしてください。",
+  "mobile.compose.downloadFailed": "ダウンロードできませんでした",
+  "mobile.drafts.title": "下書き",
+  "mobile.drafts.empty": "下書きはありません。",
+  "mobile.drafts.count_one": "下書き {{count}} 件",
+  "mobile.drafts.count_other": "下書き {{count}} 件",
+  "mobile.drafts.delete": "下書き {{subject}} を削除",
+  "mobile.drafts.confirmDelete": "下書き {{subject}} を削除しますか？元に戻せません。",
+  "mobile.drafts.noRecipients": "宛先なし",
+  "mobile.drafts.loadFailed": "この下書きを開けませんでした。",
+  "mobile.drafts.deleteFailed": "下書きを削除できませんでした。もう一度お試しください。"
 }

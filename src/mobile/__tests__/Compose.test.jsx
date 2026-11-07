@@ -12,6 +12,7 @@ const DRAFT_ID = 'drf_0123456789abcdef';
 
 const engine = vi.hoisted(() => ({
   calls: [], handlers: new Map(), prepare: null, sendError: null, outbox: [], drafts: 0,
+  draftList: [], draft: null, saveError: false, sendGate: null,
 }));
 
 vi.mock('../transport.js', () => ({
@@ -36,13 +37,24 @@ vi.mock('../transport.js', () => ({
       case 'mobile.compose.prepare':
         return typeof engine.prepare === 'function' ? engine.prepare(params) : engine.prepare;
       case 'mobile.compose.send':
+        if (engine.sendGate) await engine.sendGate;
         if (engine.sendError) throw Object.assign(new Error(engine.sendError), { code: engine.sendError });
         return { id: 'out_1', state: 'queued' };
       case 'mobile.drafts.save':
+        if (engine.saveError) throw Object.assign(new Error('disk'), { code: 'INTERNAL' });
         engine.drafts++;
-        return { id: DRAFT_ID };
+        return { id: params.id || DRAFT_ID };
       case 'mobile.drafts.delete':
+        engine.draftList = engine.draftList.filter((d) => d.id !== params.id);
         return { deleted: true };
+      case 'mobile.drafts.list':
+        return engine.draftList;
+      case 'mobile.drafts.get':
+        return engine.draft;
+      case 'mobile.attachment.fetch':
+        return { jobId: 41 };
+      case 'mobile.attachment.cancel':
+        return { cancelled: true };
       case 'mobile.outbox.list':
         return engine.outbox;
       case 'mobile.outbox.retry':
@@ -100,6 +112,10 @@ beforeEach(() => {
   engine.sendError = null;
   engine.outbox = [];
   engine.drafts = 0;
+  engine.draftList = [];
+  engine.draft = null;
+  engine.saveError = false;
+  engine.sendGate = null;
   window.localStorage.clear();
 });
 afterEach(() => {
@@ -118,6 +134,7 @@ describe('Compose', () => {
     expect(callsOf('mobile.compose.prepare')).toEqual([{
       accountId: 'a1', mode: 'reply', folder: 'INBOX', uid: 7,
       originalLabel: t('mobile.compose.originalMessage'), dateLabel: formatFullDate(DATE_MS),
+      fromLabel: t('common.from'), dateFieldLabel: t('mobile.compose.quoteDate'), subjectLabel: t('compose.subject'),
     }]);
     expect(screen.getByText('Ada Lovelace')).toBeTruthy();
     expect(body().value).toBe(`\n\n${QUOTE}`);
@@ -243,6 +260,111 @@ describe('Compose', () => {
   });
 });
 
+describe('Compose, fix round 1', () => {
+  it('a failed Save draft keeps compose open and says so', async () => {
+    const { onClose } = renderCompose();
+    await flush();
+    typeInto(body(), 'Keep me');
+    engine.saveError = true;
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.compose.saveDraft') }));
+    await flush();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.compose.saveFailed'));
+    expect(body().value).toBe('Keep me');
+    // Once the engine takes it, Save draft leaves.
+    engine.saveError = false;
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.compose.saveDraft') }));
+    await flush();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows a Sending state while the send is in flight', async () => {
+    let open;
+    engine.sendGate = new Promise((r) => { open = r; });
+    const { onClose } = renderCompose();
+    await flush();
+    typeInto(toInput(), 'bob@example.test,');
+    fireEvent.click(sendButton());
+    await flush();
+    const busy = screen.getByRole('button', { name: t('mobile.compose.sending') });
+    expect(busy.disabled).toBe(true);
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.textContent).toBe(t('mobile.compose.sending'));
+    await act(async () => { open(); });
+    await flush();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('a forwarded part that stalls for 60 s fails, is left out, and Send works', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    engine.prepare = { ...EMPTY, subject: 'Fwd: Plans', pending: [{ section: '2', filename: 'plan.pdf', mime: 'application/pdf', size: 10 }] };
+    renderCompose({ mode: 'forward', original: { folder: 'INBOX', uid: 7, dateMs: DATE_MS } });
+    await flush();
+    typeInto(toInput(), 'bob@example.test,');
+    expect(screen.getByText(t('mobile.compose.downloading'))).toBeTruthy();
+    expect(sendButton().disabled).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(59_999); });
+    expect(sendButton().disabled).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(1); });
+    await flush();
+    expect(callsOf('mobile.attachment.cancel')).toEqual([{ jobId: 41 }]);
+    expect(screen.getByText(t('mobile.compose.forwardMissing', { name: 'plan.pdf' }))).toBeTruthy();
+    expect(sendButton().disabled).toBe(false);
+  });
+
+  it('a forwarded part still downloading can be removed, which frees Send', async () => {
+    engine.prepare = { ...EMPTY, subject: 'Fwd: Plans', pending: [{ section: '2', filename: 'plan.pdf', mime: 'application/pdf', size: 10 }] };
+    renderCompose({ mode: 'forward', original: { folder: 'INBOX', uid: 7, dateMs: DATE_MS } });
+    await flush();
+    typeInto(toInput(), 'bob@example.test,');
+    expect(sendButton().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.compose.removeAttachment', { name: 'plan.pdf' }) }));
+    expect(screen.queryByText(t('mobile.compose.downloading'))).toBeNull();
+    expect(sendButton().disabled).toBe(false);
+  });
+
+  it('a reopened draft loads from mobile.drafts.get and autosaves into the same id', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const id = 'drf_00000000000000aa';
+    engine.draft = {
+      id, accountId: 'a1', updatedMs: 1, to: 'bob@example.test', cc: '', bcc: 'carol@example.test', subject: 'Plans',
+      text: 'Half done', inReplyTo: '<m1@example.test>', references: '<m1@example.test>',
+      attachments: [{ handle: 'out/0123456789abcdef/a.pdf', name: 'a.pdf', size: 2048, mime: 'application/pdf' }],
+    };
+    const { onClose } = renderCompose({ draftId: id });
+    await flush();
+    expect(callsOf('mobile.drafts.get')).toEqual([{ id }]);
+    expect(field(t('compose.subject')).value).toBe('Plans');
+    expect(body().value).toBe('Half done');
+    expect(screen.getByText('bob@example.test')).toBeTruthy();
+    expect(screen.getByText('carol@example.test')).toBeTruthy();
+    expect(screen.getByText('a.pdf')).toBeTruthy();
+    typeInto(body(), 'Half done, now more');
+    await act(async () => { vi.advanceTimersByTime(1500); });
+    await flush();
+    expect(callsOf('mobile.drafts.save')).toEqual([{
+      id, accountId: 'a1', to: 'bob@example.test', cc: '', bcc: 'carol@example.test', subject: 'Plans',
+      text: 'Half done, now more', inReplyTo: '<m1@example.test>', references: '<m1@example.test>',
+      attachments: [{ handle: 'out/0123456789abcdef/a.pdf' }],
+    }]);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('leaving a reopened draft untouched keeps it', async () => {
+    const id = 'drf_00000000000000aa';
+    engine.draft = { id, accountId: 'a1', updatedMs: 1, to: '', cc: '', bcc: '', subject: 'Keep', text: 'x', inReplyTo: '', references: '', attachments: [] };
+    const { onClose } = renderCompose({ draftId: id });
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    await flush();
+    expect(onClose).toHaveBeenCalled();
+    expect(callsOf('mobile.drafts.delete')).toEqual([]);
+    expect(callsOf('mobile.drafts.save')).toEqual([]);
+  });
+});
+
 describe('outbox', () => {
   let offsetHeight;
   beforeEach(() => {
@@ -297,5 +419,79 @@ describe('outbox', () => {
     await flush();
     expect(callsOf('mobile.outbox.discard')).toEqual([{ id: 'out_1' }]);
     await waitFor(() => expect(screen.queryByText(t('mobile.outbox.waiting', { count: 1 }))).toBeNull());
+  });
+});
+
+describe('outbox sheet and drafts list in the app', () => {
+  let offsetHeight;
+  beforeEach(() => {
+    offsetHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800);
+  });
+  afterEach(() => {
+    offsetHeight.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  async function mount() {
+    window.history.replaceState({}, '', '/mobile.html');
+    vi.resetModules();
+    const { default: App } = await import('../App.jsx');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('a1@example.test')).toBeTruthy());
+  }
+  const row = (id, state) => ({ id, accountId: 'a1', subject: `Subject ${id}`, state, lastError: null });
+
+  it('an emptied outbox closes its sheet, which does not come back by itself', async () => {
+    await mount();
+    engine.outbox = [row('out_1', 'failed')];
+    await act(async () => { emit('mobile.send.result', { id: 'out_1', accountId: 'a1', outcome: 'failed', reason: 'REFUSED' }); });
+    await waitFor(() => expect(screen.getByText(t('mobile.outbox.waiting', { count: 1 }))).toBeTruthy());
+    fireEvent.click(screen.getByText(t('mobile.outbox.waiting', { count: 1 })));
+    expect(screen.getByRole('dialog', { name: t('mobile.outbox.title') })).toBeTruthy();
+    engine.outbox = [];
+    await act(async () => { emit('mobile.send.result', { id: 'out_1', accountId: 'a1', outcome: 'sent' }); });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: t('mobile.outbox.title') })).toBeNull());
+    engine.outbox = [row('out_2', 'queued')];
+    await act(async () => { emit('mobile.send.result', { id: 'out_2', accountId: 'a1', outcome: 'queued' }); });
+    await waitFor(() => expect(screen.getByText(t('mobile.outbox.waiting', { count: 1 }))).toBeTruthy());
+    expect(screen.queryByRole('dialog', { name: t('mobile.outbox.title') })).toBeNull();
+  });
+
+  it('the drawer lists drafts with a count; one reopens in compose and one is deleted after a confirm', async () => {
+    const now = Date.now();
+    engine.draftList = [
+      { id: 'drf_00000000000000aa', accountId: 'a1', to: 'bob@example.test', subject: 'Plans', updatedMs: now - 60_000 },
+      { id: 'drf_00000000000000bb', accountId: 'a1', to: '', subject: '', updatedMs: now - 120_000 },
+      { id: 'drf_00000000000000cc', accountId: 'a2', to: 'x@example.test', subject: 'Other account', updatedMs: now },
+    ];
+    engine.draft = { id: 'drf_00000000000000aa', accountId: 'a1', updatedMs: 1, to: 'bob@example.test', cc: '', bcc: '', subject: 'Plans', text: 'Body', inReplyTo: '', references: '', attachments: [] };
+    await mount();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
+    const entry = await waitFor(() => {
+      const el = document.querySelector('[data-mv-drafts]');
+      expect(el.textContent).toContain('2');
+      return el;
+    });
+    expect(screen.getByLabelText(t('mobile.drafts.count', { count: 2 }))).toBeTruthy();
+    fireEvent.click(entry);
+    const list = await waitFor(() => screen.getByRole('dialog', { name: t('mobile.drafts.title') }));
+    expect(list.textContent).toContain('Plans');
+    expect(list.textContent).toContain('bob@example.test');
+    expect(list.textContent).toContain(t('common.noSubject'));
+    expect(list.textContent).not.toContain('Other account');
+    // Delete asks first; Cancel keeps it.
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drafts.delete', { subject: t('common.noSubject') }) }));
+    fireEvent.click(screen.getByRole('button', { name: t('common.cancel') }));
+    expect(callsOf('mobile.drafts.delete')).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drafts.delete', { subject: t('common.noSubject') }) }));
+    fireEvent.click(screen.getByRole('button', { name: t('common.delete') }));
+    await flush();
+    expect(callsOf('mobile.drafts.delete')).toEqual([{ id: 'drf_00000000000000bb' }]);
+    await waitFor(() => expect(list.textContent).not.toContain(t('common.noSubject')));
+    // Tapping a draft reopens it.
+    fireEvent.click(screen.getByText('Plans'));
+    await waitFor(() => expect(screen.getByLabelText(t('mobile.compose.body')).value).toBe('Body'));
+    expect(callsOf('mobile.drafts.get')).toEqual([{ id: 'drf_00000000000000aa' }]);
   });
 });

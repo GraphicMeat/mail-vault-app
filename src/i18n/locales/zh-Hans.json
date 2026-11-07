@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "丢弃 {{subject}}",
   "mobile.outbox.toast.failed": "有邮件无法发送。打开发件箱重试。",
   "mobile.outbox.toast.uncertain": "有邮件可能未发送。打开发件箱查看。",
-  "mobile.outbox.actionFailed": "无法更改发件箱。请重试。"
+  "mobile.outbox.actionFailed": "无法更改发件箱。请重试。",
+  "mobile.compose.quoteDate": "日期",
+  "mobile.compose.sending": "正在发送",
+  "mobile.compose.saveFailed": "无法保存草稿。请重试，或在离开前复制你的文字。",
+  "mobile.compose.downloadFailed": "无法下载",
+  "mobile.drafts.title": "草稿",
+  "mobile.drafts.empty": "没有草稿。",
+  "mobile.drafts.count_one": "{{count}} 份草稿",
+  "mobile.drafts.count_other": "{{count}} 份草稿",
+  "mobile.drafts.delete": "删除草稿 {{subject}}",
+  "mobile.drafts.confirmDelete": "要删除草稿 {{subject}} 吗？此操作无法撤销。",
+  "mobile.drafts.noRecipients": "没有收件人",
+  "mobile.drafts.loadFailed": "无法打开此草稿。",
+  "mobile.drafts.deleteFailed": "无法删除草稿。请重试。"
 }

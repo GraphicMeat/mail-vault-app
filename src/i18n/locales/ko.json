@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "{{subject}} 삭제",
   "mobile.outbox.toast.failed": "메시지를 보내지 못했습니다. 보낼 편지함을 열어 다시 시도하세요.",
   "mobile.outbox.toast.uncertain": "메시지가 보내지지 않았을 수 있습니다. 보낼 편지함을 열어 확인하세요.",
-  "mobile.outbox.actionFailed": "보낼 편지함을 변경하지 못했습니다. 다시 시도하세요."
+  "mobile.outbox.actionFailed": "보낼 편지함을 변경하지 못했습니다. 다시 시도하세요.",
+  "mobile.compose.quoteDate": "날짜",
+  "mobile.compose.sending": "보내는 중",
+  "mobile.compose.saveFailed": "임시 저장하지 못했습니다. 다시 시도하거나 나가기 전에 텍스트를 복사하세요.",
+  "mobile.compose.downloadFailed": "다운로드 실패",
+  "mobile.drafts.title": "임시 보관함",
+  "mobile.drafts.empty": "임시 저장된 메시지가 없습니다.",
+  "mobile.drafts.count_one": "임시 저장 {{count}}개",
+  "mobile.drafts.count_other": "임시 저장 {{count}}개",
+  "mobile.drafts.delete": "임시 저장 {{subject}} 삭제",
+  "mobile.drafts.confirmDelete": "임시 저장 {{subject}}을(를) 삭제할까요? 되돌릴 수 없습니다.",
+  "mobile.drafts.noRecipients": "받는 사람 없음",
+  "mobile.drafts.loadFailed": "이 임시 저장을 열지 못했습니다.",
+  "mobile.drafts.deleteFailed": "임시 저장을 삭제하지 못했습니다. 다시 시도하세요."
 }

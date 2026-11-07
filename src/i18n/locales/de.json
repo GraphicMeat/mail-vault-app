@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "{{subject}} verwerfen",
   "mobile.outbox.toast.failed": "Eine Nachricht konnte nicht gesendet werden. Öffne den Postausgang, um es erneut zu versuchen.",
   "mobile.outbox.toast.uncertain": "Eine Nachricht wurde vielleicht nicht gesendet. Öffne den Postausgang, um es zu prüfen.",
-  "mobile.outbox.actionFailed": "Der Postausgang konnte nicht geändert werden. Erneut versuchen."
+  "mobile.outbox.actionFailed": "Der Postausgang konnte nicht geändert werden. Erneut versuchen.",
+  "mobile.compose.quoteDate": "Datum",
+  "mobile.compose.sending": "Wird gesendet",
+  "mobile.compose.saveFailed": "Der Entwurf konnte nicht gespeichert werden. Erneut versuchen oder den Text vorher kopieren.",
+  "mobile.compose.downloadFailed": "Laden fehlgeschlagen",
+  "mobile.drafts.title": "Entwürfe",
+  "mobile.drafts.empty": "Keine Entwürfe.",
+  "mobile.drafts.count_one": "{{count}} Entwurf",
+  "mobile.drafts.count_other": "{{count}} Entwürfe",
+  "mobile.drafts.delete": "Entwurf {{subject}} löschen",
+  "mobile.drafts.confirmDelete": "Entwurf {{subject}} löschen? Das lässt sich nicht rückgängig machen.",
+  "mobile.drafts.noRecipients": "Keine Empfänger",
+  "mobile.drafts.loadFailed": "Dieser Entwurf konnte nicht geöffnet werden.",
+  "mobile.drafts.deleteFailed": "Der Entwurf konnte nicht gelöscht werden. Erneut versuchen."
 }

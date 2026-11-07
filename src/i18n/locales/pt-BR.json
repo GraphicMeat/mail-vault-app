@@ -4347,5 +4347,18 @@
   "mobile.outbox.discard": "Descartar {{subject}}",
   "mobile.outbox.toast.failed": "Não foi possível enviar uma mensagem. Abra a caixa de saída para tentar de novo.",
   "mobile.outbox.toast.uncertain": "Uma mensagem pode não ter sido enviada. Abra a caixa de saída para conferir.",
-  "mobile.outbox.actionFailed": "Não foi possível alterar a caixa de saída. Tente de novo."
+  "mobile.outbox.actionFailed": "Não foi possível alterar a caixa de saída. Tente de novo.",
+  "mobile.compose.quoteDate": "Data",
+  "mobile.compose.sending": "Enviando",
+  "mobile.compose.saveFailed": "Não foi possível salvar o rascunho. Tente de novo ou copie o texto antes de sair.",
+  "mobile.compose.downloadFailed": "Falha no download",
+  "mobile.drafts.title": "Rascunhos",
+  "mobile.drafts.empty": "Nenhum rascunho.",
+  "mobile.drafts.count_one": "{{count}} rascunho",
+  "mobile.drafts.count_other": "{{count}} rascunhos",
+  "mobile.drafts.delete": "Excluir rascunho {{subject}}",
+  "mobile.drafts.confirmDelete": "Excluir o rascunho {{subject}}? Não é possível desfazer.",
+  "mobile.drafts.noRecipients": "Sem destinatários",
+  "mobile.drafts.loadFailed": "Não foi possível abrir este rascunho.",
+  "mobile.drafts.deleteFailed": "Não foi possível excluir o rascunho. Tente de novo."
 }
