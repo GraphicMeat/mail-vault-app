@@ -4213,7 +4213,6 @@
   "errors.transportSwitchPending": "Certaines modifications de ce compte attendent encore d’atteindre le serveur. Changez une fois qu’elles sont passées.",
   "errors.transportSwitchBackupUnavailable": "Votre disque de sauvegarde est inaccessible. Branchez-le, puis changez : sa copie de ce compte est mise à jour avec vos e-mails.",
   "mobile.list.loadFailed": "Impossible de charger vos messages.",
-  "mobile.list.loadFailed": "Impossible de charger vos messages.",
   "mobile.add.title": "Ajoutez votre compte e-mail",
   "mobile.add.lead": "MailVault se connecte directement à votre serveur de messagerie. Votre mot de passe reste sur cet appareil.",
   "mobile.add.email": "Adresse e-mail",

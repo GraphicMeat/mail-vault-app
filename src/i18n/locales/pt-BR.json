@@ -4213,7 +4213,6 @@
   "errors.transportSwitchPending": "Algumas alterações nesta conta ainda estão esperando chegar ao servidor. Troque quando elas forem concluídas.",
   "errors.transportSwitchBackupUnavailable": "Não foi possível acessar sua unidade de backup. Conecte-a e depois troque: a cópia desta conta é atualizada junto com seus e-mails.",
   "mobile.list.loadFailed": "Não foi possível carregar suas mensagens.",
-  "mobile.list.loadFailed": "Não foi possível carregar suas mensagens.",
   "mobile.add.title": "Adicione sua conta de e-mail",
   "mobile.add.lead": "O MailVault entra direto no seu servidor de e-mail. Sua senha fica neste dispositivo.",
   "mobile.add.email": "Endereço de e-mail",

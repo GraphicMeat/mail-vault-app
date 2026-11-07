@@ -4213,7 +4213,6 @@
   "errors.transportSwitchPending": "此账户的部分更改仍在等待同步到服务器。请在同步完成后再切换。",
   "errors.transportSwitchBackupUnavailable": "无法访问你的备份驱动器。请先连接它，然后再切换：此账户的备份副本会与邮件一同更新。",
   "mobile.list.loadFailed": "无法加载你的邮件。",
-  "mobile.list.loadFailed": "无法加载你的邮件。",
   "mobile.add.title": "添加你的邮箱账户",
   "mobile.add.lead": "MailVault 直接登录你的邮件服务器。你的密码只保存在这台设备上。",
   "mobile.add.email": "邮箱地址",

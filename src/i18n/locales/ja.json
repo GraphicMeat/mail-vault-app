@@ -4213,7 +4213,6 @@
   "errors.transportSwitchPending": "このアカウントの変更の一部がまだサーバーへの反映を待っています。反映が終わってから切り替えてください。",
   "errors.transportSwitchBackupUnavailable": "バックアップ用ドライブに接続できません。ドライブを接続してから切り替えてください。このアカウントのバックアップもメールと一緒に更新されます。",
   "mobile.list.loadFailed": "メッセージを読み込めませんでした。",
-  "mobile.list.loadFailed": "メッセージを読み込めませんでした。",
   "mobile.add.title": "メールアカウントを追加",
   "mobile.add.lead": "MailVault はメールサーバーに直接サインインします。パスワードはこの端末にのみ保存されます。",
   "mobile.add.email": "メールアドレス",

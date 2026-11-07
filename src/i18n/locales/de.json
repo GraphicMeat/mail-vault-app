@@ -4213,7 +4213,6 @@
   "errors.transportSwitchPending": "Einige Änderungen an diesem Konto warten noch darauf, den Server zu erreichen. Wechsle, sobald sie durch sind.",
   "errors.transportSwitchBackupUnavailable": "Dein Backup-Laufwerk ist nicht erreichbar. Schließe es an und wechsle dann: Seine Kopie dieses Kontos wird zusammen mit deinen E-Mails aktualisiert.",
   "mobile.list.loadFailed": "Deine Nachrichten konnten nicht geladen werden.",
-  "mobile.list.loadFailed": "Deine Nachrichten konnten nicht geladen werden.",
   "mobile.add.title": "E-Mail-Konto hinzufügen",
   "mobile.add.lead": "MailVault meldet sich direkt bei deinem Mailserver an. Dein Passwort bleibt auf diesem Gerät.",
   "mobile.add.email": "E-Mail-Adresse",

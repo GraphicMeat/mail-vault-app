@@ -4213,7 +4213,6 @@
   "errors.transportSwitchPending": "Algunos cambios en esta cuenta aún esperan llegar al servidor. Cambia cuando se hayan completado.",
   "errors.transportSwitchBackupUnavailable": "No se puede acceder a tu unidad de copia de seguridad. Conéctala y luego cambia: su copia de esta cuenta se actualiza junto con tu correo.",
   "mobile.list.loadFailed": "No se pudieron cargar tus mensajes.",
-  "mobile.list.loadFailed": "No se pudieron cargar tus mensajes.",
   "mobile.add.title": "Añade tu cuenta de correo",
   "mobile.add.lead": "MailVault inicia sesión directamente en tu servidor de correo. Tu contraseña se queda en este dispositivo.",
   "mobile.add.email": "Correo electrónico",

@@ -4213,7 +4213,6 @@
   "errors.transportSwitchPending": "Some changes to this account are still waiting to reach the server. Switch once they have gone through.",
   "errors.transportSwitchBackupUnavailable": "Your backup drive cannot be reached. Connect it, then switch: its copy of this account is updated along with your mail.",
   "mobile.list.loadFailed": "Couldn't load your messages.",
-  "mobile.list.loadFailed": "Couldn't load your messages.",
   "mobile.add.title": "Add your email account",
   "mobile.add.lead": "MailVault signs in to your mail server directly. Your password stays on this device.",
   "mobile.add.email": "Email address",

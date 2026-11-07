@@ -4213,7 +4213,6 @@
   "errors.transportSwitchPending": "Alcune modifiche a questo account sono ancora in attesa di raggiungere il server. Cambia quando saranno completate.",
   "errors.transportSwitchBackupUnavailable": "L’unità di backup non è raggiungibile. Collegala, poi cambia: la sua copia di questo account viene aggiornata insieme alla posta.",
   "mobile.list.loadFailed": "Impossibile caricare i tuoi messaggi.",
-  "mobile.list.loadFailed": "Impossibile caricare i tuoi messaggi.",
   "mobile.add.title": "Aggiungi il tuo account email",
   "mobile.add.lead": "MailVault accede direttamente al tuo server di posta. La password resta su questo dispositivo.",
   "mobile.add.email": "Indirizzo email",
