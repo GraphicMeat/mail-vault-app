@@ -77,7 +77,10 @@ pub fn decide(url: &Url, app: AppOrigin) -> Nav {
         // A web link to another machine, without user info (`https://bank.example@evil.example/`).
         "http" | "https" if web_host_ok(url) => Nav::External(url.as_str().to_string()),
         // A mail link with nothing but to/cc/bcc/subject/body (no `attach=/path` and the like).
-        "mailto" if only_safe_mailto_keys(url) => Nav::External(url.as_str().to_string()),
+        "mailto" => match canonical_mailto(url) {
+            Some(rebuilt) => Nav::External(rebuilt),
+            None => Nav::Deny,
+        },
         // javascript:, data:, blob:, file:, intent:, tauri: (any other host), ipc:, content:, ...
         _ => Nav::Deny,
     }
@@ -105,15 +108,90 @@ fn web_host_ok(url: &Url) -> bool {
     }
 }
 
-/// Every query key of a `mailto:` (percent-decoded by `query_pairs`, NULs dropped, trimmed, any
-/// case) is one of to, cc, bcc, subject, body. Any other key (`attach`, `attachment`, `x-...`)
-/// denies the link: some mail apps have attached the named local file. The same allowlist as
-/// `PopupUrlPolicy.kt`.
-fn only_safe_mailto_keys(url: &Url) -> bool {
-    url.query_pairs().all(|(k, _)| {
-        let k = k.replace('\0', "");
-        matches!(k.trim().to_ascii_lowercase().as_str(), "to" | "cc" | "bcc" | "subject" | "body")
-    })
+/// The mailto keys that may reach a mail app. Any other key (`attach`, `attachment`, `x-...`) denies
+/// the link: some mail apps have attached the named local file.
+const MAILTO_KEYS: [&str; 5] = ["to", "cc", "bcc", "subject", "body"];
+
+/// A `mailto:` rebuilt from checked parts, or `None` to deny it. The original string is never
+/// handed on: a mail app may parse what this filter did not (a fragment, a value decoded twice).
+/// Denied: a fragment; a key (percent-decoded once, NULs dropped, trimmed, any case) that is not in
+/// `MAILTO_KEYS`; a decoded value that still holds a `%XX` escape (double encoding); NUL, or CR/LF
+/// outside `body`; an address path that decodes to something holding `?`, `#`, `&`, NUL or CR/LF.
+/// Rebuilt: `mailto:` + the address path + `?` + `key=value` pairs with lowercase keys, every
+/// value decoded once and re-encoded strictly (only unreserved characters stay, plus `@` and `,` in
+/// the address fields). The same rule, byte for byte, as `PopupUrlPolicy.kt`.
+fn canonical_mailto(url: &Url) -> Option<String> {
+    if url.fragment().is_some() {
+        return None;
+    }
+    let path = pct_decode(url.path())?;
+    if path.chars().any(|c| matches!(c, '?' | '#' | '&' | '\0' | '\r' | '\n')) || has_pct_escape(&path) {
+        return None;
+    }
+    let mut out = String::from("mailto:");
+    out.push_str(&pct_encode(&path, true));
+    let mut sep = '?';
+    for pair in url.query().unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        let key = pct_decode(k)?.replace('\0', "").trim().to_ascii_lowercase();
+        if !MAILTO_KEYS.contains(&key.as_str()) {
+            return None;
+        }
+        let value = pct_decode(v)?;
+        let address = key != "subject" && key != "body";
+        let crlf_ok = key == "body";
+        if has_pct_escape(&value)
+            || value.contains('\0')
+            || (!crlf_ok && value.contains(['\r', '\n']))
+        {
+            return None;
+        }
+        out.push(sep);
+        sep = '&';
+        out.push_str(&key);
+        out.push('=');
+        out.push_str(&pct_encode(&value, address));
+    }
+    Some(out)
+}
+
+/// `%XX` decoding only (a `+` stays a `+`); `None` on a broken escape or bytes that are not UTF-8.
+fn pct_decode(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' {
+            let hex = s.get(i + 1..i + 3)?;
+            if !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
+                return None; // from_str_radix would take "+4".
+            }
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// A `%` followed by two hex digits: the value was encoded twice.
+fn has_pct_escape(s: &str) -> bool {
+    s.as_bytes().windows(3).any(|w| w[0] == b'%' && w[1].is_ascii_hexdigit() && w[2].is_ascii_hexdigit())
+}
+
+/// Everything but unreserved characters (and `@`, `,` when `address`) as uppercase `%XX` UTF-8.
+fn pct_encode(s: &str, address: bool) -> String {
+    let mut out = String::with_capacity(s.len());
+    for &b in s.as_bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') || (address && matches!(b, b'@' | b',')) {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
 }
 
 /// `decide` on a raw string, for callers that hold one. A string that does not parse is denied.
@@ -257,6 +335,43 @@ mod tests {
                 assert_eq!(d(url, app), Nav::Deny, "{url} on {app:?}");
             }
             assert!(matches!(d("mailto:ada@example.test?subject=attach%20this&body=attachment", app), Nav::External(_)));
+        }
+    }
+
+    // The same rows as PopupUrlPolicyTest.kt `mailto_is_rebuilt_from_checked_pairs`: the original
+    // string is never handed on; a fragment, a double-encoded value or a control character in an
+    // address denies the link, and the rest is rebuilt with lowercase keys and strict encoding.
+    #[test]
+    fn mailto_is_rebuilt_from_checked_pairs() {
+        for app in [IOS, ANDROID] {
+            for url in [
+                "mailto:a@b.test?subject=x#&attach=/etc/passwd",
+                "mailto:a@b.test#",
+                "mailto:a@b.test?body=x%2526attach%253D/x",
+                "mailto:a@b.test?body=%2526attach%253D",
+                "mailto:a@b.test?to=a%00b@c.test",
+                "mailto:a@b.test?to=a%0D%0Ab@c.test",
+                "mailto:a@b.test?cc=a%0Ab@c.test",
+                "mailto:a@b.test?subject=a%0D%0Abcc:x@y.test",
+                "mailto:a%0D%0A@b.test",
+                "mailto:a%3Fattach=/x@b.test",
+                "mailto:a%26b@c.test",
+                "mailto:a%23b@c.test",
+                "mailto:a@b.test?body=%+4",
+                "mailto:a@b.test?body=%ff",
+            ] {
+                assert_eq!(d(url, app), Nav::Deny, "{url} on {app:?}");
+            }
+            for (url, want) in [
+                ("mailto:a@b.test?SUBJECT=Hi%20there&Body=x%26y", "mailto:a@b.test?subject=Hi%20there&body=x%26y"),
+                ("mailto:a@b.test", "mailto:a@b.test"),
+                ("mailto:?to=a@b.test", "mailto:?to=a@b.test"),
+                ("mailto:a@b.test?body=x%26attach%3D/x", "mailto:a@b.test?body=x%26attach%3D%2Fx"),
+                ("mailto:a@b.test?body=l1%0D%0Al2", "mailto:a@b.test?body=l1%0D%0Al2"),
+                ("mailto:a@b.test?%53ubject=a+b", "mailto:a@b.test?subject=a%2Bb"),
+            ] {
+                assert_eq!(d(url, app), Nav::External(want.into()), "{url} on {app:?}");
+            }
         }
     }
 

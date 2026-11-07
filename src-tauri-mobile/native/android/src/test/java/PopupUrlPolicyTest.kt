@@ -132,6 +132,39 @@ class PopupUrlPolicyTest {
         }
     }
 
+    // The same rows as links.rs `mailto_is_rebuilt_from_checked_pairs`.
+    @Test
+    fun mailto_is_rebuilt_from_checked_pairs() {
+        for (url in listOf(
+            "mailto:a@b.test?subject=x#&attach=/etc/passwd",
+            "mailto:a@b.test#",
+            "mailto:a@b.test?body=x%2526attach%253D/x",
+            "mailto:a@b.test?body=%2526attach%253D",
+            "mailto:a@b.test?to=a%00b@c.test",
+            "mailto:a@b.test?to=a%0D%0Ab@c.test",
+            "mailto:a@b.test?cc=a%0Ab@c.test",
+            "mailto:a@b.test?subject=a%0D%0Abcc:x@y.test",
+            "mailto:a%0D%0A@b.test",
+            "mailto:a%3Fattach=/x@b.test",
+            "mailto:a%26b@c.test",
+            "mailto:a%23b@c.test",
+            "mailto:a@b.test?body=%+4",
+            "mailto:a@b.test?body=%ff",
+        )) {
+            assertNull(url, PopupUrlPolicy.allow(url))
+        }
+        for ((url, want) in listOf(
+            "mailto:a@b.test?SUBJECT=Hi%20there&Body=x%26y" to "mailto:a@b.test?subject=Hi%20there&body=x%26y",
+            "mailto:a@b.test" to "mailto:a@b.test",
+            "mailto:?to=a@b.test" to "mailto:?to=a@b.test",
+            "mailto:a@b.test?body=x%26attach%3D/x" to "mailto:a@b.test?body=x%26attach%3D%2Fx",
+            "mailto:a@b.test?body=l1%0D%0Al2" to "mailto:a@b.test?body=l1%0D%0Al2",
+            "mailto:a@b.test?%53ubject=a+b" to "mailto:a@b.test?subject=a%2Bb",
+        )) {
+            assertEquals(url, want, PopupUrlPolicy.allow(url))
+        }
+    }
+
     @Test
     fun unparseable_urls_are_dropped() {
         assertNull(PopupUrlPolicy.allow("https://exa mple.com/"))

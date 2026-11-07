@@ -34,8 +34,8 @@ object PopupUrlPolicy {
         return when (uri.scheme?.lowercase()) {
             "mailto" -> when {
                 !uri.isOpaque || uri.rawSchemeSpecificPart.isNullOrEmpty() -> null
-                !onlySafeKeys(uri.rawSchemeSpecificPart) -> null
-                else -> uri.toASCIIString()
+                uri.rawFragment != null -> null
+                else -> canonicalMailto(uri.rawSchemeSpecificPart)
             }
             "http", "https" -> when {
                 uri.rawUserInfo != null -> null
@@ -104,17 +104,55 @@ object PopupUrlPolicy {
         return listOf((value shr 24) and 0xff, (value shr 16) and 0xff, (value shr 8) and 0xff, value and 0xff)
     }
 
-    /** Every query key of a mailto, percent-decoded, is to/cc/bcc/subject/body (any case). */
-    private fun onlySafeKeys(ssp: String): Boolean {
-        val query = ssp.substringAfter('?', "")
-        if (query.isEmpty()) return true
-        return query.split('&').filter { it.isNotEmpty() }.all { pair ->
-            val key = percentDecode(pair.substringBefore('=')) ?: return false
-            key.replace("\u0000", "").trim().lowercase() in MAILTO_KEYS
+    /**
+     * A mailto rebuilt from checked parts, or null to deny it. The original string is never handed
+     * on: a mail app may parse what this filter did not (a fragment, a value decoded twice).
+     * Denied: a key (percent-decoded once, NULs dropped, trimmed, any case) that is not in
+     * MAILTO_KEYS; a decoded value that still holds a `%XX` escape (double encoding); NUL, or CR/LF
+     * outside `body`; an address path that decodes to something holding `?`, `#`, `&`, NUL or CR/LF.
+     * Rebuilt: `mailto:` + the address path + `?` + `key=value` pairs with lowercase keys, every
+     * value decoded once and re-encoded strictly (only unreserved characters stay, plus `@` and `,`
+     * in the address fields). The same rule, byte for byte, as links.rs `canonical_mailto`.
+     */
+    private fun canonicalMailto(ssp: String): String? {
+        val path = percentDecode(ssp.substringBefore('?')) ?: return null
+        if (path.any { it in "?#&\u0000\r\n" } || hasPercentEscape(path)) return null
+        val out = StringBuilder("mailto:").append(percentEncode(path, true))
+        var sep = '?'
+        for (pair in ssp.substringAfter('?', "").split('&')) {
+            if (pair.isEmpty()) continue
+            val key = percentDecode(pair.substringBefore('=')) ?: return null
+            val k = key.replace("\u0000", "").trim().lowercase()
+            if (k !in MAILTO_KEYS) return null
+            val value = percentDecode(pair.substringAfter('=', "")) ?: return null
+            val address = k != "subject" && k != "body"
+            if (hasPercentEscape(value) || '\u0000' in value) return null
+            if (k != "body" && ('\r' in value || '\n' in value)) return null
+            out.append(sep).append(k).append('=').append(percentEncode(value, address))
+            sep = '&'
         }
+        return out.toString()
     }
 
-    /** `%XX` decoding only (a `+` stays a `+`); null on a broken escape. */
+    /** A `%` followed by two hex digits: the value was encoded twice. */
+    private fun hasPercentEscape(s: String): Boolean =
+        Regex("%[0-9A-Fa-f]{2}").containsMatchIn(s)
+
+    /** Everything but unreserved characters (and `@`, `,` when [address]) as uppercase `%XX` UTF-8. */
+    private fun percentEncode(s: String, address: Boolean): String {
+        val out = StringBuilder()
+        for (b in s.toByteArray(Charsets.UTF_8)) {
+            val c = (b.toInt() and 0xff).toChar()
+            if (c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c in "-._~" || (address && c in "@,")) {
+                out.append(c)
+            } else {
+                out.append('%').append("%02X".format(b.toInt() and 0xff))
+            }
+        }
+        return out.toString()
+    }
+
+    /** `%XX` decoding only (a `+` stays a `+`); null on a broken escape or bytes that are not UTF-8. */
     private fun percentDecode(s: String): String? {
         val out = java.io.ByteArrayOutputStream()
         var i = 0
@@ -122,7 +160,9 @@ object PopupUrlPolicy {
             val c = s[i]
             if (c == '%') {
                 if (i + 2 >= s.length) return null
-                val v = s.substring(i + 1, i + 3).toIntOrNull(16) ?: return null
+                val hex = s.substring(i + 1, i + 3)
+                if (!hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
+                val v = hex.toInt(16)
                 out.write(v)
                 i += 3
             } else {
@@ -130,6 +170,13 @@ object PopupUrlPolicy {
                 i += 1
             }
         }
-        return out.toString("UTF-8")
+        return try {
+            Charsets.UTF_8.newDecoder()
+                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                .decode(java.nio.ByteBuffer.wrap(out.toByteArray())).toString()
+        } catch (e: java.nio.charset.CharacterCodingException) {
+            null
+        }
     }
 }
