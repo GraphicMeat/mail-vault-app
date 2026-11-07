@@ -115,6 +115,8 @@
 .mv-footer a:hover { color:var(--mv-accent); }
 .mv-footer-bottom { display:flex; justify-content:space-between; gap:24px; align-items:center; margin-top:24px; font-size:.8rem; }
 .mv-footer-bottom>div { display:flex; gap:24px; }
+html:has(body#top) { scroll-behavior:smooth; }
+@media(prefers-reduced-motion:reduce) { html:has(body#top) { scroll-behavior:auto; } }
 .mv-page-hero { padding-block:64px 42px; max-width:1040px; text-align:center; }
 .mv-page-hero h1 { font-size:clamp(2.4rem,4vw,3.6rem); }
 .mv-page-hero .mv-lead { margin-inline:auto; }
