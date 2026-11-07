@@ -22,6 +22,7 @@
 
 pub mod files;
 pub mod links;
+pub mod pick;
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;

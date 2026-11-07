@@ -17,6 +17,7 @@ import android.provider.OpenableColumns
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.activity.result.ActivityResult
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
@@ -26,6 +27,7 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import app.tauri.plugin.PluginManager
 import java.io.File
 import java.io.FileOutputStream
 
@@ -117,6 +119,30 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
     // Where the picks of the running pick go; set before the picker starts, read in its callback.
     // The shell lets one pick run at a time (`PickGuard`), so one field is enough.
     @Volatile private var pickDir: File? = null
+    // The running pick's invoke and the activity it was launched from. The activity result is
+    // lost if that activity is destroyed for good (not a configuration change, where the result
+    // registry hands the result to the recreated activity): then nothing would ever answer, so
+    // `onDestroy` rejects the invoke and the shell's waiting thread returns.
+    private var pendingPick: Invoke? = null
+    private var pickActivity: Activity? = null
+    private val pickLock = Any()
+
+    // The pending pick if it is `invoke` (or any, for null), now no longer pending. Each pick is
+    // answered exactly once: by its result, by `onDestroy`, or by a newer pick taking over.
+    private fun takePending(invoke: Invoke?): Invoke? = synchronized(pickLock) {
+        val pending = pendingPick
+        if (pending == null || (invoke != null && pending !== invoke)) return null
+        pendingPick = null
+        pickActivity = null
+        pending
+    }
+
+    override fun onDestroy(activity: AppCompatActivity) {
+        val lost = synchronized(pickLock) {
+            pickActivity === activity && !activity.isChangingConfigurations
+        }
+        if (lost) takePending(null)?.reject("the picker's screen went away", "INTERNAL")
+    }
 
     @Command
     fun pickFiles(invoke: Invoke) {
@@ -147,19 +173,28 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
                 return
             }
         }
+        // The shell only lets a new pick in while one is pending when that one was given up as
+        // lost: answer it now, so its waiting thread returns.
+        takePending(null)?.reject("a newer pick took over", "BUSY")
         pickDir = dir
+        synchronized(pickLock) {
+            pendingPick = invoke
+            pickActivity = PluginManager.activity
+        }
         try {
             startActivityForResult(invoke, intent, "pickResult")
         } catch (e: ActivityNotFoundException) {
-            invoke.reject("no picker on this device", "NO_APP")
+            takePending(invoke)?.reject("no picker on this device", "NO_APP")
         } catch (e: Exception) {
-            invoke.reject(e.message ?: e.javaClass.simpleName, "INTERNAL")
+            takePending(invoke)?.reject(e.message ?: e.javaClass.simpleName, "INTERNAL")
         }
     }
 
     // On the main thread: the copies run on a worker, then answer. Cancel is an empty list.
     @ActivityCallback
     fun pickResult(invoke: Invoke, result: ActivityResult) {
+        // Already answered (its activity went away, or a newer pick took over): nothing to do.
+        if (takePending(invoke) == null) return
         val dir = pickDir
         val data = result.data
         if (result.resultCode != Activity.RESULT_OK || data == null) {
@@ -179,9 +214,14 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
             data.data?.let { uris.add(it) }
         }
         Thread {
-            val items = JSArray()
-            uris.forEachIndexed { i, uri -> items.put(copyPick(uri, File(dir, i.toString()))) }
-            invoke.resolve(JSObject().put("items", items))
+            // Any throw still answers, so the shell's waiting thread never hangs.
+            try {
+                val items = JSArray()
+                uris.forEachIndexed { i, uri -> items.put(copyPick(uri, File(dir, i.toString()))) }
+                invoke.resolve(JSObject().put("items", items))
+            } catch (e: Throwable) {
+                invoke.reject(e.message ?: e.javaClass.simpleName, "INTERNAL")
+            }
         }.start()
     }
 

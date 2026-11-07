@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_mv_native::files::{self, PathError};
-use tauri_plugin_mv_native::{MvNative, NativeError, PickKind};
+use tauri_plugin_mv_native::{pick, MvNative, NativeError, PickKind};
 
 /// The engine, or why it failed to open. The app starts either way; every RPC then answers
 /// `INTERNAL` with the reason. Managed empty at the start of setup and filled once the engine is
@@ -166,22 +166,29 @@ async fn hand_out(
 const PICK_SCRATCH: &str = "pick";
 
 /// One pick at a time, on both platforms: the native side keeps one pending pick (Android one
-/// scratch dir), so a second call while a picker is up answers `BUSY`.
-static PICKING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// scratch dir), so a second call while a picker is up answers `BUSY`. A pick pending longer than
+/// [`PICK_STALE`] lost its native answer (Android drops it when the launching activity goes) and
+/// is taken over by the next call; see [`pick::PickLock`].
+static PICK_LOCK: pick::PickLock = pick::PickLock::new();
+const PICK_STALE: Duration = Duration::from_secs(10 * 60);
 
-/// Holds [`PICKING`]; dropping it (any return, error or panic) lets the next pick in.
-struct PickGuard;
+/// Holds one generation of [`PICK_LOCK`]; dropping it (any return, error or panic) frees the lock
+/// unless a newer pick has taken it over.
+struct PickGuard(u64);
 
 impl PickGuard {
     fn take() -> Option<PickGuard> {
-        use std::sync::atomic::Ordering;
-        PICKING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).ok().map(|_| PickGuard)
+        PICK_LOCK.take(std::time::Instant::now(), PICK_STALE).map(PickGuard)
+    }
+
+    fn still_held(&self) -> bool {
+        PICK_LOCK.holds(self.0)
     }
 }
 
 impl Drop for PickGuard {
     fn drop(&mut self) {
-        PICKING.store(false, std::sync::atomic::Ordering::Release);
+        PICK_LOCK.release(self.0);
     }
 }
 
@@ -203,13 +210,17 @@ async fn mobile_pick_files(app: tauri::AppHandle, kind: String) -> Result<Vec<Va
     let guard = PickGuard::take().ok_or_else(|| NativeError::new("BUSY", "a picker is already open"))?;
     // Off the webview thread: the native call answers only when the picker closes.
     tauri::async_runtime::spawn_blocking(move || {
-        let _guard = guard;
         let cache = app.path().app_cache_dir().map_err(|e| NativeError::new("INTERNAL", e.to_string()))?;
         let native = app
             .try_state::<MvNative<tauri::Wry>>()
             .ok_or_else(|| NativeError::new("INTERNAL", "the native plugin is not loaded"))?;
         let scratch = files::new_stage_dir(&cache.join(PICK_SCRATCH)).map_err(|e| NativeError::new("INTERNAL", e.to_string()))?;
         let picks = native.pick_files(kind, &scratch);
+        // Taken over meanwhile (this pick was given up as lost): its answer is dropped.
+        if !guard.still_held() {
+            let _ = std::fs::remove_dir_all(&scratch);
+            return Err(NativeError::new("BUSY", "the pick was given up"));
+        }
         let reply = picks.map(|picks| {
             picks
                 .into_iter()

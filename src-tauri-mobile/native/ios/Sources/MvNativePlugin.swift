@@ -55,6 +55,8 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
   // Set once the picker has handed over its result and the copies run: a late dismissal must not
   // answer the pick a second time (or before the copies are done).
   private var pickAnswering = false
+  // The picker on screen for the running pick: callbacks from any other controller are ignored.
+  private var pickController: UIViewController?
 
   /// The controller to present from: the root's topmost presented controller. Nil while anything
   /// is still animating in or out, since UIKit then refuses a presentation with only a console
@@ -224,12 +226,14 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
       self.pickInvoke = invoke
       self.pickDir = dir
       self.pickAnswering = false
+      self.pickController = picker
       // A swipe down can close a sheet without its picker delegate hearing of it.
       picker.presentationController?.delegate = self
       from.present(picker, animated: true) {
         if picker.presentingViewController == nil, let pending = self.pickInvoke {
           self.pickInvoke = nil
           self.pickDir = nil
+          self.pickController = nil
           pending.reject("the picker could not be shown", code: "BUSY")
         }
       }
@@ -242,11 +246,13 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
     pickInvoke = nil
     pickDir = nil
     pickAnswering = false
+    pickController = nil
     invoke?.resolve(PickReply(items: items))
   }
 
   /// The picker sheet was swiped away: a cancel, unless its delegate already took the result.
   public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    guard presentationController.presentedViewController === pickController else { return }
     if pickInvoke != nil && !pickAnswering { answerPick([]) }
   }
 
@@ -274,7 +280,7 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
   public func documentPicker(
     _ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]
   ) {
-    guard let dir = pickDir, !pickAnswering else { return }
+    guard controller === pickController, let dir = pickDir, !pickAnswering else { return }
     pickAnswering = true
     // Moving a large file is quick, but a copy across volumes is not: off the main queue.
     DispatchQueue.global(qos: .userInitiated).async {
@@ -291,13 +297,13 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
   }
 
   public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-    if !pickAnswering { answerPick([]) }
+    if controller === pickController && !pickAnswering { answerPick([]) }
   }
 
   public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
     // The photo picker does not close itself. Cancel (or a swipe down) is an empty result.
     picker.dismiss(animated: true)
-    guard !pickAnswering else { return }
+    guard picker === pickController, !pickAnswering else { return }
     guard let dir = pickDir, !results.isEmpty else { return answerPick([]) }
     pickAnswering = true
     var items = [PickItem?](repeating: nil, count: results.count)
