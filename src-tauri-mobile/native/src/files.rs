@@ -71,9 +71,13 @@ pub fn sanitize_filename(name: &str, mime: &str) -> String {
     let trimmed = trimmed.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
 
     let (stem, ext) = split_ext(trimmed);
-    let ext = match ext {
-        Some(e) => Some(e.to_string()),
-        None => ext_for_mime(mime).map(str::to_string),
+    let mime_ext = ext_for_mime(mime);
+    // When the name's extension and the MIME type disagree, the MIME type's extension is appended:
+    // QuickLook (iOS) picks by extension and Android by MIME type, so both now see the same type.
+    let (stem, ext) = match (ext, mime_ext) {
+        (Some(e), Some(m)) if !same_ext(e, m) => (trimmed, Some(m.to_string())),
+        (Some(e), _) => (stem, Some(e.to_string())),
+        (None, m) => (stem, m.map(str::to_string)),
     };
     let stem = if stem.trim().is_empty() { "attachment" } else { stem };
     let suffix = ext.map(|e| format!(".{e}")).unwrap_or_default();
@@ -105,8 +109,31 @@ fn split_ext(name: &str) -> (&str, Option<&str>) {
     (name, None)
 }
 
+/// Characters that change or hide what the name shows: bidi controls, zero-width characters, the
+/// word joiner, the BOM, the Mongolian vowel separator, and line/paragraph separators.
 fn is_bidi_control(c: char) -> bool {
-    matches!(c, '\u{200E}' | '\u{200F}' | '\u{061C}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+    matches!(
+        c,
+        '\u{200B}'..='\u{200F}'
+            | '\u{061C}'
+            | '\u{180E}'
+            | '\u{2028}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}'
+    )
+}
+
+/// The same type under two spellings counts as agreeing.
+fn same_ext(name_ext: &str, mime_ext: &str) -> bool {
+    let norm = |e: &str| match e.to_ascii_lowercase().as_str() {
+        "jpeg" | "jpe" => "jpg".to_string(),
+        "htm" => "html".to_string(),
+        "text" => "txt".to_string(),
+        "mpga" => "mp3".to_string(),
+        other => other.to_string(),
+    };
+    norm(name_ext) == norm(mime_ext)
 }
 
 /// The extension for a few common types; None for anything else.
@@ -326,18 +353,43 @@ mod tests {
         let pdf = "application/pdf";
         assert_eq!(sanitize_filename("Planting calendar 2027.pdf", pdf), "Planting calendar 2027.pdf");
         assert_eq!(sanitize_filename("../../etc/passwd", "text/plain"), "_.._etc_passwd.txt");
-        assert_eq!(sanitize_filename("..\\..\\boot.ini", "text/plain"), "_.._boot.ini");
+        assert_eq!(sanitize_filename("..\\..\\boot.ini", "text/plain"), "_.._boot.ini.txt");
         assert_eq!(sanitize_filename(".hidden.pdf", pdf), "hidden.pdf");
         assert_eq!(sanitize_filename("...", pdf), "attachment.pdf");
         assert_eq!(sanitize_filename("", pdf), "attachment.pdf");
         assert_eq!(sanitize_filename("   ", "application/x-unknown"), "attachment");
         assert_eq!(sanitize_filename("a\u{0}b\nc\td.pdf", pdf), "abcd.pdf");
-        assert_eq!(sanitize_filename("invoice\u{202E}fdp.exe", pdf), "invoicefdp.exe");
+        assert_eq!(sanitize_filename("invoice\u{202E}fdp.exe", pdf), "invoicefdp.exe.pdf");
         assert_eq!(sanitize_filename("report", pdf), "report.pdf");
         assert_eq!(sanitize_filename("report", "application/x-unknown"), "report");
         assert_eq!(sanitize_filename("C:report.pdf", pdf), "C_report.pdf");
         assert_eq!(sanitize_filename("trailing. . ", pdf), "trailing.pdf");
         assert_eq!(sanitize_filename(".pdf", pdf), "pdf.pdf");
+    }
+
+    #[test]
+    fn invisible_characters_are_dropped() {
+        let pdf = "application/pdf";
+        for c in ['\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}', '\u{FEFF}', '\u{180E}', '\u{2028}', '\u{2029}', '\u{202E}', '\u{2066}'] {
+            assert_eq!(sanitize_filename(&format!("in{c}voice.pdf"), pdf), "invoice.pdf", "U+{:04X}", c as u32);
+        }
+    }
+
+    // The name's extension decides what QuickLook shows (iOS), the MIME type what Android opens:
+    // when they disagree, the MIME type's extension is appended, so both read the same type and
+    // the name keeps what the sender called it. Equivalent spellings (jpeg/jpg, htm/html) agree.
+    #[test]
+    fn an_extension_that_disagrees_with_the_mime_type_gets_the_mime_one() {
+        assert_eq!(sanitize_filename("invoice.pdf.exe", "application/pdf"), "invoice.pdf.exe.pdf");
+        assert_eq!(sanitize_filename("report.html", "application/pdf"), "report.html.pdf");
+        assert_eq!(sanitize_filename("Report.PDF", "application/pdf"), "Report.PDF");
+        assert_eq!(sanitize_filename("photo.jpeg", "image/jpeg"), "photo.jpeg");
+        assert_eq!(sanitize_filename("page.htm", "text/html"), "page.htm");
+        // An unknown MIME type says nothing: the name's extension stays alone.
+        assert_eq!(sanitize_filename("archive.7z", "application/x-7z-compressed"), "archive.7z");
+        assert_eq!(sanitize_filename("archive.7z", "application/octet-stream"), "archive.7z");
+        let long = sanitize_filename(&format!("{}.html", "a".repeat(300)), "application/pdf");
+        assert!(long.len() <= MAX_NAME_BYTES && long.ends_with(".pdf"), "{long}");
     }
 
     #[test]

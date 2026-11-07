@@ -152,8 +152,8 @@ describe('AttachmentChip', () => {
     await act(async () => { fireEvent.click(chip()); });
     expect(engine.shell).toEqual([['mobile_open_file', { path: other, name: pdf.filename, mime: 'application/pdf' }]]);
     expect(calls('mobile.attachment.local')).toHaveLength(2);
-    // Nothing of the message's own metadata is ever passed as a path.
-    expect(JSON.stringify(engine.shell)).not.toContain('/cache/att/x');
+    // The mount-time answer is never reused for the open.
+    expect(engine.shell.some(([, a]) => a.path === PATH)).toBe(false);
   });
 
   it('ready_with_a_purged_file_fetches_again', async () => {
