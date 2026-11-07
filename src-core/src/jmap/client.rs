@@ -35,6 +35,18 @@ const ID_PAGE: usize = 500;
 /// The most hits a Message-ID lookup reads back (`find_message_id_in`).
 const MESSAGE_ID_HITS: usize = 50;
 
+/// An open blob download (`JmapClient::open_download`).
+pub struct BlobStream {
+    resp: reqwest::Response,
+}
+
+impl BlobStream {
+    /// The next chunk, `None` at the end.
+    pub async fn chunk(&mut self) -> Result<Option<Vec<u8>>, JmapError> {
+        self.resp.chunk().await.map(|c| c.map(|b| b.to_vec())).map_err(transport)
+    }
+}
+
 pub struct JmapClient {
     api: Tracked,
     transfer: Tracked,
@@ -283,6 +295,14 @@ impl JmapClient {
         &self.email
     }
 
+    /// The mail account's `maxSizeAttachmentsPerEmail` (RFC 8621 §1.3.1), when
+    /// the session names one.
+    pub fn max_size_attachments_per_email(&self) -> Option<u64> {
+        self.session.accounts.get(&self.account_id)?["accountCapabilities"][MAIL]["maxSizeAttachmentsPerEmail"]
+            .as_u64()
+            .filter(|n| *n > 0)
+    }
+
     pub fn has_submission(&self) -> bool {
         self.session.capabilities.contains_key(SUBMISSION)
     }
@@ -433,6 +453,60 @@ impl JmapClient {
         Ok((ids, total))
     }
 
+    /// Every email id in `mailbox_id` received at or after `after` (a UTCDate,
+    /// `...Z`), newest first, `ID_PAGE` per request. Pages by what each answer
+    /// holds (a server may cap `limit`) until an empty page or the total; if
+    /// the `queryState` moves between pages the run starts over once, then
+    /// accepts the moving state. An id a shifting window hands out twice is
+    /// kept once.
+    pub async fn query_mailbox_since(&self, mailbox_id: &str, after: &str) -> Result<Vec<String>, JmapError> {
+        let mut ids: Vec<String> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut pos = 0usize;
+        let mut query_state: Option<String> = None;
+        let mut restarted = false;
+        loop {
+            let r = self
+                .method(
+                    "Email/query",
+                    json!({
+                        "filter": {"inMailbox": mailbox_id, "after": after},
+                        "sort": [{"property": "receivedAt", "isAscending": false}],
+                        "position": pos,
+                        "limit": ID_PAGE,
+                        "calculateTotal": true,
+                    }),
+                )
+                .await?;
+            let state = r["queryState"].as_str().unwrap_or_default().to_string();
+            match query_state.as_deref() {
+                None => query_state = Some(state),
+                Some(prev) if prev != state => {
+                    query_state = Some(state);
+                    if !restarted {
+                        restarted = true;
+                        ids.clear();
+                        seen.clear();
+                        pos = 0;
+                        continue;
+                    }
+                }
+                Some(_) => {}
+            }
+            let total = r["total"].as_u64().map(|t| t as usize);
+            let page = strings(&r["ids"]);
+            if page.is_empty() {
+                break;
+            }
+            pos += page.len();
+            ids.extend(page.into_iter().filter(|id| seen.insert(id.clone())));
+            if total.is_some_and(|t| pos >= t) {
+                break;
+            }
+        }
+        Ok(ids)
+    }
+
     /// `Email/get` for `ids`, one request per `maxObjectsInGet` chunk.
     pub async fn get_emails(&self, ids: &[String], properties: &[&str]) -> Result<EmailsGot, JmapError> {
         if ids.is_empty() {
@@ -570,6 +644,21 @@ impl JmapClient {
         let req = self.transfer.get(url.as_str()).header(AUTHORIZATION, self.auth.header());
         let resp = check_status(self.transfer.send(req).await.map_err(transport)?).await?;
         Ok(resp.bytes().await.map_err(transport)?.to_vec())
+    }
+
+    /// One blob from the session's `downloadUrl` as `content_type` named
+    /// `name`, read chunk by chunk ([`BlobStream::chunk`]) so the bytes are
+    /// never all in memory. Rides the transfer client: a connect limit and a
+    /// read-idle limit, no total timeout, so a large download that keeps
+    /// moving is never cut.
+    pub async fn open_download(&self, blob_id: &str, content_type: &str, name: &str) -> Result<BlobStream, JmapError> {
+        let url = expand_template(
+            &self.session.download_url,
+            &[("accountId", &self.account_id), ("blobId", blob_id), ("type", content_type), ("name", name)],
+        );
+        let req = self.transfer.get(url.as_str()).header(AUTHORIZATION, self.auth.header());
+        let resp = check_status(self.transfer.send(req).await.map_err(transport)?).await?;
+        Ok(BlobStream { resp })
     }
 
     /// Upload a raw message; its blob id. Refused locally over `maxSizeUpload`.

@@ -1,6 +1,9 @@
 // Add an account. The first screen picks the provider: Google and Microsoft sign in through the
-// system sign-in sheet (`onOAuth(provider)`, oauth.js), "Fastmail and other JMAP" is shown disabled
-// until the JMAP form exists, and "Other (IMAP)" opens the IMAP form below. While a sign-in runs,
+// system sign-in sheet (`onOAuth(provider)`, oauth.js), "Fastmail and other JMAP" opens the JMAP
+// form (email, app password or token, and the server URL under Advanced; the engine finds the
+// server when none is typed), and "Other (IMAP)" opens the IMAP form below. A JMAP server the
+// engine found on another domain is never sent the password unasked: the form names its host and
+// sends again only when the user confirms (the URL then counts as typed). While a sign-in runs,
 // Cancel stays live: it ends the flow (`onOAuthCancel`) and comes back to the picker at once, so a
 // sheet whose answer never comes cannot strand the user.
 // The IMAP form: email and password first, then the server, prefilled from the address's
@@ -49,7 +52,10 @@ const PROVIDERS = [
 
 export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel, autoStart = null }) {
   const t = useT();
-  const [step, setStep] = useState('picker'); // 'picker' | 'waiting' | 'credentials' | 'server'
+  const [step, setStep] = useState('picker'); // 'picker' | 'waiting' | 'credentials' | 'server' | 'jmap'
+  const [jmapUrl, setJmapUrl] = useState('');
+  const [advanced, setAdvanced] = useState(false);
+  const [confirmHost, setConfirmHost] = useState(null); // { host, jmapUrl } while asking
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [host, setHost] = useState('');
@@ -103,6 +109,10 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
     if (provider === 'imap') {
       setErrorCode(null);
       setStep('credentials');
+    } else if (provider === 'jmap') {
+      setErrorCode(null);
+      setConfirmHost(null);
+      setStep('jmap');
     } else if (provider === 'google' || provider === 'microsoft') {
       signInWith(provider);
     }
@@ -155,6 +165,44 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
     if (!result?.ok) setErrorCode(result?.code ?? 'INTERNAL');
   };
 
+  const canJmap = !busy && looksLikeEmail(email) && password.length > 0;
+
+  const sendJmap = async (url) => {
+    setBusy(true);
+    setErrorCode(null);
+    setConfirmHost(null);
+    const typed = (url ?? jmapUrl).trim();
+    const form = { kind: 'jmap', email: email.trim(), password, ...(typed ? { jmapUrl: typed } : {}) };
+    let result;
+    try {
+      result = await onSubmit(form);
+    } catch {
+      result = { ok: false, code: 'INTERNAL' };
+    }
+    setBusy(false);
+    if (result?.ok || result?.code === 'AUTH_FAILED') setPassword('');
+    if (result?.ok) return;
+    if (result?.code === 'CONFIRM_HOST' && result.host && result.jmapUrl) {
+      setConfirmHost({ host: result.host, jmapUrl: result.jmapUrl });
+      return;
+    }
+    if (result?.code === 'JMAP_NOT_FOUND') setAdvanced(true);
+    setErrorCode(result?.code ?? 'INTERNAL');
+  };
+
+  const submitJmap = (e) => {
+    e.preventDefault();
+    if (canJmap) sendJmap();
+  };
+
+  const confirmJmapHost = () => {
+    const url = confirmHost?.jmapUrl;
+    if (!url || !canJmap) return;
+    setJmapUrl(url);
+    setAdvanced(true);
+    sendJmap(url);
+  };
+
   return (
     <section className="mv-add" aria-labelledby="mv-add-title">
       <div className="mv-add__bar">
@@ -180,7 +228,7 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
                   type="button"
                   className="mv-provider"
                   data-provider={id}
-                  disabled={step === 'waiting' || id === 'jmap' || (id !== 'imap' && !onOAuth)}
+                  disabled={step === 'waiting' || (id !== 'imap' && id !== 'jmap' && !onOAuth)}
                   onClick={() => choose(id)}
                 >
                   {t(key)}
@@ -191,6 +239,81 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
           {step === 'waiting' && <p className="mv-add__waiting" role="status">{t('mobile.add.waiting')}</p>}
           {errorCode && <p className="mv-add__error" role="alert">{t(errorKey(errorCode))}</p>}
         </div>
+      ) : step === 'jmap' ? (
+        <form className="mv-add__form" onSubmit={submitJmap} noValidate>
+          <Field id="mv-add-email" label={t('mobile.add.email')}>
+            <input
+              id="mv-add-email"
+              className="mv-input"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={email}
+              disabled={busy}
+              onChange={(e) => { setEmail(e.target.value); setConfirmHost(null); }}
+            />
+          </Field>
+          <Field id="mv-add-jmap-secret" label={t('mobile.add.jmapSecret')}>
+            <input
+              id="mv-add-jmap-secret"
+              className="mv-input"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              disabled={busy}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </Field>
+          <p className="mv-add__hint">{t('mobile.add.jmapHint')}</p>
+          <button
+            type="button"
+            className="mv-textbtn"
+            aria-expanded={advanced}
+            aria-controls="mv-add-jmap-advanced"
+            disabled={busy}
+            onClick={() => setAdvanced((v) => !v)}
+          >
+            {t('mobile.add.advanced')}
+          </button>
+          {advanced && (
+            <div id="mv-add-jmap-advanced">
+              <Field id="mv-add-jmap-url" label={t('mobile.add.jmapUrl')}>
+                <input
+                  id="mv-add-jmap-url"
+                  className="mv-input"
+                  type="url"
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={jmapUrl}
+                  disabled={busy}
+                  onChange={(e) => { setJmapUrl(e.target.value); setConfirmHost(null); }}
+                />
+              </Field>
+            </div>
+          )}
+          {confirmHost && (
+            <div className="mv-add__confirm" role="alert">
+              <p dir="auto">{t('mobile.add.confirmHost', { host: confirmHost.host })}</p>
+              <button type="button" className="mv-primary" disabled={!canJmap} onClick={confirmJmapHost}>
+                {t('mobile.add.confirmHostYes')}
+              </button>
+            </div>
+          )}
+          {errorCode && <p className="mv-add__error" role="alert">{t(errorKey(errorCode))}</p>}
+          {!confirmHost && (
+            <button type="submit" className="mv-primary" disabled={!canJmap} aria-busy={busy}>
+              {busy ? t('mobile.add.signingIn') : t('mobile.add.signIn')}
+            </button>
+          )}
+          <button type="button" className="mv-textbtn" disabled={busy} onClick={() => { setErrorCode(null); setConfirmHost(null); setStep('picker'); }}>
+            {t('common.back')}
+          </button>
+        </form>
       ) : step === 'credentials' ? (
         <form className="mv-add__form" onSubmit={next} noValidate>
           <Field id="mv-add-email" label={t('mobile.add.email')}>

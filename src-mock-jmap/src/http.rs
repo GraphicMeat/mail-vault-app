@@ -394,7 +394,8 @@ fn download(
         drop(st);
         return unauthorized(stream);
     };
-    let bytes = if authed == acc { st.blobs.get(blob).cloned() } else { None };
+    // A message blob, or one of its parts (`methods::part_blob_id`), decoded.
+    let bytes = if authed == acc { st.blobs.get(blob).cloned().or_else(|| methods::part_blob(&st.blobs, blob)) } else { None };
     drop(st);
     let Some(bytes) = bytes else { return not_found(stream) };
     let ctype = req.query_param("type").unwrap_or_else(|| "application/octet-stream".into());

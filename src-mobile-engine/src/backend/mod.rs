@@ -1,6 +1,6 @@
 //! The engine's one door to a mail server. Sync, replay, bodies and attachment downloads talk to
 //! a [`Backend`], never to a protocol: [`open`] picks the implementation from `accounts.kind`
-//! (`imap`, `graph`; JMAP later) and signs in.
+//! (`imap`, `graph`, `jmap`) and signs in.
 //!
 //! A backend does the network work and nothing the list shows: no event, no log line, and no write
 //! to `messages`, `folders`, `bodies`, `attachments` or the journal. The callers keep those writes,
@@ -12,12 +12,14 @@
 //! server answered. A failure's text has had the account's secrets scrubbed out already.
 //!
 //! Identity is `(account, folder path, u32 uid)` for every backend: IMAP's own uids, and for Graph
-//! and JMAP a local uid from `remote_ids`, with the remote folder id in `folders.path`. A backend
+//! and JMAP a local uid from `remote_ids`, with the remote folder id in `folders.path` (JMAP's
+//! entries are folder-qualified, since one email can sit in several mailboxes). A backend
 //! that assigns local uids assigns them in ascending received-date order, so sync's
 //! newest-uid-first fill matches the list's order.
 
 pub(crate) mod graph;
 pub(crate) mod imap;
+pub(crate) mod jmap;
 
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -244,6 +246,7 @@ pub(crate) fn open<'a>(shared: &'a Shared, account_id: &str) -> Result<Box<dyn B
         Some((_, needs_auth)) if needs_auth != 0 => Err(Fail::auth()),
         Some((kind, _)) if kind == "imap" => Ok(Box::new(imap::ImapBackend::open(shared, account_id)?)),
         Some((kind, _)) if kind == "graph" => Ok(Box::new(graph::GraphBackend::open(shared, account_id)?)),
+        Some((kind, _)) if kind == "jmap" => Ok(Box::new(jmap::JmapBackend::open(shared, account_id)?)),
         Some((other, _)) => Err(Fail::unsupported(&format!("account kind {other}"))),
     }
 }

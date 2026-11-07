@@ -665,6 +665,9 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-add__who { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .mv-add__section { margin: 8px 0 0; font-size: 0.8125rem; font-weight: 600; color: var(--mail-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .mv-add__row { display: grid; grid-template-columns: 7rem 1fr; gap: 12px; }
+.mv-add__hint { margin: -6px 0 0; font-size: 0.875rem; color: var(--mail-text-muted); }
+.mv-add__confirm { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--mail-text-muted) 12%, transparent); overflow-wrap: anywhere; }
+.mv-add__confirm p { margin: 0; }
 .mv-add__error { margin: 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
 /* The provider picker: one full-width row per provider. */
 .mv-providers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }

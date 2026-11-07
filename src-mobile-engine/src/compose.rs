@@ -8,8 +8,8 @@
 //!
 //! `send` checks everything it can before it journals, with no network: the account, the
 //! addresses (core's MIME builder must take them), every handle (`ATTACHMENT_MISSING`) and the
-//! total attachment size (`TOO_LARGE` above the account's [`attachment_limit`]: 25 MB, or what
-//! fits Graph's 4 MB `sendMail` body for a Graph account). Then one write
+//! total attachment size (`TOO_LARGE` above the account's [`attachment_limit`]: 25 MB, what
+//! fits Graph's 4 MB `sendMail` body for a Graph account, or a JMAP session's upload limits). Then one write
 //! transaction adds the outbox row (with the Message-ID every attempt sends under) and removes the
 //! draft it came from; the outbox worker does the rest (`outbox.rs`).
 //!
@@ -41,17 +41,33 @@ pub(crate) const MAX_ATTACHMENT_BYTES: u64 = 25 * 1024 * 1024;
 /// be quoted-printable) and the MIME structure.
 const GRAPH_HEADER_MARGIN: u64 = 16 * 1024;
 
-/// Most bytes of attachments `f` may carry on `acct`. A Graph account sends through `sendMail`,
-/// whose body (the MIME, base64-encoded once more) Graph refuses above
-/// `graph::SEND_MAIL_LIMIT_BYTES`: the MIME may be 3/4 of that, and in it an attachment takes
-/// 4/3 of its size in base64 plus a line break every 76 characters.
-pub(crate) fn attachment_limit(acct: &AccountRow, f: &Fields) -> u64 {
-    if acct.kind != "graph" {
-        return MAX_ATTACHMENT_BYTES;
-    }
-    let mime_budget = mailvault_core::graph::SEND_MAIL_LIMIT_BYTES as u64 * 3 / 4;
+/// Most bytes of attachments `f` may carry on account `account_id` (`acct`).
+/// - A Graph account sends through `sendMail`, whose body (the MIME, base64-encoded once more)
+///   Graph refuses above `graph::SEND_MAIL_LIMIT_BYTES`: the MIME may be 3/4 of that.
+/// - A JMAP account uploads the MIME, which the server refuses above its session's
+///   `maxSizeUpload`, and may cap attachments at `maxSizeAttachmentsPerEmail`; both as the
+///   last session stored them (`backend::jmap::stored_limits`), never above 25 MB.
+///
+/// In the MIME an attachment takes 4/3 of its size in base64 plus a line break every 76
+/// characters.
+pub(crate) fn attachment_limit(shared: &Shared, account_id: &str, acct: &AccountRow, f: &Fields) -> u64 {
     let other = GRAPH_HEADER_MARGIN + 3 * f.text.len() as u64 + (f.subject.len() + f.to.len() + f.cc.len() + f.bcc.len() + f.references.len()) as u64;
-    mime_budget.saturating_sub(other) * 3 / 4 * 76 / 78
+    let fits = |mime_budget: u64| mime_budget.saturating_sub(other) * 3 / 4 * 76 / 78;
+    match acct.kind.as_str() {
+        "graph" => fits(mailvault_core::graph::SEND_MAIL_LIMIT_BYTES as u64 * 3 / 4),
+        "jmap" => {
+            let (upload, attachments) = crate::backend::jmap::stored_limits(shared, account_id);
+            let mut limit = MAX_ATTACHMENT_BYTES;
+            if let Some(upload) = upload {
+                limit = limit.min(fits(upload));
+            }
+            if let Some(attachments) = attachments {
+                limit = limit.min(attachments);
+            }
+            limit
+        }
+        _ => MAX_ATTACHMENT_BYTES,
+    }
 }
 
 /// How long a reply or forward waits for a body that is not cached.
@@ -255,7 +271,7 @@ pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         attachments.push(ok);
     }
     let total: u64 = attachments.iter().map(|a| a.size).sum();
-    let limit = attachment_limit(&acct, &fields);
+    let limit = attachment_limit(shared, &p.account_id, &acct, &fields);
     if total > limit {
         return Err(RpcError::TooLarge { message: format!("attachments are {total} bytes, the limit is {limit}"), limit_bytes: limit });
     }

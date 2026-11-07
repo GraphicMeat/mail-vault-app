@@ -5417,12 +5417,14 @@ dependencies = [
  "libc",
  "mailvault-core",
  "mock-imap",
+ "mock-jmap",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]

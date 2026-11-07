@@ -1,4 +1,5 @@
-//! Accounts: `mobile.accounts.{list,test,add,remove}` (IMAP password accounts so far) and
+//! Accounts: `mobile.accounts.{list,test,add,remove}` (IMAP password accounts; `add` with
+//! `kind: "jmap"` is `backend::jmap::add`) and
 //! [`AccountRow`], the one way the engine reads an account's settings.
 //!
 //! The secret goes to the platform secret store, as a [`Credential`] envelope, and nowhere else:
@@ -115,6 +116,8 @@ pub(crate) struct AccountRow {
     pub(crate) display_name: String,
     /// `google`, `microsoft`, ... when the account was added through a provider.
     pub(crate) provider: Option<String>,
+    /// A JMAP account's session URL.
+    pub(crate) jmap_url: Option<String>,
 }
 
 impl AccountRow {
@@ -132,6 +135,7 @@ impl AccountRow {
             smtp_security: None,
             display_name: String::new(),
             provider: None,
+            jmap_url: None,
         }
     }
 }
@@ -140,7 +144,7 @@ impl AccountRow {
 pub(crate) fn load_account(shared: &Shared, id: &str) -> Result<Option<AccountRow>, EngineError> {
     shared.read(|c| {
         c.query_row(
-            "SELECT email, auth, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, display_name, provider, kind
+            "SELECT email, auth, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, display_name, provider, kind, jmap_url
              FROM accounts WHERE id = ?1",
             [id],
             |r| {
@@ -156,6 +160,7 @@ pub(crate) fn load_account(shared: &Shared, id: &str) -> Result<Option<AccountRo
                     smtp_security: r.get(7)?,
                     display_name: r.get(8)?,
                     provider: r.get(9)?,
+                    jmap_url: r.get(11)?,
                 })
             },
         )
@@ -362,6 +367,9 @@ pub(crate) fn email_taken(engine: &Engine, email: &str) -> Result<bool, RpcError
 }
 
 pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    if params.get("kind").and_then(Value::as_str) == Some("jmap") {
+        return crate::backend::jmap::add(engine, params);
+    }
     let form = match Form::from_params(&params) {
         Ok(f) => f,
         Err(reply) => return Ok(reply),
@@ -440,6 +448,7 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
             Ok(c.execute("DELETE FROM accounts WHERE id = ?1", [&p.account_id])? > 0)
         })
         .map_err(internal)?;
+    engine.shared().jmap.forget(&p.account_id);
     // Rows first: a failure here leaves a secret for an account that is gone, and repeating the
     // call (which still reaches this line) removes it.
     engine.secrets().delete(&p.account_id).map_err(internal)?;

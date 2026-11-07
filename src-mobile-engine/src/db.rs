@@ -265,6 +265,8 @@ pub(crate) struct Shared {
     settles: Mutex<HashMap<(String, String), Settles>>,
     /// OAuth sign-in flows, the loopback listener and token refreshes (`oauth.rs`).
     pub(crate) oauth: crate::oauth::OAuth,
+    /// JMAP sessions, one per account (`backend::jmap`).
+    pub(crate) jmap: crate::backend::jmap::Sessions,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -429,6 +431,7 @@ impl Engine {
                 closing: AtomicBool::new(false),
                 settles: Mutex::new(HashMap::new()),
                 oauth: crate::oauth::OAuth::default(),
+                jmap: crate::backend::jmap::Sessions::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]

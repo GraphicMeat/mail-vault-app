@@ -4377,5 +4377,14 @@
   "mobile.compose.error.TOO_LARGE_LIMIT": "Los adjuntos son demasiado grandes para enviarlos desde esta cuenta. Su límite es {{size}} MB.",
   "mobile.attachment.link": "Enlace, ábrelo en Outlook",
   "mobile.attachment.labelLink": "{{name}}, adjunto de enlace, ábrelo en Outlook",
-  "mobile.viewer.attachmentsUnknown": "No se pudieron cargar los adjuntos."
+  "mobile.viewer.attachmentsUnknown": "No se pudieron cargar los adjuntos.",
+  "mobile.add.jmapSecret": "Contraseña de aplicación o token",
+  "mobile.add.jmapHint": "Crea una contraseña de aplicación o un token de API en los ajustes de tu proveedor. Fastmail necesita un token de API.",
+  "mobile.add.advanced": "Avanzado",
+  "mobile.add.jmapUrl": "URL del servidor (opcional)",
+  "mobile.add.confirmHost": "El servidor de esta dirección es {{host}}, que no está en el dominio de tu dirección. ¿Enviar tu contraseña allí?",
+  "mobile.add.confirmHostYes": "Enviar e iniciar sesión",
+  "mobile.error.HTTPS_REQUIRED": "La URL del servidor debe empezar por https://.",
+  "mobile.error.JMAP_NOT_FOUND": "No se encontró un servidor JMAP para esta dirección. Escribe la URL del servidor en Avanzado.",
+  "mobile.error.CONFIRM_HOST": "Comprueba la dirección del servidor antes de iniciar sesión."
 }

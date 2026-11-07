@@ -162,7 +162,7 @@ describe('AddAccount', () => {
   });
 
   it('every engine code has a translated message, and an unknown one falls back', () => {
-    for (const code of ['AUTH_FAILED', 'HOST_UNREACHABLE', 'TLS_FAILED', 'TIMEOUT', 'DUPLICATE', 'INVALID', 'SMTP_FAILED', 'INTERNAL', 'NEEDS_AUTH', 'CANCELLED', 'NO_BROWSER', 'SIGNIN_BUSY']) {
+    for (const code of ['AUTH_FAILED', 'HOST_UNREACHABLE', 'TLS_FAILED', 'TIMEOUT', 'DUPLICATE', 'INVALID', 'SMTP_FAILED', 'INTERNAL', 'NEEDS_AUTH', 'CANCELLED', 'NO_BROWSER', 'SIGNIN_BUSY', 'HTTPS_REQUIRED', 'JMAP_NOT_FOUND', 'CONFIRM_HOST']) {
       expect(ERROR_KEYS[code], code).toBeDefined();
       expect(en[ERROR_KEYS[code]], code).toBeTruthy();
     }
@@ -209,11 +209,11 @@ function oauthEngine({ url = 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
 const calls = (method) => daemonCall.mock.calls.filter(([m]) => m === method);
 
 describe('AddAccount provider picker', () => {
-  it('offers the four providers first, JMAP disabled until it is wired', () => {
+  it('offers the four providers first, every one live', () => {
     render(<AddAccount onSubmit={vi.fn()} onOAuth={vi.fn()} />);
     expect(screen.getByRole('button', { name: t('mobile.add.google') }).disabled).toBe(false);
     expect(screen.getByRole('button', { name: t('mobile.add.microsoft') }).disabled).toBe(false);
-    expect(screen.getByRole('button', { name: t('mobile.add.jmap') }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: t('mobile.add.jmap') }).disabled).toBe(false);
     expect(screen.getByRole('button', { name: t('mobile.add.imap') }).disabled).toBe(false);
     expect(en['mobile.add.microsoft']).toBe('Microsoft (Outlook, Hotmail, Microsoft 365)');
     expect(en['mobile.add.jmap']).toBe('Fastmail and other JMAP');
@@ -443,5 +443,86 @@ describe('needs_auth', () => {
     expect(buttons).toHaveLength(1);
     fireEvent.click(buttons[0]);
     expect(onReauth).toHaveBeenCalledWith('a1');
+  });
+});
+
+describe('AddAccount JMAP form', () => {
+  const openJmap = (onSubmit) => {
+    render(<AddAccount onSubmit={onSubmit} onOAuth={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.add.jmap') }));
+  };
+  const fill = (email = 'ada@fastmail.com', secret = 'fmu1-token') => {
+    fireEvent.change(field('mobile.add.email'), { target: { value: email } });
+    fireEvent.change(field('mobile.add.jmapSecret'), { target: { value: secret } });
+  };
+  const signIn = () => screen.getByRole('button', { name: t('mobile.add.signIn') });
+
+  it('asks for the address and the app password or token; the server URL waits under Advanced', async () => {
+    const onSubmit = vi.fn(async () => ({ ok: true }));
+    openJmap(onSubmit);
+    expect(en['mobile.add.jmapSecret']).toBe('App password or token');
+    expect(field('mobile.add.jmapSecret').getAttribute('type')).toBe('password');
+    expect(screen.queryByLabelText(t('mobile.add.jmapUrl'))).toBeNull();
+    expect(signIn().disabled).toBe(true);
+    fill();
+    await act(async () => { fireEvent.click(signIn()); });
+    expect(onSubmit).toHaveBeenCalledWith({ kind: 'jmap', email: 'ada@fastmail.com', password: 'fmu1-token' });
+  });
+
+  it('a typed server URL goes with the form', async () => {
+    const onSubmit = vi.fn(async () => ({ ok: false, code: 'HTTPS_REQUIRED' }));
+    openJmap(onSubmit);
+    fill('ada@example.test', 'app-pw');
+    const advanced = screen.getByRole('button', { name: t('mobile.add.advanced') });
+    expect(advanced.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(advanced);
+    expect(advanced.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.change(field('mobile.add.jmapUrl'), { target: { value: ' http://jmap.example.test/ ' } });
+    await act(async () => { fireEvent.click(signIn()); });
+    expect(onSubmit).toHaveBeenCalledWith({ kind: 'jmap', email: 'ada@example.test', password: 'app-pw', jmapUrl: 'http://jmap.example.test/' });
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.error.HTTPS_REQUIRED'));
+    expect(field('mobile.add.jmapSecret').value).toBe('app-pw'); // a URL problem keeps the password
+  });
+
+  it('nothing found opens Advanced and says so', async () => {
+    openJmap(vi.fn(async () => ({ ok: false, code: 'JMAP_NOT_FOUND' })));
+    fill('ada@example.test', 'app-pw');
+    await act(async () => { fireEvent.click(signIn()); });
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.error.JMAP_NOT_FOUND'));
+    expect(field('mobile.add.jmapUrl')).toBeTruthy();
+  });
+
+  it('a server on another domain is named and the password goes there only on Continue', async () => {
+    const onSubmit = vi.fn()
+      .mockResolvedValueOnce({ ok: false, code: 'CONFIRM_HOST', host: 'jmap.host.test', jmapUrl: 'https://jmap.host.test/jmap/session' })
+      .mockResolvedValueOnce({ ok: true });
+    openJmap(onSubmit);
+    fill('ada@example.test', 'app-pw');
+    await act(async () => { fireEvent.click(signIn()); });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const ask = screen.getByRole('alert');
+    expect(ask.textContent).toContain(t('mobile.add.confirmHost', { host: 'jmap.host.test' }));
+    expect(screen.queryByRole('button', { name: t('mobile.add.signIn') })).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('mobile.add.confirmHostYes') })); });
+    expect(onSubmit).toHaveBeenLastCalledWith({ kind: 'jmap', email: 'ada@example.test', password: 'app-pw', jmapUrl: 'https://jmap.host.test/jmap/session' });
+    expect(field('mobile.add.jmapUrl').value).toBe('https://jmap.host.test/jmap/session');
+  });
+
+  it('a refused sign-in clears the secret', async () => {
+    openJmap(vi.fn(async () => ({ ok: false, code: 'AUTH_FAILED' })));
+    fill('ada@example.test', 'wrong');
+    await act(async () => { fireEvent.click(signIn()); });
+    expect(field('mobile.add.jmapSecret').value).toBe('');
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.error.AUTH_FAILED'));
+  });
+
+  it('the store sends kind and URL and passes the host to confirm back', async () => {
+    daemonCall.mockImplementation(async (method) => {
+      if (method === 'mobile.accounts.add') return { ok: false, code: 'CONFIRM_HOST', host: 'jmap.host.test', jmapUrl: 'https://jmap.host.test/s', message: 'x' };
+      throw new Error(`unexpected ${method}`);
+    });
+    const r = await useMobileStore.getState().addAccount({ kind: 'jmap', email: 'a@example.test', password: 'pw', jmapUrl: 'https://x.test/' });
+    expect(calls('mobile.accounts.add')[0][1]).toEqual({ kind: 'jmap', email: 'a@example.test', password: 'pw', jmapUrl: 'https://x.test/' });
+    expect(r).toEqual({ ok: false, code: 'CONFIRM_HOST', host: 'jmap.host.test', jmapUrl: 'https://jmap.host.test/s' });
   });
 });

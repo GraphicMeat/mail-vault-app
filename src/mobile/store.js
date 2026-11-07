@@ -428,7 +428,13 @@ export function createMobileStore() {
       async addAccount(form) {
         let reply;
         try {
-          reply = await daemonCall('mobile.accounts.add', {
+          reply = await daemonCall('mobile.accounts.add', form.kind === 'jmap' ? {
+            kind: 'jmap',
+            email: form.email,
+            password: form.password,
+            ...(form.jmapUrl ? { jmapUrl: form.jmapUrl } : {}),
+            ...(form.displayName ? { displayName: form.displayName } : {}),
+          } : {
             email: form.email,
             password: form.password,
             imapHost: form.imapHost,
@@ -442,7 +448,12 @@ export function createMobileStore() {
         } catch (err) {
           return { ok: false, code: errorCodeOf(err?.code) };
         }
-        if (!reply?.ok) return { ok: false, code: errorCodeOf(reply?.code) };
+        if (!reply?.ok) {
+          const code = errorCodeOf(reply?.code);
+          // A JMAP server on another domain: the form asks before the password goes there.
+          if (code === 'CONFIRM_HOST') return { ok: false, code, host: reply.host, jmapUrl: reply.jmapUrl };
+          return { ok: false, code };
+        }
         await adopt(reply.account);
         return { ok: true };
       },

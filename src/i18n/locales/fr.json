@@ -4377,5 +4377,14 @@
   "mobile.compose.error.TOO_LARGE_LIMIT": "Les pièces jointes sont trop lourdes pour l'envoi depuis ce compte. Sa limite est de {{size}} Mo.",
   "mobile.attachment.link": "Lien, à ouvrir dans Outlook",
   "mobile.attachment.labelLink": "{{name}}, pièce jointe en lien, ouvrez-la dans Outlook",
-  "mobile.viewer.attachmentsUnknown": "Impossible de charger les pièces jointes."
+  "mobile.viewer.attachmentsUnknown": "Impossible de charger les pièces jointes.",
+  "mobile.add.jmapSecret": "Mot de passe d'application ou jeton",
+  "mobile.add.jmapHint": "Créez un mot de passe d'application ou un jeton d'API dans les réglages de votre fournisseur. Fastmail demande un jeton d'API.",
+  "mobile.add.advanced": "Avancé",
+  "mobile.add.jmapUrl": "URL du serveur (facultatif)",
+  "mobile.add.confirmHost": "Le serveur de cette adresse est {{host}}, qui n'est pas sur le domaine de votre adresse. Y envoyer votre mot de passe ?",
+  "mobile.add.confirmHostYes": "Envoyer et se connecter",
+  "mobile.error.HTTPS_REQUIRED": "L'URL du serveur doit commencer par https://.",
+  "mobile.error.JMAP_NOT_FOUND": "Aucun serveur JMAP trouvé pour cette adresse. Saisissez l'URL du serveur dans Avancé.",
+  "mobile.error.CONFIRM_HOST": "Vérifiez l'adresse du serveur avant de vous connecter."
 }

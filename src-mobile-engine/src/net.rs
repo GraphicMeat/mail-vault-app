@@ -57,6 +57,12 @@ pub(crate) fn imap_config(account: &AccountRow, cred: &Credential) -> Value {
     } else {
         v["password"] = json!(cred.password);
     }
+    if account.kind == "jmap" {
+        // Core sends through JMAP (`ImapConfig::uses_jmap`): the password is the app password
+        // (`basic`) or the token (`bearer`).
+        v["jmapSessionUrl"] = json!(account.jmap_url);
+        v["jmapAuth"] = json!(if account.auth == "bearer" { "bearer" } else { "basic" });
+    }
     if let Some(host) = &account.smtp_host {
         v["smtpHost"] = json!(host);
         v["smtpPort"] = json!(account.smtp_port);

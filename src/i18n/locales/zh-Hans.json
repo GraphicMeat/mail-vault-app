@@ -4377,5 +4377,14 @@
   "mobile.compose.error.TOO_LARGE_LIMIT": "附件太大，无法从此账户发送。上限为 {{size}} MB。",
   "mobile.attachment.link": "链接，请在 Outlook 中打开",
   "mobile.attachment.labelLink": "{{name}}，链接附件，请在 Outlook 中打开",
-  "mobile.viewer.attachmentsUnknown": "无法加载附件。"
+  "mobile.viewer.attachmentsUnknown": "无法加载附件。",
+  "mobile.add.jmapSecret": "应用专用密码或令牌",
+  "mobile.add.jmapHint": "请在服务商的设置中创建应用专用密码或 API 令牌。Fastmail 需要 API 令牌。",
+  "mobile.add.advanced": "高级",
+  "mobile.add.jmapUrl": "服务器 URL（可选）",
+  "mobile.add.confirmHost": "此地址的服务器是 {{host}}，不在你地址的域名下。要把密码发送到那里吗？",
+  "mobile.add.confirmHostYes": "发送并登录",
+  "mobile.error.HTTPS_REQUIRED": "服务器 URL 必须以 https:// 开头。",
+  "mobile.error.JMAP_NOT_FOUND": "未找到此地址的 JMAP 服务器。请在“高级”中输入服务器 URL。",
+  "mobile.error.CONFIRM_HOST": "登录前请检查服务器地址。"
 }

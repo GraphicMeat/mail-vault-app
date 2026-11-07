@@ -19,6 +19,6 @@ pub mod mailbox_map;
 pub mod ops;
 pub mod types;
 
-pub use client::{expand_template, JmapClient};
+pub use client::{expand_template, BlobStream, JmapClient};
 pub use ops::{remove_from, RemoveOutcome};
 pub use types::*;

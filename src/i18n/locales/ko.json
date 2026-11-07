@@ -4377,5 +4377,14 @@
   "mobile.compose.error.TOO_LARGE_LIMIT": "첨부 파일이 너무 커서 이 계정에서 보낼 수 없습니다. 한도는 {{size}}MB입니다.",
   "mobile.attachment.link": "링크, Outlook에서 열기",
   "mobile.attachment.labelLink": "{{name}}, 링크 첨부 파일, Outlook에서 여세요",
-  "mobile.viewer.attachmentsUnknown": "첨부 파일을 불러올 수 없습니다."
+  "mobile.viewer.attachmentsUnknown": "첨부 파일을 불러올 수 없습니다.",
+  "mobile.add.jmapSecret": "앱 비밀번호 또는 토큰",
+  "mobile.add.jmapHint": "제공업체 설정에서 앱 비밀번호나 API 토큰을 만드세요. Fastmail은 API 토큰이 필요합니다.",
+  "mobile.add.advanced": "고급",
+  "mobile.add.jmapUrl": "서버 URL(선택)",
+  "mobile.add.confirmHost": "이 주소의 서버는 {{host}}이며, 주소의 도메인에 있지 않습니다. 비밀번호를 그곳으로 보낼까요?",
+  "mobile.add.confirmHostYes": "보내고 로그인",
+  "mobile.error.HTTPS_REQUIRED": "서버 URL은 https://로 시작해야 합니다.",
+  "mobile.error.JMAP_NOT_FOUND": "이 주소의 JMAP 서버를 찾지 못했습니다. 고급에서 서버 URL을 입력하세요.",
+  "mobile.error.CONFIRM_HOST": "로그인하기 전에 서버 주소를 확인하세요."
 }

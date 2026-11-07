@@ -26,10 +26,13 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "net"] }
 sha2 = "0.10"
 # Outgoing attachments as core's builder takes them (the same base64 core already builds).
 base64 = "0.22"
+# JMAP session URLs as typed (the same url core already builds).
+url = "2"
 
 [dev-dependencies]
 tempfile = "3"
 mock-imap = { path = "../src-mock-imap" }
+mock-jmap = { path = "../src-mock-jmap" }
 
 [target.'cfg(unix)'.dev-dependencies]
 # Peak RSS for the attachment streaming test's report line.

@@ -13,6 +13,20 @@ const EMAIL_PROPS: [&str; 20] = [
     "references", "sender", "from", "to", "cc", "bcc", "replyTo", "subject", "sentAt", "hasAttachment", "preview",
 ];
 
+/// Body properties (RFC 8621 §4.1.4): asked for by name only, never part of the default set.
+const BODY_PROPS: [&str; 4] = ["htmlBody", "textBody", "bodyValues", "attachments"];
+/// The EmailBodyPart properties `bodyProperties` may name (RFC 8621 §4.1.4).
+const BODY_PART_PROPS: [&str; 10] = ["partId", "blobId", "size", "name", "type", "charset", "disposition", "cid", "language", "location"];
+
+/// The `Email/get` arguments that shape the body properties.
+#[derive(Debug, Clone, Default)]
+struct BodyArgs {
+    fetch_text: bool,
+    fetch_html: bool,
+    max_value_bytes: usize,
+    part_props: Vec<String>,
+}
+
 /// A method-level error: `["error", {"type": kind, "description": ...}, tag]`.
 #[derive(Debug, Clone)]
 pub struct MErr {
@@ -356,6 +370,145 @@ fn addresses(v: &str) -> Value {
     json!(out)
 }
 
+/// One leaf part of a message, as the mock's body properties describe it.
+struct Leaf {
+    part_id: String,
+    mime: String,
+    charset: Option<String>,
+    name: Option<String>,
+    disposition: Option<String>,
+    cid: Option<String>,
+    size: usize,
+    /// Text of a text part, decoded.
+    text: Option<String>,
+    /// In the body (textBody/htmlBody) rather than an attachment.
+    body: bool,
+}
+
+/// The leaf parts of `raw` in depth-first order, partIds "1", "2", ... (multipart containers
+/// get none: RFC 8621 gives them a null partId). A text/plain or text/html part that is not an
+/// attachment and has no file name is body; every other leaf is an attachment, an inline image
+/// with a Content-ID included.
+fn leaves(raw: &[u8]) -> Vec<Leaf> {
+    fn walk(p: &ParsedMail, out: &mut Vec<Leaf>) {
+        if !p.subparts.is_empty() {
+            for s in &p.subparts {
+                walk(s, out);
+            }
+            return;
+        }
+        let d = p.get_content_disposition();
+        let name = d.params.get("filename").cloned().or_else(|| p.ctype.params.get("name").cloned());
+        let mime = p.ctype.mimetype.to_ascii_lowercase();
+        let text_type = mime == "text/plain" || mime == "text/html";
+        let attachment = d.disposition == DispositionType::Attachment;
+        let body = text_type && !attachment && name.is_none();
+        let disposition = match d.disposition {
+            DispositionType::Attachment => Some("attachment".to_string()),
+            DispositionType::Inline if p.headers.iter().any(|h| h.get_key().eq_ignore_ascii_case("Content-Disposition")) => {
+                Some("inline".to_string())
+            }
+            _ => None,
+        };
+        let cid = p
+            .headers
+            .iter()
+            .find(|h| h.get_key().eq_ignore_ascii_case("Content-ID"))
+            .map(|h| h.get_value().trim().trim_start_matches('<').trim_end_matches('>').to_string());
+        let bytes = p.get_body_raw().unwrap_or_default();
+        out.push(Leaf {
+            part_id: (out.len() + 1).to_string(),
+            charset: text_type.then(|| p.ctype.charset.clone()),
+            text: if text_type { p.get_body().ok() } else { None },
+            mime,
+            name,
+            disposition,
+            cid,
+            size: bytes.len(),
+            body,
+        });
+    }
+    let Ok(parsed) = mailparse::parse_mail(raw) else { return Vec::new() };
+    let mut out = Vec::new();
+    walk(&parsed, &mut out);
+    out
+}
+
+/// The blob id of part `part_id` of the email whose blob is `email_blob`. `part_blob` reads it
+/// back.
+pub fn part_blob_id(email_blob: &str, part_id: &str) -> String {
+    format!("{email_blob}_{part_id}")
+}
+
+/// The decoded bytes of a part blob (`part_blob_id`) of an email blob `blobs` holds.
+pub fn part_blob(blobs: &HashMap<String, Vec<u8>>, blob_id: &str) -> Option<Vec<u8>> {
+    let (email_blob, part_id) = blob_id.rsplit_once('_')?;
+    let raw = blobs.get(email_blob)?;
+    let parsed = mailparse::parse_mail(raw).ok()?;
+    fn find<'a>(p: &'a ParsedMail<'a>, n: &mut usize, want: &str) -> Option<&'a ParsedMail<'a>> {
+        if p.subparts.is_empty() {
+            *n += 1;
+            return (n.to_string() == want).then_some(p);
+        }
+        p.subparts.iter().find_map(|s| find(s, n, want))
+    }
+    let mut n = 0;
+    find(&parsed, &mut n, part_id)?.get_body_raw().ok()
+}
+
+fn part_json(e: &Email, l: &Leaf, props: &[String]) -> Value {
+    let mut m = Map::new();
+    for p in props {
+        let v = match p.as_str() {
+            "partId" => json!(l.part_id),
+            "blobId" => json!(part_blob_id(&e.blob_id, &l.part_id)),
+            "size" => json!(l.size),
+            "name" => json!(l.name),
+            "type" => json!(l.mime),
+            "charset" => json!(l.charset),
+            "disposition" => json!(l.disposition),
+            "cid" => json!(l.cid),
+            _ => Value::Null,
+        };
+        m.insert(p.clone(), v);
+    }
+    Value::Object(m)
+}
+
+/// `htmlBody`, `textBody`, `bodyValues` or `attachments` of `e` (RFC 8621 §4.1.4), simplified:
+/// textBody is the text/plain body parts, htmlBody the text/html ones (the text/plain ones when
+/// there is none), and bodyValues holds the parts the fetch flags asked for.
+fn body_prop(e: &Email, raw: &[u8], prop: &str, args: &BodyArgs) -> Value {
+    let all = leaves(raw);
+    let text: Vec<&Leaf> = all.iter().filter(|l| l.body && l.mime == "text/plain").collect();
+    let html_only: Vec<&Leaf> = all.iter().filter(|l| l.body && l.mime == "text/html").collect();
+    let html = if html_only.is_empty() { text.clone() } else { html_only };
+    match prop {
+        "textBody" => json!(text.iter().map(|l| part_json(e, l, &args.part_props)).collect::<Vec<_>>()),
+        "htmlBody" => json!(html.iter().map(|l| part_json(e, l, &args.part_props)).collect::<Vec<_>>()),
+        "attachments" => json!(all.iter().filter(|l| !l.body).map(|l| part_json(e, l, &args.part_props)).collect::<Vec<_>>()),
+        _ => {
+            let mut values = Map::new();
+            let wanted = text.iter().filter(|_| args.fetch_text).chain(html.iter().filter(|_| args.fetch_html));
+            for l in wanted {
+                let value = l.text.clone().unwrap_or_default();
+                let cut = args.max_value_bytes > 0 && value.len() > args.max_value_bytes;
+                let value = if cut {
+                    let mut end = args.max_value_bytes;
+                    while !value.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    value[..end].to_string()
+                } else {
+                    value
+                };
+                values.insert(l.part_id.clone(), json!({"value": value, "isEncodingProblem": false, "isTruncated": cut}));
+            }
+            Value::Object(values)
+        }
+    }
+}
+
 fn first_text(p: &ParsedMail) -> Option<String> {
     if p.subparts.is_empty() {
         let inline = p.get_content_disposition().disposition != DispositionType::Attachment;
@@ -614,7 +767,7 @@ fn changes(state: &State, acc: &str, args: &Args, kind: Kind) -> Result<Value, M
 
 // ── Email/get, Email/query ──────────────────────────────────────────────────
 
-fn email_json(e: &Email, raw: &[u8], props: &Option<Vec<String>>) -> Value {
+fn email_json(e: &Email, raw: &[u8], props: &Option<Vec<String>>, body: &BodyArgs) -> Value {
     let wanted: Vec<String> = match props {
         Some(p) => p.clone(),
         None => EMAIL_PROPS.iter().map(|s| s.to_string()).collect(),
@@ -644,6 +797,7 @@ fn email_json(e: &Email, raw: &[u8], props: &Option<Vec<String>>) -> Value {
             "sentAt" => msg.sent_at(),
             "hasAttachment" => json!(msg.has_attachment),
             "preview" => json!(msg.preview()),
+            "htmlBody" | "textBody" | "bodyValues" | "attachments" => body_prop(e, raw, &p, body),
             h => match h.strip_prefix("header:") {
                 Some(spec) => msg.header_prop(spec),
                 None => continue,
@@ -657,9 +811,29 @@ fn email_json(e: &Email, raw: &[u8], props: &Option<Vec<String>>) -> Value {
 fn email_get(state: &State, acc: &str, args: &Args) -> Result<Value, MErr> {
     let a = state.account(acc);
     let props = ids_arg(args, "properties")?;
-    if let Some(bad) = props.iter().flatten().find(|p| !EMAIL_PROPS.contains(&p.as_str()) && !p.starts_with("header:")) {
+    if let Some(bad) = props
+        .iter()
+        .flatten()
+        .find(|p| !EMAIL_PROPS.contains(&p.as_str()) && !BODY_PROPS.contains(&p.as_str()) && !p.starts_with("header:"))
+    {
         return Err(merr("invalidArguments", format!("unknown Email property {bad}")));
     }
+    let flag = |k: &str| args.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let part_props = match ids_arg(args, "bodyProperties")? {
+        Some(list) => {
+            if let Some(bad) = list.iter().find(|p| !BODY_PART_PROPS.contains(&p.as_str())) {
+                return Err(merr("invalidArguments", format!("unknown EmailBodyPart property {bad}")));
+            }
+            list
+        }
+        None => BODY_PART_PROPS.iter().map(|s| s.to_string()).collect(),
+    };
+    let body = BodyArgs {
+        fetch_text: flag("fetchTextBodyValues") || flag("fetchAllBodyValues"),
+        fetch_html: flag("fetchHTMLBodyValues") || flag("fetchAllBodyValues"),
+        max_value_bytes: args.get("maxBodyValueBytes").and_then(Value::as_u64).map_or(0, |n| n as usize),
+        part_props,
+    };
     let ids = match ids_arg(args, "ids")? {
         Some(ids) => ids,
         None => a.emails.keys().cloned().collect(),
@@ -674,7 +848,7 @@ fn email_get(state: &State, acc: &str, args: &Args) -> Result<Value, MErr> {
         match a.emails.get(&id) {
             Some(e) => {
                 let raw = state.blobs.get(&e.blob_id).map(Vec::as_slice).unwrap_or_default();
-                list.push(email_json(e, raw, &props));
+                list.push(email_json(e, raw, &props, &body));
             }
             None => not_found.push(id),
         }

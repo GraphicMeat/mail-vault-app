@@ -4377,5 +4377,14 @@
   "mobile.compose.error.TOO_LARGE_LIMIT": "添付ファイルが大きすぎて、このアカウントからは送信できません。上限は {{size}} MB です。",
   "mobile.attachment.link": "リンク、Outlook で開く",
   "mobile.attachment.labelLink": "{{name}}、リンクの添付ファイル、Outlook で開いてください",
-  "mobile.viewer.attachmentsUnknown": "添付ファイルを読み込めませんでした。"
+  "mobile.viewer.attachmentsUnknown": "添付ファイルを読み込めませんでした。",
+  "mobile.add.jmapSecret": "アプリパスワードまたはトークン",
+  "mobile.add.jmapHint": "プロバイダの設定でアプリパスワードまたは API トークンを作成してください。Fastmail では API トークンが必要です。",
+  "mobile.add.advanced": "詳細設定",
+  "mobile.add.jmapUrl": "サーバー URL（任意）",
+  "mobile.add.confirmHost": "このアドレスのサーバーは {{host}} で、アドレスのドメイン上にありません。パスワードをそこに送信しますか？",
+  "mobile.add.confirmHostYes": "送信してサインイン",
+  "mobile.error.HTTPS_REQUIRED": "サーバー URL は https:// で始まる必要があります。",
+  "mobile.error.JMAP_NOT_FOUND": "このアドレスの JMAP サーバーが見つかりませんでした。詳細設定でサーバー URL を入力してください。",
+  "mobile.error.CONFIRM_HOST": "サインインする前にサーバーのアドレスを確認してください。"
 }

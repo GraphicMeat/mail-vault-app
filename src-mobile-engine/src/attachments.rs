@@ -95,7 +95,7 @@ fn is_final_name(name: &str) -> bool {
 }
 
 /// An IMAP part: `1.2` and the like, dot-separated positive numbers, which is all core will send.
-/// A Graph part is the attachment's id (`graph`): an opaque token of the characters Graph ids use
+/// A Graph part is the attachment's id, a JMAP part its partId (`graph`): an opaque token of the characters Graph ids use
 /// (base64 and URL-safe base64), at most 1024 of them, never only dots (a dot segment in the
 /// request URL would climb out of the attachment). `name_of` also wants it among the message's
 /// listed attachments.
@@ -886,7 +886,8 @@ fn name_of(shared: &Shared, key: &PartKey) -> Result<Option<(String, i64)>, RpcE
     let kind: Option<String> = shared
         .read(|c| c.query_row("SELECT kind FROM accounts WHERE id = ?1", [&key.account_id], |r| r.get(0)).optional())
         .map_err(internal)?;
-    let graph = kind.as_deref() == Some("graph");
+    // Graph and JMAP name a part by an opaque id (an attachment id, a JMAP partId).
+    let graph = matches!(kind.as_deref(), Some("graph" | "jmap"));
     if !valid_section(&key.section, graph) {
         return Err(RpcError::Invalid(format!("not a part section: {}", key.section)));
     }

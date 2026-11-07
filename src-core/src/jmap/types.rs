@@ -119,6 +119,11 @@ pub struct Session {
     pub event_source_url: Option<String>,
     #[serde(default)]
     pub state: String,
+    /// The accounts the credentials reach, by id, as the server described them
+    /// (`accountCapabilities` holds per-account limits such as
+    /// `maxSizeAttachmentsPerEmail`).
+    #[serde(default)]
+    pub accounts: Map<String, Value>,
 }
 
 /// `urn:ietf:params:jmap:core` limits the client honours.
