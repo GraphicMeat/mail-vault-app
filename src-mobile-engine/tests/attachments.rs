@@ -403,3 +403,114 @@ fn a_gone_uid_fails_gone() {
     assert!(f.engine.rpc("mobile.attachment.fetch", json!({ "accountId": f.account, "folder": "Nope", "uid": 1, "section": "2" })).is_err());
     assert!(f.engine.rpc("mobile.attachment.fetch", json!({ "accountId": f.account, "folder": "INBOX", "uid": 1, "section": "2 BODY[]" })).is_err());
 }
+
+/// The server ends a slice early in the middle of the part (fewer bytes than asked, well before
+/// the reported size) and still has bytes after it: never a finished file, the job fails.
+#[test]
+fn a_short_slice_mid_part_is_not_the_end() {
+    let data = source(1_500_000, 7);
+    let server = MockImap::start(
+        Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(binary_message(1, &data))).fault(
+            Trigger::nth_with("FETCH", RANGE, 2),
+            Action::RespondRaw(format!("* 1 FETCH (UID 1 BODY[2]<{CHUNK}> {{8}}\r\nQUJDREVG)\r\n{{tag}} OK FETCH completed\r\n")),
+        ),
+    );
+    let f = setup(&server);
+    let job = f.fetch(1);
+    let (name, v) = f.end(job);
+    assert_eq!((name.as_str(), &v["code"]), ("mobile.attachment.failed", &json!("INVALID")), "{v}");
+    assert_eq!(f.local(1), Value::Null);
+    assert!(f.att_files().iter().all(|n| n.contains(".part")), "a finished file exists: {:?}", f.att_files());
+    // The end was probed right after the short slice.
+    assert!(ranges(&server).contains(&(CHUNK as u64 + 8, CHUNK as u64)), "{:?}", ranges(&server));
+}
+
+/// A download killed after its second chunk: the server, the data dir and what to reopen with.
+struct Killed {
+    server: MockImap,
+    tmp: tempfile::TempDir,
+    secrets: Arc<MemorySecrets>,
+    account: String,
+    data: Vec<u8>,
+    /// Range fetches sent before the kill.
+    before: usize,
+}
+
+impl Killed {
+    fn new(seed: u64) -> Killed {
+        let data = source(1_500_000, seed);
+        let stall = Duration::from_millis(1500);
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(Mailbox::new("INBOX").push_msg(binary_message(1, &data)))
+                .fault(Trigger::nth_with("FETCH", RANGE, 3), Action::Delay(stall)),
+        );
+        let f = setup(&server);
+        let job = f.fetch(1);
+        f.events.wait(0, "second chunk", |n, v| n == "mobile.attachment.progress" && v["jobId"] == job && v["received"] == 2 * CHUNK as u64);
+        let t = Instant::now();
+        let Fixture { tmp, secrets, engine, events: _, account } = f;
+        drop(engine);
+        std::thread::sleep(stall.saturating_sub(t.elapsed()) + Duration::from_millis(700));
+        let before = ranges(&server).len();
+        assert_eq!(before, 3);
+        Killed { server, tmp, secrets, account, data, before }
+    }
+
+    fn file(&self, suffix: &str) -> PathBuf {
+        let dir = self.tmp.path().join("cache").join("att");
+        std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .find(|p| p.to_string_lossy().ends_with(suffix))
+            .unwrap_or_else(|| panic!("no *{suffix} in {dir:?}"))
+    }
+
+    fn edit_meta(&self, f: impl FnOnce(&mut Value)) {
+        let path = self.file(".part.meta");
+        let mut v: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        f(&mut v);
+        std::fs::write(&path, serde_json::to_vec(&v).unwrap()).unwrap();
+    }
+
+    /// Reopens, fetches to the end, checks the file is the source; the offsets fetched after.
+    fn finish(self) -> Vec<(u64, u64)> {
+        let (engine, events) = open(self.tmp.path(), &self.secrets);
+        let f = Fixture { tmp: self.tmp, secrets: self.secrets, engine, events, account: self.account };
+        let path = f.done(f.fetch(1));
+        assert!(std::fs::read(&path).unwrap() == self.data, "the file differs from the source");
+        ranges(&self.server)[self.before..].to_vec()
+    }
+}
+
+/// A kill between the data write and the meta write leaves the `.part` longer than the meta
+/// vouches for: the extra bytes are cut and the download resumes where the meta says.
+#[test]
+fn resume_truncates_bytes_the_meta_never_vouched_for() {
+    let k = Killed::new(8);
+    let part = k.file(".part");
+    let mut f = std::fs::OpenOptions::new().append(true).open(&part).unwrap();
+    std::io::Write::write_all(&mut f, &[0xAB; 100_000]).unwrap();
+    drop(f);
+    let after = k.finish();
+    assert!(after[0].0 > CHUNK as u64, "started over instead of resuming: {after:?}");
+}
+
+/// A meta for another UIDVALIDITY or another encoding, or a `.part` shorter than the meta says,
+/// cannot be resumed: the download starts over from 0.
+#[test]
+fn resume_starts_over_on_a_meta_that_does_not_match() {
+    let k = Killed::new(9);
+    k.edit_meta(|m| m["uidValidity"] = json!(m["uidValidity"].as_i64().unwrap() + 1));
+    assert_eq!(k.finish()[0].0, 0, "another UIDVALIDITY");
+
+    let k = Killed::new(10);
+    k.edit_meta(|m| m["encoding"] = json!("quoted-printable"));
+    assert_eq!(k.finish()[0].0, 0, "another encoding");
+
+    let k = Killed::new(11);
+    let part = k.file(".part");
+    let len = std::fs::metadata(&part).unwrap().len();
+    std::fs::OpenOptions::new().write(true).open(&part).unwrap().set_len(len - 1).unwrap();
+    assert_eq!(k.finish()[0].0, 0, "a .part shorter than the meta");
+}

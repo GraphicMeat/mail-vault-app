@@ -146,6 +146,9 @@ struct State {
     cap: AtomicU64,
     #[cfg(test)]
     lease_ttl_ms: AtomicU64,
+    /// Unit tests: runs with the job id after the finished `.part` is synced, before the rename.
+    #[cfg(test)]
+    before_finish: Mutex<Option<Box<dyn Fn(u64) + Send>>>,
 }
 
 impl State {
@@ -201,6 +204,8 @@ impl Attachments {
                 cap: AtomicU64::new(CACHE_CAP),
                 #[cfg(test)]
                 lease_ttl_ms: AtomicU64::new(LEASE_TTL.as_millis() as u64),
+                #[cfg(test)]
+                before_finish: Mutex::new(None),
             }),
         }
     }
@@ -292,6 +297,9 @@ enum Stop {
     /// The uid, the part or the folder's UIDVALIDITY is not what was asked for.
     Gone,
     Cancelled,
+    /// A slice came back short before the part's reported size and the server still had bytes
+    /// after it: the end cannot be trusted, so the file is not finished.
+    Short { at: u64, total: u64 },
     Io(io::Error),
 }
 
@@ -364,6 +372,13 @@ fn run(state: &State, shared: &Shared, id: u64, key: &PartKey, name: &str, uid_v
             shared.log(&format!("[attachment] {} {} {} {}: {} {}", key.account_id, key.folder, key.uid, key.section, code.as_str(), why));
             End::Failed(code.as_str())
         }
+        Err(Stop::Short { at, total }) => {
+            shared.log(&format!(
+                "[attachment] {} {} {} {}: short slice at {at} of {total}, but the part goes on",
+                key.account_id, key.folder, key.uid, key.section
+            ));
+            End::Failed("INVALID")
+        }
         Err(Stop::Io(e)) => {
             shared.log(&format!("[attachment] {} {} {} {}: io {}", key.account_id, key.folder, key.uid, key.section, e));
             End::Failed("INVALID")
@@ -419,6 +434,18 @@ async fn download(
             return Err(Stop::Gone);
         };
         let last = data.len() < CHUNK as usize;
+        let end_at = offset + data.len() as u64;
+        if last && end_at < total {
+            // Short before the size the server reported: a server may end a slice early. The end
+            // is real only when the next offset has nothing.
+            let probe = imap::fetch_selected_section_range(session, &key.folder, key.uid, &key.section, end_at, CHUNK).await?;
+            checkpoint(shared, cancel)?;
+            match probe {
+                None => return Err(Stop::Gone),
+                Some(p) if p.is_empty() => {}
+                Some(_) => return Err(Stop::Short { at: end_at, total }),
+            }
+        }
         out.clear();
         decoder.feed(&data, &mut out);
         offset += data.len() as u64;
@@ -432,7 +459,22 @@ async fn download(
         if last {
             file.sync_all()?;
             drop(file);
-            fs::rename(&part_path, state.path(name))?;
+            #[cfg(test)]
+            if let Some(hook) = lock(&state.before_finish).as_ref() {
+                hook(id);
+            }
+            {
+                // Under the table lock, which `cancel` also takes: a cancel lands either before
+                // this (the job ends CANCELLED, no file) or after it (the job is already off the
+                // table and the cancel answers false). Never a cancelled job that ends `done`.
+                let mut t = lock(&state.table);
+                if cancel.load(Ordering::SeqCst) {
+                    return Err(Stop::Cancelled);
+                }
+                fs::rename(&part_path, state.path(name))?;
+                t.jobs.remove(&id);
+                t.by_key.remove(key);
+            }
             sync_dir(&state.dir);
             let _ = fs::remove_file(&meta_path);
             return Ok(());
@@ -533,7 +575,10 @@ fn cleanup(dir: &Path, stale: Duration) {
 /// Deletes the least recently opened finished files until the total is at most the cap, never
 /// `keep` (the file just finished) and never a leased one.
 fn evict(state: &State, keep: &str) -> usize {
-    let leased = lock(&state.table).leased();
+    // Held to the end: a lease (taken under this lock, after checking the file is there) either
+    // comes before the delete loop, which then skips the file, or finds the file gone.
+    let mut t = lock(&state.table);
+    let leased = t.leased();
     let Ok(rd) = fs::read_dir(&state.dir) else {
         return 0;
     };
@@ -567,6 +612,7 @@ fn evict(state: &State, keep: &str) -> usize {
             removed += 1;
         }
     }
+    drop(t);
     removed
 }
 
@@ -895,7 +941,8 @@ struct LeaseParams {
 }
 
 /// `mobile.attachment.lease {path}` -> `{leaseId, ttlMs}`: eviction skips the file until
-/// `mobile.attachment.release {leaseId}` or until the lease lapses. `path` must be a finished
+/// `mobile.attachment.release {leaseId}` or until the lease lapses. Leasing a file that already
+/// has a live lease renews it and answers the same `leaseId`. `path` must be a finished
 /// file this engine handed out.
 pub(crate) fn lease(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: LeaseParams = parse(params)?;
@@ -905,14 +952,23 @@ pub(crate) fn lease(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         (Some(dir), Some(n)) if dir == state.dir && is_final_name(n) => n.to_string(),
         _ => return Err(RpcError::Invalid("not an attachment file".into())),
     };
+    let ttl = state.lease_ttl();
+    // Under the table lock, which eviction holds across its deletes: the file is either still
+    // there (and now leased) or already gone.
+    let mut t = lock(&state.table);
     if touch(path).is_err() {
         return Err(RpcError::Invalid("the file is gone".into()));
     }
-    let ttl = state.lease_ttl();
-    let mut t = lock(&state.table);
+    let until = Instant::now() + ttl;
+    t.leased();
+    // A live lease on the same file is renewed (a resumed share sheet leases again), not doubled.
+    if let Some((id, l)) = t.leases.iter_mut().find(|(_, l)| l.name == name) {
+        l.until = until;
+        return Ok(json!({ "leaseId": *id, "ttlMs": ttl.as_millis() as u64 }));
+    }
     t.next_lease += 1;
     let id = t.next_lease;
-    t.leases.insert(id, Lease { name, until: Instant::now() + ttl });
+    t.leases.insert(id, Lease { name, until });
     Ok(json!({ "leaseId": id, "ttlMs": ttl.as_millis() as u64 }))
 }
 
@@ -1077,6 +1133,85 @@ mod tests {
         fs::write(&part, b"x").unwrap();
         assert!(e.rpc("mobile.attachment.lease", json!({ "path": part.to_string_lossy() })).is_err());
         assert!(e.rpc("mobile.attachment.lease", json!({ "path": p4.to_string_lossy() })).is_err(), "an evicted file was leased");
+    }
+
+    /// A live lease on the same file is renewed, not doubled: the renewal keeps it protected
+    /// past the first lease's expiry.
+    #[test]
+    fn leasing_again_renews_the_lease() {
+        let (_tmp, e) = engine();
+        let state = &e.attachments().state;
+        state.lease_ttl_ms.store(300, Ordering::SeqCst);
+        let (_, p1) = finished(state, 1, 1_000, Duration::from_secs(60));
+        let (n2, _p2) = finished(state, 2, 1_000, Duration::ZERO);
+        let lease = |p: &Path| e.rpc("mobile.attachment.lease", json!({ "path": p.to_string_lossy() })).unwrap()["leaseId"].as_u64().unwrap();
+        let l = lease(&p1);
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(lease(&p1), l, "a second lease of a leased file is the same lease");
+        std::thread::sleep(Duration::from_millis(200));
+        // 400 ms after the first lease, 200 ms after the renewal: still protected.
+        set_age(&p1, Duration::from_secs(60));
+        state.cap.store(0, Ordering::SeqCst);
+        assert_eq!(evict(state, &n2), 0);
+        assert!(p1.is_file());
+        assert_eq!(e.rpc("mobile.attachment.release", json!({ "leaseId": l })).unwrap()["released"], true);
+        assert_eq!(evict(state, &n2), 1);
+        assert!(!p1.exists());
+    }
+
+    /// A cancel that lands after the last slice is written but before the rename wins: no
+    /// finished file, no `done`, the job ends CANCELLED; a cancel after that answers false.
+    #[test]
+    fn a_cancel_just_before_the_rename_wins() {
+        use mock_imap::state::{Mailbox, Message};
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let raw = "From: a <a@example.com>\r\nSubject: s\r\nMessage-ID: <c@x>\r\nMIME-Version: 1.0\r\n\
+             Content-Type: multipart/mixed; boundary=\"m\"\r\n\r\n--m\r\nContent-Type: text/plain\r\n\r\nhi\r\n\
+             --m\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=\"x.bin\"\r\n\
+             Content-Transfer-Encoding: base64\r\n\r\naGVsbG8gd29ybGQ=\r\n--m--\r\n";
+        let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as i64;
+        let mut mb = Mailbox::new("INBOX");
+        mb.add(Message::new(1, raw).with_internal_ms(now - 86_400_000));
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(mb));
+        let (_tmp, e) = engine();
+        let events: Arc<(Mutex<Vec<(String, Value)>>, Condvar)> = Arc::default();
+        let sink = Arc::clone(&events);
+        e.set_event_sink(move |n, v| {
+            sink.0.lock().unwrap().push((n.to_string(), v));
+            sink.1.notify_all();
+        });
+        let added = e
+            .rpc(
+                "mobile.accounts.add",
+                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none" }),
+            )
+            .unwrap();
+        let account = added["account"]["id"].as_str().unwrap().to_string();
+        crate::sync::sync_now_for_test(e.shared(), &account, None);
+
+        let weak = Arc::downgrade(&e.attachments().state);
+        *lock(&e.attachments().state.before_finish) = Some(Box::new(move |id| {
+            let st = weak.upgrade().unwrap();
+            let t = lock(&st.table);
+            t.jobs[&id].cancel.store(true, Ordering::SeqCst);
+        }));
+        let part = json!({ "accountId": account, "folder": "INBOX", "uid": 1, "section": "2" });
+        let job = e.rpc("mobile.attachment.fetch", part.clone()).unwrap()["jobId"].as_u64().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let mut list = events.0.lock().unwrap();
+        let end = loop {
+            if let Some(hit) = list.iter().find(|(n, v)| n.starts_with("mobile.attachment.") && n != "mobile.attachment.progress" && v["jobId"] == job) {
+                break hit.clone();
+            }
+            assert!(Instant::now() < deadline, "no end: {list:?}");
+            list = events.1.wait_timeout(list, Duration::from_millis(200)).unwrap().0;
+        };
+        drop(list);
+        assert_eq!(end.0, ATTACHMENT_FAILED, "{end:?}");
+        assert_eq!(end.1["code"], "CANCELLED");
+        assert_eq!(e.rpc("mobile.attachment.local", part).unwrap()["path"], Value::Null);
+        assert_eq!(fs::read_dir(&e.attachments().state.dir).unwrap().count(), 0, "files left behind");
+        assert_eq!(e.rpc("mobile.attachment.cancel", json!({ "jobId": job })).unwrap()["cancelled"], false);
     }
 
     /// Open deletes partial files that cannot resume and keeps the ones that can.

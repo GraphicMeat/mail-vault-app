@@ -249,3 +249,18 @@ async fn range_fetch_refuses_another_origin() {
     let err = fetch_section_range(&mut sess, "INBOX", 1, "2", 8, 4).await.unwrap_err();
     assert!(err.contains("<0>"), "{err}");
 }
+
+/// A server that ignores the range answers `BODY[2]` with no origin and the whole part: refused
+/// at every offset, never sliced or handed back whole.
+#[async_std::test]
+async fn range_fetch_refuses_a_reply_without_origin() {
+    for (offset, needle) in [(0u64, "BODY.PEEK[2]<0.4>"), (8, "BODY.PEEK[2]<8.4>")] {
+        let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push(CRAFTED)).fault(
+            Trigger::with("FETCH", needle),
+            Action::RespondRaw("* 1 FETCH (UID 1 BODY[2] {20}\r\nPHA+R3LDvMOfZTwvcD4=)\r\n{tag} OK FETCH completed\r\n".into()),
+        ));
+        let mut sess = session(&server).await;
+        let err = fetch_section_range(&mut sess, "INBOX", 1, "2", offset, 4).await.unwrap_err();
+        assert!(err.contains("origin"), "offset {offset}: {err}");
+    }
+}
