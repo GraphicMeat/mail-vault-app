@@ -45,8 +45,8 @@ describe('footer Back to top', () => {
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*html:has\(body#top\)\s*\{\s*scroll-behavior:\s*auto;?\s*\}\s*\}/);
   });
 
-  const LOCALES = ['de','es','fr','it','ja','ko','pt-br','zh'];
-  it.each([...LOCALES.map(l => `${l}/pricing.html`), 'blog/notion-mail-closing.html'])('leaves %s untouched', (file) => {
+  // Locale index.html is rebuilt from website/index.html (homepage-clips-layout.test.js), so only the other locale pages must stay untouched.
+  it.each(['de/pricing.html','es/pricing.html','blog/notion-mail-closing.html'])('leaves %s untouched', (file) => {
     const doc = english(file);
     expect(doc.querySelector('a[href="#top"]')).toBeNull();
     expect(doc.querySelector('body#top')).toBeNull();
