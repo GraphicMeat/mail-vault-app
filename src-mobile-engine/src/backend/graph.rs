@@ -13,10 +13,15 @@
 //! Opening a message never downloads an attachment (Ruling 13 as revised): the body comes from
 //! the message resource (`GraphClient::get_body`, HTML where there is one), the parts are the
 //! attachments' metadata (`list_attachments`, no bytes), each part's section being its Graph
-//! attachment id. A tapped attachment is streamed whole (Graph serves no byte ranges) into
-//! `<cache>/graph` (`download_attachment_to`, counted in the attachment cache's cap and LRU), and
-//! the attachment worker's range reads come from that file; it goes once the last range was read.
-//! A download that resumes after its staged file was evicted starts that file again from 0.
+//! attachment id. A listing that fails leaves the body with no attachments rather than failing
+//! the open. A cloud link (`referenceAttachment`) is listed with encoding [`LINK`] and never
+//! fetched; an attached message (`itemAttachment`) is `message/rfc822` named `.eml`.
+//!
+//! A tapped attachment is one response streamed through the attachment worker's range reads
+//! (Graph serves no byte ranges): each `part_range` takes the next bytes of the open response, so
+//! the worker writes its cache file chunk by chunk, with progress, and a cancel stops it between
+//! chunks. A range that does not continue the open response (a resumed download) opens it again
+//! and skips to the offset.
 //!
 //! Every request goes through [`GraphBackend::call`]: a 401 gets one token refresh and one retry
 //! (a second 401 is handled as `ImapBackend::open` handles a fresh token refused), and a 429 waits
@@ -31,12 +36,11 @@ use crate::net::block_on;
 use crate::remote_ids;
 use crate::secrets::Credential;
 use crate::sync::{self, Fail};
-use mailvault_core::graph::{GraphAttachmentInfo, GraphClient, GraphMailFolder, GraphSynced};
+use mailvault_core::graph::{AttachmentStream, GraphAttachmentInfo, GraphClient, GraphMailFolder, GraphSynced};
 use mailvault_core::imap::PartInfo;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::time::Duration;
 
 /// Graph has no UIDVALIDITY: every folder's generation, constant so sync never wipes.
@@ -56,6 +60,9 @@ const READ_TIMEOUT: Duration = Duration::from_secs(60);
 fn client(token: &str) -> GraphClient {
     GraphClient::with_stall_limits(token, "sync", CONNECT_TIMEOUT, READ_TIMEOUT)
 }
+/// The `encoding` of a Graph cloud-link attachment: listed, never fetched (it has no bytes).
+pub(crate) const LINK: &str = "link";
+
 /// New mappings per write transaction (plus the one `uid_seq` row: at most 200 rows).
 const BATCH: usize = 199;
 /// Moves remapped per write transaction (a forget and an insert each, plus `uid_seq`).
@@ -136,32 +143,32 @@ fn folder_info(f: &GraphMailFolder) -> FolderInfo {
 }
 
 /// A Graph attachment as a part: its id is the section; its bytes come as Graph stores them
-/// (`binary`, nothing to undo).
+/// (`binary`, nothing to undo). A cloud link is encoding [`LINK`] with no size; an attached
+/// message is `message/rfc822` named `.eml`.
 fn part_info(a: GraphAttachmentInfo) -> PartInfo {
+    let kind = a.odata_type.as_deref().unwrap_or("").to_ascii_lowercase();
+    let link = kind.ends_with("referenceattachment");
+    let item = kind.ends_with("itemattachment");
+    let mut filename = a.name.filter(|n| !n.trim().is_empty());
+    if item {
+        let base = filename.unwrap_or_else(|| "message".into());
+        filename = Some(if base.to_ascii_lowercase().ends_with(".eml") { base } else { format!("{base}.eml") });
+    }
+    let mime = if item {
+        "message/rfc822".to_string()
+    } else {
+        a.content_type.map(|t| t.to_ascii_lowercase()).filter(|t| !t.is_empty()).unwrap_or_else(|| "application/octet-stream".into())
+    };
     PartInfo {
         section: a.id,
-        mime: a.content_type.map(|t| t.to_ascii_lowercase()).filter(|t| !t.is_empty()).unwrap_or_else(|| "application/octet-stream".into()),
-        filename: a.name.filter(|n| !n.trim().is_empty()),
-        size: u32::try_from(a.size.max(0)).unwrap_or(u32::MAX),
-        encoding: "binary".into(),
+        mime,
+        filename,
+        size: if link { 0 } else { u32::try_from(a.size.max(0)).unwrap_or(u32::MAX) },
+        encoding: if link { LINK } else { "binary" }.into(),
         charset: None,
-        content_id: a.content_id.map(|id| id.trim().trim_start_matches('<').trim_end_matches('>').to_string()).filter(|id| !id.is_empty()),
+        content_id: None,
         disposition: Some(if a.is_inline { "inline" } else { "attachment" }.to_string()),
     }
-}
-
-/// Bytes `offset..offset + len` of `file` (fewer at its end) and the file's length.
-fn read_range(file: &std::path::Path, offset: u64, len: u32) -> std::io::Result<(Vec<u8>, u64)> {
-    use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(file)?;
-    let size = f.metadata()?.len();
-    let want = size.saturating_sub(offset).min(len as u64);
-    let mut buf = Vec::with_capacity(want as usize);
-    if want > 0 {
-        f.seek(SeekFrom::Start(offset))?;
-        f.take(want).read_to_end(&mut buf)?;
-    }
-    Ok((buf, size))
 }
 
 /// Why a call did not return a value.
@@ -181,15 +188,17 @@ impl From<CallErr> for Fail {
     }
 }
 
-/// The attachment `part_range` is reading: its message, section and staged file.
-struct Staged {
+/// The attachment response `part_range` is reading.
+struct Streaming {
     folder: String,
     uid: u32,
     section: String,
-    file: PathBuf,
-    /// The file's length once the last range was read (the file is gone then; a probe past the
-    /// end needs no download).
-    ended: Option<u64>,
+    stream: AttachmentStream,
+    /// Bytes received and not yet handed out.
+    buf: Vec<u8>,
+    /// The offset of `buf`'s first byte.
+    pos: u64,
+    ended: bool,
 }
 
 pub(crate) struct GraphBackend<'a> {
@@ -203,8 +212,8 @@ pub(crate) struct GraphBackend<'a> {
     selected: Option<(String, (i64, i64))>,
     /// The last `window`: the folder's path and its listed messages by uid.
     listed: Option<(String, HashMap<u32, GraphSynced>)>,
-    /// The attachment `part_range` last read.
-    staged: Option<Staged>,
+    /// The attachment response `part_range` is reading.
+    streaming: Option<Streaming>,
     /// A request went through since `open`.
     worked: bool,
 }
@@ -225,7 +234,7 @@ impl<'a> GraphBackend<'a> {
             secrets: Vec::new(),
             selected: None,
             listed: None,
-            staged: None,
+            streaming: None,
             worked: false,
         };
         backend.set_token(token);
@@ -349,55 +358,67 @@ impl<'a> GraphBackend<'a> {
         }
     }
 
-    /// Raw octets `offset..offset + len` of attachment `section`, from its staged file, staged
-    /// first when it is not (a whole download). `None` when the message or attachment is gone.
+    /// Octets `offset..offset + len` of attachment `section` (fewer at its end): the next bytes of
+    /// the open response when it is that attachment's at `offset`, else a new response skipped to
+    /// `offset`. `None` when the message or attachment is gone.
     fn read(&mut self, folder: &FolderRow, uid: u32, section: &str, offset: u64, len: u32) -> Result<Option<Vec<u8>>, Fail> {
-        let same = |s: &Staged| s.folder == folder.path && s.uid == uid && s.section == section;
-        if let Some(end) = self.staged.as_ref().filter(|s| same(s)).and_then(|s| s.ended) {
-            if offset >= end {
-                return Ok(Some(Vec::new()));
-            }
+        if section.bytes().all(|b| b == b'.') {
+            return Err(Fail::Code(Code::Invalid, "an attachment id made of dots".into()));
         }
-        for _ in 0..2 {
-            let file = match self.staged.as_ref().filter(|s| same(s) && s.ended.is_none() && s.file.is_file()) {
-                Some(s) => s.file.clone(),
-                None => {
-                    self.staged = None;
-                    let Some(id) = self.remote_id(folder, uid)? else {
-                        return Ok(None);
-                    };
-                    let file = self.shared.stage.path(&self.account, &id, section);
-                    if file.is_file() {
-                        self.shared.stage.touch(&file);
-                    } else {
-                        let target = file.clone();
-                        match self.call(async |c| c.download_attachment_to(&id, section, &target).await) {
-                            Ok(_) => self.shared.stage.written(&file),
-                            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => return Ok(None),
-                            Err(e) => return Err(e.into()),
-                        }
-                    }
-                    self.staged = Some(Staged { folder: folder.path.clone(), uid, section: section.to_string(), file: file.clone(), ended: None });
-                    file
-                }
+        let continues = self.streaming.as_ref().is_some_and(|s| {
+            s.folder == folder.path && s.uid == uid && s.section == section && s.pos <= offset && (offset <= s.pos + s.buf.len() as u64 || !s.ended)
+        });
+        if !continues {
+            self.streaming = None;
+            let Some(id) = self.remote_id(folder, uid)? else {
+                return Ok(None);
             };
-            match read_range(&file, offset, len) {
-                Ok((bytes, file_len)) => {
-                    if bytes.len() < len as usize {
-                        // The last range: the attachment cache has it now.
-                        let _ = std::fs::remove_file(&file);
-                        if let Some(s) = self.staged.as_mut() {
-                            s.ended = Some(file_len);
-                        }
+            let att = section.to_string();
+            let stream = match self.call(async |c| c.open_attachment(&id, &att).await) {
+                Ok(s) => s,
+                Err(CallErr::Text(e)) if status_of(&e) == Some(404) => return Ok(None),
+                Err(e) => return Err(e.into()),
+            };
+            self.streaming =
+                Some(Streaming { folder: folder.path.clone(), uid, section: section.to_string(), stream, buf: Vec::new(), pos: 0, ended: false });
+        }
+        let shared = self.shared;
+        let s = self.streaming.as_mut().expect("opened above");
+        let want = offset + len as u64;
+        // Fill until the range is in hand or the response ended; bytes before `offset` (a resume)
+        // are dropped as they arrive.
+        let mut failed = None;
+        while !s.ended && s.pos + (s.buf.len() as u64) < want {
+            if let Err(f) = sync::not_closing(shared) {
+                return Err(f);
+            }
+            match block_on(s.stream.chunk()) {
+                Ok(Some(chunk)) => {
+                    s.buf.extend_from_slice(&chunk);
+                    let skip = offset.saturating_sub(s.pos).min(s.buf.len() as u64) as usize;
+                    if skip > 0 {
+                        s.buf.drain(..skip);
+                        s.pos += skip as u64;
                     }
-                    return Ok(Some(bytes));
                 }
-                // Evicted meanwhile: staged again from 0.
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.staged = None,
-                Err(e) => return Err(Fail::Code(Code::Invalid, format!("staged attachment: {e}"))),
+                Ok(None) => s.ended = true,
+                Err(e) => {
+                    failed = Some(e);
+                    break;
+                }
             }
         }
-        Err(Fail::Code(Code::Invalid, "the staged attachment went away twice".into()))
+        if let Some(e) = failed {
+            self.streaming = None;
+            return Err(graph_fail(self.scrub(e)));
+        }
+        let skip = offset.saturating_sub(s.pos).min(s.buf.len() as u64) as usize;
+        s.buf.drain(..skip);
+        s.pos += skip as u64;
+        let take = (len as usize).min(s.buf.len());
+        let out: Vec<u8> = s.buf.drain(..take).collect();
+        s.pos += take as u64;
+        Ok(Some(out))
     }
 
     /// Writes the mapping changes of an apply: `forget` drops `(folder, uid)`, `moved` maps a new
@@ -538,8 +559,15 @@ impl Backend for GraphBackend<'_> {
             Err(CallErr::Text(e)) if status_of(&e) == Some(404) => return Ok(None),
             Err(e) => return Err(e.into()),
         };
-        let Some(parts) = self.attachments(&id)? else {
-            return Ok(None);
+        // The body shows without its attachments rather than not at all.
+        let parts = match self.attachments(&id) {
+            Ok(Some(parts)) => parts,
+            Ok(None) => return Ok(None),
+            Err(Fail::Code(code, why)) if code != Code::NeedsAuth => {
+                self.shared.log(&format!("[graph] {}: the message's attachments were not listed: {} {why}", self.account, code.as_str()));
+                Vec::new()
+            }
+            Err(f) => return Err(f),
         };
         let (kind, content) = got.body.map(|b| (b.content_type.unwrap_or_default(), b.content.unwrap_or_default())).unwrap_or_default();
         let (html, text) = if kind.eq_ignore_ascii_case("html") {

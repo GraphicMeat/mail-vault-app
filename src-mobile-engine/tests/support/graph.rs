@@ -9,7 +9,8 @@
 //!
 //! Strict where core could slip: ids end in `=` and paths are percent-decoded, so an id sent raw or
 //! encoded both resolve, while a folder named by anything but its id or its lowercase well-known
-//! name (`INBOX` included) is a 404.
+//! name (`INBOX` included) is a 404; and the attachments collection answers 400 to a `$select` of
+//! any property the base `attachment` type lacks (`contentId`, `contentBytes`), as Graph does.
 
 #![allow(dead_code)]
 
@@ -60,7 +61,12 @@ pub struct Att {
     pub bytes: Vec<u8>,
     pub inline: bool,
     pub content_id: Option<String>,
+    /// `fileAttachment`, `itemAttachment` or `referenceAttachment`.
+    pub odata: &'static str,
 }
+
+/// The properties of Graph's base `attachment` type, the only ones its collection can `$select`.
+const ATTACHMENT_PROPS: &[&str] = &["id", "name", "contentType", "size", "isInline", "lastModifiedDateTime"];
 
 #[derive(Default)]
 pub struct State {
@@ -82,6 +88,10 @@ pub struct State {
     pub drop_send: bool,
     /// `(n, folder id)`: after `n` more successful moves, the folder is deleted.
     pub delete_after_moves: Option<(u32, String)>,
+    /// Listing a message's attachments answers 503.
+    pub fail_attachments: bool,
+    /// An attachment's `$value` is written 64 KiB at a time with this pause between.
+    pub slow_value_ms: u64,
     next_id: u64,
 }
 
@@ -247,14 +257,38 @@ impl GraphMock {
         id
     }
 
-    /// An attachment of message `msg`; its id.
+    /// A file attachment of message `msg`; its id.
     pub fn add_attachment(&self, msg: &str, name: &str, content_type: &str, bytes: Vec<u8>, inline: bool, content_id: Option<&str>) -> String {
+        self.add_typed(msg, "fileAttachment", name, content_type, bytes, inline, content_id)
+    }
+
+    /// An attachment of `odata` type (`itemAttachment`: an attached message;
+    /// `referenceAttachment`: a cloud link, whose `$value` Graph refuses); its id.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_typed(&self, msg: &str, odata: &'static str, name: &str, content_type: &str, bytes: Vec<u8>, inline: bool, content_id: Option<&str>) -> String {
         let mut st = self.st();
         let id = st.new_id("att");
         let m = st.messages.iter_mut().find(|m| m.id == msg).unwrap_or_else(|| panic!("no message {msg}"));
-        m.attachments.push(Att { id: id.clone(), name: name.into(), content_type: content_type.into(), bytes, inline, content_id: content_id.map(String::from) });
+        m.attachments.push(Att { id: id.clone(), name: name.into(), content_type: content_type.into(), bytes, inline, content_id: content_id.map(String::from), odata });
         m.has_attachments |= !inline;
         id
+    }
+
+    pub fn fail_attachments(&self, on: bool) {
+        self.st().fail_attachments = on;
+    }
+
+    pub fn slow_value(&self, pause_ms: u64) {
+        self.st().slow_value_ms = pause_ms;
+    }
+
+    /// A raw `GET path_and_query` with `token`: the status.
+    pub fn raw_get(&self, path_and_query: &str, token: &str) -> u16 {
+        let mut c = TcpStream::connect(self.addr).unwrap();
+        write!(c, "GET {path_and_query} HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut line = String::new();
+        BufReader::new(c).read_line(&mut line).unwrap();
+        line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0)
     }
 
     pub fn refuse_tokens(&self, on: bool) {
@@ -422,18 +456,28 @@ fn serve(conn: TcpStream, state: &Mutex<State>, authority: &TokenAuthority, addr
             401 => "Unauthorized",
             404 => "Not Found",
             429 => "Too Many Requests",
+            503 => "Service Unavailable",
             _ => "X",
         };
         let mut head = format!("HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\n", body.len());
         if !body.is_empty() && !headers.iter().any(|(k, _)| k == "Content-Type") {
             head.push_str("Content-Type: application/json\r\n");
         }
-        for (k, v) in &headers {
+        let slow: u64 = headers.iter().find(|(k, _)| k == "X-Mock-Slow-Ms").and_then(|(_, v)| v.parse().ok()).unwrap_or(0);
+        for (k, v) in headers.iter().filter(|(k, _)| k != "X-Mock-Slow-Ms") {
             head.push_str(&format!("{k}: {v}\r\n"));
         }
         head.push_str("\r\n");
         out.write_all(head.as_bytes())?;
-        out.write_all(&body)?;
+        if slow > 0 {
+            for piece in body.chunks(64 * 1024) {
+                out.write_all(piece)?;
+                out.flush()?;
+                std::thread::sleep(std::time::Duration::from_millis(slow));
+            }
+        } else {
+            out.write_all(&body)?;
+        }
         out.flush()?;
     }
     Ok(())
@@ -542,21 +586,52 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             Some(m) => ok_json(message_json(m, &me)),
             None => not_found(),
         },
-        ("GET", ["me", "messages", id, "attachments"]) => match st.messages.iter().find(|m| m.id == *id) {
-            Some(m) => {
-                // Metadata only: no contentBytes, as the $select asks.
-                let v: Vec<Value> = m
-                    .attachments
-                    .iter()
-                    .map(|a| json!({ "id": a.id, "name": a.name, "contentType": a.content_type, "size": a.bytes.len() + 120, "isInline": a.inline, "contentId": a.content_id }))
-                    .collect();
-                ok_json(json!({ "value": v }))
+        ("GET", ["me", "messages", id, "attachments"]) => {
+            if st.fail_attachments {
+                return (503, json!({ "error": { "code": "ServiceUnavailable" } }).to_string().into_bytes(), Vec::new());
             }
-            None => not_found(),
-        },
+            // Only the base type's properties can be selected on the collection.
+            let select: Vec<String> = query_param(&req.query, "$select").map(|s| s.split(',').map(|p| p.trim().to_string()).collect()).unwrap_or_default();
+            if let Some(bad) = select.iter().find(|p| !ATTACHMENT_PROPS.contains(&p.as_str())) {
+                let body = json!({ "error": { "code": "BadRequest", "message": format!("Could not find a property named '{bad}' on type 'microsoft.graph.attachment'.") } });
+                return (400, body.to_string().into_bytes(), Vec::new());
+            }
+            match st.messages.iter().find(|m| m.id == *id) {
+                Some(m) => {
+                    let v: Vec<Value> = m
+                        .attachments
+                        .iter()
+                        .map(|a| {
+                            let mut full = json!({
+                                "@odata.type": format!("#microsoft.graph.{}", a.odata),
+                                "id": a.id, "name": a.name, "contentType": a.content_type, "size": a.bytes.len() + 120,
+                                "isInline": a.inline, "lastModifiedDateTime": "2026-01-01T00:00:00Z",
+                                "contentId": a.content_id, "contentBytes": "(bytes)",
+                            });
+                            if !select.is_empty() {
+                                let o = full.as_object_mut().unwrap();
+                                o.retain(|k, _| k == "@odata.type" || select.contains(k));
+                            }
+                            full
+                        })
+                        .collect();
+                    ok_json(json!({ "value": v }))
+                }
+                None => not_found(),
+            }
+        }
         ("GET", ["me", "messages", id, "attachments", att, "$value"]) => {
             match st.messages.iter().find(|m| m.id == *id).and_then(|m| m.attachments.iter().find(|a| a.id == *att)) {
-                Some(a) => (200, a.bytes.clone(), vec![("Content-Type".into(), a.content_type.clone())]),
+                Some(a) if a.odata == "referenceAttachment" => {
+                    (400, json!({ "error": { "code": "ErrorInvalidRequest", "message": "A reference attachment has no content." } }).to_string().into_bytes(), Vec::new())
+                }
+                Some(a) => {
+                    let mut h = vec![("Content-Type".into(), a.content_type.clone())];
+                    if st.slow_value_ms > 0 {
+                        h.push(("X-Mock-Slow-Ms".into(), st.slow_value_ms.to_string()));
+                    }
+                    (200, a.bytes.clone(), h)
+                }
                 None => not_found(),
             }
         }

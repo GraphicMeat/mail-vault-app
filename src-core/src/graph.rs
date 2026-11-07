@@ -301,11 +301,14 @@ pub struct GraphBodyOnly {
     pub body_preview: Option<String>,
 }
 
-/// One row of `GraphClient::list_attachments`: metadata, no bytes. `content_id` is
-/// set on an inline file attachment.
+/// One row of `GraphClient::list_attachments`: metadata, no bytes. `odata_type` is
+/// `#microsoft.graph.fileAttachment`, `…itemAttachment` (an attached message) or
+/// `…referenceAttachment` (a cloud link, no bytes).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphAttachmentInfo {
+    #[serde(rename = "@odata.type", default)]
+    pub odata_type: Option<String>,
     pub id: String,
     pub name: Option<String>,
     pub content_type: Option<String>,
@@ -313,7 +316,22 @@ pub struct GraphAttachmentInfo {
     pub size: i64,
     #[serde(default)]
     pub is_inline: bool,
-    pub content_id: Option<String>,
+}
+
+/// An attachment's bytes as they arrive (`GraphClient::open_attachment`).
+pub struct AttachmentStream {
+    resp: reqwest::Response,
+}
+
+impl AttachmentStream {
+    /// The next chunk, `None` at the end.
+    pub async fn chunk(&mut self) -> Result<Option<Vec<u8>>, String> {
+        self.resp
+            .chunk()
+            .await
+            .map(|c| c.map(|b| b.to_vec()))
+            .map_err(|e| format!("Graph open_attachment read error: {}", e))
+    }
 }
 
 /// One row of `GraphClient::list_since`: the message as the full-header
@@ -1724,11 +1742,14 @@ impl GraphClient {
         resp.json().await.map_err(|e| format!("Graph get_body parse error: {}", e))
     }
 
-    /// The message's attachments, metadata only (`$select=id,name,contentType,size,isInline,contentId`,
-    /// never `contentBytes`), every page of them.
+    /// The message's attachments, metadata only, every page of them. `$select` names only
+    /// properties of the base `attachment` type (`id,name,contentType,size,isInline`): Graph
+    /// answers 400 to one of a derived type's (`contentId`, `contentBytes`) on the collection,
+    /// and without a `$select` it would send every file's bytes. `@odata.type` comes back anyway
+    /// and tells a file from an item (an attached message) or a reference (a cloud link).
     pub async fn list_attachments(&self, message_id: &str) -> Result<Vec<GraphAttachmentInfo>, String> {
         let mut url = format!(
-            "{}/me/messages/{}/attachments?$select=id,name,contentType,size,isInline,contentId",
+            "{}/me/messages/{}/attachments?$select=id,name,contentType,size,isInline",
             graph_base(),
             percent_encode(message_id)
         );
@@ -1753,56 +1774,30 @@ impl GraphClient {
         }
     }
 
-    /// Streams one attachment's bytes (`/attachments/{id}/$value`) into `path`, never
-    /// holding them in memory: written to a `<path>.<pid>-<n>.tmp` of its own chunk by
-    /// chunk, synced, then renamed, so `path` only ever holds the whole attachment.
-    /// Returns the byte count. A refused answer is `failure_text` (`(404)` when gone).
-    pub async fn download_attachment_to(&self, message_id: &str, attachment_id: &str, path: &std::path::Path) -> Result<u64, String> {
-        use std::io::Write;
+    /// Opens one attachment's bytes (`/attachments/{id}/$value`) as a stream the caller reads
+    /// chunk by chunk ([`AttachmentStream::chunk`]), so a download shows progress and stops when
+    /// asked, and the bytes are never all in memory. An id made only of dots is refused before
+    /// any request: as a path segment it would climb to the message's own `$value`. A refused
+    /// answer is `failure_text` (`(404)` when gone).
+    pub async fn open_attachment(&self, message_id: &str, attachment_id: &str) -> Result<AttachmentStream, String> {
+        if attachment_id.is_empty() || attachment_id.bytes().all(|b| b == b'.') {
+            return Err("Graph open_attachment refused an attachment id made of dots".to_string());
+        }
         let url = format!(
             "{}/me/messages/{}/attachments/{}/$value",
             graph_base(),
             percent_encode(message_id),
             percent_encode(attachment_id)
         );
-        let mut resp = self
+        let resp = self
             .client
             .send(self.client.get(&url).bearer_auth(&self.access_token))
             .await
-            .map_err(|e| format!("Graph download_attachment request failed: {}", e))?;
+            .map_err(|e| format!("Graph open_attachment request failed: {}", e))?;
         if !resp.status().is_success() {
-            return Err(Self::failure_text(resp, "download_attachment").await);
+            return Err(Self::failure_text(resp, "open_attachment").await);
         }
-        // A name of its own per download: two downloads of one attachment never write into
-        // the same file; the last rename wins, whole.
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let mut tmp = path.as_os_str().to_owned();
-        tmp.push(format!(".{}-{}.tmp", std::process::id(), n));
-        let tmp = std::path::PathBuf::from(tmp);
-        let written = async {
-            let mut file = std::fs::File::create(&tmp).map_err(|e| format!("Graph download_attachment write error: {}", e))?;
-            let mut n: u64 = 0;
-            while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Graph download_attachment read error: {}", e))? {
-                file.write_all(&chunk).map_err(|e| format!("Graph download_attachment write error: {}", e))?;
-                n += chunk.len() as u64;
-            }
-            file.sync_all().map_err(|e| format!("Graph download_attachment write error: {}", e))?;
-            Ok::<u64, String>(n)
-        }
-        .await;
-        let n = match written {
-            Ok(n) => n,
-            Err(e) => {
-                let _ = std::fs::remove_file(&tmp);
-                return Err(e);
-            }
-        };
-        if let Err(e) = std::fs::rename(&tmp, path) {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(format!("Graph download_attachment write error: {}", e));
-        }
-        Ok(n)
+        Ok(AttachmentStream { resp })
     }
 
     /// Does the message still exist (under this id)? A moved message gets a new
@@ -1975,6 +1970,16 @@ impl GraphClient {
 mod tests {
 
     #[test]
+    fn an_attachment_id_of_dots_is_refused_before_any_request() {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let c = super::GraphClient::new("t");
+        for id in ["", ".", "..", "..."] {
+            let e = rt.block_on(c.open_attachment("m=", id)).err().expect("refused");
+            assert!(e.contains("made of dots"), "{e}");
+        }
+    }
+
+    #[test]
     fn a_body_and_attachment_metadata_read() {
         let b: super::GraphBodyOnly = serde_json::from_value(serde_json::json!({
             "body": { "contentType": "html", "content": "<p>x</p>" }, "bodyPreview": "x"
@@ -1984,15 +1989,15 @@ mod tests {
         assert_eq!(b.body_preview.as_deref(), Some("x"));
         let page: super::GraphListResponse<super::GraphAttachmentInfo> = serde_json::from_value(serde_json::json!({
             "value": [
-                { "@odata.type": "#microsoft.graph.fileAttachment", "id": "a=", "name": "doc.pdf", "contentType": "application/pdf", "size": 1234, "isInline": false, "contentId": null },
-                { "id": "b=", "isInline": true, "contentId": "logo@x" }
+                { "@odata.type": "#microsoft.graph.fileAttachment", "id": "a=", "name": "doc.pdf", "contentType": "application/pdf", "size": 1234, "isInline": false },
+                { "@odata.type": "#microsoft.graph.referenceAttachment", "id": "b=", "isInline": true }
             ]
         }))
         .unwrap();
         assert_eq!(page.value[0].size, 1234);
         assert_eq!(page.value[0].name.as_deref(), Some("doc.pdf"));
         assert!(page.value[1].is_inline && page.value[1].size == 0);
-        assert_eq!(page.value[1].content_id.as_deref(), Some("logo@x"));
+        assert_eq!(page.value[1].odata_type.as_deref(), Some("#microsoft.graph.referenceAttachment"));
     }
 
     #[test]

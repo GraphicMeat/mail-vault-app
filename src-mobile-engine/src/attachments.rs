@@ -57,11 +57,6 @@ pub(crate) const STALE_PART: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 /// Downloads that run at once; more wait in the queue.
 const WORKERS: usize = 2;
 const DIR: &str = "att";
-/// Graph attachments as Graph sends them (`<cache>/graph/<hash>.bin`), staged whole because Graph
-/// serves no byte ranges; the range reads of a download come from here. Counted with the
-/// attachments against [`CACHE_CAP`] and evicted by the same LRU.
-const STAGE_DIR: &str = "graph";
-const STAGED: &str = ".bin";
 const PART: &str = ".part";
 const META: &str = ".part.meta";
 const TMP: &str = ".tmp";
@@ -99,18 +94,17 @@ fn is_final_name(name: &str) -> bool {
     name.len() == 64 && name.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// A whole staged Graph attachment: `<64 hex>.bin`.
-fn is_staged_name(name: &str) -> bool {
-    name.strip_suffix(STAGED).is_some_and(is_final_name)
-}
-
 /// An IMAP part: `1.2` and the like, dot-separated positive numbers, which is all core will send.
 /// A Graph part is the attachment's id (`graph`): an opaque token of the characters Graph ids use
-/// (base64 and URL-safe base64), at most 1024 of them; it only ever reaches a request URL
-/// percent-encoded.
+/// (base64 and URL-safe base64), at most 1024 of them, never only dots (a dot segment in the
+/// request URL would climb out of the attachment). `name_of` also wants it among the message's
+/// listed attachments.
 fn valid_section(s: &str, graph: bool) -> bool {
     if graph {
-        !s.is_empty() && s.len() <= 1024 && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'+' | b'/' | b'=' | b'.'))
+        !s.is_empty()
+            && s.len() <= 1024
+            && !s.bytes().all(|b| b == b'.')
+            && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'+' | b'/' | b'=' | b'.'))
     } else {
         !s.is_empty() && s.split('.').all(|n| n.parse::<u32>().is_ok_and(|n| n > 0))
     }
@@ -154,16 +148,13 @@ impl Table {
 
 struct State {
     dir: PathBuf,
-    /// `<cache>/graph`.
-    stage_dir: PathBuf,
     table: Mutex<Table>,
     cv: Condvar,
     /// Tests: the largest buffer one job held (raw chunk in, decoded bytes out).
     peak_buffer: AtomicU64,
-    /// The byte cap of finished files: [`CACHE_CAP`], lowered only by tests
-    /// (`Engine::set_attachment_cache_cap`).
+    /// Unit tests: the cap and the lease lifetime, in place of [`CACHE_CAP`] and [`LEASE_TTL`].
+    #[cfg(test)]
     cap: AtomicU64,
-    /// Unit tests: the lease lifetime, in place of [`LEASE_TTL`].
     #[cfg(test)]
     lease_ttl_ms: AtomicU64,
     /// Unit tests: runs with the job id after the finished `.part` is synced, before the rename.
@@ -176,7 +167,14 @@ struct State {
 
 impl State {
     fn cap(&self) -> u64 {
-        self.cap.load(Ordering::SeqCst)
+        #[cfg(test)]
+        {
+            self.cap.load(Ordering::SeqCst)
+        }
+        #[cfg(not(test))]
+        {
+            CACHE_CAP
+        }
     }
 
     fn lease_ttl(&self) -> Duration {
@@ -210,17 +208,13 @@ impl Attachments {
         let dir = cache_dir.join(DIR);
         let _ = fs::create_dir_all(&dir);
         cleanup(&dir, STALE_PART);
-        let stage_dir = cache_dir.join(STAGE_DIR);
-        let _ = fs::create_dir_all(&stage_dir);
-        // An unfinished download (`<hash>.bin.<pid>-<n>.tmp`) never resumes.
-        cleanup(&stage_dir, STALE_PART);
         Attachments {
             state: Arc::new(State {
                 dir,
-                stage_dir,
                 table: Mutex::new(Table::default()),
                 cv: Condvar::new(),
                 peak_buffer: AtomicU64::new(0),
+                #[cfg(test)]
                 cap: AtomicU64::new(CACHE_CAP),
                 #[cfg(test)]
                 lease_ttl_ms: AtomicU64::new(LEASE_TTL.as_millis() as u64),
@@ -241,51 +235,6 @@ impl Attachments {
     pub(crate) fn peak_buffer(&self) -> u64 {
         self.state.peak_buffer.load(Ordering::SeqCst)
     }
-
-    pub(crate) fn set_cap(&self, bytes: u64) {
-        self.state.cap.store(bytes, Ordering::SeqCst);
-    }
-
-    /// The handle a backend uses for the files it stages in the cache.
-    pub(crate) fn stage_cache(&self) -> StageCache {
-        StageCache(Arc::clone(&self.state))
-    }
-}
-
-/// A Graph backend's way into the cache: where an attachment it downloads whole is staged, and
-/// the LRU pass after it wrote one. The files are named by a SHA-256 of account, message id and
-/// attachment id (a moved message has a new id, so a new file), live in `<cache>/graph`, and count
-/// against the attachment cap.
-#[derive(Clone)]
-pub(crate) struct StageCache(Arc<State>);
-
-impl StageCache {
-    /// `<cache>/graph/<64 hex>.bin` for attachment `part` of message `remote_id` of `account`.
-    pub(crate) fn path(&self, account: &str, remote_id: &str, part: &str) -> PathBuf {
-        let mut h = Sha256::new();
-        h.update(b"mv-graph-stage-v1");
-        for field in [account.as_bytes(), remote_id.as_bytes(), part.as_bytes()] {
-            h.update((field.len() as u64).to_le_bytes());
-            h.update(field);
-        }
-        let hex: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
-        let _ = fs::create_dir_all(&self.0.stage_dir);
-        self.0.stage_dir.join(format!("{hex}{STAGED}"))
-    }
-
-    /// Marks `path` as just used (its LRU position).
-    pub(crate) fn touch(&self, path: &Path) {
-        let _ = touch(path);
-    }
-
-    /// The LRU pass after `path` was written: everything but it may go.
-    pub(crate) fn written(&self, path: &Path) {
-        let keep = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        evict(&self.0, &keep);
-    }
-}
-
-impl Attachments {
 
     /// Queues a download of `key` (file `name`) unless one is queued or running; its job id.
     fn enqueue(&self, shared: &Arc<Shared>, key: PartKey, name: String, uid_validity: i64) -> Result<u64, String> {
@@ -637,21 +586,20 @@ fn evict(state: &State, keep: &str) -> usize {
     // waits on a directory pass. Each delete takes the lock for that one file and re-checks the
     // leases there: a lease (taken under the lock after checking the file is there) either lands
     // first and the file is skipped, or finds the file gone.
-    // Finished attachments and staged Graph attachments share the cap.
-    let mut files: Vec<(SystemTime, u64, String, PathBuf)> = Vec::new();
-    for (dir, counted) in [(&state.dir, is_final_name as fn(&str) -> bool), (&state.stage_dir, is_staged_name)] {
-        let Ok(rd) = fs::read_dir(dir) else {
-            continue;
-        };
-        files.extend(rd.filter_map(|e| e.ok()).filter_map(|e| {
+    let Ok(rd) = fs::read_dir(&state.dir) else {
+        return 0;
+    };
+    let mut files: Vec<(SystemTime, u64, String)> = rd
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            if !counted(&name) {
+            if !is_final_name(&name) {
                 return None;
             }
             let m = e.metadata().ok()?;
-            Some((m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), name, e.path()))
-        }));
-    }
+            Some((m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), name))
+        })
+        .collect();
     let mut total: u64 = files.iter().map(|f| f.1).sum();
     let cap = state.cap();
     if total <= cap {
@@ -663,7 +611,7 @@ fn evict(state: &State, keep: &str) -> usize {
         hook();
     }
     let mut removed = 0;
-    for (_, len, name, path) in files {
+    for (_, len, name) in files {
         if total <= cap {
             break;
         }
@@ -674,7 +622,7 @@ fn evict(state: &State, keep: &str) -> usize {
         if t.leased().contains(&name) {
             continue;
         }
-        if fs::remove_file(&path).is_ok() {
+        if fs::remove_file(state.path(&name)).is_ok() {
             total -= len;
             removed += 1;
         }
@@ -938,8 +886,28 @@ fn name_of(shared: &Shared, key: &PartKey) -> Result<Option<(String, i64)>, RpcE
     let kind: Option<String> = shared
         .read(|c| c.query_row("SELECT kind FROM accounts WHERE id = ?1", [&key.account_id], |r| r.get(0)).optional())
         .map_err(internal)?;
-    if !valid_section(&key.section, kind.as_deref() == Some("graph")) {
+    let graph = kind.as_deref() == Some("graph");
+    if !valid_section(&key.section, graph) {
         return Err(RpcError::Invalid(format!("not a part section: {}", key.section)));
+    }
+    if graph {
+        // Only an attachment the message's body listed, and never a link (it has no bytes).
+        let encoding: Option<String> = shared
+            .read(|c| {
+                c.query_row(
+                    "SELECT encoding FROM attachments WHERE account_id = ?1 AND folder = ?2 AND uid = ?3 AND section = ?4",
+                    (&key.account_id, &key.folder, key.uid as i64, &key.section),
+                    |r| r.get::<_, Option<String>>(0),
+                )
+                .optional()
+            })
+            .map_err(internal)?
+            .flatten();
+        match encoding.as_deref() {
+            None => return Err(RpcError::Invalid(format!("not an attachment of the message: {}", key.section))),
+            Some(crate::backend::graph::LINK) => return Err(RpcError::Invalid("a link attachment has no bytes".into())),
+            Some(_) => {}
+        }
     }
     let row: Option<Option<i64>> = shared
         .read(|c| {
@@ -1169,7 +1137,10 @@ mod tests {
         assert_ne!(file_name(&k("ab", "c", 1, "1"), 1), file_name(&k("a", "bc", 1, "1"), 1));
         assert!(valid_section("1.2", false) && !valid_section("", false) && !valid_section("0", false) && !valid_section("2 BODY[]", false));
         assert!(!valid_section("AAMkAD=", false), "an IMAP account takes part numbers only");
-        assert!(valid_section("AAMkADk0-_+/x=", true) && !valid_section("", true) && !valid_section("a b", true) && !valid_section("a]", true));
+        assert!(valid_section("AAMkADk0-_+/x=", true) && valid_section("a.b", true));
+        for bad in ["", "a b", "a]", ".", "..", "..."] {
+            assert!(!valid_section(bad, true), "{bad:?}");
+        }
     }
 
     fn engine() -> (tempfile::TempDir, Engine) {

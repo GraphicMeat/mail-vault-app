@@ -192,12 +192,19 @@ impl Fx {
         self.tmp.path().join("cache")
     }
 
-    /// Attachments staged whole in `<cache>/graph`.
-    fn staged_files(&self) -> Vec<String> {
-        match std::fs::read_dir(self.cache().join("graph")) {
-            Ok(rd) => rd.map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect(),
-            Err(_) => Vec::new(),
-        }
+    fn fetch(&self, uid: i64, section: &str) -> Result<u64, mailvault_mobile_engine::RpcError> {
+        self.engine
+            .rpc("mobile.attachment.fetch", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid, "section": section }))
+            .map(|v| v["jobId"].as_u64().unwrap())
+    }
+
+    /// A job's `done` or `failed` event, after `from`.
+    fn job_end(&self, from: usize, job: u64) -> (String, Value) {
+        self.events.wait(from, "attachment end", |n, v| (n == "mobile.attachment.done" || n == "mobile.attachment.failed") && v["jobId"] == job)
+    }
+
+    fn body(&self, uid: i64) -> Value {
+        self.rpc("mobile.message.body", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid }))
     }
 
     /// A picked file of `len` bytes that takes no disk space; its handle.
@@ -340,40 +347,96 @@ fn graph_read_flag_move_delete_round_trip() {
 fn opening_a_graph_message_fetches_no_attachment_and_a_tap_fetches_one() {
     let f = setup();
     let pdf = source(600 * 1024, 7);
-    let other = source(300 * 1024, 9);
-    let id = f.g.add_message("inbox", "With files", now_ms() - HOUR, "<p>Html body <img src=\"cid:logo@x\"></p>");
+    let id = f.g.add_message("inbox", "With files", now_ms() - HOUR, "<p>Html body</p>");
     let pdf_id = f.g.add_attachment(&id, "doc.pdf", "application/pdf", pdf.clone(), false, None);
-    let other_id = f.g.add_attachment(&id, "big.zip", "application/zip", other, false, None);
+    let zip_id = f.g.add_attachment(&id, "big.zip", "application/zip", source(300 * 1024, 9), false, None);
     f.g.add_attachment(&id, "logo.png", "image/png", source(100, 3), true, Some("<logo@x>"));
+    let item_id = f.g.add_typed(&id, "itemAttachment", "Forwarded note", "", source(2000, 4), false, None);
+    let link_id = f.g.add_typed(&id, "referenceAttachment", "Plan.docx", "", Vec::new(), false, None);
     f.sync(None);
     let uid = f.uids("INBOX")["With files"];
     f.g.clear_requests();
 
-    // Opening: the body and the attachments' metadata, no bytes of any attachment.
-    let body = f.rpc("mobile.message.body", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid }));
+    // Opening: the body and the attachments' metadata (a $select the strict mock accepts), no
+    // bytes of any attachment.
+    let body = f.body(uid);
     assert!(body["html"].as_str().unwrap_or("").contains("Html body"), "{body}");
     let atts = body["attachments"].as_array().unwrap();
-    assert_eq!(atts.len(), 3, "{body}");
-    let pdf_part = atts.iter().find(|a| a["filename"] == "doc.pdf").unwrap();
-    assert_eq!(pdf_part["section"], pdf_id.as_str(), "a part's section is its Graph attachment id");
-    assert_eq!(pdf_part["mime"], "application/pdf");
-    assert!(atts.iter().any(|a| a["contentId"] == "logo@x"), "an inline image keeps its Content-ID: {body}");
+    assert_eq!(atts.len(), 5, "{body}");
+    let by = |section: &str| atts.iter().find(|a| a["section"] == section).cloned().unwrap_or_else(|| panic!("no {section} in {body}"));
+    assert_eq!(by(&pdf_id)["mime"], "application/pdf");
+    assert_eq!(by(&pdf_id)["kind"], "file");
+    let item = by(&item_id);
+    assert_eq!((item["mime"].as_str(), item["filename"].as_str()), (Some("message/rfc822"), Some("Forwarded note.eml")), "{item}");
+    let link = by(&link_id);
+    assert_eq!(link["kind"], "link", "{link}");
+    assert!(link["size"].is_null(), "{link}");
     let requests = f.g.requests();
     assert!(!requests.iter().any(|r| r.contains("$value")), "no bytes on open: {requests:?}");
     assert!(requests.iter().any(|r| r.contains("$select=body,bodyPreview")), "{requests:?}");
 
     // A tap fetches that attachment only, through the attachment worker's range reads.
     let from = f.events.len();
-    let job = f.rpc("mobile.attachment.fetch", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid, "section": pdf_id }))["jobId"].as_u64().unwrap();
-    let (name, v) = f.events.wait(from, "attachment end", |n, v| (n == "mobile.attachment.done" || n == "mobile.attachment.failed") && v["jobId"] == job);
+    let job = f.fetch(uid, &pdf_id).unwrap();
+    let (name, v) = f.job_end(from, job);
     assert_eq!(name, "mobile.attachment.done", "{v}; logs {:?}", f.logs.lock().unwrap());
     let path = PathBuf::from(v["path"].as_str().unwrap());
     assert!(std::fs::read(&path).unwrap() == pdf, "the attachment is the PDF");
-    assert_eq!(f.g.count(&format!("/attachments/{pdf_id}/$value")), 1, "{:?}", f.g.requests());
-    assert_eq!(f.g.count(&format!("/attachments/{other_id}/$value")), 0, "only the tapped attachment");
-    assert!(f.staged_files().is_empty(), "the staged copy went once read: {:?}", f.staged_files());
-    // A section that is not an attachment id shape is refused before any work.
-    assert!(f.engine.rpc("mobile.attachment.fetch", json!({ "accountId": ACCOUNT, "folder": "INBOX", "uid": uid, "section": "a b" })).is_err());
+    assert_eq!(f.g.count(&format!("/attachments/{pdf_id}/$value")), 1, "one response for the whole file: {:?}", f.g.requests());
+    assert_eq!(f.g.count(&format!("/attachments/{zip_id}/$value")), 0, "only the tapped attachment");
+    let progress = f.events.list.lock().unwrap().iter().skip(from).filter(|(n, v)| n == "mobile.attachment.progress" && v["jobId"] == job).count();
+    assert!(progress >= 2, "progress as the chunks arrive: {progress}");
+
+    // Never fetched: a link, an id the message does not list, an id of dots.
+    for bad in [link_id.as_str(), "AAMkNotListed=", "..", "."] {
+        let err = f.fetch(uid, bad).expect_err(bad);
+        assert_eq!(err.code(), "INVALID", "{bad}");
+    }
+    assert_eq!(f.g.count("$value"), 1, "{:?}", f.g.requests());
+}
+
+#[test]
+fn the_attachment_listing_selects_only_base_properties_and_its_failure_spares_the_body() {
+    let f = setup();
+    // The mock refuses what real Graph refuses: a derived type's property in the collection's
+    // $select.
+    let (_, access, _) = f.g.grant();
+    let id = f.g.add_message("inbox", "Plain", now_ms() - HOUR, "<p>Still readable</p>");
+    f.g.add_attachment(&id, "a.txt", "text/plain", b"x".to_vec(), false, None);
+    assert_eq!(f.g.raw_get(&format!("/me/messages/{id}/attachments?$select=id,contentId"), &access), 400);
+    assert_eq!(f.g.raw_get(&format!("/me/messages/{id}/attachments?$select=id,contentBytes"), &access), 400);
+    assert_eq!(f.g.raw_get(&format!("/me/messages/{id}/attachments?$select=id,name,contentType,size,isInline"), &access), 200);
+
+    // A listing that fails: the body still opens, with no attachments, and the log says why.
+    f.sync(None);
+    let uid = f.uids("INBOX")["Plain"];
+    f.g.fail_attachments(true);
+    let body = f.body(uid);
+    assert!(body["html"].as_str().unwrap_or("").contains("Still readable"), "{body}");
+    assert_eq!(body["attachments"].as_array().unwrap().len(), 0, "{body}");
+    assert!(f.logs.lock().unwrap().iter().any(|l| l.contains("attachments were not listed")), "{:?}", f.logs.lock().unwrap());
+}
+
+#[test]
+fn a_graph_attachment_download_shows_progress_and_stops_on_cancel() {
+    let f = setup();
+    let big = source(2 * 1024 * 1024, 5);
+    let id = f.g.add_message("inbox", "Big", now_ms() - HOUR, "<p>big</p>");
+    let att = f.g.add_attachment(&id, "big.bin", "application/octet-stream", big, false, None);
+    f.sync(None);
+    let uid = f.uids("INBOX")["Big"];
+    f.body(uid);
+    // 32 pieces of 64 KiB, 150 ms apart: about 5 s for the whole file.
+    f.g.slow_value(150);
+    let from = f.events.len();
+    let job = f.fetch(uid, &att).unwrap();
+    f.events.wait(from, "first progress", |n, v| n == "mobile.attachment.progress" && v["jobId"] == job);
+    let t0 = Instant::now();
+    assert_eq!(f.rpc("mobile.attachment.cancel", json!({ "jobId": job }))["cancelled"], true);
+    let (name, v) = f.job_end(from, job);
+    assert_eq!((name.as_str(), v["code"].as_str()), ("mobile.attachment.failed", Some("CANCELLED")), "{v}");
+    assert!(t0.elapsed() < Duration::from_secs(2), "stopped between chunks, not at the end: {:?}", t0.elapsed());
+    f.g.slow_value(0);
 }
 
 #[test]

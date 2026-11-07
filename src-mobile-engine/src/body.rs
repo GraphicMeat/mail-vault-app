@@ -85,7 +85,14 @@ impl Body {
     fn reply(&self) -> Value {
         let attachments: Vec<Value> = attachments_of(&self.stored.parts)
             .iter()
-            .map(|p| json!({ "section": p.section, "filename": p.filename, "mime": p.mime, "size": p.size, "contentId": p.content_id }))
+            .map(|p| {
+                // A Graph cloud link: listed, never downloaded (no bytes, no size).
+                if p.encoding == crate::backend::graph::LINK {
+                    json!({ "section": p.section, "filename": p.filename, "mime": p.mime, "size": null, "contentId": p.content_id, "kind": "link" })
+                } else {
+                    json!({ "section": p.section, "filename": p.filename, "mime": p.mime, "size": p.size, "contentId": p.content_id, "kind": "file" })
+                }
+            })
             .collect();
         json!({
             "html": self.html, "text": self.text, "attachments": attachments,
@@ -152,7 +159,8 @@ fn cap(shared: &Shared) -> u64 {
 }
 
 /// `mobile.message.body {accountId, folder, uid}` -> `{html, text, attachments: [{section,
-/// filename, mime, size, contentId}], remoteImages, trackers, gone}`. A network failure is an
+/// filename, mime, size, contentId, kind}], remoteImages, trackers, gone}`. `kind` is `file`, or
+/// `link` for a Graph cloud link (`size` null; it cannot be fetched). A network failure is an
 /// `INTERNAL` error whose message is the accounts error code (`TIMEOUT`, `HOST_UNREACHABLE`, ...);
 /// the detail goes to the log only.
 pub(crate) fn message_body(engine: &Engine, params: Value) -> Result<Value, RpcError> {
