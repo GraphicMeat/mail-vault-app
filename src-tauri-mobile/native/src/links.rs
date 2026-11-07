@@ -8,7 +8,7 @@
 //! (browser, mail app) and the navigation is cancelled, everything else is cancelled.
 //! The mail cleaner already keeps only http(s) and mailto links; this is the shell's own check.
 
-use url::Url;
+use url::{Host, Url};
 
 /// The origin the app page is served from: `tauri://localhost` on iOS, `http(s)://tauri.localhost`
 /// on Android. Only that platform's form counts, so a mail link to the other form leaves the app.
@@ -74,11 +74,44 @@ pub fn decide(url: &Url, app: AppOrigin) -> Nav {
                 Nav::Deny
             }
         }
-        "http" | "https" if url.host_str().is_some_and(|h| !h.is_empty()) => Nav::External(url.as_str().to_string()),
-        "mailto" => Nav::External(url.as_str().to_string()),
+        // A web link to another machine, without user info (`https://bank.example@evil.example/`).
+        "http" | "https" if web_host_ok(url) => Nav::External(url.as_str().to_string()),
+        // A mail link, unless it asks the mail app to attach something (`attach=/path`).
+        "mailto" if !asks_to_attach(url) => Nav::External(url.as_str().to_string()),
         // javascript:, data:, blob:, file:, intent:, tauri: (any other host), ipc:, content:, ...
         _ => Nav::Deny,
     }
+}
+
+/// An http(s) URL may leave the app only for a host that is not this device and with no user info:
+/// not `localhost` or `*.localhost` (`tauri.localhost`, `ipc.localhost` included), not a loopback
+/// or unspecified address in any spelling the parser accepts (`127.1.2.3`, `0x7f.1`, `[::1]`,
+/// `[::]`, `[::ffff:127.0.0.1]`). The same rule as the Android popup path (`PopupUrlPolicy.kt`).
+fn web_host_ok(url: &Url) -> bool {
+    if !url.username().is_empty() || url.password().is_some() {
+        return false;
+    }
+    match url.host() {
+        Some(Host::Domain(d)) => {
+            let d = d.trim_end_matches('.').to_ascii_lowercase();
+            !d.is_empty() && d != "localhost" && !d.ends_with(".localhost")
+        }
+        Some(Host::Ipv4(ip)) => !(ip.is_loopback() || ip.is_unspecified()),
+        Some(Host::Ipv6(ip)) => {
+            let mapped_local = ip.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback() || v4.is_unspecified());
+            !(ip.is_loopback() || ip.is_unspecified() || mapped_local)
+        }
+        None => false,
+    }
+}
+
+/// A `mailto:` whose query has an `attach` or `attachment` key (any case): some mail apps have
+/// attached the named local file.
+fn asks_to_attach(url: &Url) -> bool {
+    url.query_pairs().any(|(k, _)| {
+        let k = k.to_ascii_lowercase();
+        k == "attach" || k == "attachment"
+    })
 }
 
 /// `decide` on a raw string, for callers that hold one. A string that does not parse is denied.
@@ -118,8 +151,9 @@ mod tests {
 
     #[test]
     fn the_other_platforms_app_origin_is_not_the_app() {
-        // On iOS, http://tauri.localhost is a web host like any other: it leaves the app.
-        assert_eq!(d("http://tauri.localhost/x", IOS), Nav::External("http://tauri.localhost/x".into()));
+        // On iOS, http://tauri.localhost is not the app either, and as a host of this device it
+        // does not leave the app: denied.
+        assert_eq!(d("http://tauri.localhost/x", IOS), Nav::Deny);
         // On Android, tauri://localhost is not a scheme anyone serves: denied.
         assert_eq!(d("tauri://localhost/mobile.html", ANDROID), Nav::Deny);
     }
@@ -128,9 +162,58 @@ mod tests {
     fn app_origin_lookalikes_are_not_the_app() {
         assert_eq!(d("tauri://evil.test/mobile.html", IOS), Nav::Deny);
         assert_eq!(d("tauri://user@localhost/mobile.html", IOS), Nav::Deny);
-        assert_eq!(d("http://tauri.localhost:8080/", ANDROID), Nav::External("http://tauri.localhost:8080/".into()));
+        assert_eq!(d("http://tauri.localhost:8080/", ANDROID), Nav::Deny);
         assert_eq!(d("http://tauri.localhost.evil.test/", ANDROID), Nav::External("http://tauri.localhost.evil.test/".into()));
-        assert_eq!(d("http://a:b@tauri.localhost/", ANDROID), Nav::External("http://a:b@tauri.localhost/".into()));
+        assert_eq!(d("http://a:b@tauri.localhost/", ANDROID), Nav::Deny);
+    }
+
+    // The same table as the Android popup rule (PopupUrlPolicyTest.kt): both platforms send out
+    // only mailto and http(s) to a host that is not this device, without user info.
+    #[test]
+    fn this_device_is_not_a_web_host() {
+        for app in [IOS, ANDROID] {
+            for url in [
+                "https://localhost/",
+                "http://LOCALHOST:8080/",
+                "http://ipc.localhost/plugin",
+                "http://foo.localhost/",
+                "http://127.0.0.1/",
+                "http://127.1.2.3:8080/admin?action=x",
+                "http://[::1]/",
+                "http://0.0.0.0/",
+                "http://[::]/",
+                "http://[::ffff:127.0.0.1]/",
+                "http://2130706433/",
+                "http://0x7f.1/",
+            ] {
+                assert_eq!(d(url, app), Nav::Deny, "{url} on {app:?}");
+            }
+        }
+        assert_eq!(d("http://tauri.localhost/", IOS), Nav::Deny);
+    }
+
+    #[test]
+    fn user_info_is_never_sent_out() {
+        for app in [IOS, ANDROID] {
+            for url in ["https://yourbank.example@evil.example/login", "https://user:pass@example.com/", "http://:pw@example.com/"] {
+                assert_eq!(d(url, app), Nav::Deny, "{url} on {app:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn mailto_with_an_attachment_is_denied() {
+        for app in [IOS, ANDROID] {
+            for url in [
+                "mailto:ada@example.test?attach=/etc/passwd",
+                "mailto:ada@example.test?subject=Hi&ATTACHMENT=file:///x",
+                "mailto:ada@example.test?Attach=x",
+                "mailto:?to=ada@example.test&attach=a",
+            ] {
+                assert_eq!(d(url, app), Nav::Deny, "{url} on {app:?}");
+            }
+            assert!(matches!(d("mailto:ada@example.test?subject=attach%20this&body=attachment", app), Nav::External(_)));
+        }
     }
 
     #[test]

@@ -62,6 +62,26 @@ class PopupUrlPolicyTest {
     }
 
     @Test
+    fun mailto_with_an_attachment_is_dropped() {
+        for (url in listOf(
+            "mailto:ada@example.test?attach=/etc/passwd",
+            "mailto:ada@example.test?subject=Hi&ATTACHMENT=file:///x",
+            "mailto:ada@example.test?Attach=x",
+            "mailto:?to=ada@example.test&attach=a",
+        )) {
+            assertNull(url, PopupUrlPolicy.allow(url))
+        }
+        assertNotNull(PopupUrlPolicy.allow("mailto:ada@example.test?subject=attach%20this&body=attachment"))
+    }
+
+    @Test
+    fun loopback_spellings_are_dropped() {
+        for (url in listOf("http://127.1.2.3/", "http://[::]/", "http://foo.localhost/")) {
+            assertNull(url, PopupUrlPolicy.allow(url))
+        }
+    }
+
+    @Test
     fun unparseable_urls_are_dropped() {
         assertNull(PopupUrlPolicy.allow("https://exa mple.com/"))
         assertNull(PopupUrlPolicy.allow("ht!tp://example.com/"))
