@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "未読 {{count}} 件",
   "mobile.switcher.remove": "{{email}} を削除",
   "mobile.switcher.removeConfirm": "{{email}} をこの端末から削除しますか？サーバー上のメールはそのまま残ります。",
+  "mobile.switcher.removeFailed": "アカウントを削除できませんでした。もう一度お試しください。",
   "mobile.drawer.title": "フォルダ",
   "mobile.drawer.open": "フォルダを表示",
   "mobile.drawer.empty": "まだフォルダがありません。リストを下に引いて更新してください。",

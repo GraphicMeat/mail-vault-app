@@ -328,12 +328,20 @@ export function createMobileStore() {
 
       async removeAccount(id) {
         // A deferred action of the account being removed is dropped unsent: nothing can apply it.
-        if (deferred?.accountId === id) {
-          clearTimeout(deferred.timer);
-          if (get().undo?.id === deferred.id) set({ undo: null });
+        const dropped = deferred?.accountId === id ? deferred : null;
+        if (dropped) {
+          clearTimeout(dropped.timer);
+          if (get().undo?.id === dropped.id) set({ undo: null });
           deferred = null;
         }
-        await daemonCall('mobile.accounts.remove', { accountId: id });
+        try {
+          await daemonCall('mobile.accounts.remove', { accountId: id });
+        } catch (err) {
+          // The account stays: its dropped action's rows come back, and the switcher keeps asking.
+          dropped?.list?.unhide(dropped.uids);
+          notice('mobile.switcher.removeFailed');
+          throw err;
+        }
         const { accounts, activeAccountId } = get();
         const at = accounts.findIndex((a) => a.id === id);
         const rest = accounts.filter((a) => a.id !== id);

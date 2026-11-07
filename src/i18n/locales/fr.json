@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "{{count}} non lus",
   "mobile.switcher.remove": "Supprimer {{email}}",
   "mobile.switcher.removeConfirm": "Supprimer {{email}} de cet appareil ? Les e-mails sur le serveur sont conservés.",
+  "mobile.switcher.removeFailed": "Impossible de supprimer le compte. Réessayez.",
   "mobile.drawer.title": "Dossiers",
   "mobile.drawer.open": "Afficher les dossiers",
   "mobile.drawer.empty": "Aucun dossier pour l’instant. Tirez la liste vers le bas pour actualiser.",

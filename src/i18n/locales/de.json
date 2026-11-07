@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "{{count}} ungelesen",
   "mobile.switcher.remove": "{{email}} entfernen",
   "mobile.switcher.removeConfirm": "{{email}} von diesem Gerät entfernen? Die E-Mails auf dem Server bleiben erhalten.",
+  "mobile.switcher.removeFailed": "Das Konto konnte nicht entfernt werden. Versuchen Sie es erneut.",
   "mobile.drawer.title": "Ordner",
   "mobile.drawer.open": "Ordner anzeigen",
   "mobile.drawer.empty": "Noch keine Ordner. Zieh die Liste nach unten, um zu aktualisieren.",

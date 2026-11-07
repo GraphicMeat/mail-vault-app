@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "{{count}} 封未读",
   "mobile.switcher.remove": "移除 {{email}}",
   "mobile.switcher.removeConfirm": "要从这台设备移除 {{email}} 吗？服务器上的邮件会保留。",
+  "mobile.switcher.removeFailed": "无法移除该账户。请重试。",
   "mobile.drawer.title": "文件夹",
   "mobile.drawer.open": "显示文件夹",
   "mobile.drawer.empty": "还没有文件夹。下拉列表即可刷新。",

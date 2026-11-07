@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "{{count}} não lidas",
   "mobile.switcher.remove": "Remover {{email}}",
   "mobile.switcher.removeConfirm": "Remover {{email}} deste dispositivo? Os e-mails no servidor continuam lá.",
+  "mobile.switcher.removeFailed": "Não foi possível remover a conta. Tente novamente.",
   "mobile.drawer.title": "Pastas",
   "mobile.drawer.open": "Mostrar pastas",
   "mobile.drawer.empty": "Ainda não há pastas. Puxe a lista para baixo para atualizar.",

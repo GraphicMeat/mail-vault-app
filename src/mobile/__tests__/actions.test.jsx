@@ -10,6 +10,7 @@ import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({
   calls: [], handlers: new Map(), rows: [], gone: new Set(), skip: [], pending: [], seq: 0, gen: 1, failApply: false,
+  failRemove: false,
   accounts: [],
   folders: [
     { path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: 2, total: 5, depth: 0, noselect: false },
@@ -29,6 +30,7 @@ vi.mock('../transport.js', () => ({
       case 'mobile.accounts.list':
         return { accounts: engine.accounts };
       case 'mobile.accounts.remove':
+        if (engine.failRemove) throw Object.assign(new Error('nope'), { code: 'INTERNAL' });
         return { ok: true };
       case 'mobile.folders.list':
         return { folders: engine.folders };
@@ -111,6 +113,7 @@ beforeEach(() => {
   engine.skip = [];
   engine.pending = [];
   engine.failApply = false;
+  engine.failRemove = false;
   engine.gen = 1;
   engine.accounts = [{ id: 'a1', email: 'a1@example.test', displayName: 'A' }];
   visibility = 'visible';
@@ -261,6 +264,22 @@ describe('deferred move and delete', () => {
     store.getState().act('delete', { accountId: 'a1', folder: 'INBOX', uids: [4] });
     await store.getState().removeAccount('a1');
     expect(store.getState().undo).toBeNull();
+    await vi.advanceTimersByTimeAsync(UNDO_MS * 2);
+    expect(applies()).toEqual([]);
+  });
+
+  it('a failed account removal brings the deferred rows back and says so', async () => {
+    const store = await freshStore();
+    const { list } = store.getState();
+    store.getState().act('delete', { accountId: 'a1', folder: 'INBOX', uids: [4] });
+    expect(uidsOf(list)).toEqual([5, 3, 2, 1]);
+    engine.failRemove = true;
+    await expect(store.getState().removeAccount('a1')).rejects.toBeTruthy();
+    expect(store.getState().notice?.key).toBe('mobile.switcher.removeFailed');
+    expect(t('mobile.switcher.removeFailed')).not.toBe('mobile.switcher.removeFailed');
+    expect(store.getState().accounts.map((a) => a.id)).toEqual(['a1']);
+    await list.ensure(0);
+    expect(uidsOf(list)).toEqual([5, 4, 3, 2, 1]);
     await vi.advanceTimersByTimeAsync(UNDO_MS * 2);
     expect(applies()).toEqual([]);
   });

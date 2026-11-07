@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "{{count}} non letti",
   "mobile.switcher.remove": "Rimuovi {{email}}",
   "mobile.switcher.removeConfirm": "Rimuovere {{email}} da questo dispositivo? La posta sul server resta dov’è.",
+  "mobile.switcher.removeFailed": "Impossibile rimuovere l’account. Riprova.",
   "mobile.drawer.title": "Cartelle",
   "mobile.drawer.open": "Mostra cartelle",
   "mobile.drawer.empty": "Nessuna cartella per ora. Trascina la lista verso il basso per aggiornare.",

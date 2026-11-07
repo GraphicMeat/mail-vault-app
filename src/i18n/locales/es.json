@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "{{count}} sin leer",
   "mobile.switcher.remove": "Quitar {{email}}",
   "mobile.switcher.removeConfirm": "¿Quitar {{email}} de este dispositivo? El correo del servidor se conserva.",
+  "mobile.switcher.removeFailed": "No se pudo quitar la cuenta. Inténtalo de nuevo.",
   "mobile.drawer.title": "Carpetas",
   "mobile.drawer.open": "Mostrar carpetas",
   "mobile.drawer.empty": "Aún no hay carpetas. Desliza la lista hacia abajo para actualizar.",

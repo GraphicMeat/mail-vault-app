@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "{{count}} unread",
   "mobile.switcher.remove": "Remove {{email}}",
   "mobile.switcher.removeConfirm": "Remove {{email}} from this device? Mail on the server stays.",
+  "mobile.switcher.removeFailed": "Couldn't remove the account. Try again.",
   "mobile.drawer.title": "Folders",
   "mobile.drawer.open": "Show folders",
   "mobile.drawer.empty": "No folders yet. Pull down on the list to refresh.",

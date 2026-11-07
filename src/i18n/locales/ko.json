@@ -4236,6 +4236,7 @@
   "mobile.unreadCount_other": "읽지 않음 {{count}}개",
   "mobile.switcher.remove": "{{email}} 제거",
   "mobile.switcher.removeConfirm": "이 기기에서 {{email}}을(를) 제거할까요? 서버의 메일은 그대로 남습니다.",
+  "mobile.switcher.removeFailed": "계정을 제거하지 못했습니다. 다시 시도하세요.",
   "mobile.drawer.title": "폴더",
   "mobile.drawer.open": "폴더 보기",
   "mobile.drawer.empty": "아직 폴더가 없습니다. 목록을 아래로 당겨 새로 고치세요.",
