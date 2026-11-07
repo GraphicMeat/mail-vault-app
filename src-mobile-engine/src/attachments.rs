@@ -31,8 +31,8 @@
 use crate::db::{lock, Engine, Shared};
 use crate::events::{ATTACHMENT_DONE, ATTACHMENT_FAILED, ATTACHMENT_PROGRESS};
 use crate::rpc::{parse, RpcError};
-use crate::sync::{not_closing, session_config, Fail};
-use mailvault_core::imap::{self, ImapPool, ImapSession};
+use crate::backend::{self, Backend, FolderRow};
+use crate::sync::{not_closing, Fail};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -346,18 +346,11 @@ fn run(state: &State, shared: &Shared, id: u64, key: &PartKey, name: &str, uid_v
             touch(&final_path)?;
             return Ok(());
         }
-        let sc = session_config(shared, &key.account_id)?;
-        crate::net::block_on(async {
-            let pool = ImapPool::new();
-            let mut session = imap::create_imap_session(&sc.config, &pool).await?;
-            let out = download(state, shared, &mut session, id, key, name, uid_validity, cancel).await;
-            let _ = session.logout().await;
-            out
-        })
-        .map_err(|s| match s {
-            Stop::Fail(f) => Stop::Fail(sc.scrub(f)),
-            other => other,
-        })
+        let mut backend = backend::open(shared, &key.account_id)?;
+        let out = download(state, shared, backend.as_mut(), id, key, name, uid_validity, cancel);
+        // Signs out.
+        drop(backend);
+        out
     })();
     match out {
         Ok(()) => {
@@ -402,10 +395,10 @@ fn checkpoint(shared: &Shared, cancel: &AtomicBool) -> Result<(), Stop> {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn download(
+fn download(
     state: &State,
     shared: &Shared,
-    session: &mut ImapSession,
+    backend: &mut dyn Backend,
     id: u64,
     key: &PartKey,
     name: &str,
@@ -414,14 +407,12 @@ async fn download(
 ) -> Result<(), Stop> {
     // Selects the folder, proves the uid is there under the same UIDVALIDITY and names the part's
     // encoding; every range fetch after it runs on this selection.
-    let (parts, validity) = imap::fetch_parts(session, &key.folder, key.uid).await?;
+    let folder = FolderRow::new(&key.folder, Some(uid_validity));
+    let parts = backend.parts(&folder, key.uid)?;
     checkpoint(shared, cancel)?;
     let Some(parts) = parts else {
         return Err(Stop::Gone);
     };
-    if validity.map(i64::from) != Some(uid_validity) {
-        return Err(Stop::Gone);
-    }
     let Some(part) = parts.into_iter().find(|p| p.section == key.section) else {
         return Err(Stop::Gone);
     };
@@ -433,7 +424,7 @@ async fn download(
     let mut offset = meta.raw_offset;
     let mut out = Vec::new();
     loop {
-        let data = imap::fetch_selected_section_range(session, &key.folder, key.uid, &key.section, offset, CHUNK).await?;
+        let data = backend.part_range(&folder, key.uid, &key.section, offset, CHUNK)?;
         checkpoint(shared, cancel)?;
         let Some(data) = data else {
             return Err(Stop::Gone);
@@ -443,7 +434,7 @@ async fn download(
         if last && end_at < total {
             // Short before the size the server reported: a server may end a slice early. The end
             // is real only when the next offset has nothing.
-            let probe = imap::fetch_selected_section_range(session, &key.folder, key.uid, &key.section, end_at, CHUNK).await?;
+            let probe = backend.part_range(&folder, key.uid, &key.section, end_at, CHUNK)?;
             checkpoint(shared, cancel)?;
             match probe {
                 None => return Err(Stop::Gone),

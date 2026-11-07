@@ -15,13 +15,12 @@
 //! action was applied. Replay compares the server's UIDVALIDITY with the journaled one, never with
 //! the folder row's current one: after a resync a uid names a different message.
 
-use crate::accounts::{map_error, Code};
+use crate::accounts::Code;
+use crate::backend::{self, ApplyOutcome, Backend, FolderRow};
 use crate::db::{lock, Engine, Shared};
 use crate::events::{ACTION_RESULT, FOLDER_CHANGED};
 use crate::rpc::{parse, RpcError};
 use crate::sync::{self, Fail};
-use mailvault_core::abd::ops::Caps;
-use mailvault_core::imap::{self, abd_cmds, ImapPool, ImapSession};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -44,7 +43,7 @@ pub(crate) const PENDING_UIDS: &str =
     "SELECT j.value FROM pending_actions p, json_each(p.uids_json) j WHERE p.account_id = ?1 AND p.folder = ?2";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Kind {
+pub(crate) enum Kind {
     Seen,
     Unseen,
     Flag,
@@ -86,7 +85,7 @@ impl Kind {
         }
     }
 
-    fn value(self) -> i64 {
+    pub(crate) fn value(self) -> i64 {
         match self {
             Kind::Unseen | Kind::Unflag => 0,
             _ => 1,
@@ -580,22 +579,18 @@ fn head(shared: &Shared, account: &str) -> Result<Option<Journaled>, Fail> {
 /// Replays `account`'s journal through one session until it is empty. `Err(code)` when an attempt
 /// failed: the head stays queued as `retrying` and the account backs off.
 fn replay_account(shared: &Shared, account: &str) -> Result<(), Code> {
-    let sc = match sync::session_config(shared, account) {
-        Ok(sc) => sc,
+    let mut backend = match backend::open(shared, account) {
+        Ok(b) => b,
         Err(Fail::Gone) | Err(Fail::Closing) => return Ok(()),
         Err(Fail::Code(code, why)) => {
             fail_head(shared, account, code, &why);
             return Err(code);
         }
     };
-    let out = crate::net::block_on(async {
-        let pool = ImapPool::new();
-        let mut session = imap::create_imap_session(&sc.config, &pool).await?;
-        let out = drain(shared, &mut session, account).await;
-        let _ = session.logout().await;
-        out
-    });
-    match out.map_err(|f| sc.scrub(f)) {
+    let out = drain(shared, backend.as_mut(), account);
+    // Signs out.
+    drop(backend);
+    match out {
         Ok(true) | Err(Fail::Gone) | Err(Fail::Closing) => Ok(()),
         // The head was refused and marked already.
         Ok(false) => Err(Code::Invalid),
@@ -650,37 +645,16 @@ enum Outcome {
     Refused(String),
 }
 
-/// Core's rendering of a command the server answered with a tagged NO or BAD: async-imap's
-/// `no response: …` / `bad response: …`, or core's own `… failed: No …` / `… failed: Bad …` where it
-/// reads the tag itself (COPYUID, SEARCH).
-fn is_tagged_refusal(err: &str) -> bool {
-    let lower = err.to_ascii_lowercase();
-    lower.contains("no response:") || lower.contains("bad response:") || err.contains("failed: No ") || err.contains("failed: Bad ")
-}
-
-/// An IMAP step's failure: only the server's tagged NO or BAD (and not one the network, a
-/// timeout or the sign-in explains) becomes [`Outcome::Refused`]. Anything else, including a
-/// transport error whose words no needle knows, stays a failure: retried with backoff, never
-/// dropped, since three of them would otherwise throw away a delete the user made.
-fn refused_or_fail(err: String) -> Result<Outcome, Fail> {
-    if map_error(&err) == Code::Invalid && is_tagged_refusal(&err) {
-        Ok(Outcome::Refused(err))
-    } else {
-        Err(Fail::from(err))
-    }
-}
-
 /// Replays the account's actions until the journal is empty (`Ok(true)`) or the head was refused
 /// and must back off (`Ok(false)`, already marked).
-async fn drain(shared: &Shared, session: &mut ImapSession, account: &str) -> Result<bool, Fail> {
-    let caps = abd_cmds::capabilities(session).await?;
+fn drain(shared: &Shared, backend: &mut dyn Backend, account: &str) -> Result<bool, Fail> {
     loop {
         sync::not_closing(shared)?;
         let Some(a) = head(shared, account)? else {
             return Ok(true);
         };
         let outcome = match a.kind {
-            Some(kind) => run_action(shared, session, &caps, account, &a, kind).await?,
+            Some(kind) => run_action(shared, backend, account, &a, kind)?,
             // A kind this build does not know: nothing can replay it.
             None => Outcome::Dropped { reason: Reason::Gone, uids_gone: false },
         };
@@ -740,114 +714,26 @@ fn mark_sent(shared: &Shared, account: &str, a: &Journaled) -> Result<(), Fail> 
     Ok(())
 }
 
-/// After a failed SELECT or MOVE: `Ok(true)` when `path` is really gone, which only the server's
-/// answer (not the network) followed by a whole LIST (one that includes INBOX) without it proves;
-/// `Ok(false)` when the server refused but still lists the folder. A network failure stays one.
-async fn confirm_folder_gone(session: &mut ImapSession, path: &str, err: &str) -> Result<bool, Fail> {
-    if map_error(err) != Code::Invalid || !is_tagged_refusal(err) {
-        return Err(Fail::from(err.to_string()));
-    }
-    let boxes = imap::list_mailboxes(session).await?;
-    let whole = boxes.iter().any(|b| sync::is_inbox(&b.path));
-    let listed = boxes.iter().any(|b| b.path == path || (sync::is_inbox(path) && sync::is_inbox(&b.path)));
-    if !whole {
-        // A short LIST proves nothing either way.
-        return Err(Fail::from(err.to_string()));
-    }
-    Ok(!listed)
-}
-
-async fn run_action(
-    shared: &Shared,
-    session: &mut ImapSession,
-    caps: &Caps,
-    account: &str,
-    a: &Journaled,
-    kind: Kind,
-) -> Result<Outcome, Fail> {
-    let mbox = match imap::select_mailbox(session, &a.folder).await {
-        Ok(m) => m,
-        Err(e) => {
-            if confirm_folder_gone(session, &a.folder, &e).await? {
-                return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false });
-            }
-            return Ok(Outcome::Refused(e));
-        }
-    };
-    if let Some(v) = a.arg.uid_validity {
-        if mbox.uid_validity.map(i64::from) != Some(v) {
-            // Another generation: the journaled uids name other messages, or none.
-            return Ok(Outcome::Dropped { reason: Reason::Gone, uids_gone: false });
-        }
-    }
-    // Absence is proven by the server's tagged answer, never inferred: a STORE or MOVE on a uid
-    // that is gone answers OK too.
-    let found: HashSet<u32> = match abd_cmds::uid_search(session, &a.folder, &format!("UID {}", sync::uid_list(&a.uids))).await {
-        Ok(f) => f.into_iter().collect(),
-        Err(e) => return refused_or_fail(e),
-    };
-    let (present, gone): (Vec<u32>, Vec<u32>) = a.uids.iter().partition(|u| found.contains(u));
-    if present.is_empty() {
-        if kind.hides() && a.arg.sent {
-            // A move or delete that went on the wire before, and every uid has left the source:
-            // the server did it, and only the reply was lost (the engine died or the link dropped).
-            return Ok(Outcome::Done { gone: Vec::new(), remap: None });
-        }
-        return Ok(Outcome::Dropped { reason: Reason::Gone, uids_gone: true });
-    }
-    let mut remap = None;
-    match kind {
-        Kind::Seen | Kind::Unseen | Kind::Flag | Kind::Unflag => {
-            let flag = if matches!(kind, Kind::Seen | Kind::Unseen) { "\\Seen" } else { "\\Flagged" };
-            let op = if kind.value() == 1 { "add" } else { "remove" };
-            for uid in &present {
-                if let Err(e) = imap::set_flags(session, &a.folder, *uid, &[flag.to_string()], op).await {
-                    return refused_or_fail(e);
-                }
-            }
-        }
-        Kind::Delete => {
-            // In Trash already: a delete is permanent. Elsewhere core moves it to Trash. "Trash" is
-            // the folder core's delete would move to (SPECIAL-USE, then by name), not the stored
-            // `special_use`, whose name guess also matches "Trash-old": asking anything else either
-            // expunges outside Trash or moves a message onto itself. A LIST failure is a `Fail`.
-            let trash = imap::resolve_trash_path(session).await?;
-            let permanent = trash.as_deref() == Some(a.folder.as_str());
-            let expected = a.arg.uid_validity.map(|v| v as u32);
-            mark_sent(shared, account, a)?;
-            for uid in &present {
-                match imap::delete_email_in(session, &a.folder, *uid, permanent, caps.uidplus, expected).await {
-                    Ok(_) => {}
-                    Err(e) if e == "errors.bulkIdentityChanged" => {
-                        return Ok(Outcome::Dropped { reason: Reason::Gone, uids_gone: false });
-                    }
-                    Err(e) => return refused_or_fail(e),
-                }
-            }
-        }
-        Kind::Move => {
-            let Some(target) = a.arg.target.as_deref() else {
-                return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false });
-            };
-            mark_sent(shared, account, a)?;
-            match imap::move_uids(session, &a.folder, target, &present, caps.move_cmd, caps.uidplus).await {
-                Ok(out) => {
-                    // COPYUID pairs the source set, ascending, with the new uids in order.
-                    if let Some(new) = out.new_uids.filter(|n| n.len() == present.len()) {
-                        let validity = abd_cmds::uid_validity(session, target).await.ok().flatten().map(i64::from);
-                        remap = Some(Remap { target: target.to_string(), pairs: present.iter().copied().zip(new).collect(), validity });
-                    }
-                }
-                Err(e) => {
-                    if confirm_folder_gone(session, target, &e).await? {
-                        return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false });
-                    }
-                    return Ok(Outcome::Refused(e));
-                }
-            }
-        }
-    }
-    Ok(Outcome::Done { gone, remap })
+/// One attempt at the head action, through the backend; what the server's answer means for the
+/// journal.
+fn run_action(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Journaled, kind: Kind) -> Result<Outcome, Fail> {
+    let folder = FolderRow::new(&a.folder, a.arg.uid_validity);
+    let target = a.arg.target.as_deref();
+    let mut before_wire = || mark_sent(shared, account, a);
+    Ok(match backend.apply(&folder, kind, &a.uids, target, &mut before_wire)? {
+        ApplyOutcome::Done { gone, moved } => Outcome::Done {
+            gone,
+            remap: moved.map(|m| Remap { target: target.unwrap_or_default().to_string(), pairs: m.pairs, validity: m.uid_validity }),
+        },
+        // A move or delete that went on the wire before, and every uid has left the source: the
+        // server did it, and only the reply was lost (the engine died or the link dropped).
+        ApplyOutcome::NonePresent if kind.hides() && a.arg.sent => Outcome::Done { gone: Vec::new(), remap: None },
+        ApplyOutcome::NonePresent => Outcome::Dropped { reason: Reason::Gone, uids_gone: true },
+        ApplyOutcome::FolderGone => Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false },
+        // Another generation: the journaled uids name other messages, or none.
+        ApplyOutcome::OtherGeneration => Outcome::Dropped { reason: Reason::Gone, uids_gone: false },
+        ApplyOutcome::Refused(why) => Outcome::Refused(why),
+    })
 }
 
 /// Rewrites the account's later journal rows that name only uids the move took from `a.folder`, to
@@ -988,7 +874,7 @@ mod tests {
     /// retryable failure.
     #[test]
     fn refusal_needs_a_tagged_no_or_bad() {
-        let refused = |e: &str| matches!(refused_or_fail(e.to_string()), Ok(Outcome::Refused(_)));
+        let refused = |e: &str| matches!(crate::backend::imap::refused_or_fail(e.to_string()), Ok(ApplyOutcome::Refused(_)));
         assert!(refused("STORE flags failed: no response: [CANNOT] read only"));
         assert!(refused("SELECT Work failed: bad response: unknown mailbox"));
         assert!(refused("SEARCH failed: No [THROTTLED] slow down"));

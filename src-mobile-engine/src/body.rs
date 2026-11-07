@@ -14,8 +14,9 @@
 
 use crate::db::{Engine, EngineError, Shared};
 use crate::rpc::{parse, RpcError};
-use crate::sync::{session_config, Fail};
-use mailvault_core::imap::{self, ImapPool, ImapSession, PartInfo};
+use crate::backend::{self, FolderRow, RawBody};
+use crate::sync::Fail;
+use mailvault_core::imap::PartInfo;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -106,6 +107,14 @@ fn is_attachment(p: &Part) -> bool {
 fn body_parts(parts: &[Part]) -> (Option<&Part>, Option<&Part>) {
     let first = |mime: &str| parts.iter().find(|p| p.mime == mime && !is_attachment(p));
     (first("text/html"), first("text/plain"))
+}
+
+/// [`body_parts`] over core's parts, for a backend that reads the body itself.
+pub(crate) fn body_part_infos(parts: &[PartInfo]) -> (Option<&PartInfo>, Option<&PartInfo>) {
+    let own: Vec<Part> = parts.iter().cloned().map(Part::from).collect();
+    let (html, text) = body_parts(&own);
+    let find = |p: Option<&Part>| p.and_then(|p| parts.iter().find(|q| q.section == p.section));
+    (find(html), find(text))
 }
 
 /// Everything that is not the body: attachments, inline images (by `contentId`), a forwarded
@@ -204,44 +213,11 @@ fn cached(shared: &Shared, p: &BodyParams) -> Result<Option<Body>, EngineError> 
 /// Signs in, lists the parts and fetches the body parts. `Ok(None)` when the uid is gone, or now
 /// names a different message (the folder's UIDVALIDITY moved; the next sync wipes the folder).
 fn fetch(shared: &Shared, p: &BodyParams, stored_validity: Option<i64>) -> Result<Option<(Body, String)>, Fail> {
-    let sc = session_config(shared, &p.account_id)?;
-    let out = crate::net::block_on(async {
-        let pool = ImapPool::new();
-        let mut session = imap::create_imap_session(&sc.config, &pool).await?;
-        let out = fetch_in(&mut session, &p.folder, p.uid, stored_validity).await;
-        let _ = session.logout().await;
-        out
-    });
-    out.map_err(|f| sc.scrub(f))
-}
-
-async fn fetch_in(session: &mut ImapSession, folder: &str, uid: u32, stored_validity: Option<i64>) -> Result<Option<(Body, String)>, Fail> {
-    let (parts, validity) = imap::fetch_parts(session, folder, uid).await?;
-    let Some(parts) = parts else {
-        return Ok(None);
-    };
-    if validity.map(i64::from) != stored_validity {
-        return Ok(None);
-    }
-    let parts: Vec<Part> = parts.into_iter().map(Part::from).collect();
-    let (html_part, text_part) = body_parts(&parts);
-    let Some(html) = read_part(session, folder, uid, html_part).await? else {
-        return Ok(None);
-    };
-    let Some(text) = read_part(session, folder, uid, text_part).await? else {
-        return Ok(None);
-    };
-    Ok(Some(scanned(html, text, parts)))
-}
-
-/// One body part as text: `Ok(Some(None))` when there is no such part, `Ok(None)` when the uid
-/// went away between the BODYSTRUCTURE and the part.
-async fn read_part(session: &mut ImapSession, folder: &str, uid: u32, part: Option<&Part>) -> Result<Option<Option<String>>, Fail> {
-    let Some(part) = part else {
-        return Ok(Some(None));
-    };
-    let bytes = imap::fetch_section(session, folder, uid, &part.section).await?;
-    Ok(bytes.map(|b| Some(imap::parts::decode_text(&b, part.charset.as_deref()))))
+    let mut backend = backend::open(shared, &p.account_id)?;
+    let out = backend.body(&FolderRow::new(&p.folder, stored_validity), p.uid);
+    // Signs out.
+    drop(backend);
+    Ok(out?.map(|RawBody { parts, html, text }| scanned(html, text, parts.into_iter().map(Part::from).collect())))
 }
 
 /// Strips the html's tracking pixels and counts the remote images the cleaned html would load.

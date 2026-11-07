@@ -10,12 +10,11 @@
 //! Message identity is `(account_id, folder, uid)`, valid inside the folder's `uid_validity` (on
 //! the folder row). A UIDVALIDITY change wipes the folder's rows and resyncs it.
 
-use crate::accounts::{load_account, map_error, Code};
+use crate::accounts::{map_error, Code};
+use crate::backend::{self, has_flag, Backend, FolderInfo, FolderRow, Header};
 use crate::db::{lock, Engine, EngineError, Shared};
 use crate::events::{FOLDERS_CHANGED, FOLDER_CHANGED, SYNC_STATE};
 use crate::rpc::{parse, RpcError};
-use crate::secrets::Credential;
-use mailvault_core::imap::{self, abd_cmds, EmailHeader, ImapPool, ImapSession};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -171,6 +170,13 @@ impl From<EngineError> for Fail {
     }
 }
 
+impl Fail {
+    /// What a backend answers for an operation it does not have (yet).
+    pub(crate) fn unsupported(what: &str) -> Fail {
+        Fail::Code(Code::Invalid, format!("{what} is not supported for this account"))
+    }
+}
+
 fn run_job(shared: &Shared, job: &Job) {
     shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "syncing" }));
     let end = match sync_job(shared, job) {
@@ -183,49 +189,12 @@ fn run_job(shared: &Shared, job: &Job) {
     shared.emit(SYNC_STATE, end);
 }
 
-/// What signing in to an account takes: core's settings and the account's secrets (kept only to
-/// scrub them out of an error before that error is logged). The one place the engine builds a
-/// session's settings from an account row and its stored [`Credential`]; `Fail::Gone` when the
-/// account does not exist.
-pub(crate) struct SessionConfig {
-    pub(crate) config: imap::ImapConfig,
-    secrets: Vec<String>,
-}
-
-impl SessionConfig {
-    /// Removes every secret from a failure's log text. Core's text names the address, never the
-    /// secret; this is the belt to that brace.
-    pub(crate) fn scrub(&self, f: Fail) -> Fail {
-        match f {
-            Fail::Code(code, why) => Fail::Code(code, self.secrets.iter().fold(why, |w, s| w.replace(s.as_str(), "***"))),
-            other => other,
-        }
-    }
-}
-
-pub(crate) fn session_config(shared: &Shared, account: &str) -> Result<SessionConfig, Fail> {
-    let Some(acct) = load_account(shared, account)? else {
-        return Err(Fail::Gone);
-    };
-    let cred = match shared.secrets().get(account) {
-        Ok(Some(s)) => Credential::parse(&s),
-        Ok(None) => return Err(Fail::Code(Code::AuthFailed, "no secret stored for the account".into())),
-        Err(e) => return Err(Fail::Code(Code::Invalid, format!("secret store: {e}"))),
-    };
-    let config = crate::net::core_config(&acct, &cred).map_err(|e| Fail::Code(Code::Invalid, e))?;
-    Ok(SessionConfig { config, secrets: cred.secrets().into_iter().map(String::from).collect() })
-}
-
 fn sync_job(shared: &Shared, job: &Job) -> Result<(), Fail> {
-    let sc = session_config(shared, &job.account)?;
-    let out = crate::net::block_on(async {
-        let pool = ImapPool::new();
-        let mut session = imap::create_imap_session(&sc.config, &pool).await?;
-        let out = sync_session(shared, &mut session, job).await;
-        let _ = session.logout().await;
-        out
-    });
-    out.map_err(|f| sc.scrub(f))
+    let mut backend = backend::open(shared, &job.account)?;
+    let out = sync_session(shared, backend.as_mut(), job);
+    // Signs out.
+    drop(backend);
+    out
 }
 
 /// Unit tests: runs one sync pass on the calling thread and panics unless it ends cleanly.
@@ -239,10 +208,10 @@ pub(crate) fn sync_now_for_test(shared: &Shared, account: &str, folder: Option<&
     }
 }
 
-async fn sync_session(shared: &Shared, session: &mut ImapSession, job: &Job) -> Result<(), Fail> {
+fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result<(), Fail> {
     let folder = match &job.folder {
         None => {
-            sync_folder_list(shared, session, &job.account).await?;
+            sync_folder_list(shared, backend, &job.account)?;
             match folder_path(shared, &job.account, "INBOX")? {
                 Some(p) => p,
                 None => return Ok(()),
@@ -252,12 +221,12 @@ async fn sync_session(shared: &Shared, session: &mut ImapSession, job: &Job) -> 
             Some(p) => p,
             None => {
                 // A folder the list has not seen yet: list first.
-                sync_folder_list(shared, session, &job.account).await?;
+                sync_folder_list(shared, backend, &job.account)?;
                 folder_path(shared, &job.account, f)?.ok_or_else(|| Fail::Code(Code::Invalid, format!("no folder {f}")))?
             }
         },
     };
-    sync_folder(shared, session, &job.account, &folder).await
+    sync_folder(shared, backend, &job.account, &folder)
 }
 
 /// The stored path of `folder` (INBOX matched case-insensitively, as RFC 3501 says).
@@ -336,7 +305,7 @@ pub(crate) fn delete_uids(shared: &Shared, account: &str, folder: &str, uids: &[
 // ── Folder list ─────────────────────────────────────────────────────────────
 
 #[derive(Clone, PartialEq, Eq)]
-struct FolderRow {
+struct StoredFolder {
     name: String,
     special_use: Option<String>,
     delimiter: Option<String>,
@@ -345,14 +314,10 @@ struct FolderRow {
     total: i64,
 }
 
-async fn sync_folder_list(shared: &Shared, session: &mut ImapSession, account: &str) -> Result<(), Fail> {
-    let infos = imap::list_mailboxes(session).await?;
-    let selectable: Vec<String> = infos.iter().filter(|m| !m.noselect).map(|m| m.path.clone()).collect();
-    let statuses = imap::mailbox_statuses(session, &selectable).await?;
-    let counts: HashMap<&str, (i64, i64)> =
-        statuses.iter().map(|s| (s.path.as_str(), (s.unseen.unwrap_or(0) as i64, s.messages as i64))).collect();
+fn sync_folder_list(shared: &Shared, backend: &mut dyn Backend, account: &str) -> Result<(), Fail> {
+    let infos: Vec<FolderInfo> = backend.folders()?;
 
-    let existing: HashMap<String, FolderRow> = shared.read(|c| {
+    let existing: HashMap<String, StoredFolder> = shared.read(|c| {
         let mut st = c.prepare_cached(
             "SELECT path, name, special_use, delimiter, noselect, unseen, total FROM folders WHERE account_id = ?1",
         )?;
@@ -360,7 +325,7 @@ async fn sync_folder_list(shared: &Shared, session: &mut ImapSession, account: &
             .query_map([account], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
-                    FolderRow {
+                    StoredFolder {
                         name: r.get(1)?,
                         special_use: r.get(2)?,
                         delimiter: r.get(3)?,
@@ -374,12 +339,12 @@ async fn sync_folder_list(shared: &Shared, session: &mut ImapSession, account: &
         Ok(rows)
     })?;
 
-    let mut upserts: Vec<(String, FolderRow)> = Vec::new();
+    let mut upserts: Vec<(String, StoredFolder)> = Vec::new();
     for m in &infos {
         let old = existing.get(&m.path);
         // A folder STATUS skipped (\Noselect) or refused keeps the counts it had.
-        let (unseen, total) = counts.get(m.path.as_str()).copied().or_else(|| old.map(|o| (o.unseen, o.total))).unwrap_or((0, 0));
-        let row = FolderRow {
+        let (unseen, total) = m.counts.or_else(|| old.map(|o| (o.unseen, o.total))).unwrap_or((0, 0));
+        let row = StoredFolder {
             name: m.name.clone(),
             special_use: m.special_use.clone(),
             delimiter: m.delimiter.clone(),
@@ -482,7 +447,7 @@ impl Pass {
     }
 }
 
-async fn sync_folder(shared: &Shared, session: &mut ImapSession, account: &str, folder: &str) -> Result<(), Fail> {
+fn sync_folder(shared: &Shared, backend: &mut dyn Backend, account: &str, folder: &str) -> Result<(), Fail> {
     let stored = shared.read(|c| {
         c.query_row(
             "SELECT uid_validity, noselect, unseen, total FROM folders WHERE account_id = ?1 AND path = ?2",
@@ -498,7 +463,7 @@ async fn sync_folder(shared: &Shared, session: &mut ImapSession, account: &str, 
         return Ok(());
     }
     let mut pass = Pass { added: 0, removed: 0, updated: 0, gen: shared.list_gen(account, folder)? + 1 };
-    let out = sync_folder_pass(shared, session, account, folder, stored_validity, &mut pass).await;
+    let out = sync_folder_pass(shared, backend, account, folder, stored_validity, &mut pass);
     // Published even when the pass failed part-way: what it committed is in the table.
     if pass.changed() {
         let gen = shared.publish_list_gen(account, folder, pass.gen);
@@ -517,41 +482,32 @@ async fn sync_folder(shared: &Shared, session: &mut ImapSession, account: &str, 
     Ok(())
 }
 
-fn check_validity(got: Option<u32>, want: u32, folder: &str) -> Result<(), Fail> {
-    if got == Some(want) {
-        Ok(())
-    } else {
-        // The next pass sees the new value and wipes.
-        Err(Fail::Code(Code::Invalid, format!("UIDVALIDITY of {folder} changed during sync")))
-    }
-}
-
 /// The pass itself; returns the folder's `(unseen, total)` as the server counts them.
-async fn sync_folder_pass(
+fn sync_folder_pass(
     shared: &Shared,
-    session: &mut ImapSession,
+    backend: &mut dyn Backend,
     account: &str,
     folder: &str,
     stored_validity: Option<i64>,
     pass: &mut Pass,
 ) -> Result<(i64, i64), Fail> {
-    let mbox = imap::select_mailbox(session, folder).await?;
-    let validity = mbox.uid_validity.ok_or_else(|| Fail::from(format!("SELECT {folder}: no UIDVALIDITY")))?;
-    if stored_validity != Some(validity as i64) {
+    let mbox = backend.select(folder)?;
+    let validity = mbox.uid_validity;
+    if stored_validity != Some(validity) {
         // The folder's uids now name other messages: a journaled action applied under another
         // generation drops with GONE (it would hit someone else's message), then every row goes.
-        crate::actions::drop_folder_actions(shared, account, folder, Some(validity as i64), crate::actions::Reason::Gone)?;
+        crate::actions::drop_folder_actions(shared, account, folder, Some(validity), crate::actions::Reason::Gone)?;
         pass.removed += delete_folder_rows(shared, account, folder)?;
         write_for(shared, account, |c| {
             c.execute(
                 "UPDATE folders SET uid_validity = ?3, uid_next = NULL WHERE account_id = ?1 AND path = ?2",
-                (account, folder, validity as i64),
+                (account, folder, validity),
             )
         })?;
     }
 
-    let window = abd_cmds::uid_search(session, folder, &since_criteria(now_ms())).await?;
-    let unseen = abd_cmds::uid_search(session, folder, "UNSEEN").await?.len() as i64;
+    let here = FolderRow::new(folder, Some(validity));
+    let backend::Window { uids: window, unseen } = backend.window(folder, window_start_ms(now_ms()))?;
     let in_window: HashSet<u32> = window.iter().copied().collect();
     // Read before the flag FETCH: whether this pass may clear a disagreeing override (see
     // `write_flags`) is judged against it.
@@ -575,22 +531,17 @@ async fn sync_folder_pass(
     // Flags of the rows already held in the window. None held (a new or emptied folder): no read,
     // since `UID FETCH n:*` on an empty mailbox is an error on some servers. A row is written when
     // the server's flags changed or it carries a local override that may now clear.
-    let changes: Vec<(u32, bool, bool)> = match window.iter().copied().filter(|u| existing.contains_key(u)).min() {
-        None => Vec::new(),
-        Some(from) => {
-            let (got, flags) = imap::uid_flags_from_in_generation(session, folder, from).await?;
-            check_validity(got, validity, folder)?;
-            flags
-                .iter()
-                .filter(|(uid, _)| in_window.contains(uid))
-                .filter_map(|(uid, fl)| {
-                    let held = existing.get(uid)?;
-                    let (seen, flagged) = (has_flag(fl, "\\Seen"), has_flag(fl, "\\Flagged"));
-                    (seen != held.seen || flagged != held.flagged || held.overridden).then_some((*uid, seen, flagged))
-                })
-                .collect()
-        }
-    };
+    let held: Vec<u32> = window.iter().copied().filter(|u| existing.contains_key(u)).collect();
+    let changes: Vec<(u32, bool, bool)> = backend
+        .flags(&here, &held)?
+        .iter()
+        .filter(|(uid, _)| in_window.contains(uid))
+        .filter_map(|(uid, fl)| {
+            let held = existing.get(uid)?;
+            let (seen, flagged) = (fl.seen, fl.flagged);
+            (seen != held.seen || flagged != held.flagged || held.overridden).then_some((*uid, seen, flagged))
+        })
+        .collect();
     for chunk in changes.chunks(BATCH) {
         pass.updated += write_for(shared, account, |c| write_flags(shared, c, account, folder, chunk, pass.gen, at))?;
     }
@@ -607,17 +558,16 @@ async fn sync_folder_pass(
     new.sort_unstable_by(|a, b| b.cmp(a));
     for chunk in new.chunks(BATCH) {
         not_closing(shared)?;
-        let ((headers, _), got) = imap::fetch_headers_by_uids_bound(session, folder, chunk).await?;
-        check_validity(got, validity, folder)?;
+        let headers = backend.headers(&here, chunk)?;
         let n = write_for(shared, account, |c| insert_headers(c, account, folder, &headers, pass.gen))?;
         pass.added += n;
     }
 
-    let total = mbox.exists as i64;
+    let total = mbox.total;
     write_for(shared, account, |c| {
         c.execute(
             "UPDATE folders SET uid_next = ?3, unseen = ?4, total = ?5, synced_ms = ?6 WHERE account_id = ?1 AND path = ?2",
-            (account, folder, mbox.uid_next.map(i64::from), unseen, total, now_ms()),
+            (account, folder, mbox.uid_next, unseen, total, now_ms()),
         )
     })?;
     shared.pass_completed(account, folder, at);
@@ -678,11 +628,7 @@ fn write_flags(
     Ok(n)
 }
 
-fn has_flag(flags: &[String], flag: &str) -> bool {
-    flags.iter().any(|f| f.eq_ignore_ascii_case(flag))
-}
-
-fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[EmailHeader], gen: i64) -> rusqlite::Result<usize> {
+fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header], gen: i64) -> rusqlite::Result<usize> {
     let mut st = c.prepare_cached(
         "INSERT INTO messages
            (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged,
@@ -718,7 +664,7 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[EmailH
 }
 
 /// When the message arrived (INTERNALDATE, which the window is judged by too), else its `Date:`.
-fn header_date_ms(h: &EmailHeader) -> i64 {
+fn header_date_ms(h: &Header) -> i64 {
     h.internal_date
         .as_deref()
         .and_then(rfc3339_ms)
@@ -756,10 +702,15 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     (if m <= 2 { yoe + era * 400 + 1 } else { yoe + era * 400 }, m, d)
 }
 
-/// `SINCE dd-Mon-yyyy` for the first day of the window (IMAP dates are whole days).
-fn since_criteria(now_ms: i64) -> String {
+/// The first instant of the sync window's first day (UTC): [`WINDOW_DAYS`] days before today.
+fn window_start_ms(now_ms: i64) -> i64 {
+    (now_ms.div_euclid(DAY_MS) - WINDOW_DAYS) * DAY_MS
+}
+
+/// `SINCE dd-Mon-yyyy` for the day `start_ms` falls on (IMAP dates are whole days).
+pub(crate) fn since_criteria(start_ms: i64) -> String {
     const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    let (y, m, d) = civil_from_days(now_ms.div_euclid(DAY_MS) - WINDOW_DAYS);
+    let (y, m, d) = civil_from_days(start_ms.div_euclid(DAY_MS));
     format!("SINCE {d:02}-{}-{y}", MONTHS[(m - 1) as usize])
 }
 
@@ -959,7 +910,7 @@ mod tests {
     fn since_is_90_days_back() {
         // 2026-11-06T10:00:00Z -> 2026-08-08.
         let now = days_from_civil(2026, 11, 6) * DAY_MS + 10 * 3_600_000;
-        assert_eq!(since_criteria(now), "SINCE 08-Aug-2026");
+        assert_eq!(since_criteria(window_start_ms(now)), "SINCE 08-Aug-2026");
     }
 
     #[test]
