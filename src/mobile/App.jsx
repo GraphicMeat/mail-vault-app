@@ -6,7 +6,8 @@
 // `?ui=switcher|drawer` opens that panel at start (for screenshots); `?ui=swipe` and
 // `?ui=swipe-trailing` show the first row slid open, `?ui=toast` (or `&toast=1` with another `ui`)
 // the undo toast and the pending chip (display only, nothing is sent; these two in a perf-gate
-// bundle only); `?ui=viewer` runs the scripted viewer in `viewerProbe.js`
+// bundle only; so are `?ui=compose` (a new message), `?ui=reply` (a reply to the newest row) and
+// `?ui=outbox` (the outbox sheet over two made-up unsent rows, display only)); `?ui=viewer` runs the scripted viewer in `viewerProbe.js`
 // (perf-gate builds only: the bundle has it only when built with MV_PERF_GATE=1, and it runs only
 // when the engine's ping says `perfGate`), with `&move=1` the move picker open. The `mobile.ping`
 // line is logged first: scripts/mobile-run.sh waits for it.
@@ -53,6 +54,9 @@ const PERF_BUILD = import.meta.env.MV_PERF_GATE === '1';
 const DEMO_SWIPE = (PERF_BUILD && { swipe: { index: 0, side: 'leading' }, 'swipe-trailing': { index: 0, side: 'trailing' } }[QUERY.get('ui')]) || null;
 const DEMO_TOAST = PERF_BUILD && (QUERY.get('ui') === 'toast' || QUERY.get('toast') === '1');
 const DEMO_MOVE = VIEWER_SCRIPT && QUERY.get('move') === '1';
+const DEMO_COMPOSE = (PERF_BUILD && { compose: 'new', reply: 'reply' }[QUERY.get('ui')]) || null;
+const DEMO_OUTBOX = PERF_BUILD && QUERY.get('ui') === 'outbox';
+let demoComposeStarted = false;
 let viewerScriptStarted = false;
 let perfStarted = false;
 
@@ -212,6 +216,30 @@ function App() {
     if (DEMO_TOAST && status === 'ready') useMobileStore.setState({ undo: { id: -1, kind: 'delete', count: 1, target: null }, pending: 2 });
   }, [status]);
 
+  useEffect(() => {
+    if (!DEMO_COMPOSE || demoComposeStarted || status !== 'ready' || listState !== 'ready' || !list) return;
+    demoComposeStarted = true;
+    const { activeAccountId: accountId, activeFolder: folder } = useMobileStore.getState();
+    const row = list.rowAt(0);
+    setCompose(DEMO_COMPOSE === 'reply' && row
+      ? { key: 1, accountId, mode: 'reply', original: { folder, uid: row.uid, dateMs: row.dateMs } }
+      : { key: 1, accountId, mode: 'new' });
+    // The line scripts/mobile-run.sh can wait for before its screenshot (the reply's prepare is in).
+    setTimeout(() => logLine({ demo: DEMO_COMPOSE }), 2000);
+  }, [status, listState, list]);
+
+  useEffect(() => {
+    if (!DEMO_OUTBOX || status !== 'ready') return;
+    const accountId = useMobileStore.getState().activeAccountId;
+    useMobileStore.setState({
+      outbox: [
+        { id: 'demo-1', accountId, subject: 'Quarterly numbers', state: 'uncertain', lastError: 'TIMEOUT' },
+        { id: 'demo-2', accountId, subject: 'Lunch on Friday?', state: 'queued', lastError: null },
+      ],
+    });
+    setTimeout(() => logLine({ demo: 'outbox' }), 1000);
+  }, [status]);
+
   // Back in the foreground: sync the open folder.
   useEffect(() => {
     if (PERF) return undefined;
@@ -360,7 +388,7 @@ function App() {
         <PendingChip />
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
-      <OutboxRow />
+      <OutboxRow initialOpen={DEMO_OUTBOX} />
       {listState === 'ready' && list && (
         <MessageList
           key={listKey}
