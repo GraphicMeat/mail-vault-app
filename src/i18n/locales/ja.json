@@ -4263,6 +4263,7 @@
   "mobile.actions.markUnread": "未読にする",
   "mobile.actions.flag": "フラグを付ける",
   "mobile.actions.unflag": "フラグを外す",
+  "mobile.actions.flagged": "フラグ付き",
   "mobile.actions.move": "移動",
   "mobile.actions.moveTitle": "フォルダに移動",
   "mobile.actions.noFolders": "ほかのフォルダはありません。",

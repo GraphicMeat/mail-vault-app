@@ -197,6 +197,17 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
     ensure(i) {
       return ensurePage(Math.floor(toRaw(i) / pageSize));
     },
+    /** View index of the row `uid` on the held pages, or -1 (not held, or hidden). */
+    indexOfUid(uid) {
+      for (const [p, rows] of pages) {
+        const j = rows.findIndex((r) => r && r.uid === uid);
+        if (j < 0) continue;
+        if (hidden.has(uid)) return -1;
+        const raw = p * pageSize + j;
+        return raw - hiddenIndices().filter((h) => h < raw).length;
+      }
+      return -1;
+    },
     /** Takes the rows of `uids` out of the view (the engine still lists them). */
     hide(uids) {
       for (const uid of uids) hidden.add(uid);

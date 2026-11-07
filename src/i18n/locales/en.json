@@ -4263,6 +4263,7 @@
   "mobile.actions.markUnread": "Mark as unread",
   "mobile.actions.flag": "Flag",
   "mobile.actions.unflag": "Remove flag",
+  "mobile.actions.flagged": "Flagged",
   "mobile.actions.move": "Move",
   "mobile.actions.moveTitle": "Move to folder",
   "mobile.actions.noFolders": "No other folders.",

@@ -72,6 +72,23 @@ describe('test query hooks', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('the screenshot demo hooks (?ui=swipe, ?ui=toast) act only in a perf-gate bundle', async () => {
+    for (const [gate, shown] of [['0', false], ['1', true]]) {
+      vi.stubEnv('MV_PERF_GATE', gate);
+      engine.perfGate = gate === '1';
+      window.history.replaceState({}, '', '/mobile.html?ui=swipe&toast=1');
+      vi.resetModules();
+      const { default: App } = await import('../App.jsx');
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      render(<App />);
+      await waitFor(() => expect(screen.getByText('a1@example.test')).toBeTruthy());
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(Boolean(screen.queryByText('Message deleted')), `gate ${gate}`).toBe(shown);
+      cleanup();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('a shipping bundle has no viewer probe: the import sits behind the build constant', () => {
     const app = readFileSync(resolve(process.cwd(), 'src/mobile/App.jsx'), 'utf8');
     expect(app).not.toMatch(/^import[^;]*viewerProbe/m);

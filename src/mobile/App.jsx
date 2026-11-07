@@ -5,7 +5,8 @@
 // `MV_MOBILE {"probe":…}` line: DNS + TLS to that host and a secret store round trip.
 // `?ui=switcher|drawer` opens that panel at start (for screenshots); `?ui=swipe` and
 // `?ui=swipe-trailing` show the first row slid open, `?ui=toast` (or `&toast=1` with another `ui`)
-// the undo toast and the pending chip (display only, nothing is sent); `?ui=viewer` runs the scripted viewer in `viewerProbe.js`
+// the undo toast and the pending chip (display only, nothing is sent; these two in a perf-gate
+// bundle only); `?ui=viewer` runs the scripted viewer in `viewerProbe.js`
 // (perf-gate builds only: the bundle has it only when built with MV_PERF_GATE=1, and it runs only
 // when the engine's ping says `perfGate`), with `&move=1` the move picker open. The `mobile.ping`
 // line is logged first: scripts/mobile-run.sh waits for it.
@@ -41,8 +42,10 @@ const START_PANEL = ['switcher', 'drawer'].includes(QUERY.get('ui')) ? QUERY.get
 // `?ui=viewer` (viewerProbe.js): a scripted viewer for screenshots, the timing of large opens
 // and the on-device network proof. Perf-gate builds only: the engine's ping says which.
 const VIEWER_SCRIPT = QUERY.get('ui') === 'viewer';
-const DEMO_SWIPE = { swipe: { index: 0, side: 'leading' }, 'swipe-trailing': { index: 0, side: 'trailing' } }[QUERY.get('ui')] || null;
-const DEMO_TOAST = QUERY.get('ui') === 'toast' || QUERY.get('toast') === '1';
+// Screenshot-only hooks: a perf-gate bundle only (build constant, see vite.mobile.config.js).
+const PERF_BUILD = import.meta.env.MV_PERF_GATE === '1';
+const DEMO_SWIPE = (PERF_BUILD && { swipe: { index: 0, side: 'leading' }, 'swipe-trailing': { index: 0, side: 'trailing' } }[QUERY.get('ui')]) || null;
+const DEMO_TOAST = PERF_BUILD && (QUERY.get('ui') === 'toast' || QUERY.get('toast') === '1');
 const DEMO_MOVE = VIEWER_SCRIPT && QUERY.get('move') === '1';
 let viewerScriptStarted = false;
 let perfStarted = false;
@@ -240,8 +243,8 @@ function App() {
     s.act(kind, { accountId: s.activeAccountId, folder: s.activeFolder, uids: [row.uid] });
   }, []);
   const onViewerAction = useCallback((kind) => {
-    if (!open) return;
-    useMobileStore.getState().act(kind, { accountId: open.accountId, folder: open.folder, uids: [open.row.uid] });
+    if (!open) return undefined;
+    return useMobileStore.getState().act(kind, { accountId: open.accountId, folder: open.folder, uids: [open.row.uid] });
   }, [open]);
   const onViewerMove = useCallback((target) => {
     if (!open) return;
@@ -254,9 +257,12 @@ function App() {
   const onViewerDelete = useCallback(() => {
     if (!open) return;
     const s = useMobileStore.getState();
-    const { accountId, folder, index } = open;
+    const { accountId, folder } = open;
     const sameList = s.list && s.activeAccountId === accountId && s.activeFolder === folder;
-    const next = sameList && Number.isInteger(index) ? s.list.rowAt(index + 1) : undefined;
+    // Where the message is now: the list may have moved since it was opened (new mail, an undo).
+    const index = sameList ? s.list.indexOfUid(open.row.uid) : -1;
+    const below = index >= 0 ? s.list.rowAt(index + 1) : undefined;
+    const next = below && below.uid !== open.row.uid ? below : undefined;
     s.act('delete', { accountId, folder, uids: [open.row.uid] });
     if (next) {
       s.markSeen(accountId, folder, next);

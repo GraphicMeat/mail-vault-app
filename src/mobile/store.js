@@ -113,6 +113,7 @@ export function createMobileStore() {
       }
       if (failed) notice('mobile.actions.failed');
       loadPending();
+      return { ok: !failed, skipped };
     }
 
     /** Applies the deferred move or delete now, if there is one. */
@@ -232,6 +233,7 @@ export function createMobileStore() {
       /**
        * Applies `kind` (seen|unseen|flag|unflag|move|delete) to `uids` of `folder`. A move or
        * delete is deferred (see the top of this file); resolves once anything it sent is applied.
+       * An immediate kind resolves to `{ok, skipped}` (ok false when an apply call failed).
        */
       act(kind, { accountId, folder, uids, target } = {}) {
         if (!accountId || !folder || !Array.isArray(uids) || uids.length === 0) return Promise.resolve();
@@ -325,6 +327,12 @@ export function createMobileStore() {
       },
 
       async removeAccount(id) {
+        // A deferred action of the account being removed is dropped unsent: nothing can apply it.
+        if (deferred?.accountId === id) {
+          clearTimeout(deferred.timer);
+          if (get().undo?.id === deferred.id) set({ undo: null });
+          deferred = null;
+        }
         await daemonCall('mobile.accounts.remove', { accountId: id });
         const { accounts, activeAccountId } = get();
         const at = accounts.findIndex((a) => a.id === id);

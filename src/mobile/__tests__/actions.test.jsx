@@ -10,6 +10,7 @@ import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({
   calls: [], handlers: new Map(), rows: [], gone: new Set(), skip: [], pending: [], seq: 0, gen: 1, failApply: false,
+  accounts: [],
   folders: [
     { path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: 2, total: 5, depth: 0, noselect: false },
     { path: 'Archive', name: 'Archive', specialUse: null, unseen: 0, total: 0, depth: 0, noselect: false },
@@ -26,7 +27,9 @@ vi.mock('../transport.js', () => ({
       case 'mobile.ping':
         return { engine: 'test', schema: 2 };
       case 'mobile.accounts.list':
-        return { accounts: [{ id: 'a1', email: 'a1@example.test', displayName: 'A' }] };
+        return { accounts: engine.accounts };
+      case 'mobile.accounts.remove':
+        return { ok: true };
       case 'mobile.folders.list':
         return { folders: engine.folders };
       case 'mobile.sync.refresh':
@@ -108,6 +111,8 @@ beforeEach(() => {
   engine.skip = [];
   engine.pending = [];
   engine.failApply = false;
+  engine.gen = 1;
+  engine.accounts = [{ id: 'a1', email: 'a1@example.test', displayName: 'A' }];
   visibility = 'visible';
   // The store remembers the last folder: every test starts in INBOX.
   window.localStorage.clear();
@@ -227,6 +232,39 @@ describe('deferred move and delete', () => {
     expect(applies().map((p) => p.uids)).toEqual([[4]]);
   });
 
+  it('a folder.changed with a newer listGen during the undo window keeps the row hidden', async () => {
+    const store = await freshStore();
+    const { list } = store.getState();
+    store.getState().act('delete', { accountId: 'a1', folder: 'INBOX', uids: [4] });
+    engine.rows.unshift({ ...ROWS[0], uid: 6, dateMs: 6000, subject: 'Mail 6' });
+    engine.gen = 2;
+    emit('mobile.folder.changed', { accountId: 'a1', folder: 'INBOX', added: 1, removed: 0, updated: 0, listGen: 2 });
+    await list.ensure(0);
+    expect(list.listGen).toBe(2);
+    expect(uidsOf(list)).toEqual([6, 5, 3, 2, 1]);
+    expect(applies()).toEqual([]);
+  });
+
+  it('an account switch sends the deferred action with its own account and folder', async () => {
+    engine.accounts = [{ id: 'a1', email: 'a1@example.test' }, { id: 'a2', email: 'a2@example.test' }];
+    const store = await freshStore();
+    expect(store.getState().activeAccountId).toBe('a1');
+    store.getState().act('move', { accountId: 'a1', folder: 'INBOX', uids: [4], target: 'Archive' });
+    await store.getState().selectAccount('a2');
+    expect(store.getState().activeAccountId).toBe('a2');
+    expect(applies()).toEqual([{ accountId: 'a1', folder: 'INBOX', uids: [4], kind: 'move', target: 'Archive' }]);
+    expect(store.getState().undo).toBeNull();
+  });
+
+  it('removing the account that holds the deferred action drops it unsent', async () => {
+    const store = await freshStore();
+    store.getState().act('delete', { accountId: 'a1', folder: 'INBOX', uids: [4] });
+    await store.getState().removeAccount('a1');
+    expect(store.getState().undo).toBeNull();
+    await vi.advanceTimersByTimeAsync(UNDO_MS * 2);
+    expect(applies()).toEqual([]);
+  });
+
   it('a failed apply brings the rows back and says so', async () => {
     const store = await freshStore();
     const { list } = store.getState();
@@ -285,6 +323,22 @@ describe('viewer toolbar and move picker', () => {
     expect(screen.getByRole('button', { name: t('mobile.actions.markRead') })).toBeTruthy();
   });
 
+  it('a failed read or flag apply rolls the toolbar back', async () => {
+    const onAction = vi.fn(async () => ({ ok: false }));
+    render(<Viewer accountId="a1" folder="INBOX" row={row} folders={engine.folders} onClose={() => {}} onAction={onAction} />);
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.actions.flag') }));
+    await waitFor(() => expect(screen.getByRole('button', { name: t('mobile.actions.flag') }).getAttribute('aria-pressed')).toBe('false'));
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.actions.markUnread') }));
+    await waitFor(() => expect(screen.getByRole('button', { name: t('mobile.actions.markUnread') })).toBeTruthy());
+    expect(onAction.mock.calls.map(([k]) => k)).toEqual(['flag', 'unseen']);
+  });
+
+  it('a flagged row says so with a state label, not the action verb', () => {
+    render(<MessageRow row={{ ...ROWS[0], flagged: true }} index={0} start={0} onOpen={() => {}} />);
+    expect(screen.getByRole('img', { name: t('mobile.actions.flagged') })).toBeTruthy();
+    expect(t('mobile.actions.flagged')).not.toBe(t('mobile.actions.flag'));
+  });
+
   it('move_picker_lists_folders_without_current', () => {
     const onPick = vi.fn();
     render(<MovePicker folders={engine.folders} current="INBOX" onPick={onPick} onClose={() => {}} />);
@@ -320,10 +374,13 @@ describe('App', () => {
     vi.restoreAllMocks();
   });
 
+  let storeModule;
+  const store = () => storeModule.useMobileStore.getState();
   async function mount() {
     window.history.replaceState({}, '', '/mobile.html');
     vi.resetModules();
     const { default: App } = await import('../App.jsx');
+    storeModule = await import('../store.js');
     vi.spyOn(console, 'log').mockImplementation(() => {});
     render(<App />);
     await waitFor(() => expect(screen.getByText('a1@example.test')).toBeTruthy());
@@ -426,6 +483,31 @@ describe('App', () => {
     await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
     expect(screen.queryByRole('dialog', { name: t('mobile.drawer.title') })).toBeNull();
     expect(screen.getByText('a1@example.test')).toBeTruthy();
+  });
+
+  it('viewer delete opens the row after the open message even when the list shifted under it', async () => {
+    await mount();
+    fireEvent.click(document.querySelector('[data-index="1"]')); // uid 4
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Mail 4' })).toBeTruthy());
+    // New mail lands on top while the message is open: uid 4 is now row 2.
+    engine.rows.unshift({ ...ROWS[0], uid: 6, dateMs: 6000, subject: 'Mail 6', seen: true });
+    engine.gen = 2;
+    await act(async () => { emit('mobile.folder.changed', { accountId: 'a1', folder: 'INBOX', added: 1, removed: 0, updated: 0, listGen: 2 }); });
+    await waitFor(() => expect(document.querySelector('[data-index="0"]').textContent).toContain('Mail 6'));
+    fireEvent.click(screen.getByRole('button', { name: t('common.delete') }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Mail 3' })).toBeTruthy());
+    expect(store().undo).toMatchObject({ kind: 'delete', count: 1 });
+  });
+
+  it('a failed toolbar flag rolls back', async () => {
+    await mount();
+    fireEvent.click(document.querySelector('[data-index="1"]')); // uid 4, not flagged
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Mail 4' })).toBeTruthy());
+    engine.failApply = true;
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.actions.flag') }));
+    await waitFor(() => expect(applies().length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole('button', { name: t('mobile.actions.flag') }).getAttribute('aria-pressed')).toBe('false'));
+    expect(screen.getByRole('alert').textContent).toContain(t('mobile.actions.failed'));
   });
 
   it('the toolbar flag goes to the engine at once', async () => {

@@ -125,14 +125,17 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const [picking, setPicking] = useState(initialPicking);
   const closePicker = useCallback(() => setPicking(false), []);
   useBackLayer(picking, closePicker);
-  const toggleSeen = () => {
-    onAction(seen ? 'unseen' : 'seen');
-    setSeen(!seen);
+  // Optimistic: the button flips at once and flips back if the engine refused the apply.
+  const toggle = (value, setValue, on, off) => {
+    const next = !value;
+    setValue(next);
+    Promise.resolve(onAction(next ? on : off)).then(
+      (r) => { if (r && r.ok === false) setValue((v) => (v === next ? !next : v)); },
+      () => setValue((v) => (v === next ? !next : v)),
+    );
   };
-  const toggleFlag = () => {
-    onAction(flagged ? 'unflag' : 'flag');
-    setFlagged(!flagged);
-  };
+  const toggleSeen = () => toggle(seen, setSeen, 'seen', 'unseen');
+  const toggleFlag = () => toggle(flagged, setFlagged, 'flag', 'unflag');
   const pick = (target) => {
     setPicking(false);
     onMove(target);

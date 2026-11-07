@@ -4263,6 +4263,7 @@
   "mobile.actions.markUnread": "Marcar como no leído",
   "mobile.actions.flag": "Marcar",
   "mobile.actions.unflag": "Quitar marca",
+  "mobile.actions.flagged": "Marcado",
   "mobile.actions.move": "Mover",
   "mobile.actions.moveTitle": "Mover a carpeta",
   "mobile.actions.noFolders": "No hay otras carpetas.",

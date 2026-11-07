@@ -4263,6 +4263,7 @@
   "mobile.actions.markUnread": "Segna come non letto",
   "mobile.actions.flag": "Contrassegna",
   "mobile.actions.unflag": "Rimuovi contrassegno",
+  "mobile.actions.flagged": "Contrassegnato",
   "mobile.actions.move": "Sposta",
   "mobile.actions.moveTitle": "Sposta nella cartella",
   "mobile.actions.noFolders": "Nessun'altra cartella.",

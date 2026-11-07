@@ -4263,6 +4263,7 @@
   "mobile.actions.markUnread": "Als ungelesen markieren",
   "mobile.actions.flag": "Markieren",
   "mobile.actions.unflag": "Markierung entfernen",
+  "mobile.actions.flagged": "Markiert",
   "mobile.actions.move": "Verschieben",
   "mobile.actions.moveTitle": "In Ordner verschieben",
   "mobile.actions.noFolders": "Keine anderen Ordner.",

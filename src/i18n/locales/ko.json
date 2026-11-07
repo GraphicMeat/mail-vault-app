@@ -4263,6 +4263,7 @@
   "mobile.actions.markUnread": "읽지 않음으로 표시",
   "mobile.actions.flag": "플래그 지정",
   "mobile.actions.unflag": "플래그 해제",
+  "mobile.actions.flagged": "플래그 지정됨",
   "mobile.actions.move": "이동",
   "mobile.actions.moveTitle": "폴더로 이동",
   "mobile.actions.noFolders": "다른 폴더가 없습니다.",

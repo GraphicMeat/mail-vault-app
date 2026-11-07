@@ -45,7 +45,7 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
         <button type="button" className={unread ? 'mv-row mv-row--unread' : 'mv-row'}>
           <span className="mv-row__top">
             <span className="mv-row__sender" dir="auto">{senderOf(row, t)}</span>
-            {row.flagged && <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flag')} />}
+            {row.flagged && <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flagged')} />}
             <span className="mv-row__date">{formatEmailDate(row.dateMs)}</span>
           </span>
           <span className="mv-row__subject" dir="auto">{displayText(row.subject, t('common.noSubject'))}</span>
