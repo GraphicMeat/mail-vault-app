@@ -31,17 +31,68 @@ const DAY_MS: i64 = 86_400_000;
 // ── The worker and its queue ────────────────────────────────────────────────
 
 /// One sync pass to run: the account's folder list and INBOX (`folder: None`), or one folder.
+/// A `quick` pass (a background run's) may skip the folder when the backend can tell cheaply
+/// that nothing arrived since the last pass ([`Backend::has_news`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Job {
     account: String,
     folder: Option<String>,
+    quick: bool,
 }
 
 impl Job {
-    /// Running `self` also does everything `other` asks for.
+    pub(crate) fn new(account: &str, folder: Option<&str>) -> Job {
+        Job { account: account.to_string(), folder: folder.map(String::from), quick: false }
+    }
+
+    /// Running `self` also does everything `other` asks for. A full pass covers a quick one,
+    /// never the other way round.
     fn covers(&self, other: &Job) -> bool {
         self.account == other.account
+            && (!self.quick || other.quick)
             && (self.folder == other.folder || (self.folder.is_none() && other.folder.as_deref().is_some_and(is_inbox)))
+    }
+}
+
+/// How a queued pass ended, for a caller that waits on it ([`Worker::enqueue_waited`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Ended {
+    /// The pass completed (a quick pass that found nothing new counts).
+    Done,
+    /// The pass stopped: the account is gone or parked, the engine is closing, or a typed failure
+    /// (the code).
+    Failed(&'static str),
+}
+
+/// One waiter on a queued pass: set once by the worker thread when a pass that covers it ends.
+#[derive(Default)]
+pub(crate) struct Ticket {
+    ended: Mutex<Option<Ended>>,
+    cv: Condvar,
+}
+
+impl Ticket {
+    fn end(&self, how: Ended) {
+        let mut ended = lock(&self.ended);
+        if ended.is_none() {
+            *ended = Some(how);
+        }
+        self.cv.notify_all();
+    }
+
+    /// How the pass ended, or `None` when it has not by `deadline`.
+    pub(crate) fn wait_until(&self, deadline: std::time::Instant) -> Option<Ended> {
+        let mut ended = lock(&self.ended);
+        loop {
+            if let Some(how) = ended.as_ref() {
+                return Some(how.clone());
+            }
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return None;
+            }
+            ended = self.cv.wait_timeout(ended, left).unwrap_or_else(|p| p.into_inner()).0;
+        }
     }
 }
 
@@ -51,9 +102,10 @@ pub(crate) fn is_inbox(path: &str) -> bool {
 
 #[derive(Default)]
 struct QueueState {
-    /// Jobs not yet started. A job that is running is not here, so a refresh that arrives
-    /// during it queues a follow-up pass (mail that landed after its SEARCH is not lost).
-    pending: VecDeque<Job>,
+    /// Jobs not yet started, each with the tickets waiting on it. A job that is running is not
+    /// here, so a refresh that arrives during it queues a follow-up pass (mail that landed after
+    /// its SEARCH is not lost).
+    pending: VecDeque<(Job, Vec<Arc<Ticket>>)>,
     started: bool,
     stop: bool,
 }
@@ -74,6 +126,19 @@ pub(crate) struct Worker {
 impl Worker {
     /// Queues `job` unless a queued job already covers it; returns at once.
     fn enqueue(&self, shared: &Arc<Shared>, job: Job) -> Result<(), String> {
+        self.enqueue_with(shared, job, None)
+    }
+
+    /// Queues the quick INBOX pass of `account` (a background run's) and returns a ticket that
+    /// ends with the first pass that covers it, run from now on.
+    pub(crate) fn enqueue_waited(&self, shared: &Arc<Shared>, account: &str) -> Result<Arc<Ticket>, String> {
+        let ticket = Arc::new(Ticket::default());
+        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true };
+        self.enqueue_with(shared, job, Some(Arc::clone(&ticket)))?;
+        Ok(ticket)
+    }
+
+    fn enqueue_with(&self, shared: &Arc<Shared>, job: Job, ticket: Option<Arc<Ticket>>) -> Result<(), String> {
         let mut st = lock(&self.queue.state);
         if st.stop {
             return Err("the engine is closing".into());
@@ -86,23 +151,41 @@ impl Worker {
                 .map_err(|e| format!("sync worker: {e}"))?;
             st.started = true;
         }
-        if st.pending.iter().any(|q| q.covers(&job)) {
+        if let Some((_, tickets)) = st.pending.iter_mut().find(|(q, _)| q.covers(&job)) {
+            tickets.extend(ticket);
             return Ok(());
         }
-        st.pending.retain(|q| !job.covers(q));
-        st.pending.push_back(job);
+        // Jobs the new one covers go, and their waiters wait on it instead.
+        let mut tickets: Vec<Arc<Ticket>> = ticket.into_iter().collect();
+        let mut kept = VecDeque::with_capacity(st.pending.len());
+        for (q, t) in st.pending.drain(..) {
+            if job.covers(&q) {
+                tickets.extend(t);
+            } else {
+                kept.push_back((q, t));
+            }
+        }
+        st.pending = kept;
+        st.pending.push_back((job, tickets));
         self.queue.cv.notify_one();
         Ok(())
     }
 
     /// Queues the normal INBOX pass of `account` (coalesced with one already queued).
     pub(crate) fn enqueue_inbox(&self, shared: &Arc<Shared>, account: &str) -> Result<(), String> {
-        self.enqueue(shared, Job { account: account.to_string(), folder: Some("INBOX".into()) })
+        self.enqueue(shared, Job::new(account, Some("INBOX")))
     }
 
-    /// Asks the thread to exit after the pass it is in. Does not wait for it.
+    /// Asks the thread to exit after the pass it is in. Does not wait for it. Every ticket still
+    /// queued ends as failed.
     pub(crate) fn stop(&self) {
-        lock(&self.queue.state).stop = true;
+        let mut st = lock(&self.queue.state);
+        st.stop = true;
+        for (_, tickets) in st.pending.drain(..) {
+            for t in tickets {
+                t.end(Ended::Failed("CLOSING"));
+            }
+        }
         self.queue.cv.notify_all();
     }
 }
@@ -110,19 +193,22 @@ impl Worker {
 fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
     background_qos();
     loop {
-        let job = {
+        let (job, tickets) = {
             let mut st = lock(&queue.state);
             loop {
                 if st.stop {
                     return;
                 }
-                if let Some(job) = st.pending.pop_front() {
-                    break job;
+                if let Some(next) = st.pending.pop_front() {
+                    break next;
                 }
                 st = queue.cv.wait(st).unwrap_or_else(|p| p.into_inner());
             }
         };
-        run_job(&shared, &job);
+        let ended = run_job(&shared, &job);
+        for t in tickets {
+            t.end(ended.clone());
+        }
     }
 }
 
@@ -190,7 +276,7 @@ impl Fail {
     }
 }
 
-fn run_job(shared: &Shared, job: &Job) {
+fn run_job(shared: &Shared, job: &Job) -> Ended {
     // A parked account never shows a pass starting: only that it needs a new sign-in.
     let parked = shared
         .read(|c| c.query_row("SELECT needs_auth FROM accounts WHERE id = ?1", [&job.account], |r| r.get::<_, i64>(0)).optional())
@@ -199,17 +285,22 @@ fn run_job(shared: &Shared, job: &Job) {
         .is_some_and(|n| n != 0);
     if parked {
         shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "error", "code": Code::NeedsAuth.as_str() }));
-        return;
+        return Ended::Failed(Code::NeedsAuth.as_str());
     }
     shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "syncing" }));
-    let end = match sync_job(shared, job) {
-        Ok(()) | Err(Fail::Gone) | Err(Fail::Closing) => json!({ "accountId": job.account, "state": "idle" }),
+    let out = sync_job(shared, job);
+    crate::background::note_sign_in(shared, &job.account, &out);
+    let (end, ended) = match out {
+        Ok(()) => (json!({ "accountId": job.account, "state": "idle" }), Ended::Done),
+        Err(Fail::Gone) => (json!({ "accountId": job.account, "state": "idle" }), Ended::Failed("GONE")),
+        Err(Fail::Closing) => (json!({ "accountId": job.account, "state": "idle" }), Ended::Failed("CLOSING")),
         Err(Fail::Code(code, why)) => {
             shared.log(&format!("[sync] {} {:?}: {} {}", job.account, job.folder, code.as_str(), why));
-            json!({ "accountId": job.account, "state": "error", "code": code.as_str() })
+            (json!({ "accountId": job.account, "state": "error", "code": code.as_str() }), Ended::Failed(code.as_str()))
         }
     };
     shared.emit(SYNC_STATE, end);
+    ended
 }
 
 fn sync_job(shared: &Shared, job: &Job) -> Result<(), Fail> {
@@ -223,7 +314,7 @@ fn sync_job(shared: &Shared, job: &Job) -> Result<(), Fail> {
 /// Unit tests: runs one sync pass on the calling thread and panics unless it ends cleanly.
 #[cfg(test)]
 pub(crate) fn sync_now_for_test(shared: &Shared, account: &str, folder: Option<&str>) {
-    let job = Job { account: account.into(), folder: folder.map(String::from) };
+    let job = Job::new(account, folder);
     match sync_job(shared, &job) {
         Ok(()) => {}
         Err(Fail::Code(code, why)) => panic!("sync failed: {} {why}", code.as_str()),
@@ -232,6 +323,15 @@ pub(crate) fn sync_now_for_test(shared: &Shared, account: &str, folder: Option<&
 }
 
 fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result<(), Fail> {
+    // A background run's pass: skipped when the backend can tell cheaply nothing came in (Graph
+    // asks for its newest message rather than relisting the 90-day window).
+    if job.quick {
+        if let Some(path) = folder_path(shared, &job.account, job.folder.as_deref().unwrap_or("INBOX"))? {
+            if !backend.has_news(&FolderRow::new(&path, None))? {
+                return Ok(());
+            }
+        }
+    }
     let folder = match &job.folder {
         None => {
             sync_folder_list(shared, backend, &job.account)?;
@@ -850,7 +950,7 @@ pub(crate) fn refresh(engine: &Engine, params: Value) -> Result<Value, RpcError>
     }
     engine
         .sync_worker()
-        .enqueue(engine.shared(), Job { account: p.account_id, folder: p.folder })
+        .enqueue(engine.shared(), Job::new(&p.account_id, p.folder.as_deref()))
         .map_err(RpcError::Internal)?;
     Ok(json!({ "queued": true }))
 }
@@ -988,7 +1088,7 @@ mod tests {
     }
 
     fn sync_ok(e: &Engine, account: &str, folder: Option<&str>) {
-        let job = Job { account: account.into(), folder: folder.map(String::from) };
+        let job = Job::new(account, folder);
         match sync_job(e.shared(), &job) {
             Ok(()) => {}
             Err(Fail::Code(code, why)) => panic!("sync failed: {} {why}", code.as_str()),
@@ -1055,12 +1155,18 @@ mod tests {
 
     #[test]
     fn coalescing() {
-        let a = |f: Option<&str>| Job { account: "a".into(), folder: f.map(String::from) };
+        let a = |f: Option<&str>| Job::new("a", f);
         assert!(a(None).covers(&a(Some("INBOX"))));
         assert!(a(None).covers(&a(Some("inbox"))));
         assert!(!a(None).covers(&a(Some("Sent"))));
         assert!(!a(Some("INBOX")).covers(&a(None)));
         assert!(a(Some("Sent")).covers(&a(Some("Sent"))));
-        assert!(!a(None).covers(&Job { account: "b".into(), folder: None }));
+        assert!(!a(None).covers(&Job::new("b", None)));
+        // A full pass covers a background run's quick one, not the other way round.
+        let quick = Job { quick: true, ..a(Some("INBOX")) };
+        assert!(a(None).covers(&quick));
+        assert!(a(Some("INBOX")).covers(&quick));
+        assert!(!quick.covers(&a(Some("INBOX"))));
+        assert!(quick.covers(&quick.clone()));
     }
 }

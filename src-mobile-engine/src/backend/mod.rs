@@ -282,6 +282,12 @@ pub(crate) trait Backend: Send {
         target: Option<&str>,
         before_wire: BeforeWire<'_>,
     ) -> Result<ApplyOutcome, Fail>;
+    /// Whether `folder` may hold mail the last pass did not list, asked before a background run's
+    /// pass. `true` (the default) runs the pass; a backend whose pass is expensive answers from a
+    /// cheap request (Graph: the folder's newest message has no local uid yet).
+    fn has_news(&mut self, _folder: &FolderRow) -> Result<bool, Fail> {
+        Ok(true)
+    }
     /// The pass over `folder` wrote everything it read (flags, removals, new rows). A backend
     /// commits here what must never run ahead of those writes (JMAP: the Email state its next
     /// `flags` follows). Not called when the pass failed or stopped part way.

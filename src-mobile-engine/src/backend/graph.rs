@@ -225,6 +225,18 @@ pub(crate) struct GraphBackend<'a> {
 }
 
 impl<'a> GraphBackend<'a> {
+    /// Whether `id` already has a local uid in `folder` (a pass listed it).
+    fn is_mapped(&self, folder: &str, id: &str) -> Result<bool, Fail> {
+        let account = self.account.as_str();
+        Ok(self
+            .shared
+            .read(|c| {
+                c.query_row("SELECT 1 FROM remote_ids WHERE account_id = ?1 AND folder = ?2 AND remote_id = ?3", (account, folder, id), |_| Ok(()))
+                    .optional()
+            })?
+            .is_some())
+    }
+
     /// The live poll: every `watch.poll`, the folder's newest message (`$top=1`, id and
     /// `lastModifiedDateTime`) against the last one seen; a change only when they differ, so a
     /// quiet minute costs one small request and never a listing of the window. The first look
@@ -236,18 +248,7 @@ impl<'a> GraphBackend<'a> {
             let now = self.call(async |c| c.newest_in(&remote).await)?;
             let known = match &now {
                 None => true,
-                Some((id, _)) => {
-                    let (account, path) = (self.account.as_str(), folder.path.as_str());
-                    self.shared.read(|c| {
-                        c.query_row(
-                            "SELECT 1 FROM remote_ids WHERE account_id = ?1 AND folder = ?2 AND remote_id = ?3",
-                            (account, path, id.as_str()),
-                            |_| Ok(()),
-                        )
-                        .optional()
-                    })?
-                    .is_some()
-                }
+                Some((id, _)) => self.is_mapped(&folder.path, id)?,
             };
             self.newest = Some(now);
             if !known {
@@ -807,6 +808,17 @@ impl Backend for GraphBackend<'_> {
     fn file_sent(&mut self, _sent: &SendOutcome) -> Result<(), Fail> {
         // Graph's sendMail filed it in Sent Items.
         Ok(())
+    }
+
+    /// One `$top=1` request instead of relisting the 90-day window: news when the folder's newest
+    /// message has no local uid yet. A flag change elsewhere is not news here (a background run
+    /// only looks for new mail).
+    fn has_news(&mut self, folder: &FolderRow) -> Result<bool, Fail> {
+        let remote = remote_folder(&folder.path).to_string();
+        match self.call(async |c| c.newest_in(&remote).await)? {
+            None => Ok(false),
+            Some((id, _)) => Ok(!self.is_mapped(&folder.path, &id)?),
+        }
     }
 
     fn wait_for_change(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail> {

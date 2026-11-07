@@ -104,6 +104,8 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
+    ("mobile.settings.get", crate::settings::get),
+    ("mobile.settings.set", crate::settings::set),
     ("mobile.sync.refresh", crate::sync::refresh),
 ];
 #[cfg(not(feature = "perf-gate"))]
@@ -137,6 +139,8 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.list", crate::outbox::list),
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.ping", ping),
+    ("mobile.settings.get", crate::settings::get),
+    ("mobile.settings.set", crate::settings::set),
     ("mobile.sync.refresh", crate::sync::refresh),
 ];
 

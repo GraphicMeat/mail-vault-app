@@ -32,6 +32,12 @@ pub const ATTACHMENT_FAILED: &str = "mobile.attachment.failed";
 /// `uncertain` (the connection broke after the server may have taken it) the accounts error code.
 pub const SEND_RESULT: &str = "mobile.send.result";
 
+/// `{accountId, folder, uid?}`: the user tapped a new-mail notification (`uid` absent for a
+/// summary). The SHELL emits it, not the engine, in the same `mobile-event` envelope, when the
+/// native side reports the tap (`src-tauri-mobile/src/background.rs`); listed here so the page's
+/// `listen` is checked against one list.
+pub const NOTIFICATION_OPEN: &str = "mobile.notification.open";
+
 /// Every event name the engine emits: the one list `events.json` must match (a test checks it) and
 /// the page's `listen('…')` names are checked against.
 pub const EVENTS: &[&str] = &[
@@ -41,6 +47,7 @@ pub const EVENTS: &[&str] = &[
     ATTACHMENT_PROGRESS,
     FOLDER_CHANGED,
     FOLDERS_CHANGED,
+    NOTIFICATION_OPEN,
     SEND_RESULT,
     SYNC_STATE,
 ];

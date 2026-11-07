@@ -445,6 +445,7 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
             for t in PER_ACCOUNT_TABLES {
                 c.execute(&format!("DELETE FROM {t} WHERE account_id = ?1"), [&p.account_id])?;
             }
+            crate::background::forget(c, &p.account_id)?;
             Ok(c.execute("DELETE FROM accounts WHERE id = ?1", [&p.account_id])? > 0)
         })
         .map_err(internal)?;
