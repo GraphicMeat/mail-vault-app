@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "无法保存到此设备",
   "mobile.attachment.error.internal": "出了点问题",
   "mobile.attachment.error.noApp": "此设备上没有可打开此文件的应用",
-  "mobile.attachment.error.openFailed": "无法打开"
+  "mobile.attachment.error.openFailed": "无法打开",
+  "errors.transportSwitchImapRefused": "Microsoft 的 IMAP 服务器拒绝了此账户，因此未做任何更改，账户仍使用 Microsoft Graph。",
+  "help.outlookImap.title": "在 Outlook.com 中开启 IMAP",
+  "help.outlookImap.steps": "Microsoft 已接受你的登录，但在开启 IMAP 之前，Outlook.com 不会通过 IMAP 打开此邮箱。在网页版 Outlook 中，转到“设置”>“邮件”>“转发和 IMAP”，开启“允许设备和应用使用 IMAP”，选择“保存”，然后在此处重试。",
+  "help.outlookImap.open": "打开 Outlook 设置",
+  "help.outlookImap.faq": "如何开启 IMAP",
+  "help.outlookImap.imageAlt": "Outlook.com 设置的“POP 和 IMAP”部分，已开启“允许设备和应用使用 IMAP”",
+  "help.outlookImap.hint": "通过 IMAP 使用 Outlook.com 需要在 Outlook.com 设置中开启 IMAP。",
+  "errors.conn.problem.outlookImapOff": "Outlook.com 已接受你的登录，但此邮箱已关闭 IMAP。",
+  "errors.conn.recovery.turnOnOutlookImap": "请在 Outlook.com 设置中开启 IMAP 后重试，或改用 Microsoft Graph 连接。"
 }

@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "Impossibile salvarlo su questo dispositivo",
   "mobile.attachment.error.internal": "Qualcosa è andato storto",
   "mobile.attachment.error.noApp": "Nessuna app su questo dispositivo apre questo file",
-  "mobile.attachment.error.openFailed": "Impossibile aprirlo"
+  "mobile.attachment.error.openFailed": "Impossibile aprirlo",
+  "errors.transportSwitchImapRefused": "Il server IMAP di Microsoft ha rifiutato questo account: non è stato modificato nulla e resta su Microsoft Graph.",
+  "help.outlookImap.title": "Attiva IMAP in Outlook.com",
+  "help.outlookImap.steps": "Microsoft ha accettato l’accesso, ma Outlook.com non apre questa casella tramite IMAP finché IMAP non è attivo. In Outlook sul web vai a Impostazioni > Posta > Inoltro e IMAP, attiva «Consenti a dispositivi e app di usare IMAP», seleziona Salva, poi riprova qui.",
+  "help.outlookImap.open": "Apri le impostazioni di Outlook",
+  "help.outlookImap.faq": "Come attivare IMAP",
+  "help.outlookImap.imageAlt": "Impostazioni di Outlook.com, sezione POP e IMAP, con «Consenti a dispositivi e app di usare IMAP» attivo",
+  "help.outlookImap.hint": "Outlook.com tramite IMAP richiede che IMAP sia attivo nelle impostazioni di Outlook.com.",
+  "errors.conn.problem.outlookImapOff": "Outlook.com ha accettato l’accesso, ma IMAP è disattivato per questa casella.",
+  "errors.conn.recovery.turnOnOutlookImap": "Attiva IMAP nelle impostazioni di Outlook.com e riprova, oppure connettiti tramite Microsoft Graph."
 }

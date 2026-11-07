@@ -179,6 +179,9 @@ pub enum ConnectionFailure {
     Tls,
     /// The server rejected the credentials.
     Auth,
+    /// The sign-in was accepted, but the provider will not serve the mailbox
+    /// over IMAP: Outlook.com with "Let devices and apps use IMAP" off.
+    ImapDisabled,
     /// The provider is rate limiting this account.
     Throttled,
     /// This machine has no network at all.
@@ -195,6 +198,7 @@ impl ConnectionFailure {
             Self::BlockedOrTimeout => "blocked_or_timeout",
             Self::Tls => "tls",
             Self::Auth => "auth",
+            Self::ImapDisabled => "imap_disabled",
             Self::Throttled => "throttled",
             Self::Offline => "offline",
             Self::Other => "other",
@@ -227,6 +231,10 @@ pub fn classify_connection_error(err: &str) -> ConnectionFailure {
         "try again later",
     ]) {
         return Throttled;
+    }
+    // Before Auth: Outlook.com's reply rides on "XOAUTH2 auth failed".
+    if any(&["authenticated but not connected"]) {
+        return ImapDisabled;
     }
     if any(&["authenticationfailed", "authentication failed", "invalid credentials", "login failed", "auth failed"]) {
         return Auth;
@@ -437,6 +445,9 @@ mod tests {
             ("Login failed for user@example.com: NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)", Auth),
             ("XOAUTH2 auth failed for user@example.com: NO Invalid credentials (Failure)", Auth),
             ("Authentication failed for smtp.example.com:587", Auth),
+            // Outlook.com took the sign-in but has IMAP turned off for the
+            // mailbox: not a credential problem.
+            ("XOAUTH2 auth failed for me@outlook.com: no response: code: None, info: Some(\"User is authenticated but not connected.\")", ImapDisabled),
             ("Login failed for user@example.com: NO [ALERT] Too many simultaneous connections. (Failure)", Throttled),
             ("UID FETCH 42 failed: NO Account exceeded bandwidth limits. (Failure)", Throttled),
             ("BYE [THROTTLED] Too much traffic", Throttled),
@@ -453,10 +464,10 @@ mod tests {
     #[test]
     fn every_code_is_stable_snake_case() {
         use ConnectionFailure::*;
-        let codes: Vec<&str> = [Dns, Refused, BlockedOrTimeout, Tls, Auth, Throttled, Offline, Other]
+        let codes: Vec<&str> = [Dns, Refused, BlockedOrTimeout, Tls, Auth, ImapDisabled, Throttled, Offline, Other]
             .into_iter()
             .map(ConnectionFailure::code)
             .collect();
-        assert_eq!(codes, ["dns", "refused", "blocked_or_timeout", "tls", "auth", "throttled", "offline", "other"]);
+        assert_eq!(codes, ["dns", "refused", "blocked_or_timeout", "tls", "auth", "imap_disabled", "throttled", "offline", "other"]);
     }
 }

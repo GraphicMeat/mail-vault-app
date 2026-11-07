@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "Não foi possível salvar neste dispositivo",
   "mobile.attachment.error.internal": "Algo deu errado",
   "mobile.attachment.error.noApp": "Nenhum app deste dispositivo abre este arquivo",
-  "mobile.attachment.error.openFailed": "Não foi possível abrir"
+  "mobile.attachment.error.openFailed": "Não foi possível abrir",
+  "errors.transportSwitchImapRefused": "O servidor IMAP da Microsoft recusou esta conta, então nada foi alterado e ela continua no Microsoft Graph.",
+  "help.outlookImap.title": "Ative o IMAP no Outlook.com",
+  "help.outlookImap.steps": "A Microsoft aceitou seu login, mas o Outlook.com só abre esta caixa de correio por IMAP depois que o IMAP for ativado. No Outlook na Web, vá em Configurações > Email > Encaminhamento e IMAP, ative \"Permitir que dispositivos e aplicativos usem IMAP\", selecione Salvar e tente novamente aqui.",
+  "help.outlookImap.open": "Abrir configurações do Outlook",
+  "help.outlookImap.faq": "Como ativar o IMAP",
+  "help.outlookImap.imageAlt": "Configurações do Outlook.com, seção POP e IMAP, com \"Permitir que dispositivos e aplicativos usem IMAP\" ativado",
+  "help.outlookImap.hint": "O Outlook.com por IMAP precisa que o IMAP esteja ativado nas configurações do Outlook.com.",
+  "errors.conn.problem.outlookImapOff": "O Outlook.com aceitou seu login, mas o IMAP está desativado para esta caixa de correio.",
+  "errors.conn.recovery.turnOnOutlookImap": "Ative o IMAP nas configurações do Outlook.com e tente novamente, ou conecte pelo Microsoft Graph."
 }

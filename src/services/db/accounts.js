@@ -333,7 +333,7 @@ export async function updateAccountNative(id, fields, { unset = [], expected } =
 // holds, hence the shell command) under the new transport's numbering, then
 // saves the account with `fields` (the new grant and transport) like
 // accounts.update.
-const SWITCH_ERRORS = ['errors.transportSwitchPending', 'errors.transportSwitchBackupUnavailable'];
+const SWITCH_ERRORS = ['errors.transportSwitchPending', 'errors.transportSwitchBackupUnavailable', 'errors.transportSwitchImapRefused', 'errors.bulkIdentityChanged'];
 export async function switchAccountTransport(id, transport, fields, { unset = [], expected } = {}) {
   await initBasic();
   try {

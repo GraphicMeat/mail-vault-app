@@ -620,6 +620,9 @@ impl OAuth2Manager {
             .as_str()
             .ok_or("No access_token in response")?
             .to_string();
+        // What the provider granted, not what was asked: a sign-in that later
+        // fails over IMAP or Graph is a missing scope or a server refusal.
+        info!("[OAuth2] Granted scopes ({}): {}", provider_name, data["scope"].as_str().unwrap_or("(none listed)"));
         let refresh_token = data["refresh_token"].as_str().map(|s| s.to_string());
         let email = data["id_token"].as_str().and_then(id_token_email);
         let expires_in = data["expires_in"].as_u64().unwrap_or(3600);

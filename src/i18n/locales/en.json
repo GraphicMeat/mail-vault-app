@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "Couldn't save it on this device",
   "mobile.attachment.error.internal": "Something went wrong",
   "mobile.attachment.error.noApp": "No app on this device opens this file",
-  "mobile.attachment.error.openFailed": "Couldn't open it"
+  "mobile.attachment.error.openFailed": "Couldn't open it",
+  "errors.transportSwitchImapRefused": "Microsoft's IMAP server refused this account, so nothing was changed and it stays on Microsoft Graph.",
+  "help.outlookImap.title": "Turn on IMAP in Outlook.com",
+  "help.outlookImap.steps": "Microsoft accepted your sign-in, but Outlook.com does not open this mailbox over IMAP until IMAP is turned on. In Outlook on the web, go to Settings > Mail > Forwarding and IMAP, turn on \"Let devices and apps use IMAP\", select Save, then try again here.",
+  "help.outlookImap.open": "Open Outlook settings",
+  "help.outlookImap.faq": "How to turn on IMAP",
+  "help.outlookImap.imageAlt": "Outlook.com settings, POP and IMAP section, with \"Let devices and apps use IMAP\" turned on",
+  "help.outlookImap.hint": "Outlook.com over IMAP needs IMAP turned on in your Outlook.com settings.",
+  "errors.conn.problem.outlookImapOff": "Outlook.com accepted your sign-in but has IMAP turned off for this mailbox.",
+  "errors.conn.recovery.turnOnOutlookImap": "Turn on IMAP in your Outlook.com settings, then try again, or connect over Microsoft Graph."
 }

@@ -46,6 +46,8 @@ use tracing::{info, warn};
 const PENDING: &str = "errors.transportSwitchPending";
 /// Not a Microsoft OAuth account, or no such transport.
 const INVALID: &str = "errors.accountsInvalid";
+/// Microsoft's IMAP server refused the new grant or the folder listing.
+const IMAP_REFUSED: &str = "errors.transportSwitchImapRefused";
 
 /// One vault folder's server listing: its UIDVALIDITY and normalized
 /// Message-ID -> uid.
@@ -107,7 +109,7 @@ async fn switch(state: &Arc<DaemonState>, params: &Value) -> Result<Value, Strin
         }
         let config = crate::credentials::config_from_record(&target).map_err(|_| INVALID.to_owned())?;
         let dirs = vault_dirs(state, &account_id)?;
-        Some(list_server(state, &config, &dirs).await?)
+        Some(list_server(state, &config, &dirs).await.map_err(|e| listing_failed(&account_id, e))?)
     } else {
         None
     };
@@ -146,6 +148,15 @@ async fn switch(state: &Arc<DaemonState>, params: &Value) -> Result<Value, Strin
     };
     info!("[transport] {account_id} now over {transport}: {first:?}, then {second:?}");
     Ok(json!({"account": reply.result.and_then(|r| r.get("account").cloned()), "retired": first}))
+}
+
+/// A switch to IMAP whose server listing failed: nothing changed yet. The
+/// server's own reply goes to the log (a refused XOAUTH2 sign-in and
+/// Outlook.com's "authenticated but not connected" read the same to the
+/// user); a catalog key the listing already chose is kept.
+fn listing_failed(account_id: &str, error: String) -> String {
+    warn!("[transport] {account_id}: listing the server over IMAP failed, the account kept its transport: {error}");
+    if error.starts_with("errors.") { error } else { IMAP_REFUSED.into() }
 }
 
 /// Whether the op journal owes anything for the account.
@@ -431,6 +442,14 @@ mod tests {
         assert_eq!(imap_folder_for("Sent", &paths).map(String::as_str), Some("Sent"));
         assert_eq!(imap_folder_for("Projekt_Nystart", &paths).map(String::as_str), Some("Projekt Nystart"));
         assert_eq!(imap_folder_for("Trash", &paths), None, "Graph's Trash is not Outlook's Deleted by name");
+    }
+
+    #[test]
+    fn a_failed_imap_listing_reads_as_an_imap_refusal_and_keeps_catalog_keys() {
+        let refused = "XOAUTH2 auth failed for me@outlook.com: no response: code: None, info: Some(\"AUTHENTICATE failed.\")";
+        assert_eq!(listing_failed("acc", refused.to_owned()), IMAP_REFUSED);
+        assert_eq!(listing_failed("acc", "BAD User is authenticated but not connected.".to_owned()), IMAP_REFUSED);
+        assert_eq!(listing_failed("acc", "errors.bulkIdentityChanged".to_owned()), "errors.bulkIdentityChanged");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -47,6 +47,10 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { OutlookImapHelp } from '../OutlookImapHelp';
+
+// The daemon's answer when Outlook.com will not serve the mailbox over IMAP.
+const IMAP_REFUSED = 'errors.transportSwitchImapRefused';
 import { Private } from '../privacy/Private';
 import { usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
 
@@ -93,6 +97,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     setAccountHidden,
     isAccountHidden,
     openChangeServer,
+    transportRefusals,
+    setTransportRefusal,
   } = useSettingsStore();
 
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId || accounts[0]?.id || null);
@@ -444,6 +450,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
         expected: accountExpectedContext(account, 'oauth'),
       });
       setTransportPick(null);
+      setTransportRefusal(account.id, null);
       await useMailStore.getState().init();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -451,6 +458,9 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
       console.error('Transport switch failed:', error);
       const key = error?.message;
       setTransportError(typeof key === 'string' && key.startsWith('errors.') ? t(key) : String(key || error));
+      // Outlook refusing IMAP outlives this screen: the help stays for the
+      // account until IMAP is on and a switch goes through.
+      if (key === IMAP_REFUSED) setTransportRefusal(account.id, key);
     } finally {
       setTransportSwitching(false);
     }
@@ -722,6 +732,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                   {/* Microsoft Graph or IMAP, switched in place */}
                   {isMicrosoftOAuth && (() => {
                     const current = selectedAccount.oauth2Transport === 'graph' ? 'graph' : 'imap';
+                    const refusal = transportRefusals?.[selectedAccount.id];
                     const pick = transportPick ?? current;
                     const name = key => t(key === 'graph' ? 'account.msTransportGraph' : 'account.msTransportImap');
                     return (
@@ -753,7 +764,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                             </button>
                           </div>
                         </div>
-                        {transportError && <p role="alert" className="text-xs text-mail-danger">{transportError}</p>}
+                        {(transportError || refusal) && <p role="alert" className="text-xs text-mail-danger">{transportError || t(refusal)}</p>}
+                        {refusal === IMAP_REFUSED && <OutlookImapHelp />}
                         <p className="text-xs text-mail-text-muted">{t('settings.accounts.transportExplain')}</p>
                       </div>
                     );

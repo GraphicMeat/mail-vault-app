@@ -9,6 +9,7 @@ import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 import { describeConnectionError } from '../utils/connectionError';
+import { OutlookImapHelp, OutlookImapHint } from './OutlookImapHelp';
 import { formatCount } from '../utils/formatCount';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { Private } from './privacy/Private';
@@ -920,6 +921,7 @@ export function AccountModal({ onClose, onSuccess }) {
                           <option value="imap">{t('account.msTransportImap')}</option>
                         </select>
                       </label>
+                      {msTransport === 'imap' && <div className="mb-2"><OutlookImapHint /></div>}
                       <button
                         type="button"
                         onClick={() => setShowAdvanced(!showAdvanced)}
@@ -1218,6 +1220,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   </div>
                 </motion.div>
               )}
+              {error?.outlookImap && <OutlookImapHelp />}
 
               {/* Success Message */}
               {success && (

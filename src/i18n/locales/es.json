@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "No se pudo guardar en este dispositivo",
   "mobile.attachment.error.internal": "Algo salió mal",
   "mobile.attachment.error.noApp": "Ninguna app de este dispositivo abre este archivo",
-  "mobile.attachment.error.openFailed": "No se pudo abrir"
+  "mobile.attachment.error.openFailed": "No se pudo abrir",
+  "errors.transportSwitchImapRefused": "El servidor IMAP de Microsoft rechazó esta cuenta, así que no se cambió nada y sigue en Microsoft Graph.",
+  "help.outlookImap.title": "Activa IMAP en Outlook.com",
+  "help.outlookImap.steps": "Microsoft aceptó tu inicio de sesión, pero Outlook.com no abre este buzón por IMAP hasta que IMAP esté activado. En Outlook en la web, ve a Configuración > Correo > Reenvío e IMAP, activa «Permitir que los dispositivos y las aplicaciones usen IMAP», selecciona Guardar y vuelve a intentarlo aquí.",
+  "help.outlookImap.open": "Abrir la configuración de Outlook",
+  "help.outlookImap.faq": "Cómo activar IMAP",
+  "help.outlookImap.imageAlt": "Configuración de Outlook.com, sección POP e IMAP, con «Permitir que los dispositivos y las aplicaciones usen IMAP» activado",
+  "help.outlookImap.hint": "Outlook.com por IMAP necesita que IMAP esté activado en la configuración de Outlook.com.",
+  "errors.conn.problem.outlookImapOff": "Outlook.com aceptó tu inicio de sesión, pero IMAP está desactivado para este buzón.",
+  "errors.conn.recovery.turnOnOutlookImap": "Activa IMAP en la configuración de Outlook.com y vuelve a intentarlo, o conéctate mediante Microsoft Graph."
 }

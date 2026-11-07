@@ -175,3 +175,26 @@ describe('describeConnectionError on a JMAP account', () => {
     expect(message).toBe(t('errors.conn.couldConnectMailServerCheck'));
   });
 });
+
+// Outlook.com accepts the Microsoft sign-in, then refuses the mailbox while
+// "Let devices and apps use IMAP" is off. That is not a wrong password.
+describe('describeConnectionError: Outlook.com with IMAP turned off', () => {
+  const RAW_OFF = 'XOAUTH2 auth failed for me@outlook.com: no response: code: None, info: Some("User is authenticated but not connected.")';
+
+  it('says to turn IMAP on, not to check the password, and flags the Outlook help', () => {
+    const got = describeConnectionError(RAW_OFF);
+    expect(got.message).toBe(`${t('errors.conn.problem.outlookImapOff')} ${t('errors.conn.recovery.turnOnOutlookImap')}`);
+    expect(got.outlookImap).toBe(true);
+    expect(got.detail).toBe(RAW_OFF);
+  });
+
+  it('the daemon\'s imap_disabled code reads the same, raw text or not', () => {
+    const got = describeConnectionError(Object.assign(new Error('errors.conn.couldReachMailServerCheck'), { errorCode: 'imap_disabled' }));
+    expect(got.message).toBe(`${t('errors.conn.problem.outlookImapOff')} ${t('errors.conn.recovery.turnOnOutlookImap')}`);
+    expect(got.outlookImap).toBe(true);
+  });
+
+  it('a wrong password is not flagged', () => {
+    expect(describeConnectionError(RAW.auth).outlookImap).toBeUndefined();
+  });
+});

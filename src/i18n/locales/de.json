@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "Konnte nicht auf diesem Gerät gespeichert werden",
   "mobile.attachment.error.internal": "Etwas ist schiefgelaufen",
   "mobile.attachment.error.noApp": "Keine App auf diesem Gerät öffnet diese Datei",
-  "mobile.attachment.error.openFailed": "Konnte nicht geöffnet werden"
+  "mobile.attachment.error.openFailed": "Konnte nicht geöffnet werden",
+  "errors.transportSwitchImapRefused": "Der IMAP-Server von Microsoft hat dieses Konto abgelehnt. Es wurde nichts geändert, das Konto bleibt bei Microsoft Graph.",
+  "help.outlookImap.title": "IMAP in Outlook.com aktivieren",
+  "help.outlookImap.steps": "Microsoft hat deine Anmeldung akzeptiert, aber Outlook.com öffnet dieses Postfach erst über IMAP, wenn IMAP aktiviert ist. Gehe in Outlook im Web zu Einstellungen > E-Mail > Weiterleitung und IMAP, aktiviere „Geräten und Apps die Verwendung von IMAP erlauben“, wähle Speichern und versuche es dann hier erneut.",
+  "help.outlookImap.open": "Outlook-Einstellungen öffnen",
+  "help.outlookImap.faq": "So aktivierst du IMAP",
+  "help.outlookImap.imageAlt": "Outlook.com-Einstellungen, Abschnitt POP und IMAP, mit aktiviertem „Geräten und Apps die Verwendung von IMAP erlauben“",
+  "help.outlookImap.hint": "Outlook.com über IMAP setzt voraus, dass IMAP in deinen Outlook.com-Einstellungen aktiviert ist.",
+  "errors.conn.problem.outlookImapOff": "Outlook.com hat deine Anmeldung akzeptiert, aber IMAP ist für dieses Postfach deaktiviert.",
+  "errors.conn.recovery.turnOnOutlookImap": "Aktiviere IMAP in deinen Outlook.com-Einstellungen und versuche es erneut, oder verbinde über Microsoft Graph."
 }

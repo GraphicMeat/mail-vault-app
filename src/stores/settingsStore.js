@@ -468,6 +468,9 @@ export const useSettingsStore = create(
 
       // Hidden accounts { [accountId]: true } — hidden accounts don't sync and are invisible in sidebar
       hiddenAccounts: {},
+      // Microsoft account id -> the catalog key of the last Graph/IMAP switch
+      // the daemon refused, until a switch goes through (Settings shows its help).
+      transportRefusals: {},
       // Accounts switched off on the Notes to Self board { [accountId]: true }.
       // The off set, so an account added later starts on.
       notesHiddenAccounts: {},
@@ -1162,6 +1165,10 @@ export const useSettingsStore = create(
         });
       },
       isAccountHidden: (accountId) => !!get().hiddenAccounts[accountId],
+      setTransportRefusal: (accountId, key) => set(state => {
+        const { [accountId]: _, ...rest } = state.transportRefusals || {};
+        return { transportRefusals: key ? { ...rest, [accountId]: key } : rest };
+      }),
       toggleNotesAccount: (accountId) => set(state => {
         const { [accountId]: off, ...rest } = state.notesHiddenAccounts || {};
         return { notesHiddenAccounts: off ? rest : { ...rest, [accountId]: true } };
@@ -1579,6 +1586,7 @@ export const useSettingsStore = create(
           customCategories: [],
           accountOrder: [],
           hiddenAccounts: {},
+          transportRefusals: {},
           notesHiddenAccounts: {},
           lastMailboxPerAccount: {},
           signatures: {},

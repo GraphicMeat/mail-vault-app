@@ -16,6 +16,16 @@ import { jmapErrorKey } from './jmapErrors.js';
 // an IMAP refusal often carries both a status word and a socket error.
 
 const RULES = () => ([
+  // Before the password rule: the reply rides on "XOAUTH2 auth failed", yet
+  // the sign-in succeeded and Outlook.com only refuses the mailbox while
+  // "Let devices and apps use IMAP" is off. `outlookImap` asks the form for
+  // the steps.
+  {
+    match: (s) => s.includes('authenticated but not connected'),
+    problemKey: 'errors.conn.problem.outlookImapOff',
+    recoveryKey: 'errors.conn.recovery.turnOnOutlookImap',
+    flags: { outlookImap: true },
+  },
   {
     match: (s) => s.includes('authenticationfailed') || s.includes('invalid credentials')
       || s.includes('login failed') || (s.includes('auth') && s.includes('fail')),
@@ -82,6 +92,11 @@ const BY_CODE = {
   auth: {
     problemKey: 'errors.conn.problem.serverRejectedEmailAddressPassword',
     recoveryKey: 'errors.conn.recovery.checkBothTyposIfProvider',
+  },
+  imap_disabled: {
+    problemKey: 'errors.conn.problem.outlookImapOff',
+    recoveryKey: 'errors.conn.recovery.turnOnOutlookImap',
+    flags: { outlookImap: true },
   },
   throttled: {
     problemKey: 'errors.conn.problem.providerThrottling',
@@ -150,7 +165,7 @@ export function describeConnectionError(err) {
   if (byCode) {
     const rule = err.errorCode === 'blocked_or_timeout' && !err.host ? BLOCKED_NO_HOST : byCode;
     const vars = { host: err.host, port: err.port };
-    return { message: `${t(rule.problemKey, vars)} ${t(rule.recoveryKey, vars)}`, detail: raw || null };
+    return { message: `${t(rule.problemKey, vars)} ${t(rule.recoveryKey, vars)}`, detail: raw || null, ...rule.flags };
   }
 
   if (!raw) {
@@ -160,7 +175,7 @@ export function describeConnectionError(err) {
   const lower = raw.toLowerCase();
   const rule = RULES().find(r => r.match(lower));
   if (rule) {
-    return { message: `${t(rule.problemKey)} ${t(rule.recoveryKey)}`, detail: raw };
+    return { message: `${t(rule.problemKey)} ${t(rule.recoveryKey)}`, detail: raw, ...rule.flags };
   }
 
   // Nothing matched. Still lead with what the user can do, and keep the raw

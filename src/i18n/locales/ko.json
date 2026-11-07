@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "이 기기에 저장할 수 없습니다",
   "mobile.attachment.error.internal": "문제가 발생했습니다",
   "mobile.attachment.error.noApp": "이 파일을 열 수 있는 앱이 없습니다",
-  "mobile.attachment.error.openFailed": "열 수 없습니다"
+  "mobile.attachment.error.openFailed": "열 수 없습니다",
+  "errors.transportSwitchImapRefused": "Microsoft IMAP 서버가 이 계정을 거부하여 아무것도 변경되지 않았으며 Microsoft Graph로 계속 연결됩니다.",
+  "help.outlookImap.title": "Outlook.com에서 IMAP 켜기",
+  "help.outlookImap.steps": "Microsoft가 로그인을 수락했지만, IMAP을 켜기 전까지 Outlook.com은 이 사서함을 IMAP으로 열지 않습니다. 웹용 Outlook에서 설정 > 메일 > 전달 및 IMAP으로 이동해 \"디바이스 및 앱에서 IMAP 사용 허용\"을 켜고 저장을 선택한 다음 여기에서 다시 시도하세요.",
+  "help.outlookImap.open": "Outlook 설정 열기",
+  "help.outlookImap.faq": "IMAP 켜는 방법",
+  "help.outlookImap.imageAlt": "Outlook.com 설정의 POP 및 IMAP 섹션에서 \"디바이스 및 앱에서 IMAP 사용 허용\"이 켜진 화면",
+  "help.outlookImap.hint": "Outlook.com을 IMAP으로 사용하려면 Outlook.com 설정에서 IMAP을 켜야 합니다.",
+  "errors.conn.problem.outlookImapOff": "Outlook.com이 로그인을 수락했지만 이 사서함은 IMAP이 꺼져 있습니다.",
+  "errors.conn.recovery.turnOnOutlookImap": "Outlook.com 설정에서 IMAP을 켠 뒤 다시 시도하거나 Microsoft Graph로 연결하세요."
 }

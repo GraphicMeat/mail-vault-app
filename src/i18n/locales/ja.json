@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "このデバイスに保存できませんでした",
   "mobile.attachment.error.internal": "問題が発生しました",
   "mobile.attachment.error.noApp": "このファイルを開けるアプリがありません",
-  "mobile.attachment.error.openFailed": "開けませんでした"
+  "mobile.attachment.error.openFailed": "開けませんでした",
+  "errors.transportSwitchImapRefused": "Microsoft の IMAP サーバーがこのアカウントを拒否したため、何も変更されず Microsoft Graph のままです。",
+  "help.outlookImap.title": "Outlook.com で IMAP を有効にする",
+  "help.outlookImap.steps": "Microsoft はサインインを受け付けましたが、IMAP を有効にするまで Outlook.com はこのメールボックスを IMAP で開きません。Outlook on the web で [設定] > [メール] > [転送と IMAP] を開き、「デバイスとアプリで IMAP を使用できるようにする」をオンにして [保存] を選び、ここでもう一度お試しください。",
+  "help.outlookImap.open": "Outlook の設定を開く",
+  "help.outlookImap.faq": "IMAP を有効にする方法",
+  "help.outlookImap.imageAlt": "Outlook.com の設定の [POP と IMAP] セクションで「デバイスとアプリで IMAP を使用できるようにする」がオンになっている画面",
+  "help.outlookImap.hint": "Outlook.com を IMAP で使うには、Outlook.com の設定で IMAP を有効にする必要があります。",
+  "errors.conn.problem.outlookImapOff": "Outlook.com はサインインを受け付けましたが、このメールボックスでは IMAP がオフになっています。",
+  "errors.conn.recovery.turnOnOutlookImap": "Outlook.com の設定で IMAP を有効にしてからもう一度お試しいただくか、Microsoft Graph で接続してください。"
 }

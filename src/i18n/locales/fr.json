@@ -4290,5 +4290,14 @@
   "mobile.attachment.error.storage": "Impossible de l'enregistrer sur cet appareil",
   "mobile.attachment.error.internal": "Une erreur s'est produite",
   "mobile.attachment.error.noApp": "Aucune app de cet appareil n'ouvre ce fichier",
-  "mobile.attachment.error.openFailed": "Impossible de l'ouvrir"
+  "mobile.attachment.error.openFailed": "Impossible de l'ouvrir",
+  "errors.transportSwitchImapRefused": "Le serveur IMAP de Microsoft a refusé ce compte : rien n'a été modifié et il reste sur Microsoft Graph.",
+  "help.outlookImap.title": "Activez IMAP dans Outlook.com",
+  "help.outlookImap.steps": "Microsoft a accepté votre connexion, mais Outlook.com n’ouvre pas cette boîte aux lettres en IMAP tant qu’IMAP n’est pas activé. Dans Outlook sur le web, allez dans Paramètres > Courrier > Transfert et IMAP, activez « Autoriser les appareils et applications à utiliser IMAP », sélectionnez Enregistrer, puis réessayez ici.",
+  "help.outlookImap.open": "Ouvrir les paramètres Outlook",
+  "help.outlookImap.faq": "Comment activer IMAP",
+  "help.outlookImap.imageAlt": "Paramètres Outlook.com, section POP et IMAP, avec « Autoriser les appareils et applications à utiliser IMAP » activé",
+  "help.outlookImap.hint": "Outlook.com en IMAP nécessite qu’IMAP soit activé dans vos paramètres Outlook.com.",
+  "errors.conn.problem.outlookImapOff": "Outlook.com a accepté votre connexion, mais IMAP est désactivé pour cette boîte aux lettres.",
+  "errors.conn.recovery.turnOnOutlookImap": "Activez IMAP dans vos paramètres Outlook.com puis réessayez, ou connectez-vous via Microsoft Graph."
 }

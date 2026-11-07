@@ -66,6 +66,7 @@ vi.mock('../../services/graphConfig', () => ({
 }));
 
 const { AccountModal } = await import('../AccountModal');
+const { t } = await import('../../i18n');
 
 const TYPED_EMAIL = 'user@gmail.com';
 
@@ -502,5 +503,62 @@ describe('AccountModal: choosing Graph or IMAP for a Microsoft account', () => {
     expect(mockIsPersonalMicrosoftAccount).not.toHaveBeenCalled();
     expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(true);
     expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('graph');
+  });
+});
+
+// Outlook.com over IMAP needs IMAP turned on in Outlook.com. Picking IMAP
+// links the FAQ; a sign-in Outlook then refuses for that reason shows the
+// steps instead of "check your password".
+describe('AccountModal: Outlook.com over IMAP needs IMAP turned on', () => {
+  const OFF = 'XOAUTH2 auth failed for someone@outlook.com: no response: code: None, info: Some("User is authenticated but not connected.")';
+
+  beforeEach(() => {
+    mockAddAccount.mockReset().mockResolvedValue({ id: 'acct-9', email: 'x' });
+    mockGetOAuth2AuthUrl.mockReset().mockResolvedValue({ authUrl: 'https://login.microsoftonline.com/x', state: 'state-1' });
+    mockExchangeOAuth2Code.mockReset().mockResolvedValue({ accessToken: 'a', refreshToken: 'r', expiresAt: 1 });
+    vi.spyOn(window, 'open').mockImplementation(() => {});
+  });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+  async function pick(transport) {
+    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.click(screen.getByText('Outlook / Microsoft 365'));
+    const emailInput = await screen.findByLabelText('Email Address *');
+    fireEvent.change(emailInput, { target: { name: 'email', value: 'someone@outlook.com' } });
+    fireEvent.change(screen.getByLabelText('Connect over'), { target: { value: transport } });
+  }
+
+  it('IMAP picked: links the FAQ on turning IMAP on', async () => {
+    await pick('imap');
+    expect(screen.getByTestId('outlook-imap-hint').textContent).toContain(t('help.outlookImap.hint'));
+    expect(screen.getByRole('button', { name: t('help.outlookImap.faq') })).toBeTruthy();
+  });
+
+  it('Graph picked: no IMAP hint', async () => {
+    await pick('graph');
+    expect(screen.queryByTestId('outlook-imap-hint')).toBeNull();
+  });
+
+  it('Outlook refusing the mailbox shows the IMAP steps, not a password error', async () => {
+    mockAddAccount.mockRejectedValue(new Error(OFF));
+    await pick('imap');
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with Microsoft/i }));
+    expect(await screen.findByTestId('outlook-imap-help')).toBeTruthy();
+    expect(screen.queryByText(t('errors.conn.problem.serverRejectedEmailAddressPassword'), { exact: false })).toBeNull();
+  });
+
+  it('through the real add workflow: the daemon\'s imap_disabled code shows the IMAP steps', async () => {
+    nativeBoundary.accounts = []; nativeBoundary.calls = [];
+    nativeBoundary.reply = { ok: false, stage: 'probe', error: 'errors.conn.couldReachMailServerCheck', errorCode: 'imap_disabled', host: null, port: null };
+    vi.stubGlobal('crypto', { randomUUID: () => 'synthetic-modal-id' });
+    const keychain = await import('../../services/db/keychain.js'); keychain.__resetKeychainForTests();
+    const { addAccount } = await import('../../services/workflows/addAccount.js'); mockAddAccount.mockImplementation(addAccount);
+    mockExchangeOAuth2Code.mockResolvedValue({ accessToken: 'synthetic-at', refreshToken: 'synthetic-rt', expiresAt: 1234567890, clientId: 'synthetic-client' });
+    try {
+      await pick('imap');
+      fireEvent.click(screen.getByRole('button', { name: /Sign in with Microsoft/i }));
+      expect(await screen.findByTestId('outlook-imap-help')).toBeTruthy();
+      expect(nativeBoundary.accounts).toEqual([]);
+    } finally { nativeBoundary.reply = null; vi.unstubAllGlobals(); }
   });
 });
