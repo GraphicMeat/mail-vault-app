@@ -1,11 +1,14 @@
-//! IMAP password accounts: `mobile.accounts.{list,test,add,remove}`.
+//! Accounts: `mobile.accounts.{list,test,add,remove}` (IMAP password accounts so far) and
+//! [`AccountRow`], the one way the engine reads an account's settings.
 //!
-//! The password goes to the platform secret store and nowhere else: never into `mobile.db`, a reply,
-//! a log line or an error message (core's error strings carry the address, not the password, and
-//! [`scrub`] strips the password anyway before a message leaves this module).
+//! The secret goes to the platform secret store, as a [`Credential`] envelope, and nowhere else:
+//! never into `mobile.db`, a reply, a log line or an error message (core's error strings carry the
+//! address, not the password, and [`scrub`] strips the password anyway before a message leaves
+//! this module).
 
-use crate::db::Engine;
+use crate::db::{Engine, EngineError, Shared, PER_ACCOUNT_TABLES};
 use crate::rpc::{parse, RpcError};
+use crate::secrets::Credential;
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -86,6 +89,71 @@ fn failure(code: Code, message: impl Into<String>) -> Value {
     json!({ "ok": false, "code": code.as_str(), "message": message.into() })
 }
 
+/// What signing in to an account needs from its row. `auth` is `password`, `oauth2` or `bearer`;
+/// `security` and `smtp_security` are `ssl`, `starttls` or `none`.
+pub(crate) struct AccountRow {
+    pub(crate) email: String,
+    pub(crate) auth: String,
+    pub(crate) imap_host: String,
+    pub(crate) imap_port: u16,
+    pub(crate) security: String,
+    pub(crate) smtp_host: Option<String>,
+    pub(crate) smtp_port: Option<u16>,
+    pub(crate) smtp_security: Option<String>,
+}
+
+impl AccountRow {
+    /// A password account that has no row yet (the add form, `net::test_login`).
+    pub(crate) fn password(email: &str, imap_host: &str, imap_port: u16, security: &str) -> AccountRow {
+        AccountRow {
+            email: email.into(),
+            auth: "password".into(),
+            imap_host: imap_host.into(),
+            imap_port,
+            security: security.into(),
+            smtp_host: None,
+            smtp_port: None,
+            smtp_security: None,
+        }
+    }
+}
+
+/// Account `id`'s row, or `None` when there is no such account.
+pub(crate) fn load_account(shared: &Shared, id: &str) -> Result<Option<AccountRow>, EngineError> {
+    shared.read(|c| {
+        c.query_row(
+            "SELECT email, auth, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security FROM accounts WHERE id = ?1",
+            [id],
+            |r| {
+                Ok(AccountRow {
+                    email: r.get(0)?,
+                    auth: r.get(1)?,
+                    imap_host: r.get(2)?,
+                    imap_port: r.get::<_, i64>(3)? as u16,
+                    security: r.get(4)?,
+                    smtp_host: r.get(5)?,
+                    smtp_port: r.get::<_, Option<i64>>(6)?.map(|p| p as u16),
+                    smtp_security: r.get(7)?,
+                })
+            },
+        )
+        .optional()
+    })
+}
+
+impl Engine {
+    /// Every account id, oldest first. For the shell's one-time secret re-save at startup, which
+    /// must not go through [`Engine::rpc`]: the first RPC starts the journal replay, and replay
+    /// reads secrets.
+    pub fn account_ids(&self) -> Result<Vec<String>, EngineError> {
+        self.read(|c| {
+            let mut st = c.prepare_cached("SELECT id FROM accounts ORDER BY created_ms, id")?;
+            let ids = st.query_map([], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
+            Ok(ids)
+        })
+    }
+}
+
 struct Form {
     email: String,
     password: String,
@@ -155,7 +223,8 @@ impl Form {
 
     /// Signs in with the form's values. `Err` is the reply to send.
     fn test_login(&self) -> Result<u32, Value> {
-        crate::net::test_login(&self.imap_host, self.imap_port, &self.email, &self.password, &self.security).map_err(|e| {
+        let row = AccountRow::password(&self.email, &self.imap_host, self.imap_port, &self.security);
+        crate::net::login(&row, &Credential::from_password(&self.password)).map_err(|e| {
             let code = map_error(&e);
             let message = scrub(&e, &self.password);
             failure(code, message)
@@ -241,7 +310,8 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         return Ok(reply);
     }
     let id = new_account_id();
-    engine.secrets().set(&id, &form.password).map_err(|e| internal(scrub(&e, &form.password)))?;
+    let secret = Credential::from_password(&form.password).to_secret();
+    engine.secrets().set(&id, &secret).map_err(|e| internal(scrub(&scrub(&e, &secret), &form.password)))?;
     let display_name = form.display_name.as_deref().map(str::trim).filter(|d| !d.is_empty()).unwrap_or(&form.email).to_string();
     let inserted = engine.write(|c| {
         c.execute(
@@ -281,7 +351,7 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     let p: RemoveParams = parse(params)?;
     let existed = engine
         .write(|c| {
-            for t in ["pending_actions", "attachments", "bodies", "messages", "folders"] {
+            for t in PER_ACCOUNT_TABLES {
                 c.execute(&format!("DELETE FROM {t} WHERE account_id = ?1"), [&p.account_id])?;
             }
             Ok(c.execute("DELETE FROM accounts WHERE id = ?1", [&p.account_id])? > 0)

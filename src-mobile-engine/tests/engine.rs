@@ -53,7 +53,7 @@ fn open_seeded(dir: &std::path::Path, n: usize) -> Engine {
 }
 
 #[test]
-fn open_creates_schema_v2_in_wal() {
+fn open_creates_schema_v3_in_wal() {
     let tmp = tempfile::tempdir().unwrap();
     let _e = open(tmp.path()).unwrap();
     let path = tmp.path().join("mobile.db");
@@ -62,9 +62,9 @@ fn open_creates_schema_v2_in_wal() {
     let mode: String = c.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
     assert_eq!(mode, "wal");
-    assert_eq!(ver, 2);
+    assert_eq!(ver, 3);
     let pong = _e.rpc("mobile.ping", json!({})).unwrap();
-    assert_eq!(pong["schema"], 2);
+    assert_eq!(pong["schema"], 3);
     assert_eq!(pong["engine"], env!("CARGO_PKG_VERSION"));
     // The page enables its test hooks (`?ui=viewer`, the network probe) only on a perf-gate build.
     assert_eq!(pong["perfGate"], cfg!(feature = "perf-gate"));
@@ -133,8 +133,207 @@ fn corrupt_page_after_valid_header_is_rebuilt() {
     assert_eq!(page(&e, Value::Null, 10)["total"], 0);
 }
 
+/// Every table of schema 3.
+const V3_TABLES: [&str; 13] = [
+    "accounts",
+    "folders",
+    "messages",
+    "bodies",
+    "attachments",
+    "pending_actions",
+    "remote_ids",
+    "uid_seq",
+    "outbox",
+    "drafts",
+    "settings",
+    "notify_state",
+    "sync_state",
+];
+
+/// Schema 2 exactly as Plan 2 shipped it: the fixture for the forward step.
+const SHIPPED_V2: &str = "
+CREATE TABLE accounts (
+  id           TEXT PRIMARY KEY,
+  email        TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  imap_host    TEXT NOT NULL,
+  imap_port    INTEGER NOT NULL,
+  security     TEXT NOT NULL,
+  created_ms   INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE UNIQUE INDEX accounts_by_email ON accounts (email COLLATE NOCASE);
+CREATE TABLE folders (
+  account_id  TEXT NOT NULL,
+  path        TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  special_use TEXT,
+  delimiter   TEXT,
+  noselect    INTEGER NOT NULL DEFAULT 0,
+  uid_validity INTEGER,
+  uid_next    INTEGER,
+  unseen      INTEGER NOT NULL DEFAULT 0,
+  total       INTEGER NOT NULL DEFAULT 0,
+  synced_ms   INTEGER,
+  PRIMARY KEY (account_id, path)
+) WITHOUT ROWID;
+CREATE TABLE messages (
+  account_id      TEXT NOT NULL,
+  folder          TEXT NOT NULL,
+  uid             INTEGER NOT NULL,
+  subject         TEXT NOT NULL,
+  from_name       TEXT NOT NULL,
+  from_address    TEXT NOT NULL,
+  date_ms         INTEGER NOT NULL,
+  snippet         TEXT NOT NULL,
+  seen            INTEGER NOT NULL,
+  flagged         INTEGER NOT NULL,
+  has_attachments INTEGER NOT NULL,
+  message_id      TEXT NOT NULL DEFAULT '',
+  to_json         TEXT NOT NULL DEFAULT '[]',
+  size            INTEGER NOT NULL DEFAULT 0,
+  local_seen      INTEGER,
+  local_flagged   INTEGER,
+  local_deleted   INTEGER,
+  list_gen        INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, folder, uid)
+) WITHOUT ROWID;
+CREATE INDEX messages_by_date ON messages (account_id, folder, date_ms DESC, uid DESC);
+CREATE TABLE bodies (
+  account_id     TEXT NOT NULL,
+  folder         TEXT NOT NULL,
+  uid            INTEGER NOT NULL,
+  html           TEXT,
+  text           TEXT,
+  parts_json     TEXT,
+  bytes          INTEGER NOT NULL DEFAULT 0,
+  last_access_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, folder, uid)
+) WITHOUT ROWID;
+CREATE TABLE attachments (
+  account_id TEXT NOT NULL,
+  folder     TEXT NOT NULL,
+  uid        INTEGER NOT NULL,
+  section    TEXT NOT NULL,
+  filename   TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  size       INTEGER NOT NULL DEFAULT 0,
+  content_id TEXT,
+  encoding   TEXT,
+  PRIMARY KEY (account_id, folder, uid, section)
+) WITHOUT ROWID;
+CREATE TABLE pending_actions (
+  seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id TEXT NOT NULL,
+  folder     TEXT NOT NULL,
+  uids_json  TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  arg        TEXT,
+  state      TEXT NOT NULL DEFAULT 'queued',
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_ms INTEGER NOT NULL
+);
+";
+
+/// `(table, column, type, notnull, default)` for every table, sorted: what two files must share to
+/// have the same schema.
+fn columns(c: &Connection) -> Vec<(String, String, String, bool, Option<String>)> {
+    let mut out = Vec::new();
+    for t in V3_TABLES {
+        let mut st = c.prepare(&format!("PRAGMA table_info({t})")).unwrap();
+        let rows = st
+            .query_map([], |r| Ok((t.to_string(), r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, bool>(3)?, r.get::<_, Option<String>>(4)?)))
+            .unwrap();
+        out.extend(rows.map(Result::unwrap));
+    }
+    out.sort();
+    out
+}
+
 #[test]
-fn v1_file_is_rebuilt_as_v2() {
+fn a_v2_file_migrates_to_v3_and_keeps_its_accounts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("mobile.db");
+    {
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch("PRAGMA journal_mode = WAL;").unwrap();
+        c.execute_batch(SHIPPED_V2).unwrap();
+        c.execute_batch(
+            "INSERT INTO accounts VALUES ('acc_0123456789abcdef','u@example.test','U','imap.example.test',993,'ssl',1);
+             INSERT INTO messages (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments)
+               VALUES ('acc_0123456789abcdef','INBOX',7,'kept','n','n@example.test',1,'',0,0,0);
+             INSERT INTO pending_actions (account_id, folder, uids_json, kind, created_ms)
+               VALUES ('acc_0123456789abcdef','INBOX','[7]','seen',1);
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+    }
+    let e = open(tmp.path()).unwrap();
+    let c = Connection::open(&path).unwrap();
+    let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+    assert_eq!(ver, 3);
+    let row: (String, String, String, String, i64, Option<String>, Option<String>) = c
+        .query_row(
+            "SELECT id, email, kind, auth, needs_auth, provider, smtp_host FROM accounts",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+        )
+        .unwrap();
+    assert_eq!(row, ("acc_0123456789abcdef".into(), "u@example.test".into(), "imap".into(), "password".into(), 0, None, None));
+    assert_eq!(e.account_ids().unwrap(), vec!["acc_0123456789abcdef".to_string()]);
+    let list = e.rpc("mobile.accounts.list", json!({})).unwrap();
+    assert_eq!(list["accounts"].as_array().unwrap().len(), 1, "{list}");
+    // The step is forward only: the mail cache and the journal survive it too.
+    let p = e
+        .rpc("mobile.messages.page", json!({ "accountId": "acc_0123456789abcdef", "folder": "INBOX", "cursor": null, "limit": 10 }))
+        .unwrap();
+    assert_eq!(p["total"], 1);
+    let journal: i64 = c.query_row("SELECT count(*) FROM pending_actions", [], |r| r.get(0)).unwrap();
+    assert_eq!(journal, 1);
+    for t in ["remote_ids", "uid_seq", "outbox", "drafts", "settings", "notify_state", "sync_state"] {
+        let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "{t}");
+    }
+    // A migrated file and a new one have the same tables and columns.
+    let fresh = tempfile::tempdir().unwrap();
+    drop(open(fresh.path()).unwrap());
+    let f = Connection::open(fresh.path().join("mobile.db")).unwrap();
+    assert_eq!(columns(&c), columns(&f));
+}
+
+#[test]
+fn outbox_state_is_checked() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _e = open(tmp.path()).unwrap();
+    let c = Connection::open(tmp.path().join("mobile.db")).unwrap();
+    let insert = |id: &str, state: &str| {
+        c.execute(
+            "INSERT INTO outbox (id, account_id, draft_json, state, created_ms, updated_ms) VALUES (?1, 'a', '{}', ?2, 1, 1)",
+            (id, state),
+        )
+    };
+    for (i, s) in ["queued", "sending", "sent", "failed", "uncertain"].iter().enumerate() {
+        insert(&format!("o{i}"), s).unwrap();
+    }
+    assert!(insert("bad", "lost").is_err());
+}
+
+#[test]
+fn settings_round_trip_and_survive_reopen() {
+    let tmp = tempfile::tempdir().unwrap();
+    {
+        let e = open(tmp.path()).unwrap();
+        assert_eq!(e.setting("secrets.policy").unwrap(), None);
+        e.set_setting("secrets.policy", "afu1").unwrap();
+        e.set_setting("secrets.policy", "afu1").unwrap();
+        assert_eq!(e.setting("secrets.policy").unwrap().as_deref(), Some("afu1"));
+    }
+    let e = open(tmp.path()).unwrap();
+    assert_eq!(e.setting("secrets.policy").unwrap().as_deref(), Some("afu1"));
+}
+
+#[test]
+fn a_v1_file_is_still_dropped_and_rebuilt() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("mobile.db");
     {
@@ -154,16 +353,16 @@ fn v1_file_is_rebuilt_as_v2() {
     let e = open(tmp.path()).unwrap();
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 2);
+    assert_eq!(ver, 3);
     assert_eq!(e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "cursor": null, "limit": 10 })).unwrap()["total"], 0);
-    for t in ["accounts", "folders", "messages", "bodies", "attachments", "pending_actions"] {
+    for t in V3_TABLES {
         let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "{t}");
     }
 }
 
 #[test]
-fn newer_schema_is_refused_and_kept() {
+fn a_v4_file_is_refused_untouched() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("mobile.db");
     {
@@ -171,11 +370,11 @@ fn newer_schema_is_refused_and_kept() {
     }
     {
         let c = Connection::open(&path).unwrap();
-        c.execute_batch("PRAGMA user_version = 3;").unwrap();
+        c.execute_batch("PRAGMA user_version = 4;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
     let err = open(tmp.path()).err().expect("must refuse");
-    assert_eq!(err, EngineError::NewerSchema { found: 3, supported: 2 });
+    assert_eq!(err, EngineError::NewerSchema { found: 4, supported: 3 });
     assert_eq!(std::fs::read(&path).unwrap(), before, "a newer file must not be touched");
 }
 
@@ -188,7 +387,7 @@ fn newer_schema_in_rollback_mode_is_not_switched_to_wal() {
         c.execute_batch("PRAGMA journal_mode = DELETE; PRAGMA user_version = 7;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
-    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 7, supported: 2 }));
+    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 7, supported: 3 }));
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
 

@@ -1,6 +1,7 @@
-//! `<dir>/mobile.db`: a cache of what the mobile list shows. It can always be rebuilt from the
-//! server, so unlike `app.db` a corrupt file is deleted and recreated. A file from a NEWER build is
-//! the opposite case: it is left byte-for-byte alone and `open` refuses.
+//! `<dir>/mobile.db`: the mail cache (rebuildable from the server) beside user data the server
+//! cannot give back (accounts, drafts, the outbox, settings). A corrupt file is still deleted and
+//! recreated, but from schema 3 on a version change is a forward step that keeps every table. A
+//! file from a NEWER build is left byte-for-byte alone and `open` refuses.
 //!
 //! One writer connection (writes go through `BEGIN IMMEDIATE`, as `app_db::in_txn` does) and a
 //! small pool of read-only connections, so a list read never queues behind a write. The sync
@@ -17,11 +18,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 const READERS: usize = 2;
 
-/// Schema 2. Version 1 was the list-only prototype and held nothing the server cannot give back,
-/// so a v1 file is dropped and rebuilt rather than migrated.
+/// Schema 2, frozen: a new file is built as schema 2 plus every forward step, so it cannot drift
+/// from a migrated one. Version 1 was the list-only prototype and held nothing the server cannot
+/// give back, so a v1 file is dropped and rebuilt rather than migrated.
 const SCHEMA_V2: &str = "
 CREATE TABLE accounts (
   id           TEXT PRIMARY KEY,
@@ -106,8 +108,99 @@ CREATE TABLE pending_actions (
 );
 ";
 
+/// Schema 2 to 3: the account model for more than IMAP passwords, and the per-account tables of
+/// Graph/JMAP ids, compose, notifications and delta sync. `kind` is `imap|graph|jmap`, `auth`
+/// `password|oauth2|bearer`, `provider` `google|microsoft` or NULL. `remote_ids` gives a Graph or
+/// JMAP message a local u32 uid (`uid_seq` hands them out); `sync_state.token` is a Graph delta
+/// link or a JMAP state string. The secret itself is never here (`crate::secrets`).
+const V2_TO_V3: &str = "
+ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'imap';
+ALTER TABLE accounts ADD COLUMN auth TEXT NOT NULL DEFAULT 'password';
+ALTER TABLE accounts ADD COLUMN provider TEXT;
+ALTER TABLE accounts ADD COLUMN smtp_host TEXT;
+ALTER TABLE accounts ADD COLUMN smtp_port INTEGER;
+ALTER TABLE accounts ADD COLUMN smtp_security TEXT;
+ALTER TABLE accounts ADD COLUMN jmap_url TEXT;
+ALTER TABLE accounts ADD COLUMN needs_auth INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE remote_ids (
+  account_id TEXT NOT NULL,
+  folder     TEXT NOT NULL,
+  uid        INTEGER NOT NULL,
+  remote_id  TEXT NOT NULL,
+  PRIMARY KEY (account_id, folder, uid),
+  UNIQUE (account_id, remote_id)
+) WITHOUT ROWID;
+CREATE TABLE uid_seq (
+  account_id TEXT PRIMARY KEY,
+  next       INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE outbox (
+  id         TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  message_id TEXT,
+  draft_json TEXT NOT NULL,
+  state      TEXT NOT NULL CHECK(state IN ('queued','sending','sent','failed','uncertain')),
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_ms INTEGER NOT NULL,
+  updated_ms INTEGER NOT NULL
+);
+CREATE TABLE drafts (
+  id         TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  json       TEXT NOT NULL,
+  updated_ms INTEGER NOT NULL
+);
+CREATE TABLE settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+) WITHOUT ROWID;
+CREATE TABLE notify_state (
+  account_id TEXT NOT NULL,
+  folder     TEXT NOT NULL,
+  last_uid   INTEGER NOT NULL,
+  PRIMARY KEY (account_id, folder)
+) WITHOUT ROWID;
+CREATE TABLE sync_state (
+  account_id TEXT NOT NULL,
+  folder     TEXT NOT NULL,
+  token      TEXT,
+  PRIMARY KEY (account_id, folder)
+) WITHOUT ROWID;
+";
+
 /// Every table any schema version created; a rebuild drops them all (their indexes go with them).
-const ALL_TABLES: &[&str] = &["pending_actions", "attachments", "bodies", "messages", "folders", "accounts"];
+const ALL_TABLES: &[&str] = &[
+    "sync_state",
+    "notify_state",
+    "settings",
+    "drafts",
+    "outbox",
+    "uid_seq",
+    "remote_ids",
+    "pending_actions",
+    "attachments",
+    "bodies",
+    "messages",
+    "folders",
+    "accounts",
+];
+
+/// The tables that hold one account's rows, keyed by `account_id`; removing the account empties
+/// them. `accounts` (keyed by `id`) and `settings` (global) are not in it.
+pub(crate) const PER_ACCOUNT_TABLES: &[&str] = &[
+    "pending_actions",
+    "attachments",
+    "bodies",
+    "messages",
+    "folders",
+    "remote_ids",
+    "uid_seq",
+    "outbox",
+    "drafts",
+    "notify_state",
+    "sync_state",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineError {
@@ -236,12 +329,19 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
     }
     w.execute_batch("PRAGMA synchronous = NORMAL;")?;
     if found < SCHEMA_VERSION {
-        // New file or an older prototype schema: one transaction, so a crash leaves the old file.
+        // One transaction for every step, so a crash leaves the old file. A new file (version 0)
+        // or the v1 prototype is rebuilt from schema 2; from 2 on each step goes forward and keeps
+        // what the tables hold.
         let tx = Transaction::new_unchecked(&w, TransactionBehavior::Immediate)?;
-        for t in ALL_TABLES {
-            tx.execute_batch(&format!("DROP TABLE IF EXISTS {t};"))?;
+        if found < 2 {
+            for t in ALL_TABLES {
+                tx.execute_batch(&format!("DROP TABLE IF EXISTS {t};"))?;
+            }
+            tx.execute_batch(SCHEMA_V2)?;
         }
-        tx.execute_batch(SCHEMA_V2)?;
+        if found < 3 {
+            tx.execute_batch(V2_TO_V3)?;
+        }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;
     }
@@ -382,6 +482,26 @@ impl Engine {
     #[doc(hidden)]
     pub fn set_action_backoff(&self, base: std::time::Duration, cap: std::time::Duration) {
         self.replay.set_backoff(base, cap);
+    }
+
+    /// The `settings` value under `key`, `None` when unset. Never a secret.
+    pub fn setting(&self, key: &str) -> Result<Option<String>, EngineError> {
+        self.read(|c| {
+            c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get::<_, Option<String>>(0))
+                .optional()
+                .map(Option::flatten)
+        })
+    }
+
+    /// Stores `value` under `key`, replacing what was there. Never a secret.
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), EngineError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [key, value],
+            )?;
+            Ok(())
+        })
     }
 
     /// Writes one line to the installed sink, or to stderr when none is set.

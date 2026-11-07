@@ -245,6 +245,25 @@ fn seed_for_perf_gate(engine: &Engine) {
 #[cfg(not(feature = "perf-gate"))]
 fn seed_for_perf_gate(_: &Engine) {}
 
+/// Once per install: re-saves every account's secret under the iOS access policy (see
+/// `secrets.rs`), recorded by the `secrets.policy` setting. A failure is logged and the next
+/// start tries again.
+fn migrate_secrets(engine: &Engine, secrets: &secrets::KeyringSecrets) {
+    const KEY: &str = "secrets.policy";
+    const DONE: &str = "afu1";
+    if secrets.error().is_some() || matches!(engine.setting(KEY), Ok(Some(v)) if v == DONE) {
+        return;
+    }
+    let result = engine
+        .account_ids()
+        .map_err(|e| e.to_string())
+        .and_then(|ids| secrets.migrate_access_policy(&ids))
+        .and_then(|()| engine.set_setting(KEY, DONE).map_err(|e| e.to_string()));
+    if let Err(reason) = result {
+        log_line(&format!("MV_MOBILE {}", json!({ "secretsPolicyError": reason })));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Managed before any webview exists, so a call never finds no state; filled in setup.
@@ -258,7 +277,7 @@ pub fn run() {
         .setup(move |app| {
             let slot = setup_slot;
             init_tls_verifier();
-            let secrets = secrets::KeyringSecrets::new();
+            let secrets = Arc::new(secrets::KeyringSecrets::new());
             if let Some(reason) = secrets.error() {
                 log_line(&format!("MV_MOBILE {}", serde_json::json!({ "secretsError": reason })));
             }
@@ -266,12 +285,14 @@ pub fn run() {
             // webview: ask once, and nothing else before the engine is open.
             let cache_dir = app.path().app_cache_dir();
             let engine = match (app.path().app_data_dir(), &cache_dir) {
-                (Ok(data), Ok(cache)) => Engine::open(&data, cache, Arc::new(secrets)).map_err(|e| e.to_string()),
+                (Ok(data), Ok(cache)) => Engine::open(&data, cache, secrets.clone()).map_err(|e| e.to_string()),
                 (Err(e), _) => Err(format!("app data dir: {e}")),
                 (_, Err(e)) => Err(format!("app cache dir: {e}")),
             };
             if let Ok(engine) = &engine {
                 engine.set_log_sink(log_line);
+                // Before the event sink and the slot: either one starts work that reads secrets.
+                migrate_secrets(engine, &secrets);
                 // The sink runs on the engine's sync thread inside its block_on: only hand the
                 // event to Tauri and return, never call back into the engine (no nested block_on).
                 let handle = app.handle().clone();

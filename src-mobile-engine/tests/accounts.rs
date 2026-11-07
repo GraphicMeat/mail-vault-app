@@ -1,12 +1,12 @@
 //! `mobile.accounts.*` against the mock IMAP server and an in-memory secret store.
 
-use mailvault_mobile_engine::{Engine, SecretStore};
+use mailvault_mobile_engine::{Credential, Engine, SecretStore};
 use mock_imap::state::synthetic_mailbox;
 use mock_imap::{Action, MockImap, Scenario, Trigger};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 const PW: &str = "correct-horse-battery-staple";
@@ -81,7 +81,7 @@ fn add_then_list_never_returns_the_password() {
     assert_eq!(a["imapHost"], server.host().as_str());
     assert_eq!(a["imapPort"], server.port());
     assert_eq!(a["security"], "none");
-    assert_eq!(secrets.get(&id).unwrap().as_deref(), Some(PW));
+    assert_eq!(Credential::parse(&secrets.get(&id).unwrap().unwrap()), Credential::from_password(PW));
     // The password is not in the database file either.
     let c = Connection::open(tmp.path().join("mobile.db")).unwrap();
     let hits: i64 = c
@@ -176,20 +176,46 @@ fn remove_deletes_rows_and_secret() {
             c.execute("INSERT INTO bodies (account_id, folder, uid) VALUES (?1, 'INBOX', 1)", [aid]).unwrap();
             c.execute("INSERT INTO attachments (account_id, folder, uid, section, filename, mime) VALUES (?1, 'INBOX', 1, '2', 'a', 'x/y')", [aid]).unwrap();
             c.execute("INSERT INTO pending_actions (account_id, folder, uids_json, kind, created_ms) VALUES (?1, 'INBOX', '[1]', 'seen', 1)", [aid]).unwrap();
+            c.execute("INSERT INTO remote_ids (account_id, folder, uid, remote_id) VALUES (?1, 'INBOX', 1, 'r1')", [aid]).unwrap();
+            c.execute("INSERT INTO uid_seq (account_id, next) VALUES (?1, 2)", [aid]).unwrap();
+            c.execute(
+                "INSERT INTO outbox (id, account_id, draft_json, state, created_ms, updated_ms) VALUES ('o-' || ?1, ?1, '{}', 'queued', 1, 1)",
+                [aid],
+            )
+            .unwrap();
+            c.execute("INSERT INTO drafts (id, account_id, json, updated_ms) VALUES ('d-' || ?1, ?1, '{}', 1)", [aid]).unwrap();
+            c.execute("INSERT INTO notify_state (account_id, folder, last_uid) VALUES (?1, 'INBOX', 1)", [aid]).unwrap();
+            c.execute("INSERT INTO sync_state (account_id, folder, token) VALUES (?1, 'INBOX', 't')", [aid]).unwrap();
         }
+        c.execute("INSERT INTO settings (key, value) VALUES ('secrets.policy', 'afu1')", []).unwrap();
     }
     let r = e.rpc("mobile.accounts.remove", json!({ "accountId": id })).unwrap();
     assert_eq!(r, json!({ "removed": true }));
     assert_eq!(secrets.get(&id).unwrap(), None);
-    assert_eq!(secrets.get(&other).unwrap().as_deref(), Some(PW));
+    assert_eq!(Credential::parse(&secrets.get(&other).unwrap().unwrap()).password.as_deref(), Some(PW));
     let c = Connection::open(tmp.path().join("mobile.db")).unwrap();
-    for t in ["accounts", "folders", "messages", "bodies", "attachments", "pending_actions"] {
+    for t in [
+        "accounts",
+        "folders",
+        "messages",
+        "bodies",
+        "attachments",
+        "pending_actions",
+        "remote_ids",
+        "uid_seq",
+        "outbox",
+        "drafts",
+        "notify_state",
+        "sync_state",
+    ] {
         let col = if t == "accounts" { "id" } else { "account_id" };
         let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t} WHERE {col} = ?1"), [&id], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "{t} still holds rows for the removed account");
         let kept: i64 = c.query_row(&format!("SELECT count(*) FROM {t} WHERE {col} = ?1"), [&other], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "{t} lost the other account's row");
     }
+    let settings: i64 = c.query_row("SELECT count(*) FROM settings", [], |r| r.get(0)).unwrap();
+    assert_eq!(settings, 1, "settings are not per account");
     assert_eq!(list(&e).len(), 1);
 }
 
@@ -267,4 +293,137 @@ fn a_failed_insert_deletes_the_secret_and_reports_internal() {
     assert_eq!(err.code(), "INTERNAL");
     assert!(!err.to_string().contains(PW));
     assert!(secrets.is_empty(), "the secret must be deleted when the row insert fails");
+}
+
+/// Every `mobile.sync.state` payload, with a way to wait for the end of a pass.
+#[derive(Default)]
+struct SyncStates {
+    list: Mutex<Vec<Value>>,
+    cv: Condvar,
+}
+
+impl SyncStates {
+    fn install(e: &Engine) -> Arc<SyncStates> {
+        let s = Arc::new(SyncStates::default());
+        let sink = Arc::clone(&s);
+        e.set_event_sink(move |name, payload| {
+            if name == "mobile.sync.state" {
+                sink.list.lock().unwrap().push(payload);
+                sink.cv.notify_all();
+            }
+        });
+        s
+    }
+
+    /// Runs one sync pass of `account` and returns how it ended (`idle` or `error`).
+    fn pass(&self, e: &Engine, account: &str) -> Value {
+        let from = self.list.lock().unwrap().len();
+        e.rpc("mobile.sync.refresh", json!({ "accountId": account })).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let mut list = self.list.lock().unwrap();
+        loop {
+            if let Some(v) = list.iter().skip(from).find(|v| v["accountId"] == account && v["state"] != "syncing") {
+                return v.clone();
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(!left.is_zero(), "the sync pass never ended: {:?}", &list[from..]);
+            list = self.cv.wait_timeout(list, left).unwrap().0;
+        }
+    }
+}
+
+/// A server that signs in `u@example.test` with [`PW`] only: a login that sent anything else (the
+/// stored envelope, say) fails.
+fn strict_server() -> MockImap {
+    let server = good_server();
+    server.mutate(|s| s.expect_login = Some(("u@example.test".into(), PW.into())));
+    server
+}
+
+#[test]
+fn a_legacy_bare_secret_reads_as_a_password() {
+    for legacy in [PW, "{not json", "{\"v\":2,\"password\":\"x\"}", "{\"v\":1}", "\"quoted\"", ""] {
+        let c = Credential::parse(legacy);
+        assert_eq!(c.password.as_deref(), Some(legacy), "{legacy}");
+        assert_eq!((c.refresh, c.access, c.expires_ms), (None, None, None), "{legacy}");
+    }
+    // A Plan 2 install stored the bare password; sync signs in with it unchanged.
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, secrets) = engine(tmp.path());
+    let server = strict_server();
+    let states = SyncStates::install(&e);
+    let added = e.rpc("mobile.accounts.add", form(&server, "u@example.test", PW)).unwrap();
+    assert_eq!(added["ok"], true, "{added}");
+    let id = added["account"]["id"].as_str().unwrap().to_string();
+    secrets.set(&id, PW).unwrap();
+    let end = states.pass(&e, &id);
+    assert_eq!(end["state"], "idle", "{end}");
+    // The control: the strict server does refuse a wrong one.
+    secrets.set(&id, "not-the-password").unwrap();
+    let end = states.pass(&e, &id);
+    assert_eq!((end["state"].clone(), end["code"].clone()), (json!("error"), json!("AUTH_FAILED")), "{end}");
+}
+
+#[test]
+fn the_credential_envelope_round_trips_without_reaching_the_db() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, secrets) = engine(tmp.path());
+    let server = strict_server();
+    let states = SyncStates::install(&e);
+    let added = e.rpc("mobile.accounts.add", form(&server, "u@example.test", PW)).unwrap();
+    assert_eq!(added["ok"], true, "{added}");
+    let id = added["account"]["id"].as_str().unwrap().to_string();
+    // What add stored is the envelope, and sync signs in with the password inside it.
+    let stored = secrets.get(&id).unwrap().unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&stored).unwrap(), json!({ "v": 1, "password": PW }));
+    assert_eq!(Credential::parse(&stored), Credential::from_password(PW));
+    let end = states.pass(&e, &id);
+    assert_eq!(end["state"], "idle", "{end}");
+
+    let tokens = Credential::from_tokens("refresh-tok", "access-tok", 1_800_000_000_000);
+    let text = tokens.to_secret();
+    assert_eq!(
+        serde_json::from_str::<Value>(&text).unwrap(),
+        json!({ "v": 1, "refresh": "refresh-tok", "access": "access-tok", "expiresMs": 1_800_000_000_000i64 })
+    );
+    assert_eq!(Credential::parse(&text), tokens);
+    assert_eq!(Credential::parse(&Credential::from_password(PW).to_secret()), Credential::from_password(PW));
+    // Debug output never carries a secret.
+    let shown = format!("{tokens:?} {:?}", Credential::from_password(PW));
+    assert!(!shown.contains("refresh-tok") && !shown.contains("access-tok") && !shown.contains(PW), "{shown}");
+
+    // No TEXT column of any table holds the password, and neither do the file's raw bytes.
+    let c = Connection::open(tmp.path().join("mobile.db")).unwrap();
+    let tables: Vec<String> = c
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert!(tables.len() >= 13, "{tables:?}");
+    let mut scanned = 0;
+    for t in &tables {
+        let cols: Vec<(String, String)> = c
+            .prepare(&format!("PRAGMA table_info({t})"))
+            .unwrap()
+            .query_map([], |r| Ok((r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        for (col, _) in cols.iter().filter(|(_, ty)| ty.eq_ignore_ascii_case("TEXT")) {
+            let n: i64 = c
+                .query_row(&format!("SELECT count(*) FROM {t} WHERE instr({col}, ?1) > 0"), [PW], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 0, "{t}.{col} holds the password");
+            scanned += 1;
+        }
+    }
+    assert!(scanned > 30, "only {scanned} TEXT columns scanned");
+    drop(c);
+    for suffix in ["", "-wal"] {
+        if let Ok(bytes) = std::fs::read(tmp.path().join(format!("mobile.db{suffix}"))) {
+            assert!(!bytes.windows(PW.len()).any(|w| w == PW.as_bytes()), "mobile.db{suffix} holds the password");
+        }
+    }
 }

@@ -10,10 +10,11 @@
 //! Message identity is `(account_id, folder, uid)`, valid inside the folder's `uid_validity` (on
 //! the folder row). A UIDVALIDITY change wipes the folder's rows and resyncs it.
 
-use crate::accounts::{map_error, Code};
+use crate::accounts::{load_account, map_error, Code};
 use crate::db::{lock, Engine, EngineError, Shared};
 use crate::events::{FOLDERS_CHANGED, FOLDER_CHANGED, SYNC_STATE};
 use crate::rpc::{parse, RpcError};
+use crate::secrets::Credential;
 use mailvault_core::imap::{self, abd_cmds, EmailHeader, ImapPool, ImapSession};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
@@ -182,36 +183,21 @@ fn run_job(shared: &Shared, job: &Job) {
     shared.emit(SYNC_STATE, end);
 }
 
-struct Account {
-    email: String,
-    host: String,
-    port: u16,
-    security: String,
-}
-
-fn load_account(shared: &Shared, id: &str) -> Result<Option<Account>, EngineError> {
-    shared.read(|c| {
-        c.query_row("SELECT email, imap_host, imap_port, security FROM accounts WHERE id = ?1", [id], |r| {
-            Ok(Account { email: r.get(0)?, host: r.get(1)?, port: r.get::<_, i64>(2)? as u16, security: r.get(3)? })
-        })
-        .optional()
-    })
-}
-
-/// What signing in to an account takes: core's settings and the password (kept only to scrub it
-/// out of an error before that error is logged). The one place the engine builds a session's
-/// settings from an account row and its secret; `Fail::Gone` when the account does not exist.
+/// What signing in to an account takes: core's settings and the account's secrets (kept only to
+/// scrub them out of an error before that error is logged). The one place the engine builds a
+/// session's settings from an account row and its stored [`Credential`]; `Fail::Gone` when the
+/// account does not exist.
 pub(crate) struct SessionConfig {
     pub(crate) config: imap::ImapConfig,
-    password: String,
+    secrets: Vec<String>,
 }
 
 impl SessionConfig {
-    /// Removes the password from a failure's log text. Core's text names the address, never the
-    /// password; this is the belt to that brace.
+    /// Removes every secret from a failure's log text. Core's text names the address, never the
+    /// secret; this is the belt to that brace.
     pub(crate) fn scrub(&self, f: Fail) -> Fail {
         match f {
-            Fail::Code(code, why) if !self.password.is_empty() => Fail::Code(code, why.replace(&self.password, "***")),
+            Fail::Code(code, why) => Fail::Code(code, self.secrets.iter().fold(why, |w, s| w.replace(s.as_str(), "***"))),
             other => other,
         }
     }
@@ -221,14 +207,13 @@ pub(crate) fn session_config(shared: &Shared, account: &str) -> Result<SessionCo
     let Some(acct) = load_account(shared, account)? else {
         return Err(Fail::Gone);
     };
-    let password = match shared.secrets().get(account) {
-        Ok(Some(p)) => p,
-        Ok(None) => return Err(Fail::Code(Code::AuthFailed, "no password stored for the account".into())),
+    let cred = match shared.secrets().get(account) {
+        Ok(Some(s)) => Credential::parse(&s),
+        Ok(None) => return Err(Fail::Code(Code::AuthFailed, "no secret stored for the account".into())),
         Err(e) => return Err(Fail::Code(Code::Invalid, format!("secret store: {e}"))),
     };
-    let config = crate::net::imap_config(&acct.host, acct.port, &acct.email, &password, &acct.security)
-        .map_err(|e| Fail::Code(Code::Invalid, e))?;
-    Ok(SessionConfig { config, password })
+    let config = crate::net::core_config(&acct, &cred).map_err(|e| Fail::Code(Code::Invalid, e))?;
+    Ok(SessionConfig { config, secrets: cred.secrets().into_iter().map(String::from).collect() })
 }
 
 fn sync_job(shared: &Shared, job: &Job) -> Result<(), Fail> {

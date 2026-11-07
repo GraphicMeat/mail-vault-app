@@ -2,12 +2,22 @@
 //! or Keystore-encrypted SharedPreferences on Android, both through keyring-core. Service
 //! `com.mailvault.app`, user = account id. Error strings come from the store and never include
 //! the secret.
+//!
+//! On iOS every entry is `AfterFirstUnlockThisDeviceOnly`: background fetch mostly runs on a
+//! locked phone, and the store's default (`WhenUnlocked`) would refuse the read there.
 
 use keyring_core::{CredentialStore, Entry, Error};
 use mailvault_mobile_engine::SecretStore;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 const SERVICE: &str = "com.mailvault.app";
+
+/// The modifiers every entry is built with.
+#[cfg(target_os = "ios")]
+const MODIFIERS: &[(&str, &str)] = &[("access-policy", "AfterFirstUnlockThisDeviceOnly")];
+#[cfg(not(target_os = "ios"))]
+const MODIFIERS: &[(&str, &str)] = &[];
 
 /// The store, or why it could not be created. The app runs either way; every call then fails
 /// with the reason.
@@ -25,7 +35,34 @@ impl KeyringSecrets {
 
     fn entry(&self, account_id: &str) -> Result<Entry, String> {
         let store = self.0.as_ref().map_err(Clone::clone)?;
-        store.build(SERVICE, account_id, None).map_err(|e| e.to_string())
+        let modifiers: HashMap<&str, &str> = MODIFIERS.iter().copied().collect();
+        store.build(SERVICE, account_id, (!modifiers.is_empty()).then_some(&modifiers)).map_err(|e| e.to_string())
+    }
+
+    /// Re-saves each account's secret so it carries [`MODIFIERS`]: an item written before keeps
+    /// its old accessibility on update, so only a new item takes the policy (read, delete, set).
+    /// Run once, before anything else can read a secret. `Err` names the first account that
+    /// failed and the store's reason; the others are still moved.
+    pub fn migrate_access_policy(&self, account_ids: &[String]) -> Result<(), String> {
+        if MODIFIERS.is_empty() {
+            return Ok(());
+        }
+        let mut first = None;
+        for id in account_ids {
+            if let Err(e) = self.resave(id) {
+                first.get_or_insert(format!("{id}: {e}"));
+            }
+        }
+        first.map_or(Ok(()), Err)
+    }
+
+    fn resave(&self, account_id: &str) -> Result<(), String> {
+        let Some(secret) = self.get(account_id)? else {
+            return Ok(());
+        };
+        self.delete(account_id)?;
+        // Between the delete and the set the secret lives only here: try the set twice.
+        self.set(account_id, &secret).or_else(|_| self.set(account_id, &secret))
     }
 }
 
