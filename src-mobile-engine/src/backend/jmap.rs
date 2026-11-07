@@ -151,6 +151,13 @@ fn first_value(list: &Value, values: &Value, mime: &str) -> Option<(String, bool
     })
 }
 
+/// Whether either body value the reply uses (the html, or the text a reply quotes and the viewer
+/// falls back to) came cut short.
+fn body_truncated(v: &Value) -> bool {
+    let cut = |list: &str, mime: &str| first_value(&v[list], &v["bodyValues"], mime).is_some_and(|(_, cut)| cut);
+    cut("htmlBody", "text/html") || cut("textBody", "text/plain")
+}
+
 /// A JMAP failure as a sync or a body read reports it (its text scrubbed already).
 fn code_of(e: &JmapError) -> Code {
     match e {
@@ -669,6 +676,17 @@ impl<'a> JmapBackend<'a> {
         Ok(out)
     }
 
+    /// The uids of `folder` a journaled action still names: their mappings are the journal's
+    /// until it settles (replay decides what is gone).
+    fn pending_uids(&self, folder: &str) -> Result<HashSet<u32>, Fail> {
+        let account = self.account.as_str();
+        Ok(self.shared.read(|c| {
+            let mut st = c.prepare_cached(crate::actions::PENDING_UIDS)?;
+            let rows = st.query_map((account, folder), |r| r.get::<_, i64>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows.into_iter().map(|u| u as u32).collect())
+        })?)
+    }
+
     fn stored_state(&self, folder: &str) -> Result<Option<String>, Fail> {
         let account = self.account.as_str();
         Ok(self
@@ -729,12 +747,14 @@ impl Backend for JmapBackend<'_> {
         let state = self.call(async |c| c.email_state().await)?;
         let mailbox = self.mailbox_id(folder)?;
         let after = timestamp(window_start_ms);
+        // The mappings as they were before the query: only these can be judged by its answer (a
+        // move replay maps into this folder after the query is not in it, and must stay).
+        let account = self.account.clone();
+        let known = self.shared.read(|c| remote_ids::folder_map(c, &account, folder))?;
         let ids = self.call(async |c| c.query_mailbox_since(&mailbox, &after).await)?;
 
         // Local uids: known ids keep theirs; new ones get the next, oldest first (the query is
-        // newest first).
-        let account = self.account.clone();
-        let known = self.shared.read(|c| remote_ids::folder_map(c, &account, folder))?;
+        // newest first). `uids_for` hands back a mapping made meanwhile unchanged.
         let fresh: Vec<String> = ids.iter().rev().map(|id| key(folder, id)).filter(|k| !known.contains_key(k)).collect();
         let mut uids = known;
         for chunk in fresh.chunks(BATCH) {
@@ -749,7 +769,9 @@ impl Backend for JmapBackend<'_> {
             let rows = st.query_map((&account, folder), |r| r.get::<_, i64>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(rows.into_iter().map(|u| u as u32).collect())
         })?;
-        let orphans: Vec<u32> = uids.values().copied().filter(|u| !listed.contains_key(u) && !rows.contains(u)).collect();
+        let pending = self.pending_uids(folder)?;
+        let orphans: Vec<u32> =
+            uids.values().copied().filter(|u| !listed.contains_key(u) && !rows.contains(u) && !pending.contains(u)).collect();
         self.remap(folder, &orphans, None, &[])?;
         let window: Vec<u32> = listed.keys().copied().collect();
         self.listed = Some((folder.to_string(), listed));
@@ -768,7 +790,9 @@ impl Backend for JmapBackend<'_> {
         let got = self.call(async |c| c.get_emails(&ids, HEADER_PROPS).await)?;
         let by_id: HashMap<&str, &Value> = got.list.iter().filter_map(|e| Some((e["id"].as_str()?, e))).collect();
         // Listed, then gone before its headers came: no row will hold its mapping, so it goes now.
-        let missing: Vec<u32> = wanted.iter().filter(|(_, id)| !by_id.contains_key(id.as_str())).map(|(u, _)| *u).collect();
+        let pending = self.pending_uids(&folder.path)?;
+        let missing: Vec<u32> =
+            wanted.iter().filter(|(u, id)| !by_id.contains_key(id.as_str()) && !pending.contains(u)).map(|(u, _)| *u).collect();
         let headers = wanted.iter().filter_map(|(uid, id)| by_id.get(id.as_str()).map(|e| to_header(e, *uid))).collect();
         self.remap(&folder.path, &missing, None, &[])?;
         Ok(headers)
@@ -821,7 +845,7 @@ impl Backend for JmapBackend<'_> {
         let html = first_value(&v["htmlBody"], &v["bodyValues"], "text/html");
         let text = first_value(&v["textBody"], &v["bodyValues"], "text/plain");
         // A value over `MAX_BODY_VALUE_BYTES` arrives cut: shown with a note, never cached.
-        let truncated = html.as_ref().or(text.as_ref()).is_some_and(|(_, cut)| *cut);
+        let truncated = body_truncated(&v);
         let (html, text) = (html.map(|(h, _)| h), text.map(|(t, _)| t));
         // An answer without the attachments list says nothing about them: shown, never cached.
         let (parts, attachments_unknown) = match Self::attachments_of(&v) {
@@ -1211,6 +1235,18 @@ mod tests {
         let whole = json!({"1": {"value": "<p>all</p>", "isTruncated": false}});
         assert_eq!(first_value(&parts, &whole, "text/html"), Some(("<p>all</p>".to_string(), false)));
         assert_eq!(first_value(&parts, &whole, "text/plain"), None);
+    }
+
+    #[test]
+    fn a_cut_text_value_beside_a_whole_html_one_is_a_cut_body() {
+        let v = json!({
+            "htmlBody": [{"partId": "2", "type": "text/html"}],
+            "textBody": [{"partId": "1", "type": "text/plain"}],
+            "bodyValues": {"1": {"value": "start", "isTruncated": true}, "2": {"value": "<p>all</p>", "isTruncated": false}},
+        });
+        assert!(body_truncated(&v));
+        let whole = json!({"htmlBody": v["htmlBody"], "textBody": v["textBody"], "bodyValues": {"1": {"value": "all"}, "2": {"value": "<p>all</p>"}}});
+        assert!(!body_truncated(&whole));
     }
 
     #[test]

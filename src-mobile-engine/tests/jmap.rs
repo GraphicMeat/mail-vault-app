@@ -682,3 +682,62 @@ fn a_body_the_server_cuts_short_is_marked_and_not_cached() {
     assert_eq!(f.body("INBOX", uids["Short"])["truncated"], false);
     assert_eq!(cached(uids["Short"]), 1);
 }
+
+#[test]
+fn a_target_pass_that_lists_before_a_move_keeps_the_mapping_a_queued_action_names() {
+    let now = now_secs();
+    let f = setup(scenario(vec![email("b", "Bravo", now - 300)]));
+    f.sync(None);
+    f.sync(Some("mb-proj"));
+    let uid = f.uids("INBOX")["Bravo"];
+    // A move and a read on the same row, both queued while the server holds the move back.
+    f.m.mutate(|s| s.faults.push(Fault::ServerFailIf { method: "Email/set".into(), needle: "mailboxIds".into() }));
+    f.apply("move", "INBOX", &[uid], Some("mb-proj"));
+    f.apply("seen", "INBOX", &[uid], None);
+    // The move goes through; the read, now following the moved copy, is held back.
+    f.m.mutate(|s| s.faults = vec![Fault::ServerFailIf { method: "Email/set".into(), needle: "$seen".into() }]);
+    let deadline = Instant::now() + WAIT;
+    let pending = loop {
+        let p = f.rpc("mobile.actions.pending", json!({ "accountId": f.account }))["pending"].as_array().unwrap().clone();
+        if p.len() == 1 && p[0]["folder"] == "mb-proj" {
+            break p;
+        }
+        assert!(Instant::now() < deadline, "the move never settled: {p:?}; logs {:?}", f.logs.lock().unwrap());
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let new_uid: i64 = f
+        .db()
+        .query_row("SELECT uid FROM remote_ids WHERE account_id = ?1 AND remote_id = 'mb-proj|b'", [&f.account], |r| r.get(0))
+        .expect("the move mapped it in the target");
+    assert_eq!(pending[0]["uids"], json!([new_uid]), "the read follows the moved copy: {pending:?}");
+    // The target's pass lists the server as it was before the move (a lagging index).
+    f.m.mutate(|s| s.set_mailboxes(ACC, "b", &["mb-inbox"]));
+    f.sync(Some("mb-proj"));
+    let mapped: i64 = f.db().query_row("SELECT count(*) FROM remote_ids WHERE remote_id = 'mb-proj|b'", [], |r| r.get(0)).unwrap();
+    assert_eq!(mapped, 1, "a mapping a queued action names is the journal's");
+
+    // The server catches up: the read is applied, not dropped as gone.
+    f.m.mutate(|s| {
+        s.set_mailboxes(ACC, "b", &["mb-proj"]);
+        s.faults.clear();
+    });
+    f.wait_pending_empty();
+    assert!(f.email("b").unwrap().keywords.contains("$seen"), "{:?}; logs {:?}", f.email("b"), f.logs.lock().unwrap());
+}
+
+#[test]
+fn a_cut_text_beside_a_whole_html_is_a_cut_body() {
+    let long = "y".repeat(2 * 1024 * 1024 + 4096);
+    let raw = format!(
+        "From: Alice <alice@example.test>\r\nTo: {ME}\r\nSubject: Mixed\r\nMessage-ID: <mixed@example.test>\r\nDate: Mon, 05 Jan 2026 10:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"ALT\"\r\n\r\n--ALT\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{long}\r\n--ALT\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>short html</p>\r\n--ALT--\r\n"
+    );
+    let e = ScenarioEmail { id: "mixed".into(), raw, keywords: vec![], received_at: iso(now_secs() - 60), also_in: vec![] };
+    let f = setup(scenario(vec![e]));
+    f.sync(None);
+    let uid = f.uids("INBOX")["Mixed"];
+    let body = f.body("INBOX", uid);
+    assert!(body["html"].as_str().unwrap_or("").contains("short html"), "{}", &body.to_string()[..200.min(body.to_string().len())]);
+    assert_eq!(body["truncated"], true);
+    let cached: i64 = f.db().query_row("SELECT count(*) FROM bodies WHERE uid = ?1", [uid], |r| r.get(0)).unwrap();
+    assert_eq!(cached, 0);
+}
