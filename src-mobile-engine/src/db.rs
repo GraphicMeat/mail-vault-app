@@ -139,6 +139,8 @@ pub struct Engine {
     cache_dir: PathBuf,
     sync: crate::sync::Worker,
     replay: crate::actions::Replay,
+    /// Attachment downloads into `<cache_dir>/att`.
+    attachments: crate::attachments::Attachments,
     /// `open` found a journal: replay starts once the shell can hear its results, when the event
     /// sink is installed or the first RPC arrives, whichever is first.
     startup_replay: AtomicBool,
@@ -312,6 +314,7 @@ impl Engine {
                 #[cfg(test)]
                 body_cap: std::sync::atomic::AtomicU64::new(crate::body::CACHE_CAP),
             }),
+            attachments: crate::attachments::Attachments::open(cache_dir),
             cache_dir: cache_dir.to_path_buf(),
             sync: crate::sync::Worker::default(),
             replay: crate::actions::Replay::default(),
@@ -336,6 +339,17 @@ impl Engine {
 
     pub(crate) fn replay(&self) -> &crate::actions::Replay {
         &self.replay
+    }
+
+    pub(crate) fn attachments(&self) -> &crate::attachments::Attachments {
+        &self.attachments
+    }
+
+    /// Tests: the most bytes one attachment job has held in a buffer at once (a raw chunk in, or
+    /// its decoded bytes out).
+    #[doc(hidden)]
+    pub fn attachment_peak_buffer(&self) -> u64 {
+        self.attachments.peak_buffer()
     }
 
     /// The directory for rebuildable files the shell passed to `open`.
@@ -411,6 +425,7 @@ impl Drop for Engine {
         self.shared.closing.store(true, Ordering::SeqCst);
         self.sync.stop();
         self.replay.stop();
+        self.attachments.stop();
     }
 }
 

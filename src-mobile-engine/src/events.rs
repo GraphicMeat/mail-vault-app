@@ -16,8 +16,26 @@ pub const SYNC_STATE: &str = "mobile.sync.state";
 /// code for `retrying`.
 pub const ACTION_RESULT: &str = "mobile.action.result";
 
+/// `{jobId, received, total}`: an attachment download moved on. Both counts are transfer-encoded
+/// octets (`total` is the part's size as the server reports it), so `received` can end a little
+/// off `total`.
+pub const ATTACHMENT_PROGRESS: &str = "mobile.attachment.progress";
+/// `{jobId, path}`: the part is whole on disk at `path` (fsynced, under its final name).
+pub const ATTACHMENT_DONE: &str = "mobile.attachment.done";
+/// `{jobId, code}`: the download stopped. `code` is `GONE` (the message, the part or the account
+/// is no longer there), `CANCELLED`, or an accounts error code (the `.part` stays for a resume).
+pub const ATTACHMENT_FAILED: &str = "mobile.attachment.failed";
+
 /// Every event name the engine emits: the one list `events.json` must match (a test checks it) and
 /// the page's `listen('…')` names are checked against.
-pub const EVENTS: &[&str] = &[ACTION_RESULT, FOLDER_CHANGED, FOLDERS_CHANGED, SYNC_STATE];
+pub const EVENTS: &[&str] = &[
+    ACTION_RESULT,
+    ATTACHMENT_DONE,
+    ATTACHMENT_FAILED,
+    ATTACHMENT_PROGRESS,
+    FOLDER_CHANGED,
+    FOLDERS_CHANGED,
+    SYNC_STATE,
+];
 
 pub(crate) type EventSink = Box<dyn Fn(&str, Value) + Send + Sync>;

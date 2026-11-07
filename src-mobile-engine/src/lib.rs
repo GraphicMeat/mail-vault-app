@@ -4,6 +4,7 @@
 
 mod accounts;
 mod actions;
+mod attachments;
 mod body;
 mod db;
 pub mod events;

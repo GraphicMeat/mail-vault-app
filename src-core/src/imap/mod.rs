@@ -13,7 +13,7 @@ use tracing::{info, warn};
 use crate::net_activity::{NetEvent, Protocol};
 use crate::transfer_stats::CountingStream;
 
-pub use parts::{fetch_parts, fetch_section, parts_of, PartInfo};
+pub use parts::{fetch_parts, fetch_section, fetch_section_range, fetch_selected_section_range, parts_of, PartInfo};
 pub use pool::{ImapPool, ImapSession, ImapTransport};
 
 /// The IMAP client itself, so the daemon can name `IdleResponse` without a

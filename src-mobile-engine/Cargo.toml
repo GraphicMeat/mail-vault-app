@@ -22,10 +22,16 @@ serde_json = "1.0"
 # whose driver is running (see net::block_on).
 async-std = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "net"] }
+# Attachment cache file names (the same sha2 core already builds).
+sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
 mock-imap = { path = "../src-mock-imap" }
+
+[target.'cfg(unix)'.dev-dependencies]
+# Peak RSS for the attachment streaming test's report line.
+libc = "0.2"
 
 [[test]]
 # The seed and the perf report exist only with perf-gate; the plain test build skips this file.

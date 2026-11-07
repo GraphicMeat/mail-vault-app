@@ -329,7 +329,9 @@ pub enum FetchItem {
     BodyHeaderFields { peek: bool, fields: Vec<String> },
     /// BODY[1.2] / BODY.PEEK[1.2] — one MIME part's body, still transfer-encoded
     /// (RFC 3501 section numbering; a non-multipart message's body is part 1).
-    BodyPart { peek: bool, path: Vec<u32> },
+    /// `partial` is a `<origin.length>` suffix: only that slice of the part is sent,
+    /// labelled `BODY[1.2]<origin>` as RFC 3501 6.4.5 says.
+    BodyPart { peek: bool, path: Vec<u32>, partial: Option<(u64, u32)> },
 }
 
 /// Parse a FETCH spec such as
@@ -397,6 +399,12 @@ fn parse_fetch_item(token: &str) -> Option<FetchItem> {
     let inner_start = token.find('[')? + 1;
     let inner_end = token.rfind(']')?;
     let section = &token[inner_start..inner_end];
+    // `<origin.length>` after the section: a partial fetch.
+    let partial = token[inner_end + 1..]
+        .strip_prefix('<')
+        .and_then(|r| r.strip_suffix('>'))
+        .and_then(|r| r.split_once('.'))
+        .and_then(|(o, l)| Some((o.parse::<u64>().ok()?, l.parse::<u32>().ok()?)));
 
     if section.trim().is_empty() {
         return Some(FetchItem::BodyFull { peek });
@@ -413,7 +421,7 @@ fn parse_fetch_item(token: &str) -> Option<FetchItem> {
     }
     let path: Option<Vec<u32>> = section.split('.').map(|n| n.parse::<u32>().ok().filter(|n| *n > 0)).collect();
     if let Some(path) = path {
-        return Some(FetchItem::BodyPart { peek, path });
+        return Some(FetchItem::BodyPart { peek, path, partial });
     }
     // Unsupported section — treat as whole message rather than dropping the item.
     Some(FetchItem::BodyFull { peek })
@@ -503,12 +511,20 @@ pub fn render_items_with_labels(msg: &Message, items: &[FetchItem], force_uid: b
                 );
                 out.extend_from_slice(&data);
             }
-            FetchItem::BodyPart { path, .. } => {
+            FetchItem::BodyPart { path, partial, .. } => {
                 let name = path.iter().map(u32::to_string).collect::<Vec<_>>().join(".");
                 match parsed.as_ref().and_then(|p| part_at(p, path)) {
                     Some(part) => {
-                        let data = body_bytes(part);
-                        push(&mut out, &format!("BODY[{}] {{{}}}\r\n", name, data.len()));
+                        let whole = body_bytes(part);
+                        let (label, data) = match partial {
+                            Some((origin, len)) => {
+                                let start = (*origin).min(whole.len() as u64) as usize;
+                                let end = start.saturating_add(*len as usize).min(whole.len());
+                                (format!("BODY[{}]<{}>", name, origin), &whole[start..end])
+                            }
+                            None => (format!("BODY[{}]", name), whole),
+                        };
+                        push(&mut out, &format!("{} {{{}}}\r\n", label, data.len()));
                         out.extend_from_slice(data);
                     }
                     None => push(&mut out, &format!("BODY[{}] NIL", name)),

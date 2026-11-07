@@ -109,6 +109,8 @@ struct Reply {
     parts: Option<Vec<PartInfo>>,
     /// The `BODY[section]` item, when the line had one: `Some(None)` for NIL.
     section: Option<Option<Vec<u8>>>,
+    /// The item's `<origin>`, for a partial fetch's reply.
+    origin: Option<u32>,
 }
 
 /// `UID FETCH uid <spec>`, read up to its tagged status (a NO or BAD is an error with the
@@ -139,8 +141,9 @@ async fn fetch_uid(session: &mut ImapSession, uid: u32, spec: &str, want: Option
                         match a {
                             AttributeValue::Uid(u) => this_uid = Some(*u),
                             AttributeValue::BodyStructure(bs) => r.parts = Some(parts_of(bs)),
-                            AttributeValue::BodySection { section: Some(sp), data, .. } if Some(sp) == want => {
+                            AttributeValue::BodySection { section: Some(sp), data, index } if Some(sp) == want => {
                                 r.section = Some(data.as_ref().map(|d| d.to_vec()));
+                                r.origin = *index;
                             }
                             _ => {}
                         }
@@ -212,6 +215,52 @@ pub async fn fetch_section(session: &mut ImapSession, mailbox: &str, uid: u32, s
         .map(|p| p.encoding)
         .ok_or_else(|| format!("UID FETCH {uid}: no part {section} in the BODYSTRUCTURE"))?;
     Ok(Some(decode_transfer(&data.unwrap_or_default(), &encoding)))
+}
+
+/// `len` octets of one part from `offset` on, still transfer-encoded: `UID FETCH uid
+/// (UID BODY.PEEK[section]<offset.len>)` after selecting `mailbox`. Never sets `\Seen`.
+/// `Ok(None)` when the uid is gone. Fewer than `len` bytes (none at all past the end, `""` or NIL)
+/// means the part ends there; a caller reads to that short slice rather than trusting the
+/// BODYSTRUCTURE's size. Each call selects `mailbox`; a caller fetching many slices in a row
+/// selects once and uses [`fetch_selected_section_range`].
+pub async fn fetch_section_range(session: &mut ImapSession, mailbox: &str, uid: u32, section: &str, offset: u64, len: u32) -> Result<Option<Vec<u8>>, String> {
+    section_path(section)?;
+    select_mailbox(session, mailbox).await?;
+    fetch_selected_section_range(session, mailbox, uid, section, offset, len).await
+}
+
+/// [`fetch_section_range`] on the mailbox the session already has selected (named `mailbox`,
+/// for the gone check's message). No SELECT, so a download of many slices costs one round trip
+/// each.
+pub async fn fetch_selected_section_range(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uid: u32,
+    section: &str,
+    offset: u64,
+    len: u32,
+) -> Result<Option<Vec<u8>>, String> {
+    let sp = SectionPath::Part(section_path(section)?, None);
+    // imap-proto reads the reply's origin as a u32.
+    let origin = u32::try_from(offset).map_err(|_| format!("part offset {offset} is past 4 GiB"))?;
+    let replies = fetch_uid(session, uid, &format!("(UID BODY.PEEK[{section}]<{offset}.{len}>)"), Some(&sp)).await?;
+    let Some((data, got_origin)) = replies.into_iter().find_map(|r| r.section.map(|d| (d, r.origin))) else {
+        absent(session, mailbox, uid).await?;
+        return Ok(None);
+    };
+    let data = data.unwrap_or_default();
+    match got_origin {
+        Some(o) if o == origin => Ok(Some(data)),
+        Some(o) => Err(format!("UID FETCH {uid}: asked for BODY[{section}]<{offset}>, got <{o}>")),
+        // A server that ignored the range sent the whole part: cut the slice out of it.
+        None if data.len() > len as usize => {
+            let start = (offset as usize).min(data.len());
+            let end = start.saturating_add(len as usize).min(data.len());
+            Ok(Some(data[start..end].to_vec()))
+        }
+        None if offset == 0 => Ok(Some(data)),
+        None => Err(format!("UID FETCH {uid}: BODY[{section}] came back without its origin <{offset}>")),
+    }
 }
 
 /// Undoes base64 or quoted-printable through mailparse (lenient about line breaks and stray

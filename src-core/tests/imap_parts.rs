@@ -3,7 +3,7 @@
 mod common;
 
 use common::session;
-use mailvault_core::imap::{fetch_parts, fetch_section, parts_of, PartInfo};
+use mailvault_core::imap::{fetch_parts, fetch_section, fetch_section_range, parts_of, PartInfo};
 use mock_imap::state::Mailbox;
 use mock_imap::{Action, MockImap, Scenario, Trigger};
 
@@ -200,4 +200,52 @@ async fn a_gone_uid_with_a_flags_fetch_is_none() {
     let mut sess = session(&server).await;
     assert_eq!(fetch_parts(&mut sess, "INBOX", 99).await.unwrap().0, None);
     assert_eq!(fetch_section(&mut sess, "INBOX", 99, "1").await.unwrap(), None);
+}
+
+/// A partial fetch hands back exactly the asked slice of the part, still transfer-encoded; the
+/// last slice is short, a slice past the end is empty, and a gone uid is `None`.
+#[async_std::test]
+async fn range_fetch_returns_the_slice() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push(CRAFTED)));
+    let mut sess = session(&server).await;
+    // Part 2's encoded body is `PHA+R3LDvMOfZTwvcD4=` plus the CRLF before the boundary.
+    let got = fetch_section_range(&mut sess, "INBOX", 1, "2", 4, 8).await.unwrap().expect("uid 1 is there");
+    assert_eq!(got, b"R3LDvMOf");
+    let tail = fetch_section_range(&mut sess, "INBOX", 1, "2", 16, 8).await.unwrap().unwrap();
+    assert!(tail.starts_with(b"cD4=") && tail.len() < 8, "{:?}", String::from_utf8_lossy(&tail));
+    assert_eq!(fetch_section_range(&mut sess, "INBOX", 1, "2", 4096, 8).await.unwrap(), Some(Vec::new()));
+    assert_eq!(fetch_section_range(&mut sess, "INBOX", 99, "2", 0, 8).await.unwrap(), None);
+    assert!(fetch_section_range(&mut sess, "INBOX", 1, "2 BODY[]", 0, 8).await.is_err());
+
+    // Slices joined end to end are the whole encoded part.
+    let mut joined = Vec::new();
+    let mut offset = 0u64;
+    loop {
+        let s = fetch_section_range(&mut sess, "INBOX", 1, "2", offset, 3).await.unwrap().unwrap();
+        joined.extend_from_slice(&s);
+        offset += s.len() as u64;
+        if s.len() < 3 {
+            break;
+        }
+    }
+    assert_eq!(mailvault_core::imap::parts::decode_transfer(&joined, "base64"), "<p>Grüße</p>".as_bytes());
+
+    let fetches: Vec<String> = server.commands().into_iter().filter(|c| c.to_ascii_uppercase().contains("FETCH")).collect();
+    assert!(fetches.iter().any(|c| c.contains("BODY.PEEK[2]<4.8>")), "{fetches:?}");
+    assert!(!fetches.iter().any(|c| c.contains("BODY[") || c.contains("BODY.PEEK[]")), "{fetches:?}");
+}
+
+/// A reply labelled with another origin than the one asked for is an error, never data placed
+/// at the wrong offset.
+#[async_std::test]
+async fn range_fetch_refuses_another_origin() {
+    let server = MockImap::start(
+        Scenario::new().mailbox(Mailbox::new("INBOX").push(CRAFTED)).fault(
+            Trigger::with("FETCH", "BODY.PEEK[2]<8.4>"),
+            Action::RespondRaw("* 1 FETCH (UID 1 BODY[2]<0> {4}\r\nPHA+)\r\n{tag} OK FETCH completed\r\n".into()),
+        ),
+    );
+    let mut sess = session(&server).await;
+    let err = fetch_section_range(&mut sess, "INBOX", 1, "2", 8, 4).await.unwrap_err();
+    assert!(err.contains("<0>"), "{err}");
 }
