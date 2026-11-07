@@ -4372,5 +4372,6 @@
   "mobile.reauth.action": "Volver a iniciar sesión",
   "mobile.error.NEEDS_AUTH": "Vuelve a iniciar sesión para seguir recibiendo correo en esta cuenta.",
   "mobile.error.CANCELLED": "Se canceló el inicio de sesión.",
-  "mobile.error.NO_BROWSER": "Ningún navegador de este dispositivo puede mostrar la página de inicio de sesión."
+  "mobile.error.NO_BROWSER": "Ningún navegador de este dispositivo puede mostrar la página de inicio de sesión.",
+  "mobile.error.SIGNIN_BUSY": "Ya hay un inicio de sesión abierto. Termínalo o cancélalo primero."
 }

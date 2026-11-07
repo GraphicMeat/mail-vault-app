@@ -386,13 +386,18 @@ function App() {
     if (result.ok) setPanel(null);
     return result;
   }, []);
+  // Both "Sign in again" controls run the store's one reauth, whose busy and error state the
+  // banner shows; the switcher opens that account first, so its banner is the one on screen.
+  const reauthState = useMobileStore((s) => s.reauthState);
   const onReauth = useCallback((id) => useMobileStore.getState().reauth(id), []);
   const onSwitcherReauth = useCallback(async (id) => {
     setPanel(null);
     const store = useMobileStore.getState();
+    if (store.reauthState?.busy) return;
     if (store.activeAccountId !== id) await store.selectAccount(id);
-    return store.reauth(id);
+    await store.reauth(id);
   }, []);
+  const onOAuthCancel = useCallback(() => useMobileStore.getState().cancelSignIn(), []);
   useEffect(() => {
     if (DEMO_SIGNIN && status === 'ready') setPanel('add');
   }, [status]);
@@ -400,7 +405,7 @@ function App() {
   if (status === 'noAccount') {
     return (
       <div className="mv-app">
-        <AddAccount onSubmit={onAdd} onOAuth={onOAuth} autoStart={DEMO_SIGNIN ? 'google' : null} />
+        <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} autoStart={DEMO_SIGNIN ? 'google' : null} />
       </div>
     );
   }
@@ -451,7 +456,7 @@ function App() {
         <PendingChip />
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
-      <ReauthBanner account={account} onReauth={onReauth} />
+      <ReauthBanner account={account} state={reauthState} onReauth={onReauth} />
       <OutboxRow initialOpen={DEMO_OUTBOX} />
       {listState === 'ready' && list && (
         <MessageList
@@ -498,12 +503,13 @@ function App() {
           onAdd={() => setPanel('add')}
           onRemove={(id) => useMobileStore.getState().removeAccount(id)}
           onReauth={onSwitcherReauth}
+          reauthBusy={Boolean(reauthState?.busy)}
           onClose={closePanel}
         />
       )}
       {panel === 'add' && (
         <div className="mv-add-overlay">
-          <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onCancel={closePanel} autoStart={DEMO_SIGNIN ? 'google' : null} />
+          <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onCancel={closePanel} autoStart={DEMO_SIGNIN ? 'google' : null} />
         </div>
       )}
       {open && (

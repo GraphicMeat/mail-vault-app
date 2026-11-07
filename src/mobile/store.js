@@ -18,7 +18,7 @@ import { create } from 'zustand';
 import { daemonCall, listen } from './transport.js';
 import { createPageCache, PAGE_SIZE } from './messagePages.js';
 import { errorCodeOf } from './errors.js';
-import { oauthSignIn, oauthReauth } from './oauth.js';
+import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
 
 export const STORAGE_ACCOUNT = 'mv.mobile.activeAccount';
 export const STORAGE_FOLDER = 'mv.mobile.activeFolder';
@@ -300,6 +300,7 @@ export function createMobileStore() {
       notice: null, // a one-line toast: { id, key }
       outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError }]
       drafts: [], // the active account's drafts: [{ id, accountId, to, subject, updatedMs }]
+      reauthState: null, // the last "Sign in again": { accountId, busy, code } (code null when fine)
 
       /**
        * Applies `kind` (seen|unseen|flag|unflag|move|delete) to `uids` of `folder`. A move or
@@ -450,6 +451,11 @@ export function createMobileStore() {
        * Adds an account through the provider's sign-in sheet (`google` | `microsoft`, oauth.js)
        * and opens it. `{ok}` or `{ok: false, code}`; `CANCELLED` when the user closed the sheet.
        */
+      /** Ends the running sign-in or reauth (the in-app Cancel); its call then answers `CANCELLED`. */
+      cancelSignIn() {
+        cancelOAuth();
+      },
+
       async signIn(provider) {
         const result = await oauthSignIn(provider);
         if (!result.ok) return result;
@@ -462,7 +468,13 @@ export function createMobileStore() {
        * error cleared, and the open account syncs.
        */
       async reauth(accountId) {
+        // One run, whichever control started it: the banner and the switcher both read this.
+        if (get().reauthState?.busy) return { ok: false, code: 'SIGNIN_BUSY' };
+        set({ reauthState: { accountId, busy: true, code: null } });
         const result = await oauthReauth(accountId);
+        // A cancel is the user's own choice and says nothing; any other failure stays on show.
+        const code = result.ok || result.code === 'CANCELLED' ? null : result.code;
+        set({ reauthState: { accountId, busy: false, code } });
         if (!result.ok) return result;
         const account = { ...result.account, needsAuth: false };
         set((s) => {

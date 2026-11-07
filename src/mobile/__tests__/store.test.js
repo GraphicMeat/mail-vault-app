@@ -52,10 +52,10 @@ vi.mock('../transport.js', () => ({
   }),
 }));
 
-vi.mock('../oauth.js', () => ({ oauthSignIn: vi.fn(), oauthReauth: vi.fn() }));
+vi.mock('../oauth.js', () => ({ oauthSignIn: vi.fn(), oauthReauth: vi.fn(), cancelOAuth: vi.fn() }));
 
 import { createMobileStore, STORAGE_ACCOUNT, STORAGE_FOLDER } from '../store.js';
-import { oauthSignIn, oauthReauth } from '../oauth.js';
+import { oauthSignIn, oauthReauth, cancelOAuth } from '../oauth.js';
 
 const emit = (name, payload) => { for (const h of engine.handlers.get(name) || []) h(payload); };
 const callsOf = (method) => engine.calls.filter(([m]) => m === method).map(([, p]) => p);
@@ -290,8 +290,18 @@ describe('mobile store', () => {
     // Another error code parks nothing.
     emit('mobile.sync.state', { accountId: 'a2', state: 'error', code: 'TIMEOUT' });
     expect(store.getState().accounts.find((a) => a.id === 'a2').needsAuth).toBeUndefined();
-    oauthReauth.mockResolvedValueOnce({ ok: false, code: 'AUTH_FAILED' });
-    expect(await store.getState().reauth('a1')).toEqual({ ok: false, code: 'AUTH_FAILED' });
+    let fail;
+    oauthReauth.mockReturnValueOnce(new Promise((r) => { fail = r; }));
+    const running = store.getState().reauth('a1');
+    expect(store.getState().reauthState).toEqual({ accountId: 'a1', busy: true, code: null });
+    // One run at a time, whichever control asks.
+    expect(await store.getState().reauth('a1')).toEqual({ ok: false, code: 'SIGNIN_BUSY' });
+    expect(oauthReauth).toHaveBeenCalledTimes(1);
+    fail({ ok: false, code: 'AUTH_FAILED' });
+    expect(await running).toEqual({ ok: false, code: 'AUTH_FAILED' });
+    expect(store.getState().reauthState).toEqual({ accountId: 'a1', busy: false, code: 'AUTH_FAILED' });
+    store.getState().cancelSignIn();
+    expect(cancelOAuth).toHaveBeenCalledTimes(1);
     expect(store.getState().accounts.find((a) => a.id === 'a1').needsAuth).toBe(true);
     const refreshes = callsOf('mobile.sync.refresh').length;
     oauthReauth.mockResolvedValueOnce({ ok: true, account: { ...acct('a1'), needsAuth: false } });
@@ -299,6 +309,7 @@ describe('mobile store', () => {
     expect(oauthReauth).toHaveBeenLastCalledWith('a1');
     expect(store.getState().accounts.find((a) => a.id === 'a1').needsAuth).toBe(false);
     expect(store.getState().syncState.a1).toBeUndefined();
+    expect(store.getState().reauthState).toEqual({ accountId: 'a1', busy: false, code: null });
     expect(callsOf('mobile.sync.refresh').length).toBe(refreshes + 1);
   });
 

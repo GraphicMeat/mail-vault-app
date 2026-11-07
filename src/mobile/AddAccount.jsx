@@ -1,6 +1,8 @@
 // Add an account. The first screen picks the provider: Google and Microsoft sign in through the
 // system sign-in sheet (`onOAuth(provider)`, oauth.js), "Fastmail and other JMAP" is shown disabled
-// until the JMAP form exists, and "Other (IMAP)" opens the IMAP form below.
+// until the JMAP form exists, and "Other (IMAP)" opens the IMAP form below. While a sign-in runs,
+// Cancel stays live: it ends the flow (`onOAuthCancel`) and comes back to the picker at once, so a
+// sheet whose answer never comes cannot strand the user.
 // The IMAP form: email and password first, then the server, prefilled from the address's
 // domain (`imap.<domain>`, 993, SSL/TLS; `smtp.<domain>`, 465, SSL/TLS) and editable. The engine signs in before it saves, so the
 // one `onSubmit` call is the test. The form lives in this component only: the password is sent once
@@ -45,7 +47,7 @@ const PROVIDERS = [
   ['imap', 'mobile.add.imap'],
 ];
 
-export default function AddAccount({ onSubmit, onOAuth, onCancel, autoStart = null }) {
+export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel, autoStart = null }) {
   const t = useT();
   const [step, setStep] = useState('picker'); // 'picker' | 'waiting' | 'credentials' | 'server'
   const [email, setEmail] = useState('');
@@ -68,8 +70,12 @@ export default function AddAccount({ onSubmit, onOAuth, onCancel, autoStart = nu
   const canNext = looksLikeEmail(email) && password.length > 0;
   const canSubmit = !busy && canNext && host.trim().length > 0 && portOk && smtpHost.trim().length > 0 && smtpPortOk;
 
+  // Each run's number: a run the user cancelled here is over for this screen, whatever it answers.
+  const run = useRef(0);
+
   const signInWith = async (provider) => {
     if (step !== 'picker' || !onOAuth) return;
+    const mine = ++run.current;
     setErrorCode(null);
     setStep('waiting');
     let result;
@@ -78,11 +84,19 @@ export default function AddAccount({ onSubmit, onOAuth, onCancel, autoStart = nu
     } catch {
       result = { ok: false, code: 'INTERNAL' };
     }
+    if (mine !== run.current) return;
     // Added: the caller moves on (this screen goes away). Otherwise back to the picker; a cancel is
     // the user's own choice and says nothing.
     if (result?.ok) return;
     setStep('picker');
     if (result?.code !== 'CANCELLED') setErrorCode(result?.code ?? 'INTERNAL');
+  };
+
+  const cancelFlow = () => {
+    run.current += 1;
+    onOAuthCancel?.();
+    setErrorCode(null);
+    setStep('picker');
   };
 
   const choose = (provider) => {
@@ -144,8 +158,12 @@ export default function AddAccount({ onSubmit, onOAuth, onCancel, autoStart = nu
   return (
     <section className="mv-add" aria-labelledby="mv-add-title">
       <div className="mv-add__bar">
-        {onCancel && (
-          <button type="button" className="mv-textbtn" onClick={onCancel} disabled={busy || step === 'waiting'}>
+        {step === 'waiting' ? (
+          <button type="button" className="mv-textbtn" onClick={cancelFlow}>
+            {t('common.cancel')}
+          </button>
+        ) : onCancel && (
+          <button type="button" className="mv-textbtn" onClick={onCancel} disabled={busy}>
             {t('common.cancel')}
           </button>
         )}

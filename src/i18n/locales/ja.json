@@ -4372,5 +4372,6 @@
   "mobile.reauth.action": "再度サインイン",
   "mobile.error.NEEDS_AUTH": "このアカウントのメールを引き続き受信するには、再度サインインしてください。",
   "mobile.error.CANCELLED": "サインインはキャンセルされました。",
-  "mobile.error.NO_BROWSER": "この端末にはサインインページを表示できるブラウザがありません。"
+  "mobile.error.NO_BROWSER": "この端末にはサインインページを表示できるブラウザがありません。",
+  "mobile.error.SIGNIN_BUSY": "サインインはすでに開いています。先に完了するかキャンセルしてください。"
 }

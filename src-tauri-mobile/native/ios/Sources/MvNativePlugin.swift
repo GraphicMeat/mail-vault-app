@@ -405,7 +405,8 @@ extension MvNativePlugin {
       if !started.start() {
         self.authSession = nil
         self.authInvoke = nil
-        invoke.reject("the sign-in sheet could not be shown", code: "BUSY")
+        // Not another sheet (that is `BUSY` above): the session refused to start.
+        invoke.reject("the sign-in sheet could not be shown", code: "INTERNAL")
       }
     }
   }

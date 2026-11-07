@@ -4372,5 +4372,6 @@
   "mobile.reauth.action": "Entrar de novo",
   "mobile.error.NEEDS_AUTH": "Entre de novo para continuar recebendo e-mails desta conta.",
   "mobile.error.CANCELLED": "A entrada foi cancelada.",
-  "mobile.error.NO_BROWSER": "Nenhum navegador neste dispositivo consegue mostrar a página de entrada."
+  "mobile.error.NO_BROWSER": "Nenhum navegador neste dispositivo consegue mostrar a página de entrada.",
+  "mobile.error.SIGNIN_BUSY": "Já há uma entrada aberta. Termine ou cancele essa primeiro."
 }

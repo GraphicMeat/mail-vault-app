@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import AddAccount from '../AddAccount.jsx';
 import { ReauthBanner } from '../AccountSwitcher.jsx';
 import AccountSwitcher from '../AccountSwitcher.jsx';
-import { oauthSignIn, oauthReauth } from '../oauth.js';
+import { oauthSignIn, oauthReauth, cancelOAuth } from '../oauth.js';
+import { useMobileStore } from '../store.js';
 import { daemonCall, openAuthSheet, closeAuthSheet } from '../transport.js';
 import { ERROR_KEYS, errorKey } from '../errors.js';
 import { t } from '../i18n.js';
@@ -13,6 +14,7 @@ import en from '../../i18n/locales/en.json';
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(),
+  listen: vi.fn(() => () => {}),
   openAuthSheet: vi.fn(),
   closeAuthSheet: vi.fn(async () => {}),
 }));
@@ -160,7 +162,7 @@ describe('AddAccount', () => {
   });
 
   it('every engine code has a translated message, and an unknown one falls back', () => {
-    for (const code of ['AUTH_FAILED', 'HOST_UNREACHABLE', 'TLS_FAILED', 'TIMEOUT', 'DUPLICATE', 'INVALID', 'SMTP_FAILED', 'INTERNAL', 'NEEDS_AUTH', 'CANCELLED', 'NO_BROWSER']) {
+    for (const code of ['AUTH_FAILED', 'HOST_UNREACHABLE', 'TLS_FAILED', 'TIMEOUT', 'DUPLICATE', 'INVALID', 'SMTP_FAILED', 'INTERNAL', 'NEEDS_AUTH', 'CANCELLED', 'NO_BROWSER', 'SIGNIN_BUSY']) {
       expect(ERROR_KEYS[code], code).toBeDefined();
       expect(en[ERROR_KEYS[code]], code).toBeTruthy();
     }
@@ -197,6 +199,7 @@ function oauthEngine({ url = 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
     if (method === 'mobile.oauth.begin' || method === 'mobile.oauth.reauth') return { flowId, url };
     if (method === 'mobile.oauth.finish') return finish.promise;
     if (method === 'mobile.oauth.cancel') return { cancelled: true };
+    if (method === 'mobile.sync.refresh') return { queued: true };
     throw new Error(`unexpected ${method}`);
   });
   openAuthSheet.mockImplementation(() => sheet.promise);
@@ -294,46 +297,147 @@ describe('AddAccount provider picker', () => {
   });
 });
 
+describe('one sign-in at a time, and a way out', () => {
+  it('Cancel stays live while a sign-in runs: it cancels the flow, closes the sheet and returns to the picker', async () => {
+    const engine = oauthEngine();
+    // No onCancel: the first-launch screen. Cancel still appears while the flow runs.
+    render(<AddAccount onSubmit={vi.fn()} onOAuth={(p) => oauthSignIn(p)} onOAuthCancel={cancelOAuth} />);
+    expect(screen.queryByRole('button', { name: t('common.cancel') })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: t('mobile.add.google') }));
+    });
+    expect(screen.getByRole('button', { name: t('mobile.add.google') }).disabled).toBe(true);
+    // The sheet never answers (a lost native answer): Cancel ends it from the page.
+    const cancel = screen.getByRole('button', { name: t('common.cancel') });
+    expect(cancel.disabled).toBe(false);
+    await act(async () => { fireEvent.click(cancel); });
+    expect(calls('mobile.oauth.cancel')).toEqual([['mobile.oauth.cancel', { flowId: 'f1' }]]);
+    expect(closeAuthSheet).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: t('mobile.add.google') }).disabled).toBe(false);
+    expect(screen.queryByText(t('mobile.add.waiting'))).toBeNull();
+    await act(async () => { engine.finish.resolve({ ok: false, code: 'CANCELLED' }); });
+    expect(screen.queryByRole('alert')).toBeNull();
+    // The flow is over: a new one may start.
+    await act(async () => {});
+    const again = oauthEngine();
+    const next = oauthSignIn('google');
+    await act(async () => {});
+    again.finish.resolve({ ok: false, code: 'CANCELLED' });
+    expect(calls('mobile.oauth.begin')).toHaveLength(2);
+    await next;
+  });
+
+  it('a cancel before begin answers ends the flow without opening the sheet', async () => {
+    let answerBegin;
+    daemonCall.mockImplementation((method) => {
+      if (method === 'mobile.oauth.begin') return new Promise((r) => { answerBegin = r; });
+      if (method === 'mobile.oauth.cancel') return Promise.resolve({ cancelled: true });
+      return Promise.reject(new Error(`unexpected ${method}`));
+    });
+    const pending = oauthSignIn('google');
+    cancelOAuth();
+    answerBegin({ flowId: 'f9', url: 'https://accounts.google.com/x' });
+    await expect(pending).resolves.toEqual({ ok: false, code: 'CANCELLED' });
+    expect(calls('mobile.oauth.cancel')).toEqual([['mobile.oauth.cancel', { flowId: 'f9' }]]);
+    expect(openAuthSheet).not.toHaveBeenCalled();
+    expect(calls('mobile.oauth.finish')).toEqual([]);
+  });
+
+  it('a second start while one runs is refused with its own message and starts nothing', async () => {
+    const engine = oauthEngine();
+    const first = oauthSignIn('google');
+    await act(async () => {});
+    await expect(oauthReauth('a1')).resolves.toEqual({ ok: false, code: 'SIGNIN_BUSY' });
+    await expect(oauthSignIn('microsoft')).resolves.toEqual({ ok: false, code: 'SIGNIN_BUSY' });
+    expect(calls('mobile.oauth.begin')).toHaveLength(1);
+    expect(calls('mobile.oauth.reauth')).toEqual([]);
+    expect(openAuthSheet).toHaveBeenCalledTimes(1);
+    expect(t(errorKey('SIGNIN_BUSY'))).toBe(en['mobile.error.SIGNIN_BUSY']);
+    engine.finish.resolve({ ok: false, code: 'CANCELLED' });
+    await first;
+  });
+
+  it('a sheet the shell refuses as BUSY says a sign-in is already open', async () => {
+    const engine = oauthEngine();
+    openAuthSheet.mockImplementation(async () => { throw Object.assign(new Error('busy'), { code: 'BUSY' }); });
+    render(<AddAccount onSubmit={vi.fn()} onOAuth={(p) => oauthSignIn(p)} onOAuthCancel={cancelOAuth} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: t('mobile.add.google') }));
+    });
+    await act(async () => { engine.finish.resolve({ ok: false, code: 'CANCELLED' }); });
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.error.SIGNIN_BUSY'));
+  });
+});
+
 describe('needs_auth', () => {
   const parked = { id: 'a1', email: 'ada@gmail.test', displayName: 'ada@gmail.test', needsAuth: true, provider: 'google', kind: 'imap' };
+  const other = { id: 'a2', email: 'bo@example.test', needsAuth: false };
+
+  // The app's wiring: the banner and the switcher both run the store's one reauth.
+  function Harness() {
+    const accounts = useMobileStore((s) => s.accounts);
+    const state = useMobileStore((s) => s.reauthState);
+    const reauth = (id) => useMobileStore.getState().reauth(id);
+    return (
+      <>
+        <ReauthBanner account={accounts.find((a) => a.id === 'a1')} state={state} onReauth={reauth} />
+        <AccountSwitcher accounts={accounts} activeAccountId="a1" unread={{}} onSelect={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onReauth={reauth} reauthBusy={Boolean(state?.busy)} onClose={vi.fn()} />
+      </>
+    );
+  }
+
+  const bannerButton = () => screen.getAllByRole('button').find((b) => b.className.includes('mv-reauth__btn'));
+  const rowButton = () => screen.getAllByRole('button').find((b) => b.className.includes('mv-acct__reauth'));
+
+  beforeEach(() => {
+    useMobileStore.setState({ accounts: [parked, other], activeAccountId: 'a1', reauthState: null, syncState: {} });
+  });
 
   it('needs_auth account shows a Sign in again banner that starts reauth', async () => {
     const engine = oauthEngine();
-    const onReauth = vi.fn((id) => oauthReauth(id));
-    render(<ReauthBanner account={parked} onReauth={onReauth} />);
+    render(<Harness />);
     expect(screen.getByRole('status').textContent).toContain('ada@gmail.test');
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: t('mobile.reauth.action') }));
-    });
-    expect(onReauth).toHaveBeenCalledWith('a1');
+    await act(async () => { fireEvent.click(bannerButton()); });
     expect(calls('mobile.oauth.reauth')).toEqual([['mobile.oauth.reauth', { accountId: 'a1' }]]);
     expect(openAuthSheet).toHaveBeenCalledWith(engine.url);
-    expect(screen.getByRole('button', { name: t('mobile.add.signingIn') }).disabled).toBe(true);
+    // Both entry points are off while it runs.
+    expect(bannerButton().disabled).toBe(true);
+    expect(bannerButton().textContent).toBe(t('mobile.add.signingIn'));
+    expect(rowButton().disabled).toBe(true);
+    fireEvent.click(rowButton());
+    expect(calls('mobile.oauth.reauth')).toHaveLength(1);
     await act(async () => { engine.finish.resolve({ ok: true, account: { ...parked, needsAuth: false } }); });
     expect(closeAuthSheet).toHaveBeenCalledTimes(1);
+    expect(useMobileStore.getState().accounts.find((a) => a.id === 'a1').needsAuth).toBe(false);
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('a failed reauth says why and offers the button again', async () => {
+  it('a failed reauth started from the switcher shows its error on the banner', async () => {
     const engine = oauthEngine();
-    render(<ReauthBanner account={parked} onReauth={(id) => oauthReauth(id)} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: t('mobile.reauth.action') }));
-    });
+    render(<Harness />);
+    await act(async () => { fireEvent.click(rowButton()); });
+    expect(calls('mobile.oauth.reauth')).toEqual([['mobile.oauth.reauth', { accountId: 'a1' }]]);
+    expect(bannerButton().disabled).toBe(true);
     await act(async () => { engine.finish.resolve({ ok: false, code: 'AUTH_FAILED' }); });
     expect(screen.getByRole('alert').textContent).toBe(t('mobile.error.AUTH_FAILED'));
-    expect(screen.getByRole('button', { name: t('mobile.reauth.action') }).disabled).toBe(false);
+    expect(bannerButton().disabled).toBe(false);
+    expect(rowButton().disabled).toBe(false);
+    // A cancel clears the error and says nothing.
+    const again = oauthEngine();
+    await act(async () => { fireEvent.click(bannerButton()); });
+    await act(async () => { again.finish.resolve({ ok: false, code: 'CANCELLED' }); });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('shows no banner for an account that signs in fine', () => {
-    const { container } = render(<ReauthBanner account={{ ...parked, needsAuth: false }} onReauth={vi.fn()} />);
+    const { container } = render(<ReauthBanner account={{ ...parked, needsAuth: false }} state={null} onReauth={vi.fn()} />);
     expect(container.textContent).toBe('');
   });
 
-  it('the switcher offers Sign in again on a needs_auth row', () => {
+  it('the switcher offers Sign in again on a needs_auth row only', () => {
     const onReauth = vi.fn();
-    const ok = { id: 'a2', email: 'bo@example.test', needsAuth: false };
     render(
-      <AccountSwitcher accounts={[parked, ok]} activeAccountId="a2" unread={{}} onSelect={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onReauth={onReauth} onClose={vi.fn()} />,
+      <AccountSwitcher accounts={[parked, other]} activeAccountId="a2" unread={{}} onSelect={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onReauth={onReauth} onClose={vi.fn()} />,
     );
     const buttons = screen.getAllByRole('button', { name: t('mobile.reauth.action') });
     expect(buttons).toHaveLength(1);

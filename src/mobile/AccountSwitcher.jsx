@@ -17,7 +17,7 @@ export function Avatar({ account, small = false }) {
   return <span className={small ? 'mv-avatar mv-avatar--small' : 'mv-avatar'} aria-hidden="true">{initialOf(account)}</span>;
 }
 
-function AccountRow({ account, active, unread, onSelect, onRemove, onReauth }) {
+function AccountRow({ account, active, unread, onSelect, onRemove, onReauth, reauthBusy }) {
   const t = useT();
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -73,7 +73,7 @@ function AccountRow({ account, active, unread, onSelect, onRemove, onReauth }) {
         <span className="mv-acct__check" aria-hidden="true">{active ? '✓' : ''}</span>
       </button>
       {account.needsAuth && onReauth && (
-        <button type="button" className="mv-textbtn mv-acct__reauth" onClick={() => onReauth(account.id)}>
+        <button type="button" className="mv-textbtn mv-acct__reauth" disabled={reauthBusy} onClick={() => onReauth(account.id)}>
           {t('mobile.reauth.action')}
         </button>
       )}
@@ -91,7 +91,7 @@ function AccountRow({ account, active, unread, onSelect, onRemove, onReauth }) {
   );
 }
 
-export default function AccountSwitcher({ accounts, activeAccountId, unread, onSelect, onAdd, onRemove, onReauth, onClose }) {
+export default function AccountSwitcher({ accounts, activeAccountId, unread, onSelect, onAdd, onRemove, onReauth, reauthBusy = false, onClose }) {
   const t = useT();
   return (
     <Sheet kind="sheet" label={t('mobile.switcher.title')} onClose={onClose}>
@@ -107,6 +107,7 @@ export default function AccountSwitcher({ accounts, activeAccountId, unread, onS
             onSelect={onSelect}
             onRemove={onRemove}
             onReauth={onReauth}
+            reauthBusy={reauthBusy}
           />
         ))}
       </ul>
@@ -120,32 +121,21 @@ export default function AccountSwitcher({ accounts, activeAccountId, unread, onS
 
 /**
  * The banner above the list while `account` is parked (`needsAuth`): its provider no longer
- * honours the sign-in, so nothing syncs until the user signs in again. `onReauth(id)` runs the
- * flow and answers `{ok}` or `{ok: false, code}`; a cancel is the user's own choice and says nothing.
+ * honours the sign-in, so nothing syncs until the user signs in again. `state` is the store's
+ * `reauthState` ({ accountId, busy, code }), shared with the switcher's "Sign in again", so a run
+ * started from either shows its progress and its error here. `onReauth(id)` starts one.
  */
-export function ReauthBanner({ account, onReauth }) {
+export function ReauthBanner({ account, state, onReauth }) {
   const t = useT();
-  const [busy, setBusy] = useState(false);
-  const [errorCode, setErrorCode] = useState(null);
   if (!account?.needsAuth) return null;
-  const start = async () => {
-    setBusy(true);
-    setErrorCode(null);
-    let result;
-    try {
-      result = await onReauth(account.id);
-    } catch {
-      result = { ok: false, code: 'INTERNAL' };
-    }
-    setBusy(false);
-    if (!result?.ok && result?.code !== 'CANCELLED') setErrorCode(result?.code ?? 'INTERNAL');
-  };
+  const mine = state && state.accountId === account.id ? state : null;
+  const busy = Boolean(state?.busy);
   return (
     <div className="mv-reauth">
       <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.reauth.banner', { email: account.email })}</p>
-      {errorCode && <p className="mv-reauth__error" role="alert">{t(errorKey(errorCode))}</p>}
-      <button type="button" className="mv-reauth__btn" disabled={busy} aria-busy={busy} onClick={start}>
-        {busy ? t('mobile.add.signingIn') : t('mobile.reauth.action')}
+      {mine?.code && !busy && <p className="mv-reauth__error" role="alert">{t(errorKey(mine.code))}</p>}
+      <button type="button" className="mv-reauth__btn" disabled={busy} aria-busy={busy} onClick={() => onReauth(account.id)}>
+        {mine?.busy ? t('mobile.add.signingIn') : t('mobile.reauth.action')}
       </button>
     </div>
   );
