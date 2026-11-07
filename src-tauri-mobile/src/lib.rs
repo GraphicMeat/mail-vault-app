@@ -419,23 +419,38 @@ pub fn run() {
             // webview: ask once, and nothing else before the engine is open. The engine is the
             // process's one: a background run may have opened it already (then this is that one).
             let cache_dir = app.path().app_cache_dir();
+            // The sink runs on the engine's sync thread inside its block_on: only hand the event
+            // to Tauri and return, never call back into the engine (no nested block_on).
+            let handle = app.handle().clone();
+            let install = move |engine: &Engine| {
+                let handle = handle.clone();
+                engine.set_event_sink(move |name, payload| {
+                    let _ = handle.emit("mobile-event", serde_json::json!({ "name": name, "payload": payload }));
+                });
+            };
+            let opened_here = std::cell::Cell::new(false);
             let engine = match (app.path().app_data_dir(), &cache_dir) {
                 (Ok(data), Ok(cache)) => {
                     background::check_dirs(&data, cache);
                     #[cfg(all(feature = "perf-gate", target_os = "ios"))]
                     background::watch_device_check(cache.clone());
-                    background::engine_with(&data, cache, background::open_platform)
+                    // The sink and the perf seed before the engine is published, as before the
+                    // engine went process-wide: the page's first call must find the seeded rows,
+                    // and no startup result may be emitted with no sink.
+                    background::engine_with(&data, cache, |d, c| {
+                        let engine = background::open_platform(d, c)?;
+                        opened_here.set(true);
+                        install(&engine);
+                        seed_for_perf_gate(&engine);
+                        Ok(engine)
+                    })
                 }
                 (Err(e), _) => background::engine_failed(format!("app data dir: {e}")),
                 (_, Err(e)) => background::engine_failed(format!("app cache dir: {e}")),
             };
-            if let Ok(engine) = engine {
-                // The sink runs on the engine's sync thread inside its block_on: only hand the
-                // event to Tauri and return, never call back into the engine (no nested block_on).
-                let handle = app.handle().clone();
-                engine.set_event_sink(move |name, payload| {
-                    let _ = handle.emit("mobile-event", serde_json::json!({ "name": name, "payload": payload }));
-                });
+            if let (Ok(engine), false) = (engine, opened_here.get()) {
+                // A background run opened it first: it has no sink yet.
+                install(engine);
                 seed_for_perf_gate(engine);
             }
             if let Err(reason) = engine {
