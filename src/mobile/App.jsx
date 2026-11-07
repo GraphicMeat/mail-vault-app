@@ -249,8 +249,8 @@ function App() {
     setOpen(null);
   }, [open]);
   // Delete closes the message and opens the next row of the list (the one below it), if any.
-  // Closing onto another message sends the delete at once (no undo); with no next row the viewer
-  // closes to the list and the delete waits out its undo toast.
+  // The delete keeps its own undo toast either way; undo puts the row back in the list (the viewer
+  // stays where it is). Moving on with another delete or move sends this one first.
   const onViewerDelete = useCallback(() => {
     if (!open) return;
     const s = useMobileStore.getState();
@@ -259,7 +259,6 @@ function App() {
     const next = sameList && Number.isInteger(index) ? s.list.rowAt(index + 1) : undefined;
     s.act('delete', { accountId, folder, uids: [open.row.uid] });
     if (next) {
-      s.flush();
       s.markSeen(accountId, folder, next);
       setOpen({ row: next.seen ? next : { ...next, seen: true }, index, accountId, folder });
     } else {

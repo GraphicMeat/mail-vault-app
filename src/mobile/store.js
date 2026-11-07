@@ -4,8 +4,8 @@
 // Actions (`act`): read, unread, flag and unflag go to `mobile.actions.apply` at once. A move or a
 // delete is deferred on this side: its rows leave the list at once (`list.hide`), an undo toast
 // shows for UNDO_MS, and only then is it applied, or sooner when the page is hidden or unloaded,
-// the account or folder changes, the viewer moves on to another message (App.jsx calls `flush`),
-// or the next move or delete comes (one deferred action at a time).
+// the account or folder changes, or the next move or delete comes (one deferred action at a time;
+// a delete in the viewer that opens the next message keeps its own toast).
 // Undo forgets it and shows the rows again; nothing reached the engine. A killed app can lose an
 // unsent move or delete, which keeps the mail. Store-free of the
 // desktop: it imports nothing from src/stores, and reaches the engine only through transport.js
