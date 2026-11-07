@@ -4,73 +4,78 @@
 //! or share sheet (`mobile_open_file` / `mobile_share_file`), runs the system file and photo
 //! pickers for outgoing attachments (`mobile_pick_files`), opens and closes the system sign-in
 //! sheet for an OAuth flow (`mobile_auth_open` / `mobile_auth_close`) and, through the `mv-native`
-//! plugin's navigation hook, sends links tapped in a mail to the system browser.
+//! plugin's navigation hook, sends links tapped in a mail to the system browser. Background runs
+//! and notification taps come in through `background.rs` (and `android.rs`), on the same engine.
 
+#[cfg(target_os = "android")]
+mod android;
+mod background;
 mod secrets;
 
 use mailvault_mobile_engine::{Engine, RpcError};
 use serde_json::{json, Value};
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_mv_native::files::{self, PathError};
 use tauri_plugin_mv_native::{pick, MvNative, NativeError, PickKind};
 
-/// The engine, or why it failed to open. The app starts either way; every RPC then answers
-/// `INTERNAL` with the reason. Managed empty at the start of setup and filled once the engine is
-/// open: the page can load and call before setup ends (on Android the webview loads while setup
-/// runs), and such a call waits for the engine instead of finding no state.
-struct EngineState(Arc<EngineSlot>);
-
-type Opened = Arc<Result<Engine, String>>;
-
-#[derive(Default)]
-struct EngineSlot {
-    engine: std::sync::Mutex<Option<Opened>>,
-    ready: std::sync::Condvar,
-}
-
-/// Longest a call waits for setup to open the engine.
+/// Longest a call waits for setup to open the engine. The engine is the process's one
+/// (`background.rs`), or why it failed to open: the app starts either way, and every RPC then
+/// answers `INTERNAL` with the reason. The page can load and call before setup has opened it (on
+/// Android the webview loads while setup runs); such a call waits for it.
 const ENGINE_WAIT: Duration = Duration::from_secs(60);
 
-impl EngineSlot {
-    fn fill(&self, engine: Opened) {
-        *self.engine.lock().unwrap_or_else(|e| e.into_inner()) = Some(engine);
-        self.ready.notify_all();
-    }
-
-    /// The opened engine; blocks (call it off the async runtime) until setup has opened it.
-    fn wait(&self) -> Result<Opened, String> {
-        let guard = self.engine.lock().unwrap_or_else(|e| e.into_inner());
-        let (guard, _) = self
-            .ready
-            .wait_timeout_while(guard, ENGINE_WAIT, |e| e.is_none())
-            .unwrap_or_else(|e| e.into_inner());
-        guard.clone().ok_or_else(|| "the engine is still starting".to_string())
-    }
-}
-
 /// Same name and argument shape `daemonClient.js` sends on desktop. `daemon_mode` is the desktop
-/// spawn policy and means nothing here.
+/// spawn policy and means nothing here. A `mobile.settings.set` that changed `notifications` also
+/// turns the OS's background refresh on or off.
 #[tauri::command]
-async fn daemon_rpc(
-    state: tauri::State<'_, EngineState>,
-    method: String,
-    params: Value,
-    daemon_mode: Option<Value>,
-) -> Result<Value, RpcError> {
+async fn daemon_rpc(app: tauri::AppHandle, method: String, params: Value, daemon_mode: Option<Value>) -> Result<Value, RpcError> {
     let _ = daemon_mode;
-    let slot = Arc::clone(&state.0);
+    let schedule = method == "mobile.settings.set" && params.get("notifications").is_some();
     tauri::async_runtime::spawn_blocking(move || {
-        let engine = slot.wait().map_err(RpcError::Internal)?;
-        match engine.as_ref() {
-            Ok(engine) => engine.rpc(&method, params),
-            Err(reason) => Err(RpcError::Internal(reason.clone())),
+        let engine = background::wait_engine(ENGINE_WAIT).map_err(RpcError::Internal)?;
+        let reply = engine.rpc(&method, params)?;
+        if schedule {
+            schedule_background(&app, reply.get("notifications").and_then(Value::as_str) == Some("on"));
         }
+        Ok(reply)
     })
     .await
     .map_err(|e| RpcError::Internal(e.to_string()))?
+}
+
+/// Turns the OS's periodic background run on (iOS `BGAppRefreshTask` requests, Android unique
+/// periodic work `mv-refresh`, kept if already queued) or off. Logged on failure; call it off the
+/// main thread.
+fn schedule_background(app: &tauri::AppHandle, on: bool) {
+    let Some(native) = app.try_state::<MvNative<tauri::Wry>>() else { return };
+    if let Err(e) = native.set_background_refresh(on) {
+        log_line(&format!("MV_MOBILE {}", json!({ "backgroundScheduleError": e.message })));
+    }
+}
+
+/// The notification the user tapped last, if the page has not taken it yet: `{accountId, folder,
+/// uid?}` or `null`. The page calls it on mount (a cold launch's tap came before it existed) and
+/// on each `mobile.notification.open`; each tap is answered once.
+#[tauri::command]
+fn mobile_notification_take() -> Option<background::Tap> {
+    background::take_tap()
+}
+
+/// Asks the user to allow notifications (iOS; Android 13 and later) and answers `{granted}`. On an
+/// older Android it only reports whether they are on. Rejects with `{code, message}`: `INTERNAL`.
+#[tauri::command]
+async fn mobile_notifications_permission(app: tauri::AppHandle) -> Result<Value, NativeError> {
+    // Off the webview thread: the native call answers when the user has chosen.
+    tauri::async_runtime::spawn_blocking(move || {
+        let native = app
+            .try_state::<MvNative<tauri::Wry>>()
+            .ok_or_else(|| NativeError::new("INTERNAL", "the native plugin is not loaded"))?;
+        native.request_notifications().map(|granted| json!({ "granted": granted }))
+    })
+    .await
+    .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
 }
 
 /// How long Android keeps a staged copy: its viewer or share target reads the file after
@@ -89,43 +94,23 @@ enum HandOut {
 /// `{code, message}`: `GONE` (evicted: fetch again), `INVALID` (not a cache file), `NO_APP`,
 /// `BUSY`, `INTERNAL`.
 #[tauri::command]
-async fn mobile_open_file(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, EngineState>,
-    path: String,
-    name: String,
-    mime: String,
-) -> Result<(), NativeError> {
-    hand_out(app, Arc::clone(&state.0), path, name, mime, HandOut::Open).await
+async fn mobile_open_file(app: tauri::AppHandle, path: String, name: String, mime: String) -> Result<(), NativeError> {
+    hand_out(app, path, name, mime, HandOut::Open).await
 }
 
 /// Offers a cached attachment to the system share sheet. Same arguments and errors as
 /// `mobile_open_file`.
 #[tauri::command]
-async fn mobile_share_file(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, EngineState>,
-    path: String,
-    name: String,
-    mime: String,
-) -> Result<(), NativeError> {
-    hand_out(app, Arc::clone(&state.0), path, name, mime, HandOut::Share).await
+async fn mobile_share_file(app: tauri::AppHandle, path: String, name: String, mime: String) -> Result<(), NativeError> {
+    hand_out(app, path, name, mime, HandOut::Share).await
 }
 
 /// Checks the path is a finished file of `<cache>/att/`, leases it while a named link or copy is
 /// made under `<cache>/share/<fresh dir>/`, then hands that copy out. Off the webview thread: on
 /// iOS the native call answers only when the previewer or sheet is dismissed.
-async fn hand_out(
-    app: tauri::AppHandle,
-    slot: Arc<EngineSlot>,
-    path: String,
-    name: String,
-    mime: String,
-    how: HandOut,
-) -> Result<(), NativeError> {
+async fn hand_out(app: tauri::AppHandle, path: String, name: String, mime: String, how: HandOut) -> Result<(), NativeError> {
     tauri::async_runtime::spawn_blocking(move || {
-        let opened = slot.wait().map_err(|reason| NativeError::new("INTERNAL", reason))?;
-        let engine = opened.as_ref().as_ref().map_err(|reason| NativeError::new("INTERNAL", reason.clone()))?;
+        let engine = background::wait_engine(ENGINE_WAIT).map_err(|reason| NativeError::new("INTERNAL", reason))?;
         let cache = app.path().app_cache_dir().map_err(|e| NativeError::new("INTERNAL", e.to_string()))?;
         let share = cache.join("share");
         let real = files::validate_cache_file(Path::new(&path), &cache.join("att")).map_err(|e| match e {
@@ -312,7 +297,7 @@ fn mobile_log(line: String) {
 }
 
 #[cfg(target_os = "android")]
-fn log_line(line: &str) {
+pub(crate) fn log_line(line: &str) {
     use std::ffi::{c_char, c_int, CString};
     #[link(name = "log")]
     extern "C" {
@@ -327,7 +312,7 @@ fn log_line(line: &str) {
 }
 
 #[cfg(target_os = "ios")]
-fn log_line(line: &str) {
+pub(crate) fn log_line(line: &str) {
     use std::ffi::{c_char, c_int, CString};
     extern "C" {
         fn syslog(priority: c_int, format: *const c_char, ...);
@@ -341,7 +326,7 @@ fn log_line(line: &str) {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn log_line(line: &str) {
+pub(crate) fn log_line(line: &str) {
     println!("{line}");
 }
 
@@ -383,7 +368,7 @@ fn seed_for_perf_gate(_: &Engine) {}
 /// Once per install: re-saves every account's secret under the iOS access policy (see
 /// `secrets.rs`), recorded by the `secrets.policy` setting. A failure is logged and the next
 /// start tries again.
-fn migrate_secrets(engine: &Engine, secrets: &secrets::KeyringSecrets) {
+pub(crate) fn migrate_secrets(engine: &Engine, secrets: &secrets::KeyringSecrets) {
     const KEY: &str = "secrets.policy";
     const DONE: &str = "afu1";
     if secrets.error().is_some() || matches!(engine.setting(KEY), Ok(Some(v)) if v == DONE) {
@@ -399,36 +384,50 @@ fn migrate_secrets(engine: &Engine, secrets: &secrets::KeyringSecrets) {
     }
 }
 
+/// Perf-gate builds only: plaintext IMAP and SMTP to a loopback mock server for the device checks
+/// (core honours it for loopback addresses only). A shipping build never sets it.
+pub(crate) fn perf_gate_env() {
+    #[cfg(feature = "perf-gate")]
+    {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Managed before any webview exists, so a call never finds no state; filled in setup.
-    let slot = Arc::new(EngineSlot::default());
-    let setup_slot = Arc::clone(&slot);
-    let run_slot = Arc::clone(&slot);
+    perf_gate_env();
+    // iOS: the background task's handler and the notification tap delegate must exist before the
+    // app finishes launching (a later register is refused, and a cold launch's tap is lost); setup
+    // runs too late for both. `native/ios/Sources/Background.swift`.
+    #[cfg(target_os = "ios")]
+    {
+        extern "C" {
+            fn mv_ios_background_register();
+        }
+        // SAFETY: a Swift function with no arguments, exported with `@_cdecl`.
+        unsafe { mv_ios_background_register() };
+    }
     tauri::Builder::default()
-        .manage(EngineState(slot))
         // On the builder, before any page loads: every navigation is decided from the start, and
         // if the native plugin below fails to load, links stay cancelled (nothing opens).
         .plugin(tauri_plugin_mv_native::nav_guard(NAV_LOG))
         .setup(move |app| {
-            let slot = setup_slot;
             init_tls_verifier();
-            let secrets = Arc::new(secrets::KeyringSecrets::new());
-            if let Some(reason) = secrets.error() {
-                log_line(&format!("MV_MOBILE {}", serde_json::json!({ "secretsError": reason })));
-            }
+            background::set_app(app.handle().clone());
             // On Android each path is a round trip to the UI thread, which is busy creating the
-            // webview: ask once, and nothing else before the engine is open.
+            // webview: ask once, and nothing else before the engine is open. The engine is the
+            // process's one: a background run may have opened it already (then this is that one).
             let cache_dir = app.path().app_cache_dir();
             let engine = match (app.path().app_data_dir(), &cache_dir) {
-                (Ok(data), Ok(cache)) => Engine::open(&data, cache, secrets.clone()).map_err(|e| e.to_string()),
-                (Err(e), _) => Err(format!("app data dir: {e}")),
-                (_, Err(e)) => Err(format!("app cache dir: {e}")),
+                (Ok(data), Ok(cache)) => {
+                    background::check_dirs(&data, cache);
+                    background::engine_with(&data, cache, background::open_platform)
+                }
+                (Err(e), _) => background::engine_failed(format!("app data dir: {e}")),
+                (_, Err(e)) => background::engine_failed(format!("app cache dir: {e}")),
             };
-            if let Ok(engine) = &engine {
-                engine.set_log_sink(log_line);
-                // Before the event sink and the slot: either one starts work that reads secrets.
-                migrate_secrets(engine, &secrets);
+            if let Ok(engine) = engine {
                 // The sink runs on the engine's sync thread inside its block_on: only hand the
                 // event to Tauri and return, never call back into the engine (no nested block_on).
                 let handle = app.handle().clone();
@@ -437,10 +436,9 @@ pub fn run() {
                 });
                 seed_for_perf_gate(engine);
             }
-            if let Err(reason) = &engine {
+            if let Err(reason) = engine {
                 log_line(&format!("MV_MOBILE {}", serde_json::json!({ "engineError": reason })));
             }
-            slot.fill(Arc::new(engine));
             // Copies left by an earlier run: all of them on iOS (its previewer went with the app),
             // the stale ones on Android (another app may still be reading a fresh one).
             // A pick's scratch copies never outlive the pick. `<cache>/out/` is left alone: drafts
@@ -457,6 +455,12 @@ pub fn run() {
             // them all the same); the rest of the app works.
             if let Err(e) = app.handle().plugin(tauri_plugin_mv_native::init()) {
                 log_line(&format!("MV_MOBILE {}", json!({ "nativePluginError": e.to_string() })));
+            } else if let Ok(engine) = engine {
+                // The OS's background refresh follows the setting from the start (a fresh install
+                // or an update has nothing scheduled). Off the main thread: the native call waits
+                // for it.
+                let (handle, on) = (app.handle().clone(), engine.notifications_on());
+                std::thread::spawn(move || schedule_background(&handle, on));
             }
             Ok(())
         })
@@ -467,18 +471,20 @@ pub fn run() {
             mobile_share_file,
             mobile_pick_files,
             mobile_auth_open,
-            mobile_auth_close
+            mobile_auth_close,
+            mobile_notification_take,
+            mobile_notifications_permission
         ])
         .build(tauri::generate_context!())
         .expect("error while running the MailVault mobile shell")
-        .run(move |_app, event| on_run_event(&run_slot, &event));
+        .run(move |_app, event| on_run_event(&event));
 }
 
 /// The OS's suspend and resume (Android `onPause`/`onResume`, iOS resign/enter foreground) reach
 /// the engine's live listener directly, as `mobile.app.state`: a backstop for a WebView that never
 /// reports `visibilitychange: hidden`. A resume names no account: the engine resumes the one it
 /// last listened on, and replaces its connection, which may have died while the app was away.
-fn on_run_event(slot: &Arc<EngineSlot>, event: &tauri::RunEvent) {
+fn on_run_event(event: &tauri::RunEvent) {
     #[cfg(mobile)]
     {
         /// Numbers the lifecycle calls here, on the event loop, in the OS's order: each goes out
@@ -491,14 +497,12 @@ fn on_run_event(slot: &Arc<EngineSlot>, event: &tauri::RunEvent) {
             _ => return,
         };
         params["seq"] = json!(SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1);
-        // Not before setup opened the engine, and never on the UI thread.
-        let Some(opened) = slot.engine.lock().unwrap_or_else(|e| e.into_inner()).clone() else { return };
+        // Not before the engine is open, and never on the UI thread.
+        let Some(Ok(engine)) = background::opened() else { return };
         std::thread::spawn(move || {
-            if let Ok(engine) = opened.as_ref() {
-                let _ = engine.rpc("mobile.app.state", params);
-            }
+            let _ = engine.rpc("mobile.app.state", params);
         });
     }
     #[cfg(not(mobile))]
-    let _ = (slot, event);
+    let _ = event;
 }

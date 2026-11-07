@@ -5,6 +5,8 @@
 // `<dir>/<index>`; Rust names and moves the copies (../../src/files.rs `finish_pick`). It answers
 // when the picker closes; cancel is an empty list. `openAuth` shows a provider's sign-in page in
 // `ASWebAuthenticationSession` and answers when it closes (`closeAuth`, or the user's cancel).
+// `setBackgroundRefresh` turns the periodic background run on or off (Background.swift) and
+// `requestNotifications` asks for the notification permission.
 
 import AuthenticationServices
 import PhotosUI
@@ -12,6 +14,7 @@ import QuickLook
 import Tauri
 import UIKit
 import UniformTypeIdentifiers
+import UserNotifications
 import WebKit
 
 struct FileArgs: Decodable {
@@ -21,6 +24,10 @@ struct FileArgs: Decodable {
 
 struct UrlArgs: Decodable {
   let url: String
+}
+
+struct RefreshArgs: Decodable {
+  let enabled: Bool
 }
 
 struct PickArgs: Decodable {
@@ -408,6 +415,25 @@ extension MvNativePlugin {
         // Not another sheet (that is `BUSY` above): the session refused to start.
         invoke.reject("the sign-in sheet could not be shown", code: "INTERNAL")
       }
+    }
+  }
+
+  /// `setBackgroundRefresh {enabled}`: remembers the choice (the next move to the background asks
+  /// iOS for a run) and cancels a pending run when off. Answers at once.
+  @objc public func setBackgroundRefresh(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(RefreshArgs.self)
+    MvBackground.enabled = args.enabled
+    if !args.enabled {
+      MvBackground.schedule()
+    }
+    invoke.resolve()
+  }
+
+  /// `requestNotifications`: the system's permission prompt (alerts, sounds and the badge) the
+  /// first time, the stored answer after; answers `{granted}`.
+  @objc public func requestNotifications(_ invoke: Invoke) throws {
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+      invoke.resolve(["granted": granted])
     }
   }
 

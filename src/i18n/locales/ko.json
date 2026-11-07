@@ -4387,5 +4387,9 @@
   "mobile.error.HTTPS_REQUIRED": "서버 URL은 https://로 시작해야 합니다.",
   "mobile.error.JMAP_NOT_FOUND": "이 주소의 JMAP 서버를 찾지 못했습니다. 고급에서 서버 URL을 입력하세요.",
   "mobile.error.CONFIRM_HOST": "로그인하기 전에 서버 주소를 확인하세요.",
-  "mobile.viewer.truncated": "이 메시지는 너무 길어 전체를 표시할 수 없습니다."
+  "mobile.viewer.truncated": "이 메시지는 너무 길어 전체를 표시할 수 없습니다.",
+  "mobile.notify.newMessage": "새 메시지",
+  "mobile.notify.summary_one": "새 메시지 {{count}}개",
+  "mobile.notify.summary_other": "새 메시지 {{count}}개",
+  "mobile.notify.channel": "새 메일"
 }

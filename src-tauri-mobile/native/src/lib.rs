@@ -15,6 +15,10 @@
 //!   [`links::auth_url_ok`] accepts. The provider redirects to the engine's loopback listener, so the
 //!   sheet never hands a code back here: `open_auth` answers when the sheet closes, by the user's
 //!   cancel (`cancelled`) or by `close_auth`.
+//! - `set_background_refresh` / `request_notifications`: the OS's periodic background run (iOS
+//!   `BGAppRefreshTask` requests, Android WorkManager unique periodic work `mv-refresh`) on or off,
+//!   and the notification permission. The background run itself and notification taps reach the
+//!   shell directly (`src-tauri-mobile/src/background.rs`), with no app or webview needed.
 //! - A navigation hook: every navigation of the webview goes through [`links::decide`]. Web and
 //!   mail links are cancelled and handed to `open_url`; anything but the app page and the mail
 //!   frame's own document is cancelled. A popup never becomes a Tauri webview: iOS opens none
@@ -105,6 +109,17 @@ struct PickArgs<'a> {
     dir: &'a str,
 }
 
+#[derive(Serialize)]
+struct RefreshArgs {
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
+struct GrantReply {
+    #[serde(default)]
+    granted: bool,
+}
+
 /// How the sign-in sheet closed: `cancelled` when the user closed it (or it was replaced by a newer
 /// one), not when `close_auth` did.
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -179,6 +194,18 @@ impl<R: Runtime> MvNative<R> {
     /// nothing otherwise. Answers at once.
     pub fn close_auth(&self) -> Result<(), NativeError> {
         self.call("closeAuth", serde_json::json!({}))
+    }
+
+    /// Turns the periodic background run on (queued unless already queued) or off.
+    pub fn set_background_refresh(&self, enabled: bool) -> Result<(), NativeError> {
+        self.call("setBackgroundRefresh", RefreshArgs { enabled })
+    }
+
+    /// Asks for the notification permission when the platform has one to ask for (iOS, Android 13
+    /// and later); `true` when notifications may be posted. Blocks until the user has chosen.
+    pub fn request_notifications(&self) -> Result<bool, NativeError> {
+        let reply: GrantReply = self.call_for("requestNotifications", serde_json::json!({}))?;
+        Ok(reply.granted)
     }
 
     fn file_call(&self, method: &str, path: &Path, mime: &str) -> Result<(), NativeError> {

@@ -18,4 +18,14 @@ describe('iOS Info.ios.plist', () => {
       '<key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><true/>',
     );
   });
+
+  // Background fetch (plan Ruling 9): iOS runs a BGAppRefreshTask only for an app that declares
+  // the `fetch` mode and permits the task's identifier; the shell's Background.swift registers it.
+  it('permits the background refresh task', () => {
+    const compact = readFileSync(plistPath, 'utf8').replace(/\s+/g, '');
+    expect(compact).toContain('<key>UIBackgroundModes</key><array><string>fetch</string></array>');
+    expect(compact).toContain(
+      '<key>BGTaskSchedulerPermittedIdentifiers</key><array><string>com.mailvault.app.refresh</string></array>',
+    );
+  });
 });

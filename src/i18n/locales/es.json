@@ -4387,5 +4387,9 @@
   "mobile.error.HTTPS_REQUIRED": "La URL del servidor debe empezar por https://.",
   "mobile.error.JMAP_NOT_FOUND": "No se encontró un servidor JMAP para esta dirección. Escribe la URL del servidor en Avanzado.",
   "mobile.error.CONFIRM_HOST": "Comprueba la dirección del servidor antes de iniciar sesión.",
-  "mobile.viewer.truncated": "Este mensaje es demasiado largo para mostrarlo completo."
+  "mobile.viewer.truncated": "Este mensaje es demasiado largo para mostrarlo completo.",
+  "mobile.notify.newMessage": "Mensaje nuevo",
+  "mobile.notify.summary_one": "{{count}} mensaje nuevo",
+  "mobile.notify.summary_other": "{{count}} mensajes nuevos",
+  "mobile.notify.channel": "Correo nuevo"
 }

@@ -23,8 +23,25 @@ class MainActivity : TauriActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
-    super.onCreate(savedInstanceState)
+    // A background run may have started this process without an activity and filled ndk-context
+    // itself; the shell empties it again so tao's fill in super.onCreate does not abort the
+    // process (src-tauri-mobile/src/android.rs).
+    nativeBeforeActivity()
+    try {
+      super.onCreate(savedInstanceState)
+    } finally {
+      nativeAfterActivity()
+    }
     applySystemBarAppearance(resources.configuration)
+  }
+
+  private external fun nativeBeforeActivity()
+  private external fun nativeAfterActivity()
+
+  companion object {
+    init {
+      System.loadLibrary("mailvault_mobile_lib")
+    }
   }
 
   // The manifest's configChanges includes uiMode, so a theme switch lands here instead of

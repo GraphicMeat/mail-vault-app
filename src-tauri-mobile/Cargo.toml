@@ -16,6 +16,8 @@ perf-gate = ["mailvault-mobile-engine/perf-gate"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Reads the notification strings out of the locale catalogs (build.rs).
+serde_json = "1.0"
 
 [dependencies]
 # Core plus one in-repo plugin (native/: system previewer, share sheet, links out). Never add
@@ -24,6 +26,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-mv-native = { path = "native" }
 serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 mailvault-mobile-engine = { path = "../src-mobile-engine" }
 # The platform secret store behind the engine's SecretStore (src/secrets.rs).
 keyring-core = "1"
@@ -39,3 +42,7 @@ android-native-keyring-store = "1"
 rustls-platform-verifier = "0.6"
 jni = "0.21"
 ndk-context = "0.1"
+
+[dev-dependencies]
+# The shared-engine test opens mobile.db in a scratch dir.
+tempfile = "3"

@@ -6,9 +6,13 @@
 // `openAuth` shows a provider's sign-in page in a Custom Tab and answers when the tab goes away:
 // the user closed it (`{cancelled: true}`) or `closeAuth` brought MainActivity back over it
 // (`{cancelled: false}`).
+// `setBackgroundRefresh` queues or cancels the periodic background run (BackgroundFetchWorker.kt),
+// `requestNotifications` asks for POST_NOTIFICATIONS on Android 13 and later, and a notification
+// tap that started or resumed MainActivity is handed to the shell (Notifier.kt).
 
 package com.mailvault.mvnative
 
+import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -22,10 +26,14 @@ import android.webkit.WebView
 import androidx.activity.result.ActivityResult
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
+import app.tauri.PermissionState
 import app.tauri.annotation.InvokeArg
+import app.tauri.annotation.Permission
+import app.tauri.annotation.PermissionCallback
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSArray
@@ -47,18 +55,60 @@ class UrlArgs {
 }
 
 @InvokeArg
+class RefreshArgs {
+    var enabled: Boolean = false
+}
+
+@InvokeArg
 class PickArgs {
     lateinit var kind: String
     lateinit var dir: String
 }
 
-@TauriPlugin
+@TauriPlugin(permissions = [Permission(strings = [Manifest.permission.POST_NOTIFICATIONS], alias = "notifications")])
 class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
-    // Mail links leave the frame in a new window: catch it (PopupChromeClient.kt).
+    // Mail links leave the frame in a new window: catch it (PopupChromeClient.kt). A notification
+    // tap that started the app is handed over now (the shell holds it until the page takes it).
     override fun load(webView: WebView) {
         val inner = webView.webChromeClient ?: WebChromeClient()
         webView.settings.setSupportMultipleWindows(true)
         webView.webChromeClient = PopupChromeClient(activity, inner)
+        Notifier.takeTap(activity, activity.intent)
+    }
+
+    // MainActivity is singleTask: a tap while it exists arrives here.
+    override fun onNewIntent(intent: Intent) {
+        Notifier.takeTap(activity, intent)
+    }
+
+    @Command
+    fun setBackgroundRefresh(invoke: Invoke) {
+        val args = invoke.parseArgs(RefreshArgs::class.java)
+        try {
+            BackgroundFetchWorker.schedule(activity, args.enabled)
+            invoke.resolve()
+        } catch (e: Exception) {
+            invoke.reject(e.message ?: e.javaClass.simpleName, "INTERNAL")
+        }
+    }
+
+    @Command
+    fun requestNotifications(invoke: Invoke) {
+        if (Build.VERSION.SDK_INT < 33 || getPermissionState("notifications") == PermissionState.GRANTED) {
+            answerNotifications(invoke)
+        } else {
+            requestPermissionForAlias("notifications", invoke, "notificationsAnswered")
+        }
+    }
+
+    @PermissionCallback
+    fun notificationsAnswered(invoke: Invoke) {
+        answerNotifications(invoke)
+    }
+
+    private fun answerNotifications(invoke: Invoke) {
+        val granted = NotificationManagerCompat.from(activity).areNotificationsEnabled()
+        invoke.resolve(JSObject().put("granted", granted))
     }
     private fun contentUri(path: String): Uri {
         return FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", File(path))

@@ -5402,10 +5402,12 @@ dependencies = [
  "mailvault-mobile-engine",
  "ndk-context",
  "rustls-platform-verifier",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-mv-native",
+ "tempfile",
 ]
 
 [[package]]

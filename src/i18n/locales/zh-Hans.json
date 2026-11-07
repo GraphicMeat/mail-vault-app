@@ -4387,5 +4387,9 @@
   "mobile.error.HTTPS_REQUIRED": "服务器 URL 必须以 https:// 开头。",
   "mobile.error.JMAP_NOT_FOUND": "未找到此地址的 JMAP 服务器。请在“高级”中输入服务器 URL。",
   "mobile.error.CONFIRM_HOST": "登录前请检查服务器地址。",
-  "mobile.viewer.truncated": "此邮件太长，无法完整显示。"
+  "mobile.viewer.truncated": "此邮件太长，无法完整显示。",
+  "mobile.notify.newMessage": "新邮件",
+  "mobile.notify.summary_one": "{{count}} 封新邮件",
+  "mobile.notify.summary_other": "{{count}} 封新邮件",
+  "mobile.notify.channel": "新邮件通知"
 }

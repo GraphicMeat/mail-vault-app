@@ -3,6 +3,8 @@
 //! `com.mailvault.app`, user = account id. Error strings come from the store and never include
 //! the secret.
 //!
+//! On Android every call holds `android::enter` while it uses ndk-context (see `android.rs`).
+//!
 //! On iOS every entry is `AfterFirstUnlockThisDeviceOnly`: background fetch mostly runs on a
 //! locked phone, and the store's default (`WhenUnlocked`) would refuse the read there.
 
@@ -25,6 +27,8 @@ pub struct KeyringSecrets(Result<Arc<CredentialStore>, String>);
 
 impl KeyringSecrets {
     pub fn new() -> Self {
+        #[cfg(target_os = "android")]
+        let _ctx = crate::android::enter();
         Self(platform_store())
     }
 
@@ -86,6 +90,8 @@ fn platform_store() -> Result<Arc<CredentialStore>, String> {
 
 impl SecretStore for KeyringSecrets {
     fn get(&self, account_id: &str) -> Result<Option<String>, String> {
+        #[cfg(target_os = "android")]
+        let _ctx = crate::android::enter();
         match self.entry(account_id)?.get_password() {
             Ok(secret) => Ok(Some(secret)),
             Err(Error::NoEntry) => Ok(None),
@@ -94,10 +100,14 @@ impl SecretStore for KeyringSecrets {
     }
 
     fn set(&self, account_id: &str, secret: &str) -> Result<(), String> {
+        #[cfg(target_os = "android")]
+        let _ctx = crate::android::enter();
         self.entry(account_id)?.set_password(secret).map_err(|e| e.to_string())
     }
 
     fn delete(&self, account_id: &str) -> Result<(), String> {
+        #[cfg(target_os = "android")]
+        let _ctx = crate::android::enter();
         match self.entry(account_id)?.delete_credential() {
             Ok(()) | Err(Error::NoEntry) => Ok(()),
             Err(e) => Err(e.to_string()),
