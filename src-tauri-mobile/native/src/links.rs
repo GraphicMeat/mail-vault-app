@@ -76,8 +76,8 @@ pub fn decide(url: &Url, app: AppOrigin) -> Nav {
         }
         // A web link to another machine, without user info (`https://bank.example@evil.example/`).
         "http" | "https" if web_host_ok(url) => Nav::External(url.as_str().to_string()),
-        // A mail link, unless it asks the mail app to attach something (`attach=/path`).
-        "mailto" if !asks_to_attach(url) => Nav::External(url.as_str().to_string()),
+        // A mail link with nothing but to/cc/bcc/subject/body (no `attach=/path` and the like).
+        "mailto" if only_safe_mailto_keys(url) => Nav::External(url.as_str().to_string()),
         // javascript:, data:, blob:, file:, intent:, tauri: (any other host), ipc:, content:, ...
         _ => Nav::Deny,
     }
@@ -105,12 +105,14 @@ fn web_host_ok(url: &Url) -> bool {
     }
 }
 
-/// A `mailto:` whose query has an `attach` or `attachment` key (any case): some mail apps have
-/// attached the named local file.
-fn asks_to_attach(url: &Url) -> bool {
-    url.query_pairs().any(|(k, _)| {
-        let k = k.to_ascii_lowercase();
-        k == "attach" || k == "attachment"
+/// Every query key of a `mailto:` (percent-decoded by `query_pairs`, NULs dropped, trimmed, any
+/// case) is one of to, cc, bcc, subject, body. Any other key (`attach`, `attachment`, `x-...`)
+/// denies the link: some mail apps have attached the named local file. The same allowlist as
+/// `PopupUrlPolicy.kt`.
+fn only_safe_mailto_keys(url: &Url) -> bool {
+    url.query_pairs().all(|(k, _)| {
+        let k = k.replace('\0', "");
+        matches!(k.trim().to_ascii_lowercase().as_str(), "to" | "cc" | "bcc" | "subject" | "body")
     })
 }
 
@@ -167,8 +169,9 @@ mod tests {
         assert_eq!(d("http://a:b@tauri.localhost/", ANDROID), Nav::Deny);
     }
 
-    // The same table as the Android popup rule (PopupUrlPolicyTest.kt): both platforms send out
-    // only mailto and http(s) to a host that is not this device, without user info.
+    // The same rows as the Android popup rule (PopupUrlPolicyTest.kt
+    // `numeric_loopback_spellings_are_dropped`, `ordinary_hosts_still_pass`): both platforms send
+    // out only http(s) to a host that is not this device, without user info.
     #[test]
     fn this_device_is_not_a_web_host() {
         for app in [IOS, ANDROID] {
@@ -185,6 +188,13 @@ mod tests {
                 "http://[::ffff:127.0.0.1]/",
                 "http://2130706433/",
                 "http://0x7f.1/",
+                "http://127.1/",
+                "http://0177.0.0.1/",
+                "http://017700000001/",
+                "http://[::ffff:7f00:1]/",
+                "http://[0:0:0:0:0:ffff:127.0.0.1]/",
+                "http://[0:0::1]/",
+                "http://0/",
             ] {
                 assert_eq!(d(url, app), Nav::Deny, "{url} on {app:?}");
             }
@@ -197,6 +207,40 @@ mod tests {
         for app in [IOS, ANDROID] {
             for url in ["https://yourbank.example@evil.example/login", "https://user:pass@example.com/", "http://:pw@example.com/"] {
                 assert_eq!(d(url, app), Nav::Deny, "{url} on {app:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn ordinary_hosts_still_pass() {
+        for app in [IOS, ANDROID] {
+            for url in ["http://8.8.8.8/", "https://example.com/", "https://1.2.3.4.example.com/", "https://[2001:db8::1]/"] {
+                assert!(matches!(d(url, app), Nav::External(_)), "{url} on {app:?}");
+            }
+        }
+    }
+
+    // The same rows as PopupUrlPolicyTest.kt `mailto_keeps_only_the_safe_keys`: a mailto keeps only
+    // to, cc, bcc, subject and body (keys percent-decoded, any case); any other key is denied.
+    #[test]
+    fn mailto_keeps_only_the_safe_keys() {
+        for app in [IOS, ANDROID] {
+            for url in [
+                "mailto:a@b.test?att%61ch=/x",
+                "mailto:a@b.test?%41TTACH=/x",
+                "mailto:a@b.test?x-foo=1",
+                "mailto:a@b.test?subject=Hi&in-reply-to=x",
+                "mailto:a@b.test?%00attach=/x",
+            ] {
+                assert_eq!(d(url, app), Nav::Deny, "{url} on {app:?}");
+            }
+            for url in [
+                "mailto:a@b.test",
+                "mailto:a@b.test?to=c@d.test&cc=e@f.test&bcc=g@h.test&subject=Hi&body=Hello",
+                "mailto:a@b.test?SUBJECT=Hi&Body=x",
+                "mailto:?to=a@b.test",
+            ] {
+                assert!(matches!(d(url, app), Nav::External(_)), "{url} on {app:?}");
             }
         }
     }

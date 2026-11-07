@@ -81,6 +81,57 @@ class PopupUrlPolicyTest {
         }
     }
 
+    // The same rows as links.rs `this_device_is_not_a_web_host` / `mailto_keeps_only_the_safe_keys`.
+    @Test
+    fun numeric_loopback_spellings_are_dropped() {
+        for (url in listOf(
+            "http://2130706433/",
+            "http://0x7f.1/",
+            "http://127.1/",
+            "http://0177.0.0.1/",
+            "http://017700000001/",
+            "http://[::ffff:7f00:1]/",
+            "http://[::ffff:127.0.0.1]/",
+            "http://[0:0:0:0:0:ffff:127.0.0.1]/",
+            "http://[0:0::1]/",
+            "http://[::]/",
+            "http://0/",
+            "http://0.0.0.0/",
+            "http://foo.123/",
+            "http://foo.0x1f/",
+        )) {
+            assertNull(url, PopupUrlPolicy.allow(url))
+        }
+    }
+
+    @Test
+    fun ordinary_hosts_still_pass() {
+        for (url in listOf("http://8.8.8.8/", "https://example.com/", "https://1.2.3.4.example.com/", "https://[2001:db8::1]/")) {
+            assertNotNull(url, PopupUrlPolicy.allow(url))
+        }
+    }
+
+    @Test
+    fun mailto_keeps_only_the_safe_keys() {
+        for (url in listOf(
+            "mailto:a@b.test?att%61ch=/x",
+            "mailto:a@b.test?%41TTACH=/x",
+            "mailto:a@b.test?x-foo=1",
+            "mailto:a@b.test?subject=Hi&in-reply-to=x",
+            "mailto:a@b.test?%00attach=/x",
+        )) {
+            assertNull(url, PopupUrlPolicy.allow(url))
+        }
+        for (url in listOf(
+            "mailto:a@b.test",
+            "mailto:a@b.test?to=c@d.test&cc=e@f.test&bcc=g@h.test&subject=Hi&body=Hello",
+            "mailto:a@b.test?SUBJECT=Hi&Body=x",
+            "mailto:?to=a@b.test",
+        )) {
+            assertNotNull(url, PopupUrlPolicy.allow(url))
+        }
+    }
+
     @Test
     fun unparseable_urls_are_dropped() {
         assertNull(PopupUrlPolicy.allow("https://exa mple.com/"))
