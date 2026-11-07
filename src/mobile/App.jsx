@@ -11,7 +11,11 @@
 // when the engine's ping says `perfGate`), with `&move=1` the move picker open. The `mobile.ping`
 // line is logged first: scripts/mobile-run.sh waits for it.
 //
-// Back (Android) closes the top layer (viewer, picker, sheet) through `backStack.js`.
+// Compose (Compose.jsx) is a full-screen layer over the list or the viewer: the button at the
+// bottom right starts a new message, the viewer's More sheet a reply, reply to all or forward.
+// The outbox row (Outbox.jsx) sits between the header and the list while anything is unsent.
+//
+// Back (Android) closes the top layer (viewer, picker, sheet, compose) through `backStack.js`.
 import React, { useCallback, useEffect, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
@@ -26,6 +30,8 @@ import { runPerfGate } from './perf.js';
 import { useT } from './i18n.js';
 import { useBackLayer } from './backStack.js';
 import Toasts from './Toasts.jsx';
+import Compose from './Compose.jsx';
+import OutboxRow from './Outbox.jsx';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -134,6 +140,7 @@ function App() {
   const [listState, setListState] = useState('loading'); // 'loading' | 'ready' | 'failed'
   const [panel, setPanel] = useState(null); // null | 'switcher' | 'drawer' | 'add'
   const [open, setOpen] = useState(null);
+  const [compose, setCompose] = useState(null); // { key, accountId, mode, original? }
   const [pulled, setPulled] = useState(false);
   const [total, setTotal] = useState(null);
   const [perfGate, setPerfGate] = useState(false);
@@ -271,6 +278,20 @@ function App() {
       setOpen(null);
     }
   }, [open]);
+  const onNewMessage = useCallback(() => {
+    const { activeAccountId: accountId } = useMobileStore.getState();
+    if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new' });
+  }, []);
+  const onViewerCompose = useCallback((mode) => {
+    if (!open) return;
+    setCompose({
+      key: Date.now(),
+      accountId: open.accountId,
+      mode,
+      original: { folder: open.folder, uid: open.row.uid, dateMs: open.row.dateMs },
+    });
+  }, [open]);
+  const closeCompose = useCallback(() => setCompose(null), []);
   const onSelectFolder = useCallback((path) => {
     setPanel(null);
     useMobileStore.getState().selectFolder(path);
@@ -339,6 +360,7 @@ function App() {
         <PendingChip />
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
+      <OutboxRow />
       {listState === 'ready' && list && (
         <MessageList
           key={listKey}
@@ -356,6 +378,13 @@ function App() {
           <p>{t('mobile.list.loadFailed')}</p>
           <button type="button" onClick={loadList}>{t('common.retry')}</button>
         </div>
+      )}
+      {!open && (
+        <button type="button" className="mv-fab" data-mv-compose aria-label={t('mobile.compose.new')} onClick={onNewMessage}>
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+          </svg>
+        </button>
       )}
       {panel === 'drawer' && (
         <FolderDrawer account={account} folders={folders} activeFolder={activeFolder} onSelect={onSelectFolder} onClose={closePanel} />
@@ -387,7 +416,18 @@ function App() {
           onAction={onViewerAction}
           onMove={onViewerMove}
           onDelete={onViewerDelete}
+          onCompose={onViewerCompose}
           initialPicking={DEMO_MOVE}
+        />
+      )}
+      {compose && (
+        <Compose
+          key={compose.key}
+          accountId={compose.accountId}
+          fromEmail={accounts.find((a) => a.id === compose.accountId)?.email || ''}
+          mode={compose.mode}
+          original={compose.original || null}
+          onClose={closeCompose}
         />
       )}
       <Toasts />

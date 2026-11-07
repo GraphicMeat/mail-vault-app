@@ -7,7 +7,11 @@
 // the account or folder changes, or the next move or delete comes (one deferred action at a time;
 // a delete in the viewer that opens the next message keeps its own toast).
 // Undo forgets it and shows the rows again; nothing reached the engine. A killed app can lose an
-// unsent move or delete, which keeps the mail. Store-free of the
+// unsent move or delete, which keeps the mail.
+//
+// Outbox (`outbox`): the rows `mobile.outbox.list` still holds (queued, sending, failed, uncertain),
+// re-read on start, on resume, after a send and on every `mobile.send.result`. A failed or
+// uncertain send shows a toast once per message and outcome. Store-free of the
 // desktop: it imports nothing from src/stores, and reaches the engine only through transport.js
 // with literal method and event names (the seam test reads them off this file).
 import { create } from 'zustand';
@@ -24,6 +28,11 @@ export const UNDO_MS = 5000;
 export const MAX_APPLY = 199;
 const HIDES = new Set(['move', 'delete']);
 const DROP_REASONS = new Set(['GONE', 'FOLDER_GONE', 'REFUSED']);
+/** Send outcomes that are news: each to its toast. Literal keys for the catalog tests. */
+const SEND_TOASTS = Object.freeze({
+  failed: 'mobile.outbox.toast.failed',
+  uncertain: 'mobile.outbox.toast.uncertain',
+});
 
 // localStorage can be missing or throw (private mode, a locked-down WebView): never fatal.
 function readStorage(key) {
@@ -67,9 +76,37 @@ export function createMobileStore() {
   let unsubscribers = [];
   let deferred = null; // { id, accountId, folder, uids, kind, target, list, timer }
   let serial = 0;
+  /** `id:outcome` of the send toasts already shown. */
+  const toasted = new Set();
 
   return create((set, get) => {
     const notice = (key) => set({ notice: { id: ++serial, key } });
+
+    function sendToast(id, outcome) {
+      if (!id || !Object.hasOwn(SEND_TOASTS, outcome) || toasted.has(`${id}:${outcome}`)) return;
+      toasted.add(`${id}:${outcome}`);
+      notice(SEND_TOASTS[outcome]);
+    }
+
+    async function loadOutbox() {
+      let rows;
+      try {
+        rows = await daemonCall('mobile.outbox.list');
+      } catch {
+        return; // the row is a hint: a failed read keeps the last one
+      }
+      const outbox = Array.isArray(rows) ? rows : [];
+      // A row left uncertain by a crash has no event: its toast comes from the list.
+      for (const r of outbox) sendToast(r.id, r.state);
+      set({ outbox });
+    }
+
+    function onSendResult(p) {
+      if (!p?.id) return;
+      if (p.outcome === 'sent') set((s) => ({ outbox: s.outbox.filter((r) => r.id !== p.id) }));
+      sendToast(p.id, p.outcome);
+      loadOutbox();
+    }
 
     /** The open list, when it shows `folder` of `accountId`. */
     function listOf(accountId, folder) {
@@ -190,6 +227,7 @@ export function createMobileStore() {
         })],
         // Results sent before this subscribed are lost: the chip is re-read on start and resume.
         ['mobile.action.result', () => listen('mobile.action.result', onActionResult)],
+        ['mobile.send.result', () => listen('mobile.send.result', onSendResult)],
       ];
       for (const [name, subscribeOne] of on) {
         try {
@@ -203,7 +241,10 @@ export function createMobileStore() {
       if (typeof document !== 'undefined' && typeof window !== 'undefined') {
         const onVisibility = () => {
           if (document.visibilityState === 'hidden') flush();
-          else loadPending();
+          else {
+            loadPending();
+            loadOutbox();
+          }
         };
         const onPageHide = () => { flush(); };
         document.addEventListener('visibilitychange', onVisibility);
@@ -229,6 +270,7 @@ export function createMobileStore() {
       pending: 0, // the active account's actions still to reach the server
       undo: null, // the deferred move or delete's toast: { id, kind, count, target }
       notice: null, // a one-line toast: { id, key }
+      outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError }]
 
       /**
        * Applies `kind` (seen|unseen|flag|unflag|move|delete) to `uids` of `folder`. A move or
@@ -267,6 +309,38 @@ export function createMobileStore() {
 
       flush,
       loadPending,
+      loadOutbox,
+
+      /** Sends a failed or uncertain message again. False when the engine refused. */
+      async retryOutbox(id) {
+        try {
+          await daemonCall('mobile.outbox.retry', { id });
+          // A new attempt that fails again is news again.
+          toasted.delete(`${id}:failed`);
+          toasted.delete(`${id}:uncertain`);
+          set((s) => ({ outbox: s.outbox.map((r) => (r.id === id ? { ...r, state: 'queued' } : r)) }));
+          return true;
+        } catch {
+          notice('mobile.outbox.actionFailed');
+          return false;
+        } finally {
+          loadOutbox();
+        }
+      },
+
+      /** Drops an unsent message. False when the engine refused (it is being sent). */
+      async discardOutbox(id) {
+        try {
+          await daemonCall('mobile.outbox.discard', { id });
+          set((s) => ({ outbox: s.outbox.filter((r) => r.id !== id) }));
+          return true;
+        } catch {
+          notice('mobile.outbox.actionFailed');
+          return false;
+        } finally {
+          loadOutbox();
+        }
+      },
 
       dismissNotice(id) {
         if (get().notice?.id === id) set({ notice: null });
@@ -292,6 +366,7 @@ export function createMobileStore() {
             throw err;
           }
           set({ accounts });
+          loadOutbox();
           if (!accounts.length) {
             set({ status: 'noAccount', list: null });
             return;

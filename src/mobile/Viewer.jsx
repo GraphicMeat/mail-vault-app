@@ -10,7 +10,8 @@
 // shares. A link tapped in the mail leaves the frame for the system browser: the shell's
 // navigation hook (src-tauri-mobile/native) cancels it in the webview and hands the URL out.
 // The toolbar at the bottom acts on the message: read or unread, flag, move (MovePicker.jsx over
-// the account's folders) and delete; App.jsx sends the actions (store `act`).
+// the account's folders) and delete; App.jsx sends the actions (store `act`). Its More button opens
+// a sheet with Reply, Reply all and Forward (`onCompose(mode)`: App.jsx opens Compose.jsx).
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
@@ -20,9 +21,10 @@ import { ERROR_KEYS, errorKey } from './errors.js';
 import { afterNextPaint, bodyLoaded, notePrepare, viewerPainted } from './perf.js';
 import { useT } from './i18n.js';
 import MovePicker from './MovePicker.jsx';
+import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
-import { EnvelopeIcon, FlagIcon, MoveIcon, TrashIcon } from './icons.jsx';
+import { EnvelopeIcon, FlagIcon, MoreIcon, MoveIcon, TrashIcon } from './icons.jsx';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
 export const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
@@ -94,7 +96,7 @@ function Attachments({ accountId, folder, uid, items }) {
   );
 }
 
-function Toolbar({ seen, flagged, onSeen, onFlag, onMove, onDelete }) {
+function Toolbar({ seen, flagged, onSeen, onFlag, onMove, onDelete, onMore }) {
   const t = useT();
   return (
     <div className="mv-viewer__toolbar" role="toolbar" aria-label={t('mobile.actions.toolbar')}>
@@ -110,19 +112,51 @@ function Toolbar({ seen, flagged, onSeen, onFlag, onMove, onDelete }) {
       <button type="button" className="mv-tool mv-tool--danger" data-mv-tool="delete" aria-label={t('common.delete')} onClick={onDelete}>
         <TrashIcon />
       </button>
+      <button type="button" className="mv-tool" data-mv-tool="more" aria-label={t('mobile.viewer.more')} onClick={onMore}>
+        <MoreIcon />
+      </button>
     </div>
+  );
+}
+
+const COMPOSE_MODES = Object.freeze([
+  ['reply', 'emailActionBar.reply'],
+  ['replyAll', 'emailActionBar.replyAll'],
+  ['forward', 'emailActionBar.forward'],
+]);
+
+function MoreSheet({ onPick, onClose }) {
+  const t = useT();
+  return (
+    <Sheet kind="sheet" label={t('mobile.viewer.more')} onClose={onClose}>
+      <div className="mv-sheet__grip" aria-hidden="true" />
+      <div className="mv-sheet__actions">
+        {COMPOSE_MODES.map(([mode, key]) => (
+          <button key={mode} type="button" className="mv-sheet__action" data-mv-compose-mode={mode} onClick={() => onPick(mode)}>
+            {t(key)}
+          </button>
+        ))}
+      </div>
+    </Sheet>
   );
 }
 
 const noop = () => {};
 
-export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, initialPicking = false }) {
+export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, onCompose = noop, initialPicking = false }) {
   const t = useT();
   const [seen, setSeen] = useState(row.seen !== false);
   const [flagged, setFlagged] = useState(Boolean(row.flagged));
   const [picking, setPicking] = useState(initialPicking);
   const closePicker = useCallback(() => setPicking(false), []);
   useBackLayer(picking, closePicker);
+  const [more, setMore] = useState(false);
+  const closeMore = useCallback(() => setMore(false), []);
+  useBackLayer(more, closeMore);
+  const startCompose = (mode) => {
+    setMore(false);
+    onCompose(mode);
+  };
   // Optimistic: the button flips at once and flips back if the engine refused the apply.
   const toggle = (value, setValue, on, off) => {
     const next = !value;
@@ -226,8 +260,9 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
         />
       )}
       {!srcDoc && <div className="mv-viewer__fill" />}
-      <Toolbar seen={seen} flagged={flagged} onSeen={toggleSeen} onFlag={toggleFlag} onMove={() => setPicking(true)} onDelete={onDelete} />
+      <Toolbar seen={seen} flagged={flagged} onSeen={toggleSeen} onFlag={toggleFlag} onMove={() => setPicking(true)} onDelete={onDelete} onMore={() => setMore(true)} />
       {picking && <MovePicker folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
+      {more && <MoreSheet onPick={startCompose} onClose={closeMore} />}
     </section>
   );
 }

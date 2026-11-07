@@ -681,3 +681,205 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-input:focus { outline: 2px solid var(--mail-accent); outline-offset: -1px; border-color: transparent; }
 .mv-input:disabled { opacity: 0.6; }
+
+/* The compose button over the list: 56 pt, bottom right, above the home indicator. */
+.mv-fab {
+  position: fixed;
+  right: calc(var(--mv-safe-right) + 16px);
+  bottom: calc(var(--mv-safe-bottom) + 16px);
+  z-index: 5;
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: var(--mail-accent);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+.mv-fab:active { transform: scale(0.96); }
+[dir="rtl"] .mv-fab { right: auto; left: calc(var(--mv-safe-left) + 16px); }
+
+/* The outbox row between the header and the list (never inside the virtual scroller). */
+.mv-outbox-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 calc(var(--mv-safe-right) + 16px) 0 calc(var(--mv-safe-left) + 16px);
+  border: 0;
+  border-bottom: 1px solid var(--mail-border);
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
+}
+.mv-outbox-row--alert { color: var(--mv-danger); }
+.mv-outbox-row:active { background: var(--mail-surface-hover); }
+.mv-outbox { list-style: none; margin: 0; padding: 0 0 4px; }
+.mv-outbox__item { display: flex; flex-direction: column; gap: 6px; padding: 10px 8px; border-top: 1px solid var(--mail-border); }
+.mv-outbox__text { display: flex; flex-direction: column; min-width: 0; }
+.mv-outbox__subject { font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mv-outbox__state { font-size: 0.8125rem; color: var(--mail-text-muted); }
+.mv-outbox__item--failed .mv-outbox__state, .mv-outbox__item--uncertain .mv-outbox__state { color: var(--mv-danger); }
+.mv-outbox__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.mv-outbox__btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--mail-border);
+  border-radius: 10px;
+  background: none;
+  color: var(--mail-accent-text);
+  font: inherit;
+  font-weight: 500;
+}
+.mv-outbox__btn--danger { color: var(--mv-danger); }
+
+/* A sheet of plain actions (leave compose, attach, the viewer's More). */
+.mv-sheet__actions { display: flex; flex-direction: column; padding: 4px 0; }
+.mv-sheet__action {
+  min-height: 52px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--mail-text);
+  font: inherit;
+  font-size: 1rem;
+  text-align: start;
+}
+.mv-sheet__action:active { background: var(--mail-surface-hover); }
+.mv-sheet__action--danger { color: var(--mv-danger); }
+
+/* Compose: a bar, then the fields and the body scrolling above the keyboard (--mv-keyboard is set
+   from visualViewport while the keyboard is up). */
+.mv-compose {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  background: var(--mail-bg);
+}
+.mv-compose__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: calc(var(--mv-safe-top) + 4px) calc(var(--mv-safe-right) + 8px) 4px calc(var(--mv-safe-left) + 8px);
+  border-bottom: 1px solid var(--mail-border);
+}
+.mv-compose__back {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--mail-accent-text);
+  font: inherit;
+  font-weight: 500;
+}
+.mv-compose__title { flex: 1; min-width: 0; margin: 0; font-size: 1rem; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mv-compose__send {
+  min-height: 44px;
+  min-width: 64px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mail-accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+}
+.mv-compose__send:disabled { opacity: 0.4; }
+.mv-compose__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  padding: 0 calc(var(--mv-safe-right) + 16px) calc(var(--mv-safe-bottom) + var(--mv-keyboard, 0px) + 16px) calc(var(--mv-safe-left) + 16px);
+  scroll-padding-bottom: calc(var(--mv-keyboard, 0px) + 24px);
+}
+.mv-compose__error { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
+.mv-compose__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--mail-border);
+}
+.mv-compose__line--recipients { align-items: flex-start; }
+.mv-compose__line--recipients .mv-compose__label { line-height: 48px; }
+.mv-compose__label { flex: none; min-width: 3.5rem; color: var(--mail-text-muted); font-size: 0.875rem; }
+.mv-compose__from { min-width: 0; overflow-wrap: anywhere; }
+.mv-compose__input, .mv-compose__chip-input input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mail-text);
+  font: inherit;
+  /* 16px keeps iOS from zooming into a focused field. */
+  font-size: 16px;
+  outline: none;
+}
+.mv-compose__chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; list-style: none; margin: 0; padding: 2px 0; }
+.mv-compose__chip-input { flex: 1 1 8rem; min-width: 8rem; display: flex; }
+.mv-compose__chip-input input { width: 100%; }
+.mv-rcpt {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 32px;
+  padding-inline-start: 10px;
+  border-radius: 999px;
+  background: var(--mail-surface-hover);
+}
+.mv-rcpt--invalid { background: color-mix(in srgb, var(--mv-danger) 18%, transparent); color: var(--mv-danger); text-decoration: underline wavy; text-underline-offset: 3px; }
+.mv-rcpt__text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mv-rcpt__remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px -6px -6px -8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+.mv-compose__more { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: none; color: var(--mail-accent-text); font: inherit; }
+.mv-compose__hint { margin: 6px 0 0; font-size: 0.8125rem; color: var(--mv-danger); }
+.mv-compose__note { margin: 6px 0 0; font-size: 0.8125rem; color: var(--mail-text-muted); }
+.mv-compose__files { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mv-compose__file { display: flex; align-items: center; gap: 8px; min-height: 44px; padding-inline-start: 12px; border: 1px solid var(--mail-border); border-radius: 10px; }
+.mv-compose__file--pending { color: var(--mail-text-muted); padding-inline-end: 12px; }
+.mv-compose__file-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mv-compose__file-size { flex: none; font-size: 0.8125rem; color: var(--mail-text-muted); }
+.mv-compose__file-remove { margin: 0; }
+.mv-compose__body {
+  flex: 1 0 12rem;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: var(--mail-text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}

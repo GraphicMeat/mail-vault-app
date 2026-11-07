@@ -1,0 +1,459 @@
+// The compose screen: a full-screen layer for a new message, a reply, a reply to all or a forward.
+// Plain text only. From is the account. Recipients are chips (RecipientField.jsx); Send stays off
+// until there is a To and every address reads (the engine refuses Bcc only, so the screen does
+// too). A reply or forward is prefilled by `mobile.compose.prepare` from mobile.db: fields the
+// user already touched are never overwritten by a late answer. The quote goes under the body as
+// plain text (`quoteText`; the HTML `quote` is not used). A forward's attachments not yet
+// downloaded (`pending`) are fetched through the attachment jobs, then prepare is asked again;
+// one that fails is left out with a note.
+//
+// Drafts are local (`mobile.drafts.*`): saved 1.5 s after the last edit, when the app goes to the
+// background and when the user leaves with "Save draft"; a draft emptied and left is deleted.
+// Back with content asks: Save draft, Discard or Keep editing. Send first stops autosave and waits
+// for a save in flight, so no late save can bring back the draft the send deletes; a refused send
+// (TOO_LARGE, ATTACHMENT_MISSING, INVALID) stays on the screen with its reason and autosave runs
+// again. A queued send leaves at once: the outbox (store `outbox`) takes it from there.
+//
+// Keyboard: the focused field is kept above the keyboard (`visualViewport`); targets are 44 pt.
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { displayText } from '../utils/bidiText.js';
+import { daemonCall, pickFiles } from './transport.js';
+import { ensureAttachmentEvents, watchJob } from './attachmentJobs.js';
+import { fieldsOf, initialText, isEmpty, isValidEntry, sendErrorKey, splitList } from './compose.js';
+import RecipientField, { commitText } from './RecipientField.jsx';
+import Sheet from './Sheet.jsx';
+import { formatFullDate, formatSize } from './format.js';
+import { useBackLayer } from './backStack.js';
+import { useMobileStore } from './store.js';
+import { useT } from './i18n.js';
+
+/** Quiet time after the last edit before the draft is saved. */
+export const AUTOSAVE_MS = 1500;
+
+const TITLE_KEYS = Object.freeze({
+  new: 'mobile.compose.newTitle',
+  reply: 'emailActionBar.reply',
+  replyAll: 'emailActionBar.replyAll',
+  forward: 'emailActionBar.forward',
+});
+
+function PaperclipIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7L9.2 17.2a1.7 1.7 0 0 1-2.4-2.4L14.5 7" />
+    </svg>
+  );
+}
+
+/** Waits for one attachment job: true once it is in the cache, false when it failed. */
+function fetchPart(accountId, folder, uid, section) {
+  return daemonCall('mobile.attachment.fetch', { accountId, folder, uid, section }).then(
+    (reply) => new Promise((resolve) => {
+      const jobId = reply?.jobId;
+      if (jobId == null) {
+        resolve(false);
+        return;
+      }
+      let stop = null;
+      let ended = false;
+      stop = watchJob(jobId, (kind) => {
+        if (ended || kind === 'progress') return;
+        ended = true;
+        stop?.();
+        resolve(kind === 'done');
+      });
+      if (ended) stop();
+    }),
+    () => false,
+  );
+}
+
+/** Keeps the focused field above the on-screen keyboard. */
+function useKeyboardInset(ref) {
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const el = ref.current;
+    if (!vv || !el) return undefined;
+    const reveal = () => {
+      const focused = document.activeElement;
+      if (focused && el.contains(focused) && typeof focused.scrollIntoView === 'function') {
+        focused.scrollIntoView({ block: 'nearest' });
+      }
+    };
+    const onResize = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      el.style.setProperty('--mv-keyboard', `${Math.round(inset)}px`);
+      reveal();
+    };
+    vv.addEventListener('resize', onResize);
+    el.addEventListener('focusin', reveal);
+    onResize();
+    return () => {
+      vv.removeEventListener('resize', onResize);
+      el.removeEventListener('focusin', reveal);
+    };
+  }, [ref]);
+}
+
+export default function Compose({ accountId, fromEmail, mode = 'new', original = null, onClose }) {
+  const t = useT();
+  const [to, setTo] = useState({ entries: [], text: '' });
+  const [cc, setCc] = useState({ entries: [], text: '' });
+  const [bcc, setBcc] = useState({ entries: [], text: '' });
+  const [showCc, setShowCc] = useState(false);
+  const [subject, setSubject] = useState('');
+  const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState([]); // [{ handle, name, size, mime, forwarded? }]
+  const [fetching, setFetching] = useState([]); // forwarded parts being downloaded: [{ section, filename, size }]
+  const [notes, setNotes] = useState([]); // translated one-liners: a left-out forward, an unreadable pick
+  const [error, setError] = useState(null); // a send refusal's message key
+  const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const [edits, setEdits] = useState(0);
+
+  const threading = useRef({ inReplyTo: '', references: '' });
+  const touched = useRef(new Set());
+  const draftId = useRef(null);
+  const timer = useRef(null);
+  const stopped = useRef(false);
+  const chain = useRef(Promise.resolve());
+  const removedForwards = useRef([]);
+  const live = useRef(true);
+  const scroller = useRef(null);
+
+  // What a save or a send carries, typed-but-uncommitted addresses included.
+  const committed = (field) => commitText(field.entries, field.text, { all: true }).entries;
+  const current = () => ({
+    to: committed(latest.current.to),
+    cc: committed(latest.current.cc),
+    bcc: committed(latest.current.bcc),
+    subject: latest.current.subject,
+    text: latest.current.text,
+    attachments: latest.current.attachments,
+    ...threading.current,
+  });
+  const latest = useRef(null);
+  latest.current = { to, cc, bcc, subject, text, attachments };
+
+  const edit = (name) => {
+    touched.current.add(name);
+    setEdits((n) => n + 1);
+  };
+
+  // ── Drafts ────────────────────────────────────────────────────────────────
+  const saveNow = useCallback(() => {
+    clearTimeout(timer.current);
+    chain.current = chain.current.then(async () => {
+      if (stopped.current) return;
+      const fields = current();
+      if (isEmpty(fields)) return; // leaving deletes it; nothing worth a row meanwhile
+      try {
+        const reply = await daemonCall('mobile.drafts.save', {
+          ...(draftId.current ? { id: draftId.current } : {}),
+          accountId,
+          ...fieldsOf(fields),
+        });
+        if (reply?.id) draftId.current = reply.id;
+      } catch {
+        // Autosave is a safety net: the next edit tries again.
+      }
+    });
+    return chain.current;
+  }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Stops autosave for good (until a refused send re-arms it) and waits for a save in flight. */
+  const stopSaving = useCallback(() => {
+    stopped.current = true;
+    clearTimeout(timer.current);
+    return chain.current;
+  }, []);
+
+  useEffect(() => {
+    if (edits === 0 || stopped.current) return undefined;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(saveNow, AUTOSAVE_MS);
+    return undefined;
+  }, [edits, saveNow]);
+
+  // The app going to the background saves at once; leaving the screen otherwise is decided below.
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const onHide = () => {
+      if (document.visibilityState === 'hidden' && touched.current.size && !stopped.current) saveNow();
+    };
+    const onPageHide = () => { if (touched.current.size && !stopped.current) saveNow(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [saveNow]);
+
+  useEffect(() => () => {
+    live.current = false;
+    clearTimeout(timer.current);
+    // Unmounted without leaving through the screen (the account went away): keep what was typed.
+    if (touched.current.size && !stopped.current) saveNow();
+  }, [saveNow]);
+
+  // ── Prepare (reply, reply all, forward) ───────────────────────────────────
+  useEffect(() => {
+    if (mode === 'new' || !original) return undefined;
+    ensureAttachmentEvents();
+    const params = {
+      accountId,
+      mode,
+      folder: original.folder,
+      uid: original.uid,
+      originalLabel: t('mobile.compose.originalMessage'),
+      ...(original.dateMs ? { dateLabel: formatFullDate(original.dateMs) } : {}),
+    };
+    const fill = (field, value, setter) => { if (!touched.current.has(field)) setter(value); };
+    const forwardsOf = (list) => (Array.isArray(list) ? list : []).map((a) => ({ handle: a.handle, name: a.name, size: a.size, mime: a.mime, forwarded: true }));
+
+    (async () => {
+      let p;
+      try {
+        p = await daemonCall('mobile.compose.prepare', params);
+      } catch {
+        if (live.current) setNotes((n) => [...n, t('mobile.compose.prepareFailed')]);
+        return;
+      }
+      if (!live.current || !p) return;
+      threading.current = { inReplyTo: p.inReplyTo || '', references: p.references || '' };
+      fill('to', { entries: splitList(p.to), text: '' }, setTo);
+      const ccEntries = splitList(p.cc);
+      fill('cc', { entries: ccEntries, text: '' }, setCc);
+      if (ccEntries.length) setShowCc(true);
+      fill('subject', p.subject || '', setSubject);
+      fill('text', initialText(p.quoteText || ''), setText);
+      setAttachments((list) => [...list, ...forwardsOf(p.attachments)]);
+      const pending = Array.isArray(p.pending) ? p.pending : [];
+      if (!pending.length) return;
+
+      setFetching(pending);
+      const results = await Promise.all(pending.map((a) => fetchPart(accountId, original.folder, original.uid, a.section)));
+      if (!live.current) return;
+      let again = null;
+      if (results.some(Boolean)) {
+        try {
+          again = await daemonCall('mobile.compose.prepare', params);
+        } catch {
+          again = null;
+        }
+      }
+      if (!live.current) return;
+      const missing = again && Array.isArray(again.pending) ? again.pending.map((a) => a.section) : pending.map((a) => a.section);
+      if (again) {
+        // The second answer lists every forwarded part again; the user's removals still hold.
+        const removed = [...removedForwards.current];
+        const kept = forwardsOf(again.attachments).filter((a) => {
+          const at = removed.indexOf(a.name);
+          if (at < 0) return true;
+          removed.splice(at, 1);
+          return false;
+        });
+        setAttachments((list) => [...list.filter((a) => !a.forwarded), ...kept]);
+      }
+      const left = pending.filter((a) => missing.includes(a.section));
+      if (left.length) {
+        setNotes((n) => [...n, ...left.map((a) => t('mobile.compose.forwardMissing', { name: displayText(a.filename, '') || t('mobile.viewer.attachment') }))]);
+      }
+      setFetching([]);
+    })();
+    return undefined;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Attach ────────────────────────────────────────────────────────────────
+  const pick = async (kind) => {
+    setAttaching(false);
+    let items;
+    try {
+      items = await pickFiles(kind);
+    } catch (err) {
+      if (live.current && err?.code !== 'BUSY') setNotes((n) => [...n, t('mobile.compose.pickFailed')]);
+      return;
+    }
+    if (!live.current) return;
+    const good = items.filter((a) => !a.error);
+    const bad = items.filter((a) => a.error);
+    if (bad.length) setNotes((n) => [...n, ...bad.map((a) => t('mobile.compose.unreadable', { name: displayText(a.name, '') || t('mobile.viewer.attachment') }))]);
+    if (good.length) {
+      setAttachments((list) => [...list, ...good]);
+      edit('attachments');
+    }
+  };
+  const removeAttachment = (at) => {
+    const gone = attachments[at];
+    if (gone?.forwarded) removedForwards.current.push(gone.name);
+    setAttachments((list) => list.filter((_, i) => i !== at));
+    edit('attachments');
+  };
+
+  // ── Send ──────────────────────────────────────────────────────────────────
+  const toAll = useMemo(() => commitText(to.entries, to.text, { all: true }).entries, [to]);
+  const ccAll = useMemo(() => commitText(cc.entries, cc.text, { all: true }).entries, [cc]);
+  const bccAll = useMemo(() => commitText(bcc.entries, bcc.text, { all: true }).entries, [bcc]);
+  const invalid = [...toAll, ...ccAll, ...bccAll].some((e) => !isValidEntry(e));
+  const noTo = toAll.length === 0;
+  const canSend = !sending && !noTo && !invalid && fetching.length === 0;
+
+  const send = async () => {
+    if (!canSend) return;
+    // What is still in an input goes out as a chip.
+    setTo({ entries: toAll, text: '' });
+    setCc({ entries: ccAll, text: '' });
+    setBcc({ entries: bccAll, text: '' });
+    setSending(true);
+    setError(null);
+    await stopSaving();
+    const id = draftId.current;
+    try {
+      await daemonCall('mobile.compose.send', { accountId, ...(id ? { draftId: id } : {}), ...fieldsOf(current()) });
+    } catch (err) {
+      if (!live.current) return;
+      stopped.current = false;
+      setSending(false);
+      setError(sendErrorKey(err?.code));
+      scroller.current?.scrollTo?.({ top: 0 });
+      return;
+    }
+    useMobileStore.getState().loadOutbox();
+    onClose();
+  };
+
+  // ── Leave ─────────────────────────────────────────────────────────────────
+  const discard = useCallback(async () => {
+    setConfirming(false);
+    await stopSaving();
+    const id = draftId.current;
+    draftId.current = null;
+    if (id) await daemonCall('mobile.drafts.delete', { id }).catch(() => {});
+    onClose();
+  }, [stopSaving, onClose]);
+
+  const saveAndLeave = useCallback(async () => {
+    setConfirming(false);
+    await saveNow();
+    stopped.current = true;
+    onClose();
+  }, [saveNow, onClose]);
+
+  const requestLeave = useCallback(() => {
+    const worth = touched.current.size > 0 && !isEmpty(current());
+    if (worth) setConfirming(true);
+    else discard();
+  }, [discard]); // eslint-disable-line react-hooks/exhaustive-deps
+  const keepEditing = useCallback(() => setConfirming(false), []);
+  const closeAttach = useCallback(() => setAttaching(false), []);
+
+  useBackLayer(!confirming && !attaching, requestLeave);
+  useBackLayer(confirming, keepEditing);
+  useBackLayer(attaching, closeAttach);
+  useKeyboardInset(scroller);
+
+  const title = t(TITLE_KEYS[mode] || TITLE_KEYS.new);
+  let hint = null;
+  if (invalid) hint = t('mobile.compose.invalidAddress');
+  else if (noTo && (ccAll.length || bccAll.length)) hint = t('mobile.compose.needTo');
+
+  return (
+    <section className="mv-compose" role="dialog" aria-modal="true" aria-label={title}>
+      <header className="mv-compose__bar">
+        <button type="button" className="mv-compose__back" data-mv-compose-close onClick={requestLeave}>
+          {t('common.back')}
+        </button>
+        <h1 className="mv-compose__title">{title}</h1>
+        <button type="button" className="mv-iconbtn" aria-label={t('mobile.compose.attach')} onClick={() => setAttaching(true)}>
+          <PaperclipIcon />
+        </button>
+        <button type="button" className="mv-compose__send" data-mv-send disabled={!canSend} onClick={send}>
+          {t('compose.send')}
+        </button>
+      </header>
+      <div ref={scroller} className="mv-compose__scroll">
+        {error && <p className="mv-compose__error" role="alert">{t(error)}</p>}
+        <div className="mv-compose__line">
+          <span className="mv-compose__label">{t('common.from')}</span>
+          <span className="mv-compose__from" dir="auto">{fromEmail}</span>
+        </div>
+        <RecipientField label={t('common.to')} entries={to.entries} text={to.text} onChange={(v) => { setTo(v); edit('to'); }} />
+        {showCc ? (
+          <>
+            <RecipientField label={t('mobile.compose.cc')} entries={cc.entries} text={cc.text} onChange={(v) => { setCc(v); edit('cc'); }} />
+            <RecipientField label={t('mobile.compose.bcc')} entries={bcc.entries} text={bcc.text} onChange={(v) => { setBcc(v); edit('bcc'); }} />
+          </>
+        ) : (
+          <button type="button" className="mv-compose__more" onClick={() => setShowCc(true)}>{t('mobile.compose.showCc')}</button>
+        )}
+        {hint && <p className="mv-compose__hint">{hint}</p>}
+        <div className="mv-compose__line">
+          <label className="mv-compose__label" htmlFor="mv-compose-subject">{t('compose.subject')}</label>
+          <input
+            id="mv-compose-subject"
+            className="mv-compose__input"
+            dir="auto"
+            value={subject}
+            onChange={(e) => { setSubject(e.target.value); edit('subject'); }}
+          />
+        </div>
+        {(attachments.length > 0 || fetching.length > 0) && (
+          <ul className="mv-compose__files" aria-label={t('common.attachmentCount', { count: attachments.length + fetching.length })}>
+            {attachments.map((a, i) => (
+              <li key={a.handle} className="mv-compose__file">
+                <span className="mv-compose__file-name" dir="auto">{displayText(a.name, '') || t('mobile.viewer.attachment')}</span>
+                <span className="mv-compose__file-size">{formatSize(a.size)}</span>
+                <button type="button" className="mv-rcpt__remove mv-compose__file-remove" aria-label={t('mobile.compose.removeAttachment', { name: a.name || '' })} onClick={() => removeAttachment(i)}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
+                    <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </li>
+            ))}
+            {fetching.map((a) => (
+              <li key={`fetch:${a.section}`} className="mv-compose__file mv-compose__file--pending" role="status">
+                <span className="mv-compose__file-name" dir="auto">{displayText(a.filename, '') || t('mobile.viewer.attachment')}</span>
+                <span className="mv-compose__file-size">{t('mobile.compose.downloading')}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {notes.map((note, i) => (
+          // eslint-disable-next-line react/no-array-index-key -- notes only grow
+          <p key={i} className="mv-compose__note" role="status">{note}</p>
+        ))}
+        <textarea
+          className="mv-compose__body"
+          aria-label={t('mobile.compose.body')}
+          dir="auto"
+          value={text}
+          onChange={(e) => { setText(e.target.value); edit('text'); }}
+        />
+      </div>
+      {confirming && (
+        <Sheet kind="sheet" label={t('mobile.compose.leaveTitle')} onClose={keepEditing}>
+          <div className="mv-sheet__grip" aria-hidden="true" />
+          <h2 className="mv-sheet__title">{t('mobile.compose.leaveTitle')}</h2>
+          <div className="mv-sheet__actions">
+            <button type="button" className="mv-sheet__action" onClick={saveAndLeave}>{t('mobile.compose.saveDraft')}</button>
+            <button type="button" className="mv-sheet__action mv-sheet__action--danger" onClick={discard}>{t('common.discard')}</button>
+            <button type="button" className="mv-sheet__action" onClick={keepEditing}>{t('mobile.compose.keepEditing')}</button>
+          </div>
+        </Sheet>
+      )}
+      {attaching && (
+        <Sheet kind="sheet" label={t('mobile.compose.attach')} onClose={closeAttach}>
+          <div className="mv-sheet__grip" aria-hidden="true" />
+          <h2 className="mv-sheet__title">{t('mobile.compose.attach')}</h2>
+          <div className="mv-sheet__actions">
+            <button type="button" className="mv-sheet__action" onClick={() => pick('photos')}>{t('mobile.compose.pickPhotos')}</button>
+            <button type="button" className="mv-sheet__action" onClick={() => pick('files')}>{t('mobile.compose.pickFiles')}</button>
+            <button type="button" className="mv-sheet__action" onClick={closeAttach}>{t('common.cancel')}</button>
+          </div>
+        </Sheet>
+      )}
+    </section>
+  );
+}
