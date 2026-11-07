@@ -144,7 +144,7 @@ pub fn refuse_graph(config: &ImapConfig) -> Result<(), String> {
 /// on first use and nothing else, so it is the one failure worth trying again;
 /// a tagged `NO`/`BAD` is the server's answer and repeating it changes nothing.
 pub fn is_connection_lost(err: &str) -> bool {
-    const NEEDLES: [&str; 10] = [
+    const NEEDLES: [&str; 12] = [
         "connection lost", // async_imap::error::Error::ConnectionLost
         "connection reset",
         "connection aborted",
@@ -164,7 +164,12 @@ pub fn is_connection_lost(err: &str) -> bool {
         "connection closed", // the TLS layer: "closed via error" / "closed gracefully"
         "broken pipe",
         "unexpected end of file",
-        "not connected",
+        // ENOTCONN as macOS/Windows and Linux word it, plus Windows' number.
+        // Never a bare "not connected": Outlook.com's NO to a mailbox it will
+        // not serve over IMAP is "User is authenticated but not connected".
+        "socket is not connected",
+        "transport endpoint is not connected",
+        "os error 10057",
     ];
     let lowered = err.to_ascii_lowercase();
     NEEDLES.iter().any(|n| lowered.contains(n))
@@ -879,6 +884,18 @@ mod connect_retry_tests {
         assert!(!is_connection_lost(
             "Login failed for butcher@graphicmeat.com: NO [AUTHENTICATIONFAILED] Invalid credentials"
         ));
+    }
+
+    #[test]
+    fn a_server_refusal_that_says_not_connected_is_not_a_dead_socket() {
+        // Outlook.com's NO to XOAUTH2 for a mailbox it will not serve over IMAP.
+        let refused = "no response: code: None, info: Some(\"User is authenticated but not connected.\")";
+        assert!(!is_connection_lost(refused));
+        assert!(!is_connection_lost("bad response: User is authenticated but not connected."));
+        // ENOTCONN still is one, on every platform.
+        assert!(is_connection_lost("SELECT INBOX failed: io: Socket is not connected (os error 57)"));
+        assert!(is_connection_lost("SELECT INBOX failed: io: Transport endpoint is not connected (os error 107)"));
+        assert!(is_connection_lost("SELECT INBOX failed: io: A request was disallowed because the socket is not connected. (os error 10057)"));
     }
 
     #[test]
