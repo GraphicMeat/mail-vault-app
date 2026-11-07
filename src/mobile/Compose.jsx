@@ -191,11 +191,14 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     };
   }, [saveNow]);
 
-  useEffect(() => () => {
-    live.current = false;
-    clearTimeout(timer.current);
-    // Unmounted without leaving through the screen (the account went away): keep what was typed.
-    if (touched.current.size && !stopped.current) saveNow();
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+      clearTimeout(timer.current);
+      // Unmounted without leaving through the screen (the account went away): keep what was typed.
+      if (touched.current.size && !stopped.current) saveNow();
+    };
   }, [saveNow]);
 
   // ── Prepare (reply, reply all, forward) ───────────────────────────────────
