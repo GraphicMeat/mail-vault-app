@@ -80,7 +80,6 @@
   "799d8b93a908": "如果出现提示，请选择目标位置。检查已保存文件的扩展名，再用邮件应用打开，验证邮件和附件。",
   "02ca5a909f50": "如果菜单不同，请查看 <a href=\"https://support.microsoft.com/en-us/outlook/mail/save-an-outlook-message-as-a-eml-file-a-pdf-file-or-as-a-draft\">Microsoft 针对不同版本的保存说明</a>。保存一封邮件不会导出该对话的其余邮件或整个邮箱。",
   "21fa0016a6d0": "将 Outlook.com 或 Microsoft 365 邮箱导出为 EML",
-  "d0e702de8f8f": "安装 MailVault，通过 Microsoft 登录添加账户。Outlook.com 账户在 MailVault 中使用 Microsoft Graph；Microsoft 365 也支持应用的 OAuth 账户连接。组织策略可能阻止访问。",
   "1047574f3d21": "检查收件箱、已发送和自定义文件夹。确认所需邮件确实可在已连接的账户中访问；联机存档和共享邮箱可能需要另外受支持的访问方式。",
   "62bf1ecc9d28": "在批量操作中选择文件夹和日期，选择<strong>归档</strong>，等待下载完成。首次备份时只使用归档操作。",
   "dc869fcbc0d3": "切换到保险库来源，检查旧邮件和附件。归档邮件以独立的 .eml 文件保存在本地。",

@@ -1,8 +1,6 @@
 {
   "ddd9e381040a": "삭제한 메일의 <strong>서버로 복구</strong>. 이 컴퓨터에 이미 있는 메일이라면 로컬로 복구는 작동합니다",
   "db3b0e57e997": "연결 테스트 뒤 계정 추가 창이 알려 주는 <strong>받은편지함 메일 수</strong>",
-  "072358fa5619": "Microsoft 365 Business와 Enterprise 계정은 OAuth2와 함께 IMAP을 쓰며 이 제한의 영향을 받지 않습니다. 이 로그인은 <a href=\"https://www.thunderbird.net/\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Mozilla Thunderbird</a>와 같은 방식으로 PKCE와 XOAUTH2 인증을 사용합니다.",
-  "d8b695a6bb4c": "Graph 계정에서 아직 쓸 수 없는 기능:",
   "e2b51688f4b0": "다시 알림",
   "db3d9a0b5360": "MBOX 파일을 서버로 복원하기",
   "6556465c8152": "메일 클라이언트",

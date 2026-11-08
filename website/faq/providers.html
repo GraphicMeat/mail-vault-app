@@ -60,7 +60,7 @@
       "name": "Does MailVault work with Gmail and Outlook?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com, Hotmail and Live.com accounts connect through the Microsoft Graph API by default, or over IMAP if you choose it."
+        "text": "Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Outlook.com, Hotmail and Live.com accounts connect over IMAP with Microsoft sign-in by default, or through the Microsoft Graph API if you choose it."
       }
     },
     {
@@ -68,7 +68,15 @@
       "name": "How do I connect my Outlook.com account?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the Microsoft Graph API. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. With Connect over left on Automatic, MailVault recognizes a personal Microsoft account and uses Graph, so there is nothing to set up in Outlook.com. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts. IMAP is also available: choose IMAP under Connect over when you add the account, or switch later in Settings, Accounts, Connection. Sign-in still goes through Microsoft with OAuth2, but Outlook.com only accepts IMAP once Let devices and apps use IMAP is turned on in its settings. A few things that rely on IMAP are not available on Graph accounts yet: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits."
+        "text": "MailVault connects Outlook.com, Hotmail and Live.com accounts over IMAP by default, with Microsoft's OAuth2 sign-in. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. There is no password to enter and no server to type. Outlook.com only accepts IMAP once Let devices and apps use IMAP is turned on in its settings. Microsoft Graph is still available: choose Microsoft Graph under Connect over when you add the account, or switch later in Settings, Accounts, Connection. A few things that rely on IMAP are not available on Graph accounts: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Accounts on IMAP are not affected by these limits.""
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I add an Outlook.com or Hotmail account over IMAP?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "First turn IMAP on in Outlook.com: open Outlook on the web, go to Settings, Mail, Forwarding and IMAP, switch on Let devices and apps use IMAP under POP and IMAP, and click Save. Then in MailVault add an account, choose Outlook / Microsoft 365, type your email address, leave Connect over on IMAP and click Sign in with Microsoft. Finish the sign-in in your browser and MailVault tests the connection and adds the account. You enter no password and no server settings: MailVault fills in outlook.office365.com on port 993 for incoming mail and smtp-mail.outlook.com on port 587 for outgoing mail. An Outlook.com or Hotmail account already on Microsoft Graph switches in Settings, Accounts, Connection, Connect over, IMAP, then Switch and sign in again, and its saved mail stays."
       }
     },
     {
@@ -204,7 +212,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html" aria-current="page">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/your-questions.html">Your questions</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav><div class="mv-help-version"><div>Version <span translate="no">2.20.0</span></div><div>Reviewed <time datetime="2026-10-22">22 October 2026</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html" aria-current="page">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/your-questions.html">Your questions</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav><div class="mv-help-version"><div>Version <span translate="no">2.22.0</span></div><div>Reviewed <time datetime="2026-10-22">22 October 2026</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="Breadcrumb" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Email Providers</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">Does MailVault work with Gmail and Outlook?</a></li><li><a href="#help-section-2">How do I connect my Outlook.com account?</a></li><li><a href="#help-section-3">How do I use MailVault with Proton Mail?</a></li><li><a href="#help-section-4">Can I send from a different address than the one I log in with?</a></li><li><a href="#help-section-5">How do I send from an alias?</a></li><li><a href="#help-section-6">How do I connect Fastmail or another JMAP account?</a></li><li><a href="#help-section-7">How do I add an iCloud or Apple Account email address?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">Email Providers</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">Does MailVault work with Gmail and Outlook?</a></li><li><a href="#help-section-2">How do I connect my Outlook.com account?</a></li><li><a href="#add-outlook-hotmail-imap-title">How do I add an Outlook.com or Hotmail account over IMAP?</a></li><li><a href="#help-section-3">How do I use MailVault with Proton Mail?</a></li><li><a href="#help-section-4">Can I send from a different address than the one I log in with?</a></li><li><a href="#help-section-5">How do I send from an alias?</a></li><li><a href="#help-section-6">How do I connect Fastmail or another JMAP account?</a></li><li><a href="#help-section-7">How do I add an iCloud or Apple Account email address?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Connect Gmail, Microsoft 365, Outlook.com, Proton Mail and JMAP servers such as Fastmail, and send from an alias.</p>
 
       <div class="space-y-4">
@@ -225,23 +233,54 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">Does MailVault work with Gmail and Outlook?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com, Hotmail and Live.com accounts <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">connect through the Microsoft Graph API by default, or over IMAP if you choose it</a>.
+              Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com, Hotmail and Live.com accounts <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">connect over IMAP with Microsoft sign-in by default, or through the Microsoft Graph API if you choose it</a>.
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">How do I connect my Outlook.com account?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">MailVault connects personal Outlook.com, Hotmail and Live.com accounts through the <strong>Microsoft Graph API</strong> by default. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. With <strong>Connect over</strong> left on <strong>Automatic</strong>, MailVault recognizes a personal Microsoft account and uses Graph, so there is nothing to set up in Outlook.com. Reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts.</p>
-              <p class="mb-4">IMAP is also available. Choose <strong>IMAP</strong> under <strong>Connect over</strong> when you add the account, or switch later in <strong>Settings &rarr; Accounts &rarr; Connection</strong>. Sign-in still goes through Microsoft with OAuth2, but Outlook.com only accepts IMAP once <strong>Let devices and apps use IMAP</strong> is turned on in its settings, as described in <a href="/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">MailVault says Outlook refused IMAP</a>.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Not available on Graph accounts yet:</p>
+              <p class="mb-4">MailVault connects Outlook.com, Hotmail and Live.com accounts over <strong>IMAP</strong> by default, with Microsoft's OAuth2 sign-in. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. There is no password to enter and no server to type. Outlook.com only accepts IMAP once <strong>Let devices and apps use IMAP</strong> is turned on in its settings, as described in <a href="/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">MailVault says Outlook refused IMAP</a>. The steps are in <a href="#add-outlook-hotmail-imap" class="text-primary-500 hover:underline">How do I add an Outlook.com or Hotmail account over IMAP?</a></p>
+              <p class="mb-4">The <strong>Microsoft Graph API</strong> is still available. Choose <strong>Microsoft Graph</strong> under <strong>Connect over</strong> when you add the account, or switch later in <strong>Settings &rarr; Accounts &rarr; Connection</strong>. Graph needs nothing set up in Outlook.com, and reading, deleting, marking as read or unread, moving and backing up mail work as on other accounts.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Not available on Graph accounts:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>Snooze</strong></li>
                 <li><strong>Restoring an MBOX file to the server</strong></li>
                 <li><strong>Recover to server</strong> for deleted emails. Recover locally works, for mail already on this computer</li>
                 <li><strong>The Inbox count</strong> that the add-account window reports after the connection test</li>
               </ul>
-              <p>Microsoft 365 Business and Enterprise accounts use IMAP with OAuth2 and are not affected by these limits. That sign-in follows the same approach as <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, with PKCE and XOAUTH2 authentication.</p>
+              <p>Accounts on IMAP are not affected by these limits, and neither are Microsoft 365 work or school accounts, which also use IMAP with OAuth2. That sign-in follows the same approach as <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, with PKCE and XOAUTH2 authentication.</p>
+            </div>
+        </article>
+
+        <article id="add-outlook-hotmail-imap" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="add-outlook-hotmail-imap-title">How do I add an Outlook.com or Hotmail account over IMAP?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                IMAP is the default for Outlook.com, Hotmail, Live.com and Microsoft 365 accounts. You sign in with Microsoft in your browser, so there is no password or app password to enter and no server settings to type.
+              </p>
+              <p class="font-medium text-slate-700 dark:text-slate-300">1. Turn IMAP on in Outlook.com (Outlook.com, Hotmail and Live.com only):</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>Open <a href="https://outlook.live.com/mail/options/mail/forwarding" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Outlook on the web &rarr; Settings &rarr; Mail &rarr; Forwarding and IMAP</a>, signed in with the same Microsoft account.</li>
+                <li>Under <strong>POP and IMAP</strong>, switch on <strong>Let devices and apps use IMAP</strong>.</li>
+                <li>Click <strong>Save</strong>.</li>
+              </ol>
+              <p class="font-medium text-slate-700 dark:text-slate-300">2. Add the account in MailVault:</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>Add an account and choose <strong>Outlook / Microsoft 365</strong>.</li>
+                <li>Type your email address, for example <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">you@outlook.com</code> or <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">you@hotmail.com</code>.</li>
+                <li>Leave <strong>Connect over</strong> on <strong>IMAP</strong>.</li>
+                <li>Click <strong>Sign in with Microsoft</strong> and finish the sign-in in your browser. MailVault tests the connection and adds the account.</li>
+              </ol>
+              <p>
+                MailVault fills in the servers for you: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">outlook.office365.com</code> on port 993 for incoming mail, and <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">smtp-mail.outlook.com</code> on port 587 for outgoing mail from an Outlook.com or Hotmail address.
+              </p>
+              <p>
+                <strong>Already connected through Microsoft Graph?</strong> Open <strong>Settings &rarr; Accounts &rarr; Connection</strong>, set <strong>Connect over</strong> to <strong>IMAP</strong> and choose <strong>Switch and sign in again</strong>. Your saved mail stays. MailVault also shows a banner when it starts, for each account still on Graph, with <strong>Switch to IMAP</strong> and <strong>Don't show again</strong>.
+              </p>
+              <p>
+                If Outlook answers "User is authenticated but not connected", the IMAP setting in step 1 is still off: see <a href="/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">MailVault says Outlook refused IMAP</a>.
+              </p>
             </div>
         </article>
 
@@ -332,7 +371,7 @@
         </div>
       </div>
     </div>
-  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>Version <span translate="no">2.20.0</span></div><div>Reviewed <time datetime="2026-10-22">22 October 2026</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>Version <span translate="no">2.22.0</span></div><div>Reviewed <time datetime="2026-10-22">22 October 2026</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">

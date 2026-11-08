@@ -2,7 +2,6 @@
   "acb6472040f4": "<strong>앱 자체의 데이터베이스.</strong> 전용 보관 도구는 흔히 이 방식을 쓰며, 검색을 빠르게 해 줄 수 있습니다. 대신 보관본을 읽는 일이 그 앱에 달려 있게 됩니다. 정하기 전에 모든 것을 mbox나 .eml로 내보낼 수 있는지 확인하십시오.",
   "85864855d7e6": "실용적인 원칙: 무엇을 쓰든 보관본의 사본 하나는 .eml이나 mbox로 간직하십시오. 도구를 믿기 전에 무엇을 확인해야 하는지는 <a href=\"/guides/imap-backup-tool-checklist.html\">IMAP 백업 도구 체크리스트</a>를 보십시오.",
   "afc0b7094700": "<a href=\"/get-started.html\">다운로드 페이지</a>에서 <strong>MailVault를 설치하십시오</strong>.",
-  "cbcc0a0987f3": "<strong>계정을 추가하십시오.</strong> Gmail과 Microsoft 365는 Google이나 Microsoft 자체 페이지에서 로그인합니다. 개인용 Outlook.com, Hotmail, Live.com 계정은 Microsoft Graph로 연결되므로 입력할 IMAP 설정이 없습니다. iCloud Mail과 다른 제공업체는 IMAP을 씁니다. iCloud의 경우 MailVault는 Apple 계정에서 만든 앱 전용 암호로 로그인하며, <a href=\"/guides/export-icloud-mail.html\">iCloud Mail 내보내기 가이드</a>에서 그 과정을 안내합니다. 비밀번호는 MailVault가 아니라 시스템 키체인이 보관합니다.",
   "0baff86a8670": "<strong>MailVault가 모든 것을 백업하도록 설정하십시오.</strong> 설정 &gt; 백업 및 복원 &gt; 백업 설정을 여십시오. <strong>백업 대상</strong>의 기본값은 <strong>보관된 메일만 (로컬에 저장된 것)</strong>입니다. 아직 서버에만 있는 메일도 포함되도록 <strong>모든 메일 (서버에서 내려받기)</strong>로 바꾸십시오. 외장 드라이브나 NAS에 두 번째 사본을 둘 곳도 여기서 고를 수 있습니다.",
   "9472e7c1bbbf": "<strong>백업을 실행하십시오.</strong> <strong>백업 일정</strong> 탭을 열고 <strong>모든 계정 지금 백업</strong>을 누르거나, 계정 카드 하나에서 <strong>지금 백업</strong>을 누르십시오. 계정의 모든 폴더를 다룹니다. 수동 백업은 무료이며 저희 쪽 한도가 없고, 쓰는 공간은 사용자 자신의 디스크입니다.",
   "73cbfa5d904e": "<strong>큰 메일함에는 시간을 주십시오.</strong> Google은 계정당 하루 IMAP 다운로드를 2,500 MB로 제한하며, 넘으면 보통 한 시간, 길게는 24시간까지 접근이 중단됩니다. 모든 IMAP 도구에 해당합니다. MailVault는 한도에서 깔끔하게 멈추고, 다음 실행 때 멈춘 곳부터 이어 갑니다. 큰 Gmail 계정은 며칠이 걸릴 수 있습니다.",

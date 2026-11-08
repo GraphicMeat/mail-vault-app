@@ -1,8 +1,6 @@
 {
   "ddd9e381040a": "削除したメールの<strong>サーバーに復元</strong>。ローカルに復元は、すでにこのコンピュータにあるメールに対して使えます",
   "db3b0e57e997": "接続テストの後にアカウント追加ウインドウが表示する<strong>受信トレイの件数</strong>",
-  "072358fa5619": "Microsoft 365 Business と Enterprise のアカウントは OAuth2 による IMAP を使うため、これらの制限は受けません。このサインインは <a href=\"https://www.thunderbird.net/\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Mozilla Thunderbird</a> と同じ方式で、PKCE と XOAUTH2 の認証を使います。",
-  "d8b695a6bb4c": "Graph のアカウントでまだ使えないもの：",
   "e2b51688f4b0": "スヌーズ",
   "db3d9a0b5360": "MBOX ファイルをサーバーに復元すること",
   "6556465c8152": "メールクライアント",

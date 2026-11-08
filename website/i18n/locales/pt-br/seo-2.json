@@ -1,8 +1,6 @@
 {
   "ddd9e381040a": "<strong>Recuperar no servidor</strong> para e-mails excluídos. Recuperar localmente funciona, para e-mails que já estão neste computador",
   "db3b0e57e997": "<strong>A contagem da Caixa de entrada</strong> que a janela de adicionar conta informa depois do teste de conexão",
-  "072358fa5619": "Contas Microsoft 365 Business e Enterprise usam IMAP com OAuth2 e não são afetadas por essas limitações. Esse login segue a mesma abordagem do <a href=\"https://www.thunderbird.net/\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Mozilla Thunderbird</a>, com autenticação PKCE e XOAUTH2.",
-  "d8b695a6bb4c": "Ainda não disponível em contas Graph:",
   "e2b51688f4b0": "Adiar",
   "db3d9a0b5360": "Restaurar um arquivo MBOX no servidor",
   "6556465c8152": "Clientes de e-mail",

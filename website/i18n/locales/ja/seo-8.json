@@ -10,7 +10,6 @@
   "d1691b8e53c1": "はい。Piler と Mail-Archiver（どちらも GPL-3）、Open Archiver（AGPL-3）はオープンソースのアーカイブサーバーです。デスクトップでは Thunderbird がオープンソースで、MailVault のソースコードは GitHub で公開されています。",
   "f172070ec425": "MailVault は macOS・Windows・Linux 向けの無料のデスクトップアプリです。各自がインストールし、自分の Gmail、Microsoft 365、Outlook.com、または IMAP のアカウントにサインインして、メールのコピーを自分のコンピュータに保管します。MailVault のアカウントはなく、メールの経路に MailVault のサーバーは存在しません。ソースコードは GitHub で公開されています。このケースは<a href=\"/guides/email-archiving-for-freelancers.html\" class=\"text-primary-500 hover:text-primary-600 underline\">フリーランスと小規模事業者のためのメールアーカイブガイド</a>で詳しく説明しています。",
   "a90bd839a7d3": "macOS・Windows・Linux 向けに無料。ソースコードは GitHub で公開。Premium ではワンステップのアーカイブして削除とスケジュールバックアップが加わります。",
-  "1f2a76bd427d": "MailVault は前者です。macOS・Windows・Linux 向けのデスクトップメールアプリで、メールのコピーをコンピュータ上の保管庫に保管します。すべてのメッセージは Maildir 形式のフォルダに置かれたプレーンな <code>.eml</code> ファイルなので、MailVault がなくても Apple Mail、Thunderbird、テキストエディタで開けます。サインインする相手はメールのプロバイダーで、MailVault ではありません。Gmail と Microsoft 365 はそれぞれのサインインページで、Outlook.com は Microsoft Graph 経由で、そのほかのプロバイダーは IMAP で接続します。コンピュータはメールサーバーと直接通信し、MailVault のサーバーがあなたのメッセージを目にすることはありません。ソースコードは GitHub で公開されています。",
   "4c78d4ffc75b": "<strong>ソースコードは GitHub で公開。</strong> コードは GitHub にあるので、メールに対して何をしているかを確かめられます。",
   "3561b5fe7f59": "MailVault は無料で、ソースコードは GitHub で公開されており、どの IMAP メールアカウントでも使えます。ダウンロードして古いメールをアーカイブし、節約を始めましょう。"
 }

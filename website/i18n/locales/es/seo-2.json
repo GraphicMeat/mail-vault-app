@@ -1,8 +1,6 @@
 {
   "ddd9e381040a": "<strong>Recuperar en el servidor</strong> para los correos eliminados. Recuperar en local sí funciona, para el correo que ya está en este ordenador",
   "db3b0e57e997": "<strong>El recuento de la bandeja de entrada</strong> que muestra la ventana de añadir cuenta tras la prueba de conexión",
-  "072358fa5619": "Las cuentas de Microsoft 365 Business y Enterprise usan IMAP con OAuth2 y no se ven afectadas por estos límites. Ese inicio de sesión sigue el mismo enfoque que <a href=\"https://www.thunderbird.net/\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Mozilla Thunderbird</a>, con autenticación PKCE y XOAUTH2.",
-  "d8b695a6bb4c": "Aún no disponible en las cuentas Graph:",
   "e2b51688f4b0": "Posponer",
   "db3d9a0b5360": "Restaurar un archivo MBOX en el servidor",
   "6556465c8152": "Clientes de correo",

@@ -80,7 +80,6 @@
   "799d8b93a908": "요청이 나타나면 저장 위치를 선택하십시오. 저장된 파일의 확장자를 확인하고 메일 앱에서 열어 메시지와 첨부 파일을 검증하십시오.",
   "02ca5a909f50": "메뉴가 다르면 <a href=\"https://support.microsoft.com/en-us/outlook/mail/save-an-outlook-message-as-a-eml-file-a-pdf-file-or-as-a-draft\">Microsoft의 버전별 저장 안내</a>를 확인하십시오. 메시지 하나를 저장해도 나머지 대화나 메일함까지 내보내지는 않습니다.",
   "21fa0016a6d0": "Outlook.com 또는 Microsoft 365 메일함을 EML로 내보내기",
-  "d0e702de8f8f": "MailVault를 설치하고 Microsoft 로그인으로 계정을 추가하십시오. MailVault에서 Outlook.com 계정은 Microsoft Graph를 사용하며 Microsoft 365는 앱의 OAuth 계정 연결도 지원합니다. 조직 정책에 따라 접근이 차단될 수 있습니다.",
   "1047574f3d21": "받은편지함, 보낸편지함, 사용자 지정 폴더를 살펴보십시오. 필요한 메일이 연결된 계정에서 실제로 제공되는지 확인하십시오. 온라인 보관함이나 공유 메일함에는 별도로 지원되는 접근 방법이 필요할 수 있습니다.",
   "62bf1ecc9d28": "일괄 작업에서 폴더와 날짜를 선택하고 <strong>보관</strong>을 선택한 뒤 다운로드가 끝날 때까지 기다리십시오. 첫 백업에는 보관만 사용하십시오.",
   "dc869fcbc0d3": "보관함 소스로 전환해 오래된 메시지와 첨부 파일을 확인하십시오. 보관한 메시지는 개별 .eml 파일로 로컬에 저장됩니다.",

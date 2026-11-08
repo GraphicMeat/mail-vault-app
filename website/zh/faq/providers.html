@@ -57,58 +57,66 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "MailVault 支持 Gmail 和 Outlook 吗？",
+      "name": "Does MailVault work with Gmail and Outlook?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录。个人 Outlook.com、Hotmail 和 Live.com 账户默认通过 Microsoft Graph API 连接，也可以选择通过 IMAP 连接。"
+        "text": "Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Outlook.com, Hotmail and Live.com accounts connect over IMAP with Microsoft sign-in by default, or through the Microsoft Graph API if you choose it."
       }
     },
     {
       "@type": "Question",
-      "name": "如何连接我的 Outlook.com 账户？",
+      "name": "How do I connect my Outlook.com account?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault 默认通过 Microsoft Graph API 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。连接方式保持为自动时，MailVault 会识别出个人 Microsoft 账户并使用 Graph，所以无需在 Outlook.com 中做任何设置。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。也可以使用 IMAP：添加账户时在连接方式中选择 IMAP，或者之后在设置、账户、连接中切换。登录仍通过 Microsoft 使用 OAuth2，但只有在 Outlook.com 设置中打开允许设备和应用使用 IMAP 后，它才接受 IMAP。少数依赖 IMAP 的功能在 Graph 账户上暂不支持：稍后提醒；把 MBOX 文件恢复到服务器；对已删除邮件使用「恢复到服务器」（「恢复到本地」可以使用，适用于已经在这台电脑上的邮件）；以及添加账户时报告收件箱数量的那一行。Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。"
+        "text": "MailVault connects Outlook.com, Hotmail and Live.com accounts over IMAP by default, with Microsoft's OAuth2 sign-in. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. There is no password to enter and no server to type. Outlook.com only accepts IMAP once Let devices and apps use IMAP is turned on in its settings. Microsoft Graph is still available: choose Microsoft Graph under Connect over when you add the account, or switch later in Settings, Accounts, Connection. A few things that rely on IMAP are not available on Graph accounts: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Accounts on IMAP are not affected by these limits.""
       }
     },
     {
       "@type": "Question",
-      "name": "如何用 MailVault 收发 Proton Mail？",
+      "name": "How do I add an Outlook.com or Hotmail account over IMAP?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Proton Mail 对邮件做端到端加密，因此不直接提供 IMAP。要把它接入 MailVault，需要 Proton Mail Bridge：这是 Proton 提供的一个桌面应用，运行在本地，把你加密的邮箱以标准 IMAP/SMTP 的形式暴露在 127.0.0.1 上。Bridge 需要付费的 Proton Mail 套餐。安装 Bridge，用你的 Proton 账户登录，然后复制 Bridge 生成的 IMAP/SMTP 凭据（不是你的 Proton 账户密码）。在 MailVault 中，从服务商列表里选择 Proton Mail Bridge（或自定义 IMAP），服务器填 127.0.0.1，IMAP 端口 1143 并使用 STARTTLS，SMTP 端口 1025，用户名填你的 Proton 邮箱地址，密码填 Bridge 的密码。MailVault 同步时 Bridge 必须在运行，不过即使 Bridge 关着，已归档的邮件在 MailVault 里依然可读。对本地连接，Bridge 的自签名证书由 MailVault 自动处理。"
+        "text": "First turn IMAP on in Outlook.com: open Outlook on the web, go to Settings, Mail, Forwarding and IMAP, switch on Let devices and apps use IMAP under POP and IMAP, and click Save. Then in MailVault add an account, choose Outlook / Microsoft 365, type your email address, leave Connect over on IMAP and click Sign in with Microsoft. Finish the sign-in in your browser and MailVault tests the connection and adds the account. You enter no password and no server settings: MailVault fills in outlook.office365.com on port 993 for incoming mail and smtp-mail.outlook.com on port 587 for outgoing mail. An Outlook.com or Hotmail account already on Microsoft Graph switches in Settings, Accounts, Connection, Connect over, IMAP, then Switch and sign in again, and its saved mail stays."
       }
     },
     {
       "@type": "Question",
-      "name": "我可以用与登录地址不同的地址发信吗？",
+      "name": "How do I use MailVault with Proton Mail?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "可以。在设置 → 账户 → 别名中将该地址添加为账户别名，然后在写信时从发件人一栏选择，或设为默认地址。用户名和密码保持不变，MailVault 仍使用你设置的账户登录，也不会添加 Reply-To 标头。该地址必须是服务商允许此登录账户用于发信的地址。"
+        "text": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections."
       }
     },
     {
       "@type": "Question",
-      "name": "如何用别名发信？",
+      "name": "Can I send from a different address than the one I log in with?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "打开 设置 → 账户，选中账户，进入它的别名部分，这里列出该账户用来发信的所有地址：先是登录地址，然后是各个别名。对于用 Google 登录的 Google 账户，MailVault 会获取 Gmail 允许你用来发信的地址。对于其他服务商，MailVault 会推荐它在你自己的邮件里见过的地址，也就是你发过信的地址和你收信的地址，你也可以手动添加任何地址。给每个别名起一个收件人看到的名称，并选择新邮件默认从哪个地址发出。验证会从别名发送一封测试邮件，让你看看服务商是否接受。服务商必须允许该地址：在 Fastmail 中，先把它添加为别名或身份；在 Gmail 中，在 设置 → 帐号和导入 → 用这个地址发送邮件 中添加；对于 Microsoft 365 和 Outlook.com，别名在 Microsoft 账户中添加。改变的只有发件地址和名称，也不会添加 Reply-To 标头，所以回复会回到该别名。"
+        "text": "Yes. Add the address as an alias of the account in Settings → Accounts → Aliases, then pick it in the From row when you write, or make it the default. Your username and password stay the same, MailVault still signs in as the account you set up, and no Reply-To header is added. The address must be one your provider lets that login send from."
       }
     },
     {
       "@type": "Question",
-      "name": "如何连接 Fastmail 或其他 JMAP 账户？",
+      "name": "How do I send from an alias?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "添加账户时选择 Fastmail，并粘贴在 Fastmail 设置中授予 Mail 和 Submission 访问权限的 API 令牌。对于其他服务器，选择 JMAP 并使用其密码或 API 令牌。如果域名发布了会话 URL，MailVault 会自动发现；否则请输入完整的 HTTPS 会话 URL。对于发现的陌生服务器，请在发送凭据之前确认。新邮件使用推送接收，无法使用推送时回退到轮询；发件地址来自服务器上的发件身份。Fastmail 也提供 IMAP 应用密码选项。"
+        "text": "Open Settings → Accounts, pick the account and go to its Aliases section, which lists every address the account sends from: its login address first, then each alias. For a Google account signed in with Google, MailVault fetches the addresses Gmail lets you send as. For any other provider, MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at, and you can add any address by hand. Give each alias the name recipients should see, and choose which address new messages start from. Verify sends one test message from an alias so you can see whether your provider accepts it. Your provider has to allow the address: in Fastmail, add it as an alias or identity first; in Gmail, add it under Settings → Accounts and Import → Send mail as; for Microsoft 365 and Outlook.com, aliases are added in the Microsoft account. Only the From address and name change, and no Reply-To header is added, so replies come back to the alias."
       }
     },
     {
       "@type": "Question",
-      "name": "如何添加 iCloud 或 Apple 账户的邮箱地址？",
+      "name": "How do I connect Fastmail or another JMAP account?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "添加账户时选择 iCloud 邮件，输入你完整的 iCloud 地址，并粘贴 App 专用密码。iCloud 邮件不接受其他 App 使用你常规的 Apple 账户密码。请在 account.apple.com 的“登录与安全”下，进入“App 专用密码”来创建；必须已开启双重认证。MailVault 中密码栏旁边的信息按钮会说明同样的步骤。如果之后登录失败，是因为更改 Apple 账户密码撤销了它，请创建一个新的。分步指南：https://mailvaultapp.com/zh/guides/add-icloud-mail-to-mailvault.html"
+        "text": "Choose Fastmail when adding an account and paste an API token with Mail and Submission access from Fastmail settings. For another server, choose JMAP and use its password or API token. MailVault discovers the session URL when the domain publishes it; otherwise enter the full HTTPS session URL. Confirm an unfamiliar discovered server before credentials are sent. New mail uses push with polling as a fallback, and sending addresses come from the server’s identities. Fastmail also offers an IMAP app-password option."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I add an iCloud or Apple Account email address?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at account.apple.com under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. Step-by-step guide: https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html"
       }
     }
   ]
@@ -204,7 +212,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html" aria-current="page">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/your-questions.html">你关心的问题</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav><div class="mv-help-version"><div>版本 <span translate="no">2.20.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html" aria-current="page">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/your-questions.html">你关心的问题</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav><div class="mv-help-version"><div>版本 <span translate="no">2.22.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">邮件服务商</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">MailVault 支持 Gmail 和 Outlook 吗？</a></li><li><a href="#help-section-2">如何连接我的 Outlook.com 账户？</a></li><li><a href="#help-section-3">如何用 MailVault 收发 Proton Mail？</a></li><li><a href="#help-section-4">我可以用与登录地址不同的地址发信吗？</a></li><li><a href="#help-section-5">如何用别名发信？</a></li><li><a href="#help-section-6">如何连接 Fastmail 或其他 JMAP 账户？</a></li><li><a href="#help-section-7">如何添加 iCloud 或 Apple 账户的邮箱地址？</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">邮件服务商</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">MailVault 支持 Gmail 和 Outlook 吗？</a></li><li><a href="#help-section-2">如何连接我的 Outlook.com 账户？</a></li><li><a href="#add-outlook-hotmail-imap-title">如何通过 IMAP 添加 Outlook.com 或 Hotmail 账户？</a></li><li><a href="#help-section-3">如何用 MailVault 收发 Proton Mail？</a></li><li><a href="#help-section-4">我可以用与登录地址不同的地址发信吗？</a></li><li><a href="#help-section-5">如何用别名发信？</a></li><li><a href="#help-section-6">如何连接 Fastmail 或其他 JMAP 账户？</a></li><li><a href="#help-section-7">如何添加 iCloud 或 Apple 账户的邮箱地址？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">连接 Gmail、Microsoft 365、Outlook.com、Proton Mail 和 Fastmail 等 JMAP 服务器，并使用别名发信。</p>
 
       <div class="space-y-4">
@@ -225,23 +233,54 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVault 支持 Gmail 和 Outlook 吗？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录，并顺畅支持双重身份验证。个人 Outlook.com、Hotmail 和 Live.com 账户<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">默认通过 Microsoft Graph API 连接，也可以选择通过 IMAP 连接</a>。
+              可以。MailVault 支持 Gmail、Outlook、Fastmail 这类 JMAP 服务器，以及任何支持 IMAP 的邮件服务。对于 Gmail，直接用你的 Google 账户通过 OAuth2 登录，无需手动设置 IMAP。Microsoft 365 商业版和企业版账户可以用你的 Microsoft 账户通过 OAuth2 直接登录，并能与双重身份验证顺畅配合。个人 Outlook.com、Hotmail 和 Live.com 账户<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">默认通过 IMAP 和 Microsoft 登录连接，你也可以选择改用 Microsoft Graph API</a>。
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">如何连接我的 Outlook.com 账户？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">MailVault 默认通过 <strong>Microsoft Graph API</strong> 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。<strong>连接方式</strong>保持为<strong>自动</strong>时，MailVault 会识别出个人 Microsoft 账户并使用 Graph，所以无需在 Outlook.com 中做任何设置。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。</p>
-              <p class="mb-4">也可以使用 IMAP。添加账户时在<strong>连接方式</strong>中选择 <strong>IMAP</strong>，或者之后在<strong>设置 &rarr; 账户 &rarr; 连接</strong>中切换。登录仍通过 Microsoft 使用 OAuth2，但只有在 Outlook.com 设置中打开<strong>允许设备和应用使用 IMAP</strong>后，它才接受 IMAP，具体见<a href="/zh/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">MailVault 提示 Outlook 拒绝了 IMAP</a>。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Graph 账户暂不支持：</p>
+              <p class="mb-4">MailVault 默认通过 <strong>IMAP</strong> 和 Microsoft 的 OAuth2 登录连接 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择使用 Microsoft 账户登录，然后在浏览器中完成登录。无需输入密码，也无需填写服务器。只有在 Outlook.com 的设置中打开<strong>允许设备和应用使用 IMAP</strong> 之后，它才会接受 IMAP，详见 <a href="/zh/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">MailVault 提示 Outlook 拒绝了 IMAP</a>。具体步骤见<a href="#add-outlook-hotmail-imap" class="text-primary-500 hover:underline">如何通过 IMAP 添加 Outlook.com 或 Hotmail 账户？</a></p>
+              <p class="mb-4"><strong>Microsoft Graph API</strong> 仍然可用。添加账户时，在<strong>连接方式</strong>下选择 <strong>Microsoft Graph</strong>，或者之后在<strong>设置 &rarr; 账户 &rarr; 连接</strong>中切换。Graph 不需要在 Outlook.com 里设置任何东西，阅读、删除、标为已读或未读、移动和备份邮件都和其他账户一样可用。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Graph 账户不支持：</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>稍后提醒</strong></li>
                 <li><strong>把 MBOX 文件恢复到服务器</strong></li>
                 <li>对已删除邮件使用<strong>恢复到服务器</strong>。「恢复到本地」可以使用，适用于已经在这台电脑上的邮件</li>
                 <li>添加账户窗口在连接测试后报告的<strong>收件箱数量</strong></li>
               </ul>
-              <p>Microsoft 365 商业版和企业版账户使用带 OAuth2 的 IMAP，不受这些限制影响。这种登录方式与 <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a> 的做法相同，使用 PKCE 和 XOAUTH2 身份验证。</p>
+              <p>使用 IMAP 的账户不受这些限制影响，同样使用 IMAP 和 OAuth2 的 Microsoft 365 工作或学校账户也不受影响。这种登录方式与 <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a> 的做法一致，采用 PKCE 和 XOAUTH2 认证。</p>
+            </div>
+        </article>
+
+        <article id="add-outlook-hotmail-imap" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="add-outlook-hotmail-imap-title">如何通过 IMAP 添加 Outlook.com 或 Hotmail 账户？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                IMAP 是 Outlook.com、Hotmail、Live.com 和 Microsoft 365 账户的默认方式。你在浏览器中用 Microsoft 登录，所以无需输入密码或应用专用密码，也无需填写服务器设置。
+              </p>
+              <p class="font-medium text-slate-700 dark:text-slate-300">1. 在 Outlook.com 中打开 IMAP（仅限 Outlook.com、Hotmail 和 Live.com）：</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>用同一个 Microsoft 账户登录，打开<a href="https://outlook.live.com/mail/options/mail/forwarding" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Outlook 网页版 &rarr; 设置 &rarr; 邮件 &rarr; 转发和 IMAP</a>。</li>
+                <li>在 <strong>POP 和 IMAP</strong> 下，打开<strong>允许设备和应用使用 IMAP</strong>。</li>
+                <li>点击<strong>保存</strong>。</li>
+              </ol>
+              <p class="font-medium text-slate-700 dark:text-slate-300">2. 在 MailVault 中添加账户：</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>添加账户并选择 <strong>Outlook / Microsoft 365</strong>。</li>
+                <li>输入你的邮箱地址，例如 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">you@outlook.com</code> 或 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">you@hotmail.com</code>。</li>
+                <li>把<strong>连接方式</strong>保持为 <strong>IMAP</strong>。</li>
+                <li>点击<strong>使用 Microsoft 账户登录</strong>，并在浏览器中完成登录。MailVault 会测试连接并添加账户。</li>
+              </ol>
+              <p>
+                MailVault 会为你填好服务器：收信用 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">outlook.office365.com</code>，端口 993；Outlook.com 或 Hotmail 地址发信用 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">smtp-mail.outlook.com</code>，端口 587。
+              </p>
+              <p>
+                <strong>已经通过 Microsoft Graph 连接了？</strong>打开<strong>设置 &rarr; 账户 &rarr; 连接</strong>，把<strong>连接方式</strong>设为 <strong>IMAP</strong>，然后选择<strong>切换并重新登录</strong>。你已保存的邮件会保留。MailVault 启动时，也会为每个仍在使用 Graph 的账户显示一条横幅，上面有<strong>切换到 IMAP</strong>和<strong>不再显示</strong>。
+              </p>
+              <p>
+                如果 Outlook 回复“User is authenticated but not connected”，说明第 1 步中的 IMAP 设置仍然是关闭的：见 <a href="/zh/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">MailVault 提示 Outlook 拒绝了 IMAP</a>。
+              </p>
             </div>
         </article>
 
@@ -332,7 +371,7 @@
         </div>
       </div>
     </div>
-  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>版本 <span translate="no">2.20.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>版本 <span translate="no">2.22.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">

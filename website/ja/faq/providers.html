@@ -57,58 +57,66 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "MailVaultはGmailやOutlookで使えますか？",
+      "name": "Does MailVault work with Gmail and Outlook?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。MailVault は Gmail、Outlook、Fastmail などの JMAP サーバー、および IMAP 対応のメールサービスで使えます。Gmail には OAuth2 を使って Google アカウントで直接サインインでき、IMAP の手動設定は不要です。Microsoft 365 Business および Enterprise アカウントは、OAuth2 を使って Microsoft アカウントで直接サインインできます。個人用の Outlook.com、Hotmail、Live.com アカウントは 既定では Microsoft Graph API 経由で接続し、選べば IMAP でも接続できます。"
+        "text": "Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Outlook.com, Hotmail and Live.com accounts connect over IMAP with Microsoft sign-in by default, or through the Microsoft Graph API if you choose it."
       }
     },
     {
       "@type": "Question",
-      "name": "Outlook.com のアカウントを接続するには？",
+      "name": "How do I connect my Outlook.com account?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault は、個人の Outlook.com、Hotmail、Live.com のアカウントを既定で Microsoft Graph API 経由で接続します。アカウントを追加し、「Microsoft でサインイン」を選んで、ブラウザでサインインを完了してください。接続方法が自動のままなら、MailVault は個人の Microsoft アカウントを認識して Graph を使うので、Outlook.com 側で設定することはありません。メールの閲覧、削除、既読・未読の設定、移動、バックアップは、ほかのアカウントと同じように使えます。IMAP も選べます。アカウントを追加するときに接続方法で IMAP を選ぶか、あとから設定、アカウント、接続で切り替えます。サインインは引き続き OAuth2 で Microsoft を通りますが、Outlook.com が IMAP を受け付けるのは、その設定でデバイスとアプリで IMAP を使用できるようにするをオンにしてからです。IMAP に依存するいくつかの機能は、Graph のアカウントではまだ使えません。スヌーズ、MBOX ファイルをサーバーに復元すること、削除したメールのサーバーに復元（ローカルに復元は、すでにこのコンピュータにあるメールに対して使えます）、そしてアカウントを追加するときに受信トレイの件数を表示する行です。Microsoft 365 Business と Enterprise のアカウントは OAuth2 による IMAP を使うため、これらの制限は受けません。"
+        "text": "MailVault connects Outlook.com, Hotmail and Live.com accounts over IMAP by default, with Microsoft's OAuth2 sign-in. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. There is no password to enter and no server to type. Outlook.com only accepts IMAP once Let devices and apps use IMAP is turned on in its settings. Microsoft Graph is still available: choose Microsoft Graph under Connect over when you add the account, or switch later in Settings, Accounts, Connection. A few things that rely on IMAP are not available on Graph accounts: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Accounts on IMAP are not affected by these limits.""
       }
     },
     {
       "@type": "Question",
-      "name": "Proton MailでMailVaultを使うにはどうすればよいですか？",
+      "name": "How do I add an Outlook.com or Hotmail account over IMAP?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Proton Mailはメールをエンドツーエンドで暗号化するため、IMAPを直接公開していません。MailVaultと接続するにはProton Mail Bridgeが必要です。これはProtonが提供するデスクトップアプリで、ローカルで動作し、暗号化されたメールボックスを標準のIMAP/SMTPとして127.0.0.1に公開します。Bridgeの利用にはProton Mailの有料プランが必要です。Bridgeをインストールし、Protonアカウントでサインインして、Bridgeが生成したIMAP/SMTPの認証情報（Protonアカウントのパスワードではありません）をコピーします。MailVaultではプロバイダーの一覧からProton Mail Bridge（またはCustom IMAP）を選び、サーバーに127.0.0.1、IMAPポートに1143とSTARTTLS、SMTPポートに1025、ユーザー名にProtonのメールアドレス、パスワードにBridgeのパスワードを入力します。MailVaultが同期するにはBridgeが動作している必要がありますが、アーカイブ済みのメールはBridgeが停止していてもMailVault内で閲覧できます。Bridgeの自己署名証明書は、ローカル接続についてMailVaultが自動的に処理します。"
+        "text": "First turn IMAP on in Outlook.com: open Outlook on the web, go to Settings, Mail, Forwarding and IMAP, switch on Let devices and apps use IMAP under POP and IMAP, and click Save. Then in MailVault add an account, choose Outlook / Microsoft 365, type your email address, leave Connect over on IMAP and click Sign in with Microsoft. Finish the sign-in in your browser and MailVault tests the connection and adds the account. You enter no password and no server settings: MailVault fills in outlook.office365.com on port 993 for incoming mail and smtp-mail.outlook.com on port 587 for outgoing mail. An Outlook.com or Hotmail account already on Microsoft Graph switches in Settings, Accounts, Connection, Connect over, IMAP, then Switch and sign in again, and its saved mail stays."
       }
     },
     {
       "@type": "Question",
-      "name": "ログインに使うアドレスとは別のアドレスから送信できますか？",
+      "name": "How do I use MailVault with Proton Mail?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。設定 → アカウント → エイリアスで、そのアドレスをアカウントのエイリアスとして追加します。作成時に差出人の行で選ぶか、既定のアドレスに設定してください。ユーザー名とパスワードは変わらず、MailVault は設定済みのアカウントで引き続きサインインし、Reply-To ヘッダーも追加しません。そのログインでの送信をプロバイダーが許可しているアドレスである必要があります。"
+        "text": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections."
       }
     },
     {
       "@type": "Question",
-      "name": "エイリアスから送信するには？",
+      "name": "Can I send from a different address than the one I log in with?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "設定 → アカウントを開き、アカウントを選んでエイリアスのセクションに進みます。アカウントが送信に使うすべてのアドレスが、ログインアドレス、続いて各エイリアスの順に並びます。Google でサインインした Google アカウントでは、Gmail で送信が許可されているアドレスを MailVault が取得します。それ以外の提供元では、送信に使ったアドレスやメールが届くアドレスなど、あなた自身のメールで見つかったアドレスを MailVault が提案し、どのアドレスも手動で追加できます。各エイリアスには受信者に表示する名前を付け、新しいメッセージをどのアドレスで始めるかを選びます。確認を押すとエイリアスからテストメッセージを 1 通送り、提供元が受け付けるかどうかを確かめられます。そのアドレスは提供元で許可されている必要があります。Fastmail では先にエイリアスまたは ID として追加し、Gmail では 設定 → アカウントとインポート → Send mail as で追加します。Microsoft 365 と Outlook.com では、エイリアスは Microsoft アカウントで追加します。変わるのは差出人のアドレスと名前だけで、Reply-To ヘッダーは追加されないため、返信はエイリアスに届きます。"
+        "text": "Yes. Add the address as an alias of the account in Settings → Accounts → Aliases, then pick it in the From row when you write, or make it the default. Your username and password stay the same, MailVault still signs in as the account you set up, and no Reply-To header is added. The address must be one your provider lets that login send from."
       }
     },
     {
       "@type": "Question",
-      "name": "Fastmail やほかの JMAP アカウントにはどう接続しますか？",
+      "name": "How do I send from an alias?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "アカウント追加時に Fastmail を選び、Fastmail の設定で Mail と Submission へのアクセスを許可した API トークンを貼り付けます。ほかのサーバーでは JMAP を選び、そのパスワードまたは API トークンを使います。ドメインがセッション URL を公開していれば、MailVault が検出します。公開していなければ、完全な HTTPS セッション URL を入力してください。検出されたサーバーに見覚えがない場合は、認証情報を送る前に確認してください。新着メールはプッシュで取得し、利用できない場合はポーリングに切り替えます。送信アドレスにはサーバーの差出人情報を使います。Fastmail では IMAP 用のアプリパスワードも利用できます。"
+        "text": "Open Settings → Accounts, pick the account and go to its Aliases section, which lists every address the account sends from: its login address first, then each alias. For a Google account signed in with Google, MailVault fetches the addresses Gmail lets you send as. For any other provider, MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at, and you can add any address by hand. Give each alias the name recipients should see, and choose which address new messages start from. Verify sends one test message from an alias so you can see whether your provider accepts it. Your provider has to allow the address: in Fastmail, add it as an alias or identity first; in Gmail, add it under Settings → Accounts and Import → Send mail as; for Microsoft 365 and Outlook.com, aliases are added in the Microsoft account. Only the From address and name change, and no Reply-To header is added, so replies come back to the alias."
       }
     },
     {
       "@type": "Question",
-      "name": "iCloud または Apple アカウントのメールアドレスを追加するには？",
+      "name": "How do I connect Fastmail or another JMAP account?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "アカウントの追加で iCloud Mail を選び、iCloud のメールアドレスを省略せずに入力して、App 用パスワードを貼り付けます。iCloud Mail は、他のアプリから Apple アカウントの通常のパスワードでサインインすることを受け付けません。App 用パスワードは account.apple.com の「サインインとセキュリティ」から「App 用パスワード」を開いて作成します。2 ファクタ認証をオンにしておく必要があります。MailVault のパスワード欄の横にある情報ボタンでも、同じ手順を確認できます。あとからサインインに失敗した場合は、Apple アカウントのパスワード変更で取り消されているため、新しく作成してください。手順ガイド：https://mailvaultapp.com/ja/guides/add-icloud-mail-to-mailvault.html"
+        "text": "Choose Fastmail when adding an account and paste an API token with Mail and Submission access from Fastmail settings. For another server, choose JMAP and use its password or API token. MailVault discovers the session URL when the domain publishes it; otherwise enter the full HTTPS session URL. Confirm an unfamiliar discovered server before credentials are sent. New mail uses push with polling as a fallback, and sending addresses come from the server’s identities. Fastmail also offers an IMAP app-password option."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I add an iCloud or Apple Account email address?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at account.apple.com under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. Step-by-step guide: https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html"
       }
     }
   ]
@@ -204,7 +212,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html" aria-current="page">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/your-questions.html">皆さまからのご質問</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav><div class="mv-help-version"><div>バージョン <span translate="no">2.20.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html" aria-current="page">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/your-questions.html">皆さまからのご質問</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav><div class="mv-help-version"><div>バージョン <span translate="no">2.22.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="パンくずリスト" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">メールプロバイダ</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">MailVaultはGmailやOutlookで使えますか？</a></li><li><a href="#help-section-2">Outlook.com のアカウントを接続するには？</a></li><li><a href="#help-section-3">Proton MailでMailVaultを使うにはどうすればよいですか？</a></li><li><a href="#help-section-4">ログインに使うアドレスとは別のアドレスから送信できますか？</a></li><li><a href="#help-section-5">エイリアスから送信するには？</a></li><li><a href="#help-section-6">Fastmail やほかの JMAP アカウントにはどう接続しますか？</a></li><li><a href="#help-section-7">iCloud または Apple アカウントのメールアドレスを追加するには？</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">メールプロバイダ</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">MailVaultはGmailやOutlookで使えますか？</a></li><li><a href="#help-section-2">Outlook.com のアカウントを接続するには？</a></li><li><a href="#add-outlook-hotmail-imap-title">Outlook.com や Hotmail のアカウントを IMAP で追加するには？</a></li><li><a href="#help-section-3">Proton MailでMailVaultを使うにはどうすればよいですか？</a></li><li><a href="#help-section-4">ログインに使うアドレスとは別のアドレスから送信できますか？</a></li><li><a href="#help-section-5">エイリアスから送信するには？</a></li><li><a href="#help-section-6">Fastmail やほかの JMAP アカウントにはどう接続しますか？</a></li><li><a href="#help-section-7">iCloud または Apple アカウントのメールアドレスを追加するには？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail、Microsoft 365、Outlook.com、Proton Mail、Fastmail などの JMAP サーバーに接続し、エイリアスから送信します。</p>
 
       <div class="space-y-4">
@@ -225,23 +233,54 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVaultはGmailやOutlookで使えますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              はい。MailVault は Gmail、Outlook、Fastmail などの JMAP サーバー、および IMAP 対応のメールサービスで使えます。Gmail には OAuth2 を使って Google アカウントで直接サインインでき、IMAP の手動設定は不要です。Microsoft 365 Business および Enterprise アカウントは、OAuth2 を使って Microsoft アカウントで直接サインインでき、2 要素認証にも対応しています。個人用の Outlook.com、Hotmail、Live.com アカウントは<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">既定では Microsoft Graph API 経由で接続し、選べば IMAP でも接続できます</a>。
+              はい。MailVault は Gmail、Outlook、Fastmail などの JMAP サーバー、そして IMAP に対応するあらゆるメールサービスで使えます。Gmail は OAuth2 で Google アカウントに直接サインインでき、IMAP の手動設定は不要です。Microsoft 365 のビジネス版とエンタープライズ版のアカウントも、OAuth2 で Microsoft アカウントに直接サインインでき、2 要素認証でも問題なく動作します。個人用の Outlook.com、Hotmail、Live.com アカウントは、<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">既定では Microsoft のサインインを使った IMAP で接続し、選べば Microsoft Graph API でも接続できます</a>。
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Outlook.com のアカウントを接続するには？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">MailVault は、個人の Outlook.com、Hotmail、Live.com のアカウントを既定で <strong>Microsoft Graph API</strong> 経由で接続します。アカウントを追加し、「Microsoft でサインイン」を選んで、ブラウザでサインインを完了してください。<strong>接続方法</strong>が<strong>自動</strong>のままなら、MailVault は個人の Microsoft アカウントを認識して Graph を使うので、Outlook.com 側で設定することはありません。メールの閲覧、削除、既読・未読の設定、移動、バックアップは、ほかのアカウントと同じように使えます。</p>
-              <p class="mb-4">IMAP も選べます。アカウントを追加するときに<strong>接続方法</strong>で <strong>IMAP</strong> を選ぶか、あとから<strong>設定 &rarr; アカウント &rarr; 接続</strong>で切り替えます。サインインは引き続き OAuth2 で Microsoft を通りますが、Outlook.com が IMAP を受け付けるのは、その設定で<strong>デバイスとアプリで IMAP を使用できるようにする</strong>をオンにしてからです。詳しくは<a href="/ja/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">Outlook が IMAP を拒否したと MailVault に表示される場合</a>をご覧ください。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Graph のアカウントでまだ使えないもの：</p>
+              <p class="mb-4">MailVault は、Outlook.com、Hotmail、Live.com のアカウントを、既定で Microsoft の OAuth2 サインインを使った <strong>IMAP</strong> で接続します。アカウントを追加し、Microsoft アカウントでサインインを選び、ブラウザーでサインインを完了してください。パスワードもサーバーも入力する必要はありません。Outlook.com は、設定で<strong>デバイスとアプリで IMAP を使用できるようにする</strong>をオンにしないと IMAP を受け付けません。詳しくは<a href="/ja/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">Outlook が IMAP を拒否したと MailVault に表示されます</a>をご覧ください。手順は<a href="#add-outlook-hotmail-imap" class="text-primary-500 hover:underline">Outlook.com や Hotmail のアカウントを IMAP で追加するには？</a>にあります。</p>
+              <p class="mb-4"><strong>Microsoft Graph API</strong> も引き続き使えます。アカウントを追加するときに<strong>接続方法</strong>で<strong>Microsoft Graph</strong>を選ぶか、あとから<strong>設定 &rarr; アカウント &rarr; 接続</strong>で切り替えてください。Graph は Outlook.com 側での設定が不要で、メールの読み取り、削除、既読・未読のマーク、移動、バックアップは、ほかのアカウントと同じように動作します。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Graph アカウントでは使えないもの:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>スヌーズ</strong></li>
                 <li><strong>MBOX ファイルをサーバーに復元すること</strong></li>
                 <li>削除したメールの<strong>サーバーに復元</strong>。ローカルに復元は、すでにこのコンピュータにあるメールに対して使えます</li>
                 <li>接続テストの後にアカウント追加ウインドウが表示する<strong>受信トレイの件数</strong></li>
               </ul>
-              <p>Microsoft 365 Business と Enterprise のアカウントは OAuth2 による IMAP を使うため、これらの制限は受けません。このサインインは <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a> と同じ方式で、PKCE と XOAUTH2 の認証を使います。</p>
+              <p>IMAP を使うアカウントにはこれらの制限は当てはまりません。同じく IMAP と OAuth2 を使う Microsoft 365 の職場・学校アカウントも同様です。このサインインは、PKCE と XOAUTH2 認証を使う点で、<a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a> と同じ方式です。</p>
+            </div>
+        </article>
+
+        <article id="add-outlook-hotmail-imap" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="add-outlook-hotmail-imap-title">Outlook.com や Hotmail のアカウントを IMAP で追加するには？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                IMAP は、Outlook.com、Hotmail、Live.com、Microsoft 365 アカウントの既定の接続方法です。ブラウザーで Microsoft にサインインするので、パスワードやアプリパスワードの入力も、サーバー設定の入力も不要です。
+              </p>
+              <p class="font-medium text-slate-700 dark:text-slate-300">1. Outlook.com で IMAP をオンにします（Outlook.com、Hotmail、Live.com のみ）:</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>同じ Microsoft アカウントでサインインした状態で、<a href="https://outlook.live.com/mail/options/mail/forwarding" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Outlook on the web &rarr; 設定 &rarr; メール &rarr; 転送と IMAP</a> を開きます。</li>
+                <li><strong>POP と IMAP</strong> で<strong>デバイスとアプリで IMAP を使用できるようにする</strong>をオンにします。</li>
+                <li><strong>保存</strong>をクリックします。</li>
+              </ol>
+              <p class="font-medium text-slate-700 dark:text-slate-300">2. MailVault でアカウントを追加します:</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>アカウントを追加して、<strong>Outlook / Microsoft 365</strong>を選びます。</li>
+                <li>メールアドレスを入力します。たとえば <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">you@outlook.com</code> や <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">you@hotmail.com</code> です。</li>
+                <li><strong>接続方法</strong>は<strong>IMAP</strong>のままにします。</li>
+                <li><strong>Microsoft アカウントでサインイン</strong>をクリックし、ブラウザーでサインインを完了します。MailVault が接続をテストし、アカウントを追加します。</li>
+              </ol>
+              <p>
+                サーバーは MailVault が入力します。受信は <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">outlook.office365.com</code> のポート 993、Outlook.com または Hotmail のアドレスからの送信は <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">smtp-mail.outlook.com</code> のポート 587 です。
+              </p>
+              <p>
+                <strong>すでに Microsoft Graph で接続していますか？</strong><strong>設定 &rarr; アカウント &rarr; 接続</strong>を開き、<strong>接続方法</strong>を<strong>IMAP</strong>にして、<strong>切り替えて再サインイン</strong>を選びます。保存済みのメールはそのまま残ります。MailVault は起動時にも、Graph のままのアカウントごとにバナーを表示し、<strong>IMAP に切り替える</strong>と<strong>今後は表示しない</strong>を選べます。
+              </p>
+              <p>
+                Outlook が「User is authenticated but not connected」と答える場合は、手順 1 の IMAP の設定がまだオフです。<a href="/ja/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">Outlook が IMAP を拒否したと MailVault に表示されます</a>をご覧ください。
+              </p>
             </div>
         </article>
 
@@ -332,7 +371,7 @@
         </div>
       </div>
     </div>
-  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>バージョン <span translate="no">2.20.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>バージョン <span translate="no">2.22.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">

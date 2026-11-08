@@ -57,58 +57,66 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "O MailVault funciona com Gmail e Outlook?",
+      "name": "Does MailVault work with Gmail and Outlook?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sim. O MailVault funciona com Gmail, Outlook, servidores JMAP como Fastmail e qualquer serviço de e-mail compatível com IMAP. Para o Gmail, entre diretamente com sua conta do Google usando OAuth2 — sem configurar o IMAP manualmente. Contas Microsoft 365 Business e Enterprise podem entrar diretamente com sua conta Microsoft usando OAuth2. Contas pessoais Outlook.com, Hotmail e Live.com se conectam por padrão pela API do Microsoft Graph, ou por IMAP se você escolher."
+        "text": "Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Outlook.com, Hotmail and Live.com accounts connect over IMAP with Microsoft sign-in by default, or through the Microsoft Graph API if you choose it."
       }
     },
     {
       "@type": "Question",
-      "name": "Como conecto minha conta do Outlook.com?",
+      "name": "How do I connect my Outlook.com account?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "O MailVault conecta contas pessoais do Outlook.com, Hotmail e Live.com pela Microsoft Graph API por padrão. Adicione a conta, escolha Entre com Microsoft e conclua o login no navegador. Com Conectar via em Automático, o MailVault reconhece uma conta Microsoft pessoal e usa o Graph, então não há nada para configurar no Outlook.com. Ler, excluir, marcar como lido ou não lido, mover e fazer backup de e-mails funcionam como nas outras contas. O IMAP também está disponível: escolha IMAP em Conectar via ao adicionar a conta, ou troque depois em Configurações, Contas, Conexão. O login continua passando pela Microsoft com OAuth2, mas o Outlook.com só aceita IMAP depois que Permitir que dispositivos e aplicativos usem IMAP é ativado nas configurações dele. Algumas coisas que dependem de IMAP ainda não estão disponíveis em contas Graph: Adiar; restaurar um arquivo MBOX no servidor; Recuperar no servidor para e-mails excluídos (Recuperar localmente funciona, para e-mails que já estão neste computador); e a linha que informa a contagem da sua Caixa de entrada quando você adiciona uma conta. Contas Microsoft 365 Business e Enterprise usam IMAP com OAuth2 e não são afetadas por essas limitações."
+        "text": "MailVault connects Outlook.com, Hotmail and Live.com accounts over IMAP by default, with Microsoft's OAuth2 sign-in. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. There is no password to enter and no server to type. Outlook.com only accepts IMAP once Let devices and apps use IMAP is turned on in its settings. Microsoft Graph is still available: choose Microsoft Graph under Connect over when you add the account, or switch later in Settings, Accounts, Connection. A few things that rely on IMAP are not available on Graph accounts: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Accounts on IMAP are not affected by these limits.""
       }
     },
     {
       "@type": "Question",
-      "name": "Como uso o MailVault com o Proton Mail?",
+      "name": "How do I add an Outlook.com or Hotmail account over IMAP?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "O Proton Mail criptografa suas mensagens de ponta a ponta, então não expõe IMAP diretamente. Conectá-lo ao MailVault exige o Proton Mail Bridge, um aplicativo de desktop da Proton que roda localmente e expõe sua caixa postal criptografada como IMAP/SMTP padrão em 127.0.0.1. O Bridge exige um plano pago do Proton Mail. Instale o Bridge, entre com sua conta Proton e copie as credenciais IMAP/SMTP geradas pelo Bridge (não a senha da sua conta Proton). No MailVault, escolha Proton Mail Bridge na lista de provedores (ou IMAP personalizado) com o servidor 127.0.0.1, porta IMAP 1143 com STARTTLS, porta SMTP 1025, seu e-mail Proton como usuário e a senha do Bridge. O Bridge precisa estar rodando para o MailVault sincronizar, embora as mensagens arquivadas continuem legíveis no MailVault mesmo com o Bridge desligado. O certificado autoassinado do Bridge é tratado automaticamente pelo MailVault em conexões locais."
+        "text": "First turn IMAP on in Outlook.com: open Outlook on the web, go to Settings, Mail, Forwarding and IMAP, switch on Let devices and apps use IMAP under POP and IMAP, and click Save. Then in MailVault add an account, choose Outlook / Microsoft 365, type your email address, leave Connect over on IMAP and click Sign in with Microsoft. Finish the sign-in in your browser and MailVault tests the connection and adds the account. You enter no password and no server settings: MailVault fills in outlook.office365.com on port 993 for incoming mail and smtp-mail.outlook.com on port 587 for outgoing mail. An Outlook.com or Hotmail account already on Microsoft Graph switches in Settings, Accounts, Connection, Connect over, IMAP, then Switch and sign in again, and its saved mail stays."
       }
     },
     {
       "@type": "Question",
-      "name": "Posso enviar de um endereço diferente daquele com que faço login?",
+      "name": "How do I use MailVault with Proton Mail?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sim. Adicione o endereço como apelido da conta em Configurações → Contas → Apelidos e depois escolha-o na linha De ao escrever, ou defina-o como padrão. Seu nome de usuário e senha continuam iguais, o MailVault segue entrando com a conta que você configurou e nenhum cabeçalho Reply-To é adicionado. O endereço precisa ser um que seu provedor permita usar para enviar com esse login."
+        "text": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections."
       }
     },
     {
       "@type": "Question",
-      "name": "Como envio de um alias?",
+      "name": "Can I send from a different address than the one I log in with?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Abra Configurações → Contas, escolha a conta e vá até a seção Apelidos, que lista todos os endereços dos quais a conta envia: primeiro o endereço de login, depois cada alias. Em uma conta Google conectada com o login do Google, o MailVault busca os endereços dos quais o Gmail deixa você enviar. Em qualquer outro provedor, o MailVault sugere endereços que viu nos seus próprios e-mails, os que você usou para enviar e os que recebem seus e-mails, e você pode adicionar qualquer endereço à mão. Dê a cada alias o nome que os destinatários devem ver e escolha com qual endereço as novas mensagens começam. Verificar envia uma mensagem de teste de um alias para você ver se o seu provedor o aceita. O seu provedor precisa permitir o endereço: no Fastmail, adicione-o antes como alias ou identidade; no Gmail, adicione-o em Configurações → Contas e importação → Enviar e-mail como; no Microsoft 365 e no Outlook.com, os aliases são adicionados na conta Microsoft. Só mudam o endereço e o nome do remetente, e nenhum cabeçalho Reply-To é adicionado, então as respostas voltam para o alias."
+        "text": "Yes. Add the address as an alias of the account in Settings → Accounts → Aliases, then pick it in the From row when you write, or make it the default. Your username and password stay the same, MailVault still signs in as the account you set up, and no Reply-To header is added. The address must be one your provider lets that login send from."
       }
     },
     {
       "@type": "Question",
-      "name": "Como conecto o Fastmail ou outra conta JMAP?",
+      "name": "How do I send from an alias?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Escolha Fastmail ao adicionar uma conta e cole um token de API com acesso a Mail e Submission das configurações do Fastmail. Para outro servidor, escolha JMAP e use a senha ou o token de API dele. O MailVault descobre a URL da sessão quando o domínio a publica; caso contrário, digite a URL HTTPS completa da sessão. Confirme um servidor descoberto que você não conhece antes de enviar credenciais. Novos e-mails usam push, com consultas periódicas como alternativa, e os endereços de envio vêm das identidades do servidor. O Fastmail também oferece uma opção de IMAP com senha de app."
+        "text": "Open Settings → Accounts, pick the account and go to its Aliases section, which lists every address the account sends from: its login address first, then each alias. For a Google account signed in with Google, MailVault fetches the addresses Gmail lets you send as. For any other provider, MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at, and you can add any address by hand. Give each alias the name recipients should see, and choose which address new messages start from. Verify sends one test message from an alias so you can see whether your provider accepts it. Your provider has to allow the address: in Fastmail, add it as an alias or identity first; in Gmail, add it under Settings → Accounts and Import → Send mail as; for Microsoft 365 and Outlook.com, aliases are added in the Microsoft account. Only the From address and name change, and no Reply-To header is added, so replies come back to the alias."
       }
     },
     {
       "@type": "Question",
-      "name": "Como adiciono um endereço de e-mail do iCloud ou da Conta Apple?",
+      "name": "How do I connect Fastmail or another JMAP account?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Escolha iCloud Mail ao adicionar uma conta, digite o seu endereço completo do iCloud e cole uma senha específica de app. O iCloud Mail não aceita a senha normal da sua Conta Apple em outros apps. Crie a senha específica de app em account.apple.com, em Login e segurança e depois em Senhas específicas de apps; a autenticação de dois fatores precisa estar ativada. O botão de informações ao lado do campo de senha no MailVault explica as mesmas etapas. Se o login falhar mais tarde, uma mudança na senha da Conta Apple a revogou, então crie uma nova. Guia passo a passo: https://mailvaultapp.com/pt-br/guides/add-icloud-mail-to-mailvault.html"
+        "text": "Choose Fastmail when adding an account and paste an API token with Mail and Submission access from Fastmail settings. For another server, choose JMAP and use its password or API token. MailVault discovers the session URL when the domain publishes it; otherwise enter the full HTTPS session URL. Confirm an unfamiliar discovered server before credentials are sent. New mail uses push with polling as a fallback, and sending addresses come from the server’s identities. Fastmail also offers an IMAP app-password option."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I add an iCloud or Apple Account email address?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at account.apple.com under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. Step-by-step guide: https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html"
       }
     }
   ]
@@ -204,7 +212,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Tópicos de ajuda</summary><nav aria-label="Tópicos da central de ajuda"><a href="/pt-br/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ajuda do MailVault</a><a href="/pt-br/faq/getting-started.html">Primeiros passos</a><a href="/pt-br/faq/storage-and-vault.html">Armazenamento e seu cofre</a><a href="/pt-br/faq/providers.html" aria-current="page">Provedores de e-mail</a><a href="/pt-br/faq/backup-and-restore.html">Backup e restauração</a><a href="/pt-br/faq/explorer-and-insights.html">Explorer e Estatísticas</a><a href="/pt-br/faq/scheduled-send.html">Envio agendado</a><a href="/pt-br/faq/premium.html">Gratuito e Premium</a><a href="/pt-br/faq/your-questions.html">Suas perguntas</a><a href="/pt-br/faq/troubleshooting.html">Solução de problemas</a><a href="/pt-br/docs.html#guides" class="mv-help-divider">Guias práticos</a><a href="/pt-br/docs.html#articles">Artigos</a><a href="/pt-br/features.html">Referência de recursos</a><a href="/changelog.html">Notas da versão</a></nav><div class="mv-help-version"><div>Versão <span translate="no">2.20.0</span></div><div>Revisado em <time datetime="2026-10-22">22 de outubro de 2026</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Tópicos de ajuda</summary><nav aria-label="Tópicos da central de ajuda"><a href="/pt-br/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ajuda do MailVault</a><a href="/pt-br/faq/getting-started.html">Primeiros passos</a><a href="/pt-br/faq/storage-and-vault.html">Armazenamento e seu cofre</a><a href="/pt-br/faq/providers.html" aria-current="page">Provedores de e-mail</a><a href="/pt-br/faq/backup-and-restore.html">Backup e restauração</a><a href="/pt-br/faq/explorer-and-insights.html">Explorer e Estatísticas</a><a href="/pt-br/faq/scheduled-send.html">Envio agendado</a><a href="/pt-br/faq/premium.html">Gratuito e Premium</a><a href="/pt-br/faq/your-questions.html">Suas perguntas</a><a href="/pt-br/faq/troubleshooting.html">Solução de problemas</a><a href="/pt-br/docs.html#guides" class="mv-help-divider">Guias práticos</a><a href="/pt-br/docs.html#articles">Artigos</a><a href="/pt-br/features.html">Referência de recursos</a><a href="/changelog.html">Notas da versão</a></nav><div class="mv-help-version"><div>Versão <span translate="no">2.22.0</span></div><div>Revisado em <time datetime="2026-10-22">22 de outubro de 2026</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="Trilha de navegação" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Provedores de e-mail</h1><!-- help-intro:start --><form class="mv-help-search" action="/pt-br/docs.html" method="get" role="search"><label for="help-q">Pesquisar na documentação, nas perguntas frequentes e nos artigos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Pesquisar em todos os guias e respostas" required><button type="submit">Pesquisa</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Nesta página</summary><ul><li><a href="#help-section-1">O MailVault funciona com Gmail e Outlook?</a></li><li><a href="#help-section-2">Como conecto minha conta do Outlook.com?</a></li><li><a href="#help-section-3">Como uso o MailVault com o Proton Mail?</a></li><li><a href="#help-section-4">Posso enviar de um endereço diferente daquele com que faço login?</a></li><li><a href="#help-section-5">Como envio de um alias?</a></li><li><a href="#help-section-6">Como conecto o Fastmail ou outra conta JMAP?</a></li><li><a href="#help-section-7">Como adiciono um endereço de e-mail do iCloud ou da Conta Apple?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">Provedores de e-mail</h1><!-- help-intro:start --><form class="mv-help-search" action="/pt-br/docs.html" method="get" role="search"><label for="help-q">Pesquisar na documentação, nas perguntas frequentes e nos artigos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Pesquisar em todos os guias e respostas" required><button type="submit">Pesquisa</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Nesta página</summary><ul><li><a href="#help-section-1">O MailVault funciona com Gmail e Outlook?</a></li><li><a href="#help-section-2">Como conecto minha conta do Outlook.com?</a></li><li><a href="#add-outlook-hotmail-imap-title">Como adiciono uma conta do Outlook.com ou Hotmail por IMAP?</a></li><li><a href="#help-section-3">Como uso o MailVault com o Proton Mail?</a></li><li><a href="#help-section-4">Posso enviar de um endereço diferente daquele com que faço login?</a></li><li><a href="#help-section-5">Como envio de um alias?</a></li><li><a href="#help-section-6">Como conecto o Fastmail ou outra conta JMAP?</a></li><li><a href="#help-section-7">Como adiciono um endereço de e-mail do iCloud ou da Conta Apple?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Conecte Gmail, Microsoft 365, Outlook.com, Proton Mail e servidores JMAP como Fastmail, e envie usando um apelido.</p>
 
       <div class="space-y-4">
@@ -225,23 +233,54 @@
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">O MailVault funciona com Gmail e Outlook?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Sim. O MailVault funciona com Gmail, Outlook, servidores JMAP como Fastmail e qualquer serviço de e-mail compatível com IMAP. Para o Gmail, entre diretamente com sua conta do Google usando OAuth2 — sem configurar o IMAP manualmente. Contas Microsoft 365 Business e Enterprise podem entrar diretamente com sua conta Microsoft usando OAuth2, com suporte à autenticação de dois fatores. Contas pessoais Outlook.com, Hotmail e Live.com <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">se conectam por padrão pela API do Microsoft Graph, ou por IMAP se você escolher</a>.
+              Sim. O MailVault funciona com Gmail, Outlook, servidores JMAP como o Fastmail e qualquer serviço de e-mail compatível com IMAP. Para o Gmail, entre direto com sua conta Google usando OAuth2, sem configurações manuais de IMAP. Contas Microsoft 365 Business e Enterprise podem entrar direto com sua conta Microsoft usando OAuth2, e funciona sem problemas com a autenticação em dois fatores. Contas pessoais do Outlook.com, Hotmail e Live.com <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">se conectam por IMAP com login da Microsoft por padrão, ou pela API Microsoft Graph, se você a escolher</a>.
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Como conecto minha conta do Outlook.com?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">O MailVault conecta contas pessoais do Outlook.com, Hotmail e Live.com pela <strong>Microsoft Graph API</strong> por padrão. Adicione a conta, escolha Entre com Microsoft e conclua o login no navegador. Com <strong>Conectar via</strong> em <strong>Automático</strong>, o MailVault reconhece uma conta Microsoft pessoal e usa o Graph, então não há nada para configurar no Outlook.com. Ler, excluir, marcar como lido ou não lido, mover e fazer backup de e-mails funcionam como nas outras contas.</p>
-              <p class="mb-4">O IMAP também está disponível. Escolha <strong>IMAP</strong> em <strong>Conectar via</strong> ao adicionar a conta, ou troque depois em <strong>Configurações &rarr; Contas &rarr; Conexão</strong>. O login continua passando pela Microsoft com OAuth2, mas o Outlook.com só aceita IMAP depois que <strong>Permitir que dispositivos e aplicativos usem IMAP</strong> é ativado nas configurações dele, como explicado em <a href="/pt-br/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">O MailVault diz que o Outlook recusou o IMAP</a>.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Ainda não disponível em contas Graph:</p>
+              <p class="mb-4">O MailVault conecta contas do Outlook.com, Hotmail e Live.com por <strong>IMAP</strong> por padrão, com o login OAuth2 da Microsoft. Adicione a conta, escolha Entrar com a Microsoft e conclua o login no navegador. Não há senha para digitar nem servidor para informar. O Outlook.com só aceita IMAP depois que <strong>Permitir que dispositivos e aplicativos usem IMAP</strong> é ativado nas configurações dele, como descrito em <a href="/pt-br/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">O MailVault diz que o Outlook recusou o IMAP</a>. Os passos estão em <a href="#add-outlook-hotmail-imap" class="text-primary-500 hover:underline">Como adiciono uma conta do Outlook.com ou Hotmail por IMAP?</a></p>
+              <p class="mb-4">A <strong>API Microsoft Graph</strong> continua disponível. Escolha <strong>Microsoft Graph</strong> em <strong>Conectar via</strong> ao adicionar a conta, ou troque depois em <strong>Configurações &rarr; Contas &rarr; Conexão</strong>. O Graph não precisa de nada configurado no Outlook.com, e ler, excluir, marcar como lido ou não lido, mover e fazer backup do e-mail funcionam como nas outras contas.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Indisponível em contas no Graph:</p>
               <ul class="list-disc list-inside space-y-2 mb-4">
                 <li><strong>Adiar</strong></li>
                 <li><strong>Restaurar um arquivo MBOX no servidor</strong></li>
                 <li><strong>Recuperar no servidor</strong> para e-mails excluídos. Recuperar localmente funciona, para e-mails que já estão neste computador</li>
                 <li><strong>A contagem da Caixa de entrada</strong> que a janela de adicionar conta informa depois do teste de conexão</li>
               </ul>
-              <p>Contas Microsoft 365 Business e Enterprise usam IMAP com OAuth2 e não são afetadas por essas limitações. Esse login segue a mesma abordagem do <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, com autenticação PKCE e XOAUTH2.</p>
+              <p>Contas em IMAP não são afetadas por esses limites, nem as contas Microsoft 365 de trabalho ou escola, que também usam IMAP com OAuth2. Esse login segue a mesma abordagem do <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, com PKCE e autenticação XOAUTH2.</p>
+            </div>
+        </article>
+
+        <article id="add-outlook-hotmail-imap" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="add-outlook-hotmail-imap-title">Como adiciono uma conta do Outlook.com ou Hotmail por IMAP?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                O IMAP é o padrão para contas Outlook.com, Hotmail, Live.com e Microsoft 365. Você entra com a Microsoft no navegador, então não há senha nem senha de app para digitar, nem configurações de servidor.
+              </p>
+              <p class="font-medium text-slate-700 dark:text-slate-300">1. Ative o IMAP no Outlook.com (somente Outlook.com, Hotmail e Live.com):</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>Abra <a href="https://outlook.live.com/mail/options/mail/forwarding" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Outlook na web &rarr; Configurações &rarr; Email &rarr; Encaminhamento e IMAP</a> conectado com a mesma conta Microsoft.</li>
+                <li>Em <strong>POP e IMAP</strong>, ative <strong>Permitir que dispositivos e aplicativos usem IMAP</strong>.</li>
+                <li>Clique em <strong>Salvar</strong>.</li>
+              </ol>
+              <p class="font-medium text-slate-700 dark:text-slate-300">2. Adicione a conta no MailVault:</p>
+              <ol class="list-decimal list-inside space-y-2">
+                <li>Adicione uma conta e escolha <strong>Outlook / Microsoft 365</strong>.</li>
+                <li>Digite seu endereço de e-mail, por exemplo <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">you@outlook.com</code> ou <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">you@hotmail.com</code>.</li>
+                <li>Deixe <strong>Conectar via</strong> em <strong>IMAP</strong>.</li>
+                <li>Clique em <strong>Entrar com a Microsoft</strong> e conclua o login no navegador. O MailVault testa a conexão e adiciona a conta.</li>
+              </ol>
+              <p>
+                O MailVault preenche os servidores para você: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">outlook.office365.com</code> na porta 993 para o e-mail recebido, e <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">smtp-mail.outlook.com</code> na porta 587 para o e-mail enviado de um endereço Outlook.com ou Hotmail.
+              </p>
+              <p>
+                <strong>Já está conectado pelo Microsoft Graph?</strong> Abra <strong>Configurações &rarr; Contas &rarr; Conexão</strong>, defina <strong>Conectar via</strong> como <strong>IMAP</strong> e escolha <strong>Trocar e entrar de novo</strong>. Seus e-mails salvos continuam onde estão. O MailVault também mostra um aviso ao iniciar, para cada conta ainda no Graph, com <strong>Mudar para IMAP</strong> e <strong>Não mostrar novamente</strong>.
+              </p>
+              <p>
+                Se o Outlook responder "User is authenticated but not connected", a configuração de IMAP do passo 1 ainda está desativada: veja <a href="/pt-br/faq/troubleshooting.html#outlook-imap-not-connected" class="text-primary-500 hover:underline">O MailVault diz que o Outlook recusou o IMAP</a>.
+              </p>
             </div>
         </article>
 
@@ -332,7 +371,7 @@
         </div>
       </div>
     </div>
-  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>Versão <span translate="no">2.20.0</span></div><div>Revisado em <time datetime="2026-10-22">22 de outubro de 2026</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>Versão <span translate="no">2.22.0</span></div><div>Revisado em <time datetime="2026-10-22">22 de outubro de 2026</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Uma criação da Graphic Meat</p><h2 id="studio-title">Conheça as pessoas por trás do MailVault.</h2><p>Somos a Graphic Meat, um estúdio independente de produtos que cria software útil desde 2013. MailVault é uma das coisas que fazemos. Venha nos conhecer e explorar em que mais estamos trabalhando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conheça a Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visite a Graphic Meat, o estúdio por trás do MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mais da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transforme suas fotos em um livro pronto para impressão.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Um espaço de trabalho local para notas e código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mova seu e-mail para outro provedor.</span></a></div></div></aside><footer class="mv-footer">

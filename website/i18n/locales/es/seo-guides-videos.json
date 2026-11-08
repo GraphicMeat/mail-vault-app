@@ -80,7 +80,6 @@
   "799d8b93a908": "Elige un destino si se te solicita. Comprueba la extensión del archivo guardado y ábrelo en una aplicación de correo para verificar el mensaje y los adjuntos.",
   "02ca5a909f50": "Consulta las <a href=\"https://support.microsoft.com/en-us/outlook/mail/save-an-outlook-message-as-a-eml-file-a-pdf-file-or-as-a-draft\">instrucciones de Microsoft para guardar según la versión</a> si tus menús son distintos. Guardar un mensaje no exporta el resto de su conversación ni de su buzón.",
   "21fa0016a6d0": "Exporta un buzón de Outlook.com o Microsoft 365 a EML",
-  "d0e702de8f8f": "Instala MailVault y añade la cuenta con el inicio de sesión de Microsoft. Las cuentas de Outlook.com usan Microsoft Graph en MailVault; Microsoft 365 también admite la conexión de cuenta OAuth de la aplicación. Las políticas de la organización pueden impedir el acceso.",
   "1047574f3d21": "Revisa la bandeja de entrada, los enviados y las carpetas personalizadas. Confirma que el correo que necesitas esté disponible en la cuenta conectada; los archivos en línea y los buzones compartidos pueden necesitar otra vía de acceso compatible.",
   "62bf1ecc9d28": "Selecciona las carpetas y fechas en las operaciones masivas, elige <strong>Archivar</strong> y deja que termine la descarga. Usa solo Archivar para tu primera copia.",
   "dc869fcbc0d3": "Cambia al origen Bóveda y comprueba los mensajes antiguos y los adjuntos. Los mensajes archivados se guardan localmente como archivos .eml individuales.",

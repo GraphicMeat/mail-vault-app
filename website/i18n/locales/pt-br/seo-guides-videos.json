@@ -80,7 +80,6 @@
   "799d8b93a908": "Escolha um destino se for solicitado. Confira a extensão do arquivo salvo e abra-o em um app de e-mail para verificar a mensagem e os anexos.",
   "02ca5a909f50": "Consulte as <a href=\"https://support.microsoft.com/en-us/outlook/mail/save-an-outlook-message-as-a-eml-file-a-pdf-file-or-as-a-draft\">instruções de salvamento da Microsoft para sua versão</a> se os menus forem diferentes. Salvar uma mensagem não exporta o restante da conversa ou da caixa.",
   "21fa0016a6d0": "Exporte uma caixa do Outlook.com ou Microsoft 365 em EML",
-  "d0e702de8f8f": "Instale o MailVault e adicione a conta usando o login da Microsoft. Contas do Outlook.com usam o Microsoft Graph no MailVault; o Microsoft 365 também permite a conexão OAuth do app. Políticas da organização podem impedir o acesso.",
   "1047574f3d21": "Examine Caixa de entrada, Enviados e pastas personalizadas. Confirme se os e-mails necessários estão disponíveis na conta conectada; arquivos online e caixas compartilhadas podem exigir uma forma separada de acesso compatível.",
   "62bf1ecc9d28": "Selecione as pastas e datas nas operações em massa, escolha <strong>Arquivar</strong> e aguarde o fim do download. Use apenas Arquivar no primeiro backup.",
   "dc869fcbc0d3": "Mude para a origem Cofre e confira mensagens antigas e anexos. As mensagens arquivadas são salvas localmente como arquivos .eml individuais.",

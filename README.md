@@ -52,13 +52,13 @@ MailVault is a full email client with a vault behind it. You read, search, threa
 | **Windows** | Windows 10 or 11, 64-bit Intel or AMD. Signed installer (`-setup.exe`). |
 | **Linux** | x86_64 and aarch64: `.deb` for Ubuntu 22.04+ / Debian 12+, or the Snap Store. Wayland and X11. |
 
-Every build is on the [latest release](https://github.com/GraphicMeat/mail-vault-app/releases/latest). Accounts: any IMAP server, plus Gmail and Microsoft 365 through OAuth2 and Outlook.com through Microsoft Graph or IMAP, picked when you add the account.
+Every build is on the [latest release](https://github.com/GraphicMeat/mail-vault-app/releases/latest). Accounts: any IMAP server, plus Gmail and Microsoft 365 through OAuth2 and Outlook.com over IMAP (the default) or Microsoft Graph, picked when you add the account.
 
 ## Features
 
 ### Mail, properly
 
-- **One-click sign-in** - Google and Microsoft 365 OAuth2, plus Microsoft Graph or IMAP for Outlook.com. Everything else is plain IMAP, with server auto-detection from SRV records, Mozilla autoconfig and MX fallback.
+- **One-click sign-in** - Google and Microsoft 365 OAuth2, plus IMAP (default) or Microsoft Graph for Outlook.com. Everything else is plain IMAP, with server auto-detection from SRV records, Mozilla autoconfig and MX fallback.
 - **Threaded conversations** - JWZ threading, quote folding, signature folding, oldest- or newest-first.
 - **Compose that behaves** - templates, contacts picker, attachments, undo send from 15 seconds to 5 minutes, and an outbox that stages locally so a failed send is recoverable rather than lost.
 - **Offline full-text search** - SQLite FTS5 over every message on your disk. A trigram index matches any part of a word and ignores accents, and a second index covers Chinese, Japanese and Korean. Filter by sender, date range, attachments or folder, with history and suggestions.

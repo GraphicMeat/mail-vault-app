@@ -80,7 +80,6 @@
   "799d8b93a908": "Wähle bei Aufforderung ein Ziel. Prüfe die Dateiendung der gespeicherten Datei und öffne sie dann in einer Mail-App, um Nachricht und Anhänge zu kontrollieren.",
   "02ca5a909f50": "Prüfe <a href=\"https://support.microsoft.com/en-us/outlook/mail/save-an-outlook-message-as-a-eml-file-a-pdf-file-or-as-a-draft\">Microsofts versionsspezifische Speicheranleitung</a>, falls deine Menüs abweichen. Das Speichern einer Nachricht exportiert nicht den Rest ihrer Unterhaltung oder ihres Postfachs.",
   "21fa0016a6d0": "Ein Postfach aus Outlook.com oder Microsoft 365 als EML exportieren",
-  "d0e702de8f8f": "Installiere MailVault und füge das Konto über die Microsoft-Anmeldung hinzu. Outlook.com-Konten nutzen Microsoft Graph in MailVault; Microsoft 365 unterstützt auch die OAuth-Kontoverbindung der App. Organisationsrichtlinien können den Zugriff verhindern.",
   "1047574f3d21": "Prüfe Posteingang, Gesendet und eigene Ordner. Stelle sicher, dass die benötigten E-Mails im verbundenen Konto tatsächlich verfügbar sind; Onlinearchive und freigegebene Postfächer benötigen möglicherweise einen separaten unterstützten Zugriffsweg.",
   "62bf1ecc9d28": "Wähle in den Massenaktionen Ordner und Daten, dann <strong>Archivieren</strong>, und lass den Download abschließen. Nutze für dein erstes Backup nur Archivieren.",
   "dc869fcbc0d3": "Wechsle zur Quelle Tresor und prüfe ältere Nachrichten und Anhänge. Archivierte Nachrichten werden lokal als einzelne .eml-Dateien gespeichert.",

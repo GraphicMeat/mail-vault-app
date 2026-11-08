@@ -82,7 +82,7 @@
       "name": "MailVault は Hotmail や Live.com のアドレスでも使えますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "はい。MailVault は outlook.com、hotmail.com、live.com のアドレスを個人の Microsoft アカウントとして扱います。ブラウザで Microsoft にサインインすると、MailVault は Microsoft Graph 経由で接続するので、入力する IMAP の設定はありません。"
+        "text": "はい。MailVault は outlook.com、hotmail.com、live.com のアドレスを個人用 Microsoft アカウントとして扱います。ブラウザーで Microsoft にサインインすると、MailVault が IMAP で接続するため、IMAP の設定を入力する必要はありません。先に Outlook.com で「デバイスとアプリで IMAP を使用できるようにする」をオンにしてください。"
       }
     },
     {
@@ -209,7 +209,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/your-questions.html">皆さまからのご質問</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav><div class="mv-help-version"><div>バージョン <span translate="no">2.20.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/your-questions.html">皆さまからのご質問</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav><div class="mv-help-version"><div>バージョン <span translate="no">2.22.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -303,7 +303,7 @@
           </ol>
 
           <p>
-            MailVault は outlook.com、hotmail.com、live.com のアドレス（と地域ごとの版）を認識し、Microsoft のメール API である Microsoft Graph 経由で接続します。IMAP の設定やアプリパスワードを入力する必要はありません。職場や学校の Microsoft 365 のアカウントは、代わりに IMAP 上の OAuth2 でサインインします。ルールの厳しい組織は、<strong>詳細設定（法人向け）</strong>で独自のクライアント ID とテナント ID を設定できます。
+            MailVault は outlook.com、hotmail.com、live.com のアドレス（各地域版を含む）を認識し、Microsoft のサインインを使って IMAP で接続します。IMAP の設定やアプリパスワードを入力する必要はありませんが、先に Outlook.com 側で IMAP をオンにしておく必要があります（<a href="/ja/faq/providers.html#add-outlook-hotmail-imap">手順</a>）。職場・学校の Microsoft 365 アカウントも同じ方法でサインインでき、厳しい規則のある組織は<strong>詳細設定（法人向け）</strong>で独自のクライアント ID とテナント ID を設定できます。
           </p>
 
           <figure class="my-6">
@@ -334,7 +334,7 @@
           </p>
 
           <p>
-            <strong>Outlook.com のアカウントの既知の制限：</strong>これらのアカウントは Microsoft Graph を使うため、スヌーズはまだ使えず、MBOX ファイルをサーバーに復元できず、削除したメールはコンピュータには復元できてもサーバーには戻せず、接続テストの後の受信トレイの件数は表示されません。閲覧、削除、移動、マーク、バックアップは、ほかのアカウントと同じように使えます。
+            <strong>IMAP ではなく Microsoft Graph を選んだ場合の既知の制限:</strong> Graph アカウントでは、スヌーズと MBOX ファイルのサーバーへの復元は使えません。削除したメールはお使いのコンピューター上では復元できますが、サーバーには戻せません。接続テスト後の受信トレイの件数も表示されません。読み取り、削除、移動、マーク、バックアップは、ほかのアカウントと同じように動作します。
           </p>
 
           <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">4 つの方法の比較</h2>
@@ -414,7 +414,7 @@
 
           <div class="pt-2">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">MailVault は Hotmail や Live.com のアドレスでも使えますか？</h3>
-            <p>はい。MailVault は outlook.com、hotmail.com、live.com のアドレスを個人の Microsoft アカウントとして扱います。ブラウザで Microsoft にサインインすると、MailVault は Microsoft Graph 経由で接続するので、入力する IMAP の設定はありません。</p>
+            <p>はい。MailVault は outlook.com、hotmail.com、live.com のアドレスを個人用 Microsoft アカウントとして扱います。ブラウザーで Microsoft にサインインすると、MailVault が IMAP で接続するため、IMAP の設定を入力する必要はありません。先に Outlook.com で「デバイスとアプリで IMAP を使用できるようにする」をオンにしてください。</p>
           </div>
 
           <div class="pt-2">
@@ -449,7 +449,7 @@
       </article>
 
     </div>
-  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>バージョン <span translate="no">2.20.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>バージョン <span translate="no">2.22.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">

@@ -80,7 +80,6 @@
   "799d8b93a908": "Se richiesto, scegli una destinazione. Controlla l'estensione del file salvato, poi aprilo in un'app di posta per verificare il messaggio e gli allegati.",
   "02ca5a909f50": "Se i tuoi menu sono diversi, consulta le <a href=\"https://support.microsoft.com/en-us/outlook/mail/save-an-outlook-message-as-a-eml-file-a-pdf-file-or-as-a-draft\">istruzioni di salvataggio di Microsoft per la tua versione</a>. Salvare un messaggio non esporta il resto della conversazione o della casella.",
   "21fa0016a6d0": "Esporta una casella Outlook.com o Microsoft 365 in EML",
-  "d0e702de8f8f": "Installa MailVault e aggiungi l'account tramite l'accesso con Microsoft. Gli account Outlook.com usano Microsoft Graph in MailVault; Microsoft 365 supporta anche la connessione OAuth dell'app. I criteri dell'organizzazione possono impedire l'accesso.",
   "1047574f3d21": "Esamina Posta in arrivo, Posta inviata e le cartelle personalizzate. Conferma che la posta necessaria sia effettivamente disponibile nell'account collegato; archivi online e caselle condivise possono richiedere un percorso di accesso supportato separato.",
   "62bf1ecc9d28": "Seleziona le cartelle e le date nelle operazioni in blocco, scegli <strong>Archivia</strong> e lascia terminare il download. Per il primo backup usa solo Archivia.",
   "dc869fcbc0d3": "Passa alla sorgente Cassaforte e controlla i messaggi più vecchi e gli allegati. I messaggi archiviati vengono salvati in locale come singoli file .eml.",

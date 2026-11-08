@@ -92,7 +92,7 @@
       "name": "MailVault 提示 Outlook 拒绝了 IMAP（“User is authenticated but not connected”）。怎么解决？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Outlook.com、Hotmail 和 Live.com 有一项网页设置：允许设备和应用使用 IMAP。如果它是关闭的，Microsoft 会接受你的登录和 MailVault 请求的 IMAP 权限，随后其 IMAP 服务器以 User is authenticated but not connected 拒绝连接。你的密码没有问题，MailVault 也工作正常。解决方法：打开 Outlook 网页版，进入设置、邮件、转发和 IMAP，在 POP 和 IMAP 下打开允许设备和应用使用 IMAP，然后点击保存。直接链接是 https://outlook.live.com/mail/options/mail/forwarding。然后在 MailVault 中重试。这只与通过 IMAP 连接的 Outlook.com 账户有关：添加时连接方式设为 IMAP 的账户，或在设置、账户、连接中从 Microsoft Graph 切换到 IMAP 的账户。被拒绝的切换不会改变任何东西，账户仍使用 Microsoft Graph。使用 Microsoft Graph 的账户，也就是 Outlook.com 的默认自动方式，不需要这项设置。"
+        "text": "Outlook.com、Hotmail 和 Live.com 有一项网页设置：允许设备和应用使用 IMAP。如果它是关闭的，Microsoft 会接受你的登录和 MailVault 请求的 IMAP 权限，随后其 IMAP 服务器以 User is authenticated but not connected 拒绝连接。你的密码没有问题，MailVault 也工作正常。修复方法：打开 Outlook 网页版，依次进入设置、邮件、转发和 IMAP，在 POP 和 IMAP 下打开允许设备和应用使用 IMAP，然后点击保存。直接链接是 https://outlook.live.com/mail/options/mail/forwarding。之后回到 MailVault 再试一次。这对通过 IMAP 连接的 Outlook.com 账户很重要，而这是默认方式：即添加账户时连接方式为 IMAP，或者在设置、账户、连接中把账户从 Microsoft Graph 切换到 IMAP。被拒绝的切换不会改变任何内容，账户仍使用 Microsoft Graph。使用 Microsoft Graph 的账户不需要这项设置。"
       }
     }
   ]
@@ -188,7 +188,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/your-questions.html">你关心的问题</a><a href="/zh/faq/troubleshooting.html" aria-current="page">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav><div class="mv-help-version"><div>版本 <span translate="no">2.20.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/your-questions.html">你关心的问题</a><a href="/zh/faq/troubleshooting.html" aria-current="page">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav><div class="mv-help-version"><div>版本 <span translate="no">2.22.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -320,7 +320,7 @@
                 <strong>这是什么意思。</strong>Outlook.com、Hotmail 和 Live.com 有一项网页设置：<strong>允许设备和应用使用 IMAP</strong>。如果它是关闭的，Microsoft 会接受你的登录和 MailVault 请求的 IMAP 权限，随后其 IMAP 服务器以这条消息拒绝连接：<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">User is authenticated but not connected.</code> 你的密码没有问题，MailVault 也工作正常：打开这项设置后立即就能解决。
               </p>
               <p>
-                <strong>什么时候会出现。</strong>只在 Outlook.com 账户通过 IMAP 连接时：添加账户时把<strong>连接方式</strong>设为 <strong>IMAP</strong>，或者在<strong>设置 &rarr; 账户 &rarr; 连接 &rarr; 连接方式</strong>中用<strong>切换并重新登录</strong>把账户从 Microsoft Graph 切换到 IMAP。被拒绝的切换不会改变任何东西：账户仍使用 Microsoft Graph，MailVault 会显示这些步骤和指向该设置的链接。
+                <strong>何时出现。</strong>只有当 Outlook.com 账户通过 IMAP 连接时才会出现，而这是默认方式：添加账户时<strong>连接方式</strong>为 <strong>IMAP</strong>，或者在<strong>设置 &rarr; 账户 &rarr; 连接 &rarr; 连接方式</strong>中用<strong>切换并重新登录</strong>把账户从 Microsoft Graph 切换到 IMAP。被拒绝的切换不会改变任何内容：账户仍使用 Microsoft Graph，MailVault 会显示这些步骤和该设置的链接。
               </p>
               <p class="font-medium text-slate-700 dark:text-slate-300">在 Outlook.com 中开启 IMAP：</p>
               <ol class="list-decimal list-inside space-y-2">
@@ -334,7 +334,7 @@
                 <figcaption class="text-sm mt-2">Outlook.com 中的这项设置，已打开。</figcaption>
               </figure>
               <p>
-                <strong>继续使用 Microsoft Graph 无需任何更改。</strong>Outlook.com 账户默认通过 Microsoft Graph 连接，连接方式为自动，而 Graph 不使用这项设置。如果不需要 IMAP，可以让它保持关闭。
+                <strong>Microsoft Graph 不需要这项设置。</strong>通过 Microsoft Graph 连接的 Outlook.com 账户不会用到它。如果你更喜欢 Graph，请在连接方式下选择 <strong>Microsoft Graph</strong>，这项设置可以保持关闭。
               </p>
             </div>
         </article>
@@ -358,7 +358,7 @@
         </div>
       </div>
     </div>
-  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>版本 <span translate="no">2.20.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>版本 <span translate="no">2.22.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
