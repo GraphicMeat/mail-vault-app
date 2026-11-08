@@ -113,11 +113,36 @@ impl std::fmt::Display for OpenError {
 pub fn open(vault_root: &Path) -> Result<Connection, OpenError> {
     let dir = vault_root.join(DB_DIR);
     std::fs::create_dir_all(&dir).map_err(|e| OpenError::Io(format!("create {}: {e}", dir.display())))?;
-    let path = dir.join(DB_FILE);
-    open_at(&path).map_err(|failure| match failure {
-        Fail::Rebuildable(e) => OpenError::Rebuildable(e),
-        Fail::Other(e) => e,
-    })
+    open_at(&dir.join(DB_FILE))
+}
+
+/// Open (creating if needed) an index file at any path, with no vault: the
+/// phone keeps its index in a `search.db` beside `mobile.db`. Same pragmas,
+/// migrations and failure classes as `open`.
+///
+/// The connection is the file's only one: `locking_mode=EXCLUSIVE` and no busy
+/// wait, so a second open fails fast with `OpenError::Io`. Exclusive mode also
+/// covers any database later ATTACHed to this connection, so never attach a
+/// store another connection uses (such as `mobile.db`) to it.
+pub fn open_at(path: &Path) -> Result<Connection, OpenError> {
+    open_file(path).map_err(OpenError::from)
+}
+
+/// Create (or migrate) the index tables inside a connection the caller opened,
+/// and check them. The tables are named `messages`, `attachments`, `meta`, so
+/// this is for a database that holds nothing else: never `mobile.db`, whose own
+/// `messages` and `attachments` tables would collide.
+pub fn ensure_schema(conn: &Connection) -> Result<(), OpenError> {
+    migrate(conn).and_then(|()| validate_schema(conn)).map_err(OpenError::from)
+}
+
+impl From<Fail> for OpenError {
+    fn from(failure: Fail) -> Self {
+        match failure {
+            Fail::Rebuildable(e) => OpenError::Rebuildable(e),
+            Fail::Other(e) => e,
+        }
+    }
 }
 
 /// Why `open_at` failed. Only rebuildable failures let the daemon replace the files.
@@ -163,7 +188,7 @@ fn schema_sql(e: rusqlite::Error) -> Fail {
     if retryable_sql(&e) { Fail::Other(io(e)) } else { Fail::Rebuildable(e.to_string()) }
 }
 
-fn open_at(path: &Path) -> Result<Connection, Fail> {
+fn open_file(path: &Path) -> Result<Connection, Fail> {
     let conn = Connection::open(path).map_err(sql)?;
     // The app holds one Mutex-guarded connection, so SQLITE_BUSY can only be
     // another process: waiting rusqlite's default 5 s buys nothing.

@@ -523,7 +523,7 @@ fn apply_ops(conn: &mut Connection, ops: &[(i64, Op)]) -> rusqlite::Result<Vec<S
     Ok(removed_keys)
 }
 
-const UPSERT: &str = "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
+pub(crate) const UPSERT: &str = "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
     from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags, to_lc, snippet)
   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
   ON CONFLICT(account_id, vault_dir, uid) DO UPDATE SET filename=excluded.filename, size=excluded.size,
@@ -563,34 +563,9 @@ fn commit_batch(
                 _ => None,
             };
             let d = doc.unwrap_or_else(|| IndexDoc { row_json: "{}".into(), ..IndexDoc::default() });
-            let addrs = d.addrs.join("\n");
-            let id: i64 = upsert.query_row(
-                params![
-                    account_id,
-                    vault_dir,
-                    file.uid,
-                    file.filename,
-                    file.size,
-                    file.mtime_ns,
-                    d.message_id,
-                    d.date_utc.unwrap_or(file.mtime_ns / 1_000_000_000),
-                    d.from_addr.to_lowercase(),
-                    d.from_name.to_lowercase(),
-                    d.subject.to_lowercase(),
-                    addrs.to_lowercase(),
-                    d.has_attachments,
-                    body_state,
-                    d.row_json,
-                    file.flags,
-                    d.to_addrs.join("\n").to_lowercase(),
-                    snippet,
-                ],
-                |r| r.get(0),
-            )?;
-            delete_fts(&tx, id)?;
-            if body_state != BODY_UNPARSEABLE {
-                insert_fts(&tx, id, &d.subject, &addrs, &d.body_text, "")?;
-            }
+            let place = RowPlace { account_id, vault_dir, uid: file.uid, filename: &file.filename, size: file.size, mtime_ns: file.mtime_ns, flags: &file.flags };
+            let date_utc = d.date_utc.unwrap_or(file.mtime_ns / 1_000_000_000);
+            let id = write_row(&tx, &mut upsert, &place, &d, date_utc, body_state, snippet)?;
             clear_attachments.execute([id])?;
             if config.attachments {
                 for (i, part) in candidates.iter().enumerate() {
@@ -602,7 +577,64 @@ fn commit_batch(
     tx.commit()
 }
 
-fn delete_fts(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+/// Where one row lives and what its listing says: the vault's file, or for a
+/// caller with no vault (`writer::index_doc`) an empty name and zero stat.
+pub(crate) struct RowPlace<'a> {
+    pub(crate) account_id: &'a str,
+    pub(crate) vault_dir: &'a str,
+    pub(crate) uid: u32,
+    pub(crate) filename: &'a str,
+    pub(crate) size: i64,
+    pub(crate) mtime_ns: i64,
+    /// Flag letters (`messages.flags`).
+    pub(crate) flags: &'a str,
+}
+
+/// Upsert one message row and replace its FTS terms. The one place a row is
+/// built from an `IndexDoc`, so the vault reconcile and the vault-free writer
+/// store the same columns the same way. `upsert` is `UPSERT` prepared on `tx`.
+/// Returns the row id.
+pub(crate) fn write_row(
+    tx: &Connection,
+    upsert: &mut rusqlite::CachedStatement<'_>,
+    place: &RowPlace,
+    d: &IndexDoc,
+    date_utc: i64,
+    body_state: i64,
+    snippet: Option<String>,
+) -> rusqlite::Result<i64> {
+    let addrs = d.addrs.join("\n");
+    let id: i64 = upsert.query_row(
+        params![
+            place.account_id,
+            place.vault_dir,
+            place.uid,
+            place.filename,
+            place.size,
+            place.mtime_ns,
+            d.message_id,
+            date_utc,
+            d.from_addr.to_lowercase(),
+            d.from_name.to_lowercase(),
+            d.subject.to_lowercase(),
+            addrs.to_lowercase(),
+            d.has_attachments,
+            body_state,
+            d.row_json,
+            place.flags,
+            d.to_addrs.join("\n").to_lowercase(),
+            snippet,
+        ],
+        |r| r.get(0),
+    )?;
+    delete_fts(tx, id)?;
+    if body_state != BODY_UNPARSEABLE {
+        insert_fts(tx, id, &d.subject, &addrs, &d.body_text, "")?;
+    }
+    Ok(id)
+}
+
+pub(crate) fn delete_fts(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     conn.prepare_cached("DELETE FROM msg_fts WHERE rowid = ?1")?.execute([id])?;
     conn.prepare_cached("DELETE FROM msg_cjk WHERE rowid = ?1")?.execute([id])?;
     Ok(())

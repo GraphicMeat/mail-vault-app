@@ -9,6 +9,7 @@ pub mod query;
 pub mod reconcile;
 pub mod slot;
 pub mod text;
+pub mod writer;
 
 /// The one connection an app process holds. `None` while the vault is being
 /// switched or when the index could not be opened.
