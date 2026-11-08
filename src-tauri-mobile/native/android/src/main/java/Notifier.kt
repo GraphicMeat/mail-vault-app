@@ -2,11 +2,15 @@
 // the shell renders the text from the app's catalogs) on the `new_mail` channel, and hands a tap's
 // payload `{accountId, folder, uid?}` back to the shell. A tap opens MainActivity with the payload
 // as an extra; `MvNativePlugin` reads it on a cold start (`load`) or a warm one (`onNewIntent`).
+// While the app is in front nothing is posted (the list shows new mail live), as on iOS. An
+// activity Android recreates from Recents gets the task's first intent again: a tap read from it
+// would open an old message, so such an intent is never a tap.
 
 package com.mailvault.mvnative
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -30,6 +34,10 @@ object Notifier {
         val reply = try { JSONObject(json) } catch (e: Exception) { return }
         val notes = reply.optJSONArray("notes") ?: return
         if (notes.length() == 0) return
+        if (inFront()) {
+            Log.i("MailVault", "MV_MOBILE {\"notifications\":{\"inFront\":${notes.length()}}}")
+            return
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -55,7 +63,7 @@ object Notifier {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
             val notification = NotificationCompat.Builder(context, CHANNEL)
-                .setSmallIcon(android.R.drawable.ic_dialog_email)
+                .setSmallIcon(R.drawable.mv_ic_notification)
                 .setContentTitle(note.optString("title"))
                 .setContentText(note.optString("body"))
                 .setCategory(NotificationCompat.CATEGORY_EMAIL)
@@ -72,6 +80,18 @@ object Notifier {
         log(posted, notes.length() - posted)
     }
 
+    /** The app is in front (its process is foreground and shows an activity). */
+    private fun inFront(): Boolean {
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    }
+
+    /** Whether an intent with these flags can carry a fresh tap: never one Android replays when
+     *  it recreates the activity from Recents (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`). */
+    @JvmStatic
+    fun isFreshTap(flags: Int): Boolean = (flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0
+
     /** Counts only (never a sender or subject), to logcat where the run scripts read them. */
     private fun log(posted: Int, refused: Int) {
         Log.i("MailVault", "MV_MOBILE {\"notifications\":{\"posted\":$posted,\"refused\":$refused}}")
@@ -83,13 +103,16 @@ object Notifier {
         manager.createNotificationChannel(NotificationChannel(CHANNEL, name, NotificationManager.IMPORTANCE_DEFAULT))
     }
 
-    /** Hands the tap in `intent`, if any, to the shell, once (the extra is removed). */
+    /** Hands the tap in `intent`, if any, to the shell, once (the extra is removed). An intent
+     *  replayed from Recents is no tap: its extra is dropped unread. */
     fun takeTap(activity: Activity, intent: Intent?) {
         val payload = intent?.getStringExtra(EXTRA)
-        Log.i("MailVault", "MV_MOBILE {\"notificationIntent\":{\"tap\":${payload != null}}}")
+        val fresh = intent != null && isFreshTap(intent.flags)
+        Log.i("MailVault", "MV_MOBILE {\"notificationIntent\":{\"tap\":${payload != null},\"fresh\":$fresh}}")
         if (payload == null) return
         intent.removeExtra(EXTRA)
         activity.intent?.removeExtra(EXTRA)
+        if (!fresh) return
         nativeTapped(payload)
     }
 

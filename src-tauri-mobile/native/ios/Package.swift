@@ -17,10 +17,15 @@ let package = Package(
     .package(name: "Tauri", path: "../.tauri/tauri-api")
   ],
   targets: [
+    // The shell's C exports, declared in C so Swift calls them with the C calling convention.
+    .target(
+      name: "MvShellC",
+      path: "ShellC"),
     .target(
       name: "tauri-plugin-mv-native",
       dependencies: [
-        .byName(name: "Tauri")
+        .byName(name: "Tauri"),
+        "MvShellC",
       ],
       path: "Sources")
   ]

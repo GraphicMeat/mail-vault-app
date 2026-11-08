@@ -64,15 +64,17 @@ async fn mobile_notification_take() -> Option<background::Tap> {
 }
 
 /// Asks the user to allow notifications (iOS; Android 13 and later) and answers `{granted}`. On an
-/// older Android it only reports whether they are on. Rejects with `{code, message}`: `INTERNAL`.
+/// older Android it only reports whether they are on. `prompt: false` only reads the current
+/// answer, never asking (Settings checks it each time it shows). Rejects with `{code, message}`:
+/// `INTERNAL`.
 #[tauri::command]
-async fn mobile_notifications_permission(app: tauri::AppHandle) -> Result<Value, NativeError> {
+async fn mobile_notifications_permission(app: tauri::AppHandle, prompt: Option<bool>) -> Result<Value, NativeError> {
     // Off the webview thread: the native call answers when the user has chosen.
     tauri::async_runtime::spawn_blocking(move || {
         let native = app
             .try_state::<MvNative<tauri::Wry>>()
             .ok_or_else(|| NativeError::new("INTERNAL", "the native plugin is not loaded"))?;
-        native.request_notifications().map(|granted| json!({ "granted": granted }))
+        native.request_notifications(prompt.unwrap_or(true)).map(|granted| json!({ "granted": granted }))
     })
     .await
     .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
@@ -150,6 +152,8 @@ async fn hand_out(app: tauri::AppHandle, path: String, name: String, mime: Strin
 /// Where a running pick's copies land before they are named: `<cache>/pick/<fresh dir>/<index>`.
 /// Emptied after each pick and at start (a pick killed with the app leaves its dir behind).
 const PICK_SCRATCH: &str = "pick";
+/// The startup sweep removes only pick scratch dirs at least this old.
+const PICK_STALE_TTL: Duration = Duration::from_secs(60 * 60);
 
 /// One pick at a time, on both platforms: the native side keeps one pending pick (Android one
 /// scratch dir), so a second call while a picker is up answers `BUSY`. A pick pending longer than
@@ -266,15 +270,17 @@ async fn mobile_auth_open(app: tauri::AppHandle, url: String) -> Result<Value, N
     Ok(json!({ "cancelled": reply.cancelled }))
 }
 
-/// Closes the sign-in sheet, once `mobile.oauth.finish` has answered; nothing when none is up.
-/// Never waits for the sheet's lock: it runs while `mobile_auth_open` is still waiting.
+/// Closes the sign-in sheet of `url` (the page's flow), once `mobile.oauth.finish` has answered;
+/// nothing when none is up, and idempotent. A close that overtakes its sheet's open (each call
+/// runs on its own thread) cancels that open: the sheet never shows. Never waits for the sheet's
+/// lock: it runs while `mobile_auth_open` is still waiting.
 #[tauri::command]
-async fn mobile_auth_close(app: tauri::AppHandle) -> Result<(), NativeError> {
+async fn mobile_auth_close(app: tauri::AppHandle, url: Option<String>) -> Result<(), NativeError> {
     tauri::async_runtime::spawn_blocking(move || {
         let native = app
             .try_state::<MvNative<tauri::Wry>>()
             .ok_or_else(|| NativeError::new("INTERNAL", "the native plugin is not loaded"))?;
-        native.close_auth()
+        native.close_auth(url.as_deref())
     })
     .await
     .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
@@ -374,13 +380,19 @@ pub(crate) fn migrate_secrets(engine: &Engine, secrets: &secrets::KeyringSecrets
     if secrets.error().is_some() || matches!(engine.setting(KEY), Ok(Some(v)) if v == DONE) {
         return;
     }
+    let mut lost = Vec::new();
     let result = engine
         .account_ids()
         .map_err(|e| e.to_string())
-        .and_then(|ids| secrets.migrate_access_policy(&ids))
+        .and_then(|ids| secrets.migrate_access_policy(&ids, &mut lost))
         .and_then(|()| engine.set_setting(KEY, DONE).map_err(|e| e.to_string()));
+    // A secret deleted for the move and refused twice is gone: the account must sign in again
+    // ("Sign in again" for OAuth, "add it again" for a password) rather than fail opaquely.
+    for id in &lost {
+        engine.secret_lost(id);
+    }
     if let Err(reason) = result {
-        log_line(&format!("MV_MOBILE {}", json!({ "secretsPolicyError": reason })));
+        log_line(&format!("MV_MOBILE {}", json!({ "secretsPolicyError": reason, "lost": lost.len() })));
     }
 }
 
@@ -445,26 +457,30 @@ pub fn run() {
                         Ok(engine)
                     })
                 }
-                (Err(e), _) => background::engine_failed(format!("app data dir: {e}")),
-                (_, Err(e)) => background::engine_failed(format!("app cache dir: {e}")),
+                (Err(e), _) => Err(format!("app data dir: {e}")),
+                (_, Err(e)) => Err(format!("app cache dir: {e}")),
             };
-            if let (Ok(engine), false) = (engine, opened_here.get()) {
+            if let (Ok(engine), false) = (&engine, opened_here.get()) {
                 // A background run opened it first: it has no sink yet.
                 install(engine);
                 seed_for_perf_gate(engine);
             }
-            if let Err(reason) = engine {
+            if let Err(reason) = &engine {
                 log_line(&format!("MV_MOBILE {}", serde_json::json!({ "engineError": reason })));
+                // The page's calls say why; a later open (a background run) may still work.
+                background::engine_failed(reason.clone());
             }
             // Copies left by an earlier run: all of them on iOS (its previewer went with the app),
             // the stale ones on Android (another app may still be reading a fresh one).
-            // A pick's scratch copies never outlive the pick. `<cache>/out/` is left alone: drafts
-            // and the outbox hold its handles.
+            // A pick's scratch copies never outlive the pick; a scratch dir an hour old is one a
+            // pick killed with the app left behind (a younger one may belong to a pick the page
+            // started while this sweep was queued). `<cache>/out/` is left alone: drafts and the
+            // outbox hold its handles.
             if let Ok(cache) = cache_dir {
                 let ttl = if cfg!(target_os = "android") { STAGE_TTL } else { Duration::ZERO };
                 std::thread::spawn(move || {
                     files::sweep(&cache.join("share"), ttl);
-                    files::sweep(&cache.join(PICK_SCRATCH), Duration::ZERO);
+                    files::sweep(&cache.join(PICK_SCRATCH), PICK_STALE_TTL);
                 });
             }
             // The native plugin, after the engine is open: on Android registering it waits until the
@@ -515,7 +531,7 @@ fn on_run_event(event: &tauri::RunEvent) {
         };
         params["seq"] = json!(SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1);
         // Not before the engine is open, and never on the UI thread.
-        let Some(Ok(engine)) = background::opened() else { return };
+        let Some(engine) = background::opened() else { return };
         std::thread::spawn(move || {
             let _ = engine.rpc("mobile.app.state", params);
         });

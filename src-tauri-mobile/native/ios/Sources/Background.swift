@@ -7,28 +7,23 @@
 // background, asks for the next run (15 minutes at the earliest; when is up to iOS) if the user
 // turned notifications on (`setBackgroundRefresh` from the plugin keeps that flag).
 //
-// A run calls the shell's `mv_background_fetch(25000)` on a background queue: the engine syncs
-// every INBOX headers-only and the shell answers the notifications ready to post (title, body and
-// the tap payload). They are posted, the next run is asked for, and the task completes. When iOS
-// ends the task early the expiration handler completes it at once; the Rust call returns within
-// its budget anyway. A tap hands its payload to `mv_notification_tapped`.
+// A run calls the shell's `mv_background_fetch` on a background queue with a budget counted from
+// that call (opening the engine on a cold launch included), short of the ~30 s iOS gives a refresh
+// task so posting fits after it: the engine syncs every INBOX headers-only and the shell answers
+// the notifications ready to post (title, body and the tap payload) and a commit token. They are
+// posted, then the token is handed to `mv_background_commit`, which counts the mail as notified;
+// then the task completes. When iOS ends the task first, the expiration handler completes it at
+// once and nothing is committed: the next run returns the same mail (a repost replaces, the ids
+// are per message). A tap hands its payload to `mv_notification_tapped`.
+//
+// The shell's exports are declared in C (`ShellC/include/mv_shell.h`), so they are called with the
+// C calling convention.
 
 import BackgroundTasks
 import Foundation
+import MvShellC
 import UIKit
 import UserNotifications
-
-@_silgen_name("mv_background_fetch")
-func mv_background_fetch(_ budgetMs: UInt32) -> UnsafeMutablePointer<CChar>?
-
-@_silgen_name("mv_free_string")
-func mv_free_string(_ s: UnsafeMutablePointer<CChar>?)
-
-@_silgen_name("mv_notification_tapped")
-func mv_notification_tapped(_ json: UnsafePointer<CChar>?)
-
-@_silgen_name("mv_set_languages")
-func mv_set_languages(_ csv: UnsafePointer<CChar>?)
 
 /// One notification as the shell renders it.
 struct BackgroundNote: Decodable {
@@ -42,13 +37,16 @@ struct BackgroundNote: Decodable {
 
 struct BackgroundReply: Decodable {
   let notes: [BackgroundNote]
+  /// Handed back once the notes are posted.
+  let commit: String?
 }
 
 enum MvBackground {
   static let taskId = "com.mailvault.app.refresh"
   /// Set by `setBackgroundRefresh`: notifications are on, so runs are asked for.
   static let enabledKey = "mv.backgroundRefresh"
-  static let budgetMs: UInt32 = 25_000
+  /// Counted from the Rust call; iOS gives a refresh task about 30 s, and posting follows.
+  static let budgetMs: UInt32 = 22_000
   static let earliest: TimeInterval = 15 * 60
   /// The notification center holds its delegate weakly.
   static let taps = TapDelegate()
@@ -62,6 +60,8 @@ enum MvBackground {
   static func register() {
     guard !registered else { return }
     registered = true
+    // Kept only by perf-gate builds of the shell (the device check); dropped by shipping ones.
+    mv_set_device_check_runner(mvDeviceCheckRun)
     UNUserNotificationCenter.current().delegate = taps
     BGTaskScheduler.shared.register(forTaskWithIdentifier: taskId, using: nil) { task in
       guard let refresh = task as? BGAppRefreshTask else {
@@ -98,18 +98,26 @@ enum MvBackground {
     let done = Completion(task)
     task.expirationHandler = { done.finish(false) }
     DispatchQueue.global(qos: .utility).async {
-      let languages = Locale.preferredLanguages.joined(separator: ",")
-      languages.withCString { mv_set_languages($0) }
-      let raw = mv_background_fetch(budgetMs)
-      defer { mv_free_string(raw) }
-      guard let raw = raw, let data = String(cString: raw).data(using: .utf8),
-        let reply = try? JSONDecoder().decode(BackgroundReply.self, from: data)
-      else {
+      guard let reply = fetch() else {
         done.finish(false)
         return
       }
-      post(reply.notes) { done.finish(true) }
+      post(reply.notes) {
+        // Counted as notified only once posted, and only while the task is still ours.
+        if let token = reply.commit { done.commitIfRunning(token) }
+        done.finish(true)
+      }
     }
+  }
+
+  /// One Rust run: the reply, or nil when it could not be read.
+  static func fetch() -> BackgroundReply? {
+    let languages = Locale.preferredLanguages.joined(separator: ",")
+    languages.withCString { mv_set_languages($0) }
+    let raw = mv_background_fetch(budgetMs)
+    defer { mv_free_string(raw) }
+    guard let raw = raw, let data = String(cString: raw).data(using: .utf8) else { return nil }
+    return try? JSONDecoder().decode(BackgroundReply.self, from: data)
   }
 
   /// Posts `notes` (a repeat id replaces, never doubles), then calls `finished`.
@@ -163,6 +171,15 @@ final class Completion {
     done = true
     task.setTaskCompleted(success: success)
   }
+
+  /// Commits the run's notified mail unless the task already ended (iOS may suspend the process
+  /// right after): the expiration handler waits for a commit that started.
+  func commitIfRunning(_ token: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !done else { return }
+    token.withCString { mv_background_commit($0) }
+  }
 }
 
 final class TapDelegate: NSObject, UNUserNotificationCenterDelegate {
@@ -188,19 +205,15 @@ final class TapDelegate: NSObject, UNUserNotificationCenterDelegate {
   }
 }
 
-/// The run without a `BGTask` (the device check calls it from lldb where the simulator does not
-/// launch background tasks): the same fetch and posting.
-@_cdecl("mv_ios_background_run_now")
-public func mvIosBackgroundRunNow() {
+/// The run without a `BGTask`, for the device check of a perf-gate build (the simulator launches
+/// no background task): the same fetch, posting and commit. Not exported; the shell keeps it only
+/// in perf-gate builds (`mv_set_device_check_runner`).
+private let mvDeviceCheckRun: @convention(c) () -> Void = {
   DispatchQueue.global(qos: .utility).async {
-    let languages = Locale.preferredLanguages.joined(separator: ",")
-    languages.withCString { mv_set_languages($0) }
-    let raw = mv_background_fetch(MvBackground.budgetMs)
-    defer { mv_free_string(raw) }
-    guard let raw = raw, let data = String(cString: raw).data(using: .utf8),
-      let reply = try? JSONDecoder().decode(BackgroundReply.self, from: data)
-    else { return }
-    MvBackground.post(reply.notes) {}
+    guard let reply = MvBackground.fetch() else { return }
+    MvBackground.post(reply.notes) {
+      if let token = reply.commit { token.withCString { mv_background_commit($0) } }
+    }
   }
 }
 

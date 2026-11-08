@@ -486,3 +486,23 @@ fn smtp_defaults_come_from_the_address_domain_and_a_bad_mode_is_invalid() {
     let r = e.rpc("mobile.accounts.add", f).unwrap();
     assert_eq!(r["code"], "INVALID", "{r}");
 }
+
+/// The shell lost an account's secret (the keychain policy move failed twice): the account is
+/// parked, so the page asks for a new sign-in, and no worker dials it.
+#[test]
+fn a_lost_secret_parks_the_account() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _secrets) = engine(tmp.path());
+    let server = good_server();
+    let added = e.rpc("mobile.accounts.add", form(&server, "u@example.test", PW)).unwrap();
+    let id = added["account"]["id"].as_str().unwrap().to_string();
+    e.secret_lost(&id);
+    let a = list(&e).into_iter().find(|a| a["id"] == id.as_str()).unwrap();
+    assert_eq!(a["needsAuth"], true);
+    assert_eq!(a["oauth"], false, "a password account: the page offers adding it again");
+    let before = server.connection_count();
+    let err = e.rpc("mobile.sync.refresh", json!({ "accountId": id })).map(|_| ());
+    assert!(err.is_ok());
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert_eq!(server.connection_count(), before, "a parked account is never dialled");
+}

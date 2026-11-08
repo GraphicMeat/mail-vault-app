@@ -125,7 +125,7 @@ fn system_language(env: &mut JNIEnv) -> Option<String> {
 }
 
 /// `BackgroundFetchWorker.nativeFetch(dataDir, cacheDir, budgetMs)`: one background run; returns
-/// `{channel, notes}` JSON (see `background::run_json`).
+/// `{channel, notes, commit?}` JSON (see `background::run_json`).
 #[no_mangle]
 pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeFetch(
     mut env: JNIEnv,
@@ -134,6 +134,8 @@ pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeF
     cache_dir: JString,
     budget_ms: jint,
 ) -> jstring {
+    // The budget counts from here: opening the engine in a worker-first process is inside it.
+    let started = Instant::now();
     let empty = r#"{"channel":"","notes":[]}"#.to_string();
     let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if let Err(e) = ensure_context(&mut env, &this) {
@@ -153,10 +155,17 @@ pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeF
             return empty.clone();
         };
         let budget = Duration::from_millis(u64::try_from(budget_ms).unwrap_or(0));
-        crate::background::run_json(&PathBuf::from(data), &PathBuf::from(cache), budget)
+        crate::background::run_json(&PathBuf::from(data), &PathBuf::from(cache), budget, started)
     }))
     .unwrap_or(empty);
     env.new_string(out).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
+}
+
+/// `BackgroundFetchWorker.nativeCommit(token)`: the run's notifications were posted.
+#[no_mangle]
+pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeCommit(mut env: JNIEnv, _this: JObject, token: JString) {
+    let Some(text) = jstr(&mut env, &token) else { return };
+    let _ = std::panic::catch_unwind(|| crate::background::commit(&text));
 }
 
 /// `Notifier.nativeTapped(json)`: a notification was tapped.

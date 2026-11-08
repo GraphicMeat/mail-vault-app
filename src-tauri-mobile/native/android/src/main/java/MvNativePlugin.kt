@@ -60,6 +60,16 @@ class RefreshArgs {
 }
 
 @InvokeArg
+class CloseArgs {
+    var url: String? = null
+}
+
+@InvokeArg
+class PermissionArgs {
+    var prompt: Boolean = true
+}
+
+@InvokeArg
 class PickArgs {
     lateinit var kind: String
     lateinit var dir: String
@@ -92,9 +102,12 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    // `requestNotifications {prompt}`: the permission prompt (Android 13 and later) when not yet
+    // granted, else the current answer; `prompt: false` only reads it (Settings checks each time).
     @Command
     fun requestNotifications(invoke: Invoke) {
-        if (Build.VERSION.SDK_INT < 33 || getPermissionState("notifications") == PermissionState.GRANTED) {
+        val prompt = try { invoke.parseArgs(PermissionArgs::class.java).prompt } catch (e: Exception) { true }
+        if (!prompt || Build.VERSION.SDK_INT < 33 || getPermissionState("notifications") == PermissionState.GRANTED) {
             answerNotifications(invoke)
         } else {
             requestPermissionForAlias("notifications", invoke, "notificationsAnswered")
@@ -178,10 +191,17 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
     private var authAway = false
     private var authClosing = false
     private var authActivity: Activity? = null
+    // The URL of the running tab; one `closeAuth` named before its tab's open arrived (that open
+    // answers at once and shows nothing); and a close answered while the tab was still starting,
+    // so the tab is taken off as soon as it covers the app.
+    private var authUrl: String? = null
+    private var closedBeforeOpen: String? = null
+    private var closeOnPauseUntil = 0L
 
     private fun answerAuth(cancelled: Boolean) {
         val invoke = authInvoke ?: return
         authInvoke = null
+        authUrl = null
         authAway = false
         authClosing = false
         authActivity = null
@@ -196,11 +216,17 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         activity.runOnUiThread {
+            if (closedBeforeOpen != null && closedBeforeOpen == args.url) {
+                closedBeforeOpen = null
+                invoke.resolve(JSObject().put("cancelled", false))
+                return@runOnUiThread
+            }
             if (authInvoke != null) {
                 invoke.reject("a sign-in sheet is already open", "BUSY")
                 return@runOnUiThread
             }
             authInvoke = invoke
+            authUrl = args.url
             authAway = false
             authClosing = false
             authActivity = PluginManager.activity
@@ -223,8 +249,12 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
     // answers from `onResume`. Answers at once; nothing to close is not an error.
     @Command
     fun closeAuth(invoke: Invoke) {
+        val url = try { invoke.parseArgs(CloseArgs::class.java).url } catch (e: Exception) { null }
         activity.runOnUiThread {
-            if (authInvoke != null) {
+            if (authInvoke == null || (url != null && url != authUrl)) {
+                // Its open has not arrived yet: that open shows nothing.
+                if (url != null) closedBeforeOpen = url
+            } else {
                 authClosing = true
                 if (authAway) {
                     try {
@@ -236,8 +266,10 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
                         answerAuth(false)
                     }
                 } else {
-                    // The tab never covered the app (it failed to show, or is still starting).
+                    // The tab never covered the app (it failed to show, or is still starting): if
+                    // it covers it in a moment, it is taken off again.
                     answerAuth(false)
+                    closeOnPauseUntil = System.currentTimeMillis() + 5_000
                 }
             }
             invoke.resolve()
@@ -246,6 +278,16 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
 
     override fun onPause(activity: AppCompatActivity) {
         if (authInvoke != null) authAway = true
+        if (closeOnPauseUntil > System.currentTimeMillis()) {
+            closeOnPauseUntil = 0L
+            try {
+                val front = Intent(activity, activity.javaClass)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                activity.startActivity(front)
+            } catch (e: Exception) {
+                // The tab stays until the user closes it; the page went on long ago.
+            }
+        }
     }
 
     override fun onResume(activity: AppCompatActivity) {

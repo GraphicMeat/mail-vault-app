@@ -6,7 +6,7 @@
 // when the picker closes; cancel is an empty list. `openAuth` shows a provider's sign-in page in
 // `ASWebAuthenticationSession` and answers when it closes (`closeAuth`, or the user's cancel).
 // `setBackgroundRefresh` turns the periodic background run on or off (Background.swift) and
-// `requestNotifications` asks for the notification permission.
+// `requestNotifications` asks for the notification permission (or, `prompt: false`, reads it).
 
 import AuthenticationServices
 import PhotosUI
@@ -28,6 +28,14 @@ struct UrlArgs: Decodable {
 
 struct RefreshArgs: Decodable {
   let enabled: Bool
+}
+
+struct CloseArgs: Decodable {
+  let url: String?
+}
+
+struct PermissionArgs: Decodable {
+  let prompt: Bool?
 }
 
 struct PickArgs: Decodable {
@@ -72,6 +80,10 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
   // session nothing holds is deallocated and its sheet goes away unanswered.
   private var authSession: ASWebAuthenticationSession?
   private var authInvoke: Invoke?
+  /// The URL of the running sheet; and one `closeAuth` named before its sheet opened (the two
+  /// calls reach the main queue in either order): that open answers at once, showing nothing.
+  private var authUrl: String?
+  private var closedBeforeOpen: String?
 
   /// The hosts `openAuth` opens; the shell has already checked the whole URL (links.rs
   /// `auth_url_ok`), this is the native side's own floor.
@@ -373,6 +385,7 @@ extension MvNativePlugin {
     let invoke = authInvoke
     authInvoke = nil
     authSession = nil
+    authUrl = nil
     invoke?.resolve(["cancelled": cancelled])
   }
 
@@ -390,6 +403,11 @@ extension MvNativePlugin {
       return
     }
     DispatchQueue.main.async {
+      if let closed = self.closedBeforeOpen, closed == args.url {
+        self.closedBeforeOpen = nil
+        invoke.resolve(["cancelled": false])
+        return
+      }
       guard self.authInvoke == nil else {
         invoke.reject("a sign-in sheet is already open", code: "BUSY")
         return
@@ -409,9 +427,11 @@ extension MvNativePlugin {
       started.prefersEphemeralWebBrowserSession = false
       self.authSession = started
       self.authInvoke = invoke
+      self.authUrl = args.url
       if !started.start() {
         self.authSession = nil
         self.authInvoke = nil
+        self.authUrl = nil
         // Not another sheet (that is `BUSY` above): the session refused to start.
         invoke.reject("the sign-in sheet could not be shown", code: "INTERNAL")
       }
@@ -429,22 +449,36 @@ extension MvNativePlugin {
     invoke.resolve()
   }
 
-  /// `requestNotifications`: the system's permission prompt (alerts, sounds and the badge) the
-  /// first time, the stored answer after; answers `{granted}`.
+  /// `requestNotifications {prompt?}`: the system's permission prompt (alerts and sounds; no
+  /// badge, the app sets none) the first time, the stored answer after; answers `{granted}`. With
+  /// `prompt: false` only the current answer (the user may have turned them off in Settings).
   @objc public func requestNotifications(_ invoke: Invoke) throws {
-    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+    let prompt = (try? invoke.parseArgs(PermissionArgs.self))?.prompt ?? true
+    let center = UNUserNotificationCenter.current()
+    guard prompt else {
+      center.getNotificationSettings { settings in
+        let on = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+        invoke.resolve(["granted": on])
+      }
+      return
+    }
+    center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
       invoke.resolve(["granted": granted])
     }
   }
 
-  /// `closeAuth`: closes the running sheet, whose `openAuth` answers `{cancelled: false}`. Answers
-  /// at once; nothing to close is not an error.
+  /// `closeAuth {url?}`: closes the running sheet (of `url`, when named), whose `openAuth` answers
+  /// `{cancelled: false}`. Answers at once; idempotent. A close of a `url` whose open has not
+  /// arrived yet is remembered, and that open then answers at once without showing a sheet.
   @objc public func closeAuth(_ invoke: Invoke) throws {
+    let url = (try? invoke.parseArgs(CloseArgs.self))?.url
     DispatchQueue.main.async {
-      if let session = self.authSession {
+      if let session = self.authSession, url == nil || url == self.authUrl {
         // Answer first: `cancel()` calls the completion, which must find nothing left to answer.
         self.answerAuth(cancelled: false)
         session.cancel()
+      } else if let url = url, url != self.authUrl {
+        self.closedBeforeOpen = url
       }
       invoke.resolve()
     }

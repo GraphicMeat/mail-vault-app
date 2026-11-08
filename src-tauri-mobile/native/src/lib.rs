@@ -114,6 +114,16 @@ struct RefreshArgs {
     enabled: bool,
 }
 
+#[derive(Serialize)]
+struct CloseArgs<'a> {
+    url: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct PermissionArgs {
+    prompt: bool,
+}
+
 #[derive(Deserialize)]
 struct GrantReply {
     #[serde(default)]
@@ -190,10 +200,12 @@ impl<R: Runtime> MvNative<R> {
         self.call_for("openAuth", UrlArgs { url })
     }
 
-    /// Closes the sign-in sheet if one is up (its `open_auth` then answers `cancelled: false`);
-    /// nothing otherwise. Answers at once.
-    pub fn close_auth(&self) -> Result<(), NativeError> {
-        self.call("closeAuth", serde_json::json!({}))
+    /// Closes the sign-in sheet of `url` if it is up (its `open_auth` then answers
+    /// `cancelled: false`). Idempotent. A close of `url` that arrives before that sheet's open
+    /// (the two calls take different threads) is remembered, and that open answers at once
+    /// without showing anything. `None` closes whatever sheet is up. Answers at once.
+    pub fn close_auth(&self, url: Option<&str>) -> Result<(), NativeError> {
+        self.call("closeAuth", CloseArgs { url })
     }
 
     /// Turns the periodic background run on (queued unless already queued) or off.
@@ -203,8 +215,10 @@ impl<R: Runtime> MvNative<R> {
 
     /// Asks for the notification permission when the platform has one to ask for (iOS, Android 13
     /// and later); `true` when notifications may be posted. Blocks until the user has chosen.
-    pub fn request_notifications(&self) -> Result<bool, NativeError> {
-        let reply: GrantReply = self.call_for("requestNotifications", serde_json::json!({}))?;
+    /// With `prompt` false it only reads the current answer (the user may have changed it in the
+    /// system settings), never asking.
+    pub fn request_notifications(&self, prompt: bool) -> Result<bool, NativeError> {
+        let reply: GrantReply = self.call_for("requestNotifications", PermissionArgs { prompt })?;
         Ok(reply.granted)
     }
 

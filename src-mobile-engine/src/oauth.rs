@@ -370,6 +370,13 @@ pub(crate) fn forget(shared: &Shared, account: &str) {
 }
 
 impl Engine {
+    /// The platform lost `account`'s secret (the shell's keychain policy move could not write it
+    /// back): the account is parked (`needs_auth = 1`, one `NEEDS_AUTH` event) so the page asks
+    /// for a new sign-in instead of every worker failing on a missing secret.
+    pub fn secret_lost(&self, account: &str) {
+        mark_needs_auth(self.shared(), account, "the stored secret was lost");
+    }
+
     /// Tests: how long fresh-token refusals must span before they park an account.
     #[doc(hidden)]
     pub fn set_oauth_refusal_span(&self, span: Duration) {
