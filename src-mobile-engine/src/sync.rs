@@ -20,7 +20,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// Header window per folder.
 const WINDOW_DAYS: i64 = 90;
@@ -31,18 +31,19 @@ const DAY_MS: i64 = 86_400_000;
 // ── The worker and its queue ────────────────────────────────────────────────
 
 /// One sync pass to run: the account's folder list and INBOX (`folder: None`), or one folder.
-/// A `quick` pass (a background run's) may skip the folder when the backend can tell cheaply
-/// that nothing arrived since the last pass ([`Backend::has_news`]).
+/// A `quick` pass (a background run's) asks only for what arrived since the newest message held
+/// ([`Backend::arrivals`]), and stops at its `deadline` (its share of the run's budget).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Job {
     account: String,
     folder: Option<String>,
     quick: bool,
+    deadline: Option<Instant>,
 }
 
 impl Job {
     pub(crate) fn new(account: &str, folder: Option<&str>) -> Job {
-        Job { account: account.to_string(), folder: folder.map(String::from), quick: false }
+        Job { account: account.to_string(), folder: folder.map(String::from), quick: false, deadline: None }
     }
 
     /// Running `self` also does everything `other` asks for. A full pass covers a quick one,
@@ -65,13 +66,22 @@ pub(crate) enum Ended {
 }
 
 /// One waiter on a queued pass: set once by the worker thread when a pass that covers it ends.
+/// A background run's ticket also gets what that pass left for it to notify, read on the worker
+/// before the next pass starts ([`crate::background::collect`]).
 #[derive(Default)]
 pub(crate) struct Ticket {
     ended: Mutex<Option<Ended>>,
     cv: Condvar,
+    collect: bool,
+    collected: Mutex<Option<Result<Option<crate::background::Collected>, String>>>,
 }
 
 impl Ticket {
+    /// What the pass left for a background run (set before the ticket ends).
+    pub(crate) fn collected(&self) -> Option<Result<Option<crate::background::Collected>, String>> {
+        lock(&self.collected).take()
+    }
+
     fn end(&self, how: Ended) {
         let mut ended = lock(&self.ended);
         if ended.is_none() {
@@ -129,12 +139,21 @@ impl Worker {
         self.enqueue_with(shared, job, None)
     }
 
-    /// Queues the quick INBOX pass of `account` (a background run's) and returns a ticket that
-    /// ends with the first pass that covers it, run from now on.
-    pub(crate) fn enqueue_waited(&self, shared: &Arc<Shared>, account: &str) -> Result<Arc<Ticket>, String> {
-        let ticket = Arc::new(Ticket::default());
-        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true };
+    /// Queues the quick INBOX pass of `account` (a background run's) that stops at `deadline`, and
+    /// returns a ticket that ends with the first pass that covers it, run from now on, carrying
+    /// what that pass left to notify.
+    pub(crate) fn enqueue_waited(&self, shared: &Arc<Shared>, account: &str, deadline: Instant) -> Result<Arc<Ticket>, String> {
+        let ticket = Arc::new(Ticket { collect: true, ..Ticket::default() });
+        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, deadline: Some(deadline) };
         self.enqueue_with(shared, job, Some(Arc::clone(&ticket)))?;
+        Ok(ticket)
+    }
+
+    /// Queues the normal INBOX pass of `account` and returns a ticket that ends with it (the
+    /// user's Retry).
+    pub(crate) fn enqueue_inbox_waited(&self, shared: &Arc<Shared>, account: &str) -> Result<Arc<Ticket>, String> {
+        let ticket = Arc::new(Ticket::default());
+        self.enqueue_with(shared, Job::new(account, Some("INBOX")), Some(Arc::clone(&ticket)))?;
         Ok(ticket)
     }
 
@@ -151,7 +170,11 @@ impl Worker {
                 .map_err(|e| format!("sync worker: {e}"))?;
             st.started = true;
         }
-        if let Some((_, tickets)) = st.pending.iter_mut().find(|(q, _)| q.covers(&job)) {
+        if let Some((q, tickets)) = st.pending.iter_mut().find(|(q, _)| q.covers(&job)) {
+            // A queued quick pass taken over by a later run stops at the later deadline.
+            if q.quick && job.quick && q.deadline < job.deadline {
+                q.deadline = job.deadline;
+            }
             tickets.extend(ticket);
             return Ok(());
         }
@@ -206,6 +229,14 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
             }
         };
         let ended = run_job(&shared, &job);
+        // On this thread, before the next pass starts: no other pass is half way through the
+        // folder's inserts while a background run reads what is new.
+        if ended == Ended::Done && tickets.iter().any(|t| t.collect) {
+            let got = crate::background::collect(&shared, &job.account).map_err(|e| e.to_string());
+            for t in tickets.iter().filter(|t| t.collect) {
+                *lock(&t.collected) = Some(got.clone());
+            }
+        }
         for t in tickets {
             t.end(ended.clone());
         }
@@ -277,6 +308,11 @@ impl Fail {
 }
 
 fn run_job(shared: &Shared, job: &Job) -> Ended {
+    // A background run's pass whose share of the budget is gone (it waited behind a slow pass):
+    // the run has moved on, so no network and no events.
+    if job.deadline.is_some_and(|d| Instant::now() >= d) {
+        return Ended::Failed(Code::Timeout.as_str());
+    }
     // A parked account never shows a pass starting: only that it needs a new sign-in.
     let parked = shared
         .read(|c| c.query_row("SELECT needs_auth FROM accounts WHERE id = ?1", [&job.account], |r| r.get::<_, i64>(0)).optional())
@@ -289,14 +325,21 @@ fn run_job(shared: &Shared, job: &Job) -> Ended {
     }
     shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "syncing" }));
     let out = sync_job(shared, job);
-    crate::background::note_sign_in(shared, &job.account, &out);
+    if let Err(Fail::Code(code, _)) = &out {
+        crate::hold::note_failure(shared, &job.account, *code);
+    }
     let (end, ended) = match out {
         Ok(()) => (json!({ "accountId": job.account, "state": "idle" }), Ended::Done),
         Err(Fail::Gone) => (json!({ "accountId": job.account, "state": "idle" }), Ended::Failed("GONE")),
         Err(Fail::Closing) => (json!({ "accountId": job.account, "state": "idle" }), Ended::Failed("CLOSING")),
         Err(Fail::Code(code, why)) => {
             shared.log(&format!("[sync] {} {:?}: {} {}", job.account, job.folder, code.as_str(), why));
-            (json!({ "accountId": job.account, "state": "error", "code": code.as_str() }), Ended::Failed(code.as_str()))
+            let mut end = json!({ "accountId": job.account, "state": "error", "code": code.as_str() });
+            // A refused password: the page offers Retry.
+            if code == Code::AuthFailed && crate::hold::is_held(shared, &job.account) {
+                end["held"] = json!(true);
+            }
+            (end, Ended::Failed(code.as_str()))
         }
     };
     shared.emit(SYNC_STATE, end);
@@ -323,13 +366,13 @@ pub(crate) fn sync_now_for_test(shared: &Shared, account: &str, folder: Option<&
 }
 
 fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result<(), Fail> {
-    // A background run's pass: skipped when the backend can tell cheaply nothing came in (Graph
-    // asks for its newest message rather than relisting the 90-day window).
+    // A background run's pass: only what arrived since the newest message held, within its
+    // share of the budget. A folder never synced (or a backend with no cheap way) gets the full
+    // pass.
     if job.quick {
-        if let Some(path) = folder_path(shared, &job.account, job.folder.as_deref().unwrap_or("INBOX"))? {
-            if !backend.has_news(&FolderRow::new(&path, None))? {
-                return Ok(());
-            }
+        backend.set_deadline(job.deadline);
+        if quick_pass(shared, backend, &job.account, job.deadline)? {
+            return Ok(());
         }
     }
     let folder = match &job.folder {
@@ -350,6 +393,89 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result
         },
     };
     sync_folder(shared, backend, &job.account, &folder)
+}
+
+/// `Fail` once a background pass's share of the budget is spent.
+fn within(deadline: Option<Instant>) -> Result<(), Fail> {
+    match deadline {
+        Some(d) if Instant::now() >= d => Err(Fail::Code(Code::Timeout, "the background run's budget is spent".into())),
+        _ => Ok(()),
+    }
+}
+
+/// A background run's INBOX pass: the backend's cheap news check, then only the messages that
+/// arrived since the newest one held, inserted newest first in write chunks. No flags, no
+/// removals, no delta state: the next foreground pass does those. `false` when the folder needs
+/// the full pass (never synced, empty, a new generation, or a backend with no cheap way).
+fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) -> Result<bool, Fail> {
+    let Some(folder) = folder_path(shared, account, "INBOX")? else {
+        return Ok(false);
+    };
+    let held: Option<(Option<i64>, Option<i64>, Option<i64>, Option<i64>)> = shared.read(|c| {
+        c.query_row(
+            "SELECT f.uid_validity, f.synced_ms,
+                    (SELECT MAX(uid) FROM messages m WHERE m.account_id = f.account_id AND m.folder = f.path),
+                    (SELECT MAX(date_ms) FROM messages m WHERE m.account_id = f.account_id AND m.folder = f.path)
+             FROM folders f WHERE f.account_id = ?1 AND f.path = ?2",
+            (account, &folder),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .optional()
+    })?;
+    let Some((Some(validity), Some(_), Some(newest_uid), Some(newest_ms))) = held else {
+        return Ok(false);
+    };
+    let here = FolderRow::new(&folder, Some(validity));
+    within(deadline)?;
+    if !backend.has_news(&here)? {
+        return Ok(true);
+    }
+    within(deadline)?;
+    let Some(arrived) = backend.arrivals(&here, newest_uid as u32, newest_ms)? else {
+        return Ok(false);
+    };
+    let present: HashSet<u32> = shared.read(|c| {
+        let mut st = c.prepare_cached("SELECT 1 FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3")?;
+        let mut out = HashSet::new();
+        for u in &arrived {
+            if st.query_row((account, &folder, *u as i64), |_| Ok(())).optional()?.is_some() {
+                out.insert(*u);
+            }
+        }
+        Ok(out)
+    })?;
+    let mut new: Vec<u32> = arrived.into_iter().filter(|u| !present.contains(u)).collect();
+    new.sort_unstable_by(|a, b| b.cmp(a));
+    new.dedup();
+    let gen = shared.list_gen(account, &folder)? + 1;
+    let mut added = 0;
+    let mut out = Ok(true);
+    for chunk in new.chunks(BATCH) {
+        if let Err(f) = within(deadline).and_then(|()| not_closing(shared)) {
+            out = Err(f);
+            break;
+        }
+        let headers = match backend.headers(&here, chunk) {
+            Ok(h) => h,
+            Err(f) => {
+                out = Err(f);
+                break;
+            }
+        };
+        match write_for(shared, account, |c| insert_headers(c, account, &folder, &headers, gen)) {
+            Ok(n) => added += n,
+            Err(f) => {
+                out = Err(f);
+                break;
+            }
+        }
+    }
+    // Published even when the pass stopped part way: what it committed is in the table.
+    if added > 0 {
+        let gen = shared.publish_list_gen(account, &folder, gen);
+        shared.emit(FOLDER_CHANGED, json!({ "accountId": account, "folder": folder, "added": added, "removed": 0, "updated": 0, "listGen": gen }));
+    }
+    out
 }
 
 /// The stored path of `folder` (INBOX matched case-insensitively, as RFC 3501 says).

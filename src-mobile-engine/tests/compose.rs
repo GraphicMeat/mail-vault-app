@@ -601,3 +601,46 @@ fn no_secret_reaches_outbox_or_drafts_rows() {
     let listed = serde_json::to_string(&f.outbox()).unwrap();
     assert!(!listed.contains(PASSWORD));
 }
+
+#[test]
+fn a_forwarded_part_keeps_the_type_the_server_gave_it() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    // A part with no telling extension (a forward of a server part named without one).
+    let handle = f.pick("abababababababab", "invoice", b"%PDF-1.4 fwd");
+    let saved = f
+        .engine
+        .rpc(
+            "mobile.drafts.save",
+            json!({ "accountId": f.account, "to": "rcpt@example.test", "subject": "Fwd", "text": "", "attachments": [{ "handle": handle, "mime": "application/pdf" }] }),
+        )
+        .unwrap();
+    let d = f.engine.rpc("mobile.drafts.get", json!({ "id": saved["id"] })).unwrap();
+    assert_eq!(d["attachments"][0]["mime"], "application/pdf", "{d}");
+    // Something that is not a media type is not kept.
+    let bad = f
+        .engine
+        .rpc(
+            "mobile.drafts.save",
+            json!({ "accountId": f.account, "to": "rcpt@example.test", "subject": "Fwd", "text": "", "attachments": [{ "handle": handle, "mime": "pdf; drop table" }] }),
+        )
+        .unwrap();
+    let d = f.engine.rpc("mobile.drafts.get", json!({ "id": bad["id"] })).unwrap();
+    assert_eq!(d["attachments"][0]["mime"], "application/octet-stream", "{d}");
+}
+
+#[test]
+fn removing_an_account_removes_its_picked_files() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let handle = f.pick("cdcdcdcdcdcdcdcd", "plan.pdf", b"%PDF-1.4 draft");
+    f.engine
+        .rpc(
+            "mobile.drafts.save",
+            json!({ "accountId": f.account, "to": "rcpt@example.test", "subject": "Draft", "text": "", "attachments": [{ "handle": handle }] }),
+        )
+        .unwrap();
+    assert!(f.cache().join(&handle).is_file());
+    f.engine.rpc("mobile.accounts.remove", json!({ "accountId": f.account })).unwrap();
+    assert!(!f.cache().join("out").join("cdcdcdcdcdcdcdcd").exists(), "the removed account's picked files went with it");
+}

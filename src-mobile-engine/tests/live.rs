@@ -341,11 +341,12 @@ fn a_refused_password_is_tried_once_per_foreground() {
     wait_until(Duration::from_secs(2), "the thread gave up on the refused password", || !f.engine.live_running());
     std::thread::sleep(Duration::from_millis(1500));
     assert_eq!(server.count_commands("LOGIN") - logins, 1, "logs {:?}", f.logs());
-    // A return to the front is the next chance, once.
+    // The refusal holds the account for every worker: a return to the front does not dial it
+    // again (only the user's Retry does).
     f.app_state_resumed(Some(&account));
-    wait_until(Duration::from_secs(2), "the resumed try ended", || !f.engine.live_running());
+    wait_until(Duration::from_secs(2), "the resumed thread ended", || !f.engine.live_running());
     std::thread::sleep(Duration::from_millis(500));
-    assert_eq!(server.count_commands("LOGIN") - logins, 2);
+    assert_eq!(server.count_commands("LOGIN") - logins, 1);
 }
 
 #[test]

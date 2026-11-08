@@ -41,10 +41,14 @@ use std::time::{Duration, Instant};
 const FINISH_TIMEOUT: Duration = Duration::from_secs(300);
 /// A stored access token is used only while it has at least this long left.
 const REFRESH_MARGIN_MS: i64 = 60_000;
-/// Consecutive server refusals of a freshly refreshed token before the account is parked: the
-/// grant is valid, but the mailbox will not take it (IMAP turned off, a tenant policy), and every
-/// further attempt would cost a refresh and two logins.
-const MAX_FRESH_REFUSALS: u32 = 3;
+/// Distinct freshly refreshed tokens the server must refuse in a row before the account is parked:
+/// the grant is valid, but the mailbox will not take it (IMAP turned off, a tenant policy), and
+/// every further attempt would cost a refresh and two logins. One token refused by several workers
+/// (sync, replay, outbox, live share it) counts once.
+const MAX_FRESH_REFUSALS: usize = 3;
+/// ... and the refusals must span at least this long: a provider incident that refuses every
+/// token for a few minutes is not a revoked mailbox.
+const REFUSAL_SPAN: Duration = Duration::from_secs(10 * 60);
 /// Microsoft's Graph grant also asks for this, so `/me` can name the address.
 const MICROSOFT_EXTRA_SCOPE: &str = "User.Read";
 
@@ -115,9 +119,18 @@ pub(crate) struct OAuth {
     refresh_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     finish_timeout: Mutex<Duration>,
     google_servers: Mutex<Servers>,
-    /// Per account: sign-ins the server refused in a row although the token had just been
-    /// refreshed. At [`MAX_FRESH_REFUSALS`] the account is parked like a refused grant.
-    fresh_refusals: Mutex<HashMap<String, u32>>,
+    /// Per account: the fresh tokens the server refused in a row (hashes, never the tokens) and
+    /// when the first was refused. At [`MAX_FRESH_REFUSALS`] over [`REFUSAL_SPAN`] the account is
+    /// parked like a refused grant.
+    fresh_refusals: Mutex<HashMap<String, Refusals>>,
+    /// [`REFUSAL_SPAN`], shortened by tests.
+    refusal_span: Mutex<Duration>,
+}
+
+#[derive(Default)]
+struct Refusals {
+    tokens: Vec<u64>,
+    first: Option<Instant>,
 }
 
 impl Default for OAuth {
@@ -131,6 +144,7 @@ impl Default for OAuth {
             finish_timeout: Mutex::new(FINISH_TIMEOUT),
             google_servers: Mutex::new(Servers::default()),
             fresh_refusals: Mutex::new(HashMap::new()),
+            refusal_span: Mutex::new(REFUSAL_SPAN),
         }
     }
 }
@@ -314,20 +328,30 @@ fn mark_needs_auth(shared: &Shared, account: &str, why: &str) {
     }
 }
 
-/// The server refused `account`'s freshly refreshed token. Parks the account (and returns
-/// [`Fail::auth`]) at the [`MAX_FRESH_REFUSALS`]th refusal in a row; `None` below it.
-pub(crate) fn fresh_token_refused(shared: &Shared, account: &str) -> Option<Fail> {
-    let n = {
+/// The server refused `account`'s freshly refreshed `token`. Parks the account (and returns
+/// [`Fail::auth`]) once [`MAX_FRESH_REFUSALS`] distinct fresh tokens were refused in a row over
+/// at least the refusal span; `None` before. A token already counted (another worker used the same
+/// one) does not count again.
+pub(crate) fn fresh_token_refused(shared: &Shared, account: &str, token: &str) -> Option<Fail> {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    token.hash(&mut h);
+    let id = h.finish();
+    let span = *lock(&shared.oauth.refusal_span);
+    let (n, over) = {
         let mut m = lock(&shared.oauth.fresh_refusals);
-        let n = m.entry(account.to_string()).or_insert(0);
-        *n += 1;
-        *n
+        let r = m.entry(account.to_string()).or_default();
+        if !r.tokens.contains(&id) {
+            r.tokens.push(id);
+        }
+        let first = *r.first.get_or_insert_with(Instant::now);
+        (r.tokens.len(), first.elapsed() >= span)
     };
-    if n < MAX_FRESH_REFUSALS {
+    if n < MAX_FRESH_REFUSALS || !over {
         return None;
     }
     lock(&shared.oauth.fresh_refusals).remove(account);
-    mark_needs_auth(shared, account, &format!("the server refused a fresh token {n} times in a row"));
+    mark_needs_auth(shared, account, &format!("the server refused {n} fresh tokens in a row over {span:?}"));
     Some(Fail::auth())
 }
 
@@ -336,6 +360,20 @@ pub(crate) fn sign_in_worked(shared: &Shared, account: &str) {
     let mut m = lock(&shared.oauth.fresh_refusals);
     if !m.is_empty() {
         m.remove(account);
+    }
+}
+
+/// The account is being removed: its refusal run and refresh lock go.
+pub(crate) fn forget(shared: &Shared, account: &str) {
+    lock(&shared.oauth.fresh_refusals).remove(account);
+    lock(&shared.oauth.refresh_locks).remove(account);
+}
+
+impl Engine {
+    /// Tests: how long fresh-token refusals must span before they park an account.
+    #[doc(hidden)]
+    pub fn set_oauth_refusal_span(&self, span: Duration) {
+        *lock(&self.shared().oauth.refusal_span) = span;
     }
 }
 
@@ -742,6 +780,54 @@ mod tests {
         assert_eq!(exchange_failure("OAuth callback error: OAuth flow timed out"), Code::Timeout);
         assert_eq!(exchange_failure("Token request failed: error sending request"), Code::HostUnreachable);
         assert_eq!(exchange_failure("Token error: \"invalid_grant\" — bad code"), Code::AuthFailed);
+    }
+
+    fn engine() -> (tempfile::TempDir, Engine) {
+        let tmp = tempfile::tempdir().unwrap();
+        let e = Engine::open(tmp.path(), &tmp.path().join("cache"), std::sync::Arc::new(crate::MemorySecrets::default())).unwrap();
+        e.write(|c| {
+            c.execute(
+                "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, kind, auth, provider, needs_auth, created_ms)
+                 VALUES ('acc_x', 'x@gmail.com', '', 'imap.gmail.com', 993, 'ssl', 'imap', 'oauth2', 'google', 0, 1)",
+                [],
+            )
+        })
+        .unwrap();
+        (tmp, e)
+    }
+
+    fn parked(e: &Engine) -> bool {
+        e.read(|c| c.query_row("SELECT needs_auth FROM accounts WHERE id = 'acc_x'", [], |r| r.get::<_, i64>(0))).unwrap() != 0
+    }
+
+    /// One refreshed token refused by every worker that used it (sync, replay, outbox, live)
+    /// counts once; only distinct fresh tokens, refused over the span, park the account.
+    #[test]
+    fn a_fresh_token_counts_once_however_many_workers_it_fails() {
+        let (_tmp, e) = engine();
+        e.set_oauth_refusal_span(Duration::ZERO);
+        for _ in 0..5 {
+            assert!(fresh_token_refused(e.shared(), "acc_x", "token-a").is_none());
+        }
+        assert!(!parked(&e), "one token, many refusals: not three");
+        assert!(fresh_token_refused(e.shared(), "acc_x", "token-b").is_none());
+        assert!(fresh_token_refused(e.shared(), "acc_x", "token-c").is_some(), "three distinct fresh tokens refused");
+        assert!(parked(&e));
+    }
+
+    #[test]
+    fn refusals_inside_the_span_do_not_park_and_a_sign_in_starts_over() {
+        let (_tmp, e) = engine();
+        e.set_oauth_refusal_span(Duration::from_secs(600));
+        for t in ["t1", "t2", "t3", "t4"] {
+            assert!(fresh_token_refused(e.shared(), "acc_x", t).is_none(), "{t}");
+        }
+        assert!(!parked(&e));
+        sign_in_worked(e.shared(), "acc_x");
+        e.set_oauth_refusal_span(Duration::ZERO);
+        assert!(fresh_token_refused(e.shared(), "acc_x", "t1").is_none(), "the count started again");
+        assert!(fresh_token_refused(e.shared(), "acc_x", "t2").is_none());
+        assert!(fresh_token_refused(e.shared(), "acc_x", "t3").is_some());
     }
 
     #[test]

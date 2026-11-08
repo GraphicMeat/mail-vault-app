@@ -53,7 +53,7 @@ fn open_seeded(dir: &std::path::Path, n: usize) -> Engine {
 }
 
 #[test]
-fn open_creates_schema_v3_in_wal() {
+fn open_creates_schema_v4_in_wal() {
     let tmp = tempfile::tempdir().unwrap();
     let _e = open(tmp.path()).unwrap();
     let path = tmp.path().join("mobile.db");
@@ -62,9 +62,9 @@ fn open_creates_schema_v3_in_wal() {
     let mode: String = c.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
     assert_eq!(mode, "wal");
-    assert_eq!(ver, 3);
+    assert_eq!(ver, 4);
     let pong = _e.rpc("mobile.ping", json!({})).unwrap();
-    assert_eq!(pong["schema"], 3);
+    assert_eq!(pong["schema"], 4);
     assert_eq!(pong["engine"], env!("CARGO_PKG_VERSION"));
     // The page enables its test hooks (`?ui=viewer`, the network probe) only on a perf-gate build.
     assert_eq!(pong["perfGate"], cfg!(feature = "perf-gate"));
@@ -289,7 +289,7 @@ fn a_v2_file_migrates_to_v3_and_keeps_its_accounts() {
     let e = open(tmp.path()).unwrap();
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 3);
+    assert_eq!(ver, 4);
     let row: (String, String, String, String, i64, Option<String>, Option<String>) = c
         .query_row(
             "SELECT id, email, kind, auth, needs_auth, provider, smtp_host FROM accounts",
@@ -371,7 +371,7 @@ fn a_v1_file_is_still_dropped_and_rebuilt() {
     let e = open(tmp.path()).unwrap();
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 3);
+    assert_eq!(ver, 4);
     assert_eq!(e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "cursor": null, "limit": 10 })).unwrap()["total"], 0);
     for t in V3_TABLES {
         let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get(0)).unwrap();
@@ -388,11 +388,11 @@ fn a_v4_file_is_refused_untouched() {
     }
     {
         let c = Connection::open(&path).unwrap();
-        c.execute_batch("PRAGMA user_version = 4;").unwrap();
+        c.execute_batch("PRAGMA user_version = 5;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
     let err = open(tmp.path()).err().expect("must refuse");
-    assert_eq!(err, EngineError::NewerSchema { found: 4, supported: 3 });
+    assert_eq!(err, EngineError::NewerSchema { found: 5, supported: 4 });
     assert_eq!(std::fs::read(&path).unwrap(), before, "a newer file must not be touched");
 }
 
@@ -405,7 +405,7 @@ fn newer_schema_in_rollback_mode_is_not_switched_to_wal() {
         c.execute_batch("PRAGMA journal_mode = DELETE; PRAGMA user_version = 7;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
-    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 7, supported: 3 }));
+    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 7, supported: 4 }));
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
 
@@ -508,4 +508,41 @@ fn events_json_matches_emitted_names() {
         let src = std::fs::read_to_string(format!("{}/src/{file}", env!("CARGO_MANIFEST_DIR"))).unwrap();
         assert!(!src.contains("emit(\""), "{file}: emit with a string literal bypasses events::EVENTS");
     }
+}
+
+/// Schema 3 to 4 adds the background run's dedupe table and the watermark's generation and
+/// baseline time; accounts, drafts, the outbox, settings and the watermarks stay.
+#[test]
+fn a_v3_file_migrates_to_v4_and_keeps_its_rows() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("mobile.db");
+    {
+        let e = open(tmp.path()).unwrap();
+        drop(e);
+        let c = Connection::open(&path).unwrap();
+        // Back to what a v3 build wrote.
+        c.execute_batch(
+            "DROP TABLE notified;
+             DROP TABLE notify_state;
+             CREATE TABLE notify_state (account_id TEXT NOT NULL, folder TEXT NOT NULL, last_uid INTEGER NOT NULL,
+               PRIMARY KEY (account_id, folder)) WITHOUT ROWID;
+             INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, created_ms)
+               VALUES ('acc_0123456789abcdef','u@example.test','U','imap.example.test',993,'ssl',1);
+             INSERT INTO notify_state VALUES ('acc_0123456789abcdef', 'INBOX', 41);
+             INSERT INTO settings VALUES ('notifications', 'on');
+             PRAGMA user_version = 3;",
+        )
+        .unwrap();
+    }
+    let e = open(tmp.path()).unwrap();
+    assert!(e.notifications_on());
+    let c = Connection::open(&path).unwrap();
+    let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+    assert_eq!(ver, 4);
+    let mark: (i64, Option<i64>) =
+        c.query_row("SELECT last_uid, uid_validity FROM notify_state WHERE account_id = 'acc_0123456789abcdef'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+    assert_eq!(mark, (41, None));
+    let n: i64 = c.query_row("SELECT count(*) FROM notified", [], |r| r.get(0)).unwrap();
+    assert_eq!(n, 0);
+    assert_eq!(c.query_row("SELECT count(*) FROM accounts", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
 }

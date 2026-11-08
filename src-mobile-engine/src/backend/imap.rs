@@ -95,8 +95,8 @@ impl ImapBackend {
                 match Self::sign_in(sc) {
                     // Refused with a token minted just now: the grant is fine but the mailbox
                     // will not take it. Parked after a few such attempts in a row.
-                    Err((f @ Fail::Code(Code::AuthFailed, _), Some(_))) => {
-                        Err(crate::oauth::fresh_token_refused(shared, account).unwrap_or(f))
+                    Err((f @ Fail::Code(Code::AuthFailed, _), Some(fresh))) => {
+                        Err(crate::oauth::fresh_token_refused(shared, account, &fresh).unwrap_or(f))
                     }
                     other => other.map_err(|(f, _)| f),
                 }
@@ -383,6 +383,20 @@ impl Backend for ImapBackend {
             let uids = abd_cmds::uid_search(session, folder, &sync::since_criteria(window_start_ms)).await?;
             let unseen = abd_cmds::uid_search(session, folder, "UNSEEN").await?.len() as i64;
             Ok(Window { uids, unseen })
+        })
+    }
+
+    /// `UID SEARCH UID n:*` above the newest uid held, after a SELECT that proves the generation.
+    /// `n:*` names the last message even when its uid is below `n`, so only uids above it count.
+    fn arrivals(&mut self, folder: &FolderRow, newest_uid: u32, _newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
+        self.step(async |session| {
+            let validity = abd_cmds::uid_validity(session, &folder.path).await?;
+            if validity.map(i64::from) != folder.uid_validity || validity.is_none() {
+                return Ok(None);
+            }
+            let from = newest_uid.saturating_add(1);
+            let uids = abd_cmds::uid_search(session, &folder.path, &format!("UID {from}:*")).await?;
+            Ok(Some(uids.into_iter().filter(|u| *u > newest_uid).collect()))
         })
     }
 

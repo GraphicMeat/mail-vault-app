@@ -42,7 +42,7 @@ use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Graph has no UIDVALIDITY: every folder's generation, constant so sync never wipes.
 pub(crate) const GENERATION: i64 = 1;
@@ -90,7 +90,8 @@ fn status_of(e: &str) -> Option<u16> {
 /// A Graph failure as a sync or a body read reports it.
 fn graph_fail(e: String) -> Fail {
     let code = match status_of(&e) {
-        Some(401 | 403) => Code::AuthFailed,
+        // 403 is Graph refusing one resource (a folder the mailbox may not open): no sign-in fixes it.
+        Some(401) => Code::AuthFailed,
         Some(429) => Code::Timeout,
         Some(s) if s >= 500 => Code::HostUnreachable,
         Some(_) => Code::Invalid,
@@ -222,9 +223,29 @@ pub(crate) struct GraphBackend<'a> {
     newest: Option<Option<(String, Option<String>)>>,
     /// While a live wait runs: its stop, which also ends a throttle's wait.
     stop: Option<Arc<StopFlag>>,
+    /// A background run's pass stops here: no throttle is waited out past it.
+    deadline: Option<Instant>,
 }
 
 impl<'a> GraphBackend<'a> {
+    /// Whether `id` is listed in `folder`: mapped, and its row landed (a pass cut off between the
+    /// two leaves a mapping with no row, which is still news).
+    fn is_listed(&self, folder: &str, id: &str) -> Result<bool, Fail> {
+        let account = self.account.as_str();
+        Ok(self
+            .shared
+            .read(|c| {
+                c.query_row(
+                    "SELECT 1 FROM remote_ids r JOIN messages m ON m.account_id = r.account_id AND m.folder = r.folder AND m.uid = r.uid
+                     WHERE r.account_id = ?1 AND r.folder = ?2 AND r.remote_id = ?3",
+                    (account, folder, id),
+                    |_| Ok(()),
+                )
+                .optional()
+            })?
+            .is_some())
+    }
+
     /// Whether `id` already has a local uid in `folder` (a pass listed it).
     fn is_mapped(&self, folder: &str, id: &str) -> Result<bool, Fail> {
         let account = self.account.as_str();
@@ -281,6 +302,7 @@ impl<'a> GraphBackend<'a> {
             worked: false,
             newest: None,
             stop: None,
+            deadline: None,
         };
         backend.set_token(token);
         Ok(backend)
@@ -303,6 +325,9 @@ impl<'a> GraphBackend<'a> {
 
     /// Waits `wait` in slices of at most a second, stopping early when the engine closes.
     fn pause(&self, wait: Duration) -> Result<(), CallErr> {
+        if self.deadline.is_some_and(|d| Instant::now() + wait >= d) {
+            return Err(CallErr::Fail(Fail::Code(Code::Timeout, "throttled past the background run's budget".into())));
+        }
         let mut left = wait;
         while !left.is_zero() {
             sync::not_closing(self.shared).map_err(CallErr::Fail)?;
@@ -340,7 +365,7 @@ impl<'a> GraphBackend<'a> {
                     // IMAP account whose server refuses a fresh token.
                     let why = self.scrub(e);
                     return Err(CallErr::Fail(
-                        crate::oauth::fresh_token_refused(self.shared, &self.account).unwrap_or(Fail::Code(Code::AuthFailed, why)),
+                        crate::oauth::fresh_token_refused(self.shared, &self.account, &self.token).unwrap_or(Fail::Code(Code::AuthFailed, why)),
                     ));
                 }
                 refreshed = true;
@@ -469,6 +494,25 @@ impl<'a> GraphBackend<'a> {
         Ok(Some(out))
     }
 
+    /// Local uids for listed `rows` of `folder`: known ids keep theirs; new ones get the next,
+    /// oldest first. A message a page boundary showed twice counts once.
+    fn map_listed(&self, folder: &str, mut rows: Vec<GraphSynced>) -> Result<HashMap<u32, GraphSynced>, Fail> {
+        let mut ids: HashSet<String> = HashSet::new();
+        rows.retain(|r| ids.insert(r.message.id.clone()));
+        let account = self.account.clone();
+        let known = self.shared.read(|c| remote_ids::folder_map(c, &account, folder))?;
+        let received = |r: &GraphSynced| r.message.received_date_time.as_deref().and_then(sync::rfc3339_ms).unwrap_or(0);
+        let mut fresh: Vec<(i64, String)> = rows.iter().filter(|r| !known.contains_key(&r.message.id)).map(|r| (received(r), r.message.id.clone())).collect();
+        fresh.sort();
+        let mut uids = known;
+        for chunk in fresh.chunks(BATCH) {
+            let ids: Vec<String> = chunk.iter().map(|(_, id)| id.clone()).collect();
+            let got = sync::write_for(self.shared, &account, |c| remote_ids::uids_for(c, &account, folder, &ids))?;
+            uids.extend(ids.into_iter().zip(got));
+        }
+        Ok(rows.into_iter().filter_map(|r| uids.get(&r.message.id).map(|u| (*u, r))).collect())
+    }
+
     /// Writes the mapping changes of an apply: `forget` drops `(folder, uid)`, `moved` maps a new
     /// id in `target`. Returns the `(old uid, new uid)` pairs.
     fn remap(&self, folder: &str, forget: &[u32], target: Option<&str>, moved: &[(u32, String)]) -> Result<Vec<(u32, u32)>, Fail> {
@@ -542,23 +586,27 @@ impl Backend for GraphBackend<'_> {
                 None => break,
             }
         }
-        // A message a page boundary showed twice counts once.
-        let mut ids: HashSet<String> = HashSet::new();
-        rows.retain(|r| ids.insert(r.message.id.clone()));
-
-        // Local uids: known ids keep theirs; new ones get the next, oldest first.
+        // The mappings as they were before the listing: only these can be judged by it (a move
+        // replay maps into this folder meanwhile, and that mapping must stay).
         let account = self.account.clone();
-        let known = self.shared.read(|c| remote_ids::folder_map(c, &account, folder))?;
-        let received = |r: &GraphSynced| r.message.received_date_time.as_deref().and_then(sync::rfc3339_ms).unwrap_or(0);
-        let mut fresh: Vec<(i64, String)> = rows.iter().filter(|r| !known.contains_key(&r.message.id)).map(|r| (received(r), r.message.id.clone())).collect();
-        fresh.sort();
-        let mut uids = known;
-        for chunk in fresh.chunks(BATCH) {
-            let ids: Vec<String> = chunk.iter().map(|(_, id)| id.clone()).collect();
-            let got = sync::write_for(self.shared, &account, |c| remote_ids::uids_for(c, &account, folder, &ids))?;
-            uids.extend(ids.into_iter().zip(got));
-        }
-        let listed: HashMap<u32, GraphSynced> = rows.into_iter().filter_map(|r| uids.get(&r.message.id).map(|u| (*u, r))).collect();
+        let before = self.shared.read(|c| remote_ids::folder_map(c, &account, folder))?;
+        let listed = self.map_listed(folder, rows)?;
+        // A mapping no longer listed and with no row (its row never landed, or the message moved
+        // here from outside the window): nothing else would ever remove it. One with a row goes
+        // with the row (`sync::delete_uids`); one a pending action names is the journal's.
+        let rows_held: HashSet<u32> = self.shared.read(|c| {
+            let mut st = c.prepare_cached("SELECT uid FROM messages WHERE account_id = ?1 AND folder = ?2")?;
+            let rows = st.query_map((&account, folder), |r| r.get::<_, i64>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows.into_iter().map(|u| u as u32).collect())
+        })?;
+        let pending: HashSet<u32> = self.shared.read(|c| {
+            let mut st = c.prepare_cached(crate::actions::PENDING_UIDS)?;
+            let rows = st.query_map((&account, folder), |r| r.get::<_, i64>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows.into_iter().map(|u| u as u32).collect())
+        })?;
+        let orphans: Vec<u32> =
+            before.values().copied().filter(|u| !listed.contains_key(u) && !rows_held.contains(u) && !pending.contains(u)).collect();
+        self.remap(folder, &orphans, None, &[])?;
         let window: Vec<u32> = listed.keys().copied().collect();
         self.listed = Some((folder.to_string(), listed));
         let (unseen, _) = self.counts(folder)?;
@@ -574,6 +622,10 @@ impl Backend for GraphBackend<'_> {
                 let mut h = row.message.to_email_header(*uid);
                 if row.flagged {
                     h.flags.push("\\Flagged".into());
+                }
+                // Where a reply goes (core's header leaves it unset for Graph).
+                if let Some(to) = row.reply_to.first() {
+                    h.reply_to = Some(to.clone());
                 }
                 Some(h)
             })
@@ -748,6 +800,21 @@ impl Backend for GraphBackend<'_> {
                     }
                 }
                 let pairs = self.remap(path, &[], Some(target), &moved)?;
+                // Failed part way after some moved: what moved is recorded (its follow-ups follow
+                // it), and the rest is retried.
+                if let (Some(e), false) = (&failed, moved.is_empty()) {
+                    let fail = match e {
+                        CallErr::Fail(Fail::Code(code, why)) => Some((*code, why.clone())),
+                        CallErr::Fail(_) => None,
+                        CallErr::Text(t) => match refused_or_fail(t.clone()) {
+                            Err(Fail::Code(code, why)) => Some((code, why)),
+                            _ => None,
+                        },
+                    };
+                    if let Some(error) = fail {
+                        return Ok(ApplyOutcome::Partial { gone, moved: Moved { pairs, uid_validity: Some(GENERATION) }, error });
+                    }
+                }
                 match failed {
                     Some(CallErr::Fail(f)) => Err(f),
                     Some(CallErr::Text(e)) => refused_or_fail(e),
@@ -817,8 +884,27 @@ impl Backend for GraphBackend<'_> {
         let remote = remote_folder(&folder.path).to_string();
         match self.call(async |c| c.newest_in(&remote).await)? {
             None => Ok(false),
-            Some((id, _)) => Ok(!self.is_mapped(&folder.path, &id)?),
+            Some((id, _)) => Ok(!self.is_listed(&folder.path, &id)?),
         }
+    }
+
+    /// One page, newest first, of what was received since the newest message held (a second
+    /// early, for messages of the same second): usually one small request, never the window.
+    fn arrivals(&mut self, folder: &FolderRow, _newest_uid: u32, newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
+        if folder.uid_validity.is_some_and(|v| v != GENERATION) {
+            return Ok(None);
+        }
+        let remote = remote_folder(&folder.path).to_string();
+        let since = timestamp((newest_ms - 1000).max(sync::window_start_ms(crate::compose::now_ms())));
+        let (rows, _more) = self.call(async |c| c.list_since(&remote, &since, None).await)?;
+        let listed = self.map_listed(&folder.path, rows)?;
+        let uids: Vec<u32> = listed.keys().copied().collect();
+        self.listed = Some((folder.path.clone(), listed));
+        Ok(Some(uids))
+    }
+
+    fn set_deadline(&mut self, deadline: Option<Instant>) {
+        self.deadline = deadline;
     }
 
     fn wait_for_change(&mut self, folder: &FolderRow, watch: &Watch) -> Result<Change, Fail> {
@@ -839,6 +925,13 @@ mod tests {
         assert_eq!(status_of("Graph move_message failed (404) {\"error\":{}}"), Some(404));
         assert_eq!(status_of("Graph list_since failed (429:retry_after=3) x"), Some(429));
         assert_eq!(status_of("Graph list_since request failed: error sending request"), None);
+    }
+
+    /// A folder Graph refuses (403) is no sign-in problem: a new sign-in would not fix it.
+    #[test]
+    fn a_403_is_not_an_auth_failure() {
+        assert!(matches!(graph_fail("Graph get_folder failed (403) {\"error\":{\"code\":\"ErrorAccessDenied\"}}".into()), Fail::Code(Code::Invalid, _)));
+        assert!(matches!(graph_fail("Graph get_folder failed (401) expired".into()), Fail::Code(Code::AuthFailed, _)));
     }
 
     #[test]

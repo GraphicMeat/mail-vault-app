@@ -379,9 +379,6 @@ pub(crate) fn drop_folder_actions(
 struct Retry {
     at: Instant,
     delay: Duration,
-    /// The head failed to sign in. A new apply or a refresh does not forgive this backoff: each
-    /// would be one more login with a password the server already refused.
-    auth: bool,
 }
 
 struct ReplayState {
@@ -408,8 +405,8 @@ struct Queue {
     cv: Condvar,
 }
 
-/// The engine's replay worker. The thread starts on the first wake.
-#[derive(Default)]
+/// The engine's replay worker. The thread starts on the first wake. A clone wakes the same worker.
+#[derive(Default, Clone)]
 pub(crate) struct Replay {
     queue: Arc<Queue>,
 }
@@ -424,8 +421,8 @@ fn next_delay(prev: Option<Duration>, base: Duration, cap: Duration) -> Duration
 
 impl Replay {
     /// Starts the worker if needed and makes it look at the journal now. With `account`, that
-    /// account's backoff is forgiven (the user just acted or refreshed, so try at once), unless its
-    /// head last failed to sign in.
+    /// account's backoff is forgiven (the user just acted, refreshed or retried, so try at once).
+    /// A refused password is never retried this way: the account is held (`hold.rs`) and skipped.
     pub(crate) fn wake(&self, shared: &Arc<Shared>, account: Option<&str>) {
         let mut st = lock(&self.queue.state);
         if st.stop {
@@ -442,9 +439,7 @@ impl Replay {
             }
         }
         if let Some(a) = account {
-            if !st.retry.get(a).is_some_and(|r| r.auth) {
-                st.retry.remove(a);
-            }
+            st.retry.remove(a);
         }
         st.kicked = true;
         self.queue.cv.notify_all();
@@ -467,12 +462,15 @@ impl Replay {
 fn pending_accounts(shared: &Shared) -> Vec<String> {
     shared
         .read(|c| {
-            // An account waiting for a new sign-in is parked: its journal stays until reauth wakes it.
-            let mut st = c.prepare_cached(
+            // An account waiting for a new sign-in is parked, and one whose password the server
+            // refused is held: its journal stays until reauth, or the user's Retry, wakes it.
+            let mut st = c.prepare_cached(&format!(
                 "SELECT account_id FROM pending_actions p
                  WHERE NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = p.account_id AND a.needs_auth != 0)
+                 AND {}
                  GROUP BY account_id ORDER BY min(seq)",
-            )?;
+                crate::hold::NOT_HELD_SQL.replace("{account}", "p.account_id")
+            ))?;
             let rows = st.query_map([], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
             Ok(rows)
         })
@@ -518,9 +516,9 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
                 Ok(()) => {
                     st.retry.remove(account);
                 }
-                Err(code) => {
+                Err(_) => {
                     let delay = next_delay(st.retry.get(account).map(|r| r.delay), st.base, st.cap);
-                    st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, delay, auth: code == Code::AuthFailed });
+                    st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, delay });
                 }
             }
         }
@@ -609,6 +607,7 @@ fn replay_account(shared: &Shared, account: &str) -> Result<(), Code> {
 /// Marks the account's head `retrying` with the failure's code and reports it. `why` is for the log
 /// only (scrubbed of the password by the caller).
 fn fail_head(shared: &Shared, account: &str, code: Code, why: &str) {
+    crate::hold::note_failure(shared, account, code);
     let marked = shared.write(|c| {
         let seq: Option<i64> = c
             .query_row("SELECT seq FROM pending_actions WHERE account_id = ?1 ORDER BY seq LIMIT 1", [account], |r| r.get(0))
@@ -649,6 +648,8 @@ enum Outcome {
     Dropped { reason: Reason, uids_gone: bool },
     /// The server answered the command with a refusal (core's text, for the log).
     Refused(String),
+    /// Done for `done` (moved, with `remap`) and `gone`; failed for the rest with the failure.
+    Partial { done: Vec<u32>, gone: Vec<u32>, remap: Remap, error: (Code, String) },
 }
 
 /// Replays the account's actions until the journal is empty (`Ok(true)`) or the head was refused
@@ -669,6 +670,10 @@ fn drain(shared: &Shared, backend: &mut dyn Backend, account: &str) -> Result<bo
                 return Ok(false);
             }
             continue;
+        }
+        if let Outcome::Partial { done, gone, remap, error } = outcome {
+            record_partial(shared, account, &a, &done, &gone, &remap)?;
+            return Err(Fail::Code(error.0, error.1));
         }
         record(shared, account, &a, outcome)?;
     }
@@ -740,7 +745,28 @@ fn run_action(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jou
         // Another generation: the journaled uids name other messages, or none.
         ApplyOutcome::OtherGeneration => Outcome::Dropped { reason: Reason::Gone, uids_gone: false },
         ApplyOutcome::Refused(why) => Outcome::Refused(why),
+        ApplyOutcome::Partial { gone, moved, error } => Outcome::Partial {
+            done: moved.pairs.iter().map(|(old, _)| *old).collect(),
+            gone,
+            remap: Remap { target: target.unwrap_or_default().to_string(), pairs: moved.pairs, validity: moved.uid_validity },
+            error,
+        },
     })
+}
+
+/// A move that went part way: the head keeps only the uids still to move (and stays queued for a
+/// retry), later rows that name only moved uids follow them to the target, and the moved and gone
+/// rows leave the source. One write transaction for the journal, then the rows.
+fn record_partial(shared: &Shared, account: &str, a: &Journaled, done: &[u32], gone: &[u32], remap: &Remap) -> Result<(), Fail> {
+    let rest: Vec<u32> = a.uids.iter().copied().filter(|u| !done.contains(u) && !gone.contains(u)).collect();
+    sync::write_for(shared, account, |c| {
+        if c.execute("UPDATE pending_actions SET uids_json = ?2 WHERE seq = ?1", (a.seq, serde_json::to_string(&rest).unwrap_or_default()))? == 0 {
+            return Ok(());
+        }
+        remap_later(c, account, a, remap)
+    })?;
+    let left: Vec<u32> = done.iter().chain(gone).copied().collect();
+    remove_rows(shared, account, &a.folder, &left)
 }
 
 /// Rewrites the account's later journal rows that name only uids the move took from `a.folder`, to
@@ -797,6 +823,7 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
     match outcome {
         // Counted by `refuse`, which records the drop at the limit.
         Outcome::Refused(why) => refuse(shared, account, a, &why).map(|_| ()),
+        Outcome::Partial { done, gone, remap, .. } => record_partial(shared, account, a, &done, &gone, &remap),
         Outcome::Done { gone, remap, kept } => {
             let gen = shared.list_gen(account, &a.folder)? + 1;
             let settled = sync::write_for(shared, account, |c| {

@@ -84,6 +84,9 @@ pub(crate) struct Live {
     timing: Mutex<Timing>,
     /// Live threads not yet exited, a stopping one included.
     alive: Arc<AtomicUsize>,
+    /// The accounts put in front since the app last left it: their INBOX watermarks move past what
+    /// the list showed when it leaves (`background::seen_in_front`).
+    shown: Mutex<Vec<String>>,
 }
 
 impl Live {
@@ -279,7 +282,13 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
         *applied = seq;
     }
     let account = match (p.foreground, p.account_id) {
-        (true, Some(a)) => a,
+        (true, Some(a)) => {
+            let mut shown = lock(&engine.live().shown);
+            if !shown.contains(&a) {
+                shown.push(a.clone());
+            }
+            a
+        }
         // The shell's OS resume: the account the page last put in front.
         (true, None) if p.resumed => match lock(&engine.live().last).clone() {
             Some(a) => a,
@@ -287,6 +296,18 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
         },
         _ => {
             engine.live().stop();
+            if !p.foreground {
+                // The user saw these accounts' lists: what they showed is no news for a later
+                // background run. The account in front stays shown until the app comes back.
+                let mut shown: Vec<String> = std::mem::take(&mut *lock(&engine.live().shown));
+                if let Some(last) = lock(&engine.live().last).clone() {
+                    if !shown.contains(&last) {
+                        shown.push(last.clone());
+                    }
+                    lock(&engine.live().shown).push(last);
+                }
+                crate::background::seen_in_front(engine.shared(), &shown);
+            }
             return Ok(json!({ "live": false }));
         }
     };

@@ -50,6 +50,8 @@ pub struct Msg {
     pub flagged: bool,
     pub has_attachments: bool,
     pub internet_message_id: String,
+    /// `replyTo`'s one address, if any.
+    pub reply_to: Option<String>,
     /// The body as Graph serves it (HTML).
     pub body_html: String,
     pub attachments: Vec<Att>,
@@ -92,6 +94,8 @@ pub struct State {
     pub delete_after_moves: Option<(u32, String)>,
     /// Listing a message's attachments answers 503.
     pub fail_attachments: bool,
+    /// `(n, k)`: after `n` more successful moves, the next `k` moves answer 503.
+    pub fail_moves_after: Option<(u32, u32)>,
     /// An attachment's `$value` is written 64 KiB at a time with this pause between.
     pub slow_value_ms: u64,
     next_id: u64,
@@ -254,6 +258,7 @@ impl GraphMock {
             flagged: false,
             has_attachments: false,
             internet_message_id: format!("<m{n}@example.com>"),
+            reply_to: None,
             body_html: body_html.to_string(),
             attachments: Vec::new(),
         });
@@ -300,6 +305,18 @@ impl GraphMock {
 
     pub fn drop_send(&self, on: bool) {
         self.st().drop_send = on;
+    }
+
+    /// After `n` more successful moves, the next `k` moves answer 503 (a transient failure).
+    pub fn fail_moves_after(&self, n: u32, k: u32) {
+        self.st().fail_moves_after = Some((n, k));
+    }
+
+    /// Message `id`'s Reply-To.
+    pub fn set_reply_to(&self, id: &str, address: &str) {
+        if let Some(m) = self.st().messages.iter_mut().find(|m| m.id == id) {
+            m.reply_to = Some(address.to_string());
+        }
     }
 
     /// After `n` more successful moves, folder `id` is deleted (with what is in it).
@@ -389,6 +406,7 @@ fn message_json(m: &Msg, me: &str) -> Value {
         "isRead": m.is_read,
         "hasAttachments": m.has_attachments,
         "internetMessageId": m.internet_message_id,
+        "replyTo": m.reply_to.iter().map(|a| json!({ "emailAddress": { "name": "Reply Desk", "address": a } })).collect::<Vec<_>>(),
         "flag": { "flagStatus": if m.flagged { "flagged" } else { "notFlagged" } },
         "parentFolderId": m.folder,
         "body": { "contentType": "html", "content": m.body_html },
@@ -654,6 +672,15 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             ok_json(v)
         }
         ("POST", ["me", "messages", id, "move"]) => {
+            match st.fail_moves_after {
+                Some((0, k)) => {
+                    st.fail_moves_after = (k > 1).then_some((0, k - 1));
+                    let body = json!({ "error": { "code": "ServiceUnavailable", "message": "Try again." } });
+                    return (503, body.to_string().into_bytes(), Vec::new());
+                }
+                Some((n, k)) => st.fail_moves_after = Some((n - 1, k)),
+                None => {}
+            }
             let body: Value = serde_json::from_slice(&req.body).unwrap_or_default();
             let dest = body["destinationId"].as_str().unwrap_or("").to_string();
             let Some(target) = st.folder(&dest).map(|f| f.id.clone()) else { return not_found() };
@@ -713,6 +740,7 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
                     flagged: false,
                     has_attachments: false,
                     internet_message_id: String::new(),
+                    reply_to: None,
                     body_html: String::new(),
                     attachments: Vec::new(),
                 });

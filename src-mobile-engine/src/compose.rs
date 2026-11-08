@@ -232,13 +232,22 @@ fn mime_of(name: &str) -> &'static str {
     }
 }
 
-/// `a`, checked: the handle resolves to a picked file, and name, size and type are the file's.
+/// A `type/subtype` media type as a server names one: ASCII token characters only.
+fn plausible_mime(m: &str) -> bool {
+    let token = |s: &str| !s.is_empty() && s.len() <= 127 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$&-^_.+".contains(&b));
+    matches!(m.split_once('/'), Some((t, s)) if token(t) && token(s))
+}
+
+/// `a`, checked: the handle resolves to a picked file, and name and size are the file's. The
+/// type is the one the page sent when it is a plain media type (a forwarded part keeps what the
+/// server called it, whatever its name says), else the file name's.
 /// `None` when it does not resolve.
 fn checked(cache_dir: &Path, a: &Attached) -> Option<Attached> {
     let path = resolve_outgoing(cache_dir, &a.handle).ok()?;
     let size = std::fs::metadata(&path).ok()?.len();
     let name = a.handle.rsplit('/').next().unwrap_or_default().to_string();
-    let mime = mime_of(&name).to_string();
+    let sent = a.mime.trim().to_ascii_lowercase();
+    let mime = if plausible_mime(&sent) && sent != "application/octet-stream" { sent } else { mime_of(&name).to_string() };
     Some(Attached { handle: a.handle.clone(), name, size, mime })
 }
 

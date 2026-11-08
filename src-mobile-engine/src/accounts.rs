@@ -57,7 +57,7 @@ impl Code {
 /// signing in" is a network failure even though it mentions signing in.
 ///
 /// Anything unrecognised is `Invalid` with core's message, except text that names a connection
-/// level failure, which is `HostUnreachable`.
+/// level failure, or a refusal the server marks as temporary, which is `HostUnreachable`.
 pub fn map_error(msg: &str) -> Code {
     let m = msg.to_ascii_lowercase();
     let has = |needles: &[&str]| needles.iter().any(|n| m.contains(n));
@@ -68,6 +68,10 @@ pub fn map_error(msg: &str) -> Code {
     } else if has(&["connection lost", "connection abort", "not connected", "broken pipe", "connection reset"])
         || mailvault_core::imap::pool::is_connection_lost(msg)
     {
+        Code::HostUnreachable
+    } else if has(&["[unavailable]", "[inuse]", "[limit]", "[serverbug]"]) {
+        // RFC 5530 says these are temporary (Gmail's XOAUTH2 `NO [UNAVAILABLE] Temporary System
+        // Problem` among them): never a wrong password or token, whatever words come before.
         Code::HostUnreachable
     } else if has(&["login failed", "auth failed", "authenticationfailed", "invalid credentials", "authentication failed"]) {
         Code::AuthFailed
@@ -319,7 +323,8 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
     let accounts = engine
         .read(|c| {
             let mut st = c.prepare_cached(
-                "SELECT id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, kind, provider, needs_auth
+                "SELECT id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, kind, provider, needs_auth,
+                        auth, EXISTS(SELECT 1 FROM settings s WHERE s.key = 'bg.authRefused.' || accounts.id)
                  FROM accounts ORDER BY created_ms, id",
             )?;
             let rows = st
@@ -336,6 +341,10 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
                     a["kind"] = json!(r.get::<_, String>(9)?);
                     a["provider"] = json!(r.get::<_, Option<String>>(10)?);
                     a["needsAuth"] = json!(r.get::<_, i64>(11)? != 0);
+                    // Signs in with OAuth (a refused grant is `needsAuth`), not a password.
+                    a["oauth"] = json!(r.get::<_, String>(12)? == "oauth2");
+                    // The server refused its password: nothing dials it until the user's Retry.
+                    a["authRefused"] = json!(r.get::<_, bool>(13)?);
                     Ok(a)
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -440,6 +449,20 @@ struct RemoveParams {
 
 pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: RemoveParams = parse(params)?;
+    // The picked files its drafts and unsent outbox rows hold, released once the rows are gone.
+    let dirs: Vec<String> = engine
+        .read(|c| {
+            let mut st = c.prepare(
+                "SELECT json FROM drafts WHERE account_id = ?1
+                 UNION ALL SELECT draft_json FROM outbox WHERE account_id = ?1 AND state != 'sent'",
+            )?;
+            let rows = st.query_map([&p.account_id], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .map_err(internal)?
+        .iter()
+        .flat_map(|j| crate::compose::Fields::read(j).dirs())
+        .collect();
     let existed = engine
         .write(|c| {
             for t in PER_ACCOUNT_TABLES {
@@ -450,6 +473,8 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
         })
         .map_err(internal)?;
     engine.shared().jmap.forget(&p.account_id);
+    crate::oauth::forget(engine.shared(), &p.account_id);
+    crate::outbox::release_dirs(engine.shared(), engine.cache_dir(), &dirs);
     // Its live listener, if it has one, hangs up now rather than at its next failed connect.
     engine.live().stop_account(&p.account_id);
     // Rows first: a failure here leaves a secret for an account that is gone, and repeating the
@@ -466,6 +491,21 @@ mod tests {
     fn auth_failed() {
         assert_eq!(map_error("Login failed for u@example.test: NO [AUTHENTICATIONFAILED] Invalid credentials"), Code::AuthFailed);
         assert_eq!(map_error("XOAUTH2 auth failed for u@x: NO Invalid credentials"), Code::AuthFailed);
+    }
+
+    /// A refusal the server marks as temporary (RFC 5530) is no wrong password or token: Gmail's
+    /// `NO [UNAVAILABLE] Temporary System Problem` must never hold or park an account.
+    #[test]
+    fn a_temporary_refusal_is_not_an_auth_failure() {
+        for e in [
+            "XOAUTH2 auth failed for u@gmail.com: NO [UNAVAILABLE] Temporary System Problem. Try again later.",
+            "Login failed for u@example.test: NO [UNAVAILABLE] Server busy",
+            "Login failed for u@example.test: NO [INUSE] Mailbox in use",
+            "Login failed for u@example.test: NO [LIMIT] Too many connections",
+            "Login failed for u@example.test: NO [SERVERBUG] Oops",
+        ] {
+            assert_eq!(map_error(e), Code::HostUnreachable, "{e}");
+        }
     }
 
     #[test]

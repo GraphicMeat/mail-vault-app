@@ -395,15 +395,14 @@ fn auth_failure_stays_queued() {
     assert_eq!(f.row(1).unwrap()["flagged"], true);
     let first = f.events.result(from, seq);
     assert_eq!(first, json!({ "seq": seq, "accountId": f.account, "outcome": "retrying", "reason": "AUTH_FAILED" }));
-    // It retries on the backoff, and stays queued.
-    let n = f.events.len();
-    let again = f.events.result(n, seq);
-    assert_eq!(again["outcome"], "retrying");
+    // It stays queued, and the refused password is not tried again on any backoff (servers ban
+    // an address after a few failed logins): the account is held until the user's Retry.
+    std::thread::sleep(Duration::from_millis(600));
     let p = f.pending();
     assert_eq!(p.len(), 1, "{p:?}");
     assert_eq!(p[0]["state"], "retrying");
     assert_eq!(p[0]["lastError"], "AUTH_FAILED");
-    assert!(server.count_commands("LOGIN") >= 2, "{:?}", server.commands());
+    assert_eq!(server.count_commands("LOGIN"), 1, "{:?}", server.commands());
     assert!(!has(&server_flags(&server, "INBOX", 1), "\\Flagged"));
     assert_eq!(f.row(1).unwrap()["flagged"], true);
 
@@ -415,7 +414,9 @@ fn auth_failure_stays_queued() {
         .unwrap();
     assert!(!journal.contains(PASSWORD), "{journal}");
 
+    // The password works again and the user taps Retry: the queued flag goes out on its own.
     server.reset_scenario(scenario(&[1]));
+    f.engine.rpc("mobile.accounts.retrySignIn", json!({ "accountId": f.account })).unwrap();
     assert_eq!(f.events.final_result(seq)["outcome"], "done");
     assert!(has(&server_flags(&server, "INBOX", 1), "\\Flagged"));
     assert!(f.pending().is_empty());

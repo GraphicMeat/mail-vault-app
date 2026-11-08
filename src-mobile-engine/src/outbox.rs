@@ -236,7 +236,8 @@ struct Queue {
     cache_dir: PathBuf,
 }
 
-/// The engine's outbox worker. The thread starts on the first wake.
+/// The engine's outbox worker. The thread starts on the first wake. A clone wakes the same worker.
+#[derive(Clone)]
 pub(crate) struct Outbox {
     queue: Arc<Queue>,
 }
@@ -306,12 +307,15 @@ impl Outbox {
 fn queued_accounts(shared: &Shared) -> Vec<String> {
     shared
         .read(|c| {
-            // An account waiting for a new sign-in is parked: its rows stay queued until reauth.
-            let mut st = c.prepare_cached(
+            // An account waiting for a new sign-in is parked, and one whose password the server
+            // refused is held: its rows stay queued until reauth, or the user's Retry, wakes it.
+            let mut st = c.prepare_cached(&format!(
                 "SELECT account_id FROM outbox o WHERE state = 'queued'
                  AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = o.account_id AND a.needs_auth != 0)
+                 AND {}
                  GROUP BY account_id ORDER BY min(created_ms)",
-            )?;
+                crate::hold::NOT_HELD_SQL.replace("{account}", "o.account_id")
+            ))?;
             let rows = st.query_map([], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
             Ok(rows)
         })
@@ -394,6 +398,7 @@ fn queued_ids(shared: &Shared, account: &str) -> Result<Vec<String>, Fail> {
 
 /// Puts every queued row of `account` on hold after a failure to reach the server.
 fn hold_account(shared: &Shared, account: &str, code: Code, why: &str) {
+    crate::hold::note_failure(shared, account, code);
     let ids = queued_ids(shared, account).unwrap_or_default();
     shared.log(&format!("[outbox] {account}: {} {why}", code.as_str()));
     for id in ids {

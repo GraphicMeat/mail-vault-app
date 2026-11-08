@@ -463,7 +463,8 @@ fn wrong_password_ends_in_error_state() {
     let from = f.events.len();
     f.refresh(None);
     let end = f.events.wait(from, "sync end", |n, v| n == "mobile.sync.state" && (v["state"] == "idle" || v["state"] == "error"));
-    assert_eq!(end, json!({ "accountId": f.account, "state": "error", "code": "AUTH_FAILED" }));
+    // A refused password holds the account until the user's Retry (`hold.rs`).
+    assert_eq!(end, json!({ "accountId": f.account, "state": "error", "code": "AUTH_FAILED", "held": true }));
 }
 
 #[test]

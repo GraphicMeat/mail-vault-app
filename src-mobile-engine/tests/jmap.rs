@@ -741,3 +741,24 @@ fn a_cut_text_beside_a_whole_html_is_a_cut_body() {
     let cached: i64 = f.db().query_row("SELECT count(*) FROM bodies WHERE uid = ?1", [uid], |r| r.get(0)).unwrap();
     assert_eq!(cached, 0);
 }
+
+#[test]
+fn the_attachments_of_a_body_the_server_cuts_short_can_still_be_opened() {
+    let long = "z".repeat(2 * 1024 * 1024 + 4096);
+    let pdf = b64_lines(b"%PDF-1.4 attached to a long mail");
+    let raw = format!(
+        "From: Alice <alice@example.test>\r\nTo: {ME}\r\nSubject: LongAtt\r\nMessage-ID: <longatt@example.test>\r\nDate: Mon, 05 Jan 2026 10:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"MIX\"\r\n\r\n--MIX\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{long}\r\n--MIX\r\nContent-Type: application/pdf; name=\"a.pdf\"\r\nContent-Disposition: attachment; filename=\"a.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\n{pdf}\r\n--MIX--\r\n"
+    );
+    let e = ScenarioEmail { id: "longatt".into(), raw, keywords: vec![], received_at: iso(now_secs() - 60), also_in: vec![] };
+    let f = setup(scenario(vec![e]));
+    f.sync(None);
+    let uid = f.uids("INBOX")["LongAtt"];
+    let body = f.body("INBOX", uid);
+    assert_eq!(body["truncated"], true);
+    let parts = body["attachments"].as_array().cloned().unwrap_or_default();
+    let section = parts.iter().find(|p| p["filename"] == "a.pdf").unwrap_or_else(|| panic!("no attachment listed: {body}"))["section"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(f.fetch(uid, &section).is_ok(), "the listed attachment can be fetched");
+}

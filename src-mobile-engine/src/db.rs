@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 const READERS: usize = 2;
 
 /// Schema 2, frozen: a new file is built as schema 2 plus every forward step, so it cannot drift
@@ -170,8 +170,25 @@ CREATE TABLE sync_state (
 ) WITHOUT ROWID;
 ";
 
+/// Schema 3 to 4: what the background run needs to never notify a message twice. `notify_state`
+/// gains the folder generation its watermark belongs to (a new UIDVALIDITY takes a new baseline)
+/// and when the baseline was taken (mail that arrived before it is never news). `notified` holds
+/// the identity (Message-ID, else the remote id) of every message a run notified, per account,
+/// pruned after 30 days: a message that comes back under a new uid is not notified again.
+const V3_TO_V4: &str = "
+ALTER TABLE notify_state ADD COLUMN uid_validity INTEGER;
+ALTER TABLE notify_state ADD COLUMN since_ms INTEGER;
+CREATE TABLE notified (
+  account_id TEXT NOT NULL,
+  key        TEXT NOT NULL,
+  ms         INTEGER NOT NULL,
+  PRIMARY KEY (account_id, key)
+) WITHOUT ROWID;
+";
+
 /// Every table any schema version created; a rebuild drops them all (their indexes go with them).
 const ALL_TABLES: &[&str] = &[
+    "notified",
     "sync_state",
     "notify_state",
     "settings",
@@ -200,6 +217,7 @@ pub(crate) const PER_ACCOUNT_TABLES: &[&str] = &[
     "outbox",
     "drafts",
     "notify_state",
+    "notified",
     "sync_state",
 ];
 
@@ -272,6 +290,8 @@ pub(crate) struct Shared {
     /// Bumped each time an account is parked (`needs_auth = 1`): a live listener reads it on
     /// every stop check and reads the database only when it moved.
     pub(crate) parks: std::sync::atomic::AtomicU64,
+    /// Background runs whose mail was returned and not committed yet (`background.rs`).
+    pub(crate) background: crate::background::Pending,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -353,6 +373,9 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         }
         if found < 3 {
             tx.execute_batch(V2_TO_V3)?;
+        }
+        if found < 4 {
+            tx.execute_batch(V3_TO_V4)?;
         }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;
@@ -438,6 +461,7 @@ impl Engine {
                 oauth: crate::oauth::OAuth::default(),
                 jmap: crate::backend::jmap::Sessions::default(),
                 parks: std::sync::atomic::AtomicU64::new(0),
+                background: crate::background::Pending::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -550,8 +574,13 @@ impl Engine {
         })
     }
 
-    /// Stores `value` under `key`, replacing what was there. Never a secret.
+    /// Stores `value` under `key`, replacing what was there. Never a secret. The user's settings
+    /// (`notifications`, `notificationPreview`) go through the same checks and side effects as
+    /// `mobile.settings.set` (turning notifications on takes the background run's baseline).
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), EngineError> {
+        if let Some(r) = crate::settings::set_user_key(self, key, value) {
+            return r;
+        }
         self.write(|c| {
             c.execute(
                 "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",

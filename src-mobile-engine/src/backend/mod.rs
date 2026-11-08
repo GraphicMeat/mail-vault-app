@@ -136,6 +136,10 @@ pub(crate) enum ApplyOutcome {
     OtherGeneration,
     /// The server answered a command with a refusal (its text, for the log).
     Refused(String),
+    /// A move that failed part way (a transient failure after some messages moved): `moved` went
+    /// (the journal records them and their follow-ups follow them), `gone` were not there, the
+    /// rest is retried. `error` is the failure's code and text.
+    Partial { gone: Vec<u32>, moved: Moved, error: (crate::accounts::Code, String) },
 }
 
 /// The journal's hook into [`Backend::apply`]: called once, right before the first command that
@@ -288,6 +292,17 @@ pub(crate) trait Backend: Send {
     fn has_news(&mut self, _folder: &FolderRow) -> Result<bool, Fail> {
         Ok(true)
     }
+    /// A background run's cheap listing: the uids (local uids mapped as for [`Backend::window`])
+    /// of the messages in `folder` that may have arrived since the newest one held (`newest_uid`,
+    /// received at `newest_ms`), ready for [`Backend::headers`]. May include ones already held;
+    /// the caller skips those. `None` when the backend has no cheap way, or the folder's
+    /// generation is not `folder.uid_validity`: the full pass runs. Never stores delta state.
+    fn arrivals(&mut self, _folder: &FolderRow, _newest_uid: u32, _newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
+        Ok(None)
+    }
+    /// The moment a background run's pass must stop: a backend does not wait out a throttle past
+    /// it. `None` (the default) for every other pass.
+    fn set_deadline(&mut self, _deadline: Option<Instant>) {}
     /// The pass over `folder` wrote everything it read (flags, removals, new rows). A backend
     /// commits here what must never run ahead of those writes (JMAP: the Email state its next
     /// `flags` follows). Not called when the pass failed or stopped part way.
@@ -314,16 +329,31 @@ pub(crate) trait Backend: Send {
 /// Signs in to `account_id` with the backend its `kind` names. `Fail::Gone` when the account does
 /// not exist, [`Fail::auth`] with no network at all while it waits for a new sign-in
 /// (`needs_auth = 1`). The backend may keep `shared` for its mapping writes (see the module doc).
+///
+/// A password-style account (password, app password, JMAP token) whose sign-in the server refused
+/// is held for every worker (`hold.rs`): [`Fail`] `AUTH_FAILED` with no network until the user's
+/// Retry.
 pub(crate) fn open<'a>(shared: &'a Shared, account_id: &str) -> Result<Box<dyn Backend + 'a>, Fail> {
-    let row: Option<(String, i64)> = shared.read(|c| {
-        c.query_row("SELECT kind, needs_auth FROM accounts WHERE id = ?1", [account_id], |r| Ok((r.get(0)?, r.get(1)?))).optional()
+    let row: Option<(String, i64, String)> = shared.read(|c| {
+        c.query_row("SELECT kind, needs_auth, auth FROM accounts WHERE id = ?1", [account_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .optional()
     })?;
-    match row {
-        None => Err(Fail::Gone),
-        Some((_, needs_auth)) if needs_auth != 0 => Err(Fail::auth()),
-        Some((kind, _)) if kind == "imap" => Ok(Box::new(imap::ImapBackend::open(shared, account_id)?)),
-        Some((kind, _)) if kind == "graph" => Ok(Box::new(graph::GraphBackend::open(shared, account_id)?)),
-        Some((kind, _)) if kind == "jmap" => Ok(Box::new(jmap::JmapBackend::open(shared, account_id)?)),
-        Some((other, _)) => Err(Fail::unsupported(&format!("account kind {other}"))),
+    let Some((kind, needs_auth, auth)) = row else {
+        return Err(Fail::Gone);
+    };
+    if needs_auth != 0 {
+        return Err(Fail::auth());
     }
+    let password = auth != "oauth2";
+    let probing = if password { crate::hold::before_open(shared, account_id)? } else { false };
+    let out: Result<Box<dyn Backend + 'a>, Fail> = match kind.as_str() {
+        "imap" => imap::ImapBackend::open(shared, account_id).map(|b| Box::new(b) as Box<dyn Backend + 'a>),
+        "graph" => graph::GraphBackend::open(shared, account_id).map(|b| Box::new(b) as Box<dyn Backend + 'a>),
+        "jmap" => jmap::JmapBackend::open(shared, account_id).map(|b| Box::new(b) as Box<dyn Backend + 'a>),
+        other => Err(Fail::unsupported(&format!("account kind {other}"))),
+    };
+    if password {
+        crate::hold::after_open(shared, account_id, probing, &out);
+    }
+    out
 }

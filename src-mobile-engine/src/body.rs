@@ -205,10 +205,15 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
     };
     // A body whose attachments could not be listed is shown but not cached: cached, it would
     // read as a message with none (its sections refused, a forward without them) until evicted.
-    // Nor is a body the server cut short: cached, it would read as the whole message.
-    if !body.attachments_unknown && !body.truncated {
-        store(shared, &p, &body, &snippet).map_err(internal)?;
-        evict(shared, cap(shared), &p).map_err(internal)?;
+    // Nor is a body the server cut short: cached, it would read as the whole message; its
+    // attachments are listed all the same, so a tap or a forward can find them.
+    if !body.attachments_unknown {
+        if body.truncated {
+            store_attachments(shared, &p, &body).map_err(internal)?;
+        } else {
+            store(shared, &p, &body, &snippet).map_err(internal)?;
+            evict(shared, cap(shared), &p).map_err(internal)?;
+        }
     }
     Ok(body.reply())
 }
@@ -398,6 +403,31 @@ fn message_exists(c: &Connection, p: &BodyParams) -> rusqlite::Result<bool> {
 /// Writes the attachment rows (at most [`BATCH`] per transaction), then the body row and the
 /// snippet in one last transaction, so a body row means its attachment rows are in place.
 fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str) -> Result<(), EngineError> {
+    if !store_attachments(shared, p, body)? {
+        return Ok(());
+    }
+    let parts_json = serde_json::to_string(&body.stored).map_err(|e| EngineError::Db(e.to_string()))?;
+    let bytes = body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len) + parts_json.len();
+    shared.write(|c| {
+        if !message_exists(c, p)? {
+            return Ok(());
+        }
+        let (account, folder, uid, now) = key(p);
+        c.execute(
+            &format!(
+                "INSERT OR REPLACE INTO bodies (account_id, folder, uid, html, text, parts_json, bytes, last_access_ms)
+                 VALUES (?1, ?2, ?3, ?5, ?6, ?7, ?8, {STAMP})"
+            ),
+            (account, folder, uid, now, &body.html, &body.text, &parts_json, bytes as i64),
+        )?;
+        c.execute(&format!("UPDATE messages SET snippet = ?4 WHERE {KEY}"), (account, folder, uid, snippet))?;
+        Ok(())
+    })
+}
+
+/// Writes the message's attachment rows (what a tap and a forward look up); `false` when the
+/// message row is gone meanwhile.
+fn store_attachments(shared: &Shared, p: &BodyParams, body: &Body) -> Result<bool, EngineError> {
     let attachments = attachments_of(&body.stored.parts);
     for chunk in attachments.chunks(BATCH) {
         let done = shared.write(|c| {
@@ -424,26 +454,10 @@ fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str) -> Result<
             Ok(true)
         })?;
         if !done {
-            return Ok(());
+            return Ok(false);
         }
     }
-    let parts_json = serde_json::to_string(&body.stored).map_err(|e| EngineError::Db(e.to_string()))?;
-    let bytes = body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len) + parts_json.len();
-    shared.write(|c| {
-        if !message_exists(c, p)? {
-            return Ok(());
-        }
-        let (account, folder, uid, now) = key(p);
-        c.execute(
-            &format!(
-                "INSERT OR REPLACE INTO bodies (account_id, folder, uid, html, text, parts_json, bytes, last_access_ms)
-                 VALUES (?1, ?2, ?3, ?5, ?6, ?7, ?8, {STAMP})"
-            ),
-            (account, folder, uid, now, &body.html, &body.text, &parts_json, bytes as i64),
-        )?;
-        c.execute(&format!("UPDATE messages SET snippet = ?4 WHERE {KEY}"), (account, folder, uid, snippet))?;
-        Ok(())
-    })
+    Ok(true)
 }
 
 /// Deletes the least recently opened bodies until the total is at most `cap`, never the row of

@@ -325,6 +325,13 @@ fn connect(shared: &Shared, account: &str, row: &AccountRow, cred: &Credential) 
                 let c = Arc::new(c);
                 store_limits(shared, account, &c).map_err(CallErr::Fail)?;
                 shared.jmap.put(account, Arc::clone(&c));
+                // Removed meanwhile (its forget ran before this put): the session, which holds the
+                // credentials, must not stay in memory.
+                let exists = shared.read(|c| c.query_row("SELECT 1 FROM accounts WHERE id = ?1", [account], |_| Ok(())).optional()).map_err(|e| CallErr::Fail(e.into()))?;
+                if exists.is_none() {
+                    shared.jmap.forget(account);
+                    return Err(CallErr::Fail(Fail::Gone));
+                }
                 return Ok(c);
             }
             Err(JmapError::RateLimited { retry_after }) if waits < THROTTLE_WAITS => {
@@ -781,6 +788,31 @@ impl Backend for JmapBackend<'_> {
         self.pass_state = Some((folder.to_string(), state));
         let unseen = self.mailbox(folder, false)?.unread_emails as i64;
         Ok(Window { uids: window, unseen })
+    }
+
+    /// One `Email/query` of what was received since the newest message held (a second early,
+    /// for messages of the same second), never the window, and no Email state: flags and the
+    /// state stay the next full pass's (`pass_done` is not reached).
+    fn arrivals(&mut self, folder: &FolderRow, _newest_uid: u32, newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
+        if folder.uid_validity.is_some_and(|v| v != GENERATION) {
+            return Ok(None);
+        }
+        let path = folder.path.clone();
+        let mailbox = self.mailbox_id(&path)?;
+        let after = timestamp((newest_ms - 1000).max(sync::window_start_ms(crate::compose::now_ms())));
+        let account = self.account.clone();
+        let known = self.shared.read(|c| remote_ids::folder_map(c, &account, &path))?;
+        let ids = self.call(async |c| c.query_mailbox_since(&mailbox, &after).await)?;
+        let fresh: Vec<String> = ids.iter().rev().map(|id| key(&path, id)).filter(|k| !known.contains_key(k)).collect();
+        let mut uids = known;
+        for chunk in fresh.chunks(BATCH) {
+            let got = sync::write_for(self.shared, &account, |c| remote_ids::uids_for(c, &account, &path, chunk))?;
+            uids.extend(chunk.iter().cloned().zip(got));
+        }
+        let listed: HashMap<u32, String> = ids.into_iter().filter_map(|id| uids.get(&key(&path, &id)).map(|u| (*u, id))).collect();
+        let out: Vec<u32> = listed.keys().copied().collect();
+        self.listed = Some((path, listed));
+        Ok(Some(out))
     }
 
     fn headers(&mut self, folder: &FolderRow, uids: &[u32]) -> Result<Vec<Header>, Fail> {

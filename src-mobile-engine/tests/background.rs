@@ -4,7 +4,7 @@
 //! returned; notifications off means no network at all; a parked account, or a password account
 //! whose last sign-in was refused, is never dialled.
 
-use mailvault_mobile_engine::{Engine, MemorySecrets, NewMail};
+use mailvault_mobile_engine::{BackgroundRun, Engine, MemorySecrets, NewMail};
 use mock_imap::state::{Mailbox, Message};
 use mock_imap::{Action, MockImap, Scenario, Trigger};
 use serde_json::{json, Value};
@@ -44,11 +44,16 @@ fn inbox(msgs: Vec<Message>) -> Mailbox {
     mb
 }
 
+/// New mail arriving now.
 fn deliver(server: &MockImap, subject: &str, seen: bool) {
+    deliver_at(server, subject, seen, now_ms());
+}
+
+fn deliver_at(server: &MockImap, subject: &str, seen: bool, at_ms: i64) {
     server.mutate(|st| {
         let mb = st.find_mut("INBOX").unwrap();
         let uid = mb.uid_next;
-        let m = msg(uid, subject);
+        let m = msg(uid, subject).with_internal_ms(at_ms);
         mb.add(if seen { m.with_flags(&["\\Seen"]) } else { m });
     });
 }
@@ -83,8 +88,35 @@ impl Fx {
         self.engine.rpc("mobile.settings.set", json!({ "notifications": if on { "on" } else { "off" } })).unwrap()
     }
 
+    /// A run whose notifications were posted: fetched, then committed.
     fn run(&self, budget: Duration) -> Vec<NewMail> {
+        let BackgroundRun { mail, commit } = self.engine.background_fetch(budget).unwrap();
+        if let Some(token) = commit {
+            self.engine.background_commit(&token).unwrap();
+        }
+        mail
+    }
+
+    /// A run the platform cut short before its notifications were posted (no commit).
+    fn run_uncommitted(&self, budget: Duration) -> BackgroundRun {
         self.engine.background_fetch(budget).unwrap()
+    }
+
+    fn sync(&self, account: &str) {
+        assert_eq!(self.engine.rpc("mobile.sync.refresh", json!({ "accountId": account, "folder": "INBOX" })).unwrap(), json!({ "queued": true }));
+    }
+
+    /// Waits until the INBOX list holds `n` rows.
+    fn wait_rows(&self, account: &str, n: usize) {
+        let deadline = Instant::now() + BUDGET;
+        loop {
+            let page = self.engine.rpc("mobile.messages.page", json!({ "accountId": account, "folder": "INBOX", "cursor": null, "limit": 500 })).unwrap();
+            if page["rows"].as_array().unwrap().len() >= n {
+                return;
+            }
+            assert!(Instant::now() < deadline, "the list never reached {n} rows: {page}");
+            std::thread::sleep(Duration::from_millis(30));
+        }
     }
 
     fn db(&self) -> rusqlite::Connection {
@@ -135,11 +167,12 @@ fn first_run_sets_the_watermark_and_notifies_nothing() {
     let page = f.engine.rpc("mobile.messages.page", json!({ "accountId": account, "folder": "INBOX", "cursor": null, "limit": 10 })).unwrap();
     assert_eq!(page["rows"].as_array().unwrap().len(), 2, "{page}");
 
-    // Turned off and on again: a new baseline, so mail that came while it was off is no flood.
+    // Turned off and on again: a new baseline at what the list holds, so mail that came while
+    // it was off (it arrived before the switch) is no flood.
     f.notifications(false);
-    deliver(&server, "while off", false);
+    deliver_at(&server, "while off", false, now_ms() - 3 * 3_600_000);
     f.notifications(true);
-    assert_eq!(f.watermark(&account), None, "turning notifications on starts a new baseline");
+    assert_eq!(f.watermark(&account), Some(2), "turning notifications on starts a new baseline at the list's newest");
     assert_eq!(subjects(&f.run(BUDGET)), Vec::<&str>::new());
     assert_eq!(f.watermark(&account), Some(3));
 }
@@ -195,9 +228,11 @@ fn a_run_out_of_budget_returns_in_time_and_keeps_unreturned_mail_for_next_time()
 
     deliver(&slow, "a new", false);
     deliver(&other, "b new", false);
-    // A's server stalls in the middle of its pass (a dead network halfway).
+    // A's server stalls in the middle of its pass (a dead network halfway). A goes first this run
+    // (the first account rotates from run to run).
     let mut stall = slow.pause_command("SEARCH");
     let b_logins = other.count_commands("LOGIN");
+    f.engine.set_setting("bg.rotation", "0").unwrap();
     let budget = Duration::from_millis(1500);
     let t0 = Instant::now();
     let got = f.run(budget);
@@ -277,9 +312,9 @@ fn a_refused_password_is_not_tried_again_in_the_background() {
     assert!(f.run(BUDGET).is_empty());
     assert_eq!(server.count_commands("LOGIN"), refused, "a refused password is not tried again in the background");
 
-    // A pass that signs in again (the user fixed it, the app in front) lifts the hold.
+    // The user's Retry signs in again (the password works again) and lifts the hold.
     server.reset_scenario(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
-    assert_eq!(f.engine.rpc("mobile.sync.refresh", json!({ "accountId": account, "folder": "INBOX" })).unwrap(), json!({ "queued": true }));
+    assert_eq!(f.engine.rpc("mobile.accounts.retrySignIn", json!({ "accountId": account })).unwrap(), json!({ "queued": true }));
     let deadline = Instant::now() + BUDGET;
     while f.engine.setting(&format!("bg.authRefused.{account}")).unwrap().is_some() {
         assert!(Instant::now() < deadline, "a good pass never lifted the hold");
@@ -302,4 +337,158 @@ fn removing_an_account_drops_its_background_state() {
     f.engine.rpc("mobile.accounts.remove", json!({ "accountId": account })).unwrap();
     assert_eq!(f.watermark(&account), None);
     assert_eq!(f.engine.setting(&format!("bg.authRefused.{account}")).unwrap(), None);
+}
+
+#[test]
+fn an_uncommitted_run_returns_its_mail_again_and_a_committed_one_does_not() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+
+    deliver(&server, "posted late", false);
+    // The platform ended the task before the notifications were posted: nothing is counted.
+    let cut = f.run_uncommitted(BUDGET);
+    assert_eq!(subjects(&cut.mail), vec!["posted late"]);
+    assert!(cut.commit.is_some());
+    assert_eq!(f.watermark(&account), Some(1), "the watermark waits for the commit");
+    // The next run returns it again; posted and committed, it is never returned again.
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["posted late"]);
+    assert_eq!(f.watermark(&account), Some(2));
+    assert!(f.run(BUDGET).is_empty());
+    // A commit token that is spent or unknown changes nothing.
+    assert!(f.engine.background_commit("bg-unknown").is_ok());
+    // A run with nothing new has nothing to commit.
+    assert!(f.run_uncommitted(BUDGET).commit.is_none());
+}
+
+#[test]
+fn a_message_that_comes_back_under_a_new_uid_is_not_notified_again() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+    deliver(&server, "only once", false);
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["only once"]);
+
+    // The server hands the same message (same Message-ID) back under a new uid, as a missed
+    // Graph page or a renumbering does: it is above the watermark, and still not news.
+    server.mutate(|st| {
+        let mb = st.find_mut("INBOX").unwrap();
+        let raw = mb.by_uid(2).unwrap().raw.clone();
+        mb.expunge(&[2], true);
+        let uid = mb.uid_next;
+        mb.add(mock_imap::state::Message::new(uid, raw).with_internal_ms(now_ms()));
+    });
+    assert!(f.run(BUDGET).is_empty(), "notified twice");
+    assert_eq!(f.watermark(&account), Some(3));
+}
+
+#[test]
+fn a_new_uidvalidity_takes_a_new_baseline_and_notifies_no_old_mail() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old one"), msg(2, "old two")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+    // The server renumbers the folder: new UIDVALIDITY, the same unread mail above the old mark.
+    server.mutate(|st| {
+        let mb = st.find_mut("INBOX").unwrap();
+        mb.uid_validity += 1;
+        let old: Vec<Vec<u8>> = mb.messages.iter().map(|m| m.raw.clone()).collect();
+        mb.expunge(&[1, 2], false);
+        mb.uid_next = 50;
+        for raw in old {
+            let uid = mb.uid_next;
+            mb.add(mock_imap::state::Message::new(uid, raw).with_internal_ms(now_ms() - DAY));
+        }
+    });
+    assert!(f.run(BUDGET).is_empty(), "old mail renumbered is no news");
+    assert_eq!(f.watermark(&account), Some(51));
+    deliver(&server, "really new", false);
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["really new"]);
+}
+
+#[test]
+fn mail_listed_while_the_app_was_in_front_is_not_notified_after_it_leaves() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+
+    // The app comes to the front on the account, lists the new mail, and goes away unread.
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true, "accountId": account })).unwrap();
+    deliver(&server, "seen in the list", false);
+    f.sync(&account);
+    f.wait_rows(&account, 2);
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    assert_eq!(f.watermark(&account), Some(2), "leaving the app moves the watermark past what it showed");
+    assert!(f.run(BUDGET).is_empty(), "no notification for mail the user saw in the list");
+
+    // Mail that came after the app left is news.
+    deliver(&server, "after leaving", false);
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["after leaving"]);
+}
+
+#[test]
+fn mail_between_turning_notifications_on_and_the_first_run_is_notified() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    // The app has listed the INBOX before the switch.
+    f.sync(&account);
+    f.wait_rows(&account, 1);
+    f.notifications(true);
+    assert_eq!(f.watermark(&account), Some(1), "the baseline is taken when notifications are turned on");
+    deliver(&server, "right after the switch", false);
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["right after the switch"], "not folded into a later baseline");
+}
+
+#[test]
+fn turning_notifications_on_through_set_setting_takes_the_same_baseline() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.sync(&account);
+    f.wait_rows(&account, 1);
+    f.engine.set_setting("notifications", "on").unwrap();
+    assert!(f.engine.notifications_on());
+    assert_eq!(f.watermark(&account), Some(1), "set_setting goes through the settings path");
+    // A value the setting does not take is refused there too.
+    assert!(f.engine.set_setting("notifications", "maybe").is_err());
+    assert!(f.engine.set_setting("notificationPreview", "sometimes").is_err());
+}
+
+#[test]
+fn one_slow_account_does_not_starve_the_next_one() {
+    let slow = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "a old")])));
+    let other = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "b old")])));
+    let f = fx();
+    let a = f.add(&slow, "a@example.test");
+    let b = f.add(&other, "b@example.test");
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+    assert_eq!((f.watermark(&a), f.watermark(&b)), (Some(1), Some(1)));
+
+    deliver(&slow, "a new", false);
+    deliver(&other, "b new", false);
+    // A's server answers, but slowly: its pass outlives A's share of the budget. A goes first.
+    slow.reset_scenario(
+        Scenario::new()
+            .mailbox(inbox(vec![msg(1, "a old"), msg(2, "a new").with_internal_ms(now_ms())]))
+            .fault(Trigger::on("SEARCH"), Action::Delay(Duration::from_millis(4000))),
+    );
+    f.engine.set_setting("bg.rotation", "0").unwrap();
+    let budget = Duration::from_millis(6000);
+    let t0 = Instant::now();
+    let got = f.run(budget);
+    assert!(t0.elapsed() < budget + Duration::from_millis(700), "the run overran: {:?}", t0.elapsed());
+    assert_eq!(subjects(&got), vec!["b new"], "B is not starved by A");
+    assert_eq!(f.watermark(&a), Some(1), "A's cut-short pass keeps its mail for the next run");
+    // The next run starts with the other account, and A's mail comes then.
+    slow.reset_scenario(Scenario::new().mailbox(inbox(vec![msg(1, "a old"), msg(2, "a new").with_internal_ms(now_ms())])));
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["a new"]);
 }

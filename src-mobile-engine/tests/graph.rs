@@ -491,6 +491,8 @@ fn a_graph_send_whose_answer_is_lost_is_uncertain_and_never_resent() {
 #[test]
 fn a_token_graph_keeps_refusing_parks_the_account_after_three_passes() {
     let f = setup();
+    // Refusals count at once here; the span rule is in tests/oauth.rs.
+    f.engine.set_oauth_refusal_span(Duration::ZERO);
     f.g.refuse_tokens(true);
     for pass in 1..=3 {
         f.g.clear_requests();
@@ -699,4 +701,91 @@ fn opening_an_engine_drops_graph_bodies_cached_by_an_earlier_build_once() {
     body(5, &stored(vec![part("3", "base64")]));
     drop(open());
     assert_eq!(bodies(), vec![2, 5]);
+}
+
+/// Turns notifications on and takes the first run's baseline.
+fn baseline(f: &Fx) {
+    f.rpc("mobile.settings.set", json!({ "notifications": "on" }));
+    let run = f.engine.background_fetch(WAIT).unwrap();
+    assert!(run.mail.is_empty());
+    if let Some(t) = run.commit {
+        f.engine.background_commit(&t).unwrap();
+    }
+}
+
+fn background(f: &Fx) -> Vec<String> {
+    let run = f.engine.background_fetch(WAIT).unwrap();
+    if let Some(t) = &run.commit {
+        f.engine.background_commit(t).unwrap();
+    }
+    run.mail.into_iter().map(|m| m.subject).collect()
+}
+
+#[test]
+fn a_background_run_on_a_big_graph_inbox_lists_only_what_is_new() {
+    let f = setup();
+    let now = now_ms();
+    // 450 messages in the 90-day window: a whole relist would take five pages.
+    for i in 0..450 {
+        f.g.add_message("inbox", &format!("Old {i}"), now - DAY - i * HOUR / 4, &plain("old"));
+    }
+    f.sync(None);
+    baseline(&f);
+    f.g.add_message("inbox", "Fresh", now - 1000, &plain("Fresh"));
+    f.g.clear_requests();
+    assert_eq!(background(&f), vec!["Fresh".to_string()]);
+    let listings: Vec<String> = f.g.requests().into_iter().filter(|r| r.contains("/messages?")).collect();
+    assert!(listings.len() <= 2, "a quick pass asks for the newest and what came since, no more: {listings:?}");
+    assert!(!f.g.requests().iter().any(|r| r.contains("$skip")), "no page of the old window: {:?}", f.g.requests());
+}
+
+#[test]
+fn a_mapping_left_without_its_row_is_still_news_for_a_background_run() {
+    let f = setup();
+    let now = now_ms();
+    f.g.add_message("inbox", "Old", now - DAY, &plain("Old"));
+    f.sync(None);
+    baseline(&f);
+    // A pass cut off after it mapped the newest message but before its row landed.
+    let id = f.g.add_message("inbox", "Mapped only", now - 1000, &plain("x"));
+    f.db()
+        .execute("INSERT INTO remote_ids (account_id, folder, uid, remote_id) VALUES (?1, 'INBOX', 777, ?2)", [ACCOUNT, id.as_str()])
+        .unwrap();
+    f.db().execute("UPDATE uid_seq SET next = 778 WHERE account_id = ?1", [ACCOUNT]).unwrap();
+    assert_eq!(background(&f), vec!["Mapped only".to_string()]);
+}
+
+#[test]
+fn a_graph_reply_goes_to_reply_to() {
+    let f = setup();
+    let id = f.g.add_message("inbox", "From the list", now_ms() - HOUR, &plain("list"));
+    f.g.set_reply_to(&id, "list@example.org");
+    f.sync(None);
+    let uid = f.uids("INBOX")["From the list"];
+    let reply = f.rpc("mobile.compose.prepare", json!({ "accountId": ACCOUNT, "mode": "reply", "folder": "INBOX", "uid": uid }));
+    assert!(reply["to"].as_str().unwrap().contains("list@example.org"), "{reply}");
+    assert!(!reply["to"].as_str().unwrap().contains("alice@example.com"), "{reply}");
+}
+
+#[test]
+fn a_move_that_fails_part_way_keeps_what_moved_and_its_follow_up() {
+    let f = setup();
+    let projects = f.g.add_folder("Projects", None);
+    let now = now_ms();
+    for (i, s) in ["Alpha", "Bravo", "Charlie"].iter().enumerate() {
+        f.g.add_message("inbox", s, now - (10 - i as i64) * HOUR, &plain(s));
+    }
+    f.sync(None);
+    let uids = f.uids("INBOX");
+    let all: Vec<i64> = ["Alpha", "Bravo", "Charlie"].iter().map(|s| uids[*s]).collect();
+    // The first move lands, then Graph fails the next one (503): a transient failure.
+    f.g.fail_moves_after(1, 4);
+    f.apply("move", "INBOX", &all, Some(&projects));
+    // A read of the message that moved first, queued behind the move.
+    f.apply("seen", "INBOX", &[uids["Alpha"]], None);
+    f.wait_pending_empty();
+    let moved: Vec<String> = f.g.messages_in(&projects).into_iter().map(|m| m.subject).collect();
+    assert_eq!(moved.len(), 3, "the rest moved on retry: {moved:?}; logs {:?}", f.logs.lock().unwrap());
+    let alpha = f.g.messages_in(&projects).into_iter().find(|m| m.subject == "Alpha").unwrap();
+    assert!(alpha.is_read, "the read followed the moved message; logs {:?}", f.logs.lock().unwrap());
 }

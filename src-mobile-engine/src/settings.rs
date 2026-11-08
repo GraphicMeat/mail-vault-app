@@ -2,8 +2,10 @@
 //! runs that have no page, and by the page through `mobile.settings.get` / `mobile.settings.set`.
 //!
 //! - `notifications`: `"on"` | `"off"` (default `"off"`, plan Ruling 10: opt-in). Turning it on
-//!   empties `notify_state`, so the next background run takes a new baseline: mail that came while
-//!   it was off is no flood.
+//!   takes the background run's baseline there and then (`background::seed_baselines`): each
+//!   INBOX the list has synced gets its watermark at its newest uid, timed now, so mail that came
+//!   while it was off is no flood and mail that comes after the switch is news, even before the
+//!   first run. An INBOX never synced gets no row: its first run takes the baseline.
 //! - `notificationPreview`: `true` | `false` (default `true`): a notification shows sender and
 //!   subject, or only "New message" and the account.
 
@@ -73,6 +75,11 @@ struct SetParams {
 /// Anything but the listed values is `INVALID` and changes nothing.
 pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: SetParams = parse(params)?;
+    apply(engine, &p)?;
+    get(engine, Value::Null)
+}
+
+fn apply(engine: &Engine, p: &SetParams) -> Result<(), RpcError> {
     if let Some(n) = &p.notifications {
         if n != "on" && n != "off" {
             return Err(RpcError::Invalid("notifications is \"on\" or \"off\"".into()));
@@ -84,7 +91,7 @@ pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
                 let was_on = on(get_in(c, NOTIFICATIONS)?);
                 put_in(c, NOTIFICATIONS, n)?;
                 if n == "on" && !was_on {
-                    c.execute("DELETE FROM notify_state", [])?;
+                    crate::background::seed_baselines(c)?;
                 }
             }
             if let Some(v) = p.notification_preview {
@@ -92,6 +99,20 @@ pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             }
             Ok(())
         })
-        .map_err(|e| RpcError::Internal(e.to_string()))?;
-    get(engine, Value::Null)
+        .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// [`Engine::set_setting`] of a user setting: the same checks and side effects as
+/// `mobile.settings.set`. `None` for any other key (stored as given).
+pub(crate) fn set_user_key(engine: &Engine, key: &str, value: &str) -> Option<Result<(), EngineError>> {
+    let p = match key {
+        NOTIFICATIONS => SetParams { notifications: Some(value.to_string()), notification_preview: None },
+        NOTIFICATION_PREVIEW => match value {
+            "true" => SetParams { notifications: None, notification_preview: Some(true) },
+            "false" => SetParams { notifications: None, notification_preview: Some(false) },
+            _ => return Some(Err(EngineError::Db(format!("{NOTIFICATION_PREVIEW} is true or false")))),
+        },
+        _ => return None,
+    };
+    Some(apply(engine, &p).map_err(|e| EngineError::Db(e.to_string())))
 }

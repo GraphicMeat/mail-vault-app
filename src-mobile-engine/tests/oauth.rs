@@ -744,6 +744,8 @@ fn a_token_the_server_keeps_refusing_parks_the_account() {
     let f = setup();
     let id = f.sign_in();
     assert_eq!(f.sync(&id)["state"], "idle");
+    // Refusals count at once here; the span rule has its own test.
+    f.engine.set_oauth_refusal_span(Duration::ZERO);
 
     // The grant refreshes fine, but the mailbox refuses every token (IMAP turned off).
     f.authority.refuse_valid_tokens(true);
@@ -797,4 +799,26 @@ fn a_stale_flow_releases_the_listener() {
     assert!(!port_is_free(), "the new flow keeps the listener");
     assert_eq!(f.rpc("mobile.oauth.cancel", json!({ "flowId": c })), json!({ "cancelled": true }));
     assert!(port_is_free());
+}
+
+#[test]
+fn fresh_token_refusals_park_only_when_they_span_time() {
+    let _port = port();
+    let f = setup();
+    let id = f.sign_in();
+    assert_eq!(f.sync(&id)["state"], "idle");
+    f.engine.set_oauth_refusal_span(Duration::from_millis(1500));
+
+    // A provider hiccup: three fresh tokens refused in a moment do not park the account.
+    f.authority.refuse_valid_tokens(true);
+    for _ in 0..4 {
+        assert_eq!(f.sync(&id)["code"], "AUTH_FAILED");
+    }
+    assert_eq!(f.needs_auth(&id), 0, "refusals inside a short span never park");
+    // Refusals that go on over the span do.
+    std::thread::sleep(Duration::from_millis(1600));
+    let end = f.sync(&id);
+    assert_eq!(end["code"], "NEEDS_AUTH", "{end}");
+    assert_eq!(f.needs_auth(&id), 1);
+    f.assert_no_secret_leaked(&[]);
 }
