@@ -11,9 +11,9 @@
  * - e1 opens and its body renders.
  * - Flagging e1 sets `$flagged` on the server.
  * - Moving e1 to Work leaves it in Work only.
- * - Deleting e2 from INBOX lands it in Trash. Not e1: a delete from any folder
- *   but INBOX is permanent (the daemon's `auto` mode), and on JMAP a permanent delete
- *   from the only mailbox destroys the email (ruling R5).
+ * - Deleting e2 from INBOX lands it in Trash (the delete rule: outside Trash a
+ *   move to Trash). Not e1: it sits in INBOX and Work, so a delete from either
+ *   only takes that label off (ruling R5), which this spec does not pin.
  * - Mail delivered on the server shows up without Refresh, through the
  *   EventSource push, within 10 s.
  * - A send goes out once through EmailSubmission, and the server's own copy

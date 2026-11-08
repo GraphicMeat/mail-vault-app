@@ -373,4 +373,22 @@ describe('a server delete that is refused and then lands', () => {
     expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|8`)).toBe(false);
     expect(useMailStore.getState().loadEmails).toHaveBeenCalled();
   });
+
+  // Owner decision 1: a Sent delete the daemon queued lands later as a move to
+  // Trash, like an INBOX one, and the late landing offers the undo back.
+  it('a queued Sent delete lands as a move to Trash and offers the undo', async () => {
+    prime([row(9)]);
+    useMailStore.setState({ activeMailbox: 'Sent', error: null, undo: null });
+    useMailStore.getState().updateSortedEmails();
+    mockSubmit.mockImplementation(answer(() => true));
+
+    await useMailStore.getState().deleteEmailFromServer(9);
+    expect(mockSubmit).toHaveBeenCalledWith({ accountId: ACCT.id, mailbox: 'Sent', uids: [9] }, { mode: 'auto', bin: true, arg: {} });
+    expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|Sent|9`)).toBe(true);
+
+    await onDeleteQueueLanded({ accountId: ACCT.id, mailbox: 'Sent', landed: [{ kind: 'deleted', uid: 9, trash: 'Trash', trashUid: 109, binId: 'b9' }] });
+
+    expect(useMailStore.getState().emails).toEqual([]);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 1 }, canUndo: true });
+  });
 });

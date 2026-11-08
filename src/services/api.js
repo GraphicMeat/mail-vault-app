@@ -337,9 +337,11 @@ export async function updateEmailFlags(account, uid, flags, action = 'add', mail
  *
  * The app says what it wants; the daemon decides what that means for the
  * folder (src-daemon/src/message_delete.rs). `mode`:
- *   'auto'      (default) INBOX moves to Trash, any other folder is deleted for
- *               good. The daemon reads the folder name (INBOX is
- *               case-insensitive); nothing here does.
+ *   'auto'      (default) the delete rule both apps share
+ *               (src-core/src/actions/policy.rs): outside Trash a move to
+ *               Trash, inside Trash deleted for good. An account with no
+ *               Trash moves INBOX and deletes any other folder for good. The
+ *               daemon finds Trash on the server; nothing here does.
  *   'trash'     always a move to the account's Trash.
  *   'permanent' always removed for good.
  * `bin: false` skips the daemon's copy into the deleted-mail bin (a cleanup

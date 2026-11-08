@@ -8,10 +8,13 @@
 //! Test names are `delete_{imap|jmap|graph}_{auto|trash|permanent}_{capture_ok|
 //! capture_fetch_err|capture_timeout|capture_busy|capture_write_err}`:
 //!
-//! - mode `auto`: the caller passes `permanent = null` and `api.js`
-//!   `deleteEmail` computes `permanent = mailbox !== 'INBOX'`, so the daemon
-//!   always sees an explicit bool. `auto` runs INBOX (-> trash arm) and a
-//!   non-INBOX folder (-> permanent arm).
+//! - mode `auto`: the daemon decides by core's delete rule (owner decision
+//!   1, 2026-11-08; it was "INBOX moves, any other folder is permanent"
+//!   before): outside Trash a move to Trash, inside Trash permanent. `auto`
+//!   runs INBOX and a non-INBOX folder, both outside Trash (-> trash arm; a
+//!   JMAP label the email is not alone in loses only that label). The
+//!   inside-Trash and no-Trash cells are `message_delete::tests` (IMAP) and
+//!   `delete_jmap_auto_*` below.
 //! - `capture_ok`: the capture works. `capture_fetch_err`: the full-message
 //!   fetch the capture needs is refused by the server (IMAP: tagged NO on
 //!   `BODY.PEEK[]`; JMAP: the blob is gone). `capture_timeout`: that fetch
@@ -102,16 +105,6 @@ impl Mode {
             Mode::Auto => "auto",
             Mode::Trash => "trash",
             Mode::Permanent => "permanent",
-        }
-    }
-
-    /// Whether the delete the daemon runs is permanent: `Auto` resolves by
-    /// the folder (INBOX is a move to Trash, any other folder permanent).
-    fn permanent(self, server: ServerScenario) -> bool {
-        match self {
-            Mode::Auto => server != ServerScenario::Inbox,
-            Mode::Trash => false,
-            Mode::Permanent => true,
         }
     }
 }
@@ -449,6 +442,24 @@ fn jmap_expect(permanent: bool, capture: CaptureScenario, r: &Ran) {
     }
 }
 
+/// JMAP, a delete (not permanent) from a label the email is not alone in:
+/// only that label comes off (`jmap::remove_from`), nothing moves to Trash,
+/// and the capture is best effort.
+fn jmap_label_expect(capture: CaptureScenario, r: &Ran) {
+    use CaptureScenario::*;
+    let copy = match capture {
+        Busy => return assert_refused(r, "errors.keychainBusy"),
+        Ok => BinCopy::Bytes,
+        FetchErr | WriteErr => BinCopy::Nothing,
+        Timeout => unreachable!(),
+    };
+    let v = r.result();
+    assert_eq!(v["success"], json!(true), "{v}");
+    assert_eq!((&v["trash"], &v["trashUid"]), (&Value::Null, &Value::Null), "{v}");
+    assert_bin(r, copy, &v["binId"]);
+    assert!(!r.in_source && !r.in_trash, "the label came off; nothing went to Trash");
+}
+
 /// Graph: every cell is the same wire call; the capture is best effort.
 fn graph_expect(capture: CaptureScenario, r: &Ran) {
     use CaptureScenario::*;
@@ -474,14 +485,16 @@ use Mode as M;
 use Provider as P;
 use ServerScenario as S;
 
-/// `auto`: INBOX is a move to Trash; any other folder is a permanent delete.
+/// `auto` outside Trash: INBOX and any other folder are a move to Trash
+/// (owner decision 1). JMAP's `Work` holds an email INBOX holds too, so the
+/// move is the label coming off (`jmap_label_expect`).
 async fn auto(provider: Provider, capture: CaptureScenario) {
     for server in [S::Inbox, S::OtherFolder] {
         let r = run_delete(provider, M::Auto, capture, server).await;
-        let permanent = M::Auto.permanent(server);
         match provider {
-            P::Imap => imap_expect(permanent, capture, "Trash", &r),
-            P::Jmap => jmap_expect(permanent, capture, &r),
+            P::Imap => imap_expect(false, capture, "Trash", &r),
+            P::Jmap if server == S::OtherFolder => jmap_label_expect(capture, &r),
+            P::Jmap => jmap_expect(false, capture, &r),
             P::Graph => graph_expect(capture, &r),
         }
     }
@@ -612,11 +625,48 @@ async fn delete_imap_permanent_gmail_all_mail_capture_timeout() {
     assert_capture_refused(&r, "timeout", "timed out after 45s");
 }
 
-/// `auto` from All Mail is permanent (`mailbox !== 'INBOX'`): the same refusal.
+/// `auto` from All Mail is outside Trash: a move to `[Gmail]/Trash` that
+/// never fetches, so a fetch error does not matter (it was a permanent
+/// delete, refused on the fetch, before owner decision 1).
 #[tokio::test]
 async fn delete_imap_auto_gmail_all_mail_capture_fetch_err() {
     let r = run_delete(P::Imap, M::Auto, C::FetchErr, S::GmailAllMail).await;
-    assert_capture_refused(&r, "fetch", "Server returned no body for UID 1");
+    assert_trashed(&r, "[Gmail]/Trash", BinCopy::ByteLess);
+    assert_eq!(r.body_fetches, 0);
+}
+
+/// JMAP `auto` by core's rule: from Sent (its only mailbox) a move to Trash
+/// with a Trash uid for the undo; from Trash permanent (destroyed, the bin
+/// copy first).
+#[tokio::test]
+async fn delete_jmap_auto_moves_from_sent_and_is_permanent_in_trash() {
+    use crate::jmap_test_support as support;
+    let mut scenario = support::scenario();
+    let boxes = &mut scenario.accounts[0].mailboxes;
+    boxes.iter_mut().find(|b| b.id == "mb-sent").unwrap().emails.push(support::email("e3", "three", "2026-10-03T10:00:00Z"));
+    boxes.iter_mut().find(|b| b.id == "mb-trash").unwrap().emails.push(support::email("e4", "four", "2026-10-04T10:00:00Z"));
+    let m = mock_jmap::MockJmap::start(scenario);
+    let (_trap, port) = support::imap_trap();
+    let s = plain_state(&std::env::temp_dir().join(format!("mv-delete-char-jmap-rule-{}", uuid::Uuid::new_v4())));
+    seed_accounts(&s, r#"[{"id":"acct1"}]"#);
+    s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), support::config(&m, port));
+    let account = support::account_json(&m, port);
+    let uid_of = |listing: &Value, id: &str| listing["emails"].as_array().unwrap().iter().find(|e| e["messageId"] == format!("<{id}@x>").as_str()).unwrap()["uid"].as_u64().unwrap();
+
+    let sent = handle_request_for_test(&s, "imap_get_emails", json!({"account": account, "mailbox": "Sent", "page": 1, "limit": 50})).await.result.expect("listed");
+    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": uid_of(&sent, "e3"), "mailbox": "Sent", "mode": "auto"})).await;
+    let v = resp.result.unwrap_or_else(|| panic!("{:?}", resp.error.map(|e| e.message)));
+    assert_eq!(v["trash"], json!("Trash"), "Sent: a move to Trash: {v}");
+    assert!(v["trashUid"].is_u64(), "the undo's handle: {v}");
+    let labels = m.read(|st| st.email("acc1", "e3").map(|e| e.mailbox_ids.clone())).expect("e3 still on the server");
+    assert!(labels.contains("mb-trash") && !labels.contains("mb-sent"), "{labels:?}");
+
+    let trash = handle_request_for_test(&s, "imap_get_emails", json!({"account": account, "mailbox": "Trash", "page": 1, "limit": 50})).await.result.expect("listed");
+    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": uid_of(&trash, "e4"), "mailbox": "Trash", "mode": "auto"})).await;
+    let v = resp.result.unwrap_or_else(|| panic!("{:?}", resp.error.map(|e| e.message)));
+    assert_eq!((&v["trash"], &v["trashUid"]), (&Value::Null, &Value::Null), "Trash: permanent: {v}");
+    assert!(v["binId"].is_string(), "the bin copy came first: {v}");
+    assert!(m.read(|st| st.email("acc1", "e4").is_none()), "destroyed");
 }
 
 /// A trash-mode delete from All Mail never fetches, so a fetch error does not matter.

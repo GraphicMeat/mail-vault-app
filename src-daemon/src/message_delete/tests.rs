@@ -30,14 +30,23 @@ fn capture_policy_truth_table() {
     }
 }
 
+/// Core's delete rule (owner decision 1): outside Trash a move, inside
+/// Trash permanent. An account with no Trash keeps desktop's old rule
+/// (ruling P6): INBOX moves, any other folder is permanent.
 #[test]
-fn auto_resolves_from_the_folder_role() {
-    assert_eq!(Mode::Auto.resolve("INBOX"), Mode::Trash);
-    assert_eq!(Mode::Auto.resolve("Inbox"), Mode::Trash, "INBOX is case-insensitive (RFC 3501)");
-    assert_eq!(Mode::Auto.resolve("[Gmail]/All Mail"), Mode::Permanent);
-    assert_eq!(Mode::Auto.resolve("Archive"), Mode::Permanent);
-    assert_eq!(Mode::Trash.resolve("[Gmail]/All Mail"), Mode::Trash, "only Auto resolves");
-    assert_eq!(Mode::Permanent.resolve("INBOX"), Mode::Permanent);
+fn auto_follows_the_core_delete_rule() {
+    use TrashPlace::*;
+    for folder in ["INBOX", "Inbox", "Sent", "Archive", "Spam", "[Gmail]/All Mail", "Clients/Acme"] {
+        assert_eq!(Mode::Auto.by_rule(folder, Elsewhere), Mode::Trash, "{folder} outside Trash is a move");
+    }
+    assert_eq!(Mode::Auto.by_rule("Trash", ThisFolder), Mode::Permanent, "in Trash, permanent");
+    assert_eq!(Mode::Auto.by_rule("INBOX", Missing), Mode::Trash, "P6: INBOX still moves");
+    assert_eq!(Mode::Auto.by_rule("Inbox", Missing), Mode::Trash, "INBOX is case-insensitive (RFC 3501)");
+    assert_eq!(Mode::Auto.by_rule("Sent", Missing), Mode::Permanent, "P6: no Trash, permanent as before");
+    assert_eq!(Mode::Auto.by_rule("Archive", Missing), Mode::Permanent);
+    // Only Auto resolves.
+    assert_eq!(Mode::Trash.by_rule("Trash", ThisFolder), Mode::Trash);
+    assert_eq!(Mode::Permanent.by_rule("INBOX", Elsewhere), Mode::Permanent);
 }
 
 #[test]
@@ -220,8 +229,8 @@ async fn imap_delete_email_ignores_a_legacy_permanent_flag() {
     assert!(f.in_trash());
 }
 
-/// No `mode`, a stale `permanent: true`, from a folder that `auto` would
-/// delete for good: still a move to Trash. A caller that has not caught up
+/// No `mode`, a stale `permanent: true`, from a folder outside INBOX: still
+/// a move to Trash. A caller that has not caught up
 /// cannot destroy mail.
 #[tokio::test]
 async fn imap_delete_email_without_a_mode_is_a_move_to_trash_whatever_a_stale_flag_says() {
@@ -237,16 +246,149 @@ async fn imap_delete_email_without_a_mode_is_a_move_to_trash_whatever_a_stale_fl
     assert_eq!(v["trash"], json!("Trash"), "{v}");
     assert!(srv.state().find("Work").unwrap().messages.is_empty(), "left Work");
     assert!(!srv.state().find("Trash").unwrap().messages.is_empty(), "landed in Trash");
-    // The same call with `mode: auto` is the permanent delete the flag asked for.
+    // Only `mode: permanent` deletes for good outside Trash.
     let mut work = Mailbox::new("Work");
     work.add(Message::new(1, RAW).with_flags(&["\\Seen"]));
     let srv = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")).mailbox(work).mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"])));
     let account = json!({"id": "acc1", "email": "user@example.com", "password": "hunter2", "imapHost": srv.host(), "imapPort": srv.port()});
-    let r = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": "Work", "mode": "auto", "bin": false})).await;
+    let r = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": "Work", "mode": "permanent", "bin": false})).await;
     let v = r.result.unwrap_or_else(|| panic!("{:?}", r.error.map(|e| e.message)));
-    assert_eq!(v["trash"], json!(null), "auto from Work is permanent: {v}");
+    assert_eq!(v["trash"], json!(null), "permanent from Work: {v}");
     assert!(srv.state().find("Trash").unwrap().messages.is_empty(), "nothing in Trash");
 }
+
+// ── the delete rule on the wire (owner decision 1, ruling P6) ──────────────
+
+/// One message (uid 1) in `folder`, beside INBOX, and a `\Trash` folder
+/// named `trash` when there is one. The mock advertises no other folder.
+fn rule_scenario(folder: &str, trash: Option<&str>) -> Scenario {
+    let mut source = Mailbox::new(folder);
+    if Some(folder) == trash {
+        source = source.with_attrs(&["\\Trash"]);
+    }
+    source.add(Message::new(1, RAW).with_flags(&["\\Seen"]));
+    let mut scenario = Scenario::new().mailbox(source);
+    if folder != "INBOX" {
+        scenario = scenario.mailbox(Mailbox::new("INBOX"));
+    }
+    if let Some(t) = trash.filter(|t| *t != folder) {
+        scenario = scenario.mailbox(Mailbox::new(t).with_attrs(&["\\Trash"]));
+    }
+    scenario
+}
+
+/// A daemon with account `acc1` on `srv`, and the list row a sync leaves for
+/// uid 1 of `folder`.
+fn rule_state(srv: &MockImap, folder: &str) -> (Arc<DaemonState>, ImapConfig) {
+    std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    let account = json!({"id": "acc1", "email": "user@example.com", "password": "hunter2", "imapHost": srv.host(), "imapPort": srv.port()});
+    let s = plain_state(&std::env::temp_dir().join(format!("mv-delete-rule-{}", uuid::Uuid::new_v4())));
+    seed_accounts(&s, r#"[{"id":"acc1"}]"#);
+    let config: ImapConfig = serde_json::from_value(account).unwrap();
+    s.raw_messages.accounts.lock().unwrap().insert("acc1".into(), config.clone());
+    let headers = json!({"emails": [{"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me", "flags": ["\\Seen"]}]}).to_string();
+    crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", folder, &headers)).unwrap();
+    (s, config)
+}
+
+fn rule_server(folder: &str, trash: Option<&str>) -> (MockImap, Arc<DaemonState>, ImapConfig) {
+    std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    let srv = MockImap::start(rule_scenario(folder, trash));
+    let (s, config) = rule_state(&srv, folder);
+    (srv, s, config)
+}
+
+/// Sent, Archive, Spam and a custom folder: `auto` moves to Trash, with an
+/// undo handle (the Trash uid) and the bin row that says where it went. No
+/// full fetch: a move keeps a byte-less bin row.
+#[tokio::test]
+async fn auto_outside_trash_moves_to_trash_from_every_folder() {
+    for folder in ["Sent", "Archive", "Spam", "Clients/Acme"] {
+        let (srv, s, config) = rule_server(folder, Some("Trash"));
+        let out = delete_one(&s, Provider::Imap(&config), "acc1", folder, 1, Mode::Auto, true).await.unwrap_or_else(|e| panic!("{folder}: {e:?}"));
+        assert_eq!(out.trash.as_deref(), Some("Trash"), "{folder}: moved to Trash");
+        assert!(out.trash_uid.is_some(), "{folder}: the undo's handle");
+        assert!(srv.state().find(folder).unwrap().messages.is_empty(), "{folder}: left the folder");
+        assert_eq!(srv.state().find("Trash").unwrap().messages.len(), 1, "{folder}: landed in Trash");
+        assert_eq!(srv.count_commands("BODY.PEEK[]"), 0, "{folder}: a move downloads nothing");
+        let rows = bin_rows(&s);
+        assert_eq!(rows.len(), 1, "{folder}: one bin row");
+        assert_eq!(rows[0].trash.as_deref(), Some("Trash"), "{folder}: the bin row knows where it went");
+    }
+}
+
+/// Inside Trash `auto` is permanent: the bin copy is required first (the
+/// full fetch), nothing is left on the server, nothing to move back.
+#[tokio::test]
+async fn auto_inside_trash_is_permanent() {
+    let (srv, s, config) = rule_server("Trash", Some("Trash"));
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "Trash", 1, Mode::Auto, true).await.expect("deleted");
+    assert_eq!((out.trash.as_deref(), out.trash_uid), (None, None), "permanent: nothing to move back");
+    assert!(out.bin_id.is_some(), "the bin holds the only copy");
+    assert!(srv.state().find("Trash").unwrap().messages.is_empty(), "gone from Trash");
+    assert_eq!(srv.count_commands("BODY.PEEK[]"), 1, "the required capture downloaded it");
+}
+
+/// A Trash found only by name (no SPECIAL-USE) is still Trash: the folder a
+/// move lands in, nothing else.
+#[tokio::test]
+async fn auto_inside_a_name_only_trash_is_permanent() {
+    std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    let mut trash = Mailbox::new("Trash");
+    trash.add(Message::new(1, RAW).with_flags(&["\\Seen"]));
+    let srv = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")).mailbox(trash));
+    let (s, config) = rule_state(&srv, "Trash");
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "Trash", 1, Mode::Auto, false).await.expect("deleted");
+    assert_eq!(out.trash, None, "permanent");
+    assert!(srv.state().find("Trash").unwrap().messages.is_empty());
+}
+
+/// Ruling P6: an account with no Trash keeps desktop's old rule. Outside
+/// INBOX the delete is permanent (bin copy first) and creates no folder.
+#[tokio::test]
+async fn auto_with_no_trash_outside_inbox_is_permanent() {
+    let (srv, s, config) = rule_server("Sent", None);
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "Sent", 1, Mode::Auto, true).await.expect("deleted");
+    assert_eq!(out.trash, None, "permanent");
+    assert!(out.bin_id.is_some(), "kept in the bin first");
+    assert!(srv.state().find("Sent").unwrap().messages.is_empty(), "gone");
+    assert!(srv.state().find("Trash").is_none(), "no Trash was made");
+    assert_eq!(srv.count_commands("CREATE"), 0);
+}
+
+/// Ruling P6, INBOX: still a move, Trash made for it as before.
+#[tokio::test]
+async fn auto_with_no_trash_in_inbox_still_moves() {
+    let (srv, s, config) = rule_server("INBOX", None);
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "INBOX", 1, Mode::Auto, true).await.expect("deleted");
+    assert_eq!(out.trash.as_deref(), Some("Trash"), "moved into the Trash it made");
+    assert!(srv.state().find("Trash").is_some_and(|m| m.messages.len() == 1));
+}
+
+/// INBOX never asks where Trash is before the delete: the same LISTs as an
+/// explicit move to Trash.
+#[tokio::test]
+async fn auto_in_inbox_asks_nothing_first() {
+    let (auto, s, config) = rule_server("INBOX", Some("Trash"));
+    delete_one(&s, Provider::Imap(&config), "acc1", "INBOX", 1, Mode::Auto, false).await.expect("deleted");
+    let (trash, s, config) = rule_server("INBOX", Some("Trash"));
+    delete_one(&s, Provider::Imap(&config), "acc1", "INBOX", 1, Mode::Trash, false).await.expect("deleted");
+    assert_eq!(auto.count_commands("LIST"), trash.count_commands("LIST"), "no lookup of its own");
+}
+
+/// Outside INBOX the rule costs one LIST before the delete, and a lookup that
+/// fails refuses the delete with nothing sent and nothing captured.
+#[tokio::test]
+async fn a_trash_lookup_that_fails_sends_nothing() {
+    std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    let srv = MockImap::start(rule_scenario("Sent", Some("Trash")).fault(Trigger::on("LIST"), Action::RefuseWith("NO".into(), "list refused".into())));
+    let (s, config) = rule_state(&srv, "Sent");
+    let r = delete_one(&s, Provider::Imap(&config), "acc1", "Sent", 1, Mode::Auto, true).await;
+    assert!(matches!(&r, Err(Refusal::Server(e)) if e.contains("Trash")), "{r:?}");
+    assert_eq!(srv.state().find("Sent").unwrap().messages.len(), 1, "untouched");
+    assert!(bin_rows(&s).is_empty(), "no capture before the rule is known");
+}
+
 
 #[tokio::test]
 async fn imap_delete_email_refuses_an_unknown_mode() {

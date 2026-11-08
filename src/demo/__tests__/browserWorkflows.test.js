@@ -106,6 +106,18 @@ describe('browser demo workflow contracts', () => {
     expect(await trashHas(first)).toBe(false);
   });
 
+  // Outside Trash every folder moves to Trash, not only INBOX (owner decision 1).
+  it('moves an "auto" delete from a folder other than INBOX to Trash', async () => {
+    const backend = createDemoBackend();
+    const account = backend.accounts[0];
+    const elsewhere = backend.snapshot().messages.find(row => row.accountId === account.id && !['INBOX', 'Trash'].includes(row.mailbox) && row.serverPresent);
+    expect(elsewhere).toBeTruthy();
+    const out = await backend.invoke('imap_delete_email', { account, mailbox: elsewhere.mailbox, uid: elsewhere.uid, mode: 'auto' });
+    expect(out.trash).toBe('Trash');
+    const trash = (await backend.invoke('imap_get_emails', { account, mailbox: 'Trash' })).emails;
+    expect(trash.some(r => r.messageId === elsewhere.messageId)).toBe(true);
+  });
+
   it('keeps folder creation scoped to one account and reset restores the folder tree', async () => {
     const backend = createDemoBackend();
     const [account, other] = backend.accounts;

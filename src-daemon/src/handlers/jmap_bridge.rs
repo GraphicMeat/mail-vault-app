@@ -1230,6 +1230,23 @@ pub(crate) async fn remove_for_delete(
     }
 }
 
+/// Where Trash is, seen from `mailbox`, for the delete rule
+/// (`mailvault_core::actions::policy::jmap_trash_place`): the `trash`-role
+/// mailbox of the last listing, the same one `remove_one` moves to. A
+/// listing that lacks `mailbox` (or none yet) is fetched again first; one
+/// with no Trash is fetched again too, so a Trash made since is seen.
+pub(crate) async fn trash_place(state: &Arc<DaemonState>, config: &ImapConfig, mailbox: &str) -> Result<mailvault_core::actions::policy::TrashPlace, String> {
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    let listed = acct.last_listing().filter(|b| b.ids.contains_key(mailbox) && role_mailbox(b, "trash").is_some());
+    let boxes = match listed {
+        Some(boxes) => boxes,
+        None => acct.refresh().await.map_err(|e| e.to_string())?,
+    };
+    let mailbox_id = boxes.ids.get(mailbox).ok_or_else(|| JmapError::Protocol(format!("no mailbox {mailbox}")).to_string())?;
+    let trash = role_mailbox(&boxes, "trash");
+    Ok(mailvault_core::actions::policy::jmap_trash_place(mailbox_id, trash.as_ref().map(|(_, id)| id.as_str())))
+}
+
 /// Take the email behind `uid` out of `mailbox` by the label semantics rule
 /// (`jmap::ops::remove_from`, ruling R5):
 /// - A delete that needs Trash on an account without one is refused

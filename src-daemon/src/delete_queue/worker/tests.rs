@@ -40,8 +40,8 @@ fn a_pass_runs_twenty_seconds_after_launch_every_five_minutes_and_two_seconds_af
 }
 
 /// The entry's own intent when it has one; an entry the app's old journal
-/// wrote (no `mode`) replays as the app's old replay sent it: by the folder
-/// (`api.deleteEmail`'s `permanent = mailbox !== 'INBOX'`), with a bin copy.
+/// wrote (no `mode`) replays as `Auto`, with a bin copy: by the folder, under
+/// the delete rule of the day (`message_delete::resolve`).
 /// A mode this build does not know is never guessed at.
 #[test]
 fn a_replay_sends_the_entrys_own_intent_and_a_legacy_entry_by_its_folder() {
@@ -101,10 +101,11 @@ async fn a_pass_lands_imap_and_jmap_entries_and_drops_entries_no_account_can_sen
     assert_eq!(seen.last().unwrap().0, "delete-queue-status", "after the pass");
 }
 
-/// A legacy entry outside INBOX is a permanent delete, as the old replay
-/// sent it, with its bin copy kept first.
+/// A legacy entry outside INBOX replays as `Auto` under today's rule (owner
+/// decision 1): a move to Trash, not the permanent delete the old replay
+/// sent. No full fetch: a move needs no bin bytes.
 #[tokio::test]
-async fn a_legacy_entry_outside_the_inbox_replays_as_a_permanent_delete() {
+async fn a_legacy_entry_outside_the_inbox_replays_as_a_move_to_trash() {
     let mut work = Mailbox::new("Work");
     work.add(Message::new(1, RAW));
     let f = fixture_with(vec![], r#"[{"id":"acc1"}]"#, vec![work]);
@@ -112,8 +113,23 @@ async fn a_legacy_entry_outside_the_inbox_replays_as_a_permanent_delete() {
     let counts = pass(&f.s, "launch").await;
     assert_eq!((counts.done, counts.kept), (1, 0), "{counts:?}");
     assert!(entry(&f, id).is_none());
-    assert!(f.srv.state().find("Work").unwrap().messages.is_empty(), "removed");
-    assert!(!f.in_trash(), "not moved: permanent");
+    assert!(f.srv.state().find("Work").unwrap().messages.is_empty(), "left Work");
+    assert!(f.in_trash(), "moved to Trash");
+    assert_eq!(f.srv.count_commands("BODY.PEEK[]"), 0, "a move fetches nothing");
+}
+
+/// An entry journalled in Trash replays as a permanent delete, bin copy first.
+#[tokio::test]
+async fn an_entry_in_trash_replays_as_a_permanent_delete() {
+    let f = fixture_with(vec![], r#"[{"id":"acc1"}]"#, vec![]);
+    f.srv.mutate(|st| {
+        st.find_mut("Trash").unwrap().add(Message::new(3, RAW));
+    });
+    let id = queue(&f, "acc1", "Trash", &[3], json!({"mode": "auto", "bin": true}));
+    let counts = pass(&f.s, "launch").await;
+    assert_eq!((counts.done, counts.kept), (1, 0), "{counts:?}");
+    assert!(entry(&f, id).is_none());
+    assert!(!f.in_trash(), "gone from Trash");
     assert_eq!(f.srv.count_commands("BODY.PEEK[]"), 1, "the bin copy was fetched first");
 }
 

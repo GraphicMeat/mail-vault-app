@@ -918,3 +918,27 @@ async fn a_renumber_between_the_refused_move_and_the_presence_check_stops_the_de
     assert_eq!(f.srv.count_commands("SELECT"), 2, "the remove's, then the presence check's");
     assert!(f.in_inbox(1));
 }
+
+// ── the delete rule, once per round (owner decision 1) ──────────────────────
+
+/// `auto` from Sent moves every uid to Trash, and the round asks where Trash
+/// is once for the batch: one LIST more than the same batch sent as `trash`.
+#[tokio::test]
+async fn auto_from_sent_moves_the_batch_to_trash_with_one_lookup() {
+    let sent = || {
+        let mut sent = Mailbox::new("Sent").with_attrs(&["\\Sent"]);
+        sent.add(Message::new(1, RAW).with_flags(&["\\Seen"]));
+        sent.add(Message::new(2, RAW).with_flags(&["\\Seen"]));
+        sent
+    };
+    let lists = |mode: Mode| async move {
+        let f = fixture_with(vec![], r#"[{"id":"acc1"}]"#, vec![sent()]);
+        let reply = submit(&f.s, Submit { mailbox: "Sent".into(), ..ask(&[1, 2], mode) }).await.unwrap();
+        assert_eq!(reply.landed.len(), 2, "{mode:?}: {reply:?}");
+        assert!(reply.landed.iter().all(|l| matches!(l, Landed::Deleted { trash: Some(t), .. } if t == "Trash")), "{mode:?}: {reply:?}");
+        assert!(f.srv.state().find("Sent").unwrap().messages.is_empty(), "{mode:?}: left Sent");
+        assert_eq!(f.srv.state().find("Trash").unwrap().messages.len(), 2, "{mode:?}: both in Trash");
+        f.srv.count_commands("LIST")
+    };
+    assert_eq!(lists(Mode::Auto).await, lists(Mode::Trash).await + 1, "one Trash lookup for the round");
+}

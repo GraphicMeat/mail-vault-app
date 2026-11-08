@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Deleting a message from Sent, Archive, Spam or any folder other than Inbox now moves it to Trash, the same as deleting from Inbox, and you can undo it. Only deleting a message that is already in Trash removes it for good. Accounts without a Trash folder keep the old behaviour.
+
 ## [2.23.0] - 2026-11-08
 
 - In the Blitz renderer, a message no longer opens to an empty reading pane when MailVault could not check it for trackers in time, as could happen right after you clicked a new-mail notification. It now shows with remote images held back, as the Web renderer already did. The same applies to threads, the full view, original messages and previews.

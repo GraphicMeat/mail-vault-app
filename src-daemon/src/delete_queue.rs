@@ -557,57 +557,67 @@ async fn send_owed_answering(state: &Arc<DaemonState>, s: &Submit, owners: &[(u3
             Ok(config) if config.uses_graph() && !config.uses_jmap() => {
                 dropped.extend(pending.iter().map(|uid| (*uid, GRAPH_UNSUPPORTED.to_string())));
             }
-            Ok(config) => {
-                for &uid in &pending {
-                    let entry = owner.get(&uid).copied();
-                    if entry.is_some_and(|id| renumbered.contains(&id)) {
-                        stopped.push((uid, RENUMBERED.to_string()));
-                        continue;
-                    }
-                    if stop.is_some() {
-                        unsent.push(uid);
-                        continue;
-                    }
-                    if how.yields {
-                        crate::search_index::wait_foreground_quiet(&state.search_index).await;
-                    }
-                    // The gate shut mid-round (a send below confirmed it):
-                    // the rest wait for it to open, unsent and uncounted.
-                    if !state.net.is_online() {
-                        stop = Some(Halt::Offline);
-                        unsent.push(uid);
-                        continue;
-                    }
-                    // A replay re-checks the account before each uid: one
-                    // that began closing (removal, a credential change)
-                    // mid-entry keeps the rest, unsent and with no reason.
-                    // A submit is the user's own click and goes on.
-                    if !how.priority && state.account_lifecycle.capture(&s.account_id).is_err() {
-                        stop = Some(Halt::Account);
-                        unsent.push(uid);
-                        continue;
-                    }
-                    // The owner's own generation when it has one, else the one this
-                    // send was journalled with (an older entry may have none).
-                    let generation = entry.and_then(|id| generations.get(&id).copied().flatten()).or(journalled);
-                    let result = send(state, &config, s, uid, how.priority, generation).await;
-                    match classify(uid, &result) {
-                        Verdict::Landed(l) => {
-                            state.net.note_success();
-                            landed.push(l);
+            Ok(config) => match resolve_mode(state, &config, s, how.priority).await {
+                // The folder's delete rule, once per round (`message_delete::resolve`):
+                // one Trash lookup for the batch, never one per uid. A lookup that
+                // fails is this round's answer for every uid, retried like a refusal.
+                Err(e) => {
+                    warn!("[delete-queue] {}/{}: where Trash is could not be read, round {} not sent: {e}", s.account_id, s.mailbox, round + 1);
+                    state.net.note_failure(&e).await;
+                    failed.extend(pending.iter().map(|uid| (*uid, e.clone())));
+                }
+                Ok(mode) => {
+                    for &uid in &pending {
+                        let entry = owner.get(&uid).copied();
+                        if entry.is_some_and(|id| renumbered.contains(&id)) {
+                            stopped.push((uid, RENUMBERED.to_string()));
+                            continue;
                         }
-                        Verdict::Drop(reason) => dropped.push((uid, reason)),
-                        Verdict::Retry(reason) => {
-                            state.net.note_failure(&reason).await;
-                            failed.push((uid, reason));
+                        if stop.is_some() {
+                            unsent.push(uid);
+                            continue;
                         }
-                        Verdict::Stop(reason) => {
-                            renumbered.extend(entry);
-                            stopped.push((uid, reason));
+                        if how.yields {
+                            crate::search_index::wait_foreground_quiet(&state.search_index).await;
+                        }
+                        // The gate shut mid-round (a send below confirmed it):
+                        // the rest wait for it to open, unsent and uncounted.
+                        if !state.net.is_online() {
+                            stop = Some(Halt::Offline);
+                            unsent.push(uid);
+                            continue;
+                        }
+                        // A replay re-checks the account before each uid: one
+                        // that began closing (removal, a credential change)
+                        // mid-entry keeps the rest, unsent and with no reason.
+                        // A submit is the user's own click and goes on.
+                        if !how.priority && state.account_lifecycle.capture(&s.account_id).is_err() {
+                            stop = Some(Halt::Account);
+                            unsent.push(uid);
+                            continue;
+                        }
+                        // The owner's own generation when it has one, else the one this
+                        // send was journalled with (an older entry may have none).
+                        let generation = entry.and_then(|id| generations.get(&id).copied().flatten()).or(journalled);
+                        let result = send(state, &config, s, mode, uid, how.priority, generation).await;
+                        match classify(uid, &result) {
+                            Verdict::Landed(l) => {
+                                state.net.note_success();
+                                landed.push(l);
+                            }
+                            Verdict::Drop(reason) => dropped.push((uid, reason)),
+                            Verdict::Retry(reason) => {
+                                state.net.note_failure(&reason).await;
+                                failed.push((uid, reason));
+                            }
+                            Verdict::Stop(reason) => {
+                                renumbered.extend(entry);
+                                stopped.push((uid, reason));
+                            }
                         }
                     }
                 }
-            }
+            },
         }
         // What this round refused or left of a renumbered entry is that
         // generation too: stopped, never sent again.
@@ -779,7 +789,7 @@ fn admit_listed(listing: &mailvault_core::accounts_doc::Listing, account_id: &st
 /// One `delete_one` on the account's provider (a JMAP account through its
 /// session, any other through the IMAP pool's priority lane), into the folder
 /// generation `generation` names (IMAP; `None`: unchecked).
-async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Submit, uid: u32, priority: bool, generation: Option<u32>) -> Result<Outcome, Refusal> {
+async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Submit, mode: Mode, uid: u32, priority: bool, generation: Option<u32>) -> Result<Outcome, Refusal> {
     #[cfg(test)]
     {
         state.delete_queue.sends.lock().unwrap().push((uid, priority));
@@ -788,7 +798,18 @@ async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Su
         }
     }
     let provider = if config.uses_jmap() { Provider::Jmap(config) } else { Provider::Imap(config) };
-    message_delete::delete_one_on(state, provider, &s.account_id, &s.mailbox, uid, s.mode, s.bin, priority, generation).await
+    message_delete::delete_one_on(state, provider, &s.account_id, &s.mailbox, uid, mode, s.bin, priority, generation).await
+}
+
+/// `s.mode` resolved for its folder on the account's provider
+/// (`message_delete::resolve`), as a refusal's text when the lookup failed.
+async fn resolve_mode(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Submit, priority: bool) -> Result<Mode, String> {
+    let provider = if config.uses_jmap() { Provider::Jmap(config) } else { Provider::Imap(config) };
+    match message_delete::resolve(state, &provider, &s.account_id, &s.mailbox, s.mode, priority).await {
+        Ok(mode) => Ok(mode),
+        Err(Refusal::Server(e)) => Err(e),
+        Err(other) => Err(format!("{other:?}")),
+    }
 }
 
 /// The uids of `pending` their entries still owe, and the folder generation

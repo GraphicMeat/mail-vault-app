@@ -235,8 +235,10 @@ impl Drop for Running {
 /// How an entry is sent: its own `mode` and `bin` (every entry `submit`
 /// wrote has them). An entry the app's own journal wrote has neither, and is
 /// sent the way the app's replay sent it: `api.deleteEmail(account, uid,
-/// mailbox)`, whose `permanent = mailbox !== 'INBOX'` is `Mode::Auto`, with
-/// a bin copy. A `mode` this build does not know: `None`, never guessed.
+/// mailbox)`, as `Mode::Auto` with a bin copy. `Auto` is resolved when it
+/// is sent, by the rule of that day (`message_delete::resolve`): an entry
+/// journalled before owner decision 1 now moves to Trash outside Trash. A
+/// `mode` this build does not know: `None`, never guessed.
 pub(crate) fn replay_intent(arg: &Value) -> Option<(Mode, bool)> {
     let mode = match arg.get("mode") {
         None | Some(Value::Null) => Mode::Auto,

@@ -4,10 +4,16 @@
 //! through `handlers::jmap_bridge`) and `graph_delete_message` read their
 //! params and call `delete_one`; nothing else writes this sequence.
 //!
-//! - `Mode`: what the caller asked. `Auto` resolves from the folder's role:
-//!   INBOX (matched case-insensitively, RFC 3501) is a move to Trash, any
-//!   other folder a permanent delete. This is the only place that rule lives:
-//!   the app sends `mode` (default `auto`) and never reads a folder name.
+//! - `Mode`: what the caller asked. `Auto` resolves by core's delete rule
+//!   (`mailvault_core::actions::policy`, owner decision 1): outside Trash a
+//!   move to Trash, inside Trash a permanent delete (`resolve`). Trash is the
+//!   folder a move would land in (IMAP `resolve_trash_path`, one LIST; JMAP
+//!   the `trash`-role mailbox of the last listing); INBOX is never Trash and
+//!   asks nothing. An account with no Trash (ruling P6) keeps the old rule:
+//!   INBOX moves (IMAP creates Trash, JMAP refuses), any other folder is a
+//!   permanent delete, logged once per resolve (one per RPC, one per delete
+//!   queue round). The app sends `mode` (default `auto`) and never reads a
+//!   folder name.
 //! - `capture_policy`: whether the bin copy is skipped, best effort or
 //!   required. Required exactly when the delete is permanent and `bin` is on:
 //!   the bin would be the only copy, so a capture that fails refuses the
@@ -46,6 +52,7 @@ use crate::account_lifecycle::AccountStamp;
 use crate::handlers::deleted::{self, CaptureFailure, Source};
 use crate::imap::{self, pool::ImapPool, ImapConfig};
 use crate::server::DaemonState;
+use mailvault_core::actions::policy::{delete_disposition, imap_trash_place, DeleteDisposition, FolderRole, TrashPlace, WithoutTrash};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{error, warn};
@@ -79,13 +86,14 @@ impl Mode {
         }
     }
 
-    /// `Auto` by the role of `mailbox`: INBOX (case-insensitive, RFC 3501)
-    /// is a move to Trash, any other folder a permanent delete. The other
-    /// modes are what they say.
-    pub(crate) fn resolve(self, mailbox: &str) -> Mode {
+    /// What core's rule says for `Auto` in `mailbox`, where Trash is
+    /// `trash` from that folder. The other modes are what they say.
+    pub(crate) fn by_rule(self, mailbox: &str, trash: TrashPlace) -> Mode {
         match self {
-            Mode::Auto if mailbox.eq_ignore_ascii_case("INBOX") => Mode::Trash,
-            Mode::Auto => Mode::Permanent,
+            Mode::Auto => match delete_disposition(FolderRole::of(mailbox, None), trash, WithoutTrash::Permanent) {
+                DeleteDisposition::MoveToTrash => Mode::Trash,
+                DeleteDisposition::Permanent => Mode::Permanent,
+            },
             m => m,
         }
     }
@@ -127,15 +135,6 @@ impl Provider<'_> {
             Provider::Imap(_) => "imap",
             Provider::Jmap(_) => "jmap",
             Provider::Graph { .. } => "graph",
-        }
-    }
-
-    /// What the delete really is on this provider: Graph only moves to
-    /// Deleted Items.
-    fn mode(&self, mode: Mode, mailbox: &str) -> Mode {
-        match self {
-            Provider::Graph { .. } => Mode::Trash,
-            _ => mode.resolve(mailbox),
         }
     }
 
@@ -205,6 +204,49 @@ struct Removed {
     changed: bool,
 }
 
+/// What the delete of a message in `mailbox` really is on `provider`, never
+/// `Auto`: Graph only moves to Deleted Items (its DELETE), whatever `mode`
+/// says; `Auto` elsewhere by core's rule (`Mode::by_rule`), asking the
+/// server where Trash is unless `mailbox` is INBOX. A lookup that fails is a
+/// `Refusal::Server`: nothing was sent, a retry may work. A caller deleting
+/// several uids of one folder resolves once and passes the result down.
+pub(crate) async fn resolve(state: &Arc<DaemonState>, provider: &Provider<'_>, account_id: &str, mailbox: &str, mode: Mode, priority: bool) -> Result<Mode, Refusal> {
+    if matches!(provider, Provider::Graph { .. }) {
+        return Ok(Mode::Trash);
+    }
+    if mode != Mode::Auto {
+        return Ok(mode);
+    }
+    let role = FolderRole::of(mailbox, None);
+    if role == FolderRole::Inbox {
+        // INBOX is never Trash: every answer the lookup could give moves it.
+        return Ok(Mode::Trash);
+    }
+    let trash = match provider {
+        Provider::Imap(config) => imap_trash_place(mailbox, imap_trash_path(state, config, priority).await.map_err(Refusal::Server)?.as_deref()),
+        Provider::Jmap(config) => crate::handlers::jmap_bridge::trash_place(state, config, mailbox).await.map_err(Refusal::Server)?,
+        Provider::Graph { .. } => unreachable!("Graph returned above"),
+    };
+    let resolved = mode.by_rule(mailbox, trash);
+    if trash == TrashPlace::Missing && resolved == Mode::Permanent {
+        warn!("[delete:{}] {account_id}/{mailbox}: the account has no Trash folder, so this delete is permanent (a bin copy first)", provider.name());
+    }
+    Ok(resolved)
+}
+
+/// The folder a move to Trash lands in (`imap::resolve_trash_path`, one
+/// LIST), `None` when the account has none.
+async fn imap_trash_path(state: &Arc<DaemonState>, config: &ImapConfig, priority: bool) -> Result<Option<String>, String> {
+    state
+        .imap_pool
+        .run_read(config, priority, |mut session| async move {
+            let trash = imap::resolve_trash_path(&mut session).await?;
+            Ok((trash, session, None))
+        })
+        .await
+        .map_err(|e| format!("Could not find the Trash folder: {e}"))
+}
+
 /// Delete `uid` of `mailbox`, capture first (`capture_policy`). The account
 /// stamp is taken here; `delete_one_stamped` takes one the caller holds.
 pub(crate) async fn delete_one(
@@ -235,7 +277,7 @@ pub(crate) async fn delete_one_on(
     priority: bool,
     generation: Option<u32>,
 ) -> Result<Outcome, Refusal> {
-    let mode = provider.mode(mode, mailbox);
+    let mode = resolve(state, &provider, account_id, mailbox, mode, priority).await?;
     let policy = capture_policy(mode, bin);
     let wants_stamp = policy != CapturePolicy::Skip || matches!(provider, Provider::Jmap(_));
     let original = if wants_stamp { state.account_lifecycle.capture(account_id).ok() } else { None };
@@ -256,12 +298,12 @@ pub(crate) async fn delete_one_stamped(
     mode: Mode,
     bin: bool,
 ) -> Result<Outcome, Refusal> {
-    let mode = provider.mode(mode, mailbox);
+    let mode = resolve(state, &provider, account_id, mailbox, mode, true).await?;
     let policy = capture_policy(mode, bin);
     run(state, original, provider, account_id, mailbox, uid, mode, policy, true, None).await
 }
 
-/// The sequence, for a `mode` already resolved by `Provider::mode` (never
+/// The sequence, for a `mode` already resolved by `resolve` (never
 /// `Auto`) and the `policy` that mode and `bin` give, in the IMAP folder
 /// generation `generation` (`None`: unchecked).
 #[allow(clippy::too_many_arguments)]

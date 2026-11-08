@@ -29,11 +29,11 @@ const serializeMessage = message => {
 };
 
 const key = (accountId, mailbox, uid) => `${accountId}|${mailbox}|${uid}`;
-// The daemon's rule for a delete (message_delete.rs): `auto` moves an INBOX
-// message to Trash (INBOX is case-insensitive) and removes any other for good.
-// No mode at all is a move to Trash, as in the daemon.
+// The daemon's rule for a delete (message_delete.rs, core actions/policy.rs):
+// `auto` moves a message to Trash from any folder but Trash, and removes one
+// in Trash for good. No mode at all is a move to Trash, as in the daemon.
 const demoDeleteGoesToTrash = (mode, mailbox) => (mode ?? 'trash') === 'trash'
-  || (mode === 'auto' && String(mailbox).toUpperCase() === 'INBOX');
+  || (mode === 'auto' && mailbox !== 'Trash');
 
 class DemoUnsupportedError extends Error {
   constructor(command) {

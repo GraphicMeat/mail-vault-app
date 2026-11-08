@@ -413,6 +413,32 @@ describe('undo after a delete', () => {
     expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([]);
   });
 
+  // Owner decision 1: a delete outside Trash is a move to Trash from every
+  // folder, not only INBOX. The daemon answers Sent like INBOX (a Trash uid,
+  // a bin copy), and the undo moves it back to Sent from Trash, not from the
+  // bin.
+  it('a Sent delete is a move: the undo moves it back to Sent from Trash', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: 5, binId: 'b7' });
+    primeStore({ emails: [row(7)], activeMailbox: 'Sent' });
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    expect(mockDeleteQueueSubmit).toHaveBeenCalledWith(
+      { accountId: 'a1', mailbox: 'Sent', uids: [7] },
+      expect.objectContaining({ mode: 'auto', bin: true }),
+    );
+    expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([]);
+    expect(useMailStore.getState().deleteTombstones.has('a1|Sent|7')).toBe(true);
+    expect(useMailStore.getState().undo).toMatchObject({ labelKey: 'undo.deleted', labelParams: { count: 1 }, canUndo: true });
+    clearForUndo();
+
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(true);
+
+    expect(mockRestoreMessages).toHaveBeenCalledWith([item(7, { mailbox: 'Sent', trashUid: 5, messageId: 'm7@mock' })]);
+    expect(mockDaemonCall).not.toHaveBeenCalledWith('deleted.recover', expect.anything());
+    expectNoAppSideRestore();
+  });
+
   it('says a permanent delete cannot be undone rather than offering a button', async () => {
     mockDeleteEmail.mockResolvedValue({ trash: null, trashUid: null });
     primeStore({ emails: [row(7)] });
