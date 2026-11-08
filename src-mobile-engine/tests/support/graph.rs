@@ -98,6 +98,8 @@ pub struct State {
     pub fail_moves_after: Option<(u32, u32)>,
     /// An attachment's `$value` is written 64 KiB at a time with this pause between.
     pub slow_value_ms: u64,
+    /// A folder's message listing answers after this pause (a slow network, page by page).
+    pub list_pause_ms: u64,
     next_id: u64,
 }
 
@@ -288,6 +290,10 @@ impl GraphMock {
 
     pub fn slow_value(&self, pause_ms: u64) {
         self.st().slow_value_ms = pause_ms;
+    }
+
+    pub fn slow_listing(&self, pause_ms: u64) {
+        self.st().list_pause_ms = pause_ms;
     }
 
     /// A raw `GET path_and_query` with `token`: the status.
@@ -487,7 +493,11 @@ fn serve(conn: TcpStream, state: &Mutex<State>, authority: &TokenAuthority, addr
             head.push_str("Content-Type: application/json\r\n");
         }
         let slow: u64 = headers.iter().find(|(k, _)| k == "X-Mock-Slow-Ms").and_then(|(_, v)| v.parse().ok()).unwrap_or(0);
-        for (k, v) in headers.iter().filter(|(k, _)| k != "X-Mock-Slow-Ms") {
+        let delay: u64 = headers.iter().find(|(k, _)| k == "X-Mock-Delay-Ms").and_then(|(_, v)| v.parse().ok()).unwrap_or(0);
+        if delay > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(delay));
+        }
+        for (k, v) in headers.iter().filter(|(k, _)| k != "X-Mock-Slow-Ms" && k != "X-Mock-Delay-Ms") {
             head.push_str(&format!("{k}: {v}\r\n"));
         }
         head.push_str("\r\n");
@@ -590,8 +600,11 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             let skip: usize = query_param(q, "$skip").and_then(|t| t.parse().ok()).unwrap_or(0);
             let since = query_param(q, "$filter").and_then(|f| f.strip_prefix("receivedDateTime ge ").and_then(|d| parse_rfc3339(d.trim())));
             let mut list: Vec<&Msg> = st.messages.iter().filter(|m| m.folder == fid && since.is_none_or(|s| m.received_ms >= s)).collect();
-            // Newest first, as asked.
+            // Newest first unless asked otherwise.
             list.sort_by(|a, b| b.received_ms.cmp(&a.received_ms));
+            if query_param(q, "$orderby").is_some_and(|o| o.trim().ends_with("asc")) {
+                list.reverse();
+            }
             let page: Vec<Value> = list.iter().skip(skip).take(top).map(|m| message_json(m, &me)).collect();
             let mut out = json!({ "value": page });
             if skip + top < list.len() {
@@ -603,7 +616,11 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
                 pairs.push(format!("$skip={}", skip + top));
                 out["@odata.nextLink"] = json!(format!("http://{addr}/me/mailFolders/{}/messages?{}", fid, pairs.join("&")));
             }
-            ok_json(out)
+            let mut answer = ok_json(out);
+            if st.list_pause_ms > 0 {
+                answer.2.push(("X-Mock-Delay-Ms".into(), st.list_pause_ms.to_string()));
+            }
+            answer
         }
         ("GET", ["me", "messages", id]) => match st.messages.iter().find(|m| m.id == *id) {
             Some(m) => ok_json(message_json(m, &me)),

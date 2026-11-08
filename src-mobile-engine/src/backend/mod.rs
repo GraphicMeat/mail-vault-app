@@ -31,6 +31,20 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// What [`Backend::arrivals`] listed, oldest first.
+pub(crate) struct Arrivals {
+    pub uids: Vec<u32>,
+    /// Everything that arrived is listed (false: the listing stopped at the deadline, newer
+    /// arrivals wait for the next pass).
+    pub complete: bool,
+}
+
+impl Arrivals {
+    pub(crate) fn all(uids: Vec<u32>) -> Arrivals {
+        Arrivals { uids, complete: true }
+    }
+}
+
 /// A folder as a backend call names it: its stored path (the remote id) and the generation the
 /// caller's uids belong to (IMAP's UIDVALIDITY). What `None` means is up to each method.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -295,11 +309,13 @@ pub(crate) trait Backend: Send {
     /// A background run's cheap listing: the uids (local uids mapped as for [`Backend::window`])
     /// of the messages in `folder` that may have arrived since the newest one held (`newest_uid`,
     /// received at `newest_ms`), oldest first, ready for [`Backend::headers`]: the caller inserts
-    /// in that order, so a pass cut part way has missed nothing below what it inserted. All of
-    /// them, however many pages that takes. May include ones already held;
+    /// in that order, so a pass cut part way has missed nothing below what it inserted. A backend
+    /// that lists page by page may stop at the pass's deadline with the oldest pages only
+    /// ([`Arrivals::complete`] false): the caller inserts those and the next pass resumes after
+    /// them. May include ones already held;
     /// the caller skips those. `None` when the backend has no cheap way, or the folder's
     /// generation is not `folder.uid_validity`: the full pass runs. Never stores delta state.
-    fn arrivals(&mut self, _folder: &FolderRow, _newest_uid: u32, _newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
+    fn arrivals(&mut self, _folder: &FolderRow, _newest_uid: u32, _newest_ms: i64) -> Result<Option<Arrivals>, Fail> {
         Ok(None)
     }
     /// The moment a background run's pass must stop: a backend does not wait out a throttle past

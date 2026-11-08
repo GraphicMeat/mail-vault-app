@@ -1,7 +1,7 @@
 //! [`Backend`] over IMAP, through mailvault-core. One signed-in session per backend; every method
 //! runs core's futures on the calling thread through [`crate::net::block_on`].
 
-use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -388,7 +388,7 @@ impl Backend for ImapBackend {
 
     /// `UID SEARCH UID n:*` above the newest uid held, after a SELECT that proves the generation.
     /// `n:*` names the last message even when its uid is below `n`, so only uids above it count.
-    fn arrivals(&mut self, folder: &FolderRow, newest_uid: u32, _newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
+    fn arrivals(&mut self, folder: &FolderRow, newest_uid: u32, _newest_ms: i64) -> Result<Option<Arrivals>, Fail> {
         self.step(async |session| {
             let validity = abd_cmds::uid_validity(session, &folder.path).await?;
             if validity.map(i64::from) != folder.uid_validity || validity.is_none() {
@@ -398,7 +398,7 @@ impl Backend for ImapBackend {
             let uids = abd_cmds::uid_search(session, &folder.path, &format!("UID {from}:*")).await?;
             let mut uids: Vec<u32> = uids.into_iter().filter(|u| *u > newest_uid).collect();
             uids.sort_unstable();
-            Ok(Some(uids))
+            Ok(Some(Arrivals::all(uids)))
         })
     }
 

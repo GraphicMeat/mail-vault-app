@@ -811,3 +811,41 @@ fn a_graph_burst_over_one_page_is_fetched_and_notified_in_full() {
     assert_eq!(rows, 251);
     assert!(background(&f).is_empty());
 }
+
+/// A Graph burst that needs more pages than one run's budget can list (here two at most): each
+/// run inserts and notifies the oldest pages it listed and the next run resumes after them, so
+/// every message is fetched and notified exactly once over the runs.
+#[test]
+fn a_graph_burst_longer_than_a_run_is_notified_in_full_over_the_runs() {
+    let f = setup();
+    let now = now_ms();
+    f.g.add_message("inbox", "Old", now - DAY, &plain("Old"));
+    f.sync(None);
+    baseline(&f);
+    for i in 0..600 {
+        f.g.add_message("inbox", &format!("Burst {i}"), now - 900_000 + i * 1000, &plain("b"));
+    }
+    // Each listing request takes 400 ms; a run of 1.1 s lists two pages at most.
+    f.g.slow_listing(400);
+    let rows = || -> i64 { f.db().query_row("SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = 'INBOX'", [ACCOUNT], |r| r.get(0)).unwrap() };
+    let mut seen: Vec<String> = Vec::new();
+    let mut runs = 0;
+    while rows() < 601 {
+        runs += 1;
+        assert!(runs <= 12, "the burst never landed in full: {} rows after {runs} runs", rows());
+        let before = rows();
+        let run = f.engine.background_fetch(Duration::from_millis(1100)).unwrap();
+        if let Some(t) = &run.commit {
+            f.engine.background_commit(t).unwrap();
+        }
+        assert!(rows() - before <= 200, "a run listed more than two pages");
+        seen.extend(run.mail.into_iter().map(|m| m.subject));
+    }
+    f.g.slow_listing(0);
+    seen.extend(background(&f));
+    assert!(runs >= 3, "the budget did not cut the listing ({runs} runs)");
+    let distinct: std::collections::HashSet<&String> = seen.iter().collect();
+    assert_eq!(distinct.len(), seen.len(), "a message was notified twice");
+    assert_eq!(seen.len(), 600, "every message of the burst was notified");
+    assert!(background(&f).is_empty());
+}

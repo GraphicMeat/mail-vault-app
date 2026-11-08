@@ -28,7 +28,7 @@
 //! the server's `Retry-After` (capped) and retries, a few times, as a transient condition and
 //! never as an error. `open` makes no request.
 
-use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Watch, Window};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Watch, Window};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -888,12 +888,13 @@ impl Backend for GraphBackend<'_> {
         }
     }
 
-    /// Everything received since the newest message held (a second early, for messages of the
-    /// same second), every page of it (newest first) until the list reaches that message: usually
-    /// one small request, never the window. The pages are mapped in one go, so local uids follow
-    /// arrival, and answered oldest first. A deadline that comes between pages ends the listing
-    /// with nothing mapped: inserting only the newest pages would leave older arrivals below.
-    fn arrivals(&mut self, folder: &FolderRow, _newest_uid: u32, newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
+    /// What was received since the newest message held (a second early, for messages of the
+    /// same second), oldest first, page by page (core `list_since_oldest_first`): usually one
+    /// small request, never the window. When the next page would not come back before the pass's
+    /// deadline (judged by the slowest page so far), the listing stops with the pages it has,
+    /// which are the oldest arrivals: the caller inserts them and the next pass resumes after
+    /// them. The pages are mapped in one go, so local uids follow arrival.
+    fn arrivals(&mut self, folder: &FolderRow, _newest_uid: u32, newest_ms: i64) -> Result<Option<Arrivals>, Fail> {
         if folder.uid_validity.is_some_and(|v| v != GENERATION) {
             return Ok(None);
         }
@@ -901,26 +902,29 @@ impl Backend for GraphBackend<'_> {
         let since = timestamp((newest_ms - 1000).max(sync::window_start_ms(crate::compose::now_ms())));
         let mut rows: Vec<GraphSynced> = Vec::new();
         let mut next: Option<String> = None;
-        loop {
+        let mut slowest = Duration::ZERO;
+        let complete = loop {
             let link = next.clone();
-            let (page, more) = self.call(async |c| c.list_since(&remote, &since, link.as_deref()).await)?;
+            let asked = Instant::now();
+            let (page, more) = self.call(async |c| c.list_since_oldest_first(&remote, &since, link.as_deref()).await)?;
+            slowest = slowest.max(asked.elapsed());
             rows.extend(page);
             match more {
                 Some(l) => {
-                    if self.deadline.is_some_and(|d| Instant::now() >= d) {
-                        return Err(Fail::Code(Code::Timeout, "the background run's budget is spent".into()));
+                    if self.deadline.is_some_and(|d| Instant::now() + slowest >= d) {
+                        break false;
                     }
                     next = Some(l);
                 }
-                None => break,
+                None => break true,
             }
-        }
+        };
         let listed = self.map_listed(&folder.path, rows)?;
         let received = |r: &GraphSynced| r.message.received_date_time.as_deref().and_then(sync::rfc3339_ms).unwrap_or(0);
         let mut order: Vec<(i64, u32)> = listed.iter().map(|(uid, r)| (received(r), *uid)).collect();
         order.sort_unstable();
         self.listed = Some((folder.path.clone(), listed));
-        Ok(Some(order.into_iter().map(|(_, uid)| uid).collect()))
+        Ok(Some(Arrivals { uids: order.into_iter().map(|(_, uid)| uid).collect(), complete }))
     }
 
     fn set_deadline(&mut self, deadline: Option<Instant>) {

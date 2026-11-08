@@ -433,7 +433,8 @@ fn quick_mark(shared: &Shared, account: &str, folder: &str, validity: i64) -> Re
 /// arrived since the newest one held, oldest first, inserted in write chunks. Each chunk moves
 /// the pass's own mark ([`quick_mark_key`]) in the same transaction, so a pass cut part way (its
 /// budget, the network) leaves a mark below which nothing is missing, and the next quick pass
-/// resumes there; a pass that completes drops it. No flags, no removals, no delta state: the next
+/// resumes there; a pass that completes drops it. A listing that stopped at the deadline (Graph,
+/// page by page) is inserted and keeps the mark, so the next pass lists on from it. No flags, no removals, no delta state: the next
 /// foreground pass does those. `false` when the folder needs the full pass (never synced, empty,
 /// a new generation, or a backend with no cheap way).
 fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) -> Result<bool, Fail> {
@@ -465,7 +466,7 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadlin
         return Ok(true);
     }
     within(deadline)?;
-    let Some(arrived) = backend.arrivals(&here, from_uid as u32, from_ms)? else {
+    let Some(backend::Arrivals { uids: arrived, complete }) = backend.arrivals(&here, from_uid as u32, from_ms)? else {
         return Ok(false);
     };
     let present: HashSet<u32> = shared.read(|c| {
@@ -519,7 +520,8 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadlin
             }
         }
     }
-    if out.is_ok() && marked {
+    // A listing that stopped at the deadline: what it listed is in, the mark stays for the rest.
+    if out.is_ok() && marked && complete {
         // Left behind, the mark only makes the next quick pass list from lower down.
         if let Err(Fail::Code(_, why)) = write_for(shared, account, |c| c.execute("DELETE FROM settings WHERE key = ?1", [&mark_key])) {
             shared.log(&format!("[sync] {account}: dropping the quick mark: {why}"));

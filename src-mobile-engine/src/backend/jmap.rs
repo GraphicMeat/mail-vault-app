@@ -35,7 +35,7 @@
 //! server's `Retry-After` (capped) a few times as a transient condition. One session per account
 //! is kept in [`Sessions`] so a message open does not fetch the session again.
 
-use super::{ApplyOutcome, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
 use crate::accounts::{self, failure, load_account, map_error, AccountRow, Code};
 use crate::actions::Kind;
 use crate::db::{lock, Engine, Shared};
@@ -793,7 +793,7 @@ impl Backend for JmapBackend<'_> {
     /// One `Email/query` of what was received since the newest message held (a second early,
     /// for messages of the same second), never the window, and no Email state: flags and the
     /// state stay the next full pass's (`pass_done` is not reached).
-    fn arrivals(&mut self, folder: &FolderRow, _newest_uid: u32, newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
+    fn arrivals(&mut self, folder: &FolderRow, _newest_uid: u32, newest_ms: i64) -> Result<Option<Arrivals>, Fail> {
         if folder.uid_validity.is_some_and(|v| v != GENERATION) {
             return Ok(None);
         }
@@ -813,7 +813,7 @@ impl Backend for JmapBackend<'_> {
         let out: Vec<u32> = ids.iter().rev().filter_map(|id| uids.get(&key(&path, id)).copied()).collect();
         let listed: HashMap<u32, String> = ids.into_iter().filter_map(|id| uids.get(&key(&path, &id)).map(|u| (*u, id))).collect();
         self.listed = Some((path, listed));
-        Ok(Some(out))
+        Ok(Some(Arrivals::all(out)))
     }
 
     fn headers(&mut self, folder: &FolderRow, uids: &[u32]) -> Result<Vec<Header>, Fail> {
