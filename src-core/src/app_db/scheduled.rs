@@ -212,17 +212,13 @@ pub fn bump_attempt(conn: &Connection, id: &str) -> Result<i64, String> {
 /// Guard for a row about to be sent. Bumps `attempts` unconditionally (never
 /// silently resend without a trace), then refuses to hand the caller a `Send`
 /// once that count is past `MAX_ATTEMPTS`: it marks the row `failed` itself,
-/// with a message that says delivery is uncertain rather than claiming it
-/// definitely failed.
+/// saying it was not sent after that many attempts.
 pub fn attempt_before_send(conn: &Connection, id: &str) -> Result<AttemptOutcome, String> {
     let attempt = bump_attempt(conn, id)?;
     if attempt > MAX_ATTEMPTS {
-        set_status(
-            conn,
-            id,
-            "failed",
-            "Delivery is uncertain after repeated attempts (possibly following a crash) — check the Sent folder before retrying.",
-        )?;
+        // Only proven-unsent failures count toward the ceiling (`due` never
+        // replays a `sending` row), so the row was not sent.
+        set_status(conn, id, "failed", &format!("Not sent: {MAX_ATTEMPTS} attempts failed. Retry to try again."))?;
         return Ok(AttemptOutcome::CeilingExceeded);
     }
     Ok(AttemptOutcome::Send { attempt })
@@ -424,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn exceeding_the_ceiling_marks_the_row_failed_with_an_uncertain_message_and_refuses_to_send() {
+    fn exceeding_the_ceiling_marks_the_row_failed_saying_it_was_not_sent_and_refuses_to_send() {
         let c = conn();
         seed(&c, "a", 1000);
         for _ in 1..=MAX_ATTEMPTS {
@@ -434,7 +430,11 @@ mod tests {
         assert_eq!(outcome, AttemptOutcome::CeilingExceeded);
         let row = get(&c, "a").unwrap().unwrap();
         assert_eq!(row.status, "failed");
-        assert!(row.last_error.to_lowercase().contains("uncertain"), "{}", row.last_error);
+        // Only proven-unsent failures reach the ceiling (`due` never replays
+        // a `sending` row): it says so, with no "uncertain" wording, which is
+        // the `uncertain` status's own.
+        assert_eq!(row.last_error, format!("Not sent: {MAX_ATTEMPTS} attempts failed. Retry to try again."));
+        assert!(!row.last_error.contains('\u{2014}'), "no em dash");
     }
 
     #[test]

@@ -857,6 +857,26 @@ pub(crate) mod tests {
         assert_eq!(sent.len(), 1, "commands: {:?}", server.smtp_commands());
     }
 
+    /// Cut off after DATA, `smtp_send_email` answers like `compose.send`:
+    /// a reply (not an RPC error) with `success: false, mayHaveSent: true`
+    /// and the transport's words. `api.sendEmail` turns that into a thrown
+    /// error with the flag, so no caller reads it as accepted.
+    #[tokio::test]
+    async fn send_email_cut_off_after_data_answers_may_have_sent() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().smtp_drop_after_data("SEND-EMAIL-CUT-AFTER-DATA"));
+        let s = st(true);
+        let mut email = outgoing_email("partner@example.com");
+        email["text"] = json!("SEND-EMAIL-CUT-AFTER-DATA");
+
+        let resp = call(&s, "smtp_send_email", json!({"account": account_json(&server), "email": email})).await;
+        let result = resp.result.expect("a reply, not an RPC error");
+        assert_eq!(result["success"], json!(false), "{result}");
+        assert_eq!(result["mayHaveSent"], json!(true), "{result}");
+        assert!(result["error"].as_str().is_some_and(|e| !e.is_empty()), "{result}");
+        assert_eq!(server.sent_messages().len(), 1, "the server took it once");
+    }
+
     /// Compose's two calls: `smtp_build_mime` stages the local Sent copy, then
     /// `smtp_send_email` sends under that id. The server must receive the staged
     /// bytes, so its copy is the local copy (same Date, same everything).

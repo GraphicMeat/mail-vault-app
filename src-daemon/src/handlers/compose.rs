@@ -147,8 +147,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Ok(sent) => sent,
                 // A send that may have gone out answers `mayHaveSent: true`
                 // (not an error): the outbox keeps it as uncertain and never
-                // resends it on its own. The staged copy stays as it is.
-                Err(failed) => return Some(failed.reply(id)),
+                // resends it on its own. The staged copy stays as it is. An
+                // edited scheduled email it replaced may have gone out with
+                // it: that row goes `uncertain` too, never firing as a second
+                // copy.
+                Err(failed) => {
+                    if failed.verdict.is_uncertain() {
+                        if let Some(row_id) = after.cancel_scheduled_id.clone() {
+                            hold_replaced_row(state, row_id, failed.message.clone(), operation.clone()).await;
+                        }
+                    }
+                    return Some(failed.reply(id));
+                }
             };
             // The message is out. Nothing below fails the call.
             let entry = after_send(state, &account, &email, &sent, after, original, operation).await;
@@ -157,6 +167,30 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
         _ => return None,
     })
+}
+
+/// A send of an edited scheduled email that may have gone out: its row
+/// (`row_id`) is marked `uncertain` with the send's words, so the worker
+/// never fires it and the Scheduled folder offers Retry or Discard for it.
+/// Only a `queued` or `failed` row moves; one the worker holds right now is
+/// its own, and is left to it.
+async fn hold_replaced_row(state: &Arc<DaemonState>, row_id: String, why: String, operation: OperationPermit) {
+    let st = Arc::clone(state);
+    let id_for_mark = row_id.clone();
+    let marked = blocking(move || {
+        let _operation = operation;
+        crate::handlers::scheduled::mark_uncertain(&st, &id_for_mark, &why)
+    })
+    .await
+    .and_then(|r| r);
+    match marked {
+        Ok(true) => {
+            state.scheduled_send.wake();
+            state.events.emit("scheduled-send", json!({"id": row_id, "status": "uncertain"}));
+        }
+        Ok(false) => warn!("[send:hold_scheduled_skip] row={} not queued or failed, or held by the worker", row_id),
+        Err(e) => warn!("[send:hold_scheduled_fail] row={} error={}", row_id, e),
+    }
 }
 
 /// What the vault holds at the staged uid.
@@ -1321,7 +1355,7 @@ mod tests {
     /// The connection is cut after DATA: the server took the message and the
     /// reply never came. The send may have gone out, so compose.send answers
     /// `mayHaveSent: true` (not an error the outbox would offer to retry by
-    /// itself), the staged copy stays as staged, and nothing is sent again.
+    /// itself), the staged copy stays as staged, and no Sent copy is filed.
     #[tokio::test]
     async fn a_send_cut_off_after_data_answers_may_have_sent_and_is_sent_once() {
         plaintext();
@@ -1338,9 +1372,10 @@ mod tests {
         assert_eq!(reply["success"], json!(false), "{reply}");
         assert_eq!(reply["mayHaveSent"], json!(true), "{reply}");
         assert!(reply["error"].as_str().is_some_and(|e| !e.is_empty()), "{reply}");
+        // The daemon never resends a compose send; the app's outbox is where a
+        // resend would come from (`OutboxTray.test.jsx` pins that it never
+        // does on its own).
         assert_eq!(server.sent_messages().len(), 1, "the server took it once");
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        assert_eq!(server.sent_messages().len(), 1, "nothing resends it on its own");
         assert_eq!(flags_of(&s, uid), Some(vec!["draft".to_string(), "seen".to_string()]), "the staged copy is left as staged");
         assert!(server.state().find("Sent").unwrap().messages.is_empty(), "no Sent copy is filed for an uncertain send");
     }

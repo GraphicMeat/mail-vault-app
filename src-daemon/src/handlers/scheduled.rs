@@ -233,7 +233,11 @@ fn update(
     };
     let existing = app_db::with(&state.app_dir, |c| scheduled::get(c, row_id))?
         .ok_or_else(|| format!("No scheduled send {row_id}"))?;
-    if rebuild.is_some() && !matches!(existing.status.as_str(), "queued" | "failed") {
+    // Only a row still waiting to fire is edited or rescheduled. An
+    // `uncertain` one may have gone out (Retry or Discard only), and a new
+    // time would leave it a row that never fires; a cancelled one has no
+    // frozen message left to send.
+    if !matches!(existing.status.as_str(), "queued" | "failed") {
         return Err(NOT_EDITABLE.to_string());
     }
     let original = if rebuild.is_some() || reschedule.is_some() {
@@ -295,6 +299,26 @@ pub(crate) fn cancel(state: &Arc<DaemonState>, row_id: &str) -> Result<Value, St
     let _cancel_done = tests::schedule_pause(&state.app_dir);
     app_db::with(&state.app_dir, |c| scheduled::cancel(c, row_id))?;
     Ok(Value::Null)
+}
+
+/// A `queued` or `failed` row whose message may have gone out another way
+/// (an edited copy sent now and cut off after DATA) becomes `uncertain` with
+/// `why`, under the worker's claim like `cancel`: never fired on its own,
+/// Retry or Discard in the Scheduled folder. `Ok(false)` when the row is in
+/// another state, gone, or held by the worker. The frozen `.eml` stays for
+/// Retry.
+pub(crate) fn mark_uncertain(state: &Arc<DaemonState>, row_id: &str, why: &str) -> Result<bool, String> {
+    let Some(_claim) = state.scheduled_send.claim(row_id) else {
+        return Ok(false);
+    };
+    let Some(row) = app_db::with(&state.app_dir, |c| scheduled::get(c, row_id))? else {
+        return Ok(false);
+    };
+    if !matches!(row.status.as_str(), "queued" | "failed") {
+        return Ok(false);
+    }
+    app_db::with(&state.app_dir, |c| scheduled::set_status(c, row_id, "uncertain", why))?;
+    Ok(true)
 }
 
 /// Facts for the app's timezone suggestion for a recipient, not a zone:
@@ -879,6 +903,69 @@ mod tests {
         assert_eq!(retried["status"], json!("uncertain"), "the same cut: {retried:?}");
         assert_eq!(retried["attempts"], json!(1), "a retry starts a fresh count");
         assert_eq!(server.sent_messages().len(), 2, "one more, on the user's word");
+    }
+
+    /// An edited scheduled email sent now instead (`compose.send` with
+    /// `cancelScheduledId`), cut off after DATA: it may have gone out, so the
+    /// row it replaces goes `uncertain` with it (Retry or Discard in the
+    /// Scheduled folder) and never fires on its own as a second copy.
+    #[tokio::test]
+    async fn an_uncertain_send_of_an_edited_row_leaves_the_row_uncertain_and_unsent() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let s = st();
+        let server = serve_acc1_with(&s, Scenario::new().smtp_drop_after_data("EDITED-CUT-AFTER-DATA"));
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        let uid = row["uid"].as_u64().unwrap() as u32;
+
+        let account = json!({
+            "email": "luke@mock.test", "password": "hunter2",
+            "imapHost": server.host(), "imapPort": server.port(),
+            "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecure": false,
+        });
+        let email = json!({"to": "partner@example.com", "subject": "Later, edited", "text": "EDITED-CUT-AFTER-DATA"});
+        let staged = crate::server::handle_request_for_test(&s, "compose.stage", json!({
+            "accountId": "acc1", "account": account, "email": email, "mailbox": "Sent", "snippet": "x", "hasAttachments": false,
+        })).await.result.expect("staged");
+        let reply = crate::server::handle_request_for_test(&s, "compose.send", json!({
+            "accountId": "acc1", "account": account, "email": email,
+            "mailbox": staged["mailbox"], "uid": staged["uid"], "messageId": staged["messageId"],
+            "snippet": "x", "hasAttachments": false, "cancelScheduledId": id,
+        })).await.result.expect("answered");
+        assert_eq!(reply["mayHaveSent"], json!(true), "{reply}");
+        assert_eq!(server.sent_messages().len(), 1);
+
+        let after = stored(&s, &id);
+        assert_eq!(after.status, "uncertain", "the replaced row must not stay queued: {after:?}");
+        assert!(!after.last_error.is_empty(), "it says why: {after:?}");
+        assert!(mailvault_core::vault_files::exists(&s.data_dir, "acc1", "Scheduled", uid), "the frozen copy stays for Retry");
+
+        // Due now: the worker still passes it by.
+        mailvault_core::app_db::with(&s.app_dir, |c| scheduled::push_fire_at(c, &id, now_ms() - 1_000)).unwrap();
+        crate::scheduled_send_worker::process_due(&s).await;
+        crate::scheduled_send_worker::process_due(&s).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!(server.sent_messages().len(), 1, "the recipient gets it once");
+        assert_eq!(stored(&s, &id).status, "uncertain");
+    }
+
+    /// A reschedule-only edit of an `uncertain` row is refused: the status
+    /// would stay `uncertain` under a new time, a row that never fires. Only
+    /// a `queued` or `failed` row is rescheduled.
+    #[tokio::test]
+    async fn a_reschedule_of_an_uncertain_row_is_refused() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        mailvault_core::app_db::with(&s.app_dir, |c| scheduled::set_status(c, &id, "uncertain", "cut off")).unwrap();
+        let before = stored(&s, &id);
+
+        let params = json!({"id": id, "localTime": "2026-10-02T10:00", "tz": "Europe/Vilnius", "fireAt": 9_999_999_999_998i64});
+        let resp = route(&s, "scheduled.update", &params, json!(1)).await.expect("routed");
+        let err = resp.error.expect("a reschedule of an uncertain row must be refused").message;
+        assert!(err.starts_with("E_SCHEDULED_NOT_EDITABLE:"), "{err}");
+        let after = stored(&s, &id);
+        assert_eq!((after.status.as_str(), after.fire_at), ("uncertain", before.fire_at));
     }
 
     /// A row refused before DATA (550 at RCPT) proved nothing went out: it
