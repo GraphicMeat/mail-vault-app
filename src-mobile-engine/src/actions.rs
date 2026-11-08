@@ -21,6 +21,7 @@ use crate::db::{lock, Engine, Shared};
 use crate::events::{ACTION_RESULT, FOLDER_CHANGED};
 use crate::rpc::{parse, RpcError};
 use crate::sync::{self, Fail};
+use mailvault_core::backoff::RetryPolicy;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -378,7 +379,8 @@ pub(crate) fn drop_folder_actions(
 
 struct Retry {
     at: Instant,
-    delay: Duration,
+    /// Failures in a row for this account.
+    failures: u32,
 }
 
 struct ReplayState {
@@ -409,14 +411,6 @@ struct Queue {
 #[derive(Default, Clone)]
 pub(crate) struct Replay {
     queue: Arc<Queue>,
-}
-
-/// The next delay after a failure: `base` first, then doubling, never above `cap`.
-fn next_delay(prev: Option<Duration>, base: Duration, cap: Duration) -> Duration {
-    match prev {
-        None => base.min(cap),
-        Some(d) => d.saturating_mul(2).min(cap),
-    }
 }
 
 impl Replay {
@@ -517,8 +511,9 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
                     st.retry.remove(account);
                 }
                 Err(_) => {
-                    let delay = next_delay(st.retry.get(account).map(|r| r.delay), st.base, st.cap);
-                    st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, delay });
+                    let failures = st.retry.get(account).map_or(0, |r| r.failures).saturating_add(1);
+                    let delay = RetryPolicy::new(st.base, st.cap, None).next_delay(failures);
+                    st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, failures });
                 }
             }
         }
@@ -912,13 +907,8 @@ mod tests {
 
     #[test]
     fn backoff_doubles_to_the_cap() {
-        let mut d = None;
-        let mut seen = Vec::new();
-        for _ in 0..9 {
-            let next = next_delay(d, BACKOFF_BASE, BACKOFF_CAP);
-            seen.push(next.as_secs());
-            d = Some(next);
-        }
+        let p = RetryPolicy::new(BACKOFF_BASE, BACKOFF_CAP, None);
+        let seen: Vec<u64> = (1..=9).map(|n| p.next_delay(n).as_secs()).collect();
         assert_eq!(seen, vec![5, 10, 20, 40, 80, 160, 300, 300, 300]);
     }
 

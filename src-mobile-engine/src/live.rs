@@ -30,6 +30,7 @@ use crate::backend::{self, Change, FolderRow, StopFlag, Watch};
 use crate::db::{lock, Engine, Shared};
 use crate::rpc::{parse, RpcError};
 use crate::sync::{self, Fail, Worker};
+use mailvault_core::backoff::RetryPolicy;
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -156,10 +157,6 @@ impl Live {
     }
 }
 
-fn next_delay(d: Duration, cap: Duration) -> Duration {
-    (d * 2).min(cap)
-}
-
 fn parked(shared: &Shared, account: &str) -> bool {
     shared
         .read(|c| c.query_row("SELECT needs_auth FROM accounts WHERE id = ?1", [account], |r| r.get::<_, i64>(0)).optional())
@@ -179,7 +176,9 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
         .ok()
         .flatten()
         .is_some_and(|a| a == "oauth2");
-    let mut backoff = timing.backoff_base;
+    let policy = RetryPolicy::new(timing.backoff_base, timing.backoff_cap, None);
+    // The failure the next wait answers: 1 after a healthy stretch.
+    let mut failures = 1u32;
     // The last connect failed with a sign-in refusal: its catch-up pass would fail the same way.
     let mut refused = false;
     let inbox = FolderRow::new("INBOX", None);
@@ -206,7 +205,7 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
                     }
                     match change {
                         Ok(Change::Changed) => {
-                            backoff = timing.backoff_base;
+                            failures = 1;
                             if let Err(e) = sync.enqueue_inbox(shared, account) {
                                 shared.log(&format!("[live] {account}: {e}"));
                                 return;
@@ -216,7 +215,7 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
                             if watch.stopped() {
                                 return;
                             }
-                            backoff = timing.backoff_base;
+                            failures = 1;
                         }
                         Err(f) => break f,
                     }
@@ -238,13 +237,13 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
                     shared.log(&format!("[live] {account}: {} {why}; not again until the next foreground", code.as_str()));
                     return;
                 }
-                shared.log(&format!("[live] {account}: {} {why}; again in {:?}", code.as_str(), backoff));
+                shared.log(&format!("[live] {account}: {} {why}; again in {:?}", code.as_str(), policy.next_delay(failures)));
             }
         }
-        if !watch.nap(backoff) {
+        if !watch.nap(policy.next_delay(failures)) {
             return;
         }
-        backoff = next_delay(backoff, timing.backoff_cap);
+        failures = failures.saturating_add(1);
     }
 }
 
@@ -352,12 +351,8 @@ mod tests {
 
     #[test]
     fn backoff_doubles_to_the_cap() {
-        let mut d = BACKOFF_BASE;
-        let mut seen = Vec::new();
-        for _ in 0..9 {
-            seen.push(d.as_secs());
-            d = next_delay(d, BACKOFF_CAP);
-        }
+        let p = RetryPolicy::new(BACKOFF_BASE, BACKOFF_CAP, None);
+        let seen: Vec<u64> = (1..=9).map(|n| p.next_delay(n).as_secs()).collect();
         assert_eq!(seen, vec![5, 10, 20, 40, 80, 160, 300, 300, 300]);
     }
 }

@@ -9,7 +9,9 @@
 //! Same shape as `app_db::snooze`: the worker is the only reader of `due()`,
 //! the RPCs in `src-daemon/src/handlers/follow_up.rs` own the rest.
 
+use crate::backoff::RetryPolicy;
 use rusqlite::{params, Connection, OptionalExtension};
+use std::time::Duration;
 
 /// Transient failures a row gets before it goes `failed`. Offline or a locked
 /// keychain never counts (`Outcome::Wait`).
@@ -66,10 +68,13 @@ pub enum Outcome {
     Wait(String),
 }
 
-/// Retry backoff after the `attempt`th transient failure, as snooze's.
+/// Retry backoff after the `attempt`th transient failure, as snooze's: 30 s doubling, at most
+/// 2^10 times the base.
 pub fn backoff_ms(attempt: i64) -> i64 {
-    crate::app_db::snooze::backoff_ms(attempt)
+    RETRY.next_delay_ms(attempt)
 }
+
+const RETRY: RetryPolicy = RetryPolicy::new(Duration::from_secs(30), Duration::from_secs(30 * 1024), Some(MAX_ATTEMPTS as u32));
 
 fn now_ms() -> i64 {
     std::time::SystemTime::now()

@@ -15,6 +15,7 @@
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, scheduled};
+use mailvault_core::backoff::RetryPolicy;
 use mailvault_core::imap::ImapConfig;
 use mailvault_core::smtp::{self, FrozenEnvelope};
 use mailvault_core::vault_files;
@@ -93,8 +94,11 @@ const KEYCHAIN_POLL: Duration = Duration::from_secs(5 * 60);
 /// picked straight back up on the worker's very next tick and hammer the
 /// server instead of waiting.
 fn backoff_ms(attempt: i64) -> i64 {
-    30_000 * 2i64.pow((attempt.max(1) - 1) as u32)
+    RETRY.next_delay_ms(attempt)
 }
+
+/// 30 s doubling; `scheduled::MAX_ATTEMPTS` (3) attempts, so the waits used are 30 s and 60 s.
+const RETRY: RetryPolicy = RetryPolicy::new(Duration::from_secs(30), Duration::MAX, Some(scheduled::MAX_ATTEMPTS as u32));
 
 /// When the daemon came up. A credential read that fails inside
 /// `CREDENTIAL_GRACE` of that moment is treated as transient rather than

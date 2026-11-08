@@ -32,6 +32,7 @@ use crate::idle_watch::WatchStatus;
 use crate::jmap_sessions::JmapMeta;
 use crate::server::DaemonState;
 use crate::sync_engine::SyncAccount;
+use mailvault_core::backoff::RetryPolicy;
 use mailvault_core::jmap::JmapError;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
@@ -88,8 +89,7 @@ impl PushTiming {
     /// The wait after the `failures`-th failure in a row (from 1): the base,
     /// doubled per failure, at most the cap.
     pub fn backoff(&self, failures: u32) -> Duration {
-        let shift = failures.saturating_sub(1).min(31);
-        self.backoff_base.saturating_mul(1u32 << shift).min(self.backoff_cap)
+        RetryPolicy::new(self.backoff_base, self.backoff_cap, None).next_delay(failures)
     }
 }
 

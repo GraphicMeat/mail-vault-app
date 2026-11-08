@@ -11,7 +11,9 @@
 //! Same shape as `app_db::scheduled`: the worker is the only reader of
 //! `due()`, the RPCs in `src-daemon/src/handlers/snooze.rs` own the rest.
 
+use crate::backoff::RetryPolicy;
 use rusqlite::{params, Connection, OptionalExtension};
+use std::time::Duration;
 
 /// The one folder name snooze moves mail into. No IMAP special-use exists for
 /// it, and Gmail's own snooze is not exposed over IMAP, so every provider gets
@@ -60,8 +62,11 @@ pub enum WakeOutcome {
 
 /// Retry backoff after the `attempt`th transient failure: 30s, 1m, 2m, 4m.
 pub fn backoff_ms(attempt: i64) -> i64 {
-    30_000 * 2i64.pow((attempt.max(1) - 1).min(10) as u32)
+    RETRY.next_delay_ms(attempt)
 }
+
+/// 30 s doubling per failure, at most 2^10 times the base.
+const RETRY: RetryPolicy = RetryPolicy::new(Duration::from_secs(30), Duration::from_secs(30 * 1024), Some(MAX_ATTEMPTS as u32));
 
 /// Which uid in the Snoozed folder is this row's message. `found` is what a
 /// `UID SEARCH HEADER Message-ID` there answered. The stored COPYUID wins when

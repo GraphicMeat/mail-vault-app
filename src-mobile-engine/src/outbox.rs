@@ -31,6 +31,7 @@ use crate::outgoing::resolve_outgoing;
 use crate::rpc::{parse, RpcError};
 use crate::sync::{self, Fail};
 use base64::Engine as _;
+use mailvault_core::backoff::RetryPolicy;
 use mailvault_core::smtp::OutgoingAttachment;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
@@ -218,7 +219,8 @@ pub(crate) fn discard(engine: &Engine, params: Value) -> Result<Value, RpcError>
 
 struct Retry {
     at: Instant,
-    delay: Duration,
+    /// Failures in a row for this account.
+    failures: u32,
 }
 
 struct State {
@@ -240,13 +242,6 @@ struct Queue {
 #[derive(Clone)]
 pub(crate) struct Outbox {
     queue: Arc<Queue>,
-}
-
-fn next_delay(prev: Option<Duration>, base: Duration, cap: Duration) -> Duration {
-    match prev {
-        None => base.min(cap),
-        Some(d) => d.saturating_mul(2).min(cap),
-    }
 }
 
 impl Outbox {
@@ -359,8 +354,9 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
             if ok {
                 st.retry.remove(account);
             } else {
-                let delay = next_delay(st.retry.get(account).map(|r| r.delay), st.base, st.cap);
-                st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, delay });
+                let failures = st.retry.get(account).map_or(0, |r| r.failures).saturating_add(1);
+                let delay = RetryPolicy::new(st.base, st.cap, None).next_delay(failures);
+                st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, failures });
             }
         }
         if !ready.is_empty() {
@@ -564,9 +560,9 @@ mod tests {
 
     #[test]
     fn backoff_doubles_to_the_cap() {
-        let (b, c) = (BACKOFF_BASE, BACKOFF_CAP);
-        assert_eq!(next_delay(None, b, c), Duration::from_secs(5));
-        assert_eq!(next_delay(Some(Duration::from_secs(5)), b, c), Duration::from_secs(10));
-        assert_eq!(next_delay(Some(Duration::from_secs(200)), b, c), Duration::from_secs(300));
+        let p = RetryPolicy::new(BACKOFF_BASE, BACKOFF_CAP, None);
+        assert_eq!(p.next_delay(1), Duration::from_secs(5));
+        assert_eq!(p.next_delay(2), Duration::from_secs(10));
+        assert_eq!(p.next_delay(9), Duration::from_secs(300));
     }
 }

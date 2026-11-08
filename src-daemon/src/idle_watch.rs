@@ -17,6 +17,7 @@ use crate::netgate::NetGate;
 use crate::server::DaemonState;
 use crate::sync_engine::{SyncAccount, SyncEngine};
 use serde::Serialize;
+use mailvault_core::backoff::RetryPolicy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
@@ -274,7 +275,9 @@ impl IdleWatchers {
         idle_timeout: Duration,
         state: Arc<Mutex<WatchStatus>>,
     ) {
-        let mut backoff = self.backoff_base;
+        let policy = RetryPolicy::new(self.backoff_base, BACKOFF_CAP, None);
+        // Failures in a row since the last healthy round.
+        let mut failures = 0u32;
 
         loop {
             if !self.net.is_online() {
@@ -295,7 +298,7 @@ impl IdleWatchers {
                 Err(e) => {
                     warn!("[idle] {}: connect failed: {}", account.email, e);
                     note_error(&state, e);
-                    wait_backoff(&mut backoff).await;
+                    wait_backoff(&policy, &mut failures).await;
                     continue;
                 }
             };
@@ -317,7 +320,7 @@ impl IdleWatchers {
             if let Err(e) = imap::select_mailbox(&mut session, "INBOX").await {
                 warn!("[idle] {}: SELECT INBOX failed: {}", account.email, e);
                 note_error(&state, e);
-                wait_backoff(&mut backoff).await;
+                wait_backoff(&policy, &mut failures).await;
                 continue;
             }
 
@@ -376,11 +379,11 @@ impl IdleWatchers {
                 // to reconnect and must keep the backoff it had, or a server
                 // that fails one round in every two is dialled at full speed
                 // for ever.
-                backoff = self.backoff_base;
+                failures = 0;
             }
 
             state.lock().unwrap().idling = false;
-            wait_backoff(&mut backoff).await;
+            wait_backoff(&policy, &mut failures).await;
         }
     }
 
@@ -551,9 +554,9 @@ fn note_error(state: &Arc<Mutex<WatchStatus>>, error: String) {
 }
 
 /// Wait out this failure, then double the wait for the next one.
-async fn wait_backoff(backoff: &mut Duration) {
-    tokio::time::sleep(*backoff).await;
-    *backoff = (*backoff * 2).min(BACKOFF_CAP);
+async fn wait_backoff(policy: &RetryPolicy, failures: &mut u32) {
+    *failures = failures.saturating_add(1);
+    tokio::time::sleep(policy.next_delay(*failures)).await;
 }
 
 #[cfg(test)]
