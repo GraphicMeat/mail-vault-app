@@ -23,8 +23,7 @@ use crate::outgoing::resolve_outgoing;
 use crate::rpc::{parse, RpcError};
 use mailvault_core::filename_safety::safe_handle_name;
 use mailvault_core::mime_types::mime_of_name;
-use mailvault_core::compose::own_addresses_with_from;
-use mailvault_core::compose_prep::{self, Account, Context};
+use mailvault_core::compose_prep::{self, quoted_text, Account, Context, QuoteLabels};
 use mailvault_core::send::limits;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
@@ -282,14 +281,6 @@ struct PrepareParams {
     subject_label: Option<String>,
 }
 
-/// The quote's header line and field names.
-struct QuoteLabels {
-    original: String,
-    from: String,
-    date: String,
-    subject: String,
-}
-
 /// The stored list row of the original, with what sync kept for a reply (`thread_json`).
 struct Stored {
     subject: String,
@@ -347,49 +338,6 @@ fn body_within(shared: &Arc<Shared>, account: &str, folder: &str, uid: u32) -> O
         Ok(Ok(v)) if v["gone"] != true => Some(v),
         _ => None,
     }
-}
-
-/// `Re: subject` / `Fwd: subject`, with any prefix of the same kind the original had replaced.
-fn subject_candidate(subject: &str, forward: bool) -> String {
-    let s = subject.trim();
-    let (prefix, known): (&str, &[&str]) = if forward { ("Fwd:", &["fwd:", "fw:"]) } else { ("Re:", &["re:"]) };
-    let lower = s.to_ascii_lowercase();
-    let rest = known.iter().find(|k| lower.starts_with(*k)).map(|k| s[k.len()..].trim_start()).unwrap_or(s);
-    format!("{prefix} {rest}")
-}
-
-/// The original's text quoted line by line, under a short header.
-fn quote_text(labels: &QuoteLabels, header: &Value, date: &str, text: &str) -> String {
-    let from = &header["from"];
-    let mut out = format!(
-        "{}\n{}: {} <{}>\n{}: {date}\n{}: {}\n\n",
-        labels.original,
-        labels.from,
-        from["name"].as_str().unwrap_or(""),
-        from["address"].as_str().unwrap_or(""),
-        labels.date,
-        labels.subject,
-        header["subject"].as_str().unwrap_or("")
-    );
-    for line in text.lines() {
-        out.push_str("> ");
-        out.push_str(line);
-        out.push('\n');
-    }
-    out
-}
-
-/// Removes the user's own addresses from a comma-separated list.
-fn without_own(list: &str, own: &[String]) -> String {
-    list.split(',')
-        .map(str::trim)
-        .filter(|a| !a.is_empty())
-        .filter(|a| {
-            let bare = a.rsplit_once('<').map(|(_, r)| r.trim_end_matches('>')).unwrap_or(a).trim();
-            !own.iter().any(|o| o.eq_ignore_ascii_case(bare))
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 /// `mobile.compose.prepare {accountId, mode: "new"|"reply"|"replyAll"|"forward", folder?, uid?,
@@ -466,7 +414,6 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
             Ok(rows)
         })
         .map_err(internal)?;
-    let own = own_addresses_with_from(&accounts.iter().map(|a| a.email.clone()).collect::<Vec<_>>(), &acct.email);
     let request = json!({
         "kind": "message",
         "requestId": "mobile",
@@ -477,7 +424,7 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
         "presentation": {
             "originalLabel": label,
             "dateLabel": date,
-            "subjectCandidate": subject_candidate(header["subject"].as_str().unwrap_or(""), forward),
+            "subjectCandidate": format!("{} {}", if forward { "Fwd:" } else { "Re:" }, header["subject"].as_str().unwrap_or("")),
         },
     });
     let ctx = Context { accounts, settings: json!({}), settings_version: 0 };
@@ -513,11 +460,11 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
         }
     }
     Ok(json!({
-        "to": without_own(&str_of("to"), &own),
-        "cc": without_own(&str_of("cc"), &own),
+        "to": str_of("to"),
+        "cc": str_of("cc"),
         "subject": str_of("subject"),
         "quote": str_of("quotedHtml"),
-        "quoteText": if quote_pending { String::new() } else { quote_text(&labels, &header, &date, &quote_body) },
+        "quoteText": if quote_pending { String::new() } else { quoted_text(&labels, &header, &date, &quote_body) },
         "quotePending": quote_pending,
         "inReplyTo": str_of("inReplyTo"),
         "references": str_of("references"),
@@ -650,25 +597,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn subjects_get_one_prefix() {
-        assert_eq!(subject_candidate("Plans", false), "Re: Plans");
-        assert_eq!(subject_candidate("RE: Plans", false), "Re: Plans");
-        assert_eq!(subject_candidate("re:Plans", false), "Re: Plans");
-        assert_eq!(subject_candidate("Fw: Plans", true), "Fwd: Plans");
-        assert_eq!(subject_candidate("Re: Plans", true), "Fwd: Re: Plans");
-    }
-
-    #[test]
     fn message_ids_are_safe_for_core() {
         let id = new_message_id("u@example.test");
         assert!(id.starts_with('<') && id.ends_with("@example.test>"), "{id}");
         assert_eq!(new_message_id("u@exämple.test").rsplit('@').next(), Some("mailvault.local>"));
         assert_ne!(new_message_id("u@x.test"), new_message_id("u@x.test"));
-    }
-
-    #[test]
-    fn own_addresses_leave_the_list() {
-        let own = vec!["me@x.test".to_string()];
-        assert_eq!(without_own("a@x.test, Me <ME@x.test>, b@x.test", &own), "a@x.test, b@x.test");
     }
 }

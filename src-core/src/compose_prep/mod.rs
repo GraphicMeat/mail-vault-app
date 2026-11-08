@@ -8,6 +8,10 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
+pub mod quote;
+pub mod subject;
+pub use quote::{quoted_text, QuoteLabels};
+
 // Check/mailto payloads and the separate account reader retain this bound.
 // Complete message preparation has no product byte/count cutoff.
 pub const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
@@ -435,14 +439,16 @@ pub fn reply_context(params: &Value, ctx: &Context) -> Result<Value> {
                     .collect::<Vec<_>>()
                     .join("<hr>")
             };
-            let subject = &original.header.subject;
-            let prefix = if mode == ReplyMode::Forward {
-                "Fwd:"
-            } else {
-                "Re:"
-            };
+            let original_subject = &original.header.subject;
+            // The caller's candidate carries its localized prefix (`WG:`, `Re :`); the
+            // original's own leading prefixes are dropped (one rule, see `subject`).
+            let fallback = if mode == ReplyMode::Forward { "Fwd:" } else { "Re:" };
+            let subject = subject::subject_for(
+                original_subject,
+                subject::prefix_of(&presentation.subject_candidate, original_subject, fallback),
+            );
             Ok(
-                json!({"requestId":request_id,"settingsVersion":ctx.settings_version,"accountId":account,"to":to,"cc":cc,"bcc":"","subject":if subject.starts_with(prefix){subject}else{&presentation.subject_candidate},"inReplyTo":parent,"references":refs,"quotedHeaderHtml":header,"fullQuotedBodyHtml":body,"quotedHtml":quote,"contextHtml":context,"fullOriginalHtml":full,"bodyAvailable":original.html.as_ref().is_some_and(|s|!s.is_empty())||(!original.header.body_loading&&original.text.as_ref().is_some_and(|s|!s.is_empty()))}),
+                json!({"requestId":request_id,"settingsVersion":ctx.settings_version,"accountId":account,"to":to,"cc":cc,"bcc":"","subject":subject,"inReplyTo":parent,"references":refs,"quotedHeaderHtml":header,"fullQuotedBodyHtml":body,"quotedHtml":quote,"contextHtml":context,"fullOriginalHtml":full,"bodyAvailable":original.html.as_ref().is_some_and(|s|!s.is_empty())||(!original.header.body_loading&&original.text.as_ref().is_some_and(|s|!s.is_empty()))}),
             )
         }
     }

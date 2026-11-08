@@ -34,6 +34,16 @@ fn request(c: &Value) -> Value {
 fn check_request() -> Value {
     json!({"requestId":"check","draftId":"draft-1","revision":3,"accountId":"one","fromAddress":"removed@example.test","mode":"new","forward":false,"to":"ok@example.test","cc":"","bcc":"","subject":"","authoredBodyText":"","attachmentCount":0,"sendPlan":null,"scheduleDraft":null,"timeZone":"UTC","sendAnyway":false})
 }
+/// The subjects where the one shared rule differs from the frozen JS corpus.
+fn reply_subject_rule(name: &str) -> Option<&'static str> {
+    match name {
+        "lower-re-prefix-reply" | "lower-re-prefix-replyAll" | "exact-fwd-prefix-reply" | "exact-fwd-prefix-replyAll" => {
+            Some("Re: Ready")
+        }
+        "exact-re-prefix-forward" | "lower-re-prefix-forward" | "exact-fwd-prefix-forward" => Some("WG: Ready"),
+        _ => None,
+    }
+}
 #[test]
 fn actual_js_message_fields_match() {
     let f = fixture();
@@ -46,6 +56,14 @@ fn actual_js_message_fields_match() {
     {
         let actual = compose_prep::reply_context(&request(c), &ctx).unwrap();
         for (key, expected) in c["output"].as_object().unwrap() {
+            if key == "subject" {
+                // The frozen JS kept an original's own prefix as is. Ruling 1 (one reply
+                // subject rule, see `compose_prep::subject`) changes exactly these cases.
+                if let Some(now) = reply_subject_rule(c["name"].as_str().unwrap()) {
+                    assert_eq!(actual[key], now, "{} field {key}", c["name"]);
+                    continue;
+                }
+            }
             assert_eq!(&actual[key], expected, "{} field {key}", c["name"]);
         }
         assert_eq!(actual["requestId"], c["name"]);
