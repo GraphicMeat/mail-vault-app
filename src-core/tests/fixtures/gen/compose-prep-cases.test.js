@@ -15,7 +15,8 @@ import { composeIdentities, resolveInitialComposeIdentity } from '../../../../sr
 import { invalidRecipients } from '../../../../src/utils/recipientTokens';
 import { missingAttachment } from '../../../../src/utils/missingAttachment';
 import { parseMailto } from '../../../../src/utils/mailto';
-import { routeSend } from '../../../../src/utils/sendPlan';
+// routeSend left src/utils/sendPlan.js for a demo-only copy; same code.
+import { routeSend } from '../../../../src/demo/routeSend';
 import { zonedTimeToEpoch, isPastLocalTime, wallClockAt } from '../../../../src/utils/scheduledTime';
 import { hasPremiumAccess, useSettingsStore } from '../../../../src/stores/settingsStore';
 const copy = value => JSON.parse(JSON.stringify(value));
