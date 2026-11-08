@@ -791,3 +791,23 @@ fn a_move_that_fails_part_way_keeps_what_moved_and_its_follow_up() {
     let alpha = f.g.messages_in(&projects).into_iter().find(|m| m.subject == "Alpha").unwrap();
     assert!(alpha.is_read, "the read followed the moved message; logs {:?}", f.logs.lock().unwrap());
 }
+
+/// A Graph burst over one page (100): the quick pass pages back to the newest message it held,
+/// so every new message is fetched and notified once.
+#[test]
+fn a_graph_burst_over_one_page_is_fetched_and_notified_in_full() {
+    let f = setup();
+    let now = now_ms();
+    f.g.add_message("inbox", "Old", now - DAY, &plain("Old"));
+    f.sync(None);
+    baseline(&f);
+    for i in 0..250 {
+        f.g.add_message("inbox", &format!("Burst {i}"), now - 600_000 + i * 1000, &plain("b"));
+    }
+    let got = background(&f);
+    let distinct: std::collections::HashSet<&String> = got.iter().collect();
+    assert_eq!((got.len(), distinct.len()), (250, 250), "every message of the burst, once");
+    let rows: i64 = f.db().query_row("SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = 'INBOX'", [ACCOUNT], |r| r.get(0)).unwrap();
+    assert_eq!(rows, 251);
+    assert!(background(&f).is_empty());
+}

@@ -403,10 +403,39 @@ fn within(deadline: Option<Instant>) -> Result<(), Fail> {
     }
 }
 
-/// A background run's INBOX pass: the backend's cheap news check, then only the messages that
-/// arrived since the newest one held, inserted newest first in write chunks. No flags, no
-/// removals, no delta state: the next foreground pass does those. `false` when the folder needs
-/// the full pass (never synced, empty, a new generation, or a backend with no cheap way).
+/// Where a cut quick pass of `account`'s `folder` stopped: `<validity> <uid> <ms>`, the newest uid
+/// and arrival time of what it inserted (everything that arrived since its start up to that
+/// point is in the table). The next quick pass resumes there rather than at the newest row held.
+fn quick_mark_key(account: &str, folder: &str) -> String {
+    format!("bg.quickFrom.{account}/{folder}")
+}
+
+/// Drops every quick-pass mark of `account` (the account is being removed). Inside its write
+/// transaction.
+pub(crate) fn forget_quick_marks(c: &Connection, account: &str) -> rusqlite::Result<()> {
+    let prefix = format!("bg.quickFrom.{account}/");
+    c.execute("DELETE FROM settings WHERE substr(key, 1, length(?1)) = ?1", [&prefix])?;
+    Ok(())
+}
+
+/// The mark a cut quick pass left in `folder` under generation `validity`, if any.
+fn quick_mark(shared: &Shared, account: &str, folder: &str, validity: i64) -> Result<Option<(i64, i64)>, Fail> {
+    let value: Option<String> = shared
+        .read(|c| c.query_row("SELECT value FROM settings WHERE key = ?1", [quick_mark_key(account, folder)], |r| r.get(0)).optional())?;
+    let parsed = value.and_then(|v| {
+        let mut it = v.split(' ').map(|p| p.parse::<i64>().ok());
+        Some((it.next()??, it.next()??, it.next()??))
+    });
+    Ok(parsed.and_then(|(v, uid, ms)| (v == validity).then_some((uid, ms))))
+}
+
+/// A background run's INBOX pass: the backend's cheap news check, then every message that
+/// arrived since the newest one held, oldest first, inserted in write chunks. Each chunk moves
+/// the pass's own mark ([`quick_mark_key`]) in the same transaction, so a pass cut part way (its
+/// budget, the network) leaves a mark below which nothing is missing, and the next quick pass
+/// resumes there; a pass that completes drops it. No flags, no removals, no delta state: the next
+/// foreground pass does those. `false` when the folder needs the full pass (never synced, empty,
+/// a new generation, or a backend with no cheap way).
 fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) -> Result<bool, Fail> {
     let Some(folder) = folder_path(shared, account, "INBOX")? else {
         return Ok(false);
@@ -426,12 +455,17 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadlin
         return Ok(false);
     };
     let here = FolderRow::new(&folder, Some(validity));
+    let mark_key = quick_mark_key(account, &folder);
+    let resume = quick_mark(shared, account, &folder, validity)?;
+    let (from_uid, from_ms) = resume.unwrap_or((newest_uid, newest_ms));
     within(deadline)?;
-    if !backend.has_news(&here)? {
+    // A cut pass left mail below the newest row held: the news check (is the newest listed?)
+    // would say there is none.
+    if resume.is_none() && !backend.has_news(&here)? {
         return Ok(true);
     }
     within(deadline)?;
-    let Some(arrived) = backend.arrivals(&here, newest_uid as u32, newest_ms)? else {
+    let Some(arrived) = backend.arrivals(&here, from_uid as u32, from_ms)? else {
         return Ok(false);
     };
     let present: HashSet<u32> = shared.read(|c| {
@@ -444,11 +478,13 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadlin
         }
         Ok(out)
     })?;
-    let mut new: Vec<u32> = arrived.into_iter().filter(|u| !present.contains(u)).collect();
-    new.sort_unstable_by(|a, b| b.cmp(a));
-    new.dedup();
+    // Oldest first, as the backend listed them.
+    let mut once = HashSet::new();
+    let new: Vec<u32> = arrived.into_iter().filter(|u| !present.contains(u) && once.insert(*u)).collect();
     let gen = shared.list_gen(account, &folder)? + 1;
     let mut added = 0;
+    let mut marked = resume.is_some();
+    let mut mark = (from_uid, from_ms);
     let mut out = Ok(true);
     for chunk in new.chunks(BATCH) {
         if let Err(f) = within(deadline).and_then(|()| not_closing(shared)) {
@@ -462,12 +498,31 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadlin
                 break;
             }
         };
-        match write_for(shared, account, |c| insert_headers(c, account, &folder, &headers, gen)) {
-            Ok(n) => added += n,
+        let top = headers.iter().fold(mark, |(u, ms), h| (u.max(h.uid as i64), ms.max(header_date_ms(h))));
+        let wrote = write_for(shared, account, |c| {
+            let n = insert_headers(c, account, &folder, &headers, gen)?;
+            c.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (&mark_key, format!("{validity} {} {}", top.0, top.1)),
+            )?;
+            Ok(n)
+        });
+        match wrote {
+            Ok(n) => {
+                added += n;
+                mark = top;
+                marked = true;
+            }
             Err(f) => {
                 out = Err(f);
                 break;
             }
+        }
+    }
+    if out.is_ok() && marked {
+        // Left behind, the mark only makes the next quick pass list from lower down.
+        if let Err(Fail::Code(_, why)) = write_for(shared, account, |c| c.execute("DELETE FROM settings WHERE key = ?1", [&mark_key])) {
+            shared.log(&format!("[sync] {account}: dropping the quick mark: {why}"));
         }
     }
     // Published even when the pass stopped part way: what it committed is in the table.
@@ -832,6 +887,8 @@ fn sync_folder_pass(
 
     let total = mbox.total;
     write_for(shared, account, |c| {
+        // A completed pass holds the whole window: a cut quick pass's mark is spent.
+        c.execute("DELETE FROM settings WHERE key = ?1", [quick_mark_key(account, folder)])?;
         c.execute(
             "UPDATE folders SET uid_next = ?3, unseen = ?4, total = ?5, synced_ms = ?6 WHERE account_id = ?1 AND path = ?2",
             (account, folder, mbox.uid_next, unseen, total, now_ms()),

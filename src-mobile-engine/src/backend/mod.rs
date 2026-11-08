@@ -294,7 +294,9 @@ pub(crate) trait Backend: Send {
     }
     /// A background run's cheap listing: the uids (local uids mapped as for [`Backend::window`])
     /// of the messages in `folder` that may have arrived since the newest one held (`newest_uid`,
-    /// received at `newest_ms`), ready for [`Backend::headers`]. May include ones already held;
+    /// received at `newest_ms`), oldest first, ready for [`Backend::headers`]: the caller inserts
+    /// in that order, so a pass cut part way has missed nothing below what it inserted. All of
+    /// them, however many pages that takes. May include ones already held;
     /// the caller skips those. `None` when the backend has no cheap way, or the folder's
     /// generation is not `folder.uid_validity`: the full pass runs. Never stores delta state.
     fn arrivals(&mut self, _folder: &FolderRow, _newest_uid: u32, _newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {

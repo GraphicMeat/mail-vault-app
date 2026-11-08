@@ -396,7 +396,9 @@ impl Backend for ImapBackend {
             }
             let from = newest_uid.saturating_add(1);
             let uids = abd_cmds::uid_search(session, &folder.path, &format!("UID {from}:*")).await?;
-            Ok(Some(uids.into_iter().filter(|u| *u > newest_uid).collect()))
+            let mut uids: Vec<u32> = uids.into_iter().filter(|u| *u > newest_uid).collect();
+            uids.sort_unstable();
+            Ok(Some(uids))
         })
     }
 

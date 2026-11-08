@@ -492,3 +492,40 @@ fn one_slow_account_does_not_starve_the_next_one() {
     slow.reset_scenario(Scenario::new().mailbox(inbox(vec![msg(1, "a old"), msg(2, "a new").with_internal_ms(now_ms())])));
     assert_eq!(subjects(&f.run(BUDGET)), vec!["a new"]);
 }
+
+/// A burst bigger than one write chunk whose pass is cut after the first chunk (the run's budget
+/// ran out in the middle): the next runs fetch the rest from where the cut pass stopped, oldest
+/// first, and every message is notified exactly once.
+#[test]
+fn a_burst_cut_after_one_chunk_is_fetched_and_notified_in_full_over_the_next_runs() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+    for i in 0..450 {
+        deliver(&server, &format!("burst {i}"), false);
+    }
+    let rows = || -> i64 { f.db().query_row("SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = 'INBOX'", [&account], |r| r.get(0)).unwrap() };
+    // The second header chunk stalls past the run's budget.
+    let mut stall = server.pause_command_nth("FETCH", 2);
+    let got = f.run(Duration::from_millis(2500));
+    assert!(stall.entered(Duration::ZERO), "the pass reached its second chunk");
+    assert!(got.is_empty(), "a cut pass posts nothing: {:?}", subjects(&got));
+    assert_eq!(rows(), 201, "one chunk landed before the cut");
+    stall.release();
+
+    let mut seen: Vec<String> = Vec::new();
+    for _ in 0..4 {
+        let got = f.run(BUDGET);
+        if got.is_empty() && rows() == 451 {
+            break;
+        }
+        seen.extend(got.into_iter().map(|m| m.subject));
+    }
+    assert_eq!(rows(), 451, "every message of the burst was fetched");
+    let distinct: std::collections::HashSet<&String> = seen.iter().collect();
+    assert_eq!(distinct.len(), seen.len(), "a message was notified twice");
+    assert_eq!(seen.len(), 450, "every message of the burst was notified");
+    assert!(f.run(BUDGET).is_empty());
+}

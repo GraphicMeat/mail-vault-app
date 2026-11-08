@@ -809,8 +809,9 @@ impl Backend for JmapBackend<'_> {
             let got = sync::write_for(self.shared, &account, |c| remote_ids::uids_for(c, &account, &path, chunk))?;
             uids.extend(chunk.iter().cloned().zip(got));
         }
+        // `Email/query` answers newest first: the caller wants oldest first.
+        let out: Vec<u32> = ids.iter().rev().filter_map(|id| uids.get(&key(&path, id)).copied()).collect();
         let listed: HashMap<u32, String> = ids.into_iter().filter_map(|id| uids.get(&key(&path, &id)).map(|u| (*u, id))).collect();
-        let out: Vec<u32> = listed.keys().copied().collect();
         self.listed = Some((path, listed));
         Ok(Some(out))
     }

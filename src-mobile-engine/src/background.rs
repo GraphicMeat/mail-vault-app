@@ -105,6 +105,7 @@ fn now_ms() -> i64 {
 /// Drops the account's background state (the account is being removed). Runs inside its write
 /// transaction; `notify_state` and `notified` go with `PER_ACCOUNT_TABLES`.
 pub(crate) fn forget(c: &Connection, account: &str) -> rusqlite::Result<()> {
+    crate::sync::forget_quick_marks(c, account)?;
     crate::hold::forget(c, account)
 }
 

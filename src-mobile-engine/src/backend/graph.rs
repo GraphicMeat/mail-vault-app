@@ -888,19 +888,39 @@ impl Backend for GraphBackend<'_> {
         }
     }
 
-    /// One page, newest first, of what was received since the newest message held (a second
-    /// early, for messages of the same second): usually one small request, never the window.
+    /// Everything received since the newest message held (a second early, for messages of the
+    /// same second), every page of it (newest first) until the list reaches that message: usually
+    /// one small request, never the window. The pages are mapped in one go, so local uids follow
+    /// arrival, and answered oldest first. A deadline that comes between pages ends the listing
+    /// with nothing mapped: inserting only the newest pages would leave older arrivals below.
     fn arrivals(&mut self, folder: &FolderRow, _newest_uid: u32, newest_ms: i64) -> Result<Option<Vec<u32>>, Fail> {
         if folder.uid_validity.is_some_and(|v| v != GENERATION) {
             return Ok(None);
         }
         let remote = remote_folder(&folder.path).to_string();
         let since = timestamp((newest_ms - 1000).max(sync::window_start_ms(crate::compose::now_ms())));
-        let (rows, _more) = self.call(async |c| c.list_since(&remote, &since, None).await)?;
+        let mut rows: Vec<GraphSynced> = Vec::new();
+        let mut next: Option<String> = None;
+        loop {
+            let link = next.clone();
+            let (page, more) = self.call(async |c| c.list_since(&remote, &since, link.as_deref()).await)?;
+            rows.extend(page);
+            match more {
+                Some(l) => {
+                    if self.deadline.is_some_and(|d| Instant::now() >= d) {
+                        return Err(Fail::Code(Code::Timeout, "the background run's budget is spent".into()));
+                    }
+                    next = Some(l);
+                }
+                None => break,
+            }
+        }
         let listed = self.map_listed(&folder.path, rows)?;
-        let uids: Vec<u32> = listed.keys().copied().collect();
+        let received = |r: &GraphSynced| r.message.received_date_time.as_deref().and_then(sync::rfc3339_ms).unwrap_or(0);
+        let mut order: Vec<(i64, u32)> = listed.iter().map(|(uid, r)| (received(r), *uid)).collect();
+        order.sort_unstable();
         self.listed = Some((folder.path.clone(), listed));
-        Ok(Some(uids))
+        Ok(Some(order.into_iter().map(|(_, uid)| uid).collect()))
     }
 
     fn set_deadline(&mut self, deadline: Option<Instant>) {
