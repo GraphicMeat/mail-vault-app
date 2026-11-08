@@ -10,6 +10,10 @@
 //! may have gone out: it becomes `uncertain` and is never sent again on its own (the user's
 //! Retry sends it again under the same Message-ID, Discard drops it).
 //!
+//! The rows are core's outbox state machine (`mailvault_core::send::outbox`): [`Store`] is its
+//! SQLite [`OutboxStore`], and where an attempt leaves a row is core's [`core_outbox::next_state`] (through
+//! [`finish`]) under [`RETRY`], which never gives up on a transient failure.
+//!
 //! The backend says where a failure fell ([`SendFail`], from core's `send_built_phased`): one
 //! that may have followed an acceptance (the connection broke or timed out during or after the
 //! upload) makes the row `uncertain`, never resent on its own, exactly like a crash; a refusal no
@@ -22,17 +26,18 @@
 //! ([`release_dirs`]): when its row is sent or discarded, or its draft deleted. [`sweep`] removes,
 //! at engine open, the dirs older than a day that nothing names (a pick the page never saved).
 
-use crate::accounts::{load_account, Code};
+use crate::accounts::Code;
 use crate::backend::{self, Backend, SendFail};
-use mailvault_core::send::classify::SendVerdict;
 use crate::compose::{self, Fields};
-use crate::db::{lock, Engine, Shared};
+use crate::db::{lock, Engine, EngineError, Shared};
 use crate::events::SEND_RESULT;
 use crate::outgoing::resolve_outgoing;
 use crate::rpc::{parse, RpcError};
 use crate::sync::{self, Fail};
 use base64::Engine as _;
 use mailvault_core::backoff::RetryPolicy;
+use mailvault_core::send::classify::SendVerdict;
+use mailvault_core::send::outbox::{self as core_outbox, finish, OutboxState, OutboxStore};
 use mailvault_core::smtp::OutgoingAttachment;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
@@ -44,6 +49,9 @@ use std::time::{Duration, Instant};
 
 const BACKOFF_BASE: Duration = Duration::from_secs(5);
 const BACKOFF_CAP: Duration = Duration::from_secs(300);
+/// The mobile retry policy: 5 s doubling to 300 s, never giving up on a transient failure. A row
+/// goes back to `queued` at once; the wait is its account's backoff in the worker.
+pub(crate) const RETRY: RetryPolicy = RetryPolicy::new(BACKOFF_BASE, BACKOFF_CAP, None);
 /// A picked dir nothing names is swept at open once it is this old.
 pub(crate) const ORPHAN_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 /// `sent` rows are kept this long (for `uncertain` detection and support), then pruned at open.
@@ -125,10 +133,76 @@ pub(crate) fn sweep(shared: &Shared, cache_dir: &Path, older_than: Duration) {
 
 /// At open, before any worker runs: a row left `sending` may have gone out, so it becomes
 /// `uncertain`; `sent` rows past their keep time go. Answers whether rows wait to be sent.
+/// Runs on the writer before [`Shared`] exists; [`Store`]'s `on_open` is the same.
 pub(crate) fn on_open(w: &Connection, now_ms: i64) -> rusqlite::Result<bool> {
-    w.execute("UPDATE outbox SET state = 'uncertain', updated_ms = ?1 WHERE state = 'sending'", [now_ms])?;
-    w.execute("DELETE FROM outbox WHERE state = 'sent' AND updated_ms < ?1", [now_ms - SENT_KEEP_MS])?;
-    w.query_row("SELECT EXISTS(SELECT 1 FROM outbox WHERE state = 'queued')", [], |r| r.get(0))
+    let sending = OutboxState::Sending;
+    w.execute(
+        "UPDATE outbox SET state = ?2, updated_ms = ?1 WHERE state = ?3",
+        (now_ms, core_outbox::on_open(sending).as_str(), sending.as_str()),
+    )?;
+    w.execute("DELETE FROM outbox WHERE state = ?2 AND updated_ms < ?1", (now_ms - SENT_KEEP_MS, OutboxState::Sent.as_str()))?;
+    w.query_row("SELECT EXISTS(SELECT 1 FROM outbox WHERE state = ?1)", [OutboxState::Queued.as_str()], |r| r.get(0))
+}
+
+// ── The store ───────────────────────────────────────────────────────────────
+
+/// The `outbox` table as core's [`OutboxStore`]. Every move is a compare-and-set on `state`, so a
+/// row discarded or retried while it was being sent is left alone. There is no not-before column:
+/// a requeued row waits through its account's backoff in the worker, so `mark` ignores
+/// `not_before_ms` and `queued` answers every queued row.
+pub(crate) struct Store<'a>(pub(crate) &'a Shared);
+
+impl OutboxStore for Store<'_> {
+    type Error = EngineError;
+
+    fn claim_sending(&self, id: &str) -> Result<bool, EngineError> {
+        self.mark(id, OutboxState::Queued, OutboxState::Sending, None, false, None)
+    }
+
+    fn mark(
+        &self,
+        id: &str,
+        from: OutboxState,
+        to: OutboxState,
+        error: Option<&str>,
+        count_attempt: bool,
+        _not_before_ms: Option<i64>,
+    ) -> Result<bool, EngineError> {
+        self.0
+            .write(|c| {
+                c.execute(
+                    "UPDATE outbox SET state = ?3, last_error = ?4, attempts = attempts + ?5, updated_ms = ?6 WHERE id = ?1 AND state = ?2",
+                    (id, from.as_str(), to.as_str(), error, count_attempt as i64, compose::now_ms()),
+                )
+            })
+            .map(|n| n == 1)
+    }
+
+    fn on_open(&self, now_ms: i64) -> Result<bool, EngineError> {
+        self.0.write(|c| on_open(c, now_ms))
+    }
+
+    fn queued(&self, account: &str, _now_ms: i64) -> Result<Vec<String>, EngineError> {
+        self.0.read(|c| {
+            let mut st = c.prepare_cached("SELECT id FROM outbox WHERE account_id = ?1 AND state = ?2 ORDER BY created_ms, id")?;
+            let rows = st.query_map((account, OutboxState::Queued.as_str()), |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
+            Ok(rows)
+        })
+    }
+
+    fn attempts(&self, id: &str) -> Result<u32, EngineError> {
+        let n: Option<i64> = self.0.read(|c| c.query_row("SELECT attempts FROM outbox WHERE id = ?1", [id], |r| r.get(0)).optional())?;
+        Ok(n.map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX)))
+    }
+}
+
+/// A store answer, or `default` with the error logged (a failed move is a move that did not
+/// happen: the row stays where it was).
+fn logged<T>(shared: &Shared, what: &str, r: Result<T, EngineError>, default: T) -> T {
+    r.unwrap_or_else(|e| {
+        shared.log(&format!("[outbox] {what}: {e}"));
+        default
+    })
 }
 
 // ── RPCs ────────────────────────────────────────────────────────────────────
@@ -177,10 +251,13 @@ pub(crate) fn retry(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             let Some((account, state)) = row else {
                 return Ok(Err("unknown outbox row"));
             };
-            if !matches!(state.as_str(), "queued" | "failed" | "uncertain") {
+            if !OutboxState::parse(&state).is_some_and(OutboxState::user_may_retry) {
                 return Ok(Err("the message is being sent or was sent"));
             }
-            c.execute("UPDATE outbox SET state = 'queued', last_error = NULL, updated_ms = ?2 WHERE id = ?1", (&p.id, compose::now_ms()))?;
+            c.execute(
+                "UPDATE outbox SET state = ?3, last_error = NULL, updated_ms = ?2 WHERE id = ?1",
+                (&p.id, compose::now_ms(), OutboxState::Queued.as_str()),
+            )?;
             Ok(Ok(account))
         })
         .map_err(internal)?;
@@ -200,7 +277,7 @@ pub(crate) fn discard(engine: &Engine, params: Value) -> Result<Value, RpcError>
                 c.query_row("SELECT state, draft_json FROM outbox WHERE id = ?1", [&p.id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
             match row {
                 None => Ok(Ok(None)),
-                Some((state, _)) if state == "sending" => Ok(Err(())),
+                Some((state, _)) if state == OutboxState::Sending.as_str() => Ok(Err(())),
                 Some((_, json)) => {
                     c.execute("DELETE FROM outbox WHERE id = ?1", [&p.id])?;
                     Ok(Ok(Some(json)))
@@ -386,11 +463,7 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
 }
 
 fn queued_ids(shared: &Shared, account: &str) -> Result<Vec<String>, Fail> {
-    Ok(shared.read(|c| {
-        let mut st = c.prepare_cached("SELECT id FROM outbox WHERE account_id = ?1 AND state = 'queued' ORDER BY created_ms, id")?;
-        let rows = st.query_map([account], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
-        Ok(rows)
-    })?)
+    Ok(Store(shared).queued(account, compose::now_ms())?)
 }
 
 /// Puts every queued row of `account` on hold after a failure to reach the server.
@@ -436,27 +509,12 @@ fn send_account(shared: &Shared, cache_dir: &Path, account: &str) -> bool {
     true
 }
 
-/// Moves row `id` from `from` to `to`; `false` when it was not in `from` (discarded, retried).
-fn transition(shared: &Shared, id: &str, from: &str, to: &str, error: Option<&str>, attempt: bool) -> bool {
-    shared
-        .write(|c| {
-            c.execute(
-                "UPDATE outbox SET state = ?3, last_error = ?4, attempts = attempts + ?5, updated_ms = ?6 WHERE id = ?1 AND state = ?2",
-                (id, from, to, error, attempt as i64, compose::now_ms()),
-            )
-        })
-        .map(|n| n == 1)
-        .unwrap_or_else(|e| {
-            shared.log(&format!("[outbox] {id}: {from} -> {to}: {e}"));
-            false
-        })
-}
-
-/// Ends row `id` as `failed` with `reason`, from `from`.
-fn fail_row(shared: &Shared, account: &str, id: &str, from: &str, reason: &str) {
-    if transition(shared, id, from, "failed", Some(reason), from == "sending") {
-        emit_result(shared, id, account, "failed", Some(reason));
-    }
+/// Ends claimed row `id`'s attempt with `verdict` (core's [`finish`] under [`RETRY`]) and tells
+/// the page where it went, with `reason`.
+fn end_attempt(shared: &Shared, account: &str, id: &str, verdict: SendVerdict, reason: Option<&str>) -> Option<OutboxState> {
+    let to = logged(shared, id, finish(&Store(shared), id, verdict, reason, compose::now_ms(), &RETRY), None)?;
+    emit_result(shared, id, account, to.as_str(), reason.filter(|_| to != OutboxState::Sent));
+    Some(to)
 }
 
 /// The picked files as core's attachments: read and base64-encoded here, on the worker. `Err`
@@ -476,42 +534,53 @@ fn read_attachments(cache_dir: &Path, fields: &Fields) -> Result<Vec<OutgoingAtt
     Ok(out)
 }
 
-/// One attempt at row `id`. `false` when the account must back off (the row is `queued` again).
+/// One attempt at row `id`. `false` when the account must back off (the row is `queued` again,
+/// or `uncertain`).
 fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, account: &str, id: &str) -> bool {
+    let store = Store(shared);
     let row: Option<(String, Option<String>)> = shared
         .read(|c| {
-            c.query_row("SELECT draft_json, message_id FROM outbox WHERE id = ?1 AND state = 'queued'", [id], |r| Ok((r.get(0)?, r.get(1)?)))
-                .optional()
+            c.query_row(
+                "SELECT draft_json, message_id FROM outbox WHERE id = ?1 AND state = ?2",
+                (id, OutboxState::Queued.as_str()),
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
         })
         .unwrap_or(None);
     let Some((json, message_id)) = row else {
         return true;
     };
     let fields = Fields::read(&json);
-    let checked = match load_account(shared, account) {
-        Ok(Some(acct)) => compose::check_recipients(&acct, &fields),
-        _ => return true,
-    };
-    if let Err(why) = checked {
+    if !matches!(crate::accounts::load_account(shared, account), Ok(Some(_))) {
+        return true;
+    }
+    if let Err(why) = compose::check_recipients(&fields) {
         shared.log(&format!("[outbox] {account} {id}: INVALID {why}"));
-        fail_row(shared, account, id, "queued", "INVALID");
+        // Never tried: no attempt is counted.
+        let failed = store.mark(id, OutboxState::Queued, OutboxState::Failed, Some("INVALID"), false, None);
+        if logged(shared, id, failed, false) {
+            emit_result(shared, id, account, OutboxState::Failed.as_str(), Some("INVALID"));
+        }
         return true;
     }
     // Committed before the network: from here on, a crash leaves `sending`, read as `uncertain`.
-    if !transition(shared, id, "queued", "sending", None, false) {
+    if !logged(shared, id, store.claim_sending(id), false) {
         return true;
     }
     let Ok(attachments) = read_attachments(cache_dir, &fields) else {
-        fail_row(shared, account, id, "sending", "ATTACHMENT_MISSING");
+        end_attempt(shared, account, id, SendVerdict::Terminal, Some("ATTACHMENT_MISSING"));
         return true;
     };
     let email = fields.outgoing(message_id, attachments);
     match backend.send(&email) {
         Ok(sent) => {
             drop(email);
-            if transition(shared, id, "sending", "sent", None, true) {
+            // The files go before the page hears `sent`.
+            let sent_now = finish(&Store(shared), id, SendVerdict::Sent, None, compose::now_ms(), &RETRY);
+            if logged(shared, id, sent_now, None).is_some() {
                 release_dirs(shared, cache_dir, &fields.dirs());
-                emit_result(shared, id, account, "sent", None);
+                emit_result(shared, id, account, OutboxState::Sent.as_str(), None);
             }
             if let Err(Fail::Code(code, why)) = backend.file_sent(&sent) {
                 shared.log(&format!("[outbox] {account} {id}: filing in Sent: {} {why}", code.as_str()));
@@ -526,23 +595,17 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
                 }
                 Fail::Gone | Fail::Closing => Code::HostUnreachable,
             };
-            if verdict.is_uncertain() {
-                // The server may have it: never again on its own (Retry or Discard in the UI).
-                if transition(shared, id, "sending", "uncertain", Some(code.as_str()), true) {
-                    emit_result(shared, id, account, "uncertain", Some(code.as_str()));
-                }
-                false
-            } else if verdict == SendVerdict::Terminal {
-                let reason = if code == Code::AuthFailed { "AUTH_FAILED" } else { "REFUSED" };
-                fail_row(shared, account, id, "sending", reason);
-                true
-            } else {
-                // Proven not sent: back to the queue, and the account backs off.
-                if transition(shared, id, "sending", "queued", Some(code.as_str()), true) {
-                    emit_result(shared, id, account, "queued", Some(code.as_str()));
-                }
-                false
-            }
+            // `lastError` is a code: a final refusal says whether the sign-in or the message was
+            // refused, anything else the failure's code.
+            let reason = match verdict {
+                SendVerdict::Terminal if code == Code::AuthFailed => "AUTH_FAILED",
+                SendVerdict::Terminal => "REFUSED",
+                _ => code.as_str(),
+            };
+            // An uncertain row is never sent again on its own (Retry or Discard in the UI); a
+            // proven-unsent one is queued again. Either way the account backs off.
+            end_attempt(shared, account, id, verdict, Some(reason));
+            !(verdict.is_uncertain() || verdict.may_retry_automatically())
         }
     }
 }
@@ -561,7 +624,7 @@ mod tests {
 
     #[test]
     fn backoff_doubles_to_the_cap() {
-        let p = RetryPolicy::new(BACKOFF_BASE, BACKOFF_CAP, None);
+        let p = RETRY;
         assert_eq!(p.next_delay(1), Duration::from_secs(5));
         assert_eq!(p.next_delay(2), Duration::from_secs(10));
         assert_eq!(p.next_delay(9), Duration::from_secs(300));
