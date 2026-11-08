@@ -718,3 +718,87 @@ fn removing_an_account_removes_its_picked_files() {
     f.engine.rpc("mobile.accounts.remove", json!({ "accountId": f.account })).unwrap();
     assert!(!f.cache().join("out").join("cdcdcdcdcdcdcdcd").exists(), "the removed account's picked files went with it");
 }
+
+/// One tokenizer in core: a list the check accepts with `;` or a line break between addresses is
+/// built and sent to each of them, never journaled and then failed as `REFUSED`.
+#[test]
+fn a_semicolon_or_newline_list_is_sent_to_each_address() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let from = f.events.len();
+    let id = f.send(json!({ "to": "one@example.test; two@example.test\nthree@example.test", "subject": "Many", "text": "To all" })).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    f.events.send_result(from, &id, "sent");
+    let rcpts: Vec<String> = server.smtp_commands().into_iter().filter(|c| c.to_ascii_uppercase().starts_with("RCPT")).collect();
+    for who in ["one@example.test", "two@example.test", "three@example.test"] {
+        assert!(rcpts.iter().any(|c| c.contains(who)), "{who}: {rcpts:?}");
+    }
+}
+
+/// `not_before_ms` of outbox row `id`.
+fn not_before(f: &Fixture, id: &str) -> i64 {
+    f.db().query_row("SELECT not_before_ms FROM outbox WHERE id = ?1", [id], |r| r.get(0)).unwrap()
+}
+
+/// Core's `OutboxStore` contract: a row put back to `queued` after a failure carries the earliest
+/// time it may go again, and `queued` holds it back until then, across a restart too (the wait
+/// is the row's, not only the worker's memory).
+#[test]
+fn a_queued_row_waits_for_its_not_before_time() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    // IMAP signs in; SMTP is a port nobody listens on: the send fails before anything went out.
+    let dead = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    assert_eq!(f.db().execute("UPDATE accounts SET smtp_port = ?2 WHERE id = ?1", rusqlite::params![&f.account, dead]).unwrap(), 1);
+    let from = f.events.len();
+    let id = f.send(json!({ "to": "rcpt@example.test", "subject": "Later", "text": "Not before its time" })).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    f.events.send_result(from, &id, "queued");
+    assert!(not_before(&f, &id) > 0, "a requeued row carries its wait");
+
+    // Down while it waits; back up with a wait well past the worker's own backoff.
+    let Fixture { tmp, secrets, engine, events: _, account } = f;
+    drop(engine);
+    let until = now_ms() + 2_500;
+    {
+        let db = rusqlite::Connection::open(tmp.path().join("mobile.db")).unwrap();
+        assert_eq!(db.execute("UPDATE outbox SET not_before_ms = ?2 WHERE id = ?1", rusqlite::params![&id, until]).unwrap(), 1);
+        db.execute("UPDATE accounts SET smtp_port = ?2 WHERE id = ?1", rusqlite::params![&account, server.smtp_port()]).unwrap();
+    }
+    let (engine, events) = open(tmp.path(), &secrets);
+    let f = Fixture { tmp, secrets, engine, events, account };
+    std::thread::sleep(Duration::from_millis(1_200));
+    assert!(server.sent_messages().is_empty(), "sent before its not-before time");
+    assert_eq!(f.row(&id).unwrap().0, "queued");
+    f.events.send_result(0, &id, "sent");
+    assert!(now_ms() >= until, "sent at its time, not before");
+    assert_eq!(server.sent_messages().len(), 1);
+}
+
+/// The user's Retry sends at once, whatever wait the row carried.
+#[test]
+fn a_retry_clears_the_wait() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    server.reset_scenario(scenario().smtp_refuse("refused-rcpt"));
+    let from = f.events.len();
+    let id = f.send(json!({ "to": "refused-rcpt@example.test", "subject": "Refused", "text": "x" })).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    f.events.send_result(from, &id, "failed");
+    assert_eq!(f.db().execute("UPDATE outbox SET not_before_ms = ?2 WHERE id = ?1", rusqlite::params![&id, now_ms() + 60_000]).unwrap(), 1);
+    let from = f.events.len();
+    let asked = Instant::now();
+    f.engine.rpc("mobile.outbox.retry", json!({ "id": id })).unwrap();
+    // Tried again at once, not in a minute: its next result comes now, whatever the server says.
+    f.events.wait(from, "a result after Retry", |n, v| {
+        n == "mobile.send.result" && v["id"] == id.as_str() && v["outcome"] != "queued"
+    });
+    assert!(asked.elapsed() < Duration::from_secs(30), "waited {:?}", asked.elapsed());
+    assert_eq!(not_before(&f, &id), 0, "Retry is now");
+}

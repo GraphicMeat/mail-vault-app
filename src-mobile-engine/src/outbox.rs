@@ -17,9 +17,11 @@
 //! The backend says where a failure fell ([`SendFail`], from core's `send_built_phased`): one
 //! that may have followed an acceptance (the connection broke or timed out during or after the
 //! upload) makes the row `uncertain`, never resent on its own, exactly like a crash; a refusal no
-//! retry can change (a permanent 5xx, `smtp::is_terminal_send_error`) makes it `failed`; anything
+//! retry can change (a permanent 5xx, core's `send::classify`) makes it `failed`; anything
 //! that proves nothing was sent (connect, TLS, sign-in, MAIL/RCPT/DATA, a 4xx) puts it back to
-//! `queued`, and the account backs off: 5 s, doubling, at most 300 s, like the action replay.
+//! `queued` with its wait in `not_before_ms` (5 s, doubling, at most 300 s, like the action
+//! replay), and the account backs off as long. A row is only sent once its `not_before_ms` has
+//! come, so the wait survives a restart; the user's Retry clears it.
 //! `lastError` and an event's `reason` are codes, never core's text.
 //!
 //! Picked files: `<cache>/out/<dir>/` is deleted once no draft and no unsent outbox row names it
@@ -50,7 +52,8 @@ use std::time::{Duration, Instant};
 const BACKOFF_BASE: Duration = Duration::from_secs(5);
 const BACKOFF_CAP: Duration = Duration::from_secs(300);
 /// The mobile retry policy: 5 s doubling to 300 s, never giving up on a transient failure. A row
-/// goes back to `queued` at once; the wait is its account's backoff in the worker.
+/// goes back to `queued` with this wait as its `not_before_ms`, and its account backs off as long.
+/// The worker reads it from its own base and cap (tests shorten them).
 pub(crate) const RETRY: RetryPolicy = RetryPolicy::new(BACKOFF_BASE, BACKOFF_CAP, None);
 /// A picked dir nothing names is swept at open once it is this old.
 pub(crate) const ORPHAN_AGE: Duration = Duration::from_secs(24 * 60 * 60);
@@ -147,9 +150,9 @@ pub(crate) fn on_open(w: &Connection, now_ms: i64) -> rusqlite::Result<bool> {
 // ── The store ───────────────────────────────────────────────────────────────
 
 /// The `outbox` table as core's [`OutboxStore`]. Every move is a compare-and-set on `state`, so a
-/// row discarded or retried while it was being sent is left alone. There is no not-before column:
-/// a requeued row waits through its account's backoff in the worker, so `mark` ignores
-/// `not_before_ms` and `queued` answers every queued row.
+/// row discarded or retried while it was being sent is left alone. `mark` stores a requeued row's
+/// `not_before_ms` (`None` keeps the row's own), and `queued` answers only the rows whose time has
+/// come.
 pub(crate) struct Store<'a>(pub(crate) &'a Shared);
 
 impl OutboxStore for Store<'_> {
@@ -166,13 +169,14 @@ impl OutboxStore for Store<'_> {
         to: OutboxState,
         error: Option<&str>,
         count_attempt: bool,
-        _not_before_ms: Option<i64>,
+        not_before_ms: Option<i64>,
     ) -> Result<bool, EngineError> {
         self.0
             .write(|c| {
                 c.execute(
-                    "UPDATE outbox SET state = ?3, last_error = ?4, attempts = attempts + ?5, updated_ms = ?6 WHERE id = ?1 AND state = ?2",
-                    (id, from.as_str(), to.as_str(), error, count_attempt as i64, compose::now_ms()),
+                    "UPDATE outbox SET state = ?3, last_error = ?4, attempts = attempts + ?5, updated_ms = ?6,
+                     not_before_ms = COALESCE(?7, not_before_ms) WHERE id = ?1 AND state = ?2",
+                    (id, from.as_str(), to.as_str(), error, count_attempt as i64, compose::now_ms(), not_before_ms),
                 )
             })
             .map(|n| n == 1)
@@ -182,10 +186,13 @@ impl OutboxStore for Store<'_> {
         self.0.write(|c| on_open(c, now_ms))
     }
 
-    fn queued(&self, account: &str, _now_ms: i64) -> Result<Vec<String>, EngineError> {
+    fn queued(&self, account: &str, now_ms: i64) -> Result<Vec<String>, EngineError> {
         self.0.read(|c| {
-            let mut st = c.prepare_cached("SELECT id FROM outbox WHERE account_id = ?1 AND state = ?2 ORDER BY created_ms, id")?;
-            let rows = st.query_map((account, OutboxState::Queued.as_str()), |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
+            let mut st = c.prepare_cached(
+                "SELECT id FROM outbox WHERE account_id = ?1 AND state = ?2 AND not_before_ms <= ?3 ORDER BY created_ms, id",
+            )?;
+            let rows =
+                st.query_map((account, OutboxState::Queued.as_str(), now_ms), |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
             Ok(rows)
         })
     }
@@ -254,8 +261,9 @@ pub(crate) fn retry(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             if !OutboxState::parse(&state).is_some_and(OutboxState::user_may_retry) {
                 return Ok(Err("the message is being sent or was sent"));
             }
+            // The user's Retry is "now": whatever wait the row carried goes.
             c.execute(
-                "UPDATE outbox SET state = ?3, last_error = NULL, updated_ms = ?2 WHERE id = ?1",
+                "UPDATE outbox SET state = ?3, last_error = NULL, updated_ms = ?2, not_before_ms = 0 WHERE id = ?1",
                 (&p.id, compose::now_ms(), OutboxState::Queued.as_str()),
             )?;
             Ok(Ok(account))
@@ -331,8 +339,8 @@ impl Outbox {
                     stop: false,
                     kicked: false,
                     retry: HashMap::new(),
-                    base: BACKOFF_BASE,
-                    cap: BACKOFF_CAP,
+                    base: RETRY.base,
+                    cap: RETRY.cap,
                 }),
                 cv: Condvar::new(),
                 cache_dir: cache_dir.to_path_buf(),
@@ -376,25 +384,43 @@ impl Outbox {
     }
 }
 
-/// Accounts with queued rows, oldest row first.
-fn queued_accounts(shared: &Shared) -> Vec<String> {
+/// The queued rows the worker may take: not on an account waiting for a new sign-in (parked) or
+/// one whose password the server refused (held); those stay queued until reauth, or the user's
+/// Retry, wakes it.
+fn sendable_sql(select: &str) -> String {
+    format!(
+        "{select} FROM outbox o WHERE state = 'queued'
+         AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = o.account_id AND a.needs_auth != 0)
+         AND {}",
+        crate::hold::NOT_HELD_SQL.replace("{account}", "o.account_id")
+    )
+}
+
+/// Accounts with queued rows whose `not_before_ms` has come (`now_ms`), oldest row first.
+fn queued_accounts(shared: &Shared, now_ms: i64) -> Vec<String> {
     shared
         .read(|c| {
-            // An account waiting for a new sign-in is parked, and one whose password the server
-            // refused is held: its rows stay queued until reauth, or the user's Retry, wakes it.
             let mut st = c.prepare_cached(&format!(
-                "SELECT account_id FROM outbox o WHERE state = 'queued'
-                 AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = o.account_id AND a.needs_auth != 0)
-                 AND {}
-                 GROUP BY account_id ORDER BY min(created_ms)",
-                crate::hold::NOT_HELD_SQL.replace("{account}", "o.account_id")
+                "{} AND o.not_before_ms <= ?1 GROUP BY account_id ORDER BY min(created_ms)",
+                sendable_sql("SELECT account_id")
             ))?;
-            let rows = st.query_map([], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
+            let rows = st.query_map([now_ms], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
             Ok(rows)
         })
         .unwrap_or_else(|e| {
             shared.log(&format!("[outbox] read: {e}"));
             Vec::new()
+        })
+}
+
+/// The earliest `not_before_ms` still to come (after `now_ms`) among the rows the worker may take:
+/// when it must look again.
+fn next_not_before(shared: &Shared, now_ms: i64) -> Option<i64> {
+    shared
+        .read(|c| c.query_row(&format!("{} AND o.not_before_ms > ?1", sendable_sql("SELECT min(o.not_before_ms)")), [now_ms], |r| r.get(0)))
+        .unwrap_or_else(|e| {
+            shared.log(&format!("[outbox] read: {e}"));
+            None
         })
 }
 
@@ -409,10 +435,13 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
             st.kicked = false;
         }
         let now = Instant::now();
-        let mut next: Option<Instant> = None;
-        let ready: Vec<String> = {
+        let now_ms = compose::now_ms();
+        // A row whose wait is still to come wakes the worker when it is up.
+        let mut next: Option<Instant> =
+            next_not_before(&shared, now_ms).map(|at| now + Duration::from_millis(u64::try_from(at - now_ms).unwrap_or(0)));
+        let (ready, policy): (Vec<String>, RetryPolicy) = {
             let st = lock(&queue.state);
-            queued_accounts(&shared)
+            let ready = queued_accounts(&shared, now_ms)
                 .into_iter()
                 .filter(|a| match st.retry.get(a) {
                     Some(r) if r.at > now => {
@@ -421,19 +450,20 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
                     }
                     _ => true,
                 })
-                .collect()
+                .collect();
+            (ready, RetryPolicy::new(st.base, st.cap, None))
         };
         for account in &ready {
             if shared.is_closing() || lock(&queue.state).stop {
                 return;
             }
-            let ok = send_account(&shared, &queue.cache_dir, account);
+            let ok = send_account(&shared, &queue.cache_dir, account, &policy);
             let mut st = lock(&queue.state);
             if ok {
                 st.retry.remove(account);
             } else {
                 let failures = st.retry.get(account).map_or(0, |r| r.failures).saturating_add(1);
-                let delay = RetryPolicy::new(st.base, st.cap, None).next_delay(failures);
+                let delay = policy.next_delay(failures);
                 st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, failures });
             }
         }
@@ -484,8 +514,9 @@ fn hold_account(shared: &Shared, account: &str, code: Code, why: &str) {
     }
 }
 
-/// Sends `account`'s queued rows through one backend. `false` when the account must back off.
-fn send_account(shared: &Shared, cache_dir: &Path, account: &str) -> bool {
+/// Sends `account`'s queued rows through one backend, a requeued row waiting as `policy` says.
+/// `false` when the account must back off.
+fn send_account(shared: &Shared, cache_dir: &Path, account: &str, policy: &RetryPolicy) -> bool {
     let ids = match queued_ids(shared, account) {
         Ok(ids) if !ids.is_empty() => ids,
         _ => return true,
@@ -502,17 +533,17 @@ fn send_account(shared: &Shared, cache_dir: &Path, account: &str) -> bool {
         if sync::not_closing(shared).is_err() {
             return true;
         }
-        if !send_one(shared, cache_dir, backend.as_mut(), account, &id) {
+        if !send_one(shared, cache_dir, backend.as_mut(), account, &id, policy) {
             return false;
         }
     }
     true
 }
 
-/// Ends claimed row `id`'s attempt with `verdict` (core's [`finish`] under [`RETRY`]) and tells
-/// the page where it went, with `reason`.
-fn end_attempt(shared: &Shared, account: &str, id: &str, verdict: SendVerdict, reason: Option<&str>) -> Option<OutboxState> {
-    let to = logged(shared, id, finish(&Store(shared), id, verdict, reason, compose::now_ms(), &RETRY), None)?;
+/// Ends claimed row `id`'s attempt with `verdict` (core's [`finish`] under `policy`, [`RETRY`]
+/// outside tests) and tells the page where it went, with `reason`.
+fn end_attempt(shared: &Shared, account: &str, id: &str, verdict: SendVerdict, reason: Option<&str>, policy: &RetryPolicy) -> Option<OutboxState> {
+    let to = logged(shared, id, finish(&Store(shared), id, verdict, reason, compose::now_ms(), policy), None)?;
     emit_result(shared, id, account, to.as_str(), reason.filter(|_| to != OutboxState::Sent));
     Some(to)
 }
@@ -536,7 +567,7 @@ fn read_attachments(cache_dir: &Path, fields: &Fields) -> Result<Vec<OutgoingAtt
 
 /// One attempt at row `id`. `false` when the account must back off (the row is `queued` again,
 /// or `uncertain`).
-fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, account: &str, id: &str) -> bool {
+fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, account: &str, id: &str, policy: &RetryPolicy) -> bool {
     let store = Store(shared);
     let row: Option<(String, Option<String>)> = shared
         .read(|c| {
@@ -569,7 +600,7 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
         return true;
     }
     let Ok(attachments) = read_attachments(cache_dir, &fields) else {
-        end_attempt(shared, account, id, SendVerdict::Terminal, Some("ATTACHMENT_MISSING"));
+        end_attempt(shared, account, id, SendVerdict::Terminal, Some("ATTACHMENT_MISSING"), policy);
         return true;
     };
     let email = fields.outgoing(message_id, attachments);
@@ -577,7 +608,7 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
         Ok(sent) => {
             drop(email);
             // The files go before the page hears `sent`.
-            let sent_now = finish(&Store(shared), id, SendVerdict::Sent, None, compose::now_ms(), &RETRY);
+            let sent_now = finish(&Store(shared), id, SendVerdict::Sent, None, compose::now_ms(), policy);
             if logged(shared, id, sent_now, None).is_some() {
                 release_dirs(shared, cache_dir, &fields.dirs());
                 emit_result(shared, id, account, OutboxState::Sent.as_str(), None);
@@ -604,7 +635,7 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
             };
             // An uncertain row is never sent again on its own (Retry or Discard in the UI); a
             // proven-unsent one is queued again. Either way the account backs off.
-            end_attempt(shared, account, id, verdict, Some(reason));
+            end_attempt(shared, account, id, verdict, Some(reason), policy);
             !(verdict.is_uncertain() || verdict.may_retry_automatically())
         }
     }

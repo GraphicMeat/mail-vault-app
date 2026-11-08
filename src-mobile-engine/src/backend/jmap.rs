@@ -1180,7 +1180,7 @@ fn host_port(url: &url::Url) -> (String, u16) {
 
 /// A connect failure as the add form's reply.
 fn add_failure(e: &JmapError, password: &str) -> Value {
-    let text = if password.is_empty() { e.to_string() } else { e.to_string().replace(password, "***") };
+    let text = mailvault_core::secret_scrub::scrub(&e.to_string(), &[password]);
     match e {
         JmapError::Protocol(m) if m.contains("requires https") || m.contains("must be https") => failure_code("HTTPS_REQUIRED", &text),
         _ => failure(code_of(e), text),
@@ -1263,7 +1263,7 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     engine
         .secrets()
         .set(&id, &secret)
-        .map_err(|e| RpcError::Internal(e.replace(&secret, "***").replace(&form.password, "***")))?;
+        .map_err(|e| RpcError::Internal(mailvault_core::secret_scrub::scrub(&e, &[secret.as_str(), form.password.as_str()])))?;
     let display_name = form.display_name.clone().unwrap_or_else(|| form.email.clone());
     let (host, port) = host_port(&url);
     let session = url.to_string();

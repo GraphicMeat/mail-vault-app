@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 const READERS: usize = 2;
 
 /// Schema 2, frozen: a new file is built as schema 2 plus every forward step, so it cannot drift
@@ -184,6 +184,13 @@ CREATE TABLE notified (
   ms         INTEGER NOT NULL,
   PRIMARY KEY (account_id, key)
 ) WITHOUT ROWID;
+";
+
+/// Schema 4 to 5: the earliest time a queued outbox row may be sent (`not_before_ms`, unix ms;
+/// `0` is now), core's `OutboxStore` wait: a retry's backoff that survives a restart, and Plan 4's
+/// send-later time.
+const V4_TO_V5: &str = "
+ALTER TABLE outbox ADD COLUMN not_before_ms INTEGER NOT NULL DEFAULT 0;
 ";
 
 /// Every table any schema version created; a rebuild drops them all (their indexes go with them).
@@ -376,6 +383,9 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         }
         if found < 4 {
             tx.execute_batch(V3_TO_V4)?;
+        }
+        if found < 5 {
+            tx.execute_batch(V4_TO_V5)?;
         }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;
