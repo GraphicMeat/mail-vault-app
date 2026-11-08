@@ -514,12 +514,48 @@ pub fn scan_links(html: &str, texts: &Texts) -> LinkScan {
     out
 }
 
+// ── the tracker rule ────────────────────────────────────────────────────────
+
+/// What becomes of the tracking pixels a body carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrackerPolicy {
+    /// Each beacon is replaced by its marker: the shown body cannot load it.
+    StripPixels,
+    /// The body is shown as it came; the beacons are only counted. Remote
+    /// images stay blocked by the reader until the user loads them, for
+    /// everyone: that is not this rule's business.
+    Keep,
+}
+
+impl TrackerPolicy {
+    pub fn strips(self) -> bool {
+        self == TrackerPolicy::StripPixels
+    }
+}
+
+/// The tracker rule, one place for both apps (owner decision 3): stripping
+/// pixels is Premium. Detection runs for everyone.
+///
+/// The desktop reader passes `isTrackerBlockingActive` (Premium and the
+/// user's own switch, which only a Premium user can turn on); the phone
+/// passes its Premium answer, which is "free" until Plan 4 brings Premium to
+/// the phone.
+pub fn tracker_policy(premium: bool) -> TrackerPolicy {
+    if premium {
+        TrackerPolicy::StripPixels
+    } else {
+        TrackerPolicy::Keep
+    }
+}
+
 // ── the reader's scan ───────────────────────────────────────────────────────
 
 /// What the reader frames: the tracker scan of `html`; the body it shows
-/// (the cleaned one when `blocking`); and, when `links`, that body's link scan.
-/// `html` in the answer is the body to frame, `null` when it is `html` itself.
-pub fn scan_body(html: &str, blocking: bool, links: bool, texts: &Texts) -> Value {
+/// (the cleaned one when `policy` strips); and, when `links`, that body's
+/// link scan. `html` in the answer is the body to frame, `null` when it is
+/// `html` itself.
+pub fn scan_body(html: &str, policy: TrackerPolicy, links: bool, texts: &Texts) -> Value {
+    let blocking = policy.strips();
     let found = scan_trackers(html, texts);
     let shown: &str = match (&found.cleaned, blocking) {
         (Some(cleaned), true) => cleaned,

@@ -666,7 +666,7 @@ fn opening_an_engine_drops_graph_bodies_cached_by_an_earlier_build_once() {
     let part = |section: &str, encoding: &str| {
         format!(r#"{{"section":"{section}","mime":"application/pdf","filename":"f","size":1,"encoding":"{encoding}","charset":null,"contentId":null,"disposition":"attachment"}}"#)
     };
-    let stored = |parts: Vec<String>| format!(r#"{{"parts":[{}],"remoteImages":0,"trackers":0}}"#, parts.join(","));
+    let stored = |parts: Vec<String>| format!(r#"{{"parts":[{}],"remoteImages":0,"remoteWithoutTrackers":0,"trackers":0}}"#, parts.join(","));
     let bodies = || -> Vec<i64> {
         let c = db();
         let mut st = c.prepare("SELECT uid FROM bodies ORDER BY uid").unwrap();

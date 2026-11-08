@@ -218,6 +218,10 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   // Every part is a chip, inline `cid:` images too: the frame does not draw those yet.
   const attachments = body?.attachments || [];
   const remoteImages = body?.remoteImages || 0;
+  // Tracker pixels are stripped for Premium only (core `tracker_policy`; the phone has no Premium
+  // yet): a free body keeps them, blocked with every other remote image until Load images, which
+  // would load them too. The bar says so rather than implying they are gone.
+  const pixelsKept = (body?.trackers || 0) > 0 && !body?.trackersStripped;
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   return (
@@ -247,7 +251,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       )}
       {remoteImages > 0 && !allowRemote && (
         <div className="mv-viewer__images">
-          <span>{t('mobile.viewer.imagesBlocked')}</span>
+          <span>{pixelsKept ? t('mobile.viewer.imagesTrack') : t('mobile.viewer.imagesBlocked')}</span>
           <button type="button" data-mv-load-images style={{ minHeight: '44px' }} onClick={() => setAllowRemote(true)}>
             {t('mobile.viewer.loadImages', { count: remoteImages })}
           </button>

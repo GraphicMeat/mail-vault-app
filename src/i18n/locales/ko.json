@@ -4256,6 +4256,7 @@
   "mobile.viewer.loadFailed": "이 메시지를 불러오지 못했습니다. {{reason}}",
   "mobile.viewer.empty": "이 메시지에는 본문이 없습니다.",
   "mobile.viewer.imagesBlocked": "개인정보 보호를 위해 이미지를 숨겼습니다.",
+  "mobile.viewer.imagesTrack": "개인정보 보호를 위해 이미지를 숨겼습니다. 일부 이미지는 이 이메일을 열었다는 사실을 발신자에게 알립니다.",
   "mobile.viewer.loadImages_one": "이미지 불러오기 ({{count}})",
   "mobile.viewer.loadImages_other": "이미지 불러오기 ({{count}})",
   "mobile.viewer.attachment": "첨부파일",

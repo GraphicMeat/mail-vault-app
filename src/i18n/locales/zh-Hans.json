@@ -4256,6 +4256,7 @@
   "mobile.viewer.loadFailed": "无法加载此邮件。{{reason}}",
   "mobile.viewer.empty": "此邮件没有正文。",
   "mobile.viewer.imagesBlocked": "为保护你的隐私，图片已隐藏。",
+  "mobile.viewer.imagesTrack": "为保护你的隐私，图片已隐藏。其中一些会在你打开这封邮件时通知发件人。",
   "mobile.viewer.loadImages_one": "加载图片 ({{count}})",
   "mobile.viewer.loadImages_other": "加载图片 ({{count}})",
   "mobile.viewer.attachment": "附件",

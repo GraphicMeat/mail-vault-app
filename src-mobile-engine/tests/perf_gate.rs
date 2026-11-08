@@ -205,7 +205,10 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
         assert_eq!(news["gone"], false);
         let html = news["html"].as_str().unwrap();
         assert!(html.contains("https://"), "{html}");
-        assert!(html.contains("data-mv-tracker-blocked"), "{html}");
+        // The phone has no Premium yet: the pixel is counted and kept (the frame blocks it).
+        assert!(!html.contains("data-mv-tracker-blocked"), "{html}");
+        assert!(html.contains("https://t.example.test/open.gif"), "{html}");
+        assert_eq!(news["trackersStripped"], false);
         assert!(news["remoteImages"].as_u64().unwrap() >= 1, "{news}");
         assert_eq!(news["trackers"], 1);
         assert_eq!(news["attachments"].as_array().unwrap().len(), 2);

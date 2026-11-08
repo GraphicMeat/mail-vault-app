@@ -112,7 +112,7 @@ fn the_reader_pipeline_matches_the_js() {
     let mut wrong = Vec::new();
     for case in cases {
         let html = case["html"].as_str().unwrap();
-        let ans = scan_body(html, case["blocking"].as_bool().unwrap(), case["links"].as_bool().unwrap(), &t);
+        let ans = scan_body(html, tracker_policy(case["blocking"].as_bool().unwrap()), case["links"].as_bool().unwrap(), &t);
         let got = json!({
             "trackers": ans["trackers"],
             "count": ans["count"],
@@ -225,7 +225,7 @@ fn remote_counts_what_a_frame_would_fetch() {
     ];
     let mut wrong = Vec::new();
     for (html, want) in cases {
-        let ans = scan_body(html, false, false, &Texts::default());
+        let ans = scan_body(html, TrackerPolicy::Keep, false, &Texts::default());
         if ans["remote"] != json!(want) {
             wrong.push(format!("{html}: got {} want {want}", ans["remote"]));
         }
@@ -238,21 +238,37 @@ fn remote_counts_the_body_tracker_blocking_leaves() {
     let beacon = r#"<img src="https://u1.ct.sendgrid.net/wf/open?upn=abc" width="1" height="1">"#;
     let image = r#"<img src="https://a.test/x.png">"#;
     let both = format!("{beacon}{image}");
-    assert_eq!(scan_body(&both, false, false, &Texts::default())["remote"], 2);
-    assert_eq!(scan_body(&both, true, false, &Texts::default())["remote"], 1);
-    assert_eq!(scan_body(beacon, true, false, &Texts::default())["remote"], 0);
+    assert_eq!(scan_body(&both, TrackerPolicy::Keep, false, &Texts::default())["remote"], 2);
+    assert_eq!(scan_body(&both, TrackerPolicy::StripPixels, false, &Texts::default())["remote"], 1);
+    assert_eq!(scan_body(beacon, TrackerPolicy::StripPixels, false, &Texts::default())["remote"], 0);
 }
 
 #[test]
 fn counting_remote_content_leaves_the_body_alone() {
     let body = r#"<p>Hi<b>unclosed<img src="https://a.test/x.png">"#;
-    assert_eq!(scan_body(body, false, false, &Texts::default())["html"], Value::Null);
+    assert_eq!(scan_body(body, TrackerPolicy::Keep, false, &Texts::default())["html"], Value::Null);
 }
 
 #[test]
 fn an_unchanged_body_is_not_rewritten() {
     let body = "<p>Hi<b>unclosed";
-    let ans = scan_body(body, true, false, &Texts::default());
+    let ans = scan_body(body, TrackerPolicy::StripPixels, false, &Texts::default());
     assert_eq!(ans["html"], Value::Null);
     assert_eq!(ans["count"], 0);
+}
+
+#[test]
+fn stripping_pixels_is_premium() {
+    assert_eq!(tracker_policy(true), TrackerPolicy::StripPixels);
+    assert_eq!(tracker_policy(false), TrackerPolicy::Keep);
+    // Free: detected and counted, the body left as it came.
+    let beacon = r#"<p>Hi</p><img src="https://u1.ct.sendgrid.net/wf/open?upn=abc" width="1" height="1">"#;
+    let free = scan_body(beacon, tracker_policy(false), false, &Texts::default());
+    assert_eq!(free["count"], 1);
+    assert_eq!(free["html"], Value::Null);
+    assert_eq!(free["remote"], 1);
+    let premium = scan_body(beacon, tracker_policy(true), false, &Texts::default());
+    assert_eq!(premium["count"], 1);
+    assert!(!premium["html"].as_str().unwrap().contains("sendgrid"));
+    assert_eq!(premium["remote"], 0);
 }

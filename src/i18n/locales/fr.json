@@ -4256,6 +4256,7 @@
   "mobile.viewer.loadFailed": "Impossible de charger ce message. {{reason}}",
   "mobile.viewer.empty": "Ce message n'a pas de texte.",
   "mobile.viewer.imagesBlocked": "Les images sont masquées pour protéger votre vie privée.",
+  "mobile.viewer.imagesTrack": "Les images sont masquées pour protéger votre vie privée. Certaines indiquent à l'expéditeur quand vous ouvrez cet e-mail.",
   "mobile.viewer.loadImages_one": "Charger l'image ({{count}})",
   "mobile.viewer.loadImages_other": "Charger les images ({{count}})",
   "mobile.viewer.attachment": "Pièce jointe",

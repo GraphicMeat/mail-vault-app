@@ -2,9 +2,12 @@
 //!
 //! The BODYSTRUCTURE names the parts; only the first `text/html` and the first `text/plain` that
 //! are not attachments are downloaded (`BODY.PEEK[section]`, so opening never sets `\Seen` and an
-//! attachment's bytes never cross the network). Tracking pixels are stripped from the html with
-//! core's `body_scan`; remote images are counted, not loaded, and the stored html keeps their URLs
-//! (the viewer's CSP blocks them until the user asks). The result is cached in `bodies`, with the
+//! attachment's bytes never cross the network). Tracking pixels are found with core's `body_scan`
+//! and stripped only under core's `tracker_policy` (Premium, owner decision 3; the phone has no
+//! Premium yet, so they are kept and counted). The policy is applied when a body is answered, not
+//! when it is cached, so the cache holds the html as it came and a change of plan shows on the
+//! next open. Remote images are counted, not loaded, and the html keeps their URLs (the viewer's
+//! CSP blocks every one, tracking pixels included, until the user asks). The result is cached in `bodies`, with the
 //! attachment list in `attachments`, and the list row's `snippet` is filled from the text.
 //!
 //! The cache is an LRU of at most [`CACHE_CAP`] bytes of `bodies`: each insert stamps the row as
@@ -16,6 +19,7 @@ use crate::db::{Engine, EngineError, Shared};
 use crate::rpc::{parse, RpcError};
 use crate::backend::{self, FolderRow, RawBody};
 use crate::sync::Fail;
+use mailvault_core::body_scan::{tracker_policy, TrackerPolicy};
 use mailvault_core::imap::PartInfo;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -65,12 +69,17 @@ impl From<PartInfo> for Part {
     }
 }
 
-/// What `parts_json` holds: every part, and what the scan of the html found.
+/// What `parts_json` holds: every part, and what the scan of the html found. A row written before
+/// the tracker rule (its html stripped, no `remoteWithoutTrackers`) no longer reads, so it is
+/// fetched again and replaced.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Stored {
     parts: Vec<Part>,
+    /// Everything remote the html as it came would load, tracking pixels included.
     remote_images: u32,
+    /// The same, with the tracking pixels stripped.
+    remote_without_trackers: u32,
     trackers: u32,
 }
 
@@ -85,8 +94,33 @@ struct Body {
     truncated: bool,
 }
 
+/// Whether the phone's user has Premium. Always free until Plan 4 brings Premium to the phone
+/// (`premium::active`, the server's cached answer).
+fn premium(_shared: &Shared) -> bool {
+    false
+}
+
+/// The marker that replaces a beacon carries no catalog key or English text: empty templates; the
+/// viewer labels `[data-mv-tracker-blocked]` in the UI language.
+fn blank_texts() -> mailvault_core::body_scan::Texts {
+    let blank: serde_json::Map<String, Value> =
+        mailvault_core::body_scan::TEXT_KEYS.iter().map(|k| (k.to_string(), Value::String(String::new()))).collect();
+    mailvault_core::body_scan::Texts::from_value(Some(&Value::Object(blank)))
+}
+
 impl Body {
-    fn reply(&self) -> Value {
+    /// The answer under `policy`: the html as it came (pixels kept), or with its pixels replaced by
+    /// markers. `remoteImages` is what the shown html would load once the user allows it.
+    /// `trackersStripped` says which.
+    fn reply(&self, policy: TrackerPolicy) -> Value {
+        let strip = policy.strips() && self.stored.trackers > 0;
+        let (html, remote_images) = match (&self.html, strip) {
+            (Some(h), true) => {
+                let cleaned = mailvault_core::body_scan::scan_trackers(h, &blank_texts()).cleaned.unwrap_or_else(|| h.clone());
+                (Some(cleaned), self.stored.remote_without_trackers)
+            }
+            _ => (self.html.clone(), self.stored.remote_images),
+        };
         let attachments: Vec<Value> = attachments_of(&self.stored.parts)
             .iter()
             .map(|p| {
@@ -99,8 +133,8 @@ impl Body {
             })
             .collect();
         json!({
-            "html": self.html, "text": self.text, "attachments": attachments,
-            "remoteImages": self.stored.remote_images, "trackers": self.stored.trackers, "gone": false,
+            "html": html, "text": self.text, "attachments": attachments,
+            "remoteImages": remote_images, "trackers": self.stored.trackers, "trackersStripped": policy.strips(), "gone": false,
             "attachmentsUnknown": self.attachments_unknown, "truncated": self.truncated,
         })
     }
@@ -182,7 +216,7 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
         // Skipped when a sync write holds the writer: a stale stamp only makes the row an
         // earlier eviction candidate.
         let _ = shared.try_write(|c| c.execute(&format!("UPDATE bodies SET last_access_ms = {STAMP} WHERE {KEY}"), key(&p)));
-        return Ok(hit.reply());
+        return Ok(hit.reply(tracker_policy(premium(shared))));
     }
     let validity: Option<Option<i64>> = shared
         .read(|c| {
@@ -215,7 +249,7 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
             evict(shared, cap(shared), &p).map_err(internal)?;
         }
     }
-    Ok(body.reply())
+    Ok(body.reply(tracker_policy(premium(shared))))
 }
 
 fn internal(e: impl ToString) -> RpcError {
@@ -255,26 +289,24 @@ fn fetch(shared: &Shared, p: &BodyParams, stored_validity: Option<i64>) -> Resul
     }))
 }
 
-/// Strips the html's tracking pixels and counts the remote images the cleaned html would load.
-/// The snippet comes with it, read from the html before a marker replaced any beacon.
+/// Finds the html's tracking pixels and counts the remote images it would load, with and without
+/// them; the html itself is kept as it came (the tracker rule applies when it is answered). The
+/// snippet comes with it.
 fn scanned(html: Option<String>, text: Option<String>, parts: Vec<Part>) -> (Body, String) {
     let snippet = snippet_of(html.as_deref(), text.as_deref());
-    let (mut remote_images, mut trackers) = (0, 0);
-    let html = html.map(|h| {
-        // Empty templates: the marker that replaces a beacon carries no catalog key or English
-        // text; the viewer labels `[data-mv-tracker-blocked]` in the UI language.
-        let blank: serde_json::Map<String, Value> =
-            mailvault_core::body_scan::TEXT_KEYS.iter().map(|k| (k.to_string(), Value::String(String::new()))).collect();
-        let scan = mailvault_core::body_scan::scan_trackers(&h, &mailvault_core::body_scan::Texts::from_value(Some(&Value::Object(blank))));
-        remote_images = scan.remote_cleaned as u32;
+    let (mut remote_images, mut remote_without_trackers, mut trackers) = (0, 0, 0);
+    if let Some(h) = &html {
+        let scan = mailvault_core::body_scan::scan_trackers(h, &blank_texts());
+        remote_images = scan.remote as u32;
+        remote_without_trackers = scan.remote_cleaned as u32;
         trackers = scan.trackers.len() as u32;
-        scan.cleaned.unwrap_or(h)
-    });
-    (Body { html, text, stored: Stored { parts, remote_images, trackers }, attachments_unknown: false, truncated: false }, snippet)
+    }
+    let stored = Stored { parts, remote_images, remote_without_trackers, trackers };
+    (Body { html, text, stored, attachments_unknown: false, truncated: false }, snippet)
 }
 
 /// Perf-gate screenshots: caches `html` / `text` as the body of a listed message, scanned the way
-/// a fetched body is (trackers stripped, remote images counted), with `attachments` as
+/// a fetched body is (trackers found, remote images counted), with `attachments` as
 /// `(filename, mime, size)` parts. `INSERT OR IGNORE`: a body already there is left alone.
 #[cfg(feature = "perf-gate")]
 pub(crate) fn seed_body(
@@ -538,6 +570,32 @@ mod tests {
         assert_eq!(text.unwrap().section, "1.1");
         let att: Vec<&str> = attachments_of(&parts).iter().map(|p| p.section.as_str()).collect();
         assert_eq!(att, ["2", "3"]);
+    }
+
+    /// Owner decision 3 on the phone: the same cached body answers free (pixel kept) and Premium
+    /// (pixel replaced by its marker), so a change of plan shows on the next open.
+    #[test]
+    fn tracker_policy_free_keeps_pixels_premium_strips_them() {
+        let html = "<p>Hi</p><img src=\"https://cdn.example.com/hero.jpg\" width=\"600\" height=\"300\">\
+            <img src=\"https://track.example.net/open/abc123.gif\" width=\"1\" height=\"1\">";
+        let (body, _) = scanned(Some(html.into()), None, vec![part("1", "text/html", None, None)]);
+        assert_eq!(body.html.as_deref(), Some(html), "the cache holds the html as it came");
+
+        let free = body.reply(tracker_policy(false));
+        assert_eq!(free["trackers"], 1);
+        assert_eq!(free["trackersStripped"], false);
+        assert_eq!(free["remoteImages"], 2);
+        assert_eq!(free["html"], html);
+
+        let premium = body.reply(tracker_policy(true));
+        assert_eq!(premium["trackers"], 1);
+        assert_eq!(premium["trackersStripped"], true);
+        assert_eq!(premium["remoteImages"], 1);
+        let shown = premium["html"].as_str().unwrap();
+        assert!(!shown.contains("track.example.net"), "{shown}");
+        assert!(shown.contains("data-mv-tracker-blocked"), "{shown}");
+        assert!(shown.contains("https://cdn.example.com/hero.jpg"), "{shown}");
+        assert!(!shown.contains("util.trackerDetect"), "a catalog key leaked into the html: {shown}");
     }
 
     #[test]

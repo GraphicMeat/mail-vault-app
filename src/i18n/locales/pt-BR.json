@@ -4256,6 +4256,7 @@
   "mobile.viewer.loadFailed": "Não foi possível carregar esta mensagem. {{reason}}",
   "mobile.viewer.empty": "Esta mensagem não tem texto.",
   "mobile.viewer.imagesBlocked": "As imagens estão ocultas para proteger sua privacidade.",
+  "mobile.viewer.imagesTrack": "As imagens estão ocultas para proteger sua privacidade. Algumas avisam o remetente quando você abre este e-mail.",
   "mobile.viewer.loadImages_one": "Carregar imagem ({{count}})",
   "mobile.viewer.loadImages_other": "Carregar imagens ({{count}})",
   "mobile.viewer.attachment": "Anexo",

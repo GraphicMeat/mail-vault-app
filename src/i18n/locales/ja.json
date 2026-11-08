@@ -4256,6 +4256,7 @@
   "mobile.viewer.loadFailed": "このメッセージを読み込めませんでした。{{reason}}",
   "mobile.viewer.empty": "このメッセージには本文がありません。",
   "mobile.viewer.imagesBlocked": "プライバシー保護のため画像を非表示にしています。",
+  "mobile.viewer.imagesTrack": "プライバシー保護のため画像を非表示にしています。一部の画像は、このメールを開いたことを送信者に知らせます。",
   "mobile.viewer.loadImages_one": "画像を読み込む ({{count}})",
   "mobile.viewer.loadImages_other": "画像を読み込む ({{count}})",
   "mobile.viewer.attachment": "添付ファイル",

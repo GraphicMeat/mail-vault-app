@@ -177,8 +177,11 @@ fn body_fetches_only_text_parts() {
     assert_eq!(server.commands().len(), n, "a cached body went to the server");
 }
 
+/// Owner decision 3: stripping tracking pixels is Premium, and the phone has no Premium yet. A
+/// free user's body keeps its pixel (found and counted); remote images, the pixel among them,
+/// stay blocked by the viewer until Load images.
 #[test]
-fn body_strips_trackers_and_counts_remote_images() {
+fn a_free_body_keeps_its_tracking_pixel_and_counts_it() {
     let html = "<p>Hello</p>\
         <img src=\"https://cdn.example.com/hero.jpg\" width=\"600\" height=\"300\">\
         <img src=\"https://cdn.example.com/logo.png\" width=\"120\" height=\"40\">\
@@ -188,15 +191,17 @@ fn body_strips_trackers_and_counts_remote_images() {
 
     let body = f.body(1);
     assert_eq!(body["gone"], false, "{body}");
-    assert_eq!(body["trackers"], 1, "{body}");
-    assert_eq!(body["remoteImages"], 2, "{body}");
-    let stored = body["html"].as_str().unwrap();
-    assert!(!stored.contains("track.example.net"), "the beacon is still there: {stored}");
-    assert!(stored.contains("data-mv-tracker-blocked"), "{stored}");
-    assert!(stored.contains("https://cdn.example.com/hero.jpg"), "remote images keep their URLs: {stored}");
-    assert!(!stored.contains("util.trackerDetect"), "a catalog key leaked into the html: {stored}");
+    assert_eq!(body["trackers"], 1, "found for everyone: {body}");
+    assert_eq!(body["trackersStripped"], false, "{body}");
+    assert_eq!(body["remoteImages"], 3, "the pixel is one of the images Load images would load: {body}");
+    let shown = body["html"].as_str().unwrap();
+    assert!(shown.contains("https://track.example.net/open/abc123.gif"), "a free body keeps its pixel: {shown}");
+    assert!(!shown.contains("data-mv-tracker-blocked"), "no marker claims a tracker was blocked: {shown}");
+    assert!(shown.contains("https://cdn.example.com/hero.jpg"), "remote images keep their URLs: {shown}");
     assert_eq!(body["text"], Value::Null);
     assert_eq!(f.snippet(1), "Hello");
+    // From the cache: the same answer, and the stored html is the html as it came.
+    assert_eq!(f.body(1), body);
 }
 
 #[test]

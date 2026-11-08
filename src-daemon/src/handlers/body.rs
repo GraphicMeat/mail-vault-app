@@ -52,7 +52,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             blocking(move || {
                 let html = params.get("html").and_then(Value::as_str).unwrap_or("");
                 let flag = |k: &str| params.get(k).and_then(Value::as_bool).unwrap_or(false);
-                body_scan::scan_body(html, flag("blocking"), flag("links"), &Texts::from_value(params.get("texts")))
+                // `blocking` is the app's `isTrackerBlockingActive`: Premium, with the user's
+                // switch on. Core's tracker rule turns it into what the frame shows.
+                let policy = body_scan::tracker_policy(flag("blocking"));
+                body_scan::scan_body(html, policy, flag("links"), &Texts::from_value(params.get("texts")))
             })
             .await,
         ),

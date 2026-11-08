@@ -127,6 +127,50 @@ describe('Viewer', () => {
     expect(engine.calls).toHaveLength(1);
   });
 
+  // Review Focus 5 / owner decision 3: a free user's body keeps its tracking pixel (stripping is
+  // Premium), so the frame is what keeps it from loading. Nothing remote may leave the viewer, the
+  // pixel included, until the user taps Load images; the bar says the hidden images can track.
+  it('a free body with a kept tracking pixel makes no request until Load images', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    engine.reply = body({
+      html: '<p>Hi</p><img src="https://cdn.test/hero.jpg">'
+        + '<div style="background:url(https://cdn.test/bg.png)">x</div>'
+        + '<link rel="stylesheet" href="https://cdn.test/a.css">'
+        + '<img src="https://track.test/open.gif" width="1" height="1">',
+      remoteImages: 3, trackers: 1, trackersStripped: false,
+    });
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const doc = frame().getAttribute('srcdoc');
+    const csp = doc.match(/http-equiv="Content-Security-Policy" content="([^"]*)"/)[1];
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).not.toMatch(/https?:/);
+    // No marker element claims a tracker was blocked (the frame's CSS names the attribute anyway).
+    expect(doc).not.toMatch(/<[a-z]+[^>]*data-mv-tracker-blocked/);
+    expect(doc).toContain('https://track.test/open.gif');
+    expect(screen.getByText(t('mobile.viewer.imagesTrack'))).toBeTruthy();
+    expect(screen.queryByText(t('mobile.viewer.imagesBlocked'))).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(engine.calls.map(([m]) => m)).toEqual(['mobile.message.body']);
+
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.viewer.loadImages', { count: 3 }) }));
+    const after = frame().getAttribute('srcdoc').match(/http-equiv="Content-Security-Policy" content="([^"]*)"/)[1];
+    expect(after).toContain("default-src 'none'");
+    expect(after).toContain('img-src data: cid: https:;');
+    expect(after.replace('img-src data: cid: https:;', '')).not.toMatch(/https?:/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('says nothing about tracking when the engine stripped the pixels', async () => {
+    engine.reply = body({ remoteImages: 1, trackers: 1, trackersStripped: true });
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    expect(screen.getByText(t('mobile.viewer.imagesBlocked'))).toBeTruthy();
+    expect(screen.queryByText(t('mobile.viewer.imagesTrack'))).toBeNull();
+  });
+
   it('cleans the mail once: Load images reuses it and parses nothing', async () => {
     engine.reply = body({ remoteImages: 2 });
     const spy = vi.spyOn(DOMParser.prototype, 'parseFromString');
