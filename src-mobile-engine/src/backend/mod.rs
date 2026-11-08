@@ -354,6 +354,7 @@ pub(crate) fn open<'a>(shared: &'a Shared, account_id: &str) -> Result<Box<dyn B
     };
     if password {
         crate::hold::after_open(shared, account_id, probing, &out);
+        return out.map_err(crate::hold::signed_in);
     }
     out
 }

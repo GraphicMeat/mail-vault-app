@@ -607,7 +607,7 @@ fn replay_account(shared: &Shared, account: &str) -> Result<(), Code> {
 /// Marks the account's head `retrying` with the failure's code and reports it. `why` is for the log
 /// only (scrubbed of the password by the caller).
 fn fail_head(shared: &Shared, account: &str, code: Code, why: &str) {
-    crate::hold::note_failure(shared, account, code);
+    crate::hold::note_failure(shared, account, code, why);
     let marked = shared.write(|c| {
         let seq: Option<i64> = c
             .query_row("SELECT seq FROM pending_actions WHERE account_id = ?1 ORDER BY seq LIMIT 1", [account], |r| r.get(0))

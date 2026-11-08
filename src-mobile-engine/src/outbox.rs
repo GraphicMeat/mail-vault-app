@@ -398,7 +398,7 @@ fn queued_ids(shared: &Shared, account: &str) -> Result<Vec<String>, Fail> {
 
 /// Puts every queued row of `account` on hold after a failure to reach the server.
 fn hold_account(shared: &Shared, account: &str, code: Code, why: &str) {
-    crate::hold::note_failure(shared, account, code);
+    crate::hold::note_failure(shared, account, code, why);
     let ids = queued_ids(shared, account).unwrap_or_default();
     shared.log(&format!("[outbox] {account}: {} {why}", code.as_str()));
     for id in ids {

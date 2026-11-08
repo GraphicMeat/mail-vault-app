@@ -325,8 +325,8 @@ fn run_job(shared: &Shared, job: &Job) -> Ended {
     }
     shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "syncing" }));
     let out = sync_job(shared, job);
-    if let Err(Fail::Code(code, _)) = &out {
-        crate::hold::note_failure(shared, &job.account, *code);
+    if let Err(Fail::Code(code, why)) = &out {
+        crate::hold::note_failure(shared, &job.account, *code, why);
     }
     let (end, ended) = match out {
         Ok(()) => (json!({ "accountId": job.account, "state": "idle" }), Ended::Done),
