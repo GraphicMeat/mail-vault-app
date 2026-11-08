@@ -171,12 +171,37 @@ async fn compose_prep_bounds_input_and_does_not_wait_on_vault_locks() {
 async fn compose_prep_check_uses_the_native_injected_clock() {
     let (_dir, s) = seed();
     s.clock.set(1792886400000);
+    SettingsDoc::shared(&s.app_dir).patch(&json!({"mailvault-settings":{"state":{"billingProfile":{"hasSubscription":true,"status":"active"}}}}),None).unwrap();
     let mut p = chk();
     p["sendPlan"] = json!({"kind":"in","minutes":6});
     assert_eq!(
         rpc(&s, "compose.check", p).await.unwrap()["route"],
         json!({"draft":{"localTime":"2026-10-25T00:06","tz":"UTC"}})
     );
+}
+
+/// The send-later rule (core `schedule_allowed`) is enforced by the daemon:
+/// without Premium a delay past 5 minutes and a set time are refused, the
+/// short delay is not; with Premium they go through.
+#[tokio::test]
+async fn compose_check_refuses_a_free_user_a_delay_past_five_minutes() {
+    let (_dir, s) = seed();
+    s.clock.set(1792886400000);
+    let check = |plan: Value| {
+        let mut p = chk();
+        p["sendPlan"] = plan;
+        p["scheduleDraft"] = json!({"localTime":"2026-10-26T09:00","tz":"UTC"});
+        rpc(&s, "compose.check", p)
+    };
+    assert_eq!(check(json!({"kind":"in","minutes":5})).await.unwrap()["route"], json!({"delay":300}));
+    for plan in [json!({"kind":"in","minutes":6}), json!({"kind":"in","minutes":1440}), json!({"kind":"at"})] {
+        let out = check(plan.clone()).await.unwrap();
+        assert_eq!((out["kind"].as_str(), out["key"].as_str()), (Some("invalid"), Some("scheduled.premium.freeDelay")), "{plan}");
+    }
+    SettingsDoc::shared(&s.app_dir).patch(&json!({"mailvault-settings":{"state":{"billingProfile":{"hasSubscription":true,"status":"active"}}}}),None).unwrap();
+    for plan in [json!({"kind":"in","minutes":6}), json!({"kind":"in","minutes":1440}), json!({"kind":"at"})] {
+        assert_eq!(check(plan.clone()).await.unwrap()["kind"], "ready", "{plan}");
+    }
 }
 
 #[tokio::test]

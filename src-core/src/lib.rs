@@ -22,6 +22,7 @@ pub mod windows_mailto;
 pub mod backup;
 pub mod backup_access;
 pub mod fetch_mode;
+pub mod follow_up;
 pub mod fsx;
 pub mod log_redact;
 pub mod header_cache;

@@ -1,12 +1,14 @@
 //! Pure compose preparation and UX preflight. No IO and no transport authority.
 //! The frozen actual-JS corpus pins recipient, quote, parser and timezone policy.
 use crate::notes_to_self::fold_identity;
+use crate::send::schedule::{schedule_allowed, ScheduleRefusal, FREE_DELAY_MINUTES, MAX_DELAY_MINUTES};
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 pub mod quote;
 pub mod subject;
@@ -791,6 +793,7 @@ pub fn check(params: &Value, ctx: &Context, now: i64) -> Result<Value> {
         }
     }
     let route = route_send(&p.send_plan, &p.schedule_draft, now, &p.time_zone)?;
+    let premium = share_active || crate::cleanup_rules::has_premium_access(&entitlement, now);
     if let Some(draft) = route.get("draft") {
         if zoned_time_to_epoch(
             draft["localTime"].as_str().ok_or(INVALID)?,
@@ -801,6 +804,26 @@ pub fn check(params: &Value, ctx: &Context, now: i64) -> Result<Value> {
             out["key"] = json!("scheduled.picker.pastTime");
             return Ok(out);
         }
+    }
+    // The send-later rule (core `send::schedule`): "Send in" past the free
+    // minutes needs Premium, and a set time always does. The picker already
+    // offers nothing else; this is the rule itself.
+    let refusal = match (&p.send_plan, route.get("draft")) {
+        (plan, Some(_)) if plan["kind"] == "at" => (!premium).then_some(ScheduleRefusal::PremiumRequired),
+        (plan, Some(_)) => {
+            let minutes = plan["minutes"].as_u64().ok_or(INVALID)?;
+            schedule_allowed(Duration::from_secs(minutes * 60), premium).err()
+        }
+        _ => None,
+    };
+    if let Some(refusal) = refusal {
+        // `route_send` has already refused a delay past a day.
+        if refusal == ScheduleRefusal::TooFar {
+            return Err(INVALID);
+        }
+        out["kind"] = json!("invalid");
+        out["key"] = json!("scheduled.premium.freeDelay");
+        return Ok(out);
     }
     out["kind"] = json!("ready");
     out["route"] = route;
@@ -851,9 +874,9 @@ pub fn route_send(plan: &Value, draft: &Value, now: i64, tz: &str) -> Result<Val
         return Ok(json!({"delay":null}));
     }
     match serde_json::from_value::<Plan>(plan.clone()).map_err(|_| INVALID)? {
-        Plan::In { minutes } if minutes > 1440 => Err(INVALID),
+        Plan::In { minutes } if minutes > MAX_DELAY_MINUTES => Err(INVALID),
         Plan::In { minutes: 0 } => Ok(json!({"delay":null})),
-        Plan::In { minutes } if minutes <= 5 => Ok(json!({"delay":minutes*60})),
+        Plan::In { minutes } if minutes <= FREE_DELAY_MINUTES => Ok(json!({"delay":minutes*60})),
         Plan::In { minutes } => Ok(
             json!({"draft":{"localTime":wall_clock_at(now.checked_add(minutes as i64*60000+59999).ok_or(INVALID)?,tz)?,"tz":tz}}),
         ),

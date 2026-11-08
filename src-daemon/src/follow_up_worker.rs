@@ -43,6 +43,7 @@ use crate::imap::{self, pool::PooledSessionGuard, ImapConfig};
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, follow_up};
 use mailvault_core::custody::cache as sql_cache;
+use mailvault_core::follow_up::matcher;
 use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::Arc;
@@ -324,24 +325,13 @@ async fn account_cache_answers(state: &Arc<DaemonState>, account_id: &str, mut w
     Some(hits)
 }
 
-/// A NO or BAD the server marks temporary (RFC 5530 response codes, and
-/// Exchange's own wording): a try to repeat, never a refusal that the cache's
-/// answer can settle.
-fn temporary_refusal(why: &str) -> bool {
-    let why = why.to_ascii_lowercase();
-    ["[unavailable]", "[serverbug]", "[inuse]", "[limit]", "[expungeissued]", "server unavailable"]
-        .iter()
-        .any(|code| why.contains(code))
-}
-
 /// Of `uids` in `mailbox`, is one from someone other than the sender (`own`,
 /// folded like the app's `normalizeEmailIdentity`)? The search cannot fold a
 /// Gmail address itself, so its hits are read back (at most a few dozen).
 async fn a_hit_from_someone_else(session: &mut imap::ImapSession, mailbox: &str, uids: &[u32], own: &[String]) -> Result<bool, String> {
-    let own: Vec<String> = own.iter().map(|a| mailvault_core::notes_to_self::normalize_identity(a)).collect();
     let newest: Vec<u32> = uids.iter().rev().take(50).copied().collect();
     let (headers, _) = imap::fetch_headers_by_uids(session, mailbox, &newest).await?;
-    Ok(headers.iter().any(|h| !own.contains(&mailvault_core::notes_to_self::normalize_identity(&h.from.address))))
+    Ok(matcher::any_from_someone_else(headers.iter().map(|h| h.from.address.as_str()), own))
 }
 
 /// `check_row_with`, asking the header cache about this one row first.
@@ -405,7 +395,7 @@ pub(crate) async fn check_row_with(state: &Arc<DaemonState>, row: &follow_up::Fo
             selected = Some(mailbox.clone());
             let mut answer = imap::uid_search_tolerant(&mut session, mailbox, &criteria).await?;
             if let SearchRefused(why) | FolderRefused(why) = &answer {
-                if temporary_refusal(why) {
+                if matcher::temporary_refusal(why) {
                     return Err(format!("{mailbox} turned the reply search away for now: {why}"));
                 }
             }
@@ -511,34 +501,9 @@ const JMAP_REPLY_PROPS: [&str; 10] = [
     "header:X-Auto-Response-Suppress:asText",
 ];
 
-/// Is `email` (read with `JMAP_REPLY_PROPS`) an answer to `term` (a bare
-/// Message-ID) from someone else? It names the message in In-Reply-To or
-/// References (exactly, any case: the `header` filter matched a substring),
-/// is no draft, is not from one of `own` (folded like the app's
-/// `normalizeEmailIdentity`), and is neither marked nor titled like an
-/// automatic reply.
-fn jmap_reply_from_someone_else(email: &Value, term: &str, own: &[String]) -> bool {
-    let names_it = |prop: &str| {
-        email[prop]
-            .as_array()
-            .is_some_and(|ids| ids.iter().filter_map(Value::as_str).any(|m| mailvault_core::maildir::normalize_message_id(m).eq_ignore_ascii_case(term)))
-    };
-    let draft = email["keywords"]
-        .as_object()
-        .is_some_and(|k| k.iter().any(|(name, on)| name.eq_ignore_ascii_case("$draft") && on.as_bool() == Some(true)));
-    let automatic = email["header:Auto-Submitted:asText"].as_str().is_some_and(|v| !v.trim().eq_ignore_ascii_case("no"))
-        || ["header:X-Autoreply:asText", "header:X-Autorespond:asText", "header:X-Auto-Response-Suppress:asText"]
-            .iter()
-            .any(|prop| !email[*prop].is_null())
-        || sql_cache::is_auto_reply_subject(email["subject"].as_str().unwrap_or_default());
-    let from = email["from"].as_array().and_then(|a| a.first()).and_then(|f| f["email"].as_str()).unwrap_or_default();
-    let mine = own.iter().any(|a| mailvault_core::notes_to_self::normalize_identity(a) == mailvault_core::notes_to_self::normalize_identity(from));
-    (names_it("inReplyTo") || names_it("references")) && !draft && !automatic && !mine
-}
-
 /// `check_row_with`'s server check for a JMAP account (`uses_jmap`), on the
 /// account's session; the header cache already said no hit. A reply
-/// anywhere but Sent and Drafts (`jmap_reply_from_someone_else`) is
+/// anywhere but Sent and Drafts (`matcher::jmap_reply_from_someone_else`) is
 /// `Replied`. Else the Sent copy by exact Message-ID, in the folder the app
 /// filed it in, then the role=sent mailbox: `NoReply` under the uid that
 /// mailbox's JMAP ledger gives it, `SentCopyGone` when neither holds it.
@@ -560,7 +525,7 @@ async fn check_row_jmap(state: &Arc<DaemonState>, row: &follow_up::FollowUp, acc
         let (hits, _) = crate::handlers::jmap_bridge::query_ids(&acct.client, filter, JMAP_REPLY_HITS).await.map_err(|e| e.to_string())?;
         if !hits.is_empty() {
             let got = acct.client.get_emails(&hits, &JMAP_REPLY_PROPS).await.map_err(|e| e.to_string())?;
-            if got.list.iter().any(|e| jmap_reply_from_someone_else(e, &term, own)) {
+            if got.list.iter().any(|e| matcher::jmap_reply_from_someone_else(e, &term, own)) {
                 return Ok::<_, String>(Replied);
             }
         }
