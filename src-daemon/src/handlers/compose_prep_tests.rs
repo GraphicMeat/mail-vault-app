@@ -179,6 +179,50 @@ async fn compose_prep_check_uses_the_native_injected_clock() {
     );
 }
 
+#[tokio::test]
+async fn compose_check_warns_before_a_graph_or_jmap_send_over_its_size() {
+    let (_dir, s) = seed();
+    std::fs::write(
+        s.app_dir.join("accounts.json"),
+        json!([
+            {"id":"one","email":"owner@example.test"},
+            {"id":"graph","email":"g@example.test","oauth2Transport":"graph"},
+            {"id":"jmap","email":"j@example.test","jmapSessionUrl":"https://jmap.example.test/session"},
+            {"id":"odd","email":"o@example.test","oauth2Transport":7,"jmapSessionUrl":null}
+        ])
+        .to_string(),
+    )
+    .unwrap();
+    const MB: u64 = 1024 * 1024;
+    let check = |account: &str, bytes: u64, anyway: bool| {
+        let mut p = chk();
+        p["accountId"] = json!(account);
+        p["attachmentCount"] = json!(1);
+        p["attachmentBytes"] = json!(bytes);
+        p["sendAnyway"] = json!(anyway);
+        p
+    };
+    // Graph: (3 MB - margin) * 3/4 * 76/78 of attachments fit a 4 MB sendMail body.
+    let out = rpc(&s, "compose.check", check("graph", 3 * MB, false)).await.unwrap();
+    assert_eq!(out["kind"], "confirm_size");
+    let limit = out["limitBytes"].as_u64().unwrap();
+    assert!(limit > 2 * MB && limit < 3 * MB, "{limit}");
+    assert_eq!(rpc(&s, "compose.check", check("graph", 2 * MB, false)).await.unwrap()["kind"], "ready");
+    assert_eq!(rpc(&s, "compose.check", check("graph", 3 * MB, true)).await.unwrap()["kind"], "ready", "Send anyway");
+    // JMAP: no session limits here, so the 25 MB cap.
+    let out = rpc(&s, "compose.check", check("jmap", 26 * MB, false)).await.unwrap();
+    assert_eq!((out["kind"].as_str(), out["limitBytes"].as_u64()), (Some("confirm_size"), Some(25 * MB)));
+    assert_eq!(rpc(&s, "compose.check", check("jmap", 20 * MB, false)).await.unwrap()["kind"], "ready");
+    // SMTP (and an account whose kind fields do not read) is never warned: its server answers.
+    for account in ["one", "odd"] {
+        assert_eq!(rpc(&s, "compose.check", check(account, 60 * MB, false)).await.unwrap()["kind"], "ready", "{account}");
+    }
+    // Without attachmentBytes the check is what it was.
+    let mut p = chk();
+    p["accountId"] = json!("graph");
+    assert_eq!(rpc(&s, "compose.check", p).await.unwrap()["kind"], "ready");
+}
+
 // Test-only barriers identify the exact point after preparation and before its
 // generation check. The production route has no hook registry or wait.
 type Hook = Arc<dyn Fn() + Send + Sync>;

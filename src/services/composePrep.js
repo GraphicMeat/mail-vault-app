@@ -80,7 +80,7 @@ export async function checkCompose(input, options = {}) {
   throw unavailable();
 }
 function checkInput(input) {
-  const keys = ['mode', 'inReplyTo', 'forward', 'to', 'cc', 'bcc', 'subject', 'authoredBodyText', 'attachmentCount', 'timeZone', 'sendAnyway'];
+  const keys = ['mode', 'inReplyTo', 'forward', 'to', 'cc', 'bcc', 'subject', 'authoredBodyText', 'attachmentCount', 'attachmentBytes', 'timeZone', 'sendAnyway'];
   const plan = input.sendPlan;
   const draft = input.scheduleDraft;
   return { ...Object.fromEntries(keys.filter(k => input[k] !== undefined).map(k => [k, input[k]])),
@@ -96,6 +96,7 @@ function validateCheck(result, input, requestId, version) {
   if (!object(result) || result.requestId !== requestId || result.settingsVersion !== version
     || ['draftId', 'revision'].some(key => result[key] !== input[key] || Object.hasOwn(result, key) !== Object.hasOwn(input, key))) throw unavailable();
   if (result.kind === 'confirm_attachment' && only(result, base)) return;
+  if (result.kind === 'confirm_size' && only(result, [...base, 'limitBytes']) && Number.isSafeInteger(result.limitBytes) && result.limitBytes >= 0) return;
   if (result.kind === 'invalid' && only(result, [...base, 'key', 'args'])) {
     if (result.key === 'compose.invalidRecipient' && only(result.args, ['address']) && typeof result.args.address === 'string') return;
     if (['compose.pleaseEnterLeastOneRecipient', 'compose.noAccountSelected', 'scheduled.picker.pastTime'].includes(result.key) && !Object.hasOwn(result, 'args')) return;
@@ -122,6 +123,15 @@ function validCheckDraft(draft) {
   catch { return false; }
 }
 
+// Count and total bytes of what goes out attached: a picked file's size, or what
+// its base64 content decodes to. The daemon warns before a Graph or JMAP send
+// over that account's size limit (`confirm_size`).
+const attachmentTotals = attachments => ({
+  attachmentCount: attachments.length,
+  attachmentBytes: attachments.reduce((sum, a) => sum + (Number.isSafeInteger(a?.size) && a.size >= 0
+    ? a.size : Math.floor((typeof a?.content === 'string' ? a.content.length : 0) * 3 / 4)), 0),
+});
+
 // Only policy inputs cross the read-only native seam; the complete source stays local.
 export const composeCheckInput = ({ snapshot, mode, authoredBodyText, timeZone, sendAnyway }) => ({
   draftId: snapshot._draftId, revision: snapshot._draftRevision,
@@ -129,6 +139,7 @@ export const composeCheckInput = ({ snapshot, mode, authoredBodyText, timeZone, 
   mode, inReplyTo: snapshot.inReplyTo, forward: !!snapshot._forward,
   to: snapshot.to, cc: snapshot.cc, bcc: snapshot.bcc, subject: snapshot.subject,
   // A pasted or dropped picture sits in the body as a data: <img> and goes out as an inline part.
-  authoredBodyText, attachmentCount: snapshot.attachments.length + extractInlineImages(snapshot.body).attachments.length,
+  ...attachmentTotals([...snapshot.attachments, ...extractInlineImages(snapshot.body).attachments]),
+  authoredBodyText,
   sendPlan: snapshot._sendPlan, scheduleDraft: snapshot._scheduleDraft, timeZone, sendAnyway,
 });

@@ -21,7 +21,7 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
   const envelope = record => ({ attempt: record.attempt, editorGeneration: record.editorGeneration, outcome: record.result });
   const setResult = (record, result) => {
     record.result = result;
-    record.phase = result.kind === 'ready' ? 'ready' : result.kind === 'confirm_attachment' ? 'confirm' : 'retired';
+    record.phase = result.kind === 'ready' ? 'ready' : result.kind === 'confirm_attachment' || result.kind === 'confirm_size' ? 'confirm' : 'retired';
   };
   const sameContext = (session, record) => {
     const value = sendContext?.(record.snapshot, session);

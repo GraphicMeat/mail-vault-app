@@ -50,14 +50,16 @@ import { composeSnapshotForTransfer } from '../services/composeWindow';
 // OS window's client area.
 const viewportBounds = () => ({ width: window.innerWidth - 32, height: window.innerHeight - 32 });
 
+const sizeLabel = (t, bytes) => {
+  if (bytes < 1024) return t('settings.backup.account.b', { bytes });
+  if (bytes < 1024 * 1024) return t('settings.backup.account.kb', { bytes: (bytes / 1024).toFixed(1) });
+  return t('settings.backup.account.mb', { bytes: (bytes / (1024 * 1024)).toFixed(1) });
+};
+
 function AttachmentPreview({ attachment, onRemove }) {
   const t = useT();
   const pa = usePrivateAttr();
-  const formatSize = (bytes) => {
-    if (bytes < 1024) return t('settings.backup.account.b', { bytes });
-    if (bytes < 1024 * 1024) return t('settings.backup.account.kb', { bytes: (bytes / 1024).toFixed(1) });
-    return t('settings.backup.account.mb', { bytes: (bytes / (1024 * 1024)).toFixed(1) });
-  };
+  const formatSize = bytes => sizeLabel(t, bytes);
   
   return (
     <div
@@ -212,6 +214,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [error, setError] = useState(null);
   const [attachments, setAttachments] = useSendState([], invalidate);
   const [showAttachmentReminder, setShowAttachmentReminder] = useState(false);
+  // Bytes a Graph or JMAP account takes, while the "too large" warning is up.
+  const [sizeWarningLimit, setSizeWarningLimit] = useState(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -1002,6 +1006,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       if (result.kind === 'confirm_attachment') {
         confirmation.current = { snapshot, generation, timeZone, attempt };
         setShowAttachmentReminder(true); return false;
+      }
+      if (result.kind === 'confirm_size') {
+        confirmation.current = { snapshot, generation, timeZone, attempt };
+        setSizeWarningLimit(result.limitBytes); return false;
       }
       if (result.kind !== 'ready') throw new Error('compose.preparationUnavailable');
       return true;
@@ -2226,6 +2234,30 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             <Button variant="primary" data-autofocus data-testid="compose-attachment-reminder-attach"
               onClick={() => { invalidate(); setShowAttachmentReminder(false); fileInputRef.current?.click(); }}>
               {t('compose.attachmentReminder.attach')}
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Attachments over what a Graph or JMAP account's server takes. */}
+      <Dialog
+        open={sizeWarningLimit != null}
+        onClose={() => { invalidate(); setSizeWarningLimit(null); }}
+        role="alertdialog"
+        size="sm"
+        panelBg="bg-mail-surface"
+        data-testid="compose-size-warning"
+        title={t('compose.sizeWarning.title')}
+        description={t('compose.sizeWarning.description', { limit: sizeLabel(t, sizeWarningLimit ?? 0) })}
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="ghost" data-testid="compose-size-warning-send"
+              onClick={() => { setSizeWarningLimit(null); handleSend(null, true); }}>
+              {t('compose.sizeWarning.sendAnyway')}
+            </Button>
+            <Button variant="primary" data-autofocus data-testid="compose-size-warning-back"
+              onClick={() => { invalidate(); setSizeWarningLimit(null); }}>
+              {t('compose.sizeWarning.back')}
             </Button>
           </div>
         }

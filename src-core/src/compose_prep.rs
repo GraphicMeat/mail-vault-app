@@ -13,10 +13,37 @@ use std::sync::LazyLock;
 pub const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
 const INVALID: &str = "compose.preparationUnavailable";
 type Result<T> = std::result::Result<T, &'static str>;
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct Account {
     pub id: String,
     pub email: String,
+    /// `graph` for an account that sends through Microsoft Graph.
+    #[serde(default, rename = "oauth2Transport", deserialize_with = "text_or_none")]
+    pub oauth2_transport: Option<String>,
+    /// Set for an account that sends through JMAP.
+    #[serde(default, rename = "jmapSessionUrl", deserialize_with = "text_or_none")]
+    pub jmap_session_url: Option<String>,
+}
+/// An optional account field read leniently: anything but a string is absent,
+/// so an odd value never makes the whole accounts file unreadable here.
+fn text_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Option<String>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::String(s) => Some(s),
+        _ => None,
+    })
+}
+impl Account {
+    /// How the account sends (the rule of `ImapConfig::uses_jmap` / `uses_graph`).
+    pub fn send_kind(&self) -> crate::send::limits::SendKind {
+        use crate::send::limits::SendKind;
+        if self.jmap_session_url.as_deref().is_some_and(|u| !u.trim().is_empty()) {
+            SendKind::Jmap
+        } else if self.oauth2_transport.as_deref() == Some("graph") {
+            SendKind::Graph
+        } else {
+            SendKind::Smtp
+        }
+    }
 }
 pub struct Context {
     pub accounts: Vec<Account>,
@@ -516,6 +543,9 @@ struct Check {
     subject: String,
     authored_body_text: String,
     attachment_count: u32,
+    /// Total bytes of the attachments (optional; 0 checks no size).
+    #[serde(default)]
+    attachment_bytes: u64,
     #[serde(default)]
     send_plan: Value,
     #[serde(default)]
@@ -653,6 +683,20 @@ fn mentions(text: &str) -> bool {
     }
     MENTION.is_match(&lines.join("\n"))
 }
+/// The recipient part of [`check`]: the first problem with a message's To, Cc
+/// and Bcc as a catalog key and, for an address that does not read, that
+/// address. `None` when the lists may be sent to. Both apps check recipients
+/// here before a send.
+pub fn recipient_problem(to: &str, cc: &str, bcc: &str) -> Option<(&'static str, Option<String>)> {
+    if trim(to).is_empty() {
+        return Some(("compose.pleaseEnterLeastOneRecipient", None));
+    }
+    [to, cc, bcc]
+        .iter()
+        .flat_map(|s| tokens(s))
+        .find(|s| !valid_recipient(s))
+        .map(|token| ("compose.invalidRecipient", Some(token)))
+}
 pub fn check(params: &Value, ctx: &Context, now: i64) -> Result<Value> {
     let p: Check = serde_json::from_value(params.clone()).map_err(|_| INVALID)?;
     fence(&p.request_id, p.expected_settings_version, ctx)?;
@@ -666,14 +710,8 @@ pub fn check(params: &Value, ctx: &Context, now: i64) -> Result<Value> {
     if let Some(r) = p.revision {
         out["revision"] = json!(r)
     }
-    let invalid = if trim(&p.to).is_empty() {
-        Some(("compose.pleaseEnterLeastOneRecipient", None))
-    } else if let Some(token) = [&p.to, &p.cc, &p.bcc]
-        .iter()
-        .flat_map(|s| tokens(s))
-        .find(|s| !valid_recipient(s))
-    {
-        Some(("compose.invalidRecipient", Some(token)))
+    let invalid = if let Some(problem) = recipient_problem(&p.to, &p.cc, &p.bcc) {
+        Some(problem)
     } else if !ctx.accounts.iter().any(|a| a.id == p.account_id) {
         Some(("compose.noAccountSelected", None))
     } else {
@@ -724,6 +762,27 @@ pub fn check(params: &Value, ctx: &Context, now: i64) -> Result<Value> {
     {
         out["kind"] = json!("confirm_attachment");
         return Ok(out);
+    }
+    // Graph and JMAP refuse a message over their size limit; warn before the
+    // send (the user may send anyway: the budget is on the safe side). SMTP
+    // servers say so themselves. JMAP's session limits are not known here, so
+    // its budget is the 25 MB cap.
+    if !p.send_anyway && p.attachment_bytes > 0 {
+        use crate::send::limits::{attachment_budget, JmapLimits, SendKind};
+        let kind = ctx
+            .accounts
+            .iter()
+            .find(|a| a.id == p.account_id)
+            .map_or(SendKind::Smtp, Account::send_kind);
+        if kind != SendKind::Smtp {
+            let header = (p.subject.len() + p.to.len() + p.cc.len() + p.bcc.len()) as u64;
+            let budget = attachment_budget(kind, p.authored_body_text.len() as u64, header, JmapLimits::default());
+            if p.attachment_bytes > budget {
+                out["kind"] = json!("confirm_size");
+                out["limitBytes"] = json!(budget);
+                return Ok(out);
+            }
+        }
     }
     let route = route_send(&p.send_plan, &p.schedule_draft, now, &p.time_zone)?;
     if let Some(draft) = route.get("draft") {

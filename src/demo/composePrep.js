@@ -6,7 +6,7 @@ import { parseMailto } from '../utils/mailtoPolicy';
 import { textToHtml } from '../utils/textToHtml';
 import { invalidRecipients } from '../utils/recipientTokens';
 import { missingAttachment } from '../utils/missingAttachment';
-import { routeSend } from '../utils/sendPlan';
+import { routeSend } from './routeSend';
 import { zonedTimeToEpoch } from '../utils/scheduledTime';
 
 const escapeHtml = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -47,13 +47,13 @@ export function checkDemoCompose(p, { accounts, values, version, now }) {
   const object = v => v && typeof v === 'object' && !Array.isArray(v);
   const only = (v, keys) => object(v) && Object.keys(v).every(k => keys.includes(k));
   const uint = v => Number.isSafeInteger(v) && v >= 0;
-  const keys = ['requestId', 'expectedSettingsVersion', 'draftId', 'revision', 'accountId', 'fromAddress', 'mode', 'inReplyTo', 'forward', 'to', 'cc', 'bcc', 'subject', 'authoredBodyText', 'attachmentCount', 'sendPlan', 'scheduleDraft', 'timeZone', 'sendAnyway'];
+  const keys = ['requestId', 'expectedSettingsVersion', 'draftId', 'revision', 'accountId', 'fromAddress', 'mode', 'inReplyTo', 'forward', 'to', 'cc', 'bcc', 'subject', 'authoredBodyText', 'attachmentCount', 'attachmentBytes', 'sendPlan', 'scheduleDraft', 'timeZone', 'sendAnyway'];
   if (!only(p, keys) || ['requestId', 'accountId', 'fromAddress', 'to', 'authoredBodyText', 'timeZone'].some(k => typeof p[k] !== 'string') || !p.requestId.trim()
     || !['new', 'reply', 'replyAll', 'forward'].includes(p.mode) || !uint(p.attachmentCount) || p.attachmentCount > 4294967295
     || ['cc', 'bcc', 'subject'].some(k => p[k] !== undefined && typeof p[k] !== 'string')
     || ['forward', 'sendAnyway'].some(k => p[k] !== undefined && typeof p[k] !== 'boolean')
     || ['draftId', 'inReplyTo'].some(k => p[k] != null && typeof p[k] !== 'string')
-    || ['revision', 'expectedSettingsVersion'].some(k => p[k] != null && !uint(p[k]))) fail();
+    || ['revision', 'expectedSettingsVersion', 'attachmentBytes'].some(k => p[k] != null && !uint(p[k]))) fail();
   if (p.expectedSettingsVersion != null && p.expectedSettingsVersion !== version) throw new Error('errors.settingsConflict');
   const zone = tz => { try { if (typeof tz !== 'string' || !tz) fail(); new Intl.DateTimeFormat('en', { timeZone: tz }); } catch { fail(); } };
   zone(p.timeZone);

@@ -47,6 +47,7 @@ it.each([
   p => ({ ...ready(p), kind: 'unknown' }), p => ({ ...ready(p), route: {} }), p => ({ ...ready(p), route: { delay: null, draft: { localTime: '2030-01-01T09:00', tz: 'UTC' } } }),
   p => ({ ...ready(p), route: { delay: -1 } }), p => ({ ...ready(p), route: { delay: 1.5 } }), p => ({ ...ready(p), route: { draft: { localTime: 1, tz: 'UTC' } } }),
   p => ({ ...ready(p), key: 'compose.noAccountSelected' }), p => ({ ...ready(p), kind: 'confirm_attachment' }),
+  p => ({ ...ready(p), kind: 'confirm_size', route: undefined }), p => ({ ...ready(p), kind: 'confirm_size', route: undefined, limitBytes: -1 }), p => ({ ...ready(p), kind: 'confirm_size', limitBytes: 5 }),
   p => ({ ...ready(p), kind: 'invalid', key: 'anything', route: undefined }), p => ({ ...ready(p), kind: 'invalid', key: 'compose.invalidRecipient', route: undefined }),
 ])('refuses malformed or mismatched readiness %#', async malformed => {
   expect(prep.checkCompose).toBeTypeOf('function'); send.mockImplementation(async (_, p) => malformed(p));
@@ -54,7 +55,7 @@ it.each([
 });
 it('accepts only exact native invalid/confirm/route unions including absent optional draft identity', async () => {
   expect(prep.checkCompose).toBeTypeOf('function');
-  for (const outcome of [{ kind: 'invalid', key: 'compose.pleaseEnterLeastOneRecipient' }, { kind: 'invalid', key: 'compose.invalidRecipient', args: { address: 'bad' } }, { kind: 'invalid', key: 'compose.noAccountSelected' }, { kind: 'invalid', key: 'scheduled.picker.pastTime' }, { kind: 'confirm_attachment' }, { kind: 'ready', route: { delay: 300 } }, { kind: 'ready', route: { draft: { localTime: '2030-01-01T09:00', tz: 'UTC' } } }]) {
+  for (const outcome of [{ kind: 'invalid', key: 'compose.pleaseEnterLeastOneRecipient' }, { kind: 'invalid', key: 'compose.invalidRecipient', args: { address: 'bad' } }, { kind: 'invalid', key: 'compose.noAccountSelected' }, { kind: 'invalid', key: 'scheduled.picker.pastTime' }, { kind: 'confirm_attachment' }, { kind: 'confirm_size', limitBytes: 2286828 }, { kind: 'ready', route: { delay: 300 } }, { kind: 'ready', route: { draft: { localTime: '2030-01-01T09:00', tz: 'UTC' } } }]) {
     send.mockImplementation(async (_, p) => { const { route, ...base } = ready(p); return { ...base, ...outcome }; });
     expect(await prep.checkCompose(input())).toMatchObject(outcome);
   }
@@ -99,5 +100,19 @@ describe('composeCheckInput attachmentCount', () => {
   it('ignores images that are not embedded data (remote, no images)', () => {
     expect(check(snap('<p>hi</p><img src="https://x.test/a.png">')).attachmentCount).toBe(0);
     expect(check(snap('<p>hi</p>')).attachmentCount).toBe(0);
+  });
+});
+describe('composeCheckInput attachmentBytes', () => {
+  const snap = (body, attachments = []) => ({ _draftId: 'd', _draftRevision: 1, to: 'a@b.test', cc: '', bcc: '', subject: '', body, attachments });
+  const check = snapshot => prep.composeCheckInput({ snapshot, mode: 'new', authoredBodyText: 'hi', timeZone: 'UTC' });
+  it('totals picked sizes and what base64 content decodes to, so the daemon can warn before a Graph or JMAP send', () => {
+    expect(check(snap('<p>hi</p>')).attachmentBytes).toBe(0);
+    expect(check(snap('<p>hi</p>', [{ filename: 'a.pdf', size: 3_000_000 }, { filename: 'b.bin', content: 'QUJDRA==' }])).attachmentBytes).toBe(3_000_006);
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    expect(check(snap(`<img src="${png}">`, [{ filename: 'a.pdf', size: 10 }])).attachmentBytes).toBe(10 + Math.floor('iVBORw0KGgo='.length * 3 / 4));
+  });
+  it('sends attachmentBytes on the wire', async () => {
+    await prep.checkCompose({ ...input(), attachmentCount: 1, attachmentBytes: 42 });
+    expect(send.mock.calls[0][1]).toMatchObject({ attachmentCount: 1, attachmentBytes: 42 });
   });
 });

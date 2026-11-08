@@ -181,6 +181,37 @@ describe('attachment reminder at send', () => {
 });
 
 // Row 13 characterization: execute the real handleSend, not a reimplementation.
+describe('size warning at send (Graph or JMAP)', () => {
+  const big = { attachments: [{ filename: 'big.zip', contentType: 'application/zip', size: 3_000_000, content: 'AA==', isFromOriginal: false }] };
+  const sizeOnce = () => checkCompose.mockImplementationOnce(async () => ({ requestId: 'check', settingsVersion: 1, kind: 'confirm_size', limitBytes: 2_286_828 }));
+
+  it('asks before sending attachments over the limit, with the total on the wire', async () => {
+    sizeOnce();
+    open('<p>Here.</p>', big);
+    fireEvent.click(await screen.findByTestId('compose-send'));
+
+    expect(await screen.findByTestId('compose-size-warning')).toBeTruthy();
+    expect(checkCompose.mock.calls[0][0]).toMatchObject({ attachmentCount: 1, attachmentBytes: 3_000_000 });
+    expect(queueSend).not.toHaveBeenCalled();
+  });
+
+  it('Send anyway sends, Go back sends nothing', async () => {
+    sizeOnce();
+    const { onClose } = open('<p>Here.</p>', big);
+    fireEvent.click(await screen.findByTestId('compose-send'));
+    fireEvent.click(await screen.findByTestId('compose-size-warning-back'));
+    expect(screen.queryByTestId('compose-size-warning')).toBeNull();
+    expect(queueSend).not.toHaveBeenCalled();
+
+    sizeOnce();
+    fireEvent.click(await screen.findByTestId('compose-send'));
+    fireEvent.click(await screen.findByTestId('compose-size-warning-send'));
+    await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+    expect(checkCompose.mock.calls.at(-1)[0].sendAnyway).toBe(true);
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+
 describe('current compose validation order', () => {
   it.each([
     [{ to: '', cc: 'bad-cc', bcc: 'bad-bcc' }, 'compose.pleaseEnterLeastOneRecipient', {}],
