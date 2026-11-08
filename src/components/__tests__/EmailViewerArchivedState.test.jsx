@@ -38,6 +38,7 @@ function renderViewer(email, { viewMode = 'all', archived = [] } = {}) {
     activeAccountId: 'acct-1', activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false, viewMode,
     selectedEmail: email, selectedThread: null, loadingEmail: false, selectedEmailSource: 'server',
     emails: [email], sortedEmails: [email], savedEmailIds: new Set(), archivedEmailIds: new Set(archived),
+    mailboxes: [{ path: 'INBOX' }, { path: 'Sent', specialUse: '\\Sent' }, { path: 'Trash', specialUse: '\\Trash' }],
   });
   const { container } = render(<EmailViewer />);
   return within(container.querySelector('.email-action-bar'));
@@ -68,6 +69,15 @@ describe('EmailViewer archived state', () => {
     const bar = renderViewer(message({ _mailbox: 'Sent' }), { archived: ['acct-1:INBOX:5'] });
     expect(bar.queryAllByRole('button', { name: /^Archive$/ })).toHaveLength(1);
     expect(document.querySelector('[data-testid="email-custody-band"]').getAttribute('data-tone')).toBe('server');
+    fireEvent.click(bar.getByRole('button', { name: /delete/i }));
+    const dialog = await screen.findByRole('alertdialog');
+    // Outside Trash a delete moves the message to Trash (owner decision 1).
+    expect(dialog.textContent).toContain('Deleted mail goes to Trash on the server');
+    expect(dialog.textContent).not.toMatch(/permanently/);
+  });
+
+  it('calls a delete in Trash permanent', async () => {
+    const bar = renderViewer(message({ _mailbox: 'Trash' }));
     fireEvent.click(bar.getByRole('button', { name: /delete/i }));
     const dialog = await screen.findByRole('alertdialog');
     expect(dialog.textContent).toContain('This email will be permanently deleted from the server.');

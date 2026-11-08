@@ -7,7 +7,8 @@ import { useSearchStore } from "../stores/searchStore";
 import { X } from "lucide-react";
 import { MoveToFolderDropdown } from "./MoveToFolderDropdown";
 import { SnoozePicker } from "./SnoozePicker";
-import { vaultClause, describeReaderDelete } from "../utils/custodyCopy";
+import { serverDeleteClause, describeReaderDelete } from "../utils/custodyCopy";
+import { serverDeleteDispositionOf } from "../utils/deleteDisposition";
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from "../stores/mailStore";
 import { useExportStore } from "../stores/exportStore";
@@ -404,7 +405,14 @@ export function SelectionActionBar() {
               ? describeReaderDelete({ localFolder })
               : t("selection.deleteServer2", {
                 deleteScope,
-                vaultClause: vaultClause(totalCount, archivedCount),
+                vaultClause: serverDeleteClause(
+                  totalCount,
+                  archivedCount,
+                  serverDeleteDispositionOf(
+                    locations.filter((_, i) => selectedRows[i]?.source !== "local-only"),
+                    useMailStore.getState(),
+                  ),
+                ),
               }),
             confirmLabel: deleteMode === "unarchive"
               ? t("rowMenu.unarchive")

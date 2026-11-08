@@ -634,11 +634,10 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickSelectionAction('deleteServer')).toBe(true);
-      // This row is archived, so the vault holds a copy and the confirmation
-      // deliberately does NOT say "cannot be undone" — over-warning about the
-      // safe case is the bug the custody copy pass fixed.
+      // Outside Trash the delete is a move to Trash (owner decision 1): the
+      // confirmation says so and makes no permanence claim either way.
       await waitForBodyText(
-        'Your vault keeps the copy',
+        'goes to Trash on the server',
         'Delete-from-server confirmation never appeared',
       );
       expect(await confirmDeletePopover()).toBe(true);
@@ -673,7 +672,9 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickSelectionAction('deleteServer')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
+      // A delete outside Trash moves the message to Trash (owner decision 1), and the
+      // confirmation says so instead of "cannot be undone".
+      await waitForBodyText('goes to Trash on the server', 'Delete-from-server confirmation never appeared');
       expect(await confirmDeletePopover()).toBe(true);
 
       await browser.waitUntil(async () => !(await rowFor(subject)), {
@@ -746,11 +747,10 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickSelectionAction('deleteServer')).toBe(true);
-      // This row is archived, so the vault holds a copy and the confirmation
-      // deliberately does NOT say "cannot be undone" — over-warning about the
-      // safe case is the bug the custody copy pass fixed.
+      // Outside Trash the delete is a move to Trash (owner decision 1): the
+      // confirmation says so and makes no permanence claim either way.
       await waitForBodyText(
-        'Your vault keeps the copy',
+        'goes to Trash on the server',
         'Delete-from-server confirmation never appeared',
       );
       expect(await confirmDeletePopover()).toBe(true);

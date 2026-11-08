@@ -583,6 +583,8 @@
   "contacts.reason.account": "Visto nesta conta",
   "contacts.reason.pinned": "Fixado",
   "contacts.reason.vip": "VIP",
+  "custody.deleteMovesToTrash": "Os e-mails excluídos vão para a lixeira do servidor, onde você ainda pode recuperá-los.",
+  "custody.deleteMovesToTrashOrGone": "Os e-mails excluídos fora da lixeira vão para a lixeira do servidor. Os excluídos da lixeira somem para sempre.",
   "custody.emailLeavesServer": "Este e-mail sai do servidor.",
   "custody.noCopyVaultSoCannot": "Não há cópia no cofre, então não há como desfazer.",
   "custody.purgeNothingLeft_one": "Este e-mail vai sumir. Nenhuma cópia restará em lugar algum. Não há como desfazer.",

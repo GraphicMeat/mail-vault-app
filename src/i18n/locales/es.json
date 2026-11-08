@@ -583,6 +583,8 @@
   "contacts.reason.account": "Visto en esta cuenta",
   "contacts.reason.pinned": "Fijado",
   "contacts.reason.vip": "VIP",
+  "custody.deleteMovesToTrash": "El correo eliminado va a la papelera del servidor, donde aún puedes recuperarlo.",
+  "custody.deleteMovesToTrashOrGone": "El correo eliminado fuera de la papelera va a la papelera del servidor. El que se elimina desde la papelera desaparece para siempre.",
   "custody.emailLeavesServer": "Este correo sale del servidor.",
   "custody.noCopyVaultSoCannot": "No hay copia en tu bóveda, así que no se puede deshacer.",
   "custody.purgeNothingLeft_one": "Este correo desaparecerá. No quedará ninguna copia en ningún sitio. No se puede deshacer.",

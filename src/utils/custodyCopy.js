@@ -34,8 +34,27 @@ export function vaultClause(total, inVault) {
   return t('custody.themVaultOtherOnlyServer', { inVault: formatCount(inVault), exposed: formatCount(exposed), exposed2: exposed === 1 ? 'exists' : 'exist' });
 }
 
+// The delete rule (owner decision 1) moves a message deleted outside Trash to
+// Trash; only a delete inside Trash, or in an account with no Trash, takes it
+// off the server. "Leaves the server" and "cannot be undone" are said only
+// then (`serverDeleteDisposition`).
+
+/**
+ * What a server delete does, as the sentence after the question: a move to
+ * Trash, gone for good (the vault clause), or, when the folder list cannot
+ * tell, both rules and no claim.
+ *
+ * @param {'trash'|'permanent'|'unknown'} disposition `serverDeleteDisposition`
+ */
+export function serverDeleteClause(total, inVault, disposition = 'permanent') {
+  if (disposition === 'trash') return t('custody.deleteMovesToTrash');
+  if (disposition === 'unknown') return t('custody.deleteMovesToTrashOrGone');
+  return vaultClause(total, inVault);
+}
+
 /** Confirmation body for "Delete from server" on a row or a thread. */
-export function describeServerDelete(total, inVault) {
+export function describeServerDelete(total, inVault, disposition = 'permanent') {
+  if (disposition !== 'permanent') return serverDeleteClause(total, inVault, disposition);
   const lead = total === 1
     ? t('custody.emailLeavesServer')
     : t('custody.theseEmailsLeaveServer', { total: formatCount(total) });
@@ -48,11 +67,14 @@ export function describeServerDelete(total, inVault) {
  * thread, the chat bubbles and the full view all ask it. A message in a folder
  * kept only on this computer (an MBOX import) has no server copy to delete and
  * no vault copy that stays: it goes to the deleted bin, and the body says so.
+ * `disposition` (`serverDeleteDisposition`) says whether a server delete is a
+ * move to Trash or permanent.
  */
-export function describeReaderDelete({ localOnly = false, localFolder = false, archived = false } = {}) {
+export function describeReaderDelete({ localOnly = false, localFolder = false, archived = false, disposition = 'permanent' } = {}) {
   if (localFolder) return t('viewer.localFolderDeleteToBin');
   if (localOnly) return t('viewer.emailOnlyExistsLocalArchive');
-  return archived ? t('viewer.emailArchivedLocallyDeletingServer') : t('viewer.emailPermanentlyDeletedServer');
+  if (archived) return t('viewer.emailArchivedLocallyDeletingServer');
+  return disposition === 'permanent' ? t('viewer.emailPermanentlyDeletedServer') : serverDeleteClause(1, 0, disposition);
 }
 
 

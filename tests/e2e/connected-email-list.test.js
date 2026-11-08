@@ -95,9 +95,10 @@ describe('Email List Selection & Action Bar', function () {
     expect(clicked).toBe(true);
     await browser.pause(500);
 
-    // Verify confirmation dialog with "cannot be undone" text
+    // Verify the confirmation dialog: a delete outside Trash moves the mail to Trash
+    // (owner decision 1), and the dialog says so.
     const hasConfirmation = await browser.execute(() => {
-      return document.body.innerText.toLowerCase().includes('cannot be undone');
+      return document.body.innerText.toLowerCase().includes('goes to trash on the server');
     });
 
     expect(hasConfirmation).toBe(true);

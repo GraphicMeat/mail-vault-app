@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useQuickActionConfiguration } from '../hooks/useQuickActionConfiguration';
 import { selectionKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describeReaderDelete } from '../utils/custodyCopy';
+import { serverDeleteDispositionOf } from '../utils/deleteDisposition';
 import { replyTarget } from '../utils/replyTarget';
 import { openCompose } from '../utils/composeOpener';
 import { setDeleteUndo, reloadListInView } from '../services/workflows/messageMutations';
@@ -104,7 +105,11 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     confirmLabel: t('common.delete'),
   } : {
     title: t('rowMenu.deleteServer2'),
-    description: describeServerDelete(serverEmails.length, serverEmails.filter(email => isRowArchived(email, state)).length),
+    description: describeServerDelete(
+      serverEmails.length,
+      serverEmails.filter(email => isRowArchived(email, state)).length,
+      serverDeleteDispositionOf(serverTargets.map(target => target.location), state),
+    ),
     confirmLabel: t('rowMenu.deleteServer'),
   }, { confirmOptional: true });
   const requestUnarchive = () => {

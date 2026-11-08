@@ -36,6 +36,7 @@ import { FieldStrip } from '../FieldStrip';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { describeReaderPurge, describeReaderDelete } from '../../utils/custodyCopy';
+import { serverDeleteDispositionOf } from '../../utils/deleteDisposition';
 import { useExportStore } from '../../stores/exportStore';
 import { openCompose } from '../../utils/composeOpener';
 import { replyTarget } from '../../utils/replyTarget';
@@ -206,7 +207,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         : useMailStore.getState().deleteEmailFromServer(target.uid, { accountId: explicitLocation.accountId, mailboxOverride: explicitLocation.mailbox }),
       copy: {
         title: t('viewer.deleteEmail'),
-        description: describeReaderDelete({ localOnly, localFolder: inLocalFolder(target, state), archived: isRowArchived(target, state, archivedEmailIds) }),
+        description: describeReaderDelete({ localOnly, localFolder: inLocalFolder(target, state), archived: isRowArchived(target, state, archivedEmailIds), disposition: serverDeleteDispositionOf([location], state) }),
         confirmLabel: t('common.delete'),
       },
     });

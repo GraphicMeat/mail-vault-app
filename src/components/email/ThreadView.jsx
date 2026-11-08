@@ -62,6 +62,7 @@ import { AiComposeActions } from '../ai/AiComposeActions';
 import { accountIdsOf } from '../../services/aiClient';
 import { boundedThreadText } from '../../utils/quickReplies';
 import { describeReaderPurge, describeReaderDelete } from '../../utils/custodyCopy';
+import { serverDeleteDispositionOf } from '../../utils/deleteDisposition';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../../services/workflows/messageMutations';
 import { captureBulkScope } from '../../services/bulkSelection.js';
@@ -724,6 +725,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
           localOnly,
           localFolder: inLocalFolder(email, state),
           archived: isRowArchived(email, state, archivedEmailIds),
+          disposition: serverDeleteDispositionOf([location], state),
         }),
         confirmLabel: localOnly ? t('rowMenu.unarchive') : t('common.delete'),
       },

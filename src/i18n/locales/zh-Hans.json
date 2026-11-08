@@ -583,6 +583,8 @@
   "contacts.reason.account": "在此账户中出现过",
   "contacts.reason.pinned": "已置顶",
   "contacts.reason.vip": "VIP",
+  "custody.deleteMovesToTrash": "删除的邮件会移到服务器上的废纸篓，你仍可从那里找回。",
+  "custody.deleteMovesToTrashOrGone": "在废纸篓以外删除的邮件会移到服务器上的废纸篓。从废纸篓删除的邮件将永久消失。",
   "custody.emailLeavesServer": "这封邮件将离开服务器。",
   "custody.noCopyVaultSoCannot": "保险库中没有副本，因此无法撤销。",
   "custody.purgeNothingLeft_one": "这封邮件将消失，任何地方都不会留下副本，且无法撤销。",

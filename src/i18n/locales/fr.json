@@ -583,6 +583,8 @@
   "contacts.reason.account": "Vu sur ce compte",
   "contacts.reason.pinned": "Épinglé",
   "contacts.reason.vip": "VIP",
+  "custody.deleteMovesToTrash": "Les e-mails supprimés vont dans la corbeille du serveur, d'où vous pouvez encore les récupérer.",
+  "custody.deleteMovesToTrashOrGone": "Les e-mails supprimés hors de la corbeille vont dans la corbeille du serveur. Ceux supprimés depuis la corbeille disparaissent définitivement.",
   "custody.emailLeavesServer": "Cet e-mail quitte le serveur.",
   "custody.noCopyVaultSoCannot": "Aucune copie dans votre coffre : impossible de revenir en arrière.",
   "custody.purgeNothingLeft_one": "Cet e-mail disparaîtra. Aucune copie ne subsistera nulle part. Action irréversible.",

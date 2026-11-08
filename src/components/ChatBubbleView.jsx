@@ -56,6 +56,7 @@ import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { useExportStore } from '../stores/exportStore';
 import { describeReaderPurge, describeReaderDelete } from '../utils/custodyCopy';
+import { serverDeleteDispositionOf } from '../utils/deleteDisposition';
 import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../services/workflows/messageMutations';
@@ -443,6 +444,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         title: t('viewer.deleteEmail'),
         description: describeReaderDelete({
           localOnly, localFolder: inLocalFolder(target, useMailStore.getState()), archived: isRowArchived(target, useMailStore.getState(), archivedEmailIds),
+          disposition: serverDeleteDispositionOf([location], useMailStore.getState()),
         }),
         confirmLabel: t('common.delete'),
       },

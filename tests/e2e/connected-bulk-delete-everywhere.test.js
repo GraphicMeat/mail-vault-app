@@ -383,12 +383,11 @@ describe('Bulk delete everywhere', function () {
 
     expect(await toggleRow(localOnlySubject)).toBe(true);
     expect(await clickSelectionAction('deleteServer')).toBe(true);
-    // This row is archived, so the vault holds a copy and the confirmation
-    // deliberately does NOT say "cannot be undone" — over-warning about the
-    // safe case is the bug the custody copy pass fixed. The permanent wording
-    // is asserted where nothing is in the vault (connected-selection-actions).
+    // Outside Trash the delete is a move to Trash (owner decision 1): the
+    // confirmation says so and makes no permanence claim. The custody wording
+    // ("Your vault keeps the copy") is for a delete inside Trash.
     await waitForBodyText(
-      'Your vault keeps the copy',
+      'goes to Trash on the server',
       'Delete-from-server confirmation never appeared',
     );
 

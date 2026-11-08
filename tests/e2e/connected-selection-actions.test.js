@@ -316,7 +316,9 @@ describe('Selection Action Bar effects', function () {
 
     expect(await toggleRow(subject)).toBe(true);
     expect(await clickSelectionAction('deleteServer')).toBe(true);
-    await waitForText('No copy is in your vault', 'Delete confirmation never appeared');
+    // Outside Trash the delete is a move to Trash (owner decision 1), and the
+    // confirmation says so; the permanent wording is for a delete inside Trash.
+    await waitForText('goes to Trash on the server', 'Delete confirmation never appeared');
 
     // The bar's own trigger carries a title; the popover's confirm button does not.
     const confirmed = await browser.execute(() => {

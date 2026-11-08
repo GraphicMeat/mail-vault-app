@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Deleting a message from Sent, Archive, Spam or any folder other than Inbox now moves it to Trash, the same as deleting from Inbox, and you can undo it. Only deleting a message that is already in Trash removes it for good. Accounts without a Trash folder keep the old behaviour.
+- The delete confirmation now says that a message deleted outside Trash goes to Trash on the server. It used to warn that the message would be deleted for good and that this could not be undone, which was only true in Trash.
 
 ## [2.23.0] - 2026-11-08
 

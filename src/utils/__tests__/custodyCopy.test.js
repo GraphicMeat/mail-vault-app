@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { vaultClause, describeServerDelete, describePurge, describeReaderPurge, describeReaderDelete } from '../custodyCopy';
+import { vaultClause, describeServerDelete, describePurge, describeReaderPurge, describeReaderDelete, serverDeleteClause } from '../custodyCopy';
 
 // The bug this replaced: every "Delete from server" confirmation said "This
 // cannot be undone", whether or not a vault copy existed. These assertions
@@ -52,6 +52,28 @@ describe('describeServerDelete', () => {
 
   it('groups thousands so a bulk run reads as a number', () => {
     expect(describeServerDelete(1200, 0)).toContain('1,200');
+  });
+
+  // The delete rule (owner decision 1): outside Trash the delete is a move to
+  // Trash. Neither "leaves the server" nor "cannot be undone" is true there.
+  it('says a delete outside Trash moves the mail to Trash, with no permanence claim', () => {
+    for (const [total, inVault] of [[1, 0], [3, 0], [2, 2]]) {
+      const copy = describeServerDelete(total, inVault, 'trash');
+      expect(copy).toMatch(/goes to Trash on the server/);
+      expect(copy).not.toMatch(/cannot be undone|leaves? the server|gone for good|permanent/i);
+    }
+  });
+
+  it('states both rules when it cannot tell the folder, claiming neither', () => {
+    const copy = describeServerDelete(1, 0, 'unknown');
+    expect(copy).toMatch(/goes to Trash on the server/);
+    expect(copy).toMatch(/from Trash is gone for good/);
+    expect(copy).not.toMatch(/cannot be undone/);
+  });
+
+  it('keeps the custody wording for a permanent delete', () => {
+    expect(describeServerDelete(1, 0, 'permanent')).toBe(describeServerDelete(1, 0));
+    expect(serverDeleteClause(4, 4, 'permanent')).toBe(vaultClause(4, 4));
   });
 });
 
@@ -116,6 +138,15 @@ describe('describeReaderDelete', () => {
     expect(describeReaderDelete({ archived: true })).toMatch(/keep the archived copy/);
     expect(describeReaderDelete({})).toMatch(/permanently deleted from the server/);
     expect(describeReaderDelete({ localOnly: true, archived: true })).toMatch(/only exists in your local archive/);
+  });
+
+  it('says permanently only when the delete is permanent', () => {
+    expect(describeReaderDelete({ disposition: 'permanent' })).toMatch(/permanently deleted from the server/);
+    expect(describeReaderDelete({ disposition: 'trash' })).toMatch(/goes to Trash on the server/);
+    expect(describeReaderDelete({ disposition: 'trash' })).not.toMatch(/permanent/i);
+    expect(describeReaderDelete({ disposition: 'unknown' })).not.toMatch(/permanently deleted/);
+    // An archived message keeps its vault copy whatever the server does.
+    expect(describeReaderDelete({ archived: true, disposition: 'trash' })).toMatch(/keep the archived copy/);
   });
 });
 

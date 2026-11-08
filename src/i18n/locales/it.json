@@ -583,6 +583,8 @@
   "contacts.reason.account": "Visto su questo account",
   "contacts.reason.pinned": "Fissato",
   "contacts.reason.vip": "VIP",
+  "custody.deleteMovesToTrash": "La posta eliminata finisce nel cestino del server, dove puoi ancora recuperarla.",
+  "custody.deleteMovesToTrashOrGone": "La posta eliminata fuori dal cestino finisce nel cestino del server. Quella eliminata dal cestino sparisce per sempre.",
   "custody.emailLeavesServer": "Questa email lascia il server.",
   "custody.noCopyVaultSoCannot": "Non c'è copia in cassaforte, quindi non è reversibile.",
   "custody.purgeNothingLeft_one": "Questa email sparirà. Non resterà alcuna copia da nessuna parte. Non è reversibile.",

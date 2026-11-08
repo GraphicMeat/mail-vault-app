@@ -137,19 +137,40 @@ describe('SelectionActionBar delete confirmation', () => {
     expect(copy.textContent).not.toMatch(/backup/i);
   });
 
+  // The delete rule (owner decision 1): outside Trash a server delete moves the
+  // mail to Trash, so the confirmation must not call it permanent there.
+  it('says an INBOX delete moves the mail to Trash, never that it cannot be undone', () => {
+    render(<SelectionActionBar />);
+    fireEvent.click(quickAction('Delete from server'));
+    const copy = screen.getByText(/Delete 2 emails from the server\?/);
+    expect(copy.textContent).toMatch(/Deleted mail goes to Trash on the server/);
+    expect(copy.textContent).not.toMatch(/cannot be undone|gone for good/i);
+  });
+
+  // Inside Trash the delete is permanent: the custody clause applies.
+  const inTrash = (archived) => {
+    const rows = selectionFixtureRows.map(row => ({ ...row, _mailbox: 'Trash', isArchived: archived }));
+    useMailStoreMock.setState({
+      activeMailbox: 'Trash',
+      mailboxes: [{ path: 'INBOX' }, { path: 'Trash', specialUse: '\\Trash' }],
+      emails: rows, sortedEmails: rows,
+      archivedEmailIds: new Set(archived ? ['acct-1:Trash:1', 'acct-1:Trash:2'] : []),
+      backedUpKeys: new Set(['acct-1:Trash:1', 'acct-1:Trash:2']),
+    });
+  };
+
   // The fixture's two selected uids are not in archivedEmailIds, so the vault
   // clause must be the permanent one. The bug this guards: the bar used to say
   // "This cannot be undone" for every server delete, archived or not.
-  it('says a server delete is permanent only when the vault has no copy', () => {
+  it('says a delete in Trash is permanent only when the vault has no copy', () => {
+    inTrash(false);
     render(<SelectionActionBar />);
     fireEvent.click(quickAction('Delete from server'));
     expect(screen.getByText(/No copy is in your vault, so this cannot be undone\./)).toBeTruthy();
   });
 
-  it('promises the vault copy survives when every selected message is archived', () => {
-    // As the store has it: the archived ids and the rows derived from them.
-    const archivedRows = selectionFixtureRows.map(row => ({ ...row, isArchived: true }));
-    useMailStoreMock.setState({ archivedEmailIds: new Set(['acct-1:INBOX:1', 'acct-1:INBOX:2']), emails: archivedRows, sortedEmails: archivedRows });
+  it('promises the vault copy survives when every selected message in Trash is archived', () => {
+    inTrash(true);
     render(<SelectionActionBar />);
     fireEvent.click(quickAction('Delete from server'));
 

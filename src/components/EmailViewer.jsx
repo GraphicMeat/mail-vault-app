@@ -72,6 +72,7 @@ import { TagChips } from './TagChips';
 import { FieldStrip } from './FieldStrip';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { describeReaderPurge, describeReaderDelete } from '../utils/custodyCopy';
+import { serverDeleteDispositionOf } from '../utils/deleteDisposition';
 import { applyFlagToKeys } from '../services/workflows/messageMutations';
 import { QuickReplyChips } from './email/QuickReplyChips';
 import { AiComposeActions } from './ai/AiComposeActions';
@@ -371,6 +372,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         description: describeReaderDelete({
           localFolder: inLocalFolder(target, useMailStore.getState()),
           archived: isRowArchived(target, useMailStore.getState(), archivedEmailIds),
+          disposition: serverDeleteDispositionOf([location], useMailStore.getState()),
         }),
         confirmLabel: t('common.delete'),
       },

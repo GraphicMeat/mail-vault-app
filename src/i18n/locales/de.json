@@ -583,6 +583,8 @@
   "contacts.reason.account": "Auf diesem Konto gesehen",
   "contacts.reason.pinned": "Angeheftet",
   "contacts.reason.vip": "VIP",
+  "custody.deleteMovesToTrash": "Gelöschte E-Mails landen im Papierkorb auf dem Server, wo du sie noch zurückholen kannst.",
+  "custody.deleteMovesToTrashOrGone": "Außerhalb des Papierkorbs gelöschte E-Mails landen im Papierkorb auf dem Server. Aus dem Papierkorb gelöschte E-Mails sind endgültig weg.",
   "custody.emailLeavesServer": "Diese E-Mail verlässt den Server.",
   "custody.noCopyVaultSoCannot": "Es liegt keine Kopie im Tresor, das lässt sich nicht rückgängig machen.",
   "custody.purgeNothingLeft_one": "Diese E-Mail verschwindet. Nirgendwo bleibt eine Kopie. Das lässt sich nicht rückgängig machen.",

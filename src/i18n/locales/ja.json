@@ -583,6 +583,8 @@
   "contacts.reason.account": "このアカウントで検出",
   "contacts.reason.pinned": "ピン留め",
   "contacts.reason.vip": "VIP",
+  "custody.deleteMovesToTrash": "削除したメールはサーバーのゴミ箱に移動し、そこから元に戻せます。",
+  "custody.deleteMovesToTrashOrGone": "ゴミ箱以外で削除したメールはサーバーのゴミ箱に移動します。ゴミ箱から削除したメールは完全に消えます。",
   "custody.emailLeavesServer": "このメールはサーバーから消えます。",
   "custody.noCopyVaultSoCannot": "保管庫にコピーがないため、元に戻せません。",
   "custody.purgeNothingLeft_one": "このメールは消えます。どこにもコピーは残りません。元に戻せません。",
