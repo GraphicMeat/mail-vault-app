@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.23.0] - 2026-11-08
+
 - In the Blitz renderer, a message no longer opens to an empty reading pane when MailVault could not check it for trackers in time, as could happen right after you clicked a new-mail notification. It now shows with remote images held back, as the Web renderer already did. The same applies to threads, the full view, original messages and previews.
 - Switching an Outlook.com account from Microsoft Graph to IMAP now says why when Microsoft's IMAP server refuses it (and to check that IMAP is turned on in Outlook.com), instead of "Your account change could not be completed". Nothing changes on a refused switch; the account stays on Microsoft Graph. Outlook.com's "User is authenticated but not connected" is now treated as a refused sign-in, not a dropped connection that MailVault kept retrying.
 - When Outlook.com refuses IMAP because "Let devices and apps use IMAP" is off, MailVault now shows how to turn it on, with a screenshot, an Open Outlook settings button and a link to the new FAQ answer. Settings keeps this for the account until a switch goes through, and adding an Outlook.com account over IMAP shows it instead of "check your email address and password". Picking IMAP for an Outlook account links the same FAQ answer.
