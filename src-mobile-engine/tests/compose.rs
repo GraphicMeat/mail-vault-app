@@ -782,9 +782,8 @@ fn a_queued_row_waits_for_its_not_before_time() {
 /// The user's Retry sends at once, whatever wait the row carried.
 #[test]
 fn a_retry_clears_the_wait() {
-    let server = MockImap::start(scenario());
+    let server = MockImap::start(scenario().smtp_refuse("refused-rcpt"));
     let f = setup(&server);
-    server.reset_scenario(scenario().smtp_refuse("refused-rcpt"));
     let from = f.events.len();
     let id = f.send(json!({ "to": "refused-rcpt@example.test", "subject": "Refused", "text": "x" })).unwrap()["id"]
         .as_str()
