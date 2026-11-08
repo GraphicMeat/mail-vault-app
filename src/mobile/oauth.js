@@ -12,7 +12,7 @@
 import { daemonCall, openAuthSheet, closeAuthSheet } from './transport.js';
 import { errorCodeOf } from './errors.js';
 
-/** The running flow: `{ flowId, cancelled }` (`flowId` null until `begin` answers), or null. */
+/** The running flow: `{ flowId, url, cancelled }` (null ids until `begin` answers), or null. */
 let running = null;
 
 /** Whether a sign-in flow is running. */
@@ -30,13 +30,13 @@ export function cancelOAuth() {
   if (!flow || flow.cancelled) return;
   flow.cancelled = true;
   if (flow.flowId) daemonCall('mobile.oauth.cancel', { flowId: flow.flowId }).catch(() => {});
-  closeAuthSheet().catch(() => {});
+  closeAuthSheet(flow.url ?? undefined).catch(() => {});
 }
 
 // `start` is the call that opens the flow, so every RPC here is named literally (seam.test.js).
 async function run(start) {
   if (running) return { ok: false, code: 'SIGNIN_BUSY' };
-  const flow = { flowId: null, cancelled: false };
+  const flow = { flowId: null, url: null, cancelled: false };
   running = flow;
   try {
     return await drive(flow, start);
@@ -55,6 +55,7 @@ async function drive(flow, start) {
   const flowId = begun?.flowId;
   if (!flowId || typeof begun.url !== 'string') return { ok: false, code: 'INTERNAL' };
   flow.flowId = flowId;
+  flow.url = begun.url;
   const cancel = () => daemonCall('mobile.oauth.cancel', { flowId }).catch(() => {});
   // Cancelled from the page before `begin` answered: end it now, never show the sheet.
   if (flow.cancelled) {
@@ -81,7 +82,8 @@ async function drive(flow, start) {
     reply = { ok: false, code: err?.code };
   } finally {
     answered = true;
-    closeAuthSheet().catch(() => {});
+    // Named: a close that overtakes the sheet's open cancels that open (it never shows).
+    closeAuthSheet(begun.url).catch(() => {});
   }
   if (reply?.ok) return { ok: true, account: reply.account };
   // A sheet that never opened explains the cancel better than CANCELLED.

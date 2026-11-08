@@ -250,10 +250,15 @@ export function createMobileStore() {
           if (!p?.accountId) return;
           set((s) => ({
             syncState: { ...s.syncState, [p.accountId]: { state: p.state, code: p.code ?? null, at: Date.now() } },
-            // A lapsed provider sign-in parks the account: the banner and the switcher say so now.
-            accounts: p.code === 'NEEDS_AUTH'
-              ? s.accounts.map((a) => (a.id === p.accountId ? { ...a, needsAuth: true } : a))
-              : s.accounts,
+            // A lapsed provider sign-in parks the account, and a refused password holds it: the
+            // banner and the switcher say so now. A pass that ends well lifts the hold.
+            accounts: s.accounts.map((a) => {
+              if (a.id !== p.accountId) return a;
+              if (p.code === 'NEEDS_AUTH') return { ...a, needsAuth: true };
+              if (p.held === true && !a.authRefused) return { ...a, authRefused: true };
+              if (p.state === 'idle' && a.authRefused) return { ...a, authRefused: false };
+              return a;
+            }),
           }));
         })],
         // Results sent before this subscribed are lost: the chip is re-read on start and resume.
@@ -480,6 +485,19 @@ export function createMobileStore() {
         if (!result.ok) return result;
         await adopt(result.account);
         return { ok: true };
+      },
+
+      /**
+       * The user's Retry on an account whose password the server refused: the engine tries it
+       * exactly once (`mobile.accounts.retrySignIn`); its pass's end says how it went.
+       */
+      async retrySignIn(accountId) {
+        try {
+          await daemonCall('mobile.accounts.retrySignIn', { accountId });
+          return { ok: true };
+        } catch (err) {
+          return { ok: false, code: errorCodeOf(err?.code) };
+        }
       },
 
       /**

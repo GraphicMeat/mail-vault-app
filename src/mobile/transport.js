@@ -105,11 +105,15 @@ export async function openAuthSheet(url) {
   return { cancelled: reply?.cancelled === true };
 }
 
-/** Closes the sign-in sheet once `mobile.oauth.finish` has answered; nothing when none is up. */
-export async function closeAuthSheet() {
+/**
+ * Closes the sign-in sheet of `url` once `mobile.oauth.finish` has answered; nothing when none is
+ * up. Naming the sheet lets a close that overtakes its open (the two run on separate threads)
+ * cancel that open, so no sheet is left up with nobody to close it.
+ */
+export async function closeAuthSheet(url) {
   const invoke = requireInvoke();
   try {
-    await invoke('mobile_auth_close');
+    await invoke('mobile_auth_close', typeof url === 'string' ? { url } : {});
   } catch (error) {
     throw shellError(error);
   }
@@ -139,7 +143,19 @@ export async function takeNotificationTap() {
 export async function requestNotificationPermission() {
   const invoke = requireInvoke();
   try {
-    const reply = await invoke('mobile_notifications_permission');
+    const reply = await invoke('mobile_notifications_permission', { prompt: true });
+    return { granted: reply?.granted === true };
+  } catch (error) {
+    throw shellError(error);
+  }
+}
+
+// Whether notifications may be posted now, `{ granted }`, never asking: the user may have turned
+// them off in the system settings since. Rejects with the shell's code: `INTERNAL`.
+export async function notificationPermission() {
+  const invoke = requireInvoke();
+  try {
+    const reply = await invoke('mobile_notifications_permission', { prompt: false });
     return { granted: reply?.granted === true };
   } catch (error) {
     throw shellError(error);

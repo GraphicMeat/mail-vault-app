@@ -6,7 +6,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { render, cleanup, act, waitFor, screen } from '@testing-library/react';
 
-const engine = vi.hoisted(() => ({ handlers: new Map(), calls: [], taps: [] }));
+const engine = vi.hoisted(() => ({ handlers: new Map(), calls: [], taps: [], refused: false }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
@@ -15,7 +15,16 @@ vi.mock('../transport.js', () => ({
       case 'mobile.ping':
         return { engine: 'test', schema: 2 };
       case 'mobile.accounts.list':
-        return { accounts: [{ id: 'a1', email: 'a1@example.test', displayName: 'A' }, { id: 'a2', email: 'a2@example.test', displayName: 'B' }] };
+        return {
+          accounts: [
+            { id: 'a1', email: 'a1@example.test', displayName: 'A', oauth: false, authRefused: engine.refused },
+            { id: 'a2', email: 'a2@example.test', displayName: 'B' },
+          ],
+        };
+      case 'mobile.accounts.retrySignIn':
+        return { queued: true };
+      case 'mobile.settings.get':
+        return { notifications: 'off', notificationPreview: true };
       case 'mobile.folders.list':
         return { folders: [{ path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: engine.calls.length, total: 3, depth: 0, noselect: false }] };
       case 'mobile.sync.refresh':
@@ -44,6 +53,8 @@ vi.mock('../transport.js', () => ({
   }),
   // The shell's held tap: each one is taken once.
   takeNotificationTap: vi.fn(async () => engine.taps.shift() ?? null),
+  notificationPermission: vi.fn(async () => ({ granted: true })),
+  requestNotificationPermission: vi.fn(async () => ({ granted: true })),
 }));
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
@@ -64,6 +75,7 @@ const count = (method) => engine.calls.filter(([m]) => m === method).length;
 
 afterEach(() => {
   cleanup();
+  engine.refused = false;
   engine.calls.length = 0;
   engine.taps.length = 0;
   engine.handlers.clear();
@@ -129,5 +141,39 @@ describe('App', () => {
     await waitFor(() => expect(bodyCalls()).toContainEqual({ accountId: 'a2', folder: 'INBOX', uid: 1 }));
     await waitFor(() => expect(document.querySelector('.mv-viewer__subject')?.textContent).toBe('Second'));
     expect(store.getState().activeAccountId).toBe('a2');
+  });
+
+  it('a notification tap closes Settings so the message is not opened underneath', async () => {
+    const { App: Fresh } = await fresh();
+    render(<Fresh />);
+    await waitFor(() => expect(screen.getByText('a1@example.test')).toBeTruthy());
+    await act(async () => { screen.getByRole('button', { name: 'Show folders' }).click(); });
+    await act(async () => { document.querySelector('[data-mv-settings]').click(); });
+    await waitFor(() => expect(document.querySelector('.mv-settings')).toBeTruthy());
+    engine.taps.push({ accountId: 'a2', folder: 'INBOX', uid: 1 });
+    await act(async () => { emit('mobile.notification.open', { accountId: 'a2', folder: 'INBOX', uid: 1 }); });
+    await waitFor(() => expect(document.querySelector('.mv-viewer__subject')?.textContent).toBe('Second'));
+    expect(document.querySelector('.mv-settings')).toBeNull();
+  });
+
+  it('a refused password says so and Retry asks the engine for one try', async () => {
+    engine.refused = true;
+    const { App: Fresh, store } = await fresh();
+    render(<Fresh />);
+    const banner = await waitFor(() => {
+      const el = document.querySelector('.mv-refused');
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(banner.textContent).toContain('a1@example.test');
+    await act(async () => { banner.querySelector('button').click(); });
+    expect(engine.calls.filter(([m]) => m === 'mobile.accounts.retrySignIn')).toEqual([['mobile.accounts.retrySignIn', { accountId: 'a1' }]]);
+    // A pass that signs in lifts it.
+    await act(async () => { emit('mobile.sync.state', { accountId: 'a1', state: 'idle' }); });
+    await waitFor(() => expect(document.querySelector('.mv-refused')).toBeNull());
+    expect(store.getState().accounts.find((a) => a.id === 'a1').authRefused).toBe(false);
+    // A refusal that comes back as an event shows it again.
+    await act(async () => { emit('mobile.sync.state', { accountId: 'a1', state: 'error', code: 'AUTH_FAILED', held: true }); });
+    await waitFor(() => expect(document.querySelector('.mv-refused')).toBeTruthy());
   });
 });

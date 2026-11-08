@@ -3,14 +3,17 @@
 // - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one reauth)
 //   and Remove after an inline confirm (the store's removeAccount; a refusal keeps the question).
 // - Notifications: the switch asks the system's permission before it turns on, and stays off with
-//   a pointer to the system settings when the answer is no. "Show preview" decides whether a
-//   notification names sender and subject. Both live in the engine (`mobile.settings.*`): the
-//   background run has no page, and reads the same rows.
+//   a pointer to the system settings when the answer is no. Each time the screen shows (and when
+//   the app comes back to the front) it reads the system's current answer without asking: turned
+//   off there, notifications show off here too, with the same pointer. "Show preview" decides
+//   whether a notification names sender and subject, so it can only change while they are on.
+//   Both live in the engine (`mobile.settings.*`): the background run has no page, and reads the
+//   same rows.
 // - About: the version (a build constant) and the source link, a plain https anchor. The shell's
 //   navigation guard cancels it in the webview and hands it to the system browser, the one path
 //   every link takes; the page never opens a window itself.
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { daemonCall, requestNotificationPermission } from './transport.js';
+import { daemonCall, notificationPermission, requestNotificationPermission } from './transport.js';
 import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
 import { Avatar } from './AccountSwitcher.jsx';
@@ -87,7 +90,7 @@ function AccountRow({ account, reauthBusy }) {
         {name && <span className="mv-acct__name" dir="auto">{name}</span>}
         <span className={name ? 'mv-acct__email mv-acct__email--sub' : 'mv-acct__email'} dir="auto">{account.email}</span>
       </span>
-      {account.needsAuth && (
+      {account.needsAuth && account.oauth !== false && (
         <button
           type="button"
           className="mv-textbtn mv-acct__reauth"
@@ -146,6 +149,39 @@ export default function Settings({ onClose, version = APP_VERSION }) {
     }
   }, []);
 
+  // The system's answer against the stored "on": turned off in the system settings, they are off.
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+  const reconcile = useCallback(async () => {
+    if (valuesRef.current?.notifications !== 'on') return;
+    let granted = true;
+    try {
+      ({ granted } = await notificationPermission());
+    } catch {
+      return; // No answer: leave it as it is.
+    }
+    if (granted || !mounted.current || valuesRef.current?.notifications !== 'on') return;
+    setProblem('denied');
+    try {
+      const next = await daemonCall('mobile.settings.set', { notifications: 'off' });
+      if (mounted.current) setValues(next);
+    } catch {
+      if (mounted.current) setValues((v) => (v ? { ...v, notifications: 'off' } : v));
+    }
+  }, []);
+  const checkedOnce = useRef(false);
+  useEffect(() => {
+    if (!values || checkedOnce.current) return;
+    checkedOnce.current = true;
+    reconcile();
+  }, [values, reconcile]);
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const onVisible = () => { if (document.visibilityState !== 'hidden') reconcile(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [reconcile]);
+
   const onNotifications = useCallback(async (on) => {
     if (!on) return save('notifications', { notifications: 'off' });
     setBusy('notifications');
@@ -196,7 +232,7 @@ export default function Settings({ onClose, version = APP_VERSION }) {
           <Switch
             checked={values ? values.notificationPreview !== false : true}
             busy={busy === 'notificationPreview'}
-            disabled={!ready}
+            disabled={!ready || values.notifications !== 'on'}
             label={t('mobile.settings.preview')}
             hint={t('mobile.settings.previewHint')}
             onChange={(v) => save('notificationPreview', { notificationPreview: v })}

@@ -4404,5 +4404,8 @@
   "mobile.settings.version": "Versione {{version}}",
   "mobile.settings.source": "Il codice sorgente è su GitHub",
   "mobile.settings.loadFailed": "Impossibile caricare le impostazioni.",
-  "mobile.settings.saveFailed": "Impossibile salvare l’impostazione. Riprova."
+  "mobile.settings.saveFailed": "Impossibile salvare l’impostazione. Riprova.",
+  "mobile.refused.banner": "Il server ha rifiutato la password di {{email}}. MailVault ha smesso di provare per evitare che il server ti blocchi.",
+  "mobile.refused.retry": "Riprova",
+  "mobile.reauth.passwordLost": "La password salvata per {{email}} è andata persa. Rimuovi l'account e aggiungilo di nuovo."
 }

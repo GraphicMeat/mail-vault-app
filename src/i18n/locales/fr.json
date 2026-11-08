@@ -4404,5 +4404,8 @@
   "mobile.settings.version": "Version {{version}}",
   "mobile.settings.source": "Le code source est en ligne sur GitHub",
   "mobile.settings.loadFailed": "Impossible de charger les réglages.",
-  "mobile.settings.saveFailed": "Impossible d’enregistrer le réglage. Réessayez."
+  "mobile.settings.saveFailed": "Impossible d’enregistrer le réglage. Réessayez.",
+  "mobile.refused.banner": "Le serveur a refusé le mot de passe de {{email}}. MailVault a arrêté d'essayer pour que le serveur ne vous bloque pas.",
+  "mobile.refused.retry": "Réessayer",
+  "mobile.reauth.passwordLost": "Le mot de passe enregistré pour {{email}} a été perdu. Supprimez le compte, puis ajoutez-le à nouveau."
 }

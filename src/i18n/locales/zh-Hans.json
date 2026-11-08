@@ -4404,5 +4404,8 @@
   "mobile.settings.version": "版本 {{version}}",
   "mobile.settings.source": "源代码已在 GitHub 公开",
   "mobile.settings.loadFailed": "无法加载设置。",
-  "mobile.settings.saveFailed": "无法保存该设置，请重试。"
+  "mobile.settings.saveFailed": "无法保存该设置，请重试。",
+  "mobile.refused.banner": "服务器拒绝了 {{email}} 的密码。为避免被服务器封禁，MailVault 已停止重试。",
+  "mobile.refused.retry": "重试",
+  "mobile.reauth.passwordLost": "{{email}} 保存的密码已丢失。请删除该账户后重新添加。"
 }

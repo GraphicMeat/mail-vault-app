@@ -4404,5 +4404,8 @@
   "mobile.settings.version": "Versão {{version}}",
   "mobile.settings.source": "O código-fonte está no GitHub",
   "mobile.settings.loadFailed": "Não foi possível carregar as configurações.",
-  "mobile.settings.saveFailed": "Não foi possível salvar a configuração. Tente de novo."
+  "mobile.settings.saveFailed": "Não foi possível salvar a configuração. Tente de novo.",
+  "mobile.refused.banner": "O servidor recusou a senha de {{email}}. O MailVault parou de tentar para que o servidor não bloqueie você.",
+  "mobile.refused.retry": "Tentar de novo",
+  "mobile.reauth.passwordLost": "A senha salva de {{email}} foi perdida. Remova a conta e adicione-a novamente."
 }

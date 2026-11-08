@@ -4404,5 +4404,8 @@
   "mobile.settings.version": "バージョン {{version}}",
   "mobile.settings.source": "ソースコードは GitHub で公開中",
   "mobile.settings.loadFailed": "設定を読み込めませんでした。",
-  "mobile.settings.saveFailed": "設定を保存できませんでした。もう一度お試しください。"
+  "mobile.settings.saveFailed": "設定を保存できませんでした。もう一度お試しください。",
+  "mobile.refused.banner": "サーバーが {{email}} のパスワードを拒否しました。サーバーにブロックされないよう、MailVault は再試行を停止しました。",
+  "mobile.refused.retry": "再試行",
+  "mobile.reauth.passwordLost": "{{email}} の保存済みパスワードが失われました。アカウントを削除して、もう一度追加してください。"
 }

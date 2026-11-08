@@ -3,10 +3,10 @@
 // system's permission first; stays off when it is denied), and About.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import { t } from '../i18n.js';
 
-const engine = vi.hoisted(() => ({ calls: [], settings: null, granted: true, failRemove: false, permissionAsked: 0 }));
+const engine = vi.hoisted(() => ({ calls: [], settings: null, granted: true, failRemove: false, permissionAsked: 0, osAllows: true, statusAsked: 0 }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
@@ -29,6 +29,11 @@ vi.mock('../transport.js', () => ({
     engine.permissionAsked++;
     return { granted: engine.granted };
   }),
+  // The OS's current answer, never a prompt.
+  notificationPermission: vi.fn(async () => {
+    engine.statusAsked++;
+    return { granted: engine.osAllows };
+  }),
 }));
 
 const { default: Settings } = await import('../Settings.jsx');
@@ -43,6 +48,8 @@ beforeEach(() => {
   engine.granted = true;
   engine.failRemove = false;
   engine.permissionAsked = 0;
+  engine.osAllows = true;
+  engine.statusAsked = 0;
   useMobileStore.setState({ accounts: [A1, A2], activeAccountId: 'a1', reauthState: null });
 });
 afterEach(cleanup);
@@ -135,5 +142,36 @@ describe('Settings', () => {
     render(<Settings onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('Show preview cannot be changed while notifications are off', async () => {
+    render(<Settings onClose={() => {}} />);
+    await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('false'));
+    const preview = screen.getByRole('switch', { name: t('mobile.settings.preview') });
+    expect(preview.disabled).toBe(true);
+    engine.granted = true;
+    fireEvent.click(toggle());
+    await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('true'));
+    await waitFor(() => expect(screen.getByRole('switch', { name: t('mobile.settings.preview') }).disabled).toBe(false));
+  });
+
+  it('notifications turned off in the system settings show as off, with the pointer there', async () => {
+    engine.settings = { notifications: 'on', notificationPreview: true };
+    engine.osAllows = false;
+    render(<Settings onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText(t('mobile.settings.notifyDenied'))).toBeTruthy());
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    expect(sets()).toEqual([{ notifications: 'off' }]);
+    expect(engine.permissionAsked).toBe(0);
+    // Turned on again here, then off in the system settings while the app was away: checked
+    // again when it comes back to the front.
+    engine.osAllows = true;
+    engine.granted = true;
+    fireEvent.click(toggle());
+    await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('true'));
+    engine.osAllows = false;
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('false'));
+    expect(sets()).toEqual([{ notifications: 'off' }, { notifications: 'on' }, { notifications: 'off' }]);
   });
 });

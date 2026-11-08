@@ -72,7 +72,7 @@ function AccountRow({ account, active, unread, onSelect, onRemove, onReauth, rea
         )}
         <span className="mv-acct__check" aria-hidden="true">{active ? '✓' : ''}</span>
       </button>
-      {account.needsAuth && onReauth && (
+      {account.needsAuth && account.oauth !== false && onReauth && (
         <button type="button" className="mv-textbtn mv-acct__reauth" disabled={reauthBusy} onClick={() => onReauth(account.id)}>
           {t('mobile.reauth.action')}
         </button>
@@ -128,6 +128,15 @@ export default function AccountSwitcher({ accounts, activeAccountId, unread, onS
 export function ReauthBanner({ account, state, onReauth }) {
   const t = useT();
   if (!account?.needsAuth) return null;
+  // A password account whose saved password was lost (the keychain move failed twice): only
+  // adding it again helps.
+  if (account.oauth === false) {
+    return (
+      <div className="mv-reauth">
+        <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.reauth.passwordLost', { email: account.email })}</p>
+      </div>
+    );
+  }
   const mine = state && state.accountId === account.id ? state : null;
   const busy = Boolean(state?.busy);
   return (
@@ -136,6 +145,38 @@ export function ReauthBanner({ account, state, onReauth }) {
       {mine?.code && !busy && <p className="mv-reauth__error" role="alert">{t(errorKey(mine.code))}</p>}
       <button type="button" className="mv-reauth__btn" disabled={busy} aria-busy={busy} onClick={() => onReauth(account.id)}>
         {mine?.busy ? t('mobile.add.signingIn') : t('mobile.reauth.action')}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The banner above the list while the server refuses `account`'s password: nothing dials it again
+ * (servers block an address after a few failed logins) until the user's Retry, which the engine
+ * tries exactly once. `onRetry(id)` asks for it.
+ */
+export function RefusedBanner({ account, onRetry }) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  if (!account?.authRefused || account.needsAuth) return null;
+  return (
+    <div className="mv-reauth mv-refused">
+      <p className="mv-reauth__text" role="status" dir="auto">{t('mobile.refused.banner', { email: account.email })}</p>
+      <button
+        type="button"
+        className="mv-reauth__btn"
+        disabled={busy}
+        aria-busy={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await onRetry(account.id);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {t('mobile.refused.retry')}
       </button>
     </div>
   );

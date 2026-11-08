@@ -31,7 +31,7 @@ import { useMobileStore } from './store.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
 import AddAccount from './AddAccount.jsx';
-import AccountSwitcher, { Avatar, ReauthBanner } from './AccountSwitcher.jsx';
+import AccountSwitcher, { Avatar, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
 import { folderLabel } from './folders.js';
 import { errorKey } from './errors.js';
@@ -380,6 +380,8 @@ function App() {
       if (!(await store.openAt(tap.accountId, tap.folder))) return;
       setPanel(null);
       setDraftsOpen(false);
+      // Settings sits above the viewer: the message would open underneath it.
+      setSettingsOpen(false);
       setOpen(null);
       if (tap.uid == null) return;
       const { list, activeAccountId, activeFolder } = useMobileStore.getState();
@@ -502,6 +504,7 @@ function App() {
   // banner shows; the switcher opens that account first, so its banner is the one on screen.
   const reauthState = useMobileStore((s) => s.reauthState);
   const onReauth = useCallback((id) => useMobileStore.getState().reauth(id), []);
+  const onRetrySignIn = useCallback((id) => useMobileStore.getState().retrySignIn(id), []);
   const onSwitcherReauth = useCallback(async (id) => {
     setPanel(null);
     const store = useMobileStore.getState();
@@ -569,6 +572,7 @@ function App() {
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
       <ReauthBanner account={account} state={reauthState} onReauth={onReauth} />
+      <RefusedBanner account={account} onRetry={onRetrySignIn} />
       <OutboxRow initialOpen={DEMO_OUTBOX} />
       {listState === 'ready' && list && (
         <MessageList

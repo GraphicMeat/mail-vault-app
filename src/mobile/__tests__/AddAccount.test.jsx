@@ -238,6 +238,8 @@ describe('AddAccount provider picker', () => {
     const account = { id: 'a1', email: 'ada@gmail.test', needsAuth: false };
     await act(async () => { engine.finish.resolve({ ok: true, account }); });
     expect(closeAuthSheet).toHaveBeenCalledTimes(1);
+    // The close names the sheet it closes: one that has not opened yet is not opened at all.
+    expect(closeAuthSheet).toHaveBeenCalledWith(engine.url);
     expect(calls('mobile.oauth.cancel')).toEqual([]);
     await expect(onOAuth.mock.results[0].value).resolves.toEqual({ ok: true, account });
     // The sheet's late answer (closed by us) changes nothing.
