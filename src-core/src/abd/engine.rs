@@ -204,8 +204,33 @@ fn kept_reason(fs: &FolderState, uid: u32) -> Option<KeptReason> {
     fs.kept.iter().find(|(_, s)| s.contains(uid)).map(|(r, _)| *r)
 }
 
+/// The wait after `n` earlier failures in a row (0-based): `base`, doubled
+/// per failure, at most `BACKOFF_MAX_MS`. Core's one doubling backoff
+/// (`backoff::RetryPolicy`, whose attempts count from 1).
 fn backoff_ms(base: i64, n: u32) -> i64 {
-    base.saturating_mul(1i64 << n.min(20)).min(BACKOFF_MAX_MS)
+    let policy = crate::backoff::RetryPolicy::new(
+        std::time::Duration::from_millis(u64::try_from(base).unwrap_or(0)),
+        std::time::Duration::from_millis(BACKOFF_MAX_MS as u64),
+        None,
+    );
+    policy.next_delay_ms(i64::from(n) + 1)
+}
+
+#[cfg(test)]
+mod backoff_tests {
+    use super::*;
+
+    /// The same waits as the formula it replaced, for both bases.
+    #[test]
+    fn backoff_ms_is_the_old_doubling() {
+        let old = |base: i64, n: u32| base.saturating_mul(1i64 << n.min(20)).min(BACKOFF_MAX_MS);
+        for base in [BACKOFF_BASE_MS, TOO_MANY_BASE_MS] {
+            for n in 0..=40 {
+                assert_eq!(backoff_ms(base, n), old(base, n), "base={base} n={n}");
+            }
+            assert_eq!(backoff_ms(base, u32::MAX), old(base, u32::MAX));
+        }
+    }
 }
 
 /// A server call that waits out throttling, offline and provider limits and

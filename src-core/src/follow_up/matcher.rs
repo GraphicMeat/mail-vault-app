@@ -4,14 +4,17 @@
 use crate::{custody::cache as sql_cache, maildir, notes_to_self};
 use serde_json::Value;
 
-/// A NO or BAD the server marks temporary (RFC 5530 response codes, and
-/// Exchange's own wording): a try to repeat, never a refusal that the cache's
-/// answer can settle.
+/// A NO or BAD the server marks temporary: core's one transient-refusal
+/// check (`imap::refusal::is_transient_refusal`: RFC 5530 codes and a too-many-
+/// connections `[ALERT]`), plus what a reply search also reads as temporary,
+/// `[EXPUNGEISSUED]` and Exchange's "server unavailable". A try to repeat,
+/// never a refusal that the cache's answer can settle.
 pub fn temporary_refusal(why: &str) -> bool {
+    if crate::imap::refusal::is_transient_refusal(why) {
+        return true;
+    }
     let why = why.to_ascii_lowercase();
-    ["[unavailable]", "[serverbug]", "[inuse]", "[limit]", "[expungeissued]", "server unavailable"]
-        .iter()
-        .any(|code| why.contains(code))
+    why.contains("[expungeissued]") || why.contains("server unavailable")
 }
 
 /// Is `address` one of `own`, folded like the app's `normalizeEmailIdentity`
@@ -75,6 +78,9 @@ mod tests {
         assert!(temporary_refusal("Server Unavailable"));
         assert!(!temporary_refusal("NO [NONEXISTENT] Unknown mailbox"));
         assert!(!temporary_refusal(""));
+        // The shared check's cases count too.
+        assert!(temporary_refusal("NO [LIMIT] Too many connections"));
+        assert!(temporary_refusal("NO [EXPUNGEISSUED] Some of the requested messages no longer exist"));
     }
 
     #[test]
