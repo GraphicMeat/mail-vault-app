@@ -40,6 +40,7 @@ use mailvault_core::actions::policy::{delete_disposition, graph_trash_place, Del
 use mailvault_core::graph::{AttachmentStream, GraphAttachmentInfo, GraphClient, GraphMailFolder, GraphSynced};
 use mailvault_core::imap::PartInfo;
 use mailvault_core::send::classify::classify_failure;
+use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp::{self, OutgoingEmail};
 use mailvault_core::sync_core::dates::utc_timestamp as timestamp;
 use mailvault_core::sync_core::throttle::{retry_after_from, throttle_wait};
@@ -846,7 +847,7 @@ impl Backend for GraphBackend<'_> {
             // Core's Graph send (`sendMail`, Bcc carried in the MIME since Graph reads recipients
             // from it). Graph files the Sent copy itself.
             match block_on(smtp::send_built_phased(&config, email, built)) {
-                Ok(sent) => return Ok(SendOutcome { raw: sent.raw_rfc2822, server_saved_sent: true }),
+                Ok(sent) => return Ok(SendOutcome { server_saved_sent: sent_copy_policy(&config, &sent) == SentCopy::ServerFiled, raw: sent.raw_rfc2822 }),
                 Err(e) => {
                     let message = self.scrub(e.message);
                     let sign_in = message.contains(smtp::SIGN_IN_AGAIN);

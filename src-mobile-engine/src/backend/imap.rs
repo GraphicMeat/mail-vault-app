@@ -13,6 +13,7 @@ use mailvault_core::actions::policy::{delete_disposition, imap_trash_place, Dele
 use mailvault_core::imap::async_imap::extensions::idle::IdleResponse;
 use mailvault_core::imap::{self, abd_cmds, ImapPool, ImapSession, PartInfo};
 use mailvault_core::send::classify::classify;
+use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
@@ -25,8 +26,6 @@ use std::time::{Duration, Instant};
 struct SessionConfig {
     config: imap::ImapConfig,
     secrets: Vec<String>,
-    /// Gmail files what its SMTP server accepted in Sent itself.
-    gmail: bool,
     /// The access token an OAuth account signs in with; `None` for a password account.
     oauth_token: Option<String>,
 }
@@ -65,9 +64,8 @@ fn session_config(shared: &Shared, account: &str, refused: Option<&str>) -> Resu
         });
     }
     let config = crate::net::core_config(&acct, &cred).map_err(|e| Fail::Code(Code::Invalid, e))?;
-    let gmail = acct.provider.as_deref() == Some("google") || acct.imap_host.eq_ignore_ascii_case("imap.gmail.com");
     let oauth_token = if acct.auth == "oauth2" { cred.access.clone() } else { None };
-    Ok(SessionConfig { config, secrets: cred.secrets().into_iter().map(String::from).collect(), gmail, oauth_token })
+    Ok(SessionConfig { config, secrets: cred.secrets().into_iter().map(String::from).collect(), oauth_token })
 }
 
 pub(crate) struct ImapBackend {
@@ -79,7 +77,6 @@ pub(crate) struct ImapBackend {
     caps: Option<Caps>,
     /// The settings the session signed in with; a send's SMTP side uses them too.
     config: imap::ImapConfig,
-    gmail: bool,
     /// The last no-IDLE poll's STATUS ([`ImapBackend::poll_change`]).
     polled: Option<Polled>,
     account: String,
@@ -123,7 +120,6 @@ impl ImapBackend {
                     secrets: sc.secrets,
                     caps: None,
                     config: sc.config,
-                    gmail: sc.gmail,
                     polled: None,
                     account: String::new(),
                 })
@@ -474,7 +470,8 @@ impl Backend for ImapBackend {
         // Phased: core says whether a failure came before or after the point of no return, which
         // its message text alone cannot (a connect timeout and a lost final reply read the same).
         match block_on(smtp::send_built_phased(config, email, built)) {
-            Ok(sent) => Ok(SendOutcome { raw: sent.raw_rfc2822, server_saved_sent: sent.server_saved_sent || self.gmail }),
+            // Core's Sent copy rule: over SMTP the copy is appended, Gmail included.
+            Ok(sent) => Ok(SendOutcome { server_saved_sent: sent_copy_policy(config, &sent) == SentCopy::ServerFiled, raw: sent.raw_rfc2822 }),
             Err(e) => Err(SendFail {
                 verdict: classify(Err(&e)),
                 fail: scrub(&self.secrets, Fail::from(e.message)),

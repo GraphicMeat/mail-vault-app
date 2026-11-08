@@ -17,6 +17,7 @@ use crate::server::DaemonState;
 use mailvault_core::app_db::{self, scheduled};
 use mailvault_core::backoff::RetryPolicy;
 use mailvault_core::imap::ImapConfig;
+use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp::{self, FrozenEnvelope};
 use mailvault_core::vault_files;
 use serde_json::json;
@@ -572,7 +573,7 @@ fn append_to_sent(
     // Microsoft Graph filed its own Sent copy, and a Graph account has no
     // IMAP. (Nothing local was staged for a scheduled send, so there is no
     // completion event to send either.)
-    if result.server_saved_sent {
+    if sent_copy_policy(account, result) == SentCopy::ServerFiled {
         return;
     }
     let Some(mailbox) = sent_mailbox.filter(|m| !m.is_empty()) else { return };

@@ -205,6 +205,20 @@ impl Fixture {
     }
 }
 
+/// The messages in Sent once it holds `n` of them: an APPEND lands after the send result.
+fn wait_for_sent(server: &MockImap, n: usize) -> Vec<Message> {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let msgs = server.state().find("Sent").unwrap().messages.clone();
+        if msgs.len() >= n {
+            assert_eq!(msgs.len(), n, "Sent holds more copies than were sent");
+            return msgs;
+        }
+        assert!(Instant::now() < deadline, "Sent never held {n} message(s): {}", msgs.len());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
@@ -221,6 +235,10 @@ fn send_delivers_through_smtp_and_appends_to_sent() {
     let server = MockImap::start(scenario());
     let f = setup(&server);
     let handle = f.pick("0123456789abcdef", "notes.txt", b"attached notes body");
+    // The Sent copy is filed after the row is committed `sent` and its result is out, so the
+    // APPEND races the `sent` event. Held at the server, it is ordered: the result comes first
+    // and never waits on Sent filing; released, the copy lands.
+    let mut append = server.pause_command("APPEND");
     let from = f.events.len();
     let r = f
         .send(json!({ "to": "rcpt@example.test", "bcc": "hidden@example.test", "subject": "Hello there", "text": "Body text here", "attachments": [{ "handle": handle }] }))
@@ -245,15 +263,71 @@ fn send_delivers_through_smtp_and_appends_to_sent() {
     assert!(rcpts.iter().any(|c| c.contains("hidden@example.test")), "{rcpts:?}");
     assert!(rcpts.iter().any(|c| c.contains("rcpt@example.test")), "{rcpts:?}");
 
-    // Filed in Sent, read.
-    let state = server.state();
-    let sent_box = state.find("Sent").unwrap();
-    assert_eq!(sent_box.messages.len(), 1, "appended to Sent");
-    assert!(sent_box.messages[0].flags.iter().any(|f| f.eq_ignore_ascii_case("\\Seen")));
-    assert!(text(&sent_box.messages[0].raw).contains(&message_id));
+    // Filed in Sent, read, once the held APPEND goes through.
+    assert!(append.entered(WAIT), "the engine never filed the Sent copy");
+    assert!(server.state().find("Sent").unwrap().messages.is_empty(), "the APPEND is held");
+    append.release();
+    let sent_box = wait_for_sent(&server, 1);
+    assert!(sent_box[0].flags.iter().any(|f| f.eq_ignore_ascii_case("\\Seen")));
+    assert!(text(&sent_box[0].raw).contains(&message_id));
 
     // The picked file is gone with the sent row, and the outbox list no longer shows it.
     assert!(!f.cache().join("out").join("0123456789abcdef").exists(), "the picked dir is deleted once sent");
+    assert!(f.outbox().is_empty(), "{:?}", f.outbox());
+}
+
+impl Fixture {
+    /// Marks the account as added through Google, which is how the engine used to tell Gmail.
+    fn as_gmail(&self) {
+        assert_eq!(self.db().execute("UPDATE accounts SET provider = 'google' WHERE id = ?1", [&self.account]).unwrap(), 1);
+    }
+}
+
+/// Owner decision 2: a Gmail send over SMTP is appended to Sent like any other (the engine used
+/// to leave the copy to Gmail's server).
+#[test]
+fn a_gmail_send_over_smtp_is_appended_to_sent() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    f.as_gmail();
+    let from = f.events.len();
+    let id = f.send(json!({ "to": "rcpt@example.test", "subject": "Gmail copy", "text": "Filed by the app" })).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    f.events.send_result(from, &id, "sent");
+    assert_eq!(server.sent_messages().len(), 1);
+    let sent_box = wait_for_sent(&server, 1);
+    assert!(text(&sent_box[0].raw).contains("Filed by the app"));
+    assert!(sent_box[0].flags.iter().any(|f| f.eq_ignore_ascii_case("\\Seen")));
+}
+
+/// A refused Sent APPEND after a Gmail send: the send stays sent, is never sent again, and no
+/// failure is reported for it.
+#[test]
+fn a_refused_sent_append_never_resends_or_fails_the_send() {
+    let server = MockImap::start(scenario().fault(Trigger::on("APPEND"), Action::RefuseWith("NO".into(), "[OVERQUOTA] Sent is full".into())));
+    let f = setup(&server);
+    f.as_gmail();
+    let from = f.events.len();
+    let id = f.send(json!({ "to": "rcpt@example.test", "subject": "Quota", "text": "Sent once" })).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    f.events.send_result(from, &id, "sent");
+    let deadline = Instant::now() + WAIT;
+    while server.count_commands("APPEND") == 0 {
+        assert!(Instant::now() < deadline, "the engine never tried to file the Sent copy");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Many backoff periods (50-200 ms in this fixture): a resend would have happened by now.
+    std::thread::sleep(Duration::from_secs(2));
+    assert_eq!(server.sent_messages().len(), 1, "a failed Sent copy never sends the message again");
+    assert!(server.state().find("Sent").unwrap().messages.is_empty());
+    let results: Vec<Value> =
+        f.events.all().into_iter().skip(from).filter(|(n, v)| n == "mobile.send.result" && v["id"] == id.as_str()).map(|(_, v)| v).collect();
+    assert_eq!(results.len(), 1, "one result, and it is sent: {results:?}");
+    assert_eq!(results[0]["outcome"], "sent");
     assert!(f.outbox().is_empty(), "{:?}", f.outbox());
 }
 

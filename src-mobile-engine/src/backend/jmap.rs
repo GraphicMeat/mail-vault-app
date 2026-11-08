@@ -51,6 +51,7 @@ use mailvault_core::jmap::headers::{keywords_to_flags, to_header, HEADER_PROPS};
 use mailvault_core::jmap::push::{SseParser, StateChange};
 use mailvault_core::jmap::{BlobStream, JMailbox, JmapAuth, JmapClient, JmapError, RemoveOutcome};
 use mailvault_core::send::classify::classify_failure;
+use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp::{self, OutgoingEmail};
 use mailvault_core::sync_core::dates::utc_timestamp as timestamp;
 use mailvault_core::sync_core::throttle::throttle_wait;
@@ -1023,7 +1024,7 @@ impl Backend for JmapBackend<'_> {
         // Core's JMAP send: identity for the From address, upload, import into Drafts, submit,
         // and `onSuccessUpdateEmail` files it in Sent.
         match block_on(smtp::send_built_phased(&config, email, built)) {
-            Ok(sent) => Ok(SendOutcome { raw: sent.raw_rfc2822, server_saved_sent: true }),
+            Ok(sent) => Ok(SendOutcome { server_saved_sent: sent_copy_policy(&config, &sent) == SentCopy::ServerFiled, raw: sent.raw_rfc2822 }),
             Err(e) => {
                 let message = self.scrub(e.message);
                 let auth = message.starts_with("E_JMAP_AUTH");

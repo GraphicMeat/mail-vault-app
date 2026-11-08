@@ -338,7 +338,8 @@ pub(crate) trait Backend: Send {
     /// the message may have gone out anyway ([`SendFail`]); its text is scrubbed, for the log.
     fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail>;
     /// Files the bytes of an accepted send in the account's Sent folder, read, unless the server
-    /// does that itself (`server_saved_sent`, Gmail over SMTP). Called after the outbox row is
+    /// does that itself (`server_saved_sent`: Graph and JMAP, core's `sent_copy_policy`; Gmail over
+    /// SMTP is appended like any SMTP account). Called after the outbox row is
     /// committed `sent`, so a failure here never sends the message again.
     fn file_sent(&mut self, sent: &SendOutcome) -> Result<(), Fail>;
     /// Waits until `folder` changes on the server ([`Change::Changed`]) or the wait ends without

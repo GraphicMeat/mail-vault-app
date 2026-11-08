@@ -24,6 +24,7 @@ use crate::imap::{self, ImapConfig};
 use crate::account_lifecycle::OperationPermit;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
+use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -280,7 +281,9 @@ pub(crate) async fn report_sent_copy<F, Fut>(
         payload
     };
 
-    if result.server_saved_sent {
+    // Core's Sent copy rule (both apps): Graph and JMAP filed it, anything
+    // else that went out over SMTP is appended here, Gmail included.
+    if sent_copy_policy(account, result) == SentCopy::ServerFiled {
         let payload = json!({
             "accountId": account_id_for_log,
             "mailbox": sent_mailbox,
