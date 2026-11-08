@@ -7,7 +7,7 @@ import { useT } from '../i18n/index.js';
 import {
   addRecipients, isValidRecipient, joinRecipients, parseRecipientPaste, recipientDisplay, removeRecipients,
   replaceRecipient, splitRecipientField,
-} from '../utils/recipientTokens';
+} from '../shared/recipientTokens';
 
 /// An input method (Japanese, Korean, Chinese) confirms a candidate with
 /// Enter while composing: that key belongs to it, not to the chips.

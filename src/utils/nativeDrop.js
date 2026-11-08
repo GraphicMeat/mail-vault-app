@@ -8,18 +8,9 @@
 // emits `tauri://drag-*` with those paths and the pointer position. These
 // helpers turn that payload into what the compose window already stores.
 
-const MIME_BY_EXT = {
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
-  heic: 'image/heic', svg: 'image/svg+xml', pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv',
-  json: 'application/json', zip: 'application/zip', mp4: 'video/mp4', mov: 'video/quicktime',
-};
+import { mimeFromName } from '../shared/mimeTypes';
 
-export function mimeFromName(name) {
-  const base = String(name || '');
-  const dot = base.lastIndexOf('.');
-  const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
-  return MIME_BY_EXT[ext] || 'application/octet-stream';
-}
+export { mimeFromName };
 
 /**
  * wry reports the drop point in points on macOS and in device pixels on the

@@ -99,6 +99,13 @@ export function splitRecipientField(value) {
   return { chips: segments.map(s => s.trim()).filter(Boolean), draft: open.trimStart() };
 }
 
+/// A list of recipients (`a@x, "Doe, John" <j@x>`) as its raw trimmed entries: every committed
+/// segment and the open one, empty ones dropped. Mobile's compose uses this as its `splitList`.
+export function splitRecipientList(text) {
+  const { segments, open } = scan(text);
+  return [...segments, open].map(s => s.trim()).filter(Boolean);
+}
+
 /// Chips back into a field value: each one followed by a comma.
 export const joinRecipients = (list) => (list.length ? `${list.join(', ')}, ` : '');
 

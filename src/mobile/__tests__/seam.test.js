@@ -54,6 +54,15 @@ describe('mobile seam', () => {
     expect(modules.filter((m) => DESKTOP_ONLY.test(m))).toEqual([]);
   });
 
+  it('shared_pure_modules_are_in_the_mobile_graph', async () => {
+    const { modules } = await analyzeSeam(ENTRY);
+    const shared = modules.filter((m) => m.startsWith('src/shared/'));
+    expect(shared.length).toBeGreaterThan(0);
+    // src/shared is the one desktop-side directory both apps may import; it is held pure by
+    // src/shared/__tests__/purity.test.js, so none of it can pull a store or service in.
+    expect(shared.filter((m) => DESKTOP_ONLY.test(m))).toEqual([]);
+  });
+
   it('detector_really_detects', async () => {
     const r = await analyzeSeam(here('./fixtures/desktopLeak.js'));
     expect(r.modules.filter((m) => DESKTOP_ONLY.test(m)).length).toBeGreaterThan(0);

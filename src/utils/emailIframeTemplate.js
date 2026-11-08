@@ -1,5 +1,6 @@
 import { t } from '../i18n/index.js';
 import { linkifyHtml } from './linkify';
+import { suppressDarkScheme } from '../shared/darkScheme';
 import { CODE_FONT, CODE_LOOK, lookCss } from './codeLook';
 // Shared iframe template for rendering HTML email bodies.
 //
@@ -69,14 +70,12 @@ export function stripInlineColorImportant(html) {
 // `media` attribute, which is the other place an ESP puts the query — so a mail
 // that TALKS about `prefers-color-scheme: dark` in its prose keeps its words.
 const STYLE_BLOCK = /(<style\b[^>]*>)([\s\S]*?)(<\/style\s*>)/gi;
-const DARK_SCHEME_FEATURE = /prefers-color-scheme(\s*:\s*)dark/gi;
-const SUPPRESSED = 'mv-suppressed-color-scheme$1dark';
 
 export function neutralizeEmailDarkScheme(html) {
   if (!html || html.toLowerCase().indexOf('<style') === -1) return html;
   return html.replace(STYLE_BLOCK, (_m, open, css, close) =>
-    open.replace(DARK_SCHEME_FEATURE, SUPPRESSED)
-    + css.replace(DARK_SCHEME_FEATURE, SUPPRESSED)
+    suppressDarkScheme(open)
+    + suppressDarkScheme(css)
     + close);
 }
 

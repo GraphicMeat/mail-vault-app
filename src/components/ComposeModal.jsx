@@ -11,7 +11,7 @@ import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { RecipientField } from './RecipientField';
-import { addRecipients, removeRecipientToken } from '../utils/recipientTokens';
+import { addRecipients, removeRecipientToken } from '../shared/recipientTokens';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
 import { prepareMessage, preparationIdentity, checkCompose, composeCheckInput } from '../services/composePrep';

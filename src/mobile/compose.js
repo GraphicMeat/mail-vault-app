@@ -1,6 +1,8 @@
 // Pure helpers of the compose screen: recipient lists as chips, the fields a draft or a send
 // carries, and the send error codes each to its translated message.
 
+import { splitRecipientList } from '../shared/recipientTokens.js';
+
 /** `mobile.compose.send` refusals, each to its message. Literal keys for the catalog tests. */
 export const SEND_ERROR_KEYS = Object.freeze({
   TOO_LARGE: 'mobile.compose.error.TOO_LARGE',
@@ -32,25 +34,7 @@ export function sendError(err) {
  * A comma-separated list (`a@x, "Doe, John" <j@x>`) as its entries, raw and trimmed. A comma
  * inside quotes or angle brackets belongs to the entry.
  */
-export function splitList(text) {
-  const out = [];
-  let cur = '';
-  let quoted = false;
-  let angled = false;
-  for (const ch of String(text ?? '')) {
-    if (ch === '"' && !angled) quoted = !quoted;
-    else if (ch === '<' && !quoted) angled = true;
-    else if (ch === '>' && !quoted) angled = false;
-    if ((ch === ',' || ch === ';') && !quoted && !angled) {
-      if (cur.trim()) out.push(cur.trim());
-      cur = '';
-    } else {
-      cur += ch;
-    }
-  }
-  if (cur.trim()) out.push(cur.trim());
-  return out;
-}
+export const splitList = (text) => splitRecipientList(String(text ?? ''));
 
 /**
  * What the user typed, as entries: commas, semicolons and white space all separate (a typed

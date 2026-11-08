@@ -3,7 +3,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../stores/settingsStore';
 import { ownAddresses } from '../utils/ownAddresses';
-import { withoutRecipients } from '../utils/recipientTokens';
+import { withoutRecipients } from '../shared/recipientTokens';
 import { Users, Clock, Star } from 'lucide-react';
 import { daemonCall } from '../services/daemonClient';
 import { formatContact } from '../utils/formatContact';

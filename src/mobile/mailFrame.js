@@ -26,6 +26,9 @@
 // are disabled for the same reason the desktop reader disables them (emailIframeTemplate.js):
 // many flip only backgrounds and leave dark text on a dark card.
 
+import { suppressDarkScheme } from '../shared/darkScheme.js';
+import { hasAddressBody, isUrlStart, trimUrl } from '../shared/linkUrls.js';
+
 const CSP_BASE = "default-src 'none'; style-src 'unsafe-inline'; img-src data: cid:";
 const CSP_TAIL = "; font-src data:; form-action 'none'";
 
@@ -45,9 +48,6 @@ const PAPER = { scheme: 'light', bg: '#ffffff', fg: '#1a1a2e', link: '#4338ca' }
 
 const SAFE_HREF = /^\s*(?:https?:|mailto:|tel:|#)/i;
 
-const DARK_SCHEME_FEATURE = /prefers-color-scheme(\s*:\s*)dark/gi;
-const SUPPRESSED = 'mv-suppressed-color-scheme$1dark';
-
 const escapeHtml = (s) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -60,19 +60,6 @@ function cssString(s) {
 // Bare web and mail addresses in a text body. Only these starts are ever linked, so the only
 // schemes a link can carry are http, https and mailto.
 const LINK_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gi;
-const TRAILING = /[.,;:!?'"]$/;
-const PAIRS = { ')': '(', ']': '[', '}': '{' };
-const count = (s, ch) => s.split(ch).length - 1;
-
-function trimUrl(url) {
-  for (;;) {
-    const last = url.at(-1);
-    if (TRAILING.test(last)) url = url.slice(0, -1);
-    else if (PAIRS[last] && count(url, last) > count(url, PAIRS[last])) url = url.slice(0, -1);
-    else return url;
-  }
-}
-
 function hrefOf(match) {
   if (/^https?:\/\//i.test(match)) return match;
   if (/^www\./i.test(match)) return `https://${match}`;
@@ -84,9 +71,9 @@ export function linkifyTextHtml(text) {
   let out = '';
   let last = 0;
   for (const m of text.matchAll(LINK_RE)) {
-    const found = m[0].includes('@') && !/^(?:https?:\/\/|www\.)/i.test(m[0]) ? m[0] : trimUrl(m[0]);
+    const found = m[0].includes('@') && !isUrlStart(m[0]) ? m[0] : trimUrl(m[0]);
     // `www.` alone, or a match that was all punctuation, is not an address.
-    if (!/[a-z0-9]/i.test(found.replace(/^(?:https?:\/\/|www\.)/i, ''))) continue;
+    if (!hasAddressBody(found)) continue;
     out += escapeHtml(text.slice(last, m.index));
     out += `<a href="${escapeHtml(hrefOf(found))}" rel="noopener noreferrer">${escapeHtml(found)}</a>`;
     last = m.index + found.length;
@@ -188,9 +175,9 @@ function cleanMail(doc) {
   }
   for (const form of doc.querySelectorAll('form')) form.setAttribute('target', '_blank');
   for (const style of doc.querySelectorAll('style')) {
-    style.textContent = style.textContent.replace(DARK_SCHEME_FEATURE, SUPPRESSED);
+    style.textContent = suppressDarkScheme(style.textContent);
     const media = style.getAttribute('media');
-    if (media) style.setAttribute('media', media.replace(DARK_SCHEME_FEATURE, SUPPRESSED));
+    if (media) style.setAttribute('media', suppressDarkScheme(media));
   }
 }
 

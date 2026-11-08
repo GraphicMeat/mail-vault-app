@@ -43,7 +43,7 @@ vi.mock('../ContactsPicker', async () => {
 });
 
 import { RecipientField } from '../RecipientField';
-import { addRecipients, removeRecipientToken } from '../../utils/recipientTokens';
+import { addRecipients, removeRecipientToken } from '../../shared/recipientTokens';
 
 let latest = '';
 function Harness({ initial = '' }) {

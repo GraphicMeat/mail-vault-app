@@ -4,7 +4,7 @@ import { computeReplyRecipients, buildReplyHeaders } from '../utils/replyPolicy'
 import { composeIdentities } from '../utils/sendAsSuggestions';
 import { parseMailto } from '../utils/mailtoPolicy';
 import { textToHtml } from '../utils/textToHtml';
-import { invalidRecipients } from '../utils/recipientTokens';
+import { invalidRecipients } from '../shared/recipientTokens';
 import { missingAttachment } from '../utils/missingAttachment';
 import { routeSend } from './routeSend';
 import { zonedTimeToEpoch } from '../utils/scheduledTime';
