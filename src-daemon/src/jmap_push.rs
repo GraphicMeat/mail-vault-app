@@ -33,18 +33,14 @@ use crate::jmap_sessions::JmapMeta;
 use crate::server::DaemonState;
 use crate::sync_engine::SyncAccount;
 use mailvault_core::backoff::RetryPolicy;
+use mailvault_core::jmap::push::{SseParser, StateChange};
 use mailvault_core::jmap::JmapError;
-use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{info, warn};
 
 /// The EventSource types the stream asks for.
 const PUSH_TYPES: &str = "Email,Mailbox";
-
-/// Longest SSE line kept: a server that never sends a newline cannot grow
-/// the buffer without bound.
-const MAX_LINE: usize = 1 << 20;
 
 /// No bytes for this long, with pings asked for every `ping_secs`, is a dead
 /// stream (a proxy that holds the socket open and forwards nothing).
@@ -90,87 +86,6 @@ impl PushTiming {
     /// doubled per failure, at most the cap.
     pub fn backoff(&self, failures: u32) -> Duration {
         RetryPolicy::new(self.backoff_base, self.backoff_cap, None).next_delay(failures)
-    }
-}
-
-/// One Server-Sent Event: its `event:` type ("message" when none was given)
-/// and its `data:` lines joined with "\n".
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SseEvent {
-    pub kind: String,
-    pub data: String,
-}
-
-/// An incremental `text/event-stream` parser: chunks go in as they arrive,
-/// split anywhere, and each event a blank line completes comes out.
-#[derive(Default)]
-pub struct SseParser {
-    line: Vec<u8>,
-    kind: String,
-    data: Vec<String>,
-    /// Summed bytes of `data`: a pending event is capped at `MAX_LINE`.
-    data_bytes: usize,
-    /// The pending event outgrew the cap: its remaining lines are skipped up
-    /// to the blank line that ends it.
-    discarding: bool,
-}
-
-impl SseParser {
-    pub fn feed(&mut self, chunk: &[u8]) -> Vec<SseEvent> {
-        let mut out = Vec::new();
-        for &b in chunk {
-            if b != b'\n' {
-                if self.line.len() < MAX_LINE {
-                    self.line.push(b);
-                }
-                continue;
-            }
-            let raw = std::mem::take(&mut self.line);
-            let text = String::from_utf8_lossy(&raw).into_owned();
-            let line = text.strip_suffix('\r').unwrap_or(text.as_str());
-            if line.is_empty() {
-                self.data_bytes = 0;
-                if std::mem::take(&mut self.discarding) {
-                    continue;
-                }
-                if !self.kind.is_empty() || !self.data.is_empty() {
-                    let kind = std::mem::take(&mut self.kind);
-                    out.push(SseEvent {
-                        kind: if kind.is_empty() { "message".to_string() } else { kind },
-                        data: std::mem::take(&mut self.data).join("\n"),
-                    });
-                }
-                continue;
-            }
-            if self.discarding {
-                continue;
-            }
-            if line.starts_with(':') {
-                continue;
-            }
-            let (field, value) = match line.split_once(':') {
-                Some((field, value)) => (field, value.strip_prefix(' ').unwrap_or(value)),
-                None => (line, ""),
-            };
-            match field {
-                "event" => self.kind = value.to_string(),
-                "data" => {
-                    self.data_bytes = self.data_bytes.saturating_add(value.len());
-                    if self.data_bytes > MAX_LINE {
-                        // Endless `data:` lines with no blank line: drop the
-                        // event (never logging its content) and skip the rest.
-                        warn!("[push] an event grew past {} bytes without ending: dropped", MAX_LINE);
-                        self.data.clear();
-                        self.kind.clear();
-                        self.discarding = true;
-                    } else {
-                        self.data.push(value.to_string());
-                    }
-                }
-                _ => {}
-            }
-        }
-        out
     }
 }
 
@@ -334,12 +249,11 @@ async fn on_state(
     jmap_account: &str,
     data: &str,
 ) {
-    let Ok(change) = serde_json::from_str::<Value>(data) else {
+    let Some(change) = StateChange::parse(data) else {
         warn!("[push] {}: unreadable StateChange ({} bytes)", account_id, data.len());
         return;
     };
-    let mine = &change["changed"][jmap_account];
-    if let Some(pushed) = mine["Email"].as_str() {
+    if let Some(pushed) = change.email_state(jmap_account) {
         if stored_email_state(state, account_id, jmap_account).await.as_deref() != Some(pushed) {
             sync_inbox(state, slot).await;
             status.lock().unwrap().wakeups += 1;
@@ -348,7 +262,7 @@ async fn on_state(
     // After the sync: its `current()` already refreshed a map whose Mailbox
     // state moved, so this refreshes only what it left (a folder change
     // with no mail change).
-    if let Some(pushed) = mine["Mailbox"].as_str() {
+    if let Some(pushed) = change.mailbox_state(jmap_account) {
         let cfg = slot.lock().unwrap().imap_config.clone();
         if let Ok(acct) = state.jmap.get(&cfg).await {
             let known = acct.mailbox_state.lock().unwrap_or_else(|p| p.into_inner()).clone();
@@ -733,40 +647,6 @@ mod tests {
         wait_until(|| m.count_calls("Email/changes") >= changes0 + 2, 3_000, "two polls").await;
         assert_eq!(streams_opened(&m), streams0, "no stream attempt while polling");
         state.idle.shutdown().await;
-    }
-
-    #[test]
-    fn sse_parser_caps_a_pending_event() {
-        let mut p = SseParser::default();
-        let line = format!("data: {}\n", "x".repeat(1000));
-        let mut got = Vec::new();
-        for _ in 0..(MAX_LINE / 1000 + 10) {
-            got.extend(p.feed(line.as_bytes()));
-        }
-        assert!(got.is_empty());
-        assert!(p.data.is_empty(), "the oversized event was dropped");
-        assert!(p.data_bytes <= MAX_LINE + 1000);
-        // Its blank line ends it without emitting; the next event is fine.
-        assert!(p.feed(b"\n").is_empty());
-        let got = p.feed(b"event: state\ndata: {}\n\n");
-        assert_eq!(got, vec![SseEvent { kind: "state".into(), data: "{}".into() }]);
-    }
-
-    #[test]
-    fn sse_parser_reassembles_events_across_chunks() {
-        let mut p = SseParser::default();
-        assert!(p.feed(b"event: st").is_empty());
-        assert!(p.feed(b"ate\r\ndata: {\"a\":").is_empty());
-        let got = p.feed(b"1}\r\n\r\n: a comment\n\nevent: ping\ndata: {}\n\ndata: x\ndata: y\n\n");
-        assert_eq!(
-            got,
-            vec![
-                SseEvent { kind: "state".into(), data: "{\"a\":1}".into() },
-                SseEvent { kind: "ping".into(), data: "{}".into() },
-                SseEvent { kind: "message".into(), data: "x\ny".into() },
-            ]
-        );
-        assert!(p.feed(b"event: state\ndata: half").is_empty(), "no blank line yet");
     }
 
     #[test]
