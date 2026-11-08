@@ -22,6 +22,8 @@ use crate::outbox;
 use crate::outgoing::resolve_outgoing;
 use crate::rpc::{parse, RpcError};
 use crate::secrets::Credential;
+use mailvault_core::filename_safety::safe_handle_name;
+use mailvault_core::mime_types::mime_of_name;
 use mailvault_core::compose::own_addresses_with_from;
 use mailvault_core::compose_prep::{self, Account, Context};
 use mailvault_core::smtp::{self, OutgoingEmail};
@@ -198,40 +200,6 @@ pub(crate) fn check_recipients(acct: &AccountRow, f: &Fields) -> Result<(), Stri
     Ok(())
 }
 
-/// A file type for a picked file's name; `application/octet-stream` when the extension says
-/// nothing.
-fn mime_of(name: &str) -> &'static str {
-    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
-    match ext.as_str() {
-        "pdf" => "application/pdf",
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "heic" => "image/heic",
-        "heif" => "image/heif",
-        "txt" => "text/plain",
-        "csv" => "text/csv",
-        "htm" | "html" => "text/html",
-        "ics" => "text/calendar",
-        "vcf" => "text/vcard",
-        "eml" => "message/rfc822",
-        "json" => "application/json",
-        "zip" => "application/zip",
-        "doc" => "application/msword",
-        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "xls" => "application/vnd.ms-excel",
-        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "ppt" => "application/vnd.ms-powerpoint",
-        "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "mp3" => "audio/mpeg",
-        "m4a" => "audio/mp4",
-        "mp4" => "video/mp4",
-        "mov" => "video/quicktime",
-        _ => "application/octet-stream",
-    }
-}
-
 /// A `type/subtype` media type as a server names one: ASCII token characters only.
 fn plausible_mime(m: &str) -> bool {
     let token = |s: &str| !s.is_empty() && s.len() <= 127 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$&-^_.+".contains(&b));
@@ -247,7 +215,7 @@ fn checked(cache_dir: &Path, a: &Attached) -> Option<Attached> {
     let size = std::fs::metadata(&path).ok()?.len();
     let name = a.handle.rsplit('/').next().unwrap_or_default().to_string();
     let sent = a.mime.trim().to_ascii_lowercase();
-    let mime = if plausible_mime(&sent) && sent != "application/octet-stream" { sent } else { mime_of(&name).to_string() };
+    let mime = if plausible_mime(&sent) && sent != "application/octet-stream" { sent } else { mime_of_name(&name).to_string() };
     Some(Attached { handle: a.handle.clone(), name, size, mime })
 }
 
@@ -452,22 +420,6 @@ fn without_own(list: &str, own: &[String]) -> String {
         .join(", ")
 }
 
-/// A server's attachment name made safe as the last component of a handle.
-fn safe_name(name: &str) -> String {
-    let mapped: String = name.chars().map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':') { '_' } else { c }).collect();
-    // At most 200 bytes, cut on a character boundary: file systems count bytes (255 at most).
-    let mut end = mapped.len().min(200);
-    while !mapped.is_char_boundary(end) {
-        end -= 1;
-    }
-    let cleaned = mapped[..end].trim().to_string();
-    if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
-        "attachment".into()
-    } else {
-        cleaned
-    }
-}
-
 /// `mobile.compose.prepare {accountId, mode: "new"|"reply"|"replyAll"|"forward", folder?, uid?,
 /// originalLabel?, dateLabel?, fromLabel?, dateFieldLabel?, subjectLabel?}` -> `{to, cc, subject, quote, quoteText, inReplyTo, references,
 /// quotePending, attachments: [{handle, name, size, mime, section}], pending: [{section, filename, mime,
@@ -565,7 +517,7 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
     if forward {
         for a in body["attachments"].as_array().into_iter().flatten() {
             let section = a["section"].as_str().unwrap_or("");
-            let name = safe_name(a["filename"].as_str().unwrap_or("attachment"));
+            let name = safe_handle_name(a["filename"].as_str().unwrap_or("attachment"));
             match crate::attachments::cached_part(engine, &p.account_id, &folder, uid, section) {
                 Some(src) => {
                     let dir = engine.cache_dir().join("out").join(random_hex());
@@ -574,7 +526,7 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
                     match copied {
                         Ok(size) => {
                             let handle = format!("out/{}/{}", dir.file_name().and_then(|d| d.to_str()).unwrap_or(""), name);
-                            let mime = a["mime"].as_str().filter(|m| !m.is_empty()).unwrap_or_else(|| mime_of(&name));
+                            let mime = a["mime"].as_str().filter(|m| !m.is_empty()).unwrap_or_else(|| mime_of_name(&name));
                             attachments.push(json!({ "handle": handle, "name": name, "size": size, "mime": mime, "section": section }));
                         }
                         Err(e) => {
@@ -746,16 +698,5 @@ mod tests {
     fn own_addresses_leave_the_list() {
         let own = vec!["me@x.test".to_string()];
         assert_eq!(without_own("a@x.test, Me <ME@x.test>, b@x.test", &own), "a@x.test, b@x.test");
-    }
-
-    #[test]
-    fn server_names_become_safe_handle_names() {
-        assert_eq!(safe_name("../../etc/passwd"), ".._.._etc_passwd");
-        assert_eq!(safe_name(".."), "attachment");
-        assert_eq!(safe_name("a:b\\c\0d.pdf"), "a_b_c_d.pdf");
-        assert_eq!(safe_name("  "), "attachment");
-        let long = "ж".repeat(150) + ".pdf";
-        let cut = safe_name(&long);
-        assert!(cut.len() <= 200 && cut.chars().all(|c| c == 'ж'), "{} bytes", cut.len());
     }
 }

@@ -32,6 +32,7 @@ use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use crate::account_lifecycle::{AccountStamp, LifecycleError, LocalCommitPermit, OperationPermit};
 use mailvault_core::custody::{cache, entries};
+use mailvault_core::filename_safety::fs_safe;
 use mailvault_core::{import_rehome, maildir, message_store, vault_files};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -520,7 +521,7 @@ fn rehome_pass(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) ->
             // server's own message U.
             if !touched.is_empty() {
                 let prefixes: Vec<String> =
-                    touched.iter().map(|u| format!("{}_{}_{}_", vault_files::fs_safe(account_id), vault_files::fs_safe(mailbox), u)).collect();
+                    touched.iter().map(|u| format!("{}_{}_{}_", fs_safe(account_id), fs_safe(mailbox), u)).collect();
                 for entry in std::fs::read_dir(root.join("attachment_cache")).into_iter().flatten().flatten() {
                     if prefixes.iter().any(|p| entry.file_name().to_string_lossy().starts_with(p.as_str())) {
                         let _ = vault_files::remove_cache_entry(&entry.path());

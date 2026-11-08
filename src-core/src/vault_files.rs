@@ -7,6 +7,7 @@
 //! `maildir::vault_filename_uid` instead of `split(':').next().parse()`
 //! (oddity 5) — `find_by_uid`'s own prefix rule is unchanged, since `store`
 //! still has to find a legacy-named straggler to replace.
+use crate::filename_safety::{fs_safe, safe_leaf};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -1249,45 +1250,6 @@ pub fn migrate_email_dirs(
 // name: drag-out, Open and Open With hand that file to Finder, another app or
 // another email, and a cache key in its name would travel with it.
 
-pub fn fs_safe(s: &str) -> String {
-    s.chars().map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect()
-}
-
-/// The one component of a sender-supplied filename that may name a file.
-///
-/// A MIME `filename` is attacker-controlled: `../../x` or an absolute path
-/// would escape the directory it is being written into. Only the last
-/// component survives, and a component that names a directory instead of a
-/// file (empty, `.`, `..`) falls back.
-pub fn safe_leaf(filename: &str) -> String {
-    let leaf = Path::new(filename)
-        .file_name()
-        .map(|f| f.to_string_lossy().to_string())
-        .filter(|f| !f.is_empty() && f != "." && f != "..")
-        .unwrap_or_else(|| "attachment".to_string());
-    // Unix keeps its names byte for byte: cached attachments are found again
-    // by this name, so changing it there would orphan every cached file.
-    #[cfg(windows)]
-    let leaf = win32_safe(&leaf);
-    leaf
-}
-
-/// `: < > " | ? *` and control characters become `_`. Win32 rejects them in
-/// a file name, except `:`, which is worse: `a.pdf:x.exe` addresses an NTFS
-/// alternate data stream of `a.pdf`, where no Mark-of-the-Web can follow.
-/// `Re: invoice.pdf` is a real name this makes writable. Then reserved device
-/// names and a trailing dot or space go through `avoid_reserved`, the rule
-/// vault directories use: `CON.txt` -> `CON_.txt`.
-///
-/// Platform-independent so it is tested everywhere; only called on Windows.
-/// Mirrored by `safeLeaf` in src/services/attachmentUtils.js.
-pub fn win32_safe(leaf: &str) -> String {
-    let chars: String = leaf.chars()
-        .map(|c| if matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*') || c.is_control() { '_' } else { c })
-        .collect();
-    crate::search_index::text::avoid_reserved(&chars)
-}
-
 pub fn attachment_cache_path(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, filename: &str) -> PathBuf {
     let leaf = safe_leaf(filename);
     cache_dir.join(format!("{}_{}_{}_{}", fs_safe(account_id), fs_safe(mailbox), uid, index)).join(leaf)
@@ -1803,16 +1765,6 @@ mod tests {
             build_maildir_filename(12, &parse_flags_from_filename(&format!("12{INFO_PREFIX}AS.eml"))),
             format!("12{INFO_PREFIX}AS.eml")
         );
-    }
-
-    #[test]
-    fn win32_safe_leaves_no_stream_or_invalid_character() {
-        assert_eq!(win32_safe("a.pdf:x.exe"), "a.pdf_x.exe");
-        assert_eq!(win32_safe("Re: invoice.pdf"), "Re_ invoice.pdf");
-        assert_eq!(win32_safe("<a>|\"b\"?*\u{1}.txt"), "_a___b____.txt");
-        assert_eq!(win32_safe("Rechnung März.pdf"), "Rechnung März.pdf");
-        assert_eq!(win32_safe("CON.txt"), "CON_.txt");
-        assert_eq!(win32_safe("invoice.pdf."), "invoice.pdf._");
     }
 
     #[test]
