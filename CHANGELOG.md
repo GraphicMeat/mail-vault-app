@@ -6,6 +6,7 @@
 - A send whose connection broke after the mail server may already have taken the message is no longer sent again on its own, so the recipient no longer gets it twice. The outbox and the Scheduled folder show it as "May not have sent", with Check Sent, Retry and Discard. A scheduled send that MailVault was in the middle of sending when it quit or crashed is shown the same way instead of being sent again at the next start.
 - Sending attachments larger than a Microsoft Graph or JMAP account's server takes in one message (about 2.2 MB for Microsoft Graph) now asks first, with Send anyway and Go back, instead of failing after you pressed Send.
 - Deleting a message from Sent, Archive, Spam or any folder other than Inbox now moves it to Trash, the same as deleting from Inbox, and you can undo it. Only deleting a message that is already in Trash removes it for good. Accounts without a Trash folder keep the old behaviour.
+- On Gmail, deleting from a label or from Sent now moves the message to Trash, which removes it from every label, as Delete does on the Gmail website. It used to remove only that label and leave the message in All Mail. Use Archive to take a message out of the Inbox and keep it.
 - The delete confirmation now says that a message deleted outside Trash goes to Trash on the server. It used to warn that the message would be deleted for good and that this could not be undone, which was only true in Trash.
 
 ## [2.23.0] - 2026-11-08
