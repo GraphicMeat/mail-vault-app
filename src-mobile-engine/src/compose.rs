@@ -7,7 +7,7 @@
 //! file's bytes and never a secret: the bytes are read from the picked file when the outbox sends.
 //!
 //! `send` checks everything it can before it journals, with no network: the account, the
-//! addresses (core's MIME builder must take them), every handle (`ATTACHMENT_MISSING`) and the
+//! addresses (core's recipient check, as on desktop), every handle (`ATTACHMENT_MISSING`) and the
 //! total attachment size (`TOO_LARGE` above the account's [`attachment_limit`]: 25 MB, what
 //! fits Graph's 4 MB `sendMail` body for a Graph account, or a JMAP session's upload limits). Then one write
 //! transaction adds the outbox row (with the Message-ID every attempt sends under) and removes the
@@ -21,11 +21,11 @@ use crate::db::{Engine, Shared};
 use crate::outbox;
 use crate::outgoing::resolve_outgoing;
 use crate::rpc::{parse, RpcError};
-use crate::secrets::Credential;
 use mailvault_core::filename_safety::safe_handle_name;
 use mailvault_core::mime_types::mime_of_name;
 use mailvault_core::compose::own_addresses_with_from;
 use mailvault_core::compose_prep::{self, Account, Context};
+use mailvault_core::send::limits;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -36,40 +36,19 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Most bytes of attachments one message takes: the common server limit (Gmail and Outlook
-/// refuse above it). Checked on the picked files' sizes before anything is journaled.
-pub(crate) const MAX_ATTACHMENT_BYTES: u64 = 25 * 1024 * 1024;
-/// Room left in a Graph send for everything but the attachments: headers, the text (which may
-/// be quoted-printable) and the MIME structure.
-const GRAPH_HEADER_MARGIN: u64 = 16 * 1024;
-
-/// Most bytes of attachments `f` may carry on account `account_id` (`acct`).
-/// - A Graph account sends through `sendMail`, whose body (the MIME, base64-encoded once more)
-///   Graph refuses above `graph::SEND_MAIL_LIMIT_BYTES`: the MIME may be 3/4 of that.
-/// - A JMAP account uploads the MIME, which the server refuses above its session's
-///   `maxSizeUpload`, and may cap attachments at `maxSizeAttachmentsPerEmail`; both as the
-///   last session stored them (`backend::jmap::stored_limits`), never above 25 MB.
-///
-/// In the MIME an attachment takes 4/3 of its size in base64 plus a line break every 76
-/// characters.
+/// Most bytes of attachments `f` may carry on account `account_id` (`acct`): core's
+/// [`limits::attachment_budget`] for the account's kind, a JMAP account with the limits its last
+/// session stored (`backend::jmap::stored_limits`).
 pub(crate) fn attachment_limit(shared: &Shared, account_id: &str, acct: &AccountRow, f: &Fields) -> u64 {
-    let other = GRAPH_HEADER_MARGIN + 3 * f.text.len() as u64 + (f.subject.len() + f.to.len() + f.cc.len() + f.bcc.len() + f.references.len()) as u64;
-    let fits = |mime_budget: u64| mime_budget.saturating_sub(other) * 3 / 4 * 76 / 78;
-    match acct.kind.as_str() {
-        "graph" => fits(mailvault_core::graph::SEND_MAIL_LIMIT_BYTES as u64 * 3 / 4),
-        "jmap" => {
-            let (upload, attachments) = crate::backend::jmap::stored_limits(shared, account_id);
-            let mut limit = MAX_ATTACHMENT_BYTES;
-            if let Some(upload) = upload {
-                limit = limit.min(fits(upload));
-            }
-            if let Some(attachments) = attachments {
-                limit = limit.min(attachments);
-            }
-            limit
-        }
-        _ => MAX_ATTACHMENT_BYTES,
-    }
+    let header = (f.subject.len() + f.to.len() + f.cc.len() + f.bcc.len() + f.references.len()) as u64;
+    let kind = limits::SendKind::of(&acct.kind);
+    let jmap = if kind == limits::SendKind::Jmap {
+        let (upload, attachments) = crate::backend::jmap::stored_limits(shared, account_id);
+        limits::JmapLimits { upload, attachments }
+    } else {
+        limits::JmapLimits::default()
+    };
+    limits::attachment_budget(kind, f.text.len() as u64, header, jmap)
 }
 
 /// How long a reply or forward waits for a body that is not cached.
@@ -182,22 +161,15 @@ fn account(shared: &Shared, id: &str) -> Result<AccountRow, RpcError> {
     load_account(shared, id).map_err(internal)?.ok_or_else(|| RpcError::Invalid("unknown account".into()))
 }
 
-/// Refuses addresses core's MIME builder would not take: a To is required (core builds no message
-/// without one), and a Cc or Bcc list that does not read is refused here rather than dropped by
-/// the builder. No network and no secret: the build uses the account's identity only.
-pub(crate) fn check_recipients(acct: &AccountRow, f: &Fields) -> Result<(), String> {
-    if f.to.trim().is_empty() {
-        return Err("a message needs a To address".into());
+/// Refuses recipients core's check refuses (`compose_prep::recipient_problem`, the desktop's
+/// `compose.check` rule): a To is required, and every To, Cc and Bcc entry must read as an
+/// address. No network and no secret. The text names no address (it is logged).
+pub(crate) fn check_recipients(f: &Fields) -> Result<(), String> {
+    match compose_prep::recipient_problem(&f.to, &f.cc, &f.bcc) {
+        None => Ok(()),
+        Some(("compose.pleaseEnterLeastOneRecipient", _)) => Err("a message needs a To address".into()),
+        Some(_) => Err("a recipient is not an address".into()),
     }
-    let config = crate::net::core_config(acct, &Credential::default())?;
-    for (field, list) in [("to", &f.to), ("cc", &f.cc), ("bcc", &f.bcc)] {
-        if list.trim().is_empty() {
-            continue;
-        }
-        let probe = Fields { to: list.clone(), ..Fields::default() };
-        smtp::build_mime(&config, &probe.outgoing(None, Vec::new())).map_err(|_| format!("{field} is not a list of addresses"))?;
-    }
-    Ok(())
 }
 
 /// A `type/subtype` media type as a server names one: ASCII token characters only.
@@ -239,7 +211,7 @@ pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let shared = engine.shared();
     let acct = account(shared, &p.account_id)?;
     let mut fields = p.fields;
-    check_recipients(&acct, &fields).map_err(RpcError::Invalid)?;
+    check_recipients(&fields).map_err(RpcError::Invalid)?;
     let mut attachments = Vec::with_capacity(fields.attachments.len());
     for a in &fields.attachments {
         let Some(ok) = checked(engine.cache_dir(), a) else {
@@ -490,7 +462,7 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
     let accounts: Vec<Account> = shared
         .read(|c| {
             let mut st = c.prepare_cached("SELECT id, email FROM accounts ORDER BY created_ms, id")?;
-            let rows = st.query_map([], |r| Ok(Account { id: r.get(0)?, email: r.get(1)? }))?.collect::<Result<Vec<_>, _>>()?;
+            let rows = st.query_map([], |r| Ok(Account { id: r.get(0)?, email: r.get(1)?, ..Account::default() }))?.collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         })
         .map_err(internal)?;
