@@ -8,6 +8,7 @@ pub mod accounts_doc;
 pub mod abd;
 pub mod backoff;
 pub mod secret_scrub;
+pub mod send;
 pub mod sync_core;
 pub mod ai;
 pub mod aliases;

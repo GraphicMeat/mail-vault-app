@@ -48,6 +48,7 @@ use mailvault_core::imap::PartInfo;
 use mailvault_core::jmap::discover::{self, Discovered};
 use mailvault_core::jmap::headers::{keywords_to_flags, to_header, HEADER_PROPS};
 use mailvault_core::jmap::{BlobStream, JMailbox, JmapAuth, JmapClient, JmapError, RemoveOutcome};
+use mailvault_core::send::classify::classify_failure;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use mailvault_core::sync_core::dates::utc_timestamp as timestamp;
 use mailvault_core::sync_core::throttle::throttle_wait;
@@ -1012,7 +1013,7 @@ impl Backend for JmapBackend<'_> {
     }
 
     fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {
-        let not_sent = |fail: Fail, terminal: bool| SendFail { fail, may_have_sent: false, terminal };
+        let not_sent = SendFail::unsent;
         let config = crate::net::core_config(&self.row, &self.cred).map_err(|e| not_sent(Fail::Code(Code::Invalid, e), true))?;
         let built = smtp::build_mime(&config, email).map_err(|e| not_sent(Fail::Code(Code::Invalid, self.scrub(e)), true))?;
         // Core's JMAP send: identity for the From address, upload, import into Drafts, submit,
@@ -1025,9 +1026,9 @@ impl Backend for JmapBackend<'_> {
                 if auth {
                     self.shared.jmap.forget(&self.account);
                 }
-                let terminal = e.permanent || smtp::is_terminal_send_error(&message);
+                let verdict = classify_failure(e.phase, e.permanent, &message);
                 let fail = if auth { Fail::Code(Code::AuthFailed, message) } else { Fail::from(message) };
-                Err(SendFail { fail, may_have_sent: e.phase == smtp::SendPhase::MayHaveSent, terminal })
+                Err(SendFail { fail, verdict })
             }
         }
     }

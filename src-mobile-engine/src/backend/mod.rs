@@ -25,6 +25,7 @@ use crate::actions::Kind;
 use crate::db::Shared;
 use crate::sync::{self, Fail};
 use mailvault_core::imap::{EmailHeader, PartInfo};
+use mailvault_core::send::classify::{classify_unsent, SendVerdict};
 use mailvault_core::smtp::OutgoingEmail;
 use rusqlite::OptionalExtension;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -168,14 +169,19 @@ pub(crate) struct SendOutcome {
     pub(crate) server_saved_sent: bool,
 }
 
-/// A send that did not go through. `may_have_sent`: the failure came after the message could have
-/// been accepted (a broken connection or timeout during or after the upload), so it must never be
-/// sent again on its own. `terminal`: the server's answer was final (a permanent refusal, a
-/// sign-in it refused), so a retry cannot help. Neither: nothing reached the server, try again.
+/// A send that did not go through, with core's verdict on it: `MayHaveSent` (must never be sent
+/// again on its own), `Terminal` (a final refusal, a retry cannot help) or `Transient` (nothing
+/// reached the server, try again).
 pub(crate) struct SendFail {
     pub(crate) fail: Fail,
-    pub(crate) may_have_sent: bool,
-    pub(crate) terminal: bool,
+    pub(crate) verdict: SendVerdict,
+}
+
+impl SendFail {
+    /// A failure before any send started: nothing went out.
+    pub(crate) fn unsent(fail: Fail, permanent: bool) -> Self {
+        SendFail { fail, verdict: classify_unsent(permanent) }
+    }
 }
 
 /// What ended a [`Backend::wait_for_change`].

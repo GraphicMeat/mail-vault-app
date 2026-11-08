@@ -11,6 +11,7 @@ use crate::sync::{self, Fail};
 use mailvault_core::abd::ops::Caps;
 use mailvault_core::imap::async_imap::extensions::idle::IdleResponse;
 use mailvault_core::imap::{self, abd_cmds, ImapPool, ImapSession, PartInfo};
+use mailvault_core::send::classify::classify;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
@@ -468,18 +469,14 @@ impl Backend for ImapBackend {
 
     fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {
         let config = &self.config;
-        let built = smtp::build_mime(config, email).map_err(|e| SendFail {
-            fail: scrub(&self.secrets, Fail::Code(Code::Invalid, e)),
-            may_have_sent: false,
-            terminal: true,
-        })?;
+        let built = smtp::build_mime(config, email)
+            .map_err(|e| SendFail::unsent(scrub(&self.secrets, Fail::Code(Code::Invalid, e)), true))?;
         // Phased: core says whether a failure came before or after the point of no return, which
         // its message text alone cannot (a connect timeout and a lost final reply read the same).
         match block_on(smtp::send_built_phased(config, email, built)) {
             Ok(sent) => Ok(SendOutcome { raw: sent.raw_rfc2822, server_saved_sent: sent.server_saved_sent || self.gmail }),
             Err(e) => Err(SendFail {
-                terminal: e.permanent || smtp::is_terminal_send_error(&e.message),
-                may_have_sent: e.phase == smtp::SendPhase::MayHaveSent,
+                verdict: classify(Err(&e)),
                 fail: scrub(&self.secrets, Fail::from(e.message)),
             }),
         }

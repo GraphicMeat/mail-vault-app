@@ -38,6 +38,7 @@ use crate::secrets::Credential;
 use crate::sync::{self, Fail};
 use mailvault_core::graph::{AttachmentStream, GraphAttachmentInfo, GraphClient, GraphMailFolder, GraphSynced};
 use mailvault_core::imap::PartInfo;
+use mailvault_core::send::classify::classify_failure;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use mailvault_core::sync_core::dates::utc_timestamp as timestamp;
 use mailvault_core::sync_core::throttle::{retry_after_from, throttle_wait};
@@ -829,7 +830,7 @@ impl Backend for GraphBackend<'_> {
     }
 
     fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {
-        let not_sent = |fail: Fail, terminal: bool| SendFail { fail, may_have_sent: false, terminal };
+        let not_sent = SendFail::unsent;
         let mut refreshed = false;
         loop {
             let acct = match load_account(self.shared, &self.account) {
@@ -858,9 +859,9 @@ impl Backend for GraphBackend<'_> {
                             Err(f) => return Err(not_sent(f, true)),
                         }
                     }
-                    let terminal = e.permanent || smtp::is_terminal_send_error(&message);
+                    let verdict = classify_failure(e.phase, e.permanent, &message);
                     let fail = if sign_in { Fail::Code(Code::AuthFailed, message) } else { Fail::from(message) };
-                    return Err(SendFail { fail, may_have_sent: e.phase == smtp::SendPhase::MayHaveSent, terminal });
+                    return Err(SendFail { fail, verdict });
                 }
             }
         }

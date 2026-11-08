@@ -24,6 +24,7 @@
 
 use crate::accounts::{load_account, Code};
 use crate::backend::{self, Backend, SendFail};
+use mailvault_core::send::classify::SendVerdict;
 use crate::compose::{self, Fields};
 use crate::db::{lock, Engine, Shared};
 use crate::events::SEND_RESULT;
@@ -517,7 +518,7 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
             }
             true
         }
-        Err(SendFail { fail, may_have_sent, terminal }) => {
+        Err(SendFail { fail, verdict }) => {
             let code = match &fail {
                 Fail::Code(code, why) => {
                     shared.log(&format!("[outbox] {account} {id}: {} {why}", code.as_str()));
@@ -525,13 +526,13 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
                 }
                 Fail::Gone | Fail::Closing => Code::HostUnreachable,
             };
-            if may_have_sent {
+            if verdict.is_uncertain() {
                 // The server may have it: never again on its own (Retry or Discard in the UI).
                 if transition(shared, id, "sending", "uncertain", Some(code.as_str()), true) {
                     emit_result(shared, id, account, "uncertain", Some(code.as_str()));
                 }
                 false
-            } else if terminal {
+            } else if verdict == SendVerdict::Terminal {
                 let reason = if code == Code::AuthFailed { "AUTH_FAILED" } else { "REFUSED" };
                 fail_row(shared, account, id, "sending", reason);
                 true
