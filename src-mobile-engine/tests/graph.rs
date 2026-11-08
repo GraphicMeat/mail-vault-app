@@ -778,8 +778,10 @@ fn a_move_that_fails_part_way_keeps_what_moved_and_its_follow_up() {
     f.sync(None);
     let uids = f.uids("INBOX");
     let all: Vec<i64> = ["Alpha", "Bravo", "Charlie"].iter().map(|s| uids[*s]).collect();
-    // The first move lands, then Graph fails the next one (503): a transient failure.
+    // The first move lands, then Graph fails the next one (503): a transient failure. Its first
+    // request is throttled for a second, so the read below is queued before the move runs.
     f.g.fail_moves_after(1, 4);
+    f.g.throttle(1, 1);
     f.apply("move", "INBOX", &all, Some(&projects));
     // A read of the message that moved first, queued behind the move.
     f.apply("seen", "INBOX", &[uids["Alpha"]], None);
