@@ -7,6 +7,11 @@
 //! dying with the app in on-demand mode is the NORMAL case here, so "already
 //! past" is never refused, only sent. It then sleeps until the next
 //! `fire_at` or until `handlers::scheduled` wakes it (create/update/cancel).
+//! A row a crash left `sending` is not part of that pass: it may have gone
+//! out, so start marks it `uncertain` and only the user's Retry sends it.
+//! Each attempt's outcome goes through core's outbox state machine
+//! (`send::outbox::next_state`): a send cut off after the server may have
+//! taken it is `uncertain`, never retried on its own.
 //!
 //! `attempt_row` is the one place a row is actually sent — both this worker's
 //! loop and `scheduled.send_now` call it, so "fire now" can never drift from
@@ -17,6 +22,8 @@ use crate::server::DaemonState;
 use mailvault_core::app_db::{self, scheduled};
 use mailvault_core::backoff::RetryPolicy;
 use mailvault_core::imap::ImapConfig;
+use mailvault_core::send::classify::{classify_failure, SendVerdict};
+use mailvault_core::send::outbox::{next_state, OutboxState};
 use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp::{self, FrozenEnvelope};
 use mailvault_core::vault_files;
@@ -88,16 +95,12 @@ const MIN_RETRY_WAIT: Duration = Duration::from_secs(1);
 /// while it stays blocked.
 const KEYCHAIN_POLL: Duration = Duration::from_secs(5 * 60);
 
-/// Exponential backoff between transient-failure retries: 30s, 60s for
-/// `attempt` 1 and 2 (`attempt` 3 goes `failed` instead — see `attempt_row`).
-/// Without this, a due row that fails for a reason `NetGate` does not
+/// Exponential backoff between transient-failure retries, through core's
+/// `next_state`: 30s, 60s for `attempt` 1 and 2 (`attempt` 3 goes `failed`
+/// instead). Without it, a due row that fails for a reason `NetGate` does not
 /// recognize as offline (a provider momentarily refusing, say) would be
 /// picked straight back up on the worker's very next tick and hammer the
 /// server instead of waiting.
-fn backoff_ms(attempt: i64) -> i64 {
-    RETRY.next_delay_ms(attempt)
-}
-
 /// 30 s doubling; `scheduled::MAX_ATTEMPTS` (3) attempts, so the waits used are 30 s and 60 s.
 const RETRY: RetryPolicy = RetryPolicy::new(Duration::from_secs(30), Duration::MAX, Some(scheduled::MAX_ATTEMPTS as u32));
 
@@ -117,7 +120,21 @@ fn within_credential_grace() -> bool {
 
 pub(crate) fn start(state: Arc<DaemonState>) {
     let _ = STARTED_AT.set(std::time::Instant::now());
+    // Before the worker and before the socket takes any RPC (main starts the
+    // server after this): no send of this process can be `sending` yet.
+    mark_crash_left_uncertain(&state);
     tokio::spawn(async move { run(state).await });
+}
+
+/// A row a crash left `sending` may have gone out, so it becomes `uncertain`
+/// (core `send::outbox::on_open`) and waits for the user's Retry or Discard,
+/// never sent again on its own.
+pub(crate) fn mark_crash_left_uncertain(state: &Arc<DaemonState>) {
+    match app_db::with(&state.app_dir, |c| scheduled::on_open(c)) {
+        Ok(0) => {}
+        Ok(n) => warn!("[scheduled-send] {n} send(s) cut off by a crash may have gone out: marked uncertain, not sent again"),
+        Err(e) => warn!("[scheduled-send] could not mark crash-left sends uncertain: {e}"),
+    }
 }
 
 async fn run(state: Arc<DaemonState>) {
@@ -208,6 +225,9 @@ enum Outcome {
     Transient(String),
     /// Nothing a retry can fix.
     Terminal(String),
+    /// The connection broke after the server may have taken the message.
+    /// Never sent again on its own: the row goes `uncertain`.
+    Uncertain(String),
 }
 
 /// Run one due row through to a terminal state or back to `queued`. Public to
@@ -245,8 +265,14 @@ async fn attempt_row_with(state: &Arc<DaemonState>, snapshot: &scheduled::Schedu
             return Ok(());
         }
     };
-    if !matches!(row.status.as_str(), "queued" | "sending" | "failed")
-        || (reset_failed && !matches!(row.status.as_str(), "queued" | "failed")) {
+    // An `uncertain` row may have gone out: only the user's Retry (the
+    // explicit path) sends it again. A `sending` row is another attempt's.
+    let admissible = if reset_failed {
+        matches!(row.status.as_str(), "queued" | "failed" | "uncertain")
+    } else {
+        matches!(row.status.as_str(), "queued" | "failed")
+    };
+    if !admissible {
         return Ok(());
     }
     // Moved later since the batch was read: not due any more. (`send_now`
@@ -284,6 +310,9 @@ async fn attempt_row_with(state: &Arc<DaemonState>, snapshot: &scheduled::Schedu
         }
         Err(e) => {
             warn!("[scheduled-send] could not gate {id}: {e}");
+            // Nothing was sent: never leave it `sending`, which reads as
+            // "may have gone out" after a restart.
+            let _ = app_db::with(&app_dir, |c| scheduled::set_status(c, &id, &row.status, &row.last_error));
             return Ok(());
         }
     };
@@ -324,20 +353,15 @@ async fn attempt_row_with(state: &Arc<DaemonState>, snapshot: &scheduled::Schedu
             }
             ("queued", msg)
         }
-        Outcome::Transient(msg) => {
-            if attempt >= scheduled::MAX_ATTEMPTS {
-                ("failed", msg)
-            } else {
-                // Push fire_at forward so the very next tick does not
-                // immediately re-fire this row into the same failure.
-                let requeue_at = now_ms() + backoff_ms(attempt);
-                if let Err(e) = app_db::with(&app_dir, |c| scheduled::push_fire_at(c, &id, requeue_at)) {
-                    warn!("[scheduled-send] could not back off {id}: {e}");
-                }
-                ("queued", msg)
-            }
+        // Core's one state machine: a may-have-sent attempt is `uncertain`
+        // whatever the count (never requeued), a final one `failed`, a
+        // transient one `queued` after its wait until the tries run out.
+        Outcome::Transient(msg) => settle(&app_dir, &id, SendVerdict::Transient, attempt, msg),
+        Outcome::Terminal(msg) => settle(&app_dir, &id, SendVerdict::Terminal, attempt, msg),
+        Outcome::Uncertain(msg) => {
+            warn!("[scheduled-send] {id} may have gone out: marked uncertain, not sent again on its own");
+            settle(&app_dir, &id, SendVerdict::MayHaveSent, attempt, msg)
         }
-        Outcome::Terminal(msg) => ("failed", msg),
     };
     if let Err(e) = app_db::with(&app_dir, |c| scheduled::set_status(c, &id, status, &error)) {
         warn!("[scheduled-send] could not record '{status}' for {id}: {e}");
@@ -395,6 +419,21 @@ impl Drop for TerminalPause {
             if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
         }
     }
+}
+
+/// Where a failed attempt leaves its row (core `next_state`). A requeue's
+/// `fire_at` moves past its wait so the very next tick does not re-fire the
+/// row into the same failure.
+fn settle(app_dir: &std::path::Path, id: &str, verdict: SendVerdict, attempt: i64, msg: String) -> (&'static str, String) {
+    let attempt = u32::try_from(attempt.max(1)).unwrap_or(u32::MAX);
+    let (to, wait) = next_state(verdict, attempt, &RETRY);
+    if let (OutboxState::Queued, Some(wait)) = (to, wait) {
+        let requeue_at = now_ms().saturating_add(i64::try_from(wait.as_millis()).unwrap_or(i64::MAX));
+        if let Err(e) = app_db::with(app_dir, |c| scheduled::push_fire_at(c, id, requeue_at)) {
+            warn!("[scheduled-send] could not back off {id}: {e}");
+        }
+    }
+    (to.as_str(), msg)
 }
 
 fn emit(state: &Arc<DaemonState>, id: &str, status: &str) {
@@ -516,7 +555,7 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend, acco
         Err(e) => return Outcome::Terminal(format!("The scheduled message could not be found: {e}")),
     };
 
-    match smtp::send_raw(&account, &stored.envelope, raw).await {
+    match smtp::send_raw_phased(&account, &stored.envelope, raw).await {
         Ok(result) => {
             // Graph accounts get no reminder: the daemon has no token to
             // check for a reply with, and the app does not offer one there.
@@ -539,21 +578,29 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend, acco
             append_to_sent(state, &account, &row.account_id, stored.sent_mailbox, &result, operation.clone());
             Outcome::Sent
         }
-        // Ahead of the network probe: a Graph send that may have gone out
+        // Ahead of the network probe: a send that may have gone out (an SMTP
+        // connection cut after DATA, a Graph or JMAP request with no answer)
         // must end the row even when the network then looks down, because
-        // the offline requeue would send it a second time.
-        Err(e) if is_terminal_smtp_error(&e) => Outcome::Terminal(e),
-        Err(e) => {
-            // Same idiom `sync_engine::sync_account` uses: a success is proof
-            // of reach, a connect-shaped failure only asks — `note_failure`
-            // probes and the probe decides, so one provider's SMTP outage
-            // never gates every other account's scheduled sends.
-            if state.net.note_failure(&e).await {
-                Outcome::Transient(e)
-            } else {
-                Outcome::Offline(e)
-            }
-        }
+        // the offline requeue would send it a second time. `permanent` is not
+        // read: the words decide what is final, as they always did.
+        Err(e) => match classify_failure(e.phase, false, &e.message) {
+            SendVerdict::MayHaveSent => Outcome::Uncertain(e.message),
+            SendVerdict::Terminal => Outcome::Terminal(e.message),
+            _ => transient_or_offline(state, e.message).await,
+        },
+    }
+}
+
+/// A failure that proved nothing went out and is not final: worth another
+/// try, unless the network is down. Same idiom `sync_engine::sync_account`
+/// uses: a success is proof of reach, a connect-shaped failure only asks:
+/// `note_failure` probes and the probe decides, so one provider's SMTP outage
+/// never gates every other account's scheduled sends.
+async fn transient_or_offline(state: &Arc<DaemonState>, e: String) -> Outcome {
+    if state.net.note_failure(&e).await {
+        Outcome::Transient(e)
+    } else {
+        Outcome::Offline(e)
     }
 }
 

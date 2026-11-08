@@ -8,11 +8,6 @@ import { usePrivateAttr } from '../hooks/usePrivacy';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { DockSlot } from './ui/ToastDock';
 
-// The daemon's marker on a Graph or JMAP send that got no answer after the
-// request left (src-core smtp.rs MAY_HAVE_GONE_OUT). The server may have
-// taken it, so a Retry could send it twice: the bubble offers Sent instead.
-const MAY_HAVE_GONE_OUT = 'the message may have gone out';
-
 /** Open the Sent folder of the account a send went out from. */
 export async function openSentFolder(accountId) {
   const { useMailStore } = await import('../stores/mailStore');
@@ -48,10 +43,13 @@ export function OutboxTray({ onRestoreDraft }) {
         {items.map(item => {
           const subject = item.composeState?.initialData?.subject || 'New Message';
           const recipient = item.composeState?.initialData?.to || '';
-          const isError = item.status === 'error';
+          // `uncertain`: the daemon said `mayHaveSent` (the connection broke
+          // after the server may have taken it). Never resent on its own: the
+          // user checks Sent, then retries or discards.
+          const isUncertain = item.status === 'uncertain';
+          const isError = item.status === 'error' || isUncertain;
           const isSent = item.status === 'sent';
           const isSending = item.status === 'sending';
-          const mayHaveGoneOut = isError && String(item.error || '').includes(MAY_HAVE_GONE_OUT);
           // A JMAP code reads in the app's words (tErr); anything else as before.
           const errorText = item.error ? tErr(item.error) : item.error;
 
@@ -84,7 +82,9 @@ export function OutboxTray({ onRestoreDraft }) {
                 <p className={`text-[11px] mt-0.5 ${isError ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
                   {isSending && 'Sending…'}
                   {isSent && 'Sent'}
-                  {isError && (errorText || 'Failed to send')}
+                  {isUncertain && <span className="block font-medium">{t('outbox.mayNotHaveSent')}</span>}
+                  {isUncertain && t('outbox.mayNotHaveSentDetail')}
+                  {isError && !isUncertain && (errorText || 'Failed to send')}
                 </p>
               </div>
               {isSending && (
@@ -103,7 +103,7 @@ export function OutboxTray({ onRestoreDraft }) {
               )}
               {isError && (
                 <div className="flex flex-col gap-1 flex-shrink-0">
-                  {mayHaveGoneOut ? (
+                  {isUncertain && (
                     <button
                       onClick={() => openSentFolder(item.composeState?.initialData?._accountId)
                         .catch(e => console.warn('[OutboxTray] Could not open Sent:', e))}
@@ -114,17 +114,27 @@ export function OutboxTray({ onRestoreDraft }) {
                       <Send size={12} />
                       {t('outbox.checkSent')}
                     </button>
-                  ) : (
+                  )}
                   <button
                     onClick={() => retryOutbox(item.id)}
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium
                                text-mail-accent-text hover:bg-mail-surface-hover rounded-md transition-colors"
-                    title={t('outbox.retrySend')}
+                    title={isUncertain ? t('outbox.retryUncertainTitle') : t('outbox.retrySend')}
                   >
                     <RefreshCw size={12} />
                     {t('common.retry')}
                   </button>
-                  )}
+                  {isUncertain ? (
+                    <button
+                      onClick={() => dismissOutbox(item.id)}
+                      className="flex items-center gap-1 px-2 py-1 text-xs font-medium
+                                 text-mail-text-muted hover:bg-mail-surface-hover rounded-md transition-colors"
+                      title={t('outbox.discardUncertainTitle')}
+                    >
+                      <X size={12} />
+                      {t('common.discard')}
+                    </button>
+                  ) : (
                   <button
                     onClick={() => {
                       dismissOutbox(item.id);
@@ -137,6 +147,7 @@ export function OutboxTray({ onRestoreDraft }) {
                     <X size={12} />
                     {t('outbox.edit')}
                   </button>
+                  )}
                 </div>
               )}
             </motion.div>

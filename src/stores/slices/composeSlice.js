@@ -11,7 +11,9 @@
 //
 // On send error the outbox entry is retained with status='error' and the
 // message so the user can open the bubble, retry, or dismiss (which restores
-// the compose window with the original draft).
+// the compose window with the original draft). A send the daemon says may
+// have gone out (`mayHaveSent`) is kept as status='uncertain' instead: never
+// resent on its own, only by the user's Retry, or dropped by Discard.
 
 import { useSettingsStore } from '../settingsStore';
 
@@ -24,7 +26,7 @@ export const createComposeSlice = (set, get) => ({
   pendingSend: null,  // pendingSends.at(-1), or null
 
   // ── Outbox stage ──
-  // [{ id, composeState, sendFn, status: 'sending'|'sent'|'error', error, startedAt }]
+  // [{ id, composeState, sendFn, status: 'sending'|'sent'|'error'|'uncertain', error, startedAt }]
   outboxItems: [],
 
   queueSend: (composeState, sendFn, overrideDelay = null) => {
@@ -105,8 +107,11 @@ export const createComposeSlice = (set, get) => ({
         return;
       }
       const msg = (err && (err.message || err.toString())) || 'Failed to send';
+      // The daemon's `mayHaveSent`: the server may have the message, so the
+      // bubble never resends on its own (Retry or Discard is the user's call).
+      const status = err?.mayHaveSent === true ? 'uncertain' : 'error';
       set(s => ({
-        outboxItems: s.outboxItems.map(i => i.id === id ? { ...i, status: 'error', error: msg } : i),
+        outboxItems: s.outboxItems.map(i => i.id === id ? { ...i, status, error: msg } : i),
       }));
     }
   },

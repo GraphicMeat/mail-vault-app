@@ -330,7 +330,9 @@ async fn send_now(state: &Arc<DaemonState>, row_id: &str, id: Value) -> RpcRespo
         Ok(Ok(None)) => return RpcResponse::error(id, ipc::INVALID_PARAMS, format!("No scheduled send {row_id}")),
         Ok(Err(e)) | Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
     };
-    if !matches!(row.status.as_str(), "queued" | "failed") {
+    // `uncertain` (it may have gone out) is sent again only from here: the
+    // user's Retry, after checking Sent.
+    if !matches!(row.status.as_str(), "queued" | "failed" | "uncertain") {
         return RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Cannot send a schedule that is {}", row.status));
     }
     let original = match state.account_lifecycle.capture(&row.account_id) {
@@ -842,6 +844,85 @@ mod tests {
         assert_eq!(server.sent_messages().len(), 1, "commands: {:?}", server.smtp_commands());
     }
 
+    /// A due row over SMTP whose connection is cut after DATA (the server took
+    /// it, the reply never came) may have gone out: `uncertain`, the frozen
+    /// .eml kept, never sent again by the worker. Only the user's Retry sends
+    /// it once more.
+    #[tokio::test]
+    async fn a_scheduled_send_cut_off_after_data_is_uncertain_and_never_resent() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let s = st();
+        let server = serve_acc1_with(&s, Scenario::new().smtp_drop_after_data("SCHEDULED-CUT-AFTER-DATA"));
+        let mut params = create_params("acc1");
+        params["email"]["text"] = json!("SCHEDULED-CUT-AFTER-DATA");
+        params["fireAt"] = json!(now_ms() - 1_000);
+        let row = call(&s, "scheduled.create", params).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        let uid = row["uid"].as_u64().unwrap() as u32;
+
+        crate::scheduled_send_worker::process_due(&s).await;
+        let after = stored(&s, &id);
+        assert_eq!(after.status, "uncertain", "row: {after:?}");
+        assert_eq!(after.attempts, 1);
+        assert_eq!(server.sent_messages().len(), 1, "the server took it once");
+        assert!(mailvault_core::vault_files::exists(&s.data_dir, "acc1", "Scheduled", uid), "the frozen copy stays for Retry");
+
+        // The worker passes it by however often it runs.
+        crate::scheduled_send_worker::process_due(&s).await;
+        crate::scheduled_send_worker::process_due(&s).await;
+        assert_eq!(server.sent_messages().len(), 1, "an uncertain row is never sent again on its own");
+        assert_eq!(stored(&s, &id).status, "uncertain");
+
+        // Retry is the user's resend: it goes out once more.
+        let retried = call(&s, "scheduled.send_now", json!({"id": id})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!(retried["status"], json!("uncertain"), "the same cut: {retried:?}");
+        assert_eq!(retried["attempts"], json!(1), "a retry starts a fresh count");
+        assert_eq!(server.sent_messages().len(), 2, "one more, on the user's word");
+    }
+
+    /// A row refused before DATA (550 at RCPT) proved nothing went out: it
+    /// takes the retry ladder as before, queued again after its wait.
+    #[tokio::test]
+    async fn a_scheduled_send_refused_before_data_is_queued_again() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let s = st();
+        let server = serve_acc1_with(&s, Scenario::new().smtp_refuse("refused-rcpt"));
+        let mut params = create_params("acc1");
+        params["email"]["to"] = json!("refused-rcpt@example.com");
+        params["fireAt"] = json!(now_ms() - 1_000);
+        let row = call(&s, "scheduled.create", params).await;
+        let id = row["id"].as_str().unwrap().to_string();
+
+        crate::scheduled_send_worker::process_due(&s).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let after = stored(&s, &id);
+        assert_eq!(after.status, "queued", "row: {after:?}");
+        assert_eq!(after.attempts, 1);
+        assert!(after.fire_at > now_ms(), "backed off: {after:?}");
+        assert!(server.sent_messages().is_empty());
+    }
+
+    /// A row a crash left `sending` may have gone out: at start it becomes
+    /// `uncertain`, and the worker never sends it.
+    #[tokio::test]
+    async fn a_scheduled_row_a_crash_left_sending_opens_uncertain_and_is_not_sent() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let s = st();
+        let server = serve_acc1(&s);
+        let mut params = create_params("acc1");
+        params["fireAt"] = json!(now_ms() - 1_000);
+        let row = call(&s, "scheduled.create", params).await;
+        let id = row["id"].as_str().unwrap().to_string();
+        mailvault_core::app_db::with(&s.app_dir, |c| scheduled::set_status(c, &id, "sending", "")).unwrap();
+
+        crate::scheduled_send_worker::mark_crash_left_uncertain(&s);
+        crate::scheduled_send_worker::process_due(&s).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!(stored(&s, &id).status, "uncertain");
+        assert!(server.sent_messages().is_empty(), "a crash-left send is never replayed");
+    }
+
     /// A locked keychain is the user's to fix, not the row's failure: the row
     /// stays queued, keeps its tries and its due time, so `keychain.retry`'s
     /// wake sends it the moment the user unlocks.
@@ -875,9 +956,13 @@ mod tests {
     /// `MAILVAULT_TEST_CREDENTIALS` file bypass. The caller holds
     /// `test_env_lock` and removes that var when done.
     fn serve_acc1(s: &Arc<DaemonState>) -> MockImap {
+        serve_acc1_with(s, Scenario::new())
+    }
+
+    fn serve_acc1_with(s: &Arc<DaemonState>, scenario: Scenario) -> MockImap {
         std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
-        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let server = MockImap::start(scenario.mailbox(mock_imap::state::Mailbox::new("Sent")));
 
         let creds_path = s.app_dir.join("credentials.json");
         let account_json = json!({
@@ -1248,7 +1333,7 @@ mod tests {
     /// Graph read the whole sendMail and the connection died before it
     /// answered: the message may well have gone. Requeueing the row (the
     /// ladder a dropped connection used to get) sends it a second time, so
-    /// the row ends instead, saying to check Sent.
+    /// the row goes `uncertain` instead, saying to check Sent.
     #[tokio::test]
     async fn a_graph_send_that_may_have_gone_out_is_never_sent_again() {
         let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
@@ -1260,7 +1345,7 @@ mod tests {
         let row = call(&s, "scheduled.send_now", json!({"id": id})).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
-        assert_eq!(row["status"], json!("failed"), "row: {row:?}");
+        assert_eq!(row["status"], json!("uncertain"), "row: {row:?}");
         assert_eq!(row["attempts"], json!(1));
         let last_error = row["lastError"].as_str().unwrap_or("");
         assert!(last_error.contains("may have gone out"), "{last_error}");
@@ -1289,7 +1374,7 @@ mod tests {
             assert!(matches!(s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1"), Err(crate::account_lifecycle::LifecycleError::Busy)), "Graph terminal attempt still owns A");
             pause.finish();
             let row = completed.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
-            assert_eq!(row["status"], json!("failed"));
+            assert_eq!(row["status"], json!("uncertain"));
             assert!(row["lastError"].as_str().unwrap_or("").contains("may have gone out"));
             let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap();
             let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
@@ -1327,7 +1412,7 @@ mod tests {
             assert!(matches!(s.account_lifecycle.try_close(lifecycle_lease("acct1"), "acct1"), Err(crate::account_lifecycle::LifecycleError::Busy)), "JMAP terminal attempt still owns A");
             pause.finish();
             let row = completed.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
-            assert_eq!(row["status"], json!("failed"), "JMAP terminal row: {row:?}");
+            assert_eq!(row["status"], json!("uncertain"), "JMAP may-have-sent row: {row:?}");
             assert!(row["lastError"].as_str().unwrap_or("").contains("may have gone out"), "{row:?}");
             let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acct1"), "acct1").unwrap();
             let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();

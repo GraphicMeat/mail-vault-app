@@ -21,7 +21,10 @@
 //!
 //! Errors the app shows are `E_COMPOSE_BUILD:` (the MIME could not be built)
 //! and `E_COMPOSE_STAGE:` (the vault would not take the copy); a failed send
-//! answers the transport's own words, as `smtp_send_email` does.
+//! answers the transport's own words, as `smtp_send_email` does. A send cut
+//! off after the server may have taken it is not an error: it answers
+//! `{success: false, mayHaveSent: true, error}` (`SendFailed::reply`), and
+//! a success carries `mayHaveSent: false`.
 use crate::custody as daemon_custody;
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::handlers::common::{blocking, opt_str_arg, str_arg, u32_arg, with_mailbox_write};
@@ -142,11 +145,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             after.own_copy = own_copy;
             let sent = match send_logged(&account, &email, staged, operation.clone()).await {
                 Ok(sent) => sent,
-                Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
+                // A send that may have gone out answers `mayHaveSent: true`
+                // (not an error): the outbox keeps it as uncertain and never
+                // resends it on its own. The staged copy stays as it is.
+                Err(failed) => return Some(failed.reply(id)),
             };
             // The message is out. Nothing below fails the call.
             let entry = after_send(state, &account, &email, &sent, after, original, operation).await;
-            RpcResponse::success(id, json!({"success": true, "messageId": sent.result.message_id, "entry": entry}))
+            RpcResponse::success(id, json!({"success": true, "mayHaveSent": false, "messageId": sent.result.message_id, "entry": entry}))
         }
 
         _ => return None,
@@ -1310,6 +1316,58 @@ mod tests {
         assert_eq!(flags_of(&s, uid), None, "the staged copy is gone once the server holds one");
         assert_eq!(row_of(&s, uid), None, "and so is its row");
         assert_eq!(server.state().find("Sent").unwrap().messages.len(), 1);
+    }
+
+    /// The connection is cut after DATA: the server took the message and the
+    /// reply never came. The send may have gone out, so compose.send answers
+    /// `mayHaveSent: true` (not an error the outbox would offer to retry by
+    /// itself), the staged copy stays as staged, and nothing is sent again.
+    #[tokio::test]
+    async fn a_send_cut_off_after_data_answers_may_have_sent_and_is_sent_once() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().smtp_drop_after_data("COMPOSE-CUT-AFTER-DATA").mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let s = st(true);
+        let mut stage = stage_params(account_json(&server));
+        stage["email"]["text"] = json!("COMPOSE-CUT-AFTER-DATA");
+        let staged = ok(&s, "compose.stage", stage).await;
+        let uid = staged["uid"].as_u64().unwrap() as u32;
+        let mut send = send_params(account_json(&server), &staged, json!({"sentMailbox": "Sent"}));
+        send["email"]["text"] = json!("COMPOSE-CUT-AFTER-DATA");
+
+        let reply = ok(&s, "compose.send", send).await;
+        assert_eq!(reply["success"], json!(false), "{reply}");
+        assert_eq!(reply["mayHaveSent"], json!(true), "{reply}");
+        assert!(reply["error"].as_str().is_some_and(|e| !e.is_empty()), "{reply}");
+        assert_eq!(server.sent_messages().len(), 1, "the server took it once");
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(server.sent_messages().len(), 1, "nothing resends it on its own");
+        assert_eq!(flags_of(&s, uid), Some(vec!["draft".to_string(), "seen".to_string()]), "the staged copy is left as staged");
+        assert!(server.state().find("Sent").unwrap().messages.is_empty(), "no Sent copy is filed for an uncertain send");
+    }
+
+    /// A refusal before DATA (550 at RCPT) sent nothing: it stays an error,
+    /// the one the outbox offers Retry for, and a success says
+    /// `mayHaveSent: false`.
+    #[tokio::test]
+    async fn a_send_refused_before_data_is_an_error_and_a_success_says_not_uncertain() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().smtp_refuse("refused-rcpt"));
+        let s = st(true);
+        let mut stage = stage_params(account_json(&server));
+        stage["email"]["to"] = json!("refused-rcpt@example.com");
+        let staged = ok(&s, "compose.stage", stage).await;
+        let mut send = send_params(account_json(&server), &staged, json!({}));
+        send["email"]["to"] = json!("refused-rcpt@example.com");
+        let resp = rpc(&s, "compose.send", send).await;
+        assert!(resp.result.is_none(), "{:?}", resp.result);
+        assert!(resp.error.expect("an error").message.contains("Recipient address rejected"));
+        assert!(server.sent_messages().is_empty());
+
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let sent = ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({}))).await;
+        assert_eq!(sent["success"], json!(true));
+        assert_eq!(sent["mayHaveSent"], json!(false));
+        assert_eq!(server.sent_messages().len(), 1);
     }
 
     /// `stage_params` and the matching `send_params` email under `subject`.

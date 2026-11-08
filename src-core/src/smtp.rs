@@ -3,7 +3,7 @@ use lettre::message::header::MessageId;
 use lettre::message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::{Credentials, Mechanism};
 use lettre::transport::smtp::client::{Tls, TlsParameters};
-use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+use lettre::{AsyncSmtpTransport, Message, Tokio1Executor};
 use serde::Deserialize;
 use std::time::Duration;
 use tracing::{info, warn};
@@ -1163,63 +1163,16 @@ fn test_outcome<E: std::fmt::Display>(
 }
 
 /// Send a pre-built MIME message via SMTP, or via Microsoft Graph for a Graph
-/// account (`send_via_graph`). Returns the server response line as
+/// account (`send_via_graph`), or JMAP. Returns the server response line as
 /// `message_id` (existing behavior preserved) and echoes the raw bytes so the
-/// caller can APPEND to Sent post-success.
+/// caller can APPEND to Sent post-success. [`send_built_phased`] with the
+/// failure's text only.
 pub async fn send_built(
     account: &ImapConfig,
     email: &OutgoingEmail,
     built: BuiltMime,
 ) -> Result<SendResult, String> {
-    if account.uses_graph() {
-        // The Bcc `build_mime` put on the envelope, which lettre left out of
-        // the bytes. A list that does not parse it dropped, and so does this.
-        let bcc = email.bcc.as_deref().and_then(|b| parse_address_list(b).ok()).unwrap_or_default();
-        return send_via_graph(account, built.raw_rfc2822, &bcc).await;
-    } else if account.uses_jmap() {
-        // Same Bcc as Graph's: JMAP also reads recipients off the headers.
-        let bcc = email.bcc.as_deref().and_then(|b| parse_address_list(b).ok()).unwrap_or_default();
-        let timeout = jmap_send_timeout(built.raw_rfc2822.len());
-        return send_via_jmap(account, built.raw_rfc2822, &bcc, timeout).await;
-    }
-    let smtp_host = account
-        .smtp_host
-        .as_deref()
-        .ok_or_else(|| "SMTP host not configured".to_string())?;
-    let smtp_port = account.smtp_port.unwrap_or(587);
-
-    let attachment_bytes: usize = email
-        .attachments
-        .as_ref()
-        .map(|v| v.iter().map(|a| a.content.len()).sum())
-        .unwrap_or(0);
-    let io_timeout = Duration::from_secs(60 + (attachment_bytes / 50_000) as u64).min(Duration::from_secs(600));
-
-    let transport = build_transport(account, io_timeout)?;
-
-    info!(
-        "[smtp] Sending via {}:{} (implicit_tls={}, oauth2={})",
-        smtp_host,
-        smtp_port,
-        use_implicit_tls(account.smtp_secure, smtp_port),
-        account.is_oauth2()
-    );
-
-    let BuiltMime { message, raw_rfc2822 } = built;
-
-    let conn = smtp_event(account, smtp_host, smtp_port, "send", raw_rfc2822.len() as u64);
-    let sent = transport.send(message).await;
-    settle(conn, &sent);
-    let response =
-        sent.map_err(|e| friendly_smtp_error(smtp_host, smtp_port, account.from_address(), &e.to_string()))?;
-
-    let message_id = response
-        .message()
-        .collect::<Vec<_>>()
-        .join("");
-
-    info!("Email sent via SMTP: {}", message_id);
-    Ok(SendResult { message_id, raw_rfc2822, server_saved_sent: false })
+    send_built_phased(account, email, built).await.map_err(|e| e.message)
 }
 
 /// Which side of the point of no return a send failed on.
@@ -1262,16 +1215,27 @@ impl PhasedSendError {
 /// AUTH, MAIL, RCPT, DATA, then the payload) so a failure before the payload
 /// is `NotSent`, and an I/O error or timeout during the payload or while
 /// waiting for its reply is `MayHaveSent`; a 4xx/5xx reply to the payload is
-/// a refusal (`NotSent`). Graph and JMAP go through `send_built`, and only
-/// their "may have gone out" text is `MayHaveSent`. Additive: `send_built`
-/// and every desktop caller are unchanged.
+/// a refusal (`NotSent`). Graph and JMAP send over HTTP, and only their
+/// "may have gone out" text is `MayHaveSent`. Every send, both apps, goes
+/// through this step loop; the `String` forms are wrappers.
 pub async fn send_built_phased(
     account: &ImapConfig,
     email: &OutgoingEmail,
     built: BuiltMime,
 ) -> Result<SendResult, PhasedSendError> {
     if account.uses_graph() || account.uses_jmap() {
-        return send_built(account, email, built).await.map_err(PhasedSendError::from_http);
+        // The Bcc `build_mime` put on the envelope, which lettre left out of
+        // the bytes. A list that does not parse it dropped, and so does this.
+        // JMAP also reads recipients off the headers.
+        let bcc = email.bcc.as_deref().and_then(|b| parse_address_list(b).ok()).unwrap_or_default();
+        let raw = built.raw_rfc2822;
+        let sent = if account.uses_graph() {
+            send_via_graph(account, raw, &bcc).await
+        } else {
+            let timeout = jmap_send_timeout(raw.len());
+            send_via_jmap(account, raw, &bcc, timeout).await
+        };
+        return sent.map_err(PhasedSendError::from_http);
     }
     let attachment_bytes: usize = email.attachments.as_ref().map(|v| v.iter().map(|a| a.content.len()).sum()).unwrap_or(0);
     let io_timeout = Duration::from_secs(60 + (attachment_bytes / 50_000) as u64).min(Duration::from_secs(600));
@@ -1499,21 +1463,7 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
 /// sending address, and To, Cc and Bcc read the way the build reads them, so
 /// a Cc or Bcc list the build dropped is dropped here too.
 pub async fn send_staged(account: &ImapConfig, email: &OutgoingEmail, raw: Vec<u8>) -> Result<SendResult, String> {
-    let lenient = |list: &Option<String>| list.as_deref().and_then(|l| parse_address_list(l).ok()).unwrap_or_default();
-    let bcc = lenient(&email.bcc);
-    if account.uses_graph() {
-        return send_via_graph(account, raw, &bcc).await;
-    } else if account.uses_jmap() {
-        let timeout = jmap_send_timeout(raw.len());
-        return send_via_jmap(account, raw, &bcc, timeout).await;
-    }
-    let from: lettre::Address = account.from_address().parse().map_err(|e| format!("Invalid from email: {}", e))?;
-    let to = parse_address_list(&email.to).map_err(|e| format!("Invalid to address: {}", e))?;
-    let rcpt: Vec<lettre::Address> = to.into_iter().chain(lenient(&email.cc)).chain(bcc).map(|mb| mb.email).collect();
-    if rcpt.is_empty() {
-        return Err("Invalid to address: no recipients".to_string());
-    }
-    send_raw_smtp(account, from, rcpt, raw).await
+    send_staged_phased(account, email, raw).await.map_err(|e| e.message)
 }
 
 /// The recipients a frozen `.eml` was addressed to, kept alongside it because
@@ -1532,97 +1482,14 @@ pub struct FrozenEnvelope {
 }
 
 /// Send bytes that were built and frozen at an earlier time (Scheduled Send)
-/// rather than just now.
-///
-/// `send_built`/`send_email` call `transport.send(message)`, and lettre's
-/// default `send()` re-derives both the envelope AND the raw bytes from the
-/// `lettre::Message` object at send time (`message.formatted()`,
-/// `message.envelope()`) — there is no "replay this `Message` verbatim" mode,
-/// and no constructor that parses a `Message` back out of raw `.eml` bytes.
-/// That makes `send_built` unusable for a message frozen to disk in an
-/// earlier process: the whole point of freezing is to replay the exact bytes,
-/// and a `Message` object does not survive a restart. `send_raw` goes
-/// straight to `AsyncTransport::send_raw(envelope, bytes)` instead, so the
-/// envelope has to travel with the frozen bytes (`FrozenEnvelope`, stored
-/// alongside them) rather than being read back off a `Message`. A Graph
-/// account sends the same bytes through `send_via_graph`, and a JMAP account
-/// through `send_via_jmap` as the envelope's From, the envelope's Bcc written
-/// into them either way.
+/// rather than just now, exactly as they are, on the envelope frozen with
+/// them (`FrozenEnvelope`: a `lettre::Message` does not survive a restart and
+/// cannot be parsed back out of `.eml` bytes). A Graph account sends the same
+/// bytes through `send_via_graph`, and a JMAP account through `send_via_jmap`
+/// as the envelope's From, the envelope's Bcc written into them either way.
+/// [`send_raw_phased`] with the failure's text only.
 pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc2822: Vec<u8>) -> Result<SendResult, String> {
-    let from: lettre::Address = envelope
-        .from
-        .parse()
-        .map_err(|e| format!("Invalid from address '{}': {}", envelope.from, e))?;
-    let parse_group = |group: &str| -> Result<Vec<Mailbox>, String> {
-        if group.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-        parse_address_list(group).map_err(|e| format!("Invalid recipient address: {}", e))
-    };
-    let bcc = parse_group(&envelope.bcc)?;
-    let mut to: Vec<lettre::Address> = Vec::new();
-    for group in [&envelope.to, &envelope.cc] {
-        to.extend(parse_group(group)?.into_iter().map(|mb| mb.email));
-    }
-    to.extend(bcc.iter().map(|mb| mb.email.clone()));
-    if to.is_empty() {
-        return Err("Invalid to address: no recipients".to_string());
-    }
-    if account.uses_graph() {
-        // The frozen bytes were built without the Bcc header; it lives in the
-        // envelope, and Graph only reads headers. The identity is the frozen
-        // From's: the stored account has no send-as override (as for JMAP).
-        let mut account = account.clone();
-        account.from_email = Some(from.to_string());
-        return send_via_graph(&account, raw_rfc2822, &bcc).await;
-    } else if account.uses_jmap() {
-        // The identity is the frozen From's. Scheduled Send's account comes
-        // from the keychain record, without the send-as override compose
-        // adds per send, so `from_address()` alone would be the login.
-        let mut account = account.clone();
-        account.from_email = Some(from.to_string());
-        let timeout = jmap_send_timeout(raw_rfc2822.len());
-        return send_via_jmap(&account, raw_rfc2822, &bcc, timeout).await;
-    }
-    send_raw_smtp(account, from, to, raw_rfc2822).await
-}
-
-/// SMTP submission of bytes that are already final, on the envelope given.
-async fn send_raw_smtp(
-    account: &ImapConfig,
-    from: lettre::Address,
-    to: Vec<lettre::Address>,
-    raw_rfc2822: Vec<u8>,
-) -> Result<SendResult, String> {
-    let smtp_host = account
-        .smtp_host
-        .as_deref()
-        .ok_or_else(|| "SMTP host not configured".to_string())?;
-    let smtp_port = account.smtp_port.unwrap_or(587);
-    let io_timeout = Duration::from_secs(60 + (raw_rfc2822.len() / 50_000) as u64).min(Duration::from_secs(600));
-    let transport = build_transport(account, io_timeout)?;
-
-    let lettre_envelope =
-        lettre::address::Envelope::new(Some(from), to).map_err(|e| format!("Failed to build envelope: {}", e))?;
-
-    info!(
-        "[smtp] Sending a frozen message ({} bytes) via {}:{} (implicit_tls={}, oauth2={})",
-        raw_rfc2822.len(),
-        smtp_host,
-        smtp_port,
-        use_implicit_tls(account.smtp_secure, smtp_port),
-        account.is_oauth2()
-    );
-
-    let conn = smtp_event(account, smtp_host, smtp_port, "send", raw_rfc2822.len() as u64);
-    let sent = transport.send_raw(&lettre_envelope, &raw_rfc2822).await;
-    settle(conn, &sent);
-    let response =
-        sent.map_err(|e| friendly_smtp_error(smtp_host, smtp_port, account.from_address(), &e.to_string()))?;
-
-    let message_id = response.message().collect::<Vec<_>>().join("");
-    info!("Frozen email sent via SMTP: {}", message_id);
-    Ok(SendResult { message_id, raw_rfc2822, server_saved_sent: false })
+    send_raw_phased(account, envelope, raw_rfc2822).await.map_err(|e| e.message)
 }
 
 #[cfg(test)]

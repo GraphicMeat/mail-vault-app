@@ -66,6 +66,20 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Scheduled folder rows', () => {
+  it('shows an uncertain row as May not have sent, with Retry and Discard and no edit', async () => {
+    state.rows = [row('u1', 'uncertain', { lastError: 'SMTP connection failed: closed' })];
+    render(<ScheduledFolderModal onClose={vi.fn()} />);
+
+    expect(within(screen.getByTestId('scheduled-uncertain-u1')).getByText('outbox.mayNotHaveSent')).toBeTruthy();
+    expect(screen.queryByText(/SMTP connection failed/)).toBeNull();
+    expect(screen.queryByTestId('scheduled-row-open-u1')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('scheduled-retry-u1'));
+    await waitFor(() => expect(sendNow).toHaveBeenCalledWith('u1'));
+    fireEvent.click(screen.getByTestId('scheduled-discard-u1'));
+    await waitFor(() => expect(cancel).toHaveBeenCalledWith('u1'));
+  });
+
   it('opens a queued row for editing from the vault copy, and leaves the schedule in place', async () => {
     state.rows = [row('q1', 'queued')];
     getLocalEmailFull.mockResolvedValue({ subject: 'Later' });

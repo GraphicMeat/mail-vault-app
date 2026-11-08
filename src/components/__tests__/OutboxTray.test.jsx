@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 // The outbox bubble of a failed send. A send that may already have gone out
-// (a Graph or JMAP submission that got no answer, the daemon's
-// MAY_HAVE_GONE_OUT marker) offers "Check Sent", never Retry: a retry could
-// send it twice. A JMAP refusal reads in the app's words.
+// (the daemon's `mayHaveSent`: an SMTP connection cut after DATA, or a Graph or
+// JMAP submission that got no answer) is `uncertain`: it says "May not have
+// sent" and offers Check Sent, Retry (the user's own resend) and Discard
+// (drop the bubble, no draft reopened). It is never resent on its own. A JMAP
+// refusal reads in the app's words.
 import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -11,8 +13,8 @@ import { useMailStore } from '../../stores/mailStore';
 import { t } from '../../i18n';
 
 const activateAccount = vi.fn();
-const item = (error) => ({
-  id: 1, status: 'error', error, startedAt: Date.now(), sendFn: vi.fn(),
+const item = (error, status = 'error') => ({
+  id: 1, status, error, startedAt: Date.now(), sendFn: vi.fn(),
   composeState: { mode: 'new', initialData: { subject: 'Quarterly', to: 'them@example.test', _accountId: 'jm' } },
 });
 
@@ -27,13 +29,38 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); useMailStore.setState({ outboxItems: [] }); });
 
-it('offers Check Sent instead of Retry when the message may have gone out', async () => {
-  useMailStore.setState({ outboxItems: [item('The mail server did not confirm the send in time (timed out). Check Sent before trying again: the message may have gone out.')] });
-  render(<OutboxTray onRestoreDraft={vi.fn()} />);
+it('shows an uncertain send as May not have sent, with Check Sent, Retry and Discard', async () => {
+  const restore = vi.fn();
+  useMailStore.setState({ outboxItems: [item('Connection closed after DATA', 'uncertain')] });
+  render(<OutboxTray onRestoreDraft={restore} />);
 
-  expect(screen.queryByRole('button', { name: new RegExp(t('common.retry')) })).toBeNull();
+  expect(screen.getByTestId('outbox-bubble-uncertain')).toBeTruthy();
+  expect(screen.getByText(t('outbox.mayNotHaveSent'))).toBeTruthy();
+  expect(screen.queryByText(/Connection closed after DATA/)).toBeNull();
+  expect(screen.queryByRole('button', { name: new RegExp(t('outbox.edit')) })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: new RegExp(t('outbox.checkSent')) }));
   await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('jm', 'Sent Items'));
+
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(t('common.discard')) }));
+  expect(useMailStore.getState().outboxItems).toEqual([]);
+  expect(restore).not.toHaveBeenCalled();
+});
+
+it('resends an uncertain send only when the user taps Retry', async () => {
+  const sendFn = vi.fn().mockResolvedValue(undefined);
+  useMailStore.setState({ outboxItems: [{ ...item('cut off', 'uncertain'), sendFn }] });
+  render(<OutboxTray onRestoreDraft={vi.fn()} />);
+  expect(sendFn).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(t('common.retry')) }));
+  await waitFor(() => expect(sendFn).toHaveBeenCalledTimes(1));
+});
+
+it('marks a send the daemon says may have gone out uncertain, not error', async () => {
+  const sendFn = vi.fn().mockRejectedValue(Object.assign(new Error('cut off'), { mayHaveSent: true }));
+  useMailStore.setState({ outboxItems: [{ ...item(null, 'sending'), sendFn }] });
+  await useMailStore.getState()._runOutbox(1);
+  expect(useMailStore.getState().outboxItems[0].status).toBe('uncertain');
+  expect(sendFn).toHaveBeenCalledTimes(1);
 });
 
 it('keeps Retry for a send that never left', () => {

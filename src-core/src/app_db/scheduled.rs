@@ -15,10 +15,9 @@
 use super::db::in_txn;
 use rusqlite::{params, Connection, OptionalExtension};
 
-/// Retries a row gets — including a `sending` row a crash left behind — before
-/// it is unrecoverable. Shared by "this failed 3 times in a row" and "this
-/// crashed mid-send 3 times in a row"; both are the same question, "have we
-/// tried enough that resending blind is worse than stopping".
+/// Tries a row gets for failures that proved nothing went out before it is
+/// `failed`. A `sending` row a crash left behind is never tried again on its
+/// own: it may have gone out, so `on_open` makes it `uncertain`.
 pub const MAX_ATTEMPTS: i64 = 3;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -36,7 +35,10 @@ pub struct ScheduledSend {
     pub local_time: String,
     pub tz: String,
     pub fire_at: i64,
-    /// "queued" | "sending" | "sent" | "failed" | "cancelled".
+    /// "queued" | "sending" | "sent" | "failed" | "uncertain" | "cancelled"
+    /// (core `send::outbox::OutboxState` plus `cancelled`). `uncertain` may
+    /// have gone out: only the user's Retry (`scheduled.send_now`) sends it
+    /// again.
     pub status: String,
     pub attempts: i64,
     pub last_error: String,
@@ -145,13 +147,13 @@ pub fn update_schedule(conn: &Connection, id: &str, local_time: &str, tz: &str, 
     .map_err(|e| e.to_string())
 }
 
-/// A fresh `attempts` count for a `failed` row the user retries, for the
+/// A fresh `attempts` count for a `failed` or `uncertain` row the user retries, for the
 /// same reason `update_schedule` gives one to a rescheduled row: a row that
 /// failed by running out of tries would otherwise hit the ceiling on its very
 /// next attempt and fail again unsent. Any other status is left alone.
 pub fn reset_failed_attempts(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute(
-        "UPDATE scheduled_sends SET attempts = 0, updated_at = ?2 WHERE id = ?1 AND status = 'failed'",
+        "UPDATE scheduled_sends SET attempts = 0, updated_at = ?2 WHERE id = ?1 AND status IN ('failed', 'uncertain')",
         params![id, now_ms()],
     )
     .map(|_| ())
@@ -193,8 +195,8 @@ pub fn set_status(conn: &Connection, id: &str, status: &str, last_error: &str) -
 }
 
 /// `+1` on `attempts`, returning the new count. The worker calls this before
-/// every send it actually makes — including a replay of a `sending` row a
-/// crash left behind — so the count always reflects tries, not successes.
+/// every send it actually makes, so the count always reflects tries, not
+/// successes.
 pub fn bump_attempt(conn: &Connection, id: &str) -> Result<i64, String> {
     in_txn(conn, || {
         conn.execute(
@@ -207,9 +209,7 @@ pub fn bump_attempt(conn: &Connection, id: &str) -> Result<i64, String> {
     })
 }
 
-/// Idempotency guard for a row about to be sent — including one that comes
-/// back `due()` because a `sending` row was left behind by a crash and may
-/// already have reached the server. Bumps `attempts` unconditionally (never
+/// Guard for a row about to be sent. Bumps `attempts` unconditionally (never
 /// silently resend without a trace), then refuses to hand the caller a `Send`
 /// once that count is past `MAX_ATTEMPTS`: it marks the row `failed` itself,
 /// with a message that says delivery is uncertain rather than claiming it
@@ -275,15 +275,15 @@ fn bare_address(part: &str) -> &str {
     }
 }
 
-/// Rows worth firing right now: `queued` and due, plus `sending` (a crash
-/// recovery case — see `attempt_before_send`). Never `sent`, `failed` or
-/// `cancelled`. Oldest `fire_at` first, so a catch-up pass replays history in
-/// the order the user asked for it.
+/// Rows worth firing right now: `queued` and due. Never `sending` (a crash
+/// left it there and it may have gone out: `on_open` makes it `uncertain`),
+/// `sent`, `failed`, `uncertain` or `cancelled`. Oldest `fire_at` first, so a
+/// catch-up pass replays history in the order the user asked for it.
 pub fn due(conn: &Connection, now_ms: i64) -> Result<Vec<ScheduledSend>, String> {
     let mut stmt = conn
         .prepare(&format!(
             "SELECT {COLUMNS} FROM scheduled_sends
-             WHERE status IN ('queued', 'sending') AND fire_at <= ?1
+             WHERE status = 'queued' AND fire_at <= ?1
              ORDER BY fire_at ASC"
         ))
         .map_err(|e| e.to_string())?;
@@ -291,11 +291,23 @@ pub fn due(conn: &Connection, now_ms: i64) -> Result<Vec<ScheduledSend>, String>
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+/// At open, before the worker or any RPC runs: a row a crash left `sending`
+/// may have gone out, so it becomes `uncertain` (core
+/// `send::outbox::on_open`) and is never sent again on its own. Answers how
+/// many rows it moved.
+pub fn on_open(conn: &Connection) -> Result<usize, String> {
+    conn.execute(
+        "UPDATE scheduled_sends SET status = 'uncertain', updated_at = ?1 WHERE status = 'sending'",
+        params![now_ms()],
+    )
+    .map_err(|e| e.to_string())
+}
+
 /// The earliest `fire_at` the worker still has to wake up for, across
-/// `queued` and `sending` rows — its sleep target between catch-up passes.
+/// `queued` rows: its sleep target between catch-up passes.
 pub fn next_fire_at(conn: &Connection) -> Result<Option<i64>, String> {
     conn.query_row(
-        "SELECT MIN(fire_at) FROM scheduled_sends WHERE status IN ('queued', 'sending')",
+        "SELECT MIN(fire_at) FROM scheduled_sends WHERE status = 'queued'",
         [],
         |r| r.get(0),
     )
@@ -337,14 +349,34 @@ mod tests {
         assert_eq!(due(&c, 2000).unwrap().len(), 1, "fire_at <= now must include the boundary");
     }
 
+    /// A crash mid-send may have delivered the message: the row is never
+    /// replayed, it opens `uncertain` and stays out of `due` until the user's
+    /// Retry.
     #[test]
-    fn a_sending_row_left_by_a_crash_comes_back_as_due() {
+    fn a_sending_row_left_by_a_crash_opens_uncertain_and_is_never_due() {
         let c = conn();
         seed(&c, "a", 1000);
+        seed(&c, "b", 1000);
         set_status(&c, "a", "sending", "").unwrap();
-        let found = due(&c, 2000).unwrap();
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].status, "sending");
+        assert!(due(&c, 2000).unwrap().iter().all(|r| r.id != "a"), "a sending row is not replayed");
+        assert_eq!(next_fire_at(&c).unwrap(), Some(1000));
+        assert_eq!(on_open(&c).unwrap(), 1);
+        assert_eq!(get(&c, "a").unwrap().unwrap().status, "uncertain");
+        assert_eq!(get(&c, "b").unwrap().unwrap().status, "queued", "a queued row is left alone");
+        assert_eq!(due(&c, 2000).unwrap().iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), vec!["b"]);
+        assert_eq!(on_open(&c).unwrap(), 0);
+    }
+
+    #[test]
+    fn an_uncertain_row_gets_fresh_tries_only_from_a_retry() {
+        let c = conn();
+        seed(&c, "a", 1000);
+        set_status(&c, "a", "uncertain", "cut off").unwrap();
+        bump_attempt(&c, "a").unwrap();
+        assert!(due(&c, 2000).unwrap().is_empty());
+        assert_eq!(next_fire_at(&c).unwrap(), None);
+        reset_failed_attempts(&c, "a").unwrap();
+        assert_eq!(get(&c, "a").unwrap().unwrap().attempts, 0);
     }
 
     #[test]
@@ -369,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn next_fire_at_is_the_minimum_over_queued_and_sending_only() {
+    fn next_fire_at_is_the_minimum_over_queued_rows_only() {
         let c = conn();
         assert_eq!(next_fire_at(&c).unwrap(), None);
         seed(&c, "a", 5000);
@@ -377,6 +409,8 @@ mod tests {
         assert_eq!(next_fire_at(&c).unwrap(), Some(1000));
         set_status(&c, "b", "sent", "").unwrap();
         assert_eq!(next_fire_at(&c).unwrap(), Some(5000), "a sent row must drop out");
+        set_status(&c, "a", "sending", "").unwrap();
+        assert_eq!(next_fire_at(&c).unwrap(), None, "a row being sent is not a wake target");
     }
 
     #[test]
@@ -401,21 +435,6 @@ mod tests {
         let row = get(&c, "a").unwrap().unwrap();
         assert_eq!(row.status, "failed");
         assert!(row.last_error.to_lowercase().contains("uncertain"), "{}", row.last_error);
-    }
-
-    #[test]
-    fn a_crash_recovered_sending_row_is_also_subject_to_the_ceiling() {
-        // The exact idempotency scenario the plan calls out: a `sending` row
-        // may already have been delivered by the crashed attempt. Silently
-        // resending it forever is worse than stopping and saying so.
-        let c = conn();
-        seed(&c, "a", 1000);
-        set_status(&c, "a", "sending", "").unwrap();
-        for _ in 1..=MAX_ATTEMPTS {
-            attempt_before_send(&c, "a").unwrap();
-        }
-        assert_eq!(attempt_before_send(&c, "a").unwrap(), AttemptOutcome::CeilingExceeded);
-        assert_eq!(get(&c, "a").unwrap().unwrap().status, "failed");
     }
 
     #[test]

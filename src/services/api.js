@@ -415,15 +415,23 @@ export async function stageOutgoing(account, email, { accountId, mailbox, snippe
 }
 
 // `compose.send` sends the staged message under its Message-ID; past that
-// point it never fails. Answers { success, messageId, entry } (the sent row).
+// point it never fails. Answers { success, mayHaveSent, messageId, entry }
+// (the sent row). A send cut off after the server may have taken it answers
+// { success: false, mayHaveSent: true, error }: thrown here with
+// `mayHaveSent`, so the outbox shows it as uncertain and never resends it on
+// its own.
 export async function sendStaged(account, email, {
   accountId, mailbox, uid, messageId, sentMailbox, snippet, hasAttachments, remindDays, ownAddresses, cancelScheduledId,
 }) {
   if (IS_TAURI) {
-    return tauriInvoke('compose.send', {
+    const result = await tauriInvoke('compose.send', {
       accountId, account, email, mailbox, uid, messageId, sentMailbox, snippet, hasAttachments,
       remindDays, ownAddresses, cancelScheduledId,
     });
+    if (result?.mayHaveSent === true) {
+      throw Object.assign(new Error(result.error || 'The message may have gone out'), { mayHaveSent: true });
+    }
+    return result;
   }
   throw new Error('sendStaged: not supported outside Tauri');
 }

@@ -100,6 +100,24 @@ function BackgroundHelperCard({ onOpenSettings }) {
 function RowActions({ row, onReschedule, onCancel, onSendNow }) {
   const t = useT();
   const busy = row.status === 'sending';
+  // `uncertain`: the send was cut off after the server may have taken it.
+  // Never sent again on its own; Retry sends it, Discard drops the row.
+  if (row.status === 'uncertain') {
+    return (
+      <div className="flex items-center gap-1 shrink-0">
+        <Button variant="ghost" size="xs" data-testid={`scheduled-retry-${row.id}`}
+          title={t('outbox.retryUncertainTitle')} onClick={() => onSendNow(row)}>
+          <RotateCcw size={14} />
+          {t('common.retry')}
+        </Button>
+        <Button variant="ghost" size="xs" data-testid={`scheduled-discard-${row.id}`}
+          title={t('outbox.discardUncertainTitle')} onClick={() => onCancel(row)}>
+          <X size={14} />
+          {t('common.discard')}
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-1 shrink-0">
       {row.status === 'queued' && (
@@ -152,7 +170,7 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
 
   // A message that went out belongs in Sent, not in a list of things still
   // waiting to happen -- and a cancelled one never happened at all. What stays
-  // is what still needs the user: queued, sending, and failed.
+  // is what still needs the user: queued, sending, failed, and uncertain.
   const visible = rows.filter(r => r.status !== 'cancelled' && r.status !== 'sent');
 
   const startReschedule = (row) => {
@@ -240,6 +258,15 @@ export function ScheduledFolderModal({ onClose, onOpenSettings }) {
                   <div className="flex items-center gap-1 text-xs text-mail-danger">
                     <AlertTriangle size={12} />
                     {row.lastError || t('scheduled.row.failedGeneric')}
+                  </div>
+                )}
+                {row.status === 'uncertain' && (
+                  <div data-testid={`scheduled-uncertain-${row.id}`} className="flex flex-col text-xs text-mail-danger">
+                    <span className="flex items-center gap-1 font-medium">
+                      <AlertTriangle size={12} />
+                      {t('outbox.mayNotHaveSent')}
+                    </span>
+                    <span>{t('outbox.mayNotHaveSentDetail')}</span>
                   </div>
                 )}
                 {row.status === 'sending' && (

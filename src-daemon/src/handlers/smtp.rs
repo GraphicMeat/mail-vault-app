@@ -24,6 +24,7 @@ use crate::imap::{self, ImapConfig};
 use crate::account_lifecycle::OperationPermit;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
+use mailvault_core::send::classify::{classify_failure, SendVerdict};
 use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp;
 use serde_json::{json, Value};
@@ -189,23 +190,59 @@ pub(crate) struct Sent {
     pub message_id_header: Option<String>,
 }
 
-/// `smtp::send_email` (SMTP, Graph or JMAP, by account) with the `[send:*]`
-/// log lines every send writes, or `smtp::send_staged` when the caller holds
-/// the message's bytes already. `smtp_send_email` and `compose.send` both
-/// come through here, so the log reads the same for either.
-pub(crate) async fn send_logged(account: &ImapConfig, email: &smtp::OutgoingEmail, staged: Option<Vec<u8>>, _operation: OperationPermit) -> Result<Sent, String> {
+/// A send that did not go through: the transport's own words, and what they
+/// mean for the message (core `send::classify`). `MayHaveSent` means the
+/// connection broke after the server may have taken it: never sent again
+/// on its own.
+#[derive(Debug)]
+pub(crate) struct SendFailed {
+    pub message: String,
+    pub verdict: SendVerdict,
+}
+
+impl SendFailed {
+    /// The reply for a failed send RPC. One that may have gone out is not an
+    /// RPC error: it answers `{success: false, mayHaveSent: true, error}`, so
+    /// the app keeps it as uncertain and never resends it on its own (the
+    /// shell passes only an error's message on). Anything else is the error
+    /// it always was, the transport's own words.
+    pub(crate) fn reply(self, id: Value) -> RpcResponse {
+        if self.verdict.is_uncertain() {
+            RpcResponse::success(id, json!({"success": false, "mayHaveSent": true, "error": self.message}))
+        } else {
+            RpcResponse::error(id, ipc::INTERNAL_ERROR, self.message)
+        }
+    }
+}
+
+/// Build and send (SMTP, Graph or JMAP, by account) with the `[send:*]` log
+/// lines every send writes, or send the bytes the caller holds already
+/// (`staged`). Both go through core's phased send, so a connection cut after
+/// the server may have taken the message is told apart from one that sent
+/// nothing. `smtp_send_email` and `compose.send` both come through here, so
+/// the log reads the same for either.
+pub(crate) async fn send_logged(account: &ImapConfig, email: &smtp::OutgoingEmail, staged: Option<Vec<u8>>, _operation: OperationPermit) -> Result<Sent, SendFailed> {
     let account_id_for_log = account.email.clone();
     info!("[send:smtp_start] account={} staged={}", account_id_for_log, staged.is_some());
 
     let sent = match staged {
-        Some(raw) => smtp::send_staged(account, email, raw).await,
-        None => smtp::send_email(account, email).await,
+        Some(raw) => smtp::send_staged_phased(account, email, raw).await,
+        None => match smtp::build_mime(account, email) {
+            Ok(built) => smtp::send_built_phased(account, email, built).await,
+            Err(message) => Err(smtp::PhasedSendError { phase: smtp::SendPhase::NotSent, permanent: false, message }),
+        },
     };
     let result = match sent {
         Ok(r) => r,
         Err(e) => {
-            tracing::error!("[send:smtp_fail] account={} error={}", account_id_for_log, e);
-            return Err(e);
+            tracing::error!("[send:smtp_fail] account={} error={}", account_id_for_log, e.message);
+            // `permanent` is not read: on desktop the words decide what is
+            // final, as they always did.
+            let verdict = classify_failure(e.phase, false, &e.message);
+            if verdict.is_uncertain() {
+                tracing::warn!("[send:may_have_sent] account={} the server may have the message; not sent again on its own", account_id_for_log);
+            }
+            return Err(SendFailed { message: e.message, verdict });
         }
     };
 
@@ -490,11 +527,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             let sent = match send_logged(&account, &email, None, operation.clone()).await {
                 Ok(sent) => sent,
-                Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
+                Err(failed) => return Some(failed.reply(id)),
             };
             let message_id_for_response = sent.result.message_id.clone();
             report_sent_copy(state, &account, sent_mailbox, &sent, operation.clone(), json!({}), |_| async {}).await;
-            RpcResponse::success(id, json!({"success": true, "messageId": message_id_for_response}))
+            RpcResponse::success(id, json!({"success": true, "mayHaveSent": false, "messageId": message_id_for_response}))
         }
 
         _ => return None,
