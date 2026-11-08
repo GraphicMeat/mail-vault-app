@@ -6,6 +6,8 @@ describe('nativeDrop', () => {
   it('guesses the content type from the extension', () => {
     expect(mimeFromName('Screenshot 2026-09-03 at 12.04.41.png')).toBe('image/png');
     expect(mimeFromName('notes.PDF')).toBe('application/pdf');
+    // The desktop drop always typed an SVG as an image (placed inline on an editor drop).
+    expect(mimeFromName('diagram.svg')).toBe('image/svg+xml');
     expect(mimeFromName('Makefile')).toBe('application/octet-stream');
     expect(mimeFromName('.hidden')).toBe('application/octet-stream');
   });

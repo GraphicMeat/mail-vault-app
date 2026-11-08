@@ -58,9 +58,17 @@ it('resends an uncertain send only when the user taps Retry', async () => {
 it('marks a send the daemon says may have gone out uncertain, not error', async () => {
   const sendFn = vi.fn().mockRejectedValue(Object.assign(new Error('cut off'), { mayHaveSent: true }));
   useMailStore.setState({ outboxItems: [{ ...item(null, 'sending'), sendFn }] });
-  await useMailStore.getState()._runOutbox(1);
-  expect(useMailStore.getState().outboxItems[0].status).toBe('uncertain');
-  expect(sendFn).toHaveBeenCalledTimes(1);
+  vi.useFakeTimers();
+  try {
+    await useMailStore.getState()._runOutbox(1);
+    expect(useMailStore.getState().outboxItems[0].status).toBe('uncertain');
+    // The outbox is where a resend would come from: it never sends again on its own.
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+    expect(sendFn).toHaveBeenCalledTimes(1);
+    expect(useMailStore.getState().outboxItems[0].status).toBe('uncertain');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('keeps Retry for a send that never left', () => {

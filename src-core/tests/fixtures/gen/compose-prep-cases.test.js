@@ -12,7 +12,7 @@ import { buildQuoteBlocks } from '../../../../src/utils/replyQuote';
 import { textToHtml, htmlToText } from '../../../../src/components/RichTextEditor';
 import { replyWireHtml, splitWireHtml } from '../../../../src/utils/quoteWire';
 import { composeIdentities, resolveInitialComposeIdentity } from '../../../../src/utils/sendAsSuggestions';
-import { invalidRecipients } from '../../../../src/utils/recipientTokens';
+import { invalidRecipients } from '../../../../src/shared/recipientTokens';
 import { missingAttachment } from '../../../../src/utils/missingAttachment';
 import { parseMailto } from '../../../../src/utils/mailto';
 // routeSend left src/utils/sendPlan.js for a demo-only copy; same code.
@@ -22,7 +22,7 @@ import { hasPremiumAccess, useSettingsStore } from '../../../../src/stores/setti
 const copy = value => JSON.parse(JSON.stringify(value));
 const accounts = [{ id: 'one', email: 'John.Doe+login@gmail.com' }, { id: 'two', email: 'other@example.test' }];
 const settings = { sendAsAddresses: { one: 'default@example.test' }, aliases: { one: [{ address: 'alias@example.test' }], two: [{ address: 'second@example.test' }] } };
-const sourceFiles = ['src/utils/emailParser.js', 'src/utils/ownAddresses.js', 'src/utils/emailIdentity.js', 'src/utils/replyQuote.js', 'src/utils/quoteWire.js', 'src/components/RichTextEditor.jsx', 'src/utils/sendAsSuggestions.js', 'src/utils/recipientTokens.js', 'src/utils/missingAttachment.js', 'src/utils/mailto.js', 'src/utils/sendPlan.js', 'src/utils/scheduledTime.js', 'src/stores/settingsStore.js', 'src/components/ComposeModal.jsx'];
+const sourceFiles = ['src/utils/emailParser.js', 'src/utils/ownAddresses.js', 'src/utils/emailIdentity.js', 'src/utils/replyQuote.js', 'src/utils/quoteWire.js', 'src/components/RichTextEditor.jsx', 'src/utils/sendAsSuggestions.js', 'src/shared/recipientTokens.js', 'src/utils/missingAttachment.js', 'src/utils/mailto.js', 'src/utils/sendPlan.js', 'src/utils/scheduledTime.js', 'src/stores/settingsStore.js', 'src/components/ComposeModal.jsx'];
 const sha = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 it('captures real JS compose preparation and scheduling behavior', () => {
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-25T00:00:00.000Z'));

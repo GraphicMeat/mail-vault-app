@@ -5,6 +5,14 @@ import { zonedTimeToEpoch, resolveSuggestedTz } from '../utils/scheduledTime';
 // Rows from `scheduled.*` (src-daemon/src/handlers/scheduled.rs). Modeled on
 // tagStore.js: one flat list, refetched on mount, patched in place from the
 // `scheduled-send` daemon event and from this store's own RPC replies.
+/// Rows still waiting on the worker or on the user: `queued`, `failed`, and
+/// `uncertain` (may have gone out; only the user's Retry or Discard ends it).
+/// The Sidebar's Scheduled badge.
+const PENDING = new Set(['queued', 'failed', 'uncertain']);
+export function scheduledPendingCount(rows) {
+  return (rows || []).filter(r => PENDING.has(r.status)).length;
+}
+
 export const useScheduledStore = create((set, get) => ({
   rows: [],
 

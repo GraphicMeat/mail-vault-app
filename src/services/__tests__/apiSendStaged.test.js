@@ -8,7 +8,7 @@ vi.mock('../transport', () => ({ send: (...a) => mockSend(...a) }));
 
 // api.js reads `window.__TAURI__` once, at import.
 globalThis.window = { addEventListener: () => {}, removeEventListener: () => {}, ...(globalThis.window || {}), __TAURI__: {} };
-const { sendStaged } = await import('../api.js');
+const { sendStaged, sendEmail } = await import('../api.js');
 
 const params = { accountId: 'a1', mailbox: 'Sent', uid: 3, messageId: '<m@x>' };
 
@@ -34,5 +34,43 @@ describe('sendStaged', () => {
     const err = await sendStaged({}, {}, params).catch(e => e);
     expect(err.message).toBe('Recipient address rejected');
     expect(err.mayHaveSent).toBeUndefined();
+  });
+
+  // The request may have reached the daemon before the connection died (a
+  // crash, a force quit, an update mid-send): the server may have the bytes.
+  // Never a plain error the outbox would offer to retry as unsent.
+  it('reads a daemon lost mid-send as may-have-sent', async () => {
+    mockSend.mockRejectedValue(Object.assign(new Error('The background helper is not running'), { code: 'DAEMON_UNAVAILABLE' }));
+    const err = await sendStaged({}, {}, params).catch(e => e);
+    expect(err.mayHaveSent).toBe(true);
+    expect(err.message).toBe('The background helper is not running');
+  });
+
+  it('leaves an outdated daemon a plain error: the send never ran', async () => {
+    mockSend.mockRejectedValue(Object.assign(new Error('outdated'), { code: 'DAEMON_OUTDATED' }));
+    const err = await sendStaged({}, {}, params).catch(e => e);
+    expect(err.mayHaveSent).toBeUndefined();
+  });
+});
+
+describe('sendEmail', () => {
+  it('throws a may-have-sent reply instead of answering it as accepted', async () => {
+    mockSend.mockResolvedValue({ success: false, mayHaveSent: true, error: 'SMTP connection failed: closed' });
+    const err = await sendEmail({}, {}, null).catch(e => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.mayHaveSent).toBe(true);
+    expect(err.message).toBe('SMTP connection failed: closed');
+  });
+
+  it('returns a success as it came', async () => {
+    const reply = { success: true, mayHaveSent: false, messageId: '250 ok' };
+    mockSend.mockResolvedValue(reply);
+    await expect(sendEmail({}, {}, null)).resolves.toEqual(reply);
+  });
+
+  it('reads a daemon lost mid-send as may-have-sent', async () => {
+    mockSend.mockRejectedValue(Object.assign(new Error('gone'), { code: 'DAEMON_UNAVAILABLE' }));
+    const err = await sendEmail({}, {}, null).catch(e => e);
+    expect(err.mayHaveSent).toBe(true);
   });
 });

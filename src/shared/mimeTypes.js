@@ -11,6 +11,7 @@ export const MIME_TABLE = [
   ['jpeg', 'image/jpeg'],
   ['gif', 'image/gif'],
   ['webp', 'image/webp'],
+  ['svg', 'image/svg+xml'],
   ['heic', 'image/heic'],
   ['heif', 'image/heif'],
   ['txt', 'text/plain'],

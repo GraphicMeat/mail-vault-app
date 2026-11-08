@@ -27,7 +27,7 @@ import { t as tr, useT } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
 import { SidebarViews } from './SidebarViews';
 import { useViewStore } from '../stores/viewStore';
-import { useScheduledStore } from '../stores/scheduledStore';
+import { useScheduledStore, scheduledPendingCount } from '../stores/scheduledStore';
 import { ScheduledFolderModal } from './scheduled/ScheduledFolderModal';
 import { FolderContextMenu } from './FolderContextMenu';
 import { FolderNameDialog } from './FolderNameDialog';
@@ -592,9 +592,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // "keep running" card, Billing from its upgrade prompt); the folder closes
   // first so Settings is what is left on screen.
   const openSettingsFromScheduled = (tab) => { setShowScheduled(false); onOpenSettings?.(tab); };
-  const scheduledPendingCount = useScheduledStore(
-    s => s.rows.filter(r => r.status === 'queued' || r.status === 'failed').length
-  );
+  const scheduledPending = useScheduledStore(s => scheduledPendingCount(s.rows));
 
   // Single click resumes the folder you last read in that account; double click
   // is the shortcut straight to its Inbox. Bound on the row WRAPPER so all
@@ -1030,10 +1028,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             title={t('scheduled.sidebar.label')}
           >
             <Clock size={16} />
-            {scheduledPendingCount > 0 && (
+            {scheduledPending > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full
                                 bg-mail-accent-fill text-white text-[9px] leading-[14px] text-center">
-                {scheduledPendingCount}
+                {scheduledPending}
               </span>
             )}
           </button>
@@ -1293,8 +1291,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         >
           <Clock size={14} />
           <span className="flex-1 text-left">{t('scheduled.sidebar.label')}</span>
-          {scheduledPendingCount > 0 && (
-            <span className="text-xs text-mail-text-muted">{scheduledPendingCount}</span>
+          {scheduledPending > 0 && (
+            <span className="text-xs text-mail-text-muted">{scheduledPending}</span>
           )}
         </button>
         <SidebarViews onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} onOpenContacts={onOpenContacts} onOpenMail={onOpenMail} notesOpen={notesOpen} contactsOpen={contactsOpen} mailHidden={mailHidden} />

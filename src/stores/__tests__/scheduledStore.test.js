@@ -6,7 +6,7 @@ vi.mock('../../services/daemonClient', () => ({
   DaemonError: class DaemonError extends Error {},
 }));
 
-const { useScheduledStore } = await import('../scheduledStore');
+const { useScheduledStore, scheduledPendingCount } = await import('../scheduledStore');
 const { zonedTimeToEpoch } = await import('../../utils/scheduledTime');
 
 const ROW = {
@@ -159,5 +159,17 @@ describe('scheduledStore', () => {
       mockDaemonCall.mockResolvedValueOnce(null);
       await expect(useScheduledStore.getState().suggestTz('bob@example.com')).resolves.toBeNull();
     });
+  });
+});
+
+// The Sidebar badge that leads to the Scheduled folder: every row still
+// waiting on the user or the worker. An `uncertain` row (cut off mid-send, or
+// left `sending` by a crash) waits on the user's Retry or Discard, so it counts.
+describe('scheduledPendingCount', () => {
+  it('counts queued, failed and uncertain rows, nothing else', () => {
+    const rows = ['queued', 'failed', 'uncertain', 'sending', 'sent', 'cancelled'].map((status, i) => ({ ...ROW, id: `r${i}`, status }));
+    expect(scheduledPendingCount(rows)).toBe(3);
+    expect(scheduledPendingCount([{ ...ROW, status: 'uncertain' }])).toBe(1);
+    expect(scheduledPendingCount([])).toBe(0);
   });
 });

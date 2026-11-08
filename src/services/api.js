@@ -382,9 +382,34 @@ export function deleteQueueRun({ reason = 'manual' } = {}) {
   return transportSend('delete_queue.run', { reason });
 }
 
+// A send RPC (`compose.send`, `smtp_send_email`). Two answers mean the
+// message may have gone out, and both throw with `mayHaveSent: true` so no
+// caller reads them as sent or as safely unsent: the daemon's own
+// `{ success: false, mayHaveSent: true, error }` (cut off after DATA), and a
+// lost daemon (`DAEMON_UNAVAILABLE`: crashed, quit or updated after the
+// request may have reached it, so the server may have the bytes). The second
+// is conservative: a daemon that was never reached reads the same, and the
+// user's Retry is still there. An outdated daemon ran nothing and stays a
+// plain error.
+async function invokeSend(command, args) {
+  let result;
+  try {
+    result = await transportSend(command, args);
+  } catch (error) {
+    const message = typeof error === 'string' ? error : error?.message || 'Unknown error';
+    const failed = new ApiError(message, 0);
+    if (error?.code === 'DAEMON_UNAVAILABLE') failed.mayHaveSent = true;
+    throw failed;
+  }
+  if (result?.mayHaveSent === true) {
+    throw Object.assign(new Error(result.error || 'The message may have gone out'), { mayHaveSent: true });
+  }
+  return result;
+}
+
 export async function sendEmail(account, email, sentMailbox = null) {
   if (IS_TAURI) {
-    return tauriInvoke('smtp_send_email', { account, email, sentMailbox });
+    return invokeSend('smtp_send_email', { account, email, sentMailbox });
   }
   return httpRequest('/send', {
     method: 'POST',
@@ -418,20 +443,16 @@ export async function stageOutgoing(account, email, { accountId, mailbox, snippe
 // point it never fails. Answers { success, mayHaveSent, messageId, entry }
 // (the sent row). A send cut off after the server may have taken it answers
 // { success: false, mayHaveSent: true, error }: thrown here with
-// `mayHaveSent`, so the outbox shows it as uncertain and never resends it on
-// its own.
+// `mayHaveSent` (as is a daemon lost mid-call, `invokeSend`), so the outbox
+// shows it as uncertain and never resends it on its own.
 export async function sendStaged(account, email, {
   accountId, mailbox, uid, messageId, sentMailbox, snippet, hasAttachments, remindDays, ownAddresses, cancelScheduledId,
 }) {
   if (IS_TAURI) {
-    const result = await tauriInvoke('compose.send', {
+    return invokeSend('compose.send', {
       accountId, account, email, mailbox, uid, messageId, sentMailbox, snippet, hasAttachments,
       remindDays, ownAddresses, cancelScheduledId,
     });
-    if (result?.mayHaveSent === true) {
-      throw Object.assign(new Error(result.error || 'The message may have gone out'), { mayHaveSent: true });
-    }
-    return result;
   }
   throw new Error('sendStaged: not supported outside Tauri');
 }

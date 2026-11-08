@@ -47,7 +47,7 @@
  * `status === 'cancelled'`, not `sent`. So a delivered row does not disappear
  * from the DOM; what actually happens is it drops out of the *actionable*
  * set: `RowActions` renders no buttons for `sent`, and the sidebar's
- * `scheduledPendingCount` (queued + failed only) stops counting it. That is
+ * `scheduledPendingCount` (queued, failed and uncertain only) stops counting it. That is
  * what this spec asserts for "send now" — see the case below for the exact
  * wording. A cancelled row IS filtered out of `visible`, so that half of the
  * claim holds literally.
@@ -251,13 +251,15 @@ describe('Scheduled Send', function () {
 
   after(async function () {
     await setPremium(false).catch(() => {});
-    // Anything still queued/failed under luke when the file ends is this
+    // Anything still queued/failed/uncertain under luke when the file ends is this
     // file's own mess (a row it meant to cancel or send, not a fixture
     // another spec expects) — scoped to lukeId since nothing here touches
     // any other account's queue.
     const remaining = await scheduledRows().catch(() => []);
     for (const row of remaining) {
-      if (row.accountId === lukeId && (row.status === 'queued' || row.status === 'failed')) {
+      // `uncertain` too: a send a flaky run cut off mid-send is never fired
+      // again, but it would still sit in the next spec's Scheduled list.
+      if (row.accountId === lukeId && ['queued', 'failed', 'uncertain'].includes(row.status)) {
         await cancelRow(row.id).catch(() => {});
       }
     }

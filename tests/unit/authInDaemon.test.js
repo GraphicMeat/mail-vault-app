@@ -119,7 +119,9 @@ describe('the daemon owns the token', () => {
   });
 
   it('refreshes inside the margin the app used, one refresh per account at a time', () => {
-    expect(tokens).toMatch(/REFRESH_MARGIN_MS: i64 = 5 \* 60 \* 1000/);
+    // The daemon's margin is core's (one value for both apps), and core's is five minutes.
+    expect(tokens).toMatch(/REFRESH_MARGIN_MS: i64 = mailvault_core::oauth2::REFRESH_MARGIN_MS;/);
+    expect(read('src-core/src/oauth2.rs')).toMatch(/pub const REFRESH_MARGIN_MS: i64 = 5 \* 60 \* 1000;/);
     expect(tokens).toMatch(/fn flight\(/);
   });
 
