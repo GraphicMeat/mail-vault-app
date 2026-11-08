@@ -9,6 +9,7 @@ use crate::net::block_on;
 use crate::secrets::Credential;
 use crate::sync::{self, Fail};
 use mailvault_core::abd::ops::Caps;
+use mailvault_core::actions::policy::{delete_disposition, imap_trash_place, DeleteDisposition, FolderRole, WithoutTrash};
 use mailvault_core::imap::async_imap::extensions::idle::IdleResponse;
 use mailvault_core::imap::{self, abd_cmds, ImapPool, ImapSession, PartInfo};
 use mailvault_core::send::classify::classify;
@@ -263,12 +264,11 @@ async fn apply_in(
             }
         }
         Kind::Delete => {
-            // In Trash already: a delete is permanent. Elsewhere core moves it to Trash. "Trash" is
-            // the folder core's delete would move to (SPECIAL-USE, then by name), not the stored
-            // `special_use`, whose name guess also matches "Trash-old": asking anything else either
-            // expunges outside Trash or moves a message onto itself. A LIST failure is a `Fail`.
+            // Core's delete rule (`actions::policy`), against the folder core's delete would move
+            // to (`resolve_trash_path`). A LIST failure is a `Fail`.
             let trash = imap::resolve_trash_path(session).await?;
-            let permanent = trash.as_deref() == Some(path);
+            let permanent = delete_disposition(FolderRole::of(path, None), imap_trash_place(path, trash.as_deref()), WithoutTrash::MoveToTrash)
+                == DeleteDisposition::Permanent;
             let expected = folder.uid_validity.map(|v| v as u32);
             before_wire()?;
             for uid in &present {

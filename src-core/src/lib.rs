@@ -5,6 +5,7 @@
 //! of depending on Tauri's AppHandle.
 
 pub mod accounts_doc;
+pub mod actions;
 pub mod abd;
 pub mod backoff;
 pub mod secret_scrub;

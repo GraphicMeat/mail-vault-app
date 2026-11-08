@@ -36,6 +36,7 @@ use crate::net::block_on;
 use crate::remote_ids;
 use crate::secrets::Credential;
 use crate::sync::{self, Fail};
+use mailvault_core::actions::policy::{delete_disposition, graph_trash_place, DeleteDisposition, FolderRole, WithoutTrash};
 use mailvault_core::graph::{AttachmentStream, GraphAttachmentInfo, GraphClient, GraphMailFolder, GraphSynced};
 use mailvault_core::imap::PartInfo;
 use mailvault_core::send::classify::classify_failure;
@@ -724,8 +725,8 @@ impl Backend for GraphBackend<'_> {
                 Ok(ApplyOutcome::Done { gone, moved: None, kept: Vec::new() })
             }
             Kind::Delete => {
-                // In Deleted Items already: a delete is permanent. Its `\Trash` comes only from
-                // Graph's well-known name, so no folder merely named like it qualifies.
+                // Core's delete rule (`actions::policy`): Deleted Items is known by the `\Trash`
+                // its well-known name stored, so no folder merely named like it qualifies.
                 let account = self.account.clone();
                 let special: Option<String> = self
                     .shared
@@ -734,7 +735,8 @@ impl Backend for GraphBackend<'_> {
                             .optional()
                     })?
                     .flatten();
-                let permanent = special.as_deref() == Some("\\Trash");
+                let permanent = delete_disposition(FolderRole::of(path, special.as_deref()), graph_trash_place(special.as_deref()), WithoutTrash::MoveToTrash)
+                    == DeleteDisposition::Permanent;
                 before_wire()?;
                 let mut done: Vec<u32> = Vec::new();
                 let mut failed = None;

@@ -44,6 +44,7 @@ use crate::remote_ids;
 use crate::rpc::RpcError;
 use crate::secrets::Credential;
 use crate::sync::{self, Fail};
+use mailvault_core::actions::policy::{delete_disposition, jmap_trash_place, DeleteDisposition, FolderRole, WithoutTrash};
 use mailvault_core::imap::PartInfo;
 use mailvault_core::jmap::discover::{self, Discovered};
 use mailvault_core::jmap::headers::{keywords_to_flags, to_header, HEADER_PROPS};
@@ -934,8 +935,10 @@ impl Backend for JmapBackend<'_> {
             Kind::Delete => {
                 let source = self.mailbox_id(path)?;
                 let trash = self.mailboxes(false)?.iter().find(|m| has_role(m, "trash")).map(|m| m.id.clone());
-                // In Trash already: a delete is permanent (gone for good, or its last label off).
-                let permanent = trash.as_deref() == Some(source.as_str());
+                // Core's delete rule (`actions::policy`): in Trash, permanent (gone for good, or its
+                // last label off); elsewhere a move, refused when the account has no Trash.
+                let place = jmap_trash_place(&source, trash.as_deref());
+                let permanent = delete_disposition(FolderRole::of(path, None), place, WithoutTrash::MoveToTrash) == DeleteDisposition::Permanent;
                 before_wire()?;
                 let mut done: Vec<u32> = Vec::new();
                 let mut failed = None;
