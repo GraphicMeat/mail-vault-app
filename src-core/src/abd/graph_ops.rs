@@ -24,11 +24,10 @@ use super::plan::FolderPlan;
 use super::state::{FolderRole, Provider};
 use crate::graph::GraphClient;
 use crate::net_activity::Tracked;
-use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::future::Future;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// A lease is unusable this long before it expires, so a request never leaves
@@ -208,18 +207,10 @@ impl GraphOps {
     }
 }
 
-static BEARER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+").unwrap());
-static JWT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"eyJ[A-Za-z0-9._-]{10,}").unwrap());
-
 /// An error text made safe to keep and show: the token (and anything shaped
 /// like one) removed, then every address masked by the log redaction.
 fn scrub(text: &str, token: &str) -> String {
-    let mut s = text.to_string();
-    if !token.is_empty() {
-        s = s.replace(token, "<token>");
-    }
-    let s = BEARER.replace_all(&s, "Bearer <token>").into_owned();
-    let s = JWT.replace_all(&s, "<token>").into_owned();
+    let s = crate::secret_scrub::scrub_with(text, &[token], "<token>");
     crate::log_redact::redact(&s, b"abd-graph-ops")
 }
 

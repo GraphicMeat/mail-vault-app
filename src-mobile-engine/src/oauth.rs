@@ -29,6 +29,7 @@ use crate::rpc::{parse, RpcError};
 use crate::secrets::Credential;
 use crate::sync::Fail;
 use mailvault_core::oauth2::{OAuth2Manager, TokenResponse};
+use mailvault_core::secret_scrub::scrub;
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -209,10 +210,6 @@ fn new_flow_id() -> String {
     format!("flow_{}", &accounts::new_account_id()[4..])
 }
 
-/// `text` with every secret in `secrets` replaced, for a log line.
-fn scrub(text: &str, secrets: &[&str]) -> String {
-    secrets.iter().filter(|s| !s.is_empty()).fold(text.to_string(), |t, s| t.replace(s, "***"))
-}
 
 // ── Access tokens ───────────────────────────────────────────────────────────
 
@@ -835,10 +832,5 @@ mod tests {
         assert!(fresh_token_refused(e.shared(), "acc_x", "t1").is_none(), "the count started again");
         assert!(fresh_token_refused(e.shared(), "acc_x", "t2").is_none());
         assert!(fresh_token_refused(e.shared(), "acc_x", "t3").is_some());
-    }
-
-    #[test]
-    fn scrub_removes_every_secret() {
-        assert_eq!(scrub("a rt-1 b at-2 c", &["rt-1", "at-2", ""]), "a *** b *** c");
     }
 }

@@ -39,7 +39,7 @@ impl SessionConfig {
 
 fn scrub(secrets: &[String], f: Fail) -> Fail {
     match f {
-        Fail::Code(code, why) => Fail::Code(code, secrets.iter().fold(why, |w, s| w.replace(s.as_str(), "***"))),
+        Fail::Code(code, why) => Fail::Code(code, mailvault_core::secret_scrub::scrub(&why, &secrets.iter().map(String::as_str).collect::<Vec<_>>())),
         other => other,
     }
 }

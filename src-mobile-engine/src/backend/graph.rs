@@ -314,7 +314,7 @@ impl<'a> GraphBackend<'a> {
     }
 
     fn scrub(&self, text: String) -> String {
-        self.secrets.iter().filter(|s| !s.is_empty()).fold(text, |t, s| t.replace(s.as_str(), "***"))
+        mailvault_core::secret_scrub::scrub(&text, &self.secrets.iter().map(String::as_str).collect::<Vec<_>>())
     }
 
     /// Waits `wait` in slices of at most a second, stopping early when the engine closes.

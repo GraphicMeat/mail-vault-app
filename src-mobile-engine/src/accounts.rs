@@ -92,11 +92,7 @@ pub fn map_error(msg: &str) -> Code {
 
 /// The error message for a reply: core's text with the password removed.
 fn scrub(msg: &str, password: &str) -> String {
-    if password.is_empty() {
-        msg.to_string()
-    } else {
-        msg.replace(password, "***")
-    }
+    mailvault_core::secret_scrub::scrub(msg, &[password])
 }
 
 pub(crate) fn failure(code: Code, message: impl Into<String>) -> Value {
@@ -548,11 +544,6 @@ mod tests {
         assert_eq!(map_error("SELECT INBOX failed: weird"), Code::Invalid);
         assert_eq!(map_error("Password missing"), Code::Invalid);
         assert_eq!(Code::Duplicate.as_str(), "DUPLICATE");
-    }
-
-    #[test]
-    fn scrub_removes_the_password() {
-        assert_eq!(scrub("bad pw hunter2 here", "hunter2"), "bad pw *** here");
     }
 
     #[test]

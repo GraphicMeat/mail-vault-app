@@ -341,7 +341,7 @@ fn connect(shared: &Shared, account: &str, row: &AccountRow, cred: &Credential) 
 }
 
 fn scrub(secrets: &[String], text: String) -> String {
-    secrets.iter().filter(|s| !s.is_empty()).fold(text, |t, s| t.replace(s.as_str(), "***"))
+    mailvault_core::secret_scrub::scrub(&text, &secrets.iter().map(String::as_str).collect::<Vec<_>>())
 }
 
 /// Waits a throttle's `Retry-After` (capped) in slices of at most a second, stopping early when

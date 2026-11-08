@@ -698,11 +698,9 @@ pub(crate) fn renewal_unanswered(failure: &str) -> bool {
 
 /// `text` with every secret cut out, and the provider's em dash made a colon.
 fn scrub(text: &str, secrets: &[&str]) -> String {
-    let mut out = text.replace(" \u{2014} ", ": ");
-    for secret in secrets.iter().filter(|s| s.len() >= 4) {
-        out = out.replace(secret, "[redacted]");
-    }
-    out
+    let text = text.replace(" \u{2014} ", ": ");
+    let kept: Vec<&str> = secrets.iter().copied().filter(|s| s.len() >= 4).collect();
+    mailvault_core::secret_scrub::scrub_with(&text, &kept, "[redacted]")
 }
 
 impl TokenStore {
