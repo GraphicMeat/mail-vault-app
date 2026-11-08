@@ -434,12 +434,12 @@ pub fn run() {
             // The sink runs on the engine's sync thread inside its block_on: only hand the event
             // to Tauri and return, never call back into the engine (no nested block_on).
             let handle = app.handle().clone();
-            let install = move |engine: &Engine| {
+            let install = std::sync::Arc::new(move |engine: &Engine| {
                 let handle = handle.clone();
                 engine.set_event_sink(move |name, payload| {
                     let _ = handle.emit("mobile-event", serde_json::json!({ "name": name, "payload": payload }));
                 });
-            };
+            });
             let opened_here = std::cell::Cell::new(false);
             let engine = match (app.path().app_data_dir(), &cache_dir) {
                 (Ok(data), Ok(cache)) => {
@@ -467,8 +467,25 @@ pub fn run() {
             }
             if let Err(reason) = &engine {
                 log_line(&format!("MV_MOBILE {}", serde_json::json!({ "engineError": reason })));
-                // The page's calls say why; a later open (a background run) may still work.
-                background::engine_failed(reason.clone());
+                // The page's calls say why and open again (rate-limited); any later open, a
+                // background run's too, gets the sink and the perf seed before it is published.
+                let paths = app.handle().clone();
+                let prepare = std::sync::Arc::clone(&install);
+                background::engine_failed(
+                    reason.clone(),
+                    Some(background::Reopen {
+                        open: Box::new(move || {
+                            let data = paths.path().app_data_dir().map_err(|e| format!("app data dir: {e}"))?;
+                            let cache = paths.path().app_cache_dir().map_err(|e| format!("app cache dir: {e}"))?;
+                            Ok((data, cache))
+                        }),
+                        engine: Box::new(background::open_platform),
+                        prepare: Box::new(move |engine| {
+                            prepare(engine);
+                            seed_for_perf_gate(engine);
+                        }),
+                    }),
+                );
             }
             // Copies left by an earlier run: all of them on iOS (its previewer went with the app),
             // the stale ones on Android (another app may still be reading a fresh one).

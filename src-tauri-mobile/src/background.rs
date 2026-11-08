@@ -25,18 +25,49 @@ include!(concat!(env!("OUT_DIR"), "/notify_strings.rs"));
 /// background launch before the first unlock, a full disk) is reported to its caller and the
 /// next caller tries again, so a foreground start after a failed background run still opens.
 /// Opens are one at a time, so two engines never coexist.
+///
+/// When setup's own open failed (an iOS background launch runs setup first, before the first
+/// unlock), setup leaves its [`Reopen`]: the page's calls try it again, at most once per
+/// [`REOPEN_EVERY`] and one attempt for all callers at a time, and any later open (a background
+/// run's too) prepares the engine as setup would before it is published.
 pub(crate) struct EngineCell {
     engine: OnceLock<Engine>,
     /// Held across an open: a second opener waits for the first one's result.
     opening: Mutex<()>,
-    /// Why setup's own open failed (the page's calls report it until an open works).
-    state: Mutex<Option<String>>,
+    /// Setup's failure, while no open has worked.
+    state: Mutex<Option<Failed>>,
     cv: Condvar,
+    every: Duration,
 }
+
+/// How the page's calls reopen the engine after setup could not open it: `open` names the
+/// directories again (they may be what failed) and opens; `prepare` runs on every engine opened
+/// from then on before it is published (the event sink, the perf seed), whoever opened it.
+pub(crate) struct Reopen {
+    pub open: Box<dyn Fn() -> Result<(PathBuf, PathBuf), String> + Send + Sync>,
+    pub engine: Box<dyn Fn(&Path, &Path) -> Result<Engine, String> + Send + Sync>,
+    pub prepare: Box<dyn Fn(&Engine) + Send + Sync>,
+}
+
+struct Failed {
+    reason: String,
+    reopen: Option<std::sync::Arc<Reopen>>,
+    /// When the last open (setup's, or a page call's retry) ended.
+    tried: Instant,
+    /// A page call is opening now: the others wait for its result.
+    trying: bool,
+}
+
+/// The page's calls retry a failed setup open at most this often.
+pub(crate) const REOPEN_EVERY: Duration = Duration::from_secs(2);
 
 impl EngineCell {
     pub(crate) const fn new() -> EngineCell {
-        EngineCell { engine: OnceLock::new(), opening: Mutex::new(()), state: Mutex::new(None), cv: Condvar::new() }
+        EngineCell::retrying_every(REOPEN_EVERY)
+    }
+
+    pub(crate) const fn retrying_every(every: Duration) -> EngineCell {
+        EngineCell { engine: OnceLock::new(), opening: Mutex::new(()), state: Mutex::new(None), cv: Condvar::new(), every }
     }
 
     /// The engine: the open one, else `open` (one opener at a time). A failure is not kept.
@@ -48,12 +79,16 @@ impl EngineCell {
         if let Some(e) = self.engine.get() {
             return Ok(e);
         }
-        let out = open(data, cache);
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let out = match out {
+        // Read under `opening`: setup's failure is recorded under it too, so an open either
+        // finds its hook here or was published before setup looked.
+        let prepare = self.state.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|f| f.reopen.clone());
+        let out = match open(data, cache) {
             Ok(engine) => {
+                if let Some(reopen) = &prepare {
+                    (reopen.prepare)(&engine);
+                }
                 let _ = self.engine.set(engine);
-                *state = None;
+                *self.state.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 Ok(self.engine.get().expect("set just now"))
             }
             Err(reason) => Err(reason),
@@ -63,10 +98,20 @@ impl EngineCell {
     }
 
     /// Setup could not open the engine (or name its directories): the page's calls report
-    /// `reason` until some open works.
-    pub(crate) fn setup_failed(&self, reason: String) {
-        if self.engine.get().is_none() {
-            *self.state.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason);
+    /// `reason`, and retry with `reopen` (when given) until some open works. An engine another
+    /// caller opened meanwhile is prepared now.
+    pub(crate) fn setup_failed(&self, reason: String, reopen: Option<Reopen>) {
+        let _one = self.opening.lock().unwrap_or_else(|e| e.into_inner());
+        match self.engine.get() {
+            Some(engine) => {
+                if let Some(reopen) = &reopen {
+                    (reopen.prepare)(engine);
+                }
+            }
+            None => {
+                *self.state.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(Failed { reason, reopen: reopen.map(std::sync::Arc::new), tried: Instant::now(), trying: false });
+            }
         }
         self.cv.notify_all();
     }
@@ -77,8 +122,10 @@ impl EngineCell {
     }
 
     /// The engine, waiting up to `max` for whoever is opening it (the page can call before setup
-    /// has opened it: on Android the webview loads while setup runs). Setup's failure is answered
-    /// at once. Call it off the async runtime.
+    /// has opened it: on Android the webview loads while setup runs). After setup's failure a
+    /// call opens again once the last attempt is [`REOPEN_EVERY`] old (callers meanwhile share
+    /// that attempt); otherwise it answers the latest reason at once. Call it off the async
+    /// runtime.
     pub(crate) fn wait(&self, max: Duration) -> Result<&Engine, String> {
         let deadline = Instant::now() + max;
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -86,8 +133,31 @@ impl EngineCell {
             if let Some(engine) = self.engine.get() {
                 return Ok(engine);
             }
-            if let Some(reason) = state.as_ref() {
-                return Err(reason.clone());
+            match state.as_mut() {
+                Some(f) if f.trying => {}
+                Some(f) => {
+                    let Some(reopen) = f.reopen.clone().filter(|_| f.tried.elapsed() >= self.every) else {
+                        return Err(f.reason.clone());
+                    };
+                    f.trying = true;
+                    drop(state);
+                    let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let (data, cache) = (reopen.open)()?;
+                        self.get_or_open(&data, &cache, |d, c| (reopen.engine)(d, c)).map(|_| ())
+                    }))
+                    .unwrap_or_else(|_| Err("the engine open panicked".into()));
+                    state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(f) = state.as_mut() {
+                        f.trying = false;
+                        f.tried = Instant::now();
+                        if let Err(reason) = out {
+                            f.reason = reason;
+                        }
+                    }
+                    self.cv.notify_all();
+                    continue;
+                }
+                None => {}
             }
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
@@ -106,9 +176,10 @@ pub(crate) fn engine_with(data: &Path, cache: &Path, open: impl FnOnce(&Path, &P
     ENGINE.get_or_open(data, cache, open)
 }
 
-/// Records why setup cannot open the engine, unless one is open.
-pub(crate) fn engine_failed(reason: String) {
-    ENGINE.setup_failed(reason);
+/// Records why setup cannot open the engine, unless one is open, and how the page's calls open
+/// it again (see [`EngineCell::wait`]).
+pub(crate) fn engine_failed(reason: String, reopen: Option<Reopen>) {
+    ENGINE.setup_failed(reason, reopen);
 }
 
 /// The engine if one is open, without waiting.
@@ -529,10 +600,114 @@ mod tests {
         assert!(std::ptr::eq(second, third));
         assert_eq!(opens, 1);
         assert!(std::ptr::eq(cell.wait(Duration::ZERO).unwrap(), second));
-        // Setup's own failure is the page's answer until an open works.
+        // Setup's own failure with no way to open again stays the page's answer.
         let failed = EngineCell::new();
-        failed.setup_failed("app data dir: none".into());
+        failed.setup_failed("app data dir: none".into(), None);
         assert_eq!(failed.wait(Duration::from_secs(5)).err().as_deref(), Some("app data dir: none"));
+    }
+
+    fn opener(fails: usize, opens: Arc<std::sync::atomic::AtomicUsize>, pause: Duration) -> Box<dyn Fn(&Path, &Path) -> Result<Engine, String> + Send + Sync> {
+        use std::sync::atomic::Ordering::SeqCst;
+        Box::new(move |d, c| {
+            let n = opens.fetch_add(1, SeqCst);
+            std::thread::sleep(pause);
+            if n < fails {
+                return Err(format!("file protection {n}"));
+            }
+            Engine::open(d, c, Arc::new(MemorySecrets::default())).map_err(|e| e.to_string())
+        })
+    }
+
+    /// After setup's open failed (an iOS background launch before the first unlock), the page's
+    /// calls open again once the last attempt is old enough, and the engine they publish
+    /// already has setup's sink; an engine a background run opens meanwhile gets it too.
+    #[test]
+    fn a_failed_setup_open_is_retried_by_the_page_and_published_with_its_sink() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
+        static CELL: EngineCell = EngineCell::retrying_every(Duration::from_millis(200));
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().to_path_buf();
+        let opens = Arc::new(AtomicUsize::new(0));
+        let prepared = Arc::new(AtomicBool::new(false));
+        let p = Arc::clone(&prepared);
+        CELL.setup_failed(
+            "keychain locked".into(),
+            Some(Reopen {
+                open: Box::new(move || Ok((data.clone(), data.join("cache")))),
+                engine: opener(1, Arc::clone(&opens), Duration::ZERO),
+                prepare: Box::new(move |engine| {
+                    assert!(CELL.opened().is_none(), "prepared after it was published");
+                    assert!(engine.set_event_sink(|_, _| {}));
+                    p.store(true, SeqCst);
+                }),
+            }),
+        );
+        // Setup just tried: its reason, no new open.
+        assert_eq!(CELL.wait(Duration::from_secs(5)).err().as_deref(), Some("keychain locked"));
+        assert_eq!(opens.load(SeqCst), 0);
+        std::thread::sleep(Duration::from_millis(250));
+        // The first retry fails too: its reason is the answer now, until the next interval.
+        assert_eq!(CELL.wait(Duration::from_secs(5)).err().as_deref(), Some("file protection 0"));
+        assert_eq!(CELL.wait(Duration::from_secs(5)).err().as_deref(), Some("file protection 0"));
+        assert_eq!(opens.load(SeqCst), 1);
+        std::thread::sleep(Duration::from_millis(250));
+        let engine = CELL.wait(Duration::from_secs(5)).expect("the retry opens");
+        assert_eq!(opens.load(SeqCst), 2);
+        assert!(prepared.load(SeqCst), "setup's sink went in before the engine was published");
+        assert!(!engine.set_event_sink(|_, _| {}));
+        assert!(std::ptr::eq(CELL.wait(Duration::ZERO).unwrap(), engine));
+
+        // A background run that opens first after setup failed publishes a prepared engine too.
+        static OTHER: EngineCell = EngineCell::retrying_every(Duration::from_secs(60));
+        let other = tempfile::tempdir().unwrap();
+        let sunk = Arc::new(AtomicBool::new(false));
+        let s = Arc::clone(&sunk);
+        OTHER.setup_failed(
+            "keychain locked".into(),
+            Some(Reopen {
+                open: Box::new(|| Err("app data dir: none".into())),
+                engine: opener(0, Arc::new(AtomicUsize::new(0)), Duration::ZERO),
+                prepare: Box::new(move |engine| s.store(engine.set_event_sink(|_, _| {}), SeqCst)),
+            }),
+        );
+        let opened = OTHER
+            .get_or_open(other.path(), &other.path().join("cache"), |d, c| Engine::open(d, c, Arc::new(MemorySecrets::default())).map_err(|e| e.to_string()))
+            .unwrap();
+        assert!(sunk.load(SeqCst), "the background run's engine got setup's sink");
+        assert!(std::ptr::eq(OTHER.wait(Duration::ZERO).unwrap(), opened));
+    }
+
+    /// Page calls never stampede a failing open: callers at the same moment share one attempt,
+    /// and a caller that keeps calling opens at most once per interval.
+    #[test]
+    fn page_calls_share_one_reopen_and_retry_at_most_once_per_interval() {
+        use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+        static CELL: EngineCell = EngineCell::retrying_every(Duration::from_millis(300));
+        let opens = Arc::new(AtomicUsize::new(0));
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().to_path_buf();
+        CELL.setup_failed(
+            "locked".into(),
+            Some(Reopen {
+                open: Box::new(move || Ok((data.clone(), data.join("cache")))),
+                engine: opener(usize::MAX, Arc::clone(&opens), Duration::from_millis(150)),
+                prepare: Box::new(|_| {}),
+            }),
+        );
+        std::thread::sleep(Duration::from_millis(350));
+        let callers: Vec<_> = (0..8).map(|_| std::thread::spawn(|| CELL.wait(Duration::from_secs(5)).err())).collect();
+        for c in callers {
+            assert_eq!(c.join().unwrap().as_deref(), Some("file protection 0"), "every caller got the shared attempt's answer");
+        }
+        assert_eq!(opens.load(SeqCst), 1, "one attempt for eight callers");
+        let t0 = Instant::now();
+        let mut calls = 0;
+        while t0.elapsed() < Duration::from_millis(1200) {
+            let _ = CELL.wait(Duration::ZERO);
+            calls += 1;
+        }
+        let retries = opens.load(SeqCst) - 1;
+        assert!(calls > 100 && (1..=4).contains(&retries), "{retries} opens in 1.2 s of {calls} calls");
     }
 
     #[test]
