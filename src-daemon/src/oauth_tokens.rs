@@ -39,8 +39,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{info, warn};
 
-/// Refresh this long before the stored expiry (the app's `REFRESH_BUFFER_MS`).
-pub(crate) const REFRESH_MARGIN_MS: i64 = 5 * 60 * 1000;
+/// Refresh this long before the stored expiry (the app's `REFRESH_BUFFER_MS`); core's, shared
+/// with mobile.
+pub(crate) const REFRESH_MARGIN_MS: i64 = mailvault_core::oauth2::REFRESH_MARGIN_MS;
 /// Emitted after a refresh, payload `{accountId}` only.
 pub(crate) const REFRESHED_EVENT: &str = "oauth2-tokens-refreshed";
 /// After a refresh that got no usable answer: no new attempt for this long.
@@ -686,15 +687,6 @@ fn unrefreshable_token(record: &Value) -> Option<String> {
         .flatten()
 }
 
-/// A refresh that got no usable answer, as `oauth2::refresh_token` words it:
-/// the request failed, the reply was not a token response, or the provider
-/// said it is down for now. Anything else is a refusal no retry will change.
-pub(crate) fn renewal_unanswered(failure: &str) -> bool {
-    failure.starts_with("Refresh request failed")
-        || failure.starts_with("Refresh response parse failed")
-        || failure.contains("temporarily_unavailable")
-        || failure.contains("server_error")
-}
 
 /// `text` with every secret cut out, and the provider's em dash made a colon.
 fn scrub(text: &str, secrets: &[&str]) -> String {
@@ -1377,10 +1369,12 @@ async fn refresh_record(
         Ok(_) => "the refresh returned no token".to_string(),
         Err(e) => e,
     };
-    let kind = if renewal_unanswered(&failure) {
-        FailKind::Unanswered
-    } else {
+    // Core's one refresh classifier (mobile uses it too): only a refusal
+    // needs a new sign-in; no answer, or a provider down for now, is retried.
+    let kind = if mailvault_core::oauth2::RefreshError::of(&failure).is_revoked() {
         FailKind::Refused
+    } else {
+        FailKind::Unanswered
     };
     let message = scrub(&failure, &[&grant.refresh_token, &entry.access_token]);
     state

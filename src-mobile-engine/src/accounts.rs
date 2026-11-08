@@ -51,43 +51,45 @@ impl Code {
     }
 }
 
-/// The one place core's `String` errors become codes. Order matters: a TLS failure wins over the
-/// connection words its text may also hold, a timeout over everything (core words a stalled LOGIN
-/// "Login for X timed out", which must not read as a wrong password), and "connection lost while
-/// signing in" is a network failure even though it mentions signing in.
-///
-/// Anything unrecognised is `Invalid` with core's message, except text that names a connection
-/// level failure, or a refusal the server marks as temporary, which is `HostUnreachable`.
+/// The one place core's `String` errors become codes: core's own classifier
+/// ([`classify_connection_error`], the one the daemon words desktop errors with) decides, after
+/// [`is_transient_refusal`], so no refusal the server marks as temporary (RFC 5530 codes, Gmail's
+/// `[ALERT] Too many simultaneous connections`) ever reads as a wrong password and holds the
+/// account. Core knows no `Timeout` of its own (it is one class with a dropped port) and leaves a
+/// socket lost mid-session as `Other`, since desktop's pool retries those before anything is
+/// classified; the engine reads both from the text.
 pub fn map_error(msg: &str) -> Code {
-    let m = msg.to_ascii_lowercase();
-    let has = |needles: &[&str]| needles.iter().any(|n| m.contains(n));
-    if has(&["tls handshake", "certificate"]) {
-        Code::TlsFailed
-    } else if has(&["timed out", "timeout"]) {
-        Code::Timeout
-    } else if has(&["connection lost", "connection abort", "not connected", "broken pipe", "connection reset"])
-        || mailvault_core::imap::pool::is_connection_lost(msg)
-    {
-        Code::HostUnreachable
-    } else if mailvault_core::imap::refusal::is_transient_refusal(msg) {
-        // RFC 5530 says these are temporary (Gmail's XOAUTH2 `NO [UNAVAILABLE] Temporary System
-        // Problem` among them): never a wrong password or token, whatever words come before.
-        Code::HostUnreachable
-    } else if has(&["login failed", "auth failed", "authenticationfailed", "invalid credentials", "authentication failed"]) {
-        Code::AuthFailed
-    } else if has(&[
-        "tcp connect",
-        "dns resolve failed",
-        "no ipv4 address",
-        "failed to read server greeting",
-        "connection refused",
-        "network is unreachable",
-        "no route to host",
-    ]) {
-        Code::HostUnreachable
-    } else {
-        Code::Invalid
+    use mailvault_core::net::{classify_connection_error, ConnectionFailure as F};
+    if mailvault_core::imap::refusal::is_transient_refusal(msg) {
+        return Code::HostUnreachable;
     }
+    match classify_connection_error(msg) {
+        F::Tls => Code::TlsFailed,
+        F::Auth => Code::AuthFailed,
+        F::BlockedOrTimeout if timed_out(msg) => Code::Timeout,
+        // ImapDisabled: the password was right (Outlook.com with IMAP off): never a hold.
+        F::Throttled | F::ImapDisabled | F::Dns | F::Refused | F::Offline | F::BlockedOrTimeout => Code::HostUnreachable,
+        F::Other if lost_connection(msg) => Code::HostUnreachable,
+        F::Other => Code::Invalid,
+    }
+}
+
+/// Core's `BlockedOrTimeout` that is a timeout, not a missing route.
+fn timed_out(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    ["timed out", "timeout", "deadline has elapsed", "(os error 60)", "(os error 110)", "(os error 10060)"]
+        .iter()
+        .any(|n| m.contains(n))
+}
+
+/// A connection that broke, or never got as far as a greeting: core's pool words, plus the
+/// connect-stage texts core's classifier has no class for.
+fn lost_connection(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    mailvault_core::imap::pool::is_connection_lost(msg)
+        || ["connection abort", "tcp connect", "failed to read server greeting", "failed to read greeting"]
+            .iter()
+            .any(|n| m.contains(n))
 }
 
 /// The error message for a reply: core's text with the password removed.
@@ -500,6 +502,20 @@ mod tests {
             "Login failed for u@example.test: NO [LIMIT] Too many connections",
             "Login failed for u@example.test: NO [SERVERBUG] Oops",
             "Login failed for u@gmail.com: NO [ALERT] Too many simultaneous connections. (Failure)",
+        ] {
+            assert_eq!(map_error(e), Code::HostUnreachable, "{e}");
+        }
+    }
+
+    /// What core (and the daemon) call throttled or IMAP-off is never a wrong password: the
+    /// password hold must not engage on it.
+    #[test]
+    fn throttles_and_imap_off_are_never_auth_failures() {
+        for e in [
+            "Login failed for u@gmail.com: NO [ALERT] Too many simultaneous connections. (Failure)",
+            "Login failed for u@gmail.com: NO [ALERT] Account exceeded command or bandwidth limits. (Failure)",
+            "UID FETCH 42 failed: NO Account exceeded bandwidth limits. (Failure)",
+            "XOAUTH2 auth failed for me@outlook.com: no response: code: None, info: Some(\"User is authenticated but not connected.\")",
         ] {
             assert_eq!(map_error(e), Code::HostUnreachable, "{e}");
         }

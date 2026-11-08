@@ -15,9 +15,10 @@
 //! auth URL carries the state and the PKCE challenge, neither of them a secret.
 //!
 //! Every place that signs in an OAuth account takes its token from [`access_token`]: the stored one
-//! while it has more than a minute left, else a refresh, one at a time per account. A refresh the
-//! provider refuses (an OAuth error answer such as `invalid_grant`) marks the account
-//! `needs_auth = 1`, emits `mobile.sync.state {state: "error", code: "NEEDS_AUTH"}` and returns
+//! while it has more than core's `REFRESH_MARGIN_MS` (5 min, the daemon's) left, else a refresh, one
+//! at a time per account. A refresh the provider refuses (core's [`RefreshError::Revoked`], the
+//! daemon's rule: an OAuth error answer such as `invalid_grant`, an answer with no token) marks
+//! the account `needs_auth = 1`, emits `mobile.sync.state {state: "error", code: "NEEDS_AUTH"}` and returns
 //! [`Fail::auth`]. From then on the account is parked: `backend::open` refuses it with no network,
 //! and the replay and outbox workers skip it, until `mobile.oauth.reauth` signs it in again.
 
@@ -28,7 +29,7 @@ use crate::net::block_on;
 use crate::rpc::{parse, RpcError};
 use crate::secrets::Credential;
 use crate::sync::Fail;
-use mailvault_core::oauth2::{OAuth2Manager, TokenResponse};
+use mailvault_core::oauth2::{OAuth2Manager, RefreshError, TokenResponse, REFRESH_MARGIN_MS};
 use mailvault_core::secret_scrub::scrub;
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
@@ -40,8 +41,6 @@ use std::time::{Duration, Instant};
 
 /// How long `finish` waits for the browser to come back with a code.
 const FINISH_TIMEOUT: Duration = Duration::from_secs(300);
-/// A stored access token is used only while it has at least this long left.
-const REFRESH_MARGIN_MS: i64 = 60_000;
 /// Distinct freshly refreshed tokens the server must refuse in a row before the account is parked:
 /// the grant is valid, but the mailbox will not take it (IMAP turned off, a tenant policy), and
 /// every further attempt would cost a refresh and two logins. One token refused by several workers
@@ -213,7 +212,7 @@ fn new_flow_id() -> String {
 
 // ── Access tokens ───────────────────────────────────────────────────────────
 
-/// The token to sign `account_id` in with: the stored one while it has more than a minute left,
+/// The token to sign `account_id` in with: the stored one while it has more than the margin left,
 /// else a fresh one from the provider (stored before it is returned). One refresh at a time per
 /// account: a caller that waited finds the token the first one stored. [`Fail::auth`] while the
 /// account needs a new sign-in, and when the provider refuses the refresh (then it marks the
@@ -280,12 +279,13 @@ fn token(shared: &Shared, account: &str, refused: Option<&str>) -> Result<String
         }
         Err(e) => {
             let why = scrub(&e, &secrets);
-            if is_refused_grant(&e) {
+            if RefreshError::of(&e).is_revoked() {
                 mark_needs_auth(shared, account, &why);
                 Err(Fail::auth())
             } else {
                 shared.log(&format!("[oauth] {account}: refresh failed: {why}"));
-                // Unreachable, slow or garbled: the caller retries as for any network failure.
+                // Unreachable, slow, garbled or down for now (`Network`, `Transient`): the
+                // caller retries as for any network failure.
                 let code = match map_error(&why) {
                     Code::Invalid => Code::HostUnreachable,
                     c => c,
@@ -294,21 +294,6 @@ fn token(shared: &Shared, account: &str, refused: Option<&str>) -> Result<String
             }
         }
     }
-}
-
-/// Core's refresh failed because the provider answered with an OAuth error (`Token refresh
-/// failed: <error> — …`, a 400 or 401 such as `invalid_grant`, `invalid_client`,
-/// `unauthorized_client`), or because the grant names a client this build lacks. Transient answers
-/// (`temporarily_unavailable`, `server_error`) and failures to reach or read the endpoint are not.
-fn is_refused_grant(e: &str) -> bool {
-    if e.contains("Reconnect the account") {
-        return true;
-    }
-    let Some(rest) = e.strip_prefix("Token refresh failed:") else {
-        return false;
-    };
-    let code = rest.trim_start().split_whitespace().next().unwrap_or("").trim_matches('"');
-    !matches!(code, "temporarily_unavailable" | "server_error")
 }
 
 /// Parks `account` until a new sign-in: `needs_auth = 1` and one `NEEDS_AUTH` event.
@@ -768,13 +753,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_an_oauth_error_answer_needs_a_new_sign_in() {
-        assert!(is_refused_grant("Token refresh failed: \"invalid_grant\" — Token has been expired or revoked."));
-        assert!(is_refused_grant("Token refresh failed: \"invalid_client\" — x"));
-        assert!(is_refused_grant("This Google account was connected with a Google client this build does not include (x). Reconnect the account to fix it."));
-        assert!(!is_refused_grant("Token refresh failed: \"temporarily_unavailable\" — busy"));
-        assert!(!is_refused_grant("Refresh request failed: error sending request: connection refused"));
-        assert!(!is_refused_grant("Refresh response parse failed: expected value at line 1"));
+    fn refresh_refusals_are_the_daemons() {
+        let revoked = |e: &str| RefreshError::of(e).is_revoked();
+        assert!(revoked("Token refresh failed: \"invalid_grant\" — Token has been expired or revoked."));
+        assert!(revoked("Token refresh failed: \"invalid_client\" — x"));
+        assert!(revoked("This Google account was connected with a Google client this build does not include (x). Reconnect the account to fix it."));
+        // Was a retry on mobile before it took the daemon's rule: an answer with no token.
+        assert!(revoked("No access_token in refresh response"));
+        assert!(!revoked("Token refresh failed: \"temporarily_unavailable\" — busy"));
+        assert!(!revoked("Refresh request failed: error sending request: connection refused"));
+        assert!(!revoked("Refresh response parse failed: expected value at line 1"));
+        assert_eq!(REFRESH_MARGIN_MS, 5 * 60 * 1000, "the daemon's margin");
     }
 
     #[test]

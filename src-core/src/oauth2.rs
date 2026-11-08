@@ -35,6 +35,44 @@ pub const GOOGLE_THUNDERBIRD_CLIENT_SECRET: &str = "kSmqreRr0qwBWJgbf5Y-PjSU";
 const GOOGLE_OWN_CLIENT_ID: Option<&str> = option_env!("MAILVAULT_GOOGLE_OAUTH_CLIENT_ID");
 const GOOGLE_OWN_CLIENT_SECRET: Option<&str> = option_env!("MAILVAULT_GOOGLE_OAUTH_CLIENT_SECRET");
 
+/// A stored access token is refreshed once it has less than this left. Both apps.
+pub const REFRESH_MARGIN_MS: i64 = 5 * 60 * 1000;
+
+/// Why [`OAuth2Manager::refresh_token`] failed, as both apps act on it: only `Revoked` needs a
+/// new sign-in; the other two are retried.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefreshError {
+    /// The provider said no (`invalid_grant`, a client this build cannot pair, an answer with no
+    /// token): no retry will change it.
+    Revoked,
+    /// The provider answered, but not with a token response, or said it is down for now
+    /// (`temporarily_unavailable`, `server_error`).
+    Transient,
+    /// The request never got an answer (offline, DNS, a timeout).
+    Network,
+}
+
+impl RefreshError {
+    /// The class of a `refresh_token` error text. Anything not recognisably unanswered is a
+    /// refusal (the daemon's rule since the app's).
+    pub fn of(failure: &str) -> RefreshError {
+        if failure.starts_with("Refresh request failed") {
+            RefreshError::Network
+        } else if failure.starts_with("Refresh response parse failed")
+            || failure.contains("temporarily_unavailable")
+            || failure.contains("server_error")
+        {
+            RefreshError::Transient
+        } else {
+            RefreshError::Revoked
+        }
+    }
+
+    pub fn is_revoked(self) -> bool {
+        self == RefreshError::Revoked
+    }
+}
+
 /// A Google client id with the secret it was issued with. Always a matched pair.
 type GoogleClient = (String, String);
 
@@ -953,6 +991,32 @@ async fn handle_callback(stream: &mut tokio::net::TcpStream, senders: &SenderMap
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn refresh_failures_are_classified_once() {
+        use super::*;
+        use RefreshError::*;
+        for (e, want) in [
+            ("Token refresh failed: \"invalid_grant\" — Token has been expired or revoked.", Revoked),
+            ("Token refresh failed: \"invalid_client\" — x", Revoked),
+            ("Token refresh failed: \"unauthorized_client\" — x", Revoked),
+            ("No access_token in refresh response", Revoked),
+            ("This Google account was connected with a Google client this build does not include (x). Reconnect the account to fix it.", Revoked),
+            ("the refresh returned no token", Revoked),
+            ("Token refresh failed: \"temporarily_unavailable\" — busy", Transient),
+            ("Token refresh failed: \"server_error\" — x", Transient),
+            ("Refresh response parse failed: expected value at line 1 column 1", Transient),
+            ("Refresh request failed: error sending request: client error (Connect): tcp connect error: deadline has elapsed", Network),
+        ] {
+            assert_eq!(RefreshError::of(e), want, "{e}");
+        }
+        assert!(Revoked.is_revoked() && !Transient.is_revoked() && !Network.is_revoked());
+    }
+
+    #[test]
+    fn the_refresh_margin_is_five_minutes() {
+        use super::*;
+        assert_eq!(REFRESH_MARGIN_MS, 300_000);
+    }
 
     /// A release build ignores every token endpoint override: the env vars
     /// read as unset, and `set_token_endpoint_for_tests` does not exist (it

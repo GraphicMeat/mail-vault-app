@@ -912,7 +912,7 @@ mod tests {
         assert_eq!(seen, vec![5, 10, 20, 40, 80, 160, 300, 300, 300]);
     }
 
-    /// Only the server's tagged NO or BAD, as core renders it, is a refusal; anything else
+    /// Only the server's tagged NO or BAD, as core renders it, and not a throttle, is a refusal; anything else
     /// (a transport error whose words miss the network needles, an unknown failure) stays a
     /// retryable failure.
     #[test]
@@ -920,7 +920,6 @@ mod tests {
         let refused = |e: &str| matches!(crate::backend::imap::refused_or_fail(e.to_string()), Ok(ApplyOutcome::Refused(_)));
         assert!(refused("STORE flags failed: no response: [CANNOT] read only"));
         assert!(refused("SELECT Work failed: bad response: unknown mailbox"));
-        assert!(refused("SEARCH failed: No [THROTTLED] slow down"));
         assert!(refused("UID MOVE 1 \"Archive\" failed: No [TRYCREATE] no such mailbox"));
         assert!(refused("UID COPY 1 \"Trash\" failed: Bad command"));
         for e in [
@@ -929,6 +928,9 @@ mod tests {
             "SEARCH failed: io: Broken pipe (os error 32)",
             "STORE flags failed: io: Connection reset by peer (os error 54)",
             "STORE flags failed: parse: something odd",
+            // A throttle is the server's state, not a verdict on the action (core's classifier,
+            // the daemon's): retried with backoff, never counted toward dropping it.
+            "SEARCH failed: No [THROTTLED] slow down",
             "TCP connect to h:993 failed: No route to host (os error 65)",
             "something nobody has seen before",
         ] {

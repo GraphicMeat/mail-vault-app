@@ -9,7 +9,8 @@
 //! for the next attempt.
 //!
 //! OAuth accounts have their own path (refresh, `needs_auth`, `oauth.rs`). A temporary refusal
-//! (`NO [UNAVAILABLE]` and the other RFC 5530 codes) is not a refusal (`accounts::map_error`).
+//! (`NO [UNAVAILABLE]` and the other RFC 5530 codes, Gmail's `[ALERT] Too many simultaneous
+//! connections`) or a throttle is not a refusal (`accounts::map_error`, on core's classifier).
 //!
 //! The hold is a `settings` row `bg.authRefused.<account>` (its name from the background run that
 //! introduced it): `1` held, `probe` while a Retry's one try is due.
