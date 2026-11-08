@@ -80,7 +80,8 @@ impl Provider {
     }
 }
 
-/// Where a Google account's IMAP and SMTP live: Gmail's, or a test's mock (debug builds only).
+/// Where a Google account's IMAP and SMTP live: core's Gmail preset (desktop's, SMTP 587
+/// STARTTLS), or a test's mock (debug builds only).
 #[derive(Clone, Debug)]
 struct Servers {
     imap: (String, u16, String),
@@ -89,7 +90,8 @@ struct Servers {
 
 impl Default for Servers {
     fn default() -> Self {
-        Servers { imap: ("imap.gmail.com".into(), 993, "ssl".into()), smtp: ("smtp.gmail.com".into(), 465, "ssl".into()) }
+        let (i, s) = (mailvault_core::presets::GMAIL.imap, mailvault_core::presets::GMAIL.smtp);
+        Servers { imap: (i.host.into(), i.port, i.security.into()), smtp: (s.host.into(), s.port, s.security.into()) }
     }
 }
 
@@ -764,6 +766,14 @@ mod tests {
         assert!(!revoked("Refresh request failed: error sending request: connection refused"));
         assert!(!revoked("Refresh response parse failed: expected value at line 1"));
         assert_eq!(REFRESH_MARGIN_MS, 5 * 60 * 1000, "the daemon's margin");
+    }
+
+    /// New Gmail accounts take core's preset: desktop's SMTP 587 with STARTTLS (was 465 SSL).
+    #[test]
+    fn gmail_servers_are_the_core_preset() {
+        let s = Servers::default();
+        assert_eq!(s.imap, ("imap.gmail.com".to_string(), 993, "ssl".to_string()));
+        assert_eq!(s.smtp, ("smtp.gmail.com".to_string(), 587, "starttls".to_string()));
     }
 
     #[test]

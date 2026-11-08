@@ -139,7 +139,8 @@ fn match_mx_to_provider(mx_host: &str) -> Option<EmailServerSettings> {
     let mx = mx_host.to_lowercase();
 
     let (imap, smtp, provider) = if mx.contains("google.com") || mx.contains("googlemail.com") {
-        ("imap.gmail.com", "smtp.gmail.com", "google")
+        let g = crate::presets::GMAIL;
+        (g.imap.host, g.smtp.host, g.provider)
     } else if mx.contains("outlook.com") || mx.contains("microsoft.com") || mx.contains("office365") {
         ("outlook.office365.com", "smtp.office365.com", "microsoft")
     } else if mx.contains("hostinger") {
@@ -854,6 +855,16 @@ mod tests {
         assert_eq!(g.imap_host.as_deref(), Some("imap.gmail.com"));
         assert_eq!(g.jmap_session_url, None);
         assert_eq!(g.jmap_source, None);
+    }
+
+    /// Desktop's Gmail MX answer is core's preset, the one mobile stores too.
+    #[test]
+    fn the_gmail_mx_row_is_the_core_preset() {
+        let p = crate::presets::GMAIL;
+        let g = match_mx_to_provider("aspmx.l.google.com").unwrap();
+        assert_eq!((g.imap_host.as_deref(), g.imap_port), (Some(p.imap.host), Some(p.imap.port)));
+        assert_eq!((g.smtp_host.as_deref(), g.smtp_port), (Some(p.smtp.host), Some(p.smtp.port)));
+        assert_eq!((g.smtp_host.as_deref(), g.smtp_port), (Some("smtp.gmail.com"), Some(587)));
     }
 
     #[test]
