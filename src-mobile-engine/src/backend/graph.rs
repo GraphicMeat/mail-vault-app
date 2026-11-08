@@ -39,6 +39,8 @@ use crate::sync::{self, Fail};
 use mailvault_core::graph::{AttachmentStream, GraphAttachmentInfo, GraphClient, GraphMailFolder, GraphSynced};
 use mailvault_core::imap::PartInfo;
 use mailvault_core::smtp::{self, OutgoingEmail};
+use mailvault_core::sync_core::dates::utc_timestamp as timestamp;
+use mailvault_core::sync_core::throttle::{retry_after_from, throttle_wait};
 use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -110,14 +112,6 @@ fn refused_or_fail(e: String) -> Result<ApplyOutcome, Fail> {
         Some(s) if (400..500).contains(&s) && s != 429 && s != 401 => Ok(ApplyOutcome::Refused(e)),
         _ => Err(graph_fail(e)),
     }
-}
-
-/// `2026-01-05T00:00:00Z` for epoch ms.
-fn timestamp(ms: i64) -> String {
-    let secs = ms.div_euclid(1000);
-    let (y, m, d) = sync::civil_from_days(secs.div_euclid(86_400));
-    let rem = secs.rem_euclid(86_400);
-    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", rem / 3600, rem % 3600 / 60, rem % 60)
 }
 
 fn special_use(well_known: Option<&str>) -> Option<String> {
@@ -375,8 +369,8 @@ impl<'a> GraphBackend<'a> {
             }
             if GraphClient::is_rate_limited(&e) && waits < THROTTLE_WAITS {
                 waits += 1;
-                let secs = GraphClient::retry_after_from_error(&e).unwrap_or(DEFAULT_RETRY_AFTER).clamp(1, MAX_RETRY_AFTER);
-                self.pause(Duration::from_secs(secs))?;
+                let wait = throttle_wait(retry_after_from(&e), DEFAULT_RETRY_AFTER, MAX_RETRY_AFTER);
+                self.pause(wait)?;
                 continue;
             }
             return Err(CallErr::Text(self.scrub(e)));

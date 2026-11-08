@@ -15,6 +15,7 @@ use crate::backend::{self, has_flag, Backend, FolderInfo, FolderRow, Header};
 use crate::db::{lock, Engine, EngineError, Shared};
 use crate::events::{FOLDERS_CHANGED, FOLDER_CHANGED, SYNC_STATE};
 use crate::rpc::{parse, RpcError};
+use mailvault_core::sync_core::dates::{civil_from_days, days_from_civil};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -1017,34 +1018,10 @@ fn header_date_ms(h: &Header) -> i64 {
         .unwrap_or(0)
 }
 
-// ── Dates without a date crate ──────────────────────────────────────────────
+// ── Time ────────────────────────────────────────────────────────────────────
 
 fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
-}
-
-/// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's algorithm).
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let mp = (m + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
-}
-
-/// `(year, month 1-12, day 1-31)` of a day count since 1970-01-01.
-pub(crate) fn civil_from_days(z: i64) -> (i64, i64, i64) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    (if m <= 2 { yoe + era * 400 + 1 } else { yoe + era * 400 }, m, d)
 }
 
 /// The first instant of the sync window's first day (UTC): [`WINDOW_DAYS`] days before today.
@@ -1240,16 +1217,6 @@ pub(crate) fn folders_list(engine: &Engine, params: Value) -> Result<Value, RpcE
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn civil_round_trip() {
-        for z in [-800_000, -1, 0, 1, 365, 19_000, 20_454, 2_932_896] {
-            let (y, m, d) = civil_from_days(z);
-            assert_eq!(days_from_civil(y, m, d), z);
-        }
-        assert_eq!(civil_from_days(0), (1970, 1, 1));
-        assert_eq!(civil_from_days(days_from_civil(2024, 2, 29)), (2024, 2, 29));
-    }
 
     #[test]
     fn since_is_90_days_back() {

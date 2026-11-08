@@ -1586,7 +1586,7 @@ impl GraphClient {
     /// The error text of a non-success answer: `Graph <what> failed (<status>)
     /// <body>`, and for a 429 `(429:retry_after=N)` (30 when the header is
     /// missing), which `abd::throttle::classify_graph` and
-    /// `retry_after_from_error` read back.
+    /// `sync_core::throttle::retry_after_from` read back.
     async fn failure_text(resp: reqwest::Response, what: &str) -> String {
         let status = resp.status();
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
@@ -2018,14 +2018,6 @@ impl GraphClient {
     pub fn is_rate_limited(error: &str) -> bool {
         error.contains("(429)") || error.contains("(429:")
     }
-
-    /// The `N` of a `(429:retry_after=N)` error, in seconds.
-    pub fn retry_after_from_error(error: &str) -> Option<u64> {
-        const MARKER: &str = "(429:retry_after=";
-        let rest = &error[error.find(MARKER)? + MARKER.len()..];
-        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-        digits.parse().ok()
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2354,9 +2346,7 @@ mod tests {
         // Every call formats a 429 this way; matching "(429)" alone never fired.
         let e = "Graph move_message failed (429:retry_after=12) {\"error\":{}}";
         assert!(GraphClient::is_rate_limited(e));
-        assert_eq!(GraphClient::retry_after_from_error(e), Some(12));
-        assert_eq!(GraphClient::retry_after_from_error("Graph x failed (429) slow down"), None);
-        assert_eq!(GraphClient::retry_after_from_error("Graph x failed (500) (429:retry_after=oops)"), None);
+        assert_eq!(crate::sync_core::throttle::retry_after_from(e), Some(12));
         assert!(!GraphClient::is_rate_limited("Graph x failed (4290) nope"));
     }
 

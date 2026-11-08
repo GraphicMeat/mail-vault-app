@@ -55,10 +55,8 @@ pub fn classify_graph(err: &str) -> (Signal, Option<u64>) {
     if e.contains("(401)") {
         return (Signal::SignIn, None);
     }
-    if let Some(at) = e.find("(429:retry_after=") {
-        let rest = &e[at + "(429:retry_after=".len()..];
-        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-        return (Signal::Throttled, digits.parse::<u64>().ok());
+    if let Some(secs) = crate::sync_core::throttle::retry_after_from(&e) {
+        return (Signal::Throttled, Some(secs));
     }
     if e.contains("(429)") || e.contains("(429:") {
         return (Signal::Throttled, None);

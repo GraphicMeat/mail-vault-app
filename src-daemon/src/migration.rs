@@ -883,7 +883,7 @@ pub(crate) async fn copy_with_retries(
             Ok(done) => return Ok(done),
             Err(e) if GraphClient::is_rate_limited(&e) && rate_retries < 5 => {
                 rate_retries += 1;
-                let wait_secs = parse_retry_after(&e).unwrap_or(rate_retries as u64 * 5);
+                let wait_secs = mailvault_core::sync_core::throttle::retry_after_from(&e).unwrap_or(rate_retries as u64 * 5);
                 warn!("[migration] Rate limited, waiting {}s", wait_secs);
                 on_rate_limit(wait_secs);
                 // A pause wakes the wait and the message is tried again at
@@ -1048,14 +1048,6 @@ async fn interruptible_sleep(
         _ = tokio::time::sleep(duration) => false,
         _ = notify.notified() => true,
     }
-}
-
-/// Parse retry-after seconds from error string format "(429:retry_after=N)"
-fn parse_retry_after(err: &str) -> Option<u64> {
-    let marker = "(429:retry_after=";
-    let start = err.find(marker)? + marker.len();
-    let rest = &err[start..];
-    rest.split(')').next()?.parse().ok()
 }
 
 /// Extract sender email and subject from raw MIME bytes for log display.

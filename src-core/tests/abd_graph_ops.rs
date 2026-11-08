@@ -443,7 +443,7 @@ async fn a_429_error_carries_the_retry_after_the_server_sent() {
     let err = client().message_exists("rt-1").await.unwrap_err();
     assert!(err.contains("(429:retry_after=7)"), "{err}");
     assert!(GraphClient::is_rate_limited(&err));
-    assert_eq!(GraphClient::retry_after_from_error(&err), Some(7));
+    assert_eq!(mailvault_core::sync_core::throttle::retry_after_from(&err), Some(7));
 }
 
 // ── GraphOps ────────────────────────────────────────────────────────────────
