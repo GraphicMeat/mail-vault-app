@@ -1237,14 +1237,22 @@ pub(crate) async fn remove_for_delete(
 /// with no Trash is fetched again too, so a Trash made since is seen.
 pub(crate) async fn trash_place(state: &Arc<DaemonState>, config: &ImapConfig, mailbox: &str) -> Result<mailvault_core::actions::policy::TrashPlace, String> {
     let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    let (mailbox_id, trash) = listing_for(&acct, mailbox).await.map_err(|e| e.to_string())?;
+    Ok(mailvault_core::actions::policy::jmap_trash_place(&mailbox_id, trash.as_ref().map(|(_, id)| id.as_str())))
+}
+
+/// `mailbox`'s id and the `trash`-role mailbox (path, id), from the last
+/// listing when it holds the mailbox and a Trash, else from a fresh one (so a
+/// Trash made since is seen). The delete rule (`trash_place`) and the move
+/// (`remove_one`) both read it here, so they cannot drift apart.
+async fn listing_for(acct: &AccountJmap, mailbox: &str) -> Result<(String, Option<(String, String)>), JmapError> {
     let listed = acct.last_listing().filter(|b| b.ids.contains_key(mailbox) && role_mailbox(b, "trash").is_some());
     let boxes = match listed {
         Some(boxes) => boxes,
-        None => acct.refresh().await.map_err(|e| e.to_string())?,
+        None => acct.refresh().await?,
     };
-    let mailbox_id = boxes.ids.get(mailbox).ok_or_else(|| JmapError::Protocol(format!("no mailbox {mailbox}")).to_string())?;
-    let trash = role_mailbox(&boxes, "trash");
-    Ok(mailvault_core::actions::policy::jmap_trash_place(mailbox_id, trash.as_ref().map(|(_, id)| id.as_str())))
+    let mailbox_id = boxes.ids.get(mailbox).cloned().ok_or_else(|| JmapError::Protocol(format!("no mailbox {mailbox}")))?;
+    Ok((mailbox_id, role_mailbox(&boxes, "trash")))
 }
 
 /// Take the email behind `uid` out of `mailbox` by the label semantics rule
@@ -1279,17 +1287,7 @@ async fn remove_one(
     uid: u32,
     permanent: bool,
 ) -> Result<Removed, Fail> {
-    let listed = acct.last_listing().filter(|b| b.ids.contains_key(mailbox) && role_mailbox(b, "trash").is_some());
-    let boxes = match listed {
-        Some(boxes) => boxes,
-        None => acct.refresh().await?,
-    };
-    let mailbox_id = boxes
-        .ids
-        .get(mailbox)
-        .cloned()
-        .ok_or_else(|| Fail::from(JmapError::Protocol(format!("no mailbox {mailbox}"))))?;
-    let trash = role_mailbox(&boxes, "trash");
+    let (mailbox_id, trash) = listing_for(acct, mailbox).await?;
     let trash_id = trash.as_ref().map(|(_, id)| id.as_str());
     let pairs = acct.uid_to_id(state, account_id, mailbox, &[uid], false).await?;
     let unchanged = Removed { trash: None, trash_uid: None, changed: false };

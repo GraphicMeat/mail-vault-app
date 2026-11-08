@@ -207,31 +207,46 @@ struct Removed {
 /// What the delete of a message in `mailbox` really is on `provider`, never
 /// `Auto`: Graph only moves to Deleted Items (its DELETE), whatever `mode`
 /// says; `Auto` elsewhere by core's rule (`Mode::by_rule`), asking the
-/// server where Trash is unless `mailbox` is INBOX. A lookup that fails is a
-/// `Refusal::Server`: nothing was sent, a retry may work. A caller deleting
-/// several uids of one folder resolves once and passes the result down.
-pub(crate) async fn resolve(state: &Arc<DaemonState>, provider: &Provider<'_>, account_id: &str, mailbox: &str, mode: Mode, priority: bool) -> Result<Mode, Refusal> {
+/// server where Trash is unless `mailbox` is INBOX. A lookup that fails
+/// answers its text (a `Refusal::Server` for the caller): nothing was
+/// sent, a retry may work. A caller deleting several uids of one folder
+/// resolves once and passes the result down.
+pub(crate) async fn resolve(state: &Arc<DaemonState>, provider: &Provider<'_>, account_id: &str, mailbox: &str, mode: Mode, priority: bool) -> Result<Resolved, String> {
+    let plain = |mode: Mode| -> Result<Resolved, String> { Ok(Resolved { mode, trash: None }) };
     if matches!(provider, Provider::Graph { .. }) {
-        return Ok(Mode::Trash);
+        return plain(Mode::Trash);
     }
     if mode != Mode::Auto {
-        return Ok(mode);
+        return plain(mode);
     }
     let role = FolderRole::of(mailbox, None);
     if role == FolderRole::Inbox {
         // INBOX is never Trash: every answer the lookup could give moves it.
-        return Ok(Mode::Trash);
+        return plain(Mode::Trash);
     }
-    let trash = match provider {
-        Provider::Imap(config) => imap_trash_place(mailbox, imap_trash_path(state, config, priority).await.map_err(Refusal::Server)?.as_deref()),
-        Provider::Jmap(config) => crate::handlers::jmap_bridge::trash_place(state, config, mailbox).await.map_err(Refusal::Server)?,
+    let (trash, path) = match provider {
+        Provider::Imap(config) => {
+            let path = imap_trash_path(state, config, priority).await?;
+            (imap_trash_place(mailbox, path.as_deref()), path)
+        }
+        Provider::Jmap(config) => (crate::handlers::jmap_bridge::trash_place(state, config, mailbox).await?, None),
         Provider::Graph { .. } => unreachable!("Graph returned above"),
     };
     let resolved = mode.by_rule(mailbox, trash);
     if trash == TrashPlace::Missing && resolved == Mode::Permanent {
         warn!("[delete:{}] {account_id}/{mailbox}: the account has no Trash folder, so this delete is permanent (a bin copy first)", provider.name());
     }
-    Ok(resolved)
+    Ok(Resolved { mode: resolved, trash: path })
+}
+
+/// `resolve`'s answer: the delete's mode, never `Auto`, and for an IMAP
+/// `auto` delete outside INBOX the Trash path its lookup found, which the
+/// move then goes to without a second LIST (`None`: no lookup was made, or
+/// the account has no Trash).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Resolved {
+    pub mode: Mode,
+    pub trash: Option<String>,
 }
 
 /// The folder a move to Trash lands in (`imap::resolve_trash_path`, one
@@ -277,12 +292,12 @@ pub(crate) async fn delete_one_on(
     priority: bool,
     generation: Option<u32>,
 ) -> Result<Outcome, Refusal> {
-    let mode = resolve(state, &provider, account_id, mailbox, mode, priority).await?;
+    let Resolved { mode, trash } = resolve(state, &provider, account_id, mailbox, mode, priority).await.map_err(Refusal::Server)?;
     let policy = capture_policy(mode, bin);
     let wants_stamp = policy != CapturePolicy::Skip || matches!(provider, Provider::Jmap(_));
     let original = if wants_stamp { state.account_lifecycle.capture(account_id).ok() } else { None };
     let generation = generation.filter(|_| matches!(provider, Provider::Imap(_)));
-    run(state, original, provider, account_id, mailbox, uid, mode, policy, priority, generation).await
+    run(state, original, provider, account_id, mailbox, uid, mode, policy, priority, generation, trash.as_deref()).await
 }
 
 /// `delete_one` under the account stamp `original` (`None`: the account is
@@ -298,14 +313,15 @@ pub(crate) async fn delete_one_stamped(
     mode: Mode,
     bin: bool,
 ) -> Result<Outcome, Refusal> {
-    let mode = resolve(state, &provider, account_id, mailbox, mode, true).await?;
+    let Resolved { mode, trash } = resolve(state, &provider, account_id, mailbox, mode, true).await.map_err(Refusal::Server)?;
     let policy = capture_policy(mode, bin);
-    run(state, original, provider, account_id, mailbox, uid, mode, policy, true, None).await
+    run(state, original, provider, account_id, mailbox, uid, mode, policy, true, None, trash.as_deref()).await
 }
 
 /// The sequence, for a `mode` already resolved by `resolve` (never
 /// `Auto`) and the `policy` that mode and `bin` give, in the IMAP folder
-/// generation `generation` (`None`: unchecked).
+/// generation `generation` (`None`: unchecked). `trash`: the IMAP Trash path
+/// `resolve` found, so the move needs no LIST of its own.
 #[allow(clippy::too_many_arguments)]
 async fn run(
     state: &Arc<DaemonState>,
@@ -318,6 +334,7 @@ async fn run(
     policy: CapturePolicy,
     priority: bool,
     generation: Option<u32>,
+    trash: Option<&str>,
 ) -> Result<Outcome, Refusal> {
     debug_assert_ne!(mode, Mode::Auto, "the caller resolves Auto against the folder");
     let tag = provider.name();
@@ -361,7 +378,7 @@ async fn run(
     };
 
     let removed = match &provider {
-        Provider::Imap(config) => remove_imap(state, config, mailbox, uid, permanent, priority, generation).await,
+        Provider::Imap(config) => remove_imap(state, config, mailbox, uid, permanent, priority, generation, trash).await,
         Provider::Jmap(config) => match &original {
             Some(stamp) => crate::handlers::jmap_bridge::remove_for_delete(state, config, stamp, account_id, mailbox, uid, permanent)
                 .await
@@ -486,8 +503,10 @@ async fn forget(state: &Arc<DaemonState>, id: String, original: Option<AccountSt
 /// it twice).
 ///
 /// `generation`: compared after the SELECT, before anything is sent; another
-/// one answers exactly `IDENTITY_CHANGED`.
-async fn remove_imap(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, permanent: bool, priority: bool, generation: Option<u32>) -> Result<Removed, String> {
+/// one answers exactly `IDENTITY_CHANGED`. `trash`: where the move goes when
+/// the caller already looked it up (`None`: `delete_email_in` looks).
+#[allow(clippy::too_many_arguments)]
+async fn remove_imap(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &str, uid: u32, permanent: bool, priority: bool, generation: Option<u32>, trash: Option<&str>) -> Result<Removed, String> {
     let pool_ref: &ImapPool = &state.imap_pool;
     let acct = account;
     state
@@ -496,7 +515,7 @@ async fn remove_imap(state: &Arc<DaemonState>, account: &ImapConfig, mailbox: &s
             let mailbox = mailbox.to_string();
             async move {
                 let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
-                let outcome = imap::delete_email_in(&mut session, &mailbox, uid, permanent, has_uidplus, generation)
+                let outcome = imap::delete_email_in(&mut session, &mailbox, uid, permanent, has_uidplus, generation, trash)
                     .await
                     .map_err(|e| if generation.is_some() && e == IDENTITY_CHANGED { e } else { format!("Failed to delete email: {}", e) })?;
                 Ok((outcome, session, Some(mailbox)))

@@ -805,11 +805,7 @@ async fn send(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Su
 /// (`message_delete::resolve`), as a refusal's text when the lookup failed.
 async fn resolve_mode(state: &Arc<DaemonState>, config: &crate::imap::ImapConfig, s: &Submit, priority: bool) -> Result<Mode, String> {
     let provider = if config.uses_jmap() { Provider::Jmap(config) } else { Provider::Imap(config) };
-    match message_delete::resolve(state, &provider, &s.account_id, &s.mailbox, s.mode, priority).await {
-        Ok(mode) => Ok(mode),
-        Err(Refusal::Server(e)) => Err(e),
-        Err(other) => Err(format!("{other:?}")),
-    }
+    message_delete::resolve(state, &provider, &s.account_id, &s.mailbox, s.mode, priority).await.map(|r| r.mode)
 }
 
 /// The uids of `pending` their entries still owe, and the folder generation

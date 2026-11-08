@@ -2010,7 +2010,7 @@ pub async fn delete_email(
     permanent: bool,
     has_uidplus: bool,
 ) -> Result<DeleteOutcome, String> {
-    delete_email_in(session, mailbox, uid, permanent, has_uidplus, None).await
+    delete_email_in(session, mailbox, uid, permanent, has_uidplus, None, None).await
 }
 
 /// `delete_email`, sent only when the SELECT reports the UIDVALIDITY
@@ -2018,6 +2018,10 @@ pub async fn delete_email(
 /// inside one generation, and in another it may be someone else's message.
 /// Another generation (or a SELECT that reports none) answers exactly
 /// `errors.bulkIdentityChanged` with nothing sent after the SELECT.
+///
+/// `trash`: the Trash path the caller already resolved (`resolve_trash_path`,
+/// the same lookup), so a move costs no second LIST; `None` looks it up here,
+/// creating Trash when the account has none.
 pub async fn delete_email_in(
     session: &mut ImapSession,
     mailbox: &str,
@@ -2025,6 +2029,7 @@ pub async fn delete_email_in(
     permanent: bool,
     has_uidplus: bool,
     expected_uid_validity: Option<u32>,
+    trash: Option<&str>,
 ) -> Result<DeleteOutcome, String> {
     info!(
         "[delete_email] start uid={} mailbox={} permanent={} uidplus={}",
@@ -2047,7 +2052,10 @@ pub async fn delete_email_in(
         // Resolve the real Trash path via SPECIAL-USE/LIST — hardcoded names
         // miss namespaced servers (Dovecot/Hostinger use INBOX.Trash), which
         // left mail \Deleted-flagged but visible: delete looked like a no-op.
-        let trash = ensure_role_mailbox(session, "trash", "Trash", TRASH_CANDIDATES).await?;
+        let trash = match trash {
+            Some(path) => path.to_string(),
+            None => ensure_role_mailbox(session, "trash", "Trash", TRASH_CANDIDATES).await?,
+        };
         info!("[delete_email] uid={} resolved trash='{}'", uid, trash);
 
         // `run_collecting_copyuid` asks the tagged-OK question the old `uid_mv`

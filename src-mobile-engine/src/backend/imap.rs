@@ -268,7 +268,8 @@ async fn apply_in(
             let expected = folder.uid_validity.map(|v| v as u32);
             before_wire()?;
             for uid in &present {
-                match imap::delete_email_in(session, path, *uid, permanent, caps.uidplus, expected).await {
+                // To the Trash just resolved: no LIST per uid.
+                match imap::delete_email_in(session, path, *uid, permanent, caps.uidplus, expected, trash.as_deref()).await {
                     Ok(_) => {}
                     Err(e) if e == "errors.bulkIdentityChanged" => return Ok(ApplyOutcome::OtherGeneration),
                     Err(e) => return refused_or_fail(e),

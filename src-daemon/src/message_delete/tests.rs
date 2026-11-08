@@ -376,6 +376,19 @@ async fn auto_in_inbox_asks_nothing_first() {
     assert_eq!(auto.count_commands("LIST"), trash.count_commands("LIST"), "no lookup of its own");
 }
 
+/// Outside INBOX the rule's Trash lookup is the only LIST: the move goes to
+/// the path that lookup found, so a click costs no second round trip (the
+/// same LISTs as a move out of INBOX).
+#[tokio::test]
+async fn auto_outside_inbox_lists_once() {
+    let (sent, s, config) = rule_server("Sent", Some("Trash"));
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "Sent", 1, Mode::Auto, false).await.expect("deleted");
+    assert_eq!(out.trash.as_deref(), Some("Trash"));
+    let (inbox, s, config) = rule_server("INBOX", Some("Trash"));
+    delete_one(&s, Provider::Imap(&config), "acc1", "INBOX", 1, Mode::Trash, false).await.expect("deleted");
+    assert_eq!(sent.count_commands("LIST"), inbox.count_commands("LIST"), "one lookup, not two");
+}
+
 /// Outside INBOX the rule costs one LIST before the delete, and a lookup that
 /// fails refuses the delete with nothing sent and nothing captured.
 #[tokio::test]
