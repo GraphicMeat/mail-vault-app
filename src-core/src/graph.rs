@@ -1668,6 +1668,28 @@ impl GraphClient {
         since: &str,
         next: Option<&str>,
     ) -> Result<(Vec<GraphSynced>, Option<String>), String> {
+        self.list_since_ordered(folder_id, since, next, "desc").await
+    }
+
+    /// [`GraphClient::list_since`], oldest first: the mobile engine's background pass reads what
+    /// arrived in arrival order, so a pass that stops between pages has missed nothing older
+    /// than what it read.
+    pub async fn list_since_oldest_first(
+        &self,
+        folder_id: &str,
+        since: &str,
+        next: Option<&str>,
+    ) -> Result<(Vec<GraphSynced>, Option<String>), String> {
+        self.list_since_ordered(folder_id, since, next, "asc").await
+    }
+
+    async fn list_since_ordered(
+        &self,
+        folder_id: &str,
+        since: &str,
+        next: Option<&str>,
+        order: &str,
+    ) -> Result<(Vec<GraphSynced>, Option<String>), String> {
         let url = match next {
             Some(link) => {
                 if !is_graph_link(link) {
@@ -1680,10 +1702,11 @@ impl GraphClient {
                     return Err("Graph list_since refused a malformed receivedDateTime".to_string());
                 }
                 format!(
-                    "{}/me/mailFolders/{}/messages?$top=100&$filter=receivedDateTime ge {}&$orderby=receivedDateTime desc&$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,flag,replyTo",
+                    "{}/me/mailFolders/{}/messages?$top=100&$filter=receivedDateTime ge {}&$orderby=receivedDateTime {}&$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,flag,replyTo",
                     graph_base(),
                     percent_encode(folder_id),
-                    since
+                    since,
+                    order
                 )
             }
         };
