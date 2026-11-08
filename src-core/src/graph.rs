@@ -335,11 +335,13 @@ impl AttachmentStream {
 }
 
 /// One row of `GraphClient::list_since`: the message as the full-header
-/// listing reads it, and whether Outlook's flag is set (`flag.flagStatus`).
+/// listing reads it, whether Outlook's flag is set (`flag.flagStatus`), and
+/// its `replyTo` (where a reply goes; empty when the sender set none).
 #[derive(Debug)]
 pub struct GraphSynced {
     pub message: GraphMessage,
     pub flagged: bool,
+    pub reply_to: Vec<EmailAddress>,
 }
 
 #[derive(Deserialize)]
@@ -348,6 +350,8 @@ struct RawSynced {
     message: GraphMessage,
     #[serde(default)]
     flag: Option<RawFlag>,
+    #[serde(default, rename = "replyTo")]
+    reply_to: Option<Vec<GraphEmailAddress>>,
 }
 
 #[derive(Deserialize)]
@@ -1676,7 +1680,7 @@ impl GraphClient {
                     return Err("Graph list_since refused a malformed receivedDateTime".to_string());
                 }
                 format!(
-                    "{}/me/mailFolders/{}/messages?$top=100&$filter=receivedDateTime ge {}&$orderby=receivedDateTime desc&$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,flag",
+                    "{}/me/mailFolders/{}/messages?$top=100&$filter=receivedDateTime ge {}&$orderby=receivedDateTime desc&$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,flag,replyTo",
                     graph_base(),
                     percent_encode(folder_id),
                     since
@@ -1700,6 +1704,15 @@ impl GraphClient {
             .into_iter()
             .map(|r| GraphSynced {
                 flagged: r.flag.and_then(|f| f.flag_status).is_some_and(|s| s.eq_ignore_ascii_case("flagged")),
+                reply_to: r
+                    .reply_to
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|a| {
+                        let address = a.email_address.address.filter(|x| !x.trim().is_empty())?;
+                        Some(EmailAddress { name: a.email_address.name, address })
+                    })
+                    .collect(),
                 message: r.message,
             })
             .collect();
