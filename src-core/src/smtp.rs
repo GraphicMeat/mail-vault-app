@@ -1248,6 +1248,13 @@ impl PhasedSendError {
     fn not_sent(message: String) -> Self {
         PhasedSendError { phase: SendPhase::NotSent, permanent: false, message }
     }
+
+    /// A Graph or JMAP failure: only its "may have gone out" text is past the
+    /// point of no return.
+    fn from_http(message: String) -> Self {
+        let phase = if message.contains(MAY_HAVE_GONE_OUT) { SendPhase::MayHaveSent } else { SendPhase::NotSent };
+        PhasedSendError { phase, permanent: false, message }
+    }
 }
 
 /// [`send_built`], with the failure placed before or after the point of no
@@ -1264,12 +1271,110 @@ pub async fn send_built_phased(
     built: BuiltMime,
 ) -> Result<SendResult, PhasedSendError> {
     if account.uses_graph() || account.uses_jmap() {
-        return send_built(account, email, built).await.map_err(|message| PhasedSendError {
-            phase: if message.contains(MAY_HAVE_GONE_OUT) { SendPhase::MayHaveSent } else { SendPhase::NotSent },
-            permanent: false,
-            message,
-        });
+        return send_built(account, email, built).await.map_err(PhasedSendError::from_http);
     }
+    let attachment_bytes: usize = email.attachments.as_ref().map(|v| v.iter().map(|a| a.content.len()).sum()).unwrap_or(0);
+    let io_timeout = Duration::from_secs(60 + (attachment_bytes / 50_000) as u64).min(Duration::from_secs(600));
+    let BuiltMime { message, raw_rfc2822 } = built;
+    let envelope = message.envelope().clone();
+    drop(message);
+    smtp_phased(account, envelope, raw_rfc2822, io_timeout).await
+}
+
+/// [`send_staged`] with the failure placed before or after the point of no
+/// return, as [`send_built_phased`] places it: over SMTP the session is
+/// driven step by step, and Graph's or JMAP's "may have gone out" is
+/// `MayHaveSent`. A bad address list fails before anything is sent.
+pub async fn send_staged_phased(
+    account: &ImapConfig,
+    email: &OutgoingEmail,
+    raw: Vec<u8>,
+) -> Result<SendResult, PhasedSendError> {
+    let lenient = |list: &Option<String>| list.as_deref().and_then(|l| parse_address_list(l).ok()).unwrap_or_default();
+    let bcc = lenient(&email.bcc);
+    if account.uses_graph() {
+        return send_via_graph(account, raw, &bcc).await.map_err(PhasedSendError::from_http);
+    } else if account.uses_jmap() {
+        let timeout = jmap_send_timeout(raw.len());
+        return send_via_jmap(account, raw, &bcc, timeout).await.map_err(PhasedSendError::from_http);
+    }
+    let from: lettre::Address =
+        account.from_address().parse().map_err(|e| PhasedSendError::not_sent(format!("Invalid from email: {}", e)))?;
+    let to = parse_address_list(&email.to).map_err(|e| PhasedSendError::not_sent(format!("Invalid to address: {}", e)))?;
+    let rcpt: Vec<lettre::Address> = to.into_iter().chain(lenient(&email.cc)).chain(bcc).map(|mb| mb.email).collect();
+    if rcpt.is_empty() {
+        return Err(PhasedSendError::not_sent("Invalid to address: no recipients".to_string()));
+    }
+    let envelope = lettre::address::Envelope::new(Some(from), rcpt)
+        .map_err(|e| PhasedSendError::not_sent(format!("Failed to build envelope: {}", e)))?;
+    let io_timeout = raw_io_timeout(raw.len());
+    smtp_phased(account, envelope, raw, io_timeout).await
+}
+
+/// [`send_raw`] with the failure placed before or after the point of no
+/// return (see [`send_staged_phased`]).
+pub async fn send_raw_phased(
+    account: &ImapConfig,
+    envelope: &FrozenEnvelope,
+    raw_rfc2822: Vec<u8>,
+) -> Result<SendResult, PhasedSendError> {
+    let from: lettre::Address = envelope
+        .from
+        .parse()
+        .map_err(|e| PhasedSendError::not_sent(format!("Invalid from address '{}': {}", envelope.from, e)))?;
+    let parse_group = |group: &str| -> Result<Vec<Mailbox>, PhasedSendError> {
+        if group.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        parse_address_list(group).map_err(|e| PhasedSendError::not_sent(format!("Invalid recipient address: {}", e)))
+    };
+    let bcc = parse_group(&envelope.bcc)?;
+    let mut to: Vec<lettre::Address> = Vec::new();
+    for group in [&envelope.to, &envelope.cc] {
+        to.extend(parse_group(group)?.into_iter().map(|mb| mb.email));
+    }
+    to.extend(bcc.iter().map(|mb| mb.email.clone()));
+    if to.is_empty() {
+        return Err(PhasedSendError::not_sent("Invalid to address: no recipients".to_string()));
+    }
+    if account.uses_graph() {
+        // The frozen bytes were built without the Bcc header; it lives in the
+        // envelope, and Graph only reads headers. The identity is the frozen
+        // From's: the stored account has no send-as override (as for JMAP).
+        let mut account = account.clone();
+        account.from_email = Some(from.to_string());
+        return send_via_graph(&account, raw_rfc2822, &bcc).await.map_err(PhasedSendError::from_http);
+    } else if account.uses_jmap() {
+        // The identity is the frozen From's. Scheduled Send's account comes
+        // from the keychain record, without the send-as override compose
+        // adds per send, so `from_address()` alone would be the login.
+        let mut account = account.clone();
+        account.from_email = Some(from.to_string());
+        let timeout = jmap_send_timeout(raw_rfc2822.len());
+        return send_via_jmap(&account, raw_rfc2822, &bcc, timeout).await.map_err(PhasedSendError::from_http);
+    }
+    let lettre_envelope = lettre::address::Envelope::new(Some(from), to)
+        .map_err(|e| PhasedSendError::not_sent(format!("Failed to build envelope: {}", e)))?;
+    info!("[smtp] Sending a frozen message ({} bytes)", raw_rfc2822.len());
+    let io_timeout = raw_io_timeout(raw_rfc2822.len());
+    smtp_phased(account, lettre_envelope, raw_rfc2822, io_timeout).await
+}
+
+/// The I/O timeout for bytes that are already final: a minute, and a second
+/// more per 50 KB, at most ten minutes.
+fn raw_io_timeout(len: usize) -> Duration {
+    Duration::from_secs(60 + (len / 50_000) as u64).min(Duration::from_secs(600))
+}
+
+/// The SMTP step loop every send goes through: connect, TLS, AUTH, MAIL,
+/// RCPT, DATA, then the payload, each failure placed on its side of the point
+/// of no return (see [`send_built_phased`]).
+async fn smtp_phased(
+    account: &ImapConfig,
+    envelope: lettre::address::Envelope,
+    raw_rfc2822: Vec<u8>,
+    io_timeout: Duration,
+) -> Result<SendResult, PhasedSendError> {
     use lettre::transport::smtp::client::AsyncSmtpConnection;
     use lettre::transport::smtp::commands::{Data, Mail, Quit, Rcpt};
     use lettre::transport::smtp::extension::{ClientId, Extension, MailBodyParameter, MailParameter};
@@ -1281,8 +1386,6 @@ pub async fn send_built_phased(
     let smtp_port = account.smtp_port.unwrap_or(587);
     let from_addr = account.from_address().to_string();
     let friendly = |e: &lettre::transport::smtp::Error| friendly_smtp_error(smtp_host, smtp_port, &from_addr, &e.to_string());
-    let attachment_bytes: usize = email.attachments.as_ref().map(|v| v.iter().map(|a| a.content.len()).sum()).unwrap_or(0);
-    let io_timeout = Duration::from_secs(60 + (attachment_bytes / 50_000) as u64).min(Duration::from_secs(600));
     let credentials = if account.is_oauth2() {
         let token = account
             .access_token
@@ -1300,9 +1403,13 @@ pub async fn send_built_phased(
         )
     };
     let hello = ClientId::default();
-    let BuiltMime { message, raw_rfc2822 } = built;
-    let envelope = message.envelope().clone();
-    drop(message);
+    info!(
+        "[smtp] Sending via {}:{} (implicit_tls={}, oauth2={})",
+        smtp_host,
+        smtp_port,
+        use_implicit_tls(account.smtp_secure, smtp_port),
+        account.is_oauth2()
+    );
 
     let conn_event = smtp_event(account, smtp_host, smtp_port, "send", raw_rfc2822.len() as u64);
     let out: Result<SendResult, PhasedSendError> = async {
