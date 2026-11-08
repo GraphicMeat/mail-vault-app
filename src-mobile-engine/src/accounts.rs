@@ -69,7 +69,7 @@ pub fn map_error(msg: &str) -> Code {
         || mailvault_core::imap::pool::is_connection_lost(msg)
     {
         Code::HostUnreachable
-    } else if has(&["[unavailable]", "[inuse]", "[limit]", "[serverbug]"]) {
+    } else if mailvault_core::imap::refusal::is_transient_refusal(msg) {
         // RFC 5530 says these are temporary (Gmail's XOAUTH2 `NO [UNAVAILABLE] Temporary System
         // Problem` among them): never a wrong password or token, whatever words come before.
         Code::HostUnreachable
@@ -503,6 +503,7 @@ mod tests {
             "Login failed for u@example.test: NO [INUSE] Mailbox in use",
             "Login failed for u@example.test: NO [LIMIT] Too many connections",
             "Login failed for u@example.test: NO [SERVERBUG] Oops",
+            "Login failed for u@gmail.com: NO [ALERT] Too many simultaneous connections. (Failure)",
         ] {
             assert_eq!(map_error(e), Code::HostUnreachable, "{e}");
         }
