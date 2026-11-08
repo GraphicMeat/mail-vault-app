@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useId } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
-import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings, isPersonalMicrosoftAccount } from '../services/api';
+import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings } from '../services/api';
 import { withOAuth2Exchange } from '../services/authUtils';
 import { GOOGLE_CLIENT_THUNDERBIRD, googleClientErrorText, loadGoogleClients } from '../services/googleClient';
 import { isPersonalMicrosoftEmail } from '../services/graphConfig';
@@ -227,8 +227,8 @@ export function AccountModal({ onClose, onSuccess }) {
   const [detectedProvider, setDetectedProvider] = useState(null);
   const [showManualConfig, setShowManualConfig] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  // Microsoft only: 'auto' (personal -> Graph, work -> IMAP), 'graph' or 'imap'.
-  const [msTransport, setMsTransport] = useState('auto');
+  // Microsoft only: 'imap' (the default) or 'graph'.
+  const [msTransport, setMsTransport] = useState('imap');
   // 'imap' | 'jmap'. JMAP is on offer for a preset that has it (Fastmail),
   // after autodetect found a session, and on "Other" for a URL typed by hand.
   const [protocol, setProtocol] = useState('imap');
@@ -532,18 +532,10 @@ export function AccountModal({ onClose, onSuccess }) {
 
     const currentProvider = providerConfig?.oauth2Provider || 'microsoft';
 
-    // Graph or IMAP for a Microsoft account: the user's pick wins. Automatic
-    // keeps personal accounts on Graph: Outlook.com and Hotmail addresses are
-    // known by domain; a personal account signed in under its own domain is
-    // told by Microsoft, unless a work tenant or own app was typed (then it is
-    // a work account, over IMAP).
-    const isPersonalMs = currentProvider === 'microsoft' && (
-      msTransport !== 'auto' ? msTransport === 'graph' : (
-        isPersonalMicrosoftEmail(userEnteredEmail)
-        || (!formData.oauth2TenantId && !formData.oauth2CustomClientId
-          && await isPersonalMicrosoftAccount(userEnteredEmail).catch(() => false))
-      )
-    );
+    // IMAP is the default for every Microsoft account (Outlook.com and Hotmail
+    // included): it gives a better experience than Graph, which stays one pick
+    // away. The address never decides the transport.
+    const isPersonalMs = currentProvider === 'microsoft' && msTransport === 'graph';
 
     try {
       // Step 1: Get the auth URL from the server (pass email as login_hint + provider)
@@ -916,9 +908,8 @@ export function AccountModal({ onClose, onSuccess }) {
                           disabled={oauthLoading || oauthConnected}
                           className="px-2 py-1 text-xs bg-mail-bg border border-mail-border rounded text-mail-text"
                         >
-                          <option value="auto">{t('account.msTransportAuto')}</option>
-                          <option value="graph">{t('account.msTransportGraph')}</option>
                           <option value="imap">{t('account.msTransportImap')}</option>
+                          <option value="graph">{t('account.msTransportGraph')}</option>
                         </select>
                       </label>
                       {msTransport === 'imap' && <div className="mb-2"><OutlookImapHint /></div>}

@@ -68,6 +68,7 @@ import { MboxUploadProgress } from './components/MboxUploadProgress';
 import { FolderMoveProgress } from './components/FolderMoveProgress';
 import { FormatMigrationProgress } from './components/FormatMigrationProgress';
 import { OfflineBanner } from './components/OfflineBanner';
+import { GraphImapBanner } from './components/GraphImapBanner';
 import { BugReportDialog } from './components/BugReportDialog';
 import { anonymousLogsAttachment, ANONYMOUS_LOGS_FILENAME } from './utils/anonymousLogs';
 import { FocusLock } from './components/FocusLock';
@@ -1531,6 +1532,8 @@ function App() {
       {/* No internet. Below the vault banner: an unplugged drive is the worse
           problem, and only one of the two is the user's to fix right now. */}
       <OfflineBanner />
+      {/* Outlook accounts still on Graph: IMAP works now and is the better way. */}
+      <GraphImapBanner onSwitch={(accountId) => openSettings({ tab: 'accounts', accountId, section: 'connection' })} />
       {/* overflow-CLIP, not hidden: an overflow-hidden box is still a scroll
           container, and WebKit scrolls one sideways to reveal a text selection.
           With no scrollbar the offset sticks and the sidebar and list end up

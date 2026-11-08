@@ -192,11 +192,12 @@ describe('AccountModal — OAuth callback finishes the add', () => {
   });
 });
 
-// A personal Microsoft account signed in under its own domain (an alias of an
-// Outlook.com account) is no work account: the domain list cannot tell, so the
-// daemon asks Microsoft. Treated as a work account it is added over IMAP, which
-// a personal token cannot log in to ("Nothing answered on ... port 993").
-describe('AccountModal: a personal Microsoft account under its own domain', () => {
+// Outlook.com and Hotmail work over IMAP with OAuth, which gives a better
+// experience than Graph, so IMAP is the default for every Microsoft account.
+// A personal account signed in under its own domain (an alias of an Outlook.com
+// account) is no exception, and no lookup of whether Microsoft calls it
+// personal is made any more: the address picks nothing.
+describe('AccountModal: a Microsoft account under its own domain', () => {
   const CUSTOM = 'butcher@graphicmeat.example';
   const SIGNED_IN = { accessToken: 'access-token', refreshToken: 'refresh-token', expiresAt: 1234567890 };
 
@@ -222,24 +223,11 @@ describe('AccountModal: a personal Microsoft account under its own domain', () =
     await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
   }
 
-  it('is signed in for Graph and added over Graph when Microsoft says the domain is no work tenant', async () => {
+  it('is added over IMAP even when Microsoft would call the domain personal, without asking', async () => {
     mockIsPersonalMicrosoftAccount.mockResolvedValue(true);
     await signInWithMicrosoft();
-    expect(mockIsPersonalMicrosoftAccount).toHaveBeenCalledWith(CUSTOM);
-    expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(true);
-    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('graph');
-  });
-
-  it('stays a work account when Microsoft says the domain is a tenant', async () => {
-    mockIsPersonalMicrosoftAccount.mockResolvedValue(false);
-    await signInWithMicrosoft();
+    expect(mockIsPersonalMicrosoftAccount).not.toHaveBeenCalled();
     expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(false);
-    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('imap');
-  });
-
-  it('stays a work account, and the sign-in still goes ahead, when the lookup fails', async () => {
-    mockIsPersonalMicrosoftAccount.mockRejectedValue(new Error('offline'));
-    await signInWithMicrosoft();
     expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('imap');
   });
 });
@@ -420,9 +408,9 @@ describe('AccountModal native workflow classification',()=>{
   });
 });
 
-// Microsoft fixed personal Outlook.com IMAP over OAuth, so the transport is a
-// choice: Automatic keeps today's detection (personal -> Graph, work -> IMAP),
-// an explicit pick wins over the domain and skips the lookup.
+// Microsoft fixed personal Outlook.com IMAP over OAuth: IMAP is the default for
+// every Microsoft address, Graph stays one pick away and is never chosen by the
+// domain.
 describe('AccountModal: choosing Graph or IMAP for a Microsoft account', () => {
   const SIGNED_IN = { accessToken: 'access-token', refreshToken: 'refresh-token', expiresAt: 1234567890 };
   let personalByDomain;
@@ -453,17 +441,38 @@ describe('AccountModal: choosing Graph or IMAP for a Microsoft account', () => {
     await waitFor(() => expect(mockAddAccount).toHaveBeenCalledTimes(1));
   }
 
-  it('offers Automatic, Microsoft Graph and IMAP, Automatic first', async () => {
+  it('offers IMAP and Microsoft Graph, IMAP first and selected', async () => {
     render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
     fireEvent.click(screen.getByText('Outlook / Microsoft 365'));
     const select = await screen.findByLabelText('Connect over');
-    expect([...select.options].map(o => o.value)).toEqual(['auto', 'graph', 'imap']);
-    expect(select.value).toBe('auto');
+    expect([...select.options].map(o => o.value)).toEqual(['imap', 'graph']);
+    expect(select.value).toBe('imap');
   });
 
-  it('Automatic keeps an outlook.com address on Graph', async () => {
+  it('by default an outlook.com address is added over IMAP, with Outlook.com SMTP', async () => {
     personalByDomain.mockReturnValue(true);
     await signIn('someone@outlook.com');
+    expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(false);
+    const added = mockAddAccount.mock.calls[0][0];
+    expect(added.oauth2Transport).toBe('imap');
+    expect(added.smtpHost).toBe('smtp-mail.outlook.com');
+  });
+
+  it('by default a work address is added over IMAP', async () => {
+    await signIn('someone@contoso.example');
+    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('imap');
+  });
+
+  it('by default the IMAP hint and FAQ link are on show', async () => {
+    render(<AccountModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.click(screen.getByText('Outlook / Microsoft 365'));
+    await screen.findByLabelText('Connect over');
+    expect(screen.getByTestId('outlook-imap-hint')).toBeTruthy();
+  });
+
+  it('Graph picked: an outlook.com address still signs in for Graph and is added over Graph', async () => {
+    personalByDomain.mockReturnValue(true);
+    await signIn('someone@outlook.com', 'graph');
     expect(mockGetOAuth2AuthUrl.mock.calls[0][4]).toBe(true);
     expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('graph');
   });
@@ -489,13 +498,6 @@ describe('AccountModal: choosing Graph or IMAP for a Microsoft account', () => {
   it('a work address over IMAP keeps the Microsoft 365 SMTP host', async () => {
     await signIn('someone@contoso.example', 'imap');
     expect(mockAddAccount.mock.calls[0][0].smtpHost).toBe('smtp.office365.com');
-  });
-
-  it('IMAP picked: an own-domain address skips the personal-account lookup', async () => {
-    mockIsPersonalMicrosoftAccount.mockResolvedValue(true);
-    await signIn('butcher@graphicmeat.example', 'imap');
-    expect(mockIsPersonalMicrosoftAccount).not.toHaveBeenCalled();
-    expect(mockAddAccount.mock.calls[0][0].oauth2Transport).toBe('imap');
   });
 
   it('Graph picked: a work address signs in for Graph scopes and is added over Graph', async () => {

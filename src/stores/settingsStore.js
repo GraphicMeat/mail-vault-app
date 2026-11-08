@@ -471,6 +471,9 @@ export const useSettingsStore = create(
       // Microsoft account id -> the catalog key of the last Graph/IMAP switch
       // the daemon refused, until a switch goes through (Settings shows its help).
       transportRefusals: {},
+      // Outlook accounts on Graph whose "IMAP works now" banner the user
+      // dismissed for good { [accountId]: true }.
+      graphImapNoticeDismissed: {},
       // Accounts switched off on the Notes to Self board { [accountId]: true }.
       // The off set, so an account added later starts on.
       notesHiddenAccounts: {},
@@ -1165,6 +1168,9 @@ export const useSettingsStore = create(
         });
       },
       isAccountHidden: (accountId) => !!get().hiddenAccounts[accountId],
+      dismissGraphImapNotice: (accountId) => set(state => ({
+        graphImapNoticeDismissed: { ...state.graphImapNoticeDismissed, [accountId]: true },
+      })),
       setTransportRefusal: (accountId, key) => set(state => {
         const { [accountId]: _, ...rest } = state.transportRefusals || {};
         return { transportRefusals: key ? { ...rest, [accountId]: key } : rest };
@@ -1587,6 +1593,7 @@ export const useSettingsStore = create(
           accountOrder: [],
           hiddenAccounts: {},
           transportRefusals: {},
+          graphImapNoticeDismissed: {},
           notesHiddenAccounts: {},
           lastMailboxPerAccount: {},
           signatures: {},
