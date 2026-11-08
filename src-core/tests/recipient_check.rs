@@ -37,6 +37,12 @@ fn an_accepted_list_builds() {
         "a@x.test, , b@y.test",
         "Ann <ann@x.test>, \"B, C\" <bc@y.example>",
         "first.last+tag@sub.x.test",
+        "a@x.test; b@y.test",
+        "a@x.test;b@y.test;",
+        "a@x.test\nb@y.test",
+        "a@x.test\r\nb@y.test",
+        "\"A; B\" <a@x.test>",
+        "\"A; B\" <a@x.test>; c@z.test",
     ] {
         assert_eq!(recipient_problem(list, "", ""), None, "{list}");
         assert!(builds(list), "core accepts {list:?}, so it must build");
@@ -57,5 +63,22 @@ fn problems_name_their_catalog_key() {
         ("a@x.test, two@@x.test", "", "", "two@@x.test"),
     ] {
         assert_eq!(recipient_problem(to, cc, bcc), Some(("compose.invalidRecipient", Some(bad.to_string()))), "{to} | {cc} | {bcc}");
+    }
+}
+
+/// The builder splits a list exactly where the check does: `,` `;` and line
+/// breaks, never inside quotes or angle brackets. A list the check reads as
+/// two addresses goes to two recipients.
+#[test]
+fn the_builder_splits_where_the_check_splits() {
+    for (list, n) in [
+        ("a@x.test; b@y.test", 2),
+        ("a@x.test\nb@y.test", 2),
+        ("\"A; B\" <a@x.test>", 1),
+        ("\"A, B\" <a@x.test>, b@y.test; c@z.test", 3),
+    ] {
+        let email: OutgoingEmail = serde_json::from_value(serde_json::json!({ "to": list, "subject": "s", "text": "t" })).expect("OutgoingEmail");
+        let built = smtp::build_mime(&account(), &email).unwrap_or_else(|e| panic!("{list:?}: {e}"));
+        assert_eq!(built.message.envelope().to().len(), n, "{list:?}");
     }
 }

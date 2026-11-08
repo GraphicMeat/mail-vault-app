@@ -79,51 +79,16 @@ pub struct BuiltMime {
     pub raw_rfc2822: Vec<u8>,
 }
 
-/// Split a recipient line on commas, but never inside a quoted display name
-/// (`"Doe, John" <j@d.com>`) or inside angle brackets. A naive split turns an
-/// address-book name with a comma into two broken recipients.
+/// Split a recipient line into its addresses: core's one recipient
+/// tokenizer (`compose_prep::split_recipients`), so the builder splits a
+/// list exactly where the recipient check does (`,` `;` and line breaks,
+/// never inside a quoted display name like `"Doe, John" <j@d.com>` or inside
+/// angle brackets). A list the check accepts is a list this builds.
 pub(crate) fn split_address_line(raw: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut current = String::new();
-    let mut in_quotes = false;
-    let mut in_angle = false;
-    let mut chars = raw.chars();
-    while let Some(ch) = chars.next() {
-        match ch {
-            '\\' if in_quotes => {
-                current.push(ch);
-                if let Some(next) = chars.next() {
-                    current.push(next);
-                }
-            }
-            '"' => {
-                in_quotes = !in_quotes;
-                current.push(ch);
-            }
-            '<' if !in_quotes => {
-                in_angle = true;
-                current.push(ch);
-            }
-            '>' if !in_quotes => {
-                in_angle = false;
-                current.push(ch);
-            }
-            ',' if !in_quotes && !in_angle => {
-                if !current.trim().is_empty() {
-                    out.push(current.trim().to_string());
-                }
-                current.clear();
-            }
-            _ => current.push(ch),
-        }
-    }
-    if !current.trim().is_empty() {
-        out.push(current.trim().to_string());
-    }
-    out
+    crate::compose_prep::split_recipients(raw)
 }
 
-/// Parse a comma-separated recipient string into a list of mailboxes.
+/// Parse a recipient string (`split_address_line`) into a list of mailboxes.
 /// Empty entries (e.g. trailing commas, "a, ,b") are skipped so a stray
 /// comma doesn't cause a send failure.
 fn parse_address_list(raw: &str) -> Result<Vec<Mailbox>, String> {
@@ -1242,7 +1207,7 @@ pub async fn send_built_phased(
     let BuiltMime { message, raw_rfc2822 } = built;
     let envelope = message.envelope().clone();
     drop(message);
-    smtp_phased(account, envelope, raw_rfc2822, io_timeout).await
+    smtp_phased(account, envelope, raw_rfc2822, io_timeout, false).await
 }
 
 /// [`send_staged`] with the failure placed before or after the point of no
@@ -1272,7 +1237,7 @@ pub async fn send_staged_phased(
     let envelope = lettre::address::Envelope::new(Some(from), rcpt)
         .map_err(|e| PhasedSendError::not_sent(format!("Failed to build envelope: {}", e)))?;
     let io_timeout = raw_io_timeout(raw.len());
-    smtp_phased(account, envelope, raw, io_timeout).await
+    smtp_phased(account, envelope, raw, io_timeout, true).await
 }
 
 /// [`send_raw`] with the failure placed before or after the point of no
@@ -1319,9 +1284,8 @@ pub async fn send_raw_phased(
     }
     let lettre_envelope = lettre::address::Envelope::new(Some(from), to)
         .map_err(|e| PhasedSendError::not_sent(format!("Failed to build envelope: {}", e)))?;
-    info!("[smtp] Sending a frozen message ({} bytes)", raw_rfc2822.len());
     let io_timeout = raw_io_timeout(raw_rfc2822.len());
-    smtp_phased(account, lettre_envelope, raw_rfc2822, io_timeout).await
+    smtp_phased(account, lettre_envelope, raw_rfc2822, io_timeout, true).await
 }
 
 /// The I/O timeout for bytes that are already final: a minute, and a second
@@ -1332,12 +1296,15 @@ fn raw_io_timeout(len: usize) -> Duration {
 
 /// The SMTP step loop every send goes through: connect, TLS, AUTH, MAIL,
 /// RCPT, DATA, then the payload, each failure placed on its side of the point
-/// of no return (see [`send_built_phased`]).
+/// of no return (see [`send_built_phased`]). `frozen`: bytes that were
+/// final before this call (a staged copy, a scheduled `.eml`), logged as the
+/// desktop always logged them.
 async fn smtp_phased(
     account: &ImapConfig,
     envelope: lettre::address::Envelope,
     raw_rfc2822: Vec<u8>,
     io_timeout: Duration,
+    frozen: bool,
 ) -> Result<SendResult, PhasedSendError> {
     use lettre::transport::smtp::client::AsyncSmtpConnection;
     use lettre::transport::smtp::commands::{Data, Mail, Quit, Rcpt};
@@ -1367,13 +1334,24 @@ async fn smtp_phased(
         )
     };
     let hello = ClientId::default();
-    info!(
-        "[smtp] Sending via {}:{} (implicit_tls={}, oauth2={})",
-        smtp_host,
-        smtp_port,
-        use_implicit_tls(account.smtp_secure, smtp_port),
-        account.is_oauth2()
-    );
+    if frozen {
+        info!(
+            "[smtp] Sending a frozen message ({} bytes) via {}:{} (implicit_tls={}, oauth2={})",
+            raw_rfc2822.len(),
+            smtp_host,
+            smtp_port,
+            use_implicit_tls(account.smtp_secure, smtp_port),
+            account.is_oauth2()
+        );
+    } else {
+        info!(
+            "[smtp] Sending via {}:{} (implicit_tls={}, oauth2={})",
+            smtp_host,
+            smtp_port,
+            use_implicit_tls(account.smtp_secure, smtp_port),
+            account.is_oauth2()
+        );
+    }
 
     let conn_event = smtp_event(account, smtp_host, smtp_port, "send", raw_rfc2822.len() as u64);
     let out: Result<SendResult, PhasedSendError> = async {
@@ -1440,7 +1418,11 @@ async fn smtp_phased(
         })?;
         let _ = conn.command(Quit).await;
         let message_id = response.message().collect::<Vec<_>>().join("");
-        info!("Email sent via SMTP (phased): {}", message_id);
+        if frozen {
+            info!("Frozen email sent via SMTP: {}", message_id);
+        } else {
+            info!("Email sent via SMTP: {}", message_id);
+        }
         Ok(SendResult { message_id, raw_rfc2822, server_saved_sent: false })
     }
     .await;

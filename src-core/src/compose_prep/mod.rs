@@ -570,7 +570,11 @@ enum Mode {
     ReplyAll,
     Forward,
 }
-fn tokens(s: &str) -> Vec<String> {
+/// A recipient line's addresses: split on `,` `;` and line breaks, never
+/// inside a quoted display name or angle brackets, each trimmed, empties
+/// skipped. Core's one recipient tokenizer: the check (`recipient_problem`)
+/// and the MIME builder (`smtp::build_mime`) both split with it.
+pub fn split_recipients(s: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut current = String::new();
     let mut quoted = false;
@@ -701,7 +705,7 @@ pub fn recipient_problem(to: &str, cc: &str, bcc: &str) -> Option<(&'static str,
     }
     [to, cc, bcc]
         .iter()
-        .flat_map(|s| tokens(s))
+        .flat_map(|s| split_recipients(s))
         .find(|s| !valid_recipient(s))
         .map(|token| ("compose.invalidRecipient", Some(token)))
 }
