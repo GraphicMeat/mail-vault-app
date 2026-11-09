@@ -7,12 +7,20 @@ plugins {
     id("rust")
 }
 
-val tauriProperties = Properties().apply {
-    val propFile = file("tauri.properties")
-    if (propFile.exists()) {
-        propFile.inputStream().use { load(it) }
-    }
+// versionName and the build 0 versionCode come from scripts/bump-version.sh. MV_BUILD (0..99) is
+// added so a rejected upload can be sent again under a higher code. Tauri's own tauri.properties
+// is not used: it derives a different, non-monotonic code.
+val mvVersion = Properties().apply {
+    file("../../../version.properties").inputStream().use { load(it) }
 }
+val mvBuild = (System.getenv("MV_BUILD") ?: "0").toIntOrNull()?.takeIf { it in 0..99 }
+    ?: throw GradleException("MV_BUILD must be an integer from 0 to 99")
+
+// Release signing is read from the environment only. All four set: signed. Any missing: unsigned.
+val mvSigning = listOf(
+    "MV_ANDROID_KEYSTORE", "MV_ANDROID_KEYSTORE_PASSWORD", "MV_ANDROID_KEY_ALIAS", "MV_ANDROID_KEY_PASSWORD",
+).associateWith { System.getenv(it) }
+val mvSigned = mvSigning.values.all { !it.isNullOrEmpty() }
 
 android {
     compileSdk = 36
@@ -22,8 +30,18 @@ android {
         applicationId = "com.mailvault.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+        versionCode = mvVersion.getProperty("versionCode").toInt() + mvBuild
+        versionName = mvVersion.getProperty("versionName")
+    }
+    signingConfigs {
+        if (mvSigned) {
+            create("release") {
+                storeFile = file(mvSigning.getValue("MV_ANDROID_KEYSTORE")!!)
+                storePassword = mvSigning.getValue("MV_ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = mvSigning.getValue("MV_ANDROID_KEY_ALIAS")
+                keyPassword = mvSigning.getValue("MV_ANDROID_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -38,6 +56,11 @@ android {
             }
         }
         getByName("release") {
+            if (mvSigned) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn("MailVault: MV_ANDROID_KEYSTORE* not all set, the release build is UNSIGNED and cannot be uploaded")
+            }
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

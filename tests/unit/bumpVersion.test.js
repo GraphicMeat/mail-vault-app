@@ -38,16 +38,30 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function fixture(buildStub) {
+const PLIST = (version, code) => `<dict>
+	<key>CFBundleShortVersionString</key>
+	<string>${version}</string>
+	<key>CFBundleVersion</key>
+	<string>${code}</string>
+</dict>
+`;
+const PROJECT_YML = (version, code) => `        CFBundleShortVersionString: ${version}
+        CFBundleVersion: "${code}"
+`;
+
+function fixture(buildStub, { version = '1.2.3', bump = 'patch' } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'mv-bump-'));
   roots.push(root);
-  const old = homepage('1.2.3', '2020-01-01');
+  const old = homepage(version, '2020-01-01');
   const files = {
-    'package.json': '{\n  "version": "1.2.3"\n}\n',
-    'package-lock.json': '{\n  "version": "1.2.3",\n  "packages": { "": { "version": "1.2.3" } }\n}\n',
-    'src-tauri/Cargo.toml': '[package]\nname = "mailvault"\nversion = "1.2.3"\n',
-    'src-tauri/tauri.conf.json': '{\n  "version": "1.2.3"\n}\n',
-    'snap/snapcraft.yaml': "version: '1.2.3'\n",
+    'package.json': `{\n  "version": "${version}"\n}\n`,
+    'package-lock.json': `{\n  "version": "${version}",\n  "packages": { "": { "version": "${version}" } }\n}\n`,
+    'src-tauri/Cargo.toml': `[package]\nname = "mailvault"\nversion = "${version}"\n`,
+    'src-tauri/tauri.conf.json': `{\n  "version": "${version}"\n}\n`,
+    'snap/snapcraft.yaml': `version: '${version}'\n`,
+    'src-tauri-mobile/gen/apple/project.yml': PROJECT_YML('0.0.1', '1'),
+    'src-tauri-mobile/gen/apple/mailvault-mobile_iOS/Info.plist': PLIST('0.0.1', '1'),
+    'src-tauri-mobile/version.properties': 'versionName=0.0.1\nversionCode=1\n',
     'CHANGELOG.md': '# Changelog\n\n## [Unreleased]\n\n- A fix\n',
     'index.html': old,
     'website/index.html': old,
@@ -70,7 +84,7 @@ function fixture(buildStub) {
   git('init', '-q');
   git('add', '-A');
   git('commit', '-qm', 'base');
-  const run = spawnSync('bash', ['scripts/bump-version.sh', 'patch'], {
+  const run = spawnSync('bash', ['scripts/bump-version.sh', bump], {
     cwd: root,
     encoding: 'utf8',
     env: { ...process.env, PATH: `${join(root, 'stub-bin')}:${process.env.PATH}` },
@@ -108,5 +122,78 @@ describe.skipIf(process.platform !== 'darwin')('bump-version.sh', () => {
     const { run } = fixture(STALE_STUB);
     expect(run.status).not.toBe(0);
     expect(run.stdout).toContain('website/de/index.html does not contain version 1.2.4');
+  });
+});
+
+// CFBundleVersion and versionCode are one number, MAJOR*1_000_000 + MINOR*10_000 + PATCH*100 + BUILD,
+// so a store never sees it go down. The script writes build 0; MV_BUILD (0..99) is added at release.
+describe.skipIf(process.platform !== 'darwin')('mobile build number', () => {
+  const code = (m, n, p, b = 0) => m * 1_000_000 + n * 10_000 + p * 100 + b;
+
+  it('follows the formula in every mobile version file', () => {
+    const { run, read } = fixture(BUILD_STUB);
+    expect(run.status, run.stderr + run.stdout).toBe(0);
+    expect(code(1, 2, 4)).toBe(1020400);
+    expect(read('src-tauri-mobile/version.properties')).toContain('versionName=1.2.4\nversionCode=1020400\n');
+    expect(read('src-tauri-mobile/gen/apple/project.yml')).toBe(PROJECT_YML('1.2.4', '1020400'));
+    expect(read('src-tauri-mobile/gen/apple/mailvault-mobile_iOS/Info.plist')).toBe(PLIST('1.2.4', '1020400'));
+  });
+
+  it('only increases, across patch, minor and major bumps, even at MV_BUILD 99', () => {
+    const cases = [
+      ['patch', '1.2.9', 1020900, 1021000],
+      ['minor', '1.2.9', 1020900, 1030000],
+      ['major', '1.99.99', 1999900, 2000000],
+    ];
+    for (const [bump, version, before, after] of cases) {
+      const { run, read } = fixture(BUILD_STUB, { version, bump });
+      expect(run.status, run.stderr + run.stdout).toBe(0);
+      expect(read('src-tauri-mobile/version.properties')).toContain(`versionCode=${after}\n`);
+      expect(after).toBeGreaterThan(before + 99);
+    }
+  });
+
+  it('refuses a version the formula cannot hold', () => {
+    const { run } = fixture(BUILD_STUB, { version: '1.2.99', bump: 'patch' });
+    expect(run.status).not.toBe(0);
+    expect(run.stdout).toContain('<= 99');
+  });
+});
+
+describe('mobile-release.sh dry run', () => {
+  const dry = (platform, env = {}) => {
+    const base = { ...process.env, ...env };
+    for (const k of ['MV_BUILD', 'APPLE_TEAM_ID', 'MV_ANDROID_KEYSTORE', 'MV_ANDROID_KEYSTORE_PASSWORD', 'MV_ANDROID_KEY_ALIAS', 'MV_ANDROID_KEY_PASSWORD']) {
+      if (!(k in env)) delete base[k];
+    }
+    return spawnSync('bash', ['scripts/mobile-release.sh', platform, '--dry-run'], { encoding: 'utf8', env: base });
+  };
+  const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+  const [major, minor, patch] = version.split('.').map(Number);
+  const number = major * 1_000_000 + minor * 10_000 + patch * 100;
+
+  it('lists the .ipa it would produce without any secret in the environment', () => {
+    const run = dry('ios');
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain(`dist-release/MailVault-${version}-${number}.ipa`);
+    expect(run.stdout).toContain('APPLE_TEAM_ID');
+  });
+
+  it('lists the .aab, says it is unsigned without a keystore, and adds MV_BUILD', () => {
+    const run = dry('android', { MV_BUILD: '7' });
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain(`dist-release/MailVault-${version}-${number + 7}.aab`);
+    expect(run.stdout).toContain('UNSIGNED');
+  });
+
+  it('rejects a build outside 0..99', () => {
+    expect(dry('android', { MV_BUILD: '100' }).status).not.toBe(0);
+    expect(dry('android', { MV_BUILD: 'x' }).status).not.toBe(0);
+  });
+
+  it('keeps the committed version files at the package version build 0 number', () => {
+    expect(readFileSync('src-tauri-mobile/version.properties', 'utf8')).toContain(`versionCode=${number}\n`);
+    expect(readFileSync('src-tauri-mobile/gen/apple/project.yml', 'utf8')).toContain(`CFBundleVersion: "${number}"`);
+    expect(readFileSync('src-tauri-mobile/gen/apple/mailvault-mobile_iOS/Info.plist', 'utf8')).toContain(`<string>${number}</string>`);
   });
 });

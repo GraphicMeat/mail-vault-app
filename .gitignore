@@ -96,6 +96,7 @@ __pycache__/
 
 # Mobile shell (src-tauri-mobile): gen/ sources are committed, build output is not
 dist-mobile/
+dist-release/
 src-tauri-mobile/gen/apple/build/
 src-tauri-mobile/gen/apple/Externals/
 src-tauri-mobile/gen/apple/**/xcuserdata/

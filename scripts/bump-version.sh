@@ -31,6 +31,13 @@ case "$BUMP_TYPE" in
 esac
 
 NEW="$MAJOR.$MINOR.$PATCH"
+# Store build number: one integer for CFBundleVersion and Android versionCode. It only ever
+# grows with the version; BUILD (0..99, env MV_BUILD at release time) re-sends a rejected upload.
+if (( MINOR > 99 || PATCH > 99 )); then
+  echo "Error: minor and patch must stay <= 99 for the mobile build number ($NEW)"
+  exit 1
+fi
+MOBILE_CODE=$((MAJOR * 1000000 + MINOR * 10000 + PATCH * 100))
 TODAY=$(date +%Y-%m-%d)
 
 echo "Bumping version: $CURRENT → $NEW"
@@ -60,6 +67,13 @@ sed -i '' 's/"version": *"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"/"version": "'"$
 
 # snap/snapcraft.yaml: version: 'X.Y.Z'
 sed -i '' "s/^version: '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*'/version: '$NEW'/" "$ROOT/snap/snapcraft.yaml"
+
+# Mobile shell: iOS version keys (xcodegen source and the generated plist) and the Android
+# properties file that build.gradle.kts reads. The build number is the BUILD 0 value.
+MOBILE="$ROOT/src-tauri-mobile"
+sed -i '' "s/^\( *CFBundleShortVersionString:\) .*/\1 $NEW/; s/^\( *CFBundleVersion:\) .*/\1 \"$MOBILE_CODE\"/" "$MOBILE/gen/apple/project.yml"
+perl -0pi -e 's|(<key>CFBundleShortVersionString</key>\s*<string>)[^<]*|${1}'"$NEW"'|; s|(<key>CFBundleVersion</key>\s*<string>)[^<]*|${1}'"$MOBILE_CODE"'|' "$MOBILE/gen/apple/mailvault-mobile_iOS/Info.plist"
+printf '# Written by scripts/bump-version.sh. versionCode is the build 0 number; MV_BUILD (0..99) is added at release time.\nversionName=%s\nversionCode=%s\n' "$NEW" "$MOBILE_CODE" > "$MOBILE/version.properties"
 
 # Update Cargo.lock
 (cd "$ROOT/src-tauri" && cargo update -p mailvault 2>/dev/null || true)
@@ -99,6 +113,11 @@ verify_version "$ROOT/src-tauri/tauri.conf.json" "\"version\": \"$NEW\"" "tauri.
 verify_version "$ROOT/snap/snapcraft.yaml" "version: '$NEW'" "snapcraft.yaml"
 verify_version "$ROOT/package-lock.json" "\"version\": \"$NEW\"" "package-lock.json"
 verify_version "$ROOT/website/index.html" "\"softwareVersion\": \"$NEW\"" "website/index.html"
+verify_version "$MOBILE/gen/apple/project.yml" "CFBundleShortVersionString: $NEW" "mobile project.yml"
+verify_version "$MOBILE/gen/apple/project.yml" "CFBundleVersion: \"$MOBILE_CODE\"" "mobile project.yml build number"
+verify_version "$MOBILE/gen/apple/mailvault-mobile_iOS/Info.plist" "<string>$NEW</string>" "mobile Info.plist"
+verify_version "$MOBILE/gen/apple/mailvault-mobile_iOS/Info.plist" "<string>$MOBILE_CODE</string>" "mobile Info.plist build number"
+verify_version "$MOBILE/version.properties" "versionCode=$MOBILE_CODE" "mobile version.properties"
 # A frozen page or a broken build leaves a locale homepage on the old version.
 for page in $(git -C "$ROOT" grep -l '"softwareVersion"' -- index.html 'website/*/index.html'); do
   verify_version "$ROOT/$page" "\"softwareVersion\": \"$NEW\"" "$page"
@@ -120,6 +139,7 @@ echo "  package-lock.json       → $NEW"
 echo "  src-tauri/Cargo.toml    → $NEW"
 echo "  src-tauri/tauri.conf.json → $NEW"
 echo "  snap/snapcraft.yaml     → $NEW"
+echo "  src-tauri-mobile (project.yml, Info.plist, version.properties) → $NEW, build number $MOBILE_CODE"
 echo "  website/index.html, index.html → softwareVersion $NEW, datePublished $TODAY"
 echo "  website/*/index.html, website/sitemap.xml → rebuilt and staged"
 echo ""
