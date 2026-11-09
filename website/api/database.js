@@ -215,8 +215,9 @@ async function initDatabase() {
     )
   `);
 
-  // Installs a store subscription serves (restore on a new phone joins the set; capped at 5
-  // per subscription by store-billing.js, the least recently seen is dropped).
+  // Installs a store subscription serves (restore on a new phone joins the set). store-billing.js
+  // refuses a restore into a set of 5 live installs (409) and evicts nobody; a row not seen
+  // for 30 days is pruned when the set is read.
   await db.execute(`
     CREATE TABLE IF NOT EXISTS store_subscription_installs (
       subscription_id INT NOT NULL,

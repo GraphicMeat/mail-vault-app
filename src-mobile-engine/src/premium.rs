@@ -336,10 +336,11 @@ enum Check {
 
 /// `restore` only on the user's own verify call. The refresh re-post never sends it: once the
 /// server has put this install in the purchase's set a plain check answers, and an install the
-/// server dropped (a 6th device took its place) must not silently take a place back.
-fn check_store(receipt: &Receipt, install: &str, now: i64, restore: bool) -> Check {
+/// server no longer counts (idle 30 days) must take a place back through Restore, not silently.
+/// `app_transaction` (Apple's account proof) goes along only with `restore`; it is never stored.
+fn check_store(receipt: &Receipt, install: &str, now: i64, restore: bool, app_transaction: Option<&str>) -> Check {
     let answer = match receipt {
-        Receipt::Apple { jws } => bc::verify_apple(jws, install, restore),
+        Receipt::Apple { jws } => bc::verify_apple(jws, install, restore, app_transaction.filter(|_| restore)),
         Receipt::Google { token, product_id } => bc::verify_google(token, product_id, install, restore),
     };
     let source = receipt.source();
@@ -480,7 +481,7 @@ pub(crate) fn refresh(engine: &Engine, params: Value) -> Result<Value, RpcError>
     let install = install_id(shared)?;
     let mut checks = Vec::new();
     if let Some(r) = &receipt {
-        let c = check_store(r, &install, now, false);
+        let c = check_store(r, &install, now, false, None);
         if matches!(c, Check::Refused { .. }) {
             secret_delete(shared, RECEIPT)?;
         }
@@ -506,6 +507,10 @@ struct VerifyParams {
     /// The user tapped Restore: the receipt may name another install.
     #[serde(default)]
     restore: bool,
+    /// Apple, with `restore`: the StoreKit 2 AppTransaction JWS, the server's proof that this
+    /// phone is signed into the purchasing Apple account. Sent by the native code (Task 6).
+    #[serde(default)]
+    app_transaction: Option<String>,
 }
 
 fn present(v: Option<String>) -> Option<String> {
@@ -513,8 +518,8 @@ fn present(v: Option<String>) -> Option<String> {
 }
 
 /// `mobile.premium.verify {platform: "apple", jws}` or `{platform: "google", token, productId}`,
-/// each with an optional `restore: true` (Restore Purchases: bind a receipt bought elsewhere)
-/// -> status. The server's yes or no becomes the cache; an accepted receipt is kept for re-checks.
+/// each with an optional `restore: true` (Restore Purchases: bind a receipt bought elsewhere;
+/// Apple adds `appTransaction`, the AppTransaction JWS, as proof of the same account) -> status. The server's yes or no becomes the cache; an accepted receipt is kept for re-checks.
 /// `REFUSED` (an invalid receipt) ends a store entitlement at once; `NETWORK`/`RATE_LIMITED` keep
 /// the cache. A web entitlement is not touched by a store answer.
 pub(crate) fn verify(engine: &Engine, params: Value) -> Result<Value, RpcError> {
@@ -527,13 +532,17 @@ pub(crate) fn verify(engine: &Engine, params: Value) -> Result<Value, RpcError> 
         },
         _ => return Err(RpcError::Invalid("platform is \"apple\" or \"google\"".into())),
     };
+    let app_transaction = present(p.app_transaction);
     let shared = engine.shared();
     shared.premium.remember(receipt.secret());
+    if let Some(a) = &app_transaction {
+        shared.premium.remember(a);
+    }
     let _one = lock(&shared.premium.checks);
     observe_clock(shared);
     let now = now(shared);
     let install = install_id(shared)?;
-    let check = check_store(&receipt, &install, now, p.restore);
+    let check = check_store(&receipt, &install, now, p.restore, app_transaction.as_deref());
     let refused = matches!(check, Check::Refused { .. });
     match &check {
         // No answer: the cache stays, and the caller must not take the purchase as accepted.

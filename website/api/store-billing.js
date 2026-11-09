@@ -1,7 +1,7 @@
 // App Store and Google Play receipt verification for the phone app, plus the two
 // store webhooks that keep `store_subscriptions` current.
 //
-//   POST /api/billing/store/apple/verify    {signedTransaction, installId, restore?}
+//   POST /api/billing/store/apple/verify    {signedTransaction, installId, restore?, signedAppTransaction?}
 //   POST /api/billing/store/google/verify   {purchaseToken, productId, installId, restore?}
 //   POST /api/billing/store/apple/notifications  {signedPayload}   (ASSN v2)
 //   POST /api/billing/store/google/rtdn          Pub/Sub push, OIDC bearer
@@ -15,10 +15,18 @@
 // A misconfigured server must answer 5xx, never 4xx, or every phone loses Premium.
 //
 // A receipt names the install it was bought on (Apple appAccountToken, Google
-// obfuscatedExternalAccountId). A different install is refused 403 wrong_account unless it
-// is already in that purchase's install set, or the call says `restore: true` (the user
-// tapped Restore on a phone signed into the purchasing store account): then the install
-// joins the set, capped at MAX_INSTALLS_PER_PURCHASE.
+// obfuscatedExternalAccountId). That install always passes. A different install passes when
+// it is a live member of the purchase's install set (seen within INSTALL_IDLE_MS). Otherwise
+// it is refused 403 wrong_account unless the call says `restore: true` (the user tapped
+// Restore) AND, for Apple, proves the account (ruling P9):
+//   - Apple, the transaction carries appTransactionId (purchases from iOS 18.4 on): the call
+//     must carry `signedAppTransaction`, the StoreKit 2 AppTransaction JWS of the same Apple
+//     account, verified like a transaction, with the same appTransactionId. Missing or
+//     different: 403 wrong_account.
+//   - Apple without appTransactionId, and Google: the cap below is the only limit.
+// A restore that passes joins the set, unless the set already holds
+// MAX_INSTALLS_PER_PURCHASE live installs: 409 install_limit. Nobody is evicted; an install
+// unseen for INSTALL_IDLE_MS frees its slot (pruned lazily when the set is read).
 //
 // Replay protection is the store's signature plus the claims (bundle, product, install
 // id, environment), not one-time use: the phone re-posts its last accepted receipt on
@@ -65,9 +73,12 @@ const JWKS_MIN_REFETCH_MS = 5 * 60 * 1000;
 const TOKEN_EARLY_MS = 60 * 1000;
 const UPSTREAM_TIMEOUT_MS = 10 * 1000;
 
-// One purchase can serve this many installs (restore on a new phone); the 6th drops the
-// least recently seen. Same limit as the web device limit.
+// One purchase can serve this many installs (restore on a new phone); a restore beyond it is
+// refused 409, nobody is evicted. Same limit as the web device limit. The purchasing install
+// itself is never refused for the limit.
 const MAX_INSTALLS_PER_PURCHASE = 5;
+// An install not seen (no verify or refresh) for this long no longer counts.
+const INSTALL_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const TERMINAL = new Set(['revoked', 'refunded']);
 
@@ -79,6 +90,7 @@ class Unavailable extends Error {
   constructor(code, status) { super(code); this.code = code; this.status = status; }
 }
 const refuse = (code) => new Refusal(code);
+const installLimit = () => new Refusal('install_limit', 409);
 const badRequest = () => new Refusal('invalid_request', 400);
 
 // DER TLV of an OBJECT IDENTIFIER, e.g. 1.2.840.113635.100.6.11.1 -> 06 0a 2a 86 48 ...
@@ -129,10 +141,12 @@ const certTime = (cert, which) => {
 const validAt = (cert, at) => at >= certTime(cert, 'validFrom') && at <= certTime(cert, 'validTo');
 
 /**
- * Verifies an App Store JWS (transaction, renewal info or notification) and returns its
- * payload. Throws Refusal('invalid_signature') on anything wrong with it.
+ * Verifies an App Store JWS (transaction, renewal info, notification or AppTransaction) and
+ * returns its payload. Throws Refusal('invalid_signature') on anything wrong with it.
+ * `signedAtOf(payload)` picks the signing time the certificates must be valid at; default
+ * the payload's signedDate (an AppTransaction has receiptCreationDate instead).
  */
-function verifyAppleJws(token, roots, now) {
+function verifyAppleJws(token, roots, now, signedAtOf = (p) => p.signedDate) {
   const fail = () => refuse('invalid_signature');
   if (typeof token !== 'string') throw fail();
   const parts = token.split('.');
@@ -173,7 +187,7 @@ function verifyAppleJws(token, roots, now) {
   if (!ok) throw fail();
 
   const payload = b64urlJson(parts[1]);
-  const signedAt = payload.signedDate;
+  const signedAt = signedAtOf(payload);
   if (!Number.isFinite(signedAt) || signedAt > now + CLOCK_SKEW_MS) throw fail();
   if (![leaf, intermediate, root].every((c) => validAt(c, signedAt))) throw fail();
   return payload;
@@ -280,33 +294,40 @@ function createStoreBilling({
     return next;
   }
 
-  async function isInstalled(subId, installId) {
-    const [rows] = await getDb().execute(
-      'SELECT install_id FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?',
-      [subId, installId],
-    );
-    return rows.length > 0;
-  }
-  // Adds or refreshes an install of a purchase, then drops the least recently seen ones
-  // beyond the cap (never the one just touched).
-  async function touchInstall(subId, installId) {
-    const at = now();
+  // The installs of a purchase seen within INSTALL_IDLE_MS; idle ones are deleted first.
+  async function liveInstalls(subId) {
     await getDb().execute(
-      'INSERT INTO store_subscription_installs (subscription_id, install_id, last_seen_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at)',
-      [subId, installId, at],
+      'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND last_seen_at <= ?',
+      [subId, now() - INSTALL_IDLE_MS],
     );
     const [rows] = await getDb().execute(
-      'SELECT install_id, last_seen_at FROM store_subscription_installs WHERE subscription_id = ?',
+      'SELECT install_id FROM store_subscription_installs WHERE subscription_id = ?',
       [subId],
     );
-    const others = rows.filter((r) => r.install_id !== installId)
-      .sort((a, b) => Number(b.last_seen_at) - Number(a.last_seen_at));
-    for (const r of others.slice(MAX_INSTALLS_PER_PURCHASE - 1)) {
-      await getDb().execute(
-        'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?',
-        [subId, r.install_id],
-      );
-    }
+    return rows.map((r) => r.install_id);
+  }
+  // Adds an install to a purchase's set or refreshes its last_seen_at. Never evicts.
+  async function touchInstall(subId, installId) {
+    await getDb().execute(
+      'INSERT INTO store_subscription_installs (subscription_id, install_id, last_seen_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at)',
+      [subId, installId, now()],
+    );
+  }
+
+  /**
+   * Admits an install the receipt does not name (the purchasing install never comes here).
+   * A live member passes, whatever the flag: the proof gates joining, not staying (a member
+   * refused here would lose Premium on a plain Restore tap). Otherwise: restore must be
+   * `true`, then `prove()` (Apple account proof) runs, then the cap: a full set refuses
+   * 409 install_limit and nobody is evicted. Runs before anything is written.
+   * @param {{id: number} | null} row  the purchase's row, null when not yet recorded
+   */
+  async function admitForeign(row, installId, restore, prove) {
+    const live = row ? await liveInstalls(row.id) : [];
+    if (live.includes(installId)) return;
+    if (restore !== true) throw refuse('wrong_account');
+    if (prove) prove();
+    if (live.length >= MAX_INSTALLS_PER_PURCHASE) throw installLimit();
   }
 
   async function seen(eventId) {
@@ -349,6 +370,21 @@ function createStoreBilling({
       || !Number.isFinite(t.expiresDate)) throw refuse('invalid_receipt');
     return t;
   }
+  // The StoreKit 2 AppTransaction JWS (App Store Server Library AppTransaction model: its
+  // environment field is `receiptType`, its signing time `receiptCreationDate`, the time
+  // Apple's verifyAndDecodeAppTransaction checks the chain at; now when absent).
+  function appleAppTransaction(token) {
+    const a = verifyAppleJws(token, roots, now(), (p) => (p.receiptCreationDate === undefined ? now() : p.receiptCreationDate));
+    // A transaction JWS is signed by the same kind of leaf and carries the same
+    // appTransactionId: it must not pass as the account proof.
+    if (a.transactionId !== undefined || a.originalTransactionId !== undefined || a.environment !== undefined) {
+      throw refuse('wrong_account');
+    }
+    if (a.bundleId !== BUNDLE_ID) throw refuse('wrong_bundle');
+    if (!appleEnvironments().has(a.receiptType)) throw refuse('wrong_environment');
+    return a;
+  }
+
   const appleState = (t, status) => ({
     expiresMs: t.expiresDate,
     status: status || (t.revocationDate ? 'revoked' : 'active'),
@@ -360,19 +396,29 @@ function createStoreBilling({
 
   function appleVerify(body) {
     return answer('apple/verify', async () => {
-      const { signedTransaction, installId, restore } = body || {};
+      const { signedTransaction, installId, restore, signedAppTransaction } = body || {};
       if (typeof signedTransaction !== 'string' || !signedTransaction || signedTransaction.length > MAX_SIGNED_TRANSACTION
-        || typeof installId !== 'string' || !UUID_RE.test(installId)) throw badRequest();
+        || typeof installId !== 'string' || !UUID_RE.test(installId)
+        || (signedAppTransaction !== undefined && signedAppTransaction !== null
+          && (typeof signedAppTransaction !== 'string' || signedAppTransaction.length > MAX_SIGNED_TRANSACTION))) throw badRequest();
       if (!roots) throw new Unavailable('not_configured', 503);
       const t = appleTransaction(signedTransaction);
-      const own = typeof t.appAccountToken === 'string' && t.appAccountToken.toLowerCase() === installId.toLowerCase();
-      if (!own && restore !== true) {
-        const known = await findRow('apple', t.originalTransactionId);
-        if (!known || !(await isInstalled(known.id, installId.toLowerCase()))) throw refuse('wrong_account');
+      const install = installId.toLowerCase();
+      const own = typeof t.appAccountToken === 'string' && t.appAccountToken.toLowerCase() === install;
+      if (!own) {
+        // Same Apple account: the AppTransaction's appTransactionId is the account's id for
+        // this app. A transaction without one (bought before iOS 18.4) has only the cap.
+        const accountId = typeof t.appTransactionId === 'string' && t.appTransactionId ? t.appTransactionId : null;
+        const prove = accountId && (() => {
+          if (typeof signedAppTransaction !== 'string' || !signedAppTransaction) throw refuse('wrong_account');
+          const a = appleAppTransaction(signedAppTransaction);
+          if (a.appTransactionId !== accountId) throw refuse('wrong_account');
+        });
+        await admitForeign(await findRow('apple', t.originalTransactionId), install, restore, prove);
       }
       if (t.revocationDate) throw refuse('revoked');
       const state = await record('apple', t.originalTransactionId, [t.originalTransactionId], appleState(t), 'receipt');
-      await touchInstall(state.id, installId.toLowerCase());
+      await touchInstall(state.id, install);
       return verdict('apple', state);
     });
   }
@@ -582,9 +628,12 @@ function createStoreBilling({
       const expiresMs = lineExpiry(sub, productId);
       if (expiresMs === null) throw refuse('wrong_product');
       const ids = sub.externalAccountIdentifiers || {};
-      if (ids.obfuscatedExternalAccountId !== obfuscatedAccountId(installId) && restore !== true) {
-        const known = await googleRow(purchaseToken, sub);
-        if (!known || !(await isInstalled(known.id, installId.toLowerCase()))) throw refuse('wrong_account');
+      if (ids.obfuscatedExternalAccountId !== obfuscatedAccountId(installId)) {
+        // Google: the cap is the only limit on a restore. Play has no signed proof of the
+        // Google account behind a purchase token without Play Integrity, which the owner
+        // decided against (ruling P9 c): a leaked token unlocks at most
+        // MAX_INSTALLS_PER_PURCHASE installs until they idle out.
+        await admitForeign(await googleRow(purchaseToken, sub), installId.toLowerCase(), restore, null);
       }
       if (sub.testPurchase && !sandboxAllowed()) throw refuse('wrong_environment');
 

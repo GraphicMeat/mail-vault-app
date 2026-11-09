@@ -361,6 +361,46 @@ fn verify_with_restore_sends_the_flag() {
 }
 
 #[test]
+fn verify_restore_passes_the_app_transaction() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    stub().route(APPLE, store_ok(now + HOUR, "apple"));
+    const APP_TX: &str = "apptx-SECRET-jws-0123456789";
+    // Restore: the AppTransaction goes along as signedAppTransaction.
+    fx.e()
+        .rpc("mobile.premium.verify", json!({ "platform": "apple", "jws": JWS, "restore": true, "appTransaction": APP_TX }))
+        .unwrap();
+    let body: Value = serde_json::from_str(&stub().requests(APPLE)[0].body).unwrap();
+    assert_eq!(body["restore"], json!(true));
+    assert_eq!(body["signedAppTransaction"], json!(APP_TX));
+    // Without restore it is not sent, and the refresh re-post never sends it.
+    fx.e().rpc("mobile.premium.verify", json!({ "platform": "apple", "jws": JWS, "appTransaction": APP_TX })).unwrap();
+    fx.clock(now + 2 * HOUR / 3);
+    let _ = fx.rpc("mobile.premium.refresh", json!({ "force": true }));
+    let requests = stub().requests(APPLE);
+    assert!(requests.len() >= 3, "the refresh re-posted the receipt");
+    for r in &requests[1..] {
+        let b: Value = serde_json::from_str(&r.body).unwrap();
+        assert!(b.get("signedAppTransaction").is_none() && b.get("restore").is_none(), "{b}");
+    }
+    // Restore without one: the key is left out.
+    fx.e().rpc("mobile.premium.verify", json!({ "platform": "apple", "jws": JWS, "restore": true, "appTransaction": " " })).unwrap();
+    let last: Value = serde_json::from_str(&stub().requests(APPLE).last().unwrap().body).unwrap();
+    assert_eq!(last["restore"], json!(true));
+    assert!(last.get("signedAppTransaction").is_none(), "{last}");
+    // The AppTransaction is never stored, logged or returned.
+    let receipt = fx.secret("premium.receipt").expect("receipt kept");
+    assert!(!receipt.contains(APP_TX), "{receipt}");
+    assert!(!fx.status().to_string().contains(APP_TX));
+    assert!(fx.logs.lock().unwrap().iter().all(|l| !l.contains(APP_TX)));
+    let mut files = Vec::new();
+    files_under(fx.tmp.path(), &mut files);
+    for f in files {
+        assert!(!contains_bytes(&std::fs::read(&f).unwrap(), APP_TX), "{} holds the AppTransaction", f.display());
+    }
+}
+
+#[test]
 fn lapsed_then_clock_moved_back_offline_is_not_entitled() {
     let (_g, mut fx) = setup();
     let now = now_ms();

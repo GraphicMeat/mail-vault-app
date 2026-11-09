@@ -151,14 +151,19 @@ fn store_answer(r: Reply) -> Result<StoreAnswer, Fail> {
     Ok(StoreAnswer { entitled: b.entitled, expires_ms: b.expires_ms.map(|v| v as i64).unwrap_or(0), server_ms: r.server_ms })
 }
 
-/// `POST /api/billing/store/apple/verify {signedTransaction, installId[, restore: true]}`.
-/// `restore` (the user tapped Restore) lets the server bind a receipt bought on another install
-/// to this one; it is left out of the body otherwise.
-pub(crate) fn verify_apple(jws: &str, install_id: &str, restore: bool) -> Result<StoreAnswer, Fail> {
+/// `POST /api/billing/store/apple/verify {signedTransaction, installId[, restore: true
+/// [, signedAppTransaction]]}`. `restore` (the user tapped Restore) lets the server bind a
+/// receipt bought on another install to this one; `app_transaction` (the StoreKit 2
+/// AppTransaction JWS) proves the same Apple account and is sent only with `restore`. Both are
+/// left out of the body otherwise.
+pub(crate) fn verify_apple(jws: &str, install_id: &str, restore: bool, app_transaction: Option<&str>) -> Result<StoreAnswer, Fail> {
     let url = format!("{}/api/billing/store/apple/verify", base());
     let mut body = json!({ "signedTransaction": jws, "installId": install_id });
     if restore {
         body["restore"] = json!(true);
+        if let Some(a) = app_transaction {
+            body["signedAppTransaction"] = json!(a);
+        }
     }
     store_answer(call(|c| c.post(url).json(&body))?)
 }

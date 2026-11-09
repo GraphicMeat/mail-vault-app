@@ -51,6 +51,25 @@ function tx(over = {}) {
   };
 }
 
+// The StoreKit 2 AppTransaction payload (App Store Server Library AppTransaction model).
+function appTx(over = {}) {
+  return {
+    receiptType: 'Production',
+    appAppleId: 1234567890,
+    bundleId: 'com.mailvault.app',
+    applicationVersion: '1',
+    versionExternalIdentifier: 0,
+    receiptCreationDate: NOW - 60_000,
+    originalPurchaseDate: NOW - 100 * DAY,
+    originalApplicationVersion: '1',
+    deviceVerification: 'dGVzdA==',
+    deviceVerificationNonce: '1b2c3d4e-0000-4000-8000-000000000000',
+    appTransactionId: '704000000000001',
+    originalPlatform: 'iOS',
+    ...over,
+  };
+}
+
 function notification(type, txOver = {}, over = {}) {
   const t = tx(txOver);
   return jws({
@@ -107,21 +126,20 @@ function fakeDb() {
         [r.install_id, r.product_id, r.expires_at, r.status, r.environment, r.latest_token, r.updated_at] = p;
         return [{ affectedRows: 1 }, []];
       }
-      if (q === 'SELECT install_id FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?') {
-        return [installs.filter((r) => r.subscription_id === p[0] && r.install_id === p[1]).map(pub), []];
-      }
       if (q === 'INSERT INTO store_subscription_installs (subscription_id, install_id, last_seen_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at)') {
         const r = installs.find((x) => x.subscription_id === p[0] && x.install_id === p[1]);
         if (r) r.last_seen_at = p[2]; else installs.push({ subscription_id: p[0], install_id: p[1], last_seen_at: p[2] });
         return [{ affectedRows: 1 }, []];
       }
-      if (q === 'SELECT install_id, last_seen_at FROM store_subscription_installs WHERE subscription_id = ?') {
-        return [installs.filter((r) => r.subscription_id === p[0]).map(pub), []];
+      if (q === 'SELECT install_id FROM store_subscription_installs WHERE subscription_id = ?') {
+        return [installs.filter((r) => r.subscription_id === p[0]).map((r) => ({ install_id: r.install_id })), []];
       }
-      if (q === 'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?') {
-        const i = installs.findIndex((r) => r.subscription_id === p[0] && r.install_id === p[1]);
-        if (i >= 0) installs.splice(i, 1);
-        return [{ affectedRows: i >= 0 ? 1 : 0 }, []];
+      if (q === 'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND last_seen_at <= ?') {
+        const before = installs.length;
+        for (let i = installs.length - 1; i >= 0; i -= 1) {
+          if (installs[i].subscription_id === p[0] && installs[i].last_seen_at <= p[1]) installs.splice(i, 1);
+        }
+        return [{ affectedRows: before - installs.length }, []];
       }
       if (q === 'SELECT event_id FROM processed_store_events WHERE event_id = ?') {
         return [events.has(p[0]) ? [{ event_id: p[0] }] : [], []];
@@ -412,29 +430,153 @@ describe('restore rebinding', () => {
     expect(g.calls.length).toBeGreaterThan(0);
   });
 
-  it('sixth_install_drops_the_oldest', async () => {
+  const ids = (db) => db.installs.map((r) => r.install_id).sort();
+  // INSTALL (the purchasing install) plus restores of inst(1)..inst(4): a full set.
+  async function fillApple(billing, clock, receipt, opts = {}) {
+    expect((await appleVerify(billing, receipt))[0]).toBe(200);
+    for (let n = 1; n <= 4; n += 1) {
+      clock.t += 1000;
+      expect((await billing.appleVerify({ signedTransaction: receipt, installId: inst(n), restore: true, ...opts }))[0]).toBe(200);
+    }
+  }
+
+  it('full_set_refuses_a_new_restore_without_evicting', async () => {
     const { billing, db, clock } = setup();
     const receipt = jws(tx());
-    expect((await appleVerify(billing, receipt))[0]).toBe(200); // INSTALL, the original
-    for (let n = 1; n <= 4; n += 1) {
+    await fillApple(billing, clock, receipt);
+    expect(db.installs).toHaveLength(5);
+    const before = ids(db);
+    clock.t += 1000;
+    const subWrites = writes(db).length;
+    expect(await restoreApple(billing, receipt, inst(5))).toEqual([409, { error: 'install_limit' }]);
+    expect(ids(db)).toEqual(before);
+    expect(writes(db)).toHaveLength(subWrites);
+    // every member keeps working, with or without the flag
+    for (const id of [INSTALL, inst(1), inst(4)]) {
+      expect((await appleVerify(billing, receipt, id))[1].entitled).toBe(true);
+    }
+    expect((await restoreApple(billing, receipt, inst(2)))[0]).toBe(200);
+    expect(await restoreApple(billing, receipt, inst(5))).toEqual([409, { error: 'install_limit' }]);
+    expect(ids(db)).toEqual(before);
+  });
+
+  it('idle_install_frees_its_slot_after_30_days', async () => {
+    const { billing, db, clock } = setup();
+    const receipt = jws(tx({ expiresDate: NOW + 365 * DAY, productId: YEARLY }));
+    await fillApple(billing, clock, receipt);
+    const idleSince = db.installs.find((r) => r.install_id === inst(1)).last_seen_at;
+    // a refresh (no flag) from a member moves its last_seen_at
+    clock.t = idleSince + 10 * DAY;
+    for (const id of [INSTALL, inst(2), inst(3), inst(4)]) expect((await appleVerify(billing, receipt, id))[0]).toBe(200);
+    expect(db.installs.find((r) => r.install_id === inst(2)).last_seen_at).toBe(clock.t);
+    // one millisecond short of 30 days unseen: inst(1) still counts
+    clock.t = idleSince + 30 * DAY - 1;
+    expect(await restoreApple(billing, receipt, inst(5))).toEqual([409, { error: 'install_limit' }]);
+    // 30 days unseen: its slot is free, the others stay
+    clock.t = idleSince + 30 * DAY;
+    expect((await restoreApple(billing, receipt, inst(5)))[0]).toBe(200);
+    expect(ids(db)).toEqual([INSTALL, inst(2), inst(3), inst(4), inst(5)].sort());
+    // the idle install is a stranger now: refused without the flag, and the set is full again
+    expect(await appleVerify(billing, receipt, inst(1))).toEqual([403, { error: 'wrong_account' }]);
+    expect(await restoreApple(billing, receipt, inst(1))).toEqual([409, { error: 'install_limit' }]);
+  });
+
+  it('original_install_never_hits_the_limit', async () => {
+    const { billing, db, clock } = setup();
+    const receipt = jws(tx({ appAccountToken: inst(0) }));
+    for (let n = 1; n <= 5; n += 1) {
       clock.t += 1000;
       expect((await restoreApple(billing, receipt, inst(n)))[0]).toBe(200);
     }
+    expect(await restoreApple(billing, receipt, inst(6))).toEqual([409, { error: 'install_limit' }]);
+    // the purchasing install is never refused for the limit, with or without the flag
+    expect(await appleVerify(billing, receipt, inst(0))).toEqual([200, { entitled: true, source: 'apple', expiresMs: NOW + 25 * DAY }]);
+    expect((await restoreApple(billing, receipt, inst(0)))[0]).toBe(200);
+    expect(db.installs).toHaveLength(6);
+    // ... even after it idled out
+    clock.t += 40 * DAY;
+    expect((await appleVerify(billing, receipt, inst(0)))[0]).toBe(200);
+  });
+
+  it('apple_restore_needs_matching_app_transaction', async () => {
+    const env = { APPLE_IAP_ALLOW_SANDBOX: '1' };
+    const { billing, db } = setup({ env });
+    const receipt = jws(tx({ appTransactionId: '704000000000001' }));
+    // the purchasing install needs no proof
+    expect((await appleVerify(billing, receipt))[0]).toBe(200);
+    const restore = (signedAppTransaction, restoreFlag = true) => billing.appleVerify({
+      signedTransaction: receipt, installId: OTHER_INSTALL, restore: restoreFlag, signedAppTransaction,
+    });
+    const refusals = [
+      ['missing', undefined, 403, 'wrong_account'],
+      ['empty', '', 403, 'wrong_account'],
+      ['another account', jws(appTx({ appTransactionId: '704000000000999' })), 403, 'wrong_account'],
+      ['no id', jws(appTx({ appTransactionId: undefined })), 403, 'wrong_account'],
+      ['the transaction itself', receipt, 403, 'wrong_account'],
+      ['foreign root', jws(appTx(), { chain: ['other-leaf.pem', 'other-intermediate.pem', 'other-root.pem'], key: 'other-leaf-private-key.pem' }), 403, 'invalid_signature'],
+      ['signed by another key', jws(appTx(), { key: 'other-leaf-private-key.pem' }), 403, 'invalid_signature'],
+      ['created in the future', jws(appTx({ receiptCreationDate: NOW + DAY })), 403, 'invalid_signature'],
+      ['other app', jws(appTx({ bundleId: 'com.example.other' })), 403, 'wrong_bundle'],
+      ['xcode', jws(appTx({ receiptType: 'Xcode' })), 403, 'wrong_environment'],
+      ['no receiptType', jws(appTx({ receiptType: undefined })), 403, 'wrong_environment'],
+      ['not a string', 42, 400, 'invalid_request'],
+    ];
+    for (const [name, proof, status, error] of refusals) {
+      expect([name, ...(await restore(proof))]).toEqual([name, status, { error }]);
+    }
+    // a valid proof without the restore flag does not join
+    expect(await restore(jws(appTx()), false)).toEqual([403, { error: 'wrong_account' }]);
+    expect(ids(db)).toEqual([INSTALL]);
+    // the same Apple account: joins
+    expect(await restore(jws(appTx()))).toEqual([200, { entitled: true, source: 'apple', expiresMs: NOW + 25 * DAY }]);
+    expect(ids(db)).toEqual([INSTALL, OTHER_INSTALL].sort());
+    // a member's refresh needs no proof
+    expect((await appleVerify(billing, receipt, OTHER_INSTALL))[0]).toBe(200);
+    // sandbox AppTransaction on a sandbox-allowing server, still under the cap
+    expect((await billing.appleVerify({ signedTransaction: receipt, installId: inst(1), restore: true, signedAppTransaction: jws(appTx({ receiptType: 'Sandbox' })) }))[0]).toBe(200);
+    // a production-only server refuses a sandbox AppTransaction
+    const prod = setup();
+    expect(await prod.billing.appleVerify({ signedTransaction: receipt, installId: OTHER_INSTALL, restore: true, signedAppTransaction: jws(appTx({ receiptType: 'Sandbox' })) }))
+      .toEqual([403, { error: 'wrong_environment' }]);
+  });
+
+  it('apple_restore_without_app_transaction_id_falls_back_to_cap', async () => {
+    const { billing, db, clock } = setup();
+    const receipt = jws(tx()); // bought before iOS 18.4: no appTransactionId
+    expect((await appleVerify(billing, receipt))[0]).toBe(200);
+    // no proof needed; whatever AppTransaction is sent is not consulted
+    expect((await restoreApple(billing, receipt, inst(1)))[0]).toBe(200);
+    expect((await billing.appleVerify({ signedTransaction: receipt, installId: inst(2), restore: true, signedAppTransaction: 'garbage' }))[0]).toBe(200);
+    expect((await billing.appleVerify({ signedTransaction: receipt, installId: inst(3), restore: true, signedAppTransaction: jws(appTx({ appTransactionId: 'other' })) }))[0]).toBe(200);
+    clock.t += 1000;
+    expect((await restoreApple(billing, receipt, inst(4)))[0]).toBe(200);
+    // the cap holds
+    expect(await restoreApple(billing, receipt, inst(5))).toEqual([409, { error: 'install_limit' }]);
     expect(db.installs).toHaveLength(5);
-    clock.t += 1000;
-    expect((await restoreApple(billing, receipt, inst(5)))[0]).toBe(200);
-    expect(db.installs).toHaveLength(5);
-    expect(db.installs.map((r) => r.install_id)).not.toContain(INSTALL);
-    expect(db.installs.map((r) => r.install_id)).toContain(inst(5));
-    // a recently seen install survives: refresh inst(1), add another, inst(2) goes
-    clock.t += 1000;
-    expect((await appleVerify(billing, receipt, inst(1)))[0]).toBe(200);
-    clock.t += 1000;
-    expect((await restoreApple(billing, receipt, inst(6)))[0]).toBe(200);
-    const ids = db.installs.map((r) => r.install_id);
-    expect(ids).toHaveLength(5);
-    expect(ids).toContain(inst(1));
-    expect(ids).not.toContain(inst(2));
+  });
+
+  it('google_restore_capped', async () => {
+    const { billing, db, clock } = setup({ subs: { 'tok-1': subV2() } });
+    const gv = (installId, restore) => billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY, installId, restore });
+    expect((await gv(INSTALL))[0]).toBe(200);
+    for (let n = 1; n <= 4; n += 1) {
+      clock.t += 1000;
+      expect((await gv(inst(n), true))[0]).toBe(200);
+    }
+    const before = ids(db);
+    expect(before).toHaveLength(5);
+    expect(await gv(inst(5), true)).toEqual([409, { error: 'install_limit' }]);
+    expect(ids(db)).toEqual(before);
+    // members refresh without the flag; the purchasing install is never refused
+    expect((await gv(inst(3)))[1].entitled).toBe(true);
+    expect((await gv(INSTALL))[0]).toBe(200);
+    // an idle member frees its slot
+    const idleSince = db.installs.find((r) => r.install_id === inst(1)).last_seen_at;
+    clock.t += 10 * DAY;
+    for (const id of [INSTALL, inst(2), inst(3), inst(4)]) expect((await gv(id))[0]).toBe(200);
+    clock.t = idleSince + 30 * DAY;
+    expect((await gv(inst(5), true))[0]).toBe(200);
+    expect(ids(db)).not.toContain(inst(1));
   });
 
   it('no_restore_flag_still_refuses_a_foreign_receipt', async () => {
@@ -449,21 +591,6 @@ describe('restore rebinding', () => {
     expect(db.installs).toHaveLength(0);
   });
 
-  it('dropped_install_is_refused_until_it_restores', async () => {
-    const { billing, db, clock } = setup();
-    const receipt = jws(tx({ appAccountToken: inst(0) }));
-    for (let n = 1; n <= 5; n += 1) {
-      clock.t += 1000;
-      expect((await restoreApple(billing, receipt, inst(n)))[0]).toBe(200);
-    }
-    clock.t += 1000;
-    expect((await restoreApple(billing, receipt, inst(6)))[0]).toBe(200); // drops inst(1)
-    expect(db.installs.map((r) => r.install_id)).not.toContain(inst(1));
-    expect(await appleVerify(billing, receipt, inst(1))).toEqual([403, { error: 'wrong_account' }]);
-    clock.t += 1000;
-    expect((await restoreApple(billing, receipt, inst(1)))[0]).toBe(200);
-    expect((await appleVerify(billing, receipt, inst(1)))[0]).toBe(200);
-  });
 });
 
 describe('POST /api/billing/store/apple/notifications', () => {
