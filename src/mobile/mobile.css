@@ -270,7 +270,26 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   padding: 0 calc(var(--mv-safe-right) + 16px) 8px calc(var(--mv-safe-left) + 16px);
   border-bottom: 1px solid var(--mail-border);
 }
-.mv-viewer__bar { padding-top: var(--mv-safe-top); margin: 0 -8px; }
+.mv-viewer__bar { padding-top: var(--mv-safe-top); margin: 0 -8px; display: flex; align-items: center; justify-content: space-between; }
+.mv-viewer__shield {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  background: none;
+  padding: 0 12px;
+  color: var(--mail-accent-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.mv-viewer__shield--locked { color: var(--mail-text-muted); }
+.mv-sheet__note { margin: 0 8px 8px; font-size: 0.8125rem; color: var(--mail-text-muted); }
+.mv-trackers { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; max-height: 40vh; }
+.mv-trackers__item { display: flex; flex-direction: column; padding: 8px 0; border-top: 1px solid var(--mail-border); }
+.mv-trackers__vendor { font-weight: 600; }
+.mv-trackers__domain { font-size: 0.75rem; color: var(--mail-text-muted); overflow-wrap: anywhere; }
 .mv-viewer__back {
   border: 0;
   background: none;

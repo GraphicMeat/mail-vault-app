@@ -76,23 +76,30 @@ struct Events {
 }
 
 struct Fixture {
-    _tmp: tempfile::TempDir,
+    tmp: tempfile::TempDir,
+    secrets: Arc<MemorySecrets>,
     engine: Arc<Engine>,
     events: Arc<Events>,
     account: String,
 }
 
-fn setup(server: &MockImap) -> Fixture {
-    std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
-    std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
-    let tmp = tempfile::tempdir().unwrap();
-    let engine = Arc::new(Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(MemorySecrets::default())).unwrap());
+fn open(dir: &std::path::Path, secrets: &Arc<MemorySecrets>) -> (Arc<Engine>, Arc<Events>) {
+    let engine = Arc::new(Engine::open(dir, &dir.join("cache"), Arc::clone(secrets) as _).unwrap());
     let events = Arc::new(Events::default());
     let sink = Arc::clone(&events);
     engine.set_event_sink(move |name, payload| {
         sink.list.lock().unwrap().push((name.to_string(), payload));
         sink.cv.notify_all();
     });
+    (engine, events)
+}
+
+fn setup(server: &MockImap) -> Fixture {
+    std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+    let tmp = tempfile::tempdir().unwrap();
+    let secrets = Arc::new(MemorySecrets::default());
+    let (engine, events) = open(tmp.path(), &secrets);
     let added = engine
         .rpc(
             "mobile.accounts.add",
@@ -101,12 +108,29 @@ fn setup(server: &MockImap) -> Fixture {
         .unwrap();
     assert_eq!(added["ok"], true, "{added}");
     let account = added["account"]["id"].as_str().unwrap().to_string();
-    let f = Fixture { _tmp: tmp, engine, events, account };
+    let f = Fixture { tmp, secrets, engine, events, account };
     f.sync();
     f
 }
 
 impl Fixture {
+    fn db(&self) -> rusqlite::Connection {
+        rusqlite::Connection::open(self.tmp.path().join("mobile.db")).unwrap()
+    }
+
+    /// Premium on for a month, as a store answer the engine cached (read at the restart).
+    fn premium(self) -> Fixture {
+        let state = json!({ "entitled": true, "source": "apple", "expiresMs": now_ms() + 30 * 86_400_000, "checkedMs": now_ms() }).to_string();
+        self.db()
+            .execute("INSERT INTO settings (key, value) VALUES ('premium.state', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [&state])
+            .unwrap();
+        let Fixture { tmp, secrets, engine, events: _, account } = self;
+        drop(engine);
+        let (engine, events) = open(tmp.path(), &secrets);
+        assert_eq!(engine.rpc("mobile.premium.status", json!({})).unwrap()["premium"], true);
+        Fixture { tmp, secrets, engine, events, account }
+    }
+
     /// One full pass (folder list and INBOX), waited for until it ends idle.
     fn sync(&self) {
         let from = self.events.list.lock().unwrap().len();
@@ -267,4 +291,56 @@ fn an_undetermined_encoding_is_an_error_and_not_cached() {
         assert!(server.commands().len() > n, "the second open was served from a cache");
     }
     assert_eq!(f.snippet(1), "");
+}
+
+const PIXEL_HTML: &str = "<p>Hello</p>\
+    <img src=\"https://cdn.example.com/hero.jpg\" width=\"600\" height=\"300\">\
+    <img src=\"https://track.example.net/open/abc123.gif\" width=\"1\" height=\"1\">";
+
+/// Premium: the pixel is replaced by its marker, named in `trackerList` (vendor and host, no URL),
+/// and the remote-image count no longer includes it. The cache is untouched, so a lapse returns
+/// to free behaviour on the next open.
+#[test]
+fn a_premium_body_strips_its_pixel_and_names_it_and_a_lapse_brings_it_back() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, PIXEL_HTML))));
+    let f = setup(&server).premium();
+
+    let body = f.body(1);
+    assert_eq!(body["trackers"], 1, "{body}");
+    assert_eq!(body["trackersStripped"], true, "{body}");
+    assert_eq!(body["trackerList"], json!([{ "vendor": "track.example.net", "domain": "track.example.net" }]), "{body}");
+    assert_eq!(body["remoteImages"], 1, "{body}");
+    let shown = body["html"].as_str().unwrap();
+    assert!(!shown.contains("track.example.net"), "{shown}");
+    assert!(shown.contains("data-mv-tracker-blocked"), "{shown}");
+    assert!(shown.contains("https://cdn.example.com/hero.jpg"), "{shown}");
+    // From the cache: the same answer, and no new request.
+    let n = server.commands().len();
+    assert_eq!(f.body(1), body);
+    assert_eq!(server.commands().len(), n);
+
+    // The period ends (the engine's clock moves past it): the same cached row answers as free.
+    f.engine.set_premium_clock_for_tests(Some(now_ms() + 31 * 86_400_000));
+    let free = f.body(1);
+    assert_eq!(free["trackersStripped"], false, "{free}");
+    assert_eq!(free["remoteImages"], 2, "{free}");
+    assert_eq!(free["trackerList"], body["trackerList"]);
+    assert!(free["html"].as_str().unwrap().contains("https://track.example.net/open/abc123.gif"));
+    assert_eq!(server.commands().len(), n, "a lapse changes no cache");
+}
+
+/// A row cached before the tracker list existed no longer reads: the next open fetches it again.
+#[test]
+fn a_row_cached_without_the_tracker_list_is_fetched_once_more() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, PIXEL_HTML))));
+    let f = setup(&server);
+    assert_eq!(f.body(1)["trackerList"].as_array().unwrap().len(), 1);
+    let old: String = f.db().query_row("SELECT parts_json FROM bodies WHERE uid = 1", [], |r| r.get(0)).unwrap();
+    let mut v: Value = serde_json::from_str(&old).unwrap();
+    v.as_object_mut().unwrap().remove("trackerList").expect("stored with a tracker list");
+    f.db().execute("UPDATE bodies SET parts_json = ?1 WHERE uid = 1", [v.to_string()]).unwrap();
+    let before = fetches(&server).len();
+    let again = f.body(1);
+    assert!(fetches(&server).len() > before, "an old row was trusted");
+    assert_eq!(again["trackerList"].as_array().unwrap().len(), 1, "{again}");
 }

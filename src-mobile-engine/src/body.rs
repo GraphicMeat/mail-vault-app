@@ -3,8 +3,8 @@
 //! The BODYSTRUCTURE names the parts; only the first `text/html` and the first `text/plain` that
 //! are not attachments are downloaded (`BODY.PEEK[section]`, so opening never sets `\Seen` and an
 //! attachment's bytes never cross the network). Tracking pixels are found with core's `body_scan`
-//! and stripped only under core's `tracker_policy` (Premium, owner decision 3; the phone has no
-//! Premium yet, so they are kept and counted). The policy is applied when a body is answered, not
+//! and stripped only under core's `tracker_policy` (Premium, owner decision 3: `premium::active`;
+//! a free user's are kept and counted). The policy is applied when a body is answered, not
 //! when it is cached, so the cache holds the html as it came and a change of plan shows on the
 //! next open. Remote images are counted, not loaded, and the html keeps their URLs (the viewer's
 //! CSP blocks every one, tracking pixels included, until the user asks). The result is cached in `bodies`, with the
@@ -69,9 +69,16 @@ impl From<PartInfo> for Part {
     }
 }
 
+/// A tracking pixel as the reply names it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+struct TrackerRef {
+    vendor: String,
+    domain: String,
+}
+
 /// What `parts_json` holds: every part, and what the scan of the html found. A row written before
-/// the tracker rule (its html stripped, no `remoteWithoutTrackers`) no longer reads, so it is
-/// fetched again and replaced.
+/// the tracker rule (its html stripped, no `remoteWithoutTrackers`) or before the tracker list
+/// no longer reads, so it is fetched again and replaced.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Stored {
@@ -81,6 +88,9 @@ struct Stored {
     /// The same, with the tracking pixels stripped.
     remote_without_trackers: u32,
     trackers: u32,
+    /// The pixels the scan found, named (vendor and host, never the URL: it can carry the
+    /// recipient's address). A required field.
+    tracker_list: Vec<TrackerRef>,
 }
 
 /// A body as the reply carries it.
@@ -94,10 +104,10 @@ struct Body {
     truncated: bool,
 }
 
-/// Whether the phone's user has Premium. Always free until Plan 4 brings Premium to the phone
-/// (`premium::active`, the server's cached answer).
-fn premium(_shared: &Shared) -> bool {
-    false
+/// Whether the phone's user has Premium now (`premium::active`, the server's cached answer, read
+/// from memory). Asked on every answer, so a lapse is back to free behaviour on the next open.
+fn premium(shared: &Shared) -> bool {
+    crate::premium::active(shared)
 }
 
 /// The marker that replaces a beacon carries no catalog key or English text: empty templates; the
@@ -134,7 +144,7 @@ impl Body {
             .collect();
         json!({
             "html": html, "text": self.text, "attachments": attachments,
-            "remoteImages": remote_images, "trackers": self.stored.trackers, "trackersStripped": policy.strips(), "gone": false,
+            "remoteImages": remote_images, "trackers": self.stored.trackers, "trackerList": self.stored.tracker_list, "trackersStripped": policy.strips(), "gone": false,
             "attachmentsUnknown": self.attachments_unknown, "truncated": self.truncated,
         })
     }
@@ -198,7 +208,7 @@ fn cap(shared: &Shared) -> u64 {
 }
 
 /// `mobile.message.body {accountId, folder, uid}` -> `{html, text, attachments: [{section,
-/// filename, mime, size, contentId, kind}], remoteImages, trackers, gone, attachmentsUnknown,
+/// filename, mime, size, contentId, kind}], remoteImages, trackers, trackerList: [{vendor, domain}], trackersStripped, gone, attachmentsUnknown,
 /// truncated}`. `truncated`: the server sent only the start of the text (shown, not cached).
 /// `kind` is `file`, or `link` for a Graph cloud link (`size` null; it cannot be fetched).
 /// `attachmentsUnknown`: the server could not list the attachments this time, so the list is
@@ -309,13 +319,15 @@ fn fetch(shared: &Shared, p: &BodyParams, stored_validity: Option<i64>) -> Resul
 fn scanned(html: Option<String>, text: Option<String>, parts: Vec<Part>) -> (Body, String) {
     let snippet = snippet_of(html.as_deref(), text.as_deref());
     let (mut remote_images, mut remote_without_trackers, mut trackers) = (0, 0, 0);
+    let mut tracker_list = Vec::new();
     if let Some(h) = &html {
         let scan = mailvault_core::body_scan::scan_trackers(h, &blank_texts());
         remote_images = scan.remote as u32;
         remote_without_trackers = scan.remote_cleaned as u32;
         trackers = scan.trackers.len() as u32;
+        tracker_list = scan.trackers.iter().map(|t| TrackerRef { vendor: t.vendor.clone(), domain: t.domain.clone() }).collect();
     }
-    let stored = Stored { parts, remote_images, remote_without_trackers, trackers };
+    let stored = Stored { parts, remote_images, remote_without_trackers, trackers, tracker_list };
     (Body { html, text, stored, attachments_unknown: false, truncated: false }, snippet)
 }
 
@@ -603,6 +615,7 @@ mod tests {
         assert_eq!(free["trackersStripped"], false);
         assert_eq!(free["remoteImages"], 2);
         assert_eq!(free["html"], html);
+        assert_eq!(free["trackerList"], json!([{ "vendor": "track.example.net", "domain": "track.example.net" }]), "named for everyone");
 
         let premium = body.reply(tracker_policy(true));
         assert_eq!(premium["trackers"], 1);

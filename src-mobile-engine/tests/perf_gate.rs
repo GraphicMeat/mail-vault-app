@@ -205,7 +205,7 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
         assert_eq!(news["gone"], false);
         let html = news["html"].as_str().unwrap();
         assert!(html.contains("https://"), "{html}");
-        // The phone has no Premium yet: the pixel is counted and kept (the frame blocks it).
+        // A free user (no Premium cached): the pixel is counted and kept (the frame blocks it).
         assert!(!html.contains("data-mv-tracker-blocked"), "{html}");
         assert!(html.contains("https://t.example.test/open.gif"), "{html}");
         assert_eq!(news["trackersStripped"], false);
@@ -230,6 +230,7 @@ fn ensure_seeded_gives_the_newest_rows_a_showcase_body() {
         let large = body(&rows[3]["uid"]);
         let large_html = large["html"].as_str().unwrap();
         assert!((200_000..=320_000).contains(&large_html.len()), "{}", large_html.len());
+        assert_eq!(large["trackers"], 1, "{large}");
     }
     assert_eq!(page(&e, Value::Null, 1)["total"], 50);
 }
@@ -261,4 +262,51 @@ fn ping_says_perf_gate() {
     let tmp = tempfile::tempdir().unwrap();
     let e = open(tmp.path()).unwrap();
     assert_eq!(e.rpc("mobile.ping", json!({})).unwrap()["perfGate"], true);
+}
+
+/// B4 (shared-core Ruling P19): with Premium the strip re-parses the cached html on every open.
+/// The large newsletter (about 250 KB, one pixel) opened as free and as Premium; the Premium open
+/// must stay inside the viewer-open budget (`TAP_LIMIT_MS` in src/mobile/gate.js, 100 ms), else
+/// the cleaned html belongs in the cache. Prints the medians (`cargo test ... -- --nocapture`).
+#[test]
+fn a_premium_open_of_a_large_body_with_a_pixel_stays_inside_the_open_budget() {
+    const BUDGET_MS: f64 = 100.0;
+    const RUNS: usize = 15;
+    let median = |mut v: Vec<f64>| {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[v.len() / 2]
+    };
+    // The same seeded database, opened as a free user and then as a Premium one.
+    let tmp = tempfile::tempdir().unwrap();
+    {
+        let e = open(tmp.path()).unwrap();
+        seed::ensure_seeded(&e, 50).unwrap();
+    }
+    let measure = |e: &Engine| {
+        let uid = page(e, Value::Null, 4)["rows"][3]["uid"].clone();
+        let open_body = || {
+            let t = std::time::Instant::now();
+            let b = e.rpc("mobile.message.body", json!({ "accountId": seed::ACCOUNT_ID, "folder": seed::FOLDER, "uid": uid })).unwrap();
+            (t.elapsed().as_secs_f64() * 1000.0, b)
+        };
+        let (_, first) = open_body();
+        let ms = median((0..RUNS).map(|_| open_body().0).collect());
+        (ms, first)
+    };
+    let (free_ms, free) = measure(&open(tmp.path()).unwrap());
+    assert_eq!(free["trackersStripped"], false);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+    let state = json!({ "entitled": true, "source": "apple", "expiresMs": now + 30 * 86_400_000, "checkedMs": now }).to_string();
+    rusqlite::Connection::open(tmp.path().join("mobile.db"))
+        .unwrap()
+        .execute("INSERT INTO settings (key, value) VALUES ('premium.state', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [&state])
+        .unwrap();
+    let e = open(tmp.path()).unwrap();
+    assert_eq!(e.rpc("mobile.premium.status", json!({})).unwrap()["premium"], true);
+    let (premium, first) = measure(&e);
+    assert_eq!(first["trackersStripped"], true);
+    assert!(first["html"].as_str().unwrap().contains("data-mv-tracker-blocked"));
+    assert!(!first["html"].as_str().unwrap().contains("t.example.test/large.gif"));
+    eprintln!("perf-gate: large body open, median of {RUNS}: premium {premium:.1} ms, free {free_ms:.1} ms, budget {BUDGET_MS} ms");
+    assert!(premium <= BUDGET_MS, "a Premium open took {premium:.1} ms (free {free_ms:.1} ms): cache the cleaned html instead");
 }

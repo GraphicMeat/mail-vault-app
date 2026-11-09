@@ -24,7 +24,8 @@ import MovePicker from './MovePicker.jsx';
 import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
-import { EnvelopeIcon, FlagIcon, MoreIcon, MoveIcon, TrashIcon } from './icons.jsx';
+import { EnvelopeIcon, FlagIcon, MoreIcon, MoveIcon, ShieldIcon, TrashIcon } from './icons.jsx';
+import { openPaywall } from './premium.js';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
 export const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
@@ -141,6 +142,49 @@ function MoreSheet({ onPick, onClose }) {
   );
 }
 
+/** The tracking pixels the message carried, named (vendor and host; never the URL). */
+function TrackerSheet({ count, list, onClose }) {
+  const t = useT();
+  return (
+    <Sheet kind="sheet" label={t('alert.tracker.trackingBlocked', { count })} onClose={onClose}>
+      <div className="mv-sheet__grip" aria-hidden="true" />
+      <h2 className="mv-sheet__title">{t('alert.tracker.trackingBlocked', { count })}</h2>
+      <p className="mv-sheet__note">{t('alert.tracker.removed', { count })}</p>
+      <ul className="mv-trackers" data-mv-tracker-list>
+        {list.map((tr, i) => (
+          <li key={i} className="mv-trackers__item">
+            <span className="mv-trackers__vendor" dir="auto">{displayText(tr.vendor, '')}</span>
+            {tr.domain && tr.domain !== tr.vendor && <span className="mv-trackers__domain">{displayText(tr.domain, '')}</span>}
+          </li>
+        ))}
+      </ul>
+      <div className="mv-sheet__actions">
+        <button type="button" className="mv-sheet__action" onClick={onClose}>{t('common.close')}</button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** The shield in the bar: with the count once Premium has removed the pixels (tap for the list),
+ *  locked while they were kept (tap for the paywall). */
+function TrackerShield({ count, stripped, onOpen }) {
+  const t = useT();
+  const label = stripped ? t('alert.tracker.trackingBlocked', { count }) : t('alert.tracker.emailTracks', { count });
+  return (
+    <button
+      type="button"
+      className={`mv-viewer__shield${stripped ? '' : ' mv-viewer__shield--locked'}`}
+      data-mv-tracker-shield={stripped ? 'blocked' : 'locked'}
+      aria-label={label}
+      style={{ minHeight: '44px', minWidth: '44px' }}
+      onClick={stripped ? onOpen : () => openPaywall('trackerBlocking')}
+    >
+      <ShieldIcon state={stripped ? 'blocked' : 'locked'} />
+      {stripped && <span className="mv-viewer__shield-count" aria-hidden="true">{count}</span>}
+    </button>
+  );
+}
+
 const noop = () => {};
 
 export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, onCompose = noop, initialPicking = false }) {
@@ -150,6 +194,9 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const [picking, setPicking] = useState(initialPicking);
   const closePicker = useCallback(() => setPicking(false), []);
   useBackLayer(picking, closePicker);
+  const [trackerList, setTrackerList] = useState(false);
+  const closeTrackers = useCallback(() => setTrackerList(false), []);
+  useBackLayer(trackerList, closeTrackers);
   const [more, setMore] = useState(false);
   const closeMore = useCallback(() => setMore(false), []);
   useBackLayer(more, closeMore);
@@ -218,10 +265,12 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   // Every part is a chip, inline `cid:` images too: the frame does not draw those yet.
   const attachments = body?.attachments || [];
   const remoteImages = body?.remoteImages || 0;
-  // Tracker pixels are stripped for Premium only (core `tracker_policy`; the phone has no Premium
-  // yet): a free body keeps them, blocked with every other remote image until Load images, which
-  // would load them too. The bar says so rather than implying they are gone.
+  // Tracker pixels are stripped for Premium only (core `tracker_policy`, decided by the engine on
+  // every open): a free body keeps them, blocked with every other remote image until Load images,
+  // which would load them too. The bar says so rather than implying they are gone, and the shield
+  // in the top bar is locked (paywall) instead of counting.
   const pixelsKept = (body?.trackers || 0) > 0 && !body?.trackersStripped;
+  const trackerCount = body?.trackers || 0;
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   return (
@@ -231,6 +280,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
           <button type="button" className="mv-viewer__back" data-mv-viewer-close style={{ minHeight: '44px', minWidth: '44px' }} onClick={onClose}>
             {t('common.back')}
           </button>
+          {trackerCount > 0 && <TrackerShield count={trackerCount} stripped={Boolean(body.trackersStripped)} onOpen={() => setTrackerList(true)} />}
         </header>
         <Header row={row} />
         <Attachments accountId={accountId} folder={folder} uid={row.uid} items={attachments} />
@@ -280,6 +330,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       {!srcDoc && <div className="mv-viewer__fill" />}
       <Toolbar seen={seen} flagged={flagged} onSeen={toggleSeen} onFlag={toggleFlag} onMove={() => setPicking(true)} onDelete={onDelete} onMore={() => setMore(true)} />
       {picking && <MovePicker folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
+      {trackerList && <TrackerSheet count={trackerCount} list={body?.trackerList || []} onClose={closeTrackers} />}
       {more && <MoreSheet onPick={startCompose} onClose={closeMore} />}
     </section>
   );

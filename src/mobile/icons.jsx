@@ -29,6 +29,14 @@ export function TrashIcon() {
 }
 
 /** Three dots: more actions. */
+/** A shield: tracking pixels found in a message (a check inside once they are blocked, a lock when Premium would block them). */
+export function ShieldIcon({ state = 'blocked' }) {
+  return svg(<>
+    <path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z" />
+    {state === 'blocked' ? <path d="m9 12 2 2 4-4" /> : <><rect x="9.5" y="11" width="5" height="4" rx="1" /><path d="M10.5 11V9.8a1.5 1.5 0 0 1 3 0V11" /></>}
+  </>);
+}
+
 export function MoreIcon() {
   return svg(<><circle cx="5" cy="12" r="1.2" fill="currentColor" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /><circle cx="19" cy="12" r="1.2" fill="currentColor" /></>);
 }

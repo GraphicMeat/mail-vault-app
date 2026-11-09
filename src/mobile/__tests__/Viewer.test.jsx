@@ -22,6 +22,7 @@ vi.mock('../transport.js', () => ({
 }));
 
 const { default: Viewer } = await import('../Viewer.jsx');
+const { useMobileStore } = await import('../store.js');
 
 const SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
 
@@ -169,6 +170,46 @@ describe('Viewer', () => {
     await waitFor(() => expect(frame()).toBeTruthy());
     expect(screen.getByText(t('mobile.viewer.imagesBlocked'))).toBeTruthy();
     expect(screen.queryByText(t('mobile.viewer.imagesTrack'))).toBeNull();
+  });
+
+  it('Premium: a shield with the count opens the list of the pixels that were removed', async () => {
+    engine.reply = body({
+      remoteImages: 1, trackers: 2, trackersStripped: true,
+      trackerList: [{ vendor: 'Mailchimp', domain: 'list-manage.com' }, { vendor: 'track.example.net', domain: 'track.example.net' }],
+    });
+    renderViewer();
+    const shield = await screen.findByRole('button', { name: t('alert.tracker.trackingBlocked', { count: 2 }) });
+    expect(shield.getAttribute('data-mv-tracker-shield')).toBe('blocked');
+    expect(shield.textContent).toBe('2');
+    fireEvent.click(shield);
+    const list = await waitFor(() => {
+      const el = document.querySelector('[data-mv-tracker-list]');
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(list.textContent).toContain('Mailchimp');
+    expect(list.textContent).toContain('list-manage.com');
+    expect(list.querySelectorAll('li')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: t('common.close') }));
+    expect(document.querySelector('[data-mv-tracker-list]')).toBeNull();
+  });
+
+  it('free: a locked shield opens the paywall on tracker blocking, and the bar copy stays', async () => {
+    useMobileStore.getState().closePaywall();
+    engine.reply = body({ remoteImages: 2, trackers: 1, trackersStripped: false, trackerList: [{ vendor: 'x', domain: 'x' }] });
+    renderViewer();
+    const shield = await screen.findByRole('button', { name: t('alert.tracker.emailTracks', { count: 1 }) });
+    expect(shield.getAttribute('data-mv-tracker-shield')).toBe('locked');
+    expect(screen.getByText(t('mobile.viewer.imagesTrack'))).toBeTruthy();
+    fireEvent.click(shield);
+    expect(document.querySelector('[data-mv-tracker-list]')).toBeNull();
+    expect(useMobileStore.getState().paywall).toEqual({ feature: 'trackerBlocking', signIn: false });
+  });
+
+  it('no shield when the message has no tracking pixel', async () => {
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    expect(document.querySelector('[data-mv-tracker-shield]')).toBeNull();
   });
 
   it('cleans the mail once: Load images reuses it and parses nothing', async () => {

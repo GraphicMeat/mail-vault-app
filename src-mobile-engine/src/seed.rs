@@ -132,7 +132,7 @@ fn probe_html() -> String {
 }
 
 /// A real-world-sized newsletter (about 250 KB of html: a stylesheet and some 130 story cards,
-/// each a table with an image, a paragraph and a link), for timing a large open.
+/// each a table with an image, a paragraph and a link), for timing a large open (and a Premium one, which strips its pixel).
 fn large_newsletter() -> String {
     const PARA: &str = "Our gardens changed a lot this season, and so did the way we plan them. We moved the beds closer to the house, swapped half the lawn for clover, and kept a log of what the frost took and what it spared. The notes below are the short version: what to sow, what to cover, what to leave alone until spring, and which tools earned their place in the shed. Every story links to the long version with photos, measurements and the mistakes we made along the way, so you can skip the ones you already know and dig into the ones you do not. ";
     let mut out = String::from(r##"<!doctype html><html><head><meta charset="utf-8"><title>Weekly digest</title><style>
@@ -150,6 +150,8 @@ fn large_newsletter() -> String {
 "##
         ));
     }
+    // One open-tracking pixel at the end, so a Premium open has something to strip in a body this size.
+    out.push_str(r#"<img src="https://t.example.test/large.gif?u=42" width="1" height="1" alt="">"#);
     out.push_str("</div></body></html>");
     out
 }
