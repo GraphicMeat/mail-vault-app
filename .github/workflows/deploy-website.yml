@@ -171,6 +171,7 @@ jobs:
             --exclude='demo/assets/' \
             --exclude='demo-preview-manifest.json' \
             --exclude='src/' \
+            --exclude='__tests__/' \
             --exclude='i18n/' \
             --exclude='tailwind.config.js' \
             --exclude='package.json' \
@@ -187,6 +188,7 @@ jobs:
       - name: Rsync API source (excluding node_modules, .env, data.db)
         run: |
           rsync -avz --delete \
+            --exclude='__tests__/' \
             --exclude='node_modules/' \
             --exclude='.env*' \
             --exclude='data.db' \
