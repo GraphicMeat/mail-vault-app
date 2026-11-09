@@ -32,7 +32,7 @@
     if (query.has('rdt_cid') || (utm('utm_source') === 'reddit' && /^(cpc|ppc|paid|paid[-_ ]?social|ads?)$/.test(utm('utm_medium')))) sessionStorage.setItem('mv-reddit-ad', '1');
     if (sessionStorage.getItem('mv-reddit-ad') === '1' || document.querySelector('[data-ad-consent-reset]')) {
       const loader = document.createElement('script');
-      loader.src = '/assets/reddit-pixel.js?v=20261109-geo';
+      loader.src = '/assets/reddit-pixel.js?v=20261109-geo2';
       loader.defer = true;
       document.head.append(loader);
     }

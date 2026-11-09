@@ -30,9 +30,9 @@
   }
 
   // Consent is asked only where the law requires it: the EEA, the UK and Switzerland (and their
-  // Crown dependencies). Elsewhere an ad visit loads the pixel straight away. Cloudflare answers
+  // Crown dependencies, Gibraltar, and the EU's overseas departments, which Cloudflare reports under their own codes). Elsewhere an ad visit loads the pixel straight away. Cloudflare answers
   // "where is this visitor" at /cdn-cgi/trace; if that fails, the visitor is asked.
-  const CONSENT_REGIONS = new Set(['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE','IS','LI','NO','GB','CH','GG','JE','IM']);
+  const CONSENT_REGIONS = new Set(['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE','IS','LI','NO','GB','CH','GG','JE','IM','GI','AX','SJ','GP','MQ','GF','RE','YT','MF','BL','PM']);
   function consentNeeded() {
     return fetch('/cdn-cgi/trace', { signal: AbortSignal.timeout(3000) })
       .then(r => r.ok ? r.text() : Promise.reject())

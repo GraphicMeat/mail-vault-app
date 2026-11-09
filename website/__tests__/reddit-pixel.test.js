@@ -51,7 +51,7 @@ describe('Reddit pixel stays out of everyone but consenting ad arrivals', () => 
   });
 
   it('asks inside the EEA, UK and Switzerland, and loads nothing from Reddit until Accept', async () => {
-    for (const loc of ['LT', 'DE', 'GB', 'CH']) {
+    for (const loc of ['LT', 'DE', 'GB', 'CH', 'RE', 'GP', 'AX', 'GI', 'JE']) {
       const v = visit('index.html', '?rdt_cid=abc', { loc });
       await v.run();
       expect(v.bar(), loc).not.toBeNull();
