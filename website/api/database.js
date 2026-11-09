@@ -176,6 +176,23 @@ async function initDatabase() {
     )
   `);
 
+  // Email sign-in codes for the phone app. Only the SHA-256 of the code is stored.
+  // Times are epoch milliseconds. Unknown addresses get a row too (never mailed), so
+  // verifying cannot reveal whether an address is a customer.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS billing_signin_codes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(255) NOT NULL,
+      code_hash CHAR(64) NOT NULL,
+      expires_at BIGINT NOT NULL,
+      attempts INT NOT NULL DEFAULT 0,
+      used_at BIGINT NULL,
+      created_at BIGINT NOT NULL,
+      INDEX idx_email (email, id),
+      INDEX idx_expires (expires_at)
+    )
+  `);
+
   // Seed default features if table is empty
   const [rows] = await db.execute('SELECT COUNT(*) as count FROM features');
   if (rows[0].count === 0) {

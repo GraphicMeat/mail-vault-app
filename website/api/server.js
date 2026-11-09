@@ -576,6 +576,60 @@ const checkoutLimiter = rateLimit({
 });
 
 // -------------------------------------------
+// Phone sign-in by email code (signin-code.js)
+// -------------------------------------------
+// start mails a 6-digit code to a billing customer and always answers {ok:true};
+// verify trades the code for the Stripe customer id, which the phone then hands
+// to subscription-status with register=1. Per-address limits live in signin-code.js.
+const { createSigninCode, RESPONSES: SIGNIN_RESPONSES } = require('./signin-code');
+const signinCode = createSigninCode({
+  getDb: getPool,
+  send: sendViaGraphicMeat,
+  configured: gmConfigured,
+});
+const signinStartLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  keyGenerator: visitorIP,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited' },
+});
+const signinVerifyLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  keyGenerator: visitorIP,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited' },
+});
+
+app.post('/api/billing/signin/start', signinStartLimiter, async (req, res) => {
+  const { email, lang } = req.body || {};
+  let outcome = 'ok';
+  try {
+    outcome = await signinCode.start({ email, lang });
+  } catch (err) {
+    console.error('[billing/signin/start]', err.message);
+  }
+  const [status, body] = SIGNIN_RESPONSES[outcome];
+  res.status(status).json(body);
+});
+
+app.post('/api/billing/signin/verify', signinVerifyLimiter, async (req, res) => {
+  const { email, code } = req.body || {};
+  try {
+    const out = await signinCode.verify({ email, code });
+    if (out.customerId) return res.json({ customerId: out.customerId });
+    const [status, body] = SIGNIN_RESPONSES[out.error];
+    return res.status(status).json(body);
+  } catch (err) {
+    console.error('[billing/signin/verify]', err.message);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// -------------------------------------------
 // Latest released version
 // -------------------------------------------
 // The site ships every version's changelog entry and "What's New" copy at commit
