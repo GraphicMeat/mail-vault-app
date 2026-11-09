@@ -5,9 +5,13 @@
 //! that are due (a send-later time that came while the app was away, or a retry wait that ran
 //! out): the outbox worker is woken for their accounts at the start of the run, so it sends beside
 //! the INBOX passes rather than after them on what the passes left of the budget, and the run
-//! waits for it before returning, inside the same budget. Notifications off: only that, with no
-//! INBOX pass and nothing to post; with nothing due either, no network at all. Whether the OS
-//! should give the app runs at all is [`Engine::wants_background`].
+//! waits for it before returning, inside the same budget. Follow-up reminders (plan 4 Task 9) go
+//! the same way: a reminder whose time came wakes the follow-up worker, and the run waits for its
+//! pass. Notifications off: only those, with no INBOX pass and nothing to post (a reminder with no
+//! reply is listed, never posted); with nothing due either, no network at all. Notifications on:
+//! the run also returns the reminders that found no reply and were not posted yet, committed
+//! (announced) with the mail. Whether the OS should give the app runs at all is
+//! [`Engine::wants_background`].
 //!
 //! With notifications on, each account in turn gets one quick INBOX
 //! pass, queued on the engine's sync worker like any other pass, so a run never writes beside a
@@ -39,6 +43,7 @@
 //! ([`seen_in_front`]): mail the user saw listed is not notified later.
 
 use crate::db::{lock, Engine, EngineError, Shared};
+use crate::followup::FollowUpDue;
 use crate::sync::{folder_path, Ended};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
@@ -79,11 +84,13 @@ pub struct NewMail {
     pub key: String,
 }
 
-/// What [`Engine::background_fetch`] found: the mail to post, oldest first, and the token to hand
-/// to [`Engine::background_commit`] once it is posted (`None` when there is nothing to post).
+/// What [`Engine::background_fetch`] found: the mail to post, oldest first, the follow-up
+/// reminders that found no reply (posted once each), and the token to hand to
+/// [`Engine::background_commit`] once they are posted (`None` when there is nothing to post).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BackgroundRun {
     pub mail: Vec<NewMail>,
+    pub followups: Vec<FollowUpDue>,
     pub commit: Option<String>,
 }
 
@@ -99,10 +106,16 @@ pub(crate) struct Collected {
     mail: Vec<NewMail>,
 }
 
+/// What one returned run commits: each INBOX's part, and the follow-up reminders it posted.
+struct Posted {
+    collected: Vec<Collected>,
+    followups: Vec<String>,
+}
+
 /// Runs whose mail was returned and not committed yet, by token.
 #[derive(Default)]
 pub(crate) struct Pending {
-    runs: Mutex<Vec<(String, Vec<Collected>)>>,
+    runs: Mutex<Vec<(String, Posted)>>,
     next: AtomicU64,
 }
 
@@ -329,11 +342,11 @@ struct Candidate {
 
 impl Engine {
     /// Whether the OS should keep giving the app background runs (plan Ruling 13): notifications
-    /// are on, or a scheduled message waits to be sent. The shell re-applies its schedule from
-    /// this after every RPC that can change it. Each reason is one `||` term; plan 4 Task 9 adds
-    /// its own, a follow-up waiting for its check.
+    /// are on, a scheduled message waits to be sent, or a follow-up reminder waits for its check.
+    /// The shell re-applies its schedule from this after every RPC that can change it. Each
+    /// reason is one `||` term.
     pub fn wants_background(&self) -> bool {
-        self.notifications_on() || crate::outbox::has_scheduled(self.shared())
+        self.notifications_on() || crate::outbox::has_scheduled(self.shared()) || crate::followup::waiting(self.shared())
     }
 
     /// One background run inside `budget`; see the module doc. The mail is not counted as
@@ -344,23 +357,43 @@ impl Engine {
         crate::premium::observe_clock(self.shared());
         let notifications = self.notifications_on();
         let due = crate::outbox::due_accounts(self.shared(), now_ms());
-        if !notifications && due.is_empty() {
+        let checks = crate::followup::has_due(self.shared(), now_ms());
+        if !notifications && due.is_empty() && !checks {
             return Ok(BackgroundRun::default());
         }
         let deadline = start + budget;
-        // Sends beside the INBOX passes, on the outbox's own thread.
+        // Sends and follow-up checks beside the INBOX passes, each on its own worker thread.
         let sending = (!due.is_empty()).then(|| self.outbox().wake_for_run(self.shared(), &due));
-        let run = if notifications { self.inbox_run(start, budget) } else { Ok(BackgroundRun::default()) };
+        let checking = checks.then(|| self.shared().followup.wake_for_run());
+        let run = if notifications { self.inbox_run(start, budget) } else { Ok((Vec::new(), Vec::new())) };
         if let Some(mark) = sending {
             if !self.outbox().wait_rounds(mark, deadline) {
                 self.shared().log("[background] the outbox did not finish inside the budget; it goes on while the app runs");
             }
         }
-        run
+        if let Some(mark) = checking {
+            if !self.shared().followup.wait_pass(mark, deadline) {
+                self.shared().log("[background] the follow-up checks did not finish inside the budget; they go on while the app runs");
+            }
+        }
+        let (mail, collected) = run?;
+        // Notifications off: a reminder is listed, never posted.
+        let followups = if notifications { crate::followup::to_announce(self.shared()) } else { Vec::new() };
+        let commit = (!collected.is_empty() || !followups.is_empty()).then(|| {
+            let pending = &self.shared().background;
+            let token = format!("bg-{}", pending.next.fetch_add(1, Ordering::SeqCst) + 1);
+            let mut runs = lock(&pending.runs);
+            runs.push((token.clone(), Posted { collected, followups: followups.iter().map(|f| f.id.clone()).collect() }));
+            let extra = runs.len().saturating_sub(PENDING_KEPT);
+            runs.drain(..extra);
+            token
+        });
+        Ok(BackgroundRun { mail, followups, commit })
     }
 
-    /// The INBOX passes of a run that started at `start` with `budget` (notifications on).
-    fn inbox_run(&self, start: Instant, budget: Duration) -> Result<BackgroundRun, EngineError> {
+    /// The INBOX passes of a run that started at `start` with `budget` (notifications on): the
+    /// new mail, oldest first, and each INBOX's part with mail in it.
+    fn inbox_run(&self, start: Instant, budget: Duration) -> Result<(Vec<NewMail>, Vec<Collected>), EngineError> {
         let deadline = start + budget;
         let last_start = start + budget.mul_f32(0.8);
         let mut accounts: Vec<Candidate> = self.read(|c| {
@@ -415,21 +448,13 @@ impl Engine {
         collected.retain(|c| !c.mail.is_empty());
         let mut mail: Vec<NewMail> = collected.iter().flat_map(|c| c.mail.iter().cloned()).collect();
         mail.sort_by(|a, b| (a.date_ms, a.uid).cmp(&(b.date_ms, b.uid)));
-        let commit = (!collected.is_empty()).then(|| {
-            let pending = &self.shared().background;
-            let token = format!("bg-{}", pending.next.fetch_add(1, Ordering::SeqCst) + 1);
-            let mut runs = lock(&pending.runs);
-            runs.push((token.clone(), collected));
-            let extra = runs.len().saturating_sub(PENDING_KEPT);
-            runs.drain(..extra);
-            token
-        });
-        Ok(BackgroundRun { mail, commit })
+        Ok((mail, collected))
     }
 
     /// The platform posted the notifications of the run that returned `token`: each INBOX's
-    /// watermark moves past what that run read, and every message it returned is recorded as
-    /// notified. An unknown or spent token changes nothing.
+    /// watermark moves past what that run read, every message it returned is recorded as
+    /// notified, and every follow-up reminder it returned as announced. An unknown or spent token
+    /// changes nothing.
     pub fn background_commit(&self, token: &str) -> Result<(), EngineError> {
         let run = {
             let mut runs = lock(&self.shared().background.runs);
@@ -439,7 +464,8 @@ impl Engine {
         let Some(run) = run else {
             return Ok(());
         };
-        for c in run {
+        crate::followup::announced(self.shared(), &run.followups)?;
+        for c in run.collected {
             let keys: Vec<String> = c.mail.iter().map(|m| m.key.clone()).collect();
             record(self.shared(), &c.account, &c.folder, c.validity, c.top, &keys)?;
         }

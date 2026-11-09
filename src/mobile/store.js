@@ -128,6 +128,21 @@ export function createMobileStore() {
       set({ drafts: (Array.isArray(rows) ? rows : []).filter((d) => d.accountId === accountId) });
     }
 
+    /** The active account's follow-up reminders, soonest first (the drawer's Follow up entry). */
+    async function loadFollowUps() {
+      const accountId = get().activeAccountId;
+      if (!accountId) return;
+      let reply;
+      try {
+        reply = await daemonCall('mobile.followup.list');
+      } catch {
+        return; // a hint: a failed read keeps the last list
+      }
+      if (get().activeAccountId !== accountId) return;
+      const items = Array.isArray(reply?.items) ? reply.items : [];
+      set({ followUps: items.filter((f) => f.accountId === accountId) });
+    }
+
     function onSendResult(p) {
       if (!p?.id) return;
       if (p.outcome === 'sent') set((s) => ({ outbox: s.outbox.filter((r) => r.id !== p.id) }));
@@ -220,9 +235,10 @@ export function createMobileStore() {
 
     async function activate(accountId, folder) {
       flush();
-      set({ activeAccountId: accountId, folders: [], pending: 0, drafts: [] });
+      set({ activeAccountId: accountId, folders: [], pending: 0, drafts: [], followUps: [] });
       loadPending();
       loadDrafts();
+      loadFollowUps();
       let folders = [];
       try {
         folders = await loadFolders(accountId);
@@ -276,6 +292,7 @@ export function createMobileStore() {
         // Results sent before this subscribed are lost: the chip is re-read on start and resume.
         ['mobile.action.result', () => listen('mobile.action.result', onActionResult)],
         ['mobile.send.result', () => listen('mobile.send.result', onSendResult)],
+        ['mobile.followup.due', () => listen('mobile.followup.due', () => loadFollowUps())],
       ];
       for (const [name, subscribeOne] of on) {
         try {
@@ -292,6 +309,7 @@ export function createMobileStore() {
           else {
             loadPending();
             loadOutbox();
+            loadFollowUps();
           }
         };
         const onPageHide = () => { flush(); };
@@ -321,6 +339,7 @@ export function createMobileStore() {
       outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError, scheduledMs, notBeforeMs }]
       recentSearches: savedSearches(),
       drafts: [], // the active account's drafts: [{ id, accountId, to, subject, updatedMs }]
+      followUps: [], // the active account's reminders: [{ id, accountId, subject, recipients, sentAt, remindAt, state, folder, uid, seen }]
       premium: { premium: false, source: null, expiresMs: null }, // the engine's Premium answer (premium.js keeps it current)
       premiumLost: null, // 'DEVICE_REPLACED' once the account gave this phone's place to another device
       premiumLapsed: false, // Premium was on in this session and has ended
@@ -366,6 +385,27 @@ export function createMobileStore() {
       loadPending,
       loadOutbox,
       loadDrafts,
+      loadFollowUps,
+
+      /** Ends a follow-up reminder. False when the engine refused. */
+      async dismissFollowUp(id) {
+        try {
+          await daemonCall('mobile.followup.dismiss', { id });
+          set((s) => ({ followUps: s.followUps.filter((f) => f.id !== id) }));
+          return true;
+        } catch {
+          notice('mobile.followUp.dismissFailed');
+          return false;
+        } finally {
+          loadFollowUps();
+        }
+      },
+
+      /** The user opened a reminder's Sent copy: it stays listed, and is never posted after. */
+      followUpSeen(id) {
+        set((s) => ({ followUps: s.followUps.map((f) => (f.id === id ? { ...f, seen: true } : f)) }));
+        daemonCall('mobile.followup.seen', { id }).catch(() => {});
+      },
 
       /** Takes the engine's Premium answer `{ premium, source, expiresMs }`; a lapse is remembered. */
       setPremium(next) {

@@ -42,6 +42,10 @@ pub const NOTIFICATION_OPEN: &str = "mobile.notification.open";
 /// sign-out). The same shape as `mobile.premium.status`; never an id or a receipt.
 pub const PREMIUM_CHANGED: &str = "mobile.premium.changed";
 
+/// `{id, accountId}`: a follow-up reminder's check found no reply (plan 4 Task 9); the reminder is
+/// listed in "Follow up" (`mobile.followup.list`) until dismissed.
+pub const FOLLOWUP_DUE: &str = "mobile.followup.due";
+
 /// Every event name the engine emits: the one list `events.json` must match (a test checks it) and
 /// the page's `listen('…')` names are checked against.
 pub const EVENTS: &[&str] = &[
@@ -51,6 +55,7 @@ pub const EVENTS: &[&str] = &[
     ATTACHMENT_PROGRESS,
     FOLDER_CHANGED,
     FOLDERS_CHANGED,
+    FOLLOWUP_DUE,
     NOTIFICATION_OPEN,
     PREMIUM_CHANGED,
     SEND_RESULT,

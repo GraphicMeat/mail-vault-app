@@ -9,6 +9,8 @@ use crate::net::block_on;
 use crate::secrets::Credential;
 use crate::sync::{self, Fail};
 use mailvault_core::abd::ops::Caps;
+use mailvault_core::app_db::follow_up::{FollowUp, Outcome as ReplyOutcome};
+use mailvault_core::follow_up::imap_check;
 use mailvault_core::actions::policy::{delete_disposition, imap_trash_place, DeleteDisposition, FolderRole, WithoutTrash};
 use mailvault_core::imap::async_imap::extensions::idle::IdleResponse;
 use mailvault_core::imap::{self, abd_cmds, ImapPool, ImapSession, PartInfo};
@@ -442,6 +444,12 @@ impl Backend for ImapBackend {
 
     fn parts(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<Vec<PartInfo>>, Fail> {
         self.step(async |session| parts_in(session, folder, uid).await)
+    }
+
+    /// Core's `follow_up::imap_check::check`, the daemon's own: INBOX and the `\All`,
+    /// `\Archive` and `\Trash` folders searched for a reply, then the Sent copy by Message-ID.
+    fn reply_check(&mut self, row: &FollowUp, own: &[String], cache_miss: bool) -> Result<ReplyOutcome, Fail> {
+        self.step(async |session| Ok(imap_check::check(session, row, own, cache_miss).await.map(|(outcome, _)| outcome)?))
     }
 
     fn body(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<RawBody>, Fail> {

@@ -681,6 +681,56 @@ describe('Send later', () => {
   });
 });
 
+describe('Follow-up reminder', () => {
+  const remind = () => screen.getByLabelText(t('compose.remind.title'), { exact: false });
+  const premiumOn = () => useMobileStore.setState({ premium: { premium: true, source: 'apple', expiresMs: Date.now() + 30 * 86_400_000 } });
+
+  async function ready(props) {
+    const out = renderCompose(props);
+    await flush();
+    typeInto(toInput(), 'bob@example.test,');
+    return out;
+  }
+
+  it('with Premium the chosen days go with the send', async () => {
+    premiumOn();
+    await ready();
+    expect(remind().value).toBe('0');
+    typeInto(remind(), '3');
+    fireEvent.click(sendButton());
+    await flush();
+    expect(callsOf('mobile.compose.send')[0].remindAfterDays).toBe(3);
+  });
+
+  it('a reminder the engine refuses for Premium says so in place', async () => {
+    premiumOn();
+    engine.sendError = 'PREMIUM_REQUIRED';
+    const { onClose } = await ready();
+    typeInto(remind(), '1');
+    fireEvent.click(sendButton());
+    await flush();
+    expect(screen.getByRole('alert').textContent).toBe(t('compose.remind.upsell'));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('a free user choosing a reminder gets the paywall and it stays off', async () => {
+    await ready();
+    typeInto(remind(), '7');
+    expect(useMobileStore.getState().paywall).toMatchObject({ feature: 'followUp' });
+    expect(remind().value).toBe('0');
+    fireEvent.click(sendButton());
+    await flush();
+    expect(callsOf('mobile.compose.send')[0]).not.toHaveProperty('remindAfterDays');
+  });
+
+  it('is not offered on a Graph account', async () => {
+    useMobileStore.setState({ accounts: [{ id: 'g1', email: 'g@example.test', kind: 'graph' }] });
+    await ready({ accountId: 'g1' });
+    expect(screen.queryByLabelText(t('compose.remind.title'), { exact: false })).toBeNull();
+    useMobileStore.setState({ accounts: [] });
+  });
+});
+
 describe('scheduled in the outbox', () => {
   const HOUR = 3_600_000;
   let offsetHeight;

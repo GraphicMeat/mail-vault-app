@@ -90,7 +90,7 @@ impl Fx {
 
     /// A run whose notifications were posted: fetched, then committed.
     fn run(&self, budget: Duration) -> Vec<NewMail> {
-        let BackgroundRun { mail, commit } = self.engine.background_fetch(budget).unwrap();
+        let BackgroundRun { mail, commit, .. } = self.engine.background_fetch(budget).unwrap();
         if let Some(token) = commit {
             self.engine.background_commit(&token).unwrap();
         }

@@ -44,6 +44,8 @@ use crate::remote_ids;
 use crate::rpc::RpcError;
 use crate::secrets::Credential;
 use crate::sync::{self, Fail};
+use mailvault_core::app_db::follow_up::{FollowUp, Outcome as ReplyOutcome};
+use mailvault_core::follow_up::matcher;
 use mailvault_core::actions::policy::{delete_disposition, jmap_trash_place, DeleteDisposition, FolderRole, WithoutTrash};
 use mailvault_core::imap::PartInfo;
 use mailvault_core::jmap::discover::{self, Discovered};
@@ -80,6 +82,8 @@ const PART_PROPS: [&str; 8] = ["partId", "blobId", "size", "name", "type", "char
 const BATCH: usize = 199;
 /// Moves remapped per write transaction (a forget and an insert each, plus `uid_seq`).
 const MOVE_BATCH: usize = 99;
+/// The most replies a follow-up's reply search reads back (the daemon's `JMAP_REPLY_HITS`).
+const REPLY_HITS: usize = 50;
 /// Uids looked up per read for their local overrides.
 const READ_CHUNK: usize = 500;
 
@@ -1044,6 +1048,48 @@ impl Backend for JmapBackend<'_> {
             }
         }
         Ok(())
+    }
+
+    /// The daemon's JMAP check (`follow_up_worker::check_row_jmap`) on this session: one
+    /// `Email/query` for mail outside Sent and Drafts whose In-Reply-To or References names the
+    /// message (core `matcher::jmap_reply_filter`), read back so a draft, the user's own mail and
+    /// an automatic reply never count; then the Sent copy by exact Message-ID, in the folder the
+    /// row names, then the role=sent mailbox, under its local uid.
+    fn reply_check(&mut self, row: &FollowUp, own: &[String], _cache_miss: bool) -> Result<ReplyOutcome, Fail> {
+        let term = mailvault_core::maildir::normalize_message_id(&row.message_id);
+        if term.is_empty() {
+            return Ok(ReplyOutcome::SentCopyGone);
+        }
+        let boxes = self.mailboxes(true)?.to_vec();
+        let role = |r: &str| boxes.iter().find(|m| has_role(m, r)).map(|m| m.id.clone());
+        let skip: Vec<String> = [role("sent"), role("drafts")].into_iter().flatten().collect();
+        let filter = matcher::jmap_reply_filter(&term, &skip);
+        let hits = self.call(async |c| c.query_emails(filter.clone(), REPLY_HITS).await)?;
+        if !hits.is_empty() {
+            let got = self.call(async |c| c.get_emails(&hits, &matcher::JMAP_REPLY_PROPS).await)?;
+            if got.list.iter().any(|e| matcher::jmap_reply_from_someone_else(e, &term, own)) {
+                return Ok(ReplyOutcome::Replied);
+            }
+        }
+        let mut candidates: Vec<String> = Vec::new();
+        let filed = Some(row.sent_mailbox.clone()).filter(|m| !m.is_empty() && boxes.iter().any(|b| b.id == *m));
+        for id in filed.into_iter().chain(role("sent")) {
+            if !candidates.contains(&id) {
+                candidates.push(id);
+            }
+        }
+        for mailbox in candidates {
+            let found = self.call(async |c| c.find_message_id(&mailbox, &term).await)?;
+            if let Some(email_id) = found {
+                let account = self.account.clone();
+                let keys = [key(&mailbox, &email_id)];
+                let uids = sync::write_for(self.shared, &account, |c| remote_ids::uids_for(c, &account, &mailbox, &keys))?;
+                if let Some(sent_uid) = uids.first().copied() {
+                    return Ok(ReplyOutcome::NoReply { sent_mailbox: mailbox, sent_uid });
+                }
+            }
+        }
+        Ok(ReplyOutcome::SentCopyGone)
     }
 
     fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {

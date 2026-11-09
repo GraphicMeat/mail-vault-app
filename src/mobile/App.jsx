@@ -17,6 +17,8 @@
 // Compose (Compose.jsx) is a full-screen layer over the list or the viewer: the button at the
 // bottom right starts a new message, the viewer's More sheet a reply, reply to all or forward.
 // The drawer's Drafts entry opens the drafts list (DraftsList.jsx); a draft reopens in Compose.
+// Its Follow up entry opens the reminders list (FollowUpList.jsx); a reminder with no reply opens
+// its Sent copy the way a notification tap opens a message.
 // The outbox row (Outbox.jsx) sits between the header and the list while anything is unsent.
 //
 // Back (Android) closes the top layer (viewer, picker, sheet, compose) through `backStack.js`.
@@ -42,6 +44,7 @@ import Toasts from './Toasts.jsx';
 import Compose from './Compose.jsx';
 import OutboxRow from './Outbox.jsx';
 import DraftsList from './DraftsList.jsx';
+import FollowUpList from './FollowUpList.jsx';
 import Settings from './Settings.jsx';
 import Search from './Search.jsx';
 import Premium from './Premium.jsx';
@@ -171,9 +174,11 @@ function App() {
   const [open, setOpen] = useState(null);
   const [compose, setCompose] = useState(null); // { key, accountId, mode, original?, draftId? }
   const [draftsOpen, setDraftsOpen] = useState(DEMO_DRAFTS);
+  const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(DEMO_SETTINGS);
   const [searchOpen, setSearchOpen] = useState(false);
   const drafts = useMobileStore((s) => s.drafts);
+  const followUps = useMobileStore((s) => s.followUps);
   const [pulled, setPulled] = useState(false);
   const [total, setTotal] = useState(null);
   const [perfGate, setPerfGate] = useState(false);
@@ -387,6 +392,7 @@ function App() {
       if (!(await store.openAt(tap.accountId, tap.folder))) return;
       setPanel(null);
       setDraftsOpen(false);
+      setFollowUpsOpen(false);
       // Settings sits above the viewer: the message would open underneath it.
       setSettingsOpen(false);
       setOpen(null);
@@ -471,6 +477,17 @@ function App() {
     setDraftsOpen(true);
   }, []);
   const closeDrafts = useCallback(() => setDraftsOpen(false), []);
+  const onFollowUps = useCallback(() => {
+    setPanel(null);
+    setFollowUpsOpen(true);
+  }, []);
+  const closeFollowUps = useCallback(() => setFollowUpsOpen(false), []);
+  // A reminder opens its Sent copy the way a notification tap opens a message.
+  const onOpenFollowUp = useCallback((f) => {
+    useMobileStore.getState().followUpSeen(f.id);
+    setFollowUpsOpen(false);
+    setTap({ accountId: f.accountId, folder: f.folder, uid: f.uid });
+  }, []);
   const onOpenDraft = useCallback((id) => {
     const { activeAccountId: accountId } = useMobileStore.getState();
     if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new', draftId: id });
@@ -489,6 +506,7 @@ function App() {
   }, []);
   useBackLayer(searchOpen, closeSearch);
   useBackLayer(draftsOpen, closeDrafts);
+  useBackLayer(followUpsOpen, closeFollowUps);
   useBackLayer(settingsOpen, closeSettings);
   const paywall = useMobileStore((s) => s.paywall);
   const closePaywall = useCallback(() => useMobileStore.getState().closePaywall(), []);
@@ -631,6 +649,9 @@ function App() {
           onClose={closePanel}
           drafts={drafts.length}
           onDrafts={onDrafts}
+          followUps={followUps.length}
+          followUpsDue={followUps.filter((f) => f.state === 'due').length}
+          onFollowUps={onFollowUps}
           onSettings={onSettings}
         />
       )}
@@ -669,6 +690,7 @@ function App() {
       )}
       {searchOpen && <Search onOpen={onOpenResult} onClose={closeSearch} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
+      {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
       {settingsOpen && <Settings onClose={closeSettings} />}
       {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
       {compose && (

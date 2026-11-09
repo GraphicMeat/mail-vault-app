@@ -1,14 +1,15 @@
 // The folder drawer: the active account's folders, depth first as the engine lists them, with
 // unread counts. Special-use folders get their translated name; a folder that cannot be opened
 // (`noselect`) is shown as a heading for its children. Names come from `folders.js`. Below the
-// folders, Drafts (the account's local drafts, with their count) opens the drafts list; the footer's
-// Settings opens the settings screen.
+// folders, Drafts (the account's local drafts, with their count) opens the drafts list, and Follow up
+// (shown while the account has follow-up reminders, with the count that found no reply) opens the
+// reminders list; the footer's Settings opens the settings screen.
 import React from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
 import { folderLabel } from './folders.js';
 
-export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, onSettings }) {
+export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings }) {
   const t = useT();
   return (
     <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
@@ -53,6 +54,16 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
             <span className="mv-folder__name">{t('mobile.drafts.title')}</span>
             {drafts > 0 && (
               <span className="mv-folder__count" aria-label={t('mobile.drafts.count', { count: drafts })}>{drafts}</span>
+            )}
+          </button>
+        </div>
+      )}
+      {onFollowUps && followUps > 0 && (
+        <div className="mv-drawer__local">
+          <button type="button" className="mv-folder" data-mv-followups-open onClick={onFollowUps}>
+            <span className="mv-folder__name">{t('mobile.followUp.title')}</span>
+            {followUpsDue > 0 && (
+              <span className="mv-folder__count" aria-label={t('mobile.followUp.count', { count: followUpsDue })}>{followUpsDue}</span>
             )}
           </button>
         </div>

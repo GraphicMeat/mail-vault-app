@@ -24,6 +24,11 @@
 // section. A time past 5 minutes without Premium opens the paywall instead; the engine's refusal
 // (PREMIUM_REQUIRED, SCHEDULE_TOO_FAR) is shown in place like any other.
 //
+// Follow-up reminder (plan 4 Task 9): "Remind me if no reply" under the subject (off, 1 day, 3 days,
+// 1 week) goes with the send as `remindAfterDays`; the engine records the reminder once the message
+// went out. A choice without Premium opens the paywall instead and stays off. Not offered on a
+// Graph account (desktop parity). The engine's refusal (PREMIUM_REQUIRED) is shown in place.
+//
 // Keyboard: the focused field is kept above the keyboard (`visualViewport`); targets are 44 pt.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
@@ -33,6 +38,7 @@ import { fieldsOf, initialText, isEmpty, isValidEntry, sendError, splitList } fr
 import RecipientField, { commitText } from './RecipientField.jsx';
 import Sheet from './Sheet.jsx';
 import SendLater from './SendLater.jsx';
+import { openPaywall, usePremium } from './premium.js';
 import { formatFullDate, formatSize } from './format.js';
 import { useBackLayer } from './backStack.js';
 import { useMobileStore } from './store.js';
@@ -42,6 +48,14 @@ import { useT } from './i18n.js';
 export const AUTOSAVE_MS = 1500;
 /** A forwarded part with no progress for this long is given up on. */
 export const STALL_MS = 60_000;
+
+/** The reminder choices: days, and the label's key. */
+const REMIND_CHOICES = Object.freeze([
+  [0, 'compose.remind.off'],
+  [1, 'compose.remind.days1'],
+  [3, 'compose.remind.days3'],
+  [7, 'compose.remind.days7'],
+]);
 
 const TITLE_KEYS = Object.freeze({
   new: 'mobile.compose.newTitle',
@@ -154,6 +168,9 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const [confirming, setConfirming] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [later, setLater] = useState(false);
+  const [remind, setRemind] = useState(0); // follow-up reminder in days, 0 for none
+  const premium = usePremium();
+  const remindOffered = useMobileStore((s) => s.accounts.find((a) => a.id === accountId)?.kind !== 'graph');
   const [edits, setEdits] = useState(0);
 
   const threading = useRef({ inReplyTo: '', references: '' });
@@ -416,12 +433,15 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     try {
       await daemonCall('mobile.compose.send', {
         accountId, ...(id ? { draftId: id } : {}), ...fieldsOf(current()), ...(sendAtMs != null ? { sendAtMs } : {}),
+        ...(remind > 0 && remindOffered ? { remindAfterDays: remind } : {}),
       });
     } catch (err) {
       if (!live.current) return;
       stopped.current = false;
       setSending(false);
-      setError(sendError(err));
+      // Premium ended since the reminder was chosen (a send-later time is checked first).
+      const reminderRefused = err?.code === 'PREMIUM_REQUIRED' && remind > 0 && sendAtMs == null;
+      setError(reminderRefused ? 'compose.remind.upsell' : sendError(err));
       scroller.current?.scrollTo?.({ top: 0 });
       return;
     }
@@ -531,6 +551,31 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
             onChange={(e) => { if (!locked.current) { setSubject(e.target.value); edit('subject'); } }}
           />
         </div>
+        {remindOffered && (
+          <div className="mv-compose__line" data-mv-remind>
+            <label className="mv-compose__label mv-compose__remind-label" htmlFor="mv-compose-remind">
+              {t('compose.remind.title')}
+              {!premium && <span className="mv-schedule__premium">{t('common.premium')}</span>}
+            </label>
+            <select
+              id="mv-compose-remind"
+              className="mv-compose__select"
+              value={remind}
+              disabled={locked.current}
+              onChange={(e) => {
+                const days = Number(e.target.value) || 0;
+                if (days > 0 && !premium) {
+                  setRemind(0);
+                  openPaywall('followUp');
+                  return;
+                }
+                setRemind(days);
+              }}
+            >
+              {REMIND_CHOICES.map(([days, key]) => <option key={days} value={days}>{t(key)}</option>)}
+            </select>
+          </div>
+        )}
         {(attachments.length > 0 || fetching.length > 0) && (
           <ul className="mv-compose__files" aria-label={t('common.attachmentCount', { count: attachments.length + fetching.length })}>
             {attachments.map((a, i) => (

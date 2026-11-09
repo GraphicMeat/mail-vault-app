@@ -11,6 +11,7 @@ mod billing_client;
 mod body;
 mod compose;
 mod db;
+mod followup;
 mod hold;
 mod live;
 pub mod events;
@@ -30,6 +31,7 @@ pub mod seed;
 
 pub use background::{BackgroundRun, NewMail};
 pub use db::{Engine, EngineError, SCHEMA_VERSION};
+pub use followup::FollowUpDue;
 pub use outgoing::resolve_outgoing;
 pub use rpc::{methods, RpcError};
 #[doc(hidden)]

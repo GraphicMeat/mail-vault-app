@@ -24,6 +24,7 @@ pub(crate) mod jmap;
 use crate::actions::Kind;
 use crate::db::Shared;
 use crate::sync::{self, Fail};
+use mailvault_core::app_db::follow_up::{FollowUp, Outcome as ReplyOutcome};
 use mailvault_core::imap::{EmailHeader, PartInfo};
 use mailvault_core::send::classify::{classify_unsent, SendVerdict};
 use mailvault_core::smtp::OutgoingEmail;
@@ -339,6 +340,15 @@ pub(crate) trait Backend: Send {
     /// `flags` follows). Not called when the pass failed or stopped part way.
     fn pass_done(&mut self, _folder: &str) -> Result<(), Fail> {
         Ok(())
+    }
+    /// A follow-up's server check (plan 4 Task 9): is there a reply to `row`'s message from
+    /// someone other than `own`, and failing that, where is its Sent copy? `cache_miss`: the
+    /// local check read the account's rows and found no answer, so a server that refuses every
+    /// reply search still settles the row (core `follow_up::imap_check`). Nothing changes on the
+    /// server. An `Err` may leave the connection unusable: the caller drops the backend. A backend
+    /// without one (Graph, as on desktop) answers `unsupported`.
+    fn reply_check(&mut self, _row: &FollowUp, _own: &[String], _cache_miss: bool) -> Result<ReplyOutcome, Fail> {
+        Err(Fail::unsupported("a follow-up reply check"))
     }
     /// Builds `email` (core's `smtp::build_mime`, under `email.message_id`) and submits it.
     /// `Ok` means the server accepted it; nothing is filed in Sent yet. A failure says whether

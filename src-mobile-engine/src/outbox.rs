@@ -710,6 +710,7 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
         end_attempt(shared, account, id, SendVerdict::Terminal, Some("ATTACHMENT_MISSING"), policy);
         return true;
     };
+    let remind = fields.remind_after_days.zip(message_id.clone());
     let email = fields.outgoing(message_id, attachments);
     match backend.send(&email) {
         Ok(sent) => {
@@ -718,6 +719,10 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
             let sent_now = finish(&Store(shared), id, SendVerdict::Sent, None, compose::now_ms(), policy);
             if logged(shared, id, sent_now, None).is_some() {
                 release_dirs(shared, cache_dir, &fields.dirs());
+                // The reminder the send asked for, keyed on the Message-ID it went out under.
+                if let Some((days, message_id)) = &remind {
+                    crate::followup::record_sent(shared, account, message_id, &fields, *days);
+                }
                 emit_result(shared, id, account, OutboxState::Sent.as_str(), None);
             }
             if let Err(Fail::Code(code, why)) = backend.file_sent(&sent) {

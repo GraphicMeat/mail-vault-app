@@ -11,7 +11,7 @@
 //! announced to the page as `mobile.notification.open`, and taken by the page with
 //! `mobile_notification_take`, which also covers a cold launch whose tap came before the page.
 
-use mailvault_mobile_engine::{events::NOTIFICATION_OPEN, Engine, NewMail};
+use mailvault_mobile_engine::{events::NOTIFICATION_OPEN, Engine, FollowUpDue, NewMail};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -313,6 +313,31 @@ pub(crate) fn render(mail: &[NewMail], preview: bool, locale: &str) -> Vec<Note>
     notes
 }
 
+/// What the native side posts for follow-up reminders that found no reply: one each, "No reply
+/// yet" over the subject (the account with previews off), whose tap opens the Sent copy. The id
+/// is per reminder, so a repost (a run whose commit was lost) replaces it.
+pub(crate) fn render_followups(due: &[FollowUpDue], preview: bool, locale: &str) -> Vec<Note> {
+    due.iter()
+        .map(|f| {
+            let body = if !preview {
+                f.account_email.clone()
+            } else if f.subject.trim().is_empty() {
+                text(locale, "common.noSubject").to_string()
+            } else {
+                f.subject.clone()
+            };
+            Note {
+                id: format!("followup/{}", f.id),
+                title: text(locale, "followUp.notifyTitle").to_string(),
+                body,
+                account_id: f.account_id.clone(),
+                folder: f.folder.clone(),
+                uid: Some(f.uid),
+            }
+        })
+        .collect()
+}
+
 /// The system languages the native side last reported, most preferred first.
 static LANGUAGES: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -336,8 +361,10 @@ pub(crate) fn run_json(data: &Path, cache: &Path, budget: Duration, started: Ins
             Ok(run) => {
                 token = run.commit;
                 let mail = run.mail;
-                let notes = render(&mail, engine.notification_preview(), locale);
-                let mut line = json!({ "background": { "new": mail.len(), "notes": notes.len() } });
+                let preview = engine.notification_preview();
+                let mut notes = render(&mail, preview, locale);
+                notes.extend(render_followups(&run.followups, preview, locale));
+                let mut line = json!({ "background": { "new": mail.len(), "followUps": run.followups.len(), "notes": notes.len() } });
                 // Perf-gate builds: what each tap would open (ids only), for the device check.
                 if cfg!(feature = "perf-gate") {
                     line["background"]["taps"] = notes.iter().map(|n| json!({ "accountId": n.account_id, "folder": n.folder, "uid": n.uid })).collect();
@@ -585,6 +612,26 @@ mod tests {
         }
     }
 
+    /// A follow-up reminder's note says "No reply yet" over the subject, or the account with
+    /// previews off, and its tap opens the Sent copy.
+    #[test]
+    fn a_follow_up_note_names_the_message_and_opens_the_sent_copy() {
+        let due = FollowUpDue {
+            id: "fu_1".into(),
+            account_id: "a".into(),
+            account_email: "a@example.test".into(),
+            folder: "Sent".into(),
+            uid: 9,
+            subject: "Quote".into(),
+            recipients: "bob@example.test".into(),
+        };
+        let notes = render_followups(std::slice::from_ref(&due), true, "en");
+        assert_eq!(notes.len(), 1);
+        assert_eq!((notes[0].id.as_str(), notes[0].body.as_str(), notes[0].folder.as_str(), notes[0].uid), ("followup/fu_1", "Quote", "Sent", Some(9)));
+        assert!(!notes[0].title.is_empty(), "the title comes from the catalog");
+        assert_eq!(render_followups(&[due], false, "en")[0].body, "a@example.test");
+    }
+
     /// A failed open is not kept: the next caller (setup after a failed background launch)
     /// opens it, and only one engine is ever kept.
     #[test]
@@ -798,7 +845,7 @@ mod tests {
         assert_eq!(l(&[]), "en");
         assert_eq!(l(&["KO"]), "ko");
         for (locale, keys) in NOTIFY_STRINGS {
-            assert_eq!(keys.len(), 5, "{locale} lacks a notification string");
+            assert_eq!(keys.len(), 6, "{locale} lacks a notification string");
         }
     }
 

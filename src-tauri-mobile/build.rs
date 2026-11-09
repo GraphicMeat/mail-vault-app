@@ -12,6 +12,7 @@ const KEYS: &[&str] = &[
     "mobile.notify.summary_one",
     "mobile.notify.summary_other",
     "mobile.notify.channel",
+    "followUp.notifyTitle",
     "common.noSubject",
 ];
 

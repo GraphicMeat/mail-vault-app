@@ -872,6 +872,9 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-compose__line--recipients .mv-compose__label { line-height: 48px; }
 .mv-compose__label { flex: none; min-width: 3.5rem; color: var(--mail-text-muted); font-size: 0.875rem; }
 .mv-compose__from { min-width: 0; overflow-wrap: anywhere; }
+/* "Remind me if no reply" (Compose.jsx). */
+.mv-compose__remind-label { display: inline-flex; flex: 1; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mv-compose__select { flex: none; min-height: 44px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--mail-surface-hover); color: var(--mail-text); font: inherit; font-size: 16px; }
 .mv-compose__input, .mv-compose__chip-input input {
   flex: 1;
   min-width: 0;
@@ -985,6 +988,9 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-drafts__top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .mv-drafts__subject { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .mv-drafts__when { flex: none; font-size: 0.75rem; color: var(--mail-text-muted); }
+/* Follow up (FollowUpList.jsx): a reminder not opened yet stands out; one still waiting cannot be opened. */
+.mv-followup--unseen .mv-drafts__subject { font-weight: 700; color: var(--mail-text); }
+.mv-drafts__open:disabled { opacity: 1; cursor: default; }
 .mv-drafts__to { font-size: 0.8125rem; color: var(--mail-text-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .mv-drafts__delete { color: var(--mail-text-muted); }
 .mv-drawer__local { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--mail-border); }

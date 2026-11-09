@@ -49,12 +49,15 @@ async fn daemon_rpc(app: tauri::AppHandle, method: String, params: Value, daemon
 
 /// The RPCs after which `Engine::wants_background` may answer differently (plan Ruling 13):
 /// notifications turned on or off, a send held back for later, a scheduled message moved, sent
-/// now or cancelled, an account (and its outbox) removed. Plan 4 Task 9 adds its follow-up calls.
+/// now or cancelled, an account (and its outbox) removed, a send that asks for a follow-up
+/// reminder (its row is written once the send goes out; leaving the front re-applies too), a
+/// reminder dismissed.
 fn changes_background(method: &str, params: &Value) -> bool {
+    let set = |key: &str| params.get(key).is_some_and(|v| !v.is_null());
     match method {
         "mobile.settings.set" => params.get("notifications").is_some(),
-        "mobile.compose.send" => params.get("sendAtMs").is_some_and(|v| !v.is_null()),
-        "mobile.outbox.reschedule" | "mobile.outbox.retry" | "mobile.outbox.discard" | "mobile.accounts.remove" => true,
+        "mobile.compose.send" => set("sendAtMs") || set("remindAfterDays"),
+        "mobile.outbox.reschedule" | "mobile.outbox.retry" | "mobile.outbox.discard" | "mobile.accounts.remove" | "mobile.followup.dismiss" => true,
         _ => false,
     }
 }
@@ -606,6 +609,8 @@ mod tests {
             ("mobile.outbox.retry", json!({ "id": "o" })),
             ("mobile.outbox.discard", json!({ "id": "o" })),
             ("mobile.accounts.remove", json!({ "accountId": "a" })),
+            ("mobile.compose.send", json!({ "accountId": "a", "remindAfterDays": 3 })),
+            ("mobile.followup.dismiss", json!({ "id": "fu_1" })),
         ] {
             assert!(changes_background(method, &params), "{method} {params}");
         }
@@ -613,6 +618,9 @@ mod tests {
             ("mobile.settings.set", json!({ "notificationPreview": false })),
             ("mobile.compose.send", json!({ "accountId": "a" })),
             ("mobile.compose.send", json!({ "accountId": "a", "sendAtMs": null })),
+            ("mobile.compose.send", json!({ "accountId": "a", "remindAfterDays": null })),
+            ("mobile.followup.list", json!({})),
+            ("mobile.followup.seen", json!({ "id": "fu_1" })),
             ("mobile.outbox.list", json!({})),
             ("mobile.messages.page", json!({})),
         ] {

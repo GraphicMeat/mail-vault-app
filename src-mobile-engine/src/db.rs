@@ -317,6 +317,8 @@ pub(crate) struct Shared {
     pub(crate) search: crate::search::Search,
     /// The cached Premium answer and the clock guard (`premium.rs`).
     pub(crate) premium: crate::premium::Premium,
+    /// The follow-up reminders' worker (`followup.rs`).
+    pub(crate) followup: crate::followup::Worker,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -496,6 +498,7 @@ impl Engine {
                 background: crate::background::Pending::default(),
                 search: crate::search::Search::default(),
                 premium: crate::premium::Premium::default(),
+                followup: crate::followup::Worker::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -518,6 +521,8 @@ impl Engine {
         // backfilled there, never on this path).
         crate::search::open(&engine.shared, data_dir);
         crate::search::start(&engine.shared);
+        // Asleep until the first reminder's time (none: an hour at a time).
+        crate::followup::start(&engine.shared);
         Ok(engine)
     }
 
@@ -674,6 +679,7 @@ impl Drop for Engine {
         self.sync.stop();
         self.replay.stop();
         self.outbox.stop();
+        self.shared.followup.stop();
         self.attachments.stop();
         self.live.stop();
         // Closes search.db now: its EXCLUSIVE lock would outlive this engine in a worker's Arc.

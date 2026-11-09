@@ -112,6 +112,10 @@ pub(crate) struct Fields {
     /// reopened draft keeps its title. Not used for sending.
     #[serde(deserialize_with = "nullable", skip_serializing_if = "String::is_empty")]
     pub(crate) mode: String,
+    /// An outbox row's follow-up reminder, in days (`mobile.compose.send` sets it after
+    /// [`crate::followup::remind_check`]; a draft never carries one).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) remind_after_days: Option<i64>,
 }
 
 impl Fields {
@@ -219,16 +223,21 @@ struct SendParams {
     /// Send later: not before this time (unix ms). Never part of the stored fields.
     #[serde(default)]
     send_at_ms: Option<i64>,
+    /// "Remind me if no reply in N days" (1, 3 or 7; Premium): kept in the outbox row's fields
+    /// until the send went out, then a `follow_ups` row (`followup.rs`).
+    #[serde(default)]
+    remind_after_days: Option<i64>,
     #[serde(flatten)]
     fields: Fields,
 }
 
 /// `mobile.compose.send {accountId, draftId?, to, cc, bcc, subject, text, inReplyTo?, references?,
-/// attachments: [{handle}], sendAtMs?}` -> `{id, state: "queued", scheduledMs}` (`scheduledMs`:
+/// attachments: [{handle}], sendAtMs?, remindAfterDays?}` -> `{id, state: "queued", scheduledMs}` (`scheduledMs`:
 /// the send time when held back, else null). `INVALID` (no To, an address that does not read, an
 /// unknown account), `ATTACHMENT_MISSING`, `TOO_LARGE`, `PREMIUM_REQUIRED` (`sendAtMs` more than
-/// 5 minutes ahead without Premium), `SCHEDULE_TOO_FAR` (more than a day ahead), all before any
-/// write.
+/// 5 minutes ahead without Premium, or `remindAfterDays` without Premium), `SCHEDULE_TOO_FAR`
+/// (more than a day ahead), `INVALID` for `remindAfterDays` other than 1, 3, 7 or on a Graph
+/// account, all before any write.
 pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: SendParams = parse(params)?;
     let shared = engine.shared();
@@ -253,6 +262,7 @@ pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         Some(at) => schedule_check(shared, at, now)?,
         None => None,
     };
+    fields.remind_after_days = crate::followup::remind_check(shared, &acct, p.remind_after_days)?;
     let id = format!("out_{}", random_hex());
     let message_id = new_message_id(&acct.email);
     let json = serde_json::to_string(&fields).map_err(internal)?;
@@ -532,6 +542,7 @@ pub(crate) fn drafts_save(engine: &Engine, params: Value) -> Result<Value, RpcEr
         None => format!("drf_{}", random_hex()),
     };
     let mut fields = p.fields;
+    fields.remind_after_days = None;
     fields.attachments = fields.attachments.iter().filter_map(|a| checked(engine.cache_dir(), a)).collect();
     let json = serde_json::to_string(&fields).map_err(internal)?;
     let account_id = p.account_id;

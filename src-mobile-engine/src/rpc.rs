@@ -29,7 +29,8 @@ pub enum RpcError {
     /// A Premium call failed (`premium.rs`): `NETWORK` (the cache stays), `REFUSED` (the server
     /// says the receipt is invalid), `CODE_WRONG`, `CODE_EXPIRED`, `RATE_LIMITED`,
     /// `DEVICE_REPLACED` (another device took this one's web place), `INSTALL_LIMIT` (a Restore the
-    /// server would not add to a purchase already on its most installs). The message is fixed text,
+    /// server would not add to a purchase already on its most installs), `PREMIUM_REQUIRED` (a
+    /// follow-up reminder asked for without Premium). The message is fixed text,
     /// never the server's.
     Premium(&'static str),
     /// A send-later time core's `send::schedule::schedule_allowed` refused: its code
@@ -47,6 +48,7 @@ fn premium_message(code: &str) -> &'static str {
         "RATE_LIMITED" => "too many tries, wait a moment",
         "DEVICE_REPLACED" => "another device took this device's place",
         "INSTALL_LIMIT" => "this purchase is already in use on the most devices it allows",
+        "PREMIUM_REQUIRED" => "this needs Premium",
         _ => "premium check failed",
     }
 }
@@ -128,6 +130,9 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.drafts.list", crate::compose::drafts_list),
     ("mobile.drafts.save", crate::compose::drafts_save),
     ("mobile.folders.list", crate::sync::folders_list),
+    ("mobile.followup.dismiss", crate::followup::dismiss),
+    ("mobile.followup.list", crate::followup::list),
+    ("mobile.followup.seen", crate::followup::seen),
     ("mobile.message.body", crate::body::message_body),
     ("mobile.messages.page", messages_page),
     ("mobile.oauth.begin", crate::oauth::begin),
@@ -175,6 +180,9 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.drafts.list", crate::compose::drafts_list),
     ("mobile.drafts.save", crate::compose::drafts_save),
     ("mobile.folders.list", crate::sync::folders_list),
+    ("mobile.followup.dismiss", crate::followup::dismiss),
+    ("mobile.followup.list", crate::followup::list),
+    ("mobile.followup.seen", crate::followup::seen),
     ("mobile.message.body", crate::body::message_body),
     ("mobile.messages.page", messages_page),
     ("mobile.oauth.begin", crate::oauth::begin),
