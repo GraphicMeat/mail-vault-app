@@ -4,7 +4,7 @@
     "app": {
       "kind": "tauri",
       "setup": "npm run build:daemon",
-      "test": "~/.claude/bin/testq ~/.claude/bin/minijob cargo test -p imap-proto -p mailvault-core -p mailvault-daemon -p mock-imap",
+      "test": "~/.claude/bin/anyjob cargo test -p imap-proto -p mailvault-core -p mailvault-daemon -p mock-imap",
       "screens": [{ "name": "Launch", "launchArg": "" }]
     },
     "web": {
