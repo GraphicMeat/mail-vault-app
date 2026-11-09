@@ -1,0 +1,1 @@
+email,mail,postfach,imap,gmail,outlook,fastmail,privat,offline,suche,planen,erinnerung,tracker

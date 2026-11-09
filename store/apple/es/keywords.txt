@@ -1,0 +1,1 @@
+correo,email,bandeja,imap,gmail,outlook,fastmail,privado,sin conexión,buscar,programar,recordatorio

@@ -1,0 +1,1 @@
+email,mail,boîte,imap,gmail,outlook,fastmail,privé,hors ligne,recherche,planifier,rappel,traceur

@@ -1,0 +1,6 @@
+Welcome to MailVault on your phone.
+
+- Several accounts: Gmail, Microsoft 365, Outlook.com, Fastmail and IMAP
+- Search on your phone and on the server
+- Swipe actions with undo, drafts and an outbox
+- Premium: scheduled send, follow-up reminders and tracker blocking

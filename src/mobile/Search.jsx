@@ -31,13 +31,13 @@ function SearchIcon() {
   );
 }
 
-export default function Search({ onOpen, onClose }) {
+export default function Search({ onOpen, onClose, initialQuery = '' }) {
   const t = useT();
   const accountId = useMobileStore((s) => s.activeAccountId);
   const folder = useMobileStore((s) => s.activeFolder);
   const recent = useMobileStore((s) => s.recentSearches);
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [scope, setScope] = useState('folder'); // 'folder' | 'all'
   // The device search: idle (no query) | loading | more (a later page loading) | done | failed
   const [local, setLocal] = useState({ state: 'idle', rows: [], cursor: null, code: null });

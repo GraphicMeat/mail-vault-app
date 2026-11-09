@@ -1,0 +1,1 @@
+email,correio,caixa,imap,gmail,outlook,fastmail,privado,offline,buscar,agendar,lembrete,rastreador

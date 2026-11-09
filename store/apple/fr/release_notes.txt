@@ -1,0 +1,6 @@
+Bienvenue dans MailVault sur le téléphone.
+
+- Plusieurs comptes : Gmail, Microsoft 365, Outlook.com, Fastmail et IMAP
+- Recherche sur le téléphone et sur le serveur
+- Gestes de balayage avec annulation, brouillons et boîte d’envoi
+- Premium : envoi programmé, rappels de relance et blocage des traceurs

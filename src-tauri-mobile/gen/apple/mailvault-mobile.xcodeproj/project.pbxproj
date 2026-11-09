@@ -20,6 +20,7 @@
 		DF21EB79A20DF2115D531A94 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 659FB608210426C7FA18740C /* assets */; };
 		E78D8EFFC5380B35D72F8DCB /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 87A5529C0BC38409F20ECF72 /* UIKit.framework */; };
 		F7F3AE76F7E6DF98A9B92A6A /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 49535AFC16818D8F018FD95A /* MetalKit.framework */; };
+		9C8B7A6958473625140F3E2D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 		87A5529C0BC38409F20ECF72 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		8D238F98CBA7EFB9C2D244D6 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		B61C930FD8B5910DB5DCB1ED /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60718293A4B5C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B7851508C62EA0850FE691B5 /* mailvault-mobile_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "mailvault-mobile_iOS.entitlements"; sourceTree = "<group>"; };
 		B8083A76369BBFA179E0225A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C2A816B90DDEA4B047A30F8E /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
@@ -111,6 +113,7 @@
 			children = (
 				25577DA239B242EA2C49F01D /* Info.plist */,
 				B7851508C62EA0850FE691B5 /* mailvault-mobile_iOS.entitlements */,
+				A1B2C3D4E5F60718293A4B5C /* PrivacyInfo.xcprivacy */,
 			);
 			path = "mailvault-mobile_iOS";
 			sourceTree = "<group>";
@@ -215,6 +218,7 @@
 				C137EBD69E9E208E95DA6BF7 /* Assets.xcassets in Resources */,
 				5E6702BABE57C2F99FAD8381 /* LaunchScreen.storyboard in Resources */,
 				DF21EB79A20DF2115D531A94 /* assets in Resources */,
+				9C8B7A6958473625140F3E2D /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

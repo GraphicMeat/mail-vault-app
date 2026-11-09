@@ -1,0 +1,6 @@
+Te damos la bienvenida a MailVault en el teléfono.
+
+- Varias cuentas: Gmail, Microsoft 365, Outlook.com, Fastmail e IMAP
+- Búsqueda en el teléfono y en el servidor
+- Gestos de deslizar con deshacer, borradores y bandeja de salida
+- Premium: envío programado, recordatorios de seguimiento y bloqueo de rastreadores

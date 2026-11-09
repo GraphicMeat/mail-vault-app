@@ -1,0 +1,6 @@
+欢迎使用手机版 MailVault。
+
+- 多个账户：Gmail、Microsoft 365、Outlook.com、Fastmail 和 IMAP
+- 在手机和服务器上搜索
+- 可撤销的滑动操作、草稿和发件箱
+- Premium：定时发送、跟进提醒和追踪拦截

@@ -1,0 +1,29 @@
+MailVault ist eine Mail-App, die deine Mails dort lässt, wo sie hingehören: auf deinem Handy und auf deinem eigenen Mailserver. Du brauchst kein MailVault-Konto, es gibt keine Werbung und kein Tracking. Deine Mails laufen nie über unsere Server.
+
+Füge Gmail, Microsoft 365 und Outlook.com, Fastmail und andere JMAP-Dienste oder ein beliebiges IMAP-Konto hinzu. Nutze mehrere Konten nebeneinander.
+
+KOSTENLOS
+• Eine schnelle Nachrichtenliste, die auch mit Tausenden Mails flüssig bleibt
+• Mails lesen, beantworten, weiterleiten und schreiben, mit Entwürfen und Anhängen
+• Die Mails auf dem Handy durchsuchen oder den Server nach älteren Mails fragen
+• Wischen zum Löschen, Verschieben, Markieren oder als gelesen Markieren, mit Rückgängig
+• Offline gesendete Mails warten im Postausgang und gehen raus, sobald die Verbindung wieder da ist
+• Externe Bilder bleiben gesperrt, bis du sie laden willst
+• Mitteilungen bei neuen Mails
+• Den Versand um bis zu 5 Minuten verzögern
+
+PREMIUM (OPTIONALES ABO)
+• Geplanter Versand: Datum und Uhrzeit wählen, bis zu 24 Stunden im Voraus
+• Nachfass-Erinnerungen: eine Erinnerung, wenn nach 1, 3 oder 7 Tagen niemand antwortet
+• Tracker-Blockierung: entfernt Tracking-Pixel, damit Absender nicht sehen, dass du ihre Mail geöffnet hast
+
+ZU MITTEILUNGEN BEI NEUEN MAILS
+Android entscheidet, wann MailVault im Hintergrund nach neuen Mails sehen darf. In der Praxis ist das höchstens alle 15 Minuten, bei niedrigem Akkustand oder wenn du die App selten öffnest, seltener. Öffne MailVault, um sofort zu prüfen. Geplante Nachrichten und Nachfass-Erinnerungen laufen ebenfalls, wenn MailVault an der Reihe ist, und können sich deshalb etwas verspäten.
+
+DEINE PRIVATSPHÄRE
+Deine Mails, Passwörter und Anmelde-Token bleiben auf deinem Handy (Passwörter und Token in dem sicheren Android-Speicher). MailVault spricht nur mit deinem Mailanbieter. Wir erhalten nur, was Premium braucht: eine zufällige Installations-ID und den Kaufbeleg von Google Play. Wenn du dich mit deiner E-Mail-Adresse anmeldest, speichern wir auch diese Adresse.
+
+MailVault Premium ist ein optionales, automatisch verlängerndes Abo, monatlich oder jährlich. Der Preis wird vor dem Kauf in der App angezeigt. Die Zahlung wird bei Bestätigung deinem Google-Kontos belastet. Das Abo verlängert sich automatisch, wenn du nicht mindestens 24 Stunden vor Ende des Zeitraums kündigst. Verwalten oder kündigen kannst du es in den Einstellungen deines Google-Kontos.
+
+Nutzungsbedingungen: https://mailvaultapp.com/terms.html
+Datenschutzerklärung: https://mailvaultapp.com/privacy.html

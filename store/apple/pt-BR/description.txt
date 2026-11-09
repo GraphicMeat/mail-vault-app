@@ -1,0 +1,29 @@
+O MailVault é um app de e-mail que deixa suas mensagens onde elas devem ficar: no seu celular e no seu próprio servidor de e-mail. Não é preciso criar uma conta do MailVault, e não há anúncios nem rastreamento. Seus e-mails nunca passam pelos nossos servidores.
+
+Adicione Gmail, Microsoft 365 e Outlook.com, Fastmail e outros serviços JMAP, ou qualquer conta IMAP. Use várias contas lado a lado.
+
+GRÁTIS
+• Uma lista de mensagens rápida, fluida mesmo com milhares de e-mails
+• Leia, responda, encaminhe e escreva, com rascunhos e anexos
+• Busque nos e-mails do celular ou peça ao servidor as mensagens mais antigas
+• Deslize para excluir, mover, sinalizar ou marcar como lido, com desfazer
+• O e-mail enviado offline espera na caixa de saída e sai quando a conexão volta
+• Imagens remotas ficam bloqueadas até você escolher carregá-las
+• Notificações de novos e-mails
+• Adie um envio por até 5 minutos
+
+PREMIUM (ASSINATURA OPCIONAL)
+• Envio agendado: escolha data e hora, com até 24 horas de antecedência
+• Lembretes de acompanhamento: um aviso se ninguém responder em 1, 3 ou 7 dias
+• Bloqueio de rastreadores: remove pixels de rastreamento, para o remetente não saber que você abriu a mensagem
+
+SOBRE AS NOTIFICAÇÕES DE NOVOS E-MAILS
+O iOS decide quando o MailVault pode verificar novos e-mails em segundo plano. Na prática, é a cada 15 minutos no máximo, e com menos frequência se a bateria está baixa ou você abre pouco o app. Abra o MailVault para verificar na hora. Mensagens agendadas e lembretes de acompanhamento também rodam quando o MailVault tem a sua vez, então podem atrasar um pouco.
+
+SUA PRIVACIDADE
+Seus e-mails, senhas e tokens de acesso ficam no celular (senhas e tokens em o chaveiro do iOS). O MailVault só conversa com o seu provedor de e-mail. Só recebemos o que o Premium precisa: um ID de instalação aleatório e o registro da compra em a App Store. Se você entrar com seu endereço de e-mail, também guardamos esse endereço.
+
+O MailVault Premium é uma assinatura opcional com renovação automática, mensal ou anual. O preço aparece no app antes da compra. O pagamento é cobrado na sua conta Apple na confirmação e renova automaticamente, a menos que você cancele pelo menos 24 horas antes do fim do período. Gerencie ou cancele nos ajustes da sua conta Apple.
+
+Termos de Uso: https://mailvaultapp.com/terms.html
+Política de Privacidade: https://mailvaultapp.com/privacy.html

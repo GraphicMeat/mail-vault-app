@@ -1,0 +1,29 @@
+MailVault è un’app di posta che tiene i tuoi messaggi dove devono stare: sul telefono e sul tuo server di posta. Non c’è nessun account MailVault da creare, né pubblicità né tracciamento. La tua posta non passa mai dai nostri server.
+
+Aggiungi Gmail, Microsoft 365 e Outlook.com, Fastmail e altri servizi JMAP, oppure qualsiasi account IMAP. Usa più account insieme.
+
+GRATIS
+• Un elenco di messaggi veloce, fluido anche con migliaia di email
+• Leggi, rispondi, inoltra e scrivi, con bozze e allegati
+• Cerca nella posta sul telefono o chiedi al server i messaggi più vecchi
+• Scorri per eliminare, spostare, contrassegnare o segnare come letto, con annulla
+• La posta inviata offline attende nella posta in uscita e parte al ritorno della connessione
+• Le immagini remote restano bloccate finché non scegli di caricarle
+• Notifiche per la posta nuova
+• Ritarda un invio fino a 5 minuti
+
+PREMIUM (ABBONAMENTO FACOLTATIVO)
+• Invio programmato: scegli data e ora, fino a 24 ore prima
+• Promemoria di follow-up: un avviso se nessuno risponde entro 1, 3 o 7 giorni
+• Blocco dei tracker: rimuove i pixel di tracciamento, così il mittente non sa che hai aperto il messaggio
+
+SULLE NOTIFICHE DI POSTA NUOVA
+Android decide quando MailVault può controllare la posta in background. In pratica è al massimo ogni 15 minuti, e meno spesso se la batteria è scarica o apri poco l’app. Apri MailVault per controllare subito. Anche i messaggi programmati e i promemoria di follow-up partono quando MailVault ha il suo turno, quindi possono arrivare con un po’ di ritardo.
+
+LA TUA PRIVACY
+La tua posta, le password e i token di accesso restano sul telefono (password e token in l’archivio sicuro di Android). MailVault parla solo con il tuo provider di posta. Riceviamo solo ciò che serve a Premium: un identificativo casuale dell’installazione e la ricevuta d’acquisto di Google Play. Se accedi con il tuo indirizzo email, conserviamo anche quell’indirizzo.
+
+MailVault Premium è un abbonamento facoltativo a rinnovo automatico, mensile o annuale. Il prezzo è mostrato nell’app prima dell’acquisto. Il pagamento viene addebitato sul tuo Account Google alla conferma e si rinnova automaticamente, salvo disdetta almeno 24 ore prima della fine del periodo. Gestiscilo o annullalo nelle impostazioni del tuo Account Google.
+
+Termini di utilizzo: https://mailvaultapp.com/terms.html
+Informativa sulla privacy: https://mailvaultapp.com/privacy.html

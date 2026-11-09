@@ -76,6 +76,11 @@ const DEMO_OUTBOX = PERF_BUILD && QUERY.get('ui') === 'outbox';
 const DEMO_DRAFTS = PERF_BUILD && QUERY.get('ui') === 'drafts';
 // `?ui=settings` (perf-gate only): the settings screen open, for screenshots.
 const DEMO_SETTINGS = PERF_BUILD && QUERY.get('ui') === 'settings';
+// `?ui=search` (perf-gate only): the search layer, with `&q=word` already typed; `?ui=premium`: the
+// paywall open. Both for the store screenshots (scripts/mobile-store-shots.sh).
+const DEMO_SEARCH = PERF_BUILD && QUERY.get('ui') === 'search';
+const DEMO_SEARCH_QUERY = (DEMO_SEARCH && QUERY.get('q')) || '';
+const DEMO_PREMIUM = PERF_BUILD && QUERY.get('ui') === 'premium';
 // `?ui=signin` / `?ui=signin-close` (perf-gate only): the device check of the sign-in sheet. No
 // credentials are ever entered; the close variant proves `mobile_auth_close` takes the sheet down.
 const DEMO_SIGNIN = (PERF_BUILD && { signin: 'open', 'signin-close': 'close' }[QUERY.get('ui')]) || null;
@@ -176,7 +181,7 @@ function App() {
   const [draftsOpen, setDraftsOpen] = useState(DEMO_DRAFTS);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(DEMO_SETTINGS);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(DEMO_SEARCH);
   const drafts = useMobileStore((s) => s.drafts);
   const followUps = useMobileStore((s) => s.followUps);
   const [pulled, setPulled] = useState(false);
@@ -509,6 +514,9 @@ function App() {
   useBackLayer(followUpsOpen, closeFollowUps);
   useBackLayer(settingsOpen, closeSettings);
   const paywall = useMobileStore((s) => s.paywall);
+  useEffect(() => {
+    if (DEMO_PREMIUM) useMobileStore.getState().openPaywall();
+  }, []);
   const closePaywall = useCallback(() => useMobileStore.getState().closePaywall(), []);
   useBackLayer(Boolean(paywall), closePaywall);
   const onSelectFolder = useCallback((path) => {
@@ -688,7 +696,7 @@ function App() {
           initialPicking={DEMO_MOVE}
         />
       )}
-      {searchOpen && <Search onOpen={onOpenResult} onClose={closeSearch} />}
+      {searchOpen && <Search onOpen={onOpenResult} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
       {settingsOpen && <Settings onClose={closeSettings} />}

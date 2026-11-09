@@ -1,0 +1,6 @@
+Willkommen bei MailVault auf dem Handy.
+
+- Mehrere Konten: Gmail, Microsoft 365, Outlook.com, Fastmail und IMAP
+- Suche auf dem Handy und auf dem Server
+- Wisch-Aktionen mit Rückgängig, Entwürfe und Postausgang
+- Premium: geplanter Versand, Nachfass-Erinnerungen und Tracker-Blockierung

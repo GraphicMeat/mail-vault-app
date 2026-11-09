@@ -31,6 +31,8 @@ targets:
       - path: Sources
       - path: Assets.xcassets
       - path: Externals
+      # mailvault-mobile_iOS also holds PrivacyInfo.xcprivacy, which XcodeGen copies as a resource
+      # (the committed project.pbxproj lists it by hand, like the rest of this file).
       - path: mailvault-mobile_iOS
       - path: assets
         buildPhase: resources

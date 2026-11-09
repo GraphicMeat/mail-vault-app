@@ -1,0 +1,6 @@
+Boas-vindas ao MailVault no celular.
+
+- Várias contas: Gmail, Microsoft 365, Outlook.com, Fastmail e IMAP
+- Busca no celular e no servidor
+- Gestos de deslizar com desfazer, rascunhos e caixa de saída
+- Premium: envio agendado, lembretes de acompanhamento e bloqueio de rastreadores
