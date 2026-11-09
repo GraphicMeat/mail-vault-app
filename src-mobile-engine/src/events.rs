@@ -38,6 +38,10 @@ pub const SEND_RESULT: &str = "mobile.send.result";
 /// `listen` is checked against one list.
 pub const NOTIFICATION_OPEN: &str = "mobile.notification.open";
 
+/// `{premium, source, expiresMs}`: the Premium status changed (a check, a purchase, a sign-in or
+/// sign-out). The same shape as `mobile.premium.status`; never an id or a receipt.
+pub const PREMIUM_CHANGED: &str = "mobile.premium.changed";
+
 /// Every event name the engine emits: the one list `events.json` must match (a test checks it) and
 /// the page's `listen('…')` names are checked against.
 pub const EVENTS: &[&str] = &[
@@ -48,6 +52,7 @@ pub const EVENTS: &[&str] = &[
     FOLDER_CHANGED,
     FOLDERS_CHANGED,
     NOTIFICATION_OPEN,
+    PREMIUM_CHANGED,
     SEND_RESULT,
     SYNC_STATE,
 ];

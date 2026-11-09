@@ -11,7 +11,8 @@ use std::fmt;
 const MAX_PAGE: u64 = 200;
 
 /// Serialized as `{ code: "UNSUPPORTED"|"INVALID"|"INTERNAL"|"TOO_LARGE"|"ATTACHMENT_MISSING"|
-/// "SEARCH_UNAVAILABLE", message }`, and `TOO_LARGE` with `data: { limitBytes }`; the shell forwards it to JS unchanged.
+/// "SEARCH_UNAVAILABLE"|<a Premium code>, message }`, and `TOO_LARGE` with `data: { limitBytes }`;
+/// the shell forwards it to JS unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RpcError {
     Unsupported { method: String },
@@ -24,6 +25,24 @@ pub enum RpcError {
     AttachmentMissing(String),
     /// `search.db` could not be opened this run; the rest of the engine works.
     SearchUnavailable,
+    /// A Premium call failed (`premium.rs`): `NETWORK` (the cache stays), `REFUSED` (the server
+    /// says the receipt is invalid), `CODE_WRONG`, `CODE_EXPIRED`, `RATE_LIMITED`,
+    /// `DEVICE_REPLACED` (another device took this one's web place). The message is fixed text,
+    /// never the server's.
+    Premium(&'static str),
+}
+
+/// The fixed message of a Premium code.
+fn premium_message(code: &str) -> &'static str {
+    match code {
+        "NETWORK" => "the billing service could not be reached",
+        "REFUSED" => "the purchase was not accepted",
+        "CODE_WRONG" => "the code is wrong",
+        "CODE_EXPIRED" => "the code has expired",
+        "RATE_LIMITED" => "too many tries, wait a moment",
+        "DEVICE_REPLACED" => "another device took this device's place",
+        _ => "premium check failed",
+    }
 }
 
 impl RpcError {
@@ -35,6 +54,7 @@ impl RpcError {
             RpcError::TooLarge { .. } => "TOO_LARGE",
             RpcError::AttachmentMissing(_) => "ATTACHMENT_MISSING",
             RpcError::SearchUnavailable => "SEARCH_UNAVAILABLE",
+            RpcError::Premium(code) => *code,
         }
     }
 }
@@ -47,6 +67,7 @@ impl fmt::Display for RpcError {
                 f.write_str(m)
             }
             RpcError::SearchUnavailable => f.write_str("search is unavailable"),
+            RpcError::Premium(code) => f.write_str(premium_message(code)),
         }
     }
 }
@@ -109,6 +130,13 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
+    ("mobile.premium.installId", crate::premium::install),
+    ("mobile.premium.refresh", crate::premium::refresh),
+    ("mobile.premium.status", crate::premium::status),
+    ("mobile.premium.verify", crate::premium::verify),
+    ("mobile.premium.webSignIn.start", crate::premium::sign_in_start),
+    ("mobile.premium.webSignIn.verify", crate::premium::sign_in_verify),
+    ("mobile.premium.webSignOut", crate::premium::sign_out),
     ("mobile.search.local", crate::search::local),
     ("mobile.search.server", crate::search::server),
     ("mobile.settings.get", crate::settings::get),
@@ -147,6 +175,13 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.list", crate::outbox::list),
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.ping", ping),
+    ("mobile.premium.installId", crate::premium::install),
+    ("mobile.premium.refresh", crate::premium::refresh),
+    ("mobile.premium.status", crate::premium::status),
+    ("mobile.premium.verify", crate::premium::verify),
+    ("mobile.premium.webSignIn.start", crate::premium::sign_in_start),
+    ("mobile.premium.webSignIn.verify", crate::premium::sign_in_verify),
+    ("mobile.premium.webSignOut", crate::premium::sign_out),
     ("mobile.search.local", crate::search::local),
     ("mobile.search.server", crate::search::server),
     ("mobile.settings.get", crate::settings::get),

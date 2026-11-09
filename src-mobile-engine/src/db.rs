@@ -315,6 +315,8 @@ pub(crate) struct Shared {
     pub(crate) background: crate::background::Pending,
     /// `search.db`'s one connection and the index worker (`search.rs`).
     pub(crate) search: crate::search::Search,
+    /// The cached Premium answer and the clock guard (`premium.rs`).
+    pub(crate) premium: crate::premium::Premium,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -493,6 +495,7 @@ impl Engine {
                 parks: std::sync::atomic::AtomicU64::new(0),
                 background: crate::background::Pending::default(),
                 search: crate::search::Search::default(),
+                premium: crate::premium::Premium::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -507,6 +510,7 @@ impl Engine {
             startup_replay: AtomicBool::new(journal || queued),
         };
         crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
+        crate::premium::load(&engine.shared);
         if let Err(e) = crate::body::drop_stale_graph_bodies(&engine.shared) {
             engine.shared.log(&format!("[body] dropping stale Graph bodies: {e}"));
         }
@@ -613,6 +617,9 @@ impl Engine {
     /// (`notifications`, `notificationPreview`) go through the same checks and side effects as
     /// `mobile.settings.set` (turning notifications on takes the background run's baseline).
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), EngineError> {
+        if crate::settings::is_internal(key) {
+            return Err(EngineError::Db(format!("{key} is the engine's own")));
+        }
         if let Some(r) = crate::settings::set_user_key(self, key, value) {
             return r;
         }
@@ -744,10 +751,12 @@ impl Shared {
         }
     }
 
-    /// Writes one line to the installed sink, or to stderr when none is set.
+    /// Writes one line to the installed sink, or to stderr when none is set, with every Premium
+    /// secret the engine holds (install id, customer id, receipt) scrubbed out.
     pub(crate) fn log(&self, line: &str) {
+        let line = self.premium.scrub(line);
         match self.log_sink.get() {
-            Some(sink) => sink(line),
+            Some(sink) => sink(&line),
             None => eprintln!("{line}"),
         }
     }

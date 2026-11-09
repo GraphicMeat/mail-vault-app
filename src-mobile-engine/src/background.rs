@@ -324,6 +324,8 @@ impl Engine {
     /// notified until [`Engine::background_commit`] is called with the returned token.
     pub fn background_fetch(&self, budget: Duration) -> Result<BackgroundRun, EngineError> {
         let start = Instant::now();
+        // Every run raises Premium's clock mark, notifications on or off.
+        crate::premium::observe_clock(self.shared());
         if !self.notifications_on() {
             return Ok(BackgroundRun::default());
         }

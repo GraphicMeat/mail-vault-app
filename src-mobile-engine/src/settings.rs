@@ -18,13 +18,26 @@ use serde_json::{json, Value};
 pub(crate) const NOTIFICATIONS: &str = "notifications";
 pub(crate) const NOTIFICATION_PREVIEW: &str = "notificationPreview";
 
-fn get_in(c: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
+// Internal keys (`premium.rs`), not user settings: never a secret, never set from outside.
+/// The cached Premium answer: `{entitled, source, expiresMs, checkedMs}`.
+pub(crate) const PREMIUM_STATE: &str = "premium.state";
+/// The latest wall-clock time the engine has seen (epoch ms), for the clock guard.
+pub(crate) const PREMIUM_CLOCK_HIGH: &str = "premium.clockHigh";
+/// Set while this install's web registration (`register=1`) has not had its answer.
+pub(crate) const PREMIUM_WEB_REGISTER: &str = "premium.webRegister";
+
+/// A key the engine keeps for itself: [`Engine::set_setting`] refuses it.
+pub(crate) fn is_internal(key: &str) -> bool {
+    key.starts_with("premium.")
+}
+
+pub(crate) fn get_in(c: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
     c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get::<_, Option<String>>(0))
         .optional()
         .map(Option::flatten)
 }
 
-fn put_in(c: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
+pub(crate) fn put_in(c: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
     c.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (key, value),
