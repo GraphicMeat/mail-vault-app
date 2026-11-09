@@ -193,6 +193,37 @@ async function initDatabase() {
     )
   `);
 
+  // App Store / Google Play subscriptions of phone installs (store-billing.js). One row per
+  // store subscription: Apple originalTransactionId, or the root of a Play purchaseToken's
+  // linkedPurchaseToken chain (latest_token is the newest token of that chain). Kept current
+  // by the verify endpoints and the store webhooks. Times are epoch milliseconds.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS store_subscriptions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      platform ENUM('apple','google') NOT NULL,
+      original_id VARCHAR(512) CHARACTER SET ascii NOT NULL,
+      install_id CHAR(36) NULL,
+      product_id VARCHAR(255) NOT NULL,
+      expires_at BIGINT NOT NULL,
+      status ENUM('active','expired','revoked','refunded','on_hold','grace') NOT NULL,
+      environment VARCHAR(20) NOT NULL,
+      latest_token VARCHAR(512) CHARACTER SET ascii NULL,
+      updated_at BIGINT NOT NULL,
+      UNIQUE KEY unique_platform_original (platform, original_id),
+      INDEX idx_latest_token (platform, latest_token),
+      INDEX idx_install (install_id)
+    )
+  `);
+
+  // Store notifications already applied (ASSN notificationUUID, Pub/Sub messageId).
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS processed_store_events (
+      event_id VARCHAR(255) PRIMARY KEY,
+      platform ENUM('apple','google') NOT NULL,
+      processed_at BIGINT NOT NULL
+    )
+  `);
+
   // Seed default features if table is empty
   const [rows] = await db.execute('SELECT COUNT(*) as count FROM features');
   if (rows[0].count === 0) {

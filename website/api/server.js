@@ -176,10 +176,13 @@ const tooLong = (value, max) => typeof value === 'string' && value.length > max;
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
 
-// Rate limiting
+// Rate limiting. The store webhooks are exempt: they are signature-gated, and Apple and
+// Google deliver bursts from shared addresses (a 429 would only make them retry).
+const STORE_WEBHOOKS = new Set(['/api/billing/store/apple/notifications', '/api/billing/store/google/rtdn']);
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  skip: (req) => STORE_WEBHOOKS.has(req.path),
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use(limiter);
@@ -628,6 +631,44 @@ app.post('/api/billing/signin/verify', signinVerifyLimiter, async (req, res) => 
     return res.status(500).json({ error: 'server_error' });
   }
 });
+
+// -------------------------------------------
+// Phone store purchases (store-billing.js)
+// -------------------------------------------
+// verify answers 200 {entitled, source, expiresMs} for a valid receipt (entitled or not),
+// 4xx {error} for a refused one (the phone drops Premium), 429 when limited and 5xx when
+// we or the store failed (the phone keeps its cache). The webhooks are signature-gated
+// and not rate limited; 5xx makes the store retry.
+const { createStoreBilling, loadAppleRoot } = require('./store-billing');
+let appleRoots = null;
+try {
+  appleRoots = [loadAppleRoot()];
+} catch (err) {
+  console.error('[store] Apple root certificate not loaded:', err.message);
+}
+const storeBilling = createStoreBilling({
+  getDb: getPool,
+  fetch: (url, opts) => fetch(url, opts),
+  appleRoots,
+});
+const storeRoute = (tag, run) => async (req, res) => {
+  try {
+    const [status, body] = await run(req);
+    res.status(status).json(body);
+  } catch (err) {
+    console.error(`[billing/store/${tag}]`, err && err.message);
+    res.status(500).json({ error: 'server_error' });
+  }
+};
+
+app.post('/api/billing/store/apple/verify', statusLimiter,
+  storeRoute('apple/verify', (req) => storeBilling.appleVerify(req.body)));
+app.post('/api/billing/store/google/verify', statusLimiter,
+  storeRoute('google/verify', (req) => storeBilling.googleVerify(req.body)));
+app.post('/api/billing/store/apple/notifications',
+  storeRoute('apple/notifications', (req) => storeBilling.appleNotification(req.body)));
+app.post('/api/billing/store/google/rtdn',
+  storeRoute('google/rtdn', (req) => storeBilling.googleRtdn({ authorization: req.headers.authorization, body: req.body })));
 
 // -------------------------------------------
 // Latest released version

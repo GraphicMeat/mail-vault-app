@@ -389,6 +389,26 @@ report of results:
 - Will require webkit2gtk and related libraries
 - Update `tauri.conf.json` targets to include "deb" or "appimage"
 
+## Billing server: phone store purchases
+
+`website/api/store-billing.js` verifies App Store and Google Play receipts for the
+phone app and takes the store webhooks. Its settings live only in the server's
+environment, never in the repo:
+
+- `APPLE_IAP_ENV`: the App Store environment this server accepts, default `Production`.
+- `APPLE_IAP_ALLOW_SANDBOX`: `1` also accepts Sandbox receipts and Play license-tester
+  purchases. Leave unset in production.
+- `GOOGLE_PLAY_SA_JSON`: the Play Developer API service account key (the JSON itself,
+  or a path to the file).
+- `GOOGLE_RTDN_AUDIENCE`: the audience set on the Pub/Sub push subscription.
+- `GOOGLE_RTDN_SA_EMAIL`: the service account the push subscription signs as.
+
+Endpoints: `POST /api/billing/store/{apple,google}/verify`,
+`POST /api/billing/store/apple/notifications` (App Store Server Notifications v2 URL)
+and `POST /api/billing/store/google/rtdn` (Pub/Sub push endpoint, with OIDC
+authentication on). The Apple root is the bundled `website/api/apple-root-ca-g3.pem`,
+pinned by its SHA-256 fingerprint.
+
 ## Website CSS
 
 `website/assets/tailwind.css` is compiled from `website/src/tailwind.css` — the
