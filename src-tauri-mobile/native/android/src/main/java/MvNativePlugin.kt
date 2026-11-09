@@ -9,6 +9,8 @@
 // `setBackgroundRefresh` queues or cancels the periodic background run (BackgroundFetchWorker.kt),
 // `requestNotifications` asks for POST_NOTIFICATIONS on Android 13 and later, and a notification
 // tap that started or resumed MainActivity is handed to the shell (Notifier.kt).
+// `storeProducts`, `storePurchase` and `storeRestore` are Google Play (Store.kt), whose
+// unaccepted purchases are handed over again when the plugin loads.
 
 package com.mailvault.mvnative
 
@@ -70,6 +72,11 @@ class PermissionArgs {
 }
 
 @InvokeArg
+class PurchaseArgs {
+    lateinit var productId: String
+}
+
+@InvokeArg
 class PickArgs {
     lateinit var kind: String
     lateinit var dir: String
@@ -84,6 +91,29 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
         webView.settings.setSupportMultipleWindows(true)
         webView.webChromeClient = PopupChromeClient(activity, inner)
         Notifier.takeTap(activity, activity.intent)
+        store.start()
+    }
+
+    // Google Play (Store.kt): one billing client for the plugin's life.
+    private val store by lazy { StoreBilling(activity) }
+
+    @Command
+    fun storeProducts(invoke: Invoke) {
+        store.products(invoke)
+    }
+
+    @Command
+    fun storePurchase(invoke: Invoke) {
+        val args = try { invoke.parseArgs(PurchaseArgs::class.java) } catch (e: Exception) {
+            invoke.reject("bad arguments", "INVALID")
+            return
+        }
+        store.purchase(invoke, args.productId)
+    }
+
+    @Command
+    fun storeRestore(invoke: Invoke) {
+        store.restore(invoke)
     }
 
     // MainActivity is singleTask: a tap while it exists arrives here.

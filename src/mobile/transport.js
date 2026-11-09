@@ -162,6 +162,87 @@ export async function notificationPermission() {
   }
 }
 
+// App Store / Google Play subscriptions. The purchase runs in native code and goes to the engine
+// there (`mobile.premium.verify`), so the page never calls verify for a purchase and never sees a
+// receipt: it gets the outcome and the engine's verdict, and Premium also arrives as
+// `mobile.premium.changed`. Rejects carry the shell's code: `INVALID` (not our product), `BUSY`
+// (another purchase or Restore runs), `UNAVAILABLE` (no store, not signed in, offline),
+// `NOT_FOUND` (the store does not offer it), `OWNED` (Play: already subscribed, Restore instead),
+// `UNSUPPORTED`, `INTERNAL`.
+
+const STORE_STATUSES = ['purchased', 'pending', 'cancelled'];
+
+/** `{ premium, source, expiresMs }` or `{ code }`: the engine's verdict on one receipt. */
+function storeVerdict(item) {
+  if (item?.premium && typeof item.premium === 'object') {
+    const p = item.premium;
+    return { premium: { premium: p.premium === true, source: p.source ?? null, expiresMs: p.expiresMs ?? null } };
+  }
+  if (item?.error && typeof item.error.code === 'string') return { error: { code: item.error.code } };
+  return {};
+}
+
+/**
+ * Both subscriptions as the store offers them: `[{ id, title, price, period: 'P1M'|'P1Y',
+ * introOffer? }]`, `price` the store's own localized string (never a hard-coded price). Monthly
+ * first; one the store does not offer is missing.
+ */
+export async function storeProducts() {
+  const invoke = requireInvoke();
+  let reply;
+  try {
+    reply = await invoke('mobile_store_products');
+  } catch (error) {
+    throw shellError(error);
+  }
+  return (Array.isArray(reply) ? reply : []).map((p) => {
+    const item = { id: p.id, title: p.title, price: p.price, period: p.period };
+    if (p.introOffer) {
+      const o = p.introOffer;
+      item.introOffer = { price: o.price, period: o.period, paymentMode: o.paymentMode, periodCount: o.periodCount };
+    }
+    return item;
+  });
+}
+
+/**
+ * Buys `productId`. Answers `{ status: 'purchased'|'pending'|'cancelled', platform, productId }`;
+ * `purchased` adds the verdict: `premium` (`{ premium, source, expiresMs }`) or `error: { code }`
+ * (`NETWORK` / `RATE_LIMITED`: paid, checked again at the next launch; `REFUSED`; `UNVERIFIED`).
+ * `pending` waits for approval (Ask to Buy, a slow payment); Premium follows by event.
+ */
+export async function storePurchase(productId) {
+  const invoke = requireInvoke();
+  let reply;
+  try {
+    reply = await invoke('mobile_store_purchase', { productId });
+  } catch (error) {
+    throw shellError(error);
+  }
+  const status = STORE_STATUSES.includes(reply?.status) ? reply.status : 'cancelled';
+  const out = { status, platform: reply?.platform ?? null, productId: reply?.productId ?? productId };
+  return status === 'purchased' ? { ...out, ...storeVerdict(reply) } : out;
+}
+
+/**
+ * Restore Purchases: one item per subscription the store account holds, `[{ platform, productId,
+ * premium | error: { code } }]` (`INSTALL_LIMIT`: already on its most devices); `[]` for none.
+ */
+export async function storeRestore() {
+  const invoke = requireInvoke();
+  let reply;
+  try {
+    reply = await invoke('mobile_store_restore');
+  } catch (error) {
+    throw shellError(error);
+  }
+  return (Array.isArray(reply) ? reply : []).map((item) => ({
+    platform: item.platform,
+    productId: item.productId,
+    ...storeVerdict(item),
+  }));
+}
+
 // Engine events reach the page as one Tauri event, `mobile-event` `{ name, payload }`. This is the
 // only place mobile code subscribes; `handler` gets the payload of events called `name`. Returns
 // the unsubscribe, safe to call twice or before the bridge has answered.

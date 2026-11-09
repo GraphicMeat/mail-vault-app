@@ -10,7 +10,7 @@ const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const ENTRY = here('../main.jsx');
 const METHODS = JSON.parse(readFileSync(here('../../../src-mobile-engine/methods.json'), 'utf8'));
 const EVENTS = JSON.parse(readFileSync(here('../../../src-mobile-engine/events.json'), 'utf8'));
-const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_auth_close', 'mobile_auth_open', 'mobile_log', 'mobile_notification_take', 'mobile_notifications_permission', 'mobile_open_file', 'mobile_pick_files', 'mobile_share_file'];
+const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_auth_close', 'mobile_auth_open', 'mobile_log', 'mobile_notification_take', 'mobile_notifications_permission', 'mobile_open_file', 'mobile_pick_files', 'mobile_share_file', 'mobile_store_products', 'mobile_store_purchase', 'mobile_store_restore'];
 // Desktop stores (and `plugin-fs`) would bring the desktop RPC graph with them.
 const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|sparkle|features\/blitz|e2eMotion|src\/stores\//i;
 
@@ -45,6 +45,13 @@ describe('mobile seam', () => {
   it('the_auth_sheet_is_opened_and_closed_through_the_shell_only', async () => {
     const { invokes } = await analyzeSeam(ENTRY);
     expect(invokes.filter((c) => /auth/.test(c))).toEqual(['mobile_auth_close', 'mobile_auth_open']);
+    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
+  });
+
+  it('the_store_is_reached_through_the_three_shell_commands_only', async () => {
+    const { invokes } = await analyzeSeam(ENTRY);
+    expect(invokes.filter((c) => /store/.test(c))).toEqual(['mobile_store_products', 'mobile_store_purchase', 'mobile_store_restore']);
+    expect(ALLOWED_INVOKES).toHaveLength(12);
     expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
   });
 

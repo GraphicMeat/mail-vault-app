@@ -7,6 +7,8 @@
 // `ASWebAuthenticationSession` and answers when it closes (`closeAuth`, or the user's cancel).
 // `setBackgroundRefresh` turns the periodic background run on or off (Background.swift) and
 // `requestNotifications` asks for the notification permission (or, `prompt: false`, reads it).
+// `storeProducts`, `storePurchase` and `storeRestore` are the App Store (Store.swift), whose
+// transaction listeners start when the plugin loads.
 
 import AuthenticationServices
 import PhotosUI
@@ -88,6 +90,12 @@ class MvNativePlugin: Plugin, QLPreviewControllerDataSource, QLPreviewController
   /// The hosts `openAuth` opens; the shell has already checked the whole URL (links.rs
   /// `auth_url_ok`), this is the native side's own floor.
   private static let authHosts: Set<String> = ["accounts.google.com", "login.microsoftonline.com"]
+
+  /// The App Store's transaction listeners start with the plugin, once the engine is open
+  /// (the shell registers the plugin at the end of its setup): Store.swift.
+  public override func load(webview: WKWebView) {
+    if #available(iOS 16.0, *) { MvStore.start() }
+  }
 
   /// The controller to present from: the root's topmost presented controller. Nil while anything
   /// is still animating in or out, since UIKit then refuses a presentation with only a console

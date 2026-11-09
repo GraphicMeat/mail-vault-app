@@ -4,13 +4,15 @@
 //! or share sheet (`mobile_open_file` / `mobile_share_file`), runs the system file and photo
 //! pickers for outgoing attachments (`mobile_pick_files`), opens and closes the system sign-in
 //! sheet for an OAuth flow (`mobile_auth_open` / `mobile_auth_close`) and, through the `mv-native`
-//! plugin's navigation hook, sends links tapped in a mail to the system browser. Background runs
+//! plugin's navigation hook, sends links tapped in a mail to the system browser. App Store and
+//! Play subscriptions go through `store.rs` (`mobile_store_products` / `_purchase` / `_restore`). Background runs
 //! and notification taps come in through `background.rs` (and `android.rs`), on the same engine.
 
 #[cfg(target_os = "android")]
 mod android;
 mod background;
 mod secrets;
+mod store;
 
 use mailvault_mobile_engine::{Engine, RpcError};
 use serde_json::{json, Value};
@@ -523,7 +525,10 @@ pub fn run() {
             mobile_auth_open,
             mobile_auth_close,
             mobile_notification_take,
-            mobile_notifications_permission
+            mobile_notifications_permission,
+            store::mobile_store_products,
+            store::mobile_store_purchase,
+            store::mobile_store_restore
         ])
         .build(tauri::generate_context!())
         .expect("error while running the MailVault mobile shell")

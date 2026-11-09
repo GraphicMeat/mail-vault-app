@@ -84,6 +84,62 @@ describe('mobile transport pick', () => {
   });
 });
 
+describe('mobile transport store', () => {
+  const MONTHLY = 'com.mailvault.app.premium.monthly';
+
+  it('storeProducts invokes mobile_store_products and keeps the listed fields', async () => {
+    const { storeProducts } = await import('../transport.js');
+    invoke.mockResolvedValue([
+      { id: MONTHLY, title: 'Monthly', price: '$5.99', period: 'P1M', extra: 'x' },
+      { id: 'com.mailvault.app.premium.yearly', title: 'Yearly', price: '$39.99', period: 'P1Y',
+        introOffer: { price: '$0.00', period: 'P1W', paymentMode: 'freeTrial', periodCount: 1, extra: 'y' } },
+    ]);
+    await expect(storeProducts()).resolves.toEqual([
+      { id: MONTHLY, title: 'Monthly', price: '$5.99', period: 'P1M' },
+      { id: 'com.mailvault.app.premium.yearly', title: 'Yearly', price: '$39.99', period: 'P1Y',
+        introOffer: { price: '$0.00', period: 'P1W', paymentMode: 'freeTrial', periodCount: 1 } },
+    ]);
+    expect(invoke.mock.calls).toEqual([['mobile_store_products']]);
+    invoke.mockResolvedValue(null);
+    await expect(storeProducts()).resolves.toEqual([]);
+  });
+
+  it('storePurchase sends the product id and passes no receipt on', async () => {
+    const { storePurchase } = await import('../transport.js');
+    invoke.mockResolvedValue({ status: 'purchased', platform: 'apple', productId: MONTHLY, jws: 'SECRET',
+      premium: { premium: true, source: 'apple', expiresMs: 5, jws: 'SECRET' } });
+    const bought = await storePurchase(MONTHLY);
+    expect(invoke.mock.calls).toEqual([['mobile_store_purchase', { productId: MONTHLY }]]);
+    expect(bought).toEqual({ status: 'purchased', platform: 'apple', productId: MONTHLY,
+      premium: { premium: true, source: 'apple', expiresMs: 5 } });
+    expect(JSON.stringify(bought)).not.toContain('SECRET');
+
+    invoke.mockResolvedValue({ status: 'purchased', platform: 'google', productId: MONTHLY, error: { code: 'NETWORK' } });
+    await expect(storePurchase(MONTHLY)).resolves.toEqual({ status: 'purchased', platform: 'google', productId: MONTHLY, error: { code: 'NETWORK' } });
+    invoke.mockResolvedValue({ status: 'pending', platform: 'apple', productId: MONTHLY, premium: { premium: true } });
+    await expect(storePurchase(MONTHLY)).resolves.toEqual({ status: 'pending', platform: 'apple', productId: MONTHLY });
+    invoke.mockRejectedValue({ code: 'BUSY', message: 'a purchase is already running' });
+    await expect(storePurchase(MONTHLY)).rejects.toMatchObject({ code: 'BUSY' });
+  });
+
+  it('storeRestore lists verdicts per subscription', async () => {
+    const { storeRestore } = await import('../transport.js');
+    invoke.mockResolvedValue([
+      { platform: 'apple', productId: MONTHLY, error: { code: 'INSTALL_LIMIT' }, jws: 'SECRET' },
+      { platform: 'google', productId: MONTHLY, premium: { premium: true, source: 'google', expiresMs: 9 }, token: 'SECRET' },
+    ]);
+    const items = await storeRestore();
+    expect(invoke.mock.calls).toEqual([['mobile_store_restore']]);
+    expect(items).toEqual([
+      { platform: 'apple', productId: MONTHLY, error: { code: 'INSTALL_LIMIT' } },
+      { platform: 'google', productId: MONTHLY, premium: { premium: true, source: 'google', expiresMs: 9 } },
+    ]);
+    expect(JSON.stringify(items)).not.toContain('SECRET');
+    invoke.mockRejectedValue({ code: 'UNAVAILABLE', message: 'the App Store is not available' });
+    await expect(storeRestore()).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+  });
+});
+
 describe('mobile transport listen', () => {
   it('listen_filters_by_name_and_unsubscribes', async () => {
     const { listen } = await import('../transport.js');

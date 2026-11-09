@@ -1,0 +1,82 @@
+{
+  "identifier" : "5C1E7A2B",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21571001",
+      "localizations" : [
+
+      ],
+      "name" : "MailVault Premium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "5.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "6739571001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Scheduled send, follow-up reminders and tracker blocking.",
+              "displayName" : "MailVault Premium Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.mailvault.app.premium.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "MailVault Premium Monthly",
+          "subscriptionGroupID" : "21571001",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6739571002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Scheduled send, follow-up reminders and tracker blocking.",
+              "displayName" : "MailVault Premium Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.mailvault.app.premium.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "MailVault Premium Yearly",
+          "subscriptionGroupID" : "21571001",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

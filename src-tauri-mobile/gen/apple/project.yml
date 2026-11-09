@@ -59,6 +59,8 @@ targets:
       environmentVariables:
         RUST_BACKTRACE: full
         RUST_LOG: info
+      # Local App Store test products for runs from Xcode (Store.swift); not part of the app.
+      storeKitConfiguration: MailVault.storekit
     settings:
       base:
         ENABLE_BITCODE: false
@@ -77,6 +79,7 @@ targets:
       - sdk: MetalKit.framework
       - sdk: QuartzCore.framework
       - sdk: Security.framework
+      - sdk: StoreKit.framework
       - sdk: SystemConfiguration.framework
       - sdk: UIKit.framework
       - sdk: WebKit.framework

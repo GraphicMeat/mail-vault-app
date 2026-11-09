@@ -27,6 +27,8 @@ let package = Package(
         .byName(name: "Tauri"),
         "MvShellC",
       ],
-      path: "Sources")
+      path: "Sources",
+      // App Store subscriptions (Store.swift).
+      linkerSettings: [.linkedFramework("StoreKit")])
   ]
 )

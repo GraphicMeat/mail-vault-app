@@ -19,6 +19,12 @@
 //!   `BGAppRefreshTask` requests, Android WorkManager unique periodic work `mv-refresh`) on or off,
 //!   and the notification permission. The background run itself and notification taps reach the
 //!   shell directly (`src-tauri-mobile/src/background.rs`), with no app or webview needed.
+//! - `store_products` / `store_purchase` / `store_restore`: App Store (StoreKit 2) and Google Play
+//!   (Billing 7) subscriptions ([`store`]). The native side hands every transaction to the engine
+//!   through the shell's own export and finishes it (iOS) only when the server answered; these
+//!   calls answer the outcome and the engine's verdict, never a receipt. The native side also
+//!   listens for transactions from the moment the plugin loads (renewals, approvals, purchases a
+//!   killed app never verified).
 //! - A navigation hook: every navigation of the webview goes through [`links::decide`]. Web and
 //!   mail links are cancelled and handed to `open_url`; anything but the app page and the mail
 //!   frame's own document is cancelled. A popup never becomes a Tauri webview: iOS opens none
@@ -32,6 +38,7 @@
 pub mod files;
 pub mod links;
 pub mod pick;
+pub mod store;
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -42,7 +49,10 @@ use tauri::{Manager, Runtime};
 tauri::ios_plugin_binding!(init_plugin_mv_native);
 
 /// Why a native call failed. `code` is one the page translates: `NO_APP` (nothing on the device
-/// opens this), `BUSY` (a previewer, sheet or picker is already up), `UNSUPPORTED` (not a phone), else `INTERNAL`.
+/// opens this), `BUSY` (a previewer, sheet or picker is already up), `UNSUPPORTED` (not a phone),
+/// the store's `UNAVAILABLE` (no store, not signed in, billing off, no network), `NOT_FOUND` (the
+/// store does not offer the product) and `OWNED` (Play: already subscribed, Restore instead),
+/// else `INTERNAL`.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct NativeError {
     pub code: String,
@@ -64,6 +74,9 @@ impl From<tauri::plugin::mobile::PluginInvokeError> for NativeError {
                 let code = match r.code.as_deref() {
                     Some("NO_APP") => "NO_APP",
                     Some("BUSY") => "BUSY",
+                    Some("UNAVAILABLE") => "UNAVAILABLE",
+                    Some("NOT_FOUND") => "NOT_FOUND",
+                    Some("OWNED") => "OWNED",
                     _ => "INTERNAL",
                 };
                 NativeError::new(code, r.message.unwrap_or_default())
@@ -113,6 +126,15 @@ struct PickArgs<'a> {
 struct RefreshArgs {
     enabled: bool,
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PurchaseArgs<'a> {
+    product_id: &'a str,
+}
+
+#[derive(Serialize)]
+struct NoArgs {}
 
 #[derive(Serialize)]
 struct CloseArgs<'a> {
@@ -222,6 +244,29 @@ impl<R: Runtime> MvNative<R> {
         Ok(reply.granted)
     }
 
+    /// The store's offer for our products, raw: `{products: [...]}`; read it with
+    /// [`store::products`].
+    pub fn store_products(&self) -> Result<serde_json::Value, NativeError> {
+        self.call_for("storeProducts", NoArgs {})
+    }
+
+    /// Runs the store's purchase sheet for `product_id` and blocks until it closes and a bought
+    /// subscription has been handed to the engine. Refuses (`INVALID`) a product not ours. Raw
+    /// reply; read it with [`store::purchase_reply`].
+    pub fn store_purchase(&self, product_id: &str) -> Result<serde_json::Value, NativeError> {
+        if !store::product_ok(product_id) {
+            return Err(NativeError::new("INVALID", "not a MailVault product"));
+        }
+        self.call_for("storePurchase", PurchaseArgs { product_id })
+    }
+
+    /// Restore Purchases: syncs with the store (iOS may ask the user to sign in) and hands each
+    /// subscription the store account holds to the engine as a restore. Raw reply; read it with
+    /// [`store::restore_reply`].
+    pub fn store_restore(&self) -> Result<serde_json::Value, NativeError> {
+        self.call_for("storeRestore", NoArgs {})
+    }
+
     fn file_call(&self, method: &str, path: &Path, mime: &str) -> Result<(), NativeError> {
         let path = path.to_str().ok_or_else(|| NativeError::new("INTERNAL", "path is not UTF-8"))?;
         let mime = files::sanitize_mime(mime);
@@ -287,7 +332,7 @@ pub fn nav_guard<R: Runtime>(log: Option<NavLog>) -> TauriPlugin<R> {
         .build()
 }
 
-/// The native plugin (previewer, share sheet, pickers, sign-in sheet, links out). On Android registering it waits until
+/// The native plugin (previewer, share sheet, pickers, sign-in sheet, links out, store purchases). On Android registering it waits until
 /// the webview exists, so the shell adds it at the end of its setup.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("mv-native")

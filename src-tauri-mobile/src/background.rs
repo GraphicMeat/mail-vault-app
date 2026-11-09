@@ -439,11 +439,11 @@ pub(crate) fn check_dirs(data: &Path, cache: &Path) {
 }
 
 /// Runs `f` and turns a panic into `fallback`: unwinding across the C or JNI boundary aborts.
-fn guarded<T>(fallback: T, f: impl FnOnce() -> T) -> T {
+pub(crate) fn guarded<T>(fallback: T, f: impl FnOnce() -> T) -> T {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or(fallback)
 }
 
-fn c_string(s: String) -> *mut std::ffi::c_char {
+pub(crate) fn c_string(s: String) -> *mut std::ffi::c_char {
     std::ffi::CString::new(s.replace('\0', " ")).unwrap_or_default().into_raw()
 }
 
