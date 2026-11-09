@@ -304,6 +304,24 @@ fn due_without_reply_notifies_once() {
     assert_eq!(f.listed().len(), 1, "still listed until dismissed");
 }
 
+/// A reminder that goes due while the app is in front is listed there; once the app leaves the
+/// front a background run does not post it again.
+#[test]
+fn due_while_in_front_is_not_posted_later() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server).premium();
+    f.notifications(true);
+    let row = f.sent_with_reminder(&server, "Quote", 3);
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true, "accountId": f.account })).unwrap();
+    f.come_due(&row.id);
+    f.check();
+    assert_eq!(f.state(&row.id).as_deref(), Some("due"));
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    let run = f.engine.background_fetch(WAIT).unwrap();
+    assert!(run.followups.is_empty(), "already listed in front: {run:?}");
+    assert_eq!(f.listed().len(), 1, "still listed until dismissed");
+}
+
 /// Notifications off: a background run still checks a due reminder (and only that: no INBOX
 /// pass), lists it, and posts nothing.
 #[test]

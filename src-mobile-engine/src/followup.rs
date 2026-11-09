@@ -515,6 +515,15 @@ pub(crate) fn announced(shared: &Shared, ids: &[String]) -> Result<(), EngineErr
     })
 }
 
+/// The app leaves the front: a reminder that went due while it was there was listed in Follow up
+/// (the page reloads on `mobile.followup.due`), so a later background run does not post it, as
+/// mail the list showed is not notified later (`background::seen_in_front`).
+pub(crate) fn seen_in_front(shared: &Shared) {
+    if let Err(e) = shared.write(|c| c.execute("UPDATE follow_ups SET announced = 1 WHERE state = 'due' AND announced = 0", []).map(|_| ())) {
+        shared.log(&format!("[follow-up] marking the listed reminders: {e}"));
+    }
+}
+
 // ── RPC ─────────────────────────────────────────────────────────────────────
 
 /// `mobile.followup.list` -> `{items: [{id, accountId, subject, recipients, sentAt, remindAt,

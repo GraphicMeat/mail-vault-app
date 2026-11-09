@@ -8,7 +8,8 @@
 //! answer also carries the customer's email and every other device's client id).
 
 use crate::net::block_on;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use serde_json::{json, Value};
 use std::time::Duration;
 
@@ -63,8 +64,10 @@ pub(crate) struct WebAnswer {
     pub server_ms: Option<i64>,
 }
 
-/// What `register=1` sends beside the ids, so the account's device list names this phone.
-#[derive(Debug, Clone, Default)]
+/// What `register=1` sends beside the ids, so the account's device list names this phone. Kept as
+/// JSON in `settings` while a registration is pending (`premium.webRegister`); no secret.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ClientInfo {
     pub name: Option<String>,
     pub app_version: Option<String>,
@@ -106,16 +109,27 @@ struct Reply {
     body: Value,
 }
 
+/// The one HTTP client (its TLS roots and connection pool), made on first use. The engine's
+/// tokio runtime is process-wide, so its pooled connections outlive a call.
+fn client() -> Result<&'static reqwest::Client, Fail> {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    if let Some(c) = CLIENT.get() {
+        return Ok(c);
+    }
+    let c = reqwest::Client::builder()
+        .timeout(TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| Fail::Network)?;
+    Ok(CLIENT.get_or_init(|| c))
+}
+
 /// Sends one request. Every transport failure is [`Fail::Network`]; the error itself is dropped
 /// unread, since its text names the URL.
 fn call(build: impl FnOnce(&reqwest::Client) -> reqwest::RequestBuilder) -> Result<Reply, Fail> {
     block_on(async move {
-        let client = reqwest::Client::builder()
-            .timeout(TIMEOUT)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|_| Fail::Network)?;
-        let resp = build(&client).header("Accept", "application/json").send().await.map_err(|_| Fail::Network)?;
+        let client = client()?;
+        let resp = build(client).header("Accept", "application/json").send().await.map_err(|_| Fail::Network)?;
         let status = resp.status().as_u16();
         let server_ms = resp
             .headers()
@@ -253,7 +267,7 @@ pub(crate) fn signin_start(email: &str, lang: Option<&str>) -> Result<(), Fail> 
 }
 
 /// `POST /api/billing/signin/verify {email, code}` -> the customer id. The server's `error` is
-/// read whatever the HTTP status.
+/// read whatever the HTTP status; a 4xx without a known one is [`Fail::Refused`].
 pub(crate) fn signin_verify(email: &str, code: &str) -> Result<String, Fail> {
     let url = format!("{}/api/billing/signin/verify", base());
     let body = json!({ "email": email, "code": code });
@@ -264,10 +278,8 @@ pub(crate) fn signin_verify(email: &str, code: &str) -> Result<String, Fail> {
         Some("rate_limited") => return Err(Fail::RateLimited),
         _ => {}
     }
-    match classify(&r) {
-        Ok(()) => text(&r.body["customerId"]).ok_or(Fail::Network),
-        // A refusal that names no code reason: the code did not work.
-        Err(Fail::Refused) => Err(Fail::CodeWrong),
-        Err(f) => Err(f),
-    }
+    // A refusal that names no code reason (a malformed address, a missing field) stays
+    // `Refused`: the code was never judged, so it is not called wrong.
+    classify(&r)?;
+    text(&r.body["customerId"]).ok_or(Fail::Network)
 }

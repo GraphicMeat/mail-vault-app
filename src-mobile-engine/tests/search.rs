@@ -707,6 +707,42 @@ fn server_search_imap_graph_jmap_returns_rows_the_viewer_can_open() {
 }
 
 #[test]
+fn a_server_hit_newer_than_the_list_waits_for_the_next_full_pass() {
+    let server = MockImap::start(Scenario::new().mailbox(mailbox("INBOX", vec![mail(1, "Weekly status", "All quiet.", 2)])));
+    let f = setup(&server);
+    let dir = f._tmp.path();
+    f.sync(None);
+    // Two new messages arrive; the user searches the server before the next sync.
+    server.mutate(|s| {
+        let mb = s.find_mut("INBOX").unwrap();
+        mb.add(mail(2, "Lunch plans", "x", 0));
+        mb.add(mail(3, "Fresh invoice 77", "x", 0));
+    });
+    let from = f.events.len();
+    let rows = server_rows(&f.engine, &f.account, "INBOX", "invoice");
+    assert_eq!(uids(&json!({ "rows": rows })), vec![3]);
+    // Stored with a mark, so the list (and the quick pass's and the notifications' marks, which read
+    // the listed rows) still stop at uid 1: the next quick pass asks from there and gets uid 2.
+    assert!(mark_of(dir, &f.account, 3).is_some());
+    assert_eq!(listed_subjects(&f.engine, &f.account), vec!["Weekly status".to_string()]);
+    let top: i64 = mobile_db(dir)
+        .query_row("SELECT MAX(uid) FROM messages WHERE account_id = ?1 AND folder = 'INBOX' AND out_of_window_ms IS NULL", [&f.account], |r| r.get(0))
+        .unwrap();
+    assert_eq!(top, 1);
+    assert!(
+        !f.events.list.lock().unwrap()[from..].iter().any(|(n, _)| n == "mobile.folder.changed"),
+        "the list did not change"
+    );
+    // The next full pass takes both into the list; the found one loses its mark.
+    f.sync(Some("INBOX"));
+    assert_eq!(mark_of(dir, &f.account, 3), None);
+    let mut listed = listed_subjects(&f.engine, &f.account);
+    listed.sort();
+    assert_eq!(listed, vec!["Fresh invoice 77".to_string(), "Lunch plans".to_string(), "Weekly status".to_string()]);
+    assert_eq!(f.search("invoice"), vec![3]);
+}
+
+#[test]
 fn server_search_rows_outlive_sync_for_thirty_days_after_their_mark() {
     let server = MockImap::start(Scenario::new().mailbox(mailbox(
         "INBOX",

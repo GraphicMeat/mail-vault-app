@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 
 const APPLE: &str = "/api/billing/store/apple/verify";
 const GOOGLE: &str = "/api/billing/store/google/verify";
@@ -33,6 +33,30 @@ enum Answer {
     Json(u16, Value),
     /// Reads the request and closes the socket without a reply: the network failed.
     Drop,
+    /// The first answer whose text the request body contains, else the last one.
+    ByBody(Vec<(&'static str, Answer)>, Box<Answer>),
+    /// Holds the reply until the gate opens.
+    Gated(Arc<Gate>, Box<Answer>),
+}
+
+#[derive(Default)]
+struct Gate {
+    open: Mutex<bool>,
+    cv: Condvar,
+}
+
+impl Gate {
+    fn wait(&self) {
+        let mut open = self.open.lock().unwrap();
+        while !*open {
+            open = self.cv.wait(open).unwrap();
+        }
+    }
+
+    fn release(&self) {
+        *self.open.lock().unwrap() = true;
+        self.cv.notify_all();
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -105,8 +129,25 @@ fn serve(conn: TcpStream, state: &Mutex<StubState>) -> std::io::Result<()> {
         st.routes.get(&path).cloned().unwrap_or(Answer::Json(404, json!({ "error": "not_found" })))
     };
     let mut conn = conn;
+    let mut answer = answer;
+    loop {
+        answer = match answer {
+            Answer::ByBody(list, other) => {
+                let text = String::from_utf8_lossy(&body).into_owned();
+                list.into_iter().find(|(k, _)| text.contains(k)).map(|(_, a)| a).unwrap_or(*other)
+            }
+            Answer::Gated(gate, then) => {
+                gate.wait();
+                *then
+            }
+            a => break a_reply(&mut conn, a),
+        };
+    }
+}
+
+fn a_reply(conn: &mut TcpStream, answer: Answer) -> std::io::Result<()> {
     match answer {
-        Answer::Drop => Ok(()),
+        Answer::Drop | Answer::ByBody(..) | Answer::Gated(..) => Ok(()),
         Answer::Json(status, v) => {
             let body = v.to_string();
             write!(
@@ -742,5 +783,136 @@ fn no_secret_in_db_logs_or_replies() {
         for s in secrets {
             assert!(!contains_bytes(&bytes, s), "{} holds a secret", f.display());
         }
+    }
+}
+
+#[test]
+fn another_receipt_saying_no_never_ends_the_live_one() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    stub().route(APPLE, store_ok(now + 30 * 24 * HOUR, "apple"));
+    fx.verify_apple().unwrap();
+    assert!(fx.premium());
+    let stored = fx.secret("premium.receipt").expect("receipt kept");
+
+    // The native listener hands over an older, expired transaction of the same store. The stored
+    // receipt is checked again and still entitled: Premium and the stored receipt stay.
+    let old = "jws-old-expired-transaction";
+    stub().route(
+        APPLE,
+        Answer::ByBody(
+            vec![(old, Answer::Json(200, json!({ "entitled": false, "source": "apple", "expiresMs": now - HOUR })))],
+            Box::new(store_ok(now + 30 * 24 * HOUR, "apple")),
+        ),
+    );
+    let before = stub().requests(APPLE).len();
+    let reply = fx.rpc("mobile.premium.verify", json!({ "platform": "apple", "jws": old }));
+    assert_eq!(reply["premium"], true, "{reply}");
+    assert!(fx.premium());
+    assert_eq!(fx.secret("premium.receipt").as_deref(), Some(stored.as_str()), "the stored receipt is not replaced");
+    let asked = stub().requests(APPLE);
+    assert_eq!(asked.len(), before + 2, "the stored receipt was checked again");
+    assert!(asked[before + 1].body.contains(JWS), "{:?}", asked[before + 1]);
+    assert!(!fx.premium_events().iter().any(|e| e["premium"] == false), "Premium never went off");
+
+    // A revoked other transaction is refused, but the live one still decides.
+    stub().route(
+        APPLE,
+        Answer::ByBody(
+            vec![(old, Answer::Json(403, json!({ "error": "revoked" })))],
+            Box::new(store_ok(now + 30 * 24 * HOUR, "apple")),
+        ),
+    );
+    assert_eq!(fx.err("mobile.premium.verify", json!({ "platform": "apple", "jws": old })).code(), "REFUSED");
+    assert!(fx.premium());
+    assert_eq!(fx.secret("premium.receipt").as_deref(), Some(stored.as_str()));
+
+    // When the stored receipt itself now says no, Premium ends (and it is kept for re-checks).
+    stub().route(APPLE, Answer::Json(200, json!({ "entitled": false, "source": "apple", "expiresMs": now - HOUR })));
+    assert_eq!(fx.rpc("mobile.premium.verify", json!({ "platform": "apple", "jws": old }))["premium"], false);
+    assert!(!fx.premium());
+    assert_eq!(fx.secret("premium.receipt").as_deref(), Some(stored.as_str()));
+
+    // An entitled new receipt replaces the stored one.
+    let new = "jws-new-yearly-transaction";
+    stub().route(APPLE, store_ok(now + 365 * 24 * HOUR, "apple"));
+    assert_eq!(fx.rpc("mobile.premium.verify", json!({ "platform": "apple", "jws": new }))["premium"], true);
+    assert!(fx.secret("premium.receipt").unwrap().contains(new));
+}
+
+#[test]
+fn install_id_does_not_wait_for_a_network_check() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    stub().route(APPLE, store_ok(now + HOUR, "apple"));
+    fx.verify_apple().unwrap();
+    let id = fx.rpc("mobile.premium.installId", json!({}))["installId"].as_str().unwrap().to_string();
+
+    // A refresh is stuck on the server; the purchase sheet asks for the install id meanwhile.
+    let gate = Arc::new(Gate::default());
+    stub().route(APPLE, Answer::Gated(Arc::clone(&gate), Box::new(store_ok(now + HOUR, "apple"))));
+    let before = stub().requests(APPLE).len();
+    let e = fx.e();
+    std::thread::scope(|s| {
+        let refresh = s.spawn(|| e.rpc("mobile.premium.refresh", json!({ "force": true })));
+        while stub().requests(APPLE).len() == before {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        s.spawn(move || {
+            let _ = tx.send(e.rpc("mobile.premium.installId", json!({})));
+        });
+        let got = rx.recv_timeout(std::time::Duration::from_secs(10));
+        // Open the gate whatever happened, so the threads end.
+        gate.release();
+        let got = got.expect("installId waited for the network check").unwrap();
+        assert_eq!(got["installId"], id.as_str());
+        refresh.join().unwrap().unwrap();
+    });
+    // Made once: the same id after the check.
+    assert_eq!(fx.rpc("mobile.premium.installId", json!({}))["installId"], id.as_str());
+}
+
+#[test]
+fn a_refresh_that_meets_the_install_limit_keeps_receipt_and_cache() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    stub().route(APPLE, store_ok(now + 24 * HOUR, "apple"));
+    fx.verify_apple().unwrap();
+    let stored = fx.secret("premium.receipt").unwrap();
+    // An install idle for a month whose purchase's live set filled up meanwhile.
+    stub().route(APPLE, Answer::Json(409, json!({ "error": "install_limit" })));
+    assert_eq!(fx.err("mobile.premium.refresh", json!({ "force": true })).code(), "INSTALL_LIMIT");
+    assert!(fx.premium(), "the cache stays until its expiry");
+    assert_eq!(fx.secret("premium.receipt").as_deref(), Some(stored.as_str()));
+}
+
+#[test]
+fn a_sign_in_the_server_refuses_without_a_reason_is_not_a_wrong_code() {
+    let (_g, fx) = setup();
+    stub().route(SIGNIN_VERIFY, Answer::Json(400, json!({ "error": "invalid_request" })));
+    assert_eq!(fx.sign_in().unwrap_err().code(), "INVALID");
+    stub().route(SIGNIN_VERIFY, Answer::Json(400, json!({})));
+    assert_eq!(fx.sign_in().unwrap_err().code(), "INVALID");
+    stub().route(SIGNIN_VERIFY, Answer::Json(401, json!({ "error": "code_wrong" })));
+    assert_eq!(fx.sign_in().unwrap_err().code(), "CODE_WRONG");
+    assert_eq!(fx.secret("premium.customer"), None);
+}
+
+#[test]
+fn a_registration_finished_by_refresh_names_the_phone_as_the_sign_in_did() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    stub().route(SIGNIN_VERIFY, Answer::Json(200, json!({ "customerId": CUSTOMER })));
+    stub().route(STATUS, Answer::Drop);
+    let params = json!({ "email": EMAIL, "code": CODE, "clientName": "Rita's phone", "appVersion": "2.23.0", "osVersion": "18.1" });
+    assert_eq!(fx.err("mobile.premium.webSignIn.verify", params).code(), "NETWORK");
+    stub().route(STATUS, web_status(true, true, now + 30 * 24 * HOUR, None));
+    assert_eq!(fx.rpc("mobile.premium.refresh", json!({}))["premium"], true);
+    let status = stub().requests(STATUS);
+    let last = &status.last().unwrap().query;
+    assert!(last.contains("register=1"), "{last}");
+    for part in ["appVersion=2.23.0", "osVersion=18.1", "clientName=Rita%27s+phone"] {
+        assert!(last.contains(part), "{part} missing from {last}");
     }
 }

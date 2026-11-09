@@ -92,6 +92,9 @@ pub(crate) struct Premium {
     /// Serializes everything that calls the server or writes the cache. Never held by [`active`],
     /// so a 15 s check does not hold up a message open.
     checks: Mutex<()>,
+    /// Makes the install id once. Its own lock, never `checks`: the native purchase code asks for
+    /// the id right before the store sheet, and must not wait out a network check.
+    minting: Mutex<()>,
     /// The secrets to scrub out of log lines and errors.
     scrub: RwLock<Vec<String>>,
     #[cfg(debug_assertions)]
@@ -273,8 +276,10 @@ fn secret_delete(shared: &Shared, key: &str) -> Result<(), RpcError> {
     shared.secrets().delete(key).map_err(|e| secret_err(shared, key, e))
 }
 
-/// This install's id: a random UUID made on first use (Ruling 2).
+/// This install's id: a random UUID made on first use (Ruling 2), once (`minting`). A secret store
+/// that cannot be read (a locked keychain) is an error, never a reason to make a second id.
 fn install_id(shared: &Shared) -> Result<String, RpcError> {
+    let _once = lock(&shared.premium.minting);
     if let Some(id) = secret_get(shared, INSTALL_ID)?.filter(|s| !s.is_empty()) {
         return Ok(id);
     }
@@ -362,9 +367,14 @@ fn check_store(receipt: &Receipt, install: &str, now: i64, restore: bool, app_tr
 /// The web subscription's answer, and the device a registering call replaced. A definite answer
 /// ends a pending registration.
 fn check_web(shared: &Shared, customer: &str, install: &str, info: Option<&ClientInfo>, now: i64) -> (Check, Option<Replaced>) {
+    // A pending registration carries what the sign-in named this phone (an older flag, "1", none).
     let register = match info {
         Some(i) => Some(i.clone()),
-        None => shared.read(|c| get_in(c, PREMIUM_WEB_REGISTER)).ok().flatten().map(|_| ClientInfo::phone(None, None, None)),
+        None => shared
+            .read(|c| get_in(c, PREMIUM_WEB_REGISTER))
+            .ok()
+            .flatten()
+            .map(|v| serde_json::from_str::<ClientInfo>(&v).unwrap_or_else(|_| ClientInfo::phone(None, None, None))),
     };
     let w = match bc::web_status(customer, install, register.as_ref()) {
         Ok(w) => w,
@@ -525,6 +535,11 @@ fn present(v: Option<String>) -> Option<String> {
 /// the cache. `INSTALL_LIMIT` (a Restore of a purchase already on its most installs) keeps the
 /// cache and any stored receipt: the receipt is valid, only this install was not added, so it is
 /// not a refusal. A web entitlement is not touched by a store answer.
+///
+/// A receipt that is not the stored one (the native listener hands over every transaction, an
+/// older or refunded one too) replaces it only when it is entitled. When it is not, and the stored
+/// receipt of the same store is what Premium stands on, the stored one is checked again and that
+/// answer decides: an expired earlier period never ends a live subscription.
 pub(crate) fn verify(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: VerifyParams = parse(params)?;
     let receipt = match p.platform.as_str() {
@@ -545,25 +560,42 @@ pub(crate) fn verify(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     observe_clock(shared);
     let now = now(shared);
     let install = install_id(shared)?;
-    let check = check_store(&receipt, &install, now, p.restore, app_transaction.as_deref());
+    let mut check = check_store(&receipt, &install, now, p.restore, app_transaction.as_deref());
     let refused = matches!(check, Check::Refused { .. });
-    match &check {
+    if let Check::Failed(f) = check {
         // No answer (or the install limit): the cache and any stored receipt stay, and the caller
         // must not take the purchase as accepted.
-        Check::Failed(f) => return Err(fail(*f)),
-        Check::Entitled { .. } | Check::Not { .. } => {
-            let text = serde_json::to_string(&receipt).map_err(|e| RpcError::Internal(e.to_string()))?;
-            secret_set(shared, RECEIPT, &text)?;
+        return Err(fail(f));
+    }
+    let stored = stored_receipt(shared)?;
+    let source = receipt.source();
+    let same = stored.as_ref().is_some_and(|r| r.source() == source && r.secret() == receipt.secret());
+    let current = cached(shared);
+    let save = |r: &Receipt| -> Result<(), RpcError> {
+        let text = serde_json::to_string(r).map_err(|e| RpcError::Internal(e.to_string()))?;
+        secret_set(shared, RECEIPT, &text)
+    };
+    if matches!(check, Check::Entitled { .. }) {
+        save(&receipt)?;
+    } else if same {
+        if refused {
+            secret_delete(shared, RECEIPT)?;
         }
-        Check::Refused { source } => {
-            if stored_receipt(shared)?.is_some_and(|r| r.source() == *source) {
+    } else if let Some(old) = stored.as_ref().filter(|r| r.source() == source) {
+        // Another receipt of this store said no. When the stored one is what Premium stands on, it
+        // answers for its store instead: it alone can end that entitlement.
+        if current.entitled && current.source.as_deref() == Some(source) {
+            check = check_store(old, &install, now, false, None);
+            if matches!(check, Check::Refused { .. }) {
                 secret_delete(shared, RECEIPT)?;
             }
         }
-        Check::Replaced => {}
+    } else if stored.is_none() && !refused {
+        // Nothing stored: a receipt the server knows is kept for re-checks (it answers that
+        // subscription's current state, a renewal too).
+        save(&receipt)?;
     }
     // A store answer speaks for the store: a web entitlement stays (and the later expiry wins).
-    let current = cached(shared);
     let mut checks = vec![check];
     if current.source.as_deref() == Some(WEB) && entitled_now(shared, now) {
         checks.push(Check::Entitled { source: WEB, expires_ms: current.expires_ms });
@@ -583,9 +615,7 @@ fn entitled_now(shared: &Shared, now: i64) -> bool {
 /// `mobile.premium.installId {}` -> `{installId}`: for the native purchase code (StoreKit
 /// `appAccountToken`, Play `obfuscatedAccountId`). The one reply that carries it.
 pub(crate) fn install(engine: &Engine, _params: Value) -> Result<Value, RpcError> {
-    let shared = engine.shared();
-    let _one = lock(&shared.premium.checks);
-    Ok(json!({ "installId": install_id(shared)? }))
+    Ok(json!({ "installId": install_id(engine.shared())? }))
 }
 
 #[derive(Deserialize)]
@@ -650,11 +680,18 @@ pub(crate) fn sign_in_verify(engine: &Engine, params: Value) -> Result<Value, Rp
     let shared = engine.shared();
     let _one = lock(&shared.premium.checks);
     observe_clock(shared);
-    let customer = bc::signin_verify(&email, &code).map_err(fail)?;
+    let customer = bc::signin_verify(&email, &code).map_err(|f| match f {
+        // The server refused the request without judging the code (a malformed address).
+        Fail::Refused => RpcError::Invalid("the server refused the sign-in request".into()),
+        f => fail(f),
+    })?;
     secret_set(shared, CUSTOMER, &customer)?;
-    shared.write(|c| put_in(c, PREMIUM_WEB_REGISTER, "1")).map_err(|e| RpcError::Internal(e.to_string()))?;
-    let install = install_id(shared)?;
     let info = ClientInfo::phone(present(p.client_name), present(p.app_version), present(p.os_version));
+    // The pending registration keeps the names, so a later refresh that finishes it registers the
+    // phone as this call would (no secret in it).
+    let pending = serde_json::to_string(&info).map_err(|e| RpcError::Internal(e.to_string()))?;
+    shared.write(|c| put_in(c, PREMIUM_WEB_REGISTER, &pending)).map_err(|e| RpcError::Internal(e.to_string()))?;
+    let install = install_id(shared)?;
     let now = now(shared);
     let (check, replaced) = check_web(shared, &customer, &install, Some(&info), now);
     match check {

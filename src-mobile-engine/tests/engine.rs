@@ -308,10 +308,21 @@ fn a_v2_file_migrates_to_v3_and_keeps_its_accounts() {
     assert_eq!(p["total"], 1);
     let journal: i64 = c.query_row("SELECT count(*) FROM pending_actions", [], |r| r.get(0)).unwrap();
     assert_eq!(journal, 1);
-    for t in ["remote_ids", "uid_seq", "outbox", "drafts", "settings", "notify_state", "sync_state"] {
+    for t in ["remote_ids", "uid_seq", "outbox", "drafts", "notify_state", "sync_state"] {
         let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "{t}");
     }
+    // The step writes no setting. The first RPC above starts the startup replay of the journaled
+    // `seen` on its own thread; the account has no stored password, so the replay's sign-in is
+    // refused and `hold.rs` holds the account (`bg.authRefused.<id>`, the auth hold that predates
+    // schema 6). Whether that has landed by now is a race, so that one row may or may not be there;
+    // nothing else may.
+    let keys: Vec<String> = {
+        let mut st = c.prepare("SELECT key FROM settings ORDER BY key").unwrap();
+        st.query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
+    };
+    let hold = "bg.authRefused.acc_0123456789abcdef".to_string();
+    assert!(keys.is_empty() || keys == [hold], "settings: {keys:?}");
     // A migrated file and a new one have the same tables and columns.
     let fresh = tempfile::tempdir().unwrap();
     drop(open(fresh.path()).unwrap());

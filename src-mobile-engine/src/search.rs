@@ -761,8 +761,9 @@ pub(crate) fn server(engine: &Engine, params: Value) -> Result<Value, RpcError> 
         Ok(u) => u,
         Err(crate::sync::Fail::Gone) => return Err(RpcError::Invalid("unknown account".into())),
         Err(crate::sync::Fail::Closing) => return Err(RpcError::Internal("the engine is closing".into())),
-        Err(crate::sync::Fail::Code(code, why)) => {
-            shared.log(&format!("[search] server search {} {}: {} {}", p.account_id, folder, code.as_str(), why));
+        Err(crate::sync::Fail::Code(code, _)) => {
+            // The code only: a server's text (an IMAP BAD) can echo the command, and so the query.
+            shared.log(&format!("[search] server search {} {}: {}", p.account_id, folder, code.as_str()));
             return Err(RpcError::Internal(code.as_str().into()));
         }
     };

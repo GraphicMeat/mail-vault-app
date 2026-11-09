@@ -895,6 +895,23 @@ fn sync_folder_pass(
     gone.sort_unstable();
     pass.removed += delete_uids(shared, account, folder, &gone, true)?;
 
+    // Rows a server search stored before sync fetched them: in the window now, so they join the
+    // list (see `store_found`).
+    let found: Vec<u32> = existing.iter().filter(|(u, h)| in_window.contains(u) && h.out_of_window_ms.is_some()).map(|(u, _)| *u).collect();
+    for chunk in found.chunks(BATCH) {
+        not_closing(shared)?;
+        pass.added += write_for(shared, account, |c| {
+            let mut st = c.prepare_cached(
+                "UPDATE messages SET out_of_window_ms = NULL, list_gen = ?4 WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
+            )?;
+            let mut n = 0;
+            for u in chunk {
+                n += st.execute((account, folder, *u as i64, pass.gen))?;
+            }
+            Ok(n)
+        })?;
+    }
+
     // New rows, newest uid first so the top of the list fills first. The fetch runs outside any
     // transaction; each batch then commits on its own.
     let mut new: Vec<u32> = window.iter().copied().filter(|u| !existing.contains_key(u)).collect();
@@ -1023,8 +1040,11 @@ fn header_uids(headers: &[Header]) -> Vec<u32> {
 /// Stores the headers a server search found (`Backend::search`): the same rows sync writes, 200
 /// per transaction, each indexed right after its chunk commits. One older than the sync window is
 /// marked `out_of_window_ms = now` (a row already held and aged out is marked again), so sync keeps
-/// it for 30 days past this mark. A row in the window that sync has not fetched yet lists like any
-/// new one, announced as a change of the folder. Returns the stored uids, in the order given.
+/// it for 30 days past this mark. A row in the window that sync has not fetched yet is marked too:
+/// it stays out of the folder list and of the quick pass's and the notifications' marks (a hit
+/// newer than the list's top would otherwise make the next quick pass skip what lies between, and
+/// be announced as new mail the user just saw) until the next full pass of the folder takes it into
+/// the list. Nothing in the list changes. Returns the stored uids, in the order given.
 pub(crate) fn store_found(shared: &Shared, account: &str, folder: &str, headers: &[Header]) -> Result<Vec<u32>, Fail> {
     let now = now_ms();
     let start = window_start_ms(now);
@@ -1038,26 +1058,18 @@ pub(crate) fn store_found(shared: &Shared, account: &str, folder: &str, headers:
         }
         Ok(out)
     })?;
-    let added = headers.iter().filter(|h| !held.contains(&h.uid) && header_date_ms(h) >= start).count();
-    let gen = shared.list_gen(account, folder)? + i64::from(added > 0);
+    let gen = shared.list_gen(account, folder)?;
     for chunk in headers.chunks(BATCH) {
         not_closing(shared)?;
         write_for(shared, account, |c| {
             insert_headers(c, account, folder, chunk, gen)?;
             let mut mark = c.prepare_cached("UPDATE messages SET out_of_window_ms = ?4 WHERE account_id = ?1 AND folder = ?2 AND uid = ?3")?;
-            for h in chunk.iter().filter(|h| header_date_ms(h) < start) {
+            for h in chunk.iter().filter(|h| header_date_ms(h) < start || !held.contains(&h.uid)) {
                 mark.execute((account, folder, h.uid as i64, now))?;
             }
             Ok(())
         })?;
         crate::search::index_uids_soon(shared, account, folder, &header_uids(chunk));
-    }
-    if added > 0 {
-        let gen = shared.publish_list_gen(account, folder, gen);
-        shared.emit(
-            FOLDER_CHANGED,
-            json!({ "accountId": account, "folder": folder, "added": added, "removed": 0, "updated": 0, "listGen": gen }),
-        );
     }
     Ok(header_uids(headers))
 }
