@@ -11,8 +11,13 @@
   const fromAd = (() => { try { return sessionStorage.getItem('mv-reddit-ad') === '1'; } catch { return false; } })();
 
   // Reddit's own snippet, unmodified apart from the id living in one constant.
-  function loadPixel() {
+  // Reddit reads the page URL, so it never loads while a credential sits in it (the Stripe
+  // session id on the signup page). The page strips it itself; if that does not happen within a
+  // few seconds, there is no pixel on that page.
+  const leaky = () => /[?&](session_id|token)=/.test(location.search);
+  function loadPixel(waited = 0) {
     if (window.rdt) return;
+    if (leaky()) { if (waited < 3000) setTimeout(() => loadPixel(waited + 100), 100); return; }
     !function(w,d){if(!w.rdt){var p=w.rdt=function(){p.sendEvent?p.sendEvent.apply(p,arguments):p.callQueue.push(arguments)};p.callQueue=[];var t=d.createElement("script");t.src="https://www.redditstatic.com/ads/pixel.js?pixel_id="+PIXEL_ID,t.async=!0;var s=d.getElementsByTagName("script")[0];s.parentNode.insertBefore(t,s)}}(window,document);
     window.rdt('init', PIXEL_ID);
     window.rdt('track', 'PageVisit');

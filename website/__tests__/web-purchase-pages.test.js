@@ -139,6 +139,20 @@ describe('welcome page', () => {
     expect(doc.querySelector('[data-welcome-activate]').hidden).toBe(true);
   });
 
+  it('takes the session id out of the address bar, where third-party scripts read it', () => {
+    const { w, doc } = welcome(`?session_id=${SESSION}`);
+    expect(w.location.search).toBe('');
+    expect(w.location.href).not.toContain('cs_test');
+    expect(doc.querySelector('[data-welcome-activate]').hidden).toBe(false);
+  });
+
+  it('still offers activation after a reload in the same tab', () => {
+    const { w, doc } = welcome(`?session_id=${SESSION}`);
+    doc.querySelector('[data-welcome-activate]').hidden = true;
+    w.eval(read('assets/welcome.js')); // the reload: no query string left, the tab remembers
+    expect(doc.querySelector('[data-welcome-activate]').hidden).toBe(false);
+  });
+
   it('trades the session id for a token only when the button is pressed, then opens the deep link', async () => {
     const fetch = json(200, { token: 't', expiresAt: 1, deepLink: 'mailvault://activate?token=abc' });
     const { w, doc } = welcome(`?session_id=${SESSION}`, { fetch });

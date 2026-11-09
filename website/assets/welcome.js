@@ -6,7 +6,16 @@
 (() => {
   const root = document.querySelector('[data-welcome]');
   if (!root) return;
-  const sessionId = new URLSearchParams(location.search).get('session_id') || '';
+  // The id is a credential, so it does not stay in the address bar (third-party scripts, the
+  // Reddit pixel among them, read the page URL). Keep it for this tab only, so a reload still works.
+  let sessionId = new URLSearchParams(location.search).get('session_id') || '';
+  try {
+    if (sessionId) sessionStorage.setItem('mv-checkout-session', sessionId);
+    else sessionId = sessionStorage.getItem('mv-checkout-session') || '';
+  } catch { /* without storage a reload shows the app variant */ }
+  if (new URLSearchParams(location.search).has('session_id')) {
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch { /* nothing more to do */ }
+  }
   const web = /^cs_(?:test|live)_[A-Za-z0-9]+$/.test(sessionId);
   const activate = root.querySelector('[data-welcome-activate]');
   root.querySelectorAll('[data-welcome-web]').forEach(el => { el.hidden = !web; });
