@@ -7,7 +7,7 @@
 // listed first, under its own heading, with when it goes and three actions: Change time (the send
 // later sheet, then `mobile.outbox.reschedule`, which checks Premium again), Send now (Retry: at
 // once, no longer scheduled) and Cancel (Discard).
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import Sheet from './Sheet.jsx';
 import SendLater from './SendLater.jsx';
@@ -26,6 +26,22 @@ const STATE_KEYS = Object.freeze({
 const stateKey = (state) => (Object.hasOwn(STATE_KEYS, state) ? STATE_KEYS[state] : STATE_KEYS.queued);
 
 /** A row waiting for the time the user picked (the engine's rule: queued, `scheduledMs` to come). */
+/**
+ * Re-renders when the soonest scheduled time among `rows` passes (checked at least every minute),
+ * so a row whose time came moves out of "Scheduled" while the sheet is open.
+ */
+export function useScheduleClock(rows) {
+  const [, tick] = useReducer((n) => n + 1, 0);
+  const now = Date.now();
+  const next = rows.reduce((m, r) => (isScheduled(r, now) ? Math.min(m, r.scheduledMs) : m), Infinity);
+  useEffect(() => {
+    if (!Number.isFinite(next)) return undefined;
+    const wait = setTimeout(tick, Math.min(Math.max(next - Date.now() + 50, 1000), 60_000));
+    return () => clearTimeout(wait);
+  });
+  return now;
+}
+
 export const isScheduled = (r, now) => r.state === 'queued' && Number.isFinite(r.scheduledMs) && now < r.scheduledMs;
 
 function ScheduledList({ rows, now, onMove }) {
@@ -68,7 +84,7 @@ export function OutboxSheet({ rows: all, onClose }) {
   const [moving, setMoving] = useState(null);
   const closeMoving = useCallback(() => setMoving(null), []);
   useBackLayer(Boolean(moving), closeMoving);
-  const now = Date.now();
+  const now = useScheduleClock(all);
   const scheduled = all.filter((r) => isScheduled(r, now));
   const rows = all.filter((r) => !isScheduled(r, now));
   if (moving) {
@@ -133,9 +149,9 @@ export default function OutboxRow({ initialOpen = false }) {
     }
   }, [rows.length, initialOpen]);
   useBackLayer(open && rows.length > 0, close);
+  const now = useScheduleClock(rows);
   if (!rows.length) return null;
   const attention = rows.some((r) => r.state === 'failed' || r.state === 'uncertain');
-  const now = Date.now();
   const label = rows.every((r) => isScheduled(r, now))
     ? t('mobile.outbox.scheduledCount', { count: rows.length })
     : t('mobile.outbox.waiting', { count: rows.length });

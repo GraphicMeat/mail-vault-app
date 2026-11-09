@@ -5,10 +5,14 @@
 // device has not synced. Typing waits SEARCH_DEBOUNCE_MS after the last key before it asks.
 //
 // Scope: "This folder" searches the open folder, "All accounts" every account. A server search
-// needs one account and folder, so in both scopes it runs for the open folder's account and folder.
-// It is offered under the local results, and runs by itself when the device finds nothing (or has
-// no index). Recent searches (last 8) are page storage on this device (store.js), shown while the
-// field is empty.
+// needs one account and folder, so it is offered only in "This folder" (in "All accounts" it
+// would ask one folder of one account and read as if it asked them all). It is offered under the
+// local results, and runs by itself once a query has settled (SERVER_AUTO_DELAY_MS after the
+// device answered) with nothing found on the device (or no index), so typing does not send a
+// server search per pause. The results load page by page while they scroll, up to AUTO_ROWS
+// rows; past that, each further page is a tap (Show more results), so the list stays bounded.
+// Recent searches (last 8) are page storage on this device (store.js), shown while the field is
+// empty.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
@@ -20,6 +24,11 @@ import { useT } from './i18n.js';
 export const SEARCH_DEBOUNCE_MS = 250;
 /** How close (px) to the end of the results the next page is asked for. */
 const NEAR_END = 400;
+/** How long a query must stay unchanged after the device's empty answer before the server is
+ *  asked without a tap. */
+export const SERVER_AUTO_DELAY_MS = 1000;
+/** Rows loaded by scrolling; more only by a tap. */
+export const AUTO_ROWS = 300;
 
 const keyOf = (r) => `${r.accountId}/${r.folder}/${r.uid}`;
 
@@ -85,8 +94,9 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
     return () => clearTimeout(timer.current);
   }, [text, scope, run]);
 
-  const loadMore = useCallback(() => {
+  const loadMore = useCallback((tapped = false) => {
     if (busyMore.current || local.state !== 'done' || local.cursor == null) return;
+    if (!tapped && local.rows.length >= AUTO_ROWS) return;
     busyMore.current = true;
     const mine = gen.current;
     setLocal((l) => ({ ...l, state: 'more' }));
@@ -106,7 +116,7 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
         setLocal((l) => ({ ...l, state: 'failed', code: err?.code ?? null }));
       },
     );
-  }, [local.state, local.cursor, text, scope, accountId, folder]);
+  }, [local.state, local.cursor, local.rows.length, text, scope, accountId, folder]);
 
   // A page that left room (rows the join-back dropped, a tall screen) asks for the next one.
   useEffect(() => {
@@ -133,12 +143,16 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
     );
   }, [accountId, folder, text]);
 
-  // Nothing on the device (or no index to ask): the server is asked without a tap.
+  const canServer = Boolean(accountId && folder) && scope === 'folder';
+  // Nothing on the device (or no index to ask): the server is asked without a tap, once the query
+  // has settled. A new keystroke or scope clears the wait (and the reply would be dropped anyway).
   const localEmpty = (local.state === 'done' && local.rows.length === 0 && local.cursor == null)
     || (local.state === 'failed' && local.code === 'SEARCH_UNAVAILABLE');
   useEffect(() => {
-    if (localEmpty && server.state === 'idle') searchServer();
-  }, [localEmpty, server.state, searchServer]);
+    if (!canServer || !localEmpty || server.state !== 'idle') return undefined;
+    const wait = setTimeout(searchServer, SERVER_AUTO_DELAY_MS);
+    return () => clearTimeout(wait);
+  }, [canServer, localEmpty, server.state, searchServer]);
 
   const open = useCallback((row) => {
     useMobileStore.getState().addRecentSearch(text);
@@ -165,7 +179,6 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
   const seen = new Set(local.rows.map(keyOf));
   const serverRows = server.rows.filter((r) => !seen.has(keyOf(r)));
   const shown = [...local.rows, ...serverRows];
-  const canServer = Boolean(accountId && folder);
   const busy = local.state === 'loading';
 
   const rowsView = shown.map((row, i) => (
@@ -234,6 +247,11 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
           <div className="mv-search__list">
             {rowsView.slice(0, firstServer)}
             {local.state === 'more' && <p className="mv-search__note" role="status">{t('mobile.search.searching')}</p>}
+            {local.state === 'done' && local.cursor != null && local.rows.length >= AUTO_ROWS && (
+              <button type="button" className="mv-search__server-btn" data-mv-search-more onClick={() => loadMore(true)}>
+                {t('mobile.search.more')}
+              </button>
+            )}
             {firstServer < rowsView.length && (
               <>
                 <h2 className="mv-search__heading mv-search__heading--server">{t('mobile.search.fromServer')}</h2>

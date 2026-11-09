@@ -18,7 +18,7 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
-import Search, { SEARCH_DEBOUNCE_MS } from '../Search.jsx';
+import Search, { SEARCH_DEBOUNCE_MS, SERVER_AUTO_DELAY_MS, AUTO_ROWS } from '../Search.jsx';
 import { useMobileStore, STORAGE_RECENT_SEARCHES } from '../store.js';
 
 const row = (uid, extra = {}) => ({
@@ -81,6 +81,10 @@ describe('search screen', () => {
     type('invoice');
     await advance(SEARCH_DEBOUNCE_MS);
     await settle();
+    // Only once the query has settled.
+    expect(calls('mobile.search.server')).toEqual([]);
+    await advance(SERVER_AUTO_DELAY_MS);
+    await settle();
     expect(calls('mobile.search.server')).toEqual([{ accountId: 'a1', folder: 'INBOX', query: 'invoice' }]);
     fireEvent.click(screen.getByText('Old invoice'));
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ uid: 9 }));
@@ -108,7 +112,66 @@ describe('search screen', () => {
     await advance(SEARCH_DEBOUNCE_MS);
     await settle();
     expect(screen.getByRole('alert').textContent).toMatch(/isn't ready/);
+    await advance(SERVER_AUTO_DELAY_MS);
+    await settle();
     expect(calls('mobile.search.server')).toHaveLength(1);
+  });
+
+  it('does not ask the server for every pause while the query is typed', async () => {
+    engine.local = () => ({ rows: [], cursor: null });
+    render(<Search onOpen={() => {}} onClose={() => {}} />);
+    for (const q of ['i', 'in', 'inv', 'invo', 'invoi', 'invoic', 'invoice']) {
+      type(q);
+      await advance(SEARCH_DEBOUNCE_MS + 100);
+      await settle();
+    }
+    expect(calls('mobile.search.local')).toHaveLength(7);
+    expect(calls('mobile.search.server')).toEqual([]);
+    await advance(SERVER_AUTO_DELAY_MS);
+    await settle();
+    expect(calls('mobile.search.server')).toEqual([{ accountId: 'a1', folder: 'INBOX', query: 'invoice' }]);
+  });
+
+  it('offers no server search in All accounts, where it could ask only one folder', async () => {
+    engine.local = () => ({ rows: [], cursor: null });
+    render(<Search onOpen={() => {}} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'All accounts' }));
+    type('invoice');
+    await advance(SEARCH_DEBOUNCE_MS);
+    await settle();
+    await advance(SERVER_AUTO_DELAY_MS);
+    await settle();
+    expect(calls('mobile.search.server')).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Search on server' })).toBeNull();
+    expect(screen.getByText('No messages found.')).toBeTruthy();
+  });
+
+  it('stops loading by scroll after AUTO_ROWS rows and offers Show more results', async () => {
+    const proto = HTMLElement.prototype;
+    const sh = Object.getOwnPropertyDescriptor(proto, 'scrollHeight');
+    Object.defineProperty(proto, 'scrollHeight', { configurable: true, get: () => 5000 });
+    Object.defineProperty(proto, 'clientHeight', { configurable: true, get: () => 600 });
+    try {
+      const page = (from) => Array.from({ length: 100 }, (_, i) => row(from + i));
+      engine.local = ({ cursor }) => ({ rows: page((cursor ?? 0) + 1), cursor: (cursor ?? 0) + 100 });
+      render(<Search onOpen={() => {}} onClose={() => {}} />);
+      type('invoice');
+      await advance(SEARCH_DEBOUNCE_MS);
+      const results = document.querySelector('[data-mv-search-results]');
+      results.scrollTop = 4100;
+      for (let i = 0; i < 5; i += 1) {
+        fireEvent.scroll(results);
+        await settle();
+      }
+      expect(calls('mobile.search.local')).toHaveLength(AUTO_ROWS / 100);
+      fireEvent.click(screen.getByRole('button', { name: 'Show more results' }));
+      await settle();
+      expect(calls('mobile.search.local')).toHaveLength(AUTO_ROWS / 100 + 1);
+      expect(screen.getByText(`Subject ${AUTO_ROWS + 100}`)).toBeTruthy();
+    } finally {
+      if (sh) Object.defineProperty(proto, 'scrollHeight', sh); else delete proto.scrollHeight;
+      delete proto.clientHeight;
+    }
   });
 
   it('opening a result remembers the search and hands the row on', async () => {

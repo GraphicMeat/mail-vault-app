@@ -8,7 +8,7 @@
 // Premium, further is never allowed. The sheet only spares a round trip: a free user's choice past
 // 5 minutes opens the paywall on scheduled send instead, and a time past a day or already gone is
 // said in place. The engine checks again and its refusal is what counts.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Sheet from './Sheet.jsx';
 import { formatSendTime } from './format.js';
 import { openPaywall, usePremium } from './premium.js';
@@ -22,12 +22,20 @@ export const MAX_DELAY_MS = 24 * 60 * 60_000;
 const MORNING_HOUR = 8;
 const MORNING_LEAD_MS = 10 * 60_000;
 
-/** The next 08:00 (local) at least 10 minutes away: always inside a day. */
+/** How often the open sheet re-reads the clock, so its times and choices never go stale. */
+export const SHEET_TICK_MS = 30_000;
+
+/** The next 08:00 (local) at least 10 minutes away, never past a day: between 07:50 and 08:00
+ *  tomorrow's would be more than 24 hours off, so today's stands (a DST night is capped too). */
 export function nextMorning(now) {
   const d = new Date(now);
   d.setHours(MORNING_HOUR, 0, 0, 0);
-  if (d.getTime() <= now + MORNING_LEAD_MS) d.setDate(d.getDate() + 1);
-  return d.getTime();
+  if (d.getTime() > now + MORNING_LEAD_MS) return d.getTime();
+  const today = d.getTime();
+  d.setDate(d.getDate() + 1);
+  const tomorrow = d.getTime();
+  if (tomorrow - now <= MAX_DELAY_MS) return tomorrow;
+  return today > now ? today : now + MAX_DELAY_MS;
 }
 
 /** The ready choices at `now`: `{ id, at, key }`. Literal keys for the catalog tests. */
@@ -63,7 +71,12 @@ export function timeProblem(at, now) {
 export default function SendLater({ title, onPick, onClose }) {
   const t = useT();
   const premium = usePremium();
-  const now = useMemo(() => Date.now(), []);
+  // The clock, re-read while the sheet is open: "In 5 minutes" is 5 minutes from the tap.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), SHEET_TICK_MS);
+    return () => clearInterval(tick);
+  }, []);
   const choices = useMemo(() => scheduleChoices(now), [now]);
   const [custom, setCustom] = useState('');
   const [problem, setProblem] = useState(null);
@@ -92,7 +105,13 @@ export default function SendLater({ title, onPick, onClose }) {
         {choices.map((c) => {
           const locked = !premium && needsPremium(c.at, now);
           return (
-            <button key={c.id} type="button" className="mv-sheet__action mv-schedule__choice" data-mv-schedule={c.id} onClick={() => choose(c.at)}>
+            <button
+              key={c.id}
+              type="button"
+              className="mv-sheet__action mv-schedule__choice"
+              data-mv-schedule={c.id}
+              onClick={() => choose(scheduleChoices(Date.now()).find((x) => x.id === c.id).at)}
+            >
               <span className="mv-schedule__label">
                 {t(c.key)}
                 {locked && <span className="mv-schedule__premium">{t('common.premium')}</span>}

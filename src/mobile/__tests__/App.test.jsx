@@ -4,7 +4,7 @@
 // folder and message, from the event or (a cold launch) from the shell's held tap on mount.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
-import { render, cleanup, act, waitFor, screen } from '@testing-library/react';
+import { render, cleanup, act, waitFor, screen, fireEvent } from '@testing-library/react';
 
 const engine = vi.hoisted(() => ({ handlers: new Map(), calls: [], taps: [], refused: false }));
 
@@ -25,8 +25,13 @@ vi.mock('../transport.js', () => ({
         return { queued: true };
       case 'mobile.settings.get':
         return { notifications: 'off', notificationPreview: true };
-      case 'mobile.folders.list':
-        return { folders: [{ path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: engine.calls.length, total: 3, depth: 0, noselect: false }] };
+      case 'mobile.folders.list': {
+        const folders = [{ path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: engine.calls.length, total: 3, depth: 0, noselect: false }];
+        if (params.accountId === 'a2') folders.push({ path: 'Projects B', name: 'Projects B', specialUse: null, unseen: 0, total: 1, depth: 0, noselect: false });
+        return { folders };
+      }
+      case 'mobile.search.local':
+        return { rows: [{ uid: 1, accountId: 'a2', folder: 'INBOX', dateMs: 1000, subject: 'Second', fromName: 'Ada', fromAddress: 'ada@example.test', snippet: '', seen: true }], cursor: null };
       case 'mobile.sync.refresh':
         return { queued: true };
       case 'mobile.messages.page': {
@@ -175,5 +180,21 @@ describe('App', () => {
     // A refusal that comes back as an event shows it again.
     await act(async () => { emit('mobile.sync.state', { accountId: 'a1', state: 'error', code: 'AUTH_FAILED', held: true }); });
     await waitFor(() => expect(document.querySelector('.mv-refused')).toBeTruthy());
+  });
+
+  it('a search result from another account moves within that account\'s folders', async () => {
+    const { App: Fresh, store } = await fresh();
+    render(<Fresh />);
+    await waitFor(() => expect(screen.getByText('a1@example.test')).toBeTruthy());
+    expect(store.getState().activeAccountId).toBe('a1');
+    await act(async () => { document.querySelector('[data-mv-search-open]').click(); });
+    const box = await screen.findByRole('searchbox');
+    await act(async () => { fireEvent.change(box, { target: { value: 'second' } }); });
+    const hit = await screen.findByText('Second', {}, { timeout: 2000 });
+    await act(async () => { fireEvent.click(hit); });
+    await waitFor(() => expect(document.querySelector('.mv-viewer__subject')?.textContent).toBe('Second'));
+    expect(store.getState().activeAccountId).toBe('a1');
+    await act(async () => { document.querySelector('[data-mv-tool="move"]').click(); });
+    expect(await screen.findByText('Projects B')).toBeTruthy();
   });
 });

@@ -88,3 +88,27 @@ export function premiumSummary(premium) {
     source: t(`mobile.premium.source.${source}`),
   });
 }
+
+const UNITS = { D: 'day', W: 'week', M: 'month', Y: 'year' };
+
+/** A store's ISO 8601 period ("P1M", "P7D", "P1W") taken `count` times, in words ("3 months");
+ *  null when it does not read. Both stores send the offer's period and its number of periods. */
+export function offerDuration(period, count = 1) {
+  const m = /^P(\d+)([DWMY])$/.exec(String(period ?? ''));
+  if (!m) return null;
+  const times = Number.isInteger(count) && count > 0 ? count : 1;
+  return t(`mobile.premium.duration.${UNITS[m[2]]}`, { count: Number(m[1]) * times });
+}
+
+/** What an introductory offer gives, with how long it lasts (App Review wants the duration):
+ *  a free trial, one price for the whole intro, or a price for each period of it. */
+export function introText(offer) {
+  const duration = offerDuration(offer?.period, offer?.periodCount);
+  if (offer?.paymentMode === 'freeTrial') {
+    return duration ? t('mobile.premium.plan.trialFor', { duration }) : t('mobile.premium.plan.trial');
+  }
+  const price = offer?.price ?? '';
+  if (!duration) return t('mobile.premium.plan.intro', { price });
+  if (offer?.paymentMode === 'payAsYouGo') return t('mobile.premium.plan.introEach', { price, duration });
+  return t('mobile.premium.plan.introFor', { price, duration });
+}

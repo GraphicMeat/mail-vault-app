@@ -177,6 +177,19 @@ function App() {
   const [listState, setListState] = useState('loading'); // 'loading' | 'ready' | 'failed'
   const [panel, setPanel] = useState(null); // null | 'switcher' | 'drawer' | 'add'
   const [open, setOpen] = useState(null);
+  // A message opened from another account (a search result in All accounts) moves within that
+  // account's folders: they are read for it, so Move offers them.
+  const [otherFolders, setOtherFolders] = useState(null); // { accountId, folders }
+  const openAccount = open?.accountId ?? null;
+  useEffect(() => {
+    if (!openAccount || openAccount === activeAccountId) return undefined;
+    let live = true;
+    daemonCall('mobile.folders.list', { accountId: openAccount }).then(
+      (reply) => { if (live) setOtherFolders({ accountId: openAccount, folders: reply?.folders ?? [] }); },
+      () => { if (live) setOtherFolders({ accountId: openAccount, folders: [] }); },
+    );
+    return () => { live = false; };
+  }, [openAccount, activeAccountId]);
   const [compose, setCompose] = useState(null); // { key, accountId, mode, original?, draftId? }
   const [draftsOpen, setDraftsOpen] = useState(DEMO_DRAFTS);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
@@ -687,7 +700,7 @@ function App() {
           accountId={open.accountId}
           folder={open.folder}
           row={open.row}
-          folders={open.accountId === activeAccountId ? folders : []}
+          folders={open.accountId === activeAccountId ? folders : (otherFolders?.accountId === open.accountId ? otherFolders.folders : [])}
           onClose={onClose}
           onAction={onViewerAction}
           onMove={onViewerMove}

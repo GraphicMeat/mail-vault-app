@@ -16,7 +16,7 @@ import { daemonCall, storeProducts, storePurchase, storeRestore } from './transp
 import { useMobileStore } from './store.js';
 import { useT, getMobileLocale } from './i18n.js';
 import { errorKey } from './errors.js';
-import { PREMIUM_FEATURES, storeOf, premiumSummary } from './premium.js';
+import { PREMIUM_FEATURES, storeOf, premiumSummary, introText } from './premium.js';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 const TERMS_URL = 'https://mailvaultapp.com/terms.html';
@@ -173,6 +173,7 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
   const [products, setProducts] = useState({ state: 'loading', list: [], code: null }); // loading | ready | failed
   const [chosen, setChosen] = useState(null);
   const [webDone, setWebDone] = useState(false); // a website sign-in just turned Premium on
+  const [signOuts, setSignOuts] = useState(0); // a sign-out starts the website form afresh
   const [action, setAction] = useState(null); // 'buy' | 'restore' | null
   const [result, setResult] = useState(null); // { kind: 'thanks'|'pending'|'activating'|'restored'|'restoreNone'|'restoreInactive' } | { code }
   const mounted = useRef(true);
@@ -205,9 +206,13 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
         setResult(null);
       } else if (out.status === 'pending') {
         setResult({ kind: 'pending' });
-      } else if (out.premium) {
+      } else if (out.premium?.premium) {
         useMobileStore.getState().setPremium(out.premium);
         setResult({ kind: 'thanks' });
+      } else if (out.premium) {
+        // The server read the receipt and said it is not active (expired, refunded): no thanks.
+        useMobileStore.getState().setPremium(out.premium);
+        setResult({ kind: 'notActive' });
       } else if (out.error && (out.error.code === 'NETWORK' || out.error.code === 'RATE_LIMITED')) {
         // Paid: the engine checks it again at the next launch.
         setResult({ kind: 'activating' });
@@ -245,6 +250,23 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
     }
   }, [action]);
 
+  const signOut = useCallback(async () => {
+    if (action) return;
+    setAction('signOut');
+    setResult(null);
+    try {
+      const reply = await daemonCall('mobile.premium.webSignOut', {});
+      if (!mounted.current) return;
+      setWebDone(false);
+      setSignOuts((n) => n + 1);
+      useMobileStore.getState().setPremium(reply);
+    } catch (err) {
+      if (mounted.current) setResult({ code: err?.code ?? 'INTERNAL' });
+    } finally {
+      if (mounted.current) setAction(null);
+    }
+  }, [action]);
+
   const active = premium.premium;
   const storeName = t(`mobile.premium.source.${store}`);
   const body = (
@@ -268,6 +290,13 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
               <a href={MANAGE_URL[premium.source]} target="_blank" rel="noopener noreferrer">{t('mobile.premium.manage')}</a>
             </p>
           )}
+          {premium.source === 'web' && (
+            // Releases this phone's place among the account's devices.
+            <button type="button" className="mv-premium__linkbtn" data-mv-web-sign-out disabled={Boolean(action)} onClick={signOut}>
+              {t('mobile.premium.web.signOut')}
+            </button>
+          )}
+          {result?.code && <p className="mv-premium__error" role="alert">{t(errorKey(result.code))}</p>}
         </>
       ) : (
         <>
@@ -297,13 +326,7 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
                 >
                   <span className="mv-premium__plan-name">{p.period === 'P1Y' ? t('mobile.premium.plan.year') : t('mobile.premium.plan.month')}</span>
                   <span className="mv-premium__plan-price">{t(p.period === 'P1Y' ? 'mobile.premium.perYear' : 'mobile.premium.perMonth', { price: p.price })}</span>
-                  {p.introOffer && (
-                    <span className="mv-premium__plan-intro">
-                      {p.introOffer.paymentMode === 'freeTrial'
-                        ? t('mobile.premium.plan.trial')
-                        : t('mobile.premium.plan.intro', { price: p.introOffer.price })}
-                    </span>
-                  )}
+                  {p.introOffer && <span className="mv-premium__plan-intro">{introText(p.introOffer)}</span>}
                 </button>
               ))}
             </div>
@@ -322,7 +345,8 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
           <div className="mv-premium__disclosure" data-mv-disclosure>
             <p>{t('mobile.premium.disclosure.renew')}</p>
             <p>{t('mobile.premium.disclosure.charge', { store: storeName })}</p>
-            <p>{t('mobile.premium.disclosure.cancel', { store: storeName })}</p>
+            {/* Each store's own rule: Apple stops the next charge only 24 hours ahead, Play any time. */}
+            <p>{t(store === 'google' ? 'mobile.premium.disclosure.cancelGoogle' : 'mobile.premium.disclosure.cancelApple', { store: storeName })}</p>
             <p>
               <a href={MANAGE_URL[store]} target="_blank" rel="noopener noreferrer">{t('mobile.premium.manage')}</a>
             </p>
@@ -335,7 +359,7 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
         </>
       )}
 
-      {(!active || webDone) && <WebSignIn startOpen={signIn} onDone={() => { setResult(null); setWebDone(true); }} />}
+      {(!active || webDone) && <WebSignIn key={signOuts} startOpen={signIn} onDone={() => { setResult(null); setWebDone(true); }} />}
     </>
   );
 

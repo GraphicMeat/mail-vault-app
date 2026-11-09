@@ -1,7 +1,8 @@
 // @vitest-environment node
 // No price is written in the mobile app: amounts come from the store at run time. The sources are
 // always checked; the built bundle (`npm run mobile:build:web`, `dist-mobile`) is checked when it
-// exists, which is how the build job runs this.
+// exists: `scripts/mobile-release.sh` runs this file right after its Tauri build made the bundle,
+// and refuses to leave a store artifact when it fails.
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

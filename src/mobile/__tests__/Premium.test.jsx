@@ -15,6 +15,7 @@ const engine = vi.hoisted(() => ({
   restoreError: null,
   start: () => ({ ok: true }),
   verify: () => ({ premium: true, source: 'web', expiresMs: 1_900_000_000_000 }),
+  signOut: () => ({ premium: false, source: null, expiresMs: null }),
   status: { premium: false, source: null, expiresMs: null },
   refresh: () => ({ premium: false, source: null, expiresMs: null }),
   handlers: new Map(),
@@ -31,6 +32,7 @@ vi.mock('../transport.js', () => ({
       case 'mobile.premium.refresh': return run(engine.refresh);
       case 'mobile.premium.webSignIn.start': return run(engine.start);
       case 'mobile.premium.webSignIn.verify': return run(engine.verify);
+      case 'mobile.premium.webSignOut': return run(engine.signOut);
       case 'mobile.settings.get': return { notifications: 'off', notificationPreview: true };
       default: throw fail('UNSUPPORTED');
     }
@@ -61,7 +63,7 @@ vi.mock('../transport.js', () => ({
 const { default: Premium } = await import('../Premium.jsx');
 const { default: Settings } = await import('../Settings.jsx');
 const { useMobileStore } = await import('../store.js');
-const { openPaywall, startPremiumSync, PREMIUM_FEATURES, premiumSummary } = await import('../premium.js');
+const { openPaywall, startPremiumSync, PREMIUM_FEATURES, premiumSummary, offerDuration, introText } = await import('../premium.js');
 const { t } = await import('../i18n.js');
 const { formatFullDate } = await import('../format.js');
 
@@ -80,6 +82,7 @@ beforeEach(() => {
   engine.restoreError = null;
   engine.start = () => ({ ok: true });
   engine.verify = () => ({ premium: true, source: 'web', expiresMs: EXPIRES });
+  engine.signOut = () => FREE;
   engine.status = FREE;
   engine.refresh = FREE;
   engine.handlers = new Map();
@@ -112,13 +115,27 @@ describe('the plans and the store disclosures', () => {
     }
   });
 
-  it('points the manage link at Google Play on Android', async () => {
+  it('points the manage link at Google Play on Android, with Play\'s own cancel rule', async () => {
     const ua = vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Linux; Android 14)');
     render(<Premium onClose={() => {}} />);
     await ready();
     expect(screen.getByRole('link', { name: 'Manage subscription' }).getAttribute('href')).toBe('https://play.google.com/store/account/subscriptions');
     expect(screen.getByText(/Payment is charged to your Google Play account/)).toBeTruthy();
+    // Play stops the next charge for a cancellation at any time: Apple's 24 hours is not claimed.
+    expect(screen.getByText(t('mobile.premium.disclosure.cancelGoogle', { store: 'Google Play' }))).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/24 hours/);
     ua.mockRestore();
+  });
+
+  it('says how long an introductory offer lasts', async () => {
+    engine.products = [
+      { ...MONTH, introOffer: { price: 'QQ 0.99', period: 'P1M', paymentMode: 'payAsYouGo', periodCount: 3 } },
+      { ...YEAR, introOffer: { price: 'QQ 0', period: 'P1W', paymentMode: 'freeTrial', periodCount: 1 } },
+    ];
+    render(<Premium onClose={() => {}} />);
+    await ready();
+    expect(screen.getByRole('radio', { name: /Monthly/ }).textContent).toContain(t('mobile.premium.plan.introEach', { price: 'QQ 0.99', duration: '3 months' }));
+    expect(screen.getByRole('radio', { name: /Yearly/ }).textContent).toContain('free trial of 1 week');
   });
 
   it('offers no web price, no web purchase link and no share-to-unlock', async () => {
@@ -161,6 +178,28 @@ describe('the plans and the store disclosures', () => {
   });
 });
 
+describe('introductory offer copy', () => {
+  it('turns the store period and count into a duration', () => {
+    expect(offerDuration('P1M', 3)).toBe('3 months');
+    expect(offerDuration('P1W', 1)).toBe('1 week');
+    expect(offerDuration('P7D')).toBe('7 days');
+    expect(offerDuration('P1Y', 1)).toBe('1 year');
+    expect(offerDuration('nonsense', 1)).toBeNull();
+    expect(offerDuration(undefined)).toBeNull();
+  });
+
+  it('names the price, the duration and the kind of offer', () => {
+    expect(introText({ price: 'QQ 1', period: 'P3M', paymentMode: 'payUpFront', periodCount: 1 }))
+      .toBe('Introductory offer: QQ 1 for the first 3 months, then the regular price.');
+    expect(introText({ price: 'QQ 1', period: 'P1M', paymentMode: 'payAsYouGo', periodCount: 2 }))
+      .toBe('Introductory offer: QQ 1 per billing period for the first 2 months, then the regular price.');
+    expect(introText({ price: 'QQ 0', period: 'P2W', paymentMode: 'freeTrial', periodCount: 1 }))
+      .toBe('Starts with a free trial of 2 weeks, then the regular price.');
+    // A period that does not read keeps the general wording.
+    expect(introText({ price: 'QQ 1', period: '?', paymentMode: 'payUpFront' })).toBe(t('mobile.premium.plan.intro', { price: 'QQ 1' }));
+  });
+});
+
 describe('subscribe', () => {
   it('buys the chosen plan (yearly first) and shows Premium on', async () => {
     render(<Premium onClose={() => {}} />);
@@ -199,6 +238,16 @@ describe('subscribe', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Subscribe' }).disabled).toBe(false));
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('a purchase the server rates not active says so, never "Premium is on"', async () => {
+    engine.purchase = { status: 'purchased', platform: 'apple', productId: YEAR.id, premium: FREE };
+    render(<Premium onClose={() => {}} />);
+    await ready();
+    click('Subscribe');
+    expect((await screen.findByRole('status')).textContent).toBe(t('mobile.premium.result.notActive'));
+    expect(screen.queryByText(t('mobile.premium.result.thanks'))).toBeNull();
+    expect(useMobileStore.getState().premium.premium).toBe(false);
   });
 
   it('a pending purchase says it waits for approval', async () => {
@@ -437,5 +486,31 @@ describe('upkeep and the locked-feature entry point', () => {
     expect(useMobileStore.getState().paywall).toEqual({ feature: null, signIn: false });
     useMobileStore.getState().closePaywall();
     expect(useMobileStore.getState().paywall).toBeNull();
+  });
+});
+
+describe('sign out of the website account', () => {
+  it('is offered only for website Premium, and gives the place back', async () => {
+    useMobileStore.setState({ premium: { premium: true, source: 'apple', expiresMs: EXPIRES } });
+    render(<Premium onClose={() => {}} />);
+    expect(screen.queryByRole('button', { name: t('mobile.premium.web.signOut') })).toBeNull();
+    cleanup();
+    useMobileStore.setState({ premium: { premium: true, source: 'web', expiresMs: EXPIRES } });
+    render(<Premium onClose={() => {}} />);
+    click(t('mobile.premium.web.signOut'));
+    await waitFor(() => expect(useMobileStore.getState().premium).toEqual(FREE));
+    expect(engine.calls.filter((c) => c[0] === 'mobile.premium.webSignOut')).toEqual([['mobile.premium.webSignOut', {}]]);
+    // Free again: the plans and the website sign-in come back.
+    await ready();
+    expect(screen.getByRole('button', { name: 'Already have Premium from the MailVault website? Sign in' })).toBeTruthy();
+  });
+
+  it('shows a failed sign-out', async () => {
+    useMobileStore.setState({ premium: { premium: true, source: 'web', expiresMs: EXPIRES } });
+    engine.signOut = () => { throw fail('INTERNAL'); };
+    render(<Premium onClose={() => {}} />);
+    click(t('mobile.premium.web.signOut'));
+    expect((await screen.findByRole('alert')).textContent).toBe(t('mobile.error.INTERNAL'));
+    expect(useMobileStore.getState().premium.premium).toBe(true);
   });
 });
