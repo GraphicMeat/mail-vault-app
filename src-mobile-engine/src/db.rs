@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 const READERS: usize = 2;
 
 /// Schema 2, frozen: a new file is built as schema 2 plus every forward step, so it cannot drift
@@ -193,8 +193,19 @@ const V4_TO_V5: &str = "
 ALTER TABLE outbox ADD COLUMN not_before_ms INTEGER NOT NULL DEFAULT 0;
 ";
 
+/// Schema 5 to 6, Plan 4's one step. `messages.out_of_window_ms`: NULL for a row the 90-day sync
+/// window holds; else when a server search stored it or the user last opened it (unix ms).
+/// `outbox.scheduled_ms`: set when the user scheduled the send (a send-later row, not a retry
+/// wait). The step also creates `follow_ups` with core's DDL (`app_db::follow_up::TABLE_SQL`, run
+/// beside this text in the same transaction: a `const` cannot be spliced into this literal).
+const V5_TO_V6: &str = "
+ALTER TABLE messages ADD COLUMN out_of_window_ms INTEGER;
+ALTER TABLE outbox ADD COLUMN scheduled_ms INTEGER;
+";
+
 /// Every table any schema version created; a rebuild drops them all (their indexes go with them).
 const ALL_TABLES: &[&str] = &[
+    "follow_ups",
     "notified",
     "sync_state",
     "notify_state",
@@ -226,6 +237,7 @@ pub(crate) const PER_ACCOUNT_TABLES: &[&str] = &[
     "notify_state",
     "notified",
     "sync_state",
+    "follow_ups",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -272,8 +284,10 @@ pub struct Engine {
 /// What the RPC threads and the sync worker thread both use.
 pub(crate) struct Shared {
     path: PathBuf,
-    writer: Mutex<Connection>,
+    /// Declared before `writer`, so they close first: the last connection to close checkpoints
+    /// the WAL into the file, and a read-only one cannot (the index worker reads through them).
     readers: Mutex<Vec<Connection>>,
+    writer: Mutex<Connection>,
     /// Account secrets. Never copied into `mobile.db`, a log line or an event.
     secrets: Arc<dyn SecretStore>,
     /// Where the engine's own log lines go. The shell installs its platform logger (unified log on
@@ -299,6 +313,8 @@ pub(crate) struct Shared {
     pub(crate) parks: std::sync::atomic::AtomicU64,
     /// Background runs whose mail was returned and not committed yet (`background.rs`).
     pub(crate) background: crate::background::Pending,
+    /// `search.db`'s one connection and the index worker (`search.rs`).
+    pub(crate) search: crate::search::Search,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -387,6 +403,10 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         if found < 5 {
             tx.execute_batch(V4_TO_V5)?;
         }
+        if found < 6 {
+            tx.execute_batch(V5_TO_V6)?;
+            tx.execute_batch(mailvault_core::app_db::follow_up::TABLE_SQL)?;
+        }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;
     } else {
@@ -416,7 +436,7 @@ fn repair_early_v3(w: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-fn remove_db_files(path: &Path) -> Result<(), EngineError> {
+pub(crate) fn remove_db_files(path: &Path) -> Result<(), EngineError> {
     for suffix in ["", "-wal", "-shm", "-journal"] {
         let mut s = path.as_os_str().to_owned();
         s.push(suffix);
@@ -472,6 +492,7 @@ impl Engine {
                 jmap: crate::backend::jmap::Sessions::default(),
                 parks: std::sync::atomic::AtomicU64::new(0),
                 background: crate::background::Pending::default(),
+                search: crate::search::Search::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -489,6 +510,10 @@ impl Engine {
         if let Err(e) = crate::body::drop_stale_graph_bodies(&engine.shared) {
             engine.shared.log(&format!("[body] dropping stale Graph bodies: {e}"));
         }
+        // The index: opened here, filled by its own worker thread (rows it has not seen are
+        // backfilled there, never on this path).
+        crate::search::open(&engine.shared, data_dir);
+        crate::search::start(&engine.shared);
         Ok(engine)
     }
 
@@ -644,6 +669,8 @@ impl Drop for Engine {
         self.outbox.stop();
         self.attachments.stop();
         self.live.stop();
+        // Closes search.db now: its EXCLUSIVE lock would outlive this engine in a worker's Arc.
+        crate::search::close(&self.shared);
         // Frees the loopback port if a sign-in was still open; flows are forgotten.
         self.shared.oauth.close();
     }

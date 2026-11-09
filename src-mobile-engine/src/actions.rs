@@ -279,6 +279,12 @@ pub(crate) fn apply(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     if n > 0 {
         let (removed, updated) = if kind.hides() { (n, 0) } else { (0, n) };
         emit_folder_changed(shared, &account, &folder, gen, removed, updated);
+        // A tap: the index takes the new flags now, or from its worker when it is busy. A hidden
+        // row needs nothing: search shows only rows the list shows.
+        if !kind.hides() {
+            let kept: Vec<u32> = uids.iter().copied().filter(|u| !skipped.contains(u)).collect();
+            crate::search::reflag_soon(shared, &account, &folder, &kept);
+        }
     }
     if seq.is_some() {
         engine.replay().wake(shared, Some(&account));
@@ -851,6 +857,9 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
             };
             if shown > 0 {
                 emit_folder_changed(shared, account, &a.folder, gen, 0, shown);
+                if !kind.is_some_and(Kind::hides) {
+                    crate::search::reflag(shared, account, &a.folder, &kept);
+                }
             }
             // A flag override stays until a later sync agrees (see sync.rs); a moved or deleted
             // row has left the folder on the server, and so leaves it here. The result goes out
@@ -892,6 +901,9 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
                 if n > 0 {
                     let hides = kind.is_some_and(Kind::hides);
                     emit_folder_changed(shared, account, &a.folder, gen, 0, if hides { 0 } else { n });
+                    if !hides {
+                        crate::search::reflag(shared, account, &a.folder, &a.uids);
+                    }
                 }
                 Ok(())
             };

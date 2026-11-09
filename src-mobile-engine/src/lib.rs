@@ -19,6 +19,7 @@ pub mod outgoing;
 mod outbox;
 mod remote_ids;
 mod rpc;
+mod search;
 pub mod secrets;
 mod settings;
 mod sync;
@@ -29,4 +30,6 @@ pub use background::{BackgroundRun, NewMail};
 pub use db::{Engine, EngineError, SCHEMA_VERSION};
 pub use outgoing::resolve_outgoing;
 pub use rpc::{methods, RpcError};
+#[doc(hidden)]
+pub use search::BackfillStats;
 pub use secrets::{Credential, MemorySecrets, SecretStore};

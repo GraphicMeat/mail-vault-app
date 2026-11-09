@@ -10,8 +10,8 @@ use std::fmt;
 
 const MAX_PAGE: u64 = 200;
 
-/// Serialized as `{ code: "UNSUPPORTED"|"INVALID"|"INTERNAL"|"TOO_LARGE"|"ATTACHMENT_MISSING",
-/// message }`, and `TOO_LARGE` with `data: { limitBytes }`; the shell forwards it to JS unchanged.
+/// Serialized as `{ code: "UNSUPPORTED"|"INVALID"|"INTERNAL"|"TOO_LARGE"|"ATTACHMENT_MISSING"|
+/// "SEARCH_UNAVAILABLE", message }`, and `TOO_LARGE` with `data: { limitBytes }`; the shell forwards it to JS unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RpcError {
     Unsupported { method: String },
@@ -22,6 +22,8 @@ pub enum RpcError {
     TooLarge { message: String, limit_bytes: u64 },
     /// A send or draft names an attachment handle that does not resolve to a picked file.
     AttachmentMissing(String),
+    /// `search.db` could not be opened this run; the rest of the engine works.
+    SearchUnavailable,
 }
 
 impl RpcError {
@@ -32,6 +34,7 @@ impl RpcError {
             RpcError::Internal(_) => "INTERNAL",
             RpcError::TooLarge { .. } => "TOO_LARGE",
             RpcError::AttachmentMissing(_) => "ATTACHMENT_MISSING",
+            RpcError::SearchUnavailable => "SEARCH_UNAVAILABLE",
         }
     }
 }
@@ -43,6 +46,7 @@ impl fmt::Display for RpcError {
             RpcError::Invalid(m) | RpcError::Internal(m) | RpcError::TooLarge { message: m, .. } | RpcError::AttachmentMissing(m) => {
                 f.write_str(m)
             }
+            RpcError::SearchUnavailable => f.write_str("search is unavailable"),
         }
     }
 }
@@ -105,6 +109,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
+    ("mobile.search.local", crate::search::local),
     ("mobile.settings.get", crate::settings::get),
     ("mobile.settings.set", crate::settings::set),
     ("mobile.sync.refresh", crate::sync::refresh),
@@ -141,6 +146,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.list", crate::outbox::list),
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.ping", ping),
+    ("mobile.search.local", crate::search::local),
     ("mobile.settings.get", crate::settings::get),
     ("mobile.settings.set", crate::settings::set),
     ("mobile.sync.refresh", crate::sync::refresh),
@@ -201,10 +207,10 @@ struct CursorPageParams {
 /// The list's view of a row: a pending local change (`local_*`) wins over the server's value, and
 /// a row deleted locally is not listed.
 const LISTED: &str = "account_id = ?1 AND folder = ?2 AND COALESCE(local_deleted, 0) = 0";
-const ROW_COLUMNS: &str = "uid, subject, from_name, from_address, date_ms, snippet,
+pub(crate) const ROW_COLUMNS: &str = "uid, subject, from_name, from_address, date_ms, snippet,
     COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), has_attachments, to_json";
 
-fn row_json(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+pub(crate) fn row_json(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     Ok(json!({
         "uid": r.get::<_, i64>(0)?,
         "subject": r.get::<_, String>(1)?,

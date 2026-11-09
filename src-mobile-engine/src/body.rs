@@ -454,7 +454,10 @@ fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str) -> Result<
         )?;
         c.execute(&format!("UPDATE messages SET snippet = ?4 WHERE {KEY}"), (account, folder, uid, snippet))?;
         Ok(())
-    })
+    })?;
+    // The body's words join the index (a tap: the index worker does it when the index is busy).
+    crate::search::index_uids_soon(shared, &p.account_id, &p.folder, &[p.uid]);
+    Ok(())
 }
 
 /// Writes the message's attachment rows (what a tap and a forward look up); `false` when the

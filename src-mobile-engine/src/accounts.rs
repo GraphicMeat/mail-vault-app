@@ -470,6 +470,8 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
             Ok(c.execute("DELETE FROM accounts WHERE id = ?1", [&p.account_id])? > 0)
         })
         .map_err(internal)?;
+    // Its messages leave the index too (rows first: search shows only rows mobile.db holds).
+    crate::search::forget_account(engine.shared(), &p.account_id);
     engine.shared().jmap.forget(&p.account_id);
     crate::oauth::forget(engine.shared(), &p.account_id);
     crate::outbox::release_dirs(engine.shared(), engine.cache_dir(), &dirs);

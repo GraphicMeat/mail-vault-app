@@ -511,6 +511,7 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadlin
         });
         match wrote {
             Ok(n) => {
+                crate::search::index_uids(shared, account, &folder, &header_uids(&headers));
                 added += n;
                 mark = top;
                 marked = true;
@@ -608,6 +609,9 @@ pub(crate) fn delete_uids(shared: &Shared, account: &str, folder: &str, uids: &[
                 }
             }
         }
+        // The index follows the rows: what left `mobile.db` leaves it (a row kept for a pending
+        // action stays in both).
+        crate::search::forget_gone(shared, account, folder, chunk);
     }
     Ok(removed)
 }
@@ -752,6 +756,7 @@ fn delete_folder_rows(shared: &Shared, account: &str, folder: &str) -> Result<us
             }
         }
     }
+    crate::search::forget_folder(shared, account, folder);
     Ok(removed)
 }
 
@@ -869,6 +874,8 @@ fn sync_folder_pass(
         .collect();
     for chunk in changes.chunks(BATCH) {
         pass.updated += write_for(shared, account, |c| write_flags(shared, c, account, folder, chunk, pass.gen, at))?;
+        let uids: Vec<u32> = chunk.iter().map(|(uid, _, _)| *uid).collect();
+        crate::search::reflag(shared, account, folder, &uids);
     }
 
     // Rows no longer in the window: expunged, moved away, or aged out of the 90 days. A row a
@@ -885,6 +892,7 @@ fn sync_folder_pass(
         not_closing(shared)?;
         let headers = backend.headers(&here, chunk)?;
         let n = write_for(shared, account, |c| insert_headers(c, account, folder, &headers, pass.gen))?;
+        crate::search::index_uids(shared, account, folder, &header_uids(&headers));
         pass.added += n;
     }
 
@@ -992,6 +1000,10 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
         ))?;
     }
     Ok(n)
+}
+
+fn header_uids(headers: &[Header]) -> Vec<u32> {
+    headers.iter().map(|h| h.uid).collect()
 }
 
 /// What a reply needs beyond the list row (`messages.thread_json`): `{cc, replyTo: [{name,
