@@ -23,7 +23,7 @@ Android决定 MailVault 何时可以在后台检查新邮件。实际上最快�
 你的隐私
 你的邮件、密码和登录令牌都留在手机上（密码和令牌保存在Android 安全存储）。MailVault 只与你的邮件服务商通信。我们收到的只有 Premium 所需的数据：一个随机的安装 ID，以及来自Google Play的购买记录。如果你用邮箱地址登录，我们也会保存该地址。
 
-MailVault Premium 是可选的自动续订订阅，按月或按年计费。购买前会在应用内显示价格。确认购买时将从你的Google 账号扣款，除非在当前周期结束前至少 24 小时取消，否则会自动续订。可在Google 账号设置中管理或取消。
+MailVault Premium 是可选的自动续订订阅，按月或按年计费。购买前会在应用内显示价格。确认购买时将从你的Google 账号扣款，并会自动续订，直到你取消。你可以随时在 Google Play（付款和订阅）中取消；取消后 Premium 会保持到已付费周期结束。
 
 使用条款: https://mailvaultapp.com/terms.html
 隐私政策: https://mailvaultapp.com/privacy.html

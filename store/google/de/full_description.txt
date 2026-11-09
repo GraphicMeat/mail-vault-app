@@ -23,7 +23,7 @@ Android entscheidet, wann MailVault im Hintergrund nach neuen Mails sehen darf. 
 DEINE PRIVATSPHÄRE
 Deine Mails, Passwörter und Anmelde-Token bleiben auf deinem Handy (Passwörter und Token in dem sicheren Android-Speicher). MailVault spricht nur mit deinem Mailanbieter. Wir erhalten nur, was Premium braucht: eine zufällige Installations-ID und den Kaufbeleg von Google Play. Wenn du dich mit deiner E-Mail-Adresse anmeldest, speichern wir auch diese Adresse.
 
-MailVault Premium ist ein optionales, automatisch verlängerndes Abo, monatlich oder jährlich. Der Preis wird vor dem Kauf in der App angezeigt. Die Zahlung wird bei Bestätigung deinem Google-Kontos belastet. Das Abo verlängert sich automatisch, wenn du nicht mindestens 24 Stunden vor Ende des Zeitraums kündigst. Verwalten oder kündigen kannst du es in den Einstellungen deines Google-Kontos.
+MailVault Premium ist ein optionales, automatisch verlängerndes Abo, monatlich oder jährlich. Der Preis wird vor dem Kauf in der App angezeigt. Die Zahlung wird bei Bestätigung deinem Google-Konto belastet. Das Abo verlängert sich automatisch, bis du kündigst. Du kannst jederzeit in Google Play kündigen (Zahlungen und Abos); Premium bleibt dann bis zum Ende des bezahlten Zeitraums aktiv.
 
 Nutzungsbedingungen: https://mailvaultapp.com/terms.html
 Datenschutzerklärung: https://mailvaultapp.com/privacy.html

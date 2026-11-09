@@ -23,7 +23,7 @@ Android décide du moment où MailVault peut vérifier le courrier en arrière-p
 VOTRE VIE PRIVÉE
 Votre courrier, vos mots de passe et vos jetons de connexion restent sur le téléphone (mots de passe et jetons dans le stockage sécurisé d’Android). MailVault ne communique qu’avec votre fournisseur de messagerie. Nous ne recevons que ce dont Premium a besoin : un identifiant d’installation aléatoire et le justificatif d’achat de Google Play. Si vous vous connectez avec votre adresse e-mail, nous conservons aussi cette adresse.
 
-MailVault Premium est un abonnement facultatif à renouvellement automatique, mensuel ou annuel. Le prix s’affiche dans l’application avant l’achat. Le paiement est débité de votre compte Google à la confirmation et se renouvelle automatiquement sauf résiliation au moins 24 heures avant la fin de la période. Gérez-le ou résiliez-le dans les réglages de votre compte Google.
+MailVault Premium est un abonnement facultatif à renouvellement automatique, mensuel ou annuel. Le prix s’affiche dans l’application avant l’achat. Le paiement est débité de votre compte Google à la confirmation et se renouvelle automatiquement jusqu’à la résiliation. Vous pouvez résilier à tout moment dans Google Play (Paiements et abonnements) ; Premium reste alors actif jusqu’à la fin de la période payée.
 
 Conditions d’utilisation: https://mailvaultapp.com/terms.html
 Politique de confidentialité: https://mailvaultapp.com/privacy.html

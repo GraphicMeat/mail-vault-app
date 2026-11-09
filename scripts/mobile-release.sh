@@ -100,5 +100,13 @@ else
     [ -n "$aab" ] || { echo "mobile-release: no .aab under gen/android/app/build/outputs/bundle" >&2; exit 2; }
     cp "$aab" "$artifact"
 fi
+# The bundle that ships (dist-mobile, built by the Tauri build above) must carry no written price:
+# amounts come from the store at run time. The same check the unit suite runs on the sources.
+echo "mobile-release: checking the built bundle for prices" >&2
+if ! npx vitest run src/mobile/__tests__/premiumPrices.test.js >&2; then
+    rm -f "$artifact"
+    echo "mobile-release: the built bundle carries a price; nothing written" >&2
+    exit 2
+fi
 echo "mobile-release: wrote $artifact"
 echo "$artifact"

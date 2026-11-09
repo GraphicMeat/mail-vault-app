@@ -23,7 +23,7 @@ Android decides when MailVault may check for new mail in the background. In prac
 YOUR PRIVACY
 Your mail, passwords and sign-in tokens stay on your phone (passwords and tokens in Android secure storage). MailVault talks only to your mail provider. The only data we receive is what Premium needs: a random install ID and the purchase record from Google Play. If you sign in with your email address, we also keep that address.
 
-MailVault Premium is an optional auto-renewing subscription, monthly or yearly. The price is shown in the app before you buy. Payment is charged to your Google Account at confirmation and renews automatically unless you cancel at least 24 hours before the end of the period. Manage or cancel it in your Google Account settings.
+MailVault Premium is an optional auto-renewing subscription, monthly or yearly. The price is shown in the app before you buy. Payment is charged to your Google Account at confirmation and renews automatically until you cancel. You can cancel any time in Google Play (Payments & subscriptions); Premium then stays on until the end of the period you paid for.
 
 Terms of Use: https://mailvaultapp.com/terms.html
 Privacy Policy: https://mailvaultapp.com/privacy.html

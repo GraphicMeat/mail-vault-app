@@ -50,7 +50,7 @@ describe('store listings', () => {
     for (const { store, locale, file } of all) {
       const text = read(store, locale, file);
       expect(text, `${store}/${locale}/${file}`).not.toMatch(/[—–]/);
-      expect(text, `${store}/${locale}/${file}`).not.toMatch(/[$€£¥]|\bUSD\b|\bEUR\b/);
+      expect(text, `${store}/${locale}/${file}`).not.toMatch(/[$€£¥₩]|\d\s*元|R\$|\bUSD\b|\bEUR\b|\bKRW\b|\bBRL\b|\bJPY\b|\bCNY\b/);
       expect(text, `${store}/${locale}/${file}`).not.toMatch(/mailvault:\/\/|\/pricing|checkout|open[- ]source/i);
     }
   });
@@ -63,8 +63,21 @@ describe('store listings', () => {
         expect(text, `${store}/${locale}`).toContain('15');
         expect(text, `${store}/${locale}`).toContain('https://mailvaultapp.com/terms.html');
         expect(text, `${store}/${locale}`).toContain('https://mailvaultapp.com/privacy.html');
-        expect(text, `${store}/${locale}`).toMatch(/24/);
+        if (store === 'apple') expect(text, `${store}/${locale}`).toMatch(/24/);
       }
+    }
+  });
+
+  // Apple stops the next charge only for a cancellation 24 hours before renewal; Play for one at
+  // any time before it. The Play listing's subscription terms must not claim Apple's rule.
+  it('states each store\'s own cancellation rule', () => {
+    for (const locale of LOCALES) {
+      // The paragraph right above the Terms link.
+      const lines = read('google', locale, 'full_description').split('\n');
+      let i = lines.findIndex((l) => l.includes('https://mailvaultapp.com/terms.html')) - 1;
+      while (i > 0 && !lines[i].trim()) i -= 1;
+      expect(lines[i], `google/${locale}`).toContain('Google Play');
+      expect(lines[i], `google/${locale}`).not.toMatch(/24/);
     }
   });
 });

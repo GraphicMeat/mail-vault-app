@@ -23,7 +23,7 @@ Android decide quando MailVault può controllare la posta in background. In prat
 LA TUA PRIVACY
 La tua posta, le password e i token di accesso restano sul telefono (password e token in l’archivio sicuro di Android). MailVault parla solo con il tuo provider di posta. Riceviamo solo ciò che serve a Premium: un identificativo casuale dell’installazione e la ricevuta d’acquisto di Google Play. Se accedi con il tuo indirizzo email, conserviamo anche quell’indirizzo.
 
-MailVault Premium è un abbonamento facoltativo a rinnovo automatico, mensile o annuale. Il prezzo è mostrato nell’app prima dell’acquisto. Il pagamento viene addebitato sul tuo Account Google alla conferma e si rinnova automaticamente, salvo disdetta almeno 24 ore prima della fine del periodo. Gestiscilo o annullalo nelle impostazioni del tuo Account Google.
+MailVault Premium è un abbonamento facoltativo a rinnovo automatico, mensile o annuale. Il prezzo è mostrato nell’app prima dell’acquisto. Il pagamento viene addebitato sul tuo Account Google alla conferma e si rinnova automaticamente finché non annulli. Puoi annullare in qualsiasi momento su Google Play (Pagamenti e abbonamenti); Premium resta attivo fino alla fine del periodo pagato.
 
 Termini di utilizzo: https://mailvaultapp.com/terms.html
 Informativa sulla privacy: https://mailvaultapp.com/privacy.html
