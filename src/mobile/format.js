@@ -18,6 +18,14 @@ export function formatFullDate(dateMs) {
   return new Intl.DateTimeFormat(getMobileLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(dateMs);
 }
 
+/** A send-later time: the time alone when it is on `now`'s day, else day and time. */
+export function formatSendTime(dateMs, now = Date.now()) {
+  if (dateMs == null || !Number.isFinite(dateMs)) return '';
+  const sameDay = new Date(dateMs).toDateString() === new Date(now).toDateString();
+  const opts = sameDay ? { timeStyle: 'short' } : { weekday: 'short', hour: 'numeric', minute: '2-digit' };
+  return new Intl.DateTimeFormat(getMobileLocale(), opts).format(dateMs);
+}
+
 const SIZE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'];
 
 /** An attachment size (1024-based), unit names from `Intl` in the mobile language. */

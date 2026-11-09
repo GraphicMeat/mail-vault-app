@@ -1203,3 +1203,24 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-premium__web { margin-top: 20px; }
 .mv-premium__field { display: flex; flex-direction: column; gap: 4px; font-size: 0.875rem; }
 .mv-premium__field input { min-height: 44px; padding: 0 12px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); color: inherit; font: inherit; font-size: 1rem; }
+
+/* Send later (SendLater.jsx) and the outbox's Scheduled section. */
+.mv-schedule__choice { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; padding-block: 8px; }
+.mv-schedule__label { display: flex; align-items: center; gap: 8px; }
+.mv-schedule__premium { padding: 2px 8px; border-radius: 999px; background: var(--mail-surface-hover); color: var(--mail-accent-text); font-size: 0.75rem; font-weight: 600; }
+.mv-schedule__about { margin: 0; font-size: 0.8125rem; color: var(--mail-text-muted); }
+.mv-schedule__custom { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--mail-border); }
+.mv-schedule__pick { font-size: 0.875rem; font-weight: 600; }
+.mv-schedule__input {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--mail-border);
+  border-radius: 10px;
+  background: var(--mail-bg);
+  color: var(--mail-text);
+  font: inherit;
+}
+.mv-schedule__confirm { align-self: flex-end; }
+.mv-schedule__confirm:disabled { opacity: 0.5; }
+.mv-outbox__heading { margin: 8px 8px 0; font-size: 0.8125rem; font-weight: 600; color: var(--mail-text-muted); }
+.mv-outbox__item--scheduled .mv-outbox__actions { flex-wrap: wrap; }

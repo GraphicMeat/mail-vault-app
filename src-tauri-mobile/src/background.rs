@@ -343,6 +343,12 @@ pub(crate) fn run_json(data: &Path, cache: &Path, budget: Duration, started: Ins
                     line["background"]["taps"] = notes.iter().map(|n| json!({ "accountId": n.account_id, "folder": n.folder, "uid": n.uid })).collect();
                 }
                 crate::log_line(&format!("MV_MOBILE {line}"));
+                // The run may have sent the last scheduled message: the OS's background refresh
+                // follows what the engine wants now (a worker process that never ran setup has
+                // no app handle; its next run returns at once and the app re-applies on open).
+                if let Some(app) = APP.get() {
+                    crate::apply_background(app, engine);
+                }
                 notes
             }
             Err(e) => {

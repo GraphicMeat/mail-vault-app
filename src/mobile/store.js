@@ -17,7 +17,7 @@
 import { create } from 'zustand';
 import { daemonCall, listen } from './transport.js';
 import { createPageCache, PAGE_SIZE } from './messagePages.js';
-import { errorCodeOf } from './errors.js';
+import { errorCodeOf, errorKey } from './errors.js';
 import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
 
 export const STORAGE_ACCOUNT = 'mv.mobile.activeAccount';
@@ -318,7 +318,7 @@ export function createMobileStore() {
       pending: 0, // the active account's actions still to reach the server
       undo: null, // the deferred move or delete's toast: { id, kind, count, target }
       notice: null, // a one-line toast: { id, key }
-      outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError }]
+      outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError, scheduledMs, notBeforeMs }]
       recentSearches: savedSearches(),
       drafts: [], // the active account's drafts: [{ id, accountId, to, subject, updatedMs }]
       premium: { premium: false, source: null, expiresMs: null }, // the engine's Premium answer (premium.js keeps it current)
@@ -429,6 +429,24 @@ export function createMobileStore() {
           return true;
         } catch {
           notice('mobile.outbox.actionFailed');
+          return false;
+        } finally {
+          loadOutbox();
+        }
+      },
+
+      /**
+       * Moves a scheduled message to `sendAtMs`. False when the engine refused: past 5 minutes
+       * without Premium, past a day, or no longer waiting (it went meanwhile).
+       */
+      async rescheduleOutbox(id, sendAtMs) {
+        try {
+          await daemonCall('mobile.outbox.reschedule', { id, sendAtMs });
+          set((s) => ({ outbox: s.outbox.map((r) => (r.id === id ? { ...r, scheduledMs: sendAtMs, notBeforeMs: sendAtMs } : r)) }));
+          return true;
+        } catch (err) {
+          const code = err?.code;
+          notice(code === 'PREMIUM_REQUIRED' || code === 'SCHEDULE_TOO_FAR' ? errorKey(code) : 'mobile.outbox.actionFailed');
           return false;
         } finally {
           loadOutbox();

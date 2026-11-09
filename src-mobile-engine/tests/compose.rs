@@ -801,3 +801,210 @@ fn a_retry_clears_the_wait() {
     assert!(asked.elapsed() < Duration::from_secs(30), "waited {:?}", asked.elapsed());
     assert_eq!(not_before(&f, &id), 0, "Retry is now");
 }
+
+// ── Scheduled send (plan 4 Task 8) ──────────────────────────────────────────
+
+const MIN: i64 = 60_000;
+
+impl Fixture {
+    /// Premium on until `expires_ms`, as a store answer the engine cached (read at the restart).
+    fn with_premium_until(self, expires_ms: i64) -> Fixture {
+        let state = json!({ "entitled": true, "source": "apple", "expiresMs": expires_ms, "checkedMs": now_ms() }).to_string();
+        self.db()
+            .execute("INSERT INTO settings (key, value) VALUES ('premium.state', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [&state])
+            .unwrap();
+        let f = self.restart();
+        assert_eq!(f.engine.rpc("mobile.premium.status", json!({})).unwrap()["premium"], true);
+        f
+    }
+
+    /// Premium ends: the cached expiry is behind Premium's clock.
+    fn lapse(&self, expires_ms: i64) {
+        self.engine.set_premium_clock_for_tests(Some(expires_ms + 1));
+        assert_eq!(self.engine.rpc("mobile.premium.status", json!({})).unwrap()["premium"], false);
+    }
+
+    fn schedule(&self, subject: &str, at_ms: i64) -> Result<Value, RpcError> {
+        self.send(json!({ "to": "rcpt@example.test", "subject": subject, "text": "Sent later", "sendAtMs": at_ms }))
+    }
+
+    fn scheduled(&self, subject: &str, at_ms: i64) -> String {
+        let r = self.schedule(subject, at_ms).unwrap();
+        assert_eq!(r["state"], "queued", "{r}");
+        r["id"].as_str().unwrap().to_string()
+    }
+
+    fn reschedule(&self, id: &str, at_ms: i64) -> Result<Value, RpcError> {
+        self.engine.rpc("mobile.outbox.reschedule", json!({ "id": id, "sendAtMs": at_ms }))
+    }
+
+    /// `(not_before_ms, scheduled_ms)` of outbox row `id`.
+    fn times(&self, id: &str) -> (i64, Option<i64>) {
+        self.db().query_row("SELECT not_before_ms, scheduled_ms FROM outbox WHERE id = ?1", [id], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
+    }
+
+    /// The listed row `id`.
+    fn listed(&self, id: &str) -> Value {
+        self.outbox().into_iter().find(|r| r["id"] == id).unwrap_or_else(|| panic!("{id} is not listed: {:?}", self.outbox()))
+    }
+}
+
+#[test]
+fn a_scheduled_row_sends_once_not_before_its_time() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let at = now_ms() + 2_500;
+    let from = f.events.len();
+    let id = f.scheduled("Soon", at);
+    assert_eq!(f.times(&id), (at, Some(at)), "both the wait and the picked time are the send time");
+    let row = f.listed(&id);
+    assert_eq!((row["state"].as_str(), row["scheduledMs"].as_i64(), row["notBeforeMs"].as_i64()), (Some("queued"), Some(at), Some(at)), "{row}");
+
+    std::thread::sleep(Duration::from_millis(1_200));
+    assert!(server.sent_messages().is_empty(), "sent before its time");
+    assert_eq!(f.row(&id).unwrap().0, "queued");
+    f.events.send_result(from, &id, "sent");
+    assert!(now_ms() >= at, "sent at its time, not before");
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(server.sent_messages().len(), 1, "sent once");
+    assert!(text(&server.sent_messages()[0]).contains("Subject: Soon"));
+}
+
+#[test]
+fn free_user_past_five_minutes_is_refused_premium_required() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let err = f.schedule("An hour", now_ms() + 60 * MIN).unwrap_err();
+    assert_eq!(err.code(), "PREMIUM_REQUIRED");
+    assert_eq!(serde_json::to_value(&err).unwrap()["code"], "PREMIUM_REQUIRED");
+    assert_eq!(code(f.schedule("Six minutes", now_ms() + 6 * MIN)), "PREMIUM_REQUIRED");
+    assert_eq!(f.outbox_rows(), 0, "a refused schedule writes nothing");
+    // Up to five minutes is free.
+    f.scheduled("Four minutes", now_ms() + 4 * MIN);
+    // With Premium an hour is allowed.
+    let f = f.with_premium_until(now_ms() + 30 * DAY);
+    f.scheduled("An hour", now_ms() + 60 * MIN);
+    assert_eq!(f.outbox_rows(), 2);
+    assert!(server.sent_messages().is_empty());
+}
+
+#[test]
+fn past_a_day_is_refused_too_far() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    assert_eq!(code(f.schedule("Free, two days", now_ms() + 2 * DAY)), "SCHEDULE_TOO_FAR");
+    let f = f.with_premium_until(now_ms() + 30 * DAY);
+    assert_eq!(code(f.schedule("A day and a minute", now_ms() + DAY + MIN)), "SCHEDULE_TOO_FAR");
+    assert_eq!(f.outbox_rows(), 0);
+    let id = f.scheduled("Just inside a day", now_ms() + DAY - MIN);
+    assert_eq!(f.listed(&id)["state"], "queued");
+}
+
+/// Review Focus 5: a message scheduled while Premium still goes at its time after Premium
+/// lapsed; only new schedules past five minutes are refused.
+#[test]
+fn lapse_keeps_a_queued_schedule() {
+    let server = MockImap::start(scenario());
+    let expires = now_ms() + 30 * DAY;
+    let f = setup(&server).with_premium_until(expires);
+    let at = now_ms() + 10 * MIN;
+    let id = f.scheduled("Premium time", at);
+
+    f.lapse(expires);
+    assert_eq!(code(f.schedule("After the lapse", now_ms() + 10 * MIN)), "PREMIUM_REQUIRED");
+    let row = f.listed(&id);
+    assert_eq!((row["state"].as_str(), row["scheduledMs"].as_i64()), (Some("queued"), Some(at)), "a lapse cancels nothing: {row}");
+    assert_eq!(f.outbox().len(), 1);
+
+    // Its time comes (moved up here, with Premium gone for good): it goes, once.
+    let Fixture { tmp, secrets, engine, events: _, account } = f;
+    drop(engine);
+    let due = now_ms() + 1_000;
+    {
+        let db = rusqlite::Connection::open(tmp.path().join("mobile.db")).unwrap();
+        db.execute("UPDATE outbox SET not_before_ms = ?2, scheduled_ms = ?2 WHERE id = ?1", rusqlite::params![&id, due]).unwrap();
+        db.execute("DELETE FROM settings WHERE key = 'premium.state'", []).unwrap();
+    }
+    let (engine, events) = open(tmp.path(), &secrets);
+    let f = Fixture { tmp, secrets, engine, events, account };
+    assert_eq!(f.engine.rpc("mobile.premium.status", json!({})).unwrap()["premium"], false);
+    f.events.send_result(0, &id, "sent");
+    assert!(now_ms() >= due);
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(server.sent_messages().len(), 1);
+}
+
+#[test]
+fn reschedule_rechecks_premium() {
+    let server = MockImap::start(scenario());
+    let expires = now_ms() + 30 * DAY;
+    let f = setup(&server).with_premium_until(expires);
+    let id = f.scheduled("Moved", now_ms() + 60 * MIN);
+    let later = now_ms() + 120 * MIN;
+    let r = f.reschedule(&id, later).unwrap();
+    assert_eq!((r["id"].as_str(), r["state"].as_str(), r["scheduledMs"].as_i64()), (Some(id.as_str()), Some("queued"), Some(later)), "{r}");
+    assert_eq!(f.times(&id), (later, Some(later)));
+
+    f.lapse(expires);
+    assert_eq!(code(f.reschedule(&id, now_ms() + 30 * MIN)), "PREMIUM_REQUIRED");
+    assert_eq!(code(f.reschedule(&id, now_ms() + DAY + MIN)), "SCHEDULE_TOO_FAR");
+    assert_eq!(f.times(&id), (later, Some(later)), "a refused reschedule keeps the time");
+    // Within five minutes is free.
+    let soon = now_ms() + 4 * MIN;
+    f.reschedule(&id, soon).unwrap();
+    assert_eq!(f.times(&id), (soon, Some(soon)));
+    assert_eq!(f.listed(&id)["scheduledMs"], soon);
+
+    // Only a queued row moves.
+    assert_eq!(code(f.reschedule("out_0000000000000000", soon)), "INVALID");
+    assert_eq!(f.db().execute("UPDATE outbox SET state = 'failed' WHERE id = ?1", [&id]).unwrap(), 1);
+    assert_eq!(code(f.reschedule(&id, soon)), "INVALID");
+    assert!(server.sent_messages().is_empty());
+}
+
+#[test]
+fn send_now_and_cancel() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let now_one = f.scheduled("Send it now", now_ms() + 4 * MIN);
+    let never = f.scheduled("Never mind", now_ms() + 4 * MIN);
+    assert_eq!(f.outbox().len(), 2);
+
+    // Send now is the outbox's Retry: at once, and no longer scheduled.
+    let from = f.events.len();
+    let asked = Instant::now();
+    f.engine.rpc("mobile.outbox.retry", json!({ "id": now_one })).unwrap();
+    f.events.send_result(from, &now_one, "sent");
+    assert!(asked.elapsed() < Duration::from_secs(30));
+    assert_eq!(f.times(&now_one), (0, None), "Send now clears the wait and the picked time");
+
+    // Cancel is Discard: the row goes and nothing is sent.
+    assert_eq!(f.engine.rpc("mobile.outbox.discard", json!({ "id": never })).unwrap(), json!({ "discarded": true }));
+    assert!(f.row(&never).is_none());
+    assert!(f.outbox().is_empty(), "{:?}", f.outbox());
+    std::thread::sleep(Duration::from_millis(500));
+    let sent = server.sent_messages();
+    assert_eq!(sent.len(), 1);
+    assert!(text(&sent[0]).contains("Subject: Send it now"));
+}
+
+/// A failed attempt's backoff moves the wait only: the list still shows the time the user picked.
+#[test]
+fn a_retry_wait_keeps_the_scheduled_time() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let dead = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    assert_eq!(f.db().execute("UPDATE accounts SET smtp_port = ?2 WHERE id = ?1", rusqlite::params![&f.account, dead]).unwrap(), 1);
+    let at = now_ms() + 1_500;
+    let from = f.events.len();
+    let id = f.scheduled("Bounced back", at);
+    f.events.send_result(from, &id, "queued");
+    let (not_before, scheduled) = f.times(&id);
+    assert_eq!(scheduled, Some(at), "the picked time stays");
+    assert!(not_before > at, "the backoff moved the wait: {not_before} vs {at}");
+    let row = f.listed(&id);
+    assert_eq!(row["scheduledMs"], at, "{row}");
+    assert_eq!(row["state"], "queued");
+    assert!(row["lastError"].is_string(), "{row}");
+    assert!(server.sent_messages().is_empty());
+}

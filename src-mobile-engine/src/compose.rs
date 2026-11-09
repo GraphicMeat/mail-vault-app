@@ -13,6 +13,13 @@
 //! transaction adds the outbox row (with the Message-ID every attempt sends under) and removes the
 //! draft it came from; the outbox worker does the rest (`outbox.rs`).
 //!
+//! Send later (plan 4 Task 8): `sendAtMs` holds the row back until then. The delay is checked by
+//! core's `send::schedule::schedule_allowed` (free up to 5 minutes, Premium up to a day, never
+//! further) with no network, and the row is written `queued` with both `not_before_ms` (the wait
+//! the worker honours) and `scheduled_ms` (the time the user picked, which a retry wait never
+//! moves) at that time. Nothing else schedules: the worker sends a row once its `not_before_ms`
+//! has come, Premium or not (a lapse after scheduling cancels nothing).
+//!
 //! Drafts are local only (no IMAP Drafts folder). A draft keeps its picked files until it is
 //! deleted or sent; a send moves them to the outbox row, which deletes them once sent.
 
@@ -25,6 +32,7 @@ use mailvault_core::filename_safety::safe_handle_name;
 use mailvault_core::mime_types::mime_of_name;
 use mailvault_core::compose_prep::{self, quoted_text, Account, Context, QuoteLabels};
 use mailvault_core::send::limits;
+use mailvault_core::send::schedule::schedule_allowed;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -52,6 +60,16 @@ pub(crate) fn attachment_limit(shared: &Shared, account_id: &str, acct: &Account
 
 /// How long a reply or forward waits for a body that is not cached.
 const BODY_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// A send held back until `at_ms` (unix ms; `now_ms` is the engine's clock): allowed as core's
+/// [`schedule_allowed`] says with this phone's Premium answer, else `RpcError::Schedule`
+/// (`PREMIUM_REQUIRED`, `SCHEDULE_TOO_FAR`). A time already past is no delay. Answers the time to
+/// store as the row's schedule: `None` for one not in the future (sent at once, not "scheduled").
+pub(crate) fn schedule_check(shared: &Shared, at_ms: i64, now_ms: i64) -> Result<Option<i64>, RpcError> {
+    let delay = std::time::Duration::from_millis(u64::try_from(at_ms.saturating_sub(now_ms)).unwrap_or(0));
+    schedule_allowed(delay, crate::premium::active(shared)).map_err(RpcError::Schedule)?;
+    Ok((at_ms > now_ms).then_some(at_ms))
+}
 
 /// A string field the page may send as `null`.
 fn nullable<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
@@ -198,13 +216,19 @@ struct SendParams {
     account_id: String,
     #[serde(default)]
     draft_id: Option<String>,
+    /// Send later: not before this time (unix ms). Never part of the stored fields.
+    #[serde(default)]
+    send_at_ms: Option<i64>,
     #[serde(flatten)]
     fields: Fields,
 }
 
 /// `mobile.compose.send {accountId, draftId?, to, cc, bcc, subject, text, inReplyTo?, references?,
-/// attachments: [{handle}]}` -> `{id, state: "queued"}`. `INVALID` (no To, an address that does
-/// not read, an unknown account), `ATTACHMENT_MISSING`, `TOO_LARGE`, all before any write.
+/// attachments: [{handle}], sendAtMs?}` -> `{id, state: "queued", scheduledMs}` (`scheduledMs`:
+/// the send time when held back, else null). `INVALID` (no To, an address that does not read, an
+/// unknown account), `ATTACHMENT_MISSING`, `TOO_LARGE`, `PREMIUM_REQUIRED` (`sendAtMs` more than
+/// 5 minutes ahead without Premium), `SCHEDULE_TOO_FAR` (more than a day ahead), all before any
+/// write.
 pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: SendParams = parse(params)?;
     let shared = engine.shared();
@@ -224,10 +248,14 @@ pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         return Err(RpcError::TooLarge { message: format!("attachments are {total} bytes, the limit is {limit}"), limit_bytes: limit });
     }
     fields.attachments = attachments;
+    let now = now_ms();
+    let scheduled = match p.send_at_ms {
+        Some(at) => schedule_check(shared, at, now)?,
+        None => None,
+    };
     let id = format!("out_{}", random_hex());
     let message_id = new_message_id(&acct.email);
     let json = serde_json::to_string(&fields).map_err(internal)?;
-    let now = now_ms();
     let account_id = p.account_id;
     let old_draft: Option<String> = shared
         .write(|c| {
@@ -236,9 +264,10 @@ pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
                 None => None,
             };
             c.execute(
-                "INSERT INTO outbox (id, account_id, message_id, draft_json, state, attempts, last_error, created_ms, updated_ms)
-                 VALUES (?1, ?2, ?3, ?4, 'queued', 0, NULL, ?5, ?5)",
-                (&id, &account_id, &message_id, &json, now),
+                "INSERT INTO outbox (id, account_id, message_id, draft_json, state, attempts, last_error, created_ms, updated_ms,
+                                     not_before_ms, scheduled_ms)
+                 VALUES (?1, ?2, ?3, ?4, 'queued', 0, NULL, ?5, ?5, ?6, ?7)",
+                (&id, &account_id, &message_id, &json, now, scheduled.unwrap_or(0), scheduled),
             )?;
             if let Some(d) = &p.draft_id {
                 c.execute("DELETE FROM drafts WHERE id = ?1", [d])?;
@@ -251,7 +280,7 @@ pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         outbox::release_dirs(shared, engine.cache_dir(), &Fields::read(&old).dirs());
     }
     engine.outbox().wake(shared, Some(&account_id));
-    Ok(json!({ "id": id, "state": "queued" }))
+    Ok(json!({ "id": id, "state": "queued", "scheduledMs": scheduled }))
 }
 
 // ── mobile.compose.prepare ──────────────────────────────────────────────────

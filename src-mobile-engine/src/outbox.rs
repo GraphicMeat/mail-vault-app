@@ -22,6 +22,15 @@
 //! `queued` with its wait in `not_before_ms` (5 s, doubling, at most 300 s, like the action
 //! replay), and the account backs off as long. A row is only sent once its `not_before_ms` has
 //! come, so the wait survives a restart; the user's Retry clears it.
+//!
+//! Send later (plan 4 Task 8): a scheduled row is `queued` with `not_before_ms` at its send time
+//! and `scheduled_ms` holding the time the user picked. A failed attempt's backoff moves
+//! `not_before_ms` only, so the list keeps showing the picked time. The list's "Scheduled"
+//! section is `state = 'queued' AND scheduled_ms > now`. `reschedule` moves both (the delay checked
+//! again, Premium included), Retry is "send now" (it clears both), Discard is "cancel". The worker
+//! never looks at Premium: a lapse after scheduling cancels nothing. A background run sends the
+//! rows that are due ([`due_accounts`], [`Outbox::wake_for_run`], [`Outbox::wait_rounds`]), and
+//! while a scheduled row waits the engine asks the OS for background runs ([`has_scheduled`]).
 //! `lastError` and an event's `reason` are codes, never core's text.
 //!
 //! Picked files: `<cache>/out/<dir>/` is deleted once no draft and no unsent outbox row names it
@@ -214,13 +223,17 @@ fn logged<T>(shared: &Shared, what: &str, r: Result<T, EngineError>, default: T)
 
 // ── RPCs ────────────────────────────────────────────────────────────────────
 
-/// `mobile.outbox.list` -> `[{id, accountId, subject, state, lastError}]`, oldest first: every
-/// row not sent yet (`queued`, `sending`, `failed`, `uncertain`).
+/// `mobile.outbox.list` -> `[{id, accountId, subject, state, lastError, scheduledMs, notBeforeMs}]`,
+/// oldest first: every row not sent yet (`queued`, `sending`, `failed`, `uncertain`).
+/// `scheduledMs` is the send time the user picked (null when not scheduled), `notBeforeMs` the
+/// earliest time the worker takes the row (0: at once). A row is scheduled while `queued` with
+/// `scheduledMs` still to come.
 pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
     let rows = engine
         .read(|c| {
             let mut st = c.prepare_cached(
-                "SELECT id, account_id, draft_json, state, last_error FROM outbox WHERE state != 'sent' ORDER BY created_ms, id",
+                "SELECT id, account_id, draft_json, state, last_error, scheduled_ms, not_before_ms
+                 FROM outbox WHERE state != 'sent' ORDER BY created_ms, id",
             )?;
             let rows = st
                 .query_map([], |r| {
@@ -230,6 +243,8 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
                         "subject": Fields::read(&r.get::<_, String>(2)?).subject,
                         "state": r.get::<_, String>(3)?,
                         "lastError": r.get::<_, Option<String>>(4)?,
+                        "scheduledMs": r.get::<_, Option<i64>>(5)?,
+                        "notBeforeMs": r.get::<_, i64>(6)?,
                     }))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -246,7 +261,8 @@ struct IdParams {
 }
 
 /// `mobile.outbox.retry {id}` -> `{id, state: "queued"}`: a `failed` or `uncertain` row (or a
-/// `queued` one, at once) goes back to the worker. `INVALID` for an unknown row, one being sent
+/// `queued` one, at once: a scheduled row's "send now") goes back to the worker, no longer
+/// scheduled. `INVALID` for an unknown row, one being sent
 /// or one already sent.
 pub(crate) fn retry(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: IdParams = parse(params)?;
@@ -261,9 +277,9 @@ pub(crate) fn retry(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             if !OutboxState::parse(&state).is_some_and(OutboxState::user_may_retry) {
                 return Ok(Err("the message is being sent or was sent"));
             }
-            // The user's Retry is "now": whatever wait the row carried goes.
+            // The user's Retry is "now": whatever wait or schedule the row carried goes.
             c.execute(
-                "UPDATE outbox SET state = ?3, last_error = NULL, updated_ms = ?2, not_before_ms = 0 WHERE id = ?1",
+                "UPDATE outbox SET state = ?3, last_error = NULL, updated_ms = ?2, not_before_ms = 0, scheduled_ms = NULL WHERE id = ?1",
                 (&p.id, compose::now_ms(), OutboxState::Queued.as_str()),
             )?;
             Ok(Ok(account))
@@ -272,6 +288,54 @@ pub(crate) fn retry(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let account = out.map_err(|m| RpcError::Invalid(m.into()))?;
     engine.outbox().wake(shared, Some(&account));
     Ok(json!({ "id": p.id, "state": "queued" }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RescheduleParams {
+    id: String,
+    send_at_ms: i64,
+}
+
+/// `mobile.outbox.reschedule {id, sendAtMs}` -> `{id, state: "queued", scheduledMs}`: a `queued`
+/// row's send time moves to `sendAtMs` (both its wait and its picked time; a time already past
+/// sends it at once, no longer scheduled). The delay is checked again like a send's, with today's
+/// Premium answer: `PREMIUM_REQUIRED`, `SCHEDULE_TOO_FAR`. `INVALID` for an unknown row or one
+/// not queued (being sent, failed, uncertain).
+pub(crate) fn reschedule(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: RescheduleParams = parse(params)?;
+    let shared = engine.shared();
+    let now = compose::now_ms();
+    let scheduled = compose::schedule_check(shared, p.send_at_ms, now)?;
+    let account = shared
+        .write(|c| {
+            let queued = OutboxState::Queued.as_str();
+            let account: Option<String> =
+                c.query_row("SELECT account_id FROM outbox WHERE id = ?1 AND state = ?2", (&p.id, queued), |r| r.get(0)).optional()?;
+            if account.is_some() {
+                c.execute(
+                    "UPDATE outbox SET not_before_ms = ?3, scheduled_ms = ?4, updated_ms = ?5 WHERE id = ?1 AND state = ?2",
+                    (&p.id, queued, scheduled.unwrap_or(0), scheduled, now),
+                )?;
+            }
+            Ok(account)
+        })
+        .map_err(internal)?
+        .ok_or_else(|| RpcError::Invalid("the message is not waiting to be sent".into()))?;
+    // The worker sleeps until the earliest wait it read: a time moved earlier needs a look now.
+    engine.outbox().wake(shared, Some(&account));
+    Ok(json!({ "id": p.id, "state": "queued", "scheduledMs": scheduled }))
+}
+
+/// A scheduled message waits to be sent (`queued` with a picked time, past or to come): the
+/// engine wants background runs until it is gone (plan Ruling 13).
+pub(crate) fn has_scheduled(shared: &Shared) -> bool {
+    shared
+        .read(|c| c.query_row("SELECT EXISTS(SELECT 1 FROM outbox WHERE state = ?1 AND scheduled_ms IS NOT NULL)", [OutboxState::Queued.as_str()], |r| r.get(0)))
+        .unwrap_or_else(|e| {
+            shared.log(&format!("[outbox] read: {e}"));
+            false
+        })
 }
 
 /// `mobile.outbox.discard {id}` -> `{discarded}`: the row goes, with the files only it held.
@@ -316,6 +380,8 @@ struct State {
     retry: HashMap<String, Retry>,
     base: Duration,
     cap: Duration,
+    /// Rounds the worker has finished (each read the due rows, then sent what it could).
+    rounds: u64,
 }
 
 struct Queue {
@@ -341,6 +407,7 @@ impl Outbox {
                     retry: HashMap::new(),
                     base: RETRY.base,
                     cap: RETRY.cap,
+                    rounds: 0,
                 }),
                 cv: Condvar::new(),
                 cache_dir: cache_dir.to_path_buf(),
@@ -351,9 +418,15 @@ impl Outbox {
     /// Starts the worker if needed and makes it look at the outbox now; with `account`, that
     /// account's backoff is forgiven (the user just sent or retried).
     pub(crate) fn wake(&self, shared: &Arc<Shared>, account: Option<&str>) {
+        self.wake_all(shared, account.as_slice());
+    }
+
+    /// [`Outbox::wake`] for each of `accounts`, in one go. Answers the rounds the worker had
+    /// finished, read under the same lock that forgave their backoff.
+    fn wake_all(&self, shared: &Arc<Shared>, accounts: &[&str]) -> u64 {
         let mut st = lock(&self.queue.state);
         if st.stop {
-            return;
+            return st.rounds;
         }
         if !st.started {
             let (queue, sh) = (Arc::clone(&self.queue), Arc::clone(shared));
@@ -361,15 +434,41 @@ impl Outbox {
                 Ok(_) => st.started = true,
                 Err(e) => {
                     shared.log(&format!("[outbox] worker: {e}"));
-                    return;
+                    return st.rounds;
                 }
             }
         }
-        if let Some(a) = account {
-            st.retry.remove(a);
+        for a in accounts {
+            st.retry.remove(*a);
         }
         st.kicked = true;
         self.queue.cv.notify_all();
+        st.rounds
+    }
+
+    /// A background run: the worker takes `accounts`' due rows now (their backoff forgiven).
+    /// Answers the mark to hand to [`Outbox::wait_rounds`].
+    pub(crate) fn wake_for_run(&self, shared: &Arc<Shared>, accounts: &[String]) -> u64 {
+        let refs: Vec<&str> = accounts.iter().map(String::as_str).collect();
+        self.wake_all(shared, &refs)
+    }
+
+    /// Waits until the worker has tried every row that was due when [`Outbox::wake_for_run`]
+    /// answered `mark`, or `until`. Two rounds: the one running at the wake may have read the
+    /// rows (and the backoff) before it, the next one started after it. False on `until` (or a
+    /// stop); the worker goes on either way.
+    pub(crate) fn wait_rounds(&self, mark: u64, until: Instant) -> bool {
+        let mut st = lock(&self.queue.state);
+        loop {
+            if st.rounds >= mark.saturating_add(2) {
+                return true;
+            }
+            let now = Instant::now();
+            if st.stop || now >= until {
+                return false;
+            }
+            st = self.queue.cv.wait_timeout(st, until - now).unwrap_or_else(|p| p.into_inner()).0;
+        }
     }
 
     pub(crate) fn stop(&self) {
@@ -394,6 +493,11 @@ fn sendable_sql(select: &str) -> String {
          AND {}",
         crate::hold::NOT_HELD_SQL.replace("{account}", "o.account_id")
     )
+}
+
+/// Accounts with rows the worker would send now (`now_ms`): what a background run waits for.
+pub(crate) fn due_accounts(shared: &Shared, now_ms: i64) -> Vec<String> {
+    queued_accounts(shared, now_ms)
 }
 
 /// Accounts with queued rows whose `not_before_ms` has come (`now_ms`), oldest row first.
@@ -467,6 +571,9 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
                 st.retry.insert(account.clone(), Retry { at: Instant::now() + delay, failures });
             }
         }
+        // A background run waits on this (`wait_rounds`).
+        lock(&queue.state).rounds += 1;
+        queue.cv.notify_all();
         if !ready.is_empty() {
             continue;
         }

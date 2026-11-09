@@ -29,22 +29,46 @@ use tauri_plugin_mv_native::{pick, MvNative, NativeError, PickKind};
 const ENGINE_WAIT: Duration = Duration::from_secs(60);
 
 /// Same name and argument shape `daemonClient.js` sends on desktop. `daemon_mode` is the desktop
-/// spawn policy and means nothing here. A `mobile.settings.set` that changed `notifications` also
-/// turns the OS's background refresh on or off.
+/// spawn policy and means nothing here. A call that can change whether the engine wants
+/// background runs ([`changes_background`]) re-applies the OS's background refresh afterwards.
 #[tauri::command]
 async fn daemon_rpc(app: tauri::AppHandle, method: String, params: Value, daemon_mode: Option<Value>) -> Result<Value, RpcError> {
     let _ = daemon_mode;
-    let schedule = method == "mobile.settings.set" && params.get("notifications").is_some();
+    let schedule = changes_background(&method, &params);
     tauri::async_runtime::spawn_blocking(move || {
         let engine = background::wait_engine(ENGINE_WAIT).map_err(RpcError::Internal)?;
         let reply = engine.rpc(&method, params)?;
         if schedule {
-            schedule_background(&app, reply.get("notifications").and_then(Value::as_str) == Some("on"));
+            apply_background(&app, engine);
         }
         Ok(reply)
     })
     .await
     .map_err(|e| RpcError::Internal(e.to_string()))?
+}
+
+/// The RPCs after which `Engine::wants_background` may answer differently (plan Ruling 13):
+/// notifications turned on or off, a send held back for later, a scheduled message moved, sent
+/// now or cancelled, an account (and its outbox) removed. Plan 4 Task 9 adds its follow-up calls.
+fn changes_background(method: &str, params: &Value) -> bool {
+    match method {
+        "mobile.settings.set" => params.get("notifications").is_some(),
+        "mobile.compose.send" => params.get("sendAtMs").is_some_and(|v| !v.is_null()),
+        "mobile.outbox.reschedule" | "mobile.outbox.retry" | "mobile.outbox.discard" | "mobile.accounts.remove" => true,
+        _ => false,
+    }
+}
+
+/// Turns the OS's background refresh on or off as `Engine::wants_background` answers now. On
+/// its own thread, so no reply waits for the native call; one at a time, each reading the answer
+/// when its turn comes, so the last change wins.
+pub(crate) fn apply_background(app: &tauri::AppHandle, engine: &'static Engine) {
+    static APPLYING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let _turn = APPLYING.lock().unwrap_or_else(|e| e.into_inner());
+        schedule_background(&app, engine.wants_background());
+    });
 }
 
 /// Turns the OS's periodic background run on (iOS `BGAppRefreshTask` requests, Android unique
@@ -508,11 +532,10 @@ pub fn run() {
             if let Err(e) = app.handle().plugin(tauri_plugin_mv_native::init()) {
                 log_line(&format!("MV_MOBILE {}", json!({ "nativePluginError": e.to_string() })));
             } else if let Ok(engine) = engine {
-                // The OS's background refresh follows the setting from the start (a fresh install
-                // or an update has nothing scheduled). Off the main thread: the native call waits
-                // for it.
-                let (handle, on) = (app.handle().clone(), engine.notifications_on());
-                std::thread::spawn(move || schedule_background(&handle, on));
+                // The OS's background refresh follows what the engine wants from the start (a fresh
+                // install or an update has nothing scheduled). Off the main thread: the native
+                // call waits for it.
+                apply_background(app.handle(), engine);
             }
             Ok(())
         })
@@ -532,14 +555,14 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while running the MailVault mobile shell")
-        .run(move |_app, event| on_run_event(&event));
+        .run(move |app, event| on_run_event(app, &event));
 }
 
 /// The OS's suspend and resume (Android `onPause`/`onResume`, iOS resign/enter foreground) reach
 /// the engine's live listener directly, as `mobile.app.state`: a backstop for a WebView that never
 /// reports `visibilitychange: hidden`. A resume names no account: the engine resumes the one it
 /// last listened on, and replaces its connection, which may have died while the app was away.
-fn on_run_event(event: &tauri::RunEvent) {
+fn on_run_event(app: &tauri::AppHandle, event: &tauri::RunEvent) {
     #[cfg(mobile)]
     {
         /// Numbers the lifecycle calls here, on the event loop, in the OS's order: each goes out
@@ -554,10 +577,46 @@ fn on_run_event(event: &tauri::RunEvent) {
         params["seq"] = json!(SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1);
         // Not before the engine is open, and never on the UI thread.
         let Some(engine) = background::opened() else { return };
+        // Leaving the front: the outbox may have sent the last scheduled message meanwhile, so
+        // the OS's background refresh follows what the engine wants now.
+        if matches!(event, tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::Suspended, .. }) {
+            apply_background(app, engine);
+        }
         std::thread::spawn(move || {
             let _ = engine.rpc("mobile.app.state", params);
         });
     }
     #[cfg(not(mobile))]
-    let _ = event;
+    let _ = (app, event);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changes_background;
+    use serde_json::json;
+
+    /// Plan Ruling 13: the calls that can change `wants_background`, and no others (a native call
+    /// on every list read would be waste).
+    #[test]
+    fn background_is_re_applied_after_the_calls_that_change_it() {
+        for (method, params) in [
+            ("mobile.settings.set", json!({ "notifications": "off" })),
+            ("mobile.compose.send", json!({ "accountId": "a", "sendAtMs": 1 })),
+            ("mobile.outbox.reschedule", json!({ "id": "o", "sendAtMs": 1 })),
+            ("mobile.outbox.retry", json!({ "id": "o" })),
+            ("mobile.outbox.discard", json!({ "id": "o" })),
+            ("mobile.accounts.remove", json!({ "accountId": "a" })),
+        ] {
+            assert!(changes_background(method, &params), "{method} {params}");
+        }
+        for (method, params) in [
+            ("mobile.settings.set", json!({ "notificationPreview": false })),
+            ("mobile.compose.send", json!({ "accountId": "a" })),
+            ("mobile.compose.send", json!({ "accountId": "a", "sendAtMs": null })),
+            ("mobile.outbox.list", json!({})),
+            ("mobile.messages.page", json!({})),
+        ] {
+            assert!(!changes_background(method, &params), "{method} {params}");
+        }
+    }
 }

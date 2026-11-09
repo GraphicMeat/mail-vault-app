@@ -35,6 +35,9 @@ export const ERROR_KEYS = Object.freeze({
   BUSY: 'mobile.error.BUSY',
   INSTALL_LIMIT: 'mobile.error.INSTALL_LIMIT',
   UNVERIFIED: 'mobile.error.UNVERIFIED',
+  // Send later (`mobile.outbox.reschedule`, `mobile.compose.send` with `sendAtMs`).
+  PREMIUM_REQUIRED: 'mobile.error.PREMIUM_REQUIRED',
+  SCHEDULE_TOO_FAR: 'mobile.error.SCHEDULE_TOO_FAR',
 });
 
 /** A code the UI knows, or `INTERNAL` for anything else (a transport failure, a new code). */

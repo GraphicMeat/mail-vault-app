@@ -12,7 +12,7 @@ const DRAFT_ID = 'drf_0123456789abcdef';
 
 const engine = vi.hoisted(() => ({
   calls: [], handlers: new Map(), prepare: null, sendError: null, sendErrorData: undefined, outbox: [], drafts: 0,
-  draftList: [], draft: null, saveError: false, sendGate: null,
+  draftList: [], draft: null, saveError: false, sendGate: null, rescheduleError: null,
 }));
 
 vi.mock('../transport.js', () => ({
@@ -59,6 +59,9 @@ vi.mock('../transport.js', () => ({
         return engine.outbox;
       case 'mobile.outbox.retry':
         return { id: params.id, state: 'queued' };
+      case 'mobile.outbox.reschedule':
+        if (engine.rescheduleError) throw Object.assign(new Error(engine.rescheduleError), { code: engine.rescheduleError });
+        return { id: params.id, state: 'queued', scheduledMs: params.sendAtMs };
       case 'mobile.outbox.discard':
         engine.outbox = engine.outbox.filter((r) => r.id !== params.id);
         return { discarded: true };
@@ -80,6 +83,7 @@ vi.mock('../transport.js', () => ({
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 
 const { default: Compose } = await import('../Compose.jsx');
+const { useMobileStore } = await import('../store.js');
 
 const emit = (name, payload) => { for (const h of engine.handlers.get(name) || []) h(payload); };
 const callsOf = (method) => engine.calls.filter(([m]) => m === method).map(([, p]) => p);
@@ -118,6 +122,8 @@ beforeEach(() => {
   engine.draft = null;
   engine.saveError = false;
   engine.sendGate = null;
+  engine.rescheduleError = null;
+  useMobileStore.setState({ paywall: null, premium: { premium: false, source: null, expiresMs: null } });
   window.localStorage.clear();
 });
 afterEach(() => {
@@ -582,5 +588,166 @@ describe('outbox sheet and drafts list in the app', () => {
     fireEvent.click(screen.getByText('Plans'));
     await waitFor(() => expect(screen.getByLabelText(t('mobile.compose.body')).value).toBe('Body'));
     expect(callsOf('mobile.drafts.get')).toEqual([{ id: 'drf_00000000000000aa' }]);
+  });
+});
+
+describe('Send later', () => {
+  const MIN = 60_000;
+  const ABOUT = /Sends at about .+ when MailVault can run/;
+  const laterButton = () => screen.getByRole('button', { name: t('mobile.compose.sendLater') });
+  const sheet = () => screen.getByRole('dialog', { name: t('mobile.compose.sendLater') });
+  const choice = (id) => sheet().querySelector(`[data-mv-schedule="${id}"]`);
+  const premiumOn = () => useMobileStore.setState({ premium: { premium: true, source: 'apple', expiresMs: Date.now() + 30 * 24 * 60 * MIN } });
+
+  async function ready() {
+    const out = renderCompose();
+    await flush();
+    typeInto(toInput(), 'bob@example.test,');
+    return out;
+  }
+
+  it('sends at the picked time, saying when it goes', async () => {
+    const { onClose } = await ready();
+    expect(laterButton().disabled).toBe(false);
+    fireEvent.click(laterButton());
+    expect(sheet().textContent).toMatch(ABOUT);
+    expect(choice('in5').textContent).not.toContain(t('common.premium'));
+    expect(choice('in1h').textContent).toContain(t('common.premium'));
+    const before = Date.now();
+    fireEvent.click(choice('in5'));
+    await flush();
+    const [sent] = callsOf('mobile.compose.send');
+    expect(sent.to).toBe('bob@example.test');
+    expect(sent.sendAtMs).toBeGreaterThanOrEqual(before + 5 * MIN - 1000);
+    expect(sent.sendAtMs).toBeLessThanOrEqual(Date.now() + 5 * MIN);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('a free user past five minutes gets the paywall on scheduled send, not a send', async () => {
+    const { onClose } = await ready();
+    fireEvent.click(laterButton());
+    fireEvent.click(choice('in1h'));
+    await flush();
+    expect(callsOf('mobile.compose.send')).toEqual([]);
+    expect(useMobileStore.getState().paywall).toMatchObject({ feature: 'scheduledSend' });
+    expect(screen.queryByRole('dialog', { name: t('mobile.compose.sendLater') })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('with Premium an hour goes to the engine, and its refusal shows in place', async () => {
+    premiumOn();
+    engine.sendError = 'PREMIUM_REQUIRED';
+    const { onClose } = await ready();
+    fireEvent.click(laterButton());
+    expect(choice('in1h').textContent).not.toContain(t('common.premium'));
+    const before = Date.now();
+    fireEvent.click(choice('in1h'));
+    await flush();
+    const [sent] = callsOf('mobile.compose.send');
+    expect(sent.sendAtMs).toBeGreaterThanOrEqual(before + 60 * MIN - 1000);
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.compose.error.PREMIUM_REQUIRED'));
+    expect(onClose).not.toHaveBeenCalled();
+    engine.sendError = 'SCHEDULE_TOO_FAR';
+    fireEvent.click(laterButton());
+    fireEvent.click(choice('morning'));
+    await flush();
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.compose.error.SCHEDULE_TOO_FAR'));
+  });
+
+  it('a picked time in the past or past a day is refused before any call', async () => {
+    premiumOn();
+    await ready();
+    fireEvent.click(laterButton());
+    const input = screen.getByLabelText(t('mobile.schedule.pick'));
+    const local = (ms) => {
+      const d = new Date(ms);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+    const confirm = () => screen.getByRole('button', { name: t('mobile.schedule.confirm') });
+    typeInto(input, local(Date.now() - 2 * 60 * MIN));
+    fireEvent.click(confirm());
+    expect(sheet().textContent).toContain(t('mobile.schedule.past'));
+    typeInto(input, local(Date.now() + 26 * 60 * MIN));
+    fireEvent.click(confirm());
+    expect(sheet().textContent).toContain(t('mobile.schedule.tooFar'));
+    expect(callsOf('mobile.compose.send')).toEqual([]);
+    const at = local(Date.now() + 3 * 60 * MIN);
+    typeInto(input, at);
+    expect(sheet().textContent).toMatch(ABOUT);
+    fireEvent.click(confirm());
+    await flush();
+    expect(callsOf('mobile.compose.send')[0].sendAtMs).toBe(new Date(at).getTime());
+  });
+});
+
+describe('scheduled in the outbox', () => {
+  const HOUR = 3_600_000;
+  let offsetHeight;
+  beforeEach(() => {
+    offsetHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800);
+  });
+  afterEach(() => {
+    offsetHeight.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  async function mount() {
+    window.history.replaceState({}, '', '/mobile.html');
+    vi.resetModules();
+    const { default: App } = await import('../App.jsx');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('a1@example.test')).toBeTruthy());
+  }
+  const scheduledRow = (at) => ({ id: 'out_1', accountId: 'a1', subject: 'Board pack', state: 'queued', lastError: null, scheduledMs: at, notBeforeMs: at });
+  const open = async () => {
+    await act(async () => { emit('mobile.send.result', { id: 'out_1', accountId: 'a1', outcome: 'queued' }); });
+    await waitFor(() => expect(screen.getByText(t('mobile.outbox.scheduledCount', { count: 1 }))).toBeTruthy());
+    fireEvent.click(screen.getByText(t('mobile.outbox.scheduledCount', { count: 1 })));
+    return screen.getByRole('dialog', { name: t('mobile.outbox.title') });
+  };
+
+  it('lists a scheduled send with its time, Change time, Send now and Cancel', async () => {
+    await mount();
+    engine.outbox = [scheduledRow(Date.now() + HOUR)];
+    const sheet = await open();
+    expect(sheet.textContent).toContain(t('mobile.outbox.scheduled'));
+    expect(sheet.textContent).toMatch(/Sends at about .+ when MailVault can run/);
+    expect(sheet.textContent).not.toContain(t('mobile.outbox.state.queued'));
+
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.outbox.changeTimeOf', { subject: 'Board pack' }) }));
+    const picker = screen.getByRole('dialog', { name: t('mobile.outbox.changeTime') });
+    const before = Date.now();
+    fireEvent.click(picker.querySelector('[data-mv-schedule="in5"]'));
+    await flush();
+    const [moved] = callsOf('mobile.outbox.reschedule');
+    expect(moved.id).toBe('out_1');
+    expect(moved.sendAtMs).toBeGreaterThanOrEqual(before + 5 * 60_000 - 1000);
+    expect(screen.getByRole('dialog', { name: t('mobile.outbox.title') })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.outbox.sendNowOf', { subject: 'Board pack' }) }));
+    await flush();
+    expect(callsOf('mobile.outbox.retry')).toEqual([{ id: 'out_1' }]);
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.outbox.cancelOf', { subject: 'Board pack' }) }));
+    await flush();
+    expect(callsOf('mobile.outbox.discard')).toEqual([{ id: 'out_1' }]);
+  });
+
+  it('a refused change of time says why', async () => {
+    await mount();
+    engine.outbox = [scheduledRow(Date.now() + HOUR)];
+    engine.rescheduleError = 'PREMIUM_REQUIRED';
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.outbox.changeTimeOf', { subject: 'Board pack' }) }));
+    fireEvent.click(screen.getByRole('dialog', { name: t('mobile.outbox.changeTime') }).querySelector('[data-mv-schedule="in5"]'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(t('mobile.error.PREMIUM_REQUIRED')));
+  });
+
+  it('a row whose time passed is listed as waiting, not scheduled', async () => {
+    await mount();
+    engine.outbox = [scheduledRow(Date.now() - 60_000)];
+    await act(async () => { emit('mobile.send.result', { id: 'out_1', accountId: 'a1', outcome: 'queued' }); });
+    await waitFor(() => expect(screen.getByText(t('mobile.outbox.waiting', { count: 1 }))).toBeTruthy());
   });
 });

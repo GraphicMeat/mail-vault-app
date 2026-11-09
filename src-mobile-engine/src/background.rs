@@ -1,7 +1,15 @@
 //! A background run (plan Ruling 9): what iOS `BGAppRefreshTask` and the Android WorkManager
 //! worker call through the shell, on the process's one engine (Ruling 12), with a budget.
 //!
-//! Notifications off: nothing, no network. Otherwise each account in turn gets one quick INBOX
+//! Scheduled sends (plan 4 Ruling 13): every run, notifications on or off, sends the outbox rows
+//! that are due (a send-later time that came while the app was away, or a retry wait that ran
+//! out): the outbox worker is woken for their accounts at the start of the run, so it sends beside
+//! the INBOX passes rather than after them on what the passes left of the budget, and the run
+//! waits for it before returning, inside the same budget. Notifications off: only that, with no
+//! INBOX pass and nothing to post; with nothing due either, no network at all. Whether the OS
+//! should give the app runs at all is [`Engine::wants_background`].
+//!
+//! With notifications on, each account in turn gets one quick INBOX
 //! pass, queued on the engine's sync worker like any other pass, so a run never writes beside a
 //! pass the page started. A quick pass asks only for what arrived since the newest message the
 //! list holds (IMAP `UID n:*`, Graph and JMAP by received date) and inserts those rows; flags and
@@ -320,15 +328,39 @@ struct Candidate {
 }
 
 impl Engine {
+    /// Whether the OS should keep giving the app background runs (plan Ruling 13): notifications
+    /// are on, or a scheduled message waits to be sent. The shell re-applies its schedule from
+    /// this after every RPC that can change it. Each reason is one `||` term; plan 4 Task 9 adds
+    /// its own, a follow-up waiting for its check.
+    pub fn wants_background(&self) -> bool {
+        self.notifications_on() || crate::outbox::has_scheduled(self.shared())
+    }
+
     /// One background run inside `budget`; see the module doc. The mail is not counted as
     /// notified until [`Engine::background_commit`] is called with the returned token.
     pub fn background_fetch(&self, budget: Duration) -> Result<BackgroundRun, EngineError> {
         let start = Instant::now();
         // Every run raises Premium's clock mark, notifications on or off.
         crate::premium::observe_clock(self.shared());
-        if !self.notifications_on() {
+        let notifications = self.notifications_on();
+        let due = crate::outbox::due_accounts(self.shared(), now_ms());
+        if !notifications && due.is_empty() {
             return Ok(BackgroundRun::default());
         }
+        let deadline = start + budget;
+        // Sends beside the INBOX passes, on the outbox's own thread.
+        let sending = (!due.is_empty()).then(|| self.outbox().wake_for_run(self.shared(), &due));
+        let run = if notifications { self.inbox_run(start, budget) } else { Ok(BackgroundRun::default()) };
+        if let Some(mark) = sending {
+            if !self.outbox().wait_rounds(mark, deadline) {
+                self.shared().log("[background] the outbox did not finish inside the budget; it goes on while the app runs");
+            }
+        }
+        run
+    }
+
+    /// The INBOX passes of a run that started at `start` with `budget` (notifications on).
+    fn inbox_run(&self, start: Instant, budget: Duration) -> Result<BackgroundRun, EngineError> {
         let deadline = start + budget;
         let last_start = start + budget.mul_f32(0.8);
         let mut accounts: Vec<Candidate> = self.read(|c| {

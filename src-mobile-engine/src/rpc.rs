@@ -2,6 +2,7 @@
 //! `methods.json` must list exactly its names (a test checks it).
 
 use crate::db::{Engine, SCHEMA_VERSION};
+use mailvault_core::send::schedule::ScheduleRefusal;
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
@@ -11,7 +12,7 @@ use std::fmt;
 const MAX_PAGE: u64 = 200;
 
 /// Serialized as `{ code: "UNSUPPORTED"|"INVALID"|"INTERNAL"|"TOO_LARGE"|"ATTACHMENT_MISSING"|
-/// "SEARCH_UNAVAILABLE"|<a Premium code>, message }`, and `TOO_LARGE` with `data: { limitBytes }`;
+/// "SEARCH_UNAVAILABLE"|<a Premium code>|"PREMIUM_REQUIRED"|"SCHEDULE_TOO_FAR", message }`, and `TOO_LARGE` with `data: { limitBytes }`;
 /// the shell forwards it to JS unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RpcError {
@@ -31,6 +32,9 @@ pub enum RpcError {
     /// server would not add to a purchase already on its most installs). The message is fixed text,
     /// never the server's.
     Premium(&'static str),
+    /// A send-later time core's `send::schedule::schedule_allowed` refused: its code
+    /// ([`ScheduleRefusal::code`]: `PREMIUM_REQUIRED`, `SCHEDULE_TOO_FAR`).
+    Schedule(ScheduleRefusal),
 }
 
 /// The fixed message of a Premium code.
@@ -57,6 +61,7 @@ impl RpcError {
             RpcError::AttachmentMissing(_) => "ATTACHMENT_MISSING",
             RpcError::SearchUnavailable => "SEARCH_UNAVAILABLE",
             RpcError::Premium(code) => *code,
+            RpcError::Schedule(r) => r.code(),
         }
     }
 }
@@ -70,6 +75,8 @@ impl fmt::Display for RpcError {
             }
             RpcError::SearchUnavailable => f.write_str("search is unavailable"),
             RpcError::Premium(code) => f.write_str(premium_message(code)),
+            RpcError::Schedule(ScheduleRefusal::PremiumRequired) => f.write_str("a send more than 5 minutes ahead needs Premium"),
+            RpcError::Schedule(ScheduleRefusal::TooFar) => f.write_str("a send can be held back for at most a day"),
         }
     }
 }
@@ -129,6 +136,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.oauth.reauth", crate::oauth::reauth),
     ("mobile.outbox.discard", crate::outbox::discard),
     ("mobile.outbox.list", crate::outbox::list),
+    ("mobile.outbox.reschedule", crate::outbox::reschedule),
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
@@ -175,6 +183,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.oauth.reauth", crate::oauth::reauth),
     ("mobile.outbox.discard", crate::outbox::discard),
     ("mobile.outbox.list", crate::outbox::list),
+    ("mobile.outbox.reschedule", crate::outbox::reschedule),
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.ping", ping),
     ("mobile.premium.installId", crate::premium::install),

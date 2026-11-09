@@ -529,3 +529,97 @@ fn a_burst_cut_after_one_chunk_is_fetched_and_notified_in_full_over_the_next_run
     assert_eq!(seen.len(), 450, "every message of the burst was notified");
     assert!(f.run(BUDGET).is_empty());
 }
+
+// ── Scheduled send (plan 4 Task 8, Ruling 13) ───────────────────────────────
+
+const MIN: i64 = 60_000;
+
+impl Fx {
+    /// A send held back until `at_ms`; its outbox row id.
+    fn schedule(&self, account: &str, subject: &str, at_ms: i64) -> String {
+        let r = self
+            .engine
+            .rpc(
+                "mobile.compose.send",
+                json!({ "accountId": account, "to": "rcpt@example.test", "cc": "", "bcc": "", "subject": subject, "text": "Later", "attachments": [], "sendAtMs": at_ms }),
+            )
+            .unwrap();
+        assert_eq!(r["state"], "queued", "{r}");
+        r["id"].as_str().unwrap().to_string()
+    }
+
+    /// Moves row `id`'s time to `at_ms` behind the engine's back (the worker is not woken).
+    fn move_time(&self, id: &str, at_ms: i64) {
+        assert_eq!(self.db().execute("UPDATE outbox SET not_before_ms = ?2, scheduled_ms = ?2 WHERE id = ?1", rusqlite::params![id, at_ms]).unwrap(), 1);
+    }
+
+    fn outbox_state(&self, id: &str) -> Option<String> {
+        use rusqlite::OptionalExtension;
+        self.db().query_row("SELECT state FROM outbox WHERE id = ?1", [id], |r| r.get(0)).optional().unwrap()
+    }
+}
+
+#[test]
+fn background_run_sends_due_rows_even_with_notifications_off() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    assert!(!f.engine.notifications_on());
+    // Scheduled for later: the engine's worker sleeps until then. The time came while the app was
+    // away (the phone was asleep): moved into the past without waking anything.
+    let id = f.schedule(&account, "Scheduled", now_ms() + 4 * MIN);
+    f.move_time(&id, now_ms() - 1_000);
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(server.sent_messages().is_empty());
+
+    let run = f.engine.background_fetch(BUDGET).unwrap();
+    assert!(run.mail.is_empty() && run.commit.is_none(), "{run:?}");
+    assert_eq!(server.sent_messages().len(), 1, "the due row went out inside the run");
+    assert_eq!(f.outbox_state(&id).as_deref(), Some("sent"));
+    assert_eq!(f.watermark(&account), None, "notifications off: no INBOX pass");
+
+    // Nothing due: the run makes no connection and returns at once.
+    let conns = server.connection_count();
+    let t0 = Instant::now();
+    assert_eq!(f.engine.background_fetch(BUDGET).unwrap(), BackgroundRun::default());
+    assert!(t0.elapsed() < Duration::from_secs(1), "{:?}", t0.elapsed());
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(server.connection_count(), conns);
+    // A row not due yet is left for its time.
+    let later = f.schedule(&account, "Later", now_ms() + 4 * MIN);
+    f.engine.background_fetch(BUDGET).unwrap();
+    assert_eq!(f.outbox_state(&later).as_deref(), Some("queued"));
+    assert_eq!(server.sent_messages().len(), 1);
+}
+
+#[test]
+fn wants_background_follows_scheduled_rows() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    assert!(!f.engine.wants_background(), "a fresh install asks for no background runs");
+    f.notifications(true);
+    assert!(f.engine.wants_background());
+    f.notifications(false);
+    assert!(!f.engine.wants_background());
+
+    // A scheduled row asks for runs until it is gone (Cancel).
+    let a = f.schedule(&account, "Cancelled", now_ms() + 4 * MIN);
+    assert!(f.engine.wants_background());
+    f.engine.rpc("mobile.outbox.discard", json!({ "id": a })).unwrap();
+    assert!(!f.engine.wants_background());
+
+    // Send now: no longer scheduled.
+    let b = f.schedule(&account, "Now", now_ms() + 4 * MIN);
+    assert!(f.engine.wants_background());
+    f.engine.rpc("mobile.outbox.retry", json!({ "id": b })).unwrap();
+    assert!(!f.engine.wants_background());
+
+    // A scheduled row whose time passed unsent (the phone was offline) still asks.
+    let c = f.schedule(&account, "Overdue", now_ms() + 4 * MIN);
+    f.move_time(&c, now_ms() - MIN);
+    assert!(f.engine.wants_background());
+    f.notifications(true);
+    f.engine.rpc("mobile.outbox.discard", json!({ "id": c })).unwrap();
+    assert!(f.engine.wants_background(), "notifications on still asks");
+}

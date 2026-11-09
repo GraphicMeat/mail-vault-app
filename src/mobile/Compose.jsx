@@ -19,6 +19,11 @@
 // (TOO_LARGE, ATTACHMENT_MISSING, INVALID) stays on the screen with its reason and autosave runs
 // again. A queued send leaves at once: the outbox (store `outbox`) takes it from there.
 //
+// Send later (plan 4 Task 8): the clock beside Send opens the time sheet (SendLater.jsx); the
+// chosen time goes with the send as `sendAtMs` and the message waits in the outbox's Scheduled
+// section. A time past 5 minutes without Premium opens the paywall instead; the engine's refusal
+// (PREMIUM_REQUIRED, SCHEDULE_TOO_FAR) is shown in place like any other.
+//
 // Keyboard: the focused field is kept above the keyboard (`visualViewport`); targets are 44 pt.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
@@ -27,6 +32,7 @@ import { ensureAttachmentEvents, watchJob } from './attachmentJobs.js';
 import { fieldsOf, initialText, isEmpty, isValidEntry, sendError, splitList } from './compose.js';
 import RecipientField, { commitText } from './RecipientField.jsx';
 import Sheet from './Sheet.jsx';
+import SendLater from './SendLater.jsx';
 import { formatFullDate, formatSize } from './format.js';
 import { useBackLayer } from './backStack.js';
 import { useMobileStore } from './store.js';
@@ -43,6 +49,14 @@ const TITLE_KEYS = Object.freeze({
   replyAll: 'emailActionBar.replyAll',
   forward: 'emailActionBar.forward',
 });
+
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
 
 function PaperclipIcon() {
   return (
@@ -139,6 +153,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  const [later, setLater] = useState(false);
   const [edits, setEdits] = useState(0);
 
   const threading = useRef({ inReplyTo: '', references: '' });
@@ -386,7 +401,9 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const noTo = toAll.length === 0;
   const canSend = !sending && !locked.current && !noTo && !invalid && !fetching.some((f) => !f.failed);
 
-  const send = async () => {
+  /** Sends now, or at `sendAtMs` (unix ms) when given. */
+  const send = async (sendAtMs = null) => {
+    setLater(false);
     if (!canSend) return;
     // What is still in an input goes out as a chip.
     setTo({ entries: toAll, text: '' });
@@ -397,7 +414,9 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     await stopSaving();
     const id = draftId.current;
     try {
-      await daemonCall('mobile.compose.send', { accountId, ...(id ? { draftId: id } : {}), ...fieldsOf(current()) });
+      await daemonCall('mobile.compose.send', {
+        accountId, ...(id ? { draftId: id } : {}), ...fieldsOf(current()), ...(sendAtMs != null ? { sendAtMs } : {}),
+      });
     } catch (err) {
       if (!live.current) return;
       stopped.current = false;
@@ -446,10 +465,12 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   }, [discard, stopSaving, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
   const keepEditing = useCallback(() => setConfirming(false), []);
   const closeAttach = useCallback(() => setAttaching(false), []);
+  const closeLater = useCallback(() => setLater(false), []);
 
-  useBackLayer(!confirming && !attaching, requestLeave);
+  useBackLayer(!confirming && !attaching && !later, requestLeave);
   useBackLayer(confirming, keepEditing);
   useBackLayer(attaching, closeAttach);
+  useBackLayer(later, closeLater);
   useKeyboardInset(scroller);
 
   const title = t(TITLE_KEYS[shownMode] || TITLE_KEYS.new);
@@ -467,6 +488,9 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
         <button type="button" className="mv-iconbtn" aria-label={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)}>
           <PaperclipIcon />
         </button>
+        <button type="button" className="mv-iconbtn" data-mv-send-later-open aria-label={t('mobile.compose.sendLater')} disabled={!canSend} onClick={() => setLater(true)}>
+          <ClockIcon />
+        </button>
         <button
           type="button"
           className={`mv-compose__send${sending ? ' mv-compose__send--busy' : ''}`}
@@ -474,7 +498,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           aria-label={sending ? t('mobile.compose.sending') : t('compose.send')}
           aria-busy={sending ? 'true' : undefined}
           disabled={!canSend}
-          onClick={send}
+          onClick={() => send()}
         >
           {sending && <span className="mv-chip__spinner" aria-hidden="true" />}
           {sending ? t('mobile.compose.sending') : t('compose.send')}
@@ -561,6 +585,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           </div>
         </Sheet>
       )}
+      {later && <SendLater title={t('mobile.compose.sendLater')} onPick={(at) => send(at)} onClose={closeLater} />}
       {attaching && (
         <Sheet kind="sheet" label={t('mobile.compose.attach')} onClose={closeAttach}>
           <div className="mv-sheet__grip" aria-hidden="true" />

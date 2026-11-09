@@ -9,6 +9,8 @@ export const SEND_ERROR_KEYS = Object.freeze({
   ATTACHMENT_MISSING: 'mobile.compose.error.ATTACHMENT_MISSING',
   INVALID: 'mobile.compose.error.INVALID',
   INTERNAL: 'mobile.compose.error.INTERNAL',
+  PREMIUM_REQUIRED: 'mobile.compose.error.PREMIUM_REQUIRED',
+  SCHEDULE_TOO_FAR: 'mobile.compose.error.SCHEDULE_TOO_FAR',
 });
 
 export function sendErrorKey(code) {
