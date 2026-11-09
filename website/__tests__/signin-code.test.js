@@ -132,11 +132,34 @@ describe('signin start', () => {
     }
   });
 
-  it('is unavailable-silent when mail is not configured', async () => {
-    const { signin, sent } = setup({ configured: () => false });
+  it('is unavailable-silent when mail is not configured, and logs that once', async () => {
+    const errors = [];
+    const { signin, sent } = setup({ configured: () => false, logError: (m) => errors.push(m) });
     expect(await signin.start({ email: 'reader@example.com' })).toBe('ok');
     await signin.drain();
     expect(sent).toHaveLength(0);
+    expect(errors).toEqual(['[signin] mail sender not configured: a sign-in code for a customer was not mailed']);
+    // once per process, and never for an unknown address (the answer must not differ)
+    expect(await signin.start({ email: 'reader@example.com' })).toBe('ok');
+    expect(errors).toHaveLength(1);
+    const quiet = [];
+    const other = setup({ configured: () => false, logError: (m) => quiet.push(m) });
+    expect(await other.signin.start({ email: 'nobody@example.com' })).toBe('ok');
+    expect(quiet).toHaveLength(0);
+    expect(errors.join(' ')).not.toContain('reader@example.com');
+  });
+
+  it('purges rows a day past their expiry without a new start', async () => {
+    const { signin, db, clock } = setup();
+    expect(await signin.start({ email: 'reader@example.com' })).toBe('ok');
+    expect(await signin.start({ email: 'nobody@example.com' })).toBe('ok');
+    expect(db.rows).toHaveLength(2);
+    clock.t += 10 * MIN + 24 * HOUR - 1;
+    await signin.purge();
+    expect(db.rows).toHaveLength(2);
+    clock.t += 2;
+    await signin.purge();
+    expect(db.rows).toHaveLength(0);
   });
 
   it('survives a failing send', async () => {

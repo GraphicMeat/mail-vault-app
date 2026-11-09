@@ -131,15 +131,21 @@ function fakeDb() {
         if (r) r.last_seen_at = p[2]; else installs.push({ subscription_id: p[0], install_id: p[1], last_seen_at: p[2] });
         return [{ affectedRows: 1 }, []];
       }
-      if (q === 'SELECT install_id FROM store_subscription_installs WHERE subscription_id = ?') {
-        return [installs.filter((r) => r.subscription_id === p[0]).map((r) => ({ install_id: r.install_id })), []];
+      if (q === 'SELECT install_id, last_seen_at FROM store_subscription_installs WHERE subscription_id = ?') {
+        return [installs.filter((r) => r.subscription_id === p[0]).map((r) => ({ install_id: r.install_id, last_seen_at: r.last_seen_at })), []];
       }
-      if (q === 'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND last_seen_at <= ?') {
-        const before = installs.length;
-        for (let i = installs.length - 1; i >= 0; i -= 1) {
-          if (installs[i].subscription_id === p[0] && installs[i].last_seen_at <= p[1]) installs.splice(i, 1);
-        }
-        return [{ affectedRows: before - installs.length }, []];
+      if (q === 'SELECT COUNT(*) AS n FROM store_subscription_installs WHERE subscription_id = ? AND last_seen_at > ?') {
+        return [[{ n: installs.filter((r) => r.subscription_id === p[0] && r.last_seen_at > p[1]).length }], []];
+      }
+      if (q === 'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?') {
+        const i = installs.findIndex((r) => r.subscription_id === p[0] && r.install_id === p[1]);
+        if (i >= 0) installs.splice(i, 1);
+        return [{ affectedRows: i >= 0 ? 1 : 0 }, []];
+      }
+      if (q === 'UPDATE store_subscription_installs SET last_seen_at = ? WHERE subscription_id = ? AND install_id = ?') {
+        const r = installs.find((x) => x.subscription_id === p[1] && x.install_id === p[2]);
+        if (r) r.last_seen_at = p[0];
+        return [{ affectedRows: r ? 1 : 0 }, []];
       }
       if (q === 'SELECT event_id FROM processed_store_events WHERE event_id = ?') {
         return [events.has(p[0]) ? [{ event_id: p[0] }] : [], []];
@@ -326,7 +332,6 @@ describe('POST /api/billing/store/apple/verify', () => {
       ['wrong product', jws(tx({ productId: 'com.mailvault.app.lifetime' })), 'wrong_product'],
       ['wrong token', jws(tx({ appAccountToken: OTHER_INSTALL })), 'wrong_account'],
       ['no token', jws(tx({ appAccountToken: undefined })), 'wrong_account'],
-      ['sandbox in prod', jws(tx({ environment: 'Sandbox' })), 'wrong_environment'],
       ['xcode', jws(tx({ environment: 'Xcode' })), 'wrong_environment'],
       ['revoked', jws(tx({ revocationDate: NOW - DAY, revocationReason: 0 })), 'revoked'],
     ];
@@ -348,16 +353,44 @@ describe('POST /api/billing/store/apple/verify', () => {
     const [s, b] = await appleVerify(e.billing, jws(tx({ expiresDate: NOW - 1 })));
     expect([s, b]).toEqual([200, { entitled: false, source: 'apple', expiresMs: NOW - 1 }]);
 
-    // sandbox is accepted only when the server explicitly allows it
-    const sb = setup({ env: { APPLE_IAP_ALLOW_SANDBOX: '1' } });
+    // a production server accepts sandbox receipts by default (App Review, TestFlight) and
+    // records the environment; APPLE_IAP_ALLOW_SANDBOX=0 turns that off
+    const sb = setup();
     const [s4, b4] = await appleVerify(sb.billing, jws(tx({ environment: 'Sandbox' })));
     expect([s4, b4.entitled]).toEqual([200, true]);
     expect(sb.db.subs[0].environment).toBe('Sandbox');
     const [s5] = await appleVerify(sb.billing, jws(tx({ environment: 'Xcode' })));
     expect(s5).toBe(403);
+    const off = setup({ env: { APPLE_IAP_ALLOW_SANDBOX: '0' } });
+    expect(await appleVerify(off.billing, jws(tx({ environment: 'Sandbox' })))).toEqual([403, { error: 'wrong_environment' }]);
+    expect((await appleVerify(off.billing, jws(tx())))[0]).toBe(200);
     // a production receipt is refused by a sandbox-only server
-    const so = setup({ env: { APPLE_IAP_ENV: 'Sandbox', APPLE_IAP_ALLOW_SANDBOX: '1' } });
+    const so = setup({ env: { APPLE_IAP_ENV: 'Sandbox' } });
     expect((await appleVerify(so.billing, jws(tx())))[0]).toBe(403);
+    expect((await appleVerify(so.billing, jws(tx({ environment: 'Sandbox' }))))[0]).toBe(200);
+  });
+
+  it('answers 503 for an APPLE_IAP_ENV it does not know, never 4xx', async () => {
+    for (const value of ['production', 'Prod', 'Xcode']) {
+      const { billing, db } = setup({ env: { APPLE_IAP_ENV: value } });
+      expect([value, ...(await appleVerify(billing, jws(tx())))]).toEqual([value, 503, { error: 'not_configured' }]);
+      expect(db.subs).toHaveLength(0);
+    }
+  });
+
+  it('records a revoked receipt, so the same transaction\'s older JWS is refused too', async () => {
+    const { billing, db } = setup();
+    const older = jws(tx());
+    expect((await appleVerify(billing, older))[1].entitled).toBe(true);
+    const revoked = jws(tx({ transactionId: '2000000111', revocationDate: NOW - 1000, revocationReason: 0, signedDate: NOW - 500 }));
+    expect(await appleVerify(billing, revoked)).toEqual([403, { error: 'revoked' }]);
+    expect(db.subs[0].status).toBe('revoked');
+    expect(await appleVerify(billing, older)).toEqual([403, { error: 'revoked' }]);
+    // first seen revoked: recorded as well
+    const fresh = setup();
+    expect(await appleVerify(fresh.billing, revoked)).toEqual([403, { error: 'revoked' }]);
+    expect(fresh.db.subs[0]).toMatchObject({ original_id: '2000000100', status: 'revoked' });
+    expect(await appleVerify(fresh.billing, older)).toEqual([403, { error: 'revoked' }]);
   });
 
   it('apple_tampered_payload_fails_signature', async () => {
@@ -472,13 +505,54 @@ describe('restore rebinding', () => {
     // one millisecond short of 30 days unseen: inst(1) still counts
     clock.t = idleSince + 30 * DAY - 1;
     expect(await restoreApple(billing, receipt, inst(5))).toEqual([409, { error: 'install_limit' }]);
-    // 30 days unseen: its slot is free, the others stay
+    // 30 days unseen: its slot is free, the others stay, and inst(1) stays in the set
     clock.t = idleSince + 30 * DAY;
     expect((await restoreApple(billing, receipt, inst(5)))[0]).toBe(200);
-    expect(ids(db)).toEqual([INSTALL, inst(2), inst(3), inst(4), inst(5)].sort());
-    // the idle install is a stranger now: refused without the flag, and the set is full again
-    expect(await appleVerify(billing, receipt, inst(1))).toEqual([403, { error: 'wrong_account' }]);
+    expect(ids(db)).toEqual([INSTALL, inst(1), inst(2), inst(3), inst(4), inst(5)].sort());
+    // the idle install is never a stranger: with the live set full it meets install_limit
+    // (the phone keeps its receipt and cache), never wrong_account, and its last_seen_at stays
+    expect(await appleVerify(billing, receipt, inst(1))).toEqual([409, { error: 'install_limit' }]);
     expect(await restoreApple(billing, receipt, inst(1))).toEqual([409, { error: 'install_limit' }]);
+    expect(db.installs.find((r) => r.install_id === inst(1)).last_seen_at).toBe(idleSince);
+  });
+
+  it('an idle install that comes back with room is answered and counts again', async () => {
+    const { billing, db, clock } = setup();
+    const receipt = jws(tx({ expiresDate: NOW + 365 * DAY, productId: YEARLY }));
+    expect((await appleVerify(billing, receipt))[0]).toBe(200);
+    expect((await restoreApple(billing, receipt, inst(1)))[0]).toBe(200);
+    // months away: a plain refresh (no restore flag) from it is answered with the current state
+    clock.t += 90 * DAY;
+    expect(await appleVerify(billing, receipt, inst(1))).toEqual([200, { entitled: true, source: 'apple', expiresMs: NOW + 365 * DAY }]);
+    expect(db.installs.find((r) => r.install_id === inst(1)).last_seen_at).toBe(clock.t);
+    // Google: the same
+    const gs = setup({ subs: { 'tok-1': subV2({}, { expiryTime: new Date(NOW + 365 * DAY).toISOString() }) } });
+    const gv = (installId, restore) => gs.billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY, installId, restore });
+    expect((await gv(INSTALL))[0]).toBe(200);
+    expect((await gv(inst(1), true))[0]).toBe(200);
+    gs.clock.t += 90 * DAY;
+    expect((await gv(inst(1)))[1].entitled).toBe(true);
+  });
+
+  it('concurrent restores never take the set over the cap', async () => {
+    const { billing, db, clock } = setup();
+    const receipt = jws(tx());
+    expect((await appleVerify(billing, receipt))[0]).toBe(200);
+    for (let n = 1; n <= 3; n += 1) {
+      clock.t += 1000;
+      expect((await restoreApple(billing, receipt, inst(n)))[0]).toBe(200);
+    }
+    // four live installs; three restores race for the last place
+    clock.t += 1000;
+    const answers = await Promise.all([4, 5, 6].map((n) => restoreApple(billing, receipt, inst(n))));
+    for (const [status] of answers) expect([200, 409]).toContain(status);
+    const joined = answers.filter(([status]) => status === 200).length;
+    expect(db.installs.length).toBeLessThanOrEqual(5);
+    expect(db.installs).toHaveLength(4 + joined);
+    // once the race is over, the place left (if any) is still available
+    if (joined === 0) expect((await restoreApple(billing, receipt, inst(7)))[0]).toBe(200);
+    expect(db.installs).toHaveLength(5);
+    expect(await restoreApple(billing, receipt, inst(8))).toEqual([409, { error: 'install_limit' }]);
   });
 
   it('original_install_never_hits_the_limit', async () => {
@@ -535,7 +609,7 @@ describe('restore rebinding', () => {
     // sandbox AppTransaction on a sandbox-allowing server, still under the cap
     expect((await billing.appleVerify({ signedTransaction: receipt, installId: inst(1), restore: true, signedAppTransaction: jws(appTx({ receiptType: 'Sandbox' })) }))[0]).toBe(200);
     // a production-only server refuses a sandbox AppTransaction
-    const prod = setup();
+    const prod = setup({ env: { APPLE_IAP_ALLOW_SANDBOX: '0' } });
     expect(await prod.billing.appleVerify({ signedTransaction: receipt, installId: OTHER_INSTALL, restore: true, signedAppTransaction: jws(appTx({ receiptType: 'Sandbox' })) }))
       .toEqual([403, { error: 'wrong_environment' }]);
   });
@@ -570,13 +644,14 @@ describe('restore rebinding', () => {
     // members refresh without the flag; the purchasing install is never refused
     expect((await gv(inst(3)))[1].entitled).toBe(true);
     expect((await gv(INSTALL))[0]).toBe(200);
-    // an idle member frees its slot
+    // an idle member frees its slot but stays in the set (a later call meets install_limit)
     const idleSince = db.installs.find((r) => r.install_id === inst(1)).last_seen_at;
     clock.t += 10 * DAY;
     for (const id of [INSTALL, inst(2), inst(3), inst(4)]) expect((await gv(id))[0]).toBe(200);
     clock.t = idleSince + 30 * DAY;
     expect((await gv(inst(5), true))[0]).toBe(200);
-    expect(ids(db)).not.toContain(inst(1));
+    expect(ids(db)).toContain(inst(1));
+    expect(await gv(inst(1))).toEqual([409, { error: 'install_limit' }]);
   });
 
   it('no_restore_flag_still_refuses_a_foreign_receipt', async () => {
@@ -631,7 +706,7 @@ describe('POST /api/billing/store/apple/notifications', () => {
     expect(await billing.appleNotification({ signedPayload: innerForged })).toEqual([400, { error: 'invalid_signature' }]);
 
     expect((await billing.appleNotification({ signedPayload: notification('DID_RENEW', { bundleId: 'com.example.other' }, { data: { bundleId: 'com.example.other' } }) }))[0]).toBe(200);
-    expect((await billing.appleNotification({ signedPayload: notification('DID_RENEW', { environment: 'Sandbox' }) }))[0]).toBe(200);
+    expect((await billing.appleNotification({ signedPayload: notification('DID_RENEW', { environment: 'Xcode' }) }))[0]).toBe(200);
     expect((await billing.appleNotification({ signedPayload: jws({ notificationType: 'TEST', notificationUUID: crypto.randomUUID(), signedDate: NOW, data: { bundleId: 'com.mailvault.app', environment: 'Production' } }) }))[0]).toBe(200);
     expect(db.subs).toHaveLength(0);
   });
@@ -705,7 +780,6 @@ describe('POST /api/billing/store/google/verify', () => {
     expect(await gVerify(billing, 'tok-no-acct')).toEqual([403, { error: 'wrong_account' }]);
     expect(await gVerify(billing, 'tok-1', MONTHLY, OTHER_INSTALL)).toEqual([403, { error: 'wrong_account' }]);
     expect(await gVerify(billing, 'tok-yearly', MONTHLY)).toEqual([403, { error: 'wrong_product' }]);
-    expect(await gVerify(billing, 'tok-test')).toEqual([403, { error: 'wrong_environment' }]);
     const before = g.calls.length;
     expect(await gVerify(billing, 'tok-1', 'com.other.app.premium')).toEqual([403, { error: 'wrong_product' }]);
     expect(await billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY })).toEqual([400, { error: 'invalid_request' }]);
@@ -713,10 +787,38 @@ describe('POST /api/billing/store/google/verify', () => {
     expect(g.calls.length).toBe(before);
     expect(db.subs).toHaveLength(0);
 
-    // license-tester purchases only where sandbox is allowed
-    const sb = setup({ env: { APPLE_IAP_ALLOW_SANDBOX: '1' }, subs: { 'tok-test': subV2({ testPurchase: {} }) } });
+    // license-tester purchases are accepted by default (Play review, test tracks) and
+    // recorded as Test; GOOGLE_PLAY_ALLOW_TEST=0 turns that off
+    const sb = setup({ subs: { 'tok-test': subV2({ testPurchase: {} }) } });
     expect((await gVerify(sb.billing, 'tok-test'))[1].entitled).toBe(true);
     expect(sb.db.subs[0].environment).toBe('Test');
+    const off = setup({ env: { GOOGLE_PLAY_ALLOW_TEST: '0' }, subs: { 'tok-test': subV2({ testPurchase: {} }) } });
+    expect(await gVerify(off.billing, 'tok-test')).toEqual([403, { error: 'wrong_environment' }]);
+    expect(off.db.subs).toHaveLength(0);
+  });
+
+  it('a refund seen only through the fetch lands: Google moves the expiry back', async () => {
+    const { billing, g, db } = setup({ subs: { 'tok-1': subV2({}, { expiryTime: new Date(NOW + 365 * DAY).toISOString() }) } });
+    expect((await gVerify(billing, 'tok-1'))[1].entitled).toBe(true);
+    // refunded on Play, no RTDN: subscriptionsv2 says EXPIRED at the refund time
+    g.state.subs['tok-1'] = subV2({ subscriptionState: 'SUBSCRIPTION_STATE_EXPIRED' }, { expiryTime: new Date(NOW - 1000).toISOString() });
+    expect(await gVerify(billing, 'tok-1')).toEqual([200, { entitled: false, source: 'google', expiresMs: NOW - 1000 }]);
+    expect(db.subs[0]).toMatchObject({ status: 'expired', expires_at: NOW - 1000 });
+    // an older token of the chain cannot lower what the current token says
+    g.state.subs['tok-2'] = subV2({ linkedPurchaseToken: 'tok-1' }, { productId: YEARLY, expiryTime: new Date(NOW + 300 * DAY).toISOString() });
+    expect((await gVerify(billing, 'tok-2', YEARLY))[1].entitled).toBe(true);
+    expect((await gVerify(billing, 'tok-1'))[1]).toEqual({ entitled: true, source: 'google', expiresMs: NOW + 300 * DAY });
+    expect(db.subs[0]).toMatchObject({ latest_token: 'tok-2', status: 'active', expires_at: NOW + 300 * DAY });
+  });
+
+  it('records the purchasing install only, never a restoring one', async () => {
+    const { billing, db } = setup({ subs: { 'tok-1': subV2() } });
+    // first seen through a restore from another install
+    expect((await billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY, installId: OTHER_INSTALL, restore: true }))[0]).toBe(200);
+    expect(db.subs[0].install_id).toBeNull();
+    expect(db.installs.map((r) => r.install_id)).toEqual([OTHER_INSTALL]);
+    expect((await gVerify(billing, 'tok-1'))[0]).toBe(200);
+    expect(db.subs[0].install_id).toBe(INSTALL);
   });
 
   it('google_ack_only_after_record', async () => {
@@ -866,6 +968,14 @@ describe('mergeState', () => {
     expect(mergeState(refunded, { ...row }, 'reversal').status).toBe('active');
     expect(mergeState(refunded, { ...row, expiresMs: 200 }, 'receipt').status).toBe('active');
   });
+
+  it('takes the current token\'s fetch as is, a lower expiry too, but keeps a refund', () => {
+    expect(mergeState(row, { ...row, expiresMs: 50, status: 'expired' }, 'current')).toMatchObject({ expiresMs: 50, status: 'expired' });
+    expect(mergeState(row, { ...row, expiresMs: 50, status: 'expired' }, 'fetch')).toMatchObject({ expiresMs: 100, status: 'active' });
+    const refunded = { ...row, status: 'refunded' };
+    expect(mergeState(refunded, { ...row, expiresMs: 100 }, 'current').status).toBe('refunded');
+    expect(mergeState(refunded, { ...row, expiresMs: 50 }, 'current')).toMatchObject({ status: 'refunded', expiresMs: 100 });
+  });
 });
 
 // server.js cannot boot under vitest: check the wiring in its source.
@@ -873,12 +983,14 @@ describe('server wiring', () => {
   const server = fs.readFileSync(path.join(__dirname, '..', 'api', 'server.js'), 'utf8');
   const database = fs.readFileSync(path.join(__dirname, '..', 'api', 'database.js'), 'utf8');
 
-  it('rate-limits verify with statusLimiter (429) and leaves the signed webhooks unlimited', () => {
-    expect(server).toMatch(/app\.post\('\/api\/billing\/store\/apple\/verify', statusLimiter,/);
-    expect(server).toMatch(/app\.post\('\/api\/billing\/store\/google\/verify', statusLimiter,/);
+  it('rate-limits verify per visitor and per install (429) and leaves the signed webhooks unlimited', () => {
+    expect(server).toMatch(/app\.post\('\/api\/billing\/store\/apple\/verify', storeVerifyLimiter, storeInstallLimiter,/);
+    expect(server).toMatch(/app\.post\('\/api\/billing\/store\/google\/verify', storeVerifyLimiter, storeInstallLimiter,/);
+    expect(server).toMatch(/const storeVerifyLimiter = rateLimit\(\{[^}]*keyGenerator: visitorIP,/);
+    expect(server).toMatch(/const storeInstallLimiter = rateLimit\(\{[^}]*keyGenerator: storeInstallKey,/);
+    expect(server).toMatch(/skip: \(req\) => STORE_WEBHOOKS\.has\(req\.path\) \|\| STORE_VERIFY\.has\(req\.path\)/);
     expect(server).toMatch(/app\.post\('\/api\/billing\/store\/apple\/notifications',\n\s+storeRoute\(/);
     expect(server).toMatch(/app\.post\('\/api\/billing\/store\/google\/rtdn',\n\s+storeRoute\(/);
-    expect(server).toMatch(/skip: \(req\) => STORE_WEBHOOKS\.has\(req\.path\)/);
     expect(server).toMatch(/authorization: req\.headers\.authorization/);
   });
 

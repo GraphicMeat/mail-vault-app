@@ -52,6 +52,7 @@ function createSigninCode({
 }) {
   const starts = new Map();       // sha256(email) -> [timestamps within the window]
   const pending = new Set();      // in-flight mail sends
+  let toldUnconfigured = false;   // the missing mail sender is logged once per process
 
   function limited(address, at) {
     const key = crypto.createHash('sha256').update(address).digest('hex');
@@ -80,13 +81,19 @@ function createSigninCode({
       const known = customers.length > 0;
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
 
-      await db.execute('DELETE FROM billing_signin_codes WHERE expires_at < ?', [at - KEEP_ROWS_MS]);
+      await purgeWith(db, at);
       await db.execute('UPDATE billing_signin_codes SET used_at = ? WHERE email = ? AND used_at IS NULL', [at, address]);
       await db.execute(
         'INSERT INTO billing_signin_codes (email, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)',
         [address, hashCode(address, code), at + CODE_TTL_MS, at],
       );
 
+      if (known && !configured() && !toldUnconfigured) {
+        // A production box without the mail sender locks every web subscriber out of phone
+        // sign-in: say so once (never the address).
+        toldUnconfigured = true;
+        logError('[signin] mail sender not configured: a sign-in code for a customer was not mailed');
+      }
       if (known && configured()) {
         const mail = buildSigninCodeEmail(lang, code);
         const job = Promise.resolve()
@@ -99,6 +106,19 @@ function createSigninCode({
       logError(`[signin] start failed: ${err && err.code || err && err.message}`);
     }
     return 'ok';
+  }
+
+  // Deletes the rows that expired more than a day ago (address and code hash). Run by every
+  // start and by server.js on a timer, so a record goes even when nobody asks again.
+  async function purgeWith(db, at) {
+    await db.execute('DELETE FROM billing_signin_codes WHERE expires_at < ?', [at - KEEP_ROWS_MS]);
+  }
+  async function purge() {
+    try {
+      await purgeWith(getDb(), now());
+    } catch (err) {
+      logError(`[signin] purge failed: ${err && err.code || err && err.message}`);
+    }
   }
 
   // Resolves once every mail send started so far has settled (tests, shutdown).
@@ -142,7 +162,7 @@ function createSigninCode({
     return { customerId: customers[0].stripe_customer_id };
   }
 
-  return { start, verify, drain };
+  return { start, verify, drain, purge };
 }
 
 // HTTP status and JSON body for each non-success outcome.
@@ -154,4 +174,4 @@ const RESPONSES = {
   code_expired: [410, { error: 'code_expired' }],
 };
 
-module.exports = { createSigninCode, normalizeEmail, RESPONSES, CODE_TTL_MS, MAX_ATTEMPTS };
+module.exports = { createSigninCode, normalizeEmail, RESPONSES, CODE_TTL_MS, MAX_ATTEMPTS, KEEP_ROWS_MS };

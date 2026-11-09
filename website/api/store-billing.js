@@ -25,8 +25,19 @@
 //     different: 403 wrong_account.
 //   - Apple without appTransactionId, and Google: the cap below is the only limit.
 // A restore that passes joins the set, unless the set already holds
-// MAX_INSTALLS_PER_PURCHASE live installs: 409 install_limit. Nobody is evicted; an install
-// unseen for INSTALL_IDLE_MS frees its slot (pruned lazily when the set is read).
+// MAX_INSTALLS_PER_PURCHASE live installs: 409 install_limit. Nobody is evicted. An install
+// unseen for INSTALL_IDLE_MS stops counting toward the cap but stays in the set: once admitted,
+// an install is never answered wrong_account. Its next call (with or without the flag) is
+// answered with the current state and counts again, unless the live installs fill the set
+// meanwhile: then 409 install_limit, and the phone keeps its receipt and cache.
+// Joining is INSERT-then-count: a join that finds the set over the cap afterwards (two
+// restores raced) takes itself back out and answers 409.
+//
+// Environments: APPLE_IAP_ENV (Production, the default, or Sandbox) is the main one; a
+// Production server also accepts Sandbox receipts unless APPLE_IAP_ALLOW_SANDBOX=0 (App
+// Review, TestFlight and sandbox testers buy in Sandbox against the shipped server), and Play
+// license-tester purchases unless GOOGLE_PLAY_ALLOW_TEST=0. The row records the environment.
+// Any other APPLE_IAP_ENV answers 503 not_configured.
 //
 // Replay protection is the store's signature plus the claims (bundle, product, install
 // id, environment), not one-time use: the phone re-posts its last accepted receipt on
@@ -37,7 +48,9 @@
 // raw r||s signatures. Certificate validity is checked at the payload's signedDate, as
 // Apple's own library does without online checks, so an older stored receipt stays
 // verifiable after its leaf certificate expires.
-// Google: subscriptionsv2 is fetched on every verify and RTDN; it is the current state.
+// Google: subscriptionsv2 is fetched on every verify and RTDN; it is the current state of
+// the token fetched, taken wholesale for the chain's current token (a refund shows only as
+// EXPIRED with the expiry moved back).
 // No secret is logged. Only node crypto, no dependencies.
 const crypto = require('crypto');
 const fs = require('fs');
@@ -62,7 +75,8 @@ const GOOGLE_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.
 
 const MAX_SIGNED_TRANSACTION = 16 * 1024;
 const MAX_SIGNED_PAYLOAD = 60 * 1024;
-const MAX_PURCHASE_TOKEN = 1024;
+// store_subscriptions.original_id / latest_token are VARCHAR(512).
+const MAX_PURCHASE_TOKEN = 512;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_RE = /^[A-Za-z0-9._-]+$/;
 const B64URL_RE = /^[A-Za-z0-9_-]*$/;
@@ -196,7 +210,10 @@ function verifyAppleJws(token, roots, now, signedAtOf = (p) => p.signedDate) {
 /**
  * Folds an incoming observation into the stored row. Authorities:
  *   'receipt'  a JWS the phone posted (may be old: it never lowers expiry or undoes a refund)
- *   'fetch'    Google's subscriptionsv2 answer (current state, but a refund stays)
+ *   'fetch'    Google's subscriptionsv2 answer for an older token of the chain
+ *   'current'  Google's subscriptionsv2 answer for the chain's current token: taken as is,
+ *              a lower expiry too (a refund or revocation shows only as EXPIRED with the
+ *              expiry moved back); a recorded refund still stays unless the expiry rose
  *   'notice'   a store notification with an explicit status
  *   'reversal' Apple REFUND_REVERSED: the only thing that lifts a refund at the same expiry
  * The latest expiry wins. A refund or revocation always lands.
@@ -204,6 +221,13 @@ function verifyAppleJws(token, roots, now, signedAtOf = (p) => p.signedDate) {
 function mergeState(row, inc, authority) {
   if (!row) return { ...inc };
   const next = { ...row, installId: row.installId || inc.installId || null };
+  if (authority === 'current' && !(TERMINAL.has(row.status) && inc.expiresMs <= row.expiresMs)) {
+    Object.assign(next, {
+      expiresMs: inc.expiresMs, status: inc.status, productId: inc.productId, environment: inc.environment,
+    });
+    if (inc.latestToken) next.latestToken = inc.latestToken;
+    return next;
+  }
   if (inc.expiresMs > row.expiresMs) {
     Object.assign(next, {
       expiresMs: inc.expiresMs, status: inc.status, productId: inc.productId, environment: inc.environment,
@@ -215,7 +239,7 @@ function mergeState(row, inc, authority) {
     next.status = inc.status;
   } else if (inc.expiresMs === row.expiresMs) {
     if (authority === 'reversal') next.status = inc.status;
-    else if ((authority === 'notice' || authority === 'fetch') && !TERMINAL.has(row.status)) next.status = inc.status;
+    else if ((authority === 'notice' || authority === 'fetch' || authority === 'current') && !TERMINAL.has(row.status)) next.status = inc.status;
   }
   return next;
 }
@@ -228,8 +252,8 @@ const entitledNow = (state, now) => state.status === 'active' && state.expiresMs
  * @param {typeof fetch} deps.fetch
  * @param {() => number} [deps.now]
  * @param {import('crypto').X509Certificate[] | null} deps.appleRoots  null: Apple answers 503
- * @param {object} [deps.env]   APPLE_IAP_ENV, APPLE_IAP_ALLOW_SANDBOX, GOOGLE_PLAY_SA_JSON,
- *                              GOOGLE_RTDN_AUDIENCE, GOOGLE_RTDN_SA_EMAIL
+ * @param {object} [deps.env]   APPLE_IAP_ENV, APPLE_IAP_ALLOW_SANDBOX, GOOGLE_PLAY_ALLOW_TEST,
+ *                              GOOGLE_PLAY_SA_JSON, GOOGLE_RTDN_AUDIENCE, GOOGLE_RTDN_SA_EMAIL
  * @param {(msg: string) => void} [deps.logError]
  */
 function createStoreBilling({
@@ -240,13 +264,17 @@ function createStoreBilling({
   let jwks = null;           // { keys: Map<kid, KeyObject>, fetchedAt }
   let jwksPending = null;
 
-  const sandboxAllowed = () => env.APPLE_IAP_ALLOW_SANDBOX === '1';
+  let saCache = null;         // { raw, sa } or { raw, bad: true }
+
+  // On unless explicitly '0'.
+  const sandboxAllowed = () => env.APPLE_IAP_ALLOW_SANDBOX !== '0';
+  const playTestAllowed = () => env.GOOGLE_PLAY_ALLOW_TEST !== '0';
+  // The environments Apple receipts may come from. A misconfiguration is our fault: 503.
   function appleEnvironments() {
-    const allowed = new Set();
     const main = env.APPLE_IAP_ENV || 'Production';
-    if (main === 'Production') allowed.add('Production');
-    if (sandboxAllowed()) allowed.add('Sandbox');
-    return allowed;
+    if (main === 'Sandbox') return new Set(['Sandbox']);
+    if (main !== 'Production') throw new Unavailable('not_configured', 503);
+    return new Set(sandboxAllowed() ? ['Production', 'Sandbox'] : ['Production']);
   }
 
   // ------------------------------------------------------------------ storage
@@ -294,17 +322,21 @@ function createStoreBilling({
     return next;
   }
 
-  // The installs of a purchase seen within INSTALL_IDLE_MS; idle ones are deleted first.
-  async function liveInstalls(subId) {
-    await getDb().execute(
-      'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND last_seen_at <= ?',
-      [subId, now() - INSTALL_IDLE_MS],
-    );
+  // Every install of a purchase's set, idle ones included: [{installId, lastSeen}].
+  async function installSet(subId) {
     const [rows] = await getDb().execute(
-      'SELECT install_id FROM store_subscription_installs WHERE subscription_id = ?',
+      'SELECT install_id, last_seen_at FROM store_subscription_installs WHERE subscription_id = ?',
       [subId],
     );
-    return rows.map((r) => r.install_id);
+    return rows.map((r) => ({ installId: r.install_id, lastSeen: Number(r.last_seen_at) }));
+  }
+  const isLive = (m, at) => m.lastSeen > at - INSTALL_IDLE_MS;
+  async function liveCount(subId) {
+    const [rows] = await getDb().execute(
+      'SELECT COUNT(*) AS n FROM store_subscription_installs WHERE subscription_id = ? AND last_seen_at > ?',
+      [subId, now() - INSTALL_IDLE_MS],
+    );
+    return Number(rows[0].n);
   }
   // Adds an install to a purchase's set or refreshes its last_seen_at. Never evicts.
   async function touchInstall(subId, installId) {
@@ -317,17 +349,46 @@ function createStoreBilling({
   /**
    * Admits an install the receipt does not name (the purchasing install never comes here).
    * A live member passes, whatever the flag: the proof gates joining, not staying (a member
-   * refused here would lose Premium on a plain Restore tap). Otherwise: restore must be
-   * `true`, then `prove()` (Apple account proof) runs, then the cap: a full set refuses
-   * 409 install_limit and nobody is evicted. Runs before anything is written.
+   * refused here would lose Premium on a plain Restore tap). An idle member (admitted once,
+   * unseen for INSTALL_IDLE_MS) passes too, with or without the flag, when the live installs
+   * leave it room; else 409 install_limit. Anyone else: restore must be `true`, then `prove()`
+   * (Apple account proof) runs, then the cap: a full set refuses 409 install_limit and nobody
+   * is evicted. Runs before anything is written. Returns what `settleJoin` needs after the
+   * install is written: null for a live member (nothing to check), else `{previous}` (the idle
+   * member's last_seen_at, or null for a new install).
    * @param {{id: number} | null} row  the purchase's row, null when not yet recorded
    */
   async function admitForeign(row, installId, restore, prove) {
-    const live = row ? await liveInstalls(row.id) : [];
-    if (live.includes(installId)) return;
-    if (restore !== true) throw refuse('wrong_account');
-    if (prove) prove();
-    if (live.length >= MAX_INSTALLS_PER_PURCHASE) throw installLimit();
+    const set = row ? await installSet(row.id) : [];
+    const at = now();
+    const self = set.find((m) => m.installId === installId);
+    if (self && isLive(self, at)) return null;
+    const live = set.filter((m) => isLive(m, at)).length;
+    if (!self) {
+      if (restore !== true) throw refuse('wrong_account');
+      if (prove) prove();
+    }
+    if (live >= MAX_INSTALLS_PER_PURCHASE) throw installLimit();
+    return { previous: self ? self.lastSeen : null };
+  }
+  // After a join was written: a set over the cap means a concurrent join won the last place.
+  // This one takes itself back out (a new install's row goes, an idle member's last_seen_at is
+  // put back) and answers 409.
+  async function settleJoin(subId, installId, join) {
+    if (!join) return;
+    if (await liveCount(subId) <= MAX_INSTALLS_PER_PURCHASE) return;
+    if (join.previous === null) {
+      await getDb().execute(
+        'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?',
+        [subId, installId],
+      );
+    } else {
+      await getDb().execute(
+        'UPDATE store_subscription_installs SET last_seen_at = ? WHERE subscription_id = ? AND install_id = ?',
+        [join.previous, subId, installId],
+      );
+    }
+    throw installLimit();
   }
 
   async function seen(eventId) {
@@ -403,8 +464,15 @@ function createStoreBilling({
           && (typeof signedAppTransaction !== 'string' || signedAppTransaction.length > MAX_SIGNED_TRANSACTION))) throw badRequest();
       if (!roots) throw new Unavailable('not_configured', 503);
       const t = appleTransaction(signedTransaction);
+      // A revoked transaction is Apple's signed word: recorded whoever posts it (a revoked
+      // status always lands), so the same transaction's older JWS cannot answer entitled.
+      if (t.revocationDate) {
+        await record('apple', t.originalTransactionId, [t.originalTransactionId], appleState(t), 'receipt');
+        throw refuse('revoked');
+      }
       const install = installId.toLowerCase();
       const own = typeof t.appAccountToken === 'string' && t.appAccountToken.toLowerCase() === install;
+      let join = null;
       if (!own) {
         // Same Apple account: the AppTransaction's appTransactionId is the account's id for
         // this app. A transaction without one (bought before iOS 18.4) has only the cap.
@@ -414,11 +482,11 @@ function createStoreBilling({
           const a = appleAppTransaction(signedAppTransaction);
           if (a.appTransactionId !== accountId) throw refuse('wrong_account');
         });
-        await admitForeign(await findRow('apple', t.originalTransactionId), install, restore, prove);
+        join = await admitForeign(await findRow('apple', t.originalTransactionId), install, restore, prove);
       }
-      if (t.revocationDate) throw refuse('revoked');
       const state = await record('apple', t.originalTransactionId, [t.originalTransactionId], appleState(t), 'receipt');
       await touchInstall(state.id, install);
+      await settleJoin(state.id, install, join);
       return verdict('apple', state);
     });
   }
@@ -477,17 +545,22 @@ function createStoreBilling({
   }
 
   // ------------------------------------------------------------------ Google
+  // Parsed once per value of the env setting (a path is read once too).
   function serviceAccount() {
     const raw = env.GOOGLE_PLAY_SA_JSON;
     if (!raw || typeof raw !== 'string') throw new Unavailable('not_configured', 503);
-    let sa;
-    try {
-      sa = JSON.parse(raw.trim().startsWith('{') ? raw : fs.readFileSync(raw, 'utf8'));
-    } catch {
-      throw new Unavailable('not_configured', 503);
+    if (!saCache || saCache.raw !== raw) {
+      let sa = null;
+      try {
+        sa = JSON.parse(raw.trim().startsWith('{') ? raw : fs.readFileSync(raw, 'utf8'));
+      } catch {
+        sa = null;
+      }
+      const ok = sa && typeof sa.client_email === 'string' && typeof sa.private_key === 'string';
+      saCache = ok ? { raw, sa } : { raw, bad: true };
     }
-    if (!sa || typeof sa.client_email !== 'string' || typeof sa.private_key !== 'string') throw new Unavailable('not_configured', 503);
-    return sa;
+    if (saCache.bad) throw new Unavailable('not_configured', 503);
+    return saCache.sa;
   }
 
   async function upstream(url, opts) {
@@ -606,11 +679,16 @@ function createStoreBilling({
     return null;
   }
 
+  // `authority` 'fetch': a fetched token that is the chain's current one (the row's latest,
+  // or the token that replaced it) is taken as is ('current').
   async function recordGoogle(token, sub, inc, authority) {
     const linked = linkedOf(sub);
+    const row = await googleRow(token, sub);
+    const current = !row || !row.latestToken || row.latestToken === token || (linked !== null && linked === row.latestToken);
+    const how = authority === 'fetch' && current ? 'current' : authority;
     // The chain root.
-    const root = (await googleRow(token, sub))?.originalId || null;
-    return record('google', root || linked || token, [token, linked], { ...inc, latestToken: token }, authority);
+    const root = row?.originalId || null;
+    return record('google', root || linked || token, [token, linked], { ...inc, latestToken: token }, how);
   }
 
   const ackPending = (sub) => sub.acknowledgementState === 'ACKNOWLEDGEMENT_STATE_PENDING';
@@ -628,17 +706,22 @@ function createStoreBilling({
       const expiresMs = lineExpiry(sub, productId);
       if (expiresMs === null) throw refuse('wrong_product');
       const ids = sub.externalAccountIdentifiers || {};
-      if (ids.obfuscatedExternalAccountId !== obfuscatedAccountId(installId)) {
+      const install = installId.toLowerCase();
+      const own = ids.obfuscatedExternalAccountId === obfuscatedAccountId(installId);
+      let join = null;
+      if (!own) {
         // Google: the cap is the only limit on a restore. Play has no signed proof of the
         // Google account behind a purchase token without Play Integrity, which the owner
         // decided against (ruling P9 c): a leaked token unlocks at most
         // MAX_INSTALLS_PER_PURCHASE installs until they idle out.
-        await admitForeign(await googleRow(purchaseToken, sub), installId.toLowerCase(), restore, null);
+        join = await admitForeign(await googleRow(purchaseToken, sub), install, restore, null);
       }
-      if (sub.testPurchase && !sandboxAllowed()) throw refuse('wrong_environment');
+      if (sub.testPurchase && !playTestAllowed()) throw refuse('wrong_environment');
 
-      const state = await recordGoogle(purchaseToken, sub, googleState(sub, productId, expiresMs, installId.toLowerCase()), 'fetch');
-      await touchInstall(state.id, installId.toLowerCase());
+      // The row names the purchasing install only (a restoring install is in the set).
+      const state = await recordGoogle(purchaseToken, sub, googleState(sub, productId, expiresMs, own ? install : null), 'fetch');
+      await touchInstall(state.id, install);
+      await settleJoin(state.id, install, join);
       // Acknowledged only after the purchase is recorded; a failed acknowledge is retried
       // on the next verify or RTDN (Play refunds after 3 days without one).
       if (ackPending(sub) && entitledNow(state, now())) await acknowledge(productId, purchaseToken);

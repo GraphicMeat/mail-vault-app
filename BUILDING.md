@@ -395,9 +395,15 @@ report of results:
 phone app and takes the store webhooks. Its settings live only in the server's
 environment, never in the repo:
 
-- `APPLE_IAP_ENV`: the App Store environment this server accepts, default `Production`.
-- `APPLE_IAP_ALLOW_SANDBOX`: `1` also accepts Sandbox receipts and Play license-tester
-  purchases. Leave unset in production.
+- `APPLE_IAP_ENV`: the main App Store environment, `Production` (default) or `Sandbox`.
+  Any other value makes the verify routes answer 503 `not_configured` (a server fault, so
+  phones keep their cached Premium), never a refusal.
+- `APPLE_IAP_ALLOW_SANDBOX`: a `Production` server also accepts Sandbox receipts unless this
+  is `0`. Leave it unset in production: App Review and TestFlight buy in Sandbox against the
+  shipped server, so refusing Sandbox fails review. The row records the environment, so
+  Sandbox rows can be left out of any revenue view. TestFlight testers get Premium free.
+- `GOOGLE_PLAY_ALLOW_TEST`: Play license-tester purchases (Play's review and the test
+  tracks) are accepted unless this is `0`; they are recorded with environment `Test`.
 - `GOOGLE_PLAY_SA_JSON`: the Play Developer API service account key (the JSON itself,
   or a path to the file).
 - `GOOGLE_RTDN_AUDIENCE`: the audience set on the Pub/Sub push subscription.

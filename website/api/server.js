@@ -177,12 +177,15 @@ const tooLong = (value, max) => typeof value === 'string' && value.length > max;
 app.set('trust proxy', 1);
 
 // Rate limiting. The store webhooks are exempt: they are signature-gated, and Apple and
-// Google deliver bursts from shared addresses (a 429 would only make them retry).
+// Google deliver bursts from shared addresses (a 429 would only make them retry). The store
+// verify routes are exempt too: they have their own per-visitor and per-install limiters
+// (this one counts per Cloudflare edge, and a purchase confirmation must not meet it).
 const STORE_WEBHOOKS = new Set(['/api/billing/store/apple/notifications', '/api/billing/store/google/rtdn']);
+const STORE_VERIFY = new Set(['/api/billing/store/apple/verify', '/api/billing/store/google/verify']);
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  skip: (req) => STORE_WEBHOOKS.has(req.path),
+  skip: (req) => STORE_WEBHOOKS.has(req.path) || STORE_VERIFY.has(req.path),
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use(limiter);
@@ -590,6 +593,8 @@ const signinCode = createSigninCode({
   send: sendViaGraphicMeat,
   configured: gmConfigured,
 });
+// Codes expired more than a day ago go every hour, even when nobody asks for a new one.
+setInterval(() => { signinCode.purge(); }, 60 * 60 * 1000).unref();
 const signinStartLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -651,6 +656,30 @@ const storeBilling = createStoreBilling({
   fetch: (url, opts) => fetch(url, opts),
   appleRoots,
 });
+// Verify: keyed on the visitor (CF-Connecting-IP, as the sign-in routes), 120 per 15 min,
+// generous for a carrier NAT; and on the install id, 30 per 15 min. A phone posts a handful
+// per purchase (the native hand-over, a refresh, a Restore tap), so a fresh purchase is never
+// refused; a 429 keeps the phone's cache.
+const storeVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  keyGenerator: visitorIP,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited' },
+});
+const storeInstallKey = (req) => {
+  const id = req.body && req.body.installId;
+  return typeof id === 'string' && id && id.length <= 64 ? `install:${id.toLowerCase()}` : `ip:${visitorIP(req)}`;
+};
+const storeInstallLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  keyGenerator: storeInstallKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited' },
+});
 const storeRoute = (tag, run) => async (req, res) => {
   try {
     const [status, body] = await run(req);
@@ -661,9 +690,9 @@ const storeRoute = (tag, run) => async (req, res) => {
   }
 };
 
-app.post('/api/billing/store/apple/verify', statusLimiter,
+app.post('/api/billing/store/apple/verify', storeVerifyLimiter, storeInstallLimiter,
   storeRoute('apple/verify', (req) => storeBilling.appleVerify(req.body)));
-app.post('/api/billing/store/google/verify', statusLimiter,
+app.post('/api/billing/store/google/verify', storeVerifyLimiter, storeInstallLimiter,
   storeRoute('google/verify', (req) => storeBilling.googleVerify(req.body)));
 app.post('/api/billing/store/apple/notifications',
   storeRoute('apple/notifications', (req) => storeBilling.appleNotification(req.body)));
