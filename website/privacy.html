@@ -249,10 +249,10 @@
 
           <h3 id="advertising" class="text-lg font-semibold mt-6 mb-2">Advertising (Reddit)</h3>
           <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
-            We run ads on Reddit and use the Reddit Pixel to measure them. The pixel is loaded <strong>only if your visit began on a Reddit ad and you click Accept</strong> on the consent bar that appears. If you did not arrive from a Reddit ad, or you decline, or your browser sends a Global Privacy Control signal, the pixel is never loaded and nothing is sent to Reddit.
+            We run ads on Reddit and use the Reddit Pixel to measure them. The pixel is loaded <strong>only if your visit began on a Reddit ad</strong>. If you did not arrive from a Reddit ad, nothing is sent to Reddit. If you did, it depends on where you are: in the European Economic Area, the United Kingdom and Switzerland the pixel is loaded <strong>only after you click Accept</strong> on a consent bar; elsewhere it is loaded straight away, and you can turn it off at any time (below). Your browser's Global Privacy Control signal, if on, is always treated as a refusal and the pixel is never loaded. We tell where you are by asking our CDN (Cloudflare) for the country of your connection; that answer is not stored by us.
           </p>
           <p class="text-slate-600 dark:text-slate-400 leading-relaxed mt-3">
-            If you accept, Reddit Inc. (USA) receives, while you browse this site in that visit, the pages you view, your IP address, browser and device details, the click identifier from the ad, and a cookie it sets on this site. Reddit uses this to attribute the visit to the ad and to optimize and report on our campaign, and it handles that data under <a href="https://www.reddit.com/policies/privacy-policy" class="text-primary-500 hover:underline" target="_blank" rel="noopener">Reddit's Privacy Policy</a>. We do not send Reddit your email address or any information about your mail, and the MailVault app contains no advertising code. Legal basis: your consent (GDPR Art. 6(1)(a) and the ePrivacy rules); the transfer to the USA rests on the same consent. Your choice is remembered in this browser until you change it.
+            If you accept, Reddit Inc. (USA) receives, while you browse this site in that visit, the pages you view, your IP address, browser and device details, the click identifier from the ad, and a cookie it sets on this site. If you then reach the page shown after an installer download, Reddit is also told that a download happened (a "Lead" event with a random identifier that has no link to your mail or your identity). Reddit uses this to attribute the visit to the ad and to optimize and report on our campaign, and it handles that data under <a href="https://www.reddit.com/policies/privacy-policy" class="text-primary-500 hover:underline" target="_blank" rel="noopener">Reddit's Privacy Policy</a>. We do not send Reddit your email address or any information about your mail, and the MailVault app contains no advertising code. Legal basis: where the GDPR applies, your consent (Art. 6(1)(a) and the ePrivacy rules); the transfer to the USA rests on the same consent. Elsewhere, you can opt out of this sharing at any time, including with Global Privacy Control. Your choice is remembered in this browser until you change it.
           </p>
           <p class="text-slate-600 dark:text-slate-400 leading-relaxed mt-3">
             You can withdraw at any time: <button type="button" data-ad-consent-reset class="text-primary-500 hover:underline underline-offset-2">turn off Reddit measurement in this browser</button>. This remembers your refusal and deletes the Reddit cookies this site holds. <span data-ad-consent-status role="status"></span> Data Reddit has already received can be managed in your Reddit account's privacy settings.
@@ -260,9 +260,9 @@
 
           <h3 class="text-lg font-semibold mt-6 mb-2">What We Do NOT Collect</h3>
           <ul class="list-disc pl-6 mt-2 space-y-2 text-slate-600 dark:text-slate-400">
-            <li>We do not use cookies for tracking or advertising, except the Reddit Pixel cookie described above, set only after you accept.</li>
-            <li>We do not use third-party analytics (no Google Analytics), and there are no tracking pixels on this site except the Reddit Pixel described above, loaded only for visits from a Reddit ad that you accept.</li>
-            <li>We do not sell, rent, or share your personal data with third parties. The Reddit Pixel above is the one exception, and only with your consent.</li>
+            <li>We do not use cookies for tracking or advertising, except the Reddit Pixel cookie described above, set only for visits from a Reddit ad (after you accept, in the EEA, UK and Switzerland).</li>
+            <li>We do not use third-party analytics (no Google Analytics), and there are no tracking pixels on this site except the Reddit Pixel described above, loaded only for visits from a Reddit ad (with your consent in the EEA, UK and Switzerland).</li>
+            <li>We do not sell, rent, or share your personal data with third parties. The Reddit Pixel above is the one exception, and only for Reddit ad visits, with your consent where the law requires it.</li>
           </ul>
         </section>
 
@@ -307,7 +307,7 @@
           <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
             <li><strong>Google Fonts</strong> — to serve the Inter typeface. Google may collect your IP address. See <a href="https://policies.google.com/privacy" class="text-primary-500 hover:underline" target="_blank">Google's Privacy Policy</a>.</li>
             <li><strong>Tailwind CSS CDN</strong> — to serve stylesheets. No personal data is collected.</li>
-            <li><strong>Reddit</strong> — only for visits that began on a Reddit ad and were accepted on the consent bar, to measure our ads. See <a href="#advertising" class="text-primary-500 hover:underline">Advertising (Reddit)</a>.</li>
+            <li><strong>Reddit</strong> — only for visits that began on a Reddit ad (after consent in the EEA, UK and Switzerland), to measure our ads. See <a href="#advertising" class="text-primary-500 hover:underline">Advertising (Reddit)</a>.</li>
           </ul>
         </section>
 
