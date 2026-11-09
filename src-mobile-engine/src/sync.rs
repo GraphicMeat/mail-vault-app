@@ -28,6 +28,9 @@ const WINDOW_DAYS: i64 = 90;
 /// Most message rows one write transaction touches.
 const BATCH: usize = 200;
 const DAY_MS: i64 = 86_400_000;
+/// How long a row outside the window that a server search stored (or the user last opened) is kept
+/// when the pass does not list it: sync's removals leave it alone until this long after its mark.
+const OUT_OF_WINDOW_KEEP_MS: i64 = 30 * DAY_MS;
 
 // ── The worker and its queue ────────────────────────────────────────────────
 
@@ -445,8 +448,8 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadlin
     let held: Option<(Option<i64>, Option<i64>, Option<i64>, Option<i64>)> = shared.read(|c| {
         c.query_row(
             "SELECT f.uid_validity, f.synced_ms,
-                    (SELECT MAX(uid) FROM messages m WHERE m.account_id = f.account_id AND m.folder = f.path),
-                    (SELECT MAX(date_ms) FROM messages m WHERE m.account_id = f.account_id AND m.folder = f.path)
+                    (SELECT MAX(uid) FROM messages m WHERE m.account_id = f.account_id AND m.folder = f.path AND m.out_of_window_ms IS NULL),
+                    (SELECT MAX(date_ms) FROM messages m WHERE m.account_id = f.account_id AND m.folder = f.path AND m.out_of_window_ms IS NULL)
              FROM folders f WHERE f.account_id = ?1 AND f.path = ?2",
             (account, &folder),
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
@@ -844,14 +847,15 @@ fn sync_folder_pass(
     let at = shared.settles(account, folder);
     let existing: HashMap<u32, Held> = shared.read(|c| {
         let mut st = c.prepare_cached(
-            "SELECT uid, seen, flagged, local_seen IS NOT NULL OR local_flagged IS NOT NULL OR local_deleted IS NOT NULL
+            "SELECT uid, seen, flagged, local_seen IS NOT NULL OR local_flagged IS NOT NULL OR local_deleted IS NOT NULL,
+                    out_of_window_ms
              FROM messages WHERE account_id = ?1 AND folder = ?2",
         )?;
         let rows = st
             .query_map((account, folder), |r| {
                 Ok((
                     r.get::<_, i64>(0)? as u32,
-                    Held { seen: r.get::<_, i64>(1)? != 0, flagged: r.get::<_, i64>(2)? != 0, overridden: r.get(3)? },
+                    Held { seen: r.get::<_, i64>(1)? != 0, flagged: r.get::<_, i64>(2)? != 0, overridden: r.get(3)?, out_of_window_ms: r.get(4)? },
                 ))
             })?
             .collect::<Result<HashMap<_, _>, _>>()?;
@@ -880,7 +884,14 @@ fn sync_folder_pass(
 
     // Rows no longer in the window: expunged, moved away, or aged out of the 90 days. A row a
     // journaled action names stays until that action settles: replay decides (GONE removes it).
-    let mut gone: Vec<u32> = existing.keys().copied().filter(|u| !in_window.contains(u)).collect();
+    // A row outside the window that a server search stored, or the user opened, within the last 30
+    // days stays whatever the pass lists (`out_of_window_ms`).
+    let now = now_ms();
+    let mut gone: Vec<u32> = existing
+        .iter()
+        .filter(|(u, h)| !in_window.contains(u) && !h.out_of_window_ms.is_some_and(|m| now - m <= OUT_OF_WINDOW_KEEP_MS))
+        .map(|(u, _)| *u)
+        .collect();
     gone.sort_unstable();
     pass.removed += delete_uids(shared, account, folder, &gone, true)?;
 
@@ -910,11 +921,14 @@ fn sync_folder_pass(
     Ok((unseen, total))
 }
 
-/// A held row as a pass starts: the server's flags and whether any `local_*` override is set.
+/// A held row as a pass starts: the server's flags, whether any `local_*` override is set and its
+/// out-of-window mark.
 struct Held {
     seen: bool,
     flagged: bool,
     overridden: bool,
+    /// When a server search stored the row or the user last opened it, for a row outside the window.
+    out_of_window_ms: Option<i64>,
 }
 
 /// Writes the server's flags of `chunk` (one write transaction) and settles local overrides: an
@@ -1004,6 +1018,48 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
 
 fn header_uids(headers: &[Header]) -> Vec<u32> {
     headers.iter().map(|h| h.uid).collect()
+}
+
+/// Stores the headers a server search found (`Backend::search`): the same rows sync writes, 200
+/// per transaction, each indexed right after its chunk commits. One older than the sync window is
+/// marked `out_of_window_ms = now` (a row already held and aged out is marked again), so sync keeps
+/// it for 30 days past this mark. A row in the window that sync has not fetched yet lists like any
+/// new one, announced as a change of the folder. Returns the stored uids, in the order given.
+pub(crate) fn store_found(shared: &Shared, account: &str, folder: &str, headers: &[Header]) -> Result<Vec<u32>, Fail> {
+    let now = now_ms();
+    let start = window_start_ms(now);
+    let held: HashSet<u32> = shared.read(|c| {
+        let mut st = c.prepare_cached("SELECT 1 FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3")?;
+        let mut out = HashSet::new();
+        for h in headers {
+            if st.query_row((account, folder, h.uid as i64), |_| Ok(())).optional()?.is_some() {
+                out.insert(h.uid);
+            }
+        }
+        Ok(out)
+    })?;
+    let added = headers.iter().filter(|h| !held.contains(&h.uid) && header_date_ms(h) >= start).count();
+    let gen = shared.list_gen(account, folder)? + i64::from(added > 0);
+    for chunk in headers.chunks(BATCH) {
+        not_closing(shared)?;
+        write_for(shared, account, |c| {
+            insert_headers(c, account, folder, chunk, gen)?;
+            let mut mark = c.prepare_cached("UPDATE messages SET out_of_window_ms = ?4 WHERE account_id = ?1 AND folder = ?2 AND uid = ?3")?;
+            for h in chunk.iter().filter(|h| header_date_ms(h) < start) {
+                mark.execute((account, folder, h.uid as i64, now))?;
+            }
+            Ok(())
+        })?;
+        crate::search::index_uids_soon(shared, account, folder, &header_uids(chunk));
+    }
+    if added > 0 {
+        let gen = shared.publish_list_gen(account, folder, gen);
+        shared.emit(
+            FOLDER_CHANGED,
+            json!({ "accountId": account, "folder": folder, "added": added, "removed": 0, "updated": 0, "listGen": gen }),
+        );
+    }
+    Ok(header_uids(headers))
 }
 
 /// What a reply needs beyond the list row (`messages.thread_json`): `{cc, replyTo: [{name,

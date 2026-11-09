@@ -599,7 +599,19 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             let top: usize = query_param(q, "$top").and_then(|t| t.parse().ok()).unwrap_or(10);
             let skip: usize = query_param(q, "$skip").and_then(|t| t.parse().ok()).unwrap_or(0);
             let since = query_param(q, "$filter").and_then(|f| f.strip_prefix("receivedDateTime ge ").and_then(|d| parse_rfc3339(d.trim())));
-            let mut list: Vec<&Msg> = st.messages.iter().filter(|m| m.folder == fid && since.is_none_or(|s| m.received_ms >= s)).collect();
+            // `$search="phrase"` matches the subject and the body, and (as Graph does) cannot be
+            // combined with `$filter` or `$orderby`.
+            let search = query_param(q, "$search").map(|s| s.trim().trim_matches('"').replace("\\\"", "\"").replace("\\\\", "\\").to_lowercase());
+            if search.is_some() && (query_param(q, "$filter").is_some() || query_param(q, "$orderby").is_some()) {
+                let body = json!({ "error": { "code": "BadRequest", "message": "The query parameter $search cannot be combined with $filter or $orderby." } });
+                return (400, body.to_string().into_bytes(), Vec::new());
+            }
+            let mut list: Vec<&Msg> = st
+                .messages
+                .iter()
+                .filter(|m| m.folder == fid && since.is_none_or(|s| m.received_ms >= s))
+                .filter(|m| search.as_ref().is_none_or(|t| m.subject.to_lowercase().contains(t) || m.body_html.to_lowercase().contains(t)))
+                .collect();
             // Newest first unless asked otherwise.
             list.sort_by(|a, b| b.received_ms.cmp(&a.received_ms));
             if query_param(q, "$orderby").is_some_and(|o| o.trim().ends_with("asc")) {

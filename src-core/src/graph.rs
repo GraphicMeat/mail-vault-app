@@ -360,6 +360,28 @@ struct RawFlag {
     flag_status: Option<String>,
 }
 
+/// The fields a [`GraphSynced`] row is read from.
+const SYNCED_SELECT: &str =
+    "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,flag,replyTo";
+
+impl RawSynced {
+    fn into_synced(self) -> GraphSynced {
+        GraphSynced {
+            flagged: self.flag.and_then(|f| f.flag_status).is_some_and(|s| s.eq_ignore_ascii_case("flagged")),
+            reply_to: self
+                .reply_to
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|a| {
+                    let address = a.email_address.address.filter(|x| !x.trim().is_empty())?;
+                    Some(EmailAddress { name: a.email_address.name, address })
+                })
+                .collect(),
+            message: self.message,
+        }
+    }
+}
+
 /// The MAPI property `PR_MESSAGE_SIZE` (Integer 0x0E08), read as an extended
 /// property because `message` has no size field.
 const SIZE_PROPERTY_ID: &str = "Integer 0x0E08";
@@ -1702,11 +1724,12 @@ impl GraphClient {
                     return Err("Graph list_since refused a malformed receivedDateTime".to_string());
                 }
                 format!(
-                    "{}/me/mailFolders/{}/messages?$top=100&$filter=receivedDateTime ge {}&$orderby=receivedDateTime {}&$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,flag,replyTo",
+                    "{}/me/mailFolders/{}/messages?$top=100&$filter=receivedDateTime ge {}&$orderby=receivedDateTime {}&$select={}",
                     graph_base(),
                     percent_encode(folder_id),
                     since,
-                    order
+                    order,
+                    SYNCED_SELECT
                 )
             }
         };
@@ -1722,24 +1745,35 @@ impl GraphClient {
             .json()
             .await
             .map_err(|e| format!("Graph list_since parse error: {}", e))?;
-        let rows = list
-            .value
-            .into_iter()
-            .map(|r| GraphSynced {
-                flagged: r.flag.and_then(|f| f.flag_status).is_some_and(|s| s.eq_ignore_ascii_case("flagged")),
-                reply_to: r
-                    .reply_to
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter_map(|a| {
-                        let address = a.email_address.address.filter(|x| !x.trim().is_empty())?;
-                        Some(EmailAddress { name: a.email_address.name, address })
-                    })
-                    .collect(),
-                message: r.message,
-            })
-            .collect();
+        let rows = list.value.into_iter().map(RawSynced::into_synced).collect();
         Ok((rows, list.next_link))
+    }
+
+    /// Up to `limit` (at most 100) messages of one folder that match `query` as Graph's own `$search`
+    /// reads it (subject, sender, recipients and body), with the same fields as
+    /// [`GraphClient::list_since`]: the mobile engine's server-side search. The query travels as
+    /// one quoted `$search` phrase, `"` and `\` escaped. No ordering is asked (Graph refuses
+    /// `$orderby` beside `$search`); the caller sorts. A failure is `failure_text`.
+    pub async fn search_folder(&self, folder_id: &str, query: &str, limit: usize) -> Result<Vec<GraphSynced>, String> {
+        let phrase = format!("\"{}\"", query.replace(['\r', '\n'], " ").replace('\\', "\\\\").replace('"', "\\\""));
+        let url = format!(
+            "{}/me/mailFolders/{}/messages?$top={}&$search={}&$select={}",
+            graph_base(),
+            percent_encode(folder_id),
+            limit.clamp(1, 100),
+            percent_encode(&phrase),
+            SYNCED_SELECT
+        );
+        let resp = self
+            .client
+            .send(self.client.get(&url).bearer_auth(&self.access_token))
+            .await
+            .map_err(|e| format!("Graph search request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(Self::failure_text(resp, "search").await);
+        }
+        let list: GraphListResponse<RawSynced> = resp.json().await.map_err(|e| format!("Graph search parse error: {}", e))?;
+        Ok(list.value.into_iter().map(RawSynced::into_synced).collect())
     }
 
     /// The newest message of a folder (by received time) as `(id, lastModifiedDateTime)`, `None`

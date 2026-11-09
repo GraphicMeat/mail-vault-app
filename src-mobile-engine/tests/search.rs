@@ -1,11 +1,16 @@
 //! `mobile.search.local` and the index behind it (core's search index in `search.db`): matching as
 //! desktop matches, the index following sync, actions, bodies and account removal, the backfill,
-//! a rebuild, and the v5 -> v6 step. Mail comes from the mock IMAP server, or is written straight
+//! a rebuild, and the v5 -> v6 step; then `mobile.search.server` on IMAP, Graph and JMAP accounts
+//! and the retention of the rows it stores. Mail comes from the mock IMAP server, or is written straight
 //! into `mobile.db` for the backfill cases.
 
-use mailvault_mobile_engine::{Engine, MemorySecrets, RpcError};
+#[path = "support/graph.rs"]
+mod graph_mock;
+
+use mailvault_mobile_engine::{Credential, Engine, MemorySecrets, RpcError, SecretStore};
 use mock_imap::state::{Mailbox, Message};
 use mock_imap::{MockImap, Scenario};
+use mock_jmap::{MockJmap, Scenario as JmapScenario, ScenarioAccount, ScenarioEmail, ScenarioMailbox};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -494,4 +499,251 @@ fn a_v5_file_migrates_to_v6_and_keeps_its_rows() {
     // The rows a v5 build synced are searchable once backfilled.
     idle(&e);
     assert_eq!(uids(&search(&e, json!({ "query": "nuthatch" }))), vec![3, 2, 1]);
+}
+
+// ── Server search ───────────────────────────────────────────────────────────
+
+const MONTH: i64 = 30 * DAY;
+
+/// `mobile.search.server` rows of `folder`.
+fn server_rows(e: &Engine, account: &str, folder: &str, query: &str) -> Vec<Value> {
+    let r = e.rpc("mobile.search.server", json!({ "accountId": account, "folder": folder, "query": query })).unwrap();
+    r["rows"].as_array().unwrap().clone()
+}
+
+/// An engine over a fresh data dir with an event log, and no account.
+fn bare() -> (tempfile::TempDir, Arc<Engine>, Arc<Events>, Arc<MemorySecrets>) {
+    let tmp = tempfile::tempdir().unwrap();
+    let secrets = Arc::new(MemorySecrets::default());
+    let engine = Arc::new(Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::clone(&secrets) as _).unwrap());
+    engine.set_action_backoff(Duration::from_millis(50), Duration::from_millis(200));
+    let events = Arc::new(Events::default());
+    let sink = Arc::clone(&events);
+    assert!(engine.set_event_sink(move |name, payload| {
+        sink.list.lock().unwrap().push((name.to_string(), payload));
+        sink.cv.notify_all();
+    }));
+    (tmp, engine, events, secrets)
+}
+
+/// One sync pass of the account (folder list and INBOX), waited out with the index caught up.
+fn sync_account(e: &Engine, events: &Events, account: &str) {
+    let from = events.len();
+    assert_eq!(e.rpc("mobile.sync.refresh", json!({ "accountId": account })).unwrap(), json!({ "queued": true }));
+    let end = events.wait(from, "sync end", |n, v| n == "mobile.sync.state" && v["accountId"] == account && (v["state"] == "idle" || v["state"] == "error"));
+    assert_eq!(end["state"], "idle", "sync ended in error: {end}");
+    idle(e);
+}
+
+fn mobile_db(dir: &Path) -> Connection {
+    let c = Connection::open(dir.join("mobile.db")).unwrap();
+    c.busy_timeout(Duration::from_secs(5)).unwrap();
+    c
+}
+
+/// `out_of_window_ms` of the row, `None` when the row is missing or has no mark.
+fn mark_of(dir: &Path, account: &str, uid: i64) -> Option<i64> {
+    mobile_db(dir)
+        .query_row("SELECT out_of_window_ms FROM messages WHERE account_id = ?1 AND folder = 'INBOX' AND uid = ?2", (account, uid), |r| r.get(0))
+        .unwrap_or(None)
+}
+
+fn has_row(dir: &Path, account: &str, uid: i64) -> bool {
+    mobile_db(dir)
+        .query_row("SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = 'INBOX' AND uid = ?2", (account, uid), |r| r.get::<_, i64>(0))
+        .unwrap()
+        == 1
+}
+
+fn listed_subjects(e: &Engine, account: &str) -> Vec<String> {
+    let page = e.rpc("mobile.messages.page", json!({ "accountId": account, "folder": "INBOX", "cursor": null, "limit": 200 })).unwrap();
+    page["rows"].as_array().unwrap().iter().map(|r| r["subject"].as_str().unwrap().to_string()).collect()
+}
+
+/// An action on `uid` of INBOX, waited out; its result.
+fn act_seen(e: &Engine, events: &Events, account: &str, uid: i64) -> Value {
+    let p = json!({ "accountId": account, "folder": "INBOX", "uids": [uid], "kind": "seen" });
+    let seq = e.rpc("mobile.actions.apply", p).unwrap()["queued"].as_i64().expect("queued");
+    let r = events.wait(0, "final action result", |n, v| n == "mobile.action.result" && v["seq"] == seq && v["outcome"] != "retrying");
+    idle(e);
+    r
+}
+
+/// What every backend must do with an account whose INBOX holds a recent message "Weekly status"
+/// and one 200 days old, subject holding "invoice" and body holding `word`: sync lists only the
+/// recent one, the server search brings the old one back as a list row and stores it, and then
+/// the viewer, an action and the local search all work on it.
+fn old_message_comes_back_through_the_server(dir: &Path, e: &Engine, events: &Events, account: &str, word: &str) -> i64 {
+    sync_account(e, events, account);
+    assert_eq!(listed_subjects(e, account), vec!["Weekly status".to_string()]);
+
+    let rows = server_rows(e, account, "INBOX", "invoice");
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    let row = &rows[0];
+    assert!(row["subject"].as_str().unwrap().contains("invoice"), "{row}");
+    assert_eq!((row["accountId"].as_str(), row["folder"].as_str()), (Some(account), Some("INBOX")));
+    for k in ["uid", "fromName", "fromAddress", "dateMs", "snippet", "seen", "flagged", "hasAttachments", "to"] {
+        assert!(row.get(k).is_some(), "missing {k}: {row}");
+    }
+    assert!(row["dateMs"].as_i64().unwrap() < now_ms() - 150 * DAY, "{row}");
+    let uid = row["uid"].as_i64().unwrap();
+
+    // Stored with its mark, and still not part of the folder's list.
+    let mark = mark_of(dir, account, uid).expect("the row is stored with out_of_window_ms");
+    assert!((now_ms() - mark).abs() < 60_000, "{mark}");
+    assert_eq!(listed_subjects(e, account), vec!["Weekly status".to_string()]);
+
+    // The viewer.
+    let body = e.rpc("mobile.message.body", json!({ "accountId": account, "folder": "INBOX", "uid": uid })).unwrap();
+    assert!(body.to_string().contains(word), "{body}");
+    // An action.
+    assert_eq!(act_seen(e, events, account, uid)["outcome"], "done");
+    // The local search finds it by its subject and, the body being read, by the body.
+    idle(e);
+    let local = |q: &str| uids(&e.rpc("mobile.search.local", json!({ "accountId": account, "query": q })).unwrap());
+    assert_eq!(local("invoice"), vec![uid as u32]);
+    assert_eq!(local(word), vec![uid as u32]);
+    // A later pass does not take it away.
+    sync_account(e, events, account);
+    assert!(has_row(dir, account, uid));
+    assert_eq!(local("invoice"), vec![uid as u32]);
+    uid
+}
+
+#[test]
+fn server_search_imap_graph_jmap_returns_rows_the_viewer_can_open() {
+    // IMAP: `UID SEARCH CHARSET UTF-8 TEXT`.
+    {
+        let server = MockImap::start(Scenario::new().mailbox(mailbox(
+            "INBOX",
+            vec![
+                mail(1, "Overdue invoice 4411", "The ledgerword is attached below.", 200),
+                mail(2, "Weekly status", "All quiet.", 1),
+            ],
+        )));
+        let f = setup(&server);
+        let uid = old_message_comes_back_through_the_server(f._tmp.path(), &f.engine, &f.events, &f.account, "ledgerword");
+        assert_eq!(uid, 1);
+        // A query the server cannot match brings nothing, and stores nothing.
+        assert!(server_rows(&f.engine, &f.account, "INBOX", "zzzznotthere").is_empty());
+        // The folder is checked first.
+        let err = f.engine.rpc("mobile.search.server", json!({ "accountId": f.account, "folder": "Nope", "query": "invoice" })).unwrap_err();
+        assert_eq!(err.code(), "INVALID");
+        // A non-ASCII query goes out as UTF-8.
+        assert!(server_rows(&f.engine, &f.account, "INBOX", "東京").is_empty());
+    }
+
+    // Graph: `$search`.
+    {
+        let g = graph_mock::mock();
+        let _serial = graph_mock::serial();
+        g.reset("owner@outlook.com");
+        g.add_message("inbox", "Overdue invoice 4411", now_ms() - 200 * DAY, "<p>The ledgerword is attached below.</p>");
+        g.add_message("inbox", "Weekly status", now_ms() - DAY, "<p>All quiet.</p>");
+        let (tmp, engine, events, secrets) = bare();
+        engine.set_oauth_token_endpoint(&g.token_endpoint());
+        let account = "acc_00000000000000gr";
+        mobile_db(tmp.path())
+            .execute(
+                "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, kind, auth, provider, needs_auth, created_ms)
+                 VALUES (?1, 'owner@outlook.com', 'owner@outlook.com', 'outlook.office365.com', 993, 'ssl', 'graph', 'oauth2', 'microsoft', 0, 1)",
+                [account],
+            )
+            .unwrap();
+        let (refresh, access, expires) = g.grant();
+        secrets.set(account, &Credential::from_tokens(&refresh, &access, expires).to_secret()).unwrap();
+        old_message_comes_back_through_the_server(tmp.path(), &engine, &events, account, "ledgerword");
+        assert!(g.count("$search") >= 1, "{:?}", g.requests());
+    }
+
+    // JMAP: `Email/query` with the `text` filter.
+    {
+        let jmap_email = |id: &str, subject: &str, body: &str, received_secs: i64| ScenarioEmail {
+            id: id.into(),
+            raw: format!("From: Alice <alice@example.test>\r\nTo: me@example.test\r\nSubject: {subject}\r\nMessage-ID: <{id}@example.test>\r\nDate: Mon, 05 Jan 2026 10:00:00 +0000\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n"),
+            keywords: vec![],
+            received_at: mock_jmap::state::iso8601(received_secs),
+            also_in: vec![],
+        };
+        let mailbox = |id: &str, name: &str, role: &str, emails: Vec<ScenarioEmail>| ScenarioMailbox {
+            id: id.into(),
+            name: name.into(),
+            parent_id: None,
+            role: Some(role.into()),
+            emails,
+        };
+        let now = now_ms() / 1000;
+        let m = MockJmap::start(JmapScenario {
+            accounts: vec![ScenarioAccount {
+                username: "me@example.test".into(),
+                password: "app-pass-7c1f".into(),
+                token: None,
+                mailboxes: vec![
+                    mailbox(
+                        "mb-inbox",
+                        "Inbox",
+                        "inbox",
+                        vec![
+                            jmap_email("e-old", "Overdue invoice 4411", "The ledgerword is attached below.", now - 200 * 86_400),
+                            jmap_email("e-new", "Weekly status", "All quiet.", now - 86_400),
+                        ],
+                    ),
+                    mailbox("mb-sent", "Sent", "sent", vec![]),
+                    mailbox("mb-trash", "Trash", "trash", vec![]),
+                ],
+                identities: vec![("me@example.test".into(), "Me".into())],
+            }],
+            ..JmapScenario::default()
+        });
+        let (tmp, engine, events, _secrets) = bare();
+        engine.allow_jmap_loopback();
+        let added = engine
+            .rpc("mobile.accounts.add", json!({ "kind": "jmap", "email": "me@example.test", "password": "app-pass-7c1f", "jmapUrl": m.session_url() }))
+            .unwrap();
+        assert_eq!(added["ok"], true, "{added}");
+        let account = added["account"]["id"].as_str().unwrap().to_string();
+        old_message_comes_back_through_the_server(tmp.path(), &engine, &events, &account, "ledgerword");
+    }
+}
+
+#[test]
+fn server_search_rows_outlive_sync_for_thirty_days_after_their_mark() {
+    let server = MockImap::start(Scenario::new().mailbox(mailbox(
+        "INBOX",
+        vec![mail(1, "Overdue invoice 4411", "The ledgerword is attached below.", 200), mail(2, "Weekly status", "All quiet.", 1)],
+    )));
+    let f = setup(&server);
+    let dir = f._tmp.path();
+    f.sync(None);
+    let rows = server_rows(&f.engine, &f.account, "INBOX", "invoice");
+    assert_eq!(uids(&json!({ "rows": rows })), vec![1]);
+    let set_mark = |ms: i64| {
+        mobile_db(dir).execute("UPDATE messages SET out_of_window_ms = ?2 WHERE account_id = ?1 AND uid = 1", (&f.account, ms)).unwrap();
+    };
+    // Within 30 days of its mark a pass that does not list it leaves it alone, and so does the
+    // index.
+    set_mark(now_ms() - MONTH + DAY);
+    f.sync(Some("INBOX"));
+    assert!(has_row(dir, &f.account, 1));
+    assert_eq!(f.search("invoice"), vec![1]);
+    // Opening it moves the mark to now.
+    set_mark(now_ms() - MONTH + DAY);
+    f.body(1);
+    let mark = mark_of(dir, &f.account, 1).unwrap();
+    assert!((now_ms() - mark).abs() < 60_000, "{mark}");
+    // Searching again moves it too.
+    set_mark(now_ms() - MONTH + DAY);
+    assert_eq!(server_rows(&f.engine, &f.account, "INBOX", "invoice").len(), 1);
+    assert!((now_ms() - mark_of(dir, &f.account, 1).unwrap()).abs() < 60_000);
+    // Past 30 days the next pass removes it, with its index entry.
+    set_mark(now_ms() - MONTH - DAY);
+    f.sync(Some("INBOX"));
+    assert!(!has_row(dir, &f.account, 1));
+    assert!(f.search("invoice").is_empty());
+    assert_eq!(indexed(&f.engine, &f.account, "INBOX"), vec![2]);
+    // A row in the window never carries a mark, and a pass still removes it when it is gone.
+    assert_eq!(mark_of(dir, &f.account, 2), None);
+    server.mutate(|s| s.find_mut("INBOX").unwrap().expunge(&[2], false));
+    f.sync(Some("INBOX"));
+    assert!(!has_row(dir, &f.account, 2));
 }

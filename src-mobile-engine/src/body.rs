@@ -215,7 +215,10 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
     if let Some(hit) = cached(shared, &p).map_err(internal)? {
         // Skipped when a sync write holds the writer: a stale stamp only makes the row an
         // earlier eviction candidate.
-        let _ = shared.try_write(|c| c.execute(&format!("UPDATE bodies SET last_access_ms = {STAMP} WHERE {KEY}"), key(&p)));
+        let _ = shared.try_write(|c| {
+            c.execute(&format!("UPDATE bodies SET last_access_ms = {STAMP} WHERE {KEY}"), key(&p))?;
+            refresh_out_of_window(c, &p)
+        });
         return Ok(hit.reply(tracker_policy(premium(shared))));
     }
     let validity: Option<Option<i64>> = shared
@@ -249,7 +252,18 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
             evict(shared, cap(shared), &p).map_err(internal)?;
         }
     }
+    // Opened: a row outside the sync window that a server search stored is kept 30 days from now.
+    let _ = shared.write(|c| refresh_out_of_window(c, &p));
     Ok(body.reply(tracker_policy(premium(shared))))
+}
+
+/// Moves the `out_of_window_ms` mark of the opened message to now (a row inside the window has none).
+fn refresh_out_of_window(c: &Connection, p: &BodyParams) -> rusqlite::Result<usize> {
+    c.execute(
+        "UPDATE messages SET out_of_window_ms = ?4
+         WHERE account_id = ?1 AND folder = ?2 AND uid = ?3 AND out_of_window_ms IS NOT NULL",
+        (&p.account_id, &p.folder, p.uid as i64, now_ms()),
+    )
 }
 
 fn internal(e: impl ToString) -> RpcError {

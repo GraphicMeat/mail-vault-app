@@ -285,6 +285,13 @@ pub(crate) trait Backend: Send {
     /// The flags of `uids`. A uid missing from the reply is not reported (the window decides what is
     /// gone); a generation other than `folder.uid_validity` fails the call.
     fn flags(&mut self, folder: &FolderRow, uids: &[u32]) -> Result<Vec<(u32, Flags)>, Fail>;
+    /// Up to `limit` messages of `folder` that match `query` on the server (it searches subject,
+    /// addresses and body, over the whole folder, not the sync window), newest first, as
+    /// [`Backend::headers`] reads them: a Graph or JMAP backend maps each to a local uid first (new
+    /// ones get the next uids, oldest first), so the caller can store the rows and the viewer,
+    /// actions and attachments reach them. A generation other than `folder.uid_validity` fails the
+    /// call.
+    fn search(&mut self, folder: &FolderRow, query: &str, limit: usize) -> Result<Vec<Header>, Fail>;
     /// The parts of `uid`. `None` when the uid is gone or the folder's generation is not
     /// `folder.uid_validity`. Leaves the folder ready for [`Backend::part_range`].
     fn parts(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<Vec<PartInfo>>, Fail>;

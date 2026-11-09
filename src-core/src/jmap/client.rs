@@ -405,6 +405,18 @@ impl JmapClient {
         position: usize,
         limit: usize,
     ) -> Result<(Vec<String>, Option<usize>), JmapError> {
+        self.query_filtered(json!({"inMailbox": mailbox_id}), position, limit).await
+    }
+
+    /// Up to `limit` email ids in `mailbox_id` whose headers or body match `text` (the server's own
+    /// `text` filter), newest first: the mobile engine's server-side search.
+    pub async fn search_mailbox(&self, mailbox_id: &str, text: &str, limit: usize) -> Result<Vec<String>, JmapError> {
+        let filter = json!({"inMailbox": mailbox_id, "text": text});
+        Ok(self.query_filtered(filter, 0, limit).await?.0)
+    }
+
+    /// [`JmapClient::query_mailbox`] for any `filter`.
+    async fn query_filtered(&self, filter: Value, position: usize, limit: usize) -> Result<(Vec<String>, Option<usize>), JmapError> {
         let mut ids: Vec<String> = Vec::new();
         let mut pos = position;
         let mut total: Option<usize> = None;
@@ -415,7 +427,7 @@ impl JmapClient {
                 .method(
                     "Email/query",
                     json!({
-                        "filter": {"inMailbox": mailbox_id},
+                        "filter": filter,
                         "sort": [{"property": "receivedAt", "isAscending": false}],
                         "position": pos,
                         "limit": limit - ids.len(),

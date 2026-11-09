@@ -110,6 +110,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
     ("mobile.search.local", crate::search::local),
+    ("mobile.search.server", crate::search::server),
     ("mobile.settings.get", crate::settings::get),
     ("mobile.settings.set", crate::settings::set),
     ("mobile.sync.refresh", crate::sync::refresh),
@@ -147,6 +148,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.ping", ping),
     ("mobile.search.local", crate::search::local),
+    ("mobile.search.server", crate::search::server),
     ("mobile.settings.get", crate::settings::get),
     ("mobile.settings.set", crate::settings::set),
     ("mobile.sync.refresh", crate::sync::refresh),
@@ -205,8 +207,9 @@ struct CursorPageParams {
 }
 
 /// The list's view of a row: a pending local change (`local_*`) wins over the server's value, and
-/// a row deleted locally is not listed.
-const LISTED: &str = "account_id = ?1 AND folder = ?2 AND COALESCE(local_deleted, 0) = 0";
+/// a row deleted locally is not listed, nor is one outside the sync window that a server search
+/// stored (it shows in search results, not in the folder).
+const LISTED: &str = "account_id = ?1 AND folder = ?2 AND COALESCE(local_deleted, 0) = 0 AND out_of_window_ms IS NULL";
 pub(crate) const ROW_COLUMNS: &str = "uid, subject, from_name, from_address, date_ms, snippet,
     COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), has_attachments, to_json";
 

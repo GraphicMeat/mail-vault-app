@@ -721,6 +721,71 @@ pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     Ok(json!({ "rows": rows, "cursor": cursor }))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ServerParams {
+    account_id: String,
+    folder: String,
+    query: String,
+}
+
+/// Most messages one server search brings back.
+const SERVER_LIMIT: usize = 50;
+
+/// `mobile.search.server {accountId, folder, query}` -> `{rows}`: asks the account's server to
+/// search `folder` (the whole folder, not the sync window), stores the messages it names in
+/// `mobile.db` (those older than the window marked `out_of_window_ms`, see `sync::store_found`),
+/// indexes them, and answers them as list rows (the shape of `mobile.search.local`'s, newest
+/// first). The viewer, actions and attachments work on them like on any row. Blocks the calling
+/// thread for the network, as a body open does.
+pub(crate) fn server(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: ServerParams = parse(params)?;
+    let shared = engine.shared();
+    if p.query.trim().is_empty() {
+        return Ok(json!({ "rows": [] }));
+    }
+    let Some(folder) = crate::sync::folder_path(shared, &p.account_id, &p.folder).map_err(internal)? else {
+        return Err(RpcError::Invalid("unknown folder".into()));
+    };
+    let validity: Option<i64> = shared
+        .read(|c| c.query_row("SELECT uid_validity FROM folders WHERE account_id = ?1 AND path = ?2", (&p.account_id, &folder), |r| r.get(0)))
+        .map_err(internal)?;
+    let found = (|| {
+        let mut backend = crate::backend::open(shared, &p.account_id)?;
+        let headers = backend.search(&crate::backend::FolderRow::new(&folder, validity), &p.query, SERVER_LIMIT);
+        // Signs out.
+        drop(backend);
+        crate::sync::store_found(shared, &p.account_id, &folder, &headers?)
+    })();
+    let uids = match found {
+        Ok(u) => u,
+        Err(crate::sync::Fail::Gone) => return Err(RpcError::Invalid("unknown account".into())),
+        Err(crate::sync::Fail::Closing) => return Err(RpcError::Internal("the engine is closing".into())),
+        Err(crate::sync::Fail::Code(code, why)) => {
+            shared.log(&format!("[search] server search {} {}: {} {}", p.account_id, folder, code.as_str(), why));
+            return Err(RpcError::Internal(code.as_str().into()));
+        }
+    };
+    let cols = crate::rpc::ROW_COLUMNS;
+    let rows: Vec<Value> = engine
+        .read(|c| {
+            let mut st = c.prepare_cached(&format!(
+                "SELECT {cols} FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3 AND COALESCE(local_deleted, 0) = 0"
+            ))?;
+            let mut out = Vec::with_capacity(uids.len());
+            for uid in &uids {
+                if let Some(mut row) = st.query_row((&p.account_id, &folder, *uid as i64), crate::rpc::row_json).optional()? {
+                    row["accountId"] = json!(p.account_id);
+                    row["folder"] = json!(folder);
+                    out.push(row);
+                }
+            }
+            Ok(out)
+        })
+        .map_err(internal)?;
+    Ok(json!({ "rows": rows }))
+}
+
 /// Whether an index hit's Message-ID and a row's can name the same message (a side with none
 /// cannot contradict the other).
 fn same_message(indexed: Option<&str>, row: &str) -> bool {

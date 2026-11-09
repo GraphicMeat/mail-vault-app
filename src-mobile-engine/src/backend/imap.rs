@@ -421,6 +421,25 @@ impl Backend for ImapBackend {
         })
     }
 
+    /// `UID SEARCH CHARSET UTF-8 TEXT "<query>"` (core's `ServerSearch` writes the key and quotes
+    /// the value), then the headers of the newest `limit` hits, whose SELECT proves the generation.
+    fn search(&mut self, folder: &FolderRow, query: &str, limit: usize) -> Result<Vec<Header>, Fail> {
+        let keys = imap::ServerSearch { query: Some(query), ..Default::default() }.criteria();
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        let criteria = format!("CHARSET UTF-8 {}", keys.join(" "));
+        self.step(async |session| {
+            let found = abd_cmds::uid_search(session, &folder.path, &criteria).await?;
+            // Ascending: the newest are the last.
+            let newest = &found[found.len().saturating_sub(limit)..];
+            let ((mut headers, _), got) = imap::fetch_headers_by_uids_bound(session, &folder.path, newest).await?;
+            check_validity(got, folder)?;
+            headers.sort_by_key(|h| std::cmp::Reverse(h.uid));
+            Ok(headers)
+        })
+    }
+
     fn parts(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<Vec<PartInfo>>, Fail> {
         self.step(async |session| parts_in(session, folder, uid).await)
     }

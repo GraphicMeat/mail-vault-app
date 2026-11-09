@@ -832,6 +832,35 @@ impl Backend for JmapBackend<'_> {
         Ok(headers)
     }
 
+    /// `Email/query` with the server's `text` filter over the mailbox, then `Email/get` of the hits;
+    /// each under its local uid (new ones get the next, oldest first, as `window` gives them).
+    fn search(&mut self, folder: &FolderRow, query: &str, limit: usize) -> Result<Vec<Header>, Fail> {
+        if folder.uid_validity.is_some_and(|v| v != GENERATION) {
+            return Err(Fail::Code(Code::Invalid, format!("generation of {} changed during search", folder.path)));
+        }
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let path = folder.path.clone();
+        let mailbox = self.mailbox_id(&path)?;
+        let ids = self.call(async |c| c.search_mailbox(&mailbox, query, limit).await)?;
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let got = self.call(async |c| c.get_emails(&ids, HEADER_PROPS).await)?;
+        let by_id: HashMap<&str, &Value> = got.list.iter().filter_map(|e| Some((e["id"].as_str()?, e))).collect();
+        // `ids` is newest first: the uids of the new ones go oldest first.
+        let present: Vec<&String> = ids.iter().filter(|id| by_id.contains_key(id.as_str())).collect();
+        let account = self.account.clone();
+        let mut uids = self.shared.read(|c| remote_ids::folder_map(c, &account, &path))?;
+        let fresh: Vec<String> = present.iter().rev().map(|id| key(&path, id)).filter(|k| !uids.contains_key(k)).collect();
+        for chunk in fresh.chunks(BATCH) {
+            let got = sync::write_for(self.shared, &account, |c| remote_ids::uids_for(c, &account, &path, chunk))?;
+            uids.extend(chunk.iter().cloned().zip(got));
+        }
+        Ok(present.iter().filter_map(|id| Some(to_header(by_id[id.as_str()], *uids.get(&key(&path, id))?))).collect())
+    }
+
     fn flags(&mut self, folder: &FolderRow, uids: &[u32]) -> Result<Vec<(u32, Flags)>, Fail> {
         let listed = self.listed(folder)?.clone();
         let state = self.pass_state.as_ref().filter(|(f, _)| *f == folder.path).map(|(_, s)| s.clone());

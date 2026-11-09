@@ -117,6 +117,19 @@ fn refused_or_fail(e: String) -> Result<ApplyOutcome, Fail> {
     }
 }
 
+/// A listed row as the header sync stores: core's conversion plus Outlook's flag and where a
+/// reply goes (core's header leaves both unset for Graph).
+fn header_of(uid: u32, row: &GraphSynced) -> Header {
+    let mut h = row.message.to_email_header(uid);
+    if row.flagged {
+        h.flags.push("\\Flagged".into());
+    }
+    if let Some(to) = row.reply_to.first() {
+        h.reply_to = Some(to.clone());
+    }
+    h
+}
+
 fn special_use(well_known: Option<&str>) -> Option<String> {
     let s = match well_known? {
         "sentitems" => "\\Sent",
@@ -612,21 +625,23 @@ impl Backend for GraphBackend<'_> {
 
     fn headers(&mut self, folder: &FolderRow, uids: &[u32]) -> Result<Vec<Header>, Fail> {
         let listed = self.listed(folder)?;
-        Ok(uids
-            .iter()
-            .filter_map(|uid| {
-                let row = listed.get(uid)?;
-                let mut h = row.message.to_email_header(*uid);
-                if row.flagged {
-                    h.flags.push("\\Flagged".into());
-                }
-                // Where a reply goes (core's header leaves it unset for Graph).
-                if let Some(to) = row.reply_to.first() {
-                    h.reply_to = Some(to.clone());
-                }
-                Some(h)
-            })
-            .collect())
+        Ok(uids.iter().filter_map(|uid| listed.get(uid).map(|row| header_of(*uid, row))).collect())
+    }
+
+    /// Graph's `$search` over the folder (one request, no paging), each hit under its local uid.
+    fn search(&mut self, folder: &FolderRow, query: &str, limit: usize) -> Result<Vec<Header>, Fail> {
+        if folder.uid_validity.is_some_and(|v| v != GENERATION) {
+            return Err(Fail::Code(Code::Invalid, format!("generation of {} changed during search", folder.path)));
+        }
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let remote = remote_folder(&folder.path).to_string();
+        let found = self.call(async |c| c.search_folder(&remote, query, limit).await)?;
+        let mapped = self.map_listed(&folder.path, found)?;
+        let mut headers: Vec<Header> = mapped.iter().map(|(uid, row)| header_of(*uid, row)).collect();
+        headers.sort_by_key(|h| std::cmp::Reverse((h.internal_date.clone(), h.uid)));
+        Ok(headers)
     }
 
     fn flags(&mut self, folder: &FolderRow, uids: &[u32]) -> Result<Vec<(u32, Flags)>, Fail> {

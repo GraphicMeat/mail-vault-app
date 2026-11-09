@@ -129,7 +129,7 @@ pub(crate) fn seed_baselines(c: &Connection) -> rusqlite::Result<()> {
     c.execute(
         "INSERT INTO notify_state (account_id, folder, last_uid, uid_validity, since_ms)
          SELECT f.account_id, f.path,
-                COALESCE((SELECT MAX(m.uid) FROM messages m WHERE m.account_id = f.account_id AND m.folder = f.path), 0),
+                COALESCE((SELECT MAX(m.uid) FROM messages m WHERE m.account_id = f.account_id AND m.folder = f.path AND m.out_of_window_ms IS NULL), 0),
                 f.uid_validity, ?1
          FROM folders f WHERE f.path = 'INBOX' COLLATE NOCASE AND f.synced_ms IS NOT NULL",
         [now_ms()],
@@ -184,7 +184,7 @@ fn read_above(shared: &Shared, account: &str, folder: &str, mark: i64) -> Result
                     m.message_id, r.remote_id
              FROM messages m
              LEFT JOIN remote_ids r ON r.account_id = m.account_id AND r.folder = m.folder AND r.uid = m.uid
-             WHERE m.account_id = ?1 AND m.folder = ?2 AND m.uid > ?3 ORDER BY m.uid",
+             WHERE m.account_id = ?1 AND m.folder = ?2 AND m.uid > ?3 AND m.out_of_window_ms IS NULL ORDER BY m.uid",
         )?;
         let rows = st
             .query_map((account, folder, mark), |r| {
@@ -258,7 +258,7 @@ pub(crate) fn collect(shared: &Shared, account: &str) -> Result<Option<Collected
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?;
-        let top: i64 = c.query_row("SELECT COALESCE(MAX(uid), 0) FROM messages WHERE account_id = ?1 AND folder = ?2", (account, &folder), |r| r.get(0))?;
+        let top: i64 = c.query_row("SELECT COALESCE(MAX(uid), 0) FROM messages WHERE account_id = ?1 AND folder = ?2 AND out_of_window_ms IS NULL", (account, &folder), |r| r.get(0))?;
         Ok((validity, state, top))
     })?;
     let baseline = |shared: &Shared| -> Result<Option<Collected>, EngineError> {
