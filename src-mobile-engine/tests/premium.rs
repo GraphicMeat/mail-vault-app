@@ -471,6 +471,40 @@ fn refused_receipt_clears_premium() {
 }
 
 #[test]
+fn install_limit_is_its_own_code_and_keeps_the_receipt() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    stub().route(APPLE, store_ok(now + HOUR, "apple"));
+    fx.verify_apple().unwrap();
+    assert!(fx.premium());
+    let stored = fx.secret("premium.receipt").expect("receipt kept");
+    let events = fx.premium_events().len();
+
+    // A Restore the server will not add to a purchase already on five installs.
+    stub().route(APPLE, Answer::Json(409, json!({ "error": "install_limit" })));
+    let e = fx.err("mobile.premium.verify", json!({ "platform": "apple", "jws": "jws-other-purchase", "restore": true }));
+    assert_eq!(e.code(), "INSTALL_LIMIT");
+    assert!(!e.to_string().contains("install_limit"), "fixed text, never the server's: {e}");
+    assert!(fx.premium(), "not a refusal: Premium stays");
+    assert_eq!(fx.secret("premium.receipt").as_deref(), Some(stored.as_str()), "the stored receipt is untouched");
+    assert_eq!(fx.premium_events().len(), events, "nothing changed");
+
+    // Google the same way.
+    stub().route(GOOGLE, Answer::Json(409, json!({ "error": "install_limit" })));
+    let e = fx.err(
+        "mobile.premium.verify",
+        json!({ "platform": "google", "token": PLAY_TOKEN, "productId": "com.mailvault.app.premium.yearly", "restore": true }),
+    );
+    assert_eq!(e.code(), "INSTALL_LIMIT");
+    assert_eq!(fx.secret("premium.receipt").as_deref(), Some(stored.as_str()));
+
+    // Any other 409 stays a refusal.
+    stub().route(APPLE, Answer::Json(409, json!({ "error": "conflict" })));
+    assert_eq!(fx.verify_apple().unwrap_err().code(), "REFUSED");
+    assert!(!fx.premium());
+}
+
+#[test]
 fn network_error_keeps_cached_premium_until_expiry() {
     let (_g, fx) = setup();
     let now = now_ms();

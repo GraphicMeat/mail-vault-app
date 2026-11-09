@@ -246,6 +246,7 @@ fn fail(f: Fail) -> RpcError {
         Fail::Refused => "REFUSED",
         Fail::CodeWrong => "CODE_WRONG",
         Fail::CodeExpired => "CODE_EXPIRED",
+        Fail::InstallLimit => "INSTALL_LIMIT",
     })
 }
 
@@ -521,7 +522,9 @@ fn present(v: Option<String>) -> Option<String> {
 /// each with an optional `restore: true` (Restore Purchases: bind a receipt bought elsewhere;
 /// Apple adds `appTransaction`, the AppTransaction JWS, as proof of the same account) -> status. The server's yes or no becomes the cache; an accepted receipt is kept for re-checks.
 /// `REFUSED` (an invalid receipt) ends a store entitlement at once; `NETWORK`/`RATE_LIMITED` keep
-/// the cache. A web entitlement is not touched by a store answer.
+/// the cache. `INSTALL_LIMIT` (a Restore of a purchase already on its most installs) keeps the
+/// cache and any stored receipt: the receipt is valid, only this install was not added, so it is
+/// not a refusal. A web entitlement is not touched by a store answer.
 pub(crate) fn verify(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: VerifyParams = parse(params)?;
     let receipt = match p.platform.as_str() {
@@ -545,7 +548,8 @@ pub(crate) fn verify(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     let check = check_store(&receipt, &install, now, p.restore, app_transaction.as_deref());
     let refused = matches!(check, Check::Refused { .. });
     match &check {
-        // No answer: the cache stays, and the caller must not take the purchase as accepted.
+        // No answer (or the install limit): the cache and any stored receipt stay, and the caller
+        // must not take the purchase as accepted.
         Check::Failed(f) => return Err(fail(*f)),
         Check::Entitled { .. } | Check::Not { .. } => {
             let text = serde_json::to_string(&receipt).map_err(|e| RpcError::Internal(e.to_string()))?;

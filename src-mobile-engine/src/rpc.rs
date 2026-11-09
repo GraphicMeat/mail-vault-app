@@ -27,7 +27,8 @@ pub enum RpcError {
     SearchUnavailable,
     /// A Premium call failed (`premium.rs`): `NETWORK` (the cache stays), `REFUSED` (the server
     /// says the receipt is invalid), `CODE_WRONG`, `CODE_EXPIRED`, `RATE_LIMITED`,
-    /// `DEVICE_REPLACED` (another device took this one's web place). The message is fixed text,
+    /// `DEVICE_REPLACED` (another device took this one's web place), `INSTALL_LIMIT` (a Restore the
+    /// server would not add to a purchase already on its most installs). The message is fixed text,
     /// never the server's.
     Premium(&'static str),
 }
@@ -41,6 +42,7 @@ fn premium_message(code: &str) -> &'static str {
         "CODE_EXPIRED" => "the code has expired",
         "RATE_LIMITED" => "too many tries, wait a moment",
         "DEVICE_REPLACED" => "another device took this device's place",
+        "INSTALL_LIMIT" => "this purchase is already in use on the most devices it allows",
         _ => "premium check failed",
     }
 }

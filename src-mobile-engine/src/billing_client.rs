@@ -28,6 +28,9 @@ pub(crate) enum Fail {
     CodeWrong,
     /// signin/verify: the code is too old.
     CodeExpired,
+    /// Store verify with `restore`: HTTP 409 `install_limit`, the purchase already serves the most
+    /// installs it may. The receipt itself is valid; only this install was not added.
+    InstallLimit,
 }
 
 /// A store's answer: `{entitled, source, expiresMs}`.
@@ -146,6 +149,9 @@ struct StoreBody {
 }
 
 fn store_answer(r: Reply) -> Result<StoreAnswer, Fail> {
+    if r.status == 409 && r.body["error"].as_str() == Some("install_limit") {
+        return Err(Fail::InstallLimit);
+    }
     classify(&r)?;
     let b: StoreBody = serde_json::from_value(r.body).map_err(|_| Fail::Network)?;
     Ok(StoreAnswer { entitled: b.entitled, expires_ms: b.expires_ms.map(|v| v as i64).unwrap_or(0), server_ms: r.server_ms })
