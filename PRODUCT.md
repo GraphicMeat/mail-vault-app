@@ -9,7 +9,11 @@ web
 <!-- Desktop application shipped as a Tauri shell around a React/Tailwind front end.
      macOS 11+ (Apple Silicon and Intel) and Linux (.deb, AppImage, Snap, Flatpak) today;
      Windows desktop is a planned target and must not be designed out.
-     No iOS or Android product exists or is planned. -->
+     MailVault for iPhone and Android (iOS 16+, iPhone only; Android 8+) is built in this
+     repository as a second Tauri v2 app (src-tauri-mobile) with an in-process engine over the
+     same shared core: a mail client with search whose Premium features are bought through the
+     App Store and Google Play. It is not released yet, and public pages keep saying "coming
+     soon" until launch. No tablet or watch product is planned. -->
 
 ## Users
 
