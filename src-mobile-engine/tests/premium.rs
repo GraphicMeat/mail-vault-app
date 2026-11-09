@@ -543,6 +543,12 @@ fn web_sign_in_needs_the_code_and_stores_customer_only_in_secrets() {
     assert_eq!(fx.rpc("mobile.premium.webSignIn.start", json!({ "email": EMAIL })), json!({ "ok": true }));
     let started = stub().requests(SIGNIN_START);
     assert_eq!(serde_json::from_str::<Value>(&started[0].body).unwrap(), json!({ "email": EMAIL }));
+    // The page's language rides along, so the mail reads in it; a malformed tag is dropped.
+    assert_eq!(fx.rpc("mobile.premium.webSignIn.start", json!({ "email": EMAIL, "lang": "pt-BR" })), json!({ "ok": true }));
+    assert_eq!(fx.rpc("mobile.premium.webSignIn.start", json!({ "email": EMAIL, "lang": "x y;z" })), json!({ "ok": true }));
+    let started = stub().requests(SIGNIN_START);
+    assert_eq!(serde_json::from_str::<Value>(&started[1].body).unwrap(), json!({ "email": EMAIL, "lang": "pt-BR" }));
+    assert_eq!(serde_json::from_str::<Value>(&started[2].body).unwrap(), json!({ "email": EMAIL }));
     stub().route(SIGNIN_START, Answer::Json(429, json!({ "error": "rate_limited" })));
     assert_eq!(fx.err("mobile.premium.webSignIn.start", json!({ "email": EMAIL })).code(), "RATE_LIMITED");
     assert_eq!(fx.err("mobile.premium.webSignIn.start", json!({ "email": "" })).code(), "INVALID");

@@ -592,6 +592,9 @@ pub(crate) fn install(engine: &Engine, _params: Value) -> Result<Value, RpcError
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct StartParams {
     email: String,
+    /// The page's language, so the mailed code reads in it. A short language tag or nothing.
+    #[serde(default)]
+    lang: Option<String>,
 }
 
 fn email(raw: &str) -> Result<String, RpcError> {
@@ -602,12 +605,13 @@ fn email(raw: &str) -> Result<String, RpcError> {
     Ok(e.to_string())
 }
 
-/// `mobile.premium.webSignIn.start {email}` -> `{ok: true}`: the server mails a code (it answers
+/// `mobile.premium.webSignIn.start {email, lang?}` -> `{ok: true}`: the server mails a code (it answers
 /// the same whether or not the address subscribes). `RATE_LIMITED`, `NETWORK`.
 pub(crate) fn sign_in_start(_engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: StartParams = parse(params)?;
     let email = email(&p.email)?;
-    match bc::signin_start(&email) {
+    let lang = p.lang.as_deref().map(str::trim).filter(|l| !l.is_empty() && l.len() <= 16 && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
+    match bc::signin_start(&email, lang) {
         Ok(()) => Ok(json!({ "ok": true })),
         Err(Fail::Refused) => Err(RpcError::Invalid("email is not an address".into())),
         Err(f) => Err(fail(f)),

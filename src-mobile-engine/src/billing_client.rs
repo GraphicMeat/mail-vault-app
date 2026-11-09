@@ -241,11 +241,14 @@ pub(crate) fn web_status(customer_id: &str, client_id: &str, register: Option<&C
     })
 }
 
-/// `POST /api/billing/signin/start {email}`: the server mails a 6-digit code. `{ok: true}` whether
-/// or not the address is a subscriber's.
-pub(crate) fn signin_start(email: &str) -> Result<(), Fail> {
+/// `POST /api/billing/signin/start {email, lang?}`: the server mails a 6-digit code (in `lang`
+/// when it has that language). `{ok: true}` whether or not the address is a subscriber's.
+pub(crate) fn signin_start(email: &str, lang: Option<&str>) -> Result<(), Fail> {
     let url = format!("{}/api/billing/signin/start", base());
-    let body = json!({ "email": email });
+    let mut body = json!({ "email": email });
+    if let Some(l) = lang {
+        body["lang"] = json!(l);
+    }
     classify(&call(|c| c.post(url).json(&body))?)
 }
 
