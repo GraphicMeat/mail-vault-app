@@ -22,7 +22,7 @@ function visit(file, search = '', { gpc, sessionAd, choice, loc, conv } = {}) {
   if (gpc !== undefined) Object.defineProperty(w.navigator, 'globalPrivacyControl', { configurable: true, value: gpc });
   if (sessionAd) w.sessionStorage.setItem('mv-reddit-ad', '1');
   if (choice) w.localStorage.setItem('mv-reddit-consent', choice);
-  if (conv) w.sessionStorage.setItem('mv-reddit-conv', conv);
+  if (conv) w.sessionStorage.setItem('mv-reddit-conv-' + (file.endsWith('billing-success.html') ? 'SignUp' : 'Lead'), conv);
   w.eval(site);
   const loader = () => w.document.querySelector('script[src^="/assets/reddit-pixel.js"]');
   const run = async () => { w.eval(pixel); await new Promise(r => setTimeout(r, 0)); };
@@ -130,7 +130,7 @@ describe('Reddit pixel stays out of everyone but consenting ad arrivals', () => 
     expect(calls.map(c => c[0] + ':' + c[1])).toEqual(['init:a2_jyqdj6oz5zbw', 'track:PageVisit', 'track:Lead']);
     const id = calls[2][2].conversionId;
     expect(id).toMatch(/\S{8,}/);
-    expect(v.w.sessionStorage.getItem('mv-reddit-conv')).toBe(id);
+    expect(v.w.sessionStorage.getItem('mv-reddit-conv-Lead')).toBe(id);
     const again = visit('thank-you.html', '', { sessionAd: true, loc: 'US', conv: id });
     await again.run();
     expect(Array.from(again.w.rdt.callQueue, a => Array.from(a))[2][2]).toEqual({ conversionId: id });
@@ -140,6 +140,24 @@ describe('Reddit pixel stays out of everyone but consenting ad arrivals', () => 
     const home = visit('index.html', '', { sessionAd: true, loc: 'US' });
     await home.run();
     expect(Array.from(home.w.rdt.callQueue, a => a[1])).not.toContain('Lead');
+  });
+
+  it('reports a SignUp conversion on the page Stripe returns to, once per tab, never Lead there', async () => {
+    const v = visit('billing-success.html', '?session_id=cs_test', { sessionAd: true, loc: 'US' });
+    await v.run();
+    const calls = Array.from(v.w.rdt.callQueue, a => Array.from(a));
+    expect(calls.map(c => c[0] + ':' + c[1])).toEqual(['init:a2_jyqdj6oz5zbw', 'track:PageVisit', 'track:SignUp']);
+    const id = calls[2][2].conversionId;
+    expect(id).toMatch(/\S{8,}/);
+    const again = visit('billing-success.html', '', { sessionAd: true, loc: 'US', conv: id });
+    await again.run();
+    expect(Array.from(again.w.rdt.callQueue, a => Array.from(a))[2][2]).toEqual({ conversionId: id });
+    const de = visit('de/billing-success.html', '', { sessionAd: true, loc: 'US' });
+    await de.run();
+    expect(Array.from(de.w.rdt.callQueue, a => a[1])).toContain('SignUp');
+    const pricing = visit('pricing.html', '', { sessionAd: true, loc: 'US' });
+    await pricing.run();
+    expect(Array.from(pricing.w.rdt.callQueue, a => a[1])).not.toContain('SignUp');
   });
 
   it('after consent in the EEA, the thank-you page reports the conversion too', async () => {
@@ -168,6 +186,7 @@ describe('Reddit pixel stays out of everyone but consenting ad arrivals', () => 
     expect(html).toMatch(/Reddit Pixel/);
     expect(html).toMatch(/European Economic Area, the United Kingdom and Switzerland/);
     expect(html).toMatch(/Lead/);
+    expect(html).toMatch(/SignUp/);
     expect(html).not.toMatch(/\(no Google Analytics, no tracking pixels\)/);
     expect(html).toContain('data-ad-consent-reset');
   });

@@ -16,16 +16,19 @@
     !function(w,d){if(!w.rdt){var p=w.rdt=function(){p.sendEvent?p.sendEvent.apply(p,arguments):p.callQueue.push(arguments)};p.callQueue=[];var t=d.createElement("script");t.src="https://www.redditstatic.com/ads/pixel.js?pixel_id="+PIXEL_ID,t.async=!0;var s=d.getElementsByTagName("script")[0];s.parentNode.insertBefore(t,s)}}(window,document);
     window.rdt('init', PIXEL_ID);
     window.rdt('track', 'PageVisit');
-    // The thank-you page is where every installer download lands. One id per tab, so a reload
-    // of that page repeats the same conversion and Reddit can drop the duplicate.
-    if (/(^|\/)thank-you\.html$/.test(location.pathname)) {
+    // Conversions, by the page the visitor lands on: the thank-you page after an installer
+    // download (Lead) and the page Stripe returns to after a plan signup (SignUp). One id per
+    // event per tab, so a reload repeats the same conversion and Reddit can drop the duplicate.
+    const conversion = { 'thank-you.html': 'Lead', 'billing-success.html': 'SignUp' }[location.pathname.split('/').pop()];
+    if (conversion) {
+      const key = 'mv-reddit-conv-' + conversion;
       let id = null;
-      try { id = sessionStorage.getItem('mv-reddit-conv'); } catch { /* new id below */ }
+      try { id = sessionStorage.getItem(key); } catch { /* new id below */ }
       if (!id) {
         id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
-        try { sessionStorage.setItem('mv-reddit-conv', id); } catch { /* the id is still sent once */ }
+        try { sessionStorage.setItem(key, id); } catch { /* the id is still sent once */ }
       }
-      window.rdt('track', 'Lead', { conversionId: id });
+      window.rdt('track', conversion, { conversionId: id });
     }
   }
 
