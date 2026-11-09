@@ -24,6 +24,19 @@
     try { localStorage.setItem('mv-language', link.hreflang); } catch { /* optional preference */ }
   }));
   const query = new URLSearchParams(location.search);
+  // Reddit ad measurement: only a visit that began on a Reddit ad (click id, or utm source reddit
+  // with a paid medium) pulls in the consent bar and pixel; the privacy page loads the file for
+  // its withdraw button. Everyone else downloads nothing and never reaches Reddit.
+  try {
+    const utm = key => (query.get(key) || '').toLowerCase();
+    if (query.has('rdt_cid') || (utm('utm_source') === 'reddit' && /^(cpc|ppc|paid|paid[-_ ]?social|ads?)$/.test(utm('utm_medium')))) sessionStorage.setItem('mv-reddit-ad', '1');
+    if (sessionStorage.getItem('mv-reddit-ad') === '1' || document.querySelector('[data-ad-consent-reset]')) {
+      const loader = document.createElement('script');
+      loader.src = '/assets/reddit-pixel.js?v=20261109';
+      loader.defer = true;
+      document.head.append(loader);
+    }
+  } catch { /* no storage: no ad measurement, the site is unaffected */ }
   const selectedPlan = ['free', 'yearly', 'monthly'].includes(query.get('plan')) ? query.get('plan') : 'free';
   try {
     html.classList.toggle('dark', localStorage.theme === 'dark' || (!localStorage.theme && matchMedia('(prefers-color-scheme: dark)').matches));
