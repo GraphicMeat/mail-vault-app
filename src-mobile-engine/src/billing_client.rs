@@ -151,17 +151,25 @@ fn store_answer(r: Reply) -> Result<StoreAnswer, Fail> {
     Ok(StoreAnswer { entitled: b.entitled, expires_ms: b.expires_ms.map(|v| v as i64).unwrap_or(0), server_ms: r.server_ms })
 }
 
-/// `POST /api/billing/store/apple/verify {signedTransaction, installId}`.
-pub(crate) fn verify_apple(jws: &str, install_id: &str) -> Result<StoreAnswer, Fail> {
+/// `POST /api/billing/store/apple/verify {signedTransaction, installId[, restore: true]}`.
+/// `restore` (the user tapped Restore) lets the server bind a receipt bought on another install
+/// to this one; it is left out of the body otherwise.
+pub(crate) fn verify_apple(jws: &str, install_id: &str, restore: bool) -> Result<StoreAnswer, Fail> {
     let url = format!("{}/api/billing/store/apple/verify", base());
-    let body = json!({ "signedTransaction": jws, "installId": install_id });
+    let mut body = json!({ "signedTransaction": jws, "installId": install_id });
+    if restore {
+        body["restore"] = json!(true);
+    }
     store_answer(call(|c| c.post(url).json(&body))?)
 }
 
-/// `POST /api/billing/store/google/verify {purchaseToken, productId, installId}`.
-pub(crate) fn verify_google(token: &str, product_id: &str, install_id: &str) -> Result<StoreAnswer, Fail> {
+/// `POST /api/billing/store/google/verify {purchaseToken, productId, installId[, restore: true]}`.
+pub(crate) fn verify_google(token: &str, product_id: &str, install_id: &str, restore: bool) -> Result<StoreAnswer, Fail> {
     let url = format!("{}/api/billing/store/google/verify", base());
-    let body = json!({ "purchaseToken": token, "productId": product_id, "installId": install_id });
+    let mut body = json!({ "purchaseToken": token, "productId": product_id, "installId": install_id });
+    if restore {
+        body["restore"] = json!(true);
+    }
     store_answer(call(|c| c.post(url).json(&body))?)
 }
 

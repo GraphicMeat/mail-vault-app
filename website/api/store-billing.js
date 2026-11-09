@@ -1,8 +1,8 @@
 // App Store and Google Play receipt verification for the phone app, plus the two
 // store webhooks that keep `store_subscriptions` current.
 //
-//   POST /api/billing/store/apple/verify    {signedTransaction, installId}
-//   POST /api/billing/store/google/verify   {purchaseToken, productId, installId}
+//   POST /api/billing/store/apple/verify    {signedTransaction, installId, restore?}
+//   POST /api/billing/store/google/verify   {purchaseToken, productId, installId, restore?}
 //   POST /api/billing/store/apple/notifications  {signedPayload}   (ASSN v2)
 //   POST /api/billing/store/google/rtdn          Pub/Sub push, OIDC bearer
 //
@@ -13,6 +13,12 @@
 //   429                                 rate limited (server.js limiter): cache kept
 //   5xx {error}                         our side or the store failed: cache kept
 // A misconfigured server must answer 5xx, never 4xx, or every phone loses Premium.
+//
+// A receipt names the install it was bought on (Apple appAccountToken, Google
+// obfuscatedExternalAccountId). A different install is refused 403 wrong_account unless it
+// is already in that purchase's install set, or the call says `restore: true` (the user
+// tapped Restore on a phone signed into the purchasing store account): then the install
+// joins the set, capped at MAX_INSTALLS_PER_PURCHASE.
 //
 // Replay protection is the store's signature plus the claims (bundle, product, install
 // id, environment), not one-time use: the phone re-posts its last accepted receipt on
@@ -30,6 +36,10 @@ const fs = require('fs');
 const pathMod = require('path');
 
 const BUNDLE_ID = 'com.mailvault.app';
+// Console layout (ruling P6), the same two ids on both platforms: App Store Connect has
+// one subscription group with two subscriptions (monthly, yearly); Google Play has TWO
+// subscriptions (not one subscription with two base plans) with these product ids, one
+// base plan each. Play's subscriptionId is therefore the product id.
 const PRODUCT_IDS = new Set(['com.mailvault.app.premium.monthly', 'com.mailvault.app.premium.yearly']);
 const APPLE_ROOT_G3_SHA256 = '63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79';
 const APPLE_ROOT_PATH = pathMod.join(__dirname, 'apple-root-ca-g3.pem');
@@ -54,6 +64,10 @@ const JWKS_TTL_MS = 60 * 60 * 1000;
 const JWKS_MIN_REFETCH_MS = 5 * 60 * 1000;
 const TOKEN_EARLY_MS = 60 * 1000;
 const UPSTREAM_TIMEOUT_MS = 10 * 1000;
+
+// One purchase can serve this many installs (restore on a new phone); the 6th drops the
+// least recently seen. Same limit as the web device limit.
+const MAX_INSTALLS_PER_PURCHASE = 5;
 
 const TERMINAL = new Set(['revoked', 'refunded']);
 
@@ -250,7 +264,7 @@ function createStoreBilling({
         'INSERT IGNORE INTO store_subscriptions (platform, original_id, install_id, product_id, expires_at, status, environment, latest_token, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [platform, originalId, s.installId || null, s.productId, s.expiresMs, s.status, s.environment, s.latestToken || null, at],
       );
-      if (res.affectedRows) return s;
+      if (res.affectedRows) return { ...s, id: res.insertId };
       if (attempt > 0) throw new Error('store_subscriptions insert raced twice');
       return record(platform, originalId, [originalId, ...lookupIds], inc, authority, attempt + 1);
     }
@@ -264,6 +278,35 @@ function createStoreBilling({
       );
     }
     return next;
+  }
+
+  async function isInstalled(subId, installId) {
+    const [rows] = await getDb().execute(
+      'SELECT install_id FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?',
+      [subId, installId],
+    );
+    return rows.length > 0;
+  }
+  // Adds or refreshes an install of a purchase, then drops the least recently seen ones
+  // beyond the cap (never the one just touched).
+  async function touchInstall(subId, installId) {
+    const at = now();
+    await getDb().execute(
+      'INSERT INTO store_subscription_installs (subscription_id, install_id, last_seen_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at)',
+      [subId, installId, at],
+    );
+    const [rows] = await getDb().execute(
+      'SELECT install_id, last_seen_at FROM store_subscription_installs WHERE subscription_id = ?',
+      [subId],
+    );
+    const others = rows.filter((r) => r.install_id !== installId)
+      .sort((a, b) => Number(b.last_seen_at) - Number(a.last_seen_at));
+    for (const r of others.slice(MAX_INSTALLS_PER_PURCHASE - 1)) {
+      await getDb().execute(
+        'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?',
+        [subId, r.install_id],
+      );
+    }
   }
 
   async function seen(eventId) {
@@ -317,16 +360,19 @@ function createStoreBilling({
 
   function appleVerify(body) {
     return answer('apple/verify', async () => {
-      const { signedTransaction, installId } = body || {};
+      const { signedTransaction, installId, restore } = body || {};
       if (typeof signedTransaction !== 'string' || !signedTransaction || signedTransaction.length > MAX_SIGNED_TRANSACTION
         || typeof installId !== 'string' || !UUID_RE.test(installId)) throw badRequest();
       if (!roots) throw new Unavailable('not_configured', 503);
       const t = appleTransaction(signedTransaction);
-      if (typeof t.appAccountToken !== 'string' || t.appAccountToken.toLowerCase() !== installId.toLowerCase()) {
-        throw refuse('wrong_account');
+      const own = typeof t.appAccountToken === 'string' && t.appAccountToken.toLowerCase() === installId.toLowerCase();
+      if (!own && restore !== true) {
+        const known = await findRow('apple', t.originalTransactionId);
+        if (!known || !(await isInstalled(known.id, installId.toLowerCase()))) throw refuse('wrong_account');
       }
       if (t.revocationDate) throw refuse('revoked');
       const state = await record('apple', t.originalTransactionId, [t.originalTransactionId], appleState(t), 'receipt');
+      await touchInstall(state.id, installId.toLowerCase());
       return verdict('apple', state);
     });
   }
@@ -503,15 +549,21 @@ function createStoreBilling({
     };
   }
 
-  async function recordGoogle(token, sub, inc, authority) {
-    const linked = typeof sub.linkedPurchaseToken === 'string' && sub.linkedPurchaseToken ? sub.linkedPurchaseToken : null;
-    // The chain root: whatever row the token or the token it replaced already belongs to.
-    let root = null;
-    for (const id of [token, linked]) {
+  const linkedOf = (sub) => (typeof sub.linkedPurchaseToken === 'string' && sub.linkedPurchaseToken ? sub.linkedPurchaseToken : null);
+  // The row a token, or the token it replaced, already belongs to.
+  async function googleRow(token, sub) {
+    for (const id of [token, linkedOf(sub)]) {
       if (!id) continue;
       const row = await findRow('google', id);
-      if (row) { root = row.originalId; break; }
+      if (row) return row;
     }
+    return null;
+  }
+
+  async function recordGoogle(token, sub, inc, authority) {
+    const linked = linkedOf(sub);
+    // The chain root.
+    const root = (await googleRow(token, sub))?.originalId || null;
     return record('google', root || linked || token, [token, linked], { ...inc, latestToken: token }, authority);
   }
 
@@ -519,7 +571,7 @@ function createStoreBilling({
 
   function googleVerify(body) {
     return answer('google/verify', async () => {
-      const { purchaseToken, productId, installId } = body || {};
+      const { purchaseToken, productId, installId, restore } = body || {};
       if (typeof purchaseToken !== 'string' || !purchaseToken || purchaseToken.length > MAX_PURCHASE_TOKEN
         || !TOKEN_RE.test(purchaseToken) || typeof productId !== 'string'
         || typeof installId !== 'string' || !UUID_RE.test(installId)) throw badRequest();
@@ -530,10 +582,14 @@ function createStoreBilling({
       const expiresMs = lineExpiry(sub, productId);
       if (expiresMs === null) throw refuse('wrong_product');
       const ids = sub.externalAccountIdentifiers || {};
-      if (ids.obfuscatedExternalAccountId !== obfuscatedAccountId(installId)) throw refuse('wrong_account');
+      if (ids.obfuscatedExternalAccountId !== obfuscatedAccountId(installId) && restore !== true) {
+        const known = await googleRow(purchaseToken, sub);
+        if (!known || !(await isInstalled(known.id, installId.toLowerCase()))) throw refuse('wrong_account');
+      }
       if (sub.testPurchase && !sandboxAllowed()) throw refuse('wrong_environment');
 
       const state = await recordGoogle(purchaseToken, sub, googleState(sub, productId, expiresMs, installId.toLowerCase()), 'fetch');
+      await touchInstall(state.id, installId.toLowerCase());
       // Acknowledged only after the purchase is recorded; a failed acknowledge is retried
       // on the next verify or RTDN (Play refunds after 3 days without one).
       if (ackPending(sub) && entitledNow(state, now())) await acknowledge(productId, purchaseToken);

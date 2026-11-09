@@ -75,12 +75,14 @@ function notification(type, txOver = {}, over = {}) {
 function fakeDb() {
   const subs = [];
   const events = new Map();
+  const installs = [];
   const calls = [];
   let nextId = 1;
   let failWhen = null;
   const pub = (r) => ({ ...r });
   return {
     subs,
+    installs,
     events,
     calls,
     fail(pred) { failWhen = pred; },
@@ -104,6 +106,22 @@ function fakeDb() {
         if (!r) return [{ affectedRows: 0 }, []];
         [r.install_id, r.product_id, r.expires_at, r.status, r.environment, r.latest_token, r.updated_at] = p;
         return [{ affectedRows: 1 }, []];
+      }
+      if (q === 'SELECT install_id FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?') {
+        return [installs.filter((r) => r.subscription_id === p[0] && r.install_id === p[1]).map(pub), []];
+      }
+      if (q === 'INSERT INTO store_subscription_installs (subscription_id, install_id, last_seen_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at)') {
+        const r = installs.find((x) => x.subscription_id === p[0] && x.install_id === p[1]);
+        if (r) r.last_seen_at = p[2]; else installs.push({ subscription_id: p[0], install_id: p[1], last_seen_at: p[2] });
+        return [{ affectedRows: 1 }, []];
+      }
+      if (q === 'SELECT install_id, last_seen_at FROM store_subscription_installs WHERE subscription_id = ?') {
+        return [installs.filter((r) => r.subscription_id === p[0]).map(pub), []];
+      }
+      if (q === 'DELETE FROM store_subscription_installs WHERE subscription_id = ? AND install_id = ?') {
+        const i = installs.findIndex((r) => r.subscription_id === p[0] && r.install_id === p[1]);
+        if (i >= 0) installs.splice(i, 1);
+        return [{ affectedRows: i >= 0 ? 1 : 0 }, []];
       }
       if (q === 'SELECT event_id FROM processed_store_events WHERE event_id = ?') {
         return [events.has(p[0]) ? [{ event_id: p[0] }] : [], []];
@@ -364,6 +382,87 @@ describe('POST /api/billing/store/apple/verify', () => {
     const down = setup();
     down.db.fail(() => true);
     expect(await appleVerify(down.billing, jws(tx()))).toEqual([500, { error: 'server_error' }]);
+  });
+});
+
+describe('restore rebinding', () => {
+  const inst = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+  const restoreApple = (b, t, installId, restore = true) => b.appleVerify({ signedTransaction: t, installId, restore });
+
+  it('restore_on_a_new_install_rebinds', async () => {
+    const { billing, db, g } = setup({ subs: { 'tok-1': subV2() } });
+    const receipt = jws(tx());
+    expect((await appleVerify(billing, receipt))[0]).toBe(200);
+    // new phone, same purchase: refused without the flag, accepted with it
+    expect(await appleVerify(billing, receipt, OTHER_INSTALL)).toEqual([403, { error: 'wrong_account' }]);
+    expect(await restoreApple(billing, receipt, OTHER_INSTALL)).toEqual([200, { entitled: true, source: 'apple', expiresMs: NOW + 25 * DAY }]);
+    expect(db.subs).toHaveLength(1);
+    // now in the set: a plain verify from it answers the current state
+    expect((await appleVerify(billing, receipt, OTHER_INSTALL))[1].entitled).toBe(true);
+    // the original install keeps working
+    expect((await appleVerify(billing, receipt))[0]).toBe(200);
+    // a revoked receipt is still refused with the flag
+    const revoked = jws(tx({ originalTransactionId: '2000000300', revocationDate: NOW - DAY, revocationReason: 0 }));
+    expect(await restoreApple(billing, revoked, OTHER_INSTALL)).toEqual([403, { error: 'revoked' }]);
+    // Google: the same
+    const gv = (installId, restore) => billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY, installId, restore });
+    expect(await gv(OTHER_INSTALL)).toEqual([403, { error: 'wrong_account' }]);
+    expect((await gv(OTHER_INSTALL, true))[1]).toEqual({ entitled: true, source: 'google', expiresMs: NOW + 25 * DAY });
+    expect((await gv(OTHER_INSTALL))[0]).toBe(200);
+    expect(g.calls.length).toBeGreaterThan(0);
+  });
+
+  it('sixth_install_drops_the_oldest', async () => {
+    const { billing, db, clock } = setup();
+    const receipt = jws(tx());
+    expect((await appleVerify(billing, receipt))[0]).toBe(200); // INSTALL, the original
+    for (let n = 1; n <= 4; n += 1) {
+      clock.t += 1000;
+      expect((await restoreApple(billing, receipt, inst(n)))[0]).toBe(200);
+    }
+    expect(db.installs).toHaveLength(5);
+    clock.t += 1000;
+    expect((await restoreApple(billing, receipt, inst(5)))[0]).toBe(200);
+    expect(db.installs).toHaveLength(5);
+    expect(db.installs.map((r) => r.install_id)).not.toContain(INSTALL);
+    expect(db.installs.map((r) => r.install_id)).toContain(inst(5));
+    // a recently seen install survives: refresh inst(1), add another, inst(2) goes
+    clock.t += 1000;
+    expect((await appleVerify(billing, receipt, inst(1)))[0]).toBe(200);
+    clock.t += 1000;
+    expect((await restoreApple(billing, receipt, inst(6)))[0]).toBe(200);
+    const ids = db.installs.map((r) => r.install_id);
+    expect(ids).toHaveLength(5);
+    expect(ids).toContain(inst(1));
+    expect(ids).not.toContain(inst(2));
+  });
+
+  it('no_restore_flag_still_refuses_a_foreign_receipt', async () => {
+    const { billing, db } = setup({ subs: { 'tok-1': subV2() } });
+    for (const restore of [undefined, false, 'true', 1]) {
+      expect(await billing.appleVerify({ signedTransaction: jws(tx({ appAccountToken: OTHER_INSTALL })), installId: INSTALL, restore }))
+        .toEqual([403, { error: 'wrong_account' }]);
+      expect(await billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY, installId: OTHER_INSTALL, restore }))
+        .toEqual([403, { error: 'wrong_account' }]);
+    }
+    expect(db.subs).toHaveLength(0);
+    expect(db.installs).toHaveLength(0);
+  });
+
+  it('dropped_install_is_refused_until_it_restores', async () => {
+    const { billing, db, clock } = setup();
+    const receipt = jws(tx({ appAccountToken: inst(0) }));
+    for (let n = 1; n <= 5; n += 1) {
+      clock.t += 1000;
+      expect((await restoreApple(billing, receipt, inst(n)))[0]).toBe(200);
+    }
+    clock.t += 1000;
+    expect((await restoreApple(billing, receipt, inst(6)))[0]).toBe(200); // drops inst(1)
+    expect(db.installs.map((r) => r.install_id)).not.toContain(inst(1));
+    expect(await appleVerify(billing, receipt, inst(1))).toEqual([403, { error: 'wrong_account' }]);
+    clock.t += 1000;
+    expect((await restoreApple(billing, receipt, inst(1)))[0]).toBe(200);
+    expect((await appleVerify(billing, receipt, inst(1)))[0]).toBe(200);
   });
 });
 

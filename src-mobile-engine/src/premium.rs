@@ -334,10 +334,13 @@ enum Check {
     Failed(Fail),
 }
 
-fn check_store(receipt: &Receipt, install: &str, now: i64) -> Check {
+/// `restore` only on the user's own verify call. The refresh re-post never sends it: once the
+/// server has put this install in the purchase's set a plain check answers, and an install the
+/// server dropped (a 6th device took its place) must not silently take a place back.
+fn check_store(receipt: &Receipt, install: &str, now: i64, restore: bool) -> Check {
     let answer = match receipt {
-        Receipt::Apple { jws } => bc::verify_apple(jws, install),
-        Receipt::Google { token, product_id } => bc::verify_google(token, product_id, install),
+        Receipt::Apple { jws } => bc::verify_apple(jws, install, restore),
+        Receipt::Google { token, product_id } => bc::verify_google(token, product_id, install, restore),
     };
     let source = receipt.source();
     match answer {
@@ -477,7 +480,7 @@ pub(crate) fn refresh(engine: &Engine, params: Value) -> Result<Value, RpcError>
     let install = install_id(shared)?;
     let mut checks = Vec::new();
     if let Some(r) = &receipt {
-        let c = check_store(r, &install, now);
+        let c = check_store(r, &install, now, false);
         if matches!(c, Check::Refused { .. }) {
             secret_delete(shared, RECEIPT)?;
         }
@@ -500,13 +503,17 @@ struct VerifyParams {
     token: Option<String>,
     #[serde(default)]
     product_id: Option<String>,
+    /// The user tapped Restore: the receipt may name another install.
+    #[serde(default)]
+    restore: bool,
 }
 
 fn present(v: Option<String>) -> Option<String> {
     v.filter(|s| !s.trim().is_empty())
 }
 
-/// `mobile.premium.verify {platform: "apple", jws}` or `{platform: "google", token, productId}`
+/// `mobile.premium.verify {platform: "apple", jws}` or `{platform: "google", token, productId}`,
+/// each with an optional `restore: true` (Restore Purchases: bind a receipt bought elsewhere)
 /// -> status. The server's yes or no becomes the cache; an accepted receipt is kept for re-checks.
 /// `REFUSED` (an invalid receipt) ends a store entitlement at once; `NETWORK`/`RATE_LIMITED` keep
 /// the cache. A web entitlement is not touched by a store answer.
@@ -526,7 +533,7 @@ pub(crate) fn verify(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     observe_clock(shared);
     let now = now(shared);
     let install = install_id(shared)?;
-    let check = check_store(&receipt, &install, now);
+    let check = check_store(&receipt, &install, now, p.restore);
     let refused = matches!(check, Check::Refused { .. });
     match &check {
         // No answer: the cache stays, and the caller must not take the purchase as accepted.

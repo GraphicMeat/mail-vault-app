@@ -338,6 +338,29 @@ fn entitled_until_expiry_then_not_without_network() {
 }
 
 #[test]
+fn verify_with_restore_sends_the_flag() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    stub().route(APPLE, store_ok(now + HOUR, "apple"));
+    stub().route(GOOGLE, store_ok(now + HOUR, "google"));
+    fx.e().rpc("mobile.premium.verify", json!({ "platform": "apple", "jws": JWS, "restore": true })).unwrap();
+    let body: Value = serde_json::from_str(&stub().requests(APPLE)[0].body).unwrap();
+    assert_eq!(body["restore"], json!(true));
+    // A plain verify leaves the key out; so does the refresh that re-posts the stored receipt.
+    fx.verify_apple().unwrap();
+    fx.clock(now + 2 * HOUR / 3);
+    let _ = fx.rpc("mobile.premium.refresh", json!({ "force": true }));
+    assert!(stub().requests(APPLE).len() >= 3, "the refresh re-posted the receipt");
+    for r in &stub().requests(APPLE)[1..] {
+        let b: Value = serde_json::from_str(&r.body).unwrap();
+        assert!(b.get("restore").is_none(), "{b}");
+    }
+    fx.e().rpc("mobile.premium.verify", json!({ "platform": "google", "token": PLAY_TOKEN, "productId": "com.mailvault.app.premium.monthly", "restore": true })).unwrap();
+    let body: Value = serde_json::from_str(&stub().requests(GOOGLE)[0].body).unwrap();
+    assert_eq!(body["restore"], json!(true));
+}
+
+#[test]
 fn lapsed_then_clock_moved_back_offline_is_not_entitled() {
     let (_g, mut fx) = setup();
     let now = now_ms();

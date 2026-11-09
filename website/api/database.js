@@ -215,6 +215,17 @@ async function initDatabase() {
     )
   `);
 
+  // Installs a store subscription serves (restore on a new phone joins the set; capped at 5
+  // per subscription by store-billing.js, the least recently seen is dropped).
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS store_subscription_installs (
+      subscription_id INT NOT NULL,
+      install_id CHAR(36) NOT NULL,
+      last_seen_at BIGINT NOT NULL,
+      PRIMARY KEY (subscription_id, install_id)
+    )
+  `);
+
   // Store notifications already applied (ASSN notificationUUID, Pub/Sub messageId).
   await db.execute(`
     CREATE TABLE IF NOT EXISTS processed_store_events (
