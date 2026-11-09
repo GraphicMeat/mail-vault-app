@@ -13,6 +13,38 @@ use crate::backoff::RetryPolicy;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::time::Duration;
 
+/// Follow-up reminders (`app_db::follow_up`): one row per sent message the
+/// user asked to be reminded about if nobody answers. Keyed on the Message-ID
+/// as sent, which is all a reply names; a send retried inserts nothing twice.
+/// `own_addresses` is a JSON array of every address the send was the user's
+/// (its From, the login, aliases): a message from any of them is no reply.
+///
+/// The DDL itself: app.db's schema v9 (`app_db::db`) and the phone's
+/// `mobile.db` both run it, so a column change is a migration in both stores.
+pub const TABLE_SQL: &str = "
+CREATE TABLE follow_ups (
+  id           TEXT PRIMARY KEY,
+  account_id   TEXT NOT NULL,
+  message_id   TEXT NOT NULL,
+  subject      TEXT NOT NULL DEFAULT '',
+  recipients   TEXT NOT NULL DEFAULT '',
+  sent_at      INTEGER NOT NULL,
+  remind_at    INTEGER NOT NULL,
+  created_at   INTEGER NOT NULL,
+  state        TEXT NOT NULL,
+  sent_mailbox TEXT NOT NULL DEFAULT '',
+  sent_uid     INTEGER,
+  own_addresses TEXT NOT NULL DEFAULT '[]',
+  seen         INTEGER NOT NULL DEFAULT 0,
+  announced    INTEGER NOT NULL DEFAULT 0,
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  retry_at     INTEGER NOT NULL DEFAULT 0,
+  last_error   TEXT NOT NULL DEFAULT '',
+  UNIQUE (account_id, message_id)
+);
+CREATE INDEX follow_ups_due ON follow_ups(state, remind_at);
+";
+
 /// Transient failures a row gets before it goes `failed`. Offline or a locked
 /// keychain never counts (`Outcome::Wait`).
 pub const MAX_ATTEMPTS: i64 = 5;
