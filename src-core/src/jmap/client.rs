@@ -415,6 +415,12 @@ impl JmapClient {
         Ok(self.query_filtered(filter, 0, limit).await?.0)
     }
 
+    /// Up to `limit` email ids matching `filter`, newest first (a follow-up's reply search,
+    /// `follow_up::matcher::jmap_reply_filter`).
+    pub async fn query_emails(&self, filter: Value, limit: usize) -> Result<Vec<String>, JmapError> {
+        Ok(self.query_filtered(filter, 0, limit).await?.0)
+    }
+
     /// [`JmapClient::query_mailbox`] for any `filter`.
     async fn query_filtered(&self, filter: Value, position: usize, limit: usize) -> Result<(Vec<String>, Option<usize>), JmapError> {
         let mut ids: Vec<String> = Vec::new();
@@ -769,6 +775,11 @@ impl JmapClient {
     /// never stands in for `<e1@x>`. `None` for a message without one.
     pub async fn find_message_id_in(&self, mailbox_id: &str, raw: &[u8]) -> Result<Option<String>, JmapError> {
         let Some(wanted) = crate::maildir::message_id_in(raw) else { return Ok(None) };
+        self.find_message_id(mailbox_id, &wanted).await
+    }
+
+    /// [`JmapClient::find_message_id_in`] for a bare Message-ID (`maildir::normalize_message_id`).
+    pub async fn find_message_id(&self, mailbox_id: &str, wanted: &str) -> Result<Option<String>, JmapError> {
         let r = self
             .method(
                 "Email/query",

@@ -2,7 +2,7 @@
 //! is only a reason to try again. (Named `matcher`: `match` is a keyword.)
 
 use crate::{custody::cache as sql_cache, maildir, notes_to_self};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// A NO or BAD the server marks temporary: core's one transient-refusal
 /// check (`imap::refusal::is_transient_refusal`: RFC 5530 codes and a too-many-
@@ -54,10 +54,37 @@ pub fn jmap_reply_from_someone_else(email: &Value, term: &str, own: &[String]) -
     (names_it("inReplyTo") || names_it("references")) && !draft && !automatic && !is_own_address(own, from)
 }
 
+/// The header properties a JMAP reply is read back with: the automatic-reply
+/// markers the IMAP search leaves out (`imap::reply_search_criteria`).
+pub const JMAP_REPLY_PROPS: [&str; 10] = [
+    "id",
+    "from",
+    "subject",
+    "keywords",
+    "inReplyTo",
+    "references",
+    "header:Auto-Submitted:asText",
+    "header:X-Autoreply:asText",
+    "header:X-Autorespond:asText",
+    "header:X-Auto-Response-Suppress:asText",
+];
+
+/// The JMAP `Email/query` filter for mail whose In-Reply-To or References
+/// names `term` (a bare Message-ID), outside the `skip` mailbox ids (Sent and
+/// Drafts). The hits are read back with `JMAP_REPLY_PROPS` and judged by
+/// `jmap_reply_from_someone_else`.
+pub fn jmap_reply_filter(term: &str, skip: &[String]) -> Value {
+    let names_it = json!({"operator": "OR", "conditions": [{"header": ["In-Reply-To", term]}, {"header": ["References", term]}]});
+    if skip.is_empty() {
+        names_it
+    } else {
+        json!({"operator": "AND", "conditions": [{"inMailboxOtherThan": skip}, names_it]})
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn own() -> Vec<String> {
         vec!["me@example.com".into(), "John.Doe@gmail.com".into()]
@@ -106,6 +133,17 @@ mod tests {
         assert!(jmap_reply_from_someone_else(&reply(json!({"keywords":{"$draft":false}})), "sent1@x", &own()));
         assert!(!jmap_reply_from_someone_else(&reply(json!({"from":[{"email":"john.doe@gmail.com"}]})), "sent1@x", &own()));
         assert!(!jmap_reply_from_someone_else(&reply(json!({})), "other@x", &own()));
+    }
+
+    #[test]
+    fn the_jmap_reply_filter_names_the_message_outside_the_skipped_mailboxes() {
+        let names = json!({"operator": "OR", "conditions": [{"header": ["In-Reply-To", "q@me"]}, {"header": ["References", "q@me"]}]});
+        assert_eq!(jmap_reply_filter("q@me", &[]), names);
+        assert_eq!(
+            jmap_reply_filter("q@me", &["mb-sent".into(), "mb-drafts".into()]),
+            json!({"operator": "AND", "conditions": [{"inMailboxOtherThan": ["mb-sent", "mb-drafts"]}, names]})
+        );
+        assert!(JMAP_REPLY_PROPS.contains(&"header:Auto-Submitted:asText"));
     }
 
     #[test]

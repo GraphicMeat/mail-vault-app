@@ -21,7 +21,8 @@
 //!    addresses). A folder other than INBOX, or criteria, the server refuses
 //!    are passed over; INBOX refused, or a refusal it marks temporary, is a
 //!    try to repeat. With every search refused only a cache Miss says "no
-//!    reply"; Unknown tries again. Offline still waits.
+//!    reply"; Unknown tries again. Offline still waits. This half is core's
+//!    `follow_up::imap_check::check`, shared with the phone.
 //!
 //! No reply anywhere, it finds the Sent copy by Message-ID: that is the
 //! message the app pins above the inbox (`state: due`). Nothing is moved or
@@ -325,15 +326,6 @@ async fn account_cache_answers(state: &Arc<DaemonState>, account_id: &str, mut w
     Some(hits)
 }
 
-/// Of `uids` in `mailbox`, is one from someone other than the sender (`own`,
-/// folded like the app's `normalizeEmailIdentity`)? The search cannot fold a
-/// Gmail address itself, so its hits are read back (at most a few dozen).
-async fn a_hit_from_someone_else(session: &mut imap::ImapSession, mailbox: &str, uids: &[u32], own: &[String]) -> Result<bool, String> {
-    let newest: Vec<u32> = uids.iter().rev().take(50).copied().collect();
-    let (headers, _) = imap::fetch_headers_by_uids(session, mailbox, &newest).await?;
-    Ok(matcher::any_from_someone_else(headers.iter().map(|h| h.from.address.as_str()), own))
-}
-
 /// `check_row_with`, asking the header cache about this one row first.
 pub(crate) async fn check_row(state: &Arc<DaemonState>, row: &follow_up::FollowUp) -> follow_up::Outcome {
     let cached = cache_answers(state, std::slice::from_ref(row)).await.get(&row.id).copied().unwrap_or(CacheAnswer::Unknown);
@@ -359,12 +351,9 @@ pub(crate) async fn check_row_with(state: &Arc<DaemonState>, row: &follow_up::Fo
     // written before the app knew them still names.
     let mut own = row.own_addresses.clone();
     own.push(account.email.clone());
-    let (Some(criteria), Some(plain)) = (
-        imap::reply_search_criteria(&row.message_id, true),
-        imap::reply_search_criteria(&row.message_id, false),
-    ) else {
+    if imap::reply_search_criteria(&row.message_id, true).is_none() || imap::reply_search_criteria(&row.message_id, false).is_none() {
         return SentCopyGone;
-    };
+    }
     // The cache first: a hit needs no connection at all.
     if cached == CacheAnswer::Hit {
         return Replied;
@@ -377,95 +366,9 @@ pub(crate) async fn check_row_with(state: &Arc<DaemonState>, row: &follow_up::Fo
         Ok(g) => g,
         Err(e) => return if state.net.note_failure(&e).await { Transient(e) } else { Wait(e) },
     };
-    let mut selected: Option<String> = None;
-    let checked = async {
-        let boxes = imap::list_mailboxes(&mut session).await?;
-        let usable = |m: &&imap::MailboxInfo| !m.noselect;
-        let with_role = |role: &str| boxes.iter().filter(usable).find(|m| m.special_use.as_deref() == Some(role)).map(|m| m.path.clone());
-        let mut searched = vec!["INBOX".to_string()];
-        let all = boxes.iter().filter(usable).find(|m| imap::has_attr(&m.flags, "All")).map(|m| m.path.clone());
-        for path in [all, with_role("\\Archive"), with_role("\\Trash")].into_iter().flatten() {
-            if !searched.iter().any(|s| s.eq_ignore_ascii_case(&path)) {
-                searched.push(path);
-            }
-        }
-        let mut answered = false;
-        for mailbox in &searched {
-            use imap::FolderSearch::*;
-            selected = Some(mailbox.clone());
-            let mut answer = imap::uid_search_tolerant(&mut session, mailbox, &criteria).await?;
-            if let SearchRefused(why) | FolderRefused(why) = &answer {
-                if matcher::temporary_refusal(why) {
-                    return Err(format!("{mailbox} turned the reply search away for now: {why}"));
-                }
-            }
-            if let SearchRefused(why) = &answer {
-                // The auto-reply terms are the unusual part (an empty HEADER
-                // string, fields a server does not index). Without them an
-                // out-of-office could count as an answer: better than no check.
-                warn!("[follow-up] {mailbox} refused the reply search ({why}); asking again without the auto-reply terms");
-                answer = imap::uid_search_tolerant(&mut session, mailbox, &plain).await?;
-            }
-            match answer {
-                Hits(found) => {
-                    answered = true;
-                    if !found.is_empty() && a_hit_from_someone_else(&mut session, mailbox, &found, &own).await? {
-                        return Ok::<_, String>(Replied);
-                    }
-                }
-                // INBOX always exists: refusing it is the server's trouble.
-                FolderRefused(why) if mailbox.eq_ignore_ascii_case("INBOX") => {
-                    return Err(format!("INBOX refused the SELECT: {why}"));
-                }
-                // A label hidden from IMAP, or criteria the server will not
-                // take even without the auto-reply terms: no answer from it.
-                FolderRefused(why) | SearchRefused(why) => {
-                    info!("[follow-up] {mailbox} refused the reply search for {} ({why})", row.id);
-                }
-            }
-        }
-        // No folder searched at all: only a cache that was read can say "no
-        // reply". One that could not be leaves the row to try again.
-        if !answered && cached != CacheAnswer::Miss {
-            return Err("every reply search was refused and the header cache could not answer".to_string());
-        }
-        // The folder the app filed the message in first; one that refuses
-        // (renamed or removed since) or no longer holds the copy (the Sent
-        // folder moved, the old one stayed) gives way to the server's own.
-        let special_sent = with_role("\\Sent");
-        let mut candidates: Vec<String> = Vec::new();
-        for path in [Some(row.sent_mailbox.clone()).filter(|m| !m.is_empty()), special_sent].into_iter().flatten() {
-            if !candidates.contains(&path) {
-                candidates.push(path);
-            }
-        }
-        let (mut refused, mut answered) = (None, false);
-        for sent in candidates {
-            selected = Some(sent.clone());
-            match imap::message_id_uids_if_selectable(&mut session, &sent, &row.message_id).await? {
-                Some(found) => match found.iter().copied().max() {
-                    Some(uid) => return Ok(NoReply { sent_mailbox: sent, sent_uid: uid }),
-                    None => {
-                        info!("[follow-up] {} holds no copy of {}; trying the server's Sent folder", sent, row.id);
-                        answered = true;
-                    }
-                },
-                None => {
-                    info!("[follow-up] {} refused the search for {}; trying the server's Sent folder", sent, row.id);
-                    refused = Some(sent);
-                }
-            }
-        }
-        // A Sent folder answered and none holds it: gone. Every one refused:
-        // a failure to retry, not a message gone.
-        match refused {
-            Some(sent) if !answered => Err(format!("{sent} refused the Message-ID search")),
-            _ => Ok(SentCopyGone),
-        }
-    }
-    .await;
+    let checked = mailvault_core::follow_up::imap_check::check(&mut session, row, &own, cached == CacheAnswer::Miss).await;
     match checked {
-        Ok(outcome) => {
+        Ok((outcome, selected)) => {
             let guard = PooledSessionGuard { session, last_selected: selected, _permit };
             state.imap_pool.return_background(&account, guard).await;
             info!("[follow-up] {} checked: {outcome:?}", row.id);
@@ -486,21 +389,6 @@ pub(crate) async fn check_row_with(state: &Arc<DaemonState>, row: &follow_up::Fo
 /// The most replies a JMAP reply search reads back.
 const JMAP_REPLY_HITS: usize = 50;
 
-/// The header properties a JMAP reply is read back with: the automatic-reply
-/// markers the IMAP search leaves out (`imap::reply_search_criteria`).
-const JMAP_REPLY_PROPS: [&str; 10] = [
-    "id",
-    "from",
-    "subject",
-    "keywords",
-    "inReplyTo",
-    "references",
-    "header:Auto-Submitted:asText",
-    "header:X-Autoreply:asText",
-    "header:X-Autorespond:asText",
-    "header:X-Auto-Response-Suppress:asText",
-];
-
 /// `check_row_with`'s server check for a JMAP account (`uses_jmap`), on the
 /// account's session; the header cache already said no hit. A reply
 /// anywhere but Sent and Drafts (`matcher::jmap_reply_from_someone_else`) is
@@ -516,15 +404,10 @@ async fn check_row_jmap(state: &Arc<DaemonState>, row: &follow_up::FollowUp, acc
         let boxes = acct.current().await.map_err(|e| e.to_string())?;
         let role = |r: &str| crate::handlers::jmap_bridge::role_mailbox(&boxes, r);
         let skip: Vec<String> = [role("sent"), role("drafts")].into_iter().flatten().map(|(_, id)| id).collect();
-        let names_it = json!({"operator": "OR", "conditions": [{"header": ["In-Reply-To", term]}, {"header": ["References", term]}]});
-        let filter = if skip.is_empty() {
-            names_it
-        } else {
-            json!({"operator": "AND", "conditions": [{"inMailboxOtherThan": skip}, names_it]})
-        };
+        let filter = matcher::jmap_reply_filter(&term, &skip);
         let (hits, _) = crate::handlers::jmap_bridge::query_ids(&acct.client, filter, JMAP_REPLY_HITS).await.map_err(|e| e.to_string())?;
         if !hits.is_empty() {
-            let got = acct.client.get_emails(&hits, &JMAP_REPLY_PROPS).await.map_err(|e| e.to_string())?;
+            let got = acct.client.get_emails(&hits, &matcher::JMAP_REPLY_PROPS).await.map_err(|e| e.to_string())?;
             if got.list.iter().any(|e| matcher::jmap_reply_from_someone_else(e, &term, own)) {
                 return Ok::<_, String>(Replied);
             }
