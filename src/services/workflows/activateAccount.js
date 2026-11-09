@@ -420,6 +420,19 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   const get = () => useMailStore.getState();
   const set = (s) => useMailStore.setState(typeof s === 'function' ? s(get()) : s);
   const useMailStoreRef = { getState: get, setState: (s) => useMailStore.setState(s) };
+  // 'UNIFIED' is the All Inboxes pseudo-folder, not a folder of any account.
+  // Callers that re-activate "the view on screen" pass `activeMailbox || 'INBOX'`
+  // (the network retry timer, change-server, settings saves), and while All
+  // Inboxes shows that is 'UNIFIED'. Activating it wrote a half-switched state
+  // (All Inboxes header, the account's own untagged rows) in which a bare uid
+  // names no message, so opening a row failed with "Cannot tell which account
+  // and folder hold message N". The view still on screen is repainted as what it
+  // is; once the user has moved on, the late call is dropped.
+  if (mailbox === 'UNIFIED') {
+    const live = get();
+    if (live.unifiedInbox && live.activeMailbox === 'UNIFIED') return live.loadUnifiedInbox?.(null, live.unifiedFolder || 'INBOX');
+    return;
+  }
   const activationTrace = createPerfTrace('activateAccount', { accountId, mailbox });
 
   _resetNetworkRetry();
