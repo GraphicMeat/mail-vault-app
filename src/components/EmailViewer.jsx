@@ -59,7 +59,8 @@ import { useAltBodyRenderer, useActiveBodyRenderer } from './email/bodyRendererR
 import { useThemeStore, selectTheme } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
-import { inlineImageAt, canOpenImage, openImageFromMail, saveImageFromMail, attachImageDoubleClick } from '../utils/emailImages';
+import { inlineImageAt, canOpenImage, openImageFromMail, saveImageFromMail } from '../utils/emailImages';
+import { attachImageGestures } from '../utils/emailImageGestures';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { PgpDecryptedBadge, PgpLockedNotice } from './email/PgpStatus';
 import { getEmailColors } from '../utils/mailChrome';
@@ -535,7 +536,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     // Read at event time: the inline parts' bytes can arrive after the body.
     const inlineAttachments = () => useMailStore.getState().selectedEmail?.attachments;
     const isMac = navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac');
-    let detachDblClick = () => {};
+    let detachImageGestures = () => {};
 
     const handleContextMenu = (e) => {
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -607,11 +608,11 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
           currentDoc.removeEventListener('click', handleClick);
           currentDoc.removeEventListener('contextmenu', handleContextMenu);
         }
-        detachDblClick();
+        detachImageGestures();
         currentDoc = doc;
         doc.addEventListener('click', handleClick);
         doc.addEventListener('contextmenu', handleContextMenu);
-        detachDblClick = attachImageDoubleClick(doc, inlineAttachments);
+        detachImageGestures = attachImageGestures(doc, inlineAttachments);
         // Dark Reader is inlined into the iframe HTML (see useMemo above);
         // it runs during load, so no post-load injection is needed here.
       } catch (e) {
@@ -628,7 +629,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         try {
           currentDoc.removeEventListener('click', handleClick);
           currentDoc.removeEventListener('contextmenu', handleContextMenu);
-          detachDblClick();
+          detachImageGestures();
         } catch { /* iframe may already be detached */ }
       }
     };

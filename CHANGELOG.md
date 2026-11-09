@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Drag inline pictures from an email to the Desktop or a folder. Double-click supported pictures to open them in Preview.
 - Replying to or forwarding a message whose subject already starts with reply or forward prefixes no longer stacks them. "Re: RE: Plans" and "AW: Plans" both become "Re: Plans", on the desktop app as well as the phone app; a forward of "Re: Plans" becomes "Fwd: Plans".
 - A send whose connection broke after the mail server may already have taken the message is no longer sent again on its own, so the recipient no longer gets it twice. The outbox and the Scheduled folder show it as "May not have sent", with Check Sent, Retry and Discard. A scheduled send that MailVault was in the middle of sending when it quit or crashed is shown the same way instead of being sent again at the next start.
 - Sending attachments larger than a Microsoft Graph or JMAP account's server takes in one message (about 2.2 MB for Microsoft Graph) now asks first, with Send anyway and Go back, instead of failing after you pressed Send.

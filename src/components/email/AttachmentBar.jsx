@@ -26,6 +26,7 @@ import { useT } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { send } from '../../services/transport';
+import { DRAG_FALLBACK_PNG, startFileDrag } from '../../services/fileDrag';
 import { useAttachmentExports, messageExportKey, runAttachmentExport, startExportJob, leafOf, showSavedFolder, pickFolder } from '../../services/attachmentExport';
 
 function base64ToBytes(base64) {
@@ -55,10 +56,6 @@ const THUMB_MAX_BYTES = 4 * 1024 * 1024;
 // rows past this one keep their icon — and a thread renders a row per
 // message, so the cap is per message list, not per window.
 const THUMB_MAX_COUNT = 8;
-
-// A 1x1 transparent PNG. `start_drag` requires a drag image and rejects
-// anything that is not PNG data; this stands in when rendering the row fails.
-const DRAG_FALLBACK_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 const ICON_BY_EXT = {
   zip: FileArchive, rar: FileArchive, '7z': FileArchive, gz: FileArchive, tar: FileArchive,
@@ -537,22 +534,9 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
     e.preventDefault();
     try {
       const path = await ensurePath();
-      const [{ Channel }, { domToPng }] = await Promise.all([
-        import('@tauri-apps/api/core'),
-        import('modern-screenshot'),
-      ]);
+      const { domToPng } = await import('modern-screenshot');
       const image = await domToPng(rowRef.current, { scale: 1 }).catch(() => DRAG_FALLBACK_PNG);
-      // The LIVE global bridge, like every other invoke in this file: the
-      // module's copy talks to `__TAURI_INTERNALS__` directly, which no e2e
-      // fixture can swap — and an unstubbed start_drag on the runner opens a
-      // real drag session.
-      await window.__TAURI__.core.invoke('plugin:drag|start_drag', {
-        item: [path],
-        image,
-        // The plugin's callback is not optional; nothing here needs the drop
-        // result, so it is drained.
-        onEvent: new Channel(),
-      });
+      await startFileDrag(path, image);
     } catch (err) {
       console.error('[Attachment] Drag failed:', err);
     }

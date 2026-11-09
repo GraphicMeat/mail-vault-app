@@ -9,6 +9,15 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
+const { stageFile, startFileDrag } = vi.hoisted(() => ({
+  stageFile: vi.fn(async () => '/cache/mailvault-export/chart.png'),
+  startFileDrag: vi.fn(async () => {}),
+}));
+vi.mock('../../services/export/exportSaver', async (importOriginal) => ({ ...(await importOriginal()), stageFile }));
+vi.mock('../../services/fileDrag', () => ({
+  DRAG_FALLBACK_PNG: 'data:image/png;base64,FALLBACK', startFileDrag,
+}));
+
 const { autosized } = vi.hoisted(() => ({ autosized: [] }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex: vi.fn(), measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 700,
@@ -99,6 +108,26 @@ async function expectHandlersOn(frame) {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); autosized.length = 0; useSearchStore.setState({ searchActive: false, searchQuery: '' }); });
 
 describe('EmailViewer frame handlers follow the mounted frame', () => {
+  it('starts a native drag for an inline image in the reading pane', async () => {
+    window.__TAURI__ = {};
+    try {
+      show({ ...mail(1), attachments: [{ filename: 'chart.png', content: 'AAAA' }] });
+      const frame = frameNow();
+      await settle();
+      await act(async () => { fireEvent.load(frame); });
+      const image = frame.contentDocument.createElement('img');
+      image.src = 'data:image/png;base64,AAAA';
+      frame.contentDocument.body.appendChild(image);
+      const drag = new Event('dragstart', { bubbles: true, cancelable: true });
+      await act(async () => { image.dispatchEvent(drag); await Promise.resolve(); });
+      expect(drag.defaultPrevented).toBe(true);
+      expect(stageFile).toHaveBeenCalledWith({ name: 'chart.png', base64: 'AAAA' });
+      expect(startFileDrag).toHaveBeenCalledWith('/cache/mailvault-export/chart.png', expect.stringMatching(/^data:image\/png/));
+    } finally {
+      delete window.__TAURI__;
+    }
+  });
+
   it('the frame a message opens in has them', async () => {
     show(mail(1));
     await expectHandlersOn(frameNow());

@@ -46,7 +46,7 @@ import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors, getChatLinkColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme, keepImageProportions, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
-import { attachImageDoubleClick } from '../utils/emailImages';
+import { attachImageGestures } from '../utils/emailImageGestures';
 import { openMailtoCompose } from '../utils/mailto';
 import { useAltBodyRenderer } from './email/bodyRendererRegistry';
 import { activateEmailLink, openExternalUrl } from '../utils/emailLinkActivation';
@@ -681,7 +681,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
         if (doc) {
           doc.addEventListener('contextmenu', (e) => e.preventDefault());
-          attachImageDoubleClick(doc, () => mergedEmail?.attachments);
+          attachImageGestures(doc, () => mergedEmail?.attachments);
           doc.addEventListener('click', (e) => {
             const link = e.target.closest('a');
             if (!link || !link.href) return;

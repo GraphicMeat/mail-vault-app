@@ -14,7 +14,7 @@ vi.mock('@tauri-apps/api/path', () => ({
   basename: async (p) => p.slice(p.lastIndexOf('/') + 1),
 }));
 
-const { saveOneFile, saveFilesToDirectory, openInDefaultApp } = await import('../exportSaver');
+const { saveOneFile, saveFilesToDirectory, stageFile, openInDefaultApp } = await import('../exportSaver');
 
 const file = { name: 'shot.png', base64: 'AAAA' };
 
@@ -120,6 +120,16 @@ describe('openInDefaultApp', () => {
   it('never routes a file path through the shell plugin', async () => {
     await openInDefaultApp(file);
     expect(shellOpen).not.toHaveBeenCalled();
+  });
+});
+
+describe('stageFile', () => {
+  it('writes an image to the app cache and returns its path without opening it', async () => {
+    expect(await stageFile(file)).toBe('/cache/mailvault-export/shot.png');
+    expect(invoke).toHaveBeenCalledWith('save_attachment_to', {
+      filename: 'shot.png', contentBase64: 'AAAA', destPath: '/cache/mailvault-export/shot.png',
+    });
+    expect(invoke.mock.calls.some(([command]) => command === 'open_file')).toBe(false);
   });
 });
 

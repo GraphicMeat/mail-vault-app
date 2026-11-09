@@ -28,7 +28,7 @@
 
 import { isAbsolute } from 'node:path';
 import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
-import { ATTACHMENT_SUBJECT, ATTACHMENT_PNG, ATTACHMENT_PDF } from './mockImap.js';
+import { ATTACHMENT_SUBJECT, ATTACHMENT_PNG, ATTACHMENT_PDF, EXPORT_ATTACHMENT_SUBJECT, EXPORT_ATTACHMENT_INLINE_NAME } from './mockImap.js';
 
 const activate = (id) => browser.execute((accountId) => {
   window.__MAIL_STORE__.getState().activateAccount(accountId, 'INBOX');
@@ -410,6 +410,38 @@ describe('Connected Attachments', function () {
       expect(args.item).toHaveLength(1);
       expect(isAbsolute(args.item[0])).toBe(true);
       expect(args.item[0].endsWith(ATTACHMENT_PDF)).toBe(true);
+      expect(args.image.startsWith('data:image/png;base64,')).toBe(true);
+    } finally {
+      expect(await removeInvokeProbe()).toBe(true);
+    }
+  });
+
+  it('starts a native drag for an inline image in the reader', async function () {
+    expect(await installInvokeProbe()).toBe(true);
+    try {
+      await browser.execute(() => window.__SETTINGS_STORE__.setState({ emailRenderer: 'web' }));
+      await activate(luke.id);
+      await browser.waitUntil(() => clickRow(EXPORT_ATTACHMENT_SUBJECT), {
+        timeout: 30_000, interval: 250, timeoutMsg: 'the inline-image fixture never appeared',
+      });
+      await browser.waitUntil(() => browser.execute(() => [...document.querySelectorAll('iframe')]
+        .some((frame) => frame.contentDocument?.querySelector('img[alt="logo"]')?.getAttribute('src')?.startsWith('data:image/png;base64,'))), {
+        timeout: 30_000, interval: 250, timeoutMsg: 'the web reader never rendered the inline CID image',
+      });
+      expect(await browser.execute(() => {
+        const frame = [...document.querySelectorAll('iframe')]
+          .find((candidate) => candidate.contentDocument?.querySelector('img[alt="logo"]'));
+        const image = frame.contentDocument.querySelector('img[alt="logo"]');
+        const event = new Event('dragstart', { bubbles: true, cancelable: true });
+        image.dispatchEvent(event);
+        return event.defaultPrevented;
+      })).toBe(true);
+      await browser.waitUntil(async () => (await invokedCommands()).includes('plugin:drag|start_drag'), {
+        timeout: 30_000, interval: 250,
+      });
+      const [args] = await invokedWith('plugin:drag|start_drag');
+      expect(args.item[0]).toContain('mailvault-export');
+      expect(args.item[0].endsWith(EXPORT_ATTACHMENT_INLINE_NAME)).toBe(true);
       expect(args.image.startsWith('data:image/png;base64,')).toBe(true);
     } finally {
       expect(await removeInvokeProbe()).toBe(true);
