@@ -4419,5 +4419,19 @@
   "mobile.settings.saveFailed": "Die Einstellung konnte nicht gespeichert werden. Versuche es erneut.",
   "mobile.refused.banner": "Der Server hat das Passwort für {{email}} abgelehnt. MailVault versucht es nicht weiter, damit der Server dich nicht sperrt.",
   "mobile.refused.retry": "Erneut versuchen",
-  "mobile.reauth.passwordLost": "Das gespeicherte Passwort für {{email}} ging verloren. Entferne das Konto und füge es erneut hinzu."
+  "mobile.reauth.passwordLost": "Das gespeicherte Passwort für {{email}} ging verloren. Entferne das Konto und füge es erneut hinzu.",
+  "mobile.search.title": "Suche",
+  "mobile.search.open": "Suchen",
+  "mobile.search.placeholder": "E-Mails durchsuchen",
+  "mobile.search.scope": "Suchen in",
+  "mobile.search.thisFolder": "Dieser Ordner",
+  "mobile.search.allAccounts": "Alle Konten",
+  "mobile.search.recent": "Letzte Suchen",
+  "mobile.search.searching": "Suche läuft…",
+  "mobile.search.none": "Keine Nachrichten gefunden.",
+  "mobile.search.server": "Auf dem Server suchen",
+  "mobile.search.serverBusy": "Server wird durchsucht…",
+  "mobile.search.serverNone": "Nichts weiter auf dem Server.",
+  "mobile.search.fromServer": "Vom Server",
+  "mobile.error.SEARCH_UNAVAILABLE": "Die Suche ist auf diesem Gerät noch nicht bereit. Versuche es gleich noch einmal oder suche auf dem Server."
 }

@@ -4419,5 +4419,19 @@
   "mobile.settings.saveFailed": "无法保存该设置，请重试。",
   "mobile.refused.banner": "服务器拒绝了 {{email}} 的密码。为避免被服务器封禁，MailVault 已停止重试。",
   "mobile.refused.retry": "重试",
-  "mobile.reauth.passwordLost": "{{email}} 保存的密码已丢失。请删除该账户后重新添加。"
+  "mobile.reauth.passwordLost": "{{email}} 保存的密码已丢失。请删除该账户后重新添加。",
+  "mobile.search.title": "搜索",
+  "mobile.search.open": "搜索",
+  "mobile.search.placeholder": "搜索邮件",
+  "mobile.search.scope": "搜索范围",
+  "mobile.search.thisFolder": "此文件夹",
+  "mobile.search.allAccounts": "所有账户",
+  "mobile.search.recent": "最近搜索",
+  "mobile.search.searching": "正在搜索…",
+  "mobile.search.none": "未找到邮件。",
+  "mobile.search.server": "在服务器上搜索",
+  "mobile.search.serverBusy": "正在搜索服务器…",
+  "mobile.search.serverNone": "服务器上没有更多结果。",
+  "mobile.search.fromServer": "来自服务器",
+  "mobile.error.SEARCH_UNAVAILABLE": "此设备上的搜索尚未就绪。请稍后重试，或在服务器上搜索。"
 }

@@ -4419,5 +4419,19 @@
   "mobile.settings.saveFailed": "Impossibile salvare l’impostazione. Riprova.",
   "mobile.refused.banner": "Il server ha rifiutato la password di {{email}}. MailVault ha smesso di provare per evitare che il server ti blocchi.",
   "mobile.refused.retry": "Riprova",
-  "mobile.reauth.passwordLost": "La password salvata per {{email}} è andata persa. Rimuovi l'account e aggiungilo di nuovo."
+  "mobile.reauth.passwordLost": "La password salvata per {{email}} è andata persa. Rimuovi l'account e aggiungilo di nuovo.",
+  "mobile.search.title": "Cerca",
+  "mobile.search.open": "Cerca",
+  "mobile.search.placeholder": "Cerca nella posta",
+  "mobile.search.scope": "Cerca in",
+  "mobile.search.thisFolder": "Questa cartella",
+  "mobile.search.allAccounts": "Tutti gli account",
+  "mobile.search.recent": "Ricerche recenti",
+  "mobile.search.searching": "Ricerca in corso…",
+  "mobile.search.none": "Nessun messaggio trovato.",
+  "mobile.search.server": "Cerca sul server",
+  "mobile.search.serverBusy": "Ricerca sul server…",
+  "mobile.search.serverNone": "Nient'altro sul server.",
+  "mobile.search.fromServer": "Dal server",
+  "mobile.error.SEARCH_UNAVAILABLE": "La ricerca non è ancora pronta su questo dispositivo. Riprova tra poco o cerca sul server."
 }

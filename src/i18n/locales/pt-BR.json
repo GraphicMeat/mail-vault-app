@@ -4419,5 +4419,19 @@
   "mobile.settings.saveFailed": "Não foi possível salvar a configuração. Tente de novo.",
   "mobile.refused.banner": "O servidor recusou a senha de {{email}}. O MailVault parou de tentar para que o servidor não bloqueie você.",
   "mobile.refused.retry": "Tentar de novo",
-  "mobile.reauth.passwordLost": "A senha salva de {{email}} foi perdida. Remova a conta e adicione-a novamente."
+  "mobile.reauth.passwordLost": "A senha salva de {{email}} foi perdida. Remova a conta e adicione-a novamente.",
+  "mobile.search.title": "Pesquisar",
+  "mobile.search.open": "Pesquisar",
+  "mobile.search.placeholder": "Pesquisar e-mails",
+  "mobile.search.scope": "Pesquisar em",
+  "mobile.search.thisFolder": "Esta pasta",
+  "mobile.search.allAccounts": "Todas as contas",
+  "mobile.search.recent": "Pesquisas recentes",
+  "mobile.search.searching": "Pesquisando…",
+  "mobile.search.none": "Nenhuma mensagem encontrada.",
+  "mobile.search.server": "Pesquisar no servidor",
+  "mobile.search.serverBusy": "Pesquisando no servidor…",
+  "mobile.search.serverNone": "Nada mais no servidor.",
+  "mobile.search.fromServer": "Do servidor",
+  "mobile.error.SEARCH_UNAVAILABLE": "A pesquisa ainda não está pronta neste dispositivo. Tente de novo em instantes ou pesquise no servidor."
 }

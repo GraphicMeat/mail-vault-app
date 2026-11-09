@@ -4419,5 +4419,19 @@
   "mobile.settings.saveFailed": "No se pudo guardar el ajuste. Inténtalo de nuevo.",
   "mobile.refused.banner": "El servidor rechazó la contraseña de {{email}}. MailVault dejó de intentarlo para que el servidor no te bloquee.",
   "mobile.refused.retry": "Reintentar",
-  "mobile.reauth.passwordLost": "Se perdió la contraseña guardada de {{email}}. Elimina la cuenta y vuelve a añadirla."
+  "mobile.reauth.passwordLost": "Se perdió la contraseña guardada de {{email}}. Elimina la cuenta y vuelve a añadirla.",
+  "mobile.search.title": "Buscar",
+  "mobile.search.open": "Buscar",
+  "mobile.search.placeholder": "Buscar correo",
+  "mobile.search.scope": "Buscar en",
+  "mobile.search.thisFolder": "Esta carpeta",
+  "mobile.search.allAccounts": "Todas las cuentas",
+  "mobile.search.recent": "Búsquedas recientes",
+  "mobile.search.searching": "Buscando…",
+  "mobile.search.none": "No se encontraron mensajes.",
+  "mobile.search.server": "Buscar en el servidor",
+  "mobile.search.serverBusy": "Buscando en el servidor…",
+  "mobile.search.serverNone": "No hay nada más en el servidor.",
+  "mobile.search.fromServer": "Del servidor",
+  "mobile.error.SEARCH_UNAVAILABLE": "La búsqueda aún no está lista en este dispositivo. Inténtalo en un momento o busca en el servidor."
 }

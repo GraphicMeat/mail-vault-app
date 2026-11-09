@@ -4419,5 +4419,19 @@
   "mobile.settings.saveFailed": "Couldn't save the setting. Try again.",
   "mobile.refused.banner": "The server refused the password for {{email}}. MailVault stopped trying so the server does not block you.",
   "mobile.refused.retry": "Try again",
-  "mobile.reauth.passwordLost": "The saved password for {{email}} was lost. Remove the account and add it again."
+  "mobile.reauth.passwordLost": "The saved password for {{email}} was lost. Remove the account and add it again.",
+  "mobile.search.title": "Search",
+  "mobile.search.open": "Search",
+  "mobile.search.placeholder": "Search mail",
+  "mobile.search.scope": "Search in",
+  "mobile.search.thisFolder": "This folder",
+  "mobile.search.allAccounts": "All accounts",
+  "mobile.search.recent": "Recent searches",
+  "mobile.search.searching": "Searching…",
+  "mobile.search.none": "No messages found.",
+  "mobile.search.server": "Search on server",
+  "mobile.search.serverBusy": "Searching the server…",
+  "mobile.search.serverNone": "Nothing more on the server.",
+  "mobile.search.fromServer": "From the server",
+  "mobile.error.SEARCH_UNAVAILABLE": "Search isn't ready on this device yet. Try again in a moment, or search on the server."
 }

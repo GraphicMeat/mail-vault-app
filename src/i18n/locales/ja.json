@@ -4419,5 +4419,19 @@
   "mobile.settings.saveFailed": "設定を保存できませんでした。もう一度お試しください。",
   "mobile.refused.banner": "サーバーが {{email}} のパスワードを拒否しました。サーバーにブロックされないよう、MailVault は再試行を停止しました。",
   "mobile.refused.retry": "再試行",
-  "mobile.reauth.passwordLost": "{{email}} の保存済みパスワードが失われました。アカウントを削除して、もう一度追加してください。"
+  "mobile.reauth.passwordLost": "{{email}} の保存済みパスワードが失われました。アカウントを削除して、もう一度追加してください。",
+  "mobile.search.title": "検索",
+  "mobile.search.open": "検索",
+  "mobile.search.placeholder": "メールを検索",
+  "mobile.search.scope": "検索場所",
+  "mobile.search.thisFolder": "このフォルダ",
+  "mobile.search.allAccounts": "すべてのアカウント",
+  "mobile.search.recent": "最近の検索",
+  "mobile.search.searching": "検索中…",
+  "mobile.search.none": "メッセージが見つかりません。",
+  "mobile.search.server": "サーバーで検索",
+  "mobile.search.serverBusy": "サーバーを検索中…",
+  "mobile.search.serverNone": "サーバーにはこれ以上ありません。",
+  "mobile.search.fromServer": "サーバーから",
+  "mobile.error.SEARCH_UNAVAILABLE": "このデバイスでは検索の準備がまだできていません。しばらくしてからもう一度試すか、サーバーで検索してください。"
 }

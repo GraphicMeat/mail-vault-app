@@ -4419,5 +4419,19 @@
   "mobile.settings.saveFailed": "Impossible d’enregistrer le réglage. Réessayez.",
   "mobile.refused.banner": "Le serveur a refusé le mot de passe de {{email}}. MailVault a arrêté d'essayer pour que le serveur ne vous bloque pas.",
   "mobile.refused.retry": "Réessayer",
-  "mobile.reauth.passwordLost": "Le mot de passe enregistré pour {{email}} a été perdu. Supprimez le compte, puis ajoutez-le à nouveau."
+  "mobile.reauth.passwordLost": "Le mot de passe enregistré pour {{email}} a été perdu. Supprimez le compte, puis ajoutez-le à nouveau.",
+  "mobile.search.title": "Recherche",
+  "mobile.search.open": "Rechercher",
+  "mobile.search.placeholder": "Rechercher dans le courrier",
+  "mobile.search.scope": "Rechercher dans",
+  "mobile.search.thisFolder": "Ce dossier",
+  "mobile.search.allAccounts": "Tous les comptes",
+  "mobile.search.recent": "Recherches récentes",
+  "mobile.search.searching": "Recherche en cours…",
+  "mobile.search.none": "Aucun message trouvé.",
+  "mobile.search.server": "Rechercher sur le serveur",
+  "mobile.search.serverBusy": "Recherche sur le serveur…",
+  "mobile.search.serverNone": "Rien de plus sur le serveur.",
+  "mobile.search.fromServer": "Depuis le serveur",
+  "mobile.error.SEARCH_UNAVAILABLE": "La recherche n'est pas encore prête sur cet appareil. Réessayez dans un instant ou cherchez sur le serveur."
 }

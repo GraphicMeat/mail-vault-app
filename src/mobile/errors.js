@@ -21,6 +21,7 @@ export const ERROR_KEYS = Object.freeze({
   HTTPS_REQUIRED: 'mobile.error.HTTPS_REQUIRED',
   JMAP_NOT_FOUND: 'mobile.error.JMAP_NOT_FOUND',
   CONFIRM_HOST: 'mobile.error.CONFIRM_HOST',
+  SEARCH_UNAVAILABLE: 'mobile.error.SEARCH_UNAVAILABLE',
 });
 
 /** A code the UI knows, or `INTERNAL` for anything else (a transport failure, a new code). */

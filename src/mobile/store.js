@@ -22,6 +22,9 @@ import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
 
 export const STORAGE_ACCOUNT = 'mv.mobile.activeAccount';
 export const STORAGE_FOLDER = 'mv.mobile.activeFolder';
+/** The last searches typed, newest first. Page storage only: they never reach the engine. */
+export const STORAGE_RECENT_SEARCHES = 'mv.mobile.recentSearches';
+export const RECENT_SEARCHES = 8;
 export const INBOX = 'INBOX';
 /** How long a move or delete waits for an undo before it is applied. */
 export const UNDO_MS = 5000;
@@ -49,6 +52,15 @@ function writeStorage(key, value) {
     else globalThis.localStorage?.setItem(key, value);
   } catch {
     // Remembering the last folder is a convenience; losing it is fine.
+  }
+}
+
+function savedSearches() {
+  try {
+    const saved = JSON.parse(readStorage(STORAGE_RECENT_SEARCHES) || '[]');
+    return Array.isArray(saved) ? saved.filter((q) => typeof q === 'string' && q.trim()).slice(0, RECENT_SEARCHES) : [];
+  } catch {
+    return [];
   }
 }
 
@@ -307,6 +319,7 @@ export function createMobileStore() {
       undo: null, // the deferred move or delete's toast: { id, kind, count, target }
       notice: null, // a one-line toast: { id, key }
       outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError }]
+      recentSearches: savedSearches(),
       drafts: [], // the active account's drafts: [{ id, accountId, to, subject, updatedMs }]
       reauthState: null, // the last "Sign in again": { accountId, busy, code } (code null when fine)
 
@@ -349,6 +362,20 @@ export function createMobileStore() {
       loadPending,
       loadOutbox,
       loadDrafts,
+
+      /** Remembers a search (newest first, one per text, the last RECENT_SEARCHES kept). */
+      addRecentSearch(query) {
+        const q = String(query ?? '').trim();
+        if (!q) return;
+        const next = [q, ...get().recentSearches.filter((r) => r.toLowerCase() !== q.toLowerCase())].slice(0, RECENT_SEARCHES);
+        writeStorage(STORAGE_RECENT_SEARCHES, JSON.stringify(next));
+        set({ recentSearches: next });
+      },
+
+      clearRecentSearches() {
+        writeStorage(STORAGE_RECENT_SEARCHES, null);
+        set({ recentSearches: [] });
+      },
 
       /** Deletes a draft (and the files only it held). False when the engine refused. */
       async deleteDraft(id) {

@@ -43,6 +43,7 @@ import Compose from './Compose.jsx';
 import OutboxRow from './Outbox.jsx';
 import DraftsList from './DraftsList.jsx';
 import Settings from './Settings.jsx';
+import Search from './Search.jsx';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -169,6 +170,7 @@ function App() {
   const [compose, setCompose] = useState(null); // { key, accountId, mode, original?, draftId? }
   const [draftsOpen, setDraftsOpen] = useState(DEMO_DRAFTS);
   const [settingsOpen, setSettingsOpen] = useState(DEMO_SETTINGS);
+  const [searchOpen, setSearchOpen] = useState(false);
   const drafts = useMobileStore((s) => s.drafts);
   const [pulled, setPulled] = useState(false);
   const [total, setTotal] = useState(null);
@@ -473,6 +475,14 @@ function App() {
     setSettingsOpen(true);
   }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
+  // A search result is opened from its own account and folder, which need not be the open list's.
+  const onOpenResult = useCallback((row) => {
+    const { accountId, folder } = row;
+    useMobileStore.getState().markSeen(accountId, folder, row);
+    setOpen({ row: row.seen ? row : { ...row, seen: true }, accountId, folder });
+  }, []);
+  useBackLayer(searchOpen, closeSearch);
   useBackLayer(draftsOpen, closeDrafts);
   useBackLayer(settingsOpen, closeSettings);
   const onSelectFolder = useCallback((path) => {
@@ -569,6 +579,11 @@ function App() {
           )}
         </div>
         <PendingChip />
+        <button type="button" className="mv-iconbtn" data-mv-search-open aria-label={t('mobile.search.open')} onClick={() => setSearchOpen(true)}>
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" />
+          </svg>
+        </button>
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
       <ReauthBanner account={account} state={reauthState} onReauth={onReauth} />
@@ -644,6 +659,7 @@ function App() {
           initialPicking={DEMO_MOVE}
         />
       )}
+      {searchOpen && <Search onOpen={onOpenResult} onClose={closeSearch} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {settingsOpen && <Settings onClose={closeSettings} />}
       {compose && (
