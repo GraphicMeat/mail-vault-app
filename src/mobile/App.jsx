@@ -44,6 +44,8 @@ import OutboxRow from './Outbox.jsx';
 import DraftsList from './DraftsList.jsx';
 import Settings from './Settings.jsx';
 import Search from './Search.jsx';
+import Premium from './Premium.jsx';
+import { startPremiumSync } from './premium.js';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -195,6 +197,9 @@ function App() {
     if (PROBE) probeRun(PROBE);
     start();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Premium: read at launch, re-checked on return to the app, live on `mobile.premium.changed`.
+  useEffect(() => (PERF ? undefined : startPremiumSync()), []);
 
   // Notification taps: the shell's held one on mount, then each one it announces. Taking it is
   // what opens it, so a tap announced and also taken on mount opens once.
@@ -485,6 +490,9 @@ function App() {
   useBackLayer(searchOpen, closeSearch);
   useBackLayer(draftsOpen, closeDrafts);
   useBackLayer(settingsOpen, closeSettings);
+  const paywall = useMobileStore((s) => s.paywall);
+  const closePaywall = useCallback(() => useMobileStore.getState().closePaywall(), []);
+  useBackLayer(Boolean(paywall), closePaywall);
   const onSelectFolder = useCallback((path) => {
     setPanel(null);
     useMobileStore.getState().selectFolder(path);
@@ -662,6 +670,7 @@ function App() {
       {searchOpen && <Search onOpen={onOpenResult} onClose={closeSearch} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {settingsOpen && <Settings onClose={closeSettings} />}
+      {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
       {compose && (
         <Compose
           key={compose.key}

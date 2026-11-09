@@ -22,6 +22,19 @@ export const ERROR_KEYS = Object.freeze({
   JMAP_NOT_FOUND: 'mobile.error.JMAP_NOT_FOUND',
   CONFIRM_HOST: 'mobile.error.CONFIRM_HOST',
   SEARCH_UNAVAILABLE: 'mobile.error.SEARCH_UNAVAILABLE',
+  // Premium: the engine's (`mobile.premium.*`) and the store shell's codes.
+  NETWORK: 'mobile.error.NETWORK',
+  REFUSED: 'mobile.error.REFUSED',
+  CODE_WRONG: 'mobile.error.CODE_WRONG',
+  CODE_EXPIRED: 'mobile.error.CODE_EXPIRED',
+  RATE_LIMITED: 'mobile.error.RATE_LIMITED',
+  DEVICE_REPLACED: 'mobile.error.DEVICE_REPLACED',
+  UNAVAILABLE: 'mobile.error.UNAVAILABLE',
+  NOT_FOUND: 'mobile.error.NOT_FOUND',
+  OWNED: 'mobile.error.OWNED',
+  BUSY: 'mobile.error.BUSY',
+  INSTALL_LIMIT: 'mobile.error.INSTALL_LIMIT',
+  UNVERIFIED: 'mobile.error.UNVERIFIED',
 });
 
 /** A code the UI knows, or `INTERNAL` for anything else (a transport failure, a new code). */

@@ -9,6 +9,8 @@
 //   whether a notification names sender and subject, so it can only change while they are on.
 //   Both live in the engine (`mobile.settings.*`): the background run has no page, and reads the
 //   same rows.
+// - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
+//   screen; a phone whose place another device took says so, with Sign in again.
 // - About: the version (a build constant) and the source link, a plain https anchor. The shell's
 //   navigation guard cancels it in the webview and hands it to the system browser, the one path
 //   every link takes; the page never opens a window itself.
@@ -18,6 +20,7 @@ import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
 import { Avatar } from './AccountSwitcher.jsx';
 import { errorKey } from './errors.js';
+import { premiumSummary } from './premium.js';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
@@ -201,6 +204,8 @@ export default function Settings({ onClose, version = APP_VERSION }) {
     return save('notifications', { notifications: 'on' });
   }, [save]);
 
+  const premium = useMobileStore((s) => s.premium);
+  const premiumLost = useMobileStore((s) => s.premiumLost);
   const ready = Boolean(values);
   const reauthBusy = Boolean(reauthState?.busy);
   const reauthCode = reauthState && !reauthState.busy ? reauthState.code : null;
@@ -212,6 +217,28 @@ export default function Settings({ onClose, version = APP_VERSION }) {
         <h1 className="mv-compose__title">{t('mobile.settings.title')}</h1>
       </header>
       <div className="mv-settings__body">
+        <h2 className="mv-settings__heading">{t('common.premium')}</h2>
+        <div className="mv-settings__list">
+          <button
+            type="button"
+            className="mv-setting"
+            data-mv-premium-row
+            onClick={() => useMobileStore.getState().openPaywall(null)}
+          >
+            <span className="mv-setting__text">
+              <span className="mv-setting__label">{premiumSummary(premium)}</span>
+            </span>
+          </button>
+        </div>
+        {premiumLost === 'DEVICE_REPLACED' && !premium.premium && (
+          <div className="mv-settings__note mv-settings__note--error" role="alert" data-mv-premium-lost>
+            {t('mobile.premium.deviceReplaced')}{' '}
+            <button type="button" className="mv-textbtn" onClick={() => useMobileStore.getState().openPaywall(null, { signIn: true })}>
+              {t('mobile.premium.signInAgain')}
+            </button>
+          </div>
+        )}
+
         <h2 className="mv-settings__heading">{t('mobile.settings.accounts')}</h2>
         {reauthCode && <p className="mv-settings__note mv-settings__note--error" role="alert">{t(errorKey(reauthCode))}</p>}
         <ul className="mv-settings__list">

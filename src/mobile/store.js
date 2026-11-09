@@ -321,6 +321,10 @@ export function createMobileStore() {
       outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError }]
       recentSearches: savedSearches(),
       drafts: [], // the active account's drafts: [{ id, accountId, to, subject, updatedMs }]
+      premium: { premium: false, source: null, expiresMs: null }, // the engine's Premium answer (premium.js keeps it current)
+      premiumLost: null, // 'DEVICE_REPLACED' once the account gave this phone's place to another device
+      premiumLapsed: false, // Premium was on in this session and has ended
+      paywall: null, // the paywall layer: { feature, signIn } while open, else null
       reauthState: null, // the last "Sign in again": { accountId, busy, code } (code null when fine)
 
       /**
@@ -362,6 +366,29 @@ export function createMobileStore() {
       loadPending,
       loadOutbox,
       loadDrafts,
+
+      /** Takes the engine's Premium answer `{ premium, source, expiresMs }`; a lapse is remembered. */
+      setPremium(next) {
+        const on = next?.premium === true;
+        set((s) => ({
+          premium: { premium: on, source: on ? next.source ?? null : null, expiresMs: on ? next.expiresMs ?? null : null },
+          premiumLost: on ? null : s.premiumLost,
+          premiumLapsed: on ? false : s.premiumLapsed || s.premium.premium,
+        }));
+      },
+
+      setPremiumLost(code) {
+        set({ premiumLost: code ?? null });
+      },
+
+      /** Opens the paywall; `feature` (scheduledSend | followUp | trackerBlocking) is highlighted. */
+      openPaywall(feature = null, { signIn = false } = {}) {
+        set({ paywall: { feature, signIn } });
+      },
+
+      closePaywall() {
+        set({ paywall: null });
+      },
 
       /** Remembers a search (newest first, one per text, the last RECENT_SEARCHES kept). */
       addRecentSearch(query) {
