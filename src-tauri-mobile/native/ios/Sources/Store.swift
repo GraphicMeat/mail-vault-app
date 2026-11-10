@@ -8,11 +8,12 @@
 //
 // From the moment the plugin loads, `Transaction.updates` (renewals, Ask to Buy approvals, a
 // purchase made on the App Store page) and `Transaction.unfinished` (a purchase the app was killed
-// before verifying) are handed over too, but only this install's own: one whose `appAccountToken`
-// is this install's id. Another install's transaction on the same Apple account would be refused
-// by the server without `restore` and take this install's Premium with it; Restore is the way to
-// bring those over. A restored install's renewals reach it through the engine's own re-check of
-// the receipt it stored.
+// before verifying) are handed over too, another install's as well (a restored install's renewals
+// carry the buying install's `appAccountToken`): the server decides. It answers the current state
+// for an install in the purchase's set and refuses one that is not; either way the transaction is
+// finished, so StoreKit stops handing it over at every launch. A refusal cannot take this
+// install's Premium: the engine replaces its stored receipt only with an entitled one, and a "no"
+// for another receipt is checked against the stored one first.
 //
 // The receipt never goes back to Rust's command reply or the page: the reply carries the outcome
 // and the engine's answer only.
@@ -38,6 +39,9 @@ enum MvStore {
   /// Transactions being handed over or already finished in this run: each goes over once at a
   /// time (`Transaction.updates` and `Transaction.unfinished` can both deliver one).
   private static var claimed = Set<UInt64>()
+  /// The engine's answer for a transaction a listener handed over, for a purchase sheet that found
+  /// it claimed (the listener got the same purchase first).
+  private static var answers: [UInt64: Answer] = [:]
 
   /// The engine's answer for one transaction.
   struct Answer {
@@ -74,6 +78,29 @@ enum MvStore {
     lock.lock()
     claimed.remove(id)
     lock.unlock()
+  }
+
+  /// Records what the engine answered for a transaction a listener handed over.
+  private static func settle(_ id: UInt64, _ answer: Answer) {
+    lock.lock()
+    answers[id] = answer
+    if !answer.answered { claimed.remove(id) }
+    lock.unlock()
+  }
+
+  /// The listener's answer for a claimed transaction, waited for up to `seconds`; nil when it
+  /// did not come (or the listener gave it back unanswered).
+  private static func listenerAnswer(_ id: UInt64, seconds: Int) async -> Answer? {
+    for _ in 0..<(seconds * 10) {
+      lock.lock()
+      let answer = answers.removeValue(forKey: id)
+      let stillClaimed = claimed.contains(id)
+      lock.unlock()
+      if let answer = answer { return answer.answered ? answer : nil }
+      if !stillClaimed { return nil }
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    return nil
   }
 
   /// Runs a blocking shell call on a GCD queue, never on the main thread or a Swift task's.
@@ -139,16 +166,14 @@ enum MvStore {
     return answer
   }
 
-  /// A transaction from `Transaction.updates` or `.unfinished`: this install's own, ours, once.
+  /// A transaction from `Transaction.updates` or `.unfinished`: ours, once at a time, whichever
+  /// install bought it (the server decides).
   static func handOver(_ result: VerificationResult<Transaction>) async {
     guard case .verified(let transaction) = result, productIds.contains(transaction.productID)
     else { return }
-    guard let install = await install(),
-      transaction.appAccountToken?.uuidString.lowercased() == install.lowercased()
-    else { return }
     guard claim(transaction.id) else { return }
     let answer = await submit(result, restore: false, appTransaction: nil)
-    if !answer.answered { unclaim(transaction.id) }
+    settle(transaction.id, answer)
   }
 
   static func isoPeriod(_ period: Product.SubscriptionPeriod) -> String {
@@ -230,10 +255,19 @@ enum MvStore {
       case .success(let verification):
         reply["status"] = "purchased"
         if case .verified(let transaction) = verification {
-          _ = claim(transaction.id)
-          let answer = await submit(verification, restore: false, appTransaction: nil)
-          if !answer.answered { unclaim(transaction.id) }
-          reply["verify"] = answer.reply
+          // `Transaction.updates` can deliver the same purchase while the sheet closes: then the
+          // listener's answer is this purchase's, and it goes over once.
+          var answer: Answer?
+          if !claim(transaction.id) {
+            answer = await listenerAnswer(transaction.id, seconds: 20)
+          }
+          if answer == nil {
+            _ = claim(transaction.id)
+            let mine = await submit(verification, restore: false, appTransaction: nil)
+            if !mine.answered { unclaim(transaction.id) }
+            answer = mine
+          }
+          reply["verify"] = (answer ?? .internalError).reply
         } else {
           reply["verify"] = Answer.unverified.reply
         }

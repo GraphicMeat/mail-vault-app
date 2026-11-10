@@ -8,7 +8,10 @@
 // 3 days), so an unacknowledged purchase is one the server has not accepted yet. Those are handed
 // over again whenever the plugin loads (a purchase the app was killed before verifying never
 // reaches the listener), and the listener hands over any that complete while the app runs (a
-// pending payment that went through). Only this install's own purchases go over automatically:
+// pending payment that went through). Once a day the plugin's start also hands over this install's
+// acknowledged purchases (the server answers their current state): a purchase the server accepted
+// and acknowledged just before the app was killed, before the engine kept its answer, would
+// otherwise come back only through Restore. Only this install's own purchases go over automatically:
 // one whose obfuscated account id is this install's. Another install's purchase on the same Play
 // account would be refused by the server without `restore` and take this install's Premium with
 // it; Restore is the way to bring those over.
@@ -18,6 +21,7 @@
 package com.mailvault.mvnative
 
 import android.app.Activity
+import android.content.Context
 import android.util.Log
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSArray
@@ -46,6 +50,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.Locale
@@ -74,6 +79,23 @@ object Store {
      *  be had. Blocks: never on the main thread. */
     @JvmStatic
     external fun nativeInstallId(): String
+
+    /** How often the start hands over acknowledged purchases too. */
+    const val ACK_SWEEP_MS = 24 * 60 * 60 * 1000L
+
+    /** How long a connection to Play may take before the call answers UNAVAILABLE. */
+    const val CONNECT_TIMEOUT_MS = 10_000L
+
+    /** Whether a purchase goes to the engine without the user asking: bought, this install's own,
+     *  and either not acknowledged yet (the server has not accepted it) or, with [sweep], already
+     *  acknowledged (the engine may have missed the server's answer). */
+    @JvmStatic
+    fun handsOver(purchased: Boolean, acknowledged: Boolean, own: Boolean, sweep: Boolean): Boolean =
+        purchased && own && (!acknowledged || sweep)
+
+    /** Whether the acknowledged sweep is due: a day after the last one, or the clock went back. */
+    @JvmStatic
+    fun sweepDue(now: Long, last: Long): Boolean = now - last >= ACK_SWEEP_MS || now < last
 }
 
 /** The Play side of the plugin: one billing client for the activity's life. */
@@ -93,7 +115,8 @@ class StoreBilling(private val activity: Activity) : PurchasesUpdatedListener {
     private val inFlight = mutableSetOf<String>()
     @Volatile private var started = false
 
-    /** Hands over this install's purchases the server has not accepted yet. Once per plugin. */
+    /** Hands over this install's purchases the server has not accepted yet, and once a day its
+     *  acknowledged ones too. Once per plugin. */
     fun start() {
         if (started) return
         started = true
@@ -102,7 +125,11 @@ class StoreBilling(private val activity: Activity) : PurchasesUpdatedListener {
             if (connect().responseCode != BillingResponseCode.OK) return@launch
             val result = client.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(ProductType.SUBS).build())
             if (result.billingResult.responseCode != BillingResponseCode.OK) return@launch
-            handOver(result.purchasesList, install)
+            val prefs = activity.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val now = System.currentTimeMillis()
+            val sweep = Store.sweepDue(now, prefs.getLong(LAST_SWEEP, 0L))
+            handOver(result.purchasesList, install, sweep)
+            if (sweep) prefs.edit().putLong(LAST_SWEEP, now).apply()
         }
     }
 
@@ -116,18 +143,23 @@ class StoreBilling(private val activity: Activity) : PurchasesUpdatedListener {
         return id
     }
 
+    /** Connects to Play once at a time. A setup that never finishes (Play updating, billing off by
+     *  policy) is given up after [Store.CONNECT_TIMEOUT_MS] as SERVICE_UNAVAILABLE, so the lock is
+     *  never held for good and the Premium screen gets an answer. */
     private suspend fun connect(): BillingResult = connecting.withLock {
         if (client.isReady) return@withLock ok()
-        suspendCancellableCoroutine { done ->
-            client.startConnection(object : BillingClientStateListener {
-                override fun onBillingSetupFinished(result: BillingResult) {
-                    if (done.isActive) done.resume(result)
-                }
+        withTimeoutOrNull(Store.CONNECT_TIMEOUT_MS) {
+            suspendCancellableCoroutine<BillingResult> { done ->
+                client.startConnection(object : BillingClientStateListener {
+                    override fun onBillingSetupFinished(result: BillingResult) {
+                        if (done.isActive) done.resume(result)
+                    }
 
-                // The next call connects again.
-                override fun onBillingServiceDisconnected() {}
-            })
-        }
+                    // The next call connects again.
+                    override fun onBillingServiceDisconnected() {}
+                })
+            }
+        } ?: BillingResult.newBuilder().setResponseCode(BillingResponseCode.SERVICE_UNAVAILABLE).build()
     }
 
     private fun ok(): BillingResult = BillingResult.newBuilder().setResponseCode(BillingResponseCode.OK).build()
@@ -145,13 +177,14 @@ class StoreBilling(private val activity: Activity) : PurchasesUpdatedListener {
         }
     }
 
-    /** This install's bought, unacknowledged purchases of ours, each once at a time. */
-    private fun handOver(purchases: List<Purchase>, install: String) {
+    /** This install's bought purchases of ours the server has not accepted yet (with [sweep], the
+     *  acknowledged ones too), each once at a time. */
+    private fun handOver(purchases: List<Purchase>, install: String, sweep: Boolean = false) {
         val mine = Store.obfuscatedId(install)
         for (purchase in purchases) {
             val product = ourProduct(purchase) ?: continue
-            if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED || purchase.isAcknowledged) continue
-            if (purchase.accountIdentifiers?.obfuscatedAccountId != mine) continue
+            val own = purchase.accountIdentifiers?.obfuscatedAccountId == mine
+            if (!Store.handsOver(purchase.purchaseState == Purchase.PurchaseState.PURCHASED, purchase.isAcknowledged, own, sweep)) continue
             val token = purchase.purchaseToken
             if (!synchronized(lock) { inFlight.add(token) }) continue
             try {
@@ -328,6 +361,8 @@ class StoreBilling(private val activity: Activity) : PurchasesUpdatedListener {
 
     private companion object {
         const val STALE_MS = 10 * 60 * 1000L
+        const val PREFS = "mv_store"
+        const val LAST_SWEEP = "ackSweepMs"
     }
 
     private fun outcome(status: String, productId: String): JSObject =
