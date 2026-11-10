@@ -322,6 +322,23 @@ fn due_while_in_front_is_not_posted_later() {
     assert_eq!(f.listed().len(), 1, "still listed until dismissed");
 }
 
+/// Leaving the front without having been in front (an OS suspend of a background launch) marks
+/// nothing: the reminder is still posted.
+#[test]
+fn leaving_without_having_been_in_front_still_posts() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server).premium();
+    f.notifications(true);
+    let row = f.sent_with_reminder(&server, "Quote", 3);
+    let f = f.restart();
+    f.come_due(&row.id);
+    f.check();
+    assert_eq!(f.state(&row.id).as_deref(), Some("due"));
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    let run = f.engine.background_fetch(WAIT).unwrap();
+    assert_eq!(run.followups.len(), 1, "{run:?}");
+}
+
 /// Notifications off: a background run still checks a due reminder (and only that: no INBOX
 /// pass), lists it, and posts nothing.
 #[test]

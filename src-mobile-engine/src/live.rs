@@ -306,7 +306,10 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
                     lock(&engine.live().shown).push(last);
                 }
                 crate::background::seen_in_front(engine.shared(), &shown);
-                crate::followup::seen_in_front(engine.shared());
+                // Only after the app was in front this session (the same condition as the mail).
+                if !shown.is_empty() {
+                    crate::followup::seen_in_front(engine.shared());
+                }
             }
             return Ok(json!({ "live": false }));
         }
