@@ -88,6 +88,10 @@ pub(crate) struct Live {
     /// The accounts put in front since the app last left it: their INBOX watermarks move past what
     /// the list showed when it leaves (`background::seen_in_front`).
     shown: Mutex<Vec<String>>,
+    /// The app was put in front since it last left it: only then does leaving mark the due
+    /// reminders announced (`followup::seen_in_front`); a reminder that went due
+    /// while it was away is still posted.
+    fronted: AtomicBool,
 }
 
 impl Live {
@@ -306,8 +310,9 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
                     lock(&engine.live().shown).push(last);
                 }
                 crate::background::seen_in_front(engine.shared(), &shown);
-                // Only after the app was in front this session (the same condition as the mail).
-                if !shown.is_empty() {
+                // Only when the app was in front since it last left: a reminder that went due
+                // while it was away (a background run cut before posting it) is still posted.
+                if engine.live().fronted.swap(false, Ordering::SeqCst) {
                     crate::followup::seen_in_front(engine.shared());
                 }
             }
@@ -323,6 +328,7 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
         return Err(RpcError::Invalid("unknown account".into()));
     }
     engine.live().foreground(engine.shared(), engine.sync_worker(), &account, p.resumed).map_err(RpcError::Internal)?;
+    engine.live().fronted.store(true, Ordering::SeqCst);
     Ok(json!({ "live": true }))
 }
 

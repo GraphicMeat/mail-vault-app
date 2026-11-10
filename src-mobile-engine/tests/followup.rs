@@ -339,6 +339,24 @@ fn leaving_without_having_been_in_front_still_posts() {
     assert_eq!(run.followups.len(), 1, "{run:?}");
 }
 
+/// A front visit earlier in the process does not cover a reminder that went due later, while the
+/// app was away: a later leave (the OS suspend after a background launch) marks nothing.
+#[test]
+fn due_after_an_earlier_front_visit_is_still_posted() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server).premium();
+    f.notifications(true);
+    let row = f.sent_with_reminder(&server, "Quote", 3);
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true, "accountId": f.account })).unwrap();
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    f.come_due(&row.id);
+    f.check();
+    assert_eq!(f.state(&row.id).as_deref(), Some("due"));
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    let run = f.engine.background_fetch(WAIT).unwrap();
+    assert_eq!(run.followups.len(), 1, "never in front since it went due: {run:?}");
+}
+
 /// Notifications off: a background run still checks a due reminder (and only that: no INBOX
 /// pass), lists it, and posts nothing.
 #[test]
