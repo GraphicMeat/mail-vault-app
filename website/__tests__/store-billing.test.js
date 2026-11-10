@@ -393,6 +393,37 @@ describe('POST /api/billing/store/apple/verify', () => {
     expect(await appleVerify(fresh.billing, older)).toEqual([403, { error: 'revoked' }]);
   });
 
+  it('a revoked earlier period is refused without ending the live later one', async () => {
+    const { billing, db } = setup();
+    // month 1 refunded, month 2 paid: the phone holds month 2
+    const month2 = jws(tx({ transactionId: '2000000112', purchaseDate: NOW - 5 * DAY, expiresDate: NOW + 25 * DAY }));
+    expect(await appleVerify(billing, month2)).toEqual([200, { entitled: true, source: 'apple', expiresMs: NOW + 25 * DAY }]);
+    const month1 = jws(tx({
+      transactionId: '2000000111', purchaseDate: NOW - 35 * DAY, expiresDate: NOW - 5 * DAY,
+      revocationDate: NOW - 1000, revocationReason: 0, signedDate: NOW - 500,
+    }));
+    expect(await appleVerify(billing, month1)).toEqual([403, { error: 'revoked' }]);
+    expect(db.subs).toHaveLength(1);
+    expect(db.subs[0]).toMatchObject({ status: 'active', expires_at: NOW + 25 * DAY });
+    expect(await appleVerify(billing, month2)).toEqual([200, { entitled: true, source: 'apple', expiresMs: NOW + 25 * DAY }]);
+  });
+
+  it('a revocation of the latest period still revokes the row', async () => {
+    const { billing, db } = setup();
+    const month1 = jws(tx({ transactionId: '2000000111', purchaseDate: NOW - 35 * DAY, expiresDate: NOW - 5 * DAY }));
+    const month2 = jws(tx({ transactionId: '2000000112', purchaseDate: NOW - 5 * DAY, expiresDate: NOW + 25 * DAY }));
+    expect((await appleVerify(billing, month1))[0]).toBe(200);
+    expect((await appleVerify(billing, month2))[1].entitled).toBe(true);
+    const revoked2 = jws(tx({
+      transactionId: '2000000112', purchaseDate: NOW - 5 * DAY, expiresDate: NOW + 25 * DAY,
+      revocationDate: NOW - 1000, revocationReason: 0, signedDate: NOW - 500,
+    }));
+    expect(await appleVerify(billing, revoked2)).toEqual([403, { error: 'revoked' }]);
+    expect(db.subs[0]).toMatchObject({ status: 'revoked', expires_at: NOW + 25 * DAY });
+    expect(await appleVerify(billing, month2)).toEqual([403, { error: 'revoked' }]);
+    expect(await appleVerify(billing, month1)).toEqual([403, { error: 'revoked' }]);
+  });
+
   it('apple_tampered_payload_fails_signature', async () => {
     const { billing, db } = setup();
     const good = jws(tx({ expiresDate: NOW - DAY }));

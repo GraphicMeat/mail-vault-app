@@ -464,10 +464,16 @@ function createStoreBilling({
           && (typeof signedAppTransaction !== 'string' || signedAppTransaction.length > MAX_SIGNED_TRANSACTION))) throw badRequest();
       if (!roots) throw new Unavailable('not_configured', 503);
       const t = appleTransaction(signedTransaction);
-      // A revoked transaction is Apple's signed word: recorded whoever posts it (a revoked
-      // status always lands), so the same transaction's older JWS cannot answer entitled.
+      // A revoked transaction is Apple's signed word: recorded whoever posts it, so the same
+      // transaction's older JWS cannot answer entitled. Only for the row's latest period (an
+      // expiry at or above the row's): the revocation of an earlier, refunded period is refused
+      // without touching the row, so it never ends a later paid one (ruling R-A1). Unverified:
+      // whether Apple sets revocationDate on the monthly transaction a yearly upgrade replaced.
       if (t.revocationDate) {
-        await record('apple', t.originalTransactionId, [t.originalTransactionId], appleState(t), 'receipt');
+        const row = await findRow('apple', t.originalTransactionId);
+        if (!row || t.expiresDate >= row.expiresMs) {
+          await record('apple', t.originalTransactionId, [t.originalTransactionId], appleState(t), 'receipt');
+        }
         throw refuse('revoked');
       }
       const install = installId.toLowerCase();
