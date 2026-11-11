@@ -132,6 +132,32 @@ describe('Onboarding', () => {
     expect(screen.getByText(progress(1, 5))).toBeTruthy();
   });
 
+  it('system Back goes to the previous step, and closes a running account flow first', async () => {
+    const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+    const systemBack = async () => {
+      await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+      await settle();
+    };
+    renderTour();
+    await settle();
+    cont();
+    await settle();
+    fireEvent.click(screen.getByText(en['onboarding.skipAccount']));
+    await settle();
+    expect(screen.getByTestId('onboarding-free')).toBeTruthy();
+    await systemBack();
+    expect(screen.getByText(progress(2, 5))).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: en['mobile.import.entry'] }));
+    await settle();
+    expect(screen.getByTestId('import-stub')).toBeTruthy();
+    await systemBack();
+    expect(screen.queryByTestId('import-stub')).toBeNull();
+    expect(screen.getByRole('button', { name: en['mobile.import.entry'] })).toBeTruthy();
+    await systemBack();
+    expect(screen.getByTestId('onboarding-language')).toBeTruthy();
+    expect(screen.getByText(progress(1, 5))).toBeTruthy();
+  });
+
   it('Skip tour marks the tour complete and leaves it', async () => {
     const { onFinish } = renderTour();
     cont();

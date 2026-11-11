@@ -7,7 +7,11 @@
 // renumber the steps under the user. Skip tour and Get Started both mark the tour done in the
 // engine (`onboardingComplete`) and call `onFinish()`. The account flows (import, manual add) take
 // the whole screen while they run; the tour header comes back with their Back.
-import React, { useLayoutEffect, useRef, useState } from 'react';
+//
+// System Back (Android) follows the header's Back: it closes a running account flow, else goes to
+// the previous step; on the first step it leaves the app as everywhere else (no layer).
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { pushLayer } from '../backStack.js';
 import { useT } from '../i18n.js';
 import { daemonCall } from '../transport.js';
 import { useMobileStore } from '../store.js';
@@ -32,6 +36,17 @@ export default function Onboarding({ steps, onAdd, onOAuth, onOAuthCancel, onFin
   const last = index === steps.length - 1;
   const next = () => setIndex((i) => Math.min(i + 1, steps.length - 1));
   const back = () => setIndex((i) => Math.max(i - 1, 0));
+  // One back layer while there is somewhere to go back to. A Back the layer took re-arms it
+  // (`backs`), so each press goes one step; moving forward keeps the one layer.
+  const [backs, setBacks] = useState(0);
+  const backable = index > 0 || Boolean(flow);
+  const systemBack = useRef(null);
+  systemBack.current = () => {
+    setBacks((n) => n + 1);
+    if (flow) setFlow(null);
+    else back();
+  };
+  useEffect(() => (backable ? pushLayer(() => systemBack.current?.()) : undefined), [backable, backs]);
   const finish = async () => {
     if (finishing) return;
     setFinishing(true);
