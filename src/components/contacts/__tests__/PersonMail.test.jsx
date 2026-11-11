@@ -94,6 +94,15 @@ describe('PersonMail', () => {
     expect(onOpenMail.mock.invocationCallOrder[0]).toBeLessThan(openNotificationTarget.mock.invocationCallOrder[0]);
   });
 
+  it('reloads mail when the selected sender changes', () => {
+    h.s.setState({ selectedId: null, sender: { address: 'a@x.io', name: '' } });
+    render(<PersonMail />);
+    const { loadMail } = h.s.getState();
+    expect(loadMail).toHaveBeenCalledTimes(1);
+    act(() => h.s.setState({ sender: { address: 'b@x.io', name: '' } }));
+    expect(loadMail).toHaveBeenCalledTimes(2);
+  });
+
   it('an empty subject shows the placeholder key', () => {
     h.s.setState({ mail: [row({ subject: '' })] });
     render(<PersonMail />);

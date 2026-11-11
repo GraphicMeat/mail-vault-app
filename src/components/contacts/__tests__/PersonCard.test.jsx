@@ -16,6 +16,7 @@ vi.mock('../../../stores/mailStore', () => ({
   useMailStore: Object.assign((sel) => sel({ accounts: [] }), { getState: () => ({}) }),
 }));
 vi.mock('../../../utils/notificationOpen', () => ({ openNotificationTarget: vi.fn() }));
+vi.mock('../../../utils/composeOpener', () => ({ openCompose: vi.fn() }));
 vi.mock('../../ui/Dialog', async () => {
   const React = await import('react');
   return {
@@ -50,6 +51,7 @@ const CARD = {
   org: 'Acme', notes: '', vip: false, pinned: false, blocked: false, recordIds: ['r1'], sourceKinds: ['local'],
 };
 const select = (card, extra = {}) => h.s.setState({ selectedId: card.id, card, ...extra });
+const openDetails = () => fireEvent.click(screen.getByText('contacts.tab.details'));
 
 beforeEach(() => h.s.setState(h.fresh(), true));
 afterEach(cleanup);
@@ -98,6 +100,7 @@ describe('PersonCard', () => {
   it('save calls update with only the changed fields', () => {
     select(CARD);
     render(<PersonCard />);
+    openDetails();
     expect(screen.getByTestId('person-save').disabled).toBe(true);
     fireEvent.change(screen.getByTestId('person-notes'), { target: { value: 'met in Vilnius' } });
     fireEvent.click(screen.getByTestId('person-save'));
@@ -109,6 +112,7 @@ describe('PersonCard', () => {
     h.s.setState({ update: vi.fn(async () => { h.s.setState({ card: stored }); return stored; }) });
     select(CARD);
     render(<PersonCard />);
+    openDetails();
     fireEvent.change(screen.getByTestId('person-email-0'), { target: { value: 'Jane@X.io' } });
     expect(screen.getByTestId('person-save').disabled).toBe(false);
     await act(async () => { fireEvent.click(screen.getByTestId('person-save')); });
@@ -120,6 +124,7 @@ describe('PersonCard', () => {
   it('shows the provenance label of an existing email read-only', () => {
     select(CARD);
     render(<PersonCard />);
+    openDetails();
     expect(screen.getByTestId('person-email-0').value).toBe('amy@x.io');
     expect(screen.getByText('work')).toBeTruthy();
   });
@@ -127,6 +132,7 @@ describe('PersonCard', () => {
   it('delete asks for confirmation with the name, then calls remove', () => {
     select(CARD);
     render(<PersonCard />);
+    openDetails();
     fireEvent.click(screen.getByTestId('person-delete'));
     expect(screen.getByTestId('dialog-description').textContent).toBe('contacts.deleteConfirm:Amy');
     expect(h.s.getState().remove).not.toHaveBeenCalled();
@@ -137,13 +143,14 @@ describe('PersonCard', () => {
   it('cancelling the delete confirmation never calls remove', () => {
     select(CARD);
     render(<PersonCard />);
+    openDetails();
     fireEvent.click(screen.getByTestId('person-delete'));
     fireEvent.click(screen.getByTestId('person-delete-cancel'));
     expect(h.s.getState().remove).not.toHaveBeenCalled();
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
-  it('VIP, pinned and blocked toggles call update', () => {
+  it('Favorite, pinned and blocked toggles call update', () => {
     select({ ...CARD, pinned: true });
     render(<PersonCard />);
     fireEvent.click(screen.getByTestId('toggle-vip'));
@@ -157,6 +164,7 @@ describe('PersonCard', () => {
   it('a new card object for the same contact keeps unsaved edits', () => {
     select(CARD);
     render(<PersonCard />);
+    openDetails();
     fireEvent.change(screen.getByTestId('person-notes'), { target: { value: 'draft note' } });
     act(() => h.s.setState({ card: { ...CARD, vip: true } }));
     expect(screen.getByTestId('person-notes').value).toBe('draft note');
@@ -167,6 +175,7 @@ describe('PersonCard', () => {
   it('a contact with no email shows the details without an email section crash', () => {
     select({ ...CARD, emails: [], phones: [] });
     render(<PersonCard />);
+    openDetails();
     expect(screen.queryByTestId('person-email-0')).toBeNull();
     expect(screen.getByTestId('person-add-email')).toBeTruthy();
     expect(screen.getByTestId('person-name').value).toBe('Amy');
@@ -175,6 +184,7 @@ describe('PersonCard', () => {
   it('the merge button opens the merge dialog for this contact', () => {
     select(CARD);
     render(<PersonCard />);
+    openDetails();
     expect(screen.queryByTestId('merge-dialog')).toBeNull();
     fireEvent.click(screen.getByTestId('person-merge'));
     expect(screen.getByTestId('merge-dialog').textContent).toBe('p1');
@@ -186,6 +196,7 @@ describe('PersonCard', () => {
       { a: 'p3', b: 'p4', reason: 'phone' },
     ] });
     render(<PersonCard />);
+    openDetails();
     expect(screen.getByText('contacts.merge.proposals')).toBeTruthy();
     const row = screen.getByTestId('proposal-p2');
     expect(row.textContent).toContain('contacts.merge.reason.name');
@@ -197,19 +208,37 @@ describe('PersonCard', () => {
   it('shows no duplicates block when none include this contact', () => {
     select(CARD, { proposals: [{ a: 'p3', b: 'p4', reason: 'phone' }] });
     render(<PersonCard />);
+    openDetails();
     expect(screen.queryByTestId('person-proposals')).toBeNull();
   });
 
   it('a proposal opens the merge dialog with both contacts', () => {
     select(CARD, { proposals: [{ a: 'p1', b: 'p2', reason: 'phone' }] });
     render(<PersonCard />);
+    openDetails();
     fireEvent.click(screen.getByTestId('proposal-merge-p2'));
     expect(screen.getByTestId('merge-dialog').textContent).toBe('p1,p2');
+  });
+
+  it('opens on the emails tab', () => {
+    select(CARD);
+    render(<PersonCard />);
+    expect(screen.getByTestId('person-mail')).toBeTruthy();
+    expect(screen.queryByTestId('person-name')).toBeNull();
+    expect(h.s.getState().loadMail).toHaveBeenCalledWith({});
+  });
+
+  it('header has Email and Copy address', () => {
+    select(CARD);
+    render(<PersonCard />);
+    expect(screen.getByTestId('contact-email')).toBeTruthy();
+    expect(screen.getByTestId('contact-copy')).toBeTruthy();
   });
 
   it('the correspondence tab shows the mail list', () => {
     select(CARD);
     render(<PersonCard />);
+    openDetails();
     fireEvent.click(screen.getByText('contacts.tab.mail'));
     expect(screen.getByTestId('person-mail')).toBeTruthy();
     expect(h.s.getState().loadMail).toHaveBeenCalledWith({});

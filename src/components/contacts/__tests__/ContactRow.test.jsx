@@ -3,6 +3,7 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
+vi.mock('../../../i18n', () => ({ useT: () => (k) => k }));
 vi.mock('lucide-react', () => new Proxy({}, {
   get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : () => null),
   has: () => true,
@@ -26,6 +27,8 @@ describe('ContactRow', () => {
 
   it('falls back to the address as the name and omits an unknown count', () => {
     render(<ContactRow testId="r" address="bo@x.io" />);
-    expect(screen.getByTestId('r').textContent.startsWith('bo@x.io')).toBe(true);
+    const row = screen.getByTestId('r');
+    expect(row.querySelectorAll('.truncate')[0].textContent).toBe('bo@x.io');
+    expect(row.querySelector('.tabular-nums')).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Plus, Star } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useT } from '../../i18n';
 import { usePeopleStore } from '../../stores/peopleStore';
 import { ContactRow } from './ContactRow';
@@ -9,7 +9,7 @@ const ROW = 56;
 
 export function ContactsList() {
   const t = useT();
-  const { items, total, query, sort, vipOnly, selectedId, stats, setQuery, setSort, setVipOnly, select, loadMore, refreshStats } = usePeopleStore();
+  const { items, total, query, sort, selectedId, stats, setQuery, setSort, select, loadMore, refreshStats } = usePeopleStore();
   // The box shows what was typed at once; the store searches once typing pauses.
   const [text, setText] = useState(query);
   useEffect(() => {
@@ -41,7 +41,6 @@ export function ContactsList() {
             <option value="total">{t('contacts.sort.total')}</option>
             <option value="last">{t('contacts.sort.last')}</option>
           </select>
-          <button type="button" data-testid="contacts-vip-filter" aria-pressed={vipOnly} onClick={() => setVipOnly(!vipOnly)} title={t('contacts.filter.vip')} aria-label={t('contacts.filter.vip')}><Star size={16} /></button>
           <button type="button" data-testid="contacts-new" onClick={() => select('new')} title={t('contacts.new')} aria-label={t('contacts.new')}><Plus size={16} /></button>
         </div>
       </div>
@@ -64,6 +63,7 @@ export function ContactsList() {
                   name={p.displayName}
                   address={p.primaryEmail}
                   count={count}
+                  favorite={p.vip}
                   selected={selectedId === p.id}
                   onClick={() => select(p.id)}
                   style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: ROW, transform: `translateY(${r.start}px)` }}

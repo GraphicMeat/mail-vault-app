@@ -52,14 +52,18 @@ describe('ContactsList', () => {
     expect(h.s.getState().setQuery).toHaveBeenCalledTimes(1);
     expect(h.s.getState().setQuery).toHaveBeenCalledWith('am');
   });
-  it('selecting a row selects the contact; sort and VIP filter call the store', () => {
+  it('selecting a row selects the contact; sort calls the store', () => {
     render(<ContactsList />);
     fireEvent.click(screen.getByTestId('contact-row-p2'));
     expect(h.s.getState().select).toHaveBeenCalledWith('p2');
     fireEvent.change(screen.getByTestId('contacts-sort'), { target: { value: 'total' } });
     expect(h.s.getState().setSort).toHaveBeenCalledWith('total');
-    fireEvent.click(screen.getByTestId('contacts-vip-filter'));
-    expect(h.s.getState().setVipOnly).toHaveBeenCalledWith(true);
+    expect(screen.queryByTestId('contacts-vip-filter')).toBeNull();
+  });
+  it('marks a favorite contact with a star', () => {
+    render(<ContactsList />);
+    expect(screen.getByTestId('contact-row-p1').querySelector('[data-testid="row-favorite"]')).toBeTruthy();
+    expect(screen.getByTestId('contact-row-p2').querySelector('[data-testid="row-favorite"]')).toBeNull();
   });
   it('the new button creates an empty draft by selecting the draft sentinel', () => {
     render(<ContactsList />);

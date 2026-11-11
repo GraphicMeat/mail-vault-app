@@ -8,6 +8,7 @@ import { SegmentedChoice } from '../ui/SegmentedChoice';
 import { PersonDetails } from './PersonDetails';
 import { PersonMail } from './PersonMail';
 import { PersonActivity } from './PersonActivity';
+import { ContactActions } from './ContactActions';
 
 const date = (ms) => formatDateOnly(ms, { alwaysShowYear: true });
 
@@ -33,6 +34,7 @@ function Header({ card }) {
         {toggle('pinned', Pin, t('contacts.pinned'))}
         {toggle('blocked', Ban, t('contacts.blocked'))}
       </div>
+      <div className="mt-2"><ContactActions address={card.emails[0]?.address} /></div>
       {st && (none ? (
         <p className="mt-2 text-sm text-mail-text-secondary">{t('contacts.stats.none')}</p>
       ) : (
@@ -52,7 +54,7 @@ export function PersonCard({ onOpenMail }) {
   const t = useT();
   const selectedId = usePeopleStore((s) => s.selectedId);
   const card = usePeopleStore((s) => s.card);
-  const [tab, setTab] = useState('details');
+  const [tab, setTab] = useState('mail');
   if (!selectedId) return <div className="flex-1" />;
   const draft = selectedId === 'new';
   if (!draft && !card) return <div className="flex-1" />;
@@ -65,8 +67,8 @@ export function PersonCard({ onOpenMail }) {
           value={tab}
           onChange={setTab}
           options={[
-            { value: 'details', label: t('contacts.tab.details') },
             { value: 'mail', label: t('contacts.tab.mail') },
+            { value: 'details', label: t('contacts.tab.details') },
             { value: 'activity', label: t('contacts.tab.activity') },
           ]}
         />

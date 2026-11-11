@@ -254,9 +254,9 @@ describe('Contacts', function () {
       assert.ok(await present(tid('review-add-all')), 'A non-empty queue offers a bulk add');
     }
     await dismissOnboardingNotice();
-    await clickReachableOrExplain(tid('contacts-review-tab'));
+    await clickReachableOrExplain(tid('contacts-tab-contacts'));
     await waitShown(tid('contacts-new'), 10000);
-    assert.equal(await present(tid('review-queue')), false, 'The tab toggles back to the people list');
+    assert.equal(await present(tid('review-queue')), false, 'The Contacts tab returns to the people list');
   });
 
   it('returns to mail with the back button', async () => {

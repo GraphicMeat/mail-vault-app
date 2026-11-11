@@ -12,6 +12,7 @@ const SEARCH_DELAY_MS = 300;
 export function PersonMail({ onOpenMail }) {
   const t = useT();
   const selectedId = usePeopleStore((s) => s.selectedId);
+  const senderAddress = usePeopleStore((s) => s.sender?.address);
   const mail = usePeopleStore((s) => s.mail);
   const mailNext = usePeopleStore((s) => s.mailNext);
   const loadMail = usePeopleStore((s) => s.loadMail);
@@ -28,7 +29,7 @@ export function PersonMail({ onOpenMail }) {
 
   useEffect(() => {
     loadMail({ ...(direction !== 'all' && { direction }), ...(query && { text: query }) });
-  }, [selectedId, direction, query, loadMail]);
+  }, [selectedId, senderAddress, direction, query, loadMail]);
 
   // Leave the Contacts view first (it drops the mail selection), then open the message.
   const open = async (row) => {
