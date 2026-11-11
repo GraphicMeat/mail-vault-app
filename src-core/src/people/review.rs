@@ -2,6 +2,7 @@
 //! person. Read-only over `message_addr`, except `accept` and `dismiss`.
 use crate::people::message_addr::normalize;
 use crate::people::model::now_ms;
+use crate::people::senders::{aggregate_sql, own_list};
 use crate::people::store::{create_person, find_person_by_address, NewPerson};
 use rusqlite::{params, params_from_iter, types::Value as Sql, Connection};
 use serde::{Deserialize, Serialize};
@@ -35,28 +36,17 @@ fn automated(address: &str) -> bool {
 /// is a long scan of `message_addr`. Pages hold raw candidates; `finalize`
 /// ranks and filters them.
 pub fn candidates_page(conn: &Connection, own: &[String], after: &str, max_addresses: usize) -> Result<(Vec<Candidate>, Option<String>), String> {
-    let own_lc: Vec<String> = own.iter().filter_map(|a| normalize(a)).collect();
-    // `x NOT IN (NULL)` is NULL, which would filter every row: an empty list is `''`.
-    let own_ph = if own_lc.is_empty() { "''".to_string() } else { (1..=own_lc.len()).map(|i| format!("?{i}")).collect::<Vec<_>>().join(",") };
-    let mut args: Vec<Sql> = own_lc.iter().map(|a| Sql::Text(a.clone())).collect();
+    let (own_ph, mut args) = own_list(own);
     args.push(Sql::Text(after.to_string()));
     let after_n = args.len();
     args.push(Sql::Integer(max_addresses as i64));
     let lim = args.len();
-    let key = "m.account_id||char(31)||m.msg_key";
-    let sql = format!(
-        "SELECT m.address, MAX(m.name), \
-           COUNT(DISTINCT CASE WHEN m.role='from' THEN {key} END), \
-           COUNT(DISTINCT CASE WHEN m.role IN ('to','bcc') AND EXISTS(SELECT 1 FROM message_addr f WHERE f.account_id=m.account_id \
-             AND f.mailbox_path=m.mailbox_path AND f.uid=m.uid AND f.role='from' AND f.address IN ({own_ph})) THEN {key} END), \
-           MAX(m.sort_ms) \
-         FROM message_addr m \
-         WHERE m.counted=1 AND m.address > ?{after_n} \
-           AND m.address NOT IN (SELECT address FROM record_address) \
-           AND m.address NOT IN (SELECT address FROM review_dismissed) \
-           AND m.address NOT IN ({own_ph}) \
-         GROUP BY m.address ORDER BY m.address LIMIT ?{lim}"
+    let filter = format!(
+        "AND m.address NOT IN (SELECT address FROM record_address) \
+         AND m.address NOT IN (SELECT address FROM review_dismissed) \
+         AND m.address NOT IN ({own_ph})"
     );
+    let sql = aggregate_sql(&own_ph, &filter, "", after_n, lim);
     let mut stmt = conn.prepare(&sql).map_err(err)?;
     let rows = stmt
         .query_map(params_from_iter(args), |r| {
