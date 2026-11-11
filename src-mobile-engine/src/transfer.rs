@@ -32,10 +32,11 @@ fn refused(code: &str, message: &str) -> Value {
 
 /// The params, read by hand: serde's errors quote the offending value, which here is the password
 /// or a piece of the sealed bundle. Every error names the field only.
-fn read_params(params: &Value) -> Result<(Vec<String>, Zeroizing<String>), &'static str> {
-    let obj = params.as_object().ok_or("params must be an object")?;
-    let password = match obj.get("password") {
-        Some(Value::String(s)) => Zeroizing::new(s.clone()),
+fn read_params(params: &mut Value) -> Result<(Vec<String>, Zeroizing<String>), &'static str> {
+    let obj = params.as_object_mut().ok_or("params must be an object")?;
+    // Taken, not cloned: no second copy of the password stays in `params`.
+    let password = match obj.get_mut("password") {
+        Some(Value::String(s)) => Zeroizing::new(std::mem::take(s)),
         _ => return Err("password must be a string"),
     };
     let Some(Value::Array(items)) = obj.get("frames") else {
@@ -54,8 +55,8 @@ fn read_params(params: &Value) -> Result<(Vec<String>, Zeroizing<String>), &'sta
     Ok((frames, password))
 }
 
-pub(crate) fn import(engine: &Engine, params: Value) -> Result<Value, RpcError> {
-    let (frames, password) = match read_params(&params) {
+pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcError> {
+    let (frames, password) = match read_params(&mut params) {
         Ok(p) => p,
         Err(m) => return Ok(refused("INVALID", m)),
     };
@@ -75,48 +76,69 @@ pub(crate) fn import(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     let mut imported = Vec::new();
     let mut existing = Vec::new();
     let mut skipped = Vec::new();
-    let mut seen = HashSet::new();
+    // The same address twice in one code: once one copy is here (imported or already present),
+    // a later copy is "existing". A skipped copy does not count, so a later usable one still gets
+    // in; a skipped address is named once.
+    let mut here = HashSet::new();
+    let mut named_skipped = HashSet::new();
     for acct in &bundle.accounts {
         let email = acct.email.trim().to_string();
-        // The same address twice in one code: the first one counts.
-        if !seen.insert(email.to_lowercase()) {
+        let key = email.to_lowercase();
+        if here.contains(&key) {
             existing.push(email);
             continue;
         }
+        let skip = |skipped: &mut Vec<Value>, named: &mut HashSet<String>, email: String, reason: &str| {
+            if named.insert(email.to_lowercase()) {
+                skipped.push(json!({ "email": email, "reason": reason }));
+            }
+        };
         let (row, cred) = match to_row(acct, &email) {
             Ok(r) => r,
             Err(reason) => {
-                skipped.push(json!({ "email": email, "reason": reason }));
+                skip(&mut skipped, &mut named_skipped, email, reason);
                 continue;
             }
         };
         if accounts::email_taken(engine, &email)? {
+            here.insert(key);
             existing.push(email);
             continue;
         }
         match accounts::insert_new(engine, &row, &cred, |_, _| Ok(())) {
-            Ok(_) => imported.push(email),
-            Err(InsertError::Duplicate) => existing.push(email),
-            Err(InsertError::Secret(_)) => skipped.push(json!({ "email": email, "reason": "internal" })),
+            Ok(_) => {
+                here.insert(key);
+                imported.push(email);
+            }
+            Err(InsertError::Duplicate) => {
+                here.insert(key);
+                existing.push(email);
+            }
+            Err(InsertError::Secret(_)) => skip(&mut skipped, &mut named_skipped, email, "internal"),
             Err(InsertError::Db(e)) => return Err(RpcError::Internal(e)),
         }
     }
+    // A skipped copy whose address a later copy brought in is not skipped after all.
+    skipped.retain(|s| !s["email"].as_str().is_some_and(|e| here.contains(&e.to_lowercase())));
     Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped }))
 }
 
 /// A bundle account as the row and secret every add path stores, or why the phone cannot use it.
 /// The bundle speaks the engine's vocabulary already; this checks it, since a code is input.
-fn to_row(a: &PhoneAccount, email: &str) -> Result<(AccountRow, Credential), &'static str> {
+fn to_row<'a>(a: &'a PhoneAccount, email: &str) -> Result<(AccountRow, Credential), &'static str> {
     let at = email.find('@');
     if at.is_none_or(|i| i == 0 || i + 1 >= email.len()) || email.chars().any(char::is_whitespace) {
         return Err("invalid");
     }
     let nonblank = |s: &Option<String>| s.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
-    let secret = |s: &Option<String>| s.as_deref().filter(|s| !s.is_empty()).map(str::to_string);
+    // Borrowed, never copied: the one copy is the one the credential holds.
+    let secret = |s: &'a Option<String>| s.as_deref().filter(|s| !s.is_empty());
 
     let cred = match a.auth {
-        PhoneAuth::Password | PhoneAuth::Bearer => Credential::from_password(&secret(&a.password).ok_or("no-secret")?),
-        PhoneAuth::OAuth2 => Credential { refresh: Some(secret(&a.refresh).ok_or("no-secret")?), client_id: nonblank(&a.client_id), ..Credential::default() },
+        PhoneAuth::Password | PhoneAuth::Bearer => Credential::from_password(secret(&a.password).ok_or("no-secret")?),
+        PhoneAuth::OAuth2 => {
+            Credential { refresh: Some(secret(&a.refresh).ok_or("no-secret")?.to_string()), client_id: nonblank(&a.client_id), ..Credential::default() }
+        }
     };
     let mut row = match a.kind {
         PhoneKind::Imap => {

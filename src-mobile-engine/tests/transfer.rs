@@ -308,3 +308,19 @@ fn an_account_the_phone_cannot_store_is_skipped_and_the_rest_imported() {
     // No SMTP server on the desktop: none here either (sending says so), never a guessed host.
     assert_eq!(row(tmp.path(), "nosmtp@example.test").smtp, (None, None, None));
 }
+
+#[test]
+fn a_repeat_whose_first_copy_was_skipped_is_not_existing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    let mut bad = imap("cara@example.test");
+    bad.imap_host = None;
+    let mut bad_too = imap("dan@example.test");
+    bad_too.imap_host = None;
+    let reply = import(&e, &code(PW, vec![bad, imap("cara@example.test"), bad_too.clone(), bad_too]), PW);
+    assert_eq!(reply["ok"], true, "{reply}");
+    assert_eq!(reply["imported"], json!(["cara@example.test"]));
+    assert_eq!(reply["existing"], json!([]));
+    // cara got in from its second copy, so it is not reported skipped; dan is named once.
+    assert_eq!(reply["skipped"], json!([{ "email": "dan@example.test", "reason": "invalid" }]));
+}
