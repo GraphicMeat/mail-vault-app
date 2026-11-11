@@ -30,10 +30,10 @@ pub(super) async fn list_names(session: &mut ImapSession) -> Result<Vec<Name>, S
     // An authenticated account always has at least INBOX, so zero names is never
     // a real answer; reporting it as one is what produced "Server returned empty
     // folder list unexpectedly" while the pool was still holding a broken pipe.
-    // As an error the session gets discarded and the caller retries on a fresh
-    // connection.
+    // "connection lost" makes the pool discard this session and retry the read
+    // on a fresh connection.
     if names.is_empty() {
-        return Err("LIST returned no mailboxes — connection likely dropped mid-response".to_string());
+        return Err("LIST failed: connection lost (the reply ended before any mailbox)".to_string());
     }
     Ok(names)
 }
