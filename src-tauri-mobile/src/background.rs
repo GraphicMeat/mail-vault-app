@@ -341,8 +341,13 @@ pub(crate) fn render_followups(due: &[FollowUpDue], preview: bool, locale: &str)
 /// The system languages the native side last reported, most preferred first.
 static LANGUAGES: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
-fn locale() -> &'static str {
-    pick_locale(&LANGUAGES.lock().unwrap_or_else(|e| e.into_inner()))
+/// The notifications' language: the one picked in the app (engine setting `language`, one of the
+/// nine) over the system's, as the page picks it (`src/mobile/i18n.js` `loadMobileLocale`).
+fn notify_locale(stored: Option<&str>, languages: &[String]) -> &'static str {
+    match stored.and_then(|code| NOTIFY_STRINGS.iter().find(|(l, _)| *l == code)) {
+        Some((l, _)) => l,
+        None => pick_locale(languages),
+    }
 }
 
 /// One background run on the process's engine; the JSON the native side posts from:
@@ -354,11 +359,14 @@ fn locale() -> &'static str {
 pub(crate) fn run_json(data: &Path, cache: &Path, budget: Duration, started: Instant) -> String {
     // A worker process never ran `run()`.
     crate::perf_gate_env();
-    let locale = locale();
+    let system_languages = LANGUAGES.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let mut locale = notify_locale(None, &system_languages);
     let mut token = None;
     let notes = match engine_for_background(data, cache) {
         Ok(engine) => match engine.background_fetch(budget.saturating_sub(started.elapsed())) {
             Ok(run) => {
+                let stored = engine.setting("language").ok().flatten();
+                locale = notify_locale(stored.as_deref(), &system_languages);
                 token = run.commit;
                 let mail = run.mail;
                 let preview = engine.notification_preview();
@@ -832,6 +840,18 @@ mod tests {
         blank.subject = "  ".into();
         assert_eq!(render(&[blank], true, "fr")[0].body, "(Sans objet)");
         assert_eq!(text("ja", "mobile.notify.summary_other").replace("{{count}}", "9"), "9 件の新着メッセージ");
+    }
+
+    #[test]
+    fn the_language_picked_in_the_app_wins_over_the_system_one() {
+        let system = vec!["fr-FR".to_string()];
+        assert_eq!(notify_locale(Some("de"), &system), "de");
+        assert_eq!(notify_locale(Some("pt-BR"), &system), "pt-BR");
+        assert_eq!(notify_locale(Some("zh-Hans"), &system), "zh-Hans");
+        assert_eq!(notify_locale(Some("en"), &system), "en");
+        // Not one of the nine (or nothing stored): the system decides, as on the page.
+        assert_eq!(notify_locale(Some("sv"), &system), "fr");
+        assert_eq!(notify_locale(None, &system), "fr");
     }
 
     #[test]
