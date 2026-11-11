@@ -13,7 +13,7 @@ const JMAP_AWARE = /isJmapAccount|serverSavesSent/;
 const IMAP_PATH = 'Graph-only branch; JMAP takes the IMAP path';
 const ALLOWED = {
   'src/components/ComposeModal.jsx': IMAP_PATH,
-  'src/components/GraphImapBanner.jsx': 'Asks Graph-connected Outlook accounts to switch to IMAP; a JMAP account never sees it',
+  'src/components/GraphImapBanner.jsx': 'Banner is Graph-only; JMAP accounts need no switch-to-IMAP prompt',
   'src/App.jsx': 'Detached compose admission uses the same follow-up reminder policy; JMAP takes the IMAP path',
   'src/components/settings/MboxImportDialog.jsx': IMAP_PATH,
   'src/components/settings/MigrationSettings.jsx': IMAP_PATH,

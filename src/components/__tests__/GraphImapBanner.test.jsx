@@ -16,6 +16,7 @@ const { useSettingsStore } = await import('../../stores/settingsStore');
 const graph = (id, email) => ({ id, email, oauth2Provider: 'microsoft', oauth2Transport: 'graph' });
 const imap = (id, email) => ({ id, email, oauth2Provider: 'microsoft', oauth2Transport: 'imap' });
 const gmail = (id, email) => ({ id, email, oauth2Provider: 'google' });
+const jmap = (id, email) => ({ id, email, jmapSessionUrl: 'https://jmap.example.test/session' });
 
 beforeEach(() => {
   useSettingsStore.setState({ graphImapNoticeDismissed: {} });
@@ -26,6 +27,12 @@ afterEach(cleanup);
 describe('GraphImapBanner', () => {
   it('stays out of the way without a Graph account', () => {
     useMailStore.setState({ accounts: [imap('a', 'a@outlook.com'), gmail('g', 'g@gmail.com')] });
+    render(<GraphImapBanner onSwitch={vi.fn()} />);
+    expect(screen.queryAllByTestId('graph-imap-banner')).toHaveLength(0);
+  });
+
+  it('does not show a switch banner for JMAP', () => {
+    useMailStore.setState({ accounts: [jmap('j', 'j@fastmail.com')] });
     render(<GraphImapBanner onSwitch={vi.fn()} />);
     expect(screen.queryAllByTestId('graph-imap-banner')).toHaveLength(0);
   });

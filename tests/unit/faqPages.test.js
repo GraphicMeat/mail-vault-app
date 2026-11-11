@@ -13,11 +13,18 @@ const questionsIn = (html) => {
   const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [];
   return m.flatMap((block) => {
     const json = block.replace(/<\/?script[^>]*>/g, '');
-    let parsed; try { parsed = JSON.parse(json); } catch { return []; }
+    const parsed = JSON.parse(json);
     if (parsed['@type'] !== 'FAQPage') return [];
     return (parsed.mainEntity || []).map(q => q.name);
   });
 };
+
+const faqSchema = (html) => [...new JSDOM(html).window.document.querySelectorAll('script[type="application/ld+json"]')]
+  .map(script => JSON.parse(script.textContent)).find(item => item['@type'] === 'FAQPage');
+
+const PROVIDER_ANSWER_KEYS = ['70549e28b3f7', '4a4009251ee1', 'edb2a4315dd4',
+  'd4488842e423', '728c8ebce436', '81f908ad95bd', '8cd52f58d6ee'];
+const PROVIDER_ANSWER_INDEXES = [0, 1, 2, 3, 4, 5, 7];
 
 describe('FAQ hub and topic pages', () => {
   it('creates all required topic pages', () => {
@@ -31,6 +38,30 @@ describe('FAQ hub and topic pages', () => {
     // topics; new topics have separate coverage below.
     expect(all.length).toBe(42);
     expect(new Set(all).size).toBe(42);
+  });
+
+  it('parses every FAQ JSON-LD block in every locale', () => {
+    for (const loc of [{ dir: '' }, ...LOCALES]) {
+      for (const name of ORIGINAL_TOPICS) {
+        const html = readFileSync(`website/${loc.dir ? `${loc.dir}/` : ''}faq/${name}.html`, 'utf8');
+        expect(() => questionsIn(html), `${loc.dir || 'en'}/${name}`).not.toThrow();
+        if (name === 'providers') expect(questionsIn(html)).toHaveLength(8);
+      }
+    }
+  });
+
+  it('localizes provider structured answers', () => {
+    const english = faqSchema(topic('providers')).mainEntity;
+    for (const loc of LOCALES) {
+      const translated = faqSchema(readFileSync(`website/${loc.dir}/faq/providers.html`, 'utf8')).mainEntity;
+      const dict = loadDict(loc);
+      for (const [position, key] of PROVIDER_ANSWER_KEYS.entries()) {
+        const answer = translated[PROVIDER_ANSWER_INDEXES[position]].acceptedAnswer.text;
+        expect(dict[key], `${loc.dir}: ${key}`).toBeTruthy();
+        expect(answer, `${loc.dir}: ${key}`).toBe(dict[key]);
+        expect(answer, `${loc.dir}: ${key}`).not.toBe(english[PROVIDER_ANSWER_INDEXES[position]].acceptedAnswer.text);
+      }
+    }
   });
 
   // MailVault links here when Outlook.com refuses an IMAP session because
