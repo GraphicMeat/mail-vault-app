@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { refreshSelectedThread } from '../slices/readerThread';
+import { promoteOpenEmail, refreshSelectedThread } from '../slices/readerThread';
 import { buildThreads } from '../../utils/emailParser';
 
 // The reader's open thread is a SNAPSHOT of one buildThreads() entry. Removals
@@ -37,6 +37,56 @@ const reply = (over = {}) => ({
 
 const threadOf = (emails) => [...buildThreads(emails).values()][0];
 const state = (selectedThread, over = {}) => ({ selectedThread, activeAccountId: 'acct-1', activeMailbox: 'INBOX', getSentMailboxPath: () => 'Sent', ...over });
+
+describe('promoteOpenEmail', () => {
+  const following = (over = {}) => state(null, {
+    selectedEmailId: 10,
+    followReply: { replyId: '<mine@example.test>', emailId: 10 },
+    ...over,
+  });
+
+  it('opens the conversation once the sent reply joins it', () => {
+    const update = promoteOpenEmail(following(), buildThreads([parent, reply()]));
+    expect(update.selectedThread.emails.map(email => email.uid)).toEqual([10, 1757000000]);
+    expect(update).toMatchObject({ selectedEmail: null, selectedEmailSource: null, threadFocusKey: null, followReply: null });
+  });
+
+  it('waits while the reply is not threaded yet', () => {
+    expect(promoteOpenEmail(following(), buildThreads([parent]))).toBeNull();
+  });
+
+  it('drops the follow when the reader moved to another message', () => {
+    expect(promoteOpenEmail(following({ selectedEmailId: 99 }), buildThreads([parent, reply()])))
+      .toEqual({ followReply: null });
+  });
+
+  it('leaves an open thread to refreshSelectedThread', () => {
+    expect(promoteOpenEmail(following({ selectedThread: threadOf([parent]) }), buildThreads([parent, reply()])))
+      .toBeNull();
+  });
+
+  it('ignores state without a follow', () => {
+    expect(promoteOpenEmail(following({ followReply: null }), buildThreads([parent, reply()])))
+      .toBeNull();
+  });
+
+  it('matches the reply by canonical Message-ID', () => {
+    const update = promoteOpenEmail(following(), buildThreads([parent, reply({ messageId: ' <mine@example.test>' })]));
+    expect(update.selectedThread.messageCount).toBe(2);
+  });
+
+  it('follows a reply from a non-active account in All inboxes', () => {
+    const inboxParent = { ...parent, _accountId: 'luke', _mailbox: 'INBOX' };
+    const sentReply = reply({ _accountId: 'luke' });
+    const stranger = { ...parent, _accountId: 'yoda', _mailbox: 'INBOX', messageId: '<stranger@example.test>' };
+    const update = promoteOpenEmail(following({
+      activeAccountId: 'yoda', activeMailbox: 'UNIFIED', selectedEmailId: 'luke:INBOX:10',
+      followReply: { replyId: sentReply.messageId, emailId: 'luke:INBOX:10' },
+    }), buildThreads([inboxParent, sentReply, stranger]));
+    expect(update.selectedThread.emails.map(email => email._accountId)).toEqual(['luke', 'luke']);
+    expect(update.selectedEmailId).toBe('luke:Sent:1757000000');
+  });
+});
 
 describe('refreshSelectedThread', () => {
   it('adds the reply that landed after the thread was opened', () => {

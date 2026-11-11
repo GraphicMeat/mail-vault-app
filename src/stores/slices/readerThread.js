@@ -1,4 +1,28 @@
 import { rowIdentity, selectionKey } from './unifiedHelpers';
+import { normalizeMessageId } from '../../utils/emailParser';
+
+/** Open the conversation when a reply to the single message joins the list. */
+export function promoteOpenEmail(state, threads) {
+  const follow = state.followReply;
+  if (!follow || state.selectedThread || !threads?.size) return null;
+  if (state.selectedEmailId !== follow.emailId) return { followReply: null };
+  const replyId = normalizeMessageId(follow.replyId);
+  if (!replyId) return null;
+
+  for (const thread of threads.values()) {
+    if (!thread.emails.some(email => normalizeMessageId(email.messageId || email.message_id) === replyId)) continue;
+    if (!thread.emails.some(email => selectionKey(email, state) === follow.emailId)) continue;
+    return {
+      selectedThread: thread,
+      threadFocusKey: null,
+      selectedEmailId: selectionKey(thread.lastEmail, state),
+      selectedEmail: null,
+      selectedEmailSource: null,
+      followReply: null,
+    };
+  }
+  return null;
+}
 
 /**
  * The open thread minus one message, as a store update. Null when no thread is

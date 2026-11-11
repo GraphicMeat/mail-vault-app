@@ -6,7 +6,7 @@
 import { buildThreads } from '../../utils/emailParser';
 import { mergesSentIntoThreads } from '../../utils/sentFolder';
 import { selectionKey, resolveEmailLocation } from './unifiedHelpers';
-import { refreshSelectedThread } from './readerThread';
+import { promoteOpenEmail, refreshSelectedThread } from './readerThread';
 import { useSettingsStore } from '../settingsStore';
 import { useViewHideStore } from '../viewHideStore';
 import { unboundAction } from './unboundAction';
@@ -50,6 +50,7 @@ export const createSelectionSlice = (set, get) => ({
   selectedEmail: null,
   selectedEmailSource: null, // 'server' | 'local' | 'local-only'
   selectedThread: null, // thread object from buildThreads, or null for single email
+  followReply: null,
   // The message of `selectedThread` the reader opens on and scrolls to (an
   // emailKey), when the thread was opened for one message in it ("Go to
   // mailbox"). Null opens the newest, as a click on the row does.
@@ -88,6 +89,7 @@ export const createSelectionSlice = (set, get) => ({
     get()._cancelSelection({ keepThreadTimers: reopen });
     set(state => ({
       selectedThread: thread,
+      followReply: null,
       threadFocusKey: focusKey,
       readerAnchor: null,
       // The same key the rows are drawn with, or the row never reads as open.
@@ -109,10 +111,21 @@ export const createSelectionSlice = (set, get) => ({
   // back because a saved view holds it ("hide view mail") stays: the same
   // gated key set the list filters by (updateSortedEmails).
   syncSelectedThread: (threads) => {
+    const promoted = promoteOpenEmail(get(), threads);
+    if (promoted) { set(promoted); return; }
     // `getState?.`: many specs mock these stores with selectors alone.
     const held = useSettingsStore.getState?.()?.hideViewMail ? useViewHideStore.getState?.()?.keys ?? null : null;
     const update = refreshSelectedThread(get(), threads, held);
     if (update) set(update);
+  },
+
+  followSentReply: (original, replyId) => {
+    const state = get();
+    if (state.selectedThread || useSettingsStore.getState?.()?.threadMode === 'flat' || !replyId
+      || !state.selectedEmail || !original) return;
+    if (selectionKey(state.selectedEmail, state) !== state.selectedEmailId
+      || selectionKey(original, state) !== state.selectedEmailId) return;
+    set({ followReply: { replyId, emailId: state.selectedEmailId } });
   },
 
   // Put the reader away and leave the list. The same four fields every
@@ -128,6 +141,7 @@ export const createSelectionSlice = (set, get) => ({
       selectedEmail: null,
       selectedEmailSource: null,
       selectedThread: null,
+      followReply: null,
       loadingEmail: false,
       markReadProgress: null,
     });

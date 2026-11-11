@@ -314,6 +314,15 @@ describe('A reply and the thread it was sent from', function () {
       500,
     );
     expect(rows).toEqual([2]);
+
+    const open = await waitFor(openThreadState, t => t?.count === 2,
+      'the single-message reader did not open the sent conversation', 60_000, 500);
+    expect(open.messageCount).toBe(2);
+    await waitFor(threadHeaderCount, count => count === 2,
+      'the reader did not draw both messages', 30_000, 500);
+    expect(await threadCountLine()).toBe(2);
+    await waitFor(openThreadState, t => t?.count === 2 && t.emails.some(e => e.fromSent && !e.optimistic),
+      'the reader lost the reply when its server copy landed', 90_000, 500);
   });
 
   it('joins the open thread and its list row the moment it is sent', async function () {

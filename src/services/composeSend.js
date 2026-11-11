@@ -276,6 +276,7 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       setTimeout(() => useMailStore.getState().loadSentHeaders?.(freshAccount.id), 8000);
     }
 
+    const original = snapshot._replyTo || replyTo;
     let sent;
     try {
       // Sent under the staged copy's Message-ID. The daemon then cancels an
@@ -287,7 +288,6 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
         remindDays: remindDaysFor(snapshot), ownAddresses: ownAddressesOf(freshAccount),
         cancelScheduledId: snapshot._editScheduledId || null,
       });
-      const original = snapshot._replyTo || replyTo;
       if (mode === 'reply' || mode === 'replyAll') markAnswered(original).catch(err => console.warn('[composeSend] \\Answered not set:', err));
       else if (mode === 'forward') markForwarded(original).catch(err => console.warn('[composeSend] $Forwarded not set:', err));
       useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
@@ -321,6 +321,9 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       }
       return update;
     });
+    if (mode === 'reply' || mode === 'replyAll') {
+      useMailStore.getState().followSentReply?.(original, messageId);
+    }
     useMailStore.getState().updateSortedEmails?.();
     markLocalStageDone();
     await cleanupAcceptedDraft(snapshot, 'sent', cleanupDraft);
