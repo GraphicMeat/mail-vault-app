@@ -735,6 +735,15 @@ impl SyncEngine {
                 "[sync] Sync complete for {}: {} new, {} flag updates, {} total",
                 account.email, result.new_emails, result.updated_flags, result.total_emails
             );
+            // A body-cache copy whose message left the folder goes with it.
+            if let Some(state) = self.daemon_state() {
+                let (held, mailbox_owned) = (stamp.clone(), mailbox.to_string());
+                match crate::handlers::common::blocking(move || crate::handlers::custody::drop_stale_cache_copies(&state, &held, &mailbox_owned)).await {
+                    Ok(Ok(0)) => {}
+                    Ok(Ok(removed)) => info!("[sync] dropped {} cached copies no longer in {} for {}", removed, mailbox, account.email),
+                    Ok(Err(error)) | Err(error) => warn!("[sync] dropping stale cached copies in {} failed: {}", mailbox, error),
+                }
+            }
         } else {
             warn!("[sync] Sync failed for {}: {:?}", account.email, result.error);
         }

@@ -309,7 +309,15 @@ impl PurgeTarget {
         let valid_stored = |stored: &Option<StoredProof>| stored.as_ref().is_none_or(|p| p.uid == self.uid && valid_artifact(p));
         match &self.proof {
             Some(PurgeProof::Server {origin,identity,stored,..}) => {
-                let Some(original) = &hint.native_identity else { return false; };
+                // A row with no native identity (a vault search hit, a cache row
+                // older than identity) is proved by its folder's identity: only an
+                // IMAP proof whose Message-ID at the uid is the one the user saw.
+                let Some(original) = &hint.native_identity else {
+                    let mid = hint.message_id.as_deref().filter(|_| hint.message_id_present)
+                        .map(crate::maildir::normalize_message_id).filter(|mid| !mid.is_empty());
+                    return !origin.is_empty() && valid_stored(stored) && mid.is_some_and(|mid| matches!(identity,
+                        Identity::Imap {validity,message_ids} if *validity > 0 && message_ids.get(&self.uid) == Some(&mid)));
+                };
                 if original.account_id != self.account_id || original.mailbox != self.mailbox || original.origin_hash.is_empty() || original.uid_validity==Some(0) || &original.origin_hash != origin || !valid_stored(stored) { return false; }
                 match identity {
                     Identity::Imap {validity,message_ids} => original.uid_validity == Some(*validity) && *validity > 0

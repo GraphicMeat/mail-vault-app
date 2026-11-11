@@ -21,6 +21,7 @@ import {
   mockWaitForSync,
   mockGetEmailHeadersByUids,
   mockGetEmailHeadersMeta,
+  mockSearch,
 } from './purgeEverywhereHarness';
 import { retryAfterResync } from '../purgeResync.js';
 
@@ -158,4 +159,33 @@ it('does not retry when the resynced cache still carries no identity', async () 
   expect(native.start).toHaveBeenCalledTimes(1);
   expect(result).toMatchObject({ queued: 1 });
   expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
+});
+
+// The search Rokas ran in All Inboxes: vault-lane hits across two accounts
+// whose server copies already left INBOX (a delete to Trash earlier, another
+// client). Each is a body-cache copy: no native identity, not archived. Delete
+// everywhere on them lands; nothing is reported.
+it('deletes vault-lane search hits across accounts in All Inboxes without a warning', async () => {
+  const OTHER = { id: '22222222-2222-4222-8222-222222222222', email: 'two@mock.test' };
+  const hit = (account, uid) => ({
+    ...serverMsg(uid), _accountId: account.id, _mailbox: 'INBOX', vaultDir: 'INBOX',
+    isLocal: true, source: 'local', isArchived: false,
+  });
+  const hits = [hit(ACCOUNT, 581), hit(ACCOUNT, 585), hit(OTHER, 31712)];
+  useMailStore.setState({
+    accounts: [ACCOUNT, OTHER], activeMailbox: 'UNIFIED', emails: [], sentEmails: [], localEmails: [],
+    selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
+  });
+  mockSearch.searchResults = hits;
+  mockGetEmailHeadersByUids.mockResolvedValue([]);
+  mockGetEmailHeadersMeta.mockImplementation(async (accountId, mailbox) => ({
+    uidValidity: 1, nativeIdentity: { accountId, mailbox, uidValidity: 1, originHash: 'A' },
+  }));
+  useMailStore.getState().setEmailsSelected(hits, true);
+  expect(useMailStore.getState().selectedEmailIds.size).toBe(3);
+  const result = await useMailStore.getState().purgeSelectedEverywhere();
+  expect(native.start).toHaveBeenCalledTimes(2);
+  expect(native.start.mock.calls[1][0].scope.keys).toHaveLength(3);
+  expect(result).toMatchObject({ deleted: 3, failed: 0, needsResync: 0 });
+  expect(useMailStore.getState().error).toBeNull();
 });

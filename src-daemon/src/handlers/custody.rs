@@ -277,6 +277,62 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     })
 }
 
+/// Drops the body-cache copies (not archived, not a draft, not composed or
+/// imported here) of messages a fully listed folder no longer holds: a delete
+/// to Trash, a move or a delete in another client, a Gmail archive. A sync
+/// only drops a vanished uid's header row, so its cached file outlived it and
+/// search listed it as "Server only" under a uid the server no longer had.
+/// Archived copies are the vault and are never touched. Only when the header
+/// cache lists every message the folder holds, under the generation the files
+/// were written in, so "not listed" means "not on the server in this folder";
+/// a uid past the newest listed one may be an arrival whose row is not in yet.
+pub(crate) fn drop_stale_cache_copies(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) -> Result<usize, String> {
+    let account_id = stamp.id();
+    let _permit = commit(state, &Ok(stamp.clone()))?;
+    with_mailbox_write(state, account_id, mailbox, |root| -> Result<usize, String> {
+        let (validity, total, held) = daemon_custody::with_conn(state, |c| {
+            let (validity, total) = cache::sync_meta(c, account_id, mailbox)?;
+            Ok((validity, total, cache::uid_set(c, account_id, mailbox)?))
+        })?;
+        let (Some(validity), Some(total)) = (validity, total) else { return Ok(0) };
+        if (held.len() as u64) < total
+            || maildir::read_generation(&message_store::mailbox_dir(root, account_id, mailbox)) != Some(validity) {
+            return Ok(0);
+        }
+        let newest = held.iter().copied().max();
+        // Listed from disk, not the registry: a registry read verifies under
+        // the per-mailbox lock this closure already holds, and would deadlock.
+        let Some(newest) = newest else { return Ok(0) };
+        let (mut plain, mut kept) = (HashSet::new(), HashSet::new());
+        let Ok(dir) = std::fs::read_dir(vault_files::cur_path(root, account_id, mailbox)) else { return Ok(0) };
+        for entry in dir.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(uid) = maildir::vault_filename_uid(&name) else { continue };
+            if held.contains(&uid) || uid >= newest { continue; }
+            let flags = mailvault_core::vault_eml::parse_flags_from_filename(&name);
+            if flags.iter().any(|f| f == "archived" || f == "draft") { kept.insert(uid); } else { plain.insert(uid); }
+        }
+        let candidates: Vec<u32> = plain.difference(&kept).copied().collect();
+        if candidates.is_empty() { return Ok(0); }
+        let stale: HashSet<u32> = daemon_custody::with_conn(state, |c| {
+            let mut stale = HashSet::new();
+            for uid in candidates {
+                let entry = entries::get(c, account_id, mailbox, uid)?;
+                let source = entry.as_ref().and_then(|e| e.get("source")).and_then(Value::as_str);
+                if source.is_none_or(|source| source == "server") { stale.insert(uid); }
+            }
+            Ok(stale)
+        })?;
+        if stale.is_empty() { return Ok(0); }
+        let removed = vault_files::delete_maildir_files(&state.vault_registry, root, account_id, mailbox, &stale);
+        let uids: Vec<u32> = stale.into_iter().collect();
+        if let Err(e) = daemon_custody::with_conn(state, |c| entries::remove(c, account_id, mailbox, &uids)) {
+            warn!("drop_stale_cache_copies: custody prune failed: {}", e);
+        }
+        Ok(removed)
+    })
+}
+
 /// Re-keys the mailbox's vault files onto the server's current UIDVALIDITY
 /// when the stored generation disagrees (`maildir::repair_generation`), and
 /// remaps custody to match. Runs under the registry's per-mailbox lock (so a
@@ -672,6 +728,34 @@ mod tests {
         let cur = vault_files::cur_path(root, account, mailbox);
         fs::create_dir_all(&cur).unwrap();
         fs::write(cur.join(vault_files::build_maildir_filename(uid, &[])), b"body").unwrap();
+    }
+
+    /// A cached copy outlives its message's server copy only until the folder
+    /// is fully listed again: then it goes, and nothing else does.
+    #[tokio::test]
+    async fn stale_cache_copies_go_once_the_folder_is_fully_listed() {
+        for (total, generation, expect) in [(2u64, 1u32, vec![2u32, 4, 5, 6, 9]), (3, 1, vec![1, 2, 3, 4, 5, 6, 9]), (2, 2, vec![1, 2, 3, 4, 5, 6, 9])] {
+            let (v, s) = st(true);
+            let _ = daemon_custody::open_into(&s);
+            let headers = json!({"uidValidity":1,"totalEmails":total,"emails":[{"uid":2},{"uid":8}]});
+            daemon_custody::with_conn(&s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
+            // 1, 3: cached copies the folder no longer lists; 2: listed;
+            // 4: archived; 5: a draft; 6: sent from here; 9: past the newest
+            // listed uid, an arrival whose row is not in yet.
+            for uid in [1, 2, 3, 9] { seed_file(v.path(), "acc", "INBOX", uid); }
+            let cur = vault_files::cur_path(v.path(), "acc", "INBOX");
+            fs::write(cur.join(vault_files::build_maildir_filename(4, &["archived".to_string()])), b"body").unwrap();
+            fs::write(cur.join(vault_files::build_maildir_filename(5, &["draft".to_string()])), b"body").unwrap();
+            seed_file(v.path(), "acc", "INBOX", 6);
+            daemon_custody::with_conn(&s, |c| entries::upsert(c, "acc", "INBOX", &[json!({"uid": 6, "source": "local_sent"}), json!({"uid": 1, "source": "server"})])).unwrap();
+            maildir::write_generation(cur.parent().unwrap(), generation).unwrap();
+            let stamp = s.account_lifecycle.capture("acc").unwrap();
+            let removed = drop_stale_cache_copies(&s, &stamp, "INBOX").unwrap();
+            let mut left: Vec<u32> = s.vault_registry.files(v.path(), "acc", "INBOX").unwrap().into_iter().map(|(uid, _, _)| uid).collect();
+            left.sort();
+            assert_eq!(left, expect, "total={total} generation={generation}");
+            assert_eq!(removed, 7 - expect.len(), "total={total} generation={generation}");
+        }
     }
 
     #[tokio::test]
