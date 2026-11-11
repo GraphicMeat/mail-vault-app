@@ -722,14 +722,17 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-tour--flow > .mv-add { flex: 1; }
 .mv-tour__bar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 4px;
   align-items: center;
   min-height: 44px;
   padding: calc(var(--mv-safe-top) + 4px) calc(var(--mv-safe-right) + 8px) 0 calc(var(--mv-safe-left) + 8px);
 }
 .mv-tour__bar > :first-child { justify-self: start; }
 .mv-tour__bar > :last-child { justify-self: end; }
-.mv-tour__progress { font-size: 0.875rem; color: var(--mail-text-muted); white-space: nowrap; }
+.mv-tour__bar .mv-textbtn { padding: 0 8px; text-align: start; }
+.mv-tour__bar > :last-child.mv-textbtn { text-align: end; }
+.mv-tour__progress { font-size: 0.8125rem; color: var(--mail-text-muted); text-align: center; }
 .mv-tour__body {
   flex: 1;
   overflow-y: auto;
