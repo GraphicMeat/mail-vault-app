@@ -381,3 +381,22 @@ fn production_seal_uses_the_export_parameters() {
     let u32_at = |i: usize| u32::from_le_bytes([sealed[i], sealed[i + 1], sealed[i + 2], sealed[i + 3]]);
     assert_eq!(Params { m_kib: u32_at(7), t: u32_at(11), p: u32_at(15) }, crypto::EXPORT_PARAMS);
 }
+
+#[test]
+fn open_refuses_key_derivation_above_the_export_parameters() {
+    // A crafted code must not make the phone derive with more memory or time than the desktop
+    // ever seals with (1 GiB at the crypto ceiling). Refused from the header, before argon2.
+    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![] }, cheap()).unwrap();
+    let e = crypto::EXPORT_PARAMS;
+    for (at, value) in [(7, e.m_kib + 1), (11, e.t + 1), (15, e.p + 1)] {
+        let mut s = sealed.clone();
+        s[at..at + 4].copy_from_slice(&value.to_le_bytes());
+        assert!(matches!(open(PW, &s).unwrap_err(), PhoneError::Invalid(_)), "header offset {at}");
+    }
+}
+
+#[test]
+fn open_accepts_exactly_the_export_parameters() {
+    let bundle = PhoneBundle { v: 1, accounts: vec![] };
+    assert_eq!(open(PW, &seal(PW, &bundle).unwrap()).unwrap(), bundle);
+}

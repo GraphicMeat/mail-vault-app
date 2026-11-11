@@ -363,18 +363,56 @@ pub fn seal(password: &str, bundle: &PhoneBundle) -> Result<Vec<u8>, PhoneError>
 #[doc(hidden)]
 pub fn seal_with(password: &str, bundle: &PhoneBundle, params: Params) -> Result<Vec<u8>, PhoneError> {
     check_password(password)?;
-    let mut json: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::with_capacity(16 * 1024));
+    // Every buffer that holds secrets is sized up front: a Vec that grows reallocates and leaves
+    // the old, unwiped copy behind. A counting pass gives the JSON's exact length.
+    let mut counter = ByteCount(0);
+    serde_json::to_writer(&mut counter, bundle).map_err(|_| PhoneError::Invalid("bundle not serializable".into()))?;
+    let mut json: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::with_capacity(counter.0));
     serde_json::to_writer(&mut *json, bundle).map_err(|_| PhoneError::Invalid("bundle not serializable".into()))?;
-    let mut deflated: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::with_capacity(json.len() + 64));
+    // zlib's deflateBound: deflate never outgrows this, stored blocks included.
+    let bound = json.len() + (json.len() >> 12) + (json.len() >> 14) + (json.len() >> 25) + 13 + 64;
+    let mut deflated: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::with_capacity(bound));
     let mut enc = flate2::write::DeflateEncoder::new(&mut *deflated, flate2::Compression::best());
     enc.write_all(&json).and_then(|_| enc.finish().map(|_| ())).map_err(|_| PhoneError::Invalid("compression failed".into()))?;
     Ok(crypto::encrypt_with(password, &deflated, params)?)
 }
 
+/// Counts bytes written, keeping none.
+struct ByteCount(usize);
+
+impl Write for ByteCount {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0 += buf.len();
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The desktop always seals with [`crypto::EXPORT_PARAMS`]; a code asking for more memory, time
+/// or lanes was not made by MailVault, and must not make the phone derive (up to 1 GiB at the
+/// container's own ceiling). A ceiling, not equality: tests seal with cheaper parameters. Read
+/// from the header before any key derivation; too short a code falls through to `decrypt`.
+fn check_kdf_ceiling(sealed: &[u8]) -> Result<(), PhoneError> {
+    if sealed.len() < 19 {
+        return Ok(());
+    }
+    let u32_at = |i: usize| u32::from_le_bytes([sealed[i], sealed[i + 1], sealed[i + 2], sealed[i + 3]]);
+    let max = crypto::EXPORT_PARAMS;
+    if u32_at(7) > max.m_kib || u32_at(11) > max.t || u32_at(15) > max.p {
+        return Err(PhoneError::Invalid("key derivation parameters out of range".into()));
+    }
+    Ok(())
+}
+
 /// Open a sealed bundle.
 pub fn open(password: &str, sealed: &[u8]) -> Result<PhoneBundle, PhoneError> {
+    check_kdf_ceiling(sealed)?;
     let deflated = Zeroizing::new(crypto::decrypt(password, sealed)?);
-    let mut plain: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::with_capacity(deflated.len() * 4));
+    // The whole limit up front (1 MiB): `read_to_end` then never reallocates, so no unwiped copy
+    // of the plain bundle is left behind.
+    let mut plain: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::with_capacity(MAX_PLAIN_BYTES as usize + 1));
     flate2::read::DeflateDecoder::new(&deflated[..])
         .take(MAX_PLAIN_BYTES + 1)
         .read_to_end(&mut plain)
