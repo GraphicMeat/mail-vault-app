@@ -8,8 +8,15 @@ import { phoneQr } from '../../services/workflows/transferAccounts';
 import { transferErrorKey, TRANSFER_PASSWORD_MIN } from '../../services/transfer/transferErrors';
 import { TRANSFER_INPUT } from './transferStyles';
 
-/** How long each frame of a multi-part code stays on screen. */
-export const PHONE_QR_FRAME_MS = 1000;
+/**
+ * How long each frame of a multi-part code stays on screen. The phone's scanner plugin
+ * (tauri-plugin-barcode-scanner 2.5) answers one code per scan and closes the camera, so the
+ * phone reopens it for every part, about once a second. A frame period that divides that rhythm
+ * (1000 ms) could keep landing on the same part; 700 ms drifts against it so every part comes
+ * round. A fixed period only moves the alias points, it cannot rule them out; the "Part i of n"
+ * caption shows the user it is progressing.
+ */
+export const PHONE_QR_FRAME_MS = 700;
 /** The code hides itself after this long; showing it again needs the password. */
 export const PHONE_QR_HIDE_MS = 5 * 60 * 1000;
 

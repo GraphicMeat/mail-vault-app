@@ -55,11 +55,11 @@ it('shows one frame as an image with the steps, and drops the password', async (
   expect(screen.queryByLabelText(t('settings.transfer.password'))).toBeNull();
 });
 
-it('cycles several frames once a second with a part caption', async () => {
+it('cycles several frames with a part caption, off the phone camera\'s one-second rhythm', async () => {
   fake();
   render(<PhoneQrModal onClose={() => {}} />);
   await generate({ frames: [svg(1), svg(2), svg(3)], count: 3, skipped: [] });
-  expect(PHONE_QR_FRAME_MS).toBe(1000);
+  expect(PHONE_QR_FRAME_MS).toBe(700);
   expect(screen.getByText(t('settings.phoneSetup.part', { index: 1, total: 3 }))).toBeTruthy();
   expect(qr().getAttribute('src')).toContain(encodeURIComponent('frame 1'));
   act(() => { vi.advanceTimersByTime(PHONE_QR_FRAME_MS); });
