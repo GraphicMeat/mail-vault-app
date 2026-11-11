@@ -3161,6 +3161,8 @@
   "settings.transfer.errors.keychainWrite": "キーチェーンへの保存に失敗しました。一部のアカウントは追加済みの可能性があります。再起動後にアカウント一覧を確認してください。",
   "settings.transfer.errors.incomplete": "次のアカウントにはパスワードが保存されていません: {{emails}}",
   "settings.transfer.errors.generic": "問題が発生しました: {{message}}",
+  "settings.transfer.errors.phoneTooLarge": "1 つのコードに入れるにはアカウントが多すぎます。サポートにお問い合わせください。",
+  "settings.transfer.errors.phoneQr": "QR コードを作成できませんでした。サポートにお問い合わせください。",
   "settings.transfer.errors.partial": "読み込みが完了しませんでした ({{message}})。一部のアカウントは追加済みの可能性があります。再起動後にアカウント一覧を確認してください。",
   "settings.transfer.warnings.settings": "アカウントは読み込まれましたが、一部の設定を保存できませんでした。",
   "settings.transfer.warnings.aiKey": "AI プロバイダのキーを保存できませんでした。設定でもう一度入力してください。",

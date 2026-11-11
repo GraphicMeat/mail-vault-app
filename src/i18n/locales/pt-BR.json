@@ -3161,6 +3161,8 @@
   "settings.transfer.errors.keychainWrite": "Falha ao salvar nas chaves. Algumas contas talvez já tenham sido adicionadas; confira sua lista de contas depois de reiniciar.",
   "settings.transfer.errors.incomplete": "Estas contas não têm senha salva: {{emails}}",
   "settings.transfer.errors.generic": "Algo deu errado: {{message}}",
+  "settings.transfer.errors.phoneTooLarge": "Contas demais para um único código. Entre em contato com o suporte.",
+  "settings.transfer.errors.phoneQr": "Não foi possível criar o código QR. Entre em contato com o suporte.",
   "settings.transfer.errors.partial": "A importação não terminou ({{message}}). Algumas contas talvez já tenham sido adicionadas; confira sua lista de contas depois de reiniciar.",
   "settings.transfer.warnings.settings": "As contas foram importadas, mas algumas configurações não puderam ser salvas.",
   "settings.transfer.warnings.aiKey": "Não foi possível salvar a chave do provedor de IA. Digite-a novamente em Configurações.",

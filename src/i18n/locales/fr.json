@@ -3161,6 +3161,8 @@
   "settings.transfer.errors.keychainWrite": "L'enregistrement dans le trousseau a échoué. Certains comptes ont peut-être déjà été ajoutés ; vérifiez votre liste de comptes après le redémarrage.",
   "settings.transfer.errors.incomplete": "Ces comptes n'ont pas de mot de passe enregistré : {{emails}}",
   "settings.transfer.errors.generic": "Une erreur s'est produite : {{message}}",
+  "settings.transfer.errors.phoneTooLarge": "Trop de comptes pour un seul code. Contactez l'assistance.",
+  "settings.transfer.errors.phoneQr": "Le code QR n'a pas pu être créé. Contactez l'assistance.",
   "settings.transfer.errors.partial": "L'importation n'a pas abouti ({{message}}). Certains comptes ont peut-être déjà été ajoutés ; vérifiez votre liste de comptes après le redémarrage.",
   "settings.transfer.warnings.settings": "Les comptes ont été importés, mais certains paramètres n'ont pas pu être enregistrés.",
   "settings.transfer.warnings.aiKey": "La clé du fournisseur d'IA n'a pas pu être enregistrée. Saisissez-la de nouveau dans Paramètres.",

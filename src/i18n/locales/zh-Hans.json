@@ -3161,6 +3161,8 @@
   "settings.transfer.errors.keychainWrite": "保存到钥匙串失败。部分账户可能已添加；请在重启后检查账户列表。",
   "settings.transfer.errors.incomplete": "以下账户没有保存密码：{{emails}}",
   "settings.transfer.errors.generic": "出现问题：{{message}}",
+  "settings.transfer.errors.phoneTooLarge": "账户太多，无法放入一个二维码。请联系支持团队。",
+  "settings.transfer.errors.phoneQr": "无法生成二维码。请联系支持团队。",
   "settings.transfer.errors.partial": "导入未完成（{{message}}）。部分账户可能已添加；请在重启后检查账户列表。",
   "settings.transfer.warnings.settings": "账户已导入，但部分设置未能保存。",
   "settings.transfer.warnings.aiKey": "无法保存 AI 服务商密钥。请在设置中重新输入。",

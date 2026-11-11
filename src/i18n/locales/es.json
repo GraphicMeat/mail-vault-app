@@ -3161,6 +3161,8 @@
   "settings.transfer.errors.keychainWrite": "No se pudo guardar en el llavero. Puede que algunas cuentas ya se hayan añadido; revisa tu lista de cuentas tras reiniciar.",
   "settings.transfer.errors.incomplete": "Estas cuentas no tienen contraseña guardada: {{emails}}",
   "settings.transfer.errors.generic": "Algo salió mal: {{message}}",
+  "settings.transfer.errors.phoneTooLarge": "Demasiadas cuentas para un solo código. Ponte en contacto con el soporte.",
+  "settings.transfer.errors.phoneQr": "No se pudo crear el código QR. Ponte en contacto con el soporte.",
   "settings.transfer.errors.partial": "La importación no terminó ({{message}}). Puede que algunas cuentas ya se hayan añadido; revisa tu lista de cuentas tras reiniciar.",
   "settings.transfer.warnings.settings": "Las cuentas se importaron, pero algunos ajustes no se pudieron guardar.",
   "settings.transfer.warnings.aiKey": "No se pudo guardar la clave del proveedor de IA. Vuelve a introducirla en Ajustes.",

@@ -3161,6 +3161,8 @@
   "settings.transfer.errors.keychainWrite": "Speichern im Schlüsselbund fehlgeschlagen. Einige Konten wurden eventuell schon hinzugefügt; prüfe nach dem Neustart deine Kontenliste.",
   "settings.transfer.errors.incomplete": "Für diese Konten ist kein Passwort gespeichert: {{emails}}",
   "settings.transfer.errors.generic": "Etwas ist schiefgelaufen: {{message}}",
+  "settings.transfer.errors.phoneTooLarge": "Zu viele Konten für einen Code. Bitte wende dich an den Support.",
+  "settings.transfer.errors.phoneQr": "Der QR-Code konnte nicht erstellt werden. Bitte wende dich an den Support.",
   "settings.transfer.errors.partial": "Der Import wurde nicht abgeschlossen ({{message}}). Einige Konten wurden eventuell schon hinzugefügt; prüfe nach dem Neustart deine Kontenliste.",
   "settings.transfer.warnings.settings": "Die Konten wurden importiert, aber einige Einstellungen konnten nicht gespeichert werden.",
   "settings.transfer.warnings.aiKey": "Der Schlüssel des KI-Anbieters konnte nicht gespeichert werden. Gib ihn in den Einstellungen erneut ein.",

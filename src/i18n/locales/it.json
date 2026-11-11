@@ -3161,6 +3161,8 @@
   "settings.transfer.errors.keychainWrite": "Salvataggio nel portachiavi non riuscito. Alcuni account potrebbero essere già stati aggiunti; controlla l'elenco degli account dopo il riavvio.",
   "settings.transfer.errors.incomplete": "Questi account non hanno una password salvata: {{emails}}",
   "settings.transfer.errors.generic": "Qualcosa è andato storto: {{message}}",
+  "settings.transfer.errors.phoneTooLarge": "Troppi account per un solo codice. Contatta l'assistenza.",
+  "settings.transfer.errors.phoneQr": "Impossibile creare il codice QR. Contatta l'assistenza.",
   "settings.transfer.errors.partial": "L'importazione non è stata completata ({{message}}). Alcuni account potrebbero essere già stati aggiunti; controlla l'elenco degli account dopo il riavvio.",
   "settings.transfer.warnings.settings": "Gli account sono stati importati, ma alcune impostazioni non sono state salvate.",
   "settings.transfer.warnings.aiKey": "Impossibile salvare la chiave del provider IA. Inseriscila di nuovo in Impostazioni.",

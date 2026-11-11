@@ -3161,6 +3161,8 @@
   "settings.transfer.errors.keychainWrite": "키체인에 저장하지 못했습니다. 일부 계정은 이미 추가되었을 수 있으니 다시 시작한 후 계정 목록을 확인하세요.",
   "settings.transfer.errors.incomplete": "다음 계정에는 저장된 비밀번호가 없습니다: {{emails}}",
   "settings.transfer.errors.generic": "문제가 발생했습니다: {{message}}",
+  "settings.transfer.errors.phoneTooLarge": "하나의 코드에 담기에는 계정이 너무 많습니다. 지원팀에 문의하세요.",
+  "settings.transfer.errors.phoneQr": "QR 코드를 만들 수 없습니다. 지원팀에 문의하세요.",
   "settings.transfer.errors.partial": "가져오기가 완료되지 않았습니다({{message}}). 일부 계정은 이미 추가되었을 수 있으니 다시 시작한 후 계정 목록을 확인하세요.",
   "settings.transfer.warnings.settings": "계정은 가져왔지만 일부 설정을 저장하지 못했습니다.",
   "settings.transfer.warnings.aiKey": "AI 제공업체 키를 저장하지 못했습니다. 설정에서 다시 입력하세요.",

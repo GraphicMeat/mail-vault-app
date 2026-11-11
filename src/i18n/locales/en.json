@@ -3165,6 +3165,8 @@
   "settings.transfer.errors.keychainWrite": "Saving to the keychain failed. Some accounts may already be added; check your account list after restarting.",
   "settings.transfer.errors.incomplete": "These accounts have no saved password: {{emails}}",
   "settings.transfer.errors.generic": "Something went wrong: {{message}}",
+  "settings.transfer.errors.phoneTooLarge": "Too many accounts for one phone code. Please contact support.",
+  "settings.transfer.errors.phoneQr": "The QR code could not be created. Please contact support.",
   "settings.transfer.errors.partial": "The import did not finish ({{message}}). Some accounts may already be added; check your account list after restarting.",
   "settings.transfer.warnings.settings": "Accounts were imported, but some settings could not be saved.",
   "settings.transfer.warnings.aiKey": "The AI provider key could not be saved. Enter it again in Settings.",

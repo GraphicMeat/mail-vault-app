@@ -13,6 +13,10 @@ describe('transferErrorKey', () => {
     ['E_TRANSFER_FORMAT: not a .mvtransfer file', 'settings.transfer.errors.format'],
     [new Error('E_KEYCHAIN_UNAVAILABLE'), 'settings.transfer.errors.keychain'],
     [new Error('E_KEYCHAIN_WRITE: disk full'), 'settings.transfer.errors.keychainWrite'],
+    // The phone set-up code (transfer.phone_qr): too many accounts for the most frames the phone
+    // takes, or the QR library refused a frame.
+    ['E_PHONE_FRAME_TOO_LARGE', 'settings.transfer.errors.phoneTooLarge'],
+    ['E_PHONE_QR: data too long', 'settings.transfer.errors.phoneQr'],
   ])('maps %s by prefix', (err, key) => {
     expect(transferErrorKey(err)).toEqual({ key, values: {} });
     expect(has(key)).toBe(true);
