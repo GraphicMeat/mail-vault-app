@@ -304,13 +304,11 @@ pub(crate) fn drop_stale_cache_copies(state: &Arc<DaemonState>, stamp: &AccountS
         // the per-mailbox lock this closure already holds, and would deadlock.
         let Some(newest) = newest else { return Ok(0) };
         let (mut plain, mut kept) = (HashSet::new(), HashSet::new());
-        let Ok(dir) = std::fs::read_dir(vault_files::cur_path(root, account_id, mailbox)) else { return Ok(0) };
-        for entry in dir.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let Some(uid) = maildir::vault_filename_uid(&name) else { continue };
+        let Ok(entries) = message_store::list_maildir(root, account_id, mailbox) else { return Ok(0) };
+        for entry in entries {
+            let uid = entry.uid;
             if held.contains(&uid) || uid >= newest { continue; }
-            let flags = mailvault_core::vault_eml::parse_flags_from_filename(&name);
-            if flags.iter().any(|f| f == "archived" || f == "draft") { kept.insert(uid); } else { plain.insert(uid); }
+            if entry.flags.iter().any(|f| f == "archived" || f == "draft") { kept.insert(uid); } else { plain.insert(uid); }
         }
         let candidates: Vec<u32> = plain.difference(&kept).copied().collect();
         if candidates.is_empty() { return Ok(0); }

@@ -491,13 +491,12 @@ pub fn list(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<Entr
     list_at(&mailbox_dir(root, account_id, mailbox))
 }
 
-/// `list` of the mailbox directory `mailbox_dir`, for a caller that walks the
-/// mailbox directories by their on-disk names (a snapshot).
-///
-/// Both formats: every JMAP record that reads (`<uid>.json`), and every
-/// Maildir file of a uid no record holds. A missing directory of either format
-/// is empty; either one failing to list is the error.
-pub fn list_at(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
+/// Disk-only Maildir files, including copies shadowed by JMAP records. Safe under a mailbox lock.
+pub fn list_maildir(root: &Path, account_id: &str, mailbox: &str) -> io::Result<Vec<Entry>> {
+    list_maildir_at(&mailbox_dir(root, account_id, mailbox))
+}
+
+fn list_maildir_at(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
     let mut out = Vec::new();
     match fs::read_dir(messages_in(mailbox_dir)) {
         Ok(entries) => {
@@ -510,6 +509,18 @@ pub fn list_at(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => {}
         Err(e) => return Err(e),
     }
+    out.sort_by(|a, b| (a.uid, &a.name).cmp(&(b.uid, &b.name)));
+    Ok(out)
+}
+
+/// `list` of the mailbox directory `mailbox_dir`, for a caller that walks the
+/// mailbox directories by their on-disk names (a snapshot).
+///
+/// Both formats: every JMAP record that reads (`<uid>.json`), and every
+/// Maildir file of a uid no record holds. A missing directory of either format
+/// is empty; either one failing to list is the error.
+pub fn list_at(mailbox_dir: &Path) -> io::Result<Vec<Entry>> {
+    let mut out = list_maildir_at(mailbox_dir)?;
     let records = list_records(mailbox_dir)?;
     if !records.is_empty() {
         let held: HashSet<u32> = records.iter().map(|e| e.uid).collect();

@@ -9,18 +9,14 @@ const TOPICS = [...ORIGINAL_TOPICS, 'your-questions'];
 const hub = () => readFileSync('website/faq.html', 'utf8');
 const topic = (t) => readFileSync(`website/faq/${t}.html`, 'utf8');
 
-const questionsIn = (html) => {
-  const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [];
-  return m.flatMap((block) => {
-    const json = block.replace(/<\/?script[^>]*>/g, '');
-    const parsed = JSON.parse(json);
-    if (parsed['@type'] !== 'FAQPage') return [];
-    return (parsed.mainEntity || []).map(q => q.name);
-  });
-};
-
 const faqSchema = (html) => [...new JSDOM(html).window.document.querySelectorAll('script[type="application/ld+json"]')]
   .map(script => JSON.parse(script.textContent)).find(item => item['@type'] === 'FAQPage');
+
+const questionsIn = (html) => {
+  const schema = faqSchema(html);
+  if (!schema) throw new Error('Missing FAQPage JSON-LD');
+  return (schema.mainEntity || []).map(question => question.name);
+};
 
 const PROVIDER_ANSWER_KEYS = ['70549e28b3f7', '4a4009251ee1', 'edb2a4315dd4',
   'd4488842e423', '728c8ebce436', '81f908ad95bd', '8cd52f58d6ee'];
@@ -48,6 +44,13 @@ describe('FAQ hub and topic pages', () => {
         if (name === 'providers') expect(questionsIn(html)).toHaveLength(8);
       }
     }
+  });
+
+  it('rejects hidden or missing FAQ schema', () => {
+    expect(() => questionsIn('<script type="application/ld+json" data-test="schema">{broken}</script>'))
+      .toThrow(SyntaxError);
+    expect(() => questionsIn('<script type="application/ld+json">{"@type":"BreadcrumbList"}</script>'))
+      .toThrow('Missing FAQPage JSON-LD');
   });
 
   it('localizes provider structured answers', () => {
