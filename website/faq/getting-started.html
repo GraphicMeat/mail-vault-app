@@ -110,6 +110,14 @@
         "@type": "Answer",
         "text": "Open Contacts in the sidebar. It builds contact cards from your mail and the people you add, with correspondence history, suggestions and a review queue for discovered addresses. Merge duplicates after reviewing the preview, undo a merge, and import or export vCard files. Contacts stay on this computer and are included in vault backups and account transfers; they do not sync with your provider’s address book."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I set up the MailVault mobile app with my desktop accounts?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "On the computer, open Settings > Accounts and choose Show QR code… under Set up the mobile app. Pick a password of at least 12 characters, type it twice and choose Show QR code. On the phone, open MailVault and choose Import from computer, in the welcome tour or under Add account. Tap Scan code and point the camera at the code on the computer, then type the same password on the phone and tap Import accounts. With several accounts the code comes in parts that change about once a second: hold the camera on it until the phone has read every part. Some accounts are not included: one with no saved password, one that signs in with a provider or a custom app registration the phone cannot use, a JMAP account with a separate login name, and one with incomplete server settings. The computer lists them under the code, with the reason. An account the phone already has is left as it is. The code holds your passwords and sign-ins encrypted with the password you chose. The computer hides the code after 5 minutes. Anyone who scans the code and knows the password can read your mail, so show it only to your own phone."
+      }
     }
   ]
 }
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Getting Started</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">What is MailVault?</a></li><li><a href="#help-section-2">Which email providers does MailVault work with?</a></li><li><a href="#help-section-3">What are the system requirements?</a></li><li><a href="#help-section-4">Can I change how the open email is highlighted?</a></li><li><a href="#help-section-5">Can I change how MailVault looks and lays out?</a></li><li><a href="#help-section-6">Is my data secure?</a></li><li><a href="#help-section-7">Where is the address book?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">Getting Started</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">What is MailVault?</a></li><li><a href="#help-section-2">Which email providers does MailVault work with?</a></li><li><a href="#help-section-3">What are the system requirements?</a></li><li><a href="#help-section-4">Can I change how the open email is highlighted?</a></li><li><a href="#help-section-5">Can I change how MailVault looks and lays out?</a></li><li><a href="#help-section-6">Is my data secure?</a></li><li><a href="#help-section-7">Where is the address book?</a></li><li><a href="#help-section-8">How do I set up the MailVault mobile app with my desktop accounts?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">What MailVault is, which email providers it works with, what it runs on, and how it keeps your mail private.</p>
 
       <div class="space-y-4">
@@ -285,6 +293,23 @@
         <article id="contacts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">Where is the address book?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Open Contacts in the sidebar. It builds contact cards from your mail and the people you add, with correspondence history, suggestions and a review queue for discovered addresses. Merge duplicates after reviewing the preview, undo a merge, and import or export vCard files. Contacts stay on this computer and are included in vault backups and account transfers; they do not sync with your provider’s address book.</p></div>
+        </article>
+
+        <article id="phone-import" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">How do I set up the MailVault mobile app with my desktop accounts?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+            <p>MailVault on your computer can pass all its accounts to the MailVault mobile app with one QR code, so you type no server names or passwords on the phone.</p>
+            <ol class="list-decimal pl-6 space-y-2">
+              <li>On the computer, open <strong>Settings &rsaquo; Accounts</strong> and choose <strong>Show QR code…</strong> under <strong>Set up the mobile app</strong>.</li>
+              <li>Pick a password of at least 12 characters, type it twice and choose <strong>Show QR code</strong>.</li>
+              <li>On the phone, open MailVault and choose <strong>Import from computer</strong>, in the welcome tour or under Add account.</li>
+              <li>Tap <strong>Scan code</strong> and point the camera at the code on the computer.</li>
+              <li>Type the same password on the phone and tap <strong>Import accounts</strong>.</li>
+            </ol>
+            <p>With several accounts the code comes in parts that change about once a second. Hold the camera on it until the phone has read every part: it shows Part 2 of 3, and so on.</p>
+            <p>Some accounts are not included: one with no saved password, one that signs in with a provider or a custom app registration the phone cannot use, a JMAP account with a separate login name, and one with incomplete server settings. The computer lists them under the code, with the reason. An account the phone already has is left as it is.</p>
+            <p>The code holds your passwords and sign-ins encrypted with the password you chose, and without it nobody can read them. The computer hides the code after 5 minutes and forgets the password when you close the window. Anyone who scans the code and knows the password can read your mail, so show it only to your own phone.</p>
+          </div>
         </article>
 
       </div>

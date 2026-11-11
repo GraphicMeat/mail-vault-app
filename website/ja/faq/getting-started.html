@@ -110,6 +110,14 @@
         "@type": "Answer",
         "text": "サイドバーの連絡先を開いてください。メールと手動で追加した相手から連絡先カードを作成し、やり取りの履歴、候補、検出したアドレスの確認待ちリストを表示します。プレビューを確認してから重複を統合したり、統合を取り消したり、vCard ファイルを読み込んだり書き出したりできます。連絡先はこのコンピューターに保存され、保管庫のバックアップとアカウントの移行に含まれます。プロバイダーのアドレス帳とは同期しません。"
       }
+    },
+    {
+      "@type": "Question",
+      "name": "コンピュータのアカウントで MailVault モバイルアプリを設定するには?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "コンピュータで設定 > アカウントを開き、モバイルアプリを設定のQR コードを表示…を選びます。12 文字以上のパスワードを決めて 2 回入力し、QR コードを表示を選びます。電話で MailVault を開き、ウェルカムツアーまたはアカウントの追加からコンピュータから読み込むを選びます。コードをスキャンをタップし、カメラをコンピュータのコードに向けます。電話で同じパスワードを入力し、アカウントを読み込むをタップします。アカウントが多いと、コードは約 1 秒ごとに切り替わる複数の部分に分かれます。電話がすべての部分を読み取るまでカメラを向けたままにしてください。「3 個中 2 個目」のように表示されます。次のアカウントは含まれません。パスワードが保存されていないもの、電話で使えないプロバイダーや独自のアプリ登録でサインインするもの、別のログイン名を使う JMAP アカウント、サーバー設定が不完全なもの。コンピュータはコードの下に理由とともに一覧表示します。電話にすでにあるアカウントはそのまま残ります。コードには、選んだパスワードで暗号化されたパスワードとサインイン情報が入っており、そのパスワードがなければ誰も読めません。コンピュータは 5 分後にコードを隠し、ウィンドウを閉じるとパスワードを忘れます。コードをスキャンしてパスワードを知っている人はメールを読めるので、自分の電話にだけ見せてください。"
+      }
     }
   ]
 }
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">はじめに</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">MailVaultとは何ですか？</a></li><li><a href="#help-section-2">MailVaultはどのメールプロバイダーに対応していますか？</a></li><li><a href="#help-section-3">動作環境を教えてください</a></li><li><a href="#help-section-4">開いているメールのハイライトの仕方は変えられますか？</a></li><li><a href="#help-section-5">MailVaultの見た目やレイアウトは変えられますか？</a></li><li><a href="#help-section-6">データは安全ですか？</a></li><li><a href="#help-section-7">アドレス帳はどこにありますか？</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">はじめに</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">MailVaultとは何ですか？</a></li><li><a href="#help-section-2">MailVaultはどのメールプロバイダーに対応していますか？</a></li><li><a href="#help-section-3">動作環境を教えてください</a></li><li><a href="#help-section-4">開いているメールのハイライトの仕方は変えられますか？</a></li><li><a href="#help-section-5">MailVaultの見た目やレイアウトは変えられますか？</a></li><li><a href="#help-section-6">データは安全ですか？</a></li><li><a href="#help-section-7">アドレス帳はどこにありますか？</a></li><li><a href="#help-section-8">コンピュータのアカウントで MailVault モバイルアプリを設定するには?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">MailVaultとは何か、どのメールプロバイダに対応し、どの環境で動き、メールのプライバシーをどう守るのか。</p>
 
       <div class="space-y-4">
@@ -285,6 +293,23 @@
         <article id="contacts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">アドレス帳はどこにありますか？</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>サイドバーの連絡先を開いてください。メールと手動で追加した相手から連絡先カードを作成し、やり取りの履歴、候補、検出したアドレスの確認待ちリストを表示します。プレビューを確認してから重複を統合したり、統合を取り消したり、vCard ファイルを読み込んだり書き出したりできます。連絡先はこのコンピューターに保存され、保管庫のバックアップとアカウントの移行に含まれます。プロバイダーのアドレス帳とは同期しません。</p></div>
+        </article>
+
+        <article id="phone-import" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">コンピュータのアカウントで MailVault モバイルアプリを設定するには?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+            <p>コンピュータの MailVault は、QR コード 1 つですべてのアカウントを MailVault モバイルアプリに渡せます。電話でサーバー名やパスワードを入力する必要はありません。</p>
+            <ol class="list-decimal pl-6 space-y-2">
+              <li>コンピュータで<strong>設定 &rsaquo; アカウント</strong>を開き、<strong>モバイルアプリを設定</strong>の<strong>QR コードを表示…</strong>を選びます。</li>
+              <li>12 文字以上のパスワードを決めて 2 回入力し、<strong>QR コードを表示</strong>を選びます。</li>
+              <li>電話で MailVault を開き、ウェルカムツアーまたはアカウントの追加から<strong>コンピュータから読み込む</strong>を選びます。</li>
+              <li><strong>コードをスキャン</strong>をタップし、カメラをコンピュータのコードに向けます。</li>
+              <li>電話で同じパスワードを入力し、<strong>アカウントを読み込む</strong>をタップします。</li>
+            </ol>
+            <p>アカウントが多いと、コードは約 1 秒ごとに切り替わる複数の部分に分かれます。電話がすべての部分を読み取るまでカメラを向けたままにしてください。「3 個中 2 個目」のように表示されます。</p>
+            <p>次のアカウントは含まれません。パスワードが保存されていないもの、電話で使えないプロバイダーや独自のアプリ登録でサインインするもの、別のログイン名を使う JMAP アカウント、サーバー設定が不完全なもの。コンピュータはコードの下に理由とともに一覧表示します。電話にすでにあるアカウントはそのまま残ります。</p>
+            <p>コードには、選んだパスワードで暗号化されたパスワードとサインイン情報が入っており、そのパスワードがなければ誰も読めません。コンピュータは 5 分後にコードを隠し、ウィンドウを閉じるとパスワードを忘れます。コードをスキャンしてパスワードを知っている人はメールを読めるので、自分の電話にだけ見せてください。</p>
+          </div>
         </article>
 
       </div>

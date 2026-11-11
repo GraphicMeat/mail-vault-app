@@ -167,5 +167,16 @@
   "a0ae430b5814": "2. 在 MailVault 中添加账户：",
   "2ec0931f8689": "<strong>何时出现。</strong>只有当 Outlook.com 账户通过 IMAP 连接时才会出现，而这是默认方式：添加账户时<strong>连接方式</strong>为 <strong>IMAP</strong>，或者在<strong>设置 &rarr; 账户 &rarr; 连接 &rarr; 连接方式</strong>中用<strong>切换并重新登录</strong>把账户从 Microsoft Graph 切换到 IMAP。被拒绝的切换不会改变任何内容：账户仍使用 Microsoft Graph，MailVault 会显示这些步骤和该设置的链接。",
   "364f7ab3622c": "<strong>Microsoft Graph 不需要这项设置。</strong>通过 Microsoft Graph 连接的 Outlook.com 账户不会用到它。如果你更喜欢 Graph，请在连接方式下选择 <strong>Microsoft Graph</strong>，这项设置可以保持关闭。",
-  "eaa197d49a73": "Outlook.com、Hotmail 和 Live.com 有一项网页设置：允许设备和应用使用 IMAP。如果它是关闭的，Microsoft 会接受你的登录和 MailVault 请求的 IMAP 权限，随后其 IMAP 服务器以 User is authenticated but not connected 拒绝连接。你的密码没有问题，MailVault 也工作正常。修复方法：打开 Outlook 网页版，依次进入设置、邮件、转发和 IMAP，在 POP 和 IMAP 下打开允许设备和应用使用 IMAP，然后点击保存。直接链接是 https://outlook.live.com/mail/options/mail/forwarding。之后回到 MailVault 再试一次。这对通过 IMAP 连接的 Outlook.com 账户很重要，而这是默认方式：即添加账户时连接方式为 IMAP，或者在设置、账户、连接中把账户从 Microsoft Graph 切换到 IMAP。被拒绝的切换不会改变任何内容，账户仍使用 Microsoft Graph。使用 Microsoft Graph 的账户不需要这项设置。"
+  "eaa197d49a73": "Outlook.com、Hotmail 和 Live.com 有一项网页设置：允许设备和应用使用 IMAP。如果它是关闭的，Microsoft 会接受你的登录和 MailVault 请求的 IMAP 权限，随后其 IMAP 服务器以 User is authenticated but not connected 拒绝连接。你的密码没有问题，MailVault 也工作正常。修复方法：打开 Outlook 网页版，依次进入设置、邮件、转发和 IMAP，在 POP 和 IMAP 下打开允许设备和应用使用 IMAP，然后点击保存。直接链接是 https://outlook.live.com/mail/options/mail/forwarding。之后回到 MailVault 再试一次。这对通过 IMAP 连接的 Outlook.com 账户很重要，而这是默认方式：即添加账户时连接方式为 IMAP，或者在设置、账户、连接中把账户从 Microsoft Graph 切换到 IMAP。被拒绝的切换不会改变任何内容，账户仍使用 Microsoft Graph。使用 Microsoft Graph 的账户不需要这项设置。",
+  "72e2ca965dac": "如何用电脑上的账户设置 MailVault 移动应用？",
+  "2140713015b6": "在电脑上打开<strong>设置 &rsaquo; 账户</strong>，在<strong>设置移动应用</strong>下选择<strong>显示二维码…</strong>。",
+  "e849c26d0e23": "设定一个至少 12 个字符的密码，输入两次，然后选择<strong>显示二维码</strong>。",
+  "36b60f8941c8": "在手机上打开 MailVault，在欢迎导览或添加账户中选择<strong>从电脑导入</strong>。",
+  "529a64e765bc": "点按<strong>扫描代码</strong>，将摄像头对准电脑上的二维码。",
+  "0079ce4a8a40": "在手机上输入同一个密码，然后点按<strong>导入账户</strong>。",
+  "7bd217f41487": "电脑上的 MailVault 可以用一个二维码把所有账户交给 MailVault 移动应用，你无需在手机上输入服务器名称或密码。",
+  "38c4b31d51fb": "账户较多时，二维码会分成几部分，大约每秒切换一次。请让摄像头一直对准，直到手机读完所有部分：它会显示“第 2 部分，共 3 部分”等。",
+  "0b3a32b71df3": "有些账户不会包含在内：没有保存密码的账户、通过手机无法使用的服务商或自定义应用注册登录的账户、使用单独登录名的 JMAP 账户，以及服务器设置不完整的账户。电脑会在二维码下方列出它们及原因。手机上已有的账户保持不变。",
+  "6f06a627410d": "二维码中的密码和登录信息已用你设定的密码加密，没有这个密码谁也读不了。电脑会在 5 分钟后隐藏二维码，并在你关闭窗口时忘记密码。任何扫描二维码且知道密码的人都能读取你的邮件，所以只给你自己的手机看。",
+  "ec795bae8528": "在电脑上打开设置 > 账户，在设置移动应用下选择显示二维码…。设定一个至少 12 个字符的密码，输入两次，然后选择显示二维码。在手机上打开 MailVault，在欢迎导览或添加账户中选择从电脑导入。点按扫描代码，将摄像头对准电脑上的二维码。在手机上输入同一个密码，然后点按导入账户。账户较多时，二维码会分成几部分，大约每秒切换一次。请让摄像头一直对准，直到手机读完所有部分：它会显示“第 2 部分，共 3 部分”等。有些账户不会包含在内：没有保存密码的账户、通过手机无法使用的服务商或自定义应用注册登录的账户、使用单独登录名的 JMAP 账户，以及服务器设置不完整的账户。电脑会在二维码下方列出它们及原因。手机上已有的账户保持不变。二维码中的密码和登录信息已用你设定的密码加密，没有这个密码谁也读不了。电脑会在 5 分钟后隐藏二维码，并在你关闭窗口时忘记密码。任何扫描二维码且知道密码的人都能读取你的邮件，所以只给你自己的手机看。"
 }

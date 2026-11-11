@@ -110,6 +110,14 @@
         "@type": "Answer",
         "text": "Abre Contactos en la barra lateral. Crea fichas de contacto a partir de tu correo y de las personas que añades, con historial de correspondencia, sugerencias y una cola de revisión para las direcciones encontradas. Fusiona duplicados después de revisar la vista previa, deshaz una fusión e importa o exporta archivos vCard. Los contactos permanecen en este ordenador y se incluyen en las copias de seguridad de la bóveda y en las transferencias de cuentas; no se sincronizan con la libreta de direcciones de tu proveedor."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Cómo configuro la app móvil de MailVault con las cuentas de mi ordenador?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "En el ordenador, abre Ajustes > Cuentas y elige Mostrar código QR… en Configurar la app móvil. Elige una contraseña de al menos 12 caracteres, escríbela dos veces y elige Mostrar código QR. En el teléfono, abre MailVault y elige Importar desde el ordenador, en el recorrido de bienvenida o en Añadir cuenta. Toca Escanear código y apunta la cámara al código del ordenador. Escribe la misma contraseña en el teléfono y toca Importar cuentas. Con varias cuentas, el código llega en partes que cambian más o menos cada segundo. Mantén la cámara sobre él hasta que el teléfono haya leído todas: muestra Parte 2 de 3, y así sucesivamente. Algunas cuentas no se incluyen: una sin contraseña guardada, una que inicia sesión con un proveedor o un registro de app propio que el teléfono no puede usar, una cuenta JMAP con un nombre de inicio de sesión aparte y una con la configuración del servidor incompleta. El ordenador las muestra bajo el código, con el motivo. Una cuenta que ya está en el teléfono se queda como está. El código guarda tus contraseñas e inicios de sesión cifrados con la contraseña que elegiste, y sin ella nadie puede leerlos. El ordenador oculta el código a los 5 minutos y olvida la contraseña al cerrar la ventana. Quien escanee el código y conozca la contraseña puede leer tu correo, así que muéstralo solo a tu propio teléfono."
+      }
     }
   ]
 }
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Primeros pasos</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">¿Qué es MailVault?</a></li><li><a href="#help-section-2">¿Con qué proveedores de correo funciona MailVault?</a></li><li><a href="#help-section-3">¿Cuáles son los requisitos del sistema?</a></li><li><a href="#help-section-4">¿Puedo cambiar cómo se resalta el mensaje abierto?</a></li><li><a href="#help-section-5">¿Puedo cambiar el aspecto y la distribución de MailVault?</a></li><li><a href="#help-section-6">¿Están seguros mis datos?</a></li><li><a href="#help-section-7">¿Dónde está la libreta de direcciones?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">Primeros pasos</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">¿Qué es MailVault?</a></li><li><a href="#help-section-2">¿Con qué proveedores de correo funciona MailVault?</a></li><li><a href="#help-section-3">¿Cuáles son los requisitos del sistema?</a></li><li><a href="#help-section-4">¿Puedo cambiar cómo se resalta el mensaje abierto?</a></li><li><a href="#help-section-5">¿Puedo cambiar el aspecto y la distribución de MailVault?</a></li><li><a href="#help-section-6">¿Están seguros mis datos?</a></li><li><a href="#help-section-7">¿Dónde está la libreta de direcciones?</a></li><li><a href="#help-section-8">¿Cómo configuro la app móvil de MailVault con las cuentas de mi ordenador?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Qué es MailVault, con qué proveedores de correo funciona, en qué sistemas se ejecuta y cómo mantiene privado tu correo.</p>
 
       <div class="space-y-4">
@@ -285,6 +293,23 @@
         <article id="contacts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">¿Dónde está la libreta de direcciones?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Abre Contactos en la barra lateral. Crea fichas de contacto a partir de tu correo y de las personas que añades, con historial de correspondencia, sugerencias y una cola de revisión para las direcciones encontradas. Fusiona duplicados después de revisar la vista previa, deshaz una fusión e importa o exporta archivos vCard. Los contactos permanecen en este ordenador y se incluyen en las copias de seguridad de la bóveda y en las transferencias de cuentas; no se sincronizan con la libreta de direcciones de tu proveedor.</p></div>
+        </article>
+
+        <article id="phone-import" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">¿Cómo configuro la app móvil de MailVault con las cuentas de mi ordenador?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+            <p>MailVault en tu ordenador pasa todas sus cuentas a la app móvil de MailVault con un solo código QR, así que no escribes nombres de servidor ni contraseñas en el teléfono.</p>
+            <ol class="list-decimal pl-6 space-y-2">
+              <li>En el ordenador, abre <strong>Ajustes &rsaquo; Cuentas</strong> y elige <strong>Mostrar código QR…</strong> en <strong>Configurar la app móvil</strong>.</li>
+              <li>Elige una contraseña de al menos 12 caracteres, escríbela dos veces y elige <strong>Mostrar código QR</strong>.</li>
+              <li>En el teléfono, abre MailVault y elige <strong>Importar desde el ordenador</strong>, en el recorrido de bienvenida o en Añadir cuenta.</li>
+              <li>Toca <strong>Escanear código</strong> y apunta la cámara al código del ordenador.</li>
+              <li>Escribe la misma contraseña en el teléfono y toca <strong>Importar cuentas</strong>.</li>
+            </ol>
+            <p>Con varias cuentas, el código llega en partes que cambian más o menos cada segundo. Mantén la cámara sobre él hasta que el teléfono haya leído todas: muestra Parte 2 de 3, y así sucesivamente.</p>
+            <p>Algunas cuentas no se incluyen: una sin contraseña guardada, una que inicia sesión con un proveedor o un registro de app propio que el teléfono no puede usar, una cuenta JMAP con un nombre de inicio de sesión aparte y una con la configuración del servidor incompleta. El ordenador las muestra bajo el código, con el motivo. Una cuenta que ya está en el teléfono se queda como está.</p>
+            <p>El código guarda tus contraseñas e inicios de sesión cifrados con la contraseña que elegiste, y sin ella nadie puede leerlos. El ordenador oculta el código a los 5 minutos y olvida la contraseña al cerrar la ventana. Quien escanee el código y conozca la contraseña puede leer tu correo, así que muéstralo solo a tu propio teléfono.</p>
+          </div>
         </article>
 
       </div>

@@ -27,10 +27,10 @@ describe('FAQ hub and topic pages', () => {
   it('keeps every one of the 23 original answers, each on exactly one topic page', () => {
     const all = ORIGINAL_TOPICS.flatMap(t => questionsIn(topic(t)));
     // 23 from the original single-page FAQ, plus later answers including
-    // iCloud and adding an Outlook.com account over IMAP, across the six original topics;
-    // new topics have separate coverage below.
-    expect(all.length).toBe(41);
-    expect(new Set(all).size).toBe(41);
+    // iCloud, adding an Outlook.com account over IMAP and the phone set-up, across the six original
+    // topics; new topics have separate coverage below.
+    expect(all.length).toBe(42);
+    expect(new Set(all).size).toBe(42);
   });
 
   // MailVault links here when Outlook.com refuses an IMAP session because

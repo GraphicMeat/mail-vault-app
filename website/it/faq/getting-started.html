@@ -110,6 +110,14 @@
         "@type": "Answer",
         "text": "Apri Contatti nella barra laterale. Crea schede dei contatti a partire dalla tua posta e dalle persone che aggiungi, con cronologia della corrispondenza, suggerimenti e una coda di revisione per gli indirizzi scoperti. Unisci i duplicati dopo aver controllato l'anteprima, annulla un'unione e importa o esporta file vCard. I contatti restano su questo computer e sono inclusi nei backup della cassaforte e nei trasferimenti degli account; non si sincronizzano con la rubrica del provider."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "Come configuro l'app mobile di MailVault con gli account del computer?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sul computer, apri Impostazioni > Account e scegli Mostra codice QR… sotto Configura l'app mobile. Scegli una password di almeno 12 caratteri, digitala due volte e scegli Mostra codice QR. Sul telefono, apri MailVault e scegli Importa dal computer, nel tour di benvenuto o in Aggiungi account. Tocca Scansiona codice e inquadra con la fotocamera il codice sul computer. Digita la stessa password sul telefono e tocca Importa account. Con più account il codice arriva in parti che cambiano circa ogni secondo. Tieni la fotocamera sul codice finché il telefono non ha letto ogni parte: mostra Parte 2 di 3, e così via. Alcuni account non vengono inclusi: uno senza password salvata, uno che accede tramite un provider o una registrazione app personalizzata che il telefono non può usare, un account JMAP con un nome di accesso separato e uno con impostazioni del server incomplete. Il computer li elenca sotto il codice, con il motivo. Un account già presente sul telefono resta com'è. Il codice contiene le tue password e i tuoi accessi, cifrati con la password scelta, e senza di essa nessuno può leggerli. Il computer nasconde il codice dopo 5 minuti e dimentica la password quando chiudi la finestra. Chi scansiona il codice e conosce la password può leggere la tua posta, quindi mostralo solo al tuo telefono."
+      }
     }
   ]
 }
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Per iniziare</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>In questa pagina</summary><ul><li><a href="#help-section-1">Che cos'è MailVault?</a></li><li><a href="#help-section-2">Con quali provider di posta funziona MailVault?</a></li><li><a href="#help-section-3">Quali sono i requisiti di sistema?</a></li><li><a href="#help-section-4">Posso cambiare il modo in cui viene evidenziato il messaggio aperto?</a></li><li><a href="#help-section-5">Posso cambiare l’aspetto e la disposizione di MailVault?</a></li><li><a href="#help-section-6">I miei dati sono al sicuro?</a></li><li><a href="#help-section-7">Dove si trova la rubrica?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">Per iniziare</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>In questa pagina</summary><ul><li><a href="#help-section-1">Che cos'è MailVault?</a></li><li><a href="#help-section-2">Con quali provider di posta funziona MailVault?</a></li><li><a href="#help-section-3">Quali sono i requisiti di sistema?</a></li><li><a href="#help-section-4">Posso cambiare il modo in cui viene evidenziato il messaggio aperto?</a></li><li><a href="#help-section-5">Posso cambiare l’aspetto e la disposizione di MailVault?</a></li><li><a href="#help-section-6">I miei dati sono al sicuro?</a></li><li><a href="#help-section-7">Dove si trova la rubrica?</a></li><li><a href="#help-section-8">Come configuro l'app mobile di MailVault con gli account del computer?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Che cos’è MailVault, con quali provider di posta funziona, su cosa gira e come tiene privata la tua posta.</p>
 
       <div class="space-y-4">
@@ -285,6 +293,23 @@
         <article id="contacts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">Dove si trova la rubrica?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Apri Contatti nella barra laterale. Crea schede dei contatti a partire dalla tua posta e dalle persone che aggiungi, con cronologia della corrispondenza, suggerimenti e una coda di revisione per gli indirizzi scoperti. Unisci i duplicati dopo aver controllato l'anteprima, annulla un'unione e importa o esporta file vCard. I contatti restano su questo computer e sono inclusi nei backup della cassaforte e nei trasferimenti degli account; non si sincronizzano con la rubrica del provider.</p></div>
+        </article>
+
+        <article id="phone-import" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">Come configuro l'app mobile di MailVault con gli account del computer?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+            <p>MailVault sul computer passa tutti i suoi account all'app mobile di MailVault con un solo codice QR, così sul telefono non digiti nomi di server né password.</p>
+            <ol class="list-decimal pl-6 space-y-2">
+              <li>Sul computer, apri <strong>Impostazioni &rsaquo; Account</strong> e scegli <strong>Mostra codice QR…</strong> sotto <strong>Configura l'app mobile</strong>.</li>
+              <li>Scegli una password di almeno 12 caratteri, digitala due volte e scegli <strong>Mostra codice QR</strong>.</li>
+              <li>Sul telefono, apri MailVault e scegli <strong>Importa dal computer</strong>, nel tour di benvenuto o in Aggiungi account.</li>
+              <li>Tocca <strong>Scansiona codice</strong> e inquadra con la fotocamera il codice sul computer.</li>
+              <li>Digita la stessa password sul telefono e tocca <strong>Importa account</strong>.</li>
+            </ol>
+            <p>Con più account il codice arriva in parti che cambiano circa ogni secondo. Tieni la fotocamera sul codice finché il telefono non ha letto ogni parte: mostra Parte 2 di 3, e così via.</p>
+            <p>Alcuni account non vengono inclusi: uno senza password salvata, uno che accede tramite un provider o una registrazione app personalizzata che il telefono non può usare, un account JMAP con un nome di accesso separato e uno con impostazioni del server incomplete. Il computer li elenca sotto il codice, con il motivo. Un account già presente sul telefono resta com'è.</p>
+            <p>Il codice contiene le tue password e i tuoi accessi, cifrati con la password scelta, e senza di essa nessuno può leggerli. Il computer nasconde il codice dopo 5 minuti e dimentica la password quando chiudi la finestra. Chi scansiona il codice e conosce la password può leggere la tua posta, quindi mostralo solo al tuo telefono.</p>
+          </div>
         </article>
 
       </div>

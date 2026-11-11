@@ -110,6 +110,14 @@
         "@type": "Answer",
         "text": "Ouvrez Contacts dans la barre latérale. Des fiches de contact sont créées à partir de vos e-mails et des personnes que vous ajoutez, avec historique des échanges, suggestions et file de vérification des adresses découvertes. Fusionnez les doublons après avoir examiné l'aperçu, annulez une fusion et importez ou exportez des fichiers vCard. Les contacts restent sur cet ordinateur et sont inclus dans les sauvegardes du coffre et les transferts de comptes ; ils ne sont pas synchronisés avec le carnet d'adresses de votre fournisseur."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment configurer l'app mobile MailVault avec mes comptes de l'ordinateur ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sur l'ordinateur, ouvrez Paramètres > Comptes et choisissez Afficher le code QR… sous Configurer l'app mobile. Choisissez un mot de passe d'au moins 12 caractères, saisissez-le deux fois et choisissez Afficher le code QR. Sur le téléphone, ouvrez MailVault et choisissez Importer depuis l'ordinateur, dans la visite de bienvenue ou sous Ajouter un compte. Touchez Scanner le code et pointez l'appareil photo vers le code affiché sur l'ordinateur. Saisissez le même mot de passe sur le téléphone et touchez Importer les comptes. Avec plusieurs comptes, le code se compose de parties qui changent environ chaque seconde. Gardez l'appareil photo dessus jusqu'à ce que le téléphone ait lu chaque partie : il affiche Partie 2 sur 3, et ainsi de suite. Certains comptes ne sont pas inclus : un compte sans mot de passe enregistré, un compte qui se connecte via un fournisseur ou une inscription d'app personnalisée que le téléphone ne peut pas utiliser, un compte JMAP avec un identifiant distinct et un compte aux réglages de serveur incomplets. L'ordinateur les liste sous le code, avec la raison. Un compte déjà présent sur le téléphone reste tel quel. Le code contient vos mots de passe et connexions, chiffrés avec le mot de passe choisi, et personne ne peut les lire sans lui. L'ordinateur masque le code après 5 minutes et oublie le mot de passe quand vous fermez la fenêtre. Quiconque scanne le code et connaît le mot de passe peut lire vos e-mails : ne le montrez qu'à votre propre téléphone."
+      }
     }
   ]
 }
@@ -217,7 +225,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Premiers pas</h1><!-- help-intro:start --><form class="mv-help-search" action="/fr/docs.html" method="get" role="search"><label for="help-q">Rechercher dans la documentation, la FAQ et les articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Rechercher parmi tous les guides et réponses" required><button type="submit">Recherche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Sur cette page</summary><ul><li><a href="#help-section-1">Qu'est-ce que MailVault ?</a></li><li><a href="#help-section-2">Avec quels fournisseurs d'e-mail MailVault fonctionne-t-il ?</a></li><li><a href="#help-section-3">Quelle est la configuration requise ?</a></li><li><a href="#help-section-4">Puis-je changer la façon dont le message ouvert est mis en surbrillance ?</a></li><li><a href="#help-section-5">Puis-je changer l'apparence et la disposition de MailVault ?</a></li><li><a href="#help-section-6">Mes données sont-elles en sécurité ?</a></li><li><a href="#help-section-7">Où se trouve le carnet d'adresses ?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">Premiers pas</h1><!-- help-intro:start --><form class="mv-help-search" action="/fr/docs.html" method="get" role="search"><label for="help-q">Rechercher dans la documentation, la FAQ et les articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Rechercher parmi tous les guides et réponses" required><button type="submit">Recherche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Sur cette page</summary><ul><li><a href="#help-section-1">Qu'est-ce que MailVault ?</a></li><li><a href="#help-section-2">Avec quels fournisseurs d'e-mail MailVault fonctionne-t-il ?</a></li><li><a href="#help-section-3">Quelle est la configuration requise ?</a></li><li><a href="#help-section-4">Puis-je changer la façon dont le message ouvert est mis en surbrillance ?</a></li><li><a href="#help-section-5">Puis-je changer l'apparence et la disposition de MailVault ?</a></li><li><a href="#help-section-6">Mes données sont-elles en sécurité ?</a></li><li><a href="#help-section-7">Où se trouve le carnet d'adresses ?</a></li><li><a href="#help-section-8">Comment configurer l'app mobile MailVault avec mes comptes de l'ordinateur ?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Ce qu'est MailVault, avec quels fournisseurs d'e-mail il fonctionne, sur quoi il tourne et comment il garde votre courrier privé.</p>
 
       <div class="space-y-4">
@@ -285,6 +293,23 @@
         <article id="contacts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">Où se trouve le carnet d'adresses ?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Ouvrez Contacts dans la barre latérale. Des fiches de contact sont créées à partir de vos e-mails et des personnes que vous ajoutez, avec historique des échanges, suggestions et file de vérification des adresses découvertes. Fusionnez les doublons après avoir examiné l'aperçu, annulez une fusion et importez ou exportez des fichiers vCard. Les contacts restent sur cet ordinateur et sont inclus dans les sauvegardes du coffre et les transferts de comptes ; ils ne sont pas synchronisés avec le carnet d'adresses de votre fournisseur.</p></div>
+        </article>
+
+        <article id="phone-import" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">Comment configurer l'app mobile MailVault avec mes comptes de l'ordinateur ?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+            <p>MailVault sur votre ordinateur transmet tous ses comptes à l'app mobile MailVault avec un seul code QR : vous ne tapez ni nom de serveur ni mot de passe sur le téléphone.</p>
+            <ol class="list-decimal pl-6 space-y-2">
+              <li>Sur l'ordinateur, ouvrez <strong>Paramètres &rsaquo; Comptes</strong> et choisissez <strong>Afficher le code QR…</strong> sous <strong>Configurer l'app mobile</strong>.</li>
+              <li>Choisissez un mot de passe d'au moins 12 caractères, saisissez-le deux fois et choisissez <strong>Afficher le code QR</strong>.</li>
+              <li>Sur le téléphone, ouvrez MailVault et choisissez <strong>Importer depuis l'ordinateur</strong>, dans la visite de bienvenue ou sous Ajouter un compte.</li>
+              <li>Touchez <strong>Scanner le code</strong> et pointez l'appareil photo vers le code affiché sur l'ordinateur.</li>
+              <li>Saisissez le même mot de passe sur le téléphone et touchez <strong>Importer les comptes</strong>.</li>
+            </ol>
+            <p>Avec plusieurs comptes, le code se compose de parties qui changent environ chaque seconde. Gardez l'appareil photo dessus jusqu'à ce que le téléphone ait lu chaque partie : il affiche Partie 2 sur 3, et ainsi de suite.</p>
+            <p>Certains comptes ne sont pas inclus : un compte sans mot de passe enregistré, un compte qui se connecte via un fournisseur ou une inscription d'app personnalisée que le téléphone ne peut pas utiliser, un compte JMAP avec un identifiant distinct et un compte aux réglages de serveur incomplets. L'ordinateur les liste sous le code, avec la raison. Un compte déjà présent sur le téléphone reste tel quel.</p>
+            <p>Le code contient vos mots de passe et connexions, chiffrés avec le mot de passe choisi, et personne ne peut les lire sans lui. L'ordinateur masque le code après 5 minutes et oublie le mot de passe quand vous fermez la fenêtre. Quiconque scanne le code et connaît le mot de passe peut lire vos e-mails : ne le montrez qu'à votre propre téléphone.</p>
+          </div>
         </article>
 
       </div>
