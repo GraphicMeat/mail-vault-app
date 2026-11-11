@@ -57,7 +57,7 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "Does MailVault work with Gmail and Outlook?",
+      "name": "Funktioniert MailVault mit Gmail und Outlook?",
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Yes. MailVault works with Gmail, Outlook, JMAP servers such as Fastmail, and any email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Outlook.com, Hotmail and Live.com accounts connect over IMAP with Microsoft sign-in by default, or through the Microsoft Graph API if you choose it."
@@ -65,7 +65,7 @@
     },
     {
       "@type": "Question",
-      "name": "How do I connect my Outlook.com account?",
+      "name": "Wie verbinde ich mein Outlook.com-Konto?",
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "MailVault connects Outlook.com, Hotmail and Live.com accounts over IMAP by default, with Microsoft's OAuth2 sign-in. Add the account, choose Sign in with Microsoft and complete sign-in in your browser. There is no password to enter and no server to type. Outlook.com only accepts IMAP once Let devices and apps use IMAP is turned on in its settings. Microsoft Graph is still available: choose Microsoft Graph under Connect over when you add the account, or switch later in Settings, Accounts, Connection. A few things that rely on IMAP are not available on Graph accounts: Snooze; restoring an MBOX file to the server; Recover to server for deleted emails (Recover locally works, for mail already on this computer); and the line that reports your Inbox count when you add an account. Accounts on IMAP are not affected by these limits."
@@ -73,7 +73,7 @@
     },
     {
       "@type": "Question",
-      "name": "How do I add an Outlook.com or Hotmail account over IMAP?",
+      "name": "Wie füge ich ein Outlook.com- oder Hotmail-Konto über IMAP hinzu?",
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "First turn IMAP on in Outlook.com: open Outlook on the web, go to Settings, Mail, Forwarding and IMAP, switch on Let devices and apps use IMAP under POP and IMAP, and click Save. Then in MailVault add an account, choose Outlook / Microsoft 365, type your email address, leave Connect over on IMAP and click Sign in with Microsoft. Finish the sign-in in your browser and MailVault tests the connection and adds the account. You enter no password and no server settings: MailVault fills in outlook.office365.com on port 993 for incoming mail and smtp-mail.outlook.com on port 587 for outgoing mail. An Outlook.com or Hotmail account already on Microsoft Graph switches in Settings, Accounts, Connection, Connect over, IMAP, then Switch and sign in again, and its saved mail stays."
@@ -81,7 +81,7 @@
     },
     {
       "@type": "Question",
-      "name": "How do I use MailVault with Proton Mail?",
+      "name": "Wie nutze ich MailVault mit Proton Mail?",
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections."
@@ -89,7 +89,7 @@
     },
     {
       "@type": "Question",
-      "name": "Can I send from a different address than the one I log in with?",
+      "name": "Kann ich von einer anderen Adresse senden als der, mit der ich mich anmelde?",
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Yes. Add the address as an alias of the account in Settings → Accounts → Aliases, then pick it in the From row when you write, or make it the default. Your username and password stay the same, MailVault still signs in as the account you set up, and no Reply-To header is added. The address must be one your provider lets that login send from."
@@ -97,7 +97,7 @@
     },
     {
       "@type": "Question",
-      "name": "How do I send from an alias?",
+      "name": "Wie sende ich von einem Alias?",
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Open Settings → Accounts, pick the account and go to its Aliases section, which lists every address the account sends from: its login address first, then each alias. For a Google account signed in with Google, MailVault fetches the addresses Gmail lets you send as. For any other provider, MailVault suggests addresses it has seen in your own mail, the ones you have sent from and the ones your mail arrives at, and you can add any address by hand. Give each alias the name recipients should see, and choose which address new messages start from. Verify sends one test message from an alias so you can see whether your provider accepts it. Your provider has to allow the address: in Fastmail, add it as an alias or identity first; in Gmail, add it under Settings → Accounts and Import → Send mail as; for Microsoft 365 and Outlook.com, aliases are added in the Microsoft account. Only the From address and name change, and no Reply-To header is added, so replies come back to the alias."
@@ -105,18 +105,18 @@
     },
     {
       "@type": "Question",
-      "name": "How do I connect Fastmail or another JMAP account?",
+      "name": "Wie verbinde ich Fastmail oder ein anderes JMAP-Konto?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Choose Fastmail when adding an account and paste an API token with Mail and Submission access from Fastmail settings. For another server, choose JMAP and use its password or API token. MailVault discovers the session URL when the domain publishes it; otherwise enter the full HTTPS session URL. Confirm an unfamiliar discovered server before credentials are sent. New mail uses push with polling as a fallback, and sending addresses come from the server’s identities. Fastmail also offers an IMAP app-password option."
+        "text": "Wähle beim Hinzufügen eines Kontos Fastmail und füge einen API-Token mit Mail- und Submission-Zugriff aus den Fastmail-Einstellungen ein. Für einen anderen Server wählst du JMAP und verwendest dessen Passwort oder API-Token. MailVault ermittelt die Sitzungs-URL, wenn die Domain sie veröffentlicht; andernfalls gibst du die vollständige HTTPS-Sitzungs-URL ein. Bestätige einen unbekannten ermittelten Server, bevor Zugangsdaten gesendet werden. Neue E-Mails kommen per Push mit regelmäßiger Abfrage als Ausweichlösung; Absenderadressen stammen aus den Identitäten des Servers. Fastmail bietet auch eine IMAP-Option mit App-Passwort."
       }
     },
     {
       "@type": "Question",
-      "name": "How do I add an iCloud or Apple Account email address?",
+      "name": "Wie füge ich eine iCloud- oder Apple-Account-E-Mail-Adresse hinzu?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at account.apple.com under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. Step-by-step guide: https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html"
+        "text": "Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at account.apple.com under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. Step-by-step guide: https://mailvaultapp.com/de/guides/add-icloud-mail-to-mailvault.html"
       }
     }
   ]
