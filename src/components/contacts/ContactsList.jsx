@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Plus, Star } from 'lucide-react';
 import { useT } from '../../i18n';
 import { usePeopleStore } from '../../stores/peopleStore';
-import { Avatar } from '../ui/Avatar';
+import { ContactRow } from './ContactRow';
 
 const ROW = 56;
 
@@ -58,22 +58,16 @@ export function ContactsList() {
               const st = stats[p.id];
               const count = st ? st.received + st.sentTo + st.cc : p.total;
               return (
-                <button
-                  type="button"
+                <ContactRow
                   key={p.id}
-                  data-testid={`contact-row-${p.id}`}
+                  testId={`contact-row-${p.id}`}
+                  name={p.displayName}
+                  address={p.primaryEmail}
+                  count={count}
+                  selected={selectedId === p.id}
                   onClick={() => select(p.id)}
-                  aria-current={selectedId === p.id}
                   style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: ROW, transform: `translateY(${r.start}px)` }}
-                  className={`flex items-center gap-3 px-3 text-left ${selectedId === p.id ? 'bg-mail-accent-tint' : ''}`}
-                >
-                  <Avatar name={p.displayName || p.primaryEmail} size={32} />
-                  <span className="flex-1 min-w-0">
-                    <span className="block truncate">{p.displayName || p.primaryEmail}</span>
-                    <span className="block truncate text-xs text-mail-text-secondary">{p.primaryEmail}</span>
-                  </span>
-                  {count != null && <span className="text-xs text-mail-text-secondary tabular-nums">{count}</span>}
-                </button>
+                />
               );
             })}
           </div>
