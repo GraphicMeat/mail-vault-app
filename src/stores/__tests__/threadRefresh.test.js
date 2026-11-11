@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { refreshSelectedThread } from '../slices/unifiedHelpers';
+import { refreshSelectedThread } from '../slices/readerThread';
 import { buildThreads } from '../../utils/emailParser';
 
 // The reader's open thread is a SNAPSHOT of one buildThreads() entry. Removals

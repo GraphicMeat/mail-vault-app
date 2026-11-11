@@ -5,7 +5,8 @@
 
 import { buildThreads } from '../../utils/emailParser';
 import { mergesSentIntoThreads } from '../../utils/sentFolder';
-import { selectionKey, refreshSelectedThread, resolveEmailLocation } from './unifiedHelpers';
+import { selectionKey, resolveEmailLocation } from './unifiedHelpers';
+import { refreshSelectedThread } from './readerThread';
 import { useSettingsStore } from '../settingsStore';
 import { useViewHideStore } from '../viewHideStore';
 import { unboundAction } from './unboundAction';
