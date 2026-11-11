@@ -11,7 +11,7 @@ beforeEach(() => useSettingsStore.setState({ aliases: {}, sendAsAddresses: {} })
 
 describe('myAddresses', () => {
   it('lists every own address across accounts, aliases included, once', () => {
-    useSettingsStore.setState({ aliases: { a: ['alias@h.io'] } });
+    useSettingsStore.setState({ aliases: { a: [{ address: 'alias@h.io' }] } });
     const all = myAddresses();
     expect(all).toEqual(expect.arrayContaining(['me@h.io', 'work@w.io', 'alias@h.io']));
     expect(new Set(all).size).toBe(all.length);

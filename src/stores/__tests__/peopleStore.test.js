@@ -85,7 +85,7 @@ describe('peopleStore', () => {
     useSettingsStore.setState({ aliases: { a: [{ address: 'alias@h.io' }] }, sendAsAddresses: { a: 'from@h.io' } });
     harness.daemonCall.mockResolvedValue({});
     await usePeopleStore.getState().refreshStats(['p1']);
-    expect(harness.daemonCall).toHaveBeenCalledWith('people.stats', { ids: ['p1'], ownAddresses: ['me@h.io', 'from@h.io', 'alias@h.io'] });
+    expect(harness.daemonCall).toHaveBeenCalledWith('people.stats', { ids: ['p1'], addresses: [], ownAddresses: ['me@h.io', 'from@h.io', 'alias@h.io'] });
   });
 
   it('selecting the new-contact draft does not ask the daemon for a card', async () => {
@@ -194,5 +194,68 @@ describe('peopleStore', () => {
     await act(usePeopleStore.getState());
     expect(harness.daemonCall).toHaveBeenCalledWith('people.proposals', {});
     expect(usePeopleStore.getState().proposals).toHaveLength(1);
+  });
+
+  describe('unsaved senders', () => {
+    const bo = { address: 'bo@x.io', name: 'Bo' };
+
+    it('selectSender clears the contact and loads mail by address', async () => {
+      harness.daemonCall.mockImplementation(async (m) => (m === 'people.messages' ? { items: [{ uid: 1 }], next: null } : {}));
+      usePeopleStore.setState({ selectedId: 'p1', card: { id: 'p1' }, mail: [{ uid: 9 }] });
+      await usePeopleStore.getState().selectSender(bo);
+      expect(usePeopleStore.getState()).toMatchObject({ selectedId: null, card: null, sender: bo, mail: [] });
+      await usePeopleStore.getState().loadMail({});
+      expect(harness.daemonCall).toHaveBeenCalledWith('people.messages', expect.objectContaining({ address: 'bo@x.io' }));
+      expect(harness.daemonCall.mock.calls.find((c) => c[0] === 'people.messages')[1]).not.toHaveProperty('id');
+      expect(usePeopleStore.getState().mail).toEqual([{ uid: 1 }]);
+    });
+
+    it('select clears an unsaved sender', async () => {
+      harness.daemonCall.mockResolvedValue({ id: 'p1' });
+      usePeopleStore.setState({ sender: bo });
+      await usePeopleStore.getState().select('p1');
+      expect(usePeopleStore.getState().sender).toBeNull();
+    });
+
+    it('refreshStats sends ids and addresses', async () => {
+      harness.daemonCall.mockResolvedValue({ p1: { received: 1 }, 'bo@x.io': { received: 2 } });
+      await usePeopleStore.getState().refreshStats(['p1'], ['bo@x.io']);
+      expect(harness.daemonCall).toHaveBeenCalledWith('people.stats', { ids: ['p1'], addresses: ['bo@x.io'], ownAddresses: ['me@h.io'] });
+      expect(Object.keys(usePeopleStore.getState().stats)).toEqual(['p1', 'bo@x.io']);
+    });
+
+    it('saveSender accepts the address and selects the new contact', async () => {
+      harness.daemonCall.mockImplementation(async (m) => {
+        if (m === 'people.review.accept') return { ids: ['p7'] };
+        if (m === 'people.list') return { items: [], total: 0, indexReady: true };
+        return { id: 'p7' };
+      });
+      const id = await usePeopleStore.getState().saveSender(bo);
+      expect(harness.daemonCall).toHaveBeenCalledWith('people.review.accept', { items: [bo] });
+      expect(id).toBe('p7');
+      expect(usePeopleStore.getState().selectedId).toBe('p7');
+      expect(harness.daemonCall).toHaveBeenCalledWith('people.list', expect.anything());
+    });
+
+    it('favoriteSender saves then sets vip', async () => {
+      harness.daemonCall.mockImplementation(async (m) => {
+        if (m === 'people.review.accept') return { ids: ['p7'] };
+        if (m === 'people.list') return { items: [], total: 0, indexReady: true };
+        return { id: 'p7', vip: true };
+      });
+      await usePeopleStore.getState().favoriteSender(bo);
+      const methods = harness.daemonCall.mock.calls.map((c) => c[0]);
+      expect(methods.indexOf('people.review.accept')).toBeLessThan(methods.indexOf('people.update'));
+      expect(harness.daemonCall).toHaveBeenCalledWith('people.update', { id: 'p7', patch: { vip: true } });
+    });
+
+    it('owners returns the map and leaves list state alone', async () => {
+      harness.daemonCall.mockResolvedValue({ 'bo@x.io': { personId: 'p7', favorite: true } });
+      usePeopleStore.setState({ items: [{ id: 'p1' }], total: 1 });
+      const map = await usePeopleStore.getState().owners(['bo@x.io']);
+      expect(map).toEqual({ 'bo@x.io': { personId: 'p7', favorite: true } });
+      expect(harness.daemonCall).toHaveBeenCalledWith('people.owners', { addresses: ['bo@x.io'] });
+      expect(usePeopleStore.getState().items).toEqual([{ id: 'p1' }]);
+    });
   });
 });

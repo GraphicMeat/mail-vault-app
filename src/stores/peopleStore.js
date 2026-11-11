@@ -16,11 +16,17 @@ let loadingMoreMail = null;
 const initial = {
   items: [], total: 0, indexReady: true, indexing: false,
   query: '', sort: 'name', vipOnly: false,
-  selectedId: null, card: null, stats: {},
+  selectedId: null, card: null, sender: null, stats: {},
   mail: [], mailNext: null, mailFilters: {}, mailLoading: false,
   review: [], journal: [], proposals: [],
   status: 'idle', error: null,
 };
+
+// What the mail pager reads: a saved contact by id, else an unsaved sender by address.
+function mailTarget({ selectedId, sender }) {
+  if (selectedId && selectedId !== 'new') return { id: selectedId };
+  return sender ? { address: sender.address } : null;
+}
 
 export const usePeopleStore = create((set, get) => {
   const fail = (e) => { set({ error: e?.message || String(e), status: 'idle' }); return null; };
@@ -67,7 +73,7 @@ export const usePeopleStore = create((set, get) => {
 
     select: async (id) => {
       ++mailSeq; // a mail page still in flight for the previous contact is stale now
-      set({ selectedId: id, card: null, mail: [], mailNext: null, mailLoading: false });
+      set({ selectedId: id, card: null, sender: null, mail: [], mailNext: null, mailLoading: false });
       if (!id || id === 'new') return; // 'new' is the unsaved draft: nothing to fetch
       let card;
       try { set({ error: null }); card = await daemonCall('people.get', { id }); }
@@ -82,33 +88,58 @@ export const usePeopleStore = create((set, get) => {
       set({ card });
       get().refreshStats([id]);
     },
-    refreshStats: async (ids) => {
-      if (!ids.length) return;
-      const r = await run(() => daemonCall('people.stats', { ids, ownAddresses: myAddresses() }));
+    // An unsaved sender is selected by address: it has no card, and its stats are keyed by address.
+    selectSender: async ({ address, name = '' }) => {
+      ++mailSeq;
+      set({ selectedId: null, card: null, sender: { address, name }, mail: [], mailNext: null, mailLoading: false });
+      await get().refreshStats([], [address]);
+    },
+    refreshStats: async (ids, addresses = []) => {
+      if (!ids.length && !addresses.length) return;
+      const r = await run(() => daemonCall('people.stats', { ids, addresses, ownAddresses: myAddresses() }));
       if (r) set({ stats: { ...get().stats, ...r } });
     },
 
     loadMail: async (filters = {}) => {
-      const id = get().selectedId;
-      if (!id) return;
+      const target = mailTarget(get());
+      if (!target) return;
       const seq = ++mailSeq;
       set({ mailFilters: filters, mailLoading: true });
-      const r = await run(() => daemonCall('people.messages', { id, ownAddresses: myAddresses(), limit: PAGE, ...filters }));
+      const r = await run(() => daemonCall('people.messages', { ...target, ownAddresses: myAddresses(), limit: PAGE, ...filters }));
       if (seq !== mailSeq) return;
       set({ mail: r?.items || [], mailNext: r?.next || null, mailLoading: false });
     },
     loadMoreMail: async () => {
-      const { selectedId: id, mailNext, mailFilters, mail } = get();
+      const { mailNext, mailFilters, mail } = get();
+      const target = mailTarget(get());
       const seq = mailSeq;
-      if (!id || !mailNext || loadingMoreMail === seq) return;
+      if (!target || !mailNext || loadingMoreMail === seq) return;
       loadingMoreMail = seq;
       try {
-        const r = await run(() => daemonCall('people.messages', { id, ownAddresses: myAddresses(), limit: PAGE, ...mailFilters, after: mailNext }));
+        const r = await run(() => daemonCall('people.messages', { ...target, ownAddresses: myAddresses(), limit: PAGE, ...mailFilters, after: mailNext }));
         if (!r || seq !== mailSeq) return;
         set({ mail: [...mail, ...r.items], mailNext: r.next });
       } finally {
         if (loadingMoreMail === seq) loadingMoreMail = null;
       }
+    },
+
+    // Lookups for the contacts view: address -> { personId, favorite }; they touch no list state.
+    owners: async (addresses) => (await run(() => daemonCall('people.owners', { addresses }))) || {},
+    // A saved sender becomes a contact and is selected as one.
+    saveSender: async ({ address, name = '' }) => {
+      const r = await run(() => daemonCall('people.review.accept', { items: [{ address, name }] }));
+      const id = r?.ids?.[0];
+      if (!id) return null;
+      await get().select(id);
+      await get().load();
+      return id;
+    },
+    // A favorite is always a contact: save first, then star.
+    favoriteSender: async (row) => {
+      const id = await get().saveSender(row);
+      if (id) await get().update(id, { vip: true });
+      return id;
     },
 
     create: async (fields) => {
@@ -177,6 +208,7 @@ export const usePeopleStore = create((set, get) => {
       get().load();
       const id = get().selectedId;
       if (id && id !== 'new') get().refreshStats([id]);
+      else if (get().sender) get().refreshStats([], [get().sender.address]);
     },
     reset: () => set({ ...initial }),
     initPeople: () => initPeople(),
