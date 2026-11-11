@@ -29,6 +29,24 @@
         ],
         "createdAt": "2026-11-11T07:58:35.313Z",
         "reason": "CTA has text-white on lamp-bg; computed white on #4f46e5 and #4338ca exceeds WCAG AA, detector paired unrelated text color"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "website/faq/providers.html"
+        ],
+        "createdAt": "2026-11-11T09:01:05.000Z",
+        "reason": "DESIGN.md:287 explicitly chooses Inter for the marketing site"
+      },
+      {
+        "rule": "organic-clip-path",
+        "value": "*",
+        "files": [
+          "website/faq/providers.html"
+        ],
+        "createdAt": "2026-11-11T09:01:07.144Z",
+        "reason": "Shared site CSS uses straight geometric notched seams, not an organic contour; website/src/tailwind.css:302,341-365,445"
       }
     ]
   }
