@@ -223,10 +223,15 @@ describe('send-link API wiring', () => {
     expect(server).toMatch(/const ALL_METRICS = new Set\(\[[^\]]*'send_link_sent', 'send_link_subscribed'\]\)/);
   });
 
-  it('shares one subscribe path between the newsletter and the mail link', () => {
+  it('subscribes only through the confirm page, for the newsletter and the mail link alike', () => {
     expect(server.match(/INSERT INTO subscribers/g)).toHaveLength(1);
-    expect(server).toMatch(/app\.post\('\/api\/subscribe'[\s\S]*?addSubscriber\(email, req\)/);
     expect(server).toMatch(/app\.post\('\/api\/send-link\/subscribe'[\s\S]*?addSubscriber\(email, req\)/);
+    // The newsletter form only mails a confirm link: double opt-in, rate limited per visitor.
+    const signup = server.match(/app\.post\('\/api\/subscribe'[\s\S]*?\n\}\);/)[0];
+    expect(signup).toContain('subscribeLimiter');
+    expect(signup).toContain('subscribeConfirm.request');
+    expect(signup).not.toContain('addSubscriber');
+    expect(server).toMatch(/const subscribeLimiter = rateLimit\(\{[\s\S]*?keyGenerator: visitorIP/);
   });
 
   it('never subscribes on GET', () => {

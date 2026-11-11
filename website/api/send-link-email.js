@@ -372,4 +372,4 @@ function renderConfirmPage(lang, token) {
 `;
 }
 
-module.exports = { LOCALES, COPY, resolveLocale, linksFor, buildSendLinkEmail, renderConfirmPage, escapeHtml, localePath };
+module.exports = { LOCALES, COPY, resolveLocale, linksFor, buildSendLinkEmail, renderConfirmPage, escapeHtml, localePath, C, FONT };

@@ -337,7 +337,7 @@ app.post('/api/features/:id/vote', voteLimiter, async (req, res) => {
 // -------------------------------------------
 
 // One subscribe path for the newsletter form and for the "Yes, send me updates"
-// button behind the email-me-the-link mail. Resolves to { created } and throws
+// button behind the email-me-the-link mail and the newsletter confirm mail. Resolves to { created } and throws
 // when the database does; each route decides how to answer.
 async function addSubscriber(email, req) {
   const db = getPool();
@@ -375,25 +375,6 @@ async function addSubscriber(email, req) {
 
   return { created: true };
 }
-
-app.post('/api/subscribe', async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email || !isValidEmail(email) || tooLong(email, LIMITS.email)) {
-      if (isFormPost(req)) return redirectForm(res, 'subscribe', false);
-      return res.status(400).json({ error: 'Valid email is required' });
-    }
-
-    const { created } = await addSubscriber(email, req);
-    if (isFormPost(req)) return redirectForm(res, 'subscribe', true);
-    res.json({ success: true, message: created ? 'Subscribed successfully' : 'Already subscribed' });
-  } catch (error) {
-    console.error('Error subscribing:', error);
-    if (isFormPost(req)) return redirectForm(res, 'subscribe', false);
-    res.status(500).json({ error: 'Failed to subscribe' });
-  }
-});
 
 // -------------------------------------------
 // Email me the download link (homepage, phones and tablets)
@@ -449,6 +430,46 @@ const confirmLimiter = rateLimit({
   message: { error: 'rate_limited' },
 });
 
+// Newsletter sign-up: double opt-in. This mails a confirm link and stores
+// nothing; the button in that mail lands on /api/send-link/confirm like the
+// email-me-the-link mail's does, and only its POST subscribes (subscribe-confirm.js).
+const { createSubscribeConfirm, RESPONSES: SUBSCRIBE_RESPONSES } = require('./subscribe-confirm');
+const subscribeConfirm = createSubscribeConfirm({
+  send: sendViaGraphicMeat,
+  configured: gmConfigured,
+  key: sendLinkKey,
+  bumpMetric: (event) => bumpMetric(event),
+  validEmail: (address) => isValidEmail(address) && !tooLong(address, LIMITS.email),
+  isSubscribed: async (address) => {
+    const [rows] = await getPool().execute('SELECT id FROM subscribers WHERE email = ?', [address.toLowerCase()]);
+    return rows.length > 0;
+  },
+});
+const subscribeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  keyGenerator: visitorIP,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => (isFormPost(req)
+    ? redirectForm(res, 'subscribe', false)
+    : res.status(429).json(SUBSCRIBE_RESPONSES.limited[1])),
+});
+
+app.post('/api/subscribe', subscribeLimiter, async (req, res) => {
+  let outcome;
+  try {
+    const { email, lang, website } = req.body || {};
+    outcome = await subscribeConfirm.request({ email, lang, website });
+  } catch (err) {
+    console.error('[subscribe]', err.code || 'error');
+    outcome = 'failed';
+  }
+  if (isFormPost(req)) return redirectForm(res, 'subscribe', outcome === 'sent');
+  const [status, body] = SUBSCRIBE_RESPONSES[outcome];
+  res.status(status).json(body);
+});
+
 app.post('/api/send-link', sendLinkLimiter, async (req, res) => {
   let outcome;
   try {
@@ -500,7 +521,7 @@ app.post('/api/send-link/subscribe', confirmLimiter, async (req, res) => {
 const PUBLIC_METRICS = new Set(['pricing_view', 'download_click']);
 // All known events (public + server-side counters); guards the DB write against typos
 // send_link_* are counted here only, never accepted from the browser, so a page cannot inflate them.
-const ALL_METRICS = new Set([...PUBLIC_METRICS, 'checkout_created', 'sub_activated', 'send_link_sent', 'send_link_subscribed']);
+const ALL_METRICS = new Set([...PUBLIC_METRICS, 'checkout_created', 'sub_activated', 'subscribe_confirm_sent', 'send_link_sent', 'send_link_subscribed']);
 
 // Increment today's counter for an event. Never throws — metrics must never break a caller.
 async function bumpMetric(event) {
