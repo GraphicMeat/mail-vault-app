@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { pickLocale, loadMobileLocale, getMobileLocale, startMobileLocale, subscribeLocale, t } from '../i18n.js';
 import en from '../../i18n/locales/en.json';
 import de from '../../i18n/locales/de.json';
@@ -69,6 +69,25 @@ describe('mobile locale', () => {
     await startMobileLocale(() => new Promise(() => {}), ['it'], 30);
     expect(getMobileLocale()).toBe('it');
     expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('still applies a stored language that arrives after the first paint', async () => {
+    let answer;
+    const slow = new Promise((resolve) => { answer = resolve; });
+    await startMobileLocale(() => slow, ['it'], 10);
+    expect(getMobileLocale()).toBe('it');
+    answer({ language: 'ja' });
+    await vi.waitFor(() => expect(getMobileLocale()).toBe('ja'));
+  });
+
+  it('a late stored language never overrides one picked meanwhile', async () => {
+    let answer;
+    const slow = new Promise((resolve) => { answer = resolve; });
+    await startMobileLocale(() => slow, ['it'], 10);
+    await loadMobileLocale(['it'], 'de');
+    answer({ language: 'ja' });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(getMobileLocale()).toBe('de');
   });
 
   it('tells subscribers when the language changes; the last pick wins', async () => {

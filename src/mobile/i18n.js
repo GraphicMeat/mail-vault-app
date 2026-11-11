@@ -93,10 +93,12 @@ export async function loadMobileLocale(languages = systemLanguages(), stored = n
 export async function startMobileLocale(readSettings, languages = systemLanguages(), waitMs = 1500) {
   let stored = null;
   let timer;
+  let late = false;
+  const read = Promise.resolve().then(readSettings);
   try {
     const settings = await Promise.race([
-      Promise.resolve().then(readSettings),
-      new Promise((resolve) => { timer = setTimeout(() => resolve(null), waitMs); }),
+      read,
+      new Promise((resolve) => { timer = setTimeout(() => { late = true; resolve(null); }, waitMs); }),
     ]);
     stored = settings?.language ?? null;
   } catch {
@@ -104,7 +106,20 @@ export async function startMobileLocale(readSettings, languages = systemLanguage
   } finally {
     clearTimeout(timer);
   }
-  return loadMobileLocale(languages, stored);
+  const first = loadMobileLocale(languages, stored);
+  if (late) {
+    // The engine answered after the first paint: its stored language still wins (the page
+    // switches live), unless a language was picked meanwhile.
+    const seq = loadSeq;
+    read.then(
+      (settings) => {
+        const language = settings?.language;
+        if (seq === loadSeq && MOBILE_LOCALES.includes(language)) loadMobileLocale(languages, language);
+      },
+      () => {},
+    );
+  }
+  return first;
 }
 
 export function getMobileLocale() {
