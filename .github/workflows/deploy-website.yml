@@ -75,18 +75,29 @@ jobs:
         run: npm run build:demo
 
       - name: Install isolated demo capture tools
+        # Optional: an Ubuntu mirror outage must not block the deploy. Without
+        # cwebp the preview steps below are skipped and the committed previews ship.
+        id: webp
         run: |
-          if ! command -v cwebp >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y webp
+          for attempt in 1 2 3; do
+            command -v cwebp >/dev/null 2>&1 && break
+            sudo apt-get update && sudo apt-get install -y webp && break
+            sleep 15
+          done
+          if command -v cwebp >/dev/null 2>&1; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::cwebp unavailable, keeping the committed demo previews"
           fi
 
       - name: Capture current demo previews
         # This uses a fresh headless browser session and the freshly built demo;
         # it never starts the Tauri app or touches a developer browser profile.
+        if: steps.webp.outputs.ok == 'true'
         run: npm run capture:demo-preview
 
       - name: Update homepage preview references
+        if: steps.webp.outputs.ok == 'true'
         run: npm run update:demo-preview
 
       - name: Set up SSH
