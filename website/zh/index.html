@@ -173,7 +173,7 @@
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261031-brand">
 <link rel="stylesheet" href="/assets/home.css?v=24">
-<link rel="stylesheet" href="/assets/home-sections.css?v=11">
+<link rel="stylesheet" href="/assets/home-sections.css?v=12">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -561,6 +561,7 @@
 <p id="vote-status" class="mv-community-status" role="status"></p>
 </div>
 <form action="/api/subscribe" method="post" data-subscribe class="hm-newsletter-inline">
+<input type="hidden" name="lang" value="en">
 <label for="newsletter-email">有新内容时给你发一条通知。随时可以退订。</label>
 <div class="mv-form-row"><input id="newsletter-email" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com"><button type="submit" class="mv-button mv-secondary">订阅</button></div>
 <p role="status" data-form-status></p>
@@ -612,12 +613,15 @@
 </dialog>
 <script id="mv-runtime-copy" type="application/json">
 {
-  "newsletterSubscribed": "你已加入列表。请留意欢迎邮件。",
+  "newsletterSubscribed": "马上就好。请查看收件箱，并点按邮件中的按钮完成确认。",
   "newsletterQueryError": "未能提交。请检查邮箱地址后重试。",
-  "newsletterSubmitting": "正在订阅…",
+  "newsletterSubmitting": "正在发送…",
   "newsletterOffline": "你似乎处于离线状态。重新连接后再试。",
   "newsletterRateLimit": "尝试次数过多。请等待一分钟后重试。",
-  "newsletterSaveError": "无法保存你的邮箱地址。请稍后重试。",
+  "newsletterSaveError": "无法发送邮件。请稍后再试。",
+  "newsletterReviewAsk": "要把确认邮件发送到这个地址吗？",
+  "newsletterReviewSend": "是，发送",
+  "newsletterReviewChange": "修改",
   "newsletterReachError": "无法连接到服务器。请检查网络连接后重试。",
   "voteThanks": "感谢你的支持！",
   "voteAlreadyCounted": "你的爱心已经计入。谢谢！",
@@ -631,7 +635,7 @@
   </script>
 <script defer src="/assets/home-hero.js?v=1"></script>
 <script defer src="/assets/home-clips.js?v=2"></script>
-<script defer src="/assets/english-site.js?v=20261008-light">
+<script defer src="/assets/english-site.js?v=20261112-review">
 </script>
 <script defer src="/pricing-localize.js?v=20261008-spots">
 </script>

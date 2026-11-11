@@ -173,7 +173,7 @@
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261031-brand">
 <link rel="stylesheet" href="/assets/home.css?v=24">
-<link rel="stylesheet" href="/assets/home-sections.css?v=11">
+<link rel="stylesheet" href="/assets/home-sections.css?v=12">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -561,6 +561,7 @@
 <p id="vote-status" class="mv-community-status" role="status"></p>
 </div>
 <form action="/api/subscribe" method="post" data-subscribe class="hm-newsletter-inline">
+<input type="hidden" name="lang" value="en">
 <label for="newsletter-email">Un petit mot quand il y a du nouveau. Désabonnement à tout moment.</label>
 <div class="mv-form-row"><input id="newsletter-email" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="vous@exemple.com"><button type="submit" class="mv-button mv-secondary">S'abonner</button></div>
 <p role="status" data-form-status></p>
@@ -612,12 +613,15 @@
 </dialog>
 <script id="mv-runtime-copy" type="application/json">
 {
-  "newsletterSubscribed": "Vous êtes inscrit. Surveillez l’e-mail de bienvenue.",
+  "newsletterSubscribed": "Presque terminé. Consultez votre boîte de réception et appuyez sur le bouton de notre e-mail pour confirmer.",
   "newsletterQueryError": "L’envoi n’a pas abouti. Vérifiez votre adresse e-mail et réessayez.",
-  "newsletterSubmitting": "Inscription en cours…",
+  "newsletterSubmitting": "Envoi…",
   "newsletterOffline": "Vous semblez hors ligne. Reconnectez-vous et réessayez.",
   "newsletterRateLimit": "Trop de tentatives. Attendez une minute et réessayez.",
-  "newsletterSaveError": "Nous n’avons pas pu enregistrer votre e-mail. Réessayez dans un instant.",
+  "newsletterSaveError": "Nous n’avons pas pu envoyer l’e-mail. Réessayez dans un instant.",
+  "newsletterReviewAsk": "Envoyer la confirmation à cette adresse ?",
+  "newsletterReviewSend": "Oui, envoyer",
+  "newsletterReviewChange": "Modifier",
   "newsletterReachError": "Nous n’avons pas pu joindre le serveur. Vérifiez votre connexion et réessayez.",
   "voteThanks": "Merci pour votre soutien !",
   "voteAlreadyCounted": "Votre vote a déjà été compté. Merci !",
@@ -631,7 +635,7 @@
   </script>
 <script defer src="/assets/home-hero.js?v=1"></script>
 <script defer src="/assets/home-clips.js?v=2"></script>
-<script defer src="/assets/english-site.js?v=20261008-light">
+<script defer src="/assets/english-site.js?v=20261112-review">
 </script>
 <script defer src="/pricing-localize.js?v=20261008-spots">
 </script>

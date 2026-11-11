@@ -457,27 +457,69 @@ describe('English acquisition journey', () => {
     link.click();
     expect(gm).toHaveBeenLastCalledWith('download_action', {page_version:'homepage-en-20261002',platform:'mac',destination:'fallback'});
   });
+  it('shows the typed address back before anything is sent, and Change returns to the form', async()=>{
+    const fetchMock=vi.fn().mockResolvedValue({ok:true,status:200});
+    const {w,doc}=page('index.html','',fetchMock);
+    const form=doc.querySelector('[data-subscribe]');
+    const review=form.querySelector('.mv-review');
+    expect(review.hidden).toBe(true);
+    form.elements.email.value=' review@example.com ';
+    form.dispatchEvent(new w.Event('submit',{cancelable:true}));
+    await tick();
+    expect(review.hidden).toBe(false);
+    expect(form.querySelector('.mv-review-email').textContent).toBe('review@example.com');
+    expect(form.querySelector('.mv-form-row').hidden).toBe(true);
+    expect(fetchMock.mock.calls.filter(([url])=>String(url).includes('/api/subscribe'))).toHaveLength(0);
+    form.querySelector('.mv-review-change').click();
+    expect(review.hidden).toBe(true);
+    expect(form.querySelector('.mv-form-row').hidden).toBe(false);
+    expect(form.elements.email.value).toBe('review@example.com');
+  });
+  it('never renders the typed address as markup', async()=>{
+    const {w,doc}=page('index.html','',vi.fn().mockResolvedValue({ok:true,status:200}));
+    const form=doc.querySelector('[data-subscribe]');
+    form.elements.email.value='<img src=x onerror=alert(1)>@example.com';
+    form.dispatchEvent(new w.Event('submit',{cancelable:true}));
+    expect(form.querySelector('.mv-review-email').querySelector('img')).toBeNull();
+  });
+  it('posts only after the visitor confirms the address, then asks them to check their inbox', async()=>{
+    const fetchMock=vi.fn().mockResolvedValue({ok:true,status:200});
+    const {w,doc}=page('index.html','',fetchMock);
+    const form=doc.querySelector('[data-subscribe]');
+    form.elements.email.value='review@example.com';
+    form.dispatchEvent(new w.Event('submit',{cancelable:true}));
+    form.querySelector('.mv-review button').click();
+    await tick();
+    const call=fetchMock.mock.calls.find(([url])=>String(url).includes('/api/subscribe'));
+    expect(JSON.parse(call[1].body)).toEqual({email:'review@example.com',lang:'en'});
+    expect(form.querySelector('[role="status"]').textContent).toContain('Check your inbox');
+    expect(form.querySelector('.mv-review').hidden).toBe(true);
+    expect(form.elements.email.value).toBe('');
+  });
   it('reports signup failure honestly, reenables retry, and preserves the address', async()=>{
     const {w,doc}=page('index.html','',vi.fn().mockResolvedValue({ok:false,status:503}));
     const form=doc.querySelector('[data-subscribe]');
     form.elements.email.value='review@example.com';
     form.dispatchEvent(new w.Event('submit',{cancelable:true}));
-    expect(form.querySelector('button').disabled).toBe(true);
+    const send=form.querySelector('.mv-review button');
+    send.click();
+    expect(send.disabled).toBe(true);
     await tick();
-    expect(form.querySelector('button').disabled).toBe(false);
+    expect(send.disabled).toBe(false);
     expect(form.elements.email.value).toBe('review@example.com');
-    expect(form.querySelector('[role="status"]').textContent).toContain('could not save');
+    expect(form.querySelector('[role="status"]').textContent).toContain('could not send');
   });
   it('uses localized newsletter runtime status text', async()=>{
     const markup = readFileSync(resolve(root, 'index.html'), 'utf8')
       .replace('<html lang="en"', '<html lang="de"')
-      .replace('"newsletterSaveError":"We could not save your email. Please try again in a moment."', '"newsletterSaveError":"Die E-Mail-Adresse konnte nicht gespeichert werden."');
+      .replace('"newsletterSaveError":"We could not send the email. Please try again in a moment."', '"newsletterSaveError":"Die E-Mail-Adresse konnte nicht gesendet werden."');
     const {w,doc}=page('index.html','',vi.fn().mockResolvedValue({ok:false,status:503}),{markup});
     const form=doc.querySelector('[data-subscribe]');
     form.elements.email.value='review@example.com';
     form.dispatchEvent(new w.Event('submit',{cancelable:true}));
+    form.querySelector('.mv-review button').click();
     await tick();
-    expect(form.querySelector('[role="status"]').textContent).toBe('Die E-Mail-Adresse konnte nicht gespeichert werden.');
+    expect(form.querySelector('[role="status"]').textContent).toBe('Die E-Mail-Adresse konnte nicht gesendet werden.');
   });
   it('keeps every local link, anchor, stylesheet, script, and screenshot resolvable',()=>{
     // Parse each anchor target once: pages link the same sections many times, and a JSDOM per link

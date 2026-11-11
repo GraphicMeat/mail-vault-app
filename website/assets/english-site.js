@@ -308,26 +308,84 @@
 
   document.querySelectorAll('[data-subscribe]').forEach(form => {
     const status = form.querySelector('[data-form-status]');
-    if (query.has('subscribed')) status.textContent = runtimeText('newsletterSubscribed', 'You’re on the list. Watch for the welcome email.');
+    const emailInput = form.elements.email;
+    const subscribedText = () => runtimeText('newsletterSubscribed', 'Almost there. Check your inbox and press the button in our email to confirm.');
+    if (query.has('subscribed')) status.textContent = subscribedText();
     if (query.has('subscribe_error')) status.textContent = runtimeText('newsletterQueryError', 'That did not go through. Check your email address and try again.');
-    form.addEventListener('submit', async e => {
+
+    // Sign-up is two steps so a typo never costs anyone a mail: the first press
+    // shows the address back, and only "send" posts it. Without JavaScript the
+    // form posts straight through; the server mails a confirm link either way.
+    const row = form.querySelector('.mv-form-row');
+    const label = form.querySelector('label');
+    const review = document.createElement('div');
+    review.className = 'mv-review';
+    review.hidden = true;
+    review.setAttribute('role', 'group');
+    const ask = document.createElement('p');
+    ask.className = 'mv-review-ask';
+    ask.id = `${emailInput.id}-review-ask`;
+    ask.textContent = runtimeText('newsletterReviewAsk', 'Send the confirmation to this address?');
+    review.setAttribute('aria-labelledby', ask.id);
+    const shown = document.createElement('p');
+    shown.className = 'mv-review-email';
+    const actions = document.createElement('div');
+    actions.className = 'mv-review-actions';
+    const sendButton = document.createElement('button');
+    sendButton.type = 'button';
+    sendButton.className = 'mv-button mv-secondary';
+    sendButton.textContent = runtimeText('newsletterReviewSend', 'Yes, send it');
+    const changeButton = document.createElement('button');
+    changeButton.type = 'button';
+    changeButton.className = 'mv-review-change';
+    changeButton.textContent = runtimeText('newsletterReviewChange', 'Change it');
+    actions.append(sendButton, changeButton);
+    review.append(ask, shown, actions);
+    form.insertBefore(review, status);
+
+    const showForm = () => {
+      review.hidden = true;
+      if (row) row.hidden = false;
+      if (label) label.hidden = false;
+    };
+    changeButton.addEventListener('click', () => { showForm(); emailInput.focus(); });
+
+    form.addEventListener('submit', e => {
       e.preventDefault();
-      const button = form.querySelector('[type="submit"]');
-      if (button.disabled) return;
-      const label = button.textContent;
-      button.disabled = true;
-      button.textContent = runtimeText('newsletterSubmitting', 'Subscribing…');
-      button.setAttribute('aria-busy', 'true');
       status.textContent = '';
+      shown.textContent = emailInput.value.trim(); // textContent: the visitor's text is never markup
+      if (row) row.hidden = true;
+      if (label) label.hidden = true;
+      review.hidden = false;
+      sendButton.focus();
+    });
+
+    sendButton.addEventListener('click', async () => {
+      if (sendButton.disabled) return;
+      const sendLabel = sendButton.textContent;
+      sendButton.disabled = true;
+      changeButton.disabled = true;
+      sendButton.textContent = runtimeText('newsletterSubmitting', 'Sending…');
+      sendButton.setAttribute('aria-busy', 'true');
+      status.textContent = '';
+      let ok = false;
       try {
         if (!navigator.onLine) throw new Error(runtimeText('newsletterOffline', 'You appear to be offline. Reconnect and try again.'));
-        const response = await fetch(form.action, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:form.elements.email.value}), signal:AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error(response.status === 429 ? runtimeText('newsletterRateLimit', 'Too many attempts. Wait a minute and try again.') : runtimeText('newsletterSaveError', 'We could not save your email. Please try again in a moment.'));
-        status.textContent = runtimeText('newsletterSubscribed', 'You’re on the list. Watch for the welcome email.');
+        const response = await fetch(form.action, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:emailInput.value.trim(), lang:document.documentElement.lang || 'en'}), signal:AbortSignal.timeout(15000) });
+        if (!response.ok) throw new Error(response.status === 429 ? runtimeText('newsletterRateLimit', 'Too many attempts. Wait a minute and try again.') : runtimeText('newsletterSaveError', 'We could not send the email. Please try again in a moment.'));
+        status.textContent = subscribedText();
         form.reset();
+        ok = true;
       } catch (error) {
         status.textContent = error.name === 'TypeError' || error.name === 'TimeoutError' ? runtimeText('newsletterReachError', 'We could not reach the server. Check your connection and try again.') : error.message;
-      } finally { button.disabled = false; button.textContent = label; button.removeAttribute('aria-busy'); }
+      } finally {
+        sendButton.disabled = false;
+        changeButton.disabled = false;
+        sendButton.textContent = sendLabel;
+        sendButton.removeAttribute('aria-busy');
+        showForm();
+        if (!ok) emailInput.focus();
+      }
     });
   });
   // Email me the download link (phones and tablets). The forms also post

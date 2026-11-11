@@ -152,6 +152,14 @@
 .hm-newsletter-inline label { font-size:.82rem; font-weight:550; color:var(--mv-muted); }
 .hm-newsletter-inline [data-form-status] { margin:6px 0 0; font-size:.82rem; }
 .hm-newsletter-inline [data-form-status]:empty { display:none; }
+.mv-review { margin-top:6px; padding:12px 14px; border:1px solid var(--mv-line); border-radius:10px; background:var(--mv-card); }
+.mv-review[hidden] { display:none; }
+.mv-review-ask { margin:0; font-size:.82rem; font-weight:550; color:var(--mv-muted); }
+.mv-review-email { margin:4px 0 10px; font-size:1.05rem; font-weight:650; color:var(--mv-ink); overflow-wrap:anywhere; }
+.mv-review-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; }
+.mv-review-change { background:none; border:0; padding:6px 2px; color:var(--mv-muted); font:inherit; font-size:.9rem; text-decoration:underline; cursor:pointer; }
+.mv-review-change:hover { color:var(--mv-ink); }
+.mv-review-change:disabled { opacity:.5; cursor:default; }
 
 @media (min-width:761px) and (max-width:1000px) {
   .hm-hero-row { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }

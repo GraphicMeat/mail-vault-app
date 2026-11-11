@@ -173,7 +173,7 @@
 
   <link rel="stylesheet" href="/assets/english-site.css?v=20261031-brand">
 <link rel="stylesheet" href="/assets/home.css?v=24">
-<link rel="stylesheet" href="/assets/home-sections.css?v=11">
+<link rel="stylesheet" href="/assets/home-sections.css?v=12">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -561,6 +561,7 @@
 <p id="vote-status" class="mv-community-status" role="status"></p>
 </div>
 <form action="/api/subscribe" method="post" data-subscribe class="hm-newsletter-inline">
+<input type="hidden" name="lang" value="en">
 <label for="newsletter-email">新しいお知らせがあるときにお届けします。購読はいつでも解除できます。</label>
 <div class="mv-form-row"><input id="newsletter-email" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com"><button type="submit" class="mv-button mv-secondary">登録</button></div>
 <p role="status" data-form-status></p>
@@ -612,12 +613,15 @@
 </dialog>
 <script id="mv-runtime-copy" type="application/json">
 {
-  "newsletterSubscribed": "登録されました。ウェルカムメールをお待ちください。",
+  "newsletterSubscribed": "あと一歩です。受信トレイを確認し、届いたメールのボタンを押して確定してください。",
   "newsletterQueryError": "送信できませんでした。メールアドレスを確認して、もう一度お試しください。",
-  "newsletterSubmitting": "登録中…",
+  "newsletterSubmitting": "送信中…",
   "newsletterOffline": "オフラインのようです。再接続して、もう一度お試しください。",
   "newsletterRateLimit": "試行回数が多すぎます。1 分待ってから、もう一度お試しください。",
-  "newsletterSaveError": "メールアドレスを保存できませんでした。しばらくしてから、もう一度お試しください。",
+  "newsletterSaveError": "メールを送信できませんでした。しばらくしてからもう一度お試しください。",
+  "newsletterReviewAsk": "このアドレスに確認メールを送りますか？",
+  "newsletterReviewSend": "はい、送信",
+  "newsletterReviewChange": "変更する",
   "newsletterReachError": "サーバーに接続できませんでした。接続を確認して、もう一度お試しください。",
   "voteThanks": "応援ありがとうございます！",
   "voteAlreadyCounted": "あなたの投票はすでに数えられています。ありがとうございます！",
@@ -631,7 +635,7 @@
   </script>
 <script defer src="/assets/home-hero.js?v=1"></script>
 <script defer src="/assets/home-clips.js?v=2"></script>
-<script defer src="/assets/english-site.js?v=20261008-light">
+<script defer src="/assets/english-site.js?v=20261112-review">
 </script>
 <script defer src="/pricing-localize.js?v=20261008-spots">
 </script>
