@@ -174,4 +174,11 @@ describe('Settings', () => {
     await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('false'));
     expect(sets()).toEqual([{ notifications: 'off' }, { notifications: 'on' }, { notifications: 'off' }]);
   });
+
+  it('Replay tour hands over to the tour', () => {
+    const onReplayTour = vi.fn();
+    render(<Settings onClose={() => {}} onReplayTour={onReplayTour} />);
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.settings.replayTour') }));
+    expect(onReplayTour).toHaveBeenCalledTimes(1);
+  });
 });

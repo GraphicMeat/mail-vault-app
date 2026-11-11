@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, afterEach } from 'vitest';
-import { pickLocale, loadMobileLocale, getMobileLocale, t } from '../i18n.js';
+import { pickLocale, loadMobileLocale, getMobileLocale, startMobileLocale, subscribeLocale, t } from '../i18n.js';
 import en from '../../i18n/locales/en.json';
 import de from '../../i18n/locales/de.json';
 import ja from '../../i18n/locales/ja.json';
@@ -43,5 +43,45 @@ describe('mobile locale', () => {
     expect(t('mobile.unreadCount', { count: 2 })).toBe('2 não lidas');
     await loadMobileLocale(['ja']);
     expect(t('mobile.unreadCount', { count: 1 })).toBe('未読 1 件');
+  });
+
+  it('prefers the language the user picked over the system one', async () => {
+    await loadMobileLocale(['fr-FR'], 'de');
+    expect(getMobileLocale()).toBe('de');
+    // Anything but one of the nine codes is ignored: the system decides.
+    await loadMobileLocale(['fr-FR'], 'sv');
+    expect(getMobileLocale()).toBe('fr');
+    await loadMobileLocale(['fr-FR'], null);
+    expect(getMobileLocale()).toBe('fr');
+  });
+
+  it('starts with the stored language, and with the system one when the engine has none or fails', async () => {
+    await startMobileLocale(async () => ({ language: 'ja' }), ['de']);
+    expect(getMobileLocale()).toBe('ja');
+    await startMobileLocale(async () => ({ language: null }), ['de']);
+    expect(getMobileLocale()).toBe('de');
+    await startMobileLocale(async () => { throw new Error('no engine'); }, ['ko']);
+    expect(getMobileLocale()).toBe('ko');
+  });
+
+  it('does not wait long for a slow engine before the first paint', async () => {
+    const started = Date.now();
+    await startMobileLocale(() => new Promise(() => {}), ['it'], 30);
+    expect(getMobileLocale()).toBe('it');
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('tells subscribers when the language changes; the last pick wins', async () => {
+    let calls = 0;
+    const off = subscribeLocale(() => { calls++; });
+    const slow = loadMobileLocale(['de']);
+    const fast = loadMobileLocale(['es']);
+    await Promise.all([slow, fast]);
+    expect(getMobileLocale()).toBe('es');
+    expect(calls).toBeGreaterThan(0);
+    off();
+    const before = calls;
+    await loadMobileLocale(['fr']);
+    expect(calls).toBe(before);
   });
 });

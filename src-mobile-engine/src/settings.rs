@@ -8,6 +8,10 @@
 //!   first run. An INBOX never synced gets no row: its first run takes the baseline.
 //! - `notificationPreview`: `true` | `false` (default `true`): a notification shows sender and
 //!   subject, or only "New message" and the account.
+//! - `language`: one of the nine app languages (`LANGUAGES`), or unset (`null`): the page then
+//!   follows the system language. Picked on the tour's first step, read before the first paint.
+//! - `onboardingComplete`: `true` once the first-run tour was finished or skipped (default
+//!   `false`). An install that already has accounts is marked done without seeing it.
 
 use crate::db::{Engine, EngineError};
 use crate::rpc::{parse, RpcError};
@@ -17,6 +21,11 @@ use serde_json::{json, Value};
 
 pub(crate) const NOTIFICATIONS: &str = "notifications";
 pub(crate) const NOTIFICATION_PREVIEW: &str = "notificationPreview";
+pub(crate) const LANGUAGE: &str = "language";
+pub(crate) const ONBOARDING_COMPLETE: &str = "onboardingComplete";
+
+/// The app languages (the catalogs in `src/i18n/locales`). Nothing else is ever stored.
+pub(crate) const LANGUAGES: [&str; 9] = ["en", "es", "fr", "it", "de", "pt-BR", "ja", "ko", "zh-Hans"];
 
 // Internal keys (`premium.rs`), not user settings: never a secret, never set from outside.
 /// The cached Premium answer: `{entitled, source, expiresMs, checkedMs}`.
@@ -65,12 +74,22 @@ impl Engine {
     }
 
     fn settings_json(&self) -> Result<Value, EngineError> {
-        let (n, p) = self.read(|c| Ok((get_in(c, NOTIFICATIONS)?, get_in(c, NOTIFICATION_PREVIEW)?)))?;
-        Ok(json!({ "notifications": if on(n) { "on" } else { "off" }, "notificationPreview": preview(p) }))
+        let (n, p, l, o) = self.read(|c| {
+            Ok((get_in(c, NOTIFICATIONS)?, get_in(c, NOTIFICATION_PREVIEW)?, get_in(c, LANGUAGE)?, get_in(c, ONBOARDING_COMPLETE)?))
+        })?;
+        // A stored value that is not one of the nine reads as unset.
+        let language = l.filter(|code| LANGUAGES.contains(&code.as_str()));
+        Ok(json!({
+            "notifications": if on(n) { "on" } else { "off" },
+            "notificationPreview": preview(p),
+            "language": language,
+            "onboardingComplete": o.as_deref() == Some("true"),
+        }))
     }
 }
 
-/// `mobile.settings.get {}` -> `{notifications: "on"|"off", notificationPreview: bool}`.
+/// `mobile.settings.get {}` -> `{notifications: "on"|"off", notificationPreview: bool,
+/// language: code|null, onboardingComplete: bool}`.
 pub(crate) fn get(engine: &Engine, _params: Value) -> Result<Value, RpcError> {
     engine.settings_json().map_err(|e| RpcError::Internal(e.to_string()))
 }
@@ -82,9 +101,14 @@ struct SetParams {
     notifications: Option<String>,
     #[serde(default)]
     notification_preview: Option<bool>,
+    #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
+    onboarding_complete: Option<bool>,
 }
 
-/// `mobile.settings.set {notifications?, notificationPreview?}` -> the settings after the write.
+/// `mobile.settings.set {notifications?, notificationPreview?, language?, onboardingComplete?}` ->
+/// the settings after the write.
 /// Anything but the listed values is `INVALID` and changes nothing.
 pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: SetParams = parse(params)?;
@@ -96,6 +120,11 @@ fn apply(engine: &Engine, p: &SetParams) -> Result<(), RpcError> {
     if let Some(n) = &p.notifications {
         if n != "on" && n != "off" {
             return Err(RpcError::Invalid("notifications is \"on\" or \"off\"".into()));
+        }
+    }
+    if let Some(l) = &p.language {
+        if !LANGUAGES.contains(&l.as_str()) {
+            return Err(RpcError::Invalid("language is one of the app languages".into()));
         }
     }
     engine
@@ -110,6 +139,12 @@ fn apply(engine: &Engine, p: &SetParams) -> Result<(), RpcError> {
             if let Some(v) = p.notification_preview {
                 put_in(c, NOTIFICATION_PREVIEW, if v { "true" } else { "false" })?;
             }
+            if let Some(l) = &p.language {
+                put_in(c, LANGUAGE, l)?;
+            }
+            if let Some(v) = p.onboarding_complete {
+                put_in(c, ONBOARDING_COMPLETE, if v { "true" } else { "false" })?;
+            }
             Ok(())
         })
         .map_err(|e| RpcError::Internal(e.to_string()))
@@ -118,12 +153,22 @@ fn apply(engine: &Engine, p: &SetParams) -> Result<(), RpcError> {
 /// [`Engine::set_setting`] of a user setting: the same checks and side effects as
 /// `mobile.settings.set`. `None` for any other key (stored as given).
 pub(crate) fn set_user_key(engine: &Engine, key: &str, value: &str) -> Option<Result<(), EngineError>> {
+    let none = SetParams { notifications: None, notification_preview: None, language: None, onboarding_complete: None };
+    let flag = |v: &str| match v {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    };
     let p = match key {
-        NOTIFICATIONS => SetParams { notifications: Some(value.to_string()), notification_preview: None },
-        NOTIFICATION_PREVIEW => match value {
-            "true" => SetParams { notifications: None, notification_preview: Some(true) },
-            "false" => SetParams { notifications: None, notification_preview: Some(false) },
-            _ => return Some(Err(EngineError::Db(format!("{NOTIFICATION_PREVIEW} is true or false")))),
+        NOTIFICATIONS => SetParams { notifications: Some(value.to_string()), ..none },
+        NOTIFICATION_PREVIEW => match flag(value) {
+            Some(v) => SetParams { notification_preview: Some(v), ..none },
+            None => return Some(Err(EngineError::Db(format!("{NOTIFICATION_PREVIEW} is true or false")))),
+        },
+        LANGUAGE => SetParams { language: Some(value.to_string()), ..none },
+        ONBOARDING_COMPLETE => match flag(value) {
+            Some(v) => SetParams { onboarding_complete: Some(v), ..none },
+            None => return Some(Err(EngineError::Db(format!("{ONBOARDING_COMPLETE} is true or false")))),
         },
         _ => return None,
     };

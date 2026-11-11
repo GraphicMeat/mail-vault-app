@@ -27,17 +27,9 @@ export function t(key, vars) {
   return _interp(_resolve(key, vars), vars);
 }
 
-export const LOCALES = [
-  { code: 'en',      flag: '🇬🇧', native: 'English',             english: 'English' },
-  { code: 'es',      flag: '🇪🇸', native: 'Español',             english: 'Spanish' },
-  { code: 'fr',      flag: '🇫🇷', native: 'Français',            english: 'French' },
-  { code: 'it',      flag: '🇮🇹', native: 'Italiano',            english: 'Italian' },
-  { code: 'de',      flag: '🇩🇪', native: 'Deutsch',             english: 'German' },
-  { code: 'pt-BR',   flag: '🇧🇷', native: 'Português (Brasil)',  english: 'Portuguese (Brazil)' },
-  { code: 'ja',      flag: '🇯🇵', native: '日本語',                english: 'Japanese' },
-  { code: 'ko',      flag: '🇰🇷', native: '한국어',                english: 'Korean' },
-  { code: 'zh-Hans', flag: '🇨🇳', native: '简体中文',              english: 'Chinese (Simplified)' },
-];
+// The nine languages live in their own module so the mobile page can list them without this
+// file's desktop settings store.
+export { LOCALES } from './languages.js';
 
 // Static map, not `import(`./locales/${code}.json`)` — Vite needs the literal
 // specifiers to emit one chunk per locale.

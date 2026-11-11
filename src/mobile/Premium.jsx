@@ -26,7 +26,8 @@ const MANAGE_URL = {
   google: 'https://play.google.com/store/account/subscriptions',
 };
 
-function Features({ highlight }) {
+/** What Premium adds on the phone; the onboarding's Premium step shows the same list. */
+export function Features({ highlight }) {
   const t = useT();
   return (
     <ul className="mv-premium__features">

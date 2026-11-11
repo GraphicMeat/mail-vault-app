@@ -11,6 +11,7 @@
 //   same rows.
 // - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
 //   screen; a phone whose place another device took says so, with Sign in again.
+// - Replay tour (`onReplayTour`): the first-run tour again, without its account step (App.jsx).
 // - About: the version (a build constant) and the source link, a plain https anchor. The shell's
 //   navigation guard cancels it in the webview and hands it to the system browser, the one path
 //   every link takes; the page never opens a window itself.
@@ -117,7 +118,7 @@ function AccountRow({ account, reauthBusy }) {
   );
 }
 
-export default function Settings({ onClose, version = APP_VERSION }) {
+export default function Settings({ onClose, onReplayTour, version = APP_VERSION }) {
   const t = useT();
   const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
@@ -270,6 +271,13 @@ export default function Settings({ onClose, version = APP_VERSION }) {
 
         <h2 className="mv-settings__heading">{t('mobile.settings.about')}</h2>
         <div className="mv-settings__list">
+          {onReplayTour && (
+            <button type="button" className="mv-setting" data-mv-replay-tour onClick={onReplayTour}>
+              <span className="mv-setting__text">
+                <span className="mv-setting__label">{t('mobile.settings.replayTour')}</span>
+              </span>
+            </button>
+          )}
           {version && <p className="mv-settings__row">{t('mobile.settings.version', { version })}</p>}
           <a className="mv-settings__row mv-settings__link" href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
             {t('mobile.settings.source')}

@@ -139,9 +139,12 @@ fn subjects(mails: &[NewMail]) -> Vec<&str> {
 #[test]
 fn settings_default_off_with_preview_and_round_trip() {
     let f = fx();
-    assert_eq!(f.engine.rpc("mobile.settings.get", json!({})).unwrap(), json!({ "notifications": "off", "notificationPreview": true }));
+    assert_eq!(
+        f.engine.rpc("mobile.settings.get", json!({})).unwrap(),
+        json!({ "notifications": "off", "notificationPreview": true, "language": null, "onboardingComplete": false })
+    );
     let set = f.engine.rpc("mobile.settings.set", json!({ "notifications": "on", "notificationPreview": false })).unwrap();
-    assert_eq!(set, json!({ "notifications": "on", "notificationPreview": false }));
+    assert_eq!(set, json!({ "notifications": "on", "notificationPreview": false, "language": null, "onboardingComplete": false }));
     assert_eq!(f.engine.rpc("mobile.settings.get", json!({})).unwrap(), set);
     assert!(f.engine.notifications_on());
     assert!(!f.engine.notification_preview());

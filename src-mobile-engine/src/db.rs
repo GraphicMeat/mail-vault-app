@@ -619,8 +619,9 @@ impl Engine {
     }
 
     /// Stores `value` under `key`, replacing what was there. Never a secret. The user's settings
-    /// (`notifications`, `notificationPreview`) go through the same checks and side effects as
-    /// `mobile.settings.set` (turning notifications on takes the background run's baseline).
+    /// (`notifications`, `notificationPreview`, `language`, `onboardingComplete`) go through the
+    /// same checks and side effects as `mobile.settings.set` (turning notifications on takes the
+    /// background run's baseline).
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), EngineError> {
         if crate::settings::is_internal(key) {
             return Err(EngineError::Db(format!("{key} is the engine's own")));

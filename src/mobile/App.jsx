@@ -27,6 +27,9 @@
 // mount (a cold launch's tap came before the page) and on each `mobile.notification.open`: the app
 // opens that account and folder and the message, or says the message is gone. `?ui=notify`
 // (perf-gate only) turns notifications on and asks for the permission, for the device check.
+//
+// A fresh install (no accounts, tour never finished) opens the first-run tour (onboarding/) before
+// anything else; Settings' Replay tour opens it again, without its account step.
 import React, { useCallback, useEffect, useState } from 'react';
 import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, takeNotificationTap } from './transport.js';
 import { useMobileStore } from './store.js';
@@ -48,6 +51,8 @@ import FollowUpList from './FollowUpList.jsx';
 import Settings from './Settings.jsx';
 import Search from './Search.jsx';
 import Premium from './Premium.jsx';
+import Onboarding from './onboarding/Onboarding.jsx';
+import { mobileOnboardingSteps, onboardingGate } from './onboarding/steps.js';
 import { startPremiumSync } from './premium.js';
 
 function logLine(payload) {
@@ -89,6 +94,9 @@ const DEMO_SIGNIN = (PERF_BUILD && { signin: 'open', 'signin-close': 'close' }[Q
 // first adds a password account on that local mock server (perf-gate shells allow plaintext to
 // loopback only).
 const DEMO_NOTIFY = PERF_BUILD && QUERY.get('ui') === 'notify';
+// The first-run tour never runs under the perf probe, the device probe or a `?ui=` screen hook:
+// those start on a fresh engine and expect the add-account screen or the list.
+const NO_TOUR = PERF || QUERY.has('ui') || QUERY.has('probe');
 let demoComposeStarted = false;
 let viewerScriptStarted = false;
 let perfStarted = false;
@@ -582,6 +590,44 @@ function App() {
     if (DEMO_SIGNIN && status === 'ready') setPanel('add');
   }, [status]);
 
+  // The first-run tour (onboarding/): decided once, when the accounts are known. A fresh install
+  // (never finished, no accounts) shows it before anything else; one with accounts is marked done
+  // without seeing it. Held in state from then on: adding an account in the tour makes the store
+  // 'ready' mid-way, and the tour must stay up. Settings' Replay tour opens it again.
+  const [tour, setTour] = useState(null); // null | { steps }
+  const [tourChecked, setTourChecked] = useState(NO_TOUR);
+  useEffect(() => {
+    if (tourChecked || (status !== 'noAccount' && status !== 'ready')) return undefined;
+    let live = true;
+    const accountCount = useMobileStore.getState().accounts.length;
+    daemonCall('mobile.settings.get').then(
+      (settings) => {
+        if (!live) return;
+        const gate = onboardingGate(settings, accountCount);
+        if (gate === 'show') setTour({ steps: mobileOnboardingSteps(0) });
+        if (gate === 'markComplete') daemonCall('mobile.settings.set', { onboardingComplete: true }).catch(() => {});
+        setTourChecked(true);
+      },
+      () => { if (live) setTourChecked(true); },
+    );
+    return () => { live = false; };
+  }, [status, tourChecked]);
+  const onReplayTour = useCallback(() => {
+    setSettingsOpen(false);
+    setPanel(null);
+    setTour({ steps: mobileOnboardingSteps(useMobileStore.getState().accounts.length) });
+  }, []);
+  const closeTour = useCallback(() => setTour(null), []);
+
+  if (tour) {
+    return (
+      <div className="mv-app">
+        <Onboarding steps={tour.steps} onAdd={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onFinish={closeTour} />
+        <Toasts />
+      </div>
+    );
+  }
+
   if (status === 'noAccount') {
     return (
       <div className="mv-app">
@@ -589,10 +635,10 @@ function App() {
       </div>
     );
   }
-  if (status === 'loading' || status === 'failed') {
+  if (status === 'loading' || status === 'failed' || (status === 'noAccount' && !tourChecked)) {
     return (
       <div className="mv-app">
-        {status === 'loading' ? (
+        {status !== 'failed' ? (
           <p className="mv-status">{t('explorer.loading')}</p>
         ) : (
           <div className="mv-status">
@@ -720,7 +766,7 @@ function App() {
       {searchOpen && <Search onOpen={onOpenResult} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
-      {settingsOpen && <Settings onClose={closeSettings} />}
+      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} />}
       {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
       {compose && (
         <Compose
