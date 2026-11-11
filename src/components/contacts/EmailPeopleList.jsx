@@ -4,7 +4,7 @@ import { useContactsViewStore } from '../../stores/contactsViewStore';
 import { usePeopleStore } from '../../stores/peopleStore';
 import { ContactRow } from './ContactRow';
 
-const ROLES = ['from', 'to', 'cc'];
+const ROLE_LABEL = { from: 'common.from', to: 'common.to', cc: 'contacts.role.cc' };
 
 /** The open email's sender and recipients, grouped by role. A saved one opens its contact. */
 export function EmailPeopleList() {
@@ -31,12 +31,12 @@ export function EmailPeopleList() {
   return (
     <section className="w-80 flex flex-col border-r border-mail-border min-h-0 overflow-y-auto" data-testid="email-people">
       {participants.length === 0 && <p className="p-6 text-sm text-mail-text-secondary text-center">{t('contacts.email.empty')}</p>}
-      {ROLES.map((role) => {
+      {Object.keys(ROLE_LABEL).map((role) => {
         const group = participants.filter((p) => p.role === role);
         if (!group.length) return null;
         return (
           <div key={role}>
-            <h3 className="px-3 pt-3 pb-1 text-xs font-semibold uppercase text-mail-text-secondary">{t(`contacts.role.${role}`)}</h3>
+            <h3 className="px-3 pt-3 pb-1 text-xs font-semibold uppercase text-mail-text-secondary">{t(ROLE_LABEL[role])}</h3>
             {group.map((p) => {
               const own = owned?.[p.address.toLowerCase()];
               const selected = own ? selectedId === own.personId : sender?.address === p.address;

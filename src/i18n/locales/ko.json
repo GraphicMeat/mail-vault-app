@@ -522,8 +522,6 @@
   "contacts.scope.favorites": "즐겨찾기",
   "contacts.scope.contacts": "연락처",
   "contacts.scope.senders": "모든 발신자",
-  "contacts.role.from": "보낸 사람",
-  "contacts.role.to": "받는 사람",
   "contacts.role.cc": "참조",
   "contacts.action.email": "메일 쓰기",
   "contacts.action.copy": "주소 복사",

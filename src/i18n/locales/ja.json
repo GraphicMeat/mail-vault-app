@@ -522,8 +522,6 @@
   "contacts.scope.favorites": "お気に入り",
   "contacts.scope.contacts": "連絡先",
   "contacts.scope.senders": "すべての送信者",
-  "contacts.role.from": "差出人",
-  "contacts.role.to": "宛先",
   "contacts.role.cc": "Cc",
   "contacts.action.email": "メールを書く",
   "contacts.action.copy": "アドレスをコピー",

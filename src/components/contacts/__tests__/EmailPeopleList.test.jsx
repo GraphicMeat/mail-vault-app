@@ -38,7 +38,7 @@ describe('EmailPeopleList', () => {
   it('groups participants under From, To and Cc', async () => {
     render(<EmailPeopleList />);
     const headings = screen.getAllByRole('heading', { level: 3 }).map((e) => e.textContent);
-    expect(headings).toEqual(['contacts.role.from', 'contacts.role.to', 'contacts.role.cc']);
+    expect(headings).toEqual(['common.from', 'common.to', 'contacts.role.cc']);
     await waitFor(() => expect(h.people.getState().owners).toHaveBeenCalled());
     expect(screen.getByTestId('email-person-cy@x.io').textContent).toContain('cy@x.io');
   });

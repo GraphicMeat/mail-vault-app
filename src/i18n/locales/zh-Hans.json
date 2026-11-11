@@ -522,8 +522,6 @@
   "contacts.scope.favorites": "收藏",
   "contacts.scope.contacts": "联系人",
   "contacts.scope.senders": "所有发件人",
-  "contacts.role.from": "发件人",
-  "contacts.role.to": "收件人",
   "contacts.role.cc": "抄送",
   "contacts.action.email": "写邮件",
   "contacts.action.copy": "复制地址",

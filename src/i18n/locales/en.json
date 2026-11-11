@@ -522,8 +522,6 @@
   "contacts.scope.favorites": "Favorites",
   "contacts.scope.contacts": "Contacts",
   "contacts.scope.senders": "All senders",
-  "contacts.role.from": "From",
-  "contacts.role.to": "To",
   "contacts.role.cc": "Cc",
   "contacts.action.email": "Email",
   "contacts.action.copy": "Copy address",
