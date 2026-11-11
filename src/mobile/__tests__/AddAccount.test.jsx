@@ -12,6 +12,13 @@ import { ERROR_KEYS, errorKey } from '../errors.js';
 import { t } from '../i18n.js';
 import en from '../../i18n/locales/en.json';
 
+vi.mock('../scanner.js', () => ({
+  cameraAccess: vi.fn(async () => 'granted'),
+  scanQr: vi.fn(() => new Promise(() => {})),
+  cancelScan: vi.fn(async () => {}),
+  openCameraSettings: vi.fn(async () => {}),
+}));
+
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(),
   listen: vi.fn(() => () => {}),
@@ -526,5 +533,35 @@ describe('AddAccount JMAP form', () => {
     const r = await useMobileStore.getState().addAccount({ kind: 'jmap', email: 'a@example.test', password: 'pw', jmapUrl: 'https://x.test/' });
     expect(calls('mobile.accounts.add')[0][1]).toEqual({ kind: 'jmap', email: 'a@example.test', password: 'pw', jmapUrl: 'https://x.test/' });
     expect(r).toEqual({ ok: false, code: 'CONFIRM_HOST', host: 'jmap.host.test', jmapUrl: 'https://jmap.host.test/s' });
+  });
+});
+
+describe('AddAccount: import from computer', () => {
+  it('offers the import first, above the providers', () => {
+    render(<AddAccount onSubmit={vi.fn()} onOAuth={vi.fn()} onImport={vi.fn()} />);
+    const entries = [...document.querySelectorAll('.mv-provider')].map((b) => b.dataset.provider);
+    expect(entries).toEqual(['import', 'google', 'microsoft', 'jmap', 'imap']);
+    expect(screen.getByRole('button', { name: t('mobile.import.entry') })).toBeTruthy();
+  });
+
+  it('opens the import steps, and Back comes back to the picker', () => {
+    render(<AddAccount onSubmit={vi.fn()} onImport={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.import.entry') }));
+    expect(screen.getByRole('heading', { name: t('mobile.import.title') })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(screen.getByRole('button', { name: t('mobile.import.entry') })).toBeTruthy();
+  });
+
+  it('can start on the import (onboarding), and hands the import and its end to the caller', async () => {
+    const onImport = vi.fn(async () => ({ ok: true, imported: ['a@example.test'], existing: [], skipped: [] }));
+    const onImported = vi.fn();
+    render(<AddAccount onSubmit={vi.fn()} onImport={onImport} onImported={onImported} initialStep="import" />);
+    expect(screen.getByRole('heading', { name: t('mobile.import.title') })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: t('mobile.import.entry') })).toBeNull();
+  });
+
+  it('has no import entry when the caller cannot import', () => {
+    render(<AddAccount onSubmit={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: t('mobile.import.entry') })).toBeNull();
   });
 });

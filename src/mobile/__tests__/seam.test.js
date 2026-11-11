@@ -11,6 +11,10 @@ const ENTRY = here('../main.jsx');
 const METHODS = JSON.parse(readFileSync(here('../../../src-mobile-engine/methods.json'), 'utf8'));
 const EVENTS = JSON.parse(readFileSync(here('../../../src-mobile-engine/events.json'), 'utf8'));
 const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_auth_close', 'mobile_auth_open', 'mobile_log', 'mobile_notification_take', 'mobile_notifications_permission', 'mobile_open_file', 'mobile_pick_files', 'mobile_share_file', 'mobile_store_products', 'mobile_store_purchase', 'mobile_store_restore'];
+// The camera: the official barcode scanner plugin's own commands (scanner.js), and nothing else of it.
+const SCANNER_INVOKES = ['plugin:barcode-scanner|cancel', 'plugin:barcode-scanner|check_permissions', 'plugin:barcode-scanner|open_app_settings', 'plugin:barcode-scanner|request_permissions', 'plugin:barcode-scanner|scan'];
+// A plugin command other than the scanner's.
+const otherPlugin = (c) => c.startsWith('plugin:') && !SCANNER_INVOKES.includes(c);
 // Desktop stores (and `plugin-fs`) would bring the desktop RPC graph with them.
 const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|sparkle|features\/blitz|e2eMotion|src\/stores\//i;
 
@@ -24,14 +28,20 @@ describe('mobile seam', () => {
   it('only_daemon_rpc_is_invoked', async () => {
     const { invokes } = await analyzeSeam(ENTRY);
     expect(invokes.length).toBeGreaterThan(0);
-    expect(invokes.filter((c) => !ALLOWED_INVOKES.includes(c))).toEqual([]);
+    expect(invokes.filter((c) => !ALLOWED_INVOKES.includes(c) && !SCANNER_INVOKES.includes(c))).toEqual([]);
+  });
+
+  it('the_camera_is_reached_through_the_barcode_scanner_commands_only', async () => {
+    const { invokes } = await analyzeSeam(ENTRY);
+    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual(SCANNER_INVOKES);
+    expect(invokes.filter((c) => !c.startsWith('plugin:') && /scan|camera/.test(c))).toEqual([]);
   });
 
   it('open_and_share_are_the_only_file_commands', async () => {
     const { invokes } = await analyzeSeam(ENTRY);
     expect(invokes.filter((c) => c.startsWith('mobile_') && c.endsWith('_file')).sort()).toEqual(['mobile_open_file', 'mobile_share_file']);
     // The shell's own plugin registers no commands JS could reach.
-    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
+    expect(invokes.filter(otherPlugin)).toEqual([]);
   });
 
   it('pick_files_is_the_only_picker_command', async () => {
@@ -39,20 +49,20 @@ describe('mobile seam', () => {
     expect(invokes).toContain('mobile_pick_files');
     expect(invokes.filter((c) => /pick/.test(c))).toEqual(['mobile_pick_files']);
     // Still no plugin command: the picker is reached through the shell only.
-    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
+    expect(invokes.filter(otherPlugin)).toEqual([]);
   });
 
   it('the_auth_sheet_is_opened_and_closed_through_the_shell_only', async () => {
     const { invokes } = await analyzeSeam(ENTRY);
     expect(invokes.filter((c) => /auth/.test(c))).toEqual(['mobile_auth_close', 'mobile_auth_open']);
-    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
+    expect(invokes.filter(otherPlugin)).toEqual([]);
   });
 
   it('the_store_is_reached_through_the_three_shell_commands_only', async () => {
     const { invokes } = await analyzeSeam(ENTRY);
     expect(invokes.filter((c) => /store/.test(c))).toEqual(['mobile_store_products', 'mobile_store_purchase', 'mobile_store_restore']);
     expect(ALLOWED_INVOKES).toHaveLength(12);
-    expect(invokes.filter((c) => c.startsWith('plugin:'))).toEqual([]);
+    expect(invokes.filter(otherPlugin)).toEqual([]);
   });
 
   it('no_desktop_only_modules', async () => {

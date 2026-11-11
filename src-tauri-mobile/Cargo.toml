@@ -30,6 +30,10 @@ serde = { version = "1.0", features = ["derive"] }
 mailvault-mobile-engine = { path = "../src-mobile-engine" }
 # The platform secret store behind the engine's SecretStore (src/secrets.rs).
 keyring-core = "1"
+# The camera for "Import from computer" (the desktop's set-up QR code). Official Tauri plugin,
+# MIT OR Apache-2.0. Mobile only (the crate is empty on a host build), but listed for every target so
+# its build script registers the permissions the capability names. Same 2.5 line as the npm side.
+tauri-plugin-barcode-scanner = "2.5"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 # "protected": the data-protection keychain, the one an iOS app has.

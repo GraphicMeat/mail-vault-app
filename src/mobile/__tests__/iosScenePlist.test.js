@@ -28,4 +28,13 @@ describe('iOS Info.ios.plist', () => {
       '<key>BGTaskSchedulerPermittedIdentifiers</key><array><string>com.mailvault.app.refresh</string></array>',
     );
   });
+
+  // The barcode scanner refuses to start without it, and iOS kills an app that opens the camera
+  // with no usage string.
+  it('says why it asks for the camera', () => {
+    const compact = readFileSync(plistPath, 'utf8').replace(/\s+/g, ' ');
+    const m = compact.match(/<key>NSCameraUsageDescription<\/key> <string>([^<]+)<\/string>/);
+    expect(m, 'NSCameraUsageDescription').not.toBeNull();
+    expect(m[1]).toMatch(/code/i);
+  });
 });

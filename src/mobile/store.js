@@ -20,6 +20,9 @@ import { createPageCache, PAGE_SIZE } from './messagePages.js';
 import { errorCodeOf, errorKey } from './errors.js';
 import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
 
+// The import's own refusals (`mobile.transfer.import`), shown by ImportFromDesktop.
+const IMPORT_CODES = ['BAD_PASSWORD', 'PASSWORD_SHORT', 'INVALID'];
+
 export const STORAGE_ACCOUNT = 'mv.mobile.activeAccount';
 export const STORAGE_FOLDER = 'mv.mobile.activeFolder';
 /** The last searches typed, newest first. Page storage only: they never reach the engine. */
@@ -581,6 +584,55 @@ export function createMobileStore() {
         }
         await adopt(reply.account);
         return { ok: true };
+      },
+
+      /**
+       * "Import from computer": the engine opens the set-up code's `frames` with `password` and
+       * stores its accounts (`mobile.transfer.import`, no sign-in). Answers `{ ok: true, imported,
+       * existing, skipped }` or `{ ok: false, code }` (`BAD_PASSWORD`, `PASSWORD_SHORT`, `INVALID`,
+       * else an accounts code or `INTERNAL`). The new accounts are listed at once; the open one
+       * stays until `openImported`, so the result screen is not replaced under the user.
+       * Never keeps the password.
+       */
+      async importFromDesktop({ frames, password }) {
+        let reply;
+        try {
+          reply = await daemonCall('mobile.transfer.import', { frames, password });
+        } catch (err) {
+          return { ok: false, code: errorCodeOf(err?.code) };
+        }
+        if (!reply?.ok) {
+          const code = IMPORT_CODES.includes(reply?.code) ? reply.code : errorCodeOf(reply?.code);
+          return { ok: false, code };
+        }
+        const result = {
+          ok: true,
+          imported: Array.isArray(reply.imported) ? reply.imported : [],
+          existing: Array.isArray(reply.existing) ? reply.existing : [],
+          skipped: Array.isArray(reply.skipped) ? reply.skipped.map((s) => ({ email: s?.email, reason: s?.reason })) : [],
+        };
+        if (result.imported.length) {
+          try {
+            const { accounts } = await daemonCall('mobile.accounts.list');
+            const known = new Set(get().accounts.map((a) => a.id));
+            set((s) => ({
+              accounts,
+              unread: Object.fromEntries(accounts.map((a) => [a.id, s.unread[a.id] ?? 0])),
+            }));
+            for (const a of accounts) if (!known.has(a.id)) loadFoldersQuietly(a.id);
+          } catch {
+            // Stored all the same: the next launch lists them.
+          }
+        }
+        return result;
+      },
+
+      /** Opens the first of the imported addresses, as an added account is opened. */
+      async openImported(imported) {
+        const first = Array.isArray(imported) && imported.length
+          ? get().accounts.find((a) => a.email?.toLowerCase() === String(imported[0]).toLowerCase())
+          : null;
+        if (first) await activate(first.id, INBOX);
       },
 
       /**

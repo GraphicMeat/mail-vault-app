@@ -31,6 +31,13 @@ vi.mock('../transport.js', () => ({
         engine.accounts.push(account);
         return { ok: true, account };
       }
+      case 'mobile.transfer.import': {
+        if (params.password !== 'right-password') return { ok: false, code: params.password === 'odd' ? 'SOMETHING_NEW' : 'BAD_PASSWORD' };
+        const account = { id: 'acc_imp', email: 'imp@example.test', displayName: 'imp@example.test' };
+        engine.accounts.push(account);
+        engine.folders.acc_imp = [inbox(0)];
+        return { ok: true, imported: ['imp@example.test'], existing: ['a1@example.test'], skipped: [{ email: 'x@example.test', reason: 'invalid' }] };
+      }
       case 'mobile.messages.page': {
         const key = `${params.accountId}/${params.folder}`;
         const rows = engine.rows[key] || [];
@@ -264,6 +271,46 @@ describe('mobile store', () => {
     expect(s.accounts).toHaveLength(4);
     expect(JSON.stringify(s)).not.toContain('right');
     expect(JSON.stringify({ ...localStorage })).not.toContain('right');
+  });
+
+  it('importFromDesktop lists the imported accounts, and opens the first once the user is done', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    const frames = ['MVQR1:aaaaaaaa:1/1:QUJD'];
+    await expect(store.getState().importFromDesktop({ frames, password: 'right-password' })).resolves.toEqual({
+      ok: true, imported: ['imp@example.test'], existing: ['a1@example.test'], skipped: [{ email: 'x@example.test', reason: 'invalid' }],
+    });
+    expect(callsOf('mobile.transfer.import')).toEqual([{ frames, password: 'right-password' }]);
+    // Listed at once; the screen with the result stays until Done.
+    expect(store.getState().accounts.map((a) => a.id)).toContain('acc_imp');
+    expect(store.getState().activeAccountId).toBe('a1');
+    await store.getState().openImported(['imp@example.test']);
+    expect(store.getState().activeAccountId).toBe('acc_imp');
+    expect(callsOf('mobile.sync.refresh').some((p) => p.accountId === 'acc_imp')).toBe(true);
+    expect(JSON.stringify(store.getState())).not.toContain('right-password');
+  });
+
+  it('importFromDesktop on a fresh install keeps the add screen until Done', async () => {
+    engine.accounts = [];
+    const store = createMobileStore();
+    await store.getState().init();
+    expect(store.getState().status).toBe('noAccount');
+    await store.getState().importFromDesktop({ frames: ['f'], password: 'right-password' });
+    expect(store.getState().status).toBe('noAccount');
+    await store.getState().openImported(['imp@example.test']);
+    expect(store.getState().status).toBe('ready');
+    expect(store.getState().activeAccountId).toBe('acc_imp');
+    // Nothing imported: nothing to open.
+    await store.getState().openImported([]);
+    expect(store.getState().activeAccountId).toBe('acc_imp');
+  });
+
+  it('importFromDesktop answers the engine code, and an unknown or thrown one as INTERNAL', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    await expect(store.getState().importFromDesktop({ frames: ['f'], password: 'wrong-password' })).resolves.toEqual({ ok: false, code: 'BAD_PASSWORD' });
+    await expect(store.getState().importFromDesktop({ frames: ['f'], password: 'odd' })).resolves.toEqual({ ok: false, code: 'INTERNAL' });
+    expect(store.getState().accounts).toHaveLength(3);
   });
 
   it('signIn adds and opens the provider account; a cancel changes nothing', async () => {

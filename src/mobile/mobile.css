@@ -706,6 +706,44 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-provider:active { background: var(--mail-surface-hover); }
 .mv-provider:disabled { opacity: 0.5; }
 .mv-add__waiting { margin: 0; color: var(--mail-text-muted); }
+.mv-provider[data-provider="import"] { border-color: var(--mail-accent); color: var(--mail-accent-text); }
+
+/* Import from computer: the steps, two pictures of the computer, the FAQ entry. */
+.mv-import__steps { margin: 0; padding-inline-start: 1.4em; display: flex; flex-direction: column; gap: 8px; line-height: 1.4; }
+.mv-import__shots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mv-import__shot { width: 100%; height: auto; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-surface); }
+.mv-import__faq { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; color: var(--mail-accent-text); font-weight: 500; }
+.mv-import__secret { display: flex; gap: 8px; align-items: center; }
+.mv-import__secret .mv-input { flex: 1; }
+.mv-import__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
+.mv-import__list li { display: flex; flex-direction: column; gap: 2px; }
+.mv-import__reason { font-size: 0.875rem; color: var(--mail-text-muted); }
+/* The camera runs behind the page (the scanner's windowed mode): while it does, the page is
+   see-through and only the scanning layer shows. */
+.mv-import-scanning, .mv-import-scanning body { background: transparent !important; }
+.mv-import-scanning body > * { visibility: hidden; }
+.mv-import-scanning .mv-import-scan { visibility: visible; }
+.mv-import-scan { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; justify-content: space-between; }
+.mv-import-scan__frame {
+  align-self: center;
+  margin-top: calc(var(--mv-safe-top) + 15vh);
+  width: min(70vw, 280px);
+  aspect-ratio: 1;
+  border: 3px solid #fff;
+  border-radius: 20px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+}
+.mv-import-scan__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px calc(var(--mv-safe-right) + 20px) calc(var(--mv-safe-bottom) + 16px) calc(var(--mv-safe-left) + 20px);
+  border-radius: 16px 16px 0 0;
+  background: var(--mail-bg);
+}
+.mv-import-scan__title { margin: 0; font-size: 1rem; font-weight: 600; }
+.mv-import-scan__progress { margin: 0; min-height: 1.4em; color: var(--mail-text-muted); display: flex; flex-direction: column; gap: 4px; }
+.mv-import-scan__hint { color: var(--mv-danger); }
 .mv-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .mv-field__label { font-size: 0.8125rem; font-weight: 500; color: var(--mail-text-muted); }
 .mv-input {

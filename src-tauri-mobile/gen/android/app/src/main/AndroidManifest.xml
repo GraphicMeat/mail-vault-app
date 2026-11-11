@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- New-mail notifications from the background run (Android 13 and later ask for it). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The barcode scanner, for Import from computer (the desktop's set-up code). Its library
+         manifest asks for the same; a phone without a camera can still install the app. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" tools:replace="android:required" />
 
     <application
         android:icon="@mipmap/ic_launcher"

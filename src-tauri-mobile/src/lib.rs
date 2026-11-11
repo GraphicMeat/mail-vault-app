@@ -532,6 +532,12 @@ pub fn run() {
             // The native plugin, after the engine is open: on Android registering it waits until the
             // webview exists, and the page's first calls wait for the engine meanwhile. Without it attachments cannot open and links stay cancelled (the guard above denies
             // them all the same); the rest of the app works.
+            // The camera for "Import from computer"; registered here like the native plugin, so on
+            // Android it never holds up the engine. Without it the import says the camera failed.
+            #[cfg(mobile)]
+            if let Err(e) = app.handle().plugin(tauri_plugin_barcode_scanner::init()) {
+                log_line(&format!("MV_MOBILE {}", json!({ "scannerPluginError": e.to_string() })));
+            }
             if let Err(e) = app.handle().plugin(tauri_plugin_mv_native::init()) {
                 log_line(&format!("MV_MOBILE {}", json!({ "nativePluginError": e.to_string() })));
             } else if let Ok(engine) = engine {

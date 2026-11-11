@@ -3,7 +3,10 @@
 // form (email, app password or token, and the server URL under Advanced; the engine finds the
 // server when none is typed), and "Other (IMAP)" opens the IMAP form below. A JMAP server the
 // engine found on another domain is never sent the password unasked: the form names its host and
-// sends again only when the user confirms (the URL then counts as typed). While a sign-in runs,
+// sends again only when the user confirms (the URL then counts as typed). "Import from computer",
+// first when the caller can import (`onImport`), opens ImportFromDesktop; `initialStep="import"`
+// starts there (onboarding), and its Back is then the caller's `onCancel` when there is one.
+// `onImported({ imported })` follows the import's Done. While a sign-in runs,
 // Cancel stays live: it ends the flow (`onOAuthCancel`) and comes back to the picker at once, so a
 // sheet whose answer never comes cannot strand the user.
 // The IMAP form: email and password first, then the server, prefilled from the address's
@@ -14,6 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useT } from './i18n.js';
 import { errorKey } from './errors.js';
+import ImportFromDesktop from './ImportFromDesktop.jsx';
 
 const DEFAULT_PORT = { ssl: 993, starttls: 143, none: 143 };
 const DEFAULT_SMTP_PORT = { ssl: 465, starttls: 587 };
@@ -50,9 +54,10 @@ const PROVIDERS = [
   ['imap', 'mobile.add.imap'],
 ];
 
-export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel, autoStart = null }) {
+export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel, onImport, onImported, initialStep = 'picker', autoStart = null }) {
   const t = useT();
-  const [step, setStep] = useState('picker'); // 'picker' | 'waiting' | 'credentials' | 'server' | 'jmap'
+  // 'picker' | 'import' | 'waiting' | 'credentials' | 'server' | 'jmap'
+  const [step, setStep] = useState(initialStep === 'import' && onImport ? 'import' : 'picker');
   const [jmapUrl, setJmapUrl] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [confirmHost, setConfirmHost] = useState(null); // { host, jmapUrl } while asking
@@ -106,7 +111,10 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
   };
 
   const choose = (provider) => {
-    if (provider === 'imap') {
+    if (provider === 'import') {
+      setErrorCode(null);
+      setStep('import');
+    } else if (provider === 'imap') {
       setErrorCode(null);
       setStep('credentials');
     } else if (provider === 'jmap') {
@@ -203,6 +211,22 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
     sendJmap(url);
   };
 
+  if (step === 'import') {
+    const leave = initialStep === 'import' && onCancel ? onCancel : () => setStep('picker');
+    return (
+      <ImportFromDesktop
+        onImport={onImport}
+        onCancel={leave}
+        onDone={(result) => {
+          onImported?.(result);
+          setStep('picker');
+        }}
+      />
+    );
+  }
+
+  const providers = onImport ? [['import', 'mobile.import.entry'], ...PROVIDERS] : PROVIDERS;
+
   return (
     <section className="mv-add" aria-labelledby="mv-add-title">
       <div className="mv-add__bar">
@@ -222,13 +246,13 @@ export default function AddAccount({ onSubmit, onOAuth, onOAuthCancel, onCancel,
       {step === 'picker' || step === 'waiting' ? (
         <div className="mv-add__form">
           <ul className="mv-providers" aria-label={t('mobile.add.pickProvider')}>
-            {PROVIDERS.map(([id, key]) => (
+            {providers.map(([id, key]) => (
               <li key={id}>
                 <button
                   type="button"
                   className="mv-provider"
                   data-provider={id}
-                  disabled={step === 'waiting' || (id !== 'imap' && id !== 'jmap' && !onOAuth)}
+                  disabled={step === 'waiting' || ((id === 'google' || id === 'microsoft') && !onOAuth)}
                   onClick={() => choose(id)}
                 >
                   {t(key)}

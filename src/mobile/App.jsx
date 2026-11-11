@@ -545,6 +545,14 @@ function App() {
     if (result.ok) setPanel(null);
     return result;
   }, []);
+  const onImport = useCallback((request) => useMobileStore.getState().importFromDesktop(request), []);
+  // The import's Done: open the first imported account and close the panel; nothing imported
+  // leaves the picker up.
+  const onImported = useCallback(async ({ imported }) => {
+    if (!imported?.length) return;
+    setPanel(null);
+    await useMobileStore.getState().openImported(imported);
+  }, []);
   const onOAuth = useCallback(async (provider) => {
     if (DEMO_SIGNIN === 'close') {
       setTimeout(() => {
@@ -577,7 +585,7 @@ function App() {
   if (status === 'noAccount') {
     return (
       <div className="mv-app">
-        <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} autoStart={DEMO_SIGNIN ? 'google' : null} />
+        <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onImport={onImport} onImported={onImported} autoStart={DEMO_SIGNIN ? 'google' : null} />
       </div>
     );
   }
@@ -691,7 +699,7 @@ function App() {
       )}
       {panel === 'add' && (
         <div className="mv-add-overlay">
-          <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onCancel={closePanel} autoStart={DEMO_SIGNIN ? 'google' : null} />
+          <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onCancel={closePanel} onImport={onImport} onImported={onImported} autoStart={DEMO_SIGNIN ? 'google' : null} />
         </div>
       )}
       {open && (
