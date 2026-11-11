@@ -8,7 +8,7 @@ use crate::message_delete_characterization_tests::{bin_rows, break_the_bin, plai
 use crate::test_support::handle_request_for_test;
 use mailvault_core::custody::cache;
 use mailvault_core::vault_files;
-use mock_imap::state::{Mailbox, Message};
+use mock_imap::state::{GmailMsg, Mailbox, Message};
 use mock_imap::{Action, MockImap, Scenario, Trigger};
 use serde_json::json;
 
@@ -296,6 +296,84 @@ fn rule_server(folder: &str, trash: Option<&str>) -> (MockImap, Arc<DaemonState>
     let srv = MockImap::start(rule_scenario(folder, trash));
     let (s, config) = rule_state(&srv, folder);
     (srv, s, config)
+}
+
+#[tokio::test]
+async fn a_dropped_trash_lookup_is_retried_and_the_delete_lands() {
+    let srv = MockImap::start(
+        rule_scenario("Sent", Some("Trash"))
+            .fault(Trigger::nth("LIST", 1), Action::DropConnection),
+    );
+    let (s, config) = rule_state(&srv, "Sent");
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "Sent", 1, Mode::Auto, true)
+        .await
+        .expect("the delete retries after a dropped Trash lookup");
+    assert_eq!(out.trash.as_deref(), Some("Trash"));
+    assert!(srv.state().find("Sent").unwrap().messages.is_empty());
+    assert_eq!(srv.state().find("Trash").unwrap().messages.len(), 1);
+    assert_eq!(bin_rows(&s).len(), 1);
+}
+
+#[tokio::test]
+async fn a_dropped_list_inside_the_move_is_retried_and_the_delete_lands() {
+    let srv = MockImap::start(
+        rule_scenario("INBOX", Some("Trash"))
+            .fault(Trigger::nth("LIST", 1), Action::DropConnection),
+    );
+    let (s, config) = rule_state(&srv, "INBOX");
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "INBOX", 1, Mode::Trash, false)
+        .await
+        .expect("the move retries after LIST drops");
+    assert_eq!(out.trash.as_deref(), Some("Trash"));
+    assert!(srv.state().find("INBOX").unwrap().messages.is_empty());
+    assert_eq!(srv.state().find("Trash").unwrap().messages.len(), 1);
+}
+
+#[tokio::test]
+async fn a_note_in_inbox_and_sent_deleted_at_once_both_land_in_trash() {
+    let srv = MockImap::start(rule_scenario("Sent", Some("Trash")));
+    srv.mutate(|state| { state.find_mut("INBOX").unwrap().add(Message::new(1, RAW)); });
+    let (s, config) = rule_state(&srv, "Sent");
+    let headers = json!({"emails": [{"uid": 1, "messageId": "<keep1@example.com>", "subject": "Keep me"}]}).to_string();
+    crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", "INBOX", &headers)).unwrap();
+
+    let (inbox, sent) = tokio::join!(
+        delete_one(&s, Provider::Imap(&config), "acc1", "INBOX", 1, Mode::Auto, true),
+        delete_one(&s, Provider::Imap(&config), "acc1", "Sent", 1, Mode::Auto, true),
+    );
+    assert!(inbox.is_ok(), "INBOX: {inbox:?}");
+    assert!(sent.is_ok(), "Sent: {sent:?}");
+    assert!(srv.state().find("INBOX").unwrap().messages.is_empty());
+    assert!(srv.state().find("Sent").unwrap().messages.is_empty());
+    assert_eq!(srv.state().find("Trash").unwrap().messages.len(), 2);
+}
+
+#[tokio::test]
+async fn a_gmail_note_deleted_from_every_label_at_once_ends_in_trash_once() {
+    let srv = MockImap::start(
+        Scenario::gmail().gmail_message(GmailMsg::new(RAW).labels(&["\\Inbox", "\\Sent"])),
+    );
+    let (s, config) = rule_state(&srv, "INBOX");
+    let folders = ["INBOX", "[Gmail]/Sent Mail", "[Gmail]/All Mail"];
+    let uids: Vec<u32> = folders.iter().map(|folder| srv.state().find(folder).unwrap().messages[0].uid).collect();
+    for (&folder, &uid) in folders.iter().zip(&uids).skip(1) {
+        let headers = json!({"emails": [{"uid": uid, "messageId": "<keep1@example.com>", "subject": "Keep me"}]}).to_string();
+        crate::custody::with_conn(&s, |c| cache::save_headers(c, "acc1", folder, &headers)).unwrap();
+    }
+
+    let (inbox, sent, all_mail) = tokio::join!(
+        delete_one(&s, Provider::Imap(&config), "acc1", folders[0], uids[0], Mode::Auto, false),
+        delete_one(&s, Provider::Imap(&config), "acc1", folders[1], uids[1], Mode::Auto, false),
+        delete_one(&s, Provider::Imap(&config), "acc1", folders[2], uids[2], Mode::Auto, false),
+    );
+    for result in [inbox, sent, all_mail] {
+        assert!(result.is_ok(), "every copy delete is accepted: {result:?}");
+    }
+    let state = srv.state();
+    assert_eq!(state.find("[Gmail]/Trash").unwrap().messages.len(), 1);
+    for folder in folders {
+        assert!(state.find(folder).unwrap().messages.is_empty(), "{folder} is empty");
+    }
 }
 
 /// Sent, Archive, Spam and a custom folder: `auto` moves to Trash, with an

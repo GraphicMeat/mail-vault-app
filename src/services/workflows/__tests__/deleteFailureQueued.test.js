@@ -258,6 +258,7 @@ describe('a server delete the server refuses', () => {
       'Failed to delete email: connection reset by peer (os error 54)',
       'Failed to delete email: connection closed via error',
       'Failed to delete email: An existing connection was forcibly closed (os error 10054)',
+      'Could not find the Trash folder: LIST failed: connection lost (the reply ended before any mailbox)',
     ]) {
       prime([row(7), row(8)]);
       useMailStore.setState({ error: null });

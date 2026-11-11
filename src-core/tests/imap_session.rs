@@ -207,7 +207,27 @@ async fn a_dropped_list_is_an_error_not_an_empty_folder_list() {
     let err = list_mailboxes(&mut sess)
         .await
         .expect_err("a LIST on a dead socket must not report zero mailboxes");
-    assert!(!err.is_empty());
+    assert!(pool::is_connection_lost(&err), "must read as a lost connection: {err}");
+}
+
+#[async_std::test]
+async fn a_trash_lookup_whose_list_drops_is_asked_again_on_a_new_connection() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"]))
+            .fault(Trigger::nth("LIST", 1), Action::DropConnection),
+    );
+    let config = config_for(&server);
+    let trash = pool()
+        .run_read(&config, true, |mut session| async move {
+            let trash = resolve_trash_path(&mut session).await?;
+            Ok((trash, session, None))
+        })
+        .await
+        .expect("a fresh connection retries the Trash lookup");
+    assert_eq!(trash.as_deref(), Some("Trash"));
+    assert_eq!(server.connection_count(), 2, "the retry opens a new socket");
 }
 
 /// async-imap's `parse_mailbox` returns whatever it collected when the stream
