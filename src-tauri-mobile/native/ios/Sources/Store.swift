@@ -35,7 +35,7 @@ enum MvStore {
 
   private static let lock = NSLock()
   private static var listening = false
-  private static var installId: String?
+  private static var accountToken: String?
   /// Transactions being handed over or already finished in this run: each goes over once at a
   /// time (`Transaction.updates` and `Transaction.unfinished` can both deliver one).
   private static var claimed = Set<UInt64>()
@@ -110,21 +110,22 @@ enum MvStore {
     }
   }
 
-  /// This install's id from the engine (made on first use), cached for the process.
-  static func install() async -> String? {
+  /// This install's `appAccountToken` from the engine (a one-way hash of the install id, made on
+  /// first use), cached for the process.
+  static func appAccountToken() async -> String? {
     lock.lock()
-    let cached = installId
+    let cached = accountToken
     lock.unlock()
     if let cached = cached { return cached }
     let id: String = await blocking {
-      let raw = mv_store_install_id()
+      let raw = mv_store_account_token()
       defer { mv_free_string(raw) }
       guard let raw = raw else { return "" }
       return String(cString: raw)
     }
     guard !id.isEmpty else { return nil }
     lock.lock()
-    installId = id
+    accountToken = id
     lock.unlock()
     return id
   }
@@ -233,14 +234,14 @@ enum MvStore {
     }
   }
 
-  /// Buys `id` with this install's id as `appAccountToken`, then hands the transaction to the
+  /// Buys `id` with this install's `appAccountToken`, then hands the transaction to the
   /// engine before answering `{status, platform, productId, verify?}`.
   static func purchase(_ id: String, _ invoke: Invoke) async {
     guard productIds.contains(id) else {
       invoke.reject("not a MailVault product", code: "INVALID")
       return
     }
-    guard let install = await install(), let token = UUID(uuidString: install) else {
+    guard let raw = await appAccountToken(), let token = UUID(uuidString: raw) else {
       invoke.reject("no install id", code: "INTERNAL")
       return
     }

@@ -21,6 +21,17 @@ const MONTHLY = 'com.mailvault.app.premium.monthly';
 const YEARLY = 'com.mailvault.app.premium.yearly';
 const TEST_ROOT = new crypto.X509Certificate(fx('root.pem'));
 
+// StoreKit's appAccountToken for an install: a one-way UUID of the install id, so a receipt
+// (whose payload anyone holding it can read) never reveals the install id. Written out here
+// independently of the server; the engine (premium.rs) pins the same vector.
+function acct(installId) {
+  const h = crypto.createHash('sha256').update(`mailvault/appAccountToken/v1:${installId.toLowerCase()}`).digest().subarray(0, 16);
+  h[6] = (h[6] & 0x0f) | 0x80;
+  h[8] = (h[8] & 0x3f) | 0x80;
+  const x = h.toString('hex');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Apple JWS fixtures: signed with the test leaf key, raw r||s like the App Store.
 // ---------------------------------------------------------------------------
@@ -46,7 +57,7 @@ function tx(over = {}) {
     inAppOwnershipType: 'PURCHASED',
     signedDate: NOW - 60_000,
     environment: 'Production',
-    appAccountToken: INSTALL,
+    appAccountToken: acct(INSTALL),
     ...over,
   };
 }
@@ -310,11 +321,33 @@ describe('POST /api/billing/store/apple/verify', () => {
       expires_at: NOW + 25 * DAY, status: 'active', environment: 'Production',
     });
     // appAccountToken compares case-insensitively (StoreKit prints UUIDs upper case)
-    const [s2] = await appleVerify(billing, jws(tx({ appAccountToken: INSTALL.toUpperCase() })));
+    const [s2] = await appleVerify(billing, jws(tx({ appAccountToken: acct(INSTALL).toUpperCase() })));
     expect(s2).toBe(200);
     // the yearly product is accepted too
     const [s3, b3] = await appleVerify(billing, jws(tx({ productId: YEARLY, originalTransactionId: '2000000200' })));
     expect([s3, b3.entitled]).toEqual([200, true]);
+  });
+
+  it('apple_account_token_is_a_one_way_uuid_of_the_install_id', () => {
+    expect(acct('3f1c2b7a-9d4e-4c51-8a2f-6b0e5d9c1a77')).toBe('5d24a09b-88e1-8e7f-93d2-e47a42508791');
+    expect(acct('3F2504E0-4F89-11D3-9A0C-0305E82C3301')).toBe('5d5455f2-5303-8fc6-a255-dca43b552558');
+    expect(store.appleAccountToken(INSTALL)).toBe(acct(INSTALL));
+    expect(store.appleAccountToken(INSTALL.toUpperCase())).toBe(acct(INSTALL));
+  });
+
+  it('apple_receipt_holder_cannot_claim_the_buying_install', async () => {
+    // The buyer's phone verified: its install is a live member of the set.
+    const { billing, db } = setup();
+    const receipt = jws(tx());
+    expect((await appleVerify(billing, receipt))[0]).toBe(200);
+    // Whoever holds the shared receipt reads its appAccountToken and posts it as the install
+    // id: not the buying install, so the restore rules apply.
+    const token = JSON.parse(Buffer.from(receipt.split('.')[1], 'base64url').toString('utf8')).appAccountToken;
+    expect(await appleVerify(billing, receipt, token)).toEqual([403, { error: 'wrong_account' }]);
+    expect(await appleVerify(billing, receipt, token.toUpperCase())).toEqual([403, { error: 'wrong_account' }]);
+    expect(db.installs.map((r) => r.install_id)).toEqual([INSTALL]);
+    // The row names the buying install, never the token.
+    expect(db.subs[0].install_id).toBe(INSTALL);
   });
 
   it('apple_wrong_root_wrong_bundle_wrong_token_sandbox_in_prod_revoked_expired_are_refused', async () => {
@@ -330,7 +363,8 @@ describe('POST /api/billing/store/apple/verify', () => {
       ['signed in the future', jws(tx({ signedDate: NOW + DAY })), 'invalid_signature'],
       ['wrong bundle', jws(tx({ bundleId: 'com.example.other' })), 'wrong_bundle'],
       ['wrong product', jws(tx({ productId: 'com.mailvault.app.lifetime' })), 'wrong_product'],
-      ['wrong token', jws(tx({ appAccountToken: OTHER_INSTALL })), 'wrong_account'],
+      ['wrong token', jws(tx({ appAccountToken: acct(OTHER_INSTALL) })), 'wrong_account'],
+      ['raw install id as token', jws(tx({ appAccountToken: INSTALL })), 'wrong_account'],
       ['no token', jws(tx({ appAccountToken: undefined })), 'wrong_account'],
       ['xcode', jws(tx({ environment: 'Xcode' })), 'wrong_environment'],
       ['revoked', jws(tx({ revocationDate: NOW - DAY, revocationReason: 0 })), 'revoked'],
@@ -588,7 +622,7 @@ describe('restore rebinding', () => {
 
   it('original_install_never_hits_the_limit', async () => {
     const { billing, db, clock } = setup();
-    const receipt = jws(tx({ appAccountToken: inst(0) }));
+    const receipt = jws(tx({ appAccountToken: acct(inst(0)) }));
     for (let n = 1; n <= 5; n += 1) {
       clock.t += 1000;
       expect((await restoreApple(billing, receipt, inst(n)))[0]).toBe(200);
@@ -688,7 +722,7 @@ describe('restore rebinding', () => {
   it('no_restore_flag_still_refuses_a_foreign_receipt', async () => {
     const { billing, db } = setup({ subs: { 'tok-1': subV2() } });
     for (const restore of [undefined, false, 'true', 1]) {
-      expect(await billing.appleVerify({ signedTransaction: jws(tx({ appAccountToken: OTHER_INSTALL })), installId: INSTALL, restore }))
+      expect(await billing.appleVerify({ signedTransaction: jws(tx({ appAccountToken: acct(OTHER_INSTALL) })), installId: INSTALL, restore }))
         .toEqual([403, { error: 'wrong_account' }]);
       expect(await billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY, installId: OTHER_INSTALL, restore }))
         .toEqual([403, { error: 'wrong_account' }]);
@@ -815,6 +849,10 @@ describe('POST /api/billing/store/google/verify', () => {
     expect(await gVerify(billing, 'tok-1', 'com.other.app.premium')).toEqual([403, { error: 'wrong_product' }]);
     expect(await billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY })).toEqual([400, { error: 'invalid_request' }]);
     expect(await billing.googleVerify({ purchaseToken: 'a/../b', productId: MONTHLY, installId: INSTALL })).toEqual([400, { error: 'invalid_request' }]);
+    // The purchase shows only sha256(install id): posted as the install id it is no install id
+    // at all, and no UUID hashes to it, so a token holder cannot pass as the buying install.
+    expect(await billing.googleVerify({ purchaseToken: 'tok-1', productId: MONTHLY, installId: obfuscatedAccountId(INSTALL) }))
+      .toEqual([400, { error: 'invalid_request' }]);
     expect(g.calls.length).toBe(before);
     expect(db.subs).toHaveLength(0);
 

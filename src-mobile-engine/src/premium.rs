@@ -612,10 +612,28 @@ fn entitled_now(shared: &Shared, now: i64) -> bool {
     entitled_at(&lock(&shared.premium.state), now)
 }
 
-/// `mobile.premium.installId {}` -> `{installId}`: for the native purchase code (StoreKit
-/// `appAccountToken`, Play `obfuscatedAccountId`). The one reply that carries it.
+/// StoreKit's `appAccountToken` for an install: the first 16 bytes of
+/// `SHA-256("mailvault/appAccountToken/v1:" + lower-case id)` as an RFC 9562 version 8 UUID.
+/// One way: anyone holding a receipt can read its token, and the install id posted with it is
+/// what proves the buying install, so the token must not give the id away. The billing server
+/// (`website/api/store-billing.js` `appleAccountToken`) makes the same value; both pin a vector.
+pub fn apple_account_token(install_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(format!("mailvault/appAccountToken/v1:{}", install_id.to_lowercase()).as_bytes());
+    let mut b = [0u8; 16];
+    b.copy_from_slice(&digest[..16]);
+    b[6] = (b[6] & 0x0f) | 0x80;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let x: String = b.iter().map(|v| format!("{v:02x}")).collect();
+    format!("{}-{}-{}-{}-{}", &x[..8], &x[8..12], &x[12..16], &x[16..20], &x[20..])
+}
+
+/// `mobile.premium.installId {}` -> `{installId, appAccountToken}`: for the native purchase code
+/// (StoreKit buys with `appAccountToken`, Play hashes the id into `obfuscatedAccountId`). The one
+/// reply that carries the id.
 pub(crate) fn install(engine: &Engine, _params: Value) -> Result<Value, RpcError> {
-    Ok(json!({ "installId": install_id(engine.shared())? }))
+    let id = install_id(engine.shared())?;
+    Ok(json!({ "appAccountToken": apple_account_token(&id), "installId": id }))
 }
 
 #[derive(Deserialize)]
@@ -749,6 +767,14 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_app_account_token_is_a_one_way_uuid_of_the_install_id() {
+        // Same vectors as website/__tests__/store-billing.test.js.
+        assert_eq!(apple_account_token("3f1c2b7a-9d4e-4c51-8a2f-6b0e5d9c1a77"), "5d24a09b-88e1-8e7f-93d2-e47a42508791");
+        assert_eq!(apple_account_token("3F2504E0-4F89-11D3-9A0C-0305E82C3301"), "5d5455f2-5303-8fc6-a255-dca43b552558");
+        assert_eq!(apple_account_token("3F2504E0-4F89-11D3-9A0C-0305E82C3301"), apple_account_token("3f2504e0-4f89-11d3-9a0c-0305e82c3301"));
+    }
 
     #[test]
     fn a_server_clock_far_off_moves_the_expiry_onto_the_device_clock() {

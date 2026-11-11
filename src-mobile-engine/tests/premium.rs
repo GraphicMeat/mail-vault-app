@@ -352,7 +352,10 @@ fn entitled_until_expiry_then_not_without_network() {
     assert_eq!(body["signedTransaction"], JWS);
     let install = fx.secret("premium.installId").expect("install id in the secret store");
     assert_eq!(body["installId"], install.as_str());
-    assert_eq!(fx.rpc("mobile.premium.installId", json!({})), json!({ "installId": install }));
+    assert_eq!(
+        fx.rpc("mobile.premium.installId", json!({})),
+        json!({ "installId": install, "appAccountToken": mailvault_mobile_engine::apple_account_token(&install) })
+    );
 
     fx.clock(expires - 60_000);
     assert!(fx.premium(), "still entitled a minute before the store's expiry");

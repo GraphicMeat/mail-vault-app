@@ -13,7 +13,7 @@ Does this app track users? **No.** No tracking domains, no advertising SDK, no d
 |---|---|---|---|
 | Contact Info: Email Address | Only if the user signs in to an existing website Premium account with a code sent to the address. Never otherwise. | The address, to mail the 6-digit code and find the subscriber. | `website/api/signin-code.js` (code mail), engine `premium.webSignIn.*` |
 | Purchases: Purchase History | Only after a Premium purchase or Restore. | The signed App Store transaction (product, dates, state), kept against the install id so the server can say whether Premium is on. | `website/api/store-billing.js`, engine `mobile.premium.verify` |
-| Identifiers: User ID | Premium purchase, Restore and the 12 hourly re-check. | A random UUID made at first use of Premium and kept in the iOS keychain (the "install id"), tied to the purchase on our server. It is the StoreKit `appAccountToken`. It is not a device-level identifier: not the advertising id and not the vendor id, so Apple's "Device ID" type does not fit it. | engine `premium.installId`, `Store.swift` |
+| Identifiers: User ID | Premium purchase, Restore and the 12 hourly re-check. | A random UUID made at first use of Premium and kept in the iOS keychain (the "install id"), tied to the purchase on our server. The StoreKit `appAccountToken` is a one-way hash of it. It is not a device-level identifier: not the advertising id and not the vendor id, so Apple's "Device ID" type does not fit it. | engine `premium.installId`, `Store.swift` |
 
 ## Data types NOT collected
 

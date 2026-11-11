@@ -11,7 +11,7 @@
 char *mv_background_fetch(uint32_t budget_ms);
 // The run that answered `token` had its notes posted: its mail counts as notified.
 void mv_background_commit(const char *token);
-// Frees a string an mv_* call answered (mv_background_fetch, mv_store_verify, mv_store_install_id).
+// Frees a string an mv_* call answered (mv_background_fetch, mv_store_verify, mv_store_account_token).
 void mv_free_string(char *s);
 // A notification was tapped; `json` is its payload {accountId, folder, uid?}.
 void mv_notification_tapped(const char *json);
@@ -22,9 +22,9 @@ void mv_set_languages(const char *csv);
 // finish the transaction only when `answered`. Free it with mv_free_string. Blocks: call it off
 // the main thread.
 char *mv_store_verify(const char *json);
-// This install's id (StoreKit appAccountToken), "" when it cannot be had. Free it with
-// mv_free_string. Blocks: call it off the main thread.
-char *mv_store_install_id(void);
+// This install's StoreKit appAccountToken (a one-way hash of the install id), "" when it cannot
+// be had. Free it with mv_free_string. Blocks: call it off the main thread.
+char *mv_store_account_token(void);
 // Perf-gate builds keep `runner` (the device check's run with no BGTask); others drop it.
 void mv_set_device_check_runner(void (*runner)(void));
 

@@ -15,7 +15,9 @@
 // A misconfigured server must answer 5xx, never 4xx, or every phone loses Premium.
 //
 // A receipt names the install it was bought on (Apple appAccountToken, Google
-// obfuscatedExternalAccountId). That install always passes. A different install passes when
+// obfuscatedExternalAccountId), each a one-way hash of the install id: anyone holding a
+// receipt can read it, so it must never reveal the id that is posted as `installId`
+// (appleAccountToken, obfuscatedAccountId). That install always passes. A different install passes when
 // it is a live member of the purchase's install set (seen within INSTALL_IDLE_MS). Otherwise
 // it is refused 403 wrong_account unless the call says `restore: true` (the user tapped
 // Restore) AND, for Apple, proves the account (ruling P9):
@@ -132,6 +134,20 @@ function loadAppleRoot(file = APPLE_ROOT_PATH) {
     throw new Error('Apple root certificate fingerprint mismatch');
   }
   return cert;
+}
+
+/**
+ * StoreKit's appAccountToken for an install: the first 16 bytes of
+ * SHA-256("mailvault/appAccountToken/v1:" + lowercase UUID) as an RFC 9562 version 8 UUID,
+ * lowercase. One way, so a receipt never gives away the install id (the engine's
+ * premium::apple_account_token makes the same value; both pin a test vector).
+ */
+function appleAccountToken(installId) {
+  const h = crypto.createHash('sha256').update(`mailvault/appAccountToken/v1:${String(installId).toLowerCase()}`).digest().subarray(0, 16);
+  h[6] = (h[6] & 0x0f) | 0x80;
+  h[8] = (h[8] & 0x3f) | 0x80;
+  const x = h.toString('hex');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
 }
 
 /** Play's obfuscatedAccountId for an install: lowercase hex SHA-256 of the lowercase UUID. */
@@ -446,12 +462,14 @@ function createStoreBilling({
     return a;
   }
 
-  const appleState = (t, status) => ({
+  // `installId`: the purchasing install, known only once it posted its own receipt (the
+  // receipt carries a hash of it, never the id).
+  const appleState = (t, status, installId = null) => ({
     expiresMs: t.expiresDate,
     status: status || (t.revocationDate ? 'revoked' : 'active'),
     productId: t.productId,
     environment: t.environment,
-    installId: typeof t.appAccountToken === 'string' && UUID_RE.test(t.appAccountToken) ? t.appAccountToken.toLowerCase() : null,
+    installId,
     latestToken: null,
   });
 
@@ -477,7 +495,7 @@ function createStoreBilling({
         throw refuse('revoked');
       }
       const install = installId.toLowerCase();
-      const own = typeof t.appAccountToken === 'string' && t.appAccountToken.toLowerCase() === install;
+      const own = typeof t.appAccountToken === 'string' && t.appAccountToken.toLowerCase() === appleAccountToken(install);
       let join = null;
       if (!own) {
         // Same Apple account: the AppTransaction's appTransactionId is the account's id for
@@ -490,7 +508,8 @@ function createStoreBilling({
         });
         join = await admitForeign(await findRow('apple', t.originalTransactionId), install, restore, prove);
       }
-      const state = await record('apple', t.originalTransactionId, [t.originalTransactionId], appleState(t), 'receipt');
+      // The row names the purchasing install only (a restoring install is in the set).
+      const state = await record('apple', t.originalTransactionId, [t.originalTransactionId], appleState(t, null, own ? install : null), 'receipt');
       await touchInstall(state.id, install);
       await settleJoin(state.id, install, join);
       return verdict('apple', state);
@@ -848,6 +867,7 @@ module.exports = {
   mergeState,
   derOid,
   obfuscatedAccountId,
+  appleAccountToken,
   APPLE_ROOT_G3_SHA256,
   BUNDLE_ID,
   PRODUCT_IDS,

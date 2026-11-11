@@ -10,9 +10,10 @@
 //!   says whether it may finish it ([`store::answered`]). A purchase, a renewal, a purchase the
 //!   app was killed before verifying, and a Restore all take this path, so the rule lives in one
 //!   place.
-//! - [`install_id_json`] (iOS `mv_store_install_id`, Android `Store.nativeInstallId`): the
-//!   engine's install id, for StoreKit's `appAccountToken` and Play's obfuscated account id, and
-//!   for telling this install's own transactions from others on the same store account.
+//! - [`install_id_json`] (Android `Store.nativeInstallId`): the engine's install id, for Play's
+//!   obfuscated account id and for telling this install's own purchases from others on the same
+//!   Play account. [`account_token_json`] (iOS `mv_store_account_token`): StoreKit's
+//!   `appAccountToken`, a one-way hash of the install id (a receipt must not give the id away).
 //!
 //! The receipt, the AppTransaction and the install id pass through here and are never logged.
 
@@ -100,14 +101,26 @@ pub(crate) fn verify_json(input: &str) -> String {
     verify_reply(result).to_string()
 }
 
-/// The engine's install id, `""` when it cannot be had (the native side then waits for the next
-/// launch).
-pub(crate) fn install_id_json() -> String {
+/// One field of the engine's `mobile.premium.installId` reply, `""` when it cannot be had (the
+/// native side then waits for the next launch).
+fn install_field(key: &str) -> String {
     background::wait_engine(ENGINE_WAIT)
         .ok()
         .and_then(|engine| engine.rpc("mobile.premium.installId", json!({})).ok())
-        .and_then(|v| v["installId"].as_str().map(str::to_string))
+        .and_then(|v| v[key].as_str().map(str::to_string))
         .unwrap_or_default()
+}
+
+/// The engine's install id (Android).
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) fn install_id_json() -> String {
+    install_field("installId")
+}
+
+/// StoreKit's `appAccountToken` for this install (iOS).
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+pub(crate) fn account_token_json() -> String {
+    install_field("appAccountToken")
 }
 
 fn native(app: &tauri::AppHandle) -> Result<tauri::State<'_, MvNative<tauri::Wry>>, NativeError> {
@@ -192,12 +205,12 @@ pub unsafe extern "C" fn mv_store_verify(json: *const std::ffi::c_char) -> *mut 
     background::c_string(background::guarded(fallback, || verify_json(&text)))
 }
 
-/// iOS (Store.swift): this install's id, `""` when it cannot be had; freed with `mv_free_string`.
-/// Blocks: call it off the main thread.
+/// iOS (Store.swift): this install's StoreKit `appAccountToken`, `""` when it cannot be had;
+/// freed with `mv_free_string`. Blocks: call it off the main thread.
 #[cfg(target_os = "ios")]
 #[no_mangle]
-pub extern "C" fn mv_store_install_id() -> *mut std::ffi::c_char {
-    background::c_string(background::guarded(String::new(), install_id_json))
+pub extern "C" fn mv_store_account_token() -> *mut std::ffi::c_char {
+    background::c_string(background::guarded(String::new(), account_token_json))
 }
 
 /// Android (`Store.nativeVerify`): as `mv_store_verify`.
@@ -217,7 +230,7 @@ pub extern "system" fn Java_com_mailvault_mvnative_Store_nativeVerify(
     env.new_string(out).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 
-/// Android (`Store.nativeInstallId`): as `mv_store_install_id`.
+/// Android (`Store.nativeInstallId`): this install's id, `""` when it cannot be had.
 #[cfg(target_os = "android")]
 #[no_mangle]
 pub extern "system" fn Java_com_mailvault_mvnative_Store_nativeInstallId(env: jni::JNIEnv, _class: jni::objects::JObject) -> jni::sys::jstring {

@@ -34,6 +34,7 @@ pub use background::{BackgroundRun, NewMail};
 pub use db::{Engine, EngineError, SCHEMA_VERSION};
 pub use followup::FollowUpDue;
 pub use outgoing::resolve_outgoing;
+pub use premium::apple_account_token;
 pub use rpc::{methods, RpcError};
 #[doc(hidden)]
 pub use search::BackfillStats;
