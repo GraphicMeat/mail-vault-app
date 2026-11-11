@@ -161,6 +161,9 @@ describe('ImportFromDesktop', () => {
     expect(input.getAttribute('type')).toBe('password');
     fireEvent.change(input, { target: { value: 'eleven-char' } });
     expect(button('mobile.import.import').disabled).toBe(true);
+    // Characters, as the desktop counts them: 11 emoji are 22 UTF-16 units but 11 characters.
+    fireEvent.change(input, { target: { value: '\u{1F600}'.repeat(11) } });
+    expect(button('mobile.import.import').disabled).toBe(true);
     fireEvent.change(input, { target: { value: PW } });
     expect(button('mobile.import.import').disabled).toBe(false);
     fireEvent.click(button('mobile.import.show'));

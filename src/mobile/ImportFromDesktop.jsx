@@ -126,7 +126,7 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (busy || password.length < MIN_PASSWORD || !frames) return;
+    if (busy || [...password].length < MIN_PASSWORD || !frames) return;
     setBusy(true);
     setErrorCode(null);
     let reply;
@@ -196,7 +196,7 @@ export default function ImportFromDesktop({ onImport, onDone, onCancel }) {
   }
 
   if (step === 'password') {
-    const canImport = !busy && password.length >= MIN_PASSWORD;
+    const canImport = !busy && [...password].length >= MIN_PASSWORD;
     return (
       <section className="mv-add mv-import" aria-labelledby="mv-import-title">
         <div className="mv-add__bar">
