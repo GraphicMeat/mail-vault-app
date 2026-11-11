@@ -5304,6 +5304,7 @@ dependencies = [
  "charset",
  "chrono",
  "dirs 5.0.1",
+ "flate2",
  "futures",
  "futures-rustls",
  "hickory-resolver",
@@ -5319,6 +5320,7 @@ dependencies = [
  "mock-jmap",
  "oo7",
  "pgp",
+ "qrcode",
  "rand 0.8.7",
  "rand 0.9.4",
  "rcgen",
@@ -7575,6 +7577,12 @@ name = "pxfm"
 version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5a041e753da8b807c9255f28de81879c78c876392ff2469cde94799b2896b9d"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quick-error"

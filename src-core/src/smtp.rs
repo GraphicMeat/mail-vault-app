@@ -470,7 +470,7 @@ fn build_mime_opts(
 /// (RFC 8314) whatever the flag says: the account form saves `smtpSecure:false`
 /// without asking, so a stored false carries no choice. `Some(true)` forces the
 /// wrapper on any other port.
-fn use_implicit_tls(smtp_secure: Option<bool>, smtp_port: u16) -> bool {
+pub(crate) fn use_implicit_tls(smtp_secure: Option<bool>, smtp_port: u16) -> bool {
     smtp_port == 465 || smtp_secure == Some(true)
 }
 

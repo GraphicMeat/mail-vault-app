@@ -46,6 +46,11 @@ zip = "9"
 argon2 = "0.5"
 chacha20poly1305 = "0.10"
 zeroize = "1"
+# Phone set-up by QR (src/transfer/phone): the sealed bundle is deflated before
+# encryption, and each frame becomes an SVG QR code. No `image` feature: the
+# desktop renders SVG, the phone only decodes.
+flate2 = "1"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 # OpenPGP decryption (src/pgp.rs): pure Rust, no gpg, so the sandboxed builds can use it.
 pgp = "0.20"
 # Network Activity's map (src/geo_ip.rs): reads the bundled DB-IP country database.
