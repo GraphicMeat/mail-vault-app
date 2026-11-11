@@ -1,20 +1,8 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
-import { useSettingsStore, selectOwnAddresses } from './settingsStore';
-import { useMailStore } from './mailStore';
+import { myAddresses } from './myAddresses';
 
 const PAGE = 50;
-
-// Every address that is the user, across all accounts: login, default From, aliases.
-function myAddresses() {
-  const { accounts = [] } = useMailStore.getState();
-  const settings = useSettingsStore.getState();
-  const out = new Set();
-  for (const account of accounts) {
-    for (const a of selectOwnAddresses(settings, account)) out.add(a);
-  }
-  return [...out];
-}
 
 let listSeq = 0;
 let mailSeq = 0;
