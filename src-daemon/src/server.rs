@@ -1502,6 +1502,7 @@ mod tests {
             ("snapshot.list", json!({"accountId": "a"})),
             ("contacts_index.get", json!({"accountIds": ["a"]})),
             ("people.list", json!({})),
+            ("people.senders", json!({})),
             ("people.contacts.top", json!({"accountIds": ["a"]})),
             ("people.contacts.search", json!({"accountIds": ["a"], "query": "a"})),
             ("people.contacts.names", json!({"accountIds": ["a"]})),

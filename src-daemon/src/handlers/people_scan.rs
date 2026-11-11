@@ -2,7 +2,7 @@
 //! custody lock once per page, so no call is one long scan.
 use super::people::blocking_db;
 use crate::server::DaemonState;
-use mailvault_core::people::{correspondence as corr, review, seen};
+use mailvault_core::people::{correspondence as corr, review, seen, senders};
 use std::sync::Arc;
 
 // The paged loops below take the custody lock once per page. `people.list` and
@@ -74,4 +74,18 @@ pub(crate) async fn seen_contacts(state: &Arc<DaemonState>, ids: Vec<String>) ->
     })
     .await
     .map_err(|e| format!("task join error: {e}"))
+}
+
+/// Every sender in the vault, pooled from lock-paged scans. It is a foreground
+/// request itself, so it never waits for a quiet UI (it would wait on its own marker).
+// shortcut: re-aggregates on every page request, cache the pool per index epoch if one call passes 1 s on a big vault
+pub(crate) async fn all_senders(state: &Arc<DaemonState>, own: Vec<String>) -> Result<Vec<senders::Sender>, String> {
+    let (mut pool, mut cursor) = (Vec::new(), String::new());
+    loop {
+        let (cur, o) = (cursor.clone(), own.clone());
+        let (page, next) = blocking_db(state, move |c| senders::page(c, &o, &cur, 2000)).await?;
+        pool.extend(page);
+        let Some(n) = next else { return Ok(pool) };
+        cursor = n;
+    }
 }

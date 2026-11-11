@@ -1,10 +1,10 @@
 //! `people.*` RPCs: contacts. Thin wrappers over `mailvault_core::people`;
 //! every database call runs on a blocking thread through `custody::with_conn`.
 use super::common::done;
-use super::people_scan::{all_proposals, all_totals, review_candidates, seen_contacts};
+use super::people_scan::{all_proposals, all_senders, all_totals, review_candidates, seen_contacts};
 use crate::ipc::RpcResponse;
 use crate::state::DaemonState;
-use mailvault_core::people::{correspondence as corr, journal, merge, seen, store, suggest};
+use mailvault_core::people::{correspondence as corr, journal, merge, message_addr, seen, senders, store, suggest};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -31,6 +31,18 @@ pub(crate) async fn blocking_db<T: Send + 'static>(
     tokio::task::spawn_blocking(move || crate::custody::with_conn(&state, f))
         .await
         .map_err(|e| format!("task join error: {e}"))?
+}
+
+/// The addresses `people.messages` reads: a saved contact's, or one unsaved sender's.
+fn message_addresses(c: &rusqlite::Connection, id: Option<&str>, address: Option<&str>) -> Result<Vec<String>, String> {
+    match (id, address) {
+        (Some(id), _) => {
+            let card = store::get_card(c, id)?.ok_or_else(|| "E_NOT_FOUND: person".to_string())?;
+            Ok(store::card_addresses(&card))
+        }
+        (None, Some(a)) => message_addr::normalize(a).map(|a| vec![a]).ok_or_else(|| "E_INVALID: not an email address".to_string()),
+        (None, None) => Err("E_INVALID: missing id or address".to_string()),
+    }
 }
 
 pub(crate) fn str_param(p: &Value, k: &str) -> Result<String, String> {
@@ -80,8 +92,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             Err(e) => Err(e),
         },
         "people.stats" => {
-            let ids = strings(&p, "ids");
-            let own = own(&p);
+            let (ids, addresses, own) = (strings(&p, "ids"), strings(&p, "addresses"), own(&p));
             db(state, move |c| {
                 let mut out = serde_json::Map::new();
                 for id in ids {
@@ -90,33 +101,56 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         out.insert(id, serde_json::to_value(st).map_err(|e| e.to_string())?);
                     }
                 }
+                // an unsaved sender is keyed by its own address; ids never contain '@'
+                for address in addresses.iter().filter_map(|a| message_addr::normalize(a)) {
+                    let st = corr::stats(c, std::slice::from_ref(&address), &own, None)?;
+                    out.insert(address, serde_json::to_value(st).map_err(|e| e.to_string())?);
+                }
                 Ok(Value::Object(out))
             })
             .await
         }
-        "people.messages" => match str_param(&p, "id") {
-            Ok(pid) => {
-                let own = own(&p);
-                let limit = num(&p, "limit", 50).min(200);
-                let after: Option<corr::Cursor> = p.get("after").and_then(|v| serde_json::from_value(v.clone()).ok());
-                let (account, direction, text) = (opt_str(&p, "accountId"), opt_str(&p, "direction"), opt_str(&p, "text"));
-                let (from_ms, to_ms) = (p.get("fromMs").and_then(Value::as_i64), p.get("toMs").and_then(Value::as_i64));
-                db(state, move |c| {
-                    let card = store::get_card(c, &pid)?.ok_or_else(|| "E_NOT_FOUND: person".to_string())?;
-                    let f = corr::MsgFilter { account: account.as_deref(), direction: direction.as_deref(), from_ms, to_ms, text: text.as_deref() };
-                    let items = corr::messages(c, &store::card_addresses(&card), &own, &f, after.as_ref(), limit)?;
-                    let next = (items.len() == limit).then(|| items.last()).flatten().map(|r| corr::Cursor {
-                        sort_ms: r.sort_ms,
-                        account_id: r.account_id.clone(),
-                        mailbox_path: r.mailbox_path.clone(),
-                        uid: r.uid,
-                    });
-                    Ok(json!({"items": items, "next": next}))
-                })
-                .await
+        "people.messages" => {
+            let (id, address) = (opt_str(&p, "id"), opt_str(&p, "address"));
+            let own = own(&p);
+            let limit = num(&p, "limit", 50).min(200);
+            let after: Option<corr::Cursor> = p.get("after").and_then(|v| serde_json::from_value(v.clone()).ok());
+            let (account, direction, text) = (opt_str(&p, "accountId"), opt_str(&p, "direction"), opt_str(&p, "text"));
+            let (from_ms, to_ms) = (p.get("fromMs").and_then(Value::as_i64), p.get("toMs").and_then(Value::as_i64));
+            db(state, move |c| {
+                let addresses = message_addresses(c, id.as_deref(), address.as_deref())?;
+                let f = corr::MsgFilter { account: account.as_deref(), direction: direction.as_deref(), from_ms, to_ms, text: text.as_deref() };
+                let items = corr::messages(c, &addresses, &own, &f, after.as_ref(), limit)?;
+                let next = (items.len() == limit).then(|| items.last()).flatten().map(|r| corr::Cursor {
+                    sort_ms: r.sort_ms,
+                    account_id: r.account_id.clone(),
+                    mailbox_path: r.mailbox_path.clone(),
+                    uid: r.uid,
+                });
+                Ok(json!({"items": items, "next": next}))
+            })
+            .await
+        }
+        "people.senders" => {
+            let (q, own) = (opt_str(&p, "query"), own(&p));
+            let sort = store::Sort::parse(&opt_str(&p, "sort").unwrap_or_default());
+            let (limit, offset) = (num(&p, "limit", 50).min(200), num(&p, "offset", 0));
+            match all_senders(state, own).await {
+                Ok(pool) => {
+                    let (items, total) = senders::pick(pool, q.as_deref(), sort, offset, limit);
+                    db(state, move |c| Ok(json!({"items": items, "total": total, "indexReady": message_addr::backfill_done(c)}))).await
+                }
+                Err(e) => Err(e),
             }
-            Err(e) => Err(e),
-        },
+        }
+        "people.owners" => {
+            let addresses: Vec<String> = strings(&p, "addresses").iter().filter_map(|a| message_addr::normalize(a)).collect();
+            db(state, move |c| {
+                let owned = senders::owners(c, &addresses)?;
+                Ok(owned.into_iter().map(|(a, (id, vip))| (a, json!({"personId": id, "favorite": vip}))).collect::<serde_json::Map<_, _>>())
+            })
+            .await
+        }
         "people.suggest" => {
             let (q, own, acct, limit) = (opt_str(&p, "query").unwrap_or_default(), own(&p), opt_str(&p, "fromAccountId"), num(&p, "limit", 8).min(50));
             db(state, move |c| suggest::suggest(c, &q, &own, acct.as_deref(), limit, now_ms())).await
@@ -304,5 +338,105 @@ mod tests {
         let v = top(Arc::clone(&state)).await;
         assert_eq!(addresses(&v["result"]["popular"]), ["anna@x.io"], "{v}");
         assert_eq!(v["result"]["popular"][0]["count"], 2, "{v}");
+    }
+
+    fn sender_names(v: &Value) -> Vec<String> {
+        v["result"]["items"].as_array().unwrap().iter().map(|r| r["address"].as_str().unwrap().to_string()).collect()
+    }
+    const ME: &str = "me@h.io";
+
+    #[tokio::test]
+    async fn senders_lists_every_sender_with_saved_ones_linked() {
+        let (_d, state) = state(true);
+        save(&state, "a1", "INBOX", json!([
+            mail(1, "2026-10-18T09:00:00Z", ("Anna Smith", "anna@x.io"), ("", ME)),
+            mail(2, "2026-10-01T09:00:00Z", ("Bo", "bo@b.io"), ("", ME)),
+        ]))
+        .await;
+        let saved = call(&state, "people.review.accept", json!({"items": [{"address": "anna@x.io", "name": "Anna Smith"}]})).await;
+        assert!(saved.get("error").is_none(), "{saved}");
+        let v = call(&state, "people.senders", json!({"ownAddresses": [ME], "sort": "name"})).await;
+        assert_eq!(v["result"]["total"], 2, "{v}");
+        assert_eq!(sender_names(&v), ["anna@x.io", "bo@b.io"]);
+        assert!(v["result"]["items"][0]["personId"].is_string(), "{v}");
+        assert!(v["result"]["items"][1]["personId"].is_null(), "{v}");
+        assert!(v["result"]["indexReady"].is_boolean());
+    }
+
+    #[tokio::test]
+    async fn a_senders_list_over_two_pages_does_not_wait_on_its_own_foreground_marker() {
+        let (_d, state) = state(true);
+        let n = 2100; // two scan pages of 2000
+        crate::custody::with_conn(&state, |c| {
+            let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
+            for i in 0..n {
+                let a = format!("s{i:05}@x.io");
+                mailvault_core::people::message_addr::index_row(&tx, "acc", "INBOX", i as u32 + 1, 1000, &json!({"uid": i + 1, "from": {"address": a}}))?;
+            }
+            tx.commit().map_err(|e| e.to_string())
+        })
+        .unwrap();
+        let t = std::time::Instant::now();
+        let v = call(&state, "people.senders", json!({"limit": 5})).await;
+        assert_eq!(v["result"]["total"], n);
+        assert!(t.elapsed() < std::time::Duration::from_millis(350), "waited on itself: {:?}", t.elapsed());
+    }
+
+    #[tokio::test]
+    async fn senders_search_and_sort_by_last() {
+        let (_d, state) = state(true);
+        save(&state, "a1", "INBOX", json!([
+            mail(1, "2026-10-01T09:00:00Z", ("Anna", "anna@x.io"), ("", ME)),
+            mail(2, "2026-10-18T09:00:00Z", ("Bo", "bo@b.io"), ("", ME)),
+            mail(3, "2026-10-10T09:00:00Z", ("Annie", "annie@y.io"), ("", ME)),
+        ]))
+        .await;
+        let v = call(&state, "people.senders", json!({"ownAddresses": [ME], "sort": "last"})).await;
+        assert_eq!(sender_names(&v), ["bo@b.io", "annie@y.io", "anna@x.io"], "{v}");
+        let v = call(&state, "people.senders", json!({"ownAddresses": [ME], "sort": "last", "query": "ANN"})).await;
+        assert_eq!((sender_names(&v), v["result"]["total"].clone()), (vec!["annie@y.io".to_string(), "anna@x.io".to_string()], json!(2)), "{v}");
+    }
+
+    #[tokio::test]
+    async fn messages_by_address_lists_an_unsaved_senders_mail() {
+        let (_d, state) = state(true);
+        save(&state, "a1", "INBOX", json!([
+            mail(1, "2026-10-01T09:00:00Z", ("Bo", "bo@b.io"), ("", ME)),
+            mail(2, "2026-10-02T09:00:00Z", ("Cy", "cy@c.io"), ("", ME)),
+        ]))
+        .await;
+        let v = call(&state, "people.messages", json!({"address": " Bo@B.io ", "ownAddresses": [ME]})).await;
+        let uids: Vec<_> = v["result"]["items"].as_array().unwrap().iter().map(|r| r["uid"].clone()).collect();
+        assert_eq!(uids, [json!(1)], "{v}");
+    }
+
+    #[tokio::test]
+    async fn messages_without_id_or_address_is_invalid() {
+        let (_d, state) = state(true);
+        let v = call(&state, "people.messages", json!({})).await;
+        assert!(v.to_string().contains("missing id or address"), "{v}");
+    }
+
+    #[tokio::test]
+    async fn stats_by_address_counts_an_unsaved_sender() {
+        let (_d, state) = state(true);
+        save(&state, "a1", "INBOX", json!([
+            mail(1, "2026-10-01T09:00:00Z", ("Bo", "bo@b.io"), ("", ME)),
+            mail(2, "2026-10-02T09:00:00Z", ("Bo", "bo@b.io"), ("", ME)),
+        ]))
+        .await;
+        let v = call(&state, "people.stats", json!({"addresses": ["Bo@B.io"], "ownAddresses": [ME]})).await;
+        assert_eq!(v["result"]["bo@b.io"]["received"], 2, "{v}");
+    }
+
+    #[tokio::test]
+    async fn owners_maps_addresses_to_saved_contacts() {
+        let (_d, state) = state(true);
+        let saved = call(&state, "people.review.accept", json!({"items": [{"address": "anna@x.io", "name": "Anna"}]})).await;
+        assert!(saved.get("error").is_none(), "{saved}");
+        let v = call(&state, "people.owners", json!({"addresses": ["Anna@X.io", "bo@b.io"]})).await;
+        assert_eq!(v["result"]["anna@x.io"]["favorite"], false, "{v}");
+        assert!(v["result"]["anna@x.io"]["personId"].is_string(), "{v}");
+        assert!(v["result"].get("bo@b.io").is_none(), "{v}");
     }
 }

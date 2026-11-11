@@ -1993,6 +1993,12 @@ mod tests {
     }
 
     #[test]
+    fn people_senders_and_owners_are_foreground() {
+        assert!(crate::search_index::is_foreground_method("people.senders"));
+        assert!(crate::search_index::is_foreground_method("people.owners"));
+    }
+
+    #[test]
     fn the_worker_pauses_while_the_ui_is_busy_and_never_past_the_cap() {
         use crate::search_index::{foreground_pause, FOREGROUND_MAX_WAIT, FOREGROUND_QUIET};
         use std::time::Duration;
