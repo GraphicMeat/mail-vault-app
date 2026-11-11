@@ -33,6 +33,17 @@ describe('daemon-owned commands', () => {
     }
   });
 
+  it('routes the Sent header window read to the daemon', async () => {
+    const method = 'load_email_cache_window';
+    expect(declaredDaemonOwned.has(method)).toBe(true);
+    DAEMON_OWNED.add(method);
+    const window = { emails: [{ uid: 9 }], totalCached: 1 };
+    daemonCall.mockResolvedValueOnce(JSON.stringify(window));
+    await expect(send(method, { accountId: 'a', mailbox: 'Sent', sinceMs: 1, minRows: 200 }))
+      .resolves.toBe(JSON.stringify(window));
+    expect(daemonCall).toHaveBeenCalledWith(method, { accountId: 'a', mailbox: 'Sent', sinceMs: 1, minRows: 200 });
+  });
+
   // Move folder: the plan, the job and its controls are the daemon's alone.
   it('routes every folder_move method straight to the daemon and propagates failure', async () => {
     for (const method of ['folder_move.plan', 'folder_move.start', 'folder_move.pause', 'folder_move.resume',
@@ -172,7 +183,7 @@ describe('daemon-owned commands', () => {
       'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
       'list_cached_uids',
       'list_local_folders',
-      'load_email_cache', 'load_email_cache_by_uids', 'load_email_cache_meta', 'load_email_cache_partial',
+      'load_email_cache', 'load_email_cache_by_uids', 'load_email_cache_meta', 'load_email_cache_partial', 'load_email_cache_window',
       'load_graph_id_map', 'load_mailbox_cache',
       'local_index_append', 'local_index_read', 'local_index_remove',
       'mail_search_cancel', 'mail_search_start',

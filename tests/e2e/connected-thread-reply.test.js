@@ -30,7 +30,7 @@
  *  - `expect(value, 'message')` throws in this runner: one argument only.
  */
 
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import { FRAGMENTED_SUBJECT, FRAGMENTED_COUNT, SEND_REFUSED_TO, trackMailbox } from './mockImap.js';
 import { modalOpen, fieldValue, setField, closeComposeHard, settingsCall } from './composeHelpers.js';
 
@@ -183,6 +183,8 @@ describe('A reply and the thread it was sent from', function () {
   before(async function () {
     await waitForApp();
     await waitForEmails();
+    await switchToFolder('luke@mock.test', 'Sent');
+    await switchToFolder('luke@mock.test', 'INBOX');
     // Send now — the undo window would only delay what these cases read.
     await settingsCall('setSendDelay', 0);
     // Watermark luke's Sent folder before anything is sent into it.

@@ -115,7 +115,10 @@ export function storeActions() {
     retryKeychainAccess: () => _retryKeychainAccess(),
     // selection
     _prefetchAdjacentEmails: (currentUid) => _prefetchAdjacentEmails(currentUid),
-    selectEmail: (uid, source, mailboxOverride, locationOverride, clickedRow) => _selectEmail(uid, source, mailboxOverride, locationOverride, clickedRow),
+    selectEmail: (uid, source, mailboxOverride, locationOverride, clickedRow) => {
+      useMailStore.setState({ followReply: null });
+      return _selectEmail(uid, source, mailboxOverride, locationOverride, clickedRow);
+    },
     // Called from inside selectThread and closeEmail (through get()).
     _cancelSelection: (...args) => _cancelSelection(...args),
     markSelectedAsRead: () => _markSelectedAsRead(),

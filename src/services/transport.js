@@ -47,10 +47,8 @@ const DAEMON_COMMANDS = {
   // maildir_list (daemon {uids, count} vs Tauri MaildirEmailSummary[]),
   // maildir_read/read_light/read_light_batch (different response shapes).
 
-  // Cache — ALL cache operations fall through to Tauri, which forwards them
-  // to the daemon. The header cache is `custody.db`'s `header_cache` table
-  // (it used to be per-UID JSON files plus `_meta.json`), and the daemon owns
-  // that store, so there is no second format to reconcile.
+  // Cache — daemon-owned below. The header cache is `custody.db`'s
+  // `header_cache` table (it used to be per-UID JSON files plus `_meta.json`).
 
   // Local index, Graph ID map — fall through to Tauri
   // (format compatibility not yet verified)
@@ -130,7 +128,7 @@ export const DAEMON_OWNED = new Set([
   'vault_gap_count', 'vault_gap_save',
   'cache_attachment', 'cached_attachment_path', 'prefetch_attachments', 'export_attachments',
   // Task 2.7: header caches, mailbox cache, Outlook uid ledger, op journal, pending operation.
-  'save_email_cache', 'load_email_cache', 'load_email_cache_partial', 'load_email_cache_meta',
+  'save_email_cache', 'load_email_cache', 'load_email_cache_partial', 'load_email_cache_window', 'load_email_cache_meta',
   'load_email_cache_by_uids', 'list_cached_uids', 'header_cache_month_histogram', 'clear_email_cache',
   'save_mailbox_cache', 'load_mailbox_cache', 'delete_mailbox_cache',
   'graph_allocate_uids', 'load_graph_id_map',

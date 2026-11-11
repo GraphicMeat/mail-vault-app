@@ -2,6 +2,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [] }));
+vi.mock('../../../services/workflows/selectEmail', () => ({
+  selectEmail: async () => {},
+  _prefetchAdjacentEmails: () => {},
+  cancelSelection: () => {},
+  cancelInsightsSelection: () => {},
+  cancelPendingMarkRead: () => {},
+}));
 
 const { useMailStore } = await import('../../mailStore');
 const { useSettingsStore } = await import('../../settingsStore');
@@ -55,5 +62,19 @@ describe('followSentReply', () => {
     useMailStore.getState().followSentReply(parent, reply.messageId);
     useMailStore.getState().closeEmail();
     expect(useMailStore.getState().followReply).toBeNull();
+  });
+
+  it('does not jump after switching emails before the reply joins the list', async () => {
+    useMailStore.getState().followSentReply(parent, reply.messageId);
+    useMailStore.getState().syncSelectedThread(buildThreads([parent]));
+    expect(useMailStore.getState().followReply).not.toBeNull();
+
+    await useMailStore.getState().selectEmail(99);
+    useMailStore.setState({ selectedEmailId: 99, selectedEmail: { ...parent, uid: 99 } });
+    expect(useMailStore.getState().followReply).toBeNull();
+
+    useMailStore.setState({ selectedEmailId: 10, selectedEmail: parent, selectedThread: null });
+    useMailStore.getState().syncSelectedThread(threads());
+    expect(useMailStore.getState().selectedThread).toBeNull();
   });
 });
