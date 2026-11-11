@@ -1,14 +1,15 @@
 // S5 owns a native download-ahead focus beside the JS pipelines, which keep running until S7.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 const read = path => readFileSync(path, 'utf8');
 const executable = source => source.split('\n')
   .filter(line => !/^\s*(\/\/|\*|\/\*)/.test(line)).join('\n');
 const walk = (dir, out = []) => {
   for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
+    // Forward slashes on every OS, so the skips below match on Windows too.
+    const path = join(dir, name).split(sep).join('/');
     if (statSync(path).isDirectory()) { if (name !== '__tests__' && name !== 'node_modules') walk(path, out); }
     else if (/\.(js|jsx)$/.test(name)) out.push(path);
   }

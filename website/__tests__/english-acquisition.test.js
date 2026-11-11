@@ -480,6 +480,17 @@ describe('English acquisition journey', () => {
     expect(form.querySelector('[role="status"]').textContent).toBe('Die E-Mail-Adresse konnte nicht gespeichert werden.');
   });
   it('keeps every local link, anchor, stylesheet, script, and screenshot resolvable',()=>{
+    // Parse each anchor target once: pages link the same sections many times, and a JSDOM per link
+    // took the test past its budget on slower boxes.
+    const ids=new Map();
+    const idsIn=path=>{
+      if(!ids.has(path)) {
+        const target=new JSDOM(readFileSync(path,'utf8'));
+        ids.set(path,new Set(Array.from(target.window.document.querySelectorAll('[id]'),e=>e.id)));
+        target.window.close();
+      }
+      return ids.get(path);
+    };
     // Subdirectory pages too: a root-relative href like "favicon.ico" only resolves at the root.
     const sub = ['features','faq','blog','guides','compare'].flatMap(d => readdirSync(resolve(root,d)).filter(f => f.endsWith('.html')).map(f => d+'/'+f));
     for(const file of ['index.html','pricing.html','get-started.html','thank-you.html',...sub]) {
@@ -494,11 +505,7 @@ describe('English acquisition journey', () => {
         if(url.pathname==='/gm.js' || url.pathname.startsWith('/demo/')) continue;
         const path=resolve(root,'.'+(url.pathname.endsWith('/')?url.pathname+'index.html':url.pathname));
         expect(existsSync(path), `${file}: ${value}`).toBe(true);
-        if(url.hash) {
-          const target=new JSDOM(readFileSync(path,'utf8'));
-          expect(target.window.document.getElementById(url.hash.slice(1)), `${file}: ${value}`).not.toBeNull();
-          target.window.close();
-        }
+        if(url.hash) expect(idsIn(path).has(url.hash.slice(1)), `${file}: ${value}`).toBe(true);
       }
       for(const image of doc.querySelectorAll('img[srcset]')) {
         for(const entry of image.srcset.split(',')) {

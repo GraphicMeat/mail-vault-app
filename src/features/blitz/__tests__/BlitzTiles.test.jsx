@@ -978,12 +978,14 @@ describe('body context menu', () => {
   });
 
   it('off a link there is no Copy Link; over a fold toggle there is none either, even inside a link', async () => {
+    // Two renders and two hit round-trips: past findBy's 1 s default on a loaded runner (Windows CI box).
+    const slow = { timeout: 5000 };
     await rightClick({ link: null, fold: null });
-    await screen.findByTestId('blitz-context-menu');
+    await screen.findByTestId('blitz-context-menu', {}, slow);
     expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toEqual(['Copy', 'Select All']);
     cleanup();
     await rightClick({ link: { href: 'https://x.test/' }, fold: 'q0' });
-    await screen.findByTestId('blitz-context-menu');
+    await screen.findByTestId('blitz-context-menu', {}, slow);
     expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toEqual(['Copy', 'Select All']);
   });
 
