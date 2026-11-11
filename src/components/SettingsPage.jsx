@@ -416,7 +416,7 @@ function findSettingRow(root, label) {
   return row === root ? hit : row;
 }
 
-export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImportAccounts, onReportBug, initialTab, initialAccountId, initialSection,
+export function SettingsPage({ onClose, onAddAccount, onSetupPhone, onExportAccounts, onImportAccounts, onReportBug, initialTab, initialAccountId, initialSection,
   minimized = false, onMinimize, onDetach, onNavigationLabelChange }) {
   const t = useT();
   const accounts = useAccountStore(s => s.accounts);
@@ -619,7 +619,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
       )}
 
       {activeTab === 'accounts' && (
-        <AccountSettings accounts={accounts} onUpgrade={() => handleTabChange('billing')} onAddAccount={onAddAccount} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
+        <AccountSettings accounts={accounts} onUpgrade={() => handleTabChange('billing')} onAddAccount={onAddAccount} onSetupPhone={onSetupPhone} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} initialAccountId={initialAccountId}
           initialSection={accountSection} onSectionChange={setAccountSection} />
       )}
 

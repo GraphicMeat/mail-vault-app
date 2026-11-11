@@ -146,6 +146,7 @@ const KEEP_NO_SELECTION = { restoreSelection: false };
 const AccountModal = lazy(() => import('./components/AccountModal').then(m => ({ default: m.AccountModal })));
 const ExportModal = lazy(() => import('./components/transfer/ExportModal').then(m => ({ default: m.ExportModal })));
 const ImportModal = lazy(() => import('./components/transfer/ImportModal').then(m => ({ default: m.ImportModal })));
+const PhoneQrModal = lazy(() => import('./components/transfer/PhoneQrModal').then(m => ({ default: m.PhoneQrModal })));
 const ComposeModal = lazy(() => import('./components/ComposeModal').then(m => ({ default: m.ComposeModal })));
 const SettingsPage = lazy(() => import('./components/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const UpdateModal = lazy(() => import('./components/UpdateModal').then(m => ({ default: m.UpdateModal })));
@@ -309,6 +310,7 @@ function App() {
   // Account transfer: main window only, even when asked from the detached Settings window.
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showPhoneQrModal, setShowPhoneQrModal] = useState(false);
 
   // ── Responsive layout adaptation ─────────────────────────────────────────
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -997,6 +999,7 @@ function App() {
       listen('settings-window-action', event => {
         if (event.payload?.token !== settingsAuxRef.current?.token) return;
         if (event.payload.action === 'add-account') setShowAccountModal(true);
+        if (event.payload.action === 'setup-phone') setShowPhoneQrModal(true);
         if (event.payload.action === 'export-accounts') setShowExportModal(true);
         if (event.payload.action === 'import-accounts') setShowImportModal(true);
         if (event.payload.action === 'report-bug') handleReportBug();
@@ -1405,7 +1408,7 @@ function App() {
   }, [initialized, quickLoadDone, accounts.length, onboardingComplete]);
 
   // Nothing else on screen that an onboarding invitation would sit on top of.
-  const onboardingPromptReady = initialized && !settingsMounted && !showAccountModal && !showExportModal && !showImportModal
+  const onboardingPromptReady = initialized && !settingsMounted && !showAccountModal && !showExportModal && !showImportModal && !showPhoneQrModal
     && composeWindows.length === 0 && !updateInfo && !showShortcutsModal && !showBugModal
     && !pendingOperation && !exportTarget && !showExportSamples;
 
@@ -1422,6 +1425,7 @@ function App() {
             onDetach={detachSettings}
             onClose={closeSettings}
             onAddAccount={() => { closeSettings(); setShowAccountModal(true); }}
+            onSetupPhone={() => { closeSettings(); setShowPhoneQrModal(true); }}
             onExportAccounts={() => { closeSettings(); setShowExportModal(true); }}
             onImportAccounts={() => { closeSettings(); setShowImportModal(true); }}
             onReportBug={handleReportBug}
@@ -1630,6 +1634,7 @@ function App() {
           )}
         </AnimatePresence>
         {showExportModal && <ExportModal accounts={accounts} onClose={() => setShowExportModal(false)} />}
+        {showPhoneQrModal && <PhoneQrModal onClose={() => setShowPhoneQrModal(false)} />}
         {showImportModal && <ImportModal onClose={() => setShowImportModal(false)} />}
       </Suspense>
       </ChunkErrorBoundary>

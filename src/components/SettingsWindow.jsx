@@ -136,7 +136,8 @@ export function SettingsWindow() {
     <SettingsPage initialTab={initial.tab} initialAccountId={initial.accountId} initialSection={initial.section}
       onClose={close}
       onAddAccount={() => handoff('add-account')}
-      /* Export and import run in the main window only (components/transfer/ explains why). */
+      /* Phone set-up, export and import run in the main window only (components/transfer/ explains why). */
+      onSetupPhone={() => handoff('setup-phone')}
       onExportAccounts={() => handoff('export-accounts')}
       onImportAccounts={() => handoff('import-accounts')}
       onReportBug={() => handoff('report-bug')} />

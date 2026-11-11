@@ -44,6 +44,18 @@ export async function exportTransfer({ accountIds, includeAppSettings, password 
   return data;
 }
 
+/**
+ * Seal every account (with secrets) for the phone. The daemon maps, encrypts
+ * and renders the QR frames: `{ frames: [svg], count, skipped: [{ email, reason }] }`.
+ * Same keychain gate as exportTransfer: a locked keychain would otherwise
+ * read as every account "no saved password".
+ */
+export async function phoneQr({ password }) {
+  const accounts = await getAccounts();
+  if (!['granted', 'empty'].includes(keychainSession.getStatus())) throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
+  return daemonCall('transfer.phone_qr', { password, accounts });
+}
+
 /** Decrypt a transfer file's base64 contents into its bundle. */
 export async function decryptTransfer({ password, data }) {
   return daemonCall('transfer.decrypt', { password, data });

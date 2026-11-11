@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Settings > Accounts has a new "Set up the mobile app" section. Pick a password and MailVault shows a QR code holding all your accounts, encrypted with that password, for the MailVault phone app to scan. When the accounts do not fit one code, the parts cycle once a second. The code hides itself after 5 minutes, and accounts the phone cannot sign in with are listed with the reason.
 - Link safety now marks a link red when it goes to a bare IP address that its text does not show, as in phishing mails dressed as a bank with a plain "Sign the document" button. An IPv4 address hidden in IPv6 form is shown as the IPv4 one in the warning.
 - Drag inline pictures from an email to the Desktop or a folder. Double-click supported pictures to open them in Preview.
 - Replying to or forwarding a message whose subject already starts with reply or forward prefixes no longer stacks them. "Re: RE: Plans" and "AW: Plans" both become "Re: Plans", on the desktop app as well as the phone app; a forward of "Re: Plans" becomes "Fwd: Plans".

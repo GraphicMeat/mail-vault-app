@@ -76,7 +76,7 @@ function SavedBadge({ visible }) {
   );
 }
 
-export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAccounts, onImportAccounts, initialAccountId, initialSection = 'profile', onSectionChange }) {
+export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhone, onExportAccounts, onImportAccounts, initialAccountId, initialSection = 'profile', onSectionChange }) {
   const t = useT();
   const pa = usePrivateAttr();
   const privateInput = usePrivateInputClass();
@@ -543,7 +543,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
               {t('settings.accounts.addAccount')}
             </button>
           )}
-          <AccountTransfer accounts={accounts} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} />
+          <AccountTransfer accounts={accounts} onSetupPhone={onSetupPhone} onExportAccounts={onExportAccounts} onImportAccounts={onImportAccounts} />
         </div>
       </div>
 

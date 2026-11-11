@@ -1,5 +1,5 @@
 //! Encrypted account-transfer RPCs (`transfer.export`, `transfer.decrypt`,
-//! `transfer.apply_config`). The app never hands the daemon a user-chosen
+//! `transfer.apply_config`, and `transfer.phone_qr` for setting up the phone). The app never hands the daemon a user-chosen
 //! file path (Global constraints, architecture rule); only bytes cross this
 //! boundary, and only inside a password-derived AEAD envelope
 //! (`mailvault_core::transfer::crypto`).
@@ -15,7 +15,7 @@ use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use base64::Engine;
 use mailvault_core::app_db;
-use mailvault_core::transfer::{app_config, bundle, crypto};
+use mailvault_core::transfer::{app_config, bundle, crypto, phone};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -134,6 +134,33 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             RpcResponse::success(id, bundle_val)
         }
 
+        // The accounts (with secrets) sealed for the phone and shown as QR
+        // frames: `{frames: [svg], count, skipped: [{email, reason}]}`. No
+        // supported account is no frames, not an error.
+        "transfer.phone_qr" => {
+            let password = Zeroizing::new(req!(str_arg(&id, params, "password")));
+            if password.chars().count() < phone::MIN_PASSWORD_CHARS {
+                return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "E_TRANSFER_PASSWORD".to_string()));
+            }
+            let accounts = match params.get("accounts") {
+                Some(v) if v.is_array() => v.clone(),
+                _ => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing or invalid accounts".to_string())),
+            };
+            // argon2 and the QR rendering both stay off the async worker.
+            let built = blocking(move || -> Result<(Vec<String>, Vec<phone::Skipped>), String> {
+                let qr = phone::encode_phone_qr(&password, &accounts).map_err(|e| e.to_string())?;
+                let svgs = qr.frames.iter().map(|f| phone::qr_svg(f)).collect::<Result<Vec<_>, _>>()?;
+                Ok((svgs, qr.skipped))
+            })
+            .await;
+            match built {
+                Ok(Ok((frames, skipped))) => {
+                    RpcResponse::success(id, serde_json::json!({ "count": frames.len(), "frames": frames, "skipped": skipped }))
+                }
+                Ok(Err(e)) | Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+            }
+        }
+
         "transfer.apply_config" => {
             let cfg: app_config::AppConfig =
                 match serde_json::from_value(params.get("appConfig").cloned().unwrap_or_else(|| serde_json::json!({}))) {
@@ -244,10 +271,11 @@ mod tests {
     #[tokio::test]
     async fn the_routes_are_reachable_through_the_servers_dispatch() {
         let s = st();
-        for method in ["transfer.export", "transfer.decrypt", "transfer.apply_config"] {
+        for method in ["transfer.export", "transfer.decrypt", "transfer.apply_config", "transfer.phone_qr"] {
             let params = match method {
                 "transfer.export" => json!({ "password": "correct horse battery", "bundle": sample_bundle(), "includeAppConfig": false }),
                 "transfer.decrypt" => json!({ "password": "correct horse battery", "data": "not-valid-base64!!" }),
+                "transfer.phone_qr" => json!({ "password": "short", "accounts": [] }),
                 _ => json!({ "appConfig": {}, "accountMap": {} }),
             };
             let resp = crate::server::handle_request_for_test(&s, method, params).await;
@@ -258,6 +286,60 @@ mod tests {
                 assert!(!err.message.contains("Unknown method"), "{method} is not routed: {err:?}");
             }
         }
+    }
+
+    fn phone_accounts() -> Value {
+        json!([
+            { "id": "a1", "email": "a@x.com", "authType": "password", "password": "pw", "imapHost": "imap.x.com", "imapPort": 993,
+              "smtpHost": "smtp.x.com", "smtpPort": 587 },
+            { "id": "a2", "email": "b@gmail.com", "authType": "oauth2", "oauth2Provider": "google", "oauth2RefreshToken": "rt",
+              "imapHost": "imap.gmail.com", "smtpHost": "smtp.gmail.com" },
+            { "id": "a3", "email": "c@x.com", "authType": "password", "password": "", "imapHost": "imap.x.com" }
+        ])
+    }
+
+    #[tokio::test]
+    async fn phone_qr_returns_svg_frames_and_names_the_skipped_accounts() {
+        let s = st();
+        let resp = call(&s, "transfer.phone_qr", json!({ "password": "correct horse battery", "accounts": phone_accounts() })).await;
+        let out = resp.result.expect("phone_qr must succeed");
+        let frames = out["frames"].as_array().expect("frames");
+        assert!(!frames.is_empty());
+        assert_eq!(out["count"], json!(frames.len()));
+        for f in frames {
+            let svg = f.as_str().unwrap();
+            assert!(svg.contains("<svg"), "not an svg");
+            // ciphertext only: no secret, no address
+            assert!(!svg.contains("b@gmail.com") && !svg.contains("correct horse"));
+        }
+        assert_eq!(out["skipped"], json!([{ "email": "c@x.com", "reason": "no-secret" }]));
+    }
+
+    #[tokio::test]
+    async fn phone_qr_refuses_a_password_under_twelve_characters() {
+        let s = st();
+        let resp = call(&s, "transfer.phone_qr", json!({ "password": "short-11-ch", "accounts": phone_accounts() })).await;
+        assert_eq!(resp.error.expect("must be refused").message, "E_TRANSFER_PASSWORD");
+    }
+
+    #[tokio::test]
+    async fn phone_qr_requires_an_accounts_array() {
+        let s = st();
+        for params in [json!({ "password": "correct horse battery" }), json!({ "password": "correct horse battery", "accounts": {} })] {
+            let resp = call(&s, "transfer.phone_qr", params).await;
+            let err = resp.error.expect("must be refused");
+            assert_eq!(err.code, ipc::INVALID_PARAMS);
+        }
+    }
+
+    #[tokio::test]
+    async fn phone_qr_with_nothing_to_send_returns_no_frames() {
+        let s = st();
+        let accounts = json!([{ "email": "c@x.com", "authType": "password", "password": "", "imapHost": "imap.x.com" }]);
+        let out = call(&s, "transfer.phone_qr", json!({ "password": "correct horse battery", "accounts": accounts })).await.result.unwrap();
+        assert_eq!(out["frames"], json!([]));
+        assert_eq!(out["count"], json!(0));
+        assert_eq!(out["skipped"][0]["reason"], json!("no-secret"));
     }
 
     #[tokio::test]
