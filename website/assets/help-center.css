@@ -26,7 +26,7 @@
 .mv-help-search-row { display:flex; gap:10px; }
 .mv-help-search input { width:100%; min-width:0; padding:12px 14px; border:1px solid var(--mv-muted); border-radius:4px; background:var(--mv-bg); font:inherit; color:var(--mv-ink); caret-color:var(--mv-accent); }
 .mv-help-search input::placeholder { color:var(--mv-muted); opacity:1; }
-.mv-help-search button { padding:10px 16px; background:#4f46df; color:#fff; border-radius:4px; font:inherit; font-weight:550; cursor:pointer; }
+.mv-help-search button { flex-shrink:0; padding:10px 16px; background:#4f46df; color:#fff; border-radius:4px; font:inherit; font-weight:550; cursor:pointer; }
 .mv-help-search button:hover { background:#3e35c8; }
 .mv-help-search [role=status] { margin:12px 0 0; font-size:.85rem; }
 .mv-help-breadcrumb { font-size:.84rem; color:var(--mv-muted); }

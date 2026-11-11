@@ -1084,6 +1084,8 @@ export function verify() {
           const target = p.endsWith('/') ? `${p}index.html` : p;
           // /gm.js is injected in production only; it is legitimately absent here.
           if (target === '/gm.js') continue;
+          // Deployment builds the demo entry; it is absent from the source tree.
+          if (target === '/demo/index.html') continue;
           if (!clipExists(target)) {
             problems.push(`${loc.dir}/${rel}: dead link ${v}`);
           }

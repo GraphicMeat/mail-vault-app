@@ -599,6 +599,9 @@ pub(crate) struct TestKeychainGuard(pub Arc<TestKeychainBackend>);
 #[cfg(test)]
 impl TestKeychainGuard {
     pub(crate) fn install(path: PathBuf) -> Self {
+        // A timed-out synthetic read may leave the process-wide gate blocked.
+        // Each fixture owns a fresh backend and starts with a readable key.
+        GATE.clear(CREDENTIALS_KEY);
         let backend = Arc::new(TestKeychainBackend {
             shared: Arc::new(TestSharedBlobRead {
                 path,
