@@ -19,7 +19,8 @@
 //!   (tracker blocking is premium).
 //! - Links: every scannable `<a href>` gets its destination as its title; a
 //!   `javascript:`/`data:` link, or text that shows one site and goes to
-//!   another, is red; a redirect through one site to another is yellow.
+//!   another, or a destination that is a bare IP address the text does not
+//!   show, is red; a redirect through one site to another is yellow.
 //! - Text the reader sees (reasons, the marker's label and hover text) is
 //!   written from templates the app sends in the UI language: the daemon has
 //!   no catalogs.
@@ -41,7 +42,7 @@ use std::sync::LazyLock;
 
 /// The catalog keys whose templates a scan writes with.
 pub const TEXT_KEYS: &[&str] = &[
-    K_EXPLAIN, K_LABEL, K_VENDOR, K_PATH, K_HIDDEN_CSS, K_HIDDEN_CONTAINER, K_INVISIBLE, K_SCHEME, K_MISMATCH, K_REDIRECT,
+    K_EXPLAIN, K_LABEL, K_VENDOR, K_PATH, K_HIDDEN_CSS, K_HIDDEN_CONTAINER, K_INVISIBLE, K_SCHEME, K_MISMATCH, K_REDIRECT, K_IP,
 ];
 const K_EXPLAIN: &str = "util.trackerDetect.blockedExplain";
 const K_LABEL: &str = "util.trackerDetect.blockedLabel";
@@ -53,6 +54,7 @@ const K_INVISIBLE: &str = "util.trackerDetect.invisibleImageReadReceiptPicture";
 const K_SCHEME: &str = "linkSafety.reason.dangerousScheme";
 const K_MISMATCH: &str = "linkSafety.reason.textMismatch";
 const K_REDIRECT: &str = "linkSafety.reason.redirect";
+const K_IP: &str = "linkSafety.reason.ipAddress";
 
 /// The UI language's templates, by catalog key, as the app's `t()` holds
 /// them (`{{name}}` slots). A key the app did not send reads as the key, as
@@ -439,10 +441,23 @@ pub fn classify_link(href: &str, text: &str, texts: &Texts) -> Classified {
         _ => None,
     } {
         (Some("red"), reason)
+    } else if let Some(ip) = bare_ip(href).filter(|_| shown_domain != actual_domain) {
+        (Some("red"), texts.t(K_IP, &[("ip", ip.as_str())]))
     } else {
         redirect_verdict(href, actual_domain, texts).map_or((None, String::new()), |r| (Some("yellow"), r))
     };
     Classified { level, reason, actual_domain: actual, text_domain: shown_domain }
+}
+
+/// The address a link goes to when its host is a bare IP, as a reader would
+/// recognise it: an IPv4 address dressed as IPv6 (`[::ffff:d93c:ed6f]`) is
+/// written as the IPv4 one.
+fn bare_ip(href: &str) -> Option<String> {
+    match url::Url::parse(href).ok()?.host()? {
+        url::Host::Ipv4(a) => Some(a.to_string()),
+        url::Host::Ipv6(a) => Some(a.to_ipv4_mapped().map_or_else(|| format!("[{a}]"), |v4| v4.to_string())),
+        url::Host::Domain(_) => None,
+    }
 }
 
 fn redirect_verdict(href: &str, actual: Option<String>, texts: &Texts) -> Option<String> {

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Link safety now marks a link red when it goes to a bare IP address that its text does not show, as in phishing mails dressed as a bank with a plain "Sign the document" button. An IPv4 address hidden in IPv6 form is shown as the IPv4 one in the warning.
 - Drag inline pictures from an email to the Desktop or a folder. Double-click supported pictures to open them in Preview.
 - Replying to or forwarding a message whose subject already starts with reply or forward prefixes no longer stacks them. "Re: RE: Plans" and "AW: Plans" both become "Re: Plans", on the desktop app as well as the phone app; a forward of "Re: Plans" becomes "Fwd: Plans".
 - A send whose connection broke after the mail server may already have taken the message is no longer sent again on its own, so the recipient no longer gets it twice. The outbox and the Scheduled folder show it as "May not have sent", with Check Sent, Retry and Discard. A scheduled send that MailVault was in the middle of sending when it quit or crashed is shown the same way instead of being sent again at the next start.

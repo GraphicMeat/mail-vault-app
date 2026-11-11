@@ -1216,6 +1216,7 @@
   "linkSafety.reason.dangerousScheme": "O link usa o esquema perigoso {{scheme}}:",
   "linkSafety.reason.textMismatch": "O texto do link mostra {{textDomain}}, mas leva a {{actualDomain}}",
   "linkSafety.reason.redirect": "O link redireciona por {{actualDomain}} para {{redirectDomain}}",
+  "linkSafety.reason.ipAddress": "O link leva a um endereço IP ({{ip}}), não a um site com nome",
   "list.acrossFolders_one": "em {{count}} pasta",
   "list.acrossFolders_other": "em {{count}} pastas",
   "list.anythingAlreadyArchivedStillVault": "Tudo o que você já arquivou continua no seu cofre.",

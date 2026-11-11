@@ -1216,6 +1216,7 @@
   "linkSafety.reason.dangerousScheme": "このリンクは危険な {{scheme}}: スキームを使っています",
   "linkSafety.reason.textMismatch": "リンクの表示は {{textDomain}} ですが、実際の移動先は {{actualDomain}} です",
   "linkSafety.reason.redirect": "このリンクは {{actualDomain}} を経由して {{redirectDomain}} に転送されます",
+  "linkSafety.reason.ipAddress": "このリンクは名前のあるサイトではなく、IP アドレス ({{ip}}) に直接移動します",
   "list.acrossFolders_one": "{{count}} 個のフォルダ",
   "list.acrossFolders_other": "{{count}} 個のフォルダ",
   "list.anythingAlreadyArchivedStillVault": "すでにアーカイブしたものは保管庫に残っています。",

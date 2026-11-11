@@ -1216,6 +1216,7 @@
   "linkSafety.reason.dangerousScheme": "Link uses dangerous {{scheme}}: scheme",
   "linkSafety.reason.textMismatch": "Link text shows {{textDomain}} but goes to {{actualDomain}}",
   "linkSafety.reason.redirect": "Link redirects through {{actualDomain}} to {{redirectDomain}}",
+  "linkSafety.reason.ipAddress": "Link goes to a bare IP address ({{ip}}), not a named website",
   "list.acrossFolders_one": "across {{count}} folder",
   "list.acrossFolders_other": "across {{count}} folders",
   "list.anythingAlreadyArchivedStillVault": "Anything you already archived is still in your vault.",

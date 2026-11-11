@@ -272,3 +272,37 @@ fn stripping_pixels_is_premium() {
     assert!(!premium["html"].as_str().unwrap().contains("sendgrid"));
     assert_eq!(premium["remote"], 0);
 }
+
+/// A link whose host is a bare IP address goes nowhere a sender would name:
+/// the 2026-11 bank phish wore plain words ("Pasirasyti dokumenta") over
+/// `http://[0000:...:FFFF:D93C:ED6F]/`, an IPv4 address dressed as IPv6.
+#[test]
+fn a_link_to_a_bare_ip_address_is_red() {
+    let t = Texts::from_value(Some(&json!({"linkSafety.reason.ipAddress": "goes to {{ip}}"})));
+    let phish = "http://[0000:0000:0000:0000:0000:FFFF:D93C:ED6F]/nbf-p0f?lang=lt";
+    for (href, ip) in [
+        (phish, "217.60.237.111"),
+        ("http://217.60.237.111/login", "217.60.237.111"),
+        ("http://3644648815/login", "217.60.237.111"),
+        ("https://[2001:db8::1]/x", "[2001:db8::1]"),
+    ] {
+        let got = classify_link(href, "Pasirasyti dokumenta", &t);
+        assert_eq!((got.level, got.reason.as_str()), (Some("red"), format!("goes to {ip}").as_str()), "{href}");
+    }
+    let scan = scan_links(&format!(r#"<p><a href="{phish}">Pasirasyti dokumenta</a></p>"#), &t);
+    assert_eq!(scan.max_level, Some("red"));
+    assert!(scan.html.contains(r#"data-link-alert="red""#), "{}", scan.html);
+    // A link that shows its own address hides nothing; a named site is not an IP.
+    assert_eq!(classify_link("http://1.2.3.4/", "http://1.2.3.4/", &t).level, None);
+    assert_eq!(classify_link("https://www.luminor.lt/", "konsultantui", &t).level, None);
+}
+
+/// The app sends the templates it lists in `BODY_TEXT_KEYS`; a key only one
+/// side knows reaches the reader as its raw catalog key.
+#[test]
+fn the_app_sends_every_template_a_scan_writes_with() {
+    let js = include_str!("../../../src/services/bodyScan.js");
+    let list = js.split("export const BODY_TEXT_KEYS = [").nth(1).and_then(|r| r.split("];").next()).expect("BODY_TEXT_KEYS in bodyScan.js");
+    let keys: Vec<&str> = list.split('\'').skip(1).step_by(2).collect();
+    assert_eq!(keys, TEXT_KEYS);
+}

@@ -44,6 +44,7 @@ export const BODY_TEXT_KEYS = [
   'linkSafety.reason.dangerousScheme',
   'linkSafety.reason.textMismatch',
   'linkSafety.reason.redirect',
+  'linkSafety.reason.ipAddress',
 ];
 
 /** The UI language's templates (`t(key)` with no values leaves the `{{slots}}` in). */

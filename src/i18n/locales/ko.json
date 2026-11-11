@@ -1216,6 +1216,7 @@
   "linkSafety.reason.dangerousScheme": "이 링크는 위험한 {{scheme}}: 스킴을 사용합니다",
   "linkSafety.reason.textMismatch": "링크 텍스트는 {{textDomain}}을(를) 보여 주지만 실제로는 {{actualDomain}}(으)로 이동합니다",
   "linkSafety.reason.redirect": "링크가 {{actualDomain}}을(를) 거쳐 {{redirectDomain}}(으)로 리디렉션됩니다",
+  "linkSafety.reason.ipAddress": "링크가 이름 있는 웹사이트가 아닌 IP 주소({{ip}})로 바로 연결됩니다",
   "list.acrossFolders_one": "폴더 {{count}}개",
   "list.acrossFolders_other": "폴더 {{count}}개",
   "list.anythingAlreadyArchivedStillVault": "이미 보관한 항목은 보관함에 그대로 있습니다.",

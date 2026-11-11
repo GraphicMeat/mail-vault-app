@@ -1216,6 +1216,7 @@
   "linkSafety.reason.dangerousScheme": "该链接使用了危险的 {{scheme}}: 协议",
   "linkSafety.reason.textMismatch": "链接文字显示 {{textDomain}}，实际指向 {{actualDomain}}",
   "linkSafety.reason.redirect": "链接经由 {{actualDomain}} 重定向到 {{redirectDomain}}",
+  "linkSafety.reason.ipAddress": "链接指向一个裸 IP 地址（{{ip}}），而不是有名称的网站",
   "list.acrossFolders_one": "{{count}} 个文件夹",
   "list.acrossFolders_other": "{{count}} 个文件夹",
   "list.anythingAlreadyArchivedStillVault": "你已归档的内容仍在保险库中。",
