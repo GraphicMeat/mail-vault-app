@@ -628,13 +628,8 @@ function App() {
     );
   }
 
-  if (status === 'noAccount') {
-    return (
-      <div className="mv-app">
-        <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onImport={onImport} onImported={onImported} autoStart={DEMO_SIGNIN ? 'google' : null} />
-      </div>
-    );
-  }
+  // Until the tour check answers, a fresh install shows loading: an add-account screen here would
+  // be swapped for the tour a moment later, unmounting a sign-in or import already under way.
   if (status === 'loading' || status === 'failed' || (status === 'noAccount' && !tourChecked)) {
     return (
       <div className="mv-app">
@@ -646,6 +641,14 @@ function App() {
             <button type="button" onClick={start}>{t('common.retry')}</button>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (status === 'noAccount') {
+    return (
+      <div className="mv-app">
+        <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onImport={onImport} onImported={onImported} autoStart={DEMO_SIGNIN ? 'google' : null} />
       </div>
     );
   }

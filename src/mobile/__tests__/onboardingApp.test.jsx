@@ -7,7 +7,7 @@ import React from 'react';
 import { render, cleanup, waitFor, screen, fireEvent, act } from '@testing-library/react';
 import en from '../../i18n/locales/en.json';
 
-const engine = vi.hoisted(() => ({ calls: [], accounts: [], settings: {} }));
+const engine = vi.hoisted(() => ({ calls: [], accounts: [], settings: {}, settingsGate: null }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
@@ -18,6 +18,7 @@ vi.mock('../transport.js', () => ({
       case 'mobile.accounts.list':
         return { accounts: engine.accounts };
       case 'mobile.settings.get':
+        if (engine.settingsGate) await engine.settingsGate;
         return { notifications: 'off', notificationPreview: true, language: null, onboardingComplete: false, ...engine.settings };
       case 'mobile.settings.set':
         engine.settings = { ...engine.settings, ...params };
@@ -55,6 +56,7 @@ beforeEach(() => {
   engine.calls = [];
   engine.accounts = [];
   engine.settings = {};
+  engine.settingsGate = null;
 });
 
 afterEach(() => cleanup());
@@ -65,6 +67,22 @@ describe('App onboarding gate', () => {
     render(<App />);
     await waitFor(() => expect(screen.getByTestId('onboarding-language')).toBeTruthy());
     expect(screen.getByText(progress(1, 5))).toBeTruthy();
+    expect(screen.queryByText(en['mobile.add.title'])).toBeNull();
+  });
+
+  it('a fresh install with a slow engine shows loading until the tour, never the add-account screen', async () => {
+    let release;
+    engine.settingsGate = new Promise((resolve) => { release = resolve; });
+    const App = await freshApp();
+    render(<App />);
+    await waitFor(() => expect(engine.calls.some(([m]) => m === 'mobile.accounts.list')).toBe(true));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    // The account list is in (no accounts) and the tour check still waits on the engine: an
+    // add-account screen here would unmount when the tour replaces it, sign-in and all.
+    expect(screen.queryByText(en['mobile.add.title'])).toBeNull();
+    expect(screen.getByText(en['explorer.loading'])).toBeTruthy();
+    await act(async () => { release(); });
+    await waitFor(() => expect(screen.getByTestId('onboarding-language')).toBeTruthy());
     expect(screen.queryByText(en['mobile.add.title'])).toBeNull();
   });
 
