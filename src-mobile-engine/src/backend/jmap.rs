@@ -36,7 +36,7 @@
 //! is kept in [`Sessions`] so a message open does not fetch the session again.
 
 use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
-use crate::accounts::{self, failure, load_account, map_error, AccountRow, Code};
+use crate::accounts::{self, failure, load_account, map_error, AccountRow, Code, InsertError};
 use crate::actions::Kind;
 use crate::db::{lock, Engine, Shared};
 use crate::net::block_on;
@@ -1227,7 +1227,7 @@ fn read_form(params: &Value) -> Result<JmapForm, String> {
 /// A typed session URL as a URL: `https://` when it names no scheme, `/.well-known/jmap` when it
 /// names no path. `Err` is the reply: not a URL, credentials in it, or not https (a loopback
 /// http URL passes only under the debug test override).
-fn session_url(typed: &str) -> Result<url::Url, Value> {
+pub(crate) fn session_url(typed: &str) -> Result<url::Url, Value> {
     let full = if typed.contains("://") { typed.to_string() } else { format!("https://{typed}") };
     let mut url = url::Url::parse(&full).map_err(|_| failure(Code::Invalid, "the server address is not a URL"))?;
     if !url.username().is_empty() || url.password().is_some() {
@@ -1249,7 +1249,7 @@ fn failure_code(code: &str, message: &str) -> Value {
 }
 
 /// The host as the account row shows it, with the port when it is not 443.
-fn host_port(url: &url::Url) -> (String, u16) {
+pub(crate) fn host_port(url: &url::Url) -> (String, u16) {
     (url.host_str().unwrap_or_default().to_ascii_lowercase(), url.port_or_known_default().unwrap_or(443))
 }
 
@@ -1333,35 +1333,27 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     };
     let count = inbox.total_emails;
 
-    let id = accounts::new_account_id();
-    let secret = Credential::from_password(&form.password).to_secret();
-    engine
-        .secrets()
-        .set(&id, &secret)
-        .map_err(|e| RpcError::Internal(mailvault_core::secret_scrub::scrub(&e, &[secret.as_str(), form.password.as_str()])))?;
     let display_name = form.display_name.clone().unwrap_or_else(|| form.email.clone());
     let (host, port) = host_port(&url);
-    let session = url.to_string();
-    let inserted = engine.write(|c| {
-        c.execute(
-            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, kind, auth, jmap_url, needs_auth, created_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'ssl', 'jmap', ?6, ?7, 0, ?8)",
-            rusqlite::params![&id, &form.email, &display_name, &host, port as i64, auth, &session, accounts::now_ms()],
-        )?;
+    let mut row = AccountRow::password(&form.email, &host, port, "ssl");
+    row.kind = "jmap".into();
+    row.auth = auth.into();
+    row.jmap_url = Some(url.to_string());
+    row.display_name = display_name.clone();
+    let limits = limits_json(&client);
+    let stored = accounts::insert_new(engine, &row, &Credential::from_password(&form.password), |c, id| {
         c.execute(
             "INSERT INTO sync_state (account_id, folder, token) VALUES (?1, ?2, ?3)
              ON CONFLICT (account_id, folder) DO UPDATE SET token = excluded.token",
-            (&id, LIMITS_KEY, limits_json(&client)),
+            (id, LIMITS_KEY, &limits),
         )?;
         Ok(())
     });
-    if let Err(e) = inserted {
-        let _ = engine.secrets().delete(&id);
-        if accounts::is_unique_violation(&e.to_string()) {
-            return Ok(failure(Code::Duplicate, "this account is already added"));
-        }
-        return Err(RpcError::Internal(e.to_string()));
-    }
+    let id = match stored {
+        Ok(id) => id,
+        Err(InsertError::Duplicate) => return Ok(failure(Code::Duplicate, "this account is already added")),
+        Err(InsertError::Secret(m) | InsertError::Db(m)) => return Err(RpcError::Internal(m)),
+    };
     shared.jmap.put(&id, Arc::new(client));
     let mut account = accounts::account_json(&id, &form.email, &display_name, &host, port as i64, "ssl", (None, None, None));
     account["kind"] = json!("jmap");

@@ -388,39 +388,17 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     if let Err(reply) = form.test_login() {
         return Ok(reply);
     }
-    let id = new_account_id();
-    let secret = Credential::from_password(&form.password).to_secret();
-    engine.secrets().set(&id, &secret).map_err(|e| internal(scrub(&scrub(&e, &secret), &form.password)))?;
     let display_name = form.display_name.as_deref().map(str::trim).filter(|d| !d.is_empty()).unwrap_or(&form.email).to_string();
-    let inserted = engine.write(|c| {
-        c.execute(
-            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, created_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            (
-                &id,
-                &form.email,
-                &display_name,
-                &form.imap_host,
-                form.imap_port as i64,
-                &form.security,
-                &form.smtp_host,
-                form.smtp_port as i64,
-                &form.smtp_security,
-                now_ms(),
-            ),
-        )?;
-        Ok(())
-    });
-    if let Err(e) = inserted {
-        // Best effort: if this fails too, the secret is unreferenced and `remove` can never reach it,
-        // but nothing reads an id without a row.
-        let _ = engine.secrets().delete(&id);
-        // A second add of the same address that raced past the check above.
-        if is_unique_violation(&e.to_string()) {
-            return Ok(failure(Code::Duplicate, "this account is already added"));
-        }
-        return Err(internal(e));
-    }
+    let mut row = AccountRow::password(&form.email, &form.imap_host, form.imap_port, &form.security);
+    row.smtp_host = Some(form.smtp_host.clone());
+    row.smtp_port = Some(form.smtp_port);
+    row.smtp_security = Some(form.smtp_security.clone());
+    row.display_name = display_name.clone();
+    let id = match insert_new(engine, &row, &Credential::from_password(&form.password), |_, _| Ok(())) {
+        Ok(id) => id,
+        Err(InsertError::Duplicate) => return Ok(failure(Code::Duplicate, "this account is already added")),
+        Err(InsertError::Secret(m) | InsertError::Db(m)) => return Err(internal(m)),
+    };
     Ok(json!({
         "ok": true,
         "account": account_json(
@@ -433,6 +411,73 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             (Some(form.smtp_host.clone()), Some(form.smtp_port as i64), Some(form.smtp_security.clone())),
         ),
     }))
+}
+
+/// Why [`insert_new`] stored nothing. Every message is free of the account's secrets.
+pub(crate) enum InsertError {
+    /// The address is already an account (an add that raced past [`email_taken`]).
+    Duplicate,
+    /// The platform secret store refused the secret.
+    Secret(String),
+    Db(String),
+}
+
+/// The one way a new account is stored, by every add path (the forms, an OAuth sign-in, a JMAP
+/// sign-in, an import from the computer): `cred` goes to the secret store first, then `row` (and
+/// whatever `extra` writes for the new id) in one write. A row that fails takes the secret back
+/// out. Answers the new id.
+pub(crate) fn insert_new(
+    engine: &Engine,
+    row: &AccountRow,
+    cred: &Credential,
+    extra: impl FnOnce(&rusqlite::Connection, &str) -> rusqlite::Result<()>,
+) -> Result<String, InsertError> {
+    let id = new_account_id();
+    let secret = cred.to_secret();
+    if let Err(e) = engine.secrets().set(&id, &secret) {
+        let mut all = cred.secrets();
+        all.push(secret.as_str());
+        return Err(InsertError::Secret(mailvault_core::secret_scrub::scrub(&e, &all)));
+    }
+    let inserted = engine.write(|c| {
+        c.execute(
+            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security,
+                                   kind, auth, provider, jmap_url, needs_auth, created_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, ?14)",
+            rusqlite::params![
+                &id,
+                &row.email,
+                &row.display_name,
+                &row.imap_host,
+                row.imap_port as i64,
+                &row.security,
+                &row.smtp_host,
+                row.smtp_port.map(i64::from),
+                &row.smtp_security,
+                &row.kind,
+                &row.auth,
+                &row.provider,
+                &row.jmap_url,
+                now_ms(),
+            ],
+        )?;
+        extra(c, &id)
+    });
+    match inserted {
+        Ok(()) => Ok(id),
+        Err(e) => {
+            // Best effort: if this fails too, the secret is unreferenced and `remove` can never reach
+            // it, but nothing reads an id without a row.
+            let _ = engine.secrets().delete(&id);
+            let text = e.to_string();
+            // A second add of the same address that raced past the check.
+            if is_unique_violation(&text) {
+                Err(InsertError::Duplicate)
+            } else {
+                Err(InsertError::Db(text))
+            }
+        }
+    }
 }
 
 pub(crate) fn is_unique_violation(db_error: &str) -> bool {

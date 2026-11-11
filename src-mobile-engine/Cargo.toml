@@ -31,6 +31,8 @@ url = "2"
 # The type of core's JMAP EventSource response, read chunk by chunk by the live thread (the same
 # reqwest core already builds; no features of its own).
 reqwest = { version = "0.12", default-features = false }
+# The import's password, wiped when dropped (the same zeroize core already builds).
+zeroize = "1"
 
 [dev-dependencies]
 tempfile = "3"

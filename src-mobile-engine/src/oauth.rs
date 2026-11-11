@@ -22,7 +22,7 @@
 //! [`Fail::auth`]. From then on the account is parked: `backend::open` refuses it with no network,
 //! and the replay and outbox workers skip it, until `mobile.oauth.reauth` signs it in again.
 
-use crate::accounts::{self, failure, load_account, map_error, AccountRow, Code};
+use crate::accounts::{self, failure, load_account, map_error, AccountRow, Code, InsertError};
 use crate::db::{lock, Engine, Shared};
 use crate::events::SYNC_STATE;
 use crate::net::block_on;
@@ -643,39 +643,12 @@ fn add_account(engine: &Engine, flow: &Flow, address: &str, cred: Credential) ->
     }
     let row = new_row(engine, flow.provider, address);
     verify(&row, &cred)?;
-    let id = accounts::new_account_id();
-    let secret = cred.to_secret();
-    engine.secrets().set(&id, &secret).map_err(|e| (Code::Invalid, format!("secret store: {}", scrub(&e, &[&secret]))))?;
-    let inserted = engine.write(|c| {
-        c.execute(
-            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security,
-                                   kind, auth, provider, needs_auth, created_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, ?13)",
-            rusqlite::params![
-                &id,
-                &row.email,
-                &row.display_name,
-                &row.imap_host,
-                row.imap_port as i64,
-                &row.security,
-                &row.smtp_host,
-                row.smtp_port.map(i64::from),
-                &row.smtp_security,
-                &row.kind,
-                &row.auth,
-                &row.provider,
-                accounts::now_ms(),
-            ],
-        )?;
-        Ok(())
-    });
-    if let Err(e) = inserted {
-        let _ = engine.secrets().delete(&id);
-        if accounts::is_unique_violation(&e.to_string()) {
-            return Err((Code::Duplicate, "this account is already added".into()));
-        }
-        return Err((Code::Invalid, e.to_string()));
-    }
+    let id = match accounts::insert_new(engine, &row, &cred, |_, _| Ok(())) {
+        Ok(id) => id,
+        Err(InsertError::Duplicate) => return Err((Code::Duplicate, "this account is already added".into())),
+        Err(InsertError::Secret(m)) => return Err((Code::Invalid, format!("secret store: {m}"))),
+        Err(InsertError::Db(m)) => return Err((Code::Invalid, m)),
+    };
     Ok(json!({ "ok": true, "account": reply_account(&id, &row) }))
 }
 

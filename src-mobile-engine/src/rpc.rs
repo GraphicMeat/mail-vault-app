@@ -157,6 +157,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.settings.get", crate::settings::get),
     ("mobile.settings.set", crate::settings::set),
     ("mobile.sync.refresh", crate::sync::refresh),
+    ("mobile.transfer.import", crate::transfer::import),
 ];
 #[cfg(not(feature = "perf-gate"))]
 const TABLE: &[(&str, Handler)] = &[
@@ -206,6 +207,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.settings.get", crate::settings::get),
     ("mobile.settings.set", crate::settings::set),
     ("mobile.sync.refresh", crate::sync::refresh),
+    ("mobile.transfer.import", crate::transfer::import),
 ];
 
 /// Largest perf record accepted, serialized. The real one is a few hundred bytes.
