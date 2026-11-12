@@ -29,10 +29,10 @@ export function ContactsView({ onClose, onOpenMail }) {
     focus(emailParticipants(selectedEmail || selectedThread?.lastEmail, myAddresses()));
   }, [focus]);
 
-  // Favorites is the Contacts list narrowed to starred people.
+  // Favorites is the Contacts list narrowed to starred people; every other tab is unfiltered.
   useEffect(() => {
-    if (scope !== 'favorites' && scope !== 'contacts') return;
-    if (vipOnly !== (scope === 'favorites')) setVipOnly(scope === 'favorites');
+    const want = scope === 'favorites';
+    if (vipOnly !== want) setVipOnly(want);
   }, [scope]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onFile = async (e) => {

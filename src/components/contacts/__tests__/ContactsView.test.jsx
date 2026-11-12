@@ -122,6 +122,14 @@ describe('ContactsView', () => {
     expect(setVipOnly).toHaveBeenLastCalledWith(false);
   });
 
+  it('leaving Favorites for All senders clears the favorites filter', () => {
+    render(<ContactsView onClose={() => {}} />);
+    const { setVipOnly } = h.store.getState();
+    h.store.setState({ vipOnly: true });
+    fireEvent.click(screen.getByTestId('contacts-tab-senders'));
+    expect(setVipOnly).toHaveBeenLastCalledWith(false);
+  });
+
   it('All senders tab shows the senders list', () => {
     render(<ContactsView onClose={() => {}} />);
     fireEvent.click(screen.getByTestId('contacts-tab-senders'));
