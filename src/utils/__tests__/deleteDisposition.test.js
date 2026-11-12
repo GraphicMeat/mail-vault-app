@@ -20,7 +20,7 @@ describe('trashOf', () => {
   });
 
   it('names the same candidates as core imap::TRASH_CANDIDATES, in order', () => {
-    const src = readFileSync(resolve(process.cwd(), 'src-core/src/imap/mod.rs'), 'utf8');
+    const src = readFileSync(resolve(process.cwd(), 'src-core/src/imap/listing.rs'), 'utf8');
     const m = src.match(/pub const TRASH_CANDIDATES: &\[&str\] = &\[(.*?)\];/);
     expect(m).toBeTruthy();
     const rust = [...m[1].matchAll(/"([^"]*)"/g)].map(x => x[1]);
