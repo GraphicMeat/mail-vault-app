@@ -12,8 +12,23 @@
 # system appearance is never touched. Leaves nothing outside the clone and $TMPDIR.
 set -euo pipefail
 
-# The notes board card shares this script: its shot has its own flow.
+# Other cards share this script; each shot has its own flow.
 case ",${HARNESS_SHOTS:-}," in
+  *,reply-joined-reader,*)
+    cd "$(dirname "$0")/.."
+    out=${HARNESS_SHOTS_OUT:-${1:-$PWD/.artifacts}}
+    case "$out" in /*) ;; *) echo 'Shot output must be an absolute directory' >&2; exit 1 ;; esac
+    mkdir -p "$out"
+    [ -d node_modules ] || npm ci
+    npm run build:e2e
+    MV_BLITZ_SURFACES_OUT="$out" npx wdio run wdio.conf.js --spec tests/e2e/connected-thread-reply.test.js
+    for mode in light dark; do
+      test -s "$out/reply-joined-reader-$mode.png" || {
+        echo "capture.sh: missing $out/reply-joined-reader-$mode.png" >&2
+        exit 1
+      }
+    done
+    exit 0 ;;
   *,notes-board-after-delete,*)
     out=${HARNESS_SHOTS_OUT:-${1:-}}
     test -n "$out" || { echo 'HARNESS_SHOTS_OUT or $1 must be an absolute directory' >&2; exit 1; }
