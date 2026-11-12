@@ -26,7 +26,7 @@ const workflowPages = {
     'blog/offline-email-search-for-mac.html',
     'blog/search-50000-emails-in-milliseconds.html',
   ],
-  'privacy-mode': ['faq/premium.html'],
+  'privacy-mode': ['faq/premium.html', 'blog/best-private-email-app.html'],
   'manual-backup': [
     'docs.html', 'faq.html', 'blog.html',
     'faq/getting-started.html', 'faq/storage-and-vault.html', 'faq/backup-and-restore.html',
