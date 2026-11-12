@@ -35,6 +35,7 @@ import { TagChips } from '../TagChips';
 import { FieldStrip } from '../FieldStrip';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
+import { useDeleteConfirmation } from '../../hooks/useDeleteConfirmation';
 import { describeReaderPurge, describeReaderDelete } from '../../utils/custodyCopy';
 import { serverDeleteDispositionOf } from '../../utils/deleteDisposition';
 import { useExportStore } from '../../stores/exportStore';
@@ -78,7 +79,8 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   };
   const [fetchedEmail, setFetchedEmail] = useState(null);
   const selectionOwnership = useRef(null);
-  const [pendingDelete, setPendingDelete] = useState(null);
+  const deleteConfirmation = useDeleteConfirmation();
+  const setPendingDelete = deleteConfirmation.request;
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const moveButtonRef = useRef(null);
   const appTheme = useThemeStore(selectTheme);
@@ -111,7 +113,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   useEffect(() => {
     setFetchedEmail(null);
     setThemeOverride(null);
-    setPendingDelete(null);
+    deleteConfirmation.dismiss();
     setShowMoveDropdown(false);
     selectionOwnership.current = null;
   }, [initialIdentity]);
@@ -437,7 +439,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         })()}
       <LinkSafetyModal {...linkSafetyModal} />
     </Dialog>
-    <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />
+    <DeleteConfirmModal {...deleteConfirmation.modalProps} />
     </>
   );
 }

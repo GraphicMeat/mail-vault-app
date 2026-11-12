@@ -42,6 +42,7 @@ import { useViewBuilderStore } from '../../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
+import { useDeleteConfirmation, READER_CONFIRMING_ACTIONS } from '../../hooks/useDeleteConfirmation';
 import { remoteAllowed, scanForFrame, scanHead, refusalHead, LINK_ALERT_STYLE } from '../../services/bodyScan';
 import { ExternalContentBar } from './ExternalContentBar';
 import { recordTrackerSummary, recordLinkAlert } from '../../services/rowVerdicts';
@@ -660,14 +661,16 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
   const [expandedMessages, setExpandedMessages] = useState({});
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState(null);
+  // One confirm for every message's Delete, Delete everywhere and Unarchive;
+  // it hands focus back to the bar button that raised it.
+  const deleteConfirmation = useDeleteConfirmation({ actions: READER_CONFIRMING_ACTIONS });
+  const setPendingDelete = deleteConfirmation.request;
   // AI Compose actions (Phase 6): "Summarize thread" is the one action that
   // reads the whole conversation rather than a single draft or message, so
   // it lives at the thread level, not per-row. Read-only result — it never
   // sends or saves anything.
   const [aiSummary, setAiSummary] = useState(null);
   const scrollContainerRef = useRef(null);
-  const confirmationReturnRef = useRef(null);
 
   // One message, not the thread. The confirm reads as the reading pane's
   // (viewer.*): the message leaves the server; a vault copy stays.
@@ -748,15 +751,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
     });
   }, []);
 
-  const restoreConfirmationFocus = () => {
-    requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
-  };
-
-  const beginQuickAction = useCallback((_event, trigger, entry) => {
-    if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'archive'].includes(entry?.action)) {
-      confirmationReturnRef.current = trigger;
-    }
-  }, []);
+  const beginQuickAction = deleteConfirmation.onActionStart;
 
   // Sort emails by user preference (oldest-first or newest-first)
   const sortedEmails = useMemo(() =>
@@ -1085,7 +1080,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
         </div>
       )}
       </div>
-      {!readOnly && <DeleteConfirmModal pending={pendingDelete} onClose={() => { setPendingDelete(null); restoreConfirmationFocus(); }} />}
+      {!readOnly && <DeleteConfirmModal {...deleteConfirmation.modalProps} />}
     </div>
   );
 }

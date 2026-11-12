@@ -22,6 +22,7 @@ import {
 import { isRowArchived, savedMailboxes, selectionFacts } from "../utils/quickActionFacts";
 import { describeQuickAction } from "../utils/quickActionCatalog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { useDeleteConfirmation } from "../hooks/useDeleteConfirmation";
 import { isBackedUp, useBackupScan } from "./email/MessageStateIcon";
 import { t, useT } from "../i18n/index.js";
 import { DockSlot } from "./ui/ToastDock";
@@ -58,24 +59,25 @@ export function SelectionActionBar() {
   const searchResults = useSearchStore((s) => s.searchResults);
   const backupScan = useBackupScan();
 
-  // Which delete was requested — 'server' or 'everywhere' — so a single
-  // popover can show the right confirmation copy for whichever button
-  // triggered it. null means the popover is closed.
-  const [deleteMode, setDeleteMode] = useState(null);
+  // Which confirm was requested ('server', 'everywhere' or 'unarchive'), as
+  // `{ mode }`: one modal shows the copy of whichever button raised it, read
+  // from the selection as it stands. null means the modal is closed.
+  const deleteConfirmation = useDeleteConfirmation();
+  const deleteMode = deleteConfirmation.pending?.mode ?? null;
+  const setDeleteMode = mode => deleteConfirmation.request({ mode });
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const [snoozeRect, setSnoozeRect] = useState(null);
   const [moveLeft, setMoveLeft] = useState(0);
   const moveButtonRef = useRef(null);
   const barRef = useRef(null);
   const selectionLabelRef = useRef(null);
-  const confirmationReturnRef = useRef(null);
   const [inlineAvailableWidth, setInlineAvailableWidth] = useState(null);
 
   const hasSelection = selectedEmailIds.size > 0;
 
   // Dismiss delete confirmation when selection changes
   useEffect(() => {
-    setDeleteMode(null);
+    deleteConfirmation.dismiss();
   }, [selectedEmailIds]);
 
   const summary = useMemo(() => {
@@ -150,7 +152,7 @@ export function SelectionActionBar() {
 
   const confirmDelete = () => {
     const mode = deleteMode;
-    setDeleteMode(null);
+    deleteConfirmation.dismiss();
     if (mode === "unarchive") handleAction(handleUnarchive, { report: true });
     else {handleAction(
         mode === "everywhere"
@@ -313,6 +315,42 @@ export function SelectionActionBar() {
     }
   };
 
+  // What each confirm says, by the button that raised it.
+  const serverLabel = localFolder ? t("common.delete") : t("rowMenu.deleteServer");
+  const confirmCopy = {
+    unarchive: () => ({
+      title: t("viewer.unarchiveEmail"),
+      description: selectedRows.some((email) =>
+          isRowArchived(email, useMailStore.getState()) &&
+          (email.source === "local-only" || email._origin === "local-only"))
+        ? t("viewer.emailOnlyExistsLocalArchive")
+        : t("viewer.cachedCopyRemovedEmailStill"),
+      confirmLabel: t("rowMenu.unarchive"),
+    }),
+    everywhere: () => ({
+      title: t("rowMenu.deleteEverywhere"),
+      description: t("selection.deleteServerVaultBackupDrive", { deleteScope }),
+      confirmLabel: t("rowMenu.deleteEverywhere"),
+    }),
+    server: () => ({
+      title: serverLabel,
+      description: localFolder
+        ? describeReaderDelete({ localFolder })
+        : t("selection.deleteServer2", {
+          deleteScope,
+          vaultClause: serverDeleteClause(
+            totalCount,
+            archivedCount,
+            serverDeleteDispositionOf(
+              locations.filter((_, i) => selectedRows[i]?.source !== "local-only"),
+              useMailStore.getState(),
+            ),
+          ),
+        }),
+      confirmLabel: serverLabel,
+    }),
+  };
+
   return (
     <AnimatePresence>
       {hasSelection && (
@@ -337,15 +375,7 @@ export function SelectionActionBar() {
             moveButtonRef={moveButtonRef}
             moveOpen={showMoveDropdown}
             onAction={runAction}
-            onActionStart={(event, trigger, entry) => {
-              if (
-                ["delete", "deleteServer", "deleteEverywhere", "unarchive"]
-                  .includes(entry.action)
-              ) {
-                confirmationReturnRef.current = trigger ||
-                  event.currentTarget;
-              }
-            }}
+            onActionStart={deleteConfirmation.onActionStart}
             onClear={clearSelection}
           />
 
@@ -383,50 +413,9 @@ export function SelectionActionBar() {
           // A local folder's delete keeps a deleted-bin copy, so it may skip.
           confirmOptional: deleteMode === "server" && (allServerBacked || localFolder),
           executor: confirmDelete,
-          copy: {
-            title: deleteMode === "unarchive"
-              ? t("viewer.unarchiveEmail")
-              : deleteMode === "everywhere"
-              ? t("rowMenu.deleteEverywhere")
-              : localFolder
-              ? t("common.delete")
-              : t("rowMenu.deleteServer"),
-            description: deleteMode === "unarchive"
-              ? selectedRows.some((email) =>
-                  isRowArchived(email, useMailStore.getState()) &&
-                  (email.source === "local-only" ||
-                    email._origin === "local-only")
-                )
-                ? t("viewer.emailOnlyExistsLocalArchive")
-                : t("viewer.cachedCopyRemovedEmailStill")
-              : deleteMode === "everywhere"
-              ? t("selection.deleteServerVaultBackupDrive", { deleteScope })
-              : localFolder
-              ? describeReaderDelete({ localFolder })
-              : t("selection.deleteServer2", {
-                deleteScope,
-                vaultClause: serverDeleteClause(
-                  totalCount,
-                  archivedCount,
-                  serverDeleteDispositionOf(
-                    locations.filter((_, i) => selectedRows[i]?.source !== "local-only"),
-                    useMailStore.getState(),
-                  ),
-                ),
-              }),
-            confirmLabel: deleteMode === "unarchive"
-              ? t("rowMenu.unarchive")
-              : deleteMode === "everywhere"
-              ? t("rowMenu.deleteEverywhere")
-              : localFolder
-              ? t("common.delete")
-              : t("rowMenu.deleteServer"),
-          },
+          copy: confirmCopy[deleteMode](),
         }}
-        onClose={() => {
-          setDeleteMode(null);
-          requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
-        }}
+        onClose={deleteConfirmation.modalProps.onClose}
       />
     </AnimatePresence>
   );

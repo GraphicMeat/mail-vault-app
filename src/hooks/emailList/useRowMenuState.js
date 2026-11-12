@@ -1,4 +1,15 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useDeleteConfirmation } from '../useDeleteConfirmation';
+
+// Where a delete or unarchive confirmation hands focus back: the row trigger
+// that opened it or, once that row stopped being live and its hover bar (the
+// trigger with it) unmounted, the row's own first control.
+export function confirmationReturnTarget(saved) {
+  const { trigger, row } = saved || {};
+  if (trigger?.isConnected) return trigger;
+  return row?.isConnected ? row.querySelector('input, button, [tabindex="0"]') : null;
+}
+const rowOfTrigger = trigger => ({ trigger, row: trigger?.closest?.('.group') });
 
 export function useRowMenuState() {
   // Lifted row menu state — only one menu can be active at a time. A row
@@ -8,9 +19,8 @@ export function useRowMenuState() {
   const [activeMenuRowId, setActiveMenuRowId] = useState(null);
   // Pending delete confirmation lifted out of rows so the modal escapes the
   // virtualizer's transform stacking context.
-  // { executor, copy: { title, description, confirmLabel } } | null
-  const [pendingDelete, setPendingDelete] = useState(null);
-  const confirmationReturnRef = useRef(null);
+  const deleteConfirmation = useDeleteConfirmation({ capture: rowOfTrigger, returnFocus: confirmationReturnTarget });
+  const { request, onActionStart: handleRowActionStart } = deleteConfirmation;
   // Lifted saving state — tracks which rows have active save operations
   const [savingRowIds, setSavingRowIds] = useState(() => new Set());
   const startSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.add(id); return next; }), []);
@@ -22,17 +32,12 @@ export function useRowMenuState() {
   const openRowMenu = useCallback((id) => setActiveMenuRowId(id), []);
   // A row closing its own menu must not release another row's.
   const closeRowMenu = useCallback((id) => setActiveMenuRowId(current => (id === undefined || current === id ? null : current)), []);
-  const handleRowActionStart = useCallback((_event, trigger, entry) => {
-    if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive'].includes(entry?.action)) {
-      confirmationReturnRef.current = { trigger, row: trigger?.closest?.('.group') };
-    }
-  }, []);
   // `options` carries `confirmOptional`, which is what lets the
   // skip-confirmation setting reach this delete — see DeleteConfirmModal.
   const requestRowDelete = useCallback((executor, copy, options) => {
     setActiveMenuRowId(null);
-    setPendingDelete({ executor, copy, ...options });
-  }, []);
+    request({ executor, copy, ...options });
+  }, [request]);
 
-  return { activeMenuRowId, setActiveMenuRowId, pendingDelete, setPendingDelete, confirmationReturnRef, savingRowIds, setSavingRowIds, startSaving, stopSaving, openRowMenu, closeRowMenu, handleRowActionStart, requestRowDelete };
+  return { activeMenuRowId, setActiveMenuRowId, deleteConfirmation, savingRowIds, setSavingRowIds, startSaving, stopSaving, openRowMenu, closeRowMenu, handleRowActionStart, requestRowDelete };
 }

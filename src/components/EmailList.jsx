@@ -162,14 +162,7 @@ export function MailboxCustodyStatus({ vaultShare, vaultShareLabel, searchActive
   </div>;
 }
 
-// Where a delete or unarchive confirmation hands focus back: the row trigger
-// that opened it or, once that row stopped being live and its hover bar (the
-// trigger with it) unmounted, the row's own first control.
-export function confirmationReturnTarget(saved) {
-  const { trigger, row } = saved || {};
-  if (trigger?.isConnected) return trigger;
-  return row?.isConnected ? row.querySelector('input, button, [tabindex="0"]') : null;
-}
+export { confirmationReturnTarget } from '../hooks/emailList/useRowMenuState';
 
 // A sender-view message row mounts its quick actions the way EmailRow does:
 // only while hovered or focused, or while a menu opened from them is up.
@@ -383,7 +376,7 @@ function EmailListComponent({ stacked = false }) {
   // Sender-grouped accordion state
   const [senderGroups, setSenderGroups] = useState(null);
   const senderGroupCacheRef = useRef({ fingerprint: null, groups: null });
-  const { activeMenuRowId, setActiveMenuRowId, pendingDelete, setPendingDelete, confirmationReturnRef, savingRowIds, setSavingRowIds, startSaving, stopSaving, openRowMenu, closeRowMenu, handleRowActionStart, requestRowDelete } = useRowMenuState();
+  const { activeMenuRowId, setActiveMenuRowId, deleteConfirmation, savingRowIds, setSavingRowIds, startSaving, stopSaving, openRowMenu, closeRowMenu, handleRowActionStart, requestRowDelete } = useRowMenuState();
   const scrollContainerRef = useRef(null);
   // Two-finger trackpad swipes on the chronological list's rows (not the
   // sender grouping, not the explorer). The row is found under the pointer
@@ -435,7 +428,7 @@ function EmailListComponent({ stacked = false }) {
     setExpandedEmail(null);
     setFocusedRow(null);
     setActiveMenuRowId(null);
-    setPendingDelete(null);
+    deleteConfirmation.dismiss();
   }, [activeAccountId, activeMailbox]);
 
 
@@ -1329,10 +1322,7 @@ function EmailListComponent({ stacked = false }) {
         onCancel={handleBulkCancel}
         onDismiss={() => setBulkOpProgress(null)}
       />
-      <DeleteConfirmModal pending={pendingDelete} onClose={() => {
-        setPendingDelete(null);
-        requestAnimationFrame(() => confirmationReturnTarget(confirmationReturnRef.current)?.focus?.());
-      }} />
+      <DeleteConfirmModal {...deleteConfirmation.modalProps} />
     </div>
   );
 }

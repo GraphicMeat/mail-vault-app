@@ -53,6 +53,7 @@ import { AddressText } from './email/AddressText';
 import { TagChips } from './TagChips';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { useDeleteConfirmation } from '../hooks/useDeleteConfirmation';
 import { useExportStore } from '../stores/exportStore';
 import { describeReaderPurge, describeReaderDelete } from '../utils/custodyCopy';
 import { serverDeleteDispositionOf } from '../utils/deleteDisposition';
@@ -381,7 +382,10 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const [focused, setFocused] = useState(false);
   const menuOpenRef = useRef(false);
   const setQuickActionMenuOpen = useCallback(open => { menuOpenRef.current = open; }, []);
-  const [pendingDelete, setPendingDelete] = useState(null);
+  // While the confirm is up the bubble keeps its hover bar, as for a menu.
+  const deleteConfirmation = useDeleteConfirmation({ onOpenChange: setQuickActionMenuOpen });
+  const pendingDelete = deleteConfirmation.pending;
+  const setPendingConfirmation = deleteConfirmation.request;
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const moveButtonRef = useRef(null);
   const [senderPopover, setSenderPopover] = useState(null);
@@ -413,14 +417,6 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     server: !isLocalOnly, vault: isArchived || isLocalOnly, backup: isBackedUp,
   }, 1);
 
-  const setPendingConfirmation = pending => {
-    menuOpenRef.current = true;
-    setPendingDelete(pending);
-  };
-  const closePendingConfirmation = () => {
-    menuOpenRef.current = false;
-    setPendingDelete(null);
-  };
   const requestDelete = (target = email) => {
     const location = resolveEmailLocation(target, useMailStore.getState());
     if (!location) return;
@@ -992,7 +988,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       )}
 
       <LinkSafetyModal {...linkSafetyModal} />
-      <DeleteConfirmModal pending={pendingDelete} onClose={closePendingConfirmation} />
+      <DeleteConfirmModal {...deleteConfirmation.modalProps} />
     </motion.div>
   );
 });

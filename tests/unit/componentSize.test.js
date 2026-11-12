@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 
 const LIMITS = {
   'src/App.jsx': 1050,
-  'src/components/EmailList.jsx': 1350,
+  'src/components/EmailList.jsx': 1340,
   'src/components/ComposeModal.jsx': 1800,
 };
 

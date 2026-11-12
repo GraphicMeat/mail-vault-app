@@ -71,6 +71,7 @@ import { ReadDelayProgress } from './ReadDelayProgress';
 import { TagChips } from './TagChips';
 import { FieldStrip } from './FieldStrip';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { useDeleteConfirmation, READER_CONFIRMING_ACTIONS } from '../hooks/useDeleteConfirmation';
 import { describeReaderPurge, describeReaderDelete } from '../utils/custodyCopy';
 import { serverDeleteDispositionOf } from '../utils/deleteDisposition';
 import { applyFlagToKeys } from '../services/workflows/messageMutations';
@@ -134,8 +135,10 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   // message's Delete waits: a refused delete retries for up to half a minute,
   // and the next message opened meanwhile is the user's to delete now.
   const [deleting, setDeleting] = useState(null);
-  const [pendingDelete, setPendingDelete] = useState(null);
-  const [pendingPurge, setPendingPurge] = useState(null);
+  // Delete, Delete everywhere and Unarchive share one confirm, which hands
+  // focus back to the bar button that raised it.
+  const deleteConfirmation = useDeleteConfirmation({ actions: READER_CONFIRMING_ACTIONS });
+  const setPendingDelete = deleteConfirmation.request;
   const [showRaw, setShowRaw] = useState(false);
   const sourceBlocked = usePrivacySourceBlocked();
   const [rawSource, setRawSource] = useState(null);
@@ -158,7 +161,6 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   // Per-email theme override. null = follow app theme; 'light'|'dark' = forced.
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
   const moveButtonRef = useRef(null);
-  const confirmationReturnRef = useRef(null);
   const iframeRef = useRef(null);
   const plainBodyRef = useRef(null);
   const altBodyRef = useRef(null);
@@ -386,7 +388,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     if (!copy) return;
     const purgeKey = selectionKey(target, state);
     const purgeScope = captureBulkScope([purgeKey], state, [target]);
-    setPendingPurge({
+    setPendingDelete({
       copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
       executor: async () => {
         const current = useMailStore.getState();
@@ -807,11 +809,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
             disabled={{ delete: !!deleting && deleting === selectionKey(selectedEmail, useMailStore.getState()), toggleRead: togglingRead, archive: saving, compose: composing }}
             moveDropdownOpen={showMoveDropdown}
             moveButtonRef={moveButtonRef}
-            onActionStart={(_event, trigger, entry) => {
-              if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'archive'].includes(entry?.action)) {
-                confirmationReturnRef.current = trigger;
-              }
-            }}
+            onActionStart={deleteConfirmation.onActionStart}
           />
           {showMoveDropdown && selectedEmail && (
             <MoveToFolderDropdown
@@ -1002,14 +1000,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         })()}
       </div>
 
-      <DeleteConfirmModal pending={pendingDelete} onClose={() => {
-        setPendingDelete(null);
-        requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
-      }} />
-      <DeleteConfirmModal pending={pendingPurge} onClose={() => {
-        setPendingPurge(null);
-        requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
-      }} />
+      <DeleteConfirmModal {...deleteConfirmation.modalProps} />
 
       <LinkSafetyModal {...linkSafetyModal} />
     </div>
