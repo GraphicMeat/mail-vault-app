@@ -710,8 +710,8 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
     });
   }, [t]);
 
-  const handleQuickArchive = useCallback(async (email, entry) => {
-    if (entry?.action === 'unarchive' || isRowArchived(email, useMailStore.getState(), archivedEmailIds)) {
+  const handleQuickArchive = useCallback(async (email) => {
+    if (isRowArchived(email, useMailStore.getState(), archivedEmailIds)) {
       requestUnarchive(email);
       return;
     }

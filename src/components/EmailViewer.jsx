@@ -788,9 +788,9 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
             onReply={(email) => composeFrom('reply', email)}
             onReplyAll={(email) => composeFrom('replyAll', email)}
             onForward={(email) => composeFrom('forward', email)}
-            onArchive={(email, entry) => entry?.action === 'unarchive' || isRowArchived(email, useMailStore.getState(), archivedEmailIds)
+            onArchive={(email) => isRowArchived(email, useMailStore.getState(), archivedEmailIds)
               ? handleRemoveLocal(email) : handleSave(email)}
-            onDelete={(email, entry) => email.source === 'local-only' || email._origin === 'local-only'
+            onDelete={(email) => email.source === 'local-only' || email._origin === 'local-only'
               ? handleRemoveLocal(email) : handleDelete(email)}
             onMove={() => setShowMoveDropdown(v => !v)}
             onToggleRead={handleToggleReadStatus}
