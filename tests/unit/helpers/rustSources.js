@@ -54,7 +54,7 @@ export function registryRows() {
   if (start < 0 || end < 0) throw new Error('METHODS table not found in rpc_registry.rs');
   const table = src.slice(start, end);
   const rows = [];
-  for (const m of table.matchAll(/row\(\s*"([^"]+)"\s*,\s*Domain::(\w+)\s*\)((?:\s*\.\w+\(\))*)/g)) {
+  for (const m of table.matchAll(/row\(\s*"([^"]+)"\s*,\s*Domain::(\w+)\s*,\s*[\w()]+\s*\)((?:\s*\.\w+\(\))*)/g)) {
     const flags = m[3];
     rows.push({
       name: m[1],
@@ -70,3 +70,13 @@ export function registryRows() {
 
 /** One table row by method name, or undefined. */
 export const registryRow = (name) => registryRows().find((r) => r.name === name);
+
+/**
+ * The app's reply budget for a daemon method, in seconds, as the shell reads
+ * it (`reply_timeout` from `src-daemon/methods.json`): `null` for none,
+ * `undefined` for a name the table does not list.
+ */
+export function replyBudget(name) {
+  const row = JSON.parse(read('src-daemon/methods.json')).find((r) => r.name === name);
+  return row ? row.replySecs : undefined;
+}

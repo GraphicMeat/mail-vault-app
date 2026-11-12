@@ -2,7 +2,7 @@
 // reaches it by name, and the demo answers it without a server.
 import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { shellSource, registryRow } from './helpers/rustSources.js';
+import { registryRow, replyBudget } from './helpers/rustSources.js';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
 import { createDemoBackend } from '../../src/demo/backend.js';
 
@@ -14,7 +14,7 @@ it('routes messages.restore to the daemon, which implements it and lets the inde
   // The index yields to it: its row in the method table is flagged foreground.
   expect(registryRow('messages.restore')).toMatchObject({ foreground: true, domain: 'Deleted' });
   // A user-facing call that can talk to the server: a finite reply budget.
-  expect(shellSource()).toMatch(/"messages\.restore" => Some\(Duration::from_secs\(\d+\)\)/);
+  expect(replyBudget('messages.restore')).toBeGreaterThan(0);
 });
 
 it('the demo puts a message deleted to Trash back, by its Trash uid or its Message-ID', async () => {

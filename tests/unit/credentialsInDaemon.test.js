@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { shellSource, shellModuleSource } from './helpers/rustSources.js';
+import { shellSource, replyBudget } from './helpers/rustSources.js';
 import { createDemoBackend } from '../../src/demo/backend.js';
 
 const read = path => readFileSync(path, 'utf8');
@@ -15,9 +15,7 @@ describe('staged native credential capability', () => {
   it.each(RPCS)('%s is registered in transport, native handler and shell budget', rpc => {
     expect(owned).toContain(`'${rpc}'`);
     expect(handler).toContain(`"${rpc}"`);
-    const proxy = shellModuleSource('rpc_proxy');
-    const budget = proxy.slice(proxy.indexOf('fn reply_timeout('), proxy.indexOf('fn reply_timeout(') + 11000);
-    expect(budget).toContain(`"${rpc}"`);
+    expect(replyBudget(rpc)).toBe(50);
   });
 
   it('chains the actual native router and shares the split writer', () => {

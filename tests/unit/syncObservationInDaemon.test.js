@@ -1,7 +1,7 @@
 // Source ownership guard for the native observation routes and thin adapters.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
-import { shellSource } from './helpers/rustSources.js';
+import { replyBudget } from './helpers/rustSources.js';
 
 const read = (file) => readFileSync(file, 'utf8');
 const code = (source) => source.split('\n')
@@ -52,9 +52,9 @@ describe('sync observation policy is native', () => {
   });
 
   it('gives the new RPCs bounded shell replies', () => {
-    const shell = code(shellSource());
-    expect(shell).toMatch(/"sync\.probe"\s*\|\s*"counts\.unread"\s*=>\s*Some\(Duration::from_secs\(30\)\)/);
-    expect(shell).toMatch(/"folders\.status"\s*=>\s*Some\(Duration::from_secs\(125\)\)/);
+    expect(replyBudget('sync.probe')).toBe(30);
+    expect(replyBudget('counts.unread')).toBe(30);
+    expect(replyBudget('folders.status')).toBe(125);
   });
 
   it('pins the sized background worker, heap jobs, blocking QoS and foreground yield', () => {

@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { shellSource, registryRow } from './helpers/rustSources.js';
+import { registryRow, replyBudget } from './helpers/rustSources.js';
 const read = path => readFileSync(path, 'utf8');
 it('exposes only the read-only compose contracts and leaves production callers current', () => {
   const transport = read('src/services/transport.js');
@@ -12,7 +12,7 @@ it('exposes only the read-only compose contracts and leaves production callers c
     expect(owned).toContain(`'${method}'`);
     expect(handler).toContain(`"${method}"`);
     expect(read('src/demo/backend.js')).toContain(`'${method}'`);
-    expect(shellSource()).toContain(`"${method}"`);
+    expect(replyBudget(method), method).toBe(30);
     // The method table: a person waits on it (holds the index back) and it
     // routes before credential injection.
     expect(registryRow(method), method).toMatchObject({ foreground: true, strict: true, domain: 'ComposePrep' });
@@ -34,7 +34,7 @@ it('dispatches read-only compose before credential injection and retains its bud
   expect(entry.indexOf('crate::rpc_registry::is_strict(&method)')).toBeLessThan(entry.indexOf('oauth_tokens::inject'));
   for (const method of ['compose.reply_context', 'compose.check']) expect(registryRow(method).strict, method).toBe(true);
   expect(entry).toMatch(/return route_request\(state, req\)\.await/);
-  expect(shellSource()).toMatch(/"compose.reply_context"\s*\|\s*"compose.check"\s*=>\s*Some\(Duration::from_secs\(30\)\)/);
+  for (const method of ['compose.reply_context', 'compose.check']) expect(replyBudget(method), method).toBe(30);
   for (const locale of ['en','de','es','fr','it','pt-BR','ja','ko','zh-Hans']) {
     expect(JSON.parse(read(`src/i18n/locales/${locale}.json`))['compose.preparationUnavailable']).toBeTruthy();
   }
