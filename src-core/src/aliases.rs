@@ -107,8 +107,7 @@ pub fn is_gmail_oauth(account: &Value) -> bool {
     if text("authType") != "oauth2" || text("oauth2Transport") == "graph" {
         return false;
     }
-    let host = text("imapHost");
-    text("oauth2Provider") == "google" || host == "imap.gmail.com" || host == "imap.googlemail.com"
+    crate::provider::Provider::Google.owns_account(account)
 }
 
 /// A JMAP account (`jmapSessionUrl` set, the app's `isJmapAccount`). Its

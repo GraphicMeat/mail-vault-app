@@ -83,17 +83,6 @@ pub fn provider_allowed_for_google_mail(kind: &str, endpoint_url: Option<&str>) 
     }
 }
 
-/// Whether an account record (an `accounts.json` entry or the keychain blob's
-/// copy of it) is a Google account: Google OAuth, or an IMAP account on one of
-/// Gmail's hosts (an app-password Gmail account is Google data too). Field
-/// reads are trimmed and case-insensitive.
-pub fn is_google_account(account: &Value) -> bool {
-    let text = |key: &str| account.get(key).and_then(Value::as_str).unwrap_or_default().trim().to_ascii_lowercase();
-    let host = text("imapHost");
-    let host = host.trim_end_matches('.');
-    (text("authType") == "oauth2" && text("oauth2Provider") == "google") || host == "imap.gmail.com" || host == "imap.googlemail.com"
-}
-
 // ── Apple FM helper protocol (one JSON object per line, each way) ──────────
 
 #[derive(Debug, Clone, Serialize)]
@@ -347,22 +336,6 @@ mod tests {
         assert!(!provider_allowed_for_google_mail("endpoint", Some("http://192.168.1.5:11434")));
         assert!(!provider_allowed_for_google_mail("endpoint", None), "an endpoint with no URL is not provably local");
         assert!(!provider_allowed_for_google_mail("somethingNew", Some("http://localhost")), "an unknown kind is refused");
-    }
-
-    #[test]
-    fn a_google_account_is_google_oauth_or_a_gmail_imap_host() {
-        use serde_json::json;
-        assert!(is_google_account(&json!({"authType": "oauth2", "oauth2Provider": "google"})));
-        assert!(is_google_account(&json!({"authType": " OAuth2 ", "oauth2Provider": "Google"})));
-        assert!(is_google_account(&json!({"authType": "password", "imapHost": "imap.gmail.com"})), "an app-password Gmail account");
-        assert!(is_google_account(&json!({"imapHost": "IMAP.GOOGLEMAIL.COM"})));
-        assert!(is_google_account(&json!({"imapHost": " imap.gmail.com. "})));
-        assert!(!is_google_account(&json!({"authType": "oauth2", "oauth2Provider": "microsoft", "imapHost": "outlook.office365.com"})));
-        assert!(!is_google_account(&json!({"authType": "password", "imapHost": "imap.fastmail.com"})));
-        assert!(!is_google_account(&json!({"authType": "password", "oauth2Provider": "google"})), "a provider tag without OAuth is not a Google sign-in");
-        assert!(!is_google_account(&json!({"imapHost": "imap.gmail.com.evil.com"})));
-        assert!(!is_google_account(&json!({})));
-        assert!(!is_google_account(&json!(null)));
     }
 
     fn status(provider: &str, available: bool) -> ProviderStatus {

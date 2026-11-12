@@ -9,6 +9,7 @@ use tokio::sync::{oneshot, Mutex};
 use tracing::{info, error};
 
 use crate::net_activity::{Direction, NetEvent, Pending, Protocol};
+use crate::provider::Provider;
 
 // ── OAuth2 Provider Configuration ──────────────────────────────────────────
 
@@ -241,8 +242,8 @@ fn get_provider_config_with(
     google: GoogleClientChoice<'_>,
     compiled: Option<(&str, &str)>,
 ) -> Result<ProviderConfig, String> {
-    match provider {
-        "microsoft" => {
+    match Provider::from_tag(provider) {
+        Some(Provider::Microsoft) => {
             let client_id = std::env::var("MAILVAULT_MS_CLIENT_ID")
                 .ok()
                 .filter(|s| !s.is_empty() && s != "undefined")
@@ -266,7 +267,7 @@ fn get_provider_config_with(
                 ],
             })
         }
-        "google" => {
+        Some(Provider::Google) => {
             let (client_id, client_secret) = match google {
                 GoogleClientChoice::NewSignIn(preference) => google_client_for_new_sign_in(preference, compiled)?,
                 GoogleClientChoice::Issued(stamp) => google_client_for_stamp(stamp, compiled)?,
@@ -516,7 +517,8 @@ impl OAuth2Manager {
         apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
 
         // For personal Microsoft accounts, request Graph API scopes instead of IMAP scopes
-        if use_graph && provider_name == "microsoft" {
+        let parsed = Provider::from_tag(provider_name);
+        if use_graph && parsed == Some(Provider::Microsoft) {
             config.scopes = "offline_access Mail.ReadWrite Mail.Send".to_string();
         }
 
@@ -526,7 +528,7 @@ impl OAuth2Manager {
         // `refresh_token` reuses that value, and every Google account
         // authorized before this change was granted without openid/email;
         // widening the refresh request risks `invalid_scope` for all of them.
-        if provider_name == "google" {
+        if parsed == Some(Provider::Google) {
             config.scopes = format!("{} openid email", config.scopes);
         }
         if let Some(extra) = extra_scope.map(str::trim).filter(|e| !e.is_empty()) {
@@ -727,7 +729,7 @@ impl OAuth2Manager {
         let used_client_id = config.client_id.clone();
 
         // Graph accounts were authorized with Graph scopes — must refresh with the same scopes
-        if use_graph && provider_name == "microsoft" {
+        if use_graph && Provider::from_tag(provider_name) == Some(Provider::Microsoft) {
             config.scopes = "offline_access Mail.ReadWrite Mail.Send".to_string();
         }
 

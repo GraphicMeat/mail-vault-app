@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- A mail server whose name only contains a provider's name, such as `imap.gmail.com.evil.com` or `mail.notoutlook.example`, is no longer treated as Gmail, Outlook or Yahoo. It no longer gets Gmail's daily download limit, account setup no longer fills in that provider's servers for it, and the mail health check no longer counts it as the provider's server.
 - Settings > Mail preferences > Behavior > After Deleting has more choices for what opens once you delete the open email: the next email, the previous email, the next unread email or the previous unread email. A new "Stay in the same account" switch prefers an email from the account of the one you deleted, for All Inboxes. With no unread email left, or none left in that account, the nearest email opens rather than nothing.
 - With "Select nothing" after a delete, pressing j or k now continues from where the deleted email was instead of starting again at the top of the list.
 - Deleting in All Inboxes no longer ends with "Delete failed: Native refresh failed" when the delete worked and only one account could not be refreshed afterwards. The list repaints with what did arrive, and Undo is still offered. A refresh you start yourself now says "Some accounts could not be refreshed" and still shows the mail that did arrive.

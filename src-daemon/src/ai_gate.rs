@@ -9,7 +9,8 @@
 //! does not say whose mail it carries, or names an account the daemon cannot
 //! resolve, is refused.
 use crate::llm::Provider;
-use mailvault_core::ai::{is_google_account, GOOGLE_MAIL_ON_DEVICE_ONLY};
+use mailvault_core::ai::GOOGLE_MAIL_ON_DEVICE_ONLY;
+use mailvault_core::provider::Provider as MailProvider;
 use serde_json::Value;
 use std::path::Path;
 
@@ -39,7 +40,7 @@ pub(crate) async fn is_google_or_unknown(app_dir: &Path, account_id: &str) -> bo
         Some(r) => Some(r),
         None => crate::credentials::resolve_account_record_quiet(account_id).await.ok(),
     };
-    record.map_or(true, |r| is_google_account(&r))
+    record.map_or(true, |r| MailProvider::Google.owns_account(&r))
 }
 
 /// `Ok` when `provider` may be given mail from `account_ids`; `Err` carries

@@ -43,7 +43,7 @@ const NO_ON_DEVICE_MODEL_KEY = 'ai.noOnDeviceModel';
 /** The daemon's code when a job wants an on-device model and none is available (src-core ai::NO_ON_DEVICE_MODEL). */
 export const E_NO_ON_DEVICE_MODEL = 'E_NO_ON_DEVICE_MODEL';
 
-/** Mirror of src-core `ai::is_google_account`: Google OAuth, or IMAP on one of Gmail's hosts. */
+/** Narrower mirror of src-core `provider::Provider::Google.owns_account`: Google OAuth, or IMAP on one of Gmail's hosts. */
 export function isGoogleAccount(account) {
   const text = value => (typeof value === 'string' ? value : '').trim().toLowerCase();
   const host = text(account?.imapHost).replace(/\.$/, '');

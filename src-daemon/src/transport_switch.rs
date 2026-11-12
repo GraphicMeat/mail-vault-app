@@ -36,6 +36,7 @@ use crate::ipc::{self, RpcResponse};
 use crate::state::DaemonState;
 use mailvault_core::custody::{cache, entries};
 use mailvault_core::imap::{self, ImapConfig, MailboxInfo};
+use mailvault_core::provider::Provider;
 use mailvault_core::{app_db, message_store, transport_switch, vault_files};
 use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashMap};
@@ -88,7 +89,7 @@ async fn switch(state: &Arc<DaemonState>, params: &Value) -> Result<Value, Strin
     let (_, snapshot) = crate::credentials::resolve_account_with_record_guarded(&account_id).await?;
     let record = snapshot.record;
     let microsoft = record.get("authType").and_then(Value::as_str) == Some("oauth2")
-        && record.get("oauth2Provider").and_then(Value::as_str).is_none_or(|p| p == "microsoft");
+        && record.get("oauth2Provider").and_then(Value::as_str).is_none_or(|p| Provider::from_tag(p) == Some(Provider::Microsoft));
     if !microsoft {
         return Err(INVALID.into());
     }

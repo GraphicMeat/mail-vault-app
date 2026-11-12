@@ -6,6 +6,7 @@ use tracing::info;
 
 use crate::jmap::discover::{self, Discovered, Fetch};
 use crate::net_activity::{self, NetEvent, Pending, Protocol};
+use crate::provider::Provider;
 
 /// `lookup` as one Network Activity DNS event: host is the name asked
 /// about, purpose whatever the caller scoped (`net_activity::with_purpose`).
@@ -136,33 +137,25 @@ impl Resolver for SystemResolver {
 }
 
 fn match_mx_to_provider(mx_host: &str) -> Option<EmailServerSettings> {
-    let mx = mx_host.to_lowercase();
-
-    let (imap, smtp, provider) = if mx.contains("google.com") || mx.contains("googlemail.com") {
-        let g = crate::presets::GMAIL;
-        (g.imap.host, g.smtp.host, g.provider)
-    } else if mx.contains("outlook.com") || mx.contains("microsoft.com") || mx.contains("office365") {
-        ("outlook.office365.com", "smtp.office365.com", "microsoft")
-    } else if mx.contains("hostinger") {
-        ("imap.hostinger.com", "smtp.hostinger.com", "hostinger")
-    } else if mx.contains("zoho.com") {
-        ("imap.zoho.com", "smtp.zoho.com", "zoho")
-    } else if mx.contains("yahoo") || mx.contains("yahoodns") {
-        ("imap.mail.yahoo.com", "smtp.mail.yahoo.com", "yahoo")
-    } else if mx.contains("protonmail") || mx.contains("proton.me") {
-        return Some(EmailServerSettings {
-            imap_host: Some("127.0.0.1".into()),
-            imap_port: Some(1143),
-            smtp_host: Some("127.0.0.1".into()),
-            smtp_port: Some(1025),
-            source: "mx".into(),
-            provider: Some("protonmail".into()),
-            ..Default::default()
-        });
-    } else if mx.contains("fastmail") || mx.contains("messagingengine.com") {
-        ("imap.fastmail.com", "smtp.fastmail.com", "fastmail")
-    } else {
-        return None;
+    let provider = Provider::from_host(mx_host)?;
+    let (imap, smtp) = match provider {
+        Provider::Google => (crate::presets::GMAIL.imap.host, crate::presets::GMAIL.smtp.host),
+        Provider::Microsoft => ("outlook.office365.com", "smtp.office365.com"),
+        Provider::Hostinger => ("imap.hostinger.com", "smtp.hostinger.com"),
+        Provider::Zoho => ("imap.zoho.com", "smtp.zoho.com"),
+        Provider::Yahoo => ("imap.mail.yahoo.com", "smtp.mail.yahoo.com"),
+        Provider::Proton => {
+            return Some(EmailServerSettings {
+                imap_host: Some("127.0.0.1".into()),
+                imap_port: Some(1143),
+                smtp_host: Some("127.0.0.1".into()),
+                smtp_port: Some(1025),
+                source: "mx".into(),
+                provider: Some(provider.tag().into()),
+                ..Default::default()
+            });
+        }
+        Provider::Fastmail => ("imap.fastmail.com", "smtp.fastmail.com"),
     };
 
     let mut settings = EmailServerSettings {
@@ -171,12 +164,12 @@ fn match_mx_to_provider(mx_host: &str) -> Option<EmailServerSettings> {
         smtp_host: Some(smtp.into()),
         smtp_port: Some(587),
         source: "mx".into(),
-        provider: Some(provider.into()),
+        provider: Some(provider.tag().into()),
         ..Default::default()
     };
     // Kept here as well as in `discover`, so the preset survives a discovery
     // that timed out while this MX lookup answered.
-    if provider == "fastmail" {
+    if provider == Provider::Fastmail {
         settings.set_jmap(discover::fastmail_preset());
     }
     Some(settings)
@@ -449,47 +442,22 @@ fn base_domain(host: &str) -> String {
     }
 }
 
-/// Provider alias group for a hostname, so provider-owned MX and IMAP hosts on
-/// different base domains still match (e.g. aspmx.l.google.com ↔ imap.gmail.com).
-/// Mirrors the provider knowledge in `match_mx_to_provider`.
-fn provider_group(host: &str) -> Option<&'static str> {
-    let h = host.to_lowercase();
-    if h.contains("google") || h.contains("gmail") || h.contains("googlemail") {
-        Some("google")
-    } else if h.contains("outlook") || h.contains("office365") || h.contains("microsoft") || h.contains("hotmail") {
-        Some("microsoft")
-    } else if h.contains("hostinger") {
-        Some("hostinger")
-    } else if h.contains("zoho") {
-        Some("zoho")
-    } else if h.contains("yahoo") || h.contains("yahoodns") {
-        Some("yahoo")
-    } else if h.contains("proton") {
-        Some("proton")
-    } else if h.contains("fastmail") || h.contains("messagingengine") {
-        Some("fastmail")
-    } else {
-        None
-    }
-}
-
 /// Does any MX host point at the same mail server as `imap_host`? Compares
-/// registrable base domains plus provider alias groups. `None` when there are
-/// no MX hosts to judge against.
+/// registrable base domains, then providers, so provider-owned MX and IMAP
+/// hosts on different base domains still match (aspmx.l.google.com and
+/// imap.gmail.com). `None` when there are no MX hosts to judge against.
 fn mx_matches_host(mx_hosts: &[String], imap_host: &str) -> Option<bool> {
     if mx_hosts.is_empty() {
         return None;
     }
     let imap_base = base_domain(imap_host);
-    let imap_group = provider_group(imap_host);
+    let imap_provider = Provider::from_host(imap_host);
     for mx in mx_hosts {
         if base_domain(mx) == imap_base {
             return Some(true);
         }
-        if let (Some(g), Some(ig)) = (provider_group(mx), imap_group) {
-            if g == ig {
-                return Some(true);
-            }
+        if imap_provider.is_some() && Provider::from_host(mx) == imap_provider {
+            return Some(true);
         }
     }
     Some(false)
@@ -798,6 +766,16 @@ mod tests {
     #[test]
     fn mx_mismatch_different_providers() {
         assert_eq!(mx_matches_host(&v(&["aspmx.l.google.com"]), "imap.hostinger.com"), Some(false));
+    }
+
+    /// A provider's name inside another domain is not that provider: only the
+    /// domain itself or a host under it counts.
+    #[test]
+    fn a_lookalike_host_names_no_provider() {
+        assert!(match_mx_to_provider("yahoo.attacker.test").is_none());
+        assert!(match_mx_to_provider("aspmx.l.google.com.evil.com").is_none());
+        assert_eq!(mx_matches_host(&v(&["mail.notoutlook.example"]), "outlook.office365.com"), Some(false));
+        assert_eq!(mx_matches_host(&v(&["aspmx.l.google.com"]), "imap.gmail.com.evil.com"), Some(false));
     }
 
     #[test]

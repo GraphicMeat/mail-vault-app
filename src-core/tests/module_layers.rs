@@ -335,3 +335,100 @@ fn the_clock_copy_scanner_sees_each_form_and_skips_the_legitimate_ones() {
     assert!(clock_copies("let s = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();").is_empty(), "seconds are not epoch ms");
     assert!(clock_copies("let m = meta.modified().duration_since(UNIX_EPOCH).as_millis();").is_empty(), "a file mtime is not the clock");
 }
+
+/// What a source line (comments dropped) does that `crate::provider` owns:
+/// compares a provider's name or host (`== "google"`, `"imap.gmail.com" ==`,
+/// `"microsoft" =>`) or looks for one inside a host (`.contains("gmail")`).
+/// A literal counts when one of its dot-separated labels is a provider word,
+/// so `"[gmail]/trash"` (a folder) and `"oauth2_google_clients"` (an RPC
+/// name) do not.
+fn provider_checks(code: &str) -> Vec<String> {
+    let lit = r#""\.?(?:[a-z0-9-]+\.)*(?:gmail|googlemail|google|outlook|hotmail|office365|microsoft|yahoo|yahoodns|icloud)(?:\.[a-z0-9-]+)*""#;
+    let check = regex::Regex::new(&format!(
+        r"(?i)(?:==|!=)\s*&?{lit}|{lit}\s*(?:==|!=|=>)|\.(?:contains|starts_with|ends_with|eq_ignore_ascii_case|strip_suffix)\(\s*&?{lit}"
+    ))
+    .unwrap();
+    code.lines().filter(|l| check.is_match(l)).map(|l| l.trim().to_string()).collect()
+}
+
+/// `(file, text on the line, why it may compare a provider word itself)`.
+/// Each row is an ADDRESS-domain rule (what an email address's domain means),
+/// not which provider serves a host or an account.
+const MAY_CHECK_PROVIDER: &[(&str, &str, &str)] = &[
+    ("src-core/src/log_redact.rs", "=>", "an address domain to its log token (`<gmail#..>`), country domains included"),
+    ("src-core/src/aliases.rs", "domain !=", "Gmail's address identity (dots and +tag ignored), mirrors src/utils/emailIdentity.js"),
+];
+
+/// Source roots scanned for provider checks: core, daemon and the shell.
+fn provider_scanned_files() -> Vec<(String, String)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut out = Vec::new();
+    for r in ["src-core/src", "src-daemon/src", "src-tauri/src"] {
+        let mut files = Vec::new();
+        rust_files(&root.join(r), &mut files);
+        assert!(!files.is_empty(), "{r} holds no source");
+        for file in files {
+            let shown = format!("{r}/{}", file.strip_prefix(root.join(r)).unwrap().to_string_lossy().replace('\\', "/"));
+            // Whole-file test modules carry no `#[cfg(test)]` of their own.
+            if shown.ends_with("tests.rs") || shown == "src-core/src/provider.rs" {
+                continue;
+            }
+            out.push((shown, non_test_code(&std::fs::read_to_string(&file).unwrap())));
+        }
+    }
+    out
+}
+
+#[test]
+fn provider_identity_is_decided_in_provider_rs_only() {
+    let mut failures = Vec::new();
+    for (shown, code) in provider_scanned_files() {
+        for line in provider_checks(&code) {
+            if !MAY_CHECK_PROVIDER.iter().any(|(f, needle, _)| *f == shown && line.contains(needle)) {
+                failures.push(format!("{shown}: {line}"));
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "decide the provider with mailvault_core::provider::Provider (from_host, from_tag, owns_account), not a local compare:\n{}",
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn every_may_check_provider_row_is_still_needed() {
+    let files = provider_scanned_files();
+    for (file, needle, why) in MAY_CHECK_PROVIDER {
+        let (_, code) = files.iter().find(|(f, _)| f == file).unwrap_or_else(|| panic!("{file} is gone: drop its row"));
+        assert!(provider_checks(code).iter().any(|l| l.contains(needle)), "{file} no longer checks a provider word ({why}): drop its row");
+    }
+}
+
+#[test]
+fn the_provider_check_scanner_sees_each_form_and_skips_the_legitimate_ones() {
+    for hit in [
+        r#"if host.contains("gmail") || host.contains("googlemail") {"#,
+        r#"} else if mx.contains("outlook.com") || mx.contains("microsoft.com") {"#,
+        r#"let google = text("oauth2Provider") == "google";"#,
+        r#"if provider_name == "microsoft" {"#,
+        r#"host == "imap.gmail.com" || host == "imap.googlemail.com""#,
+        r#""google" => {"#,
+        r#".is_none_or(|p| p == "microsoft")"#,
+        r#"if h.ends_with(".yahoo.com") {"#,
+        r#"if h.eq_ignore_ascii_case("IMAP.GMAIL.COM") {"#,
+    ] {
+        assert_eq!(provider_checks(hit).len(), 1, "{hit}");
+    }
+    for miss in [
+        r#"|| lower.starts_with("[gmail]/trash")"#,
+        r#""oauth2_google_clients" => RpcResponse::success("#,
+        r#"json!({"oauth2Provider": "google", "imapHost": "imap.gmail.com"})"#,
+        r#"provider: "google","#,
+        r#""outlook.com","#,
+        r#"Provider::from_host(host) == Some(Provider::Google)"#,
+        r#"let p = "outlook";"#,
+    ] {
+        assert!(provider_checks(miss).is_empty(), "{miss}");
+    }
+}

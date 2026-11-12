@@ -138,11 +138,10 @@ impl ImapOps {
         self
     }
 
-    /// Whether the host counts as Gmail: the override, else the same host rule
-    /// the daily limit uses (`transfer_limits::default_limits`).
+    /// Whether the host counts as Gmail: the override, else the host's provider.
     pub fn is_gmail_host(&self) -> bool {
         self.gmail_host
-            .unwrap_or_else(|| crate::transfer_limits::default_limits(&self.config.host).0.is_some())
+            .unwrap_or_else(|| crate::provider::Provider::from_host(&self.config.host) == Some(crate::provider::Provider::Google))
     }
 
     /// Probe the server and the folder list, and settle the provider. Cheap to

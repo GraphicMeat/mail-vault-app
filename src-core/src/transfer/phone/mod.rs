@@ -20,6 +20,7 @@ pub use frames::{frames, parse_frame, Assembler, FrameError, FrameHeader, Progre
 pub use qr::qr_svg;
 
 use super::crypto::{self, Params, TransferError};
+use crate::provider::Provider;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::{Read, Write};
@@ -286,9 +287,14 @@ fn phone_account(a: &Value) -> Result<PhoneAccount, SkipReason> {
 
     match kind {
         PhoneKind::Imap | PhoneKind::Graph if oauth => {
-            let provider = text(a, "oauth2Provider").map(str::to_ascii_lowercase).or_else(|| graph.then(|| "microsoft".to_string()));
-            let provider = provider.filter(|p| p == "google" || p == "microsoft").ok_or(UnsupportedProvider)?;
-            if graph && provider != "microsoft" {
+            // A missing tag on a Graph account is Microsoft; a tag naming no
+            // provider, or one the phone cannot sign in to, is unsupported.
+            let provider = match text(a, "oauth2Provider") {
+                Some(tag) => Provider::from_tag(tag),
+                None => graph.then_some(Provider::Microsoft),
+            };
+            let provider = provider.filter(|p| matches!(p, Provider::Google | Provider::Microsoft)).ok_or(UnsupportedProvider)?;
+            if graph && provider != Provider::Microsoft {
                 return Err(Invalid);
             }
             // The phone refreshes with the built-in clients and the default tenant only.
@@ -298,7 +304,7 @@ fn phone_account(a: &Value) -> Result<PhoneAccount, SkipReason> {
             }
             acct.refresh = Some(secret(a, "oauth2RefreshToken").ok_or(NoSecret)?);
             acct.auth = PhoneAuth::OAuth2;
-            acct.provider = Some(provider);
+            acct.provider = Some(provider.tag().to_string());
             acct.client_id = text(a, "oauth2ClientId").map(str::to_string);
         }
         PhoneKind::Graph => return Err(Invalid),

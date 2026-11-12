@@ -78,6 +78,7 @@ pub mod sync_policy;
 pub mod mailbox_policy;
 pub mod pipeline;
 pub mod presets;
+pub mod provider;
 pub mod refresh_policy;
 pub mod verification_code;
 pub mod body_scan;

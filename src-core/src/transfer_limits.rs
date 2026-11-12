@@ -25,6 +25,7 @@ use std::sync::{Arc, Mutex};
 use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 
+use crate::provider::Provider;
 use crate::transfer_stats;
 
 pub const MB: u64 = 1024 * 1024;
@@ -80,15 +81,12 @@ pub fn read_limits(app_dir: &Path, account_id: &str) -> Option<TransferLimits> {
 
 /// The provider's default (down, up) limit, applied when the cap is on and the
 /// field is empty. Only Gmail publishes a number; everyone else is unlimited.
-/// Decided by the IMAP host, never the email domain (a Workspace address on
-/// `imap.gmail.com` is Gmail; `user@gmail.com` on a custom host is not).
+/// Decided by the IMAP host (`Provider::from_host`), never the email domain (a
+/// Workspace address on `imap.gmail.com` is Gmail; `user@gmail.com` on a
+/// custom host is not).
 pub fn default_limits(host: &str) -> (Option<u64>, Option<u64>) {
-    let host = host.to_ascii_lowercase();
-    if host.contains("gmail") || host.contains("googlemail") {
-        (Some(GMAIL_DEFAULT_DOWN_MB * MB), Some(GMAIL_DEFAULT_UP_MB * MB))
-    } else {
-        (None, None)
-    }
+    let provider = Provider::from_host(host);
+    (provider_default(provider, true, Direction::Down), provider_default(provider, true, Direction::Up))
 }
 
 /// The daily download limit that governs background downloads: `None` when the
@@ -101,12 +99,6 @@ pub fn background_down_limit(limits: Option<&TransferLimits>, host: &str) -> Opt
 
 // ── What Settings > Data usage and the banner show ──────────────────────────
 
-/// Whether the provider defaults apply: decided by the IMAP host, exactly as
-/// `default_limits` decides it.
-pub fn is_gmail_host(host: &str) -> bool {
-    default_limits(host).0.is_some()
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     Down,
@@ -116,8 +108,8 @@ pub enum Direction {
 /// The figure an EMPTY limit field stands for: on Gmail 2000 MB down when the
 /// cap is on (what `background_down_limit` enforces), Gmail's own 2500 MB when
 /// it is off; 500 MB up either way. `None` off Gmail (unlimited).
-pub fn provider_default(gmail: bool, cap_enabled: bool, direction: Direction) -> Option<u64> {
-    if !gmail {
+pub fn provider_default(provider: Option<Provider>, cap_enabled: bool, direction: Direction) -> Option<u64> {
+    if provider != Some(Provider::Google) {
         return None;
     }
     Some(match direction {
@@ -157,21 +149,21 @@ pub struct ShownLimits {
 /// would. A missing entry is the default: cap off, warning on, both blank.
 pub fn display_limits(entry: Option<&serde_json::Value>, host: &str) -> ShownLimits {
     let field = |name: &str| entry.and_then(|e| e.get(name));
-    let gmail = is_gmail_host(host);
+    let provider = Provider::from_host(host);
     let cap_enabled = field("capEnabled").and_then(serde_json::Value::as_bool) == Some(true);
     let warn_enabled = field("warnEnabled").and_then(serde_json::Value::as_bool) != Some(false);
     let side = |name: &str, direction: Direction| {
         let explicit = field(name).and_then(serde_json::Value::as_u64);
-        let fallback = provider_default(gmail, cap_enabled, direction);
+        let fallback = provider_default(provider, cap_enabled, direction);
         ShownLimit {
             limit_bytes: explicit.or(fallback),
             is_provider_default: explicit.is_none() && fallback.is_some(),
-            default_cap_on: provider_default(gmail, true, direction),
-            default_cap_off: provider_default(gmail, false, direction),
+            default_cap_on: provider_default(provider, true, direction),
+            default_cap_off: provider_default(provider, false, direction),
         }
     };
     ShownLimits {
-        gmail,
+        gmail: provider == Some(Provider::Google),
         cap_enabled,
         warn_enabled,
         down: side("dailyDownLimitBytes", Direction::Down),
@@ -479,11 +471,23 @@ mod tests {
             assert_eq!(got.default_cap_off, want.default_cap_off, "case {case}: defaultCapOff");
         }
 
+        /// The fixture holds the deleted JS's answers, which took any host
+        /// with "gmail" in it. These lookalikes are not Gmail any more.
+        const NOT_GMAIL_SINCE_PROVIDER_RS: &[&str] = &["mail.notgmail.example", "gmail"];
+
         #[test]
         fn gmail_is_decided_by_host_as_the_fixture_says() {
             for case in fixture().gmail_host_cases {
-                assert_eq!(is_gmail_host(&case.host), case.expected, "host {:?}", case.host);
+                let want = case.expected && !NOT_GMAIL_SINCE_PROVIDER_RS.contains(&case.host.as_str());
+                assert_eq!(display_limits(None, &case.host).gmail, want, "host {:?}", case.host);
             }
+        }
+
+        #[test]
+        fn a_lookalike_host_is_not_gmail() {
+            assert!(!display_limits(None, "imap.gmail.com.evil.com").gmail);
+            assert!(!display_limits(None, "mail.notgmail.example").gmail);
+            assert_eq!(default_limits("imap.gmail.com.evil.com"), (None, None));
         }
 
         #[test]
