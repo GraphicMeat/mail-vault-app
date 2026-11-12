@@ -47,14 +47,14 @@ const attrOf = (selector, name) => browser.execute((sel, attr) => document.query
 const textOf = (selector) => browser.execute((sel) => document.querySelector(sel)?.textContent ?? '', selector);
 
 async function openMessage(needle) {
-  const opened = await browser.execute((n) => {
+  // The unified inbox fills account by account: the row may land a moment after the first ones.
+  await waitFor(() => browser.execute((n) => {
     const row = [...document.querySelectorAll('[data-testid="email-row"]')].find((r) => (r.innerText || '').includes(n));
     if (!row) return false;
     row.scrollIntoView({ behavior: 'instant', block: 'center' });
     row.click();
     return true;
-  }, needle);
-  assert.equal(opened, true, `INBOX row "${needle}" is listed`);
+  }, needle), `INBOX row "${needle}" was never listed`, 40000);
   await waitFor(() => browser.execute((placeholder) => !document.body.innerText.includes(placeholder), L('viewer.selectEmailRead')),
     'The reader never opened the message');
   // The list row carries headers only; This email counts the full message's To and Cc.
@@ -103,7 +103,14 @@ describe('Contacts shots', function () {
     await waitShown(tid(`sender-row-${THEO}`));
     await clickReachable(tid(`sender-row-${THEO}`));
     for (const id of ['sender-card', 'sender-favorite', 'sender-save', 'contact-email', 'contact-copy']) await waitShown(tid(id));
-    await waitFor(async () => (await countOf('[data-testid^="mail-row-"]')) >= 2, 'Theo shows fewer than 2 emails');
+    await waitFor(async () => (await countOf('[data-testid^="mail-row-"]')) >= 2, 'Theo shows fewer than 2 emails').catch(async (error) => {
+      const state = await browser.execute(() => ({
+        rows: document.querySelectorAll('[data-testid^="mail-row-"]').length,
+        received: document.querySelector('[data-testid="stat-received"]')?.textContent,
+        card: document.querySelector('[data-testid="sender-card"]')?.innerText.replace(/\s+/g, ' ').slice(0, 300),
+      }));
+      throw new Error(`${error.message}: ${JSON.stringify(state)}`);
+    });
     assert.equal(await countOf(`${tid(`sender-row-${THEO}`)} ${tid('row-saved')}`), 0, 'Theo is not a saved contact yet');
     capture('contacts-all-senders');
   });
