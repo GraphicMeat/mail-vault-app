@@ -4,8 +4,9 @@
 //! and store a route reads must be started before `server::spawn_on_own_thread`;
 //! the storage format resume runs after it. `daemon_main` builds the state,
 //! runs `startup::steps()` for `BeforeSocket`, spawns the socket and runs the
-//! `AfterSocket` steps. This pins both halves in the source; the unit test in
-//! `startup.rs` pins the step names and phases.
+//! `AfterSocket` steps. This pins both halves in the source, and that
+//! `daemon_main` starts nothing outside the steps; the unit tests in
+//! `startup.rs` pin the step names, order and phases.
 use std::path::Path;
 
 fn source(rel: &str) -> String {
@@ -54,39 +55,35 @@ fn daemon_main_builds_the_state_then_runs_the_steps_around_the_socket() {
     );
 }
 
+/// What `daemon_main` itself may start, with why it is not a step: the four
+/// built into `DaemonState` before a step can run, the socket, the signal
+/// task and the shutdown pauses inside it.
+const STARTED_INLINE: &[(&str, &str)] = &[
+    ("net.spawn_watchdog()", "NetGate's watchdog, part of the state"),
+    ("NetLog::start(", "the network activity log, part of the state"),
+    ("blitz::spawn_reaper(", "the render pool's reaper, part of the state"),
+    ("tokio::spawn(async move {", "the signal handler that runs the shutdown"),
+    ("tokio::task::spawn_blocking(", "the shutdown's job pauses, inside the signal handler"),
+    ("server::spawn_on_own_thread(", "the socket itself"),
+];
+
+/// Every worker, watcher and flush starts as a `startup::steps()` entry, where
+/// its phase (before or after the socket) is stated and unit-tested; the
+/// order of the steps is pinned in `startup.rs`. Here: `daemon_main` starts
+/// nothing else (a line calling `::start(`, `.start(`, `::spawn(` or a
+/// `spawn_..`) but the inline ones above.
 #[test]
-fn the_steps_start_everything_in_order() {
-    let steps = between("src/startup.rs", "pub(crate) fn steps()", "pub(crate) async fn run(");
-    assert_in_order(
-        &steps,
-        &[
-            "refresh_worker::start(",
-            "account_lifecycle::start_bootstrap(",
-            "open_custody",
-            "custody::spawn_legacy_import(",
-            "classification_worker::start_classification_worker(",
-            "scheduled_send_worker::start(",
-            "snooze_worker::start(",
-            "follow_up_worker::start(",
-            "oauth_tokens::start_persistence(",
-            "launch_resync::start(",
-            "delete_queue::spawn_worker(",
-            "credentials::start_watcher(",
-            "handlers::portable::watch_drive(",
-            "auto_tag_worker::start(",
-            "eviction_worker::start(",
-            "handlers::deleted::start(",
-            "hoarder_worker::start(",
-            "abd_worker::start(",
-            "cleanup_worker::start(",
-            "backup_worker::start(",
-            "search_index::start(",
-            "people_index::spawn_backfill(",
-            "people_snapshot::spawn(",
-            "state.insights.start_cleanup()",
-            "contacts_flush(",
-            "transfer_stats_flush(",
-            "format_migration_job::resume_journaled(",
-        ],
-    );
+fn daemon_main_starts_no_worker_outside_the_steps() {
+    let main = between("src/main.rs", "async fn daemon_main()", "#[cfg(test)]");
+    let code: Vec<&str> = main.lines().map(|l| l.split("//").next().unwrap_or("")).collect();
+    let starts = |l: &str| l.contains("::start(") || l.contains(".start(") || l.contains("::spawn(") || l.contains("spawn_");
+    let stray: Vec<&str> = code
+        .iter()
+        .filter(|l| starts(l) && !STARTED_INLINE.iter().any(|(needle, _)| l.contains(needle)))
+        .map(|l| l.trim())
+        .collect();
+    assert!(stray.is_empty(), "start it as a startup::steps() entry (or list it in STARTED_INLINE with why):\n{}", stray.join("\n"));
+    for (needle, why) in STARTED_INLINE {
+        assert!(code.iter().any(|l| l.contains(needle)), "`{needle}` ({why}) is gone from daemon_main: drop its row");
+    }
 }
