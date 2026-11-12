@@ -11,7 +11,7 @@ import { RPC_METHODS } from '../../src/services/rpcMethods.generated.js';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
 
 const read = (p) => readFileSync(p, 'utf8');
-const daemonMethods = JSON.parse(read('src-daemon/methods.json'));
+const daemonMethods = JSON.parse(read('src-daemon/methods.json')).map((r) => r.name);
 
 /**
  * Names in `DAEMON_OWNED` or a `DAEMON_COMMANDS` target that are Tauri shell

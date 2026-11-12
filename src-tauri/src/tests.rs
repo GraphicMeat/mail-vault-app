@@ -146,6 +146,27 @@ fn backup_rs_has_no_vault_or_mirror_writers_left() {
 // Task 1.6b: daemon_rpc hardening — reply_timeout (C8)
 // -----------------------------------------------------------------------
 
+/// The daemon's method table states every method's budget
+/// (`src-daemon/methods.json`, `replySecs`, `null` for none): the shell
+/// answers exactly that for every row.
+#[test]
+fn reply_timeout_answers_every_methods_json_row_with_its_budget() {
+    let rows: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("../../src-daemon/methods.json")).unwrap();
+    assert!(rows.len() > 400, "{} rows", rows.len());
+    let mut bounded = 0;
+    for row in &rows {
+        let name = row["name"].as_str().unwrap();
+        let want = match row.get("replySecs").unwrap_or_else(|| panic!("{name}: no replySecs")) {
+            serde_json::Value::Null => None,
+            v => Some(std::time::Duration::from_secs(v.as_u64().unwrap())),
+        };
+        bounded += usize::from(want.is_some());
+        assert_eq!(crate::reply_timeout(name), want, "method={name}");
+    }
+    assert!(bounded > 140, "{bounded} bounded rows");
+}
+
 #[test]
 fn reply_timeout_bounds_the_helper_probe_so_settings_never_hangs_on_checking() {
     assert_eq!(crate::reply_timeout("ping"), Some(std::time::Duration::from_secs(10)));
@@ -163,10 +184,37 @@ fn reply_timeout_outlasts_the_native_observation_deadlines() {
     }
 }
 
+/// Just above the daemon's own render budgets, so its `render_unavailable`
+/// arrives first.
 #[cfg(feature = "blitz-render")]
 #[test]
-fn reply_timeout_delegates_render_methods_to_blitz_tiles() {
-    assert_eq!(crate::reply_timeout("render.open"), Some(std::time::Duration::from_secs(10)));
+fn reply_timeout_bounds_the_render_family() {
+    use std::time::Duration;
+    assert_eq!(crate::reply_timeout("render.open"), Some(Duration::from_secs(10)));
+    assert_eq!(crate::reply_timeout("render.gpuStatus"), Some(Duration::from_secs(20)));
+    assert_eq!(crate::reply_timeout("render.image"), Some(Duration::from_secs(30)));
+    for m in ["render.tile", "render.textRuns", "render.inspect", "render.fold"] {
+        assert_eq!(crate::reply_timeout(m), Some(Duration::from_secs(6)), "{m}");
+    }
+    for m in ["render.hit", "render.close", "render.fonts", "render.serialize"] {
+        assert_eq!(crate::reply_timeout(m), Some(Duration::from_secs(3)), "{m}");
+    }
+}
+
+/// A row that does not state its budget is refused, not read as "none".
+#[test]
+fn a_methods_json_row_without_reply_secs_is_refused() {
+    let ok = crate::parse_reply_budgets(r#"[{"name": "a.b", "replySecs": null}, {"name": "c.d", "replySecs": 7}]"#).unwrap();
+    assert_eq!(ok["a.b"], None);
+    assert_eq!(ok["c.d"], Some(std::time::Duration::from_secs(7)));
+    assert!(crate::parse_reply_budgets(r#"[{"name": "a.b"}]"#).is_err());
+    assert!(crate::parse_reply_budgets(r#"[{"name": "a.b", "replySecs": "30"}]"#).is_err());
+}
+
+#[test]
+fn reply_timeout_is_none_for_a_name_the_table_does_not_list() {
+    assert_eq!(crate::reply_timeout("no.such_method"), None);
+    assert_eq!(crate::reply_timeout("render.nonesuch"), None);
 }
 
 #[test]

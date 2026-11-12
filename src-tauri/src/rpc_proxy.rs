@@ -18,295 +18,51 @@ pub(crate) const DAEMON_OUTDATED: &str = "errors.daemonOutdated";
 pub(crate) const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 
 /// Per-method reply budget for `daemon_rpc` (C8). When `Some`, `rpc_attempt`
-/// wraps the *whole* attempt in it — connect, auth write, auth read, request
-/// write and response read together, not only the final response read. `None`
-/// (every legacy dotted method, unchanged) means no timeout at all.
+/// wraps the *whole* attempt in it: connect, auth write, auth read, request
+/// write and response read together, not only the final response read.
+/// `None` means no timeout at all.
 ///
-/// Task 2.5 Step 4: every Phase 2 daemon-owned name is added here now, ahead
-/// of its route landing (Tasks 2.6-2.9a), so a later task cannot forget the
-/// budget. `search_index_destroy` gets the longest of the pre-existing family
-/// because the daemon itself waits up to 120s for the index worker to finish
-/// before replying; the 600s family covers vault-wide scans/migrations and
-/// the mirror-spanning flag-rename forwarders (Task 2.9b); the 120s family
-/// is one big read or write; everything else is a single-row/one-mailbox op.
+/// The budget is part of the daemon's method table: every row of
+/// `src-daemon/methods.json` states its `replySecs` (`null` for none), and
+/// the reason for each value sits beside its row in
+/// `src-daemon/src/rpc_registry.rs`, so a new method cannot reach the app
+/// without one. A name the table does not list (a retired or unknown method)
+/// gets none. The render family exists only with `blitz-render`.
 pub(crate) fn reply_timeout(method: &str) -> Option<std::time::Duration> {
-    #[cfg(feature = "blitz-render")]
-    if let Some(t) = blitz_tiles::reply_timeout(method) {
-        return Some(t);
+    if !cfg!(feature = "blitz-render") && method.starts_with("render.") {
+        return None;
     }
-    use std::time::Duration;
-    match method {
-        "sync.probe" | "counts.unread" => Some(Duration::from_secs(30)),
-        "sync.refresh" | "sync.refresh_status" | "sync.context" => Some(Duration::from_secs(30)),
-        "pipeline.focus" | "pipeline.status" => Some(Duration::from_secs(30)),
-        "folders.status" => Some(Duration::from_secs(125)),
-        // Full draft MIME/attachment preparation may outlast a short UI read.
-        // Expiry is unknown completion, never cancellation of native work.
-        "accounts.list" | "accounts.get" => Some(Duration::from_secs(30)),
-        "accounts.save" => Some(Duration::from_secs(95)),
-        "accounts.add" | "accounts.update" => Some(Duration::from_secs(305)),
-        "accounts.remove_local" => Some(Duration::from_secs(185)),
-        "accounts.put" | "accounts.reorder" | "accounts.replace_all" => {
-            Some(Duration::from_secs(50))
-        }
-        "drafts.save" => Some(Duration::from_secs(600)),
-        "compose.reply_context" | "compose.check" => Some(Duration::from_secs(30)),
-        // list can recover one selected body; discard validates exact local IO.
-        "drafts.list" | "drafts.discard" => Some(Duration::from_secs(120)),
-        "bulk.start" | "bulk.resume" | "bulk.status" | "bulk.cancel" | "bulk.discard" => {
-            Some(Duration::from_secs(30))
-        }
-        "search_index_destroy" => Some(Duration::from_secs(150)),
+    static BUDGETS: std::sync::OnceLock<std::collections::HashMap<String, Option<std::time::Duration>>> =
+        std::sync::OnceLock::new();
+    BUDGETS
+        .get_or_init(|| {
+            parse_reply_budgets(include_str!("../../src-daemon/methods.json"))
+                .expect("src-daemon/methods.json states a budget for every method")
+        })
+        .get(method)
+        .copied()
+        .flatten()
+}
 
-        // The helper card's own probe (`isDaemonAvailable` -> `ping`).
-        // Unbounded, a daemon that accepts the socket but never answers left
-        // Settings on "Checking..." forever; a bounded failure at least says
-        // "Helper Not Running" honestly. The dotted lifecycle methods stay
-        // unbounded, like every other legacy dotted name.
-        "ping" => Some(Duration::from_secs(10)),
-
-        // Native changes bound admission at 5s, read at 20s and write at
-        // 20s. Leave time for the daemon to report failure/uncertainty.
-        "credentials.get" | "credentials.save" | "credentials.update" | "credentials.delete" => {
-            Some(Duration::from_secs(50))
-        }
-
-        "vault_search"
-        | "vault_rows"
-        | "search_index_status"
-        | "search_index_configure"
-        | "search_index_rebuild"
-        | "maildir_read"
-        | "maildir_read_light"
-        | "maildir_exists"
-        | "maildir_store"
-        | "maildir_delete"
-        | "maildir_delete_many"
-        | "maildir_set_flags"
-        | "cached_attachment_path"
-        | "save_email_cache"
-        | "load_email_cache_partial"
-        | "load_email_cache_window"
-        | "load_email_cache_meta"
-        | "load_email_cache_by_uids"
-        | "list_cached_uids"
-        | "header_cache_month_histogram"
-        | "save_mailbox_cache"
-        | "load_mailbox_cache"
-        | "delete_mailbox_cache"
-        | "load_graph_id_map"
-        | "op_journal_queue"
-        | "op_journal_clear"
-        | "op_journal_read"
-        | "read_pending_operation"
-        | "save_pending_operation"
-        | "clear_pending_operation"
-        | "local_index_read"
-        | "local_index_append"
-        | "local_index_remove"
-        | "custody_status"
-        | "maildir_repair_generation"
-        | "maildir_orphan_stats"
-        | "mail_search_start"
-        | "mail_search_cancel"
-        | "vault_rebind_uids" => Some(Duration::from_secs(30)),
-
-        // A message is framed only once its body scan answers: unbounded, a
-        // hung daemon left every reader blank. Bounded, the app frames the
-        // body unscanned, with remote images refused (services/bodyScan.js).
-        "body.scan" | "body.verdicts" | "body.classify_links" | "body.info" => {
-            Some(Duration::from_secs(30))
-        }
-
-        // H3c: a message the vault has no copy of is downloaded by these
-        // (`raw_message`). The daemon bounds its whole fallback at 60s
-        // (`FALLBACK_BOUND`: this message's lock, keychain, connect, the 45s
-        // body fetch, the cache write) and then answers the vault's error;
-        // 75s leaves room for the parse after a download that just made it.
-        // A vault hit answers in milliseconds, so the width is only ever
-        // spent on a real download. `cached_attachment_path` never
-        // downloads and stays in the 30s family above.
-        "maildir_read_attachment"
-        | "maildir_read_attachments"
-        | "maildir_read_raw_source"
-        | "cache_attachment" => Some(Duration::from_secs(75)),
-
-        // I3 (2.6 review): `maildir_read_light_batch` and `maildir_list` can
-        // be sent for a whole mailbox's uids in one call (`getLocalEmails`,
-        // `src/services/db/emails.js`) — a full MIME parse per file, with no
-        // chunking on this path (unlike `getArchivedEmails`, which chunks at
-        // 200). The old Tauri commands they replace had no budget at all, so
-        // 30s (bounding what used to be unbounded) can time out a large
-        // archive on a slow drive that used to just run slow and succeed.
-        // `vault_uid_sets` replaces `maildir_list` and lists a mailbox once
-        // per session; `vault_light_rows` parses every never-parsed file of
-        // a mailbox on its first call.
-        "load_email_cache"
-        | "graph_allocate_uids"
-        | "maildir_storage_stats"
-        | "clear_email_cache"
-        | "maildir_read_light_batch"
-        | "maildir_list"
-        | "vault_uid_sets"
-        | "vault_light_rows" => Some(Duration::from_secs(120)),
-
-        // Final fix wave I-2: a `vault_close` can outlast 120s when the
-        // search index worker is mid-batch/compaction — the app's budget
-        // must be strictly larger than the daemon's own wait
-        // (`si::close`/`custody::close` inside `handlers/search_index.rs`),
-        // or the app SIGTERMs the daemon mid-write just before the vault
-        // move starts copying. Not consulted by `daemon_vault_lifecycle_call`
-        // (it passes its own explicit `Duration`, same as `vault_reopen`
-        // below) — kept here so the budget is documented in one table and
-        // pinned by a test, matching every call site.
-        "vault_close" => Some(Duration::from_secs(300)),
-
-        "maildir_clear_cache"
-        | "maildir_migrate_json_to_eml"
-        | "maildir_migrate_email_dirs"
-        | "maildir_purge_orphans"
-        | "prefetch_attachments"
-        | "vault_apply_flags"
-        | "vault_rename_mailbox"
-        | "vault_adopt_mailbox_dirs" => Some(Duration::from_secs(600)),
-
-        // Task 3.5 decision 3: no budget. A 40k-uid archive or a large bulk
-        // delete runs far past every other family's budget in this table:
-        // the JS awaits the reply directly, and the way out of a long run is
-        // the daemon's own cancel_archive/cancel_bulk_delete, not a timeout
-        // that turns a slow success into a failure (Phase 2's 2.6 I3
-        // lesson). Written as an explicit arm rather than left to the
-        // `_ => None` catch-all below, so a later change to that default
-        // cannot silently take the budget away from these two, and so the
-        // test pinning this has something concrete to assert against.
-        "archive_emails" | "bulk_delete_emails" => None,
-
-        // The daemon's delete queue (src-daemon/src/delete_queue.rs). A
-        // submit answers only after its whole retry schedule: six send
-        // rounds, each uid's capture allowed 45s, plus 31s of waits, so a
-        // budget would turn a slow delete into a failure the daemon is still
-        // finishing. Same explicit-None arm as archive. A run is one replay
-        // pass over every entry (one round each, uids in turn), so it is
-        // unbounded too. List and cancel are one journal read or write, the
-        // op_journal_* tier.
-        "delete_queue.submit" | "delete_queue.run" => None,
-        "delete_queue.list" | "delete_queue.cancel" => Some(Duration::from_secs(30)),
-
-        // The undo of a delete (src-daemon/src/handlers/deleted.rs): a SEARCH
-        // and a MOVE per group, an APPEND per bin fallback, all inside the
-        // daemon's own 120s `RESTORE_BUDGET`, which answers first. Past this,
-        // the app hides the rows again and reloads to see what came back.
-        "messages.restore" => Some(Duration::from_secs(150)),
-
-        // One read_dir plus comparisons, same tier as the other Phase 2
-        // single-pass readers.
-        "verify_archived_emails" => Some(Duration::from_secs(120)),
-
-        // Ungated, no vault access, one atomic store per registered token.
-        "cancel_archive" | "cancel_bulk_delete" => Some(Duration::from_secs(30)),
-
-        // Task 3.7, same decision 3 reasoning as archive: the inventory walk
-        // behind a begin_snapshot reads every cached header of every account
-        // in scope (50k in the e2e's LARGE mode) before it answers, and the
-        // JS awaits that reply. Written as its own arm rather than left to
-        // the `_ => None` catch-all so a later edit to that default cannot
-        // silently hand this one a budget.
-        "insights_begin_snapshot" => None,
-
-        // One bounded page, same tier as the other single-pass readers.
-        "insights_read_page" => Some(Duration::from_secs(120)),
-
-        // Drops one snapshot out of a map.
-        "insights_release_snapshot" => Some(Duration::from_secs(30)),
-
-        // Task 4.2: its own internal reqwest timeout is 10s plus redirect
-        // overhead (up to 3 hops); 30s is a safety margin around that, not a
-        // new cap this budget could bind against in practice.
-        "fetch_remote_asset" => Some(Duration::from_secs(30)),
-
-        // The settings document (`handlers/settings.rs`): one small file read,
-        // or one write and fsync. Every window hydrates through `settings.get`,
-        // so a daemon that accepts and never answers must not hang the UI.
-        "settings.get"
-        | "settings.patch"
-        | "settings.replace"
-        | "backup.schedule.get"
-        | "backup.schedule.set"
-        | "backup.run_now"
-        | "backup.cancel"
-        | "backup.stop"
-        | "backup.schedule.status"
-        | "backup.context"
-        | "backup.attach_access"
-        | "backup.access_status"
-        | "notify.decide"
-        | "notify.arrival" => Some(Duration::from_secs(30)),
-
-        // Task 4.4 / decision 8: inline-blocking, same reasoning as
-        // archive_emails/bulk_delete_emails above, the whole ZIP
-        // read-or-write pass happens within this RPC call and the JS
-        // awaits the return value directly. Written as its own arm so a
-        // later edit to the `_ => None` default cannot silently take or
-        // grant a budget here by accident.
-        "export_backup" | "import_backup" => None,
-
-        // Task 4.6, same reasoning as export_backup/import_backup above: the
-        // whole mbox read-or-write pass happens within this RPC call and the
-        // JS awaits the return value directly. Its own arm so a later edit
-        // to the `_ => None` default cannot silently take or grant a budget.
-        "export_mbox_all" | "import_mbox" => None,
-
-        // MBOX import options: each answers from a bounded amount of work.
-        // `mbox_probe` reads a capped sample of the file's start and the
-        // cached folder list; `list_local_folders` one directory listing;
-        // the upload job's routes read or steer a job that runs on its own
-        // thread (a resume's keychain read is bounded at 20s by the daemon);
-        // `vault_gap_save` starts its run and answers at once.
-        "mbox_probe"
-        | "list_local_folders"
-        | "mbox_upload_status"
-        | "mbox_upload_pause"
-        | "mbox_upload_resume"
-        | "mbox_upload_cancel"
-        | "mbox_upload_discard"
-        | "vault_gap_save" => Some(Duration::from_secs(30)),
-
-        // Reads every cached header row of the account against the vault
-        // before it answers: the first count of a very large folder is slow.
-        "vault_gap_count" => Some(Duration::from_secs(120)),
-
-        // Same reasoning as archive_emails/bulk_delete_emails: every message
-        // of the folder is copied into the deleted-mail bin inline, within
-        // this call, and there is no cancel route; a budget would turn a
-        // slow success on a big import into a reported failure while the
-        // daemon goes on deleting. Its own arm so the default cannot hand
-        // it one.
-        "delete_local_folder" => None,
-
-        // Task 4.8 / decision 8: each of these ten either kicks off a
-        // tokio::spawn and returns almost immediately (progress flows over
-        // channel.open, not this reply) or is a fast local read/flag flip.
-        // Written as its own arm, not left to the `_ => None` catch-all, so
-        // a later edit to that default cannot silently take a budget these
-        // never had a reason to lose.
-        "start_migration"
-        | "resume_migration"
-        | "count_migration_folders"
-        | "start_restore"
-        | "cancel_migration"
-        | "pause_migration"
-        | "cancel_restore"
-        | "clear_migration_state_cmd"
-        | "get_migration_state"
-        | "count_local_folder" => Some(Duration::from_secs(30)),
-
-        // Task 4.8 / decision 8: a live IMAP LIST plus, when either side is
-        // Graph, an HTTP list_folders call, bounded but genuinely
-        // network-bound, matching Phase 2's precedent for similar calls.
-        "get_folder_mappings" => Some(Duration::from_secs(120)),
-
-        _ => None,
-    }
+/// `methods.json` rows to budgets. A row without `replySecs` is an error,
+/// never a silent "no budget".
+pub(crate) fn parse_reply_budgets(
+    json: &str,
+) -> Result<std::collections::HashMap<String, Option<std::time::Duration>>, String> {
+    let rows: Vec<serde_json::Value> = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    rows.iter()
+        .map(|row| {
+            let name = row["name"].as_str().ok_or_else(|| format!("row without a name: {row}"))?;
+            let budget = match row.get("replySecs") {
+                None => return Err(format!("{name}: no replySecs")),
+                Some(serde_json::Value::Null) => None,
+                Some(v) => Some(std::time::Duration::from_secs(
+                    v.as_u64().ok_or_else(|| format!("{name}: replySecs is not whole seconds"))?,
+                )),
+            };
+            Ok((name.to_owned(), budget))
+        })
+        .collect()
 }
 
 /// Pure decision (C7): may `daemon_rpc` skip `ensure_daemon_running` and its
