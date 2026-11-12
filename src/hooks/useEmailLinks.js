@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useBodyScan } from '../services/bodyScan';
 import { activateEmailLink, openExternalUrl } from '../utils/emailLinkActivation';
@@ -14,7 +14,9 @@ const noCompose = () => {};
  * - `scan`: the daemon's scan of `body` (useBodyScan), with flagged links
  *   marked whenever link safety is on;
  * - `onLink(link)`: what the alternative renderer calls with a clicked link;
- * - `onFrameClick(event)`: the iframe document's click listener;
+ * - `onFrameClick(event)`: the iframe document's click listener, one stable
+ *   function: a reader adds it once per frame load, and it applies the
+ *   settings as they are at the click, not as they were at the load;
  * - `linkSafetyModal`: the props for this reader's <LinkSafetyModal>.
  * `composeDisabled` (a read-only copy in the compose pane) makes a mailto:
  * link do nothing instead of opening a second compose.
@@ -34,12 +36,14 @@ export function useEmailLinks(body, { key = null, accountId, composeDisabled = f
     setLinkSafetyAlert: setAlert, openUrl: openExternalUrl,
   }), [accountId, linkSafetyEnabled, linkSafetyClickConfirm, composeDisabled]);
 
+  const latestOnLink = useRef(onLink);
+  latestOnLink.current = onLink;
   const onFrameClick = useCallback((event) => {
     const link = event.target.closest?.('a');
     if (!link || !link.href) return;
-    const result = onLink({ href: link.href, alert: link.getAttribute('data-link-alert'), title: link.getAttribute('title'), text: link.textContent });
+    const result = latestOnLink.current({ href: link.href, alert: link.getAttribute('data-link-alert'), title: link.getAttribute('title'), text: link.textContent });
     if (result !== 'ignored') { event.preventDefault(); event.stopPropagation(); }
-  }, [onLink]);
+  }, []);
 
   const linkSafetyModal = {
     alert,

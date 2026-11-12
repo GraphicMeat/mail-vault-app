@@ -17,7 +17,7 @@ import { DownloadAllButton } from './AttachmentBar';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { scanHead, remoteAllowed, LINK_ALERT_STYLE } from '../../services/bodyScan';
 import { ExternalContentBar } from './ExternalContentBar';
-import { recordTrackerSummary } from '../../services/rowVerdicts';
+import { recordTrackerSummary, recordLinkAlert } from '../../services/rowVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { plainTextBodyHtml } from '../../utils/mailto';
 import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
@@ -223,11 +223,13 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   // scan, the click confirmation below had no mark to find.
   const { scan: fullScan, onLink, onFrameClick, linkSafetyModal } = useEmailLinks(fullBody, { key: fullKey, accountId: email?._accountId });
 
-  // Fourth renderer, same duty: record what the body carries so the row it was
-  // opened from shows the glyph. The scan is the one the frame draws.
+  // Fourth renderer, same duty: record what the body carries (trackers, a
+  // flagged link) so the row it was opened from shows the glyph. The scan is
+  // the one the frame draws.
   useEffect(() => {
     if (!email?.html || !fullKey || !fullScan?.scanned) return;
     recordTrackerSummary(fullKey, fullScan.summary);
+    recordLinkAlert(fullKey, fullScan.maxAlertLevel);
   }, [fullScan, fullKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The pre-processed body (cid, tracker frame): the iframe and the alternative

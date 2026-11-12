@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '../../services/workflows/bindStoreActions';
 
-const { bodies, opened } = vi.hoisted(() => ({ bodies: new Map(), opened: [] }));
+const { bodies, opened, composed } = vi.hoisted(() => ({ bodies: new Map(), opened: [], composed: [] }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex: vi.fn(), measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 300,
   getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({ index, key: options.getItemKey ? options.getItemKey(index) : index, start: index * 96 })),
@@ -18,10 +18,17 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
   const { emailKey } = await import('../../stores/slices/unifiedHelpers');
   return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: bodies }, registerListener: () => () => {} }) };
 });
+// A body carrying FLAGGED comes back with a red link alert, as the daemon
+// answers a body with a mismatched link.
 vi.mock('../../services/bodyScan', async (orig) => {
-  const { stubBodyScan } = await import('../../test/bodyScan');
-  return stubBodyScan(orig);
+  const { stubBodyScan, bodyScanAnswer } = await import('../../test/bodyScan');
+  return stubBodyScan(orig, html => bodyScanAnswer(html, html.includes('FLAGGED')
+    ? { alerts: [{ level: 'red', href: 'https://evil.test/login' }], maxAlertLevel: 'red' } : {}));
 });
+vi.mock('../../utils/mailto', async (orig) => ({
+  ...(await orig()),
+  openMailtoCompose: (href) => { composed.push(href); return true; },
+}));
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: async (url) => { opened.push(url); } }));
 vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: () => null }));
 
@@ -29,7 +36,8 @@ const bodyScan = await import('../../services/bodyScan');
 const { useMailStore } = await import('../../stores/mailStore');
 const { useThemeStore } = await import('../../stores/themeStore');
 const { useSettingsStore } = await import('../../stores/settingsStore');
-const { emailKey } = await import('../../stores/slices/unifiedHelpers');
+const { emailKey, emailScopeKey } = await import('../../stores/slices/unifiedHelpers');
+const { LINK_ALERT_STYLE } = await import('../../services/bodyScan');
 const { EmailViewer } = await import('../EmailViewer');
 const { ChatBubbleView } = await import('../ChatBubbleView');
 const { ThreadView } = await import('../email/ThreadView');
@@ -71,14 +79,16 @@ const READERS = {
 
 const settle = () => act(async () => { await new Promise(r => setTimeout(r, 0)); });
 
-async function clickFlaggedLink() {
+// `beforeClick` runs once the frame has loaded and its handlers are on.
+async function clickFlaggedLink({ href = 'https://evil.test/login', beforeClick } = {}) {
   await settle();
   const frame = document.querySelector('iframe');
   expect(frame).not.toBeNull();
   await act(async () => { fireEvent.load(frame); });
+  if (beforeClick) { await act(async () => { beforeClick(); }); await settle(); }
   const doc = frame.contentDocument;
   const link = doc.createElement('a');
-  link.href = 'https://evil.test/login';
+  link.href = href;
   link.setAttribute('data-link-alert', 'red');
   link.title = 'Mismatch';
   link.textContent = 'https://bank.test/login';
@@ -103,7 +113,7 @@ beforeEach(() => {
     mailboxScope: null, loadingEmail: false, selectedEmailSource: 'server', savedEmailIds: new Set(), archivedEmailIds: new Set(),
   });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); bodies.clear(); opened.length = 0; bodyScan.__scans.length = 0; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); bodies.clear(); opened.length = 0; composed.length = 0; bodyScan.__scans.length = 0; });
 
 describe.each(Object.keys(READERS))('%s', (name) => {
   it('asks the scan for flagged links when link safety is on', async () => {
@@ -138,5 +148,50 @@ describe.each(Object.keys(READERS))('%s', (name) => {
     expect(click.defaultPrevented).toBe(true);
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(opened).toEqual(['https://evil.test/login']);
+  });
+
+  // The frame's click listener goes on once per load: it must still follow a
+  // change to click confirmation made while the message stays open.
+  it('follows click confirmation turned on with the message open', async () => {
+    useSettingsStore.setState({ linkSafetyClickConfirm: false });
+    READERS[name]();
+    const click = await clickFlaggedLink({ beforeClick: () => useSettingsStore.setState({ linkSafetyClickConfirm: true }) });
+    expect(click.defaultPrevented).toBe(true);
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(opened).toEqual([]);
+  });
+});
+
+describe('full view with a flagged body', () => {
+  it('marks flagged links in its frame and records the alert on the message', async () => {
+    const email = mail(5, `FLAGGED full body ${run}`);
+    useSettingsStore.setState({ linkAlerts: {} });
+    render(<FullViewEmailModal email={email} onClose={() => {}} />);
+    await settle();
+    const frame = document.querySelector('iframe');
+    expect(frame.getAttribute('srcdoc')).toContain(LINK_ALERT_STYLE);
+    expect(useSettingsStore.getState().linkAlerts[emailScopeKey(email, useMailStore.getState())]).toBe('red');
+  });
+});
+
+describe('a read-only thread (the compose pane original)', () => {
+  const thread = (readOnly) => {
+    const email = mail(6, `mailto body ${run}`);
+    bodies.set(emailKey(email), { status: 'loaded', email });
+    render(<ThreadView readOnly={readOnly} thread={{ threadId: 't', subject: 'S6', emails: [email], messageCount: 1 }} />);
+  };
+
+  it('does nothing with a mailto: link instead of opening a second compose', async () => {
+    thread(true);
+    const click = await clickFlaggedLink({ href: 'mailto:someone@example.test' });
+    expect(click.defaultPrevented).toBe(true);
+    expect(composed).toEqual([]);
+    expect(opened).toEqual([]);
+  });
+
+  it('an ordinary thread composes to it', async () => {
+    thread(false);
+    await clickFlaggedLink({ href: 'mailto:someone@example.test' });
+    expect(composed).toEqual(['mailto:someone@example.test']);
   });
 });

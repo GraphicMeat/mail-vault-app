@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Turning Click Confirmation for flagged links on or off now applies at once to the message you have open, in the reading pane, threads, chat view and the full message view. Before, that message kept the old setting until you opened another one.
+- A flagged link found while a message is open in the full message view now marks its row in the list, as the reading pane already did.
 - Unarchive on a selection of emails now says so when it fails, as Delete does, and keeps the emails selected. It used to clear the selection as if it had worked.
 - The full message view now warns before opening a suspicious link, as the reading pane, threads and chat view already did. With link safety on, it marks flagged links and asks before opening one; before, a click there opened the link without asking.
 - A mail server whose name only contains a provider's name, such as `imap.gmail.com.evil.com` or `mail.notoutlook.example`, is no longer treated as Gmail, Outlook or Yahoo. It no longer gets Gmail's daily download limit, account setup no longer fills in that provider's servers for it, and the mail health check no longer counts it as the provider's server.
