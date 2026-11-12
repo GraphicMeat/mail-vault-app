@@ -33,7 +33,7 @@ export function useDeleteConfirmation({ actions = CONFIRMING_ACTIONS, capture = 
   openChange.current = onOpenChange;
 
   const request = useCallback((next) => {
-    openChange.current?.(true);
+    openChange.current?.(!!next);
     setPending(next);
   }, []);
   const dismiss = useCallback(() => {

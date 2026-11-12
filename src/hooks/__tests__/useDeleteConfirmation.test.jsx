@@ -54,6 +54,17 @@ describe('useDeleteConfirmation', () => {
     expect(document.activeElement).toBe(document.body);
     expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
   });
+
+  // request(null) closes it, so onOpenChange must hear a close, not an open
+  // (a chat bubble would keep its hover bar up over nothing).
+  it('request(null) tells onOpenChange the confirm is closed', () => {
+    const onOpenChange = vi.fn();
+    const { result } = renderHook(() => useDeleteConfirmation({ onOpenChange }));
+    act(() => result.current.request(pending));
+    act(() => result.current.request(null));
+    expect(result.current.pending).toBeNull();
+    expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
+  });
 });
 
 describe('the list row confirmation', () => {
