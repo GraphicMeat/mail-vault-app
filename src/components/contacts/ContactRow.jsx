@@ -4,7 +4,7 @@ import { useT } from '../../i18n';
 import { Avatar } from '../ui/Avatar';
 
 /** One person line: avatar, name over address, optional star, saved mark and count. */
-export function ContactRow({ name, address, count, favorite = false, saved = false, badge = null, selected = false, onClick, style, testId }) {
+export function ContactRow({ name, address, count, favorite = false, saved = false, selected = false, onClick, style, testId }) {
   const t = useT();
   return (
     <button
@@ -20,7 +20,6 @@ export function ContactRow({ name, address, count, favorite = false, saved = fal
         <span className="block truncate">{name || address}</span>
         <span className="block truncate text-xs text-mail-text-secondary">{address}</span>
       </span>
-      {badge}
       {favorite && <span data-testid="row-favorite" title={t('contacts.vip')} aria-label={t('contacts.vip')}><Star size={14} fill="currentColor" /></span>}
       {saved && <span data-testid="row-saved" title={t('contacts.saved')} aria-label={t('contacts.saved')}><UserCheck size={14} /></span>}
       {count != null && <span className="text-xs text-mail-text-secondary tabular-nums">{count}</span>}
