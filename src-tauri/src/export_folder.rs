@@ -43,20 +43,20 @@ impl HeldExportPaths {
         self.0.lock().unwrap_or_else(|p| p.into_inner())
     }
     /// Park `path` for `job_id`; answers a path a reused id displaced.
-    fn hold(&self, job_id: &str, path: &str) -> Option<String> {
+    pub(crate) fn hold(&self, job_id: &str, path: &str) -> Option<String> {
         self.map().insert(job_id.to_string(), path.to_string())
     }
-    fn take(&self, job_id: &str) -> Option<String> {
+    pub(crate) fn take(&self, job_id: &str) -> Option<String> {
         self.map().remove(job_id)
     }
     /// The path a final frame lets go of, if the frame is final and ours.
-    fn take_finished(&self, frame: &Value) -> Option<String> {
+    pub(crate) fn take_finished(&self, frame: &Value) -> Option<String> {
         if frame.get("finished").and_then(Value::as_bool) != Some(true) {
             return None;
         }
         self.take(frame.get("jobId").and_then(Value::as_str)?)
     }
-    fn take_all(&self) -> Vec<String> {
+    pub(crate) fn take_all(&self) -> Vec<String> {
         self.map().drain().map(|(_, path)| path).collect()
     }
 }

@@ -251,13 +251,13 @@ fn attach_flow(held: &HeldAbdPaths, ports: &dyn Ports, account: &str) -> Result<
 }
 
 /// Release what a frame lets go of. Pure over the map and a release callback.
-fn release_after_frame_with(held: &HeldAbdPaths, frame: &Value, mut release: impl FnMut(&str)) {
+pub(crate) fn release_after_frame_with(held: &HeldAbdPaths, frame: &Value, mut release: impl FnMut(&str)) {
     if let Some(path) = held.take_for_frame(frame) {
         release(&path);
     }
 }
 
-fn release_all_with(held: &HeldAbdPaths, mut release: impl FnMut(&str)) -> usize {
+pub(crate) fn release_all_with(held: &HeldAbdPaths, mut release: impl FnMut(&str)) -> usize {
     let paths = held.take_all();
     let n = paths.len();
     for path in paths {

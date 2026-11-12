@@ -66,6 +66,7 @@ mod dropped_files;
 // real gate. Deleting it takes the app's last ungated vault writer with it.
 mod external_location;
 mod export_folder;
+mod native_lease;
 mod github;
 // graph/imap/oauth2 all live in mailvault_core (shared with src-daemon) and
 // src-tauri no longer references any of them: OAuth2Manager is constructed

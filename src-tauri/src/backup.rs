@@ -155,7 +155,7 @@ fn take_backup_path(app: &tauri::AppHandle, account_id: &str) -> Option<String> 
 /// terminal one (`active: false`), the run that owned the mirror scope is
 /// over: release it. Called for every `backup-progress` event, so anything
 /// that is not terminal, or names no account we hold a scope for, is a no-op.
-fn release_legacy_frame(held: &HeldBackupPaths, payload: &Value, release: impl FnOnce(&str)) {
+pub(crate) fn release_legacy_frame(held: &HeldBackupPaths, payload: &Value, release: impl FnOnce(&str)) {
     if payload.get("runId").is_some() || payload.get("executionId").is_some() {
         return;
     }

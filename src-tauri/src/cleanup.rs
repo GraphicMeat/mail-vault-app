@@ -41,7 +41,7 @@ impl HeldCleanupPath {
     }
     /// Park `path`. `false` when one is already held (a run with the drive is
     /// going): the caller then must not resolve or hold another.
-    fn hold(&self, path: &str) -> bool {
+    pub(crate) fn hold(&self, path: &str) -> bool {
         let mut s = self.slot();
         if s.is_some() {
             return false;
@@ -53,7 +53,7 @@ impl HeldCleanupPath {
         self.slot().is_some()
     }
     /// Whoever takes the entry owns its one release.
-    fn take(&self) -> Option<String> {
+    pub(crate) fn take(&self) -> Option<String> {
         self.slot().take()
     }
 }
@@ -102,7 +102,7 @@ fn run_now_flow(held: &HeldCleanupPath, ports: &dyn Ports) -> Result<Value, Stri
     reply
 }
 
-fn release_after_event_with(held: &HeldCleanupPath, payload: &Value, mut release: impl FnMut(&str)) {
+pub(crate) fn release_after_event_with(held: &HeldCleanupPath, payload: &Value, mut release: impl FnMut(&str)) {
     if payload.get("state").and_then(Value::as_str) != Some("done") {
         return;
     }
