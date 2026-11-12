@@ -6,7 +6,7 @@ import { useMailStore } from '../../stores/mailStore';
 import { resolveEmailLocation, emailScopeKey, spansMailboxes, rowKey, selectionKey, inLocalFolder } from '../../stores/slices/unifiedHelpers';
 import { isRowArchived } from '../../utils/quickActionFacts';
 import { useSelectionStore } from '../../stores/selectionStore';
-import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useThemeStore, selectTheme } from '../../stores/themeStore';
 import { getEmailColors } from '../../utils/mailChrome';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
@@ -15,11 +15,11 @@ import { X, Loader } from 'lucide-react';
 import { AttachmentItem } from '../EmailViewer';
 import { DownloadAllButton } from './AttachmentBar';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
-import { useBodyScan, refusalHead, checkLinkAlert, remoteAllowed } from '../../services/bodyScan';
+import { scanHead, remoteAllowed, LINK_ALERT_STYLE } from '../../services/bodyScan';
 import { ExternalContentBar } from './ExternalContentBar';
 import { recordTrackerSummary } from '../../services/rowVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
-import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
+import { plainTextBodyHtml } from '../../utils/mailto';
 import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
 import { attachImageGestures } from '../../utils/emailImageGestures';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
@@ -43,7 +43,7 @@ import { replyTarget } from '../../utils/replyTarget';
 import { altBodyQuote, replySelection } from '../../utils/replySelection';
 import { useAltBodyRenderer } from './bodyRendererRegistry';
 import { useSearchStore } from '../../stores/searchStore';
-import { activateEmailLink, openExternalUrl } from '../../utils/emailLinkActivation';
+import { useEmailLinks } from '../../hooks/useEmailLinks';
 import { isOutgoingMailboxName } from '../../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../../services/workflows/messageMutations';
@@ -78,12 +78,9 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   };
   const [fetchedEmail, setFetchedEmail] = useState(null);
   const selectionOwnership = useRef(null);
-  const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const moveButtonRef = useRef(null);
-  const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
-  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
@@ -118,7 +115,6 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     setShowMoveDropdown(false);
     selectionOwnership.current = null;
   }, [initialIdentity]);
-  const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
 
   // Fetch full email content if not already available
   useEffect(() => {
@@ -221,7 +217,9 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     () => replaceCidUrls(email.html || plainTextBodyHtml(email.text || email.textBody || '(No content)'), email.attachments),
     [email],
   );
-  const fullScan = useBodyScan(fullBody, { key: fullKey, blocking: trackerBlocking });
+  // Flagged links are marked here as in every other reader: without the link
+  // scan, the click confirmation below had no mark to find.
+  const { scan: fullScan, onLink, onFrameClick, linkSafetyModal } = useEmailLinks(fullBody, { key: fullKey, accountId: email?._accountId });
 
   // Fourth renderer, same duty: record what the body carries so the row it was
   // opened from shows the glyph. The scan is the one the frame draws.
@@ -245,7 +243,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     return buildEmailIframeHtml({
       bodyHtml: frameBodyHtml,
       themeTag: theme,
-      extraHead: `${isDark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${refusalHead(fullScan)}`,
+      extraHead: `${isDark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${scanHead(fullScan)}`,
       nonce,
       privacy: privacyOn,
     });
@@ -268,29 +266,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         if (!doc) return;
         doc.addEventListener('contextmenu', (e) => e.preventDefault());
         attachImageGestures(doc, () => email?.attachments);
-        doc.addEventListener('click', (e) => {
-          const link = e.target.closest('a');
-          if (!link || !link.href) return;
-          // An address in the body composes here instead of waking the OS mail
-          // client, which is not the vault this message lives in.
-          if (link.href.startsWith('mailto:')) {
-            e.preventDefault();
-            e.stopPropagation();
-            openMailtoCompose(link.href, email?._accountId);
-            return;
-          }
-          if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
-          e.preventDefault();
-          if (linkSafetyEnabled && linkSafetyClickConfirm) {
-            const alert = checkLinkAlert(link);
-            if (alert) { setLinkSafetyAlert(alert); return; }
-          }
-          import('@tauri-apps/plugin-shell').then(({ open }) => {
-              open(link.href);
-            }).catch(() => {
-              window.open(link.href, '_blank');
-            });
-        });
+        doc.addEventListener('click', onFrameClick);
       } catch (e) { /* iframe access error */ }
     };
     iframe.addEventListener('load', setup);
@@ -412,10 +388,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
               ref={altRef} surface="fullView" messageKey={emailScopeKey(email, useMailStore.getState())} bodyHtml={frameBodyHtml}
               plainText={email.text || email.textBody || ''} theme={{ dark: isDark, palette }} foldQuotes={false}
               privacy={privacyOn} message={email} searchQuery={searchQuery} accountId={email?._accountId}
-              onLink={link => activateEmailLink(link, {
-                accountId: email?._accountId, linkSafetyEnabled, linkSafetyClickConfirm,
-                openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
-              })}
+              onLink={onLink} indicatorCss={fullScan.alerts.length > 0 ? LINK_ALERT_STYLE : ''}
               sizing="fill" className="w-full h-full" allowRemote={remoteAllowed(fullScan)}
             />
           )) : (
@@ -462,15 +435,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             </div>
           ) : null;
         })()}
-      <LinkSafetyModal
-        alert={linkSafetyAlert}
-        onCancel={() => setLinkSafetyAlert(null)}
-        onOpenAnyway={() => {
-          const url = linkSafetyAlert.actualUrl;
-          setLinkSafetyAlert(null);
-          import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
-        }}
-      />
+      <LinkSafetyModal {...linkSafetyModal} />
     </Dialog>
     <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />
     </>
