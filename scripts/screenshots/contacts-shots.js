@@ -57,7 +57,13 @@ async function openMessage(needle) {
   assert.equal(opened, true, `INBOX row "${needle}" is listed`);
   await waitFor(() => browser.execute((placeholder) => !document.body.innerText.includes(placeholder), L('viewer.selectEmailRead')),
     'The reader never opened the message');
+  // The list row carries headers only; This email counts the full message's To and Cc.
+  await waitFor(() => browser.execute(() => !document.querySelector('[data-testid="email-viewer-loading"]')), 'The reader never finished loading the message');
+  await browser.pause(1500);
 }
+
+/** Visible tab labels, for a failure message that says what was on screen. */
+const tabsOnScreen = () => browser.execute(() => [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent).join(' | '));
 
 describe('Contacts shots', function () {
   this.timeout(300000);
@@ -73,7 +79,9 @@ describe('Contacts shots', function () {
     await openMessage(PRESS_SLOT);
     await clickReachable(tid('open-contacts'));
     await waitShown(tid('contacts-view'), 30000);
-    await waitFor(async () => (await textOf(tid('contacts-tab-email'))).endsWith('(4)'), 'This email tab never counted 4 people');
+    await waitFor(async () => (await textOf(tid('contacts-tab-email'))).endsWith('(4)'), 'This email tab never counted 4 people').catch(async (error) => {
+      throw new Error(`${error.message}; tabs: ${await tabsOnScreen()}`);
+    });
     assert.equal(await attrOf(tid('contacts-tab-email'), 'aria-selected'), 'true');
     const headings = await browser.execute(() => [...document.querySelectorAll('[data-testid="email-people"] h3')].map((h) => h.textContent));
     assert.deepEqual(headings, [L('common.from'), L('common.to'), L('contacts.role.cc')]);
