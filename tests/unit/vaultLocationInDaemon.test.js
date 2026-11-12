@@ -105,11 +105,16 @@ describe('the vault-location file work lives in mailvault_core::vault_ops and th
     expect(body).toMatch(new RegExp(`pub fn ${name}(<[^>]*>)?\\(`));
   });
 
-  it('vault_layout.rs gained write_marker/new_vault_id/now_millis (the daemon now writes markers, not just reads them)', () => {
+  // The daemon writes markers, not just reads them: core exports the writer
+  // and the id maker, and both stamp from the one wall clock (crate::clock),
+  // not a copy of their own.
+  it('vault_layout.rs exports write_marker/new_vault_id, stamped by the shared clock', () => {
     const body = readFileSync(vaultLayoutPath, 'utf8');
     expect(body).toMatch(/pub fn write_marker\(/);
     expect(body).toMatch(/pub fn new_vault_id\(/);
-    expect(body).toMatch(/pub fn now_millis\(/);
+    expect(body).toMatch(/crate::clock::now_ms/);
+    expect(body).not.toMatch(/fn now_millis\(|SystemTime::now\(\)/);
+    expect(readFileSync(daemonHandlerPath, 'utf8')).toMatch(/vault_layout::write_marker\(/);
   });
 
   it('src-daemon/src/handlers/vault.rs exists and routes the five method names', () => {
