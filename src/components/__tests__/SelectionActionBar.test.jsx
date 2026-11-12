@@ -316,6 +316,20 @@ describe('SelectionActionBar refusal reporting', () => {
       expect(useMailStoreMock.getState().error).toBe(tr('list.deleteFailed', { err: REFUSAL })));
   });
 
+  // Unarchive removes the vault's copy, the only one for a local-only row: a
+  // refusal is reported like a delete's, and the selection stays put.
+  it('puts a refused unarchive on screen and keeps the selection', async () => {
+    const removeLocalEmails = vi.fn().mockRejectedValue(new Error(REFUSAL));
+    useMailStoreMock.setState({ archivedEmailIds: new Set(['acct-1:INBOX:1']), removeLocalEmails });
+    render(<SelectionActionBar />);
+    confirmVia('Unarchive selected', 'Unarchive');
+
+    await waitFor(() =>
+      expect(useMailStoreMock.getState().error).toBe(tr('list.deleteFailed', { err: REFUSAL })));
+    expect(removeLocalEmails).toHaveBeenCalledTimes(1);
+    expect(useMailStoreMock.getState().clearSelection).not.toHaveBeenCalled();
+  });
+
   it('puts a refused purge on screen too', async () => {
     render(<SelectionActionBar />);
     confirmVia('Delete everywhere', 'Delete everywhere');

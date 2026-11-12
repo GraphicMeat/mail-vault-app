@@ -170,11 +170,8 @@ export function SelectionActionBar() {
       .filter((email) => isRowArchived(email, state))
       .map((email) => ({ uid: email.uid, location: resolveEmailLocation(email, state) }))
       .filter((target) => target.location);
-    try {
-      if (targets.length) await removeLocalEmails(targets);
-    } catch (e) {
-      console.error("Failed to unarchive the selection:", e);
-    }
+    // A refusal reaches handleAction, which reports it; the selection stays.
+    if (targets.length) await removeLocalEmails(targets);
     clearSelection();
   };
 
