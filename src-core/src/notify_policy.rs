@@ -225,7 +225,7 @@ pub fn policy_from_state(state: Option<&Value>) -> Value {
 /// unreadable document reads as nothing saved.
 pub fn read_policy(app_dir: &Path) -> Value {
     let doc = crate::settings_doc::SettingsDoc::shared(app_dir).read().ok();
-    policy_from_state(doc.as_deref().and_then(|d| d.get("mailvault-settings")).and_then(|s| s.get("state")))
+    policy_from_state(doc.as_deref().and_then(crate::settings_doc::app_state))
 }
 
 /// Minutes past local midnight now.

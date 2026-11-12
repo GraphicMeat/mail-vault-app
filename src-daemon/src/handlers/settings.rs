@@ -43,11 +43,11 @@ pub(crate) async fn route(
     ];
     let wake_backup = method != "settings.get"
         && backup_keys.iter().any(|key| {
-            params["patch"]["mailvault-settings"]["state"]
+            params["patch"][mailvault_core::settings_doc::STORE]["state"]
                 .get(*key)
                 .is_some()
-                || params["values"]["mailvault-settings"]["state"][*key]
-                    != params["bases"]["mailvault-settings"]["state"][*key]
+                || params["values"][mailvault_core::settings_doc::STORE]["state"][*key]
+                    != params["bases"][mailvault_core::settings_doc::STORE]["state"][*key]
         });
     let doc = SettingsDoc::shared(&state.app_dir);
     let method = method.to_string();

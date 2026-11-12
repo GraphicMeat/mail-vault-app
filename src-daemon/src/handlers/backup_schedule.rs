@@ -8,7 +8,7 @@ use mailvault_core::{
 use serde_json::{json, Map, Value};
 use std::{path::Path, sync::Arc};
 
-const STORE: &str = "mailvault-settings";
+use mailvault_core::settings_doc::STORE;
 
 pub(crate) async fn route(
     state: &Arc<DaemonState>,

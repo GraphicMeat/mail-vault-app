@@ -50,7 +50,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 /// The settings store's key in the settings document.
-const STORE_KEY: &str = "mailvault-settings";
+use mailvault_core::settings_doc::STORE;
 /// The catalog key for a write before the settings store was ever saved.
 const NOT_LOADED: &str = "errors.settingsNotLoaded";
 /// Writes tried against a document another writer keeps changing.
@@ -119,7 +119,7 @@ struct Lists {
 /// numeric `version` (a merge patch into anything else would leave a blob the
 /// app reads as version 0 and migrates from scratch).
 fn store_state(values: &Map<String, Value>) -> Option<&Map<String, Value>> {
-    let blob = values.get(STORE_KEY)?;
+    let blob = values.get(STORE)?;
     blob.get("version").and_then(Value::as_u64)?;
     blob.get("state")?.as_object()
 }
@@ -138,7 +138,7 @@ fn lists_of(state: &Map<String, Value>, account_id: &str) -> Lists {
 }
 
 fn list_reply(app_dir: &std::path::Path, account_id: &str, login: &str) -> Result<Value, String> {
-    let snap = SettingsDoc::shared(app_dir).get(Some(&[STORE_KEY.to_string()])).map_err(|e| e.catalog_key().to_string())?;
+    let snap = SettingsDoc::shared(app_dir).get(Some(&[STORE.to_string()])).map_err(|e| e.catalog_key().to_string())?;
     let lists = store_state(&snap.values).map(|s| lists_of(s, account_id)).unwrap_or_default();
     Ok(json!({"aliases": list::visible(&lists.aliases, login), "dismissed": lists.dismissed}))
 }
@@ -161,11 +161,11 @@ fn update(
 ) -> Result<(Value, Option<Change>), String> {
     let doc = SettingsDoc::shared(app_dir);
     for _ in 0..WRITE_TRIES {
-        let snap = doc.get(Some(&[STORE_KEY.to_string()])).map_err(|e| e.catalog_key().to_string())?;
+        let snap = doc.get(Some(&[STORE.to_string()])).map_err(|e| e.catalog_key().to_string())?;
         let Some(state) = store_state(&snap.values) else { return Err(NOT_LOADED.to_string()) };
         let (patch, answer) = f(&lists_of(state, account_id));
         let Some(patch) = patch else { return Ok((answer, None)) };
-        match doc.patch(&json!({ STORE_KEY: { "state": patch } }), Some(snap.version)) {
+        match doc.patch(&json!({ STORE: { "state": patch } }), Some(snap.version)) {
             Ok(change) => return Ok((answer, Some(change))),
             Err(SettingsError::Conflict { .. }) => continue,
             Err(e) => return Err(e.catalog_key().to_string()),
@@ -466,7 +466,7 @@ mod tests {
 
         /// The settings store saved with `state`, beside another store's key.
         fn seed(&self, state: Value) {
-            let doc = json!({STORE_KEY: {"state": state, "version": 17}, "mailvault-theme": {"state": {"theme": "dark"}, "version": 0}});
+            let doc = json!({STORE: {"state": state, "version": 17}, "mailvault-theme": {"state": {"theme": "dark"}, "version": 0}});
             std::fs::write(self.settings_path(), doc.to_string()).unwrap();
         }
 
@@ -475,7 +475,7 @@ mod tests {
         }
 
         fn state(&self) -> Value {
-            self.on_disk()[STORE_KEY]["state"].clone()
+            self.on_disk()[STORE]["state"].clone()
         }
 
         fn version(&self) -> u64 {
@@ -582,10 +582,10 @@ mod tests {
         assert_eq!(got, json!({"ok": true, "alias": alias("Desk@example.test", "Desk", "manual"),
             "aliases": [alias("Desk@example.test", "Desk", "manual")], "dismissed": []}));
         let disk = r.on_disk();
-        assert_eq!(disk[STORE_KEY]["version"], 17);
-        assert_eq!(disk[STORE_KEY]["state"]["cacheLimitMB"], 128);
-        assert_eq!(disk[STORE_KEY]["state"]["aliases"], json!({"b": [alias("b@example.test", "", "manual")], "a": [alias("Desk@example.test", "Desk", "manual")]}));
-        assert_eq!(disk[STORE_KEY]["state"]["dismissedAliases"], json!({"a": []}));
+        assert_eq!(disk[STORE]["version"], 17);
+        assert_eq!(disk[STORE]["state"]["cacheLimitMB"], 128);
+        assert_eq!(disk[STORE]["state"]["aliases"], json!({"b": [alias("b@example.test", "", "manual")], "a": [alias("Desk@example.test", "Desk", "manual")]}));
+        assert_eq!(disk[STORE]["state"]["dismissedAliases"], json!({"a": []}));
         assert_eq!(disk["mailvault-theme"], json!({"state": {"theme": "dark"}, "version": 0}));
         assert!(r.version() > before);
         assert!(saw_settings_changed(&mut rx));
@@ -611,10 +611,10 @@ mod tests {
         assert!(!r.settings_path().exists());
 
         // A blob with no version would be read as version 0 and migrated from scratch.
-        std::fs::write(r.settings_path(), json!({STORE_KEY: {"state": {}}}).to_string()).unwrap();
+        std::fs::write(r.settings_path(), json!({STORE: {"state": {}}}).to_string()).unwrap();
         let err = r.call("aliases.dismiss", json!({"accountId": "a", "address": "desk@example.test"})).await.unwrap_err();
         assert_eq!(err, NOT_LOADED);
-        assert_eq!(r.on_disk(), json!({STORE_KEY: {"state": {}}}));
+        assert_eq!(r.on_disk(), json!({STORE: {"state": {}}}));
     }
 
     // ── remove, dismiss ────────────────────────────────────────────────

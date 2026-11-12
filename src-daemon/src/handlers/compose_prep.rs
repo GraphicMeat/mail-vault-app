@@ -42,7 +42,7 @@ fn load(path: &Path) -> Result<Loaded, &'static str> {
         return Err(UNAVAILABLE);
     }
     let snap = snapshot(path)?;
-    let store = snap.values.get("mailvault-settings").ok_or(UNAVAILABLE)?;
+    let store = snap.values.get(mailvault_core::settings_doc::STORE).ok_or(UNAVAILABLE)?;
     store
         .get("version")
         .and_then(Value::as_u64)

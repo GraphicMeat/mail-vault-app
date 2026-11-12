@@ -382,7 +382,7 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, stamp: AccountStamp
 /// Keep Recent, which would clear a Hoarder account's copies.
 pub(crate) fn read_settings_state(app_dir: &std::path::Path) -> Result<Value, String> {
     let settings = mailvault_core::settings_doc::SettingsDoc::shared(app_dir).read()?;
-    match settings.get("mailvault-settings").and_then(|s| s.get("state")) {
+    match settings.get(mailvault_core::settings_doc::STORE).and_then(|s| s.get("state")) {
         Some(state) if state.is_object() => Ok(state.clone()),
         _ => Err("settings hold no mailvault-settings.state object".to_string()),
     }

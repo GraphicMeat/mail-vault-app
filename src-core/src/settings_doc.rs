@@ -18,6 +18,16 @@ pub const FILE_NAME: &str = "frontend-settings.json";
 pub const LOCK_NAME: &str = "frontend-settings.json.lock";
 pub const VERSION_NAME: &str = "frontend-settings.version.json";
 pub const CORRUPT_NAME: &str = "frontend-settings.json.corrupt";
+/// The app settings store's key in the document: the Zustand persist name of
+/// `src/stores/settingsStore.js`. Every Rust reader of an app setting looks
+/// under it, at `<STORE>.state.<key>` ([`app_state`]); a vitest
+/// (`settingsStoreRustKey.test.js`) pins it, and [`STORE_VERSION`], to the
+/// store.
+pub const STORE: &str = "mailvault-settings";
+/// The store's persist version this Rust code was last checked against. A
+/// frontend migration may rename or reshape a key a Rust reader uses: before
+/// raising this, check every reader of [`STORE`] the migration touches.
+pub const STORE_VERSION: u64 = 17;
 const SPEC: Spec = Spec {
     file: FILE_NAME,
     kind: Kind::Object,
@@ -25,6 +35,11 @@ const SPEC: Spec = Spec {
     persistence: Persistence::SettingsCompatible,
 };
 const SHELL_LOCK_WAIT: Duration = Duration::from_secs(2);
+
+/// The app settings object (`<STORE>.state`) of a settings document root.
+pub fn app_state(doc: &Value) -> Option<&Value> {
+    doc.get(STORE)?.get("state")
+}
 
 pub fn backup_name(n: usize) -> String {
     SPEC.backup_name(n)
@@ -211,7 +226,7 @@ impl SettingsDoc {
             for (key, value) in entries {
                 if value.is_null() {
                     map.remove(key);
-                } else if key == "mailvault-settings" && bases.contains_key(key) {
+                } else if key == STORE && bases.contains_key(key) {
                     apply_store_delta(
                         map.entry(key.clone()).or_insert(Value::Null),
                         &bases[key],

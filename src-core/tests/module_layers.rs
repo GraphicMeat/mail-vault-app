@@ -49,18 +49,37 @@ fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// The file's code before its first `#[cfg(test)]` that opens a `mod`, with
-/// `//` comments (whole-line and trailing) blanked.
+/// The file's code without its `#[cfg(test)]` modules, with `//` comments
+/// (whole-line and trailing) blanked. A test module ends at the first `}`
+/// line indented like its `mod` line (rustfmt's layout); one that never
+/// closes that way runs to the end of the file. Code after a small test
+/// helper module is still production code and is still scanned.
 fn non_test_code(src: &str) -> String {
     let lines: Vec<&str> = src.lines().collect();
+    let indent = |l: &str| l.len() - l.trim_start().len();
     let mut out = String::new();
-    for (i, line) in lines.iter().enumerate() {
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
         if line.trim() == "#[cfg(test)]" && lines.get(i + 1).is_some_and(|n| n.trim_start().starts_with("mod ") || n.trim_start().starts_with("pub mod ")) {
-            break;
+            let head = lines[i + 1];
+            if head.trim_end().ends_with(';') {
+                i += 2;
+                continue;
+            }
+            let close = (i + 2..lines.len()).find(|&j| lines[j].trim() == "}" && indent(lines[j]) == indent(head));
+            match close {
+                Some(j) => {
+                    i = j + 1;
+                    continue;
+                }
+                None => break,
+            }
         }
-        let code = line.find("//").map_or(*line, |at| &line[..at]);
+        let code = line.find("//").map_or(line, |at| &line[..at]);
         out.push_str(code);
         out.push('\n');
+        i += 1;
     }
     out
 }
@@ -143,6 +162,11 @@ fn the_reference_scanner_sees_path_and_group_forms() {
     assert!(non_test_code("// crate::maildir::x\nlet a = 1; // crate::maildir\n").find("maildir").is_none());
     assert!(non_test_code("fn a() {}\n#[cfg(test)]\nmod tests {\n use crate::maildir;\n}\n").find("maildir").is_none());
     assert!(non_test_code("#[cfg(test)]\nthread_local! {}\nuse crate::maildir;\n").contains("crate::maildir"));
+    let after_helper = "#[cfg(test)]\nmod pause {\n    use crate::a;\n    fn f() {\n    }\n}\nuse crate::maildir;\n#[cfg(test)]\nmod tests {\n    use crate::b;\n}\n";
+    let seen = non_test_code(after_helper);
+    assert!(seen.contains("crate::maildir"), "code after a test helper module is production code");
+    assert!(!seen.contains("crate::a") && !seen.contains("crate::b"), "{seen}");
+    assert!(non_test_code("#[cfg(test)]\nmod tests;\nuse crate::maildir;\n").contains("crate::maildir"));
 }
 
 /// Whether `code` compares an `oauth2_transport` field against the literal
@@ -431,4 +455,41 @@ fn the_provider_check_scanner_sees_each_form_and_skips_the_legitimate_ones() {
     ] {
         assert!(provider_checks(miss).is_empty(), "{miss}");
     }
+}
+
+/// Source roots that read the settings document: core, daemon and the shell.
+fn settings_scanned_files() -> Vec<(String, String)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut out = Vec::new();
+    for r in ["src-core/src", "src-daemon/src", "src-tauri/src"] {
+        let mut files = Vec::new();
+        rust_files(&root.join(r), &mut files);
+        assert!(!files.is_empty(), "{r} holds no source");
+        for file in files {
+            let shown = format!("{r}/{}", file.strip_prefix(root.join(r)).unwrap().to_string_lossy().replace('\\', "/"));
+            if shown.ends_with("tests.rs") || shown == "src-core/src/settings_doc.rs" {
+                continue;
+            }
+            out.push((shown, non_test_code(&std::fs::read_to_string(&file).unwrap())));
+        }
+    }
+    out
+}
+
+/// The frontend settings store's persist name is the key every Rust reader
+/// looks under. It is spelled once, as `settings_doc::STORE`, which a vitest
+/// (`src/stores/__tests__/settingsStoreRustKey.test.js`) pins to the Zustand
+/// store: a rename on either side then fails a test instead of reading "off".
+#[test]
+fn the_settings_store_key_is_spelled_in_settings_doc_only() {
+    let failures: Vec<String> = settings_scanned_files()
+        .into_iter()
+        .filter(|(_, code)| code.contains("\"mailvault-settings\""))
+        .map(|(shown, _)| shown)
+        .collect();
+    assert!(
+        failures.is_empty(),
+        "read the settings store through mailvault_core::settings_doc::{{STORE, app_state}}, not the literal:\n{}",
+        failures.join("\n")
+    );
 }

@@ -221,7 +221,7 @@ pub(crate) fn settings_state(state: &DaemonState) -> Value {
     mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir)
         .read()
         .ok()
-        .and_then(|doc| doc.get("mailvault-settings").and_then(|s| s.get("state")).cloned())
+        .and_then(|doc| doc.get(mailvault_core::settings_doc::STORE).and_then(|s| s.get("state")).cloned())
         .unwrap_or_else(|| json!({}))
 }
 

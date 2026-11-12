@@ -27,7 +27,7 @@ pub(crate) fn get_app_data_dir(app_handle: tauri::AppHandle) -> Result<String, S
 pub(crate) fn read_settings_json() -> Result<String, String> {
     let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data dir: {}", e))?;
-    let settings_path = data_dir.join("frontend-settings.json");
+    let settings_path = data_dir.join(mailvault_core::settings_doc::FILE_NAME);
     if settings_path.exists() {
         fs::read_to_string(&settings_path)
             .map_err(|e| format!("Failed to read settings: {}", e))
@@ -73,7 +73,7 @@ pub(crate) fn write_settings_json(
 /// The daemon wrote the settings (`settings-changed`): the shell's own log
 /// level follows `logVerbosity`, as it did when the shell wrote the file.
 pub(crate) fn follow_settings_log_level(payload: &serde_json::Value) {
-    let touches = payload["keys"].as_array().is_some_and(|keys| keys.iter().any(|k| k == "mailvault-settings"));
+    let touches = payload["keys"].as_array().is_some_and(|keys| keys.iter().any(|k| k == mailvault_core::settings_doc::STORE));
     if !touches {
         return;
     }
@@ -135,7 +135,7 @@ pub(crate) fn daemon_always_on() -> bool {
         return false;
     }
     let Ok(dir) = mailvault_core::paths::app_data_dir() else { return false };
-    let Ok(raw) = fs::read_to_string(dir.join("frontend-settings.json")) else { return false };
+    let Ok(raw) = fs::read_to_string(dir.join(mailvault_core::settings_doc::FILE_NAME)) else { return false };
     mailvault_core::autostart::always_on_from_settings(&raw)
 }
 
@@ -144,7 +144,7 @@ pub(crate) fn daemon_always_on() -> bool {
 /// reads as "off", so the close button quits.
 pub(crate) fn close_to_tray() -> bool {
     let Ok(dir) = mailvault_core::paths::app_data_dir() else { return false };
-    let Ok(raw) = fs::read_to_string(dir.join("frontend-settings.json")) else { return false };
+    let Ok(raw) = fs::read_to_string(dir.join(mailvault_core::settings_doc::FILE_NAME)) else { return false };
     mailvault_core::autostart::close_to_tray_from_settings(&raw)
 }
 
@@ -153,10 +153,10 @@ pub(crate) fn close_to_tray() -> bool {
 #[cfg(target_os = "linux")]
 pub(crate) fn persisted_show_menu_bar() -> bool {
     let read = || -> Option<bool> {
-        let path = mailvault_core::paths::app_data_dir().ok()?.join("frontend-settings.json");
+        let path = mailvault_core::paths::app_data_dir().ok()?.join(mailvault_core::settings_doc::FILE_NAME);
         let raw = fs::read_to_string(path).ok()?;
         let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
-        settings["mailvault-settings"]["state"]["showMenuBar"].as_bool()
+        settings[mailvault_core::settings_doc::STORE]["state"]["showMenuBar"].as_bool()
     };
     read().unwrap_or(true)
 }

@@ -76,10 +76,10 @@ pub(crate) fn update_feed_override(track: Option<&str>, app_version: &str) -> Op
 pub(crate) fn persisted_update_track() -> Option<String> {
     let path = mailvault_core::paths::app_data_dir()
         .ok()?
-        .join("frontend-settings.json");
+        .join(mailvault_core::settings_doc::FILE_NAME);
     let raw = fs::read_to_string(path).ok()?;
     let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    settings["mailvault-settings"]["state"]["updateTrack"]
+    settings[mailvault_core::settings_doc::STORE]["state"]["updateTrack"]
         .as_str()
         .map(String::from)
 }

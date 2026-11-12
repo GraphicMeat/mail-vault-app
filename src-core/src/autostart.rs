@@ -174,15 +174,12 @@ pub fn config_home(xdg_config_home: Option<&str>, home: &Path) -> PathBuf {
 ///
 /// The app reads this inside `RunEvent::Exit`, when the webview is already
 /// gone and nothing can be asked of the frontend — so it goes through the
-/// persisted store, at the same `mailvault-settings.state` path Zustand
-/// writes. Anything unreadable, unparseable or absent is "off": a corrupt
+/// persisted store, at the `settings_doc::app_state` path Zustand writes.
+/// Anything unreadable, unparseable or absent is "off": a corrupt
 /// settings file costs a background daemon, never a stray one the user cannot
 /// see or stop.
 pub fn always_on_from_settings(raw: &str) -> bool {
-    serde_json::from_str::<serde_json::Value>(raw)
-        .ok()
-        .and_then(|v| v["mailvault-settings"]["state"]["daemonAlwaysOn"].as_bool())
-        .unwrap_or(false)
+    state_flag(raw, "daemonAlwaysOn")
 }
 
 /// Whether `frontend-settings.json` says closing the main window should keep
@@ -190,9 +187,15 @@ pub fn always_on_from_settings(raw: &str) -> bool {
 /// close time, same file and path as [`always_on_from_settings`]. Anything
 /// unreadable is "off": the close button quits, which is what it says.
 pub fn close_to_tray_from_settings(raw: &str) -> bool {
+    state_flag(raw, "closeToTray")
+}
+
+/// A boolean app setting of a raw settings document; anything unreadable is
+/// `false`.
+fn state_flag(raw: &str, key: &str) -> bool {
     serde_json::from_str::<serde_json::Value>(raw)
         .ok()
-        .and_then(|v| v["mailvault-settings"]["state"]["closeToTray"].as_bool())
+        .and_then(|v| crate::settings_doc::app_state(&v)?.get(key)?.as_bool())
         .unwrap_or(false)
 }
 

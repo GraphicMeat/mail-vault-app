@@ -26,7 +26,7 @@ fn own_addresses(settings: Option<&Value>, account: &Value, account_id: &str) ->
     if let Some(email) = account.get("email").and_then(Value::as_str) {
         addresses.push(email.to_owned());
     }
-    let state = settings.and_then(|document| document.get("mailvault-settings"))
+    let state = settings.and_then(|document| document.get(mailvault_core::settings_doc::STORE))
         .and_then(|root| root.get("state"));
     if let Some(send_as) = state.and_then(|state| state.get("sendAsAddresses"))
         .and_then(|rows| rows.get(account_id)).and_then(Value::as_str) {
@@ -76,7 +76,7 @@ fn prepare_one_under_lease(state: &DaemonState, change: &ChangeRecord,
     }).ok()?;
     let preview = header.as_ref().and_then(arrival::preview);
     let settings = settings_doc::SettingsDoc::shared(&state.app_dir).read().ok();
-    let saved = settings.as_deref().and_then(|document| document.get("mailvault-settings"))
+    let saved = settings.as_deref().and_then(|document| document.get(mailvault_core::settings_doc::STORE))
         .and_then(|root| root.get("state"));
     let notification = saved.and_then(|state| state.get("notificationSettings"));
     let show_preview = notification.and_then(|value| value.get("showPreview"))

@@ -36,7 +36,7 @@ use std::sync::Arc;
 use tracing::warn;
 
 /// The persisted store that holds `linkAlerts`, `trackerAlerts` and `linkSafetyEnabled`.
-const SETTINGS_STORE: &str = "mailvault-settings";
+use mailvault_core::settings_doc::STORE;
 const BACKFILL_DEFAULT: usize = 40;
 const BACKFILL_MAX: usize = 200;
 
@@ -107,7 +107,7 @@ async fn on_background_thread(f: impl FnOnce() -> Value + Send + 'static) -> Res
 /// (or cannot be read: a row then wears what it computes, not what was saved).
 fn row_settings(state: &DaemonState) -> RowSettings {
     match SettingsDoc::shared(&state.app_dir).read() {
-        Ok(doc) => doc.get(SETTINGS_STORE).and_then(|s| s.get("state")).map(RowSettings::from_state).unwrap_or_default(),
+        Ok(doc) => doc.get(STORE).and_then(|s| s.get("state")).map(RowSettings::from_state).unwrap_or_default(),
         Err(_) => {
             warn!("[body] settings document unreadable; rows answered without persisted verdicts");
             RowSettings::default()
@@ -237,7 +237,7 @@ mod tests {
     #[tokio::test]
     async fn verdicts_read_the_persisted_alerts_and_the_toggle_from_the_settings_document() {
         let (dir, s) = rig();
-        let doc = json!({SETTINGS_STORE: {"state": {
+        let doc = json!({STORE: {"state": {
             "linkSafetyEnabled": true,
             "linkAlerts": {"a-INBOX-1": "red"},
             "trackerAlerts": {"a-INBOX-1": {"count": 1, "vendors": ["Mailchimp"]}},
@@ -256,7 +256,7 @@ mod tests {
 
         // Link safety off: the persisted verdicts stay, the header checks do not run.
         let mut off = doc.clone();
-        off[SETTINGS_STORE]["state"]["linkSafetyEnabled"] = json!(false);
+        off[STORE]["state"]["linkSafetyEnabled"] = json!(false);
         std::fs::write(dir.path().join("frontend-settings.json"), off.to_string()).unwrap();
         let r = call(&s, "body.verdicts", json!({"rows": rows})).await;
         assert!(r["rows"]["r1"]["_linkAlert"] == "red");

@@ -74,7 +74,7 @@ fn accounts_reply(app_dir: &Path, accounts: &[(String, String)], now_ms: i64) ->
     let doc = SettingsDoc::shared(app_dir).read().ok();
     let state = doc
         .as_deref()
-        .and_then(|d| d.get("mailvault-settings"))
+        .and_then(|d| d.get(mailvault_core::settings_doc::STORE))
         .and_then(|s| s.get("state"))
         .cloned()
         .unwrap_or(Value::Null);

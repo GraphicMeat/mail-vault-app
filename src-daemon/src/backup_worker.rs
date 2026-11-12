@@ -37,7 +37,7 @@ mod context;
 mod snapshots;
 
 const META: &str = "backup.scheduler.v1";
-const STORE: &str = "mailvault-settings";
+use mailvault_core::settings_doc::STORE;
 const EVENT: &str = "backup-schedule-changed";
 const STALL_MS: i64 = 900_000;
 
