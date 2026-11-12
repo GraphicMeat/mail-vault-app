@@ -169,6 +169,7 @@ export function createDocRegistry({
       const e = entries.get(key);
       if (!e) return () => {};
       e.subs.add(fn);
+      if (e.doc) fn(e.doc);
       return () => e.subs.delete(fn);
     },
     // `docId`: discard only if the entry still holds that doc (a late discard by a holder of a dead doc leaves its replacement alone).
