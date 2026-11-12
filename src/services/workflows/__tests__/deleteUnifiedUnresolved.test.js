@@ -2,7 +2,7 @@
 // account's INBOX under its bare uid. Before this guard the fallback
 // `unified?.accountId || state.activeAccountId` did exactly that, and
 // loadUnifiedInbox never clears activeAccountId, so the fallback had a target.
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { fakeDeleteQueueSubmit } from './fakeDeleteQueue.js';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 
@@ -57,6 +57,8 @@ vi.mock('../../transport', () => ({ send: (...a) => mockSend(...a) }));
 // The connectivity verdict the workflow reads. Offline is not a failure — the
 // journal entry stays and replayOps sends it when the link is back.
 let netOnline = true;
+let afterDeleteSelect = 'none';
+let afterDeleteSameAccount = false;
 
 vi.mock('../../db', () => ({
   getLocalEmailLight: vi.fn().mockResolvedValue(null),
@@ -123,6 +125,8 @@ vi.mock('../../../stores/settingsStore', () => ({
       emailListStyle: 'default',
       linkAlerts: {},
       linkSafetyEnabled: false,
+      afterDeleteSelect,
+      afterDeleteSameAccount,
       unreadPerAccount: unreadProjection,
       setUnreadPerAccount: counts => {
         for (const id of Object.keys(unreadProjection)) delete unreadProjection[id];
@@ -373,6 +377,35 @@ describe('deleting from a unified list', () => {
 // The refusal belongs to the actions that DESTROY a message. Save, mark and
 // move do not: refusing those over one row that was stamped late loses the
 // whole batch, silently, and the user has no way to tell which row did it.
+// "Delete failed: Native refresh failed": the repaint after a delete in All
+// Inboxes is a network refresh of every account, and one account that could
+// not be reached failed the whole delete that had already landed.
+describe('the repaint after a change in All Inboxes', () => {
+  afterEach(() => { afterDeleteSelect = 'none'; afterDeleteSameAccount = false; });
+  it('is not failed by an account the refresh could not reach', async () => {
+    const { refreshCurrentView } = await import('../refreshAccounts');
+    const { reloadListInView } = await import('../messageMutations');
+    primeUnified([row(1, { _accountId: ACCT_A.id, _mailbox: 'INBOX' })]);
+    refreshCurrentView.mockRejectedValueOnce(new Error('Native refresh failed'));
+    await expect(reloadListInView()).resolves.toBeUndefined();
+    expect(refreshCurrentView).toHaveBeenCalledTimes(1);
+  });
+
+  it('"same account" passes over another account\'s row in between', async () => {
+    afterDeleteSelect = 'next';
+    afterDeleteSameAccount = true;
+    primeUnified([
+      row(3, { _accountId: ACCT_A.id, _mailbox: 'INBOX', date: '2026-09-03T10:00:00Z' }),
+      row(2, { _accountId: ACCT_B.id, _mailbox: 'INBOX', date: '2026-09-02T10:00:00Z' }),
+      row(1, { _accountId: ACCT_A.id, _mailbox: 'INBOX', date: '2026-09-01T10:00:00Z' }),
+    ]);
+    const key = `${ACCT_A.id}:INBOX:3`;
+    useMailStore.setState({ selectedEmailId: key, selectedEmail: useMailStore.getState().sortedEmails[0] });
+    await useMailStore.getState().deleteEmailFromServer(key);
+    expect(useMailStore.getState().selectedEmailId).toBe(`${ACCT_A.id}:INBOX:1`);
+  });
+});
+
 describe('a bulk action that destroys nothing skips the row it cannot place', () => {
   beforeEach(() => {
     vi.clearAllMocks();

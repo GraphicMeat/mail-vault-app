@@ -566,7 +566,8 @@ export const useSettingsStore = create(
       // What the reading pane shows after the open message is deleted.
       // 'none' closes it — the safe default, because the next message opens
       // itself the moment it is selected and that marks it read.
-      afterDeleteSelect: 'none', // 'none' | 'next'
+      afterDeleteSelect: 'none', // unifiedHelpers AFTER_DELETE_MODES
+      afterDeleteSameAccount: false, // a list spanning accounts: stay in the deleted message's account
       // Days the daemon's deleted-mail bin keeps a deleted message: 1, 3, 7, 14 or 30.
       deletedRetentionDays: 1,
 
@@ -1289,6 +1290,7 @@ export const useSettingsStore = create(
       setMarkAsReadMode: (mode) => set({ markAsReadMode: mode }),
       setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
       setAfterDeleteSelect: (mode) => set({ afterDeleteSelect: mode }),
+      setAfterDeleteSameAccount: (on) => set({ afterDeleteSameAccount: !!on }),
       setDeletedRetentionDays: (days) => set({ deletedRetentionDays: days }),
       setTrackpadSwipeEnabled: (enabled) => set({ trackpadSwipeEnabled: !!enabled }),
       setSwipeAction: (side, action) => {
@@ -1626,6 +1628,7 @@ export const useSettingsStore = create(
           markAsReadDelay: 3,
           confirmBeforeDelete: true,
           afterDeleteSelect: 'none',
+          afterDeleteSameAccount: false,
           deletedRetentionDays: 1,
           trackpadSwipeEnabled: true,
           swipeLeftAction: 'archive',

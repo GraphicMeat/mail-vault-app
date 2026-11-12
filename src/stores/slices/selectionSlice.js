@@ -73,6 +73,11 @@ export const createSelectionSlice = (set, get) => ({
   // rehydrates them from the stale cache while the server delete is in flight.
   deleteTombstones: new Set(),
 
+  // `{ view, email }`: the message a delete closed the reader on, so j/k
+  // with nothing open steps on from there (useAppShortcuts). Cleared by the
+  // next message opened.
+  readerAnchor: null,
+
   // Select a thread (shows all emails in the thread in the viewer)
   selectThread: (thread, focusKey = null) => {
     // Clicking the row of the thread already open changes nothing on screen,
@@ -83,6 +88,7 @@ export const createSelectionSlice = (set, get) => ({
     set(state => ({
       selectedThread: thread,
       threadFocusKey: focusKey,
+      readerAnchor: null,
       // The same key the rows are drawn with, or the row never reads as open.
       selectedEmailId: selectionKey(thread.lastEmail, state),
       selectedEmail: null,

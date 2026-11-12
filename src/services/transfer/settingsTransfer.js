@@ -17,7 +17,7 @@ export const GLOBAL_SETTINGS_ALLOWLIST = [
   'aiSettings', 'defaultSignatureEnabled', 'undoSendEnabled', 'undoSendDelay', 'sendDelay',
   'autoSaveDrafts', 'autoSaveInterval', 'spellcheckEnabled', 'composeContextVisible', 'composeContextSplit', 'closeToTray', 'composeOpenMode',
   'refreshInterval', 'refreshOnLaunch', 'badgeEnabled', 'badgeMode', 'markAsReadMode',
-  'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'updateTrack',
+  'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'afterDeleteSameAccount', 'updateTrack',
   'autoDownloadAttachments', 'attachmentReminder', 'layoutMode', 'viewStyle', 'emailListStyle', 'listPreviewLines', 'listDensity', 'folderIconStyle', 'emailListGrouping',
   'emailListView', 'listTimelineVisible', 'hideViewMail', 'hideViewMailViews', 'explorerGrouping', 'explorerDateDepth',
   'insightsPreferences', 'threadReaderLayout', 'threadSortOrder', 'threadMode',

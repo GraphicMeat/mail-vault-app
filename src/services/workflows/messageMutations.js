@@ -9,8 +9,8 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { isGraphAccount } from '../graphConfig';
 import { isJmapAccount } from '../providerKind';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, sameMessage, rowIdentity, selectionKey, pruneSelectedThread, nextAfterRemoval, vaultKey, vaultKeys } from '../../stores/slices/unifiedHelpers';
-import { filterUnread } from '../../utils/emailParser';
+import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, sameMessage, rowIdentity, selectionKey, pruneSelectedThread, nextAfterRemoval, afterDeleteRule, viewId, vaultKey, vaultKeys } from '../../stores/slices/unifiedHelpers';
+import { filterUnread, isUnread } from '../../utils/emailParser';
 import { isLocalMailbox } from './mailboxTree';
 import { forget as forgetHeaderMemo } from '../headerMemo';
 import { cancelPendingMarkRead } from './selectEmail';
@@ -130,7 +130,15 @@ export async function reloadListInView() {
   // carrying the uid the delete retired — the move back gave the message a new
   // one. The accounts have to be refetched for the row to be clickable.
   const { refreshCurrentView } = await import('./refreshAccounts');
-  return refreshCurrentView();
+  // A repaint, not the verb that asked for it: the delete, undo or move has
+  // already happened, and one account the refresh could not reach must not
+  // be reported as that verb failing ("Delete failed: Native refresh failed").
+  // refreshCurrentView has repainted from what did arrive.
+  try {
+    await refreshCurrentView();
+  } catch (error) {
+    console.warn('[reloadListInView] The accounts could not all be refreshed; the list shows what arrived:', error);
+  }
 }
 
 
@@ -760,12 +768,21 @@ async function _publishRemoval(useMailStore, { accountId, mailbox, uids }) {
 // `sortedEmails` still holds every loaded message, and selecting one of those
 // opens a row that is not on screen. Same reading as App.jsx's j/k step.
 // Called before the rows are removed, because the open row is what places the
-// cursor.
+// cursor. The setting names a direction and whether only unread mail counts;
+// "same account" matters in a list that spans accounts, and is the wish kept
+// longest (nextAfterRemoval gives the last one up first).
 function _openAfterDelete(state, isOpenRow, isRemoved) {
-  if (useSettingsStore.getState().afterDeleteSelect !== 'next') return null;
+  const settings = useSettingsStore.getState();
+  const rule = afterDeleteRule(settings.afterDeleteSelect);
+  if (!rule) return null;
   const keyOf = (e) => selectionKey(e, state);
   const visible = filterUnread(state.sortedEmails, state.unreadOnly, state.selectedEmailId, keyOf, state.unreadKeep);
-  return nextAfterRemoval(visible, isOpenRow, isRemoved);
+  const account = settings.afterDeleteSameAccount ? rowIdentity(visible.find(isOpenRow), state)?.accountId : null;
+  const prefer = [
+    ...(account ? [(e) => rowIdentity(e, state)?.accountId === account] : []),
+    ...(rule.unread ? [isUnread] : []),
+  ];
+  return nextAfterRemoval(visible, isOpenRow, isRemoved, { backward: rule.backward, prefer });
 }
 
 
@@ -792,7 +809,7 @@ const _rowId = (e, state) => {
 };
 // The view a row was deleted from. An undo puts it back only into that one;
 // any other view learns it from its reload.
-const _viewId = (s) => [s.activeAccountId, s.activeMailbox, s.mailboxScope?.root ?? '', s.unifiedFolder ?? ''].join('|');
+const _viewId = (s) => viewId(s);
 
 // ±1 on an account's INBOX badge per unread message leaving or coming back
 // (unreadCounts). Never a recount from `emails`: in All Inboxes that holds a
@@ -810,6 +827,12 @@ function _dropUnifiedFolderCache(state) {
   import('./unifiedFolderCache')
     .then(({ clearUnifiedFolders }) => clearUnifiedFolders())
     .catch(error => console.warn('[messageMutations] Could not drop the unified folder cache:', error));
+}
+
+// The message a delete closed the reader on, with the view it was in.
+function _anchorOf(live, removed, isOpen, view) {
+  const email = removed.find(r => isOpen(r.row))?.row || live.selectedEmail || live.selectedThread?.lastEmail || null;
+  return email ? { view, email } : null;
 }
 
 // Take `targets` off every view that shows them, now. `keys` are selection
@@ -839,6 +862,9 @@ function _hideDeleted(useMailStore, targets, { keys = [] } = {}) {
     selectedEmailIds: new Set([...live.selectedEmailIds].filter(k => !dropKeys.has(k))),
     selectedEmailSnapshots: retainSelectionSnapshots(live.selectedEmailSnapshots, [...live.selectedEmailIds].filter(k => !dropKeys.has(k))),
     ...(threadUpdate ?? (closes ? READER_CLOSED : {})),
+    // The place the reader left in the list, for a j/k with nothing open: the
+    // step goes on from the deleted message, not from the top again.
+    ...(closes ? { readerAnchor: openNext ? null : _anchorOf(live, removed, isOpen, view) } : {}),
   });
   _shiftUnread(removed, -1);
   _dropUnifiedFolderCache(live);

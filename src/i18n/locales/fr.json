@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "Tout est prêt",
   "mobile.onboarding.doneLead": "Vos e-mails arrivent sur ce téléphone.",
   "mobile.onboarding.doneLeadNoAccount": "Ajoutez maintenant un compte e-mail pour commencer à lire vos messages.",
-  "mobile.settings.replayTour": "Revoir la visite"
+  "mobile.settings.replayTour": "Revoir la visite",
+  "settings.behavior.afterDeleteSelectPrevious": "Sélectionner l'e-mail précédent",
+  "settings.behavior.afterDeleteSelectNextUnread": "Sélectionner l'e-mail non lu suivant",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "Sélectionner l'e-mail non lu précédent",
+  "settings.behavior.afterDeletePreviousHint": "L'e-mail précédent s'ouvre aussitôt, ce qui le marque aussi comme lu.",
+  "settings.behavior.afterDeleteUnreadHint": "L'e-mail non lu le plus proche dans ce sens s'ouvre aussitôt et est marqué comme lu. S'il n'en reste aucun, l'e-mail le plus proche s'ouvre.",
+  "settings.behavior.afterDeleteSameAccount": "Rester dans le même compte",
+  "settings.behavior.afterDeleteSameAccountDesc": "Dans une liste de plusieurs comptes, comme Toutes les boîtes, un e-mail du compte de celui que vous avez supprimé est préféré.",
+  "errors.syncRefreshFailed": "Certains comptes n'ont pas pu être actualisés"
 }

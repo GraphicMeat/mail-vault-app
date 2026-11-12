@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "Alles bereit",
   "mobile.onboarding.doneLead": "Deine Mails sind auf dem Weg zu diesem Telefon.",
   "mobile.onboarding.doneLeadNoAccount": "Füge als Nächstes ein E-Mail-Konto hinzu, um deine Mails zu lesen.",
-  "mobile.settings.replayTour": "Tour wiederholen"
+  "mobile.settings.replayTour": "Tour wiederholen",
+  "settings.behavior.afterDeleteSelectPrevious": "Vorherige E-Mail auswählen",
+  "settings.behavior.afterDeleteSelectNextUnread": "Nächste ungelesene E-Mail auswählen",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "Vorherige ungelesene E-Mail auswählen",
+  "settings.behavior.afterDeletePreviousHint": "Die vorherige E-Mail öffnet sich sofort und gilt damit als gelesen.",
+  "settings.behavior.afterDeleteUnreadHint": "Die nächstgelegene ungelesene E-Mail in dieser Richtung öffnet sich sofort und gilt als gelesen. Ist keine ungelesene mehr da, öffnet sich die nächstgelegene E-Mail.",
+  "settings.behavior.afterDeleteSameAccount": "Im selben Konto bleiben",
+  "settings.behavior.afterDeleteSameAccountDesc": "In einer Liste mit mehreren Konten, etwa Alle Posteingänge, wird eine E-Mail aus dem Konto der gelöschten bevorzugt.",
+  "errors.syncRefreshFailed": "Einige Konten konnten nicht aktualisiert werden"
 }

@@ -50,9 +50,19 @@ export async function refreshCurrentView() {
   if (!view) return { newEmails: 0, totalUnread: (await unreadPresentation())?.total ?? 0 };
   const ordinary = view.accountId && !view.scopePaths;
   const pendingMetadata = ordinary ? folderMetadata(view.accountId, view.mailbox) : null;
-  const result = await requestNativeRefresh(view.accountId
-    ? { accountId: view.accountId, ...(ordinary ? { mailbox: view.mailbox } : {}) }
-    : {});
+  let result;
+  try {
+    result = await requestNativeRefresh(view.accountId
+      ? { accountId: view.accountId, ...(ordinary ? { mailbox: view.mailbox } : {}) }
+      : {});
+  } catch (error) {
+    // One account out of reach fails the whole receipt, and what the others
+    // fetched is in the cache all the same: the list shows it, and the
+    // caller still hears that the refresh failed.
+    await Promise.resolve(pendingMetadata).catch(() => {});
+    await Promise.resolve(repaintCurrentView()).catch(() => {});
+    throw error;
+  }
   if (pendingMetadata) await pendingMetadata;
   await repaintCurrentView();
   return { ...result, newEmails: 0, totalUnread: (await unreadPresentation())?.total ?? 0 };

@@ -323,7 +323,7 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
     isArchived: header.isArchived ?? header.source === 'vault',
   });
   const publish = patch => { if (isCurrent()) useMailStore.setState(patch); };
-  publish({ selectedThread: null, selectedEmailId, selectedEmail: null, loadingEmail: true,
+  publish({ selectedThread: null, selectedEmailId, selectedEmail: null, loadingEmail: true, readerAnchor: null,
     selectedEmailSource: source, lastSelectedAccountId: accountId, error: null });
   try {
     if (!localOnly && header.uidValidity != null) {

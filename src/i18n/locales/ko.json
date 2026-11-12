@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "준비가 끝났습니다",
   "mobile.onboarding.doneLead": "메일을 이 휴대폰으로 가져오는 중입니다.",
   "mobile.onboarding.doneLeadNoAccount": "이제 이메일 계정을 추가하면 메일을 읽을 수 있습니다.",
-  "mobile.settings.replayTour": "투어 다시 보기"
+  "mobile.settings.replayTour": "투어 다시 보기",
+  "settings.behavior.afterDeleteSelectPrevious": "이전 메일 선택",
+  "settings.behavior.afterDeleteSelectNextUnread": "다음 읽지 않은 메일 선택",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "이전 읽지 않은 메일 선택",
+  "settings.behavior.afterDeletePreviousHint": "이전 메일이 바로 열리며, 그래서 읽음으로도 표시됩니다.",
+  "settings.behavior.afterDeleteUnreadHint": "그 방향에서 가장 가까운 읽지 않은 메일이 바로 열리고 읽음으로 표시됩니다. 읽지 않은 메일이 없으면 가장 가까운 메일이 열립니다.",
+  "settings.behavior.afterDeleteSameAccount": "같은 계정에 머무르기",
+  "settings.behavior.afterDeleteSameAccountDesc": "모든 받은편지함처럼 여러 계정이 섞인 목록에서는 삭제한 메일과 같은 계정의 메일을 우선합니다.",
+  "errors.syncRefreshFailed": "일부 계정을 새로 고치지 못했습니다"
 }

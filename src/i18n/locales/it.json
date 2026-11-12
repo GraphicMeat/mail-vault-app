@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "Tutto pronto",
   "mobile.onboarding.doneLead": "La tua posta sta arrivando su questo telefono.",
   "mobile.onboarding.doneLeadNoAccount": "Ora aggiungi un account email per iniziare a leggere la posta.",
-  "mobile.settings.replayTour": "Ripeti il tour"
+  "mobile.settings.replayTour": "Ripeti il tour",
+  "settings.behavior.afterDeleteSelectPrevious": "Seleziona l'email precedente",
+  "settings.behavior.afterDeleteSelectNextUnread": "Seleziona l'email non letta successiva",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "Seleziona l'email non letta precedente",
+  "settings.behavior.afterDeletePreviousHint": "L'email precedente si apre subito e viene così segnata come letta.",
+  "settings.behavior.afterDeleteUnreadHint": "L'email non letta più vicina in quella direzione si apre subito e viene segnata come letta. Se non ne restano, si apre l'email più vicina.",
+  "settings.behavior.afterDeleteSameAccount": "Resta nello stesso account",
+  "settings.behavior.afterDeleteSameAccountDesc": "In un elenco di più account, come Tutte le caselle, viene preferita un'email dell'account di quella eliminata.",
+  "errors.syncRefreshFailed": "Non è stato possibile aggiornare alcuni account"
 }

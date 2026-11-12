@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "Tudo pronto",
   "mobile.onboarding.doneLead": "Seus e-mails estão a caminho deste telefone.",
   "mobile.onboarding.doneLeadNoAccount": "Agora adicione uma conta de e-mail para começar a ler suas mensagens.",
-  "mobile.settings.replayTour": "Repetir tour"
+  "mobile.settings.replayTour": "Repetir tour",
+  "settings.behavior.afterDeleteSelectPrevious": "Selecionar o e-mail anterior",
+  "settings.behavior.afterDeleteSelectNextUnread": "Selecionar o próximo e-mail não lido",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "Selecionar o e-mail não lido anterior",
+  "settings.behavior.afterDeletePreviousHint": "O e-mail anterior abre na hora, o que também o marca como lido.",
+  "settings.behavior.afterDeleteUnreadHint": "O e-mail não lido mais próximo nessa direção abre na hora e é marcado como lido. Se não restar nenhum, abre o e-mail mais próximo.",
+  "settings.behavior.afterDeleteSameAccount": "Ficar na mesma conta",
+  "settings.behavior.afterDeleteSameAccountDesc": "Em uma lista com várias contas, como Todas as caixas, um e-mail da conta do que você excluiu tem preferência.",
+  "errors.syncRefreshFailed": "Não foi possível atualizar algumas contas"
 }

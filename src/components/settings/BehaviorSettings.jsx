@@ -10,6 +10,15 @@ import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash
 import { SWIPE_ACTION_LABELS } from '../SwipeBackdrop';
 import { t, useT  } from '../../i18n/index.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
+import { afterDeleteRule } from '../../stores/slices/unifiedHelpers';
+
+const AFTER_DELETE_HINTS = {
+  none: 'settings.behavior.afterDeleteNothingHint',
+  next: 'settings.behavior.afterDeleteNextHint',
+  previous: 'settings.behavior.afterDeletePreviousHint',
+  nextUnread: 'settings.behavior.afterDeleteUnreadHint',
+  previousUnread: 'settings.behavior.afterDeleteUnreadHint',
+};
 
 export function BehaviorSettings() {
   const t = useT();
@@ -27,6 +36,8 @@ export function BehaviorSettings() {
     setConfirmBeforeDelete,
     afterDeleteSelect,
     setAfterDeleteSelect,
+    afterDeleteSameAccount,
+    setAfterDeleteSameAccount,
     trackpadSwipeEnabled,
     setTrackpadSwipeEnabled,
     swipeLeftAction,
@@ -432,12 +443,22 @@ export function BehaviorSettings() {
           >
             <option value="none">{t('settings.behavior.afterDeleteSelectNothing')}</option>
             <option value="next">{t('settings.behavior.afterDeleteSelectNext')}</option>
+            <option value="previous">{t('settings.behavior.afterDeleteSelectPrevious')}</option>
+            <option value="nextUnread">{t('settings.behavior.afterDeleteSelectNextUnread')}</option>
+            <option value="previousUnread">{t('settings.behavior.afterDeleteSelectPreviousUnread')}</option>
           </select>
           <p className="text-xs text-mail-text-muted mt-1">
-            {afterDeleteSelect === 'next'
-              ? t('settings.behavior.afterDeleteNextHint')
-              : t('settings.behavior.afterDeleteNothingHint')}
+            {t(AFTER_DELETE_HINTS[afterDeleteSelect] || AFTER_DELETE_HINTS.none)}
           </p>
+          {afterDeleteRule(afterDeleteSelect) && (
+            <SettingRow label={t('settings.behavior.afterDeleteSameAccount')} description={t('settings.behavior.afterDeleteSameAccountDesc')}>
+              <ToggleSwitch
+                label={t('settings.behavior.afterDeleteSameAccount')} active={!!afterDeleteSameAccount}
+                onClick={() => setAfterDeleteSameAccount(!afterDeleteSameAccount)}
+                testId="after-delete-same-account"
+              />
+            </SettingRow>
+          )}
           <AfterDeletePreview value={afterDeleteSelect} />
         </div>
       </div>

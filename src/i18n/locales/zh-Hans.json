@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "一切就绪",
   "mobile.onboarding.doneLead": "你的邮件正在同步到这部手机。",
   "mobile.onboarding.doneLeadNoAccount": "接下来添加一个邮箱账户，即可开始阅读邮件。",
-  "mobile.settings.replayTour": "重新导览"
+  "mobile.settings.replayTour": "重新导览",
+  "settings.behavior.afterDeleteSelectPrevious": "选中上一封邮件",
+  "settings.behavior.afterDeleteSelectNextUnread": "选中下一封未读邮件",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "选中上一封未读邮件",
+  "settings.behavior.afterDeletePreviousHint": "上一封邮件会立即打开，因此也会被标为已读。",
+  "settings.behavior.afterDeleteUnreadHint": "该方向上最近的未读邮件会立即打开并标为已读。没有未读邮件时，打开最近的一封邮件。",
+  "settings.behavior.afterDeleteSameAccount": "留在同一账户",
+  "settings.behavior.afterDeleteSameAccountDesc": "在包含多个账户的列表（如所有收件箱）中，优先选择与已删除邮件同一账户的邮件。",
+  "errors.syncRefreshFailed": "部分账户未能刷新"
 }

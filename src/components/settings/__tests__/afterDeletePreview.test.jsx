@@ -15,3 +15,15 @@ it('keeps the after-deletion example next to the preference in Settings', () => 
   expect(useSettingsStore.getState().afterDeleteSelect).toBe('next');
   expect(within(sample).getByText('MeatPad')).toBeTruthy();
 });
+it('offers a direction, unread only, and the same account', () => {
+  useSettingsStore.setState({ afterDeleteSelect: 'none', afterDeleteSameAccount: false });
+  render(<BehaviorSettings />);
+  const select = screen.getByTestId('after-delete-select');
+  expect([...select.options].map(o => o.value)).toEqual(['none', 'next', 'previous', 'nextUnread', 'previousUnread']);
+  // Nothing to keep to an account while nothing is selected.
+  expect(screen.queryByTestId('after-delete-same-account')).toBeNull();
+  fireEvent.change(select, { target: { value: 'previousUnread' } });
+  expect(within(screen.getByRole('figure', { name: 'After Deleting' })).getByText('MeatPad')).toBeTruthy();
+  fireEvent.click(screen.getByTestId('after-delete-same-account'));
+  expect(useSettingsStore.getState().afterDeleteSameAccount).toBe(true);
+});

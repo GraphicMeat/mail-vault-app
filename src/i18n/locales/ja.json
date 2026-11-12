@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "準備完了",
   "mobile.onboarding.doneLead": "メールをこの電話に読み込んでいます。",
   "mobile.onboarding.doneLeadNoAccount": "次にメールアカウントを追加すると、メールを読めるようになります。",
-  "mobile.settings.replayTour": "ツアーを再表示"
+  "mobile.settings.replayTour": "ツアーを再表示",
+  "settings.behavior.afterDeleteSelectPrevious": "前のメールを選ぶ",
+  "settings.behavior.afterDeleteSelectNextUnread": "次の未読メールを選ぶ",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "前の未読メールを選ぶ",
+  "settings.behavior.afterDeletePreviousHint": "前のメールがすぐに開き、その結果として既読になります。",
+  "settings.behavior.afterDeleteUnreadHint": "その方向でいちばん近い未読メールがすぐに開き、既読になります。未読がなければ、いちばん近いメールが開きます。",
+  "settings.behavior.afterDeleteSameAccount": "同じアカウント内にとどまる",
+  "settings.behavior.afterDeleteSameAccountDesc": "すべての受信トレイなど複数アカウントのリストでは、削除したメールと同じアカウントのメールを優先します。",
+  "errors.syncRefreshFailed": "一部のアカウントを更新できませんでした"
 }

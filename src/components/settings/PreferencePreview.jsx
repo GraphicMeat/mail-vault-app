@@ -213,6 +213,6 @@ export function AfterDeletePreview({ value }) {
   const next = previewRows()[1];
   return <figure className="onboarding-after-delete-sample" aria-label={t('settings.behavior.afterDeleting')}>
     <figcaption>{t('settings.preview.example')}</figcaption>
-    {value === 'next' ? <p><strong>{next.sender}</strong><br />{next.subject}</p> : <p><FileText size={15} aria-hidden="true" />{t('viewer.selectEmailRead')}</p>}
+    {value && value !== 'none' ? <p><strong>{next.sender}</strong><br />{next.subject}</p> : <p><FileText size={15} aria-hidden="true" />{t('viewer.selectEmailRead')}</p>}
   </figure>;
 }

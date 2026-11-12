@@ -360,6 +360,14 @@ describe('afterDeleteSelect', () => {
     expect(useSettingsStore.getState().afterDeleteSelect).toBe('next');
   });
 
+  it('same-account is off by default, set by its setter and reset with the rest', () => {
+    expect(useSettingsStore.getState().afterDeleteSameAccount).toBe(false);
+    useSettingsStore.getState().setAfterDeleteSameAccount(true);
+    expect(useSettingsStore.getState().afterDeleteSameAccount).toBe(true);
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().afterDeleteSameAccount).toBe(false);
+  });
+
   it('resetSettings restores none', () => {
     useSettingsStore.getState().setAfterDeleteSelect('next');
     useSettingsStore.getState().resetSettings();

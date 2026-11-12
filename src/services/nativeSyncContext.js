@@ -193,6 +193,6 @@ export async function requestNativeRefresh({ accountId, mailbox, reason = 'manua
     receipt = status.receipts?.[0] || receipt;
     if (status.lastRefreshTime != null) useSettingsStore.getState().setLastRefreshTime(status.lastRefreshTime);
   }
-  if (receipt.status === 'failed') throw new Error(receipt.accountResults?.find(row => !row.success)?.error || 'Native refresh failed');
+  if (receipt.status === 'failed') throw new Error(receipt.accountResults?.find(row => !row.success)?.error || t('errors.syncRefreshFailed'));
   return { instanceId, receipt, uncertain: !terminal.has(receipt.status) };
 }

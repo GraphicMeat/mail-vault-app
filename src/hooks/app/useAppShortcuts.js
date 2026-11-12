@@ -2,7 +2,7 @@ import { useT } from '../../i18n/index.js';
 import { currentListView } from '../../stores/viewStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMailStore } from '../../stores/mailStore';
-import { rowKey, spansMailboxes, stepThroughList } from '../../stores/slices/unifiedHelpers';
+import { rowKey, spansMailboxes, stepThroughList, viewId } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
 import { useKeyboardShortcuts } from '../useKeyboardShortcuts';
 import { openActiveReply } from '../../utils/composeOpener';
@@ -38,7 +38,10 @@ export function useAppShortcuts({ setComposeState, composeState, insightsOpen, n
     const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId, keyOf, unreadKeep);
     // The open email places the step when the list no longer shows it. Not
     // matched by key: a body fetched from the server carries no _accountId.
-    const open = selectedEmail || state.selectedThread?.lastEmail || null;
+    // With nothing open, the message a delete just closed the reader on keeps
+    // the place, so the step does not start again from the top of the list.
+    const anchor = state.readerAnchor?.view === viewId(state) ? state.readerAnchor.email : null;
+    const open = selectedEmail || state.selectedThread?.lastEmail || anchor || null;
     const target = stepThroughList(visible, selectedEmailId, spans, delta, open);
     if (target) selectEmail(keyOf(target));
   };

@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "Todo listo",
   "mobile.onboarding.doneLead": "Tu correo está llegando a este teléfono.",
   "mobile.onboarding.doneLeadNoAccount": "Añade una cuenta de correo para empezar a leer tu correo.",
-  "mobile.settings.replayTour": "Repetir recorrido"
+  "mobile.settings.replayTour": "Repetir recorrido",
+  "settings.behavior.afterDeleteSelectPrevious": "Seleccionar el correo anterior",
+  "settings.behavior.afterDeleteSelectNextUnread": "Seleccionar el siguiente correo no leído",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "Seleccionar el correo no leído anterior",
+  "settings.behavior.afterDeletePreviousHint": "El correo anterior se abre enseguida, lo que también lo marca como leído.",
+  "settings.behavior.afterDeleteUnreadHint": "El correo no leído más cercano en esa dirección se abre enseguida y se marca como leído. Si no queda ninguno, se abre el correo más cercano.",
+  "settings.behavior.afterDeleteSameAccount": "Permanecer en la misma cuenta",
+  "settings.behavior.afterDeleteSameAccountDesc": "En una lista de varias cuentas, como Todas las bandejas, se prefiere un correo de la cuenta del que eliminaste.",
+  "errors.syncRefreshFailed": "No se pudieron actualizar algunas cuentas"
 }

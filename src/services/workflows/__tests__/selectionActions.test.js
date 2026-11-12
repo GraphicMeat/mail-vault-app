@@ -71,6 +71,7 @@ let netOnline = true;
 
 // The setting under test, read through the settings mock below on every call.
 let afterDeleteSelect = 'none';
+let afterDeleteSameAccount = false;
 
 vi.mock('../../../stores/connectivityStore', () => ({
   useConnectivityStore: { getState: () => ({ online: netOnline }) },
@@ -157,6 +158,7 @@ vi.mock('../../../stores/settingsStore', () => ({
       linkAlerts: {},
       linkSafetyEnabled: false,
       afterDeleteSelect,
+      afterDeleteSameAccount,
       unreadPerAccount: unreadProjection,
       setUnreadPerAccount: counts => {
         for (const id of Object.keys(unreadProjection)) delete unreadProjection[id];
@@ -177,6 +179,7 @@ await import('../bindStoreActions');
 const { whenUnreadIdle } = await import('../../unreadCountsClient');
 const { removeLocalEmail: removeLocalEmailWorkflow, removeLocalEmails: removeLocalEmailsWorkflow } = await import('../messageMutations');
 const { loadEmails: realLoadEmails } = await import('../loadEmails');
+const { viewId } = await import('../../../stores/slices/unifiedHelpers');
 const { invalidateChatAndThreadCaches, _resetArchivedGroupsForTest, setArchivedGroup, getArchivedGroup } = await import('../../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
@@ -240,6 +243,7 @@ beforeEach(() => {
   _resetArchivedGroupsForTest();
   netOnline = true;
   afterDeleteSelect = 'none';
+  afterDeleteSameAccount = false;
   // uid 1 is the message every delete case here removes; the vault holds it.
   mockGetLocalIndexEntry.mockResolvedValue({ uid: 1, subject: 'General', flags: ['archived'], source: 'local' });
   mockAppendLocalIndex.mockResolvedValue(undefined);
@@ -1225,6 +1229,71 @@ describe('deleteEmailFromServer with "select the next email" on', () => {
     await useMailStore.getState().deleteSelectedFromServer();
 
     expect(useMailStore.getState().selectedEmailId).toBeNull();
+  });
+});
+
+// The other answers to settings.behavior.afterDeleting: a direction, and
+// "unread only".
+describe('deleteEmailFromServer with the other "after deleting" choices', () => {
+  const three = () => [
+    { uid: 1, messageId: 'a@mock', subject: 'One', flags: [], from: { address: 'a@mock.test' }, date: '2026-08-01T10:00:00Z' },
+    { uid: 2, messageId: 'b@mock', subject: 'Two', flags: ['\\Seen'], from: { address: 'b@mock.test' }, date: '2026-08-02T10:00:00Z' },
+    { uid: 3, messageId: 'c@mock', subject: 'Three', flags: [], from: { address: 'c@mock.test' }, date: '2026-08-03T10:00:00Z' },
+  ];
+  const order = () => useMailStore.getState().sortedEmails.map(e => e.uid);
+  const openAndDelete = async (uid) => {
+    useMailStore.setState({ selectedEmailId: uid, selectedEmail: { uid } });
+    await useMailStore.getState().deleteEmailFromServer(uid);
+    return useMailStore.getState().selectedEmailId;
+  };
+
+  it('"previous" opens the row above the deleted one', async () => {
+    afterDeleteSelect = 'previous';
+    primeStore(three(), []);
+    const [above, open] = order();
+    expect(await openAndDelete(open)).toBe(above);
+  });
+
+  it('"next unread" passes over a read row', async () => {
+    afterDeleteSelect = 'nextUnread';
+    primeStore(three(), []);
+    // Newest first: 3, 2 (read), 1.
+    expect(order()).toEqual([3, 2, 1]);
+    expect(await openAndDelete(3)).toBe(1);
+  });
+
+  it('"previous unread" passes over a read row', async () => {
+    afterDeleteSelect = 'previousUnread';
+    primeStore(three(), []);
+    expect(await openAndDelete(1)).toBe(3);
+  });
+});
+
+// With nothing opened, j/k used to start again from the top of the list. The
+// deleted message keeps the place instead (useAppShortcuts reads it).
+describe('the place a delete leaves in the list', () => {
+  it('is the deleted open message, in the view it was deleted from', async () => {
+    primeStore(seedThread(), []);
+    const [open] = useMailStore.getState().sortedEmails.map(e => e.uid);
+    const opened = useMailStore.getState().sortedEmails.find(e => e.uid === open);
+    useMailStore.setState({ selectedEmailId: open, selectedEmail: opened });
+
+    await useMailStore.getState().deleteEmailFromServer(open);
+
+    const { readerAnchor } = useMailStore.getState();
+    expect(readerAnchor?.email?.uid).toBe(open);
+    expect(readerAnchor?.view).toBe(viewId(useMailStore.getState()));
+  });
+
+  it('is not kept when the delete opened another message', async () => {
+    afterDeleteSelect = 'next';
+    primeStore(seedThread(), []);
+    const [open] = useMailStore.getState().sortedEmails.map(e => e.uid);
+    useMailStore.setState({ selectedEmailId: open, selectedEmail: { uid: open }, readerAnchor: { view: 'stale', email: {} } });
+
+    await useMailStore.getState().deleteEmailFromServer(open);
+
+    expect(useMailStore.getState().readerAnchor).toBeNull();
   });
 });
 

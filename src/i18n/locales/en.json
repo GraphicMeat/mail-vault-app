@@ -4619,5 +4619,13 @@
   "mobile.onboarding.doneTitle": "You're all set",
   "mobile.onboarding.doneLead": "Your mail is on its way to this phone.",
   "mobile.onboarding.doneLeadNoAccount": "Add an email account next to start reading your mail.",
-  "mobile.settings.replayTour": "Replay tour"
+  "mobile.settings.replayTour": "Replay tour",
+  "settings.behavior.afterDeleteSelectPrevious": "Select the previous email",
+  "settings.behavior.afterDeleteSelectNextUnread": "Select the next unread email",
+  "settings.behavior.afterDeleteSelectPreviousUnread": "Select the previous unread email",
+  "settings.behavior.afterDeletePreviousHint": "The previous email opens straight away, which also marks it as read.",
+  "settings.behavior.afterDeleteUnreadHint": "The nearest unread email that way opens straight away and is marked as read. With no unread email left, the nearest email opens.",
+  "settings.behavior.afterDeleteSameAccount": "Stay in the same account",
+  "settings.behavior.afterDeleteSameAccountDesc": "In a list of several accounts, such as All Inboxes, prefer an email from the account of the one you deleted.",
+  "errors.syncRefreshFailed": "Some accounts could not be refreshed"
 }

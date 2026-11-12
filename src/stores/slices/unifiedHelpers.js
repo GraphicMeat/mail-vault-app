@@ -562,18 +562,46 @@ export function stepThroughList(rows, currentId, spans, delta, openEmail = null)
  * The row a delete should leave open, when the setting asks for one.
  *
  * Read BEFORE the rows are removed — the open row is what places the cursor,
- * and once it is gone there is nothing to count from. The row after it wins;
- * the row before it is the fallback when the deleted one was last. Rows the
- * same delete is taking are skipped, which is what makes a multi-row delete
- * land on a survivor rather than on the next tombstone.
+ * and once it is gone there is nothing to count from. The neighbour in the
+ * chosen direction wins (below, or above with `backward`); the other side is
+ * the fallback when the deleted one was at that end. Rows the same delete is
+ * taking are skipped, which is what makes a multi-row delete land on a
+ * survivor rather than on the next tombstone.
+ *
+ * `prefer` are wishes (unread, same account), most important first. A row
+ * every wish holds for wins, on either side; with none, the last wish is
+ * given up, then the one before it. A wish never closes the reader: with
+ * every wish given up the answer is the plain neighbour.
  */
-export function nextAfterRemoval(rows, isOpenRow, isRemoved) {
+export function nextAfterRemoval(rows, isOpenRow, isRemoved, { backward = false, prefer = [] } = {}) {
   const idx = (rows || []).findIndex(isOpenRow);
   if (idx === -1) return null;
-  for (let i = idx + 1; i < rows.length; i++) if (!isRemoved(rows[i])) return rows[i];
-  for (let i = idx - 1; i >= 0; i--) if (!isRemoved(rows[i])) return rows[i];
+  const below = rows.slice(idx + 1);
+  const above = rows.slice(0, idx).reverse();
+  const left = (backward ? [...above, ...below] : [...below, ...above]).filter(e => !isRemoved(e));
+  for (let kept = prefer.length; kept >= 0; kept--) {
+    const wishes = prefer.slice(0, kept);
+    const found = left.find(e => wishes.every(wish => wish(e)));
+    if (found) return found;
+  }
   return null;
 }
+
+/**
+ * settings.behavior.afterDeleting as a rule: null for "select nothing" (and
+ * for a value this build does not know, e.g. from a newer settings file).
+ */
+const AFTER_DELETE_RULES = {
+  next: { backward: false, unread: false },
+  previous: { backward: true, unread: false },
+  nextUnread: { backward: false, unread: true },
+  previousUnread: { backward: true, unread: true },
+};
+export const AFTER_DELETE_MODES = ['none', ...Object.keys(AFTER_DELETE_RULES)];
+export const afterDeleteRule = (mode) => (Object.hasOwn(AFTER_DELETE_RULES, mode) ? { ...AFTER_DELETE_RULES[mode] } : null);
+
+/** The view a list belongs to: account, folder, branch scope, unified folder. */
+export const viewId = (s) => [s.activeAccountId, s.activeMailbox, s.mailboxScope?.root ?? '', s.unifiedFolder ?? ''].join('|');
 
 // ── Unified folder resolution ──────────────────────────────────────────────
 // Maps canonical folder IDs to IMAP specialUse flags for cross-provider resolution

@@ -39,6 +39,14 @@ beforeEach(() => {
 });
 
 describe('refreshCurrentView branch preservation', () => {
+  // One account the worker could not reach fails the receipt; the others'
+  // mail is in the cache all the same, and the list must show it.
+  it('repaints from what did arrive when the native refresh fails, and still says it failed', async () => {
+    request.mockRejectedValueOnce(new Error('errors.syncRefreshFailed'));
+    await expect(refreshCurrentView()).rejects.toThrow('errors.syncRefreshFailed');
+    expect(state.loadEmails).toHaveBeenCalledWith({ rereadFlags: true });
+  });
+
   it('re-lists the branch without collapsing scope or passing its root as a provider target', async () => {
     state.mailboxScope = { root: 'Kunden', paths: ['Kunden', 'Kunden.Company XY'] };
     view = { accountId: 'acct-1', mailbox: 'Kunden', scopePaths: state.mailboxScope.paths };
