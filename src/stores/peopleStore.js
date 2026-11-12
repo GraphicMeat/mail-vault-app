@@ -75,8 +75,10 @@ export const usePeopleStore = create((set, get) => {
     setVipOnly: (vipOnly) => { set({ vipOnly }); return get().load(); },
 
     select: async (id) => {
-      ++mailSeq; // a mail page still in flight for the previous contact is stale now
-      set({ selectedId: id, card: null, sender: null, mail: [], mailNext: null, mailLoading: false });
+      const same = !!id && id !== 'new' && get().selectedId === id;
+      // The mail list only refetches when the target changes, so re-picking the open contact must not blank it.
+      if (!same) ++mailSeq; // a mail page still in flight for the previous contact is stale now
+      set({ selectedId: id, card: null, sender: null, ...(same ? {} : { mail: [], mailNext: null, mailLoading: false }) });
       if (!id || id === 'new') return; // 'new' is the unsaved draft: nothing to fetch
       let card;
       try { set({ error: null }); card = await daemonCall('people.get', { id }); }
@@ -89,12 +91,15 @@ export const usePeopleStore = create((set, get) => {
       }
       if (get().selectedId !== id) return;
       set({ card });
+      if (same) get().loadMail(get().mailFilters);
       get().refreshStats([id]);
     },
     // An unsaved sender is selected by address: it has no card, and its stats are keyed by address.
     selectSender: async ({ address, name = '' }) => {
-      ++mailSeq;
-      set({ selectedId: null, card: null, sender: { address, name }, mail: [], mailNext: null, mailLoading: false });
+      const same = !get().selectedId && get().sender?.address === address;
+      if (!same) ++mailSeq;
+      set({ selectedId: null, card: null, sender: { address, name }, ...(same ? {} : { mail: [], mailNext: null, mailLoading: false }) });
+      if (same) get().loadMail(get().mailFilters);
       await get().refreshStats([], [address]);
     },
     refreshStats: async (ids, addresses = []) => {

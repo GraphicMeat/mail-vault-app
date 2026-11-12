@@ -240,6 +240,27 @@ describe('peopleStore', () => {
       expect(usePeopleStore.getState().mail).toEqual([{ uid: 1 }]);
     });
 
+    it('selecting the sender that is already open keeps its mail and refreshes it', async () => {
+      harness.daemonCall.mockImplementation(async (m) => (m === 'people.messages' ? { items: [{ uid: 1 }, { uid: 2 }], next: null } : {}));
+      await usePeopleStore.getState().selectSender(bo);
+      await usePeopleStore.getState().loadMail({});
+      usePeopleStore.setState({ mailFilters: { direction: 'received' } });
+      const again = usePeopleStore.getState().selectSender(bo);
+      expect(usePeopleStore.getState().mail).toHaveLength(2); // not blanked while the refresh runs
+      await again;
+      expect(harness.daemonCall).toHaveBeenCalledWith('people.messages', expect.objectContaining({ address: 'bo@x.io', direction: 'received' }));
+    });
+
+    it('selecting the contact that is already open keeps its mail', async () => {
+      harness.daemonCall.mockImplementation(async (m) => (m === 'people.messages' ? { items: [{ uid: 5 }], next: null } : { id: 'p1' }));
+      await usePeopleStore.getState().select('p1');
+      await usePeopleStore.getState().loadMail({});
+      const again = usePeopleStore.getState().select('p1');
+      expect(usePeopleStore.getState().mail).toEqual([{ uid: 5 }]);
+      await again;
+      await vi.waitFor(() => expect(harness.daemonCall.mock.calls.filter((c) => c[0] === 'people.messages')).toHaveLength(2));
+    });
+
     it('select clears an unsaved sender', async () => {
       harness.daemonCall.mockResolvedValue({ id: 'p1' });
       usePeopleStore.setState({ sender: bo });
