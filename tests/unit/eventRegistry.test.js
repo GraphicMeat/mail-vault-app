@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { posix } from 'node:path';
+import { rustNonTestCode } from './helpers/rustSources.js';
 
 // Forward slashes on every OS: the paths below are compared as strings.
 const { join, dirname } = posix;
@@ -27,11 +28,8 @@ const sorted = (names) => [...new Set(names)].sort();
 
 // ---------------------------------------------------------------- Rust side
 
-/** Rust source without its trailing test module and line comments. */
-const rustCode = (s) => {
-  const i = s.search(/\n#\[cfg\(test\)\]\s*\n\s*mod /);
-  return (i < 0 ? s : s.slice(0, i)).replace(/\/\/.*$/gm, '');
-};
+/** Rust source without its test items and line comments. */
+const rustCode = rustNonTestCode;
 
 /** `const NAME: &str = "value"` of every file, keyed `file::NAME`. */
 function rustConsts(files) {

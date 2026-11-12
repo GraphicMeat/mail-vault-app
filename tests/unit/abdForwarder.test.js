@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { shellSource } from './helpers/rustSources.js';
+import { rustNonTestCode, shellSource } from './helpers/rustSources.js';
 import * as transport from '../../src/services/transport.js';
 
 const read = (p) => readFileSync(p, 'utf8');
@@ -28,14 +28,8 @@ const leaseRow = (job) => {
   return m[0];
 };
 
-/** Source with `//` comment lines and the `#[cfg(test)]` module dropped. */
-const prod = (s) => {
-  const cut = s.indexOf('#[cfg(test)]');
-  return (cut === -1 ? s : s.slice(0, cut))
-    .split('\n')
-    .filter((l) => !l.trim().startsWith('//'))
-    .join('\n');
-};
+/** Source with `//` comments and the test items dropped. */
+const prod = rustNonTestCode;
 const shellProd = prod(shell);
 
 /** The body of `fn <name>` (any visibility), up to the next top-level item. */

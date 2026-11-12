@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { listSourceFiles } from '../../scripts/lib/sourceFiles.mjs';
+import { rustNonTestCode } from './helpers/rustSources.js';
 
 const read = (path) => readFileSync(path, 'utf8');
 const code = (src) => src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
@@ -69,6 +70,6 @@ describe('the body scan lives in the daemon', () => {
   it('the daemon reads the persisted verdicts through the settings document, never the file', () => {
     const handler = read('src-daemon/src/handlers/body.rs');
     expect(handler).toContain('SettingsDoc::shared(');
-    expect(handler.slice(0, handler.indexOf('#[cfg(test)]'))).not.toContain('frontend-settings');
+    expect(rustNonTestCode(handler)).not.toContain('frontend-settings');
   });
 });

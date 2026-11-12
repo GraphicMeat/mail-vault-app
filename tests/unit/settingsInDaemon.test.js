@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { shellSource } from './helpers/rustSources.js';
+import { rustNonTestCode, shellSource } from './helpers/rustSources.js';
 import { join } from 'node:path';
 
 const safeStorage = readFileSync('src/stores/safeStorage.js', 'utf8');
@@ -34,12 +34,8 @@ function files(dir, ext) {
   return out;
 }
 
-// The code of a Rust file before its test module (test modules seed the file).
-const rustCode = path => {
-  const src = readFileSync(path, 'utf8');
-  const i = src.search(/#\[cfg\(test\)\]\s*mod /);
-  return i >= 0 ? src.slice(0, i) : src;
-};
+// The code of a Rust file without its test items (test modules seed the file).
+const rustCode = path => rustNonTestCode(readFileSync(path, 'utf8'));
 
 describe('the daemon owns the settings document', () => {
   it.each(RPCS)('%s is daemon-owned, routed by handlers/settings.rs and stubbed in the demo', (rpc) => {

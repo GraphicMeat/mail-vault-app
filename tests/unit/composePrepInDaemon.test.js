@@ -1,12 +1,12 @@
 import { it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { registryRow, replyBudget } from './helpers/rustSources.js';
+import { registryRow, replyBudget, rustNonTestCode } from './helpers/rustSources.js';
 const read = path => readFileSync(path, 'utf8');
 it('exposes only the read-only compose contracts and leaves production callers current', () => {
   const transport = read('src/services/transport.js');
   const owned = transport.slice(transport.indexOf('export const DAEMON_OWNED'));
-  const handler = read('src-daemon/src/handlers/compose_prep.rs').split('#[cfg(test)]')[0];
+  const handler = rustNonTestCode(read('src-daemon/src/handlers/compose_prep.rs'));
   const server = read('src-daemon/src/server.rs');
   for (const method of ['compose.reply_context', 'compose.check']) {
     expect(owned).toContain(`'${method}'`);

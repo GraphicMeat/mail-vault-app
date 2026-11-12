@@ -8,13 +8,14 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { rustNonTestCode } from './helpers/rustSources.js';
 
 const api = readFileSync('src/services/aliases.js', 'utf8');
 const transport = readFileSync('src/services/transport.js', 'utf8');
 const owned = transport.slice(transport.indexOf('export const DAEMON_OWNED'), transport.indexOf(']);', transport.indexOf('export const DAEMON_OWNED')));
 const handlerSource = readFileSync('src-daemon/src/handlers/alias_store.rs', 'utf8');
-// The code before the test module (the tests seed files themselves).
-const handler = handlerSource.slice(0, handlerSource.search(/#\[cfg\(test\)\]\s*mod /));
+// The code without its test items (the tests seed files themselves).
+const handler = rustNonTestCode(handlerSource);
 const server = readFileSync('src-daemon/src/server.rs', 'utf8');
 const handlersMod = readFileSync('src-daemon/src/handlers/mod.rs', 'utf8');
 const demo = readFileSync('src/demo/backend.js', 'utf8');

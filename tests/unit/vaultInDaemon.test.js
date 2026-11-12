@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { shellSource } from './helpers/rustSources.js';
+import { rustNonTestCode, shellSource } from './helpers/rustSources.js';
 
 const main = shellSource();
 const handlerList = main.slice(main.indexOf('generate_handler!['), main.indexOf(']', main.indexOf('generate_handler![')));
@@ -288,16 +288,9 @@ describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
   const VAULT_PATH_MARKER = /\bcur_dir\b|\bcur_path\b|maildir_cur_path/;
   // Test fixtures (`#[cfg(test)] mod tests { .. }`) write scratch `.eml`
   // files under a tempdir, not the real vault; `restore.rs` and `backup.rs`
-  // both do this. Only the first real `mod <name> { .. }` test block is cut;
-  // an earlier lone `#[cfg(test)]` on a single non-test-module item (e.g.
-  // `main.rs`'s `find_msg_file_by_uid`) must not truncate real production
-  // code that follows it.
-  const MOD_TESTS_BLOCK = /#\[cfg\(test\)\]\s*\n\s*mod\s+\w+\s*\{/;
-  const withoutTestModules = (body) => {
-    const m = MOD_TESTS_BLOCK.exec(body);
-    MOD_TESTS_BLOCK.lastIndex = 0;
-    return m ? body.slice(0, m.index) : body;
-  };
+  // both do this. Test items are dropped, and the production code after
+  // them is still checked.
+  const withoutTestModules = rustNonTestCode;
   const hasRawVaultWrite = (body) => {
     const src = withoutTestModules(body);
     const re = new RegExp(RAW_WRITE_CALL.source, 'g');

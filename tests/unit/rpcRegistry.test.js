@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { RPC_METHODS } from '../../src/services/rpcMethods.generated.js';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
+import { rustNonTestCode } from './helpers/rustSources.js';
 
 const read = (p) => readFileSync(p, 'utf8');
 const daemonMethods = JSON.parse(read('src-daemon/methods.json')).map((r) => r.name);
@@ -96,8 +97,7 @@ describe('the shell error keys the frontend matches by text', () => {
     const files = readdirSync('src-tauri/src').filter((f) => f.endsWith('.rs') && f !== 'tests.rs' && f !== 'rpc_proxy.rs');
     const literal = files.filter((f) => {
       const src = read(`src-tauri/src/${f}`);
-      const tests = src.search(/\n#\[cfg\(test\)\]\s*\n\s*(?:mod \w+\s*\{|#\[test\])/);
-      const code = tests < 0 ? src : src.slice(0, tests);
+      const code = rustNonTestCode(src);
       return code.includes(`"${keys.unavailable}"`) || code.includes(`"${keys.outdated}"`);
     });
     expect(literal).toEqual([]);

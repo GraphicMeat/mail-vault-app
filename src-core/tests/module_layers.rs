@@ -20,6 +20,10 @@
 
 use std::path::{Path, PathBuf};
 
+#[path = "support/rust_scan.rs"]
+mod rust_scan;
+use rust_scan::non_test_code;
+
 /// `(file or directory under src-core/src, module it must not reference)`.
 /// A directory row covers every `.rs` file below it.
 const FORBIDDEN: &[(&str, &str)] = &[
@@ -60,41 +64,6 @@ fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {
             rust_files(&e.path(), out);
         }
     }
-}
-
-/// The file's code without its `#[cfg(test)]` modules, with `//` comments
-/// (whole-line and trailing) blanked. A test module ends at the first `}`
-/// line indented like its `mod` line (rustfmt's layout); one that never
-/// closes that way runs to the end of the file. Code after a small test
-/// helper module is still production code and is still scanned.
-fn non_test_code(src: &str) -> String {
-    let lines: Vec<&str> = src.lines().collect();
-    let indent = |l: &str| l.len() - l.trim_start().len();
-    let mut out = String::new();
-    let mut i = 0;
-    while i < lines.len() {
-        let line = lines[i];
-        if line.trim() == "#[cfg(test)]" && lines.get(i + 1).is_some_and(|n| n.trim_start().starts_with("mod ") || n.trim_start().starts_with("pub mod ")) {
-            let head = lines[i + 1];
-            if head.trim_end().ends_with(';') {
-                i += 2;
-                continue;
-            }
-            let close = (i + 2..lines.len()).find(|&j| lines[j].trim() == "}" && indent(lines[j]) == indent(head));
-            match close {
-                Some(j) => {
-                    i = j + 1;
-                    continue;
-                }
-                None => break,
-            }
-        }
-        let code = line.find("//").map_or(line, |at| &line[..at]);
-        out.push_str(code);
-        out.push('\n');
-        i += 1;
-    }
-    out
 }
 
 fn is_ident(c: char) -> bool {
@@ -172,14 +141,7 @@ fn the_reference_scanner_sees_path_and_group_forms() {
     assert!(references("use crate::{\n    a,\n    maildir::{self, y},\n};", "maildir"));
     assert!(!references("use crate::maildir_extra::x;", "maildir"));
     assert!(!references("use crate::{maildir_extra, a::maildir};", "maildir"));
-    assert!(non_test_code("// crate::maildir::x\nlet a = 1; // crate::maildir\n").find("maildir").is_none());
-    assert!(non_test_code("fn a() {}\n#[cfg(test)]\nmod tests {\n use crate::maildir;\n}\n").find("maildir").is_none());
-    assert!(non_test_code("#[cfg(test)]\nthread_local! {}\nuse crate::maildir;\n").contains("crate::maildir"));
-    let after_helper = "#[cfg(test)]\nmod pause {\n    use crate::a;\n    fn f() {\n    }\n}\nuse crate::maildir;\n#[cfg(test)]\nmod tests {\n    use crate::b;\n}\n";
-    let seen = non_test_code(after_helper);
-    assert!(seen.contains("crate::maildir"), "code after a test helper module is production code");
-    assert!(!seen.contains("crate::a") && !seen.contains("crate::b"), "{seen}");
-    assert!(non_test_code("#[cfg(test)]\nmod tests;\nuse crate::maildir;\n").contains("crate::maildir"));
+    rust_scan::assert_non_test_code_sees_production_code();
 }
 
 /// Whether `code` compares an `oauth2_transport` field against the literal

@@ -5,6 +5,10 @@
 //! the whole daemon collapses back into one module cycle.
 use std::path::{Path, PathBuf};
 
+#[path = "../../src-core/tests/support/rust_scan.rs"]
+mod rust_scan;
+use rust_scan::non_test_code;
+
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
@@ -112,27 +116,6 @@ fn server_import_ratchet() {
     );
 }
 
-/// The file's code before its first `#[cfg(test)]` that opens a `mod`, with
-/// `//` comments (whole-line and trailing) blanked.
-fn non_test_code(src: &str) -> String {
-    let lines: Vec<&str> = src.lines().collect();
-    let mut out = String::new();
-    for (i, line) in lines.iter().enumerate() {
-        if line.trim() == "#[cfg(test)]"
-            && lines.get(i + 1).is_some_and(|n| {
-                let n = n.trim_start();
-                n.starts_with("mod ") || n.starts_with("pub mod ") || n.starts_with("pub(crate) mod ")
-            })
-        {
-            break;
-        }
-        let code = line.find("//").map_or(*line, |at| &line[..at]);
-        out.push_str(code);
-        out.push('\n');
-    }
-    out
-}
-
 fn is_ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
@@ -209,5 +192,5 @@ fn the_daemon_scanners_see_the_raw_forms() {
     assert!(compares_oauth2_transport_to_graph("if config.oauth2_transport.as_deref() == Some(\"graph\") {"));
     assert!(!compares_oauth2_transport_to_graph("let t = config.oauth2_transport.clone();"));
     assert!(!compares_oauth2_transport_to_graph("row.get(\"oauth2Transport\") == Some(\"graph\")"));
-    assert!(non_test_code("fn a() {}\n#[cfg(test)]\nmod tests {\n fn now_ms() {}\n}\n").find("now_ms").is_none());
+    rust_scan::assert_non_test_code_sees_production_code();
 }
