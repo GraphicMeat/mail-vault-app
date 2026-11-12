@@ -32,7 +32,8 @@
 
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import { FRAGMENTED_SUBJECT, FRAGMENTED_COUNT, SEND_REFUSED_TO, trackMailbox } from './mockImap.js';
-import { modalOpen, fieldValue, setField, closeComposeHard, settingsCall } from './composeHelpers.js';
+import { modalOpen, fieldValue, setField, typeInBody, closeComposeHard, settingsCall } from './composeHelpers.js';
+import { raise, shootModes } from './blitzSurfaceShots.js';
 
 const ERROR_BUBBLE = '[data-testid="outbox-bubble-error"]';
 
@@ -196,6 +197,7 @@ describe('A reply and the thread it was sent from', function () {
   });
 
   afterEach(async function () {
+    await browser.execute(() => window.__stopReplyThreadSampler?.());
     await closeComposeHard();
   });
 
@@ -303,6 +305,16 @@ describe('A reply and the thread it was sent from', function () {
     // Same entry point in the single viewer: the sender's address, not the row.
     await browser.execute(() => document.querySelector('[data-testid="sender-address"]')?.click());
     await prefilledReply('the sender address opened no prefilled reply');
+    await typeInBody('Reply shown in this conversation.');
+    await browser.execute(() => {
+      let sawReply = false;
+      window.__replyThreadMinCount = Infinity;
+      window.__stopReplyThreadSampler = window.__MAIL_STORE__.subscribe(state => {
+        const count = state.selectedThread?.emails.length || 0;
+        if (count === 2) sawReply = true;
+        if (sawReply) window.__replyThreadMinCount = Math.min(window.__replyThreadMinCount, count);
+      });
+    });
     await clickSend();
 
     // Without In-Reply-To the copy threaded by subject alone, and the subject
@@ -325,6 +337,24 @@ describe('A reply and the thread it was sent from', function () {
     expect(await threadCountLine()).toBe(2);
     await waitFor(openThreadState, t => t?.count === 2 && t.emails.some(e => e.fromSent && !e.optimistic),
       'the reader lost the reply when its server copy landed', 90_000, 500);
+    const minimum = await browser.execute(() => {
+      window.__stopReplyThreadSampler();
+      return window.__replyThreadMinCount;
+    });
+    console.log('[reply-thread] minimum reader count through server copy:', minimum);
+    expect(minimum).toBe(2);
+    const selection = await browser.execute(() => {
+      const state = window.__MAIL_STORE__.getState();
+      return { selectedId: state.selectedEmailId, replyUid: state.selectedThread.lastEmail.uid };
+    });
+    expect(selection.selectedId === selection.replyUid
+      || String(selection.selectedId).endsWith(`:${selection.replyUid}`)).toBe(true);
+    const raised = await raise(1280, 900);
+    if (raised !== 'ok') await browser.setWindowSize(1280, 900);
+    await browser.execute(() => [...document.querySelectorAll('button')]
+      .find(button => (button.textContent || '').trim() === 'Dismiss')?.click());
+    await shootModes('reply-joined-reader', () => waitFor(threadHeaderCount, count => count === 2,
+      'the reader did not draw both messages for the shot', 30_000, 500));
   });
 
   it('joins the open thread and its list row the moment it is sent', async function () {
