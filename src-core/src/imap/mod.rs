@@ -880,23 +880,19 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
         // backslash count is the question this line answers.
         info!(
             "[IMAP] LIST name=[{}] delimiter=[{}] attrs={:?}",
-            name.name(),
-            name.delimiter().unwrap_or("NIL"),
-            name.attributes()
+            name.name,
+            name.delimiter.as_deref().unwrap_or("NIL"),
+            name.attrs
         );
-        let path = unescape_quoted(name.name());
-        let delimiter = name.delimiter().map(unescape_quoted);
+        let path = unescape_quoted(&name.name);
+        let delimiter = name.delimiter.as_deref().map(unescape_quoted);
         let short_name = if let Some(ref delim) = delimiter {
             path.rsplit(delim.as_str()).next().unwrap_or(&path).to_string()
         } else {
             path.clone()
         };
 
-        let attrs: Vec<String> = name
-            .attributes()
-            .iter()
-            .map(|a| format!("{:?}", a))
-            .collect();
+        let attrs = name.attrs.clone();
         let declared = declared_special_use(&attrs, &path);
         let guessed = if declared.is_none() { guessed_special_use(&path) } else { None };
         let noselect = attrs.iter().any(|a| {

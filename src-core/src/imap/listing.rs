@@ -1,8 +1,13 @@
 //! LIST replies and role mailbox lookup.
 
 use super::{unescape_quoted, ImapSession};
-use async_imap::types::Name;
 use futures::StreamExt;
+
+pub(super) struct ListedName {
+    pub name: String,
+    pub delimiter: Option<String>,
+    pub attrs: Vec<String>,
+}
 
 /// Run a LIST and collect its names, failing on the first stream error.
 ///
@@ -12,18 +17,25 @@ use futures::StreamExt;
 /// raised "Server returned empty folder list unexpectedly" and kept showing
 /// cached folders; `ensure_role_mailbox` would have created a duplicate
 /// Archive/Trash instead of finding the existing one.
-pub(super) async fn list_names(session: &mut ImapSession) -> Result<Vec<Name>, String> {
+pub(super) async fn list_names(session: &mut ImapSession) -> Result<Vec<ListedName>, String> {
     let names_stream = session
         .list(Some(""), Some("*"))
         .await
         .map_err(|e| format!("LIST failed: {}", e))?;
 
-    let names: Vec<Name> = names_stream
+    let names = names_stream
         .collect::<Vec<_>>()
         .await
         .into_iter()
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("LIST stream failed: {}", e))?;
+        .map_err(|e| format!("LIST stream failed: {}", e))?
+        .into_iter()
+        .map(|name| ListedName {
+            name: name.name().to_string(),
+            delimiter: name.delimiter().map(str::to_string),
+            attrs: name.attributes().iter().map(|attr| format!("{attr:?}")).collect(),
+        })
+        .collect::<Vec<_>>();
 
     // A socket that dies mid-LIST does not yield an error item — the stream
     // simply ends, so EOF and "the server said nothing" are the same thing here.
@@ -91,13 +103,11 @@ pub fn find_role_mailbox(entries: &[(String, Vec<String>)], attr_substring: &str
     None
 }
 
-fn role_entries(names: &[Name]) -> Vec<(String, Vec<String>)> {
+fn role_entries(names: &[ListedName]) -> Vec<(String, Vec<String>)> {
     names
         .iter()
         .map(|n| {
-            let path = unescape_quoted(n.name());
-            let attrs: Vec<String> = n.attributes().iter().map(|a| format!("{:?}", a)).collect();
-            (path, attrs)
+            (unescape_quoted(&n.name), n.attrs.clone())
         })
         .collect()
 }
@@ -129,8 +139,8 @@ pub(super) async fn ensure_role_mailbox(
     // line it cannot parse fails the session mid-command.
     let inbox_delimiter = names
         .iter()
-        .find(|n| n.name().eq_ignore_ascii_case("INBOX"))
-        .and_then(|n| n.delimiter())
+        .find(|n| n.name.eq_ignore_ascii_case("INBOX"))
+        .and_then(|n| n.delimiter.as_deref())
         .map(unescape_quoted)
         .filter(|d| !d.is_empty() && !create_name.contains(d.as_str()));
     let path = match session.create(create_name).await {
