@@ -168,8 +168,9 @@ function refreshOnServerCopy({ freshAccount, sentFolderPath, messageId, allowCle
     await allowCleanup;
     const state = useMailStore.getState();
     try { await state.loadSentHeaders?.(freshAccount.id); } catch (err) { console.warn('[composeSend] refresh Sent failed:', err); }
-    if (sentFolderPath && state.activeAccountId === freshAccount.id && state.activeMailbox === sentFolderPath) {
-      try { await state.activateAccount?.(freshAccount.id, sentFolderPath, { _backgroundRefresh: true }); } catch (err) { console.warn('[composeSend] refresh active Sent failed:', err); }
+    const current = useMailStore.getState();
+    if (sentFolderPath && current.activeAccountId === freshAccount.id && current.activeMailbox === sentFolderPath) {
+      try { await current.activateAccount?.(freshAccount.id, sentFolderPath, { _backgroundRefresh: true }); } catch (err) { console.warn('[composeSend] refresh active Sent failed:', err); }
     }
     const targetId = normalizeMessageId(messageId);
     const sent = useMailStore.getState().sentEmails || [];

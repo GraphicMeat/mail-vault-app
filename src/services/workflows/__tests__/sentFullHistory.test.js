@@ -486,6 +486,23 @@ describe('an unchanged cache is not read again', () => {
 });
 
 describe('review defects of the window', () => {
+  it('replaces a staged open Sent row when a later reload finds the server copy', async () => {
+    prime(IMAP);
+    const staged = { ...row(90002), messageId: '<late@x>', _optimistic: true, _accountId: IMAP.id };
+    useMailStore.setState({ activeMailbox: 'Sent', sentEmails: [staged], emails: [staged], localEmails: [staged] });
+    api.fetchEmails.mockResolvedValueOnce({ emails: rows(1, PAGE), total: TOTAL });
+    await loadSentHeaders(IMAP.id);
+    expect(useMailStore.getState().emails).toContainEqual(staged);
+
+    const server = { ...row(90003), messageId: staged.messageId };
+    api.fetchEmails.mockResolvedValueOnce({ emails: [server, ...rows(1, PAGE - 1)], total: TOTAL + 1 });
+    await loadSentHeaders(IMAP.id);
+    const state = useMailStore.getState();
+    expect(state.sentEmails.some(e => e._optimistic && e.messageId === staged.messageId)).toBe(false);
+    expect(state.emails.filter(e => e.messageId === staged.messageId).map(e => e.uid)).toEqual([server.uid]);
+    expect(state.localEmails.some(e => e._optimistic && e.messageId === staged.messageId)).toBe(false);
+  });
+
   it('a message moved in long after it was sent (top uid, old date) does not stop the window short', async () => {
     cache = [{ ...row(9000), date: '2001-01-01T00:00:00Z' }, ...rows(1, TOTAL)];
     prime(IMAP, {}, { reach: 250 });

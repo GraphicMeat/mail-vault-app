@@ -184,6 +184,7 @@ let MOCK_ACCOUNTS = [
       // after the client gave up on it, and answered after the old 30 s
       // compose listener. Scoped to that message by its Subject token.
       slowCommandWith('APPEND', SLOW_APPEND_MARKER, 40_000),
+      slowCommandWith('APPEND', 'REPLY SHOWN IN THIS CONVERSATION.', 8_000),
     ],
   },
   {

@@ -317,6 +317,9 @@ describe('A reply and the thread it was sent from', function () {
     });
     await clickSend();
 
+    await waitFor(openThreadState, t => t?.count === 2 && t.emails.some(e => e.optimistic),
+      'the reader never showed the staged reply before the delayed APPEND', 20_000, 100);
+
     // Without In-Reply-To the copy threaded by subject alone, and the subject
     // fallback is scoped per account — which the INBOX row (unstamped) and the
     // Sent copy (stamped) answer differently, so the list grew a second row.

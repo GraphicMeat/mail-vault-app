@@ -30,6 +30,7 @@ import {
   bumpFlagChangeCounter, invalidateChatAndThreadCaches, setArchivedGroup,
 } from '../../stores/slices/messageListSlice';
 import { t } from '../../i18n/index.js';
+import { normalizeMessageId } from '../../utils/emailParser';
 
 
 /**
@@ -1210,6 +1211,23 @@ function _mergeOptimisticSent(fresh, existing, accountId, accountEmail, sentPath
   ];
 }
 
+function reconcileOpenSent(state, next, accountId, sentPath) {
+  if (state.activeAccountId !== accountId || state.activeMailbox !== sentPath) return null;
+  const arrived = new Map(next.filter(e => !e._optimistic && e._accountId === accountId && e.messageId)
+    .map(e => [normalizeMessageId(e.messageId), e]));
+  const serverCopy = e => e._optimistic && e._accountId === accountId
+    ? arrived.get(normalizeMessageId(e.messageId)) : null;
+  if (![...(state.emails || []), ...(state.localEmails || [])].some(serverCopy)) return null;
+  const emails = state.emails || [];
+  return {
+    emails: emails.flatMap(e => {
+      const copy = serverCopy(e);
+      return copy ? (emails.some(row => row !== e && row.uid === copy.uid && row._accountId === accountId) ? [] : [copy]) : [e];
+    }),
+    localEmails: (state.localEmails || []).filter(e => !serverCopy(e)),
+  };
+}
+
 /** Run `body` as the account's background Sent fill, unless one runs or it is not due. */
 function _fillSent(accountId, key, body) {
   if (_sentFills.has(accountId)) return;
@@ -1396,6 +1414,13 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     return;
   }
 
+  const publishSent = next => {
+    const openSent = reconcileOpenSent(get(), next, accountId, sentPath);
+    useMailStore.setState({ sentEmails: next, ...openSent });
+    if (openSent) get().updateSortedEmails();
+    invalidateChatAndThreadCaches();
+  };
+
   // True when the mirror now reflects the read (applied, or nothing to change);
   // false when a newer write won and the read was dropped.
   const merge = (read) => {
@@ -1413,8 +1438,7 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     // not rebuild the rows and every thread built from them.
     const mine = (rows) => rows.filter(e => e._accountId === accountId).map(_sentRowSig).join('\n');
     if (next.length === current.length && mine(next) === mine(current)) return true;
-    useMailStore.setState({ sentEmails: next });
-    invalidateChatAndThreadCaches();
+    publishSent(next);
     return true;
   };
 
@@ -1476,8 +1500,7 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     if (!added.length && kept.length === current.length) return true;
     // Only a fill's end outranks a load that began before it.
     if (fill) _sentFillGen.set(accountId, (_sentFillGen.get(accountId) || 0) + 1);
-    useMailStore.setState({ sentEmails: [...kept, ...added] });
-    invalidateChatAndThreadCaches();
+    publishSent([...kept, ...added]);
     return true;
   };
   // Page one of the server: replaces the mirror's rows from a cold read, adds to

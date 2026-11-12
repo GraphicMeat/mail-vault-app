@@ -408,6 +408,20 @@ describe('the Sent copy the send leaves behind', () => {
     expect(mailStore.useMailStore.getState().emails.map(item => item.uid)).toContain(STAGED_UID);
   });
 
+  it('does not reopen Sent if the reader moved during its reload', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.activateAccount = vi.fn();
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    vi.spyOn(mailStore.useMailStore, 'getState').mockImplementationOnce(() => ({
+      ...state,
+      loadSentHeaders: async () => { state.activeMailbox = 'INBOX'; },
+    }));
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(state.activateAccount).not.toHaveBeenCalled();
+    expect(state.activeMailbox).toBe('INBOX');
+    vi.restoreAllMocks();
+  });
+
   it('keeps the staged reply when the Sent reload fails', async () => {
     mailStore.useMailStore.getState().loadSentHeaders.mockRejectedValueOnce(new Error('offline'));
     await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
