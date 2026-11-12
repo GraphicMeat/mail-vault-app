@@ -1,7 +1,7 @@
 //! LIST replies and role mailbox lookup.
 
 use super::{unescape_quoted, ImapSession};
-use futures::StreamExt;
+use imap_proto::{MailboxDatum, Response, Status};
 
 pub(super) struct ListedName {
     pub name: String,
@@ -9,41 +9,32 @@ pub(super) struct ListedName {
     pub attrs: Vec<String>,
 }
 
-/// Run a LIST and collect its names, failing on the first stream error.
-///
-/// Every item must be checked. `filter_map(Result::ok)` here turned a socket
-/// that died mid-LIST into `Ok(vec![])` — a broken pipe reported as "this server
-/// has no folders", which no caller can tell from the real thing. The frontend
-/// raised "Server returned empty folder list unexpectedly" and kept showing
-/// cached folders; `ensure_role_mailbox` would have created a duplicate
-/// Archive/Trash instead of finding the existing one.
+/// Read LIST through its tagged status. async-imap's stream ends on both EOF
+/// and a tagged reply; a cut-short list made a Sent delete permanent.
 pub(super) async fn list_names(session: &mut ImapSession) -> Result<Vec<ListedName>, String> {
-    let names_stream = session
-        .list(Some(""), Some("*"))
-        .await
-        .map_err(|e| format!("LIST failed: {}", e))?;
+    let id = session.run_command("LIST \"\" \"*\"").await.map_err(|e| format!("LIST failed: {e}"))?;
+    let mut names = Vec::new();
+    loop {
+        let response = session.read_response().await.map_err(|e| format!("LIST failed: {e}"))?
+            .ok_or_else(|| "LIST failed: connection lost (the reply ended before the server finished)".to_string())?;
+        match response.parsed() {
+            Response::Done { tag, status, information, .. } if *tag == id => match status {
+                Status::Ok => break,
+                other => return Err(format!("LIST failed: {other:?} {}", information.as_deref().unwrap_or(""))),
+            },
+            Response::MailboxData(MailboxDatum::List { name_attributes, delimiter, name }) => {
+                names.push(ListedName {
+                    name: name.to_string(),
+                    delimiter: delimiter.as_deref().map(str::to_string),
+                    attrs: name_attributes.iter().map(|attr| format!("{attr:?}")).collect(),
+                });
+            }
+            _ => {} // unsolicited mailbox updates can interleave
+        }
+    }
 
-    let names = names_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("LIST stream failed: {}", e))?
-        .into_iter()
-        .map(|name| ListedName {
-            name: name.name().to_string(),
-            delimiter: name.delimiter().map(str::to_string),
-            attrs: name.attributes().iter().map(|attr| format!("{attr:?}")).collect(),
-        })
-        .collect::<Vec<_>>();
-
-    // A socket that dies mid-LIST does not yield an error item — the stream
-    // simply ends, so EOF and "the server said nothing" are the same thing here.
-    // An authenticated account always has at least INBOX, so zero names is never
-    // a real answer; reporting it as one is what produced "Server returned empty
-    // folder list unexpectedly" while the pool was still holding a broken pipe.
-    // "connection lost" makes the pool discard this session and retry the read
-    // on a fresh connection.
+    // An authenticated account always has INBOX. Even a tagged OK with zero
+    // names is an unsafe answer: retry on a fresh connection before using it.
     if names.is_empty() {
         return Err("LIST failed: connection lost (the reply ended before any mailbox)".to_string());
     }
