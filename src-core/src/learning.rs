@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use crate::learned_rules::{is_shared_mail_domain, FROM_ADDRESS, FROM_DOMAIN, SUBJECT_CONTAINS};
+pub use crate::learned_rules::{sender_address, sender_domain};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
@@ -267,42 +268,6 @@ fn extract_address(from: Option<&Value>) -> Option<String> {
     sender_address(from?.as_str()?)
 }
 
-/// The domain a rule is learned from, and the one the classifier compares
-/// against (`learned_rules`): the part after the last `@`, `>` removed,
-/// lowercased. `None` when there is no `@` past the first character.
-pub fn sender_domain(from: &str) -> Option<String> {
-    if from.is_empty() {
-        return None;
-    }
-    let at = from.rfind('@')?;
-    if at == 0 {
-        return None;
-    }
-    Some(from[at + 1..].replace('>', "").to_lowercase())
-}
-
-/// The address a rule is learned from and compared against: the one inside
-/// the first `<...>`, else the whole string when it holds an `@`.
-pub fn sender_address(from: &str) -> Option<String> {
-    if from.is_empty() {
-        return None;
-    }
-    for (i, _) in from.match_indices('<') {
-        let rest = &from[i + 1..];
-        if let Some(end) = rest.find('>') {
-            if end > 0 {
-                return Some(rest[..end].to_lowercase());
-            }
-        } else {
-            break;
-        }
-    }
-    if from.contains('@') {
-        return Some(js::trim(from).to_lowercase());
-    }
-    None
-}
-
 /// The longest word (4+ UTF-16 units) every subject shares, the first
 /// subject's order breaking ties.
 fn find_shared_subject_word(corrections: &[&Value]) -> Option<String> {
@@ -495,7 +460,7 @@ pub fn import_rules(fb: &mut Feedback, rules: &[Value], now_ms: i64) -> usize {
 mod js {
     use serde_json::{json, Value};
 
-    pub use crate::js_value::truthy;
+    pub use crate::js_value::{is_space, trim, truthy};
 
     /// `===`. Two objects or arrays are never the same object here.
     pub fn strict_eq(a: Option<&Value>, b: Option<&Value>) -> bool {
@@ -638,18 +603,6 @@ mod js {
         }
     }
 
-    /// JS `\s` (WhiteSpace and LineTerminator).
-    pub fn is_space(c: char) -> bool {
-        matches!(
-            c,
-            '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}'
-                | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}'
-        )
-    }
-
-    pub fn trim(s: &str) -> &str {
-        s.trim_matches(is_space)
-    }
 
     /// `str.length`.
     pub fn utf16_len(s: &str) -> usize {

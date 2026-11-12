@@ -1,7 +1,24 @@
 //! Filesystem helpers shared by the app and the daemon.
 
 use std::fs;
+use std::io;
 use std::path::Path;
+
+/// The prefix of a store error the disk itself gave (no space left, a quota,
+/// an I/O error): the conversion job stops on one instead of skipping the
+/// message. Re-exported as `message_store::E_DISK`.
+pub const E_DISK: &str = "E_DISK";
+
+/// `what: e`, prefixed `E_DISK: ` when the disk is full or failing.
+pub(crate) fn io_failure(what: &str, e: &io::Error) -> String {
+    // EIO has no `ErrorKind` of its own: its raw code is 5 on every unix.
+    let eio = cfg!(unix) && e.raw_os_error() == Some(5);
+    if eio || matches!(e.kind(), io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded) {
+        format!("{E_DISK}: {what}: {e}")
+    } else {
+        format!("{what}: {e}")
+    }
+}
 
 /// Write `bytes` to `path` so a reader never sees half a file: the content
 /// lands in a sibling temp file first and one rename puts it in place. A

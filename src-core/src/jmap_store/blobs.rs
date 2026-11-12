@@ -121,10 +121,10 @@ pub(crate) fn touch(root: &Path, id: &str) -> Result<(), String> {
     }
 }
 
-/// `what: e`, marked as the disk's own failure (`message_store::E_DISK`) when
-/// it is one: a conversion stops on it.
+/// `what: e`, marked as the disk's own failure (`fsx::E_DISK`) when it is
+/// one: a conversion stops on it.
 fn failure(what: &str, e: &io::Error) -> String {
-    crate::message_store::io_failure(what, e)
+    crate::fsx::io_failure(what, e)
 }
 
 /// The bytes of blob `id`. A malformed id is `InvalidInput`.

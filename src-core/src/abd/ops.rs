@@ -58,12 +58,7 @@ pub struct MoveResult {
     pub graph_new_ids: Option<Vec<(u32, String)>>,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Caps {
-    pub uidplus: bool,
-    pub move_cmd: bool,
-    pub gmail_ext: bool,
-}
+pub use crate::imap::abd_cmds::{Caps, VALIDITY_CHANGED};
 
 #[derive(Debug, Clone)]
 pub enum OpsError {
@@ -84,10 +79,6 @@ pub enum OpsError {
     ValidityChanged(String),
     Other(String),
 }
-
-/// The marker a raw IMAP command puts in its error when the SELECT it ran
-/// under reports another UIDVALIDITY than the job expected.
-pub const VALIDITY_CHANGED: &str = "ABD_VALIDITY_CHANGED";
 
 impl OpsError {
     pub fn text(&self) -> String {

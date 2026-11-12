@@ -5,7 +5,7 @@
 //! corrupt page surfaces as `Corrupt` on the first read), and no delete on
 //! any error, ever.
 
-use rusqlite::{Connection, ErrorCode, OptionalExtension};
+use rusqlite::{Connection, ErrorCode};
 use std::path::{Path, PathBuf};
 
 pub const DB_DIR: &str = "custody";
@@ -199,15 +199,7 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
     Ok(())
 }
 
-pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
-    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0)).optional().ok().flatten()
-}
-
-pub fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?1, ?2)", [key, value])
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
+pub use crate::sqlite_meta::{meta_get, meta_set};
 
 #[cfg(test)]
 mod tests {

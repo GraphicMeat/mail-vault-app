@@ -59,7 +59,7 @@ pub fn account_dir(maildir: &Path, account_id: &str) -> PathBuf {
     if is_plain_account_id(account_id) {
         maildir.join(account_id)
     } else {
-        maildir.join(format!("_{}", crate::search_index::text::vault_dir_name(account_id)))
+        maildir.join(format!("_{}", crate::vault_dir::vault_dir_name(account_id)))
     }
 }
 

@@ -12,7 +12,21 @@ use super::{
     compress_uid_ranges, patient, quote_mailbox, run_checked, select_mailbox, uid_search_to_tag,
     uids_of, ImapSession, MailboxInfo,
 };
-use crate::abd::ops::Caps;
+
+/// What the server can do for the job (`abd::ops::Caps`). Defined here, below
+/// the job, because the IMAP probe builds it; Graph and JMAP answer fixed
+/// values.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Caps {
+    pub uidplus: bool,
+    pub move_cmd: bool,
+    pub gmail_ext: bool,
+}
+
+/// The marker a raw IMAP command puts in its error when the SELECT it ran
+/// under reports another UIDVALIDITY than the job expected
+/// (`abd::ops::VALIDITY_CHANGED`).
+pub const VALIDITY_CHANGED: &str = "ABD_VALIDITY_CHANGED";
 
 // ── Capability probe ─────────────────────────────────────────────────────────
 
@@ -467,7 +481,7 @@ fn check_validity(mailbox: &str, got: Option<u32>, expect: Option<u32>) -> Resul
     match expect {
         Some(want) if got != Some(want) => Err(format!(
             "{}: UIDVALIDITY of {} is {:?}, the job expected {}; nothing was sent",
-            crate::abd::ops::VALIDITY_CHANGED,
+            VALIDITY_CHANGED,
             mailbox,
             got,
             want

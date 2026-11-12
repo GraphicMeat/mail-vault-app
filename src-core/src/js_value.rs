@@ -1,4 +1,4 @@
-//! JavaScript truthiness of a JSON value, defined once.
+//! JavaScript truthiness of a JSON value, and JS whitespace, defined once.
 //!
 //! The ports of the app's settings and row logic test `if (x)` on values the
 //! app wrote with any shape: `null`, `false`, `0` and `""` are false, an absent
@@ -15,6 +15,20 @@ pub fn truthy(v: Option<&Value>) -> bool {
         Some(Value::String(s)) => !s.is_empty(),
         Some(Value::Bool(true) | Value::Array(_) | Value::Object(_)) => true,
     }
+}
+
+/// JS `\s` (WhiteSpace and LineTerminator).
+pub fn is_space(c: char) -> bool {
+    matches!(
+        c,
+        '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}'
+            | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}'
+    )
+}
+
+/// `str.trim()`.
+pub fn trim(s: &str) -> &str {
+    s.trim_matches(is_space)
 }
 
 /// `Boolean(v)` for a value that is present.

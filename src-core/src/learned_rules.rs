@@ -26,7 +26,6 @@
 //! subject 1, body 1, summed), then the higher confidence (repeated
 //! corrections raise it), then the rule saved later.
 
-use crate::learning::{sender_address, sender_domain};
 use serde_json::Value;
 use unicode_normalization::UnicodeNormalization;
 
@@ -34,6 +33,42 @@ pub const FROM_DOMAIN: &str = "fromDomain";
 pub const FROM_ADDRESS: &str = "fromAddress";
 pub const SUBJECT_CONTAINS: &str = "subjectContains";
 pub const BODY_CONTAINS: &str = "bodyContains";
+
+/// The domain a rule is learned from, and the one the classifier compares
+/// against: the part after the last `@`, `>` removed,
+/// lowercased. `None` when there is no `@` past the first character.
+pub fn sender_domain(from: &str) -> Option<String> {
+    if from.is_empty() {
+        return None;
+    }
+    let at = from.rfind('@')?;
+    if at == 0 {
+        return None;
+    }
+    Some(from[at + 1..].replace('>', "").to_lowercase())
+}
+
+/// The address a rule is learned from and compared against: the one inside
+/// the first `<...>`, else the whole string when it holds an `@`.
+pub fn sender_address(from: &str) -> Option<String> {
+    if from.is_empty() {
+        return None;
+    }
+    for (i, _) in from.match_indices('<') {
+        let rest = &from[i + 1..];
+        if let Some(end) = rest.find('>') {
+            if end > 0 {
+                return Some(rest[..end].to_lowercase());
+            }
+        } else {
+            break;
+        }
+    }
+    if from.contains('@') {
+        return Some(crate::js_value::trim(from).to_lowercase());
+    }
+    None
+}
 
 /// The shortest subject or body text a rule may look for. Learned subject
 /// words are 4+; a manual one of 1 or 2 letters would match most mail.

@@ -97,7 +97,7 @@ pub fn rename_mailbox(conn: &Connection, account: &str, from: &str, to: &str) ->
     Ok(())
 }
 
-use crate::custody::db::{meta_get, meta_set};
+use crate::sqlite_meta::{meta_get, meta_set};
 
 pub const DONE_KEY: &str = "message_addr_backfilled";
 const CURSOR_KEY: &str = "message_addr_cursor";

@@ -22,6 +22,40 @@ pub enum JmapAuth {
     Bearer(String),
 }
 
+/// `ImapConfig::jmap_auth` lives beside the type it builds: `imap` holds the
+/// account fields, and stays below `jmap` (`tests/module_layers.rs`).
+impl crate::imap::ImapConfig {
+    /// What every JMAP request authenticates with, or `None` when there is
+    /// nothing safe to send:
+    /// - not a JMAP account (`uses_jmap` is false);
+    /// - no secret (`password` missing or empty);
+    /// - `jmapAuth` missing or neither "basic" nor "bearer" (refused, never
+    ///   guessed; matched case-insensitively like `imapSecurity`).
+    ///
+    /// "bearer" sends `password` as the API token. "basic" sends `password`
+    /// with `jmapUsername`, or with `email` when that is unset or blank.
+    pub fn jmap_auth(&self) -> Option<JmapAuth> {
+        if !self.uses_jmap() {
+            return None;
+        }
+        let password = self.password.as_deref().filter(|p| !p.is_empty())?.to_string();
+        match self.jmap_auth.as_deref()?.trim().to_ascii_lowercase().as_str() {
+            "bearer" => Some(JmapAuth::Bearer(password)),
+            "basic" => {
+                let username = self
+                    .jmap_username
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|u| !u.is_empty())
+                    .unwrap_or(self.email.as_str())
+                    .to_string();
+                Some(JmapAuth::Basic { username, password })
+            }
+            _ => None,
+        }
+    }
+}
+
 impl JmapAuth {
     /// The `Authorization` header value: "Basic <base64>" or "Bearer <token>".
     pub fn header(&self) -> String {

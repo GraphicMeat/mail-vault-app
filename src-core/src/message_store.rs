@@ -147,7 +147,7 @@ pub fn has_blob_store(root: &Path) -> bool {
 /// The mailbox directory (holds cur/, jmap/, .uidvalidity, orphaned/, .decrypted/ ...). Dir-level callers
 /// (rename, adopt, pgp copies, rehome ledger) use this, never `cur/` directly.
 pub fn mailbox_dir(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
-    vault_files::account_dir(&root.join("Maildir"), account_id).join(crate::search_index::text::vault_dir_name(mailbox))
+    vault_files::account_dir(&root.join("Maildir"), account_id).join(crate::vault_dir::vault_dir_name(mailbox))
 }
 
 /// The mailbox's Maildir message directory. Private: callers ask by uid.
@@ -1085,21 +1085,8 @@ pub fn verify_prepared_at(root: &Path, mailbox_dir: &Path, prepared: &Prepared) 
     verify_entry(root, mailbox_dir, prepared.uid, expected)
 }
 
-/// The prefix of a store error the disk itself gave (no space left, a quota,
-/// an I/O error): the conversion job stops on one instead of skipping the
-/// message.
-pub const E_DISK: &str = "E_DISK";
-
-/// `what: e`, prefixed `E_DISK: ` when the disk is full or failing.
-pub(crate) fn io_failure(what: &str, e: &io::Error) -> String {
-    // EIO has no `ErrorKind` of its own: its raw code is 5 on every unix.
-    let eio = cfg!(unix) && e.raw_os_error() == Some(5);
-    if eio || matches!(e.kind(), io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded) {
-        format!("{E_DISK}: {what}: {e}")
-    } else {
-        format!("{what}: {e}")
-    }
-}
+pub use crate::fsx::E_DISK;
+pub(crate) use crate::fsx::io_failure;
 
 /// The format a `keep` of `format` removes.
 fn other_format(format: Format) -> Format {
@@ -1758,6 +1745,31 @@ pub fn prune_blob_store(root: &Path) {
         }
     }
     let _ = fs::remove_dir(&store);
+}
+
+/// `maildir::repair_generation` for a mailbox of either format. A JMAP
+/// mailbox's records become Maildir files again first (`demote_records`):
+/// the repair renames and sets aside by file name. A matching stamp returns
+/// before anything is touched, and a demotion cut short leaves the generation
+/// unstamped, so the next repair tries again.
+pub fn repair_generation(
+    mailbox_dir: &Path,
+    current_uid_validity: u32,
+    id_to_uid: &HashMap<String, u32>,
+    protected: &HashSet<u32>,
+) -> maildir::GenerationRepair {
+    let unchanged = maildir::GenerationRepair { generation: current_uid_validity, ..Default::default() };
+    if maildir::read_generation(mailbox_dir) == Some(current_uid_validity) {
+        return unchanged;
+    }
+    let demoted = match demote_records(mailbox_dir) {
+        Ok(n) => n as u32,
+        Err(e) => {
+            warn!("repair_generation: records not turned back into files: {}", e);
+            return maildir::GenerationRepair { ran: true, errors: 1, ..unchanged };
+        }
+    };
+    maildir::GenerationRepair { demoted, ..maildir::repair_generation(mailbox_dir, current_uid_validity, id_to_uid, protected) }
 }
 
 /// Turns every record of the mailbox directory back into a Maildir file (its
@@ -4537,5 +4549,68 @@ mod tests {
             return; // root: permissions do not apply
         }
         assert!(answer.is_err(), "an unreadable folder must not read as an empty one: {answer:?}");
+    }
+
+    /// A JMAP mailbox is repaired as Maildir files: its records become files
+    /// first (`demote_records`), then the repair runs on names.
+    #[test]
+    fn a_generation_repair_of_a_jmap_mailbox_works_on_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        set_vault_format(root, Format::Jmap).unwrap();
+        let eml = |id: &str| format!("Message-ID: <{id}>\r\nSubject: s\r\n\r\nbody\r\n");
+        write(root, "acct", "INBOX", 5, eml("five@x").as_bytes(), &["archived".to_string()]).unwrap();
+        write(root, "acct", "INBOX", 6, eml("gone@x").as_bytes(), &["archived".to_string()]).unwrap();
+        let mailbox = mailbox_dir(root, "acct", "INBOX");
+        maildir::write_generation(&mailbox, 1).unwrap();
+        let id_to_uid: HashMap<String, u32> = [("five@x".to_string(), 50)].into_iter().collect();
+
+        let r = repair_generation(&mailbox, 2, &id_to_uid, &HashSet::new());
+        assert_eq!(r.demoted, 2);
+        assert_eq!(r.rebound, vec![(5, 50)]);
+        assert_eq!(r.orphaned, vec![6]);
+        assert!(!mailbox.join("jmap").join("5.json").exists() && !mailbox.join("jmap").join("6.json").exists());
+        assert!(mailbox.join("cur").join(format!("50{INFO_PREFIX}A.eml")).is_file());
+        let orphaned: Vec<String> = fs::read_dir(mailbox.join(maildir::ORPHAN_DIR)).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(orphaned, vec![format!("6{INFO_PREFIX}A.eml")], "orphaned/ stays .eml");
+    }
+
+    /// A JMAP mailbox whose stamp already matches is not touched: no record
+    /// becomes a file on the hot path.
+    #[test]
+    fn a_matching_generation_leaves_a_jmap_mailbox_alone() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, "acct", "INBOX", 5, b"Message-ID: <five@x>\r\n\r\nbody\r\n", &["archived".to_string()]).unwrap();
+        let mailbox = mailbox_dir(root, "acct", "INBOX");
+        maildir::write_generation(&mailbox, 2).unwrap();
+
+        let r = repair_generation(&mailbox, 2, &HashMap::new(), &HashSet::new());
+        assert!(!r.ran);
+        assert_eq!((r.demoted, r.errors), (0, 0));
+        assert!(mailbox.join("jmap").join("5.json").is_file(), "the record stays a record");
+    }
+
+    /// A record that will not turn back into a file stops the repair before
+    /// it renames anything, and the generation stays unstamped so the next
+    /// repair tries again.
+    #[test]
+    fn a_failed_demotion_stops_the_repair_unstamped() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        set_vault_format(root, Format::Jmap).unwrap();
+        write(root, "acct", "INBOX", 5, b"Message-ID: <five@x>\r\n\r\nbody\r\n", &["archived".to_string()]).unwrap();
+        let mailbox = mailbox_dir(root, "acct", "INBOX");
+        maildir::write_generation(&mailbox, 1).unwrap();
+        fs::write(mailbox.join("jmap").join("5.json"), "{").unwrap();
+        let id_to_uid: HashMap<String, u32> = [("five@x".to_string(), 50)].into_iter().collect();
+
+        let r = repair_generation(&mailbox, 2, &id_to_uid, &HashSet::new());
+        assert!(r.ran);
+        assert_eq!((r.demoted, r.errors), (0, 1));
+        assert!(r.rebound.is_empty() && r.orphaned.is_empty());
+        assert_eq!(maildir::read_generation(&mailbox), Some(1), "unstamped: the next repair tries again");
+        assert!(mailbox.join("jmap").join("5.json").is_file(), "nothing is lost");
     }
 }

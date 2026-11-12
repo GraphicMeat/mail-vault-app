@@ -324,7 +324,7 @@ pub(crate) fn drop_stale_cache_copies(state: &Arc<DaemonState>, stamp: &AccountS
 }
 
 /// Re-keys the mailbox's vault files onto the server's current UIDVALIDITY
-/// when the stored generation disagrees (`maildir::repair_generation`), and
+/// when the stored generation disagrees (`message_store::repair_generation`), and
 /// remaps custody to match. Runs under the registry's per-mailbox lock (so a
 /// verify never lists the folder mid-repair) and the vault gate. The caller
 /// must not hold either, and must call any verifying registry read after
@@ -364,7 +364,7 @@ pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, stamp: &AccountSta
         };
         #[cfg(test)] p2_pause(&state.app_dir, "maildir_repair_generation");
         let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
-        let report = maildir::repair_generation(&mailbox_dir, uid_validity, &id_to_uid, &protected);
+        let report = message_store::repair_generation(&mailbox_dir, uid_validity, &id_to_uid, &protected);
         // A JMAP vault's folder holding Maildir files after a repair that
         // turned its records back into files: Settings offers to convert them
         // again (`message_store::LEFTOVER_KEY`). Not after a demotion a damaged

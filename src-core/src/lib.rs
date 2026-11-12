@@ -88,6 +88,7 @@ pub mod compose;
 pub mod spellcheck;
 pub mod json_doc;
 pub mod settings_doc;
+pub mod sqlite_meta;
 pub mod lifecycle_mail;
 pub mod notify_policy;
 pub mod transfer_limits;

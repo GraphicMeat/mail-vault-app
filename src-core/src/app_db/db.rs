@@ -17,7 +17,7 @@
 //! `pending_backup_purge` are work the user already confirmed; losing them
 //! silently is worse than reporting an unreadable store.
 
-use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{Connection, ErrorCode, Transaction, TransactionBehavior};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
@@ -557,18 +557,7 @@ fn txn<T>(conn: &Connection, behavior: TransactionBehavior, f: impl FnOnce() -> 
     Ok(out)
 }
 
-pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
-    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
-        .optional()
-        .ok()
-        .flatten()
-}
-
-pub fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?1, ?2)", [key, value])
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
+pub use crate::sqlite_meta::{meta_get, meta_set};
 
 pub fn meta_clear(conn: &Connection, key: &str) -> Result<(), String> {
     conn.execute("DELETE FROM meta WHERE key = ?1", [key]).map(|_| ()).map_err(|e| e.to_string())

@@ -8,13 +8,15 @@
 //!   `vault_eml`), then `message_store` as the one facade, then the index
 //!   (`search_index`) and custody/registry (`vault_registry`);
 //! - protocol: the `app_db` tables, `imap`, `smtp` and the plain-data leaves
-//!   they share, then `bulk_worker`, `compose_prep`, `aliases`.
+//!   they share, then `jmap` and `abd` above `imap`, then `bulk_worker`,
+//!   `compose_prep`, `aliases`;
+//! - domain: `people` below `custody`, `learned_rules` below `learning`.
 //!
-//! Known edge left in place: `maildir::repair_generation` calls
-//! `message_store::demote_records` (a JMAP mailbox's records become Maildir
-//! files before the repair renames by file name). Removing it needs the daemon
-//! to call a new entry point, which is a public-path change. It is not in the
-//! table, so it is not enforced, and is the next edge to cut.
+//! Cycles left in place (not in the table, so not enforced): `vault_files` ->
+//! `message_store` (the writer uses the facade's path helpers throughout),
+//! `bulk` <-> `bulk_worker`, `app_db::drafts` <-> `drafts` and `dns` <->
+//! `jmap` (discovery). The rows guard pairs only: longer cycles through
+//! several modules are not caught here.
 
 use std::path::{Path, PathBuf};
 
@@ -24,15 +26,26 @@ const FORBIDDEN: &[(&str, &str)] = &[
     // Storage: formats do not reach up to the facade or to each other's builders.
     ("maildir.rs", "vault_files"),
     ("maildir.rs", "vault_eml"),
+    ("maildir.rs", "message_store"),
+    ("maildir.rs", "pgp"),
+    ("vault_files.rs", "search_index"),
+    ("message_store.rs", "search_index"),
+    ("jmap_store", "message_store"),
     // Storage: the registry lists through a leaf, not through the index.
     ("vault_registry.rs", "search_index"),
     // Protocol: transports do not reach up to the coordinators and composers.
     ("imap/mod.rs", "bulk_worker"),
+    ("imap", "jmap"),
+    ("imap", "abd"),
     ("smtp.rs", "compose_prep"),
     ("smtp.rs", "aliases"),
     // Protocol: the tables sit below the bulk coordinator and the journal.
     ("app_db", "bulk_worker"),
     ("app_db", "op_journal"),
+    // Domain: the rule reader sits below the feedback store that writes rules.
+    ("learned_rules.rs", "learning"),
+    // Domain: people's tables live in custody.db, but people sits below custody.
+    ("people", "custody"),
 ];
 
 fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {

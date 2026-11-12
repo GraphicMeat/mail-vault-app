@@ -23,8 +23,7 @@ use pgp::types::{KeyDetails, Password};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// The folder beside `cur` that holds decrypted copies.
-pub const DECRYPTED_DIR: &str = ".decrypted";
+pub use crate::maildir::DECRYPTED_DIR;
 const DECRYPTED_HEADER: &str = "X-MailVault-Decrypted";
 const SOURCE_HEADER: &str = "X-MailVault-Source";
 const ARMOR_BEGIN: &str = "-----BEGIN PGP MESSAGE-----";
