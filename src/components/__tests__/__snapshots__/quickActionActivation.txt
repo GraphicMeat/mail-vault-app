@@ -1,0 +1,1056 @@
+row | single:unread | archive
+  actions.saveEmailsLocally [["email:acct-a:INBOX:1"]]
+  row.onClose []
+row | single:unread | delete
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [1,{"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":1,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m1@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:unread | deleteServer
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [1,{"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":1,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m1@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:unread | toggleRead
+  mail.setSelection [[1],["email:acct-a:INBOX:1"]]
+  mail.markSelectedAsRead []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:unread | markRead
+  mail.setSelection [[1],["email:acct-a:INBOX:1"]]
+  mail.markSelectedAsRead []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:unread | star
+  mail.setSelection [[1],["email:acct-a:INBOX:1"]]
+  mail.setSelectedFlagged [true]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:unread | move
+  picker:move [[1],"acct-a","INBOX"]
+row | single:unread | spam
+  mail.moveEmails [[1],"Junk"]
+  row.onClose []
+row | single:unread | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:INBOX:1"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":1},"_fillFrom":"email:acct-a:INBOX:1"}]
+row | single:unread | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:INBOX:1"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":1},"_fillFrom":"email:acct-a:INBOX:1"}]
+row | single:unread | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":1}}]
+row | single:unread | export
+  openExport [{"messages":["email:acct-a:INBOX:1"]}]
+  row.onClose []
+row | single:unread | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:unread | snooze
+  picker:move [[1],"acct-a","INBOX"]
+  picker:snooze [[1]]
+row | single:unread | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:1","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+  row.onClose []
+row | single:unread | move:existing
+  mail.moveEmails [[1],"Archive"]
+  row.onClose []
+row | single:unread | move:ownAccount
+  mail.moveEmails [[1],"Archive"]
+  row.onClose []
+row | single:unread | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":1},"templateBody":"<p>Thanks</p>"}]
+selection | single:unread | archive
+  mail.saveSelectedLocally []
+selection | single:unread | delete
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:unread | deleteServer
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:unread | toggleRead
+  mail.markSelectedAsRead []
+selection | single:unread | markRead
+  mail.markSelectedAsRead []
+selection | single:unread | star
+  mail.setSelectedFlagged [true]
+selection | single:unread | move
+  picker:move [[1],"acct-a","INBOX"]
+selection | single:unread | spam
+  mail.moveEmails [[1],"Junk"]
+selection | single:unread | export
+  openExport [{"messages":["email:acct-a:INBOX:1"]}]
+selection | single:unread | snooze
+  picker:move [[1],"acct-a","INBOX"]
+  picker:snooze [[1]]
+selection | single:unread | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:1","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+selection | single:unread | move:existing
+  mail.moveEmails [[1],"Archive"]
+selection | single:unread | move:ownAccount
+  mail.moveEmails [[1],"Archive"]
+reader | single:unread | archive
+  host.onArchive ["email:acct-a:INBOX:1"]
+reader | single:unread | delete
+  host.onDelete ["email:acct-a:INBOX:1"]
+reader | single:unread | deleteServer
+  host.onDelete ["email:acct-a:INBOX:1"]
+reader | single:unread | deleteEverywhere
+  host.onDeleteEverywhere ["email:acct-a:INBOX:1"]
+reader | single:unread | toggleRead
+  host.onToggleRead ["email:acct-a:INBOX:1",true]
+reader | single:unread | markRead
+  host.onToggleRead ["email:acct-a:INBOX:1",true]
+reader | single:unread | star
+  host.onToggleFlag ["email:acct-a:INBOX:1",true]
+reader | single:unread | move
+  host.onMove ["email:acct-a:INBOX:1"]
+reader | single:unread | spam
+  mail.moveEmails [[1],"Junk"]
+reader | single:unread | reply
+  host.onReply ["email:acct-a:INBOX:1"]
+reader | single:unread | replyAll
+  host.onReplyAll ["email:acct-a:INBOX:1"]
+reader | single:unread | forward
+  host.onForward ["email:acct-a:INBOX:1"]
+reader | single:unread | export
+  host.onExport ["email:acct-a:INBOX:1"]
+reader | single:unread | open
+  host.onOpenInWindow ["email:acct-a:INBOX:1"]
+reader | single:unread | source
+  host.onViewSource ["email:acct-a:INBOX:1"]
+reader | single:unread | theme
+  host.onToggleEmailTheme ["email:acct-a:INBOX:1"]
+reader | single:unread | snooze
+  picker:snooze [[1]]
+reader | single:unread | tag:existing
+  tag.applyTag ["email:acct-a:INBOX:1",{"accountId":"acct-a","mailbox":"INBOX"},"tag-1"]
+reader | single:unread | move:existing
+  mail.moveEmails [[1],"Archive"]
+reader | single:unread | move:ownAccount
+  mail.moveEmails [[1],"Archive"]
+reader | single:unread | replyTemplate:existing
+  openCompose [{"mode":"reply","replyTo":{"resolved":1},"templateBody":"<p>Thanks</p>"}]
+row | single:flagged | archive
+  actions.saveEmailsLocally [["email:acct-a:INBOX:3"]]
+  row.onClose []
+row | single:flagged | delete
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [3,{"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":3,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m3@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:flagged | deleteServer
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [3,{"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":3,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m3@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:flagged | toggleRead
+  mail.setSelection [[3],["email:acct-a:INBOX:3"]]
+  mail.markSelectedAsRead []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:flagged | markRead
+  mail.setSelection [[3],["email:acct-a:INBOX:3"]]
+  mail.markSelectedAsRead []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:flagged | unstar
+  mail.setSelection [[3],["email:acct-a:INBOX:3"]]
+  mail.setSelectedFlagged [false]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:flagged | move
+  picker:move [[3],"acct-a","INBOX"]
+row | single:flagged | spam
+  mail.moveEmails [[3],"Junk"]
+  row.onClose []
+row | single:flagged | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:INBOX:3"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":3},"_fillFrom":"email:acct-a:INBOX:3"}]
+row | single:flagged | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:INBOX:3"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":3},"_fillFrom":"email:acct-a:INBOX:3"}]
+row | single:flagged | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":3}}]
+row | single:flagged | export
+  openExport [{"messages":["email:acct-a:INBOX:3"]}]
+  row.onClose []
+row | single:flagged | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:flagged | snooze
+  picker:move [[3],"acct-a","INBOX"]
+  picker:snooze [[3]]
+row | single:flagged | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:3","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+  row.onClose []
+row | single:flagged | move:existing
+  mail.moveEmails [[3],"Archive"]
+  row.onClose []
+row | single:flagged | move:ownAccount
+  mail.moveEmails [[3],"Archive"]
+  row.onClose []
+row | single:flagged | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":3},"templateBody":"<p>Thanks</p>"}]
+selection | single:flagged | archive
+  mail.saveSelectedLocally []
+selection | single:flagged | delete
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:flagged | deleteServer
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:flagged | toggleRead
+  mail.markSelectedAsRead []
+selection | single:flagged | markRead
+  mail.markSelectedAsRead []
+selection | single:flagged | unstar
+  mail.setSelectedFlagged [false]
+selection | single:flagged | move
+  picker:move [[3],"acct-a","INBOX"]
+selection | single:flagged | spam
+  mail.moveEmails [[3],"Junk"]
+selection | single:flagged | export
+  openExport [{"messages":["email:acct-a:INBOX:3"]}]
+selection | single:flagged | snooze
+  picker:move [[3],"acct-a","INBOX"]
+  picker:snooze [[3]]
+selection | single:flagged | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:3","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+selection | single:flagged | move:existing
+  mail.moveEmails [[3],"Archive"]
+selection | single:flagged | move:ownAccount
+  mail.moveEmails [[3],"Archive"]
+reader | single:flagged | archive
+  host.onArchive ["email:acct-a:INBOX:3"]
+reader | single:flagged | delete
+  host.onDelete ["email:acct-a:INBOX:3"]
+reader | single:flagged | deleteServer
+  host.onDelete ["email:acct-a:INBOX:3"]
+reader | single:flagged | deleteEverywhere
+  host.onDeleteEverywhere ["email:acct-a:INBOX:3"]
+reader | single:flagged | toggleRead
+  host.onToggleRead ["email:acct-a:INBOX:3",true]
+reader | single:flagged | markRead
+  host.onToggleRead ["email:acct-a:INBOX:3",true]
+reader | single:flagged | unstar
+  host.onToggleFlag ["email:acct-a:INBOX:3",false]
+reader | single:flagged | move
+  host.onMove ["email:acct-a:INBOX:3"]
+reader | single:flagged | spam
+  mail.moveEmails [[3],"Junk"]
+reader | single:flagged | reply
+  host.onReply ["email:acct-a:INBOX:3"]
+reader | single:flagged | replyAll
+  host.onReplyAll ["email:acct-a:INBOX:3"]
+reader | single:flagged | forward
+  host.onForward ["email:acct-a:INBOX:3"]
+reader | single:flagged | export
+  host.onExport ["email:acct-a:INBOX:3"]
+reader | single:flagged | open
+  host.onOpenInWindow ["email:acct-a:INBOX:3"]
+reader | single:flagged | source
+  host.onViewSource ["email:acct-a:INBOX:3"]
+reader | single:flagged | theme
+  host.onToggleEmailTheme ["email:acct-a:INBOX:3"]
+reader | single:flagged | snooze
+  picker:snooze [[3]]
+reader | single:flagged | tag:existing
+  tag.applyTag ["email:acct-a:INBOX:3",{"accountId":"acct-a","mailbox":"INBOX"},"tag-1"]
+reader | single:flagged | move:existing
+  mail.moveEmails [[3],"Archive"]
+reader | single:flagged | move:ownAccount
+  mail.moveEmails [[3],"Archive"]
+reader | single:flagged | replyTemplate:existing
+  openCompose [{"mode":"reply","replyTo":{"resolved":3},"templateBody":"<p>Thanks</p>"}]
+row | single:archived | unarchive
+  row.onClose []
+  row.requestDelete [{"title":"viewer.unarchiveEmail","description":"viewer.cachedCopyRemovedEmailStill","confirmLabel":"rowMenu.unarchive"},null]
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.cachedCopyRemovedEmailStill","confirmLabel":"rowMenu.unarchive"},{}]
+  actions.removeLocalEmails [[{"uid":5,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+row | single:archived | delete
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [5,{"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":5,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m5@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:archived | deleteServer
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [5,{"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":5,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m5@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:archived | deleteEverywhere
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deletePermanently2","description":"custody.purgeNothingLeft{\"count\":1}","confirmLabel":"rowMenu.deleteServerVault"},null]
+  confirm [{"title":"rowMenu.deletePermanently2","description":"custody.purgeNothingLeft{\"count\":1}","confirmLabel":"rowMenu.deleteServerVault"},{}]
+  mail.purgeSelectedEverywhere [{"scope":{"accountId":"acct-a","mailbox":"INBOX","spans":false,"keys":[5],"targetHints":[{"accountId":"acct-a","mailbox":"INBOX","uid":5,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m5@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}]}}]
+row | single:archived | toggleRead
+  mail.setSelection [[5],["email:acct-a:INBOX:5"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:archived | markUnread
+  mail.setSelection [[5],["email:acct-a:INBOX:5"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:archived | star
+  mail.setSelection [[5],["email:acct-a:INBOX:5"]]
+  mail.setSelectedFlagged [true]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:archived | move
+  picker:move [[5],"acct-a","INBOX"]
+row | single:archived | spam
+  mail.moveEmails [[5],"Junk"]
+  row.onClose []
+row | single:archived | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:INBOX:5"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":5},"_fillFrom":"email:acct-a:INBOX:5"}]
+row | single:archived | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:INBOX:5"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":5},"_fillFrom":"email:acct-a:INBOX:5"}]
+row | single:archived | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":5}}]
+row | single:archived | export
+  openExport [{"messages":["email:acct-a:INBOX:5"]}]
+  row.onClose []
+row | single:archived | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:archived | snooze
+  picker:move [[5],"acct-a","INBOX"]
+  picker:snooze [[5]]
+row | single:archived | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:5","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+  row.onClose []
+row | single:archived | move:existing
+  mail.moveEmails [[5],"Archive"]
+  row.onClose []
+row | single:archived | move:ownAccount
+  mail.moveEmails [[5],"Archive"]
+  row.onClose []
+row | single:archived | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":5},"templateBody":"<p>Thanks</p>"}]
+selection | single:archived | unarchive
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.cachedCopyRemovedEmailStill","confirmLabel":"rowMenu.unarchive"},{"confirmOptional":false}]
+  mail.removeLocalEmails [[{"uid":5,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+  mail.clearSelection []
+selection | single:archived | delete
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:archived | deleteServer
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:archived | deleteEverywhere
+  confirm [{"title":"rowMenu.deleteEverywhere","description":"selection.deleteServerVaultBackupDrive{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\"}","confirmLabel":"rowMenu.deleteEverywhere"},{"confirmOptional":false}]
+  mail.purgeSelectedEverywhere []
+selection | single:archived | toggleRead
+  mail.markSelectedAsUnread []
+selection | single:archived | markUnread
+  mail.markSelectedAsUnread []
+selection | single:archived | star
+  mail.setSelectedFlagged [true]
+selection | single:archived | move
+  picker:move [[5],"acct-a","INBOX"]
+selection | single:archived | spam
+  mail.moveEmails [[5],"Junk"]
+selection | single:archived | export
+  openExport [{"messages":["email:acct-a:INBOX:5"]}]
+selection | single:archived | snooze
+  picker:move [[5],"acct-a","INBOX"]
+  picker:snooze [[5]]
+selection | single:archived | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:5","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+selection | single:archived | move:existing
+  mail.moveEmails [[5],"Archive"]
+selection | single:archived | move:ownAccount
+  mail.moveEmails [[5],"Archive"]
+reader | single:archived | unarchive
+  host.onArchive ["email:acct-a:INBOX:5"]
+reader | single:archived | delete
+  host.onDelete ["email:acct-a:INBOX:5"]
+reader | single:archived | deleteServer
+  host.onDelete ["email:acct-a:INBOX:5"]
+reader | single:archived | deleteEverywhere
+  host.onDeleteEverywhere ["email:acct-a:INBOX:5"]
+reader | single:archived | toggleRead
+  host.onToggleRead ["email:acct-a:INBOX:5",false]
+reader | single:archived | markUnread
+  host.onToggleRead ["email:acct-a:INBOX:5",false]
+reader | single:archived | star
+  host.onToggleFlag ["email:acct-a:INBOX:5",true]
+reader | single:archived | move
+  host.onMove ["email:acct-a:INBOX:5"]
+reader | single:archived | spam
+  mail.moveEmails [[5],"Junk"]
+reader | single:archived | reply
+  host.onReply ["email:acct-a:INBOX:5"]
+reader | single:archived | replyAll
+  host.onReplyAll ["email:acct-a:INBOX:5"]
+reader | single:archived | forward
+  host.onForward ["email:acct-a:INBOX:5"]
+reader | single:archived | export
+  host.onExport ["email:acct-a:INBOX:5"]
+reader | single:archived | open
+  host.onOpenInWindow ["email:acct-a:INBOX:5"]
+reader | single:archived | source
+  host.onViewSource ["email:acct-a:INBOX:5"]
+reader | single:archived | theme
+  host.onToggleEmailTheme ["email:acct-a:INBOX:5"]
+reader | single:archived | snooze
+  picker:snooze [[5]]
+reader | single:archived | tag:existing
+  tag.applyTag ["email:acct-a:INBOX:5",{"accountId":"acct-a","mailbox":"INBOX"},"tag-1"]
+reader | single:archived | move:existing
+  mail.moveEmails [[5],"Archive"]
+reader | single:archived | move:ownAccount
+  mail.moveEmails [[5],"Archive"]
+reader | single:archived | replyTemplate:existing
+  openCompose [{"mode":"reply","replyTo":{"resolved":5},"templateBody":"<p>Thanks</p>"}]
+row | single:localOnly | unarchive
+  row.onClose []
+  row.requestDelete [{"title":"viewer.unarchiveEmail","description":"viewer.emailOnlyExistsLocalArchive","confirmLabel":"rowMenu.unarchive"},null]
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.emailOnlyExistsLocalArchive","confirmLabel":"rowMenu.unarchive"},{}]
+  actions.removeLocalEmails [[{"uid":7,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+row | single:localOnly | delete
+  row.onClose []
+  row.requestDelete [{"title":"viewer.unarchiveEmail","description":"viewer.emailOnlyExistsLocalArchive","confirmLabel":"rowMenu.unarchive"},null]
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.emailOnlyExistsLocalArchive","confirmLabel":"rowMenu.unarchive"},{}]
+  actions.removeLocalEmails [[{"uid":7,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+row | single:localOnly | deleteEverywhere
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deletePermanently2","description":"custody.purgeNothingLeft{\"count\":1}","confirmLabel":"rowMenu.deleteVault"},null]
+  confirm [{"title":"rowMenu.deletePermanently2","description":"custody.purgeNothingLeft{\"count\":1}","confirmLabel":"rowMenu.deleteVault"},{}]
+  mail.purgeSelectedEverywhere [{"scope":{"accountId":"acct-a","mailbox":"INBOX","spans":false,"keys":[7],"targetHints":[{"accountId":"acct-a","mailbox":"INBOX","uid":7,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m7@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"local-only","staged":false}}]}}]
+row | single:localOnly | toggleRead
+  mail.setSelection [[7],["email:acct-a:INBOX:7"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:localOnly | markUnread
+  mail.setSelection [[7],["email:acct-a:INBOX:7"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:localOnly | star
+  mail.setSelection [[7],["email:acct-a:INBOX:7"]]
+  mail.setSelectedFlagged [true]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:localOnly | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:INBOX:7"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":7},"_fillFrom":"email:acct-a:INBOX:7"}]
+row | single:localOnly | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:INBOX:7"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":7},"_fillFrom":"email:acct-a:INBOX:7"}]
+row | single:localOnly | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":7}}]
+row | single:localOnly | export
+  openExport [{"messages":["email:acct-a:INBOX:7"]}]
+  row.onClose []
+row | single:localOnly | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:localOnly | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:7","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+  row.onClose []
+row | single:localOnly | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":7},"templateBody":"<p>Thanks</p>"}]
+selection | single:localOnly | unarchive
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.emailOnlyExistsLocalArchive","confirmLabel":"rowMenu.unarchive"},{"confirmOptional":false}]
+  mail.removeLocalEmails [[{"uid":7,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+  mail.clearSelection []
+selection | single:localOnly | deleteEverywhere
+  confirm [{"title":"rowMenu.deleteEverywhere","description":"selection.deleteServerVaultBackupDrive{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\"}","confirmLabel":"rowMenu.deleteEverywhere"},{"confirmOptional":false}]
+  mail.purgeSelectedEverywhere []
+selection | single:localOnly | toggleRead
+  mail.markSelectedAsUnread []
+selection | single:localOnly | markUnread
+  mail.markSelectedAsUnread []
+selection | single:localOnly | star
+  mail.setSelectedFlagged [true]
+selection | single:localOnly | export
+  openExport [{"messages":["email:acct-a:INBOX:7"]}]
+selection | single:localOnly | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:7","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+reader | single:localOnly | unarchive
+  host.onArchive ["email:acct-a:INBOX:7"]
+reader | single:localOnly | delete
+  host.onDelete ["email:acct-a:INBOX:7"]
+reader | single:localOnly | deleteEverywhere
+  host.onDeleteEverywhere ["email:acct-a:INBOX:7"]
+reader | single:localOnly | reply
+  host.onReply ["email:acct-a:INBOX:7"]
+reader | single:localOnly | replyAll
+  host.onReplyAll ["email:acct-a:INBOX:7"]
+reader | single:localOnly | forward
+  host.onForward ["email:acct-a:INBOX:7"]
+reader | single:localOnly | export
+  host.onExport ["email:acct-a:INBOX:7"]
+reader | single:localOnly | open
+  host.onOpenInWindow ["email:acct-a:INBOX:7"]
+reader | single:localOnly | source
+  host.onViewSource ["email:acct-a:INBOX:7"]
+reader | single:localOnly | theme
+  host.onToggleEmailTheme ["email:acct-a:INBOX:7"]
+reader | single:localOnly | tag:existing
+  tag.applyTag ["email:acct-a:INBOX:7",{"accountId":"acct-a","mailbox":"INBOX"},"tag-1"]
+reader | single:localOnly | replyTemplate:existing
+  openCompose [{"mode":"reply","replyTo":{"resolved":7},"templateBody":"<p>Thanks</p>"}]
+row | single:localFolder | delete
+  row.onClose []
+  row.requestDelete [{"title":"viewer.deleteEmail","description":"viewer.localFolderDeleteToBin","confirmLabel":"common.delete"},{"confirmOptional":true}]
+  confirm [{"title":"viewer.deleteEmail","description":"viewer.localFolderDeleteToBin","confirmLabel":"common.delete"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [8,{"accountId":"acct-a","mailboxOverride":"Imported","originalSnapshot":{"accountId":"acct-a","mailbox":"Imported","uid":8,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m8@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:localFolder | deleteServer
+  row.onClose []
+  row.requestDelete [{"title":"viewer.deleteEmail","description":"viewer.localFolderDeleteToBin","confirmLabel":"common.delete"},{"confirmOptional":true}]
+  confirm [{"title":"viewer.deleteEmail","description":"viewer.localFolderDeleteToBin","confirmLabel":"common.delete"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [8,{"accountId":"acct-a","mailboxOverride":"Imported","originalSnapshot":{"accountId":"acct-a","mailbox":"Imported","uid":8,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m8@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:localFolder | toggleRead
+  mail.setSelection [["acct-a:Imported:8"],["email:acct-a:Imported:8"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:localFolder | markUnread
+  mail.setSelection [["acct-a:Imported:8"],["email:acct-a:Imported:8"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:localFolder | star
+  mail.setSelection [["acct-a:Imported:8"],["email:acct-a:Imported:8"]]
+  mail.setSelectedFlagged [true]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:localFolder | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:Imported:8"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":8},"_fillFrom":"email:acct-a:Imported:8"}]
+row | single:localFolder | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:Imported:8"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":8},"_fillFrom":"email:acct-a:Imported:8"}]
+row | single:localFolder | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":8}}]
+row | single:localFolder | export
+  openExport [{"messages":["email:acct-a:Imported:8"]}]
+  row.onClose []
+row | single:localFolder | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:localFolder | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:Imported:8","location":{"accountId":"acct-a","mailbox":"Imported"}}],"tag-1"]
+  row.onClose []
+row | single:localFolder | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":8},"templateBody":"<p>Thanks</p>"}]
+selection | single:localFolder | delete
+  confirm [{"title":"common.delete","description":"viewer.localFolderDeleteToBin","confirmLabel":"common.delete"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:localFolder | deleteServer
+  confirm [{"title":"common.delete","description":"viewer.localFolderDeleteToBin","confirmLabel":"common.delete"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:localFolder | toggleRead
+  mail.markSelectedAsUnread []
+selection | single:localFolder | markUnread
+  mail.markSelectedAsUnread []
+selection | single:localFolder | star
+  mail.setSelectedFlagged [true]
+selection | single:localFolder | export
+  openExport [{"messages":["email:acct-a:Imported:8"]}]
+selection | single:localFolder | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:Imported:8","location":{"accountId":"acct-a","mailbox":"Imported"}}],"tag-1"]
+reader | single:localFolder | delete
+  host.onDelete ["email:acct-a:Imported:8"]
+reader | single:localFolder | deleteServer
+  host.onDelete ["email:acct-a:Imported:8"]
+reader | single:localFolder | toggleRead
+  host.onToggleRead ["email:acct-a:Imported:8",false]
+reader | single:localFolder | markUnread
+  host.onToggleRead ["email:acct-a:Imported:8",false]
+reader | single:localFolder | star
+  host.onToggleFlag ["email:acct-a:Imported:8",true]
+reader | single:localFolder | reply
+  host.onReply ["email:acct-a:Imported:8"]
+reader | single:localFolder | replyAll
+  host.onReplyAll ["email:acct-a:Imported:8"]
+reader | single:localFolder | forward
+  host.onForward ["email:acct-a:Imported:8"]
+reader | single:localFolder | export
+  host.onExport ["email:acct-a:Imported:8"]
+reader | single:localFolder | open
+  host.onOpenInWindow ["email:acct-a:Imported:8"]
+reader | single:localFolder | source
+  host.onViewSource ["email:acct-a:Imported:8"]
+reader | single:localFolder | theme
+  host.onToggleEmailTheme ["email:acct-a:Imported:8"]
+reader | single:localFolder | tag:existing
+  tag.applyTag ["email:acct-a:Imported:8",{"accountId":"acct-a","mailbox":"Imported"},"tag-1"]
+reader | single:localFolder | replyTemplate:existing
+  openCompose [{"mode":"reply","replyTo":{"resolved":8},"templateBody":"<p>Thanks</p>"}]
+row | single:unsubscribe | archive
+  actions.saveEmailsLocally [["email:acct-a:INBOX:17"]]
+  row.onClose []
+row | single:unsubscribe | delete
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [17,{"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":17,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m17@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:unsubscribe | deleteServer
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [17,{"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":17,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m17@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+row | single:unsubscribe | toggleRead
+  mail.setSelection [[17],["email:acct-a:INBOX:17"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:unsubscribe | markUnread
+  mail.setSelection [[17],["email:acct-a:INBOX:17"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:unsubscribe | star
+  mail.setSelection [[17],["email:acct-a:INBOX:17"]]
+  mail.setSelectedFlagged [true]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | single:unsubscribe | move
+  picker:move [[17],"acct-a","INBOX"]
+row | single:unsubscribe | spam
+  mail.moveEmails [[17],"Junk"]
+  row.onClose []
+row | single:unsubscribe | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:INBOX:17"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":17},"_fillFrom":"email:acct-a:INBOX:17"}]
+row | single:unsubscribe | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:INBOX:17"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":17},"_fillFrom":"email:acct-a:INBOX:17"}]
+row | single:unsubscribe | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":17}}]
+row | single:unsubscribe | export
+  openExport [{"messages":["email:acct-a:INBOX:17"]}]
+  row.onClose []
+row | single:unsubscribe | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:unsubscribe | snooze
+  picker:move [[17],"acct-a","INBOX"]
+  picker:snooze [[17]]
+row | single:unsubscribe | unsubscribe
+  row.onClose []
+  unsubscribe.request [{"accountId":"acct-a","sender":"sender@x.test","name":"Sender","listUnsubscribe":"<mailto:u@x.test>","listUnsubscribePost":null,"authenticationResults":null}]
+row | single:unsubscribe | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:17","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+  row.onClose []
+row | single:unsubscribe | move:existing
+  mail.moveEmails [[17],"Archive"]
+  row.onClose []
+row | single:unsubscribe | move:ownAccount
+  mail.moveEmails [[17],"Archive"]
+  row.onClose []
+row | single:unsubscribe | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":17},"templateBody":"<p>Thanks</p>"}]
+selection | single:unsubscribe | archive
+  mail.saveSelectedLocally []
+selection | single:unsubscribe | delete
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:unsubscribe | deleteServer
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":1}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | single:unsubscribe | toggleRead
+  mail.markSelectedAsUnread []
+selection | single:unsubscribe | markUnread
+  mail.markSelectedAsUnread []
+selection | single:unsubscribe | star
+  mail.setSelectedFlagged [true]
+selection | single:unsubscribe | move
+  picker:move [[17],"acct-a","INBOX"]
+selection | single:unsubscribe | spam
+  mail.moveEmails [[17],"Junk"]
+selection | single:unsubscribe | export
+  openExport [{"messages":["email:acct-a:INBOX:17"]}]
+selection | single:unsubscribe | snooze
+  picker:move [[17],"acct-a","INBOX"]
+  picker:snooze [[17]]
+selection | single:unsubscribe | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:17","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+selection | single:unsubscribe | move:existing
+  mail.moveEmails [[17],"Archive"]
+selection | single:unsubscribe | move:ownAccount
+  mail.moveEmails [[17],"Archive"]
+reader | single:unsubscribe | archive
+  host.onArchive ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | delete
+  host.onDelete ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | deleteServer
+  host.onDelete ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | deleteEverywhere
+  host.onDeleteEverywhere ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | toggleRead
+  host.onToggleRead ["email:acct-a:INBOX:17",false]
+reader | single:unsubscribe | markUnread
+  host.onToggleRead ["email:acct-a:INBOX:17",false]
+reader | single:unsubscribe | star
+  host.onToggleFlag ["email:acct-a:INBOX:17",true]
+reader | single:unsubscribe | move
+  host.onMove ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | spam
+  mail.moveEmails [[17],"Junk"]
+reader | single:unsubscribe | reply
+  host.onReply ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | replyAll
+  host.onReplyAll ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | forward
+  host.onForward ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | export
+  host.onExport ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | open
+  host.onOpenInWindow ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | source
+  host.onViewSource ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | theme
+  host.onToggleEmailTheme ["email:acct-a:INBOX:17"]
+reader | single:unsubscribe | snooze
+  picker:snooze [[17]]
+reader | single:unsubscribe | unsubscribe
+  unsubscribe.request [{"accountId":"acct-a","sender":"sender@x.test","name":"Sender","listUnsubscribe":"<mailto:u@x.test>","listUnsubscribePost":null,"authenticationResults":null}]
+reader | single:unsubscribe | tag:existing
+  tag.applyTag ["email:acct-a:INBOX:17",{"accountId":"acct-a","mailbox":"INBOX"},"tag-1"]
+reader | single:unsubscribe | move:existing
+  mail.moveEmails [[17],"Archive"]
+reader | single:unsubscribe | move:ownAccount
+  mail.moveEmails [[17],"Archive"]
+reader | single:unsubscribe | replyTemplate:existing
+  openCompose [{"mode":"reply","replyTo":{"resolved":17},"templateBody":"<p>Thanks</p>"}]
+row | thread:unread+read | archive
+  actions.saveEmailsLocally [["email:acct-a:INBOX:1","email:acct-a:INBOX:2"]]
+  row.onClose []
+row | thread:unread+read | delete
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [1,{"skipRefresh":true,"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":1,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m1@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+  actions.deleteEmailFromServer [2,{"skipRefresh":true,"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":2,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m2@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+  reloadListInView []
+  setDeleteUndo [[]]
+row | thread:unread+read | deleteServer
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [1,{"skipRefresh":true,"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":1,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m1@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+  actions.deleteEmailFromServer [2,{"skipRefresh":true,"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":2,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m2@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+  reloadListInView []
+  setDeleteUndo [[]]
+row | thread:unread+read | toggleRead:markRead
+  mail.setSelection [[1,2],["email:acct-a:INBOX:1","email:acct-a:INBOX:2"]]
+  mail.markSelectedAsRead []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:unread+read | toggleRead:markUnread
+  mail.setSelection [[1,2],["email:acct-a:INBOX:1","email:acct-a:INBOX:2"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:unread+read | markRead
+  mail.setSelection [[1,2],["email:acct-a:INBOX:1","email:acct-a:INBOX:2"]]
+  mail.markSelectedAsRead []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:unread+read | markUnread
+  mail.setSelection [[1,2],["email:acct-a:INBOX:1","email:acct-a:INBOX:2"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:unread+read | star
+  mail.setSelection [[1,2],["email:acct-a:INBOX:1","email:acct-a:INBOX:2"]]
+  mail.setSelectedFlagged [true]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:unread+read | move
+  picker:move [[1,2],"acct-a","INBOX"]
+row | thread:unread+read | spam
+  mail.moveEmails [[1,2],"Junk"]
+  row.onClose []
+row | thread:unread+read | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:INBOX:2"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":2},"_fillFrom":"email:acct-a:INBOX:2"}]
+row | thread:unread+read | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:INBOX:2"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":2},"_fillFrom":"email:acct-a:INBOX:2"}]
+row | thread:unread+read | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":2}}]
+row | thread:unread+read | export
+  openExport [{"messages":["email:acct-a:INBOX:1","email:acct-a:INBOX:2"]}]
+  row.onClose []
+row | thread:unread+read | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | thread:unread+read | snooze
+  picker:move [[1,2],"acct-a","INBOX"]
+  picker:snooze [[1,2]]
+row | thread:unread+read | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:1","location":{"accountId":"acct-a","mailbox":"INBOX"}},{"email":"email:acct-a:INBOX:2","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+  row.onClose []
+row | thread:unread+read | move:existing
+  mail.moveEmails [[1,2],"Archive"]
+  row.onClose []
+row | thread:unread+read | move:ownAccount
+  mail.moveEmails [[1,2],"Archive"]
+  row.onClose []
+row | thread:unread+read | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":2},"templateBody":"<p>Thanks</p>"}]
+selection | thread:unread+read | archive
+  mail.saveSelectedLocally []
+selection | thread:unread+read | delete
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":2}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | thread:unread+read | deleteServer
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":2}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | thread:unread+read | toggleRead
+  mail.markSelectedAsRead []
+selection | thread:unread+read | markRead
+  mail.markSelectedAsRead []
+selection | thread:unread+read | markUnread
+  mail.markSelectedAsUnread []
+selection | thread:unread+read | star
+  mail.setSelectedFlagged [true]
+selection | thread:unread+read | move
+  picker:move [[1,2],"acct-a","INBOX"]
+selection | thread:unread+read | spam
+  mail.moveEmails [[1,2],"Junk"]
+selection | thread:unread+read | export
+  openExport [{"messages":["email:acct-a:INBOX:1","email:acct-a:INBOX:2"]}]
+selection | thread:unread+read | snooze
+  picker:move [[1,2],"acct-a","INBOX"]
+  picker:snooze [[1,2]]
+selection | thread:unread+read | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:1","location":{"accountId":"acct-a","mailbox":"INBOX"}},{"email":"email:acct-a:INBOX:2","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+selection | thread:unread+read | move:existing
+  mail.moveEmails [[1,2],"Archive"]
+selection | thread:unread+read | move:ownAccount
+  mail.moveEmails [[1,2],"Archive"]
+row | thread:archived+unarchived | archive
+  actions.saveEmailsLocally [["email:acct-a:INBOX:2"]]
+  row.onClose []
+row | thread:archived+unarchived | unarchive
+  row.onClose []
+  row.requestDelete [{"title":"viewer.unarchiveEmail","description":"viewer.cachedCopyRemovedEmailStill","confirmLabel":"rowMenu.unarchive"},null]
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.cachedCopyRemovedEmailStill","confirmLabel":"rowMenu.unarchive"},{}]
+  actions.removeLocalEmails [[{"uid":5,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+row | thread:archived+unarchived | delete
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [5,{"skipRefresh":true,"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":5,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m5@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+  actions.deleteEmailFromServer [2,{"skipRefresh":true,"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":2,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m2@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+  reloadListInView []
+  setDeleteUndo [[]]
+row | thread:archived+unarchived | deleteServer
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  confirm [{"title":"rowMenu.deleteServer2","description":"custody.deleteMovesToTrash","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  actions.deleteEmailFromServer [5,{"skipRefresh":true,"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":5,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m5@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+  actions.deleteEmailFromServer [2,{"skipRefresh":true,"accountId":"acct-a","mailboxOverride":"INBOX","originalSnapshot":{"accountId":"acct-a","mailbox":"INBOX","uid":2,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m2@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}}]
+  reloadListInView []
+  setDeleteUndo [[]]
+row | thread:archived+unarchived | deleteEverywhere
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deletePermanently2","description":"custody.purgeNothingLeft{\"count\":2}","confirmLabel":"rowMenu.deleteServerVault"},null]
+  confirm [{"title":"rowMenu.deletePermanently2","description":"custody.purgeNothingLeft{\"count\":2}","confirmLabel":"rowMenu.deleteServerVault"},{}]
+  mail.purgeSelectedEverywhere [{"scope":{"accountId":"acct-a","mailbox":"INBOX","spans":false,"keys":[5,2],"targetHints":[{"accountId":"acct-a","mailbox":"INBOX","uid":5,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m5@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}},{"accountId":"acct-a","mailbox":"INBOX","uid":2,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m2@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}}]}}]
+row | thread:archived+unarchived | toggleRead:markRead
+  mail.setSelection [[5,2],["email:acct-a:INBOX:5","email:acct-a:INBOX:2"]]
+  mail.markSelectedAsRead []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:archived+unarchived | toggleRead:markUnread
+  mail.setSelection [[5,2],["email:acct-a:INBOX:5","email:acct-a:INBOX:2"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:archived+unarchived | markUnread
+  mail.setSelection [[5,2],["email:acct-a:INBOX:5","email:acct-a:INBOX:2"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:archived+unarchived | star
+  mail.setSelection [[5,2],["email:acct-a:INBOX:5","email:acct-a:INBOX:2"]]
+  mail.setSelectedFlagged [true]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:archived+unarchived | move
+  picker:move [[5,2],"acct-a","INBOX"]
+row | thread:archived+unarchived | spam
+  mail.moveEmails [[5,2],"Junk"]
+  row.onClose []
+row | thread:archived+unarchived | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:INBOX:5"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":5},"_fillFrom":"email:acct-a:INBOX:5"}]
+row | thread:archived+unarchived | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:INBOX:5"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":5},"_fillFrom":"email:acct-a:INBOX:5"}]
+row | thread:archived+unarchived | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":5}}]
+row | thread:archived+unarchived | export
+  openExport [{"messages":["email:acct-a:INBOX:5","email:acct-a:INBOX:2"]}]
+  row.onClose []
+row | thread:archived+unarchived | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | thread:archived+unarchived | snooze
+  picker:move [[5,2],"acct-a","INBOX"]
+  picker:snooze [[5,2]]
+row | thread:archived+unarchived | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:5","location":{"accountId":"acct-a","mailbox":"INBOX"}},{"email":"email:acct-a:INBOX:2","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+  row.onClose []
+row | thread:archived+unarchived | move:existing
+  mail.moveEmails [[5,2],"Archive"]
+  row.onClose []
+row | thread:archived+unarchived | move:ownAccount
+  mail.moveEmails [[5,2],"Archive"]
+  row.onClose []
+row | thread:archived+unarchived | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":5},"templateBody":"<p>Thanks</p>"}]
+selection | thread:archived+unarchived | archive
+  mail.saveSelectedLocally []
+selection | thread:archived+unarchived | unarchive
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.cachedCopyRemovedEmailStill","confirmLabel":"rowMenu.unarchive"},{"confirmOptional":false}]
+  mail.removeLocalEmails [[{"uid":5,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+  mail.clearSelection []
+selection | thread:archived+unarchived | delete
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":2}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | thread:archived+unarchived | deleteServer
+  confirm [{"title":"rowMenu.deleteServer","description":"selection.deleteServer2{\"deleteScope\":\"common.emailCount{\\\"count\\\":2}\",\"vaultClause\":\"custody.deleteMovesToTrash\"}","confirmLabel":"rowMenu.deleteServer"},{"confirmOptional":true}]
+  mail.deleteSelectedFromServer []
+selection | thread:archived+unarchived | deleteEverywhere
+  confirm [{"title":"rowMenu.deleteEverywhere","description":"selection.deleteServerVaultBackupDrive{\"deleteScope\":\"common.emailCount{\\\"count\\\":2}\"}","confirmLabel":"rowMenu.deleteEverywhere"},{"confirmOptional":false}]
+  mail.purgeSelectedEverywhere []
+selection | thread:archived+unarchived | toggleRead
+  mail.markSelectedAsUnread []
+selection | thread:archived+unarchived | markUnread
+  mail.markSelectedAsUnread []
+selection | thread:archived+unarchived | star
+  mail.setSelectedFlagged [true]
+selection | thread:archived+unarchived | move
+  picker:move [[5,2],"acct-a","INBOX"]
+selection | thread:archived+unarchived | spam
+  mail.moveEmails [[5,2],"Junk"]
+selection | thread:archived+unarchived | export
+  openExport [{"messages":["email:acct-a:INBOX:5","email:acct-a:INBOX:2"]}]
+selection | thread:archived+unarchived | snooze
+  picker:move [[5,2],"acct-a","INBOX"]
+  picker:snooze [[5,2]]
+selection | thread:archived+unarchived | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:5","location":{"accountId":"acct-a","mailbox":"INBOX"}},{"email":"email:acct-a:INBOX:2","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+selection | thread:archived+unarchived | move:existing
+  mail.moveEmails [[5,2],"Archive"]
+selection | thread:archived+unarchived | move:ownAccount
+  mail.moveEmails [[5,2],"Archive"]
+row | thread:server+localOnly | archive
+  actions.saveEmailsLocally [["email:acct-a:INBOX:2"]]
+  row.onClose []
+row | thread:server+localOnly | unarchive
+  row.onClose []
+  row.requestDelete [{"title":"viewer.unarchiveEmail","description":"viewer.emailOnlyExistsLocalArchive","confirmLabel":"rowMenu.unarchive"},null]
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.emailOnlyExistsLocalArchive","confirmLabel":"rowMenu.unarchive"},{}]
+  actions.removeLocalEmails [[{"uid":7,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+row | thread:server+localOnly | deleteEverywhere
+  row.onClose []
+  row.requestDelete [{"title":"rowMenu.deletePermanently2","description":"custody.purgeNothingLeft{\"count\":2}","confirmLabel":"rowMenu.deleteServerVault"},null]
+  confirm [{"title":"rowMenu.deletePermanently2","description":"custody.purgeNothingLeft{\"count\":2}","confirmLabel":"rowMenu.deleteServerVault"},{}]
+  mail.purgeSelectedEverywhere [{"scope":{"accountId":"acct-a","mailbox":"INBOX","spans":false,"keys":[2,7],"targetHints":[{"accountId":"acct-a","mailbox":"INBOX","uid":2,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m2@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"server","staged":false}},{"accountId":"acct-a","mailbox":"INBOX","uid":7,"nativeIdentity":null,"messageIdPresent":true,"messageId":"<m7@x.test>","graphId":null,"jmapId":null,"localIdentity":{"source":"local-only","staged":false}}]}}]
+row | thread:server+localOnly | toggleRead:markRead
+  mail.setSelection [[2,7],["email:acct-a:INBOX:2","email:acct-a:INBOX:7"]]
+  mail.markSelectedAsRead []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:server+localOnly | toggleRead:markUnread
+  mail.setSelection [[2,7],["email:acct-a:INBOX:2","email:acct-a:INBOX:7"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:server+localOnly | markUnread
+  mail.setSelection [[2,7],["email:acct-a:INBOX:2","email:acct-a:INBOX:7"]]
+  mail.markSelectedAsUnread []
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:server+localOnly | star
+  mail.setSelection [[2,7],["email:acct-a:INBOX:2","email:acct-a:INBOX:7"]]
+  mail.setSelectedFlagged [true]
+  mail.setSelection [[],[],null]
+  row.onClose []
+row | thread:server+localOnly | reply
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":"email:acct-a:INBOX:7"}]
+  openCompose [{"mode":"reply","replyTo":{"resolved":7},"_fillFrom":"email:acct-a:INBOX:7"}]
+row | thread:server+localOnly | replyAll
+  row.onClose []
+  openCompose [{"mode":"replyAll","replyTo":"email:acct-a:INBOX:7"}]
+  openCompose [{"mode":"replyAll","replyTo":{"resolved":7},"_fillFrom":"email:acct-a:INBOX:7"}]
+row | thread:server+localOnly | forward
+  row.onClose []
+  openCompose [{"mode":"forward","replyTo":{"resolved":7}}]
+row | thread:server+localOnly | export
+  openExport [{"messages":["email:acct-a:INBOX:2","email:acct-a:INBOX:7"]}]
+  row.onClose []
+row | thread:server+localOnly | newMessage
+  row.onClose []
+  openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | thread:server+localOnly | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:2","location":{"accountId":"acct-a","mailbox":"INBOX"}},{"email":"email:acct-a:INBOX:7","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
+  row.onClose []
+row | thread:server+localOnly | replyTemplate:existing
+  row.onClose []
+  openCompose [{"mode":"reply","replyTo":{"resolved":7},"templateBody":"<p>Thanks</p>"}]
+selection | thread:server+localOnly | archive
+  mail.saveSelectedLocally []
+selection | thread:server+localOnly | unarchive
+  confirm [{"title":"viewer.unarchiveEmail","description":"viewer.emailOnlyExistsLocalArchive","confirmLabel":"rowMenu.unarchive"},{"confirmOptional":false}]
+  mail.removeLocalEmails [[{"uid":7,"location":{"accountId":"acct-a","mailbox":"INBOX"}}]]
+  mail.clearSelection []
+selection | thread:server+localOnly | deleteEverywhere
+  confirm [{"title":"rowMenu.deleteEverywhere","description":"selection.deleteServerVaultBackupDrive{\"deleteScope\":\"common.emailCount{\\\"count\\\":2}\"}","confirmLabel":"rowMenu.deleteEverywhere"},{"confirmOptional":false}]
+  mail.purgeSelectedEverywhere []
+selection | thread:server+localOnly | toggleRead
+  mail.markSelectedAsUnread []
+selection | thread:server+localOnly | markUnread
+  mail.markSelectedAsUnread []
+selection | thread:server+localOnly | star
+  mail.setSelectedFlagged [true]
+selection | thread:server+localOnly | export
+  openExport [{"messages":["email:acct-a:INBOX:2","email:acct-a:INBOX:7"]}]
+selection | thread:server+localOnly | tag:existing
+  tag.applyTagToRows [[{"email":"email:acct-a:INBOX:2","location":{"accountId":"acct-a","mailbox":"INBOX"}},{"email":"email:acct-a:INBOX:7","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]

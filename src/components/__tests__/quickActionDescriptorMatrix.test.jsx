@@ -7,14 +7,19 @@
 // behavior and should name the cells it flips.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { create } from 'zustand';
 import {
   AlarmClock, Archive, ArchiveRestore, Code, ExternalLink, FileText, FolderInput, FolderOpen, Forward, ImageDown,
   Mail, MailOpen, MailPlus, MailX, Moon, Reply, ReplyAll, ShieldAlert, ShieldX, Star, Sun, Tag, Trash2,
 } from 'lucide-react';
 
-const mocks = vi.hoisted(() => ({ configs: {}, calls: [], registered: new Map(), foldersByAccount: {}, searchResults: [] }));
+const mocks = vi.hoisted(() => ({
+  configs: {}, calls: [], registered: new Map(), foldersByAccount: {}, searchResults: [],
+  // The activation log: what each action reaches, in order (see the end of this file).
+  log: null, pendingDelete: null,
+  note: (name, args) => { if (mocks.log) mocks.log.push([name, args]); },
+}));
 
 vi.mock('../QuickActions', () => ({
   QuickActions: props => { mocks.calls.push(props); return null; },
@@ -43,17 +48,22 @@ vi.mock('../../utils/rowActionRegistry', async importOriginal => {
     },
   };
 });
-vi.mock('../MoveToFolderDropdown', () => ({ MoveToFolderDropdown: () => null }));
-vi.mock('../SnoozePicker', () => ({ SnoozePicker: () => null }));
-vi.mock('../DeleteConfirmModal', () => ({ DeleteConfirmModal: () => null }));
+vi.mock('../MoveToFolderDropdown', () => ({ MoveToFolderDropdown: p => { mocks.note('picker:move', [p.uids, p.accountId, p.currentMailbox]); return null; } }));
+vi.mock('../SnoozePicker', () => ({ SnoozePicker: p => { mocks.note('picker:snooze', [p.keys]); return null; } }));
+vi.mock('../DeleteConfirmModal', () => ({ DeleteConfirmModal: p => { mocks.pendingDelete = p.pending; return null; } }));
+vi.mock('../../stores/unsubscribeStore', async importOriginal => ({
+  ...(await importOriginal()),
+  useUnsubscribeStore: { getState: () => ({ request: target => mocks.note('unsubscribe.request', [target]) }) },
+}));
+vi.mock('../../services/workflows/goToMessage', () => ({ goToMessage: email => mocks.note('goToMessage', [email]) }));
 vi.mock('../email/MessageStateIcon', () => ({ useBackupScan: () => null, isBackedUp: email => email?._backedUp === true }));
 vi.mock('../../services/cacheManager', () => ({ getAccountCacheMailboxes: accountId => mocks.foldersByAccount[accountId] }));
 vi.mock('../../services/workflows/messageMutations', () => ({
-  reloadListInView: vi.fn(), setDeleteUndo: vi.fn(), moveEmails: vi.fn(),
+  reloadListInView: () => mocks.note('reloadListInView', []), setDeleteUndo: outcomes => mocks.note('setDeleteUndo', [outcomes]), moveEmails: vi.fn(),
 }));
-vi.mock('../../utils/composeOpener', () => ({ openCompose: vi.fn() }));
-vi.mock('../../utils/replyTarget', () => ({ replyTarget: vi.fn() }));
-vi.mock('../../stores/exportStore', () => ({ useExportStore: { getState: () => ({ openExport: vi.fn() }) } }));
+vi.mock('../../utils/composeOpener', () => ({ openCompose: options => mocks.note('openCompose', [options]) }));
+vi.mock('../../utils/replyTarget', () => ({ replyTarget: async email => ({ resolved: email?.uid }) }));
+vi.mock('../../stores/exportStore', () => ({ useExportStore: { getState: () => ({ openExport: options => mocks.note('openExport', [options]) }) } }));
 
 const mailStore = create(() => ({}));
 vi.mock('../../stores/mailStore', () => ({
@@ -425,5 +435,106 @@ describe('reader', () => {
     const props = HOSTS[host](email, options);
     render(<EmailActionBar email={email} {...props} {...(host === 'samples' ? { configOverride: config } : {})} />);
     expect(captured()).toMatchSnapshot();
+  });
+});
+
+// ── Activation ──────────────────────────────────────────────────────────────
+// What pressing each action does on each surface: every store, workflow and
+// host call it reaches, with its arguments, and for a confirm what it says and
+// what confirming runs. Generated from the code, like the snapshots above.
+const ACTIVATION_TARGETS = [
+  ['single:unread', ['unread']], ['single:flagged', ['flagged']], ['single:archived', ['archived']],
+  ['single:localOnly', ['localOnly']], ['single:localFolder', ['localFolder']], ['single:unsubscribe', ['unsubscribe']],
+  ['thread:unread+read', ['unread', 'read']], ['thread:archived+unarchived', ['archived', 'read']],
+  ['thread:server+localOnly', ['read', 'localOnly']],
+];
+const ser = value => JSON.stringify(value, (key, v) => {
+  if (typeof v === 'function') return 'fn';
+  if (v instanceof Set) return [...v];
+  if (v instanceof Map) return [...v.entries()];
+  if (v && typeof v === 'object' && 'uid' in v && 'subject' in v) return `email:${v._accountId}:${v._mailbox}:${v.uid}`;
+  if (v && typeof v === 'object' && v.currentTarget) return 'event';
+  return v;
+});
+const logged = name => (...args) => { mocks.note(name, args); return Promise.resolve(); };
+const event = () => ({ currentTarget: { getBoundingClientRect: () => ({ left: 10, top: 20, right: 30, bottom: 40, width: 20, height: 20 }) }, stopPropagation() {} });
+
+function arm() {
+  mocks.log = [];
+  mocks.pendingDelete = null;
+  mailStore.setState(Object.fromEntries(['setSelection', 'markSelectedAsRead', 'markSelectedAsUnread', 'setSelectedFlagged',
+    'purgeSelectedEverywhere', 'moveEmails', 'clearSelection', 'saveSelectedLocally', 'deleteSelectedFromServer', 'removeLocalEmails',
+    'toggleFlagged'].map(name => [name, logged(`mail.${name}`)])));
+  tagStore.setState({ applyTag: logged('tag.applyTag'), applyTagToRows: logged('tag.applyTagToRows') });
+}
+// Press one descriptor, then confirm whatever it raised; the cell's lines.
+async function press(descriptor) {
+  mocks.log = [];
+  mocks.pendingDelete = null;
+  await act(async () => { await descriptor.onActivate(event(), descriptor); });
+  const pending = mocks.pendingDelete;
+  if (pending) {
+    mocks.note('confirm', [pending.copy, { confirmOptional: pending.confirmOptional }]);
+    await act(async () => { await pending.executor(); });
+  }
+  const lines = [];
+  for (const [name, args] of mocks.log) {
+    const text = `${name} ${ser(args)}`;
+    if (lines.at(-1) !== text) lines.push(text);
+  }
+  return lines;
+}
+async function pressAll(label) {
+  const descriptors = mocks.calls.at(-1).descriptors.filter(d => !d.hidden && !d.disabled);
+  const out = [];
+  for (const d of descriptors) {
+    // Each press starts from the surface as rendered: the descriptor list is re-read after a re-render.
+    const current = mocks.calls.at(-1).descriptors.find(item => item.id === d.id) || d;
+    out.push(`${label} | ${d.id}`, ...(await press(current)).map(text => `  ${text}`));
+  }
+  return out;
+}
+
+describe('activation', () => {
+  it('row, selection and reader actions reach the same calls', async () => {
+    const out = [];
+    for (const [name, targets] of ACTIVATION_TARGETS) {
+      // Row menu.
+      arm();
+      mocks.configs.row = surfaceConfig('row');
+      const onRequestDelete = (executor, copy, options) => { mocks.note('row.requestDelete', [copy, options]); mocks.pendingDelete = { executor, copy, ...options }; };
+      const actions = { deleteEmailFromServer: logged('actions.deleteEmailFromServer'), removeLocalEmails: logged('actions.removeLocalEmails'), saveEmailsLocally: logged('actions.saveEmailsLocally') };
+      render(<RowQuickActions emails={rows(targets)} actions={actions} identity="row" onRequestDelete={onRequestDelete} onClose={logged('row.onClose')} />);
+      out.push(...(await pressAll(`row | ${name}`)));
+      cleanup();
+      // Live selection bar.
+      arm();
+      mocks.configs.selection = surfaceConfig('selection');
+      const selected = rows(targets);
+      const live = mailStore.getState();
+      mailStore.setState({
+        sortedEmails: selected, emails: selected,
+        selectedEmailIds: new Set(selected.map(email => selectionKey(email, live))),
+        archivedEmailIds: new Set(selected.filter(email => email.isArchived).map(email => vaultKey(email._accountId, email._mailbox, email.uid))),
+        getSelectionSummary: () => ({ threads: selected.length, emails: selected.length }),
+      });
+      render(<SelectionActionBar />);
+      out.push(...(await pressAll(`selection | ${name}`)));
+      cleanup();
+      mailStore.setState(baseMailState(), true);
+      // Reader bar, under the reading pane's handler set, for single messages.
+      if (targets.length === 1) {
+        arm();
+        mocks.configs.reader = surfaceConfig('reader');
+        const email = E[targets[0]];
+        const props = { ...HOSTS.viewer(email) };
+        for (const key of Object.keys(props)) if (key.startsWith('on')) props[key] = logged(`host.${key}`);
+        render(<EmailActionBar email={email} {...props} />);
+        out.push(...(await pressAll(`reader | ${name}`)));
+        cleanup();
+      }
+    }
+    mocks.log = null;
+    await expect(`${out.join('\n')}\n`).toMatchFileSnapshot('./__snapshots__/quickActionActivation.txt');
   });
 });
