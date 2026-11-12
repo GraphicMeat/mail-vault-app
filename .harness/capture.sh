@@ -3,7 +3,8 @@
 #
 #   bash .harness/capture.sh [out_dir]
 #
-# The out dir is $1, else $HARNESS_SHOTS_OUT, else ${HARNESS_ARTIFACTS:-$PWD/.harness-shots}/shots.
+# The out dir is $1, else $HARNESS_SHOTS_OUT, else .artifacts/ in the clone: minijob --artifacts <dir>
+# unpacks that directory into <dir> after the job.
 # HARNESS_SHOTS (comma separated) names the shots expected; the default is the three below.
 # Runs on a Mac with a HiDPI screen, from a job clone:
 #   ~/.claude/bin/testq ~/.claude/bin/minijob --artifacts <dir> bash .harness/capture.sh
@@ -13,7 +14,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-OUT="${1:-${HARNESS_SHOTS_OUT:-${HARNESS_ARTIFACTS:-$ROOT/.harness-shots}/shots}}"
+OUT="${1:-${HARNESS_SHOTS_OUT:-$ROOT/.artifacts}}"
 IFS=',' read -r -a SHOTS <<< "${HARNESS_SHOTS:-contacts-this-email,contacts-all-senders,contacts-favorites}"
 mkdir -p "$OUT"
 
