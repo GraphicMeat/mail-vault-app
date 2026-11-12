@@ -87,7 +87,7 @@ fn p2_before_complete(path: &Path) {
 const BATCH: usize = 25;
 const BATCH_PAUSE: Duration = if cfg!(test) { Duration::from_millis(50) } else { Duration::from_secs(5) };
 const DAILY_BYTES: u64 = 1000 * 1024 * 1024;
-const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+use mailvault_core::clock::DAY_MS;
 /// One `* n FETCH (UID n FLAGS (..))` line of a uid listing, roughly: 4 MB
 /// for a 100k-message All Mail.
 const LISTING_BYTES_PER_UID: u64 = 48;

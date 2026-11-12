@@ -690,10 +690,7 @@ impl OAuth2Manager {
         let refresh_token = data["refresh_token"].as_str().map(|s| s.to_string());
         let email = data["id_token"].as_str().and_then(id_token_email);
         let expires_in = data["expires_in"].as_u64().unwrap_or(3600);
-        let expires_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64
+        let expires_at = crate::clock::now_ms_u64()
             + (expires_in * 1000);
 
         self.pending.lock().await.remove(state);
@@ -777,10 +774,7 @@ impl OAuth2Manager {
             .map(|s| s.to_string())
             .or_else(|| Some(refresh_token.to_string()));
         let expires_in = data["expires_in"].as_u64().unwrap_or(3600);
-        let expires_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64
+        let expires_at = crate::clock::now_ms_u64()
             + (expires_in * 1000);
 
         Ok(TokenResponse {

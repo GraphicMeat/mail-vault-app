@@ -776,10 +776,7 @@ mod tests {
         let mut record = oauth_record(rt, at);
         record["imapHost"] = json!("imap.gmail.com");
         record["oauth2ExpiresAt"] = json!(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64
+            mailvault_core::clock::now_ms_u64()
                 + 3_600_000
         );
         record

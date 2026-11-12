@@ -100,7 +100,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             let m = vault_layout::VaultMarker {
                                 app: "mailvault".into(),
                                 vault_id: vault_layout::new_vault_id(),
-                                created_at: vault_layout::now_millis(),
+                                created_at: mailvault_core::clock::now_ms_u64(),
                             };
                             vault_layout::write_marker(&dir, &m)?;
                             m

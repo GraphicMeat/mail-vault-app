@@ -385,6 +385,7 @@ async fn send_now(state: &Arc<DaemonState>, row_id: &str, id: Value) -> RpcRespo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mailvault_core::clock::now_ms;
     use mock_imap::{MockImap, Scenario};
     use serde_json::json;
 
@@ -1214,7 +1215,7 @@ mod tests {
         let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
         let _tokens = crate::handlers::oauth2::test_token_mock(Vec::new());
         let s = st();
-        let in_an_hour = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64 + 3_600_000;
+        let in_an_hour = mailvault_core::clock::now_ms() + mailvault_core::clock::HOUR_MS;
         graph_acc1(&s, json!({"oauth2RefreshToken": "rt-graph", "oauth2ExpiresAt": in_an_hour}));
         let (id, _) = graph_row(&s, "Graph soon").await;
 
@@ -1225,10 +1226,6 @@ mod tests {
         assert!(crate::handlers::oauth2::test_token_posts().is_empty(), "a good token must not be refreshed");
         let requests = crate::handlers::graph::test_graph_requests();
         assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer graph-token-stored"));
-    }
-
-    fn now_ms() -> i64 {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64
     }
 
     /// What Microsoft answers a refresh token it will no longer honour.

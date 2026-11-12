@@ -6784,7 +6784,7 @@ mod tests {
                         for (uid, date) in rows {
                             // The server's own arrival date follows the message: old mail arrived long ago.
                             let internal = if date.as_deref().is_some_and(|d| d.contains("2020")) { "01-Jan-2020 12:00:00 +0000".to_owned() }
-                                else { mock_imap::state::internal_date_string(chrono::Utc::now().timestamp_millis(), 0) };
+                                else { mock_imap::state::internal_date_string(mailvault_core::clock::now_ms(), 0) };
                             mailbox.add(mock_imap::state::Message::new(*uid, raw(*uid, date.as_deref()))
                                 .with_modseq(u64::from(*uid)).with_internal_date(&internal));
                         }

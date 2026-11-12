@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 pub const DIR: &str = "deleted";
 pub const DEFAULT_RETENTION_DAYS: i64 = 1;
 pub const MAX_RETENTION_DAYS: i64 = 30;
-const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+use crate::clock::DAY_MS;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

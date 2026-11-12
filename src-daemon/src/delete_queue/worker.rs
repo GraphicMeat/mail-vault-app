@@ -66,8 +66,8 @@ pub(crate) const TIMING: Timing = Timing { launch: Duration::from_secs(20), ever
 /// tries, and before it waits a day.
 pub(crate) const BACKOFF_AFTER: u32 = 3;
 pub(crate) const DAILY_AFTER: u32 = 12;
-const HOUR_MS: u64 = 60 * 60 * 1000;
-const DAY_MS: u64 = 24 * HOUR_MS;
+const HOUR_MS: u64 = mailvault_core::clock::HOUR_MS as u64;
+const DAY_MS: u64 = mailvault_core::clock::DAY_MS as u64;
 /// What a refused bin capture's wire string starts with (`CaptureFailure::wire`).
 const CAPTURE_REFUSED: &str = "E_BIN_CAPTURE:";
 /// The one capture refusal that is transient (the account was busy): never

@@ -294,7 +294,7 @@ pub(crate) fn create_with(
         return Err("the sealed credentials did not read back".to_string());
     }
 
-    let marker = serde_json::json!({"version": 1, "createdAt": crate::vault_layout::now_millis()});
+    let marker = serde_json::json!({"version": 1, "createdAt": crate::clock::now_ms_u64()});
     std::fs::write(root.join(PORTABLE_MARKER), marker.to_string()).map_err(|e| format!("write marker: {e}"))?;
     progress("verifying", 1, 1);
     Ok(Created { root, mail_dirs, files: n.0, bytes: n.1 })

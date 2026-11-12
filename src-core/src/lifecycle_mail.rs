@@ -24,8 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-pub const HOUR_MS: i64 = 3_600_000;
-pub const DAY_MS: i64 = 24 * HOUR_MS;
+use crate::clock::DAY_MS;
 
 pub const TRIAL_ENDING: &str = "trial-ending";
 pub const CHECKOUT_LEFT: &str = "checkout-left";
@@ -227,6 +226,7 @@ fn due(inputs: &Inputs, store: &Store, now_ms: i64, free: bool) -> Option<(&'sta
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::clock::HOUR_MS;
     use serde_json::json;
 
     const NOW: i64 = 1_800_000_000_000;

@@ -6,8 +6,7 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike};
 use serde_json::{json, Map, Value};
 
 pub const NEVER: i64 = 9_007_199_254_740_991;
-const HOUR: i64 = 3_600_000;
-const DAY: i64 = 86_400_000;
+use crate::clock::{DAY_MS as DAY, HOUR_MS as HOUR};
 const INVALID: &str = "errors.settingsInvalid";
 pub const CONFIG_KEYS: &[&str] = &[
     "backupGlobalEnabled",

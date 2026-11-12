@@ -1451,7 +1451,7 @@ mod tests {
             "authType":"oauth2", "oauth2Provider":"google",
             "oauth2ClientId":mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,
             "oauth2AccessToken":native_token, "oauth2RefreshToken":"synthetic-refresh",
-            "oauth2ExpiresAt":chrono::Utc::now().timestamp_millis() + 3_600_000,
+            "oauth2ExpiresAt":mailvault_core::clock::now_ms() + 3_600_000,
         });
         std::fs::write(
             dir.path().join("credentials.json"),

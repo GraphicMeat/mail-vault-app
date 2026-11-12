@@ -66,12 +66,7 @@ fn put_bookmark(app_data_dir: &std::path::Path, slot: &str, bytes: &[u8]) -> Res
     with_app_db(app_data_dir, |conn| locations::save_bookmark(conn, slot, bytes))
 }
 
-fn now_millis() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
+use mailvault_core::clock::now_ms_u64 as now_millis;
 
 fn needs_reauth_location(display_path: String, err: String) -> ExternalLocation {
     ExternalLocation {

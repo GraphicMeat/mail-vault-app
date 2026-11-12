@@ -55,7 +55,7 @@ static LAST_CHANGE_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Called after every successful `people.*` write and contacts import.
 pub(crate) fn note_change() {
-    LAST_CHANGE_MS.store(mailvault_core::vault_layout::now_millis(), Ordering::Relaxed);
+    LAST_CHANGE_MS.store(mailvault_core::clock::now_ms_u64(), Ordering::Relaxed);
 }
 
 fn due(last: u64, now: u64) -> bool {
@@ -179,7 +179,7 @@ pub fn spawn(state: Arc<DaemonState>) {
         loop {
             std::thread::sleep(POLL);
             let last = LAST_CHANGE_MS.load(Ordering::Relaxed);
-            if !due(last, mailvault_core::vault_layout::now_millis()) {
+            if !due(last, mailvault_core::clock::now_ms_u64()) {
                 continue;
             }
             let wrote = render(&state, &mut yield_fn).and_then(|text| {

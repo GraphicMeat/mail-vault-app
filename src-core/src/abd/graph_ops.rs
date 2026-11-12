@@ -75,13 +75,6 @@ impl LeaseStore for Mutex<Option<TokenLease>> {
     }
 }
 
-fn system_now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
-
 pub struct GraphOps {
     email: String,
     leases: Arc<dyn LeaseStore>,
@@ -102,7 +95,7 @@ impl GraphOps {
         GraphOps {
             email: email.to_string(),
             leases,
-            clock: Arc::new(system_now_ms),
+            clock: Arc::new(crate::clock::now_ms),
             timeout: CALL_TIMEOUT,
             // The same label and account scope the Graph backup uses.
             http: GraphClient::for_purpose("", "backup").for_account(email).client,

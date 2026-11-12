@@ -92,7 +92,7 @@ fn prepare_one_under_lease(state: &DaemonState, change: &ChangeRecord,
     let focus_until = settings.as_deref().and_then(|document| document.get("mailvault-focus"))
         .and_then(|root| root.get("state")).and_then(|state| state.get("endsAt"))
         .and_then(Value::as_i64).unwrap_or(0);
-    let focus_held = focus_until > chrono::Utc::now().timestamp_millis();
+    let focus_held = focus_until > mailvault_core::clock::now_ms();
     let from = preview.as_ref().map_or("", |row| row.from_address.as_str());
     let context = notify_policy::Ctx {
         account_id: Some(source.account_id.clone()), folder: Some(json!(source.mailbox)),

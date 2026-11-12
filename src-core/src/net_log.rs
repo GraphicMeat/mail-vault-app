@@ -35,7 +35,7 @@ pub enum Retention {
 
 impl Retention {
     pub fn ms(self) -> u64 {
-        const DAY: u64 = 24 * 60 * 60 * 1000;
+        const DAY: u64 = crate::clock::DAY_MS as u64;
         match self {
             Retention::Day => DAY,
             Retention::Week => 7 * DAY,

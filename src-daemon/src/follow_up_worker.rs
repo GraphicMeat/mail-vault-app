@@ -69,7 +69,7 @@ const OFFLINE_POLL: Duration = Duration::from_secs(30);
 const MAX_SLEEP: Duration = Duration::from_secs(3600);
 const MIN_RETRY_WAIT: Duration = Duration::from_secs(1);
 const KEYCHAIN_POLL: Duration = Duration::from_secs(5 * 60);
-const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+use mailvault_core::clock::DAY_MS;
 
 pub(crate) fn start(state: Arc<DaemonState>) {
     tokio::spawn(async move { run(state).await });

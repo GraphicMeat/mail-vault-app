@@ -1063,10 +1063,7 @@ impl KeychainGate {
             if blocked.iter().any(|b| b.item == item) {
                 return;
             }
-            let since_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
+            let since_ms = mailvault_core::clock::now_ms();
             blocked.push(Blocked {
                 item,
                 reason,
@@ -1619,10 +1616,7 @@ fn write_pgp_keys(keys: &[mailvault_core::pgp::StoredKey]) -> Result<(), String>
     let old = primary.get_password().ok();
     let generation = format!(
         "{:x}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
+        mailvault_core::clock::now_ms_u64()
     );
     let split = split_secret(PGP_KEYS_ENTRY, &json, secret_limit(), &generation);
     for (name, value) in &split.parts {
@@ -2489,10 +2483,7 @@ fn write_keychain_blob(json: &str) -> Result<(), String> {
     }
     let generation = format!(
         "{:x}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
+        mailvault_core::clock::now_ms_u64()
     );
     let written = write_split_secret(
         &mut Keyring,

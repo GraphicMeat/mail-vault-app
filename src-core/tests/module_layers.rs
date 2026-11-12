@@ -256,3 +256,82 @@ fn the_fn_scanner_sees_definitions_and_skips_methods_with_arguments() {
     assert!(defines_fn("fn truthy<'a>(e: &'a Value) -> Option<&'a str> {", "truthy", false));
     assert!(!defines_fn("fn truthy_value(v: &Value) -> bool {", "truthy", false));
 }
+
+/// Source roots of the Rust crates that read the wall clock: core, daemon and
+/// the Tauri shell.
+fn clock_scanned_roots() -> Vec<PathBuf> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    ["src-core/src", "src-daemon/src", "src-tauri/src"].iter().map(|r| root.join(r)).collect()
+}
+
+/// What a source line (comments dropped) defines or reads that
+/// `mailvault_core::clock` owns: a day or hour length constant of a number
+/// type, a zero-argument `now_ms` / `now_millis`, or the epoch milliseconds
+/// taken straight from `SystemTime::now()` or `Utc::now()`.
+fn clock_copies(src: &str) -> Vec<String> {
+    let constant = regex::Regex::new(r"\bconst\s+(DAY_MS|HOUR_MS|MINUTE_MS|DAY|HOUR)\s*:\s*(i64|u64|i32|u32|usize|f64)\b").unwrap();
+    let direct = regex::Regex::new(r"SystemTime::now\(\)\s*\.duration_since\(\s*(?:std::time::)?(?:SystemTime::)?UNIX_EPOCH\s*\)[^;]*?\.as_millis\(\)").unwrap();
+    let code: String = src.lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
+    let mut found = Vec::new();
+    for m in constant.find_iter(&code) {
+        // `const DAY: u64 = clock::DAY_MS as u64;` only retypes the shared one.
+        let statement = code[m.start()..].split(';').next().unwrap_or("");
+        if !statement.contains("clock::") {
+            found.push(m.as_str().to_string());
+        }
+    }
+    for name in ["now_ms", "now_millis"] {
+        if defines_fn(&code, name, true) {
+            found.push(format!("fn {name}()"));
+        }
+    }
+    for m in direct.find_iter(&code) {
+        found.push(m.as_str().split_whitespace().collect::<Vec<_>>().join(" "));
+    }
+    if code.contains("Utc::now().timestamp_millis()") {
+        found.push("Utc::now().timestamp_millis()".to_string());
+    }
+    found
+}
+
+#[test]
+fn time_constants_and_the_wall_clock_live_in_clock_only() {
+    let mut failures = Vec::new();
+    for root in clock_scanned_roots() {
+        let mut files = Vec::new();
+        rust_files(&root, &mut files);
+        assert!(!files.is_empty(), "{} holds no source", root.display());
+        for file in files {
+            let shown = file.to_string_lossy().replace('\\', "/");
+            if shown.ends_with("src-core/src/clock.rs") {
+                continue;
+            }
+            for copy in clock_copies(&std::fs::read_to_string(&file).unwrap()) {
+                failures.push(format!("{shown}: {copy}"));
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "use mailvault_core::clock::{{DAY_MS, HOUR_MS, now_ms, now_ms_u64}} instead of a local copy:\n{}",
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn the_clock_copy_scanner_sees_each_form_and_skips_the_legitimate_ones() {
+    assert_eq!(clock_copies("const DAY_MS: i64 = 24 * 60 * 60 * 1000;").len(), 1);
+    assert_eq!(clock_copies("    pub const HOUR_MS: u64 = 3_600_000;").len(), 1);
+    assert_eq!(clock_copies("const DAY: f64 = 1.0;").len(), 1);
+    assert_eq!(clock_copies("fn now_ms() -> i64 { 0 }").len(), 1);
+    assert_eq!(clock_copies("fn now_millis() -> u64 { 0 }").len(), 1);
+    assert_eq!(clock_copies("let n = std::time::SystemTime::now()\n    .duration_since(std::time::UNIX_EPOCH)\n    .unwrap()\n    .as_millis() as i64;").len(), 1);
+    assert_eq!(clock_copies("let n = chrono::Utc::now().timestamp_millis();").len(), 1);
+    assert!(clock_copies("const DAY: Duration = Duration::from_secs(86_400);").is_empty(), "a Duration is not a ms constant");
+    assert!(clock_copies("const DAY: u64 = mailvault_core::clock::DAY_MS as u64;").is_empty(), "a retyped use of the shared constant is fine");
+    assert!(clock_copies("const DAY: &str = \"2026-09-29\";").is_empty());
+    assert!(clock_copies("fn now_ms(&self) -> i64;").is_empty(), "an injectable clock method is not a second wall clock");
+    assert!(clock_copies("// const DAY_MS: i64 = 1;").is_empty());
+    assert!(clock_copies("let s = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();").is_empty(), "seconds are not epoch ms");
+    assert!(clock_copies("let m = meta.modified().duration_since(UNIX_EPOCH).as_millis();").is_empty(), "a file mtime is not the clock");
+}

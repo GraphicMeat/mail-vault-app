@@ -779,7 +779,7 @@ fn local_account_dir(root: &Path, safe_account_id: &str) -> PathBuf {
 fn create_local_folder(state: &Arc<DaemonState>, account_id: &str, date: &str, source: &str) -> Result<(local_folder::Marker, String), String> {
     let safe_account_id = common::sanitize_mailbox_name(account_id);
     common::with_vault_write(state, |root| {
-        let created = mailvault_core::vault_layout::now_millis();
+        let created = mailvault_core::clock::now_ms_u64();
         local_folder::create_import_folder(&local_account_dir(root, &safe_account_id), date, source, created)
             .map_err(|e| format!("Failed to create the import folder: {e}"))
     })

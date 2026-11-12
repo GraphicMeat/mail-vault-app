@@ -754,7 +754,7 @@ mod tests {
             sock.write_all(reply.as_bytes()).await.unwrap();
             String::from_utf8_lossy(&buf[..n]).to_lowercase()
         });
-        let far = chrono::Utc::now().timestamp_millis() + 3_600_000;
+        let far = mailvault_core::clock::now_ms() + 3_600_000;
         let record = json!({"id": "g", "email": "me@gmail.com", "imapHost": "imap.gmail.com", "authType": "oauth2", "oauth2Provider": "google",
                             "oauth2AccessToken": "daemon-held-token", "oauth2ExpiresAt": far});
         let mut env = Env::with_records(&[record]);

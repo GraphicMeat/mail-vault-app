@@ -8,7 +8,6 @@ use std::collections::HashSet;
 
 fn err(e: rusqlite::Error) -> String { e.to_string() }
 
-const DAY_MS: f64 = 86_400_000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextMatch { NamePrefix, AddressPrefix, Substring }
@@ -50,7 +49,7 @@ pub fn score(f: &Features, now_ms: i64) -> (f64, Vec<Reason>) {
         why.push(reason("received", Some(f.received), None));
     }
     if let Some(last) = f.last_ms.filter(|l| *l > 0) {
-        let age_days = ((now_ms - last).max(0) as f64) / DAY_MS;
+        let age_days = ((now_ms - last).max(0) as f64) / crate::clock::DAY_MS as f64;
         s += 25.0 * 0.5f64.powf(age_days / 180.0);
         why.push(reason("last", None, Some(last)));
         if age_days > 1095.0 {
@@ -187,7 +186,7 @@ mod tests {
     use crate::people::store::{create_person, update_person, NewPerson, Patch};
     use serde_json::json;
 
-    const DAY: i64 = 86_400_000;
+    use crate::clock::DAY_MS as DAY;
 
     fn f() -> Features {
         Features { text: TextMatch::NamePrefix, sent_to: 0, received: 0, last_ms: None, in_account: false, pinned: false, vip: false }

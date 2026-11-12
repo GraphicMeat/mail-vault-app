@@ -24,7 +24,7 @@ use tracing::warn;
 const ONE_CLICK_TIMEOUT: Duration = Duration::from_secs(15);
 const BIMI_TIMEOUT: Duration = Duration::from_secs(10);
 const BIMI_MAX_BYTES: usize = 64 * 1024;
-const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+use mailvault_core::clock::DAY_MS;
 const BIMI_TTL_MS: i64 = 7 * DAY_MS;
 const BIMI_NEGATIVE_TTL_MS: i64 = DAY_MS;
 

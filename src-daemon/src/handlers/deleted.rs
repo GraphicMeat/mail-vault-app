@@ -464,7 +464,7 @@ fn mark_local_folder_again(root: &std::path::Path, account_id: &str, mailbox: &s
     let marker = local_folder::Marker {
         kind: local_folder::KIND_IMPORT.to_string(),
         name: mailbox.to_string(),
-        created: mailvault_core::vault_layout::now_millis(),
+        created: mailvault_core::clock::now_ms_u64(),
         source: "recovered".to_string(),
     };
     match local_folder::write_marker(&account_dir.join(&dir), &marker) {

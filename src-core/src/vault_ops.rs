@@ -288,7 +288,7 @@ pub fn carry_marker(src_root: &Path, dst_root: &Path) -> Result<(), String> {
     let marker = crate::vault_layout::read_marker(dst_root).unwrap_or(crate::vault_layout::VaultMarker {
         app: "mailvault".into(),
         vault_id: crate::vault_layout::new_vault_id(),
-        created_at: crate::vault_layout::now_millis(),
+        created_at: crate::clock::now_ms_u64(),
     });
     crate::vault_layout::write_marker(dst_root, &marker)?;
     carry_format(src_root, dst_root)

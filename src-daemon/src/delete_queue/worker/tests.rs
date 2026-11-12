@@ -394,9 +394,9 @@ async fn passes_never_overlap_and_triggers_during_one_coalesce() {
 #[tokio::test]
 async fn a_capture_refused_entry_backs_off_hourly_then_daily_and_retry_now_ignores_it() {
     use crate::handlers::deleted::CaptureFailure;
-    const HOUR: i64 = 3_600_000;
+    use mailvault_core::clock::HOUR_MS as HOUR;
     let f = fixture(vec![]);
-    f.s.clock.set(chrono::Utc::now().timestamp_millis());
+    f.s.clock.set(mailvault_core::clock::now_ms());
     script(&f.s, |_, _| Some(Err(Refusal::BinCapture(CaptureFailure::Timeout(None)))));
     let id = queue(&f, "acc1", "INBOX", &[1], json!({"mode": "permanent", "bin": true}));
     let sent = |f: &Fixture| sends(f).len();
@@ -458,7 +458,7 @@ async fn a_capture_refused_entry_backs_off_hourly_then_daily_and_retry_now_ignor
 async fn a_busy_capture_keeps_retrying_every_pass() {
     use crate::handlers::deleted::CaptureFailure;
     let f = fixture(vec![]);
-    f.s.clock.set(chrono::Utc::now().timestamp_millis());
+    f.s.clock.set(mailvault_core::clock::now_ms());
     script(&f.s, |_, _| Some(Err(Refusal::BinCapture(CaptureFailure::Busy))));
     queue(&f, "acc1", "INBOX", &[1], json!({"mode": "permanent", "bin": true}));
     for n in 1..=5 {
@@ -473,7 +473,7 @@ async fn a_busy_capture_keeps_retrying_every_pass() {
 #[tokio::test]
 async fn a_server_refusal_keeps_retrying_every_pass() {
     let f = fixture(refuse_the_move());
-    f.s.clock.set(chrono::Utc::now().timestamp_millis());
+    f.s.clock.set(mailvault_core::clock::now_ms());
     queue(&f, "acc1", "INBOX", &[1], json!({"mode": "trash", "bin": true}));
     for n in 1..=5 {
         f.s.clock.advance(5 * 60_000);
@@ -505,7 +505,7 @@ fn backed_off_reads_the_latest_refusal_its_count_and_its_age() {
     let busy = Failure { message: "E_BIN_CAPTURE:busy: the account is busy".into(), at: now, passes: 12, stopped: false };
     assert!(!backed_off(&e(vec![(1, busy)]), now), "busy is transient: never backed off");
 }
-const DAY: u64 = 24 * 3_600_000;
+const DAY: u64 = mailvault_core::clock::DAY_MS as u64;
 
 // ── the folder's generation (UIDVALIDITY) ─────────────────────────────────────
 

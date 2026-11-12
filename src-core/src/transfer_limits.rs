@@ -43,7 +43,7 @@ pub const GMAIL_CUTOFF_DOWN_MB: u64 = 2500;
 /// The banner warns at this share of a day's limit.
 pub const WARN_FRACTION: f64 = 0.8;
 
-const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+use crate::clock::DAY_MS;
 
 /// Per-account transfer settings, as the app persists them.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -229,7 +229,7 @@ impl Clock {
 
     pub fn now_ms(&self) -> i64 {
         match self.0.load(Ordering::Relaxed) {
-            FOLLOW_SYSTEM => Utc::now().timestamp_millis(),
+            FOLLOW_SYSTEM => crate::clock::now_ms(),
             ms => ms,
         }
     }

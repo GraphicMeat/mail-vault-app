@@ -75,10 +75,7 @@ pub(crate) fn write_credentials_blob(json: &str) -> Result<(), String> {
     }
     let generation = format!(
         "{:x}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
+        mailvault_core::clock::now_ms_u64()
     );
     let written = write_split_secret(
         &mut Keyring,

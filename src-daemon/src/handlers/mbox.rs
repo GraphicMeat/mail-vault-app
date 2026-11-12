@@ -567,7 +567,7 @@ mod tests {
         save_listing(&s, &["INBOX", "Work"]);
         let dir = tempfile::tempdir().unwrap();
         let src = takeout(dir.path(), &["Work,Starred,Opened", ""]);
-        let before = mailvault_core::vault_layout::now_millis();
+        let before = mailvault_core::clock::now_ms_u64();
         let r = import_as_folder(&s, &src).await;
         let (name, fdir) = today_folder();
         assert_eq!(r["folder"], json!({"name": name, "dir": fdir}));
@@ -583,7 +583,7 @@ mod tests {
         let marker = local_folder::read_marker(&account_dir(v.path()), &fdir).unwrap().expect("marked");
         let source = Path::new(&src).file_name().unwrap().to_string_lossy().into_owned();
         assert_eq!((marker.kind.as_str(), marker.name.as_str(), marker.source.as_str()), ("import", name.as_str(), source.as_str()));
-        assert!(marker.created >= before && marker.created <= mailvault_core::vault_layout::now_millis());
+        assert!(marker.created >= before && marker.created <= mailvault_core::clock::now_ms_u64());
     }
 
     /// Each run makes its own folder, so the same file imports again in full

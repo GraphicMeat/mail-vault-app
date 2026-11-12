@@ -18,7 +18,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-pub const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+use crate::clock::DAY_MS;
 /// The form's floor, enforced again here.
 pub const MIN_THRESHOLD_MS: i64 = 7 * DAY_MS;
 /// A run is due this long after the last one.

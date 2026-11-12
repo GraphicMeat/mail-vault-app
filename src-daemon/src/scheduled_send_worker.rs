@@ -864,7 +864,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("credentials.json");
         std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"g"}]"#).unwrap();
-        let mut record = json!({"id":"g","email":"me@gmail.test","imapHost":"imap.gmail.com","authType":"oauth2","oauth2Provider":"google","oauth2ClientId":mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,"oauth2AccessToken":"synthetic-old-token","oauth2RefreshToken":"synthetic-old-refresh","oauth2ExpiresAt":chrono::Utc::now().timestamp_millis()+3_600_000});
+        let mut record = json!({"id":"g","email":"me@gmail.test","imapHost":"imap.gmail.com","authType":"oauth2","oauth2Provider":"google","oauth2ClientId":mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,"oauth2AccessToken":"synthetic-old-token","oauth2RefreshToken":"synthetic-old-refresh","oauth2ExpiresAt":mailvault_core::clock::now_ms()+3_600_000});
         std::fs::write(&path, json!({"g":record.to_string()}).to_string()).unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
         let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);

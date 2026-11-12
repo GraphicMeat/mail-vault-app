@@ -5,6 +5,10 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// An hour and a day in epoch milliseconds: the one copy of these lengths.
+pub const HOUR_MS: i64 = 3_600_000;
+pub const DAY_MS: i64 = 24 * HOUR_MS;
+
 /// Milliseconds since the Unix epoch (0 if the system clock is before it).
 pub fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)

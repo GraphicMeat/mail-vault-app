@@ -86,7 +86,7 @@ mod tests {
     use super::*;
     use crate::test_support::handle_request_for_test;
     use crate::state::DaemonState;
-    use mailvault_core::lifecycle_mail::{DAY_MS, HOUR_MS};
+    use mailvault_core::clock::{DAY_MS, HOUR_MS};
 
     fn rig() -> (tempfile::TempDir, Arc<DaemonState>) {
         let dir = tempfile::tempdir().unwrap();
@@ -101,7 +101,7 @@ mod tests {
     }
 
     fn trialing_in(hours: i64) -> Value {
-        let end = chrono::Utc::now().timestamp_millis() + hours * HOUR_MS;
+        let end = mailvault_core::clock::now_ms() + hours * HOUR_MS;
         json!({
             "onboardingComplete": true,
             "billingProfile": { "premiumAccess": true, "hasSubscription": true, "status": "trialing", "currentPeriodEnd": end },

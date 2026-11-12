@@ -161,16 +161,9 @@ pub fn write_marker(dir: &Path, marker: &VaultMarker) -> Result<(), String> {
     Ok(())
 }
 
-pub fn now_millis() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
-
 /// Enough entropy to tell two vaults apart; not a security boundary.
 pub fn new_vault_id() -> String {
-    format!("{:x}-{:x}", now_millis(), std::process::id())
+    format!("{:x}-{:x}", crate::clock::now_ms_u64(), std::process::id())
 }
 
 /// True if the folder already holds mail data, marker or not. A search index,

@@ -514,10 +514,7 @@ fn prepare(
                 .filter(|s| !s.is_empty());
             if old_host.is_some() && new_host.is_some() && old_host != new_host {
                 next["previousImapHost"] = json!(old_host.unwrap());
-                next["hostChangedAt"] = json!(std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64);
+                next["hostChangedAt"] = json!(mailvault_core::clock::now_ms_u64());
                 prepared.host_changed = true;
             }
             let key = accounts_doc::logical_key(&next);
