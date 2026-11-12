@@ -52,10 +52,11 @@ fn apply_time(
     let doc = SettingsDoc::shared(path);
     for _ in 0..3 {
         let snapshot = doc.get(None).map_err(|e| e.catalog_key().to_string())?;
-        if snapshot.recovered.is_some() || !snapshot.values[STORE]["state"].is_object() {
-            return Err("errors.settingsNotLoaded".into());
-        }
-        if snapshot.values[STORE]["state"]["snapshotLastTimes"][account]
+        let settings = match snapshot.app_state() {
+            Some(settings) if snapshot.recovered.is_none() && settings.is_object() => settings,
+            _ => return Err("errors.settingsNotLoaded".into()),
+        };
+        if settings["snapshotLastTimes"][account]
             .as_i64()
             .unwrap_or(0)
             >= at

@@ -644,9 +644,6 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
     }
 }
 
-fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
-}
 
 /// Every message a view finds as `(account, mailbox, uid)`, walked page by
 /// page past the index's per-query cap. The index lock is taken per page and
@@ -658,7 +655,7 @@ fn messages_of(
     keys: &HashMap<String, Vec<String>>,
 ) -> Result<Vec<(String, String, u32)>, String> {
     use mailvault_core::search_index::query::MAX_LIMIT;
-    let now = now_secs();
+    let now = mailvault_core::clock::now_secs();
     let mut out = Vec::new();
     // Mail indexed mid-walk shifts later pages by a row; the same message
     // twice would land as `photo.png` and `photo (1).png`.
@@ -705,7 +702,7 @@ fn hidden_members(
 ) -> Result<Value, String> {
     use std::collections::{BTreeMap, BTreeSet};
     let unavailable = || serde_json::json!({ "available": false, "members": {} });
-    let now = now_secs();
+    let now = mailvault_core::clock::now_secs();
     let mut found: BTreeMap<String, BTreeMap<String, BTreeSet<u32>>> = BTreeMap::new();
     let empty = HashMap::new();
     for view in all {
@@ -831,7 +828,7 @@ fn evaluate(
     keys: &HashMap<String, Vec<String>>,
     limit: usize,
 ) -> Result<Value, String> {
-    let now = now_secs();
+    let now = mailvault_core::clock::now_secs();
     // Accounts the view filters alike are one statement. Every FTS probe runs
     // over the whole index whatever account it is for, so one statement per
     // account paid for the same match once per account: ~0.18s each on a
@@ -915,7 +912,7 @@ fn senders(
     keys: &HashMap<String, Vec<String>>,
     limit: usize,
 ) -> Result<Value, String> {
-    let now = now_secs();
+    let now = mailvault_core::clock::now_secs();
     let open = ViewDef { senders: Vec::new(), exclude_senders: Vec::new(), ..def.clone() };
     let mut batches: Vec<(SearchRequest, Vec<&Account>)> = Vec::new();
     for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {

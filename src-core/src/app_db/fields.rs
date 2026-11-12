@@ -259,7 +259,7 @@ pub fn set_value(
     let value_json = serde_json::to_string(value).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO field_values(field_id, account_id, msg_key, value_json, at) VALUES (?1,?2,?3,?4,?5)",
-        params![field_id, account_id, msg_key, value_json, now()],
+        params![field_id, account_id, msg_key, value_json, crate::clock::now_secs()],
     )
     .map(|_| ())
     .map_err(|e| e.to_string())
@@ -352,9 +352,6 @@ fn row_to_field(r: &rusqlite::Row<'_>) -> rusqlite::Result<Field> {
     })
 }
 
-fn now() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
-}
 
 #[cfg(test)]
 mod tests {

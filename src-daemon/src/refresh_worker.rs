@@ -722,8 +722,7 @@ pub(crate) async fn authoritative_snapshot(state: &Arc<DaemonState>) -> Result<(
             .map_err(|_| "errors.bulkIdentityUncertain".to_owned())?;
         let settings_doc = settings_doc::SettingsDoc::shared(&app_dir);
         let values = match settings_doc.read() {
-            Ok(settings) => settings.get(mailvault_core::settings_doc::STORE).and_then(|store| store.get("state"))
-                .cloned().unwrap_or_else(|| json!({})),
+            Ok(settings) => mailvault_core::settings_doc::app_state(&settings).cloned().unwrap_or_else(|| json!({})),
             Err(_) if matches!(std::fs::metadata(settings_doc.path()), Err(ref error)
                 if error.kind() == std::io::ErrorKind::NotFound) => json!({}),
             Err(_) => return Err("errors.settingsNotLoaded".to_owned()),

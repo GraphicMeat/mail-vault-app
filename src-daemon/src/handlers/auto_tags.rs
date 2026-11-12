@@ -59,9 +59,6 @@ async fn provider_of(state: &DaemonState, params: &Value) -> Result<Provider, St
     }
 }
 
-pub(crate) fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
-}
 
 /// `auto_tags.list` / `.create` / `.update` / `.delete` / `.undo_backfill` —
 /// every method that only ever touches `app.db`, none of it async.
@@ -271,7 +268,7 @@ async fn run_preview(state: &Arc<DaemonState>, params: &Value) -> Result<Value, 
     let account = account_id.clone();
     let candidates = blocking(move || load_candidates(&state_clone, &account, limit)).await?;
 
-    let now = now_secs();
+    let now = mailvault_core::clock::now_secs();
     let mut rows = Vec::new();
     for c in candidates {
         if !auto_tags::passes(&rule.constraints, &c.candidate, now) {
@@ -324,7 +321,7 @@ async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value,
     let candidates = blocking(move || load_candidates(&state_clone, &account, limit)).await?;
 
     let batch_id = uuid::Uuid::new_v4().to_string();
-    let now = now_secs();
+    let now = mailvault_core::clock::now_secs();
     let total = candidates.len();
     let mut processed = 0usize;
     let mut matched = 0usize;

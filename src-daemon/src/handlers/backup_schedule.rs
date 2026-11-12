@@ -90,18 +90,13 @@ fn loaded(doc: &SettingsDoc) -> Result<mailvault_core::settings_doc::Snapshot, &
     if snapshot.recovered.is_some() {
         return Err("errors.settingsNotLoaded");
     }
-    if !snapshot
-        .values
-        .get(STORE)
-        .and_then(|s| s.get("state"))
-        .is_some_and(Value::is_object)
-    {
+    if !snapshot.app_state().is_some_and(Value::is_object) {
         return Err("errors.settingsNotLoaded");
     }
     Ok(snapshot)
 }
 fn view(snapshot: &Snapshot, ids: &[String], now: i64) -> Result<Value, &'static str> {
-    let settings = &snapshot.values[STORE]["state"];
+    let settings = snapshot.app_state().ok_or("errors.settingsNotLoaded")?;
     // Fresh system lookup per call. Never persist an offset or assume UTC.
     let zone = policy::local_zone()?;
     let mut next = Map::new();

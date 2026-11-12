@@ -78,9 +78,8 @@ pub fn verbose_from_settings(raw: &str) -> bool {
 /// `verbose_from_settings` over the parsed document
 /// (`settings_doc::SettingsDoc::read`).
 pub fn verbose_from_document(settings: &serde_json::Value) -> bool {
-    settings
-        .get(crate::settings_doc::STORE)
-        .and_then(|s| s.get("state")?.get("logVerbosity")?.as_str().map(|v| v == "verbose"))
+    crate::settings_doc::app_state(settings)
+        .and_then(|s| s.get("logVerbosity")?.as_str().map(|v| v == "verbose"))
         .unwrap_or(false)
 }
 

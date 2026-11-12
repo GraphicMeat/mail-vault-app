@@ -63,10 +63,7 @@ pub enum ImportUnit {
 }
 
 pub fn stamp_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    crate::clock::now_secs_u64()
 }
 
 /// Every legacy file worth a look, in the order they must be imported (a

@@ -31,7 +31,7 @@ pub fn index_doc(conn: &Connection, account_id: &str, folder_key: &str, uid: u32
     } else {
         (BODY_INDEXED, Some(super::reconcile::snippet_of(&doc.body_text)))
     };
-    let date_utc = doc.date_utc.unwrap_or_else(|| chrono::Utc::now().timestamp());
+    let date_utc = doc.date_utc.unwrap_or_else(|| crate::clock::now_secs());
     let mut doc = doc.clone();
     doc.body_text = super::text::cap_chars(doc.body_text, super::reconcile::MAX_BODY_CHARS);
     in_savepoint(conn, |conn| {

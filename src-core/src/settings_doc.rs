@@ -52,6 +52,13 @@ pub struct Snapshot {
     pub recovered: Option<String>,
 }
 
+impl Snapshot {
+    /// The app settings object of this snapshot ([`app_state`]).
+    pub fn app_state(&self) -> Option<&Value> {
+        self.values.get(STORE)?.get("state")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SettingsError {
     /// The caller passed a `baseVersion` that is no longer current.

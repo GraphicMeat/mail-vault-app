@@ -15,7 +15,8 @@
 //! function `.preview`/`.backfill` use — so the `allow_remote` privacy gate
 //! lives in exactly one place no matter which of the three calls it.
 
-use crate::handlers::auto_tags::{emit_assigned, evaluate, load_candidates, now_secs, on_device, provider_from_rule};
+use crate::handlers::auto_tags::{emit_assigned, evaluate, load_candidates, on_device, provider_from_rule};
+use mailvault_core::clock::now_secs;
 use crate::handlers::common::blocking;
 use crate::llm::Provider;
 use crate::state::DaemonState;

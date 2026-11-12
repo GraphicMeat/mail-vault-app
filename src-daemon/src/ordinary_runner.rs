@@ -710,7 +710,7 @@ async fn prefetch_attachments_once(state: &Arc<DaemonState>, spec: &Spec) {
     let app_dir = state.app_dir.clone();
     let enabled = crate::handlers::common::blocking(move || {
         mailvault_core::settings_doc::SettingsDoc::shared(&app_dir).read().ok()
-            .and_then(|doc| doc.get(mailvault_core::settings_doc::STORE)?.get("state")?.get("autoDownloadAttachments")?.as_bool())
+            .and_then(|doc| mailvault_core::settings_doc::app_state(&doc)?.get("autoDownloadAttachments")?.as_bool())
             .unwrap_or(false)
     }).await.unwrap_or(false);
     if !enabled { return; }

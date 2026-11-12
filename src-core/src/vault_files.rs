@@ -532,10 +532,7 @@ pub fn exists(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> bool {
 /// schedule). Seconds sit far above any server's uids, and the probe keeps
 /// two writes in one second apart. The caller holds the mailbox's write lock.
 pub fn free_local_uid(root: &Path, account_id: &str, mailbox: &str) -> u32 {
-    let mut uid = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0) as u32;
+    let mut uid = crate::clock::now_secs_u64() as u32;
     while exists(root, account_id, mailbox, uid) {
         uid += 1;
     }

@@ -71,9 +71,7 @@ fn default_true() -> bool {
 /// or unreadable: the cap is off, which is the default.
 pub fn read_limits(app_dir: &Path, account_id: &str) -> Option<TransferLimits> {
     let settings = crate::settings_doc::SettingsDoc::shared(app_dir).read().ok()?;
-    let entry = settings
-        .get(crate::settings_doc::STORE)?
-        .get("state")?
+    let entry = crate::settings_doc::app_state(&settings)?
         .get("transferLimits")?
         .get(account_id)?;
     serde_json::from_value(entry.clone()).ok()

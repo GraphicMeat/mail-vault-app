@@ -77,7 +77,7 @@ pub fn ensure(conn: &Connection, name: &str, color: &str) -> Result<Tag, String>
                     .map_err(|e| e.to_string())?;
                 conn.execute(
                     "INSERT INTO tags(id, name, color, position, created_at) VALUES (?1,?2,?3,?4,?5)",
-                    params![id, name, color, position, now()],
+                    params![id, name, color, position, crate::clock::now_secs()],
                 )
                 .map_err(|e| e.to_string())?;
                 id
@@ -119,7 +119,7 @@ pub fn delete(conn: &Connection, id: &str) -> Result<(), String> {
 pub fn assign(conn: &Connection, tag_id: &str, targets: &[Target]) -> Result<usize, String> {
     let targets = distinct(targets);
     in_txn(conn, || {
-        let at = now();
+        let at = crate::clock::now_secs();
         let mut stmt = conn
             .prepare_cached("INSERT OR IGNORE INTO tag_assignments(tag_id, account_id, msg_key, at) VALUES (?1,?2,?3,?4)")
             .map_err(|e| e.to_string())?;
@@ -218,12 +218,6 @@ fn distinct(targets: &[Target]) -> Vec<Target> {
         .collect()
 }
 
-fn now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
 
 #[cfg(test)]
 mod tests {

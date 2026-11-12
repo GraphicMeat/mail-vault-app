@@ -156,7 +156,7 @@ pub(crate) fn persisted_show_menu_bar() -> bool {
         let path = mailvault_core::paths::app_data_dir().ok()?.join(mailvault_core::settings_doc::FILE_NAME);
         let raw = fs::read_to_string(path).ok()?;
         let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
-        settings[mailvault_core::settings_doc::STORE]["state"]["showMenuBar"].as_bool()
+        mailvault_core::settings_doc::app_state(&settings)?.get("showMenuBar")?.as_bool()
     };
     read().unwrap_or(true)
 }

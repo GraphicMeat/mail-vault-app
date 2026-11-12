@@ -981,9 +981,7 @@ fn loaded_settings(path: &Path) -> Result<Value, String> {
     if s.recovered.is_some() {
         return Err("errors.settingsNotLoaded".into());
     }
-    s.values
-        .get(STORE)
-        .and_then(|v| v.get("state"))
+    s.app_state()
         .filter(|v| v.is_object())
         .cloned()
         .ok_or_else(|| "errors.settingsNotLoaded".into())
@@ -1504,16 +1502,10 @@ fn apply_outcome(
     let doc = SettingsDoc::shared(path);
     for _ in 0..3 {
         let snapshot = doc.get(None).map_err(|e| e.catalog_key().to_string())?;
-        if snapshot.recovered.is_some()
-            || !snapshot
-                .values
-                .get(STORE)
-                .and_then(|v| v.get("state"))
-                .is_some_and(Value::is_object)
-        {
-            return Err("errors.settingsNotLoaded".into());
-        }
-        let settings = &snapshot.values[STORE]["state"];
+        let settings = match snapshot.app_state() {
+            Some(settings) if snapshot.recovered.is_none() && settings.is_object() => settings,
+            _ => return Err("errors.settingsNotLoaded".into()),
+        };
         let id = &out.intent.account_id;
         let old = &settings["backupState"][id];
         if old["lastSchedulerRunId"] == out.intent.run_id {

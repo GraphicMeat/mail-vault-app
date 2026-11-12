@@ -79,7 +79,8 @@ pub(crate) fn persisted_update_track() -> Option<String> {
         .join(mailvault_core::settings_doc::FILE_NAME);
     let raw = fs::read_to_string(path).ok()?;
     let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    settings[mailvault_core::settings_doc::STORE]["state"]["updateTrack"]
+    mailvault_core::settings_doc::app_state(&settings)?
+        .get("updateTrack")?
         .as_str()
         .map(String::from)
 }

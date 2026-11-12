@@ -265,11 +265,12 @@ fn clock_scanned_roots() -> Vec<PathBuf> {
 
 /// What a source line (comments dropped) defines or reads that
 /// `mailvault_core::clock` owns: a day or hour length constant of a number
-/// type, a zero-argument `now_ms` / `now_millis`, or the epoch milliseconds
-/// taken straight from `SystemTime::now()` or `Utc::now()`.
+/// type, a zero-argument `now_ms` / `now_millis` / `now_secs` / `unix_now`,
+/// or the epoch milliseconds or seconds taken straight from
+/// `SystemTime::now()` or `Utc::now()`.
 fn clock_copies(src: &str) -> Vec<String> {
     let constant = regex::Regex::new(r"\bconst\s+(DAY_MS|HOUR_MS|MINUTE_MS|DAY|HOUR)\s*:\s*(i64|u64|i32|u32|usize|f64)\b").unwrap();
-    let direct = regex::Regex::new(r"SystemTime::now\(\)\s*\.duration_since\(\s*(?:std::time::)?(?:SystemTime::)?UNIX_EPOCH\s*\)[^;]*?\.as_millis\(\)").unwrap();
+    let direct = regex::Regex::new(r"SystemTime::now\(\)\s*\.duration_since\(\s*(?:std::time::)?(?:SystemTime::)?UNIX_EPOCH\s*\)[^;]*?\.as_(?:millis|secs)\(\)").unwrap();
     let code: String = src.lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
     let mut found = Vec::new();
     for m in constant.find_iter(&code) {
@@ -279,7 +280,7 @@ fn clock_copies(src: &str) -> Vec<String> {
             found.push(m.as_str().to_string());
         }
     }
-    for name in ["now_ms", "now_millis"] {
+    for name in ["now_ms", "now_millis", "now_secs", "unix_now"] {
         if defines_fn(&code, name, true) {
             found.push(format!("fn {name}()"));
         }
@@ -287,8 +288,10 @@ fn clock_copies(src: &str) -> Vec<String> {
     for m in direct.find_iter(&code) {
         found.push(m.as_str().split_whitespace().collect::<Vec<_>>().join(" "));
     }
-    if code.contains("Utc::now().timestamp_millis()") {
-        found.push("Utc::now().timestamp_millis()".to_string());
+    for read in ["Utc::now().timestamp_millis()", "Utc::now().timestamp()"] {
+        if code.contains(read) {
+            found.push(read.to_string());
+        }
     }
     found
 }
@@ -312,7 +315,7 @@ fn time_constants_and_the_wall_clock_live_in_clock_only() {
     }
     assert!(
         failures.is_empty(),
-        "use mailvault_core::clock::{{DAY_MS, HOUR_MS, now_ms, now_ms_u64}} instead of a local copy:\n{}",
+        "use mailvault_core::clock::{{DAY_MS, HOUR_MS, now_ms, now_ms_u64, now_secs, now_secs_u64}} instead of a local copy:\n{}",
         failures.join("\n")
     );
 }
@@ -331,7 +334,11 @@ fn the_clock_copy_scanner_sees_each_form_and_skips_the_legitimate_ones() {
     assert!(clock_copies("const DAY: &str = \"2026-09-29\";").is_empty());
     assert!(clock_copies("fn now_ms(&self) -> i64;").is_empty(), "an injectable clock method is not a second wall clock");
     assert!(clock_copies("// const DAY_MS: i64 = 1;").is_empty());
-    assert!(clock_copies("let s = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();").is_empty(), "seconds are not epoch ms");
+    assert_eq!(clock_copies("let s = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();").len(), 1, "epoch seconds too");
+    assert_eq!(clock_copies("fn now_secs() -> i64 { 0 }").len(), 1);
+    assert_eq!(clock_copies("fn unix_now() -> u64 {").len(), 1);
+    assert_eq!(clock_copies("let d = chrono::Utc::now().timestamp();").len(), 1);
+    assert!(clock_copies("let d = Utc::now().timestamp_subsec_millis();").is_empty());
     assert!(clock_copies("let m = meta.modified().duration_since(UNIX_EPOCH).as_millis();").is_empty(), "a file mtime is not the clock");
 }
 
@@ -515,4 +522,39 @@ fn the_settings_store_key_is_spelled_in_settings_doc_only() {
         "read the settings store through mailvault_core::settings_doc::{{STORE, app_state}}, not the literal:\n{}",
         failures.join("\n")
     );
+}
+
+/// `(file, why it opens the store blob itself rather than through app_state)`.
+const MAY_OPEN_STORE: &[(&str, &str)] = &[
+    ("src-daemon/src/handlers/alias_store.rs", "it also reads the store's persist version"),
+    ("src-daemon/src/handlers/compose_prep.rs", "it also reads the store's persist version"),
+    ("src-daemon/src/handlers/settings.rs", "it reads an RPC's patch payloads, not the document"),
+];
+
+/// Lines that open the store blob by hand (`.get(STORE)`, `[STORE]`) to reach
+/// its `state`: `settings_doc::app_state` (or `Snapshot::app_state`) says that once.
+fn opens_store(code: &str) -> Vec<String> {
+    let open = regex::Regex::new(r"(?:\.get\(\s*|\[\s*)(?:\w+::)*STORE\s*[)\]]").unwrap();
+    code.lines().filter(|l| open.is_match(l)).map(|l| l.trim().to_string()).collect()
+}
+
+#[test]
+fn the_app_settings_are_reached_through_app_state() {
+    let mut failures = Vec::new();
+    for (shown, code) in settings_scanned_files() {
+        if MAY_OPEN_STORE.iter().any(|(f, _)| *f == shown) {
+            continue;
+        }
+        failures.extend(opens_store(&code).into_iter().map(|line| format!("{shown}: {line}")));
+    }
+    assert!(failures.is_empty(), "use settings_doc::app_state(&doc) or snapshot.app_state():\n{}", failures.join("\n"));
+    let files = settings_scanned_files();
+    for (file, why) in MAY_OPEN_STORE {
+        let (_, code) = files.iter().find(|(f, _)| f == file).unwrap_or_else(|| panic!("{file} is gone: drop its row"));
+        assert!(!opens_store(code).is_empty(), "{file} no longer opens the store ({why}): drop its row");
+    }
+    assert_eq!(opens_store("let s = doc.get(STORE).and_then(|s| s.get(\"state\"));").len(), 1);
+    assert_eq!(opens_store("let s = &snapshot.values[mailvault_core::settings_doc::STORE][\"state\"];").len(), 1);
+    assert!(opens_store("doc.patch(&json!({STORE: {\"state\": patch}}), None)").is_empty(), "a patch names the key, it does not read");
+    assert!(opens_store("settings_doc::app_state(&doc)").is_empty());
 }

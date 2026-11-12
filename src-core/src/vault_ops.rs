@@ -196,10 +196,7 @@ fn set_aside_custody(src_root: &Path, dst_root: &Path) -> Result<(), String> {
     if !src_root.join(CUSTODY_DIR).exists() {
         return Ok(());
     }
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let stamp = crate::clock::now_secs_u64();
     for suffix in ["", "-wal", "-shm", "-journal"] {
         let path = dst_root.join(CUSTODY_DIR).join(format!("{CUSTODY_FILE}{suffix}"));
         if path.symlink_metadata().is_err() {

@@ -424,7 +424,7 @@ impl SyncEngine {
                 updated_flags,
                 arrival_uids,
                 source,
-                at: unix_now(),
+                at: mailvault_core::clock::now_secs_u64(),
             });
             // ponytail: 64 records. A client more than 64 changes behind still
             // gets the new gen, but with incomplete detail — it must fall back
@@ -513,7 +513,7 @@ impl SyncEngine {
         self.states.lock().await.insert(result.account_id.clone(), SyncState {
             account_id: result.account_id.clone(),
             status: if result.success { SyncStatus::Idle } else { SyncStatus::Error },
-            last_sync: Some(unix_now()),
+            last_sync: Some(mailvault_core::clock::now_secs_u64()),
             last_error: result.error.clone(),
             new_emails: result.new_emails,
             total_emails: result.total_emails,
@@ -723,7 +723,7 @@ impl SyncEngine {
             states.insert(account_id.clone(), SyncState {
                 account_id: account_id.clone(),
                 status: if result.success { SyncStatus::Idle } else { SyncStatus::Error },
-                last_sync: Some(unix_now()),
+                last_sync: Some(mailvault_core::clock::now_secs_u64()),
                 last_error: result.error.clone(),
                 new_emails: result.new_emails,
                 total_emails: result.total_emails,
@@ -2166,10 +2166,6 @@ const BACKFILL_CHUNK: usize = 1000;
 const HEAL_MAX_PER_SYNC: usize = 200;
 
 use crate::job_support::now_ms;
-
-fn unix_now() -> u64 {
-    now_ms() / 1000
-}
 
 /// Finished tickets kept around so a late `sync.wait` still finds its result.
 const MAX_LIVE_TICKETS: usize = 64;

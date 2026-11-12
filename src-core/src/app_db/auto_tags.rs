@@ -204,7 +204,7 @@ pub fn get(conn: &Connection, id: &str) -> Result<Option<Rule>, String> {
 
 pub fn create(conn: &Connection, draft: RuleDraft) -> Result<Rule, String> {
     let id = uuid::Uuid::new_v4().to_string();
-    let at = now();
+    let at = crate::clock::now_secs();
     let enabled_at = draft.enabled.then_some(at);
     save(conn, &id, &draft, at, at, enabled_at)
 }
@@ -216,11 +216,11 @@ pub fn update(conn: &Connection, id: &str, draft: RuleDraft) -> Result<Rule, Str
     // it, so re-enabling later starts fresh rather than silently catching up
     // on whatever arrived while it was off).
     let enabled_at = match (existing.enabled, draft.enabled) {
-        (false, true) => Some(now()),
+        (false, true) => Some(crate::clock::now_secs()),
         (true, true) => existing.enabled_at,
         (_, false) => None,
     };
-    save(conn, id, &draft, existing.created_at, now(), enabled_at)
+    save(conn, id, &draft, existing.created_at, crate::clock::now_secs(), enabled_at)
 }
 
 fn save(
@@ -308,9 +308,6 @@ fn row_to_rule(r: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Rule, String>> 
     })())
 }
 
-fn now() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
-}
 
 // ── Backfill batches (reversibility) ────────────────────────────────────
 
@@ -321,7 +318,7 @@ fn now() -> i64 {
 /// happen — the caller passes each target once) is not an error.
 pub fn record_backfill(conn: &Connection, batch_id: &str, rule_id: &str, tag_id: &str, targets: &[Target]) -> Result<(), String> {
     in_txn(conn, || {
-        let at = now();
+        let at = crate::clock::now_secs();
         let mut stmt = conn
             .prepare_cached(
                 "INSERT OR IGNORE INTO auto_tag_backfills(batch_id, rule_id, tag_id, account_id, msg_key, at) VALUES (?1,?2,?3,?4,?5,?6)",
@@ -370,7 +367,7 @@ pub fn delete_backfill_batch(conn: &Connection, batch_id: &str) -> Result<(), St
 pub fn record_decision(conn: &Connection, rule_id: &str, target: &Target, matched: bool) -> Result<(), String> {
     conn.execute(
         "INSERT OR REPLACE INTO auto_tag_decisions(rule_id, account_id, msg_key, matched, at) VALUES (?1,?2,?3,?4,?5)",
-        params![rule_id, target.account_id, target.msg_key, matched, now()],
+        params![rule_id, target.account_id, target.msg_key, matched, crate::clock::now_secs()],
     )
     .map(|_| ())
     .map_err(|e| e.to_string())

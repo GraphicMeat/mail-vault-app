@@ -15,8 +15,6 @@ use crate::search_index::query::MSG_KEY_SQL;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-#[cfg(test)]
-use std::time::UNIX_EPOCH;
 
 pub const BATCH: usize = 500;
 pub const MAX_BODY_CHARS: usize = 1_000_000;
@@ -819,7 +817,7 @@ fn listed_row(uid: u32, header: &serde_json::Value) -> (IndexDoc, String, String
     addrs.extend(list("replyTo"));
     // The Date header, then the arrival time, then now: never 1970.
     let parse = crate::maildir::header_date_secs;
-    let date_utc = parse(&text("date")).or_else(|| parse(&text("internalDate"))).or_else(|| Some(chrono::Utc::now().timestamp()));
+    let date_utc = parse(&text("date")).or_else(|| parse(&text("internalDate"))).or_else(|| Some(crate::clock::now_secs()));
     // The server's flags, never archived: no local archived copy exists.
     let imap: Vec<String> = header
         .get("flags")
@@ -2317,7 +2315,7 @@ mod tests {
         arrived["internalDate"] = serde_json::json!("2026-09-01T08:00:00+00:00");
         let mut undated = header(2, "Undated", "ann@x.test", &[]);
         undated.as_object_mut().unwrap().remove("date");
-        let before = std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let before = crate::clock::now_secs();
         assert_eq!(add_listed_rows(&v.db, &v.root.join("Maildir"), "a1", "INBOX", &[arrived, undated], &|| true).unwrap(), 2);
         let date = |uid: u32| -> i64 {
             crate::search_index::lock(&v.db).as_ref().unwrap().query_row("SELECT date_utc FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()

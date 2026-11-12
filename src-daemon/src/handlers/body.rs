@@ -36,7 +36,6 @@ use std::sync::Arc;
 use tracing::warn;
 
 /// The persisted store that holds `linkAlerts`, `trackerAlerts` and `linkSafetyEnabled`.
-use mailvault_core::settings_doc::STORE;
 const BACKFILL_DEFAULT: usize = 40;
 const BACKFILL_MAX: usize = 200;
 
@@ -107,7 +106,7 @@ async fn on_background_thread(f: impl FnOnce() -> Value + Send + 'static) -> Res
 /// (or cannot be read: a row then wears what it computes, not what was saved).
 fn row_settings(state: &DaemonState) -> RowSettings {
     match SettingsDoc::shared(&state.app_dir).read() {
-        Ok(doc) => doc.get(STORE).and_then(|s| s.get("state")).map(RowSettings::from_state).unwrap_or_default(),
+        Ok(doc) => mailvault_core::settings_doc::app_state(&doc).map(RowSettings::from_state).unwrap_or_default(),
         Err(_) => {
             warn!("[body] settings document unreadable; rows answered without persisted verdicts");
             RowSettings::default()
@@ -180,6 +179,7 @@ fn backfill(state: &Arc<DaemonState>, list: &[Value], limit: usize) -> Map<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mailvault_core::settings_doc::STORE;
     use crate::test_support::handle_request_for_test;
     use crate::state::DaemonState;
 

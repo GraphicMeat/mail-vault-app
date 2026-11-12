@@ -89,12 +89,9 @@ pub fn retire(path: &Path, stamp: u64) -> std::io::Result<()> {
     fs::rename(path, &target)
 }
 
-/// Seconds since the epoch — the stamp `retire` suffixes with.
+/// Seconds since the epoch: the stamp `retire` suffixes with.
 pub fn retire_stamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    crate::clock::now_secs_u64()
 }
 
 /// The last `n` lines of a text file, joined with `\n` (no trailing newline,

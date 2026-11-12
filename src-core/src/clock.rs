@@ -1,4 +1,4 @@
-//! The wall clock in epoch milliseconds, defined once for the crate.
+//! The wall clock in epoch milliseconds (and seconds), defined once for the crate.
 //!
 //! A clock before the epoch reads as 0 rather than failing, which is what every
 //! private copy this replaced did.
@@ -17,6 +17,17 @@ pub fn now_ms() -> i64 {
 /// [`now_ms`] for the callers that keep their stamps unsigned.
 pub fn now_ms_u64() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+/// Whole seconds since the Unix epoch (0 if the system clock is before it):
+/// the stamps the app.db tables, the search index and retired file names use.
+pub fn now_secs() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+/// [`now_secs`] for the callers that keep their stamps unsigned.
+pub fn now_secs_u64() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 #[cfg(test)]

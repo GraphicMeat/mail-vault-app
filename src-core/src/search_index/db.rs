@@ -278,16 +278,7 @@ fn validate_schema(conn: &Connection) -> Result<(), Fail> {
     Ok(())
 }
 
-/// A read error reads as "not set". Only for values where that is harmless;
-/// a decision that would write over the stored value uses `meta_get_checked`.
-pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
-    meta_get_checked(conn, key).ok().flatten()
-}
-
-/// `Ok(None)` only when the key is not stored.
-pub fn meta_get_checked(conn: &Connection, key: &str) -> Result<Option<String>, String> {
-    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0)).optional().map_err(|e| e.to_string())
-}
+pub use crate::sqlite_meta::{meta_get, meta_get_checked, meta_set};
 
 /// Written once a full pass has reconciled every folder without interruption.
 /// A fresh or rebuilt index misses mail the scan finds until then, so searches
@@ -333,12 +324,6 @@ pub fn first_pass_done(conn: &Connection) -> bool {
 
 pub fn first_pass_done_checked(conn: &Connection) -> Result<bool, String> {
     meta_get_checked(conn, FIRST_PASS_DONE).map(|value| value.is_some())
-}
-
-pub fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?1, ?2)", [key, value])
-        .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, PartialEq, Eq)]
