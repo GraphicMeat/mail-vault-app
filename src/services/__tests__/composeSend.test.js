@@ -126,9 +126,12 @@ beforeEach(() => {
   state.sentEmails = [];
   state.emails = [];
   state.localEmails = [];
+  state.sortedEmails = [];
   state.activeAccountId = 'acct-1';
   state.activeMailbox = 'Sent';
   state.loadSentHeaders.mockReset();
+  state.updateSortedEmails.mockReset();
+  state.activateAccount = undefined;
   listeners.length = 0;
   vi.useRealTimers();
 });
@@ -437,13 +440,37 @@ describe('the Sent copy the send leaves behind', () => {
     expect(state.localEmails.map(item => item.uid)).not.toContain(STAGED_UID);
   });
 
+  it('rebuilds the real Sent list when the active folder refresh fails', async () => {
+    const { deriveDisplayRows } = await import('../../stores/slices/messageListSlice');
+    const state = mailStore.useMailStore.getState();
+    state.updateSortedEmails.mockImplementation(() => {
+      state.sortedEmails = deriveDisplayRows({
+        emails: state.emails, activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox,
+      });
+    });
+    state.activateAccount = vi.fn().mockRejectedValue(new Error('offline'));
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [{ uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    expect(state.sortedEmails.map(item => item.uid)).toContain(STAGED_UID);
+    await listeners.find(l => l.name === 'send-server-append-complete')
+      .handler({ payload: { accountId: account.email, mailbox: 'Sent', ok: true, messageIdHeader: 'one@example.test' } });
+
+    expect(state.sortedEmails.map(item => item.uid)).not.toContain(STAGED_UID);
+  });
+
   it('matches the server copy by canonical Message-ID', async () => {
     const state = mailStore.useMailStore.getState();
+    let stagedAtReload = false;
     state.loadSentHeaders.mockImplementation(async () => {
+      stagedAtReload = state.sentEmails.some(item => item.uid === STAGED_UID);
       state.sentEmails = [{ uid: 900, messageId: ' <one@example.test>', _accountId: 'acct-1' }];
     });
     await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
     await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(stagedAtReload).toBe(true);
     expect(state.emails.map(item => item.uid)).not.toContain(STAGED_UID);
   });
 });

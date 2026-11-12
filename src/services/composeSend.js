@@ -182,6 +182,7 @@ function refreshOnServerCopy({ freshAccount, sentFolderPath, pseudoUid, messageI
         emails: (current.emails || []).filter(other),
         localEmails: (current.localEmails || []).filter(other),
       }));
+      useMailStore.getState().updateSortedEmails?.();
     }
     if (messageId) {
       console.log('[composeSend] server append reconciled', { messageId, found: landed });

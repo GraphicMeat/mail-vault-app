@@ -20,6 +20,7 @@ case ",${HARNESS_SHOTS:-}," in
     case "$out" in /*) ;; *) echo 'Shot output must be an absolute directory' >&2; exit 1 ;; esac
     mkdir -p "$out"
     [ -d node_modules ] || npm ci
+    rm -f "$out/reply-joined-reader-light.png" "$out/reply-joined-reader-dark.png"
     npm run build:e2e
     MV_BLITZ_SURFACES_OUT="$out" npx wdio run wdio.conf.js --spec tests/e2e/connected-thread-reply.test.js
     for mode in light dark; do
