@@ -7,7 +7,7 @@
 // full view note no trigger, so focus is left where the dialog put it.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '../../services/workflows/bindStoreActions';
 
 const { bodies } = vi.hoisted(() => ({ bodies: new Map() }));
@@ -42,6 +42,8 @@ const { EmailViewer } = await import('../EmailViewer');
 const { ChatBubbleView } = await import('../ChatBubbleView');
 const { ThreadView } = await import('../email/ThreadView');
 const { FullViewEmailModal } = await import('../email/FullViewEmailModal');
+const { t } = await import('../../i18n/index.js');
+const { describeReaderPurge } = await import('../../utils/custodyCopy');
 
 const mail = (uid) => ({
   uid, _accountId: 'acct-1', _mailbox: 'INBOX', source: 'server', subject: `S${uid}`, messageId: `<m${uid}@x>`,
@@ -115,6 +117,25 @@ describe.each(Object.keys(READERS))('%s delete confirmation', (name) => {
     await openDelete();
     expect(screen.getByRole('alertdialog')).toBeTruthy();
     expect(deleteEmailFromServer).not.toHaveBeenCalled();
+  });
+
+  // The two confirms must not read alike: Delete names a delete, Delete
+  // everywhere names what the purge removes (here the server copy, all there is).
+  it('the delete confirm and the purge confirm say which they are', async () => {
+    show();
+    await openDelete();
+    let dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByText(t('viewer.deleteEmail'))).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: t('common.delete') })).toBeTruthy();
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' })); });
+    await nextFrame();
+
+    await act(async () => { fireEvent.click(screen.getByTestId('bar-everywhere')); });
+    const purge = describeReaderPurge({ server: true, vault: false, backup: false }, 1);
+    dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByText(purge.title)).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: purge.label })).toBeTruthy();
+    expect(within(dialog).queryByText(t('viewer.deleteEmail'))).toBeNull();
   });
 
   it('Cancel closes the confirm and deletes nothing', async () => {

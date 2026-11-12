@@ -477,12 +477,8 @@ async function press(descriptor) {
     mocks.note('confirm', [pending.copy, { confirmOptional: pending.confirmOptional }]);
     await act(async () => { await pending.executor(); });
   }
-  const lines = [];
-  for (const [name, args] of mocks.log) {
-    const text = `${name} ${ser(args)}`;
-    if (lines.at(-1) !== text) lines.push(text);
-  }
-  return lines;
+  // Every call, repeats included: a doubled call is a defect to see.
+  return mocks.log.map(([name, args]) => `${name} ${ser(args)}`);
 }
 async function pressAll(label) {
   const descriptors = mocks.calls.at(-1).descriptors.filter(d => !d.hidden && !d.disabled);
