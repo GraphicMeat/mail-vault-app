@@ -23,7 +23,7 @@ describe('native refresh foundation', () => {
       expect(demo).toContain(`'${method}'`);
       expect(shell).toContain(`"${method}"`);
     }
-    expect(read('src-daemon/src/main.rs')).toContain('refresh_worker::start(&state)');
+    expect(read('src-daemon/src/startup.rs')).toContain('refresh_worker::start(state)');
     expect(read('src-daemon/src/handlers/mod.rs')).toContain('mod refresh;');
   });
 

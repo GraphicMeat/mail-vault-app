@@ -84,6 +84,7 @@ mod state;
 mod test_support;
 mod snapshot;
 mod snooze_worker;
+mod startup;
 pub mod sync_engine;
 mod sync_observation;
 mod refresh_worker;
@@ -669,171 +670,8 @@ async fn daemon_main() {
     state.idle.set_daemon(&state);
     // The JMAP sync works through the state (sessions, ledgers, custody).
     state.sync_engine.set_daemon(&state);
-    refresh_worker::start(&state);
-
-    // One owned authoritative seed. A failed read leaves the gate Unready;
-    // lifecycle-aware writers may request a finite retry later.
-    account_lifecycle::start_bootstrap(Arc::clone(&state));
-
-    // Custody, before the socket exists (Task 2.9b Step 1): a route that
-    // reads an entry must never be served by a store that is not open yet.
-    // Only the OPEN is awaited here — schema migration, a few milliseconds.
-    //
-    // The legacy JSON import is not (2026-09-20): it used to run inside
-    // `open_into`, and on a vault whose header sidecars are still on disk it
-    // took 416 s, during which the socket did not exist at all — the app
-    // showed an endless mail loader and "Helper Not Running" while the daemon
-    // process was plainly there. It runs on its own thread below, once the
-    // socket is up, taking the custody lock one mailbox at a time. A mailbox
-    // not imported yet reads as "no cached headers", never as wrong headers:
-    // the import only ever INSERTs rows the store does not have.
-    {
-        let custody_state = Arc::clone(&state);
-        let started = std::time::Instant::now();
-        let outcome = tokio::task::spawn_blocking(move || custody::open_into(&custody_state)).await;
-        let took = started.elapsed();
-        match outcome {
-            Ok(Ok(())) => {
-                if took > std::time::Duration::from_secs(2) {
-                    warn!("custody store: open took {:?} — the app only waits 3s for the daemon socket", took);
-                } else {
-                    info!("custody store: opened in {:?}", took);
-                }
-            }
-            // `open_into` already logged the reason; this line is only about
-            // timing, so it must not repeat "opened in" over a failure.
-            Ok(Err(e)) => warn!("custody store: failed to open in {:?}: {e}", took),
-            // A panic here would otherwise leave `custody.error` at `None`
-            // (task-2.11 carry-in M3): `VaultAlertBanner` renders nothing for
-            // a `None` error while every custody route still answers `custody
-            // store unavailable: closed`. Record it so the banner has
-            // something to show.
-            Err(join_err) => {
-                let msg = format!("custody store: startup open panicked: {join_err}");
-                error!("{msg}");
-                *state
-                    .custody
-                    .error
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner()) = Some(msg);
-            }
-        }
-    }
-
-    // The one-time legacy import, off the startup path (see above).
-    custody::spawn_legacy_import(Arc::clone(&state));
-
-    // Start background classification queue worker
-    classification_worker::start_classification_worker(Arc::clone(&state));
-
-    // Scheduled Send's worker: a catch-up pass over anything already due
-    // (the normal case — the daemon dies with the app in on-demand mode),
-    // then sleeps until the next fire_at or a wake from handlers::scheduled.
-    scheduled_send_worker::start(Arc::clone(&state));
-    // Snooze's worker: same catch-up-then-sleep shape.
-    snooze_worker::start(Arc::clone(&state));
-    // Follow-up reminders' worker: same catch-up-then-sleep shape.
-    follow_up_worker::start(Arc::clone(&state));
-    // Keep refreshed OAuth token pairs through quiet, guarded daemon writes.
-    let _ = oauth_tokens::start_persistence(Arc::clone(&state));
-    // Every cached mailbox is synced once, so no row keeps a pre-update cache shape.
-    launch_resync::start(Arc::clone(&state));
-    // The delete queue's replay: sends what the journal still owes, 20 s
-    // after launch, when the link returns, every 5 min and on
-    // `delete_queue.run`; background lane, quiet credentials.
-    delete_queue::spawn_worker(&state);
-    // Watches keychain access so a locked keychain is noticed without waiting
-    // for something to ask for credentials; an unlock wakes the queued sends
-    // and the snoozes it held back.
-    {
-        let state = Arc::clone(&state);
-        credentials::start_watcher(move || {
-            state.scheduled_send.wake();
-            state.snooze.wake();
-            state.follow_up.wake();
-            state.tokens.wake_persistence();
-        });
-    }
-    // A portable copy watches the drive it runs from.
-    handlers::portable::watch_drive(Arc::clone(&state));
-
-    // Auto Tags' standing worker: sweeps enabled rules over newly-cached
-    // headers on every wake from a sync/IDLE arrival (see `idle`'s
-    // `set_auto_tag_notify` above and `handlers::handle_sync_now`) — never
-    // polls the vault on its own.
-    auto_tag_worker::start(Arc::clone(&state));
-
-    // Download modes' eviction worker (Track H): deletes working-cache
-    // copies a mode no longer keeps, only with fresh proof the server still
-    // has each message. First pass after launch settles, then daily, and at
-    // once on `storage.fetch_mode_changed`.
-    eviction_worker::start(Arc::clone(&state));
-
-    // The deleted-mail bin's purge: hourly, past the Settings retention.
-    handlers::deleted::start(Arc::clone(&state));
-
-    // Hoarder (Track H4, Premium): downloads every folder's full history in
-    // the background for Hoarder accounts with `fetchModePremium`. Paced,
-    // one message at a time on the background lane; see its module doc.
-    hoarder_worker::start(Arc::clone(&state));
-
-    // Archive & delete jobs (Premium): one dedicated OS thread at background
-    // priority, its own runtime; resumes whatever the last daemon left
-    // unfinished. See `abd_worker`.
-    abd_worker::start(Arc::clone(&state));
-
-    // Auto-cleanup rules (Premium): the daily run and `cleanup.run_now`, on
-    // their own background thread, through the abd engine.
-    cleanup_worker::start(Arc::clone(&state));
-    backup_worker::start(Arc::clone(&state));
-
-    // Its own OS thread; it opens nothing until the app configures it.
-    search_index::start(Arc::clone(&state.search_index));
-
-    // message_addr backfill for vaults that predate it: background QoS, yields to the UI.
-    people_index::spawn_backfill(Arc::clone(&state));
-
-    // contacts.vcf safety copy: restores into a vault with no people, then
-    // rewrites 30 s after the last change. Custody stays the truth.
-    people_snapshot::spawn(Arc::clone(&state));
-
-    // Insights' 300s snapshot expiry sweeper (Task 3.6), same 30s loop and
-    // Weak-reference exit condition as the app's version.
-    state.insights.start_cleanup();
-
-    // Debounced flush of the contacts index to disk (every 30s). Gated like
-    // every other vault write (final fix wave I-1): ungated, dirty entries
-    // accumulated before a `vault_close` used to land in the OLD root mid
-    // vault-move copy, and `contacts_index` was never in `VAULT_DIRS`, so the
-    // leftover was neither carried by the move nor cleaned up.
-    {
-        let state = Arc::clone(&state);
-        tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
-            ticker.tick().await;
-            loop {
-                ticker.tick().await;
-                let state = Arc::clone(&state);
-                // spawn_blocking: `flush_dirty` does disk I/O and must never
-                // run on a tokio worker (global constraint).
-                let _ = tokio::task::spawn_blocking(move || flush_contacts_if_open(&state)).await;
-            }
-        });
-    }
-
-    // Per-account transfer counters → `<app_data_dir>/transfer_stats/*.daemon.json`.
-    // The app writes the `*.app.json` half; neither process locks the other's.
-    {
-        let app_dir = data_dir.clone();
-        tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
-            ticker.tick().await;
-            loop {
-                ticker.tick().await;
-                mailvault_core::transfer_stats::global().flush(&app_dir, "daemon");
-            }
-        });
-    }
+    // Every worker, watcher and store a route reads, in order (`startup::steps`).
+    startup::run(startup::Phase::BeforeSocket, &state).await;
 
     let socket_path = get_socket_path(&data_dir);
 
@@ -923,7 +761,7 @@ async fn daemon_main() {
     // signal sender, the classification worker, the insights sweeper) must be
     // installed before the first request can land.
     // `state` moves into the server below.
-    let resume_state = Arc::clone(&state);
+    let after_socket = Arc::clone(&state);
     {
         let thread_data_dir = data_dir.clone();
         let spawned = server::spawn_on_own_thread(state, socket_path.clone(), move |why| {
@@ -938,9 +776,8 @@ async fn daemon_main() {
         }
     }
 
-    // A storage format conversion a quit or a crash cut off carries on, now
-    // that the socket answers (`format_migration_job::resume_journaled`).
-    tokio::task::spawn_blocking(move || format_migration_job::resume_journaled(&resume_state));
+    // What waits for the socket: the storage format conversion's resume.
+    startup::run(startup::Phase::AfterSocket, &after_socket).await;
 
     // Nothing left to await here: the shutdown task above owns exiting the
     // process, and the server runs on its own thread until it does.
