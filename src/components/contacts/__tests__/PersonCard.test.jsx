@@ -5,7 +5,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 
 vi.mock('../../../i18n', () => ({ useT: () => (k, v) => (v?.name ? `${k}:${v.name}` : k) }));
 vi.mock('lucide-react', () => new Proxy({}, {
-  get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : () => null),
+  get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : ({ fill }) => (fill ? <svg data-fill={fill} /> : null)),
   has: () => true,
 }));
 vi.mock('../../../utils/dateFormat', () => ({
@@ -159,6 +159,13 @@ describe('PersonCard', () => {
     expect(h.s.getState().update).toHaveBeenCalledWith('p1', { pinned: false });
     fireEvent.click(screen.getByTestId('toggle-blocked'));
     expect(h.s.getState().update).toHaveBeenCalledWith('p1', { blocked: true });
+  });
+
+  it('a pressed toggle draws its icon filled, an unpressed one does not', () => {
+    select({ ...CARD, vip: true, pinned: false });
+    render(<PersonCard />);
+    expect(screen.getByTestId('toggle-vip').querySelector('svg')?.getAttribute('data-fill')).toBe('currentColor');
+    expect(screen.getByTestId('toggle-pinned').querySelector('svg')).toBeNull();
   });
 
   it('a new card object for the same contact keeps unsaved edits', () => {

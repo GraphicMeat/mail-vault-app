@@ -19,10 +19,10 @@ function Header({ card }) {
   if (!card) return <div className="px-4 py-3 border-b border-mail-border font-semibold">{t('contacts.new')}</div>;
   const st = stats[card.id];
   const none = st && !st.received && !st.sentTo && !st.cc;
-  const toggle = (key, Icon, label) => (
+  const toggle = (key, Icon, label, fillable = true) => (
     <button type="button" data-testid={`toggle-${key}`} aria-pressed={!!card[key]} title={label} aria-label={label}
       onClick={() => update(card.id, { [key]: !card[key] })}>
-      <Icon size={16} />
+      <Icon size={16} fill={fillable && card[key] ? 'currentColor' : undefined} />
     </button>
   );
   return (
@@ -32,7 +32,7 @@ function Header({ card }) {
         <h2 className="flex-1 min-w-0 truncate text-lg font-semibold">{card.displayName || card.emails[0]?.address}</h2>
         {toggle('vip', Star, t('contacts.vip'))}
         {toggle('pinned', Pin, t('contacts.pinned'))}
-        {toggle('blocked', Ban, t('contacts.blocked'))}
+        {toggle('blocked', Ban, t('contacts.blocked'), false)}
       </div>
       <div className="mt-2"><ContactActions address={card.emails[0]?.address} /></div>
       {st && (none ? (
