@@ -7,6 +7,8 @@
  *
  *   npx wdio run wdio.screenshots.conf.js
  *
+ * SHOTS_SPEC=contacts runs only the Contacts spec (scripts/screenshots/contacts-shots.js).
+ *
  * Needs a HiDPI display attached to whatever machine runs it, or the captures
  * come out at 1x. See scripts/screenshots/capture.js.
  */
@@ -28,6 +30,7 @@ import { demoScenarios } from './scripts/screenshots/demoData.js';
 import { appCode } from './scripts/screenshots/locales.js';
 import { PREMIUM_BILLING_PROFILE } from './scripts/screenshots/premiumSeed.js';
 import { writeCorpus } from './scripts/screenshots/search50kCorpus.mjs';
+import { withContactsCc } from './scripts/screenshots/contactsSeed.js';
 
 // SHOTS_LOCALE is a website directory name (`de`, `pt-br`, `zh`). It picks the
 // app language, the demo mailbox and the output directory together — one knob,
@@ -50,6 +53,10 @@ const THEME = process.env.SHOTS_THEME === 'light' ? 'light' : 'dark';
 // (scripts/screenshots/search50kCorpus.mjs). SHOTS_CORPUS_DIR points at a
 // pre-built corpus that is APFS-cloned in; without it the corpus is written here.
 const SEARCH50K = process.env.SHOTS_SEARCH50K === '1';
+
+// SHOTS_SPEC=contacts runs the Contacts spec alone, on a mailbox where one
+// message has recipients to show (scripts/screenshots/contactsSeed.js).
+const CONTACTS = process.env.SHOTS_SPEC === 'contacts';
 
 const { DEMO_ACCOUNTS } = demoScenarios(APP_LOCALE);
 
@@ -196,7 +203,8 @@ function seedSearch50kVault(accountId) {
 
 export const config = {
   runner: 'local',
-  specs: [ONBOARDING ? './scripts/screenshots/onboarding-shots.js'
+  specs: [CONTACTS ? './scripts/screenshots/contacts-shots.js'
+    : ONBOARDING ? './scripts/screenshots/onboarding-shots.js'
     : SEARCH50K ? './scripts/screenshots/search50k-shots.js' : './scripts/screenshots/shots.js'],
   maxInstances: 1,
   capabilities: [{
@@ -223,7 +231,7 @@ export const config = {
     let accounts = [];
     if (!ONBOARDING) {
       buildMockServer();
-      mockServers = await Promise.all(DEMO_ACCOUNTS.map((a) => startMockImap(a.scenario())));
+      mockServers = await Promise.all(DEMO_ACCOUNTS.map((a, i) => startMockImap(CONTACTS && i === 0 ? withContactsCc(a.scenario()) : a.scenario())));
       accounts = DEMO_ACCOUNTS.map((a, i) => mockAccount({
         id: a.id, email: a.email, name: a.name,
         port: mockServers[i].port, smtpPort: mockServers[i].smtpPort,
