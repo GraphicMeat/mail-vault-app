@@ -17,6 +17,7 @@ import { remindOfUnfinished, REMIND_EVERY_MS } from '../../services/workflows/pe
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useConnectivityStore } from '../../stores/connectivityStore';
+import '../../services/workflows/bindStoreActions';
 
 beforeEach(() => {
   useSettingsStore.setState({ pendingActionsRemindedAt: null });

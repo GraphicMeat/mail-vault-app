@@ -3,6 +3,7 @@ import { daemonCall } from '../services/daemonClient';
 import { useSettingsStore } from './settingsStore';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { t } from '../i18n/index.js';
+import { listenTo } from '../services/listenTo.js';
 
 // Follow-up reminders ("remind me if no reply"). Rows from `follow_up.*`
 // (src-daemon/src/handlers/follow_up.rs), modeled on snoozeStore.js: one flat
@@ -145,14 +146,6 @@ export async function announceDue() {
   }
 }
 
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await import('@tauri-apps/api/event');
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
-  }
-}
 
 let _initialized = false;
 

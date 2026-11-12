@@ -23,7 +23,7 @@
 use crate::imap::{self, ImapConfig};
 use crate::account_lifecycle::OperationPermit;
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::send::classify::{classify_failure, SendVerdict};
 use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp;

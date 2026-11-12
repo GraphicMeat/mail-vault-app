@@ -17,7 +17,7 @@ fn chk() -> Value {
     json!({"requestId":"c","accountId":"one","fromAddress":"owner@example.test","mode":"new","to":"friend@example.test","cc":"","bcc":"explicit@example.test","subject":"","authoredBodyText":"words","attachmentCount":0,"timeZone":"UTC"})
 }
 async fn rpc(s: &Arc<DaemonState>, method: &str, p: Value) -> Result<Value, String> {
-    let out = crate::server::handle_request_for_test(s, method, p).await;
+    let out = crate::test_support::handle_request_for_test(s, method, p).await;
     out.result.ok_or_else(|| out.error.unwrap().message)
 }
 #[tokio::test]
@@ -368,7 +368,7 @@ async fn compose_prep_large_worker_does_not_block_an_unrelated_runtime_request()
     let was_pending = !pending.is_finished();
     let other = tokio::time::timeout(
         std::time::Duration::from_secs(2),
-        crate::server::handle_request_for_test(&s, "ping", json!({})),
+        crate::test_support::handle_request_for_test(&s, "ping", json!({})),
     )
     .await;
     release.send(()).unwrap();
@@ -427,7 +427,7 @@ async fn compose_prep_large_check_is_read_only_and_keeps_ipc_responsive() {
     }
     let other = tokio::time::timeout(
         std::time::Duration::from_secs(2),
-        crate::server::handle_request_for_test(&s, "ping", json!({})),
+        crate::test_support::handle_request_for_test(&s, "ping", json!({})),
     )
     .await;
     release.send(()).unwrap();

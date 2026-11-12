@@ -1,7 +1,7 @@
 //! A connection after `channel.open`: bus events out, notifications in, no responses.
 use crate::events::event_line;
 use crate::ipc;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::io::{AsyncWriteExt, BufReader, Lines, ReadHalf, WriteHalf};
@@ -171,7 +171,7 @@ mod tests {
         crate::handlers::net_activity::listener(state.events.clone(), std::sync::Arc::clone(&state.net_log))(&recorded);
         state.net_log.flush();
 
-        let resp = crate::server::handle_request_for_test(&state, "net.activity", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&state, "net.activity", json!({})).await;
         let result = resp.result.expect("net.activity answers");
         let e = result["events"]
             .as_array()
@@ -220,7 +220,7 @@ mod tests {
     #[tokio::test]
     async fn nudge_and_sweep_notifications_reach_the_index_worker_channel() {
         let tmp = tempfile::tempdir().unwrap();
-        let state = crate::server::DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true);
+        let state = crate::state::DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true);
         let (tx, rx) = std::sync::mpsc::channel();
         *state.search_index.signals.lock().unwrap() = Some(tx);
         dispatch(&state, "search_index.nudge", json!({"accountId": "a1", "mailbox": "Projects/2026"})).await;
@@ -240,7 +240,7 @@ mod tests {
     #[tokio::test]
     async fn nudge_and_sweep_are_silent_when_the_mail_dir_is_unreachable() {
         let tmp = tempfile::tempdir().unwrap();
-        let state = crate::server::DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
+        let state = crate::state::DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
         let (tx, rx) = std::sync::mpsc::channel();
         *state.search_index.signals.lock().unwrap() = Some(tx);
         dispatch(&state, "search_index.nudge", json!({"accountId": "a1", "mailbox": "INBOX"})).await;

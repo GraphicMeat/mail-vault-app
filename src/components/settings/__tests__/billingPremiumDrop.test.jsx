@@ -49,6 +49,7 @@ vi.mock('../../../services/billingApi', () => ({
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 // accountStore is a thin hook over mailStore — the state lives there.
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../../../services/workflows/bindStoreActions');
 const { BillingSettings } = await import('../BillingSettings');
 
 const PREMIUM_PROFILE = {

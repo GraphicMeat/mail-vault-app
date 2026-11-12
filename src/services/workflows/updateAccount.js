@@ -3,7 +3,7 @@ import * as db from '../db';
 import { isGraphAccount } from '../graphConfig';
 import { t } from '../../i18n/index.js';
 export async function updateAccount(accountId, patch) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const existing = get().accounts.find(a => a.id === accountId);
   if (!existing) throw new Error(t('errors.accountNotFound'));

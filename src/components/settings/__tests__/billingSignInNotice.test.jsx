@@ -16,6 +16,7 @@ vi.mock('../../../services/api', () => ({
 }));
 
 import { signInFailureNotice, premiumDropNotice } from '../BillingSettings';
+import '../../../services/workflows/bindStoreActions';
 
 describe('signInFailureNotice', () => {
   it('explains an email the billing server has never seen', () => {

@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useMailStore } from '../../../stores/mailStore';
 import { setLocale, t } from '../../../i18n/index.js';
+import '../../../services/workflows/bindStoreActions';
 
 // The thank-you step itself is under test, so only the steps before it are stubbed.
 vi.mock('../Splash', () => ({ Splash: () => null }));

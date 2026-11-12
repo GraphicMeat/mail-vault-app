@@ -1,26 +1,11 @@
-// Conditional S4 old-JS capture. Stage beside accountSlice.js only after S3 is accepted.
+// Conditional S4 old-JS capture of the manual-refresh throttle.
 // Captures the real manual gesture throttle, spinner, and trailing call boundary.
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeFileSync } from 'node:fs';
 
+import { createManualRefreshThrottle } from '../../utils/manualRefreshThrottle';
+
 const mockRefreshCurrentView = vi.fn();
-vi.mock('../../services/workflows/activateAccount', () => ({ activateAccount: vi.fn(), init: vi.fn(), setActiveAccount: vi.fn() }));
-vi.mock('../../services/workflows/loadSubtree', () => ({ loadSubtree: vi.fn() }));
-vi.mock('../../services/transport.js', () => ({ send: vi.fn() }));
-vi.mock('../../services/workflows/prefetch', () => ({ _prefetchAllMailboxes: vi.fn(), _prewarmAccountCaches: vi.fn() }));
-vi.mock('../../services/workflows/addAccount', () => ({ addAccount: vi.fn() }));
-vi.mock('../../services/workflows/updateAccount', () => ({ updateAccount: vi.fn() }));
-vi.mock('../../services/workflows/changeServer', () => ({ changeServer: vi.fn() }));
-vi.mock('../../services/workflows/removeAccount', () => ({ removeAccount: vi.fn() }));
-vi.mock('../../services/workflows/refreshAccounts', () => ({ refreshCurrentView: (...args) => mockRefreshCurrentView(...args), refreshAllAccounts: vi.fn() }));
-vi.mock('../../services/workflows/retryKeychainAccess', () => ({ retryKeychainAccess: vi.fn() }));
-vi.mock('../../services/workflows/folderOps', () => ({ createFolder: vi.fn(), renameFolder: vi.fn(), deleteFolder: vi.fn(), deleteLocalFolder: vi.fn() }));
-vi.mock('../../services/workflows/loadUnifiedInbox', () => ({ setUnifiedInbox: vi.fn(), switchUnifiedFolder: vi.fn(), loadUnifiedInbox: vi.fn() }));
-vi.mock('../../services/workflows/messageMutations', () => ({
-  saveEmailLocally: vi.fn(), saveEmailsLocally: vi.fn(), saveSelectedLocally: vi.fn(),
-  removeLocalEmail: vi.fn(), removeLocalEmails: vi.fn(), deleteEmailFromServer: vi.fn(),
-  markEmailReadStatus: vi.fn(), exportEmail: vi.fn(),
-}));
 
 const BASE_MS = 1_000_000;
 const captured = [];
@@ -35,17 +20,17 @@ const snapshot = (label) => ({ label, elapsedMs: Date.now() - BASE_MS,
 beforeEach(async () => {
   vi.useFakeTimers();
   vi.setSystemTime(BASE_MS);
-  vi.resetModules();
   invocations = [];
   mockRefreshCurrentView.mockReset().mockImplementation(() => {
     invocations.push({ elapsedMs: Date.now() - BASE_MS, mailbox: state.activeMailbox });
     return Promise.resolve();
   });
-  const { createAccountSlice } = await import('./accountSlice');
-  const set = patch => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; };
-  const get = () => state;
-  state = { ...createAccountSlice(set, get), activeAccountId: 'acct-1', activeMailbox: 'INBOX' };
-  actions = state;
+  // The throttle moved out of the account slice (workflows are bound in
+  // services/workflows/bindStoreActions.js); it is the same code, built here
+  // over a plain state object instead of the mail store.
+  state = { activeAccountId: 'acct-1', activeMailbox: 'INBOX', manualRefreshSpinning: false };
+  const setSpinning = (manualRefreshSpinning) => { state = { ...state, manualRefreshSpinning }; };
+  actions = { refreshCurrentView: createManualRefreshThrottle(() => mockRefreshCurrentView(), setSpinning) };
 });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 afterAll(() => {

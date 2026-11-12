@@ -32,23 +32,7 @@ const FOREGROUND_POLL: Duration = Duration::from_millis(25);
 
 /// RPCs a person waits on. Sync, prefetch and index calls are not: they must not hold the index back.
 pub fn is_foreground_method(method: &str) -> bool {
-    #[cfg(feature = "blitz-render")]
-    if crate::blitz::is_foreground(method) {
-        return true;
-    }
-    matches!(
-        method,
-        "maildir_read" | "maildir_read_light" | "maildir_read_light_batch" | "maildir_read_raw_source"
-            | "maildir_read_attachment" | "maildir_read_attachments" | "maildir_set_flags" | "maildir_delete"
-            | "maildir_delete_many" | "load_email_cache_partial" | "load_email_cache_window" | "load_email_cache_by_uids" | "vault_rows"
-            | "vault_search" | "mail_search_start" | "imap_set_flags" | "imap_delete_email" | "delete_queue.submit" | "messages.restore" | "imap_move_emails"
-            | "graph_set_read" | "graph_set_flagged" | "graph_delete_message" | "graph_move_emails"
-            | "archive_emails" | "bulk_delete_emails" | "search.suggest" | "views.evaluate" | "body.scan"
-            | "views.keywords" | "views.keyword_detail" | "views.senders"
-            | "people.list" | "people.get" | "people.stats" | "people.messages" | "people.suggest" | "people.review.list"
-            | "people.contacts.top" | "people.contacts.search"
-            | "compose.reply_context" | "compose.check"
-    )
+    crate::rpc_registry::is_foreground(method)
 }
 
 /// Called for every foreground RPC.

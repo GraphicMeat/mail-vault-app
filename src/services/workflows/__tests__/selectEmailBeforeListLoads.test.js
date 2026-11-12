@@ -102,6 +102,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 
 const ACCOUNT = { id: 'acct1', email: 'someone@mock.test' };
 const ARRIVED = { uid: 7, subject: 'Just arrived', from: { address: 'ada@example.test' }, date: '2026-09-14T10:00:00Z', flags: [] };

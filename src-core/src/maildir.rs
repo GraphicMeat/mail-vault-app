@@ -195,17 +195,73 @@ pub fn mirror_cur_in(mirror_mailbox_dir: &Path) -> PathBuf {
     mirror_mailbox_dir.join("cur")
 }
 
+/// The Maildir flag letter a flag names (`archived` or `a` → `A`, `draft` →
+/// `D`, `flagged` → `F`, `replied` → `R`, `seen` → `S`, `trashed` → `T`, any
+/// case), `None` for a flag no letter carries (`\Seen`, a keyword). The one
+/// word-to-letter mapping: `build_maildir_filename` and
+/// `message_store::flag_letters` both use it.
+pub(crate) fn flag_letter(flag: &str) -> Option<char> {
+    match flag.to_lowercase().as_str() {
+        "archived" | "a" => Some('A'),
+        "draft" | "d" => Some('D'),
+        "flagged" | "f" => Some('F'),
+        "replied" | "r" => Some('R'),
+        "seen" | "s" => Some('S'),
+        "trashed" | "t" => Some('T'),
+        _ => None,
+    }
+}
+
+/// Build a vault filename from UID and flags: `{uid}:2,{letters}.eml` (`;2,`
+/// on Windows, see `maildir::INFO_SEP`), letters sorted and deduped (A D F R S T).
+pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
+    let mut flag_chars: Vec<char> = flags.iter().filter_map(|f| flag_letter(f)).collect();
+    flag_chars.sort();
+    flag_chars.dedup();
+    let flag_str: String = flag_chars.into_iter().collect();
+    format!("{}{}{}.eml", uid, crate::maildir::INFO_PREFIX, flag_str)
+}
+
+/// The flags a vault file name carries, as the Maildir words AND as the IMAP
+/// names — `seen` and `\Seen` both, for a file named `12:2,AS.eml`.
+///
+/// Every row in the app asks `flags.includes('\Seen')`; a row built from its
+/// .eml used to get the words alone and render unread whatever the file said.
+/// The words stay, because `build_maildir_filename` and the archived checks
+/// read them; the names are what the rest of the app reads.
+pub fn parse_flags_from_filename(filename: &str) -> Vec<String> {
+    let Some(flags_part) = crate::maildir::info_flags(filename) else { return Vec::new() };
+    let mut flags = Vec::new();
+    for c in flags_part.chars() {
+        match c {
+            'A' => flags.push("archived".to_string()),
+            'D' => flags.push("draft".to_string()),
+            'F' => flags.push("flagged".to_string()),
+            'R' => flags.push("replied".to_string()),
+            'S' => flags.push("seen".to_string()),
+            'T' => flags.push("trashed".to_string()),
+            _ => {}
+        }
+    }
+    for (word, name) in [("seen", "\\Seen"), ("flagged", "\\Flagged"), ("replied", "\\Answered")] {
+        if flags.iter().any(|f| f == word) {
+            flags.push(name.to_string());
+        }
+    }
+    flags
+}
+
 /// The mirror's file name for `uid` under `flags`: the vault's Maildir name
 /// (`<uid>:2,<FLAGS>.eml`), so the flags survive a restore from the mirror.
 /// The mirror stays Maildir `.eml` whatever the vault's format.
 pub fn mirror_filename(uid: u32, flags: &[String]) -> String {
-    crate::vault_files::build_maildir_filename(uid, flags)
+    build_maildir_filename(uid, flags)
 }
 
 /// The flags a mirror file's name holds, read as a vault name's
 /// (`<uid>:2,<FLAGS>[.eml]`; a legacy `<uid>.eml` holds none).
 pub fn mirror_flags(name: &str) -> Vec<String> {
-    crate::vault_eml::parse_flags_from_filename(name)
+    parse_flags_from_filename(name)
 }
 
 /// Every entry of the mirror folder `dir` whose name carries a uid by the
@@ -482,6 +538,20 @@ pub struct GenerationRepair {
 /// this.
 pub fn normalize_message_id(raw: &str) -> String {
     raw.trim().trim_start_matches('<').trim_end_matches('>').trim().to_string()
+}
+
+/// Whether two Message-IDs can name the same message: unless BOTH sides carry
+/// an id (after [`normalize_message_id`]; a blank one is none) and the two
+/// differ, they can. Uids restart after a UIDVALIDITY change, so a uid alone can
+/// name another message, but a side with no id proves nothing against the
+/// other. Case is kept: this is the strict rule, not the folded one of
+/// `fetch_mode::same_message`.
+pub fn same_message_ids(ours: Option<&str>, other: Option<&str>) -> bool {
+    let norm = |id: Option<&str>| id.map(normalize_message_id).filter(|id| !id.is_empty());
+    match (norm(ours), norm(other)) {
+        (Some(a), Some(b)) => a == b,
+        _ => true,
+    }
 }
 
 /// Which of `uids` the vault holds, split three ways: verified, missing,
@@ -1101,6 +1171,24 @@ pub fn purge_orphans(mailbox_dir: &Path) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The rule of the reconcile join and the body tracker backfill, which
+    /// each carried a copy: bare ids compare case-sensitively, and a side with
+    /// no id (absent or blank) proves nothing, so it is let through.
+    #[test]
+    fn same_message_ids_lets_a_missing_id_through_and_compares_the_bare_ids() {
+        assert!(same_message_ids(Some("<a@x>"), Some("a@x")), "brackets are not part of the id");
+        assert!(same_message_ids(Some(" <a@x> "), Some("<a@x>")), "space is not part of the id");
+        assert!(same_message_ids(Some("<<a@x>>"), Some("a@x")), "a run of brackets is stripped");
+        assert!(!same_message_ids(Some("<a@x>"), Some("<b@x>")), "two ids that differ are two messages");
+        assert!(!same_message_ids(Some("<A@x>"), Some("<a@x>")), "the compare is case-sensitive");
+        assert!(same_message_ids(None, Some("<a@x>")), "no id on our side");
+        assert!(same_message_ids(Some("<a@x>"), None), "no id on the other side");
+        assert!(same_message_ids(None, None));
+        assert!(same_message_ids(Some("<>"), Some("<b@x>")), "an empty id is no id");
+        assert!(same_message_ids(Some("  "), Some("<b@x>")), "a blank id is no id");
+        assert!(same_message_ids(Some("<a@x>"), Some("")));
+    }
 
     #[test]
     fn normalize_message_id_unfolds_and_brackets() {

@@ -57,7 +57,7 @@
 use crate::handlers::common::{self, blocking, str_arg};
 use crate::handlers::imap::{download_policy, email_date_ms, now_ms};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use futures::future::{BoxFuture, FutureExt, Shared};
 use mailvault_core::archive::{self, ArchiveCtx};
 use mailvault_core::backup::BackupProgress;
@@ -599,7 +599,7 @@ pub(crate) async fn save(state: &Arc<DaemonState>, params: &Value, id: Value) ->
         Ok(a) => a,
         Err(e) => return RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Bad account JSON: {e}")),
     };
-    if account.oauth2_transport.as_deref() == Some("graph") {
+    if account.uses_graph() {
         return RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("{E_VAULT_GAP_GRAPH}: an Outlook account's missing messages are saved by its backup"));
     }
     // A drive lost since startup passes `vault_root` (its checks are made at
@@ -657,7 +657,7 @@ pub(crate) async fn save(state: &Arc<DaemonState>, params: &Value, id: Value) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mailvault_core::maildir::{vault_filename_uid, IMPORT_UID_BASE, INFO_PREFIX};
     use mailvault_core::vault_files;
     use mock_imap::state::{Mailbox, Message};

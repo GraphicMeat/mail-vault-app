@@ -31,6 +31,8 @@ vi.mock('../../api', () => ({
   fetchEmails: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
   checkMailboxStatus: vi.fn().mockResolvedValue(null),
   fetchMailboxes: vi.fn().mockResolvedValue([]),
+  // The daemon lists (and stores) IMAP/JMAP folders: the server's answer, as fetchMailboxes was before.
+  loadMailboxes: vi.fn().mockResolvedValue({ mailboxes: [], source: 'server', suspectEmpty: false, changed: true }),
   searchAllUids: vi.fn().mockResolvedValue([]),
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
@@ -88,6 +90,7 @@ vi.mock('../folderStatus', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { forget: forgetMemo } = await import('../../headerMemo');
 
 const A = { id: 'acct-a', email: 'a@mock.test', password: 'pw' };

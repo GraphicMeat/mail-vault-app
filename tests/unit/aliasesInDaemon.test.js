@@ -68,6 +68,8 @@ describe('the alias lists live in the daemon', () => {
     const hits = [];
     for (const file of sourceFiles('src')) {
       if (file === join('src', 'demo', 'backend.js')) continue;
+      // The generated list of every daemon method name is data, not a caller.
+      if (file === join('src', 'services', 'rpcMethods.generated.js')) continue;
       const text = readFileSync(file, 'utf8');
       for (const name of ['mergeDiscovery', 'addAliasToList', 'applyDiscovery', 'aliases.discover']) {
         if (text.includes(name) && file !== join('src', 'services', 'transport.js')) hits.push(`${file}: ${name}`);

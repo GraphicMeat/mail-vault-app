@@ -1,6 +1,7 @@
 // The native worker owns every bulk action and its controls.
 import { it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { shellModuleSource } from './helpers/rustSources.js';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
 import { createDemoBackend } from '../../src/demo/backend.js';
 
@@ -12,7 +13,7 @@ it('registers implemented bulk controls in daemon transport and router', () => {
     expect(DAEMON_OWNED.has(command), command).toBe(true);
     expect(router).toContain(`"${command}"`);
   }
-  const shell = readFileSync('src-tauri/src/main.rs', 'utf8');
+  const shell = shellModuleSource('rpc_proxy');
   const forwarding = shell.indexOf('bulk::forward(');
   const fastPath = shell.indexOf('if let Some(token) = fast_token', shell.indexOf('async fn daemon_rpc('));
   expect(forwarding).toBeGreaterThan(shell.indexOf('async fn daemon_rpc('));

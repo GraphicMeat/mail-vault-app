@@ -121,6 +121,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 
 const ACCT_A = { id: 'acct-a', email: 'a@mock.test', imapHost: 'h', password: 'x' };
 

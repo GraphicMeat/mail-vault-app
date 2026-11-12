@@ -107,6 +107,7 @@ vi.mock('../settingsStore', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { useTagStore, tagRowKey } = await import('../tagStore');
 const { useAutoTagStore } = await import('../autoTagStore');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');

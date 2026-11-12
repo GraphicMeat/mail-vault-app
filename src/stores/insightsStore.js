@@ -3,11 +3,11 @@ import { useMailStore } from './mailStore';
 import { useSettingsStore, selectOwnAddressesByAccount } from './settingsStore';
 import * as api from '../services/insightsApi';
 import { createInsightsSession } from '../services/insightsSession';
-import { cancelInsightsSelection } from '../services/workflows/selectEmail';
+import { workflowPort } from './workflowPorts';
 import { normalizeInsightsPreferences, insightsDateRange } from '../utils/insights/preferences';
 
 const defaults = {
-  cancelSelection: cancelInsightsSelection,
+  cancelSelection: workflowPort('cancelInsightsSelection'),
   getAccounts: () => useMailStore.getState().accounts,
   // Login, default From and every alias of each account (settingsStore).
   getOwnAddresses: () => selectOwnAddressesByAccount(useSettingsStore.getState(), useMailStore.getState().accounts),

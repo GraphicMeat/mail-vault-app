@@ -76,6 +76,7 @@ vi.mock('../../../stores/settingsStore', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 
 const ACCOUNT = { id: 'acct-1', email: 'me@mock.test', password: 'pw' };
 

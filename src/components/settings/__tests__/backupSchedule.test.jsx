@@ -13,6 +13,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/backupScheduler', () => ({
   backupScheduler: { triggerManualBackup: vi.fn() },

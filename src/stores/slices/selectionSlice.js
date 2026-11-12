@@ -1,26 +1,14 @@
 // ── selectionSlice — email selection, viewer, and bulk operations ──
 // Large async orchestration functions are extracted to src/services/workflows/.
-// This slice contains state, simple inline actions, and passthrough wrappers.
+// This slice contains state, simple inline actions, and unbound stubs for the
+// actions a workflow implements (bound in services/workflows/bindStoreActions).
 
 import { buildThreads } from '../../utils/emailParser';
 import { mergesSentIntoThreads } from '../../utils/sentFolder';
 import { selectionKey, refreshSelectedThread, resolveEmailLocation } from './unifiedHelpers';
 import { useSettingsStore } from '../settingsStore';
 import { useViewHideStore } from '../viewHideStore';
-import {
-  selectEmail as _selectEmail,
-  _prefetchAdjacentEmails,
-  cancelSelection as _cancelSelection,
-} from '../../services/workflows/selectEmail';
-import {
-  markSelectedAsRead as _markSelectedAsRead,
-  markSelectedAsUnread as _markSelectedAsUnread,
-  setSelectedFlagged as _setSelectedFlagged,
-  toggleFlagged as _toggleFlagged,
-  deleteSelectedFromServer as _deleteSelectedFromServer,
-  moveEmails as _moveEmails,
-  purgeEverywhereReporting as _purgeEverywhere,
-} from '../../services/workflows/messageMutations';
+import { unboundAction } from './unboundAction';
 import { t } from '../../i18n/index.js';
 import { captureSelectionSnapshot } from '../../services/headerIdentity.js';
 
@@ -91,7 +79,7 @@ export const createSelectionSlice = (set, get) => ({
     // so it must not cancel that thread's mark-as-read countdowns: nothing
     // would start them again. A selection still loading is cancelled either way.
     const reopen = get().selectedThread?.threadId === thread.threadId;
-    _cancelSelection({ keepThreadTimers: reopen });
+    get()._cancelSelection({ keepThreadTimers: reopen });
     set(state => ({
       selectedThread: thread,
       threadFocusKey: focusKey,
@@ -127,7 +115,7 @@ export const createSelectionSlice = (set, get) => ({
   // `loadingEmail` too: closing during a body fetch must not leave the spinner
   // standing as the whole pane's content.
   closeEmail: () => {
-    _cancelSelection();
+    get()._cancelSelection();
     set({
       selectedEmailId: null,
       selectedEmail: null,
@@ -138,10 +126,11 @@ export const createSelectionSlice = (set, get) => ({
     });
   },
 
-  // ── Passthrough wrappers to workflow functions ──
+  // ── Actions implemented by workflows (bound in bindStoreActions) ──
 
-  _prefetchAdjacentEmails: (currentUid) => _prefetchAdjacentEmails(currentUid),
-  selectEmail: (uid, source, mailboxOverride, locationOverride, clickedRow) => _selectEmail(uid, source, mailboxOverride, locationOverride, clickedRow),
+  _prefetchAdjacentEmails: unboundAction('_prefetchAdjacentEmails'),
+  selectEmail: unboundAction('selectEmail'),
+  _cancelSelection: unboundAction('_cancelSelection'),
 
   // ── Simple inline actions (stay in slice) ──
 
@@ -235,13 +224,13 @@ export const createSelectionSlice = (set, get) => ({
     return { threads: threadCount + unwindowed, emails: selectedEmailIds.size };
   },
 
-  // ── Passthrough wrappers to workflow functions ──
+  // ── More actions implemented by workflows (bound in bindStoreActions) ──
 
-  markSelectedAsRead: () => _markSelectedAsRead(),
-  markSelectedAsUnread: () => _markSelectedAsUnread(),
-  setSelectedFlagged: (on) => _setSelectedFlagged(on),
-  toggleFlagged: (key) => _toggleFlagged(key),
-  deleteSelectedFromServer: () => _deleteSelectedFromServer(),
-  moveEmails: (uids, targetMailbox) => _moveEmails(uids, targetMailbox),
-  purgeSelectedEverywhere: (opts) => _purgeEverywhere([...get().selectedEmailIds], opts),
+  markSelectedAsRead: unboundAction('markSelectedAsRead'),
+  markSelectedAsUnread: unboundAction('markSelectedAsUnread'),
+  setSelectedFlagged: unboundAction('setSelectedFlagged'),
+  toggleFlagged: unboundAction('toggleFlagged'),
+  deleteSelectedFromServer: unboundAction('deleteSelectedFromServer'),
+  moveEmails: unboundAction('moveEmails'),
+  purgeSelectedEverywhere: unboundAction('purgeSelectedEverywhere'),
 });

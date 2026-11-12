@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { shellSource, registryRow } from './helpers/rustSources.js';
 const read = path => readFileSync(path, 'utf8');
 it('exposes only the read-only compose contracts and leaves production callers current', () => {
   const transport = read('src/services/transport.js');
@@ -11,8 +12,10 @@ it('exposes only the read-only compose contracts and leaves production callers c
     expect(owned).toContain(`'${method}'`);
     expect(handler).toContain(`"${method}"`);
     expect(read('src/demo/backend.js')).toContain(`'${method}'`);
-    expect(read('src-tauri/src/main.rs')).toContain(`"${method}"`);
-    expect(read('src-daemon/src/search_index.rs')).toContain(`"${method}"`);
+    expect(shellSource()).toContain(`"${method}"`);
+    // The method table: a person waits on it (holds the index back) and it
+    // routes before credential injection.
+    expect(registryRow(method), method).toMatchObject({ foreground: true, strict: true, domain: 'ComposePrep' });
   }
   expect(server).toContain('crate::handlers::compose_prep::route(');
   expect(handler).toContain('spawn_blocking');
@@ -27,9 +30,11 @@ it('pins the immutable remotely captured corpus bytes', () => {
 it('dispatches read-only compose before credential injection and retains its budget', () => {
   const server=read('src-daemon/src/server.rs');
   const entry=server.slice(server.indexOf('async fn handle_request('),server.indexOf('fn jmap_refusal_log_line'));
-  expect(entry.indexOf('"compose.reply_context" | "compose.check"')).toBeLessThan(entry.indexOf('oauth_tokens::inject'));
+  expect(entry.indexOf('crate::rpc_registry::is_strict(&method)')).toBeGreaterThanOrEqual(0);
+  expect(entry.indexOf('crate::rpc_registry::is_strict(&method)')).toBeLessThan(entry.indexOf('oauth_tokens::inject'));
+  for (const method of ['compose.reply_context', 'compose.check']) expect(registryRow(method).strict, method).toBe(true);
   expect(entry).toMatch(/return route_request\(state, req\)\.await/);
-  expect(read('src-tauri/src/main.rs')).toMatch(/"compose.reply_context"\s*\|\s*"compose.check"\s*=>\s*Some\(Duration::from_secs\(30\)\)/);
+  expect(shellSource()).toMatch(/"compose.reply_context"\s*\|\s*"compose.check"\s*=>\s*Some\(Duration::from_secs\(30\)\)/);
   for (const locale of ['en','de','es','fr','it','pt-BR','ja','ko','zh-Hans']) {
     expect(JSON.parse(read(`src/i18n/locales/${locale}.json`))['compose.preparationUnavailable']).toBeTruthy();
   }

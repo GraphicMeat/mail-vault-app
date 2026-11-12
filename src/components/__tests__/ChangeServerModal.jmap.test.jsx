@@ -21,6 +21,7 @@ import ChangeServerModal from '../ChangeServerModal';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { t } from '../../i18n';
+import '../../services/workflows/bindStoreActions';
 
 const JMAP = {
   id: 'jm', email: 'me@example.org', authType: 'password', password: 'tok', imapHost: 'mail.example.org',

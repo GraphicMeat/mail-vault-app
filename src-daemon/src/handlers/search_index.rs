@@ -8,7 +8,7 @@
 use crate::handlers::common::{blocking, done};
 use crate::ipc::{self, RpcResponse};
 use crate::search_index as si;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::Value;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -165,7 +165,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use crate::ipc;
-    use crate::server::DaemonState;
+    use crate::state::DaemonState;
     use serde_json::{json, Value};
     use std::sync::Arc;
     use std::time::Duration;
@@ -365,7 +365,7 @@ mod tests {
     async fn search_index_methods_are_not_behind_the_mail_dir_gate() {
         let tmp = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
-        let resp = crate::server::handle_request_for_test(&s, "search_index_status", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "search_index_status", json!({})).await;
         assert_eq!(resp.result.unwrap()["state"], "starting");
     }
 
@@ -377,8 +377,8 @@ mod tests {
     async fn vault_close_and_reopen_are_not_behind_the_mail_dir_gate() {
         let tmp = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
-        assert_eq!(crate::server::handle_request_for_test(&s, "vault_close", json!({})).await.result, Some(serde_json::Value::Null));
-        assert_eq!(crate::server::handle_request_for_test(&s, "vault_reopen", json!({})).await.result, Some(serde_json::Value::Null));
+        assert_eq!(crate::test_support::handle_request_for_test(&s, "vault_close", json!({})).await.result, Some(serde_json::Value::Null));
+        assert_eq!(crate::test_support::handle_request_for_test(&s, "vault_reopen", json!({})).await.result, Some(serde_json::Value::Null));
     }
 
     /// An open index holding two messages from Ann, one about an invoice.

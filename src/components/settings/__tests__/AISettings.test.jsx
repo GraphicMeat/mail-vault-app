@@ -14,6 +14,7 @@ import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useLearningStore } from '../../../stores/learningStore';
 import { t } from '../../../i18n/index.js';
+import '../../../services/workflows/bindStoreActions';
 
 const ACCOUNT = { id: 'ai-account', email: 'ai@example.test' };
 const RULE = { id: 'r1', type: 'sender-action', pattern: { fromDomain: 'shop.example' }, category: 'promotional', action: 'archive', confidence: 0.95, source: 'learned' };

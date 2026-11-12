@@ -22,7 +22,7 @@ use crate::handlers::common::{blocking, str_arg, vec_arg};
 use crate::handlers::insights::{begin_snapshot, read_page};
 use crate::insights;
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::insights_model::{Builder, Model};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -353,7 +353,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 mod tests {
     use super::*;
     use crate::custody;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use std::path::Path;
 
     fn st() -> (tempfile::TempDir, std::path::PathBuf, Arc<DaemonState>) {

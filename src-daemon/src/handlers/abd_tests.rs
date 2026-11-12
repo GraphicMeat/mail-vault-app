@@ -8,7 +8,7 @@
 use super::*;
 use crate::abd_local::DaemonLocal;
 use crate::abd_worker;
-use crate::server::handle_request_for_test;
+use crate::test_support::handle_request_for_test;
 use mailvault_core::abd::graph_ops::TokenLease as Lease;
 use mailvault_core::abd::{FolderPlan, FolderRole, FolderState, JobStatus, LocalStore, Phase, ServerCaps, TrashInfo};
 use mock_imap::state::{Mailbox, Message};

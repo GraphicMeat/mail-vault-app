@@ -5,28 +5,24 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
-import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation, viewOwnAddresses, rowIdentity } from '../stores/slices/unifiedHelpers';
+import { selectionKey, rowKey, spansMailboxes, emailScopeKey, resolveEmailLocation, viewOwnAddresses } from '../stores/slices/unifiedHelpers';
 import { mergesSentIntoThreads } from '../utils/sentFolder';
 import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
-import { useViewStore, viewLabel, effectiveViewConfig, viewDefaults, viewPresentationStamp, currentListView } from '../stores/viewStore';
+import { useViewStore, viewLabel, effectiveViewConfig, viewDefaults, viewPresentationStamp } from '../stores/viewStore';
 import { ViewAttachmentsDownload, useTimelineDownload, PeriodDownloadButtons } from './ViewAttachmentsDownload';
 import { useSearchStore } from '../stores/searchStore';
-import { useViewHideStore } from '../stores/viewHideStore';
 import { useSettingsStore, getAccountInitial, hashColor, normalizeListPreviewLines } from '../stores/settingsStore';
-import { shouldPrefetch } from '../services/cachePressure';
-import { backfillTrackerVerdicts } from '../services/rowVerdicts';
-import { buildThreads, reconcileThreads, rowStamp, groupBySender, getSenderName, filterUnread, threadRowMembers, emailsInRowRange } from '../utils/emailParser';
+import { rowStamp, groupBySender, getSenderName, filterUnread, threadRowMembers } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../services/bodyScan';
 import { listRowGround } from '../utils/listRowGround';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { formatCount } from '../utils/formatCount';
-import { archivedSelectionKeys, loadedRows } from '../utils/quickActionFacts';
 import { Button } from './ui/Button';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatEmailDate, formatDateOnly } from '../utils/dateFormat';
+import { formatEmailDate } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
 import { ExplorerView } from './ExplorerView';
 import { ViewUnavailableState } from './ViewUnavailableState';
@@ -60,9 +56,6 @@ import { LifecyclePinnedRows } from './LifecyclePinnedRows';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BulkSelectionBubble } from './BulkSelectionBubble';
 import { BulkOperationProgress } from './BulkOperationProgress';
-import { bulkOperationManager } from '../services/BulkOperationManager';
-import { captureBulkScope } from '../services/bulkSelection.js';
-import { purgeEverywhereReporting, bulkDeleteFromServer } from '../services/workflows/messageMutations';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow, listRowHeight } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
@@ -77,6 +70,17 @@ import { formatPurgeEverywhereOutcome } from '../utils/purgeOutcome';
 import { cleanPreviewText } from '../utils/previewText';
 import { Private } from './privacy/Private';
 import { usePrivateAttr } from '../hooks/usePrivacy';
+import { useDeferredThreads } from '../hooks/emailList/useDeferredThreads';
+import { useThreadedDisplay } from '../hooks/emailList/useThreadedDisplay';
+import { useRowAppearance } from '../hooks/emailList/useRowAppearance';
+import { useBulkActions } from '../hooks/emailList/useBulkActions';
+import { useRowMenuState } from '../hooks/emailList/useRowMenuState';
+import { useSenderAccordion } from '../hooks/emailList/useSenderAccordion';
+import { useListHeaderMetrics } from '../hooks/emailList/useListHeaderMetrics';
+import { useRowSelection } from '../hooks/emailList/useRowSelection';
+import { useSenderVirtualizer } from '../hooks/emailList/useSenderVirtualizer';
+import { useListScrollEffects } from '../hooks/emailList/useListScrollEffects';
+import { usePullToRefresh } from '../hooks/emailList/usePullToRefresh';
 
 // Labels describe what the list shows; users choose a mode directly.
 const THREAD_MODE_LABEL = {
@@ -88,9 +92,6 @@ const THREAD_MODE_LABEL = {
 // One identity for "no siblings", so the memo below keeps a stable result
 // while nothing is open and the rows it feeds do not all repaint.
 const EMPTY_SET = Object.freeze(new Set());
-// The row-appear fade in index.css, plus a frame.
-const ROW_APPEAR_MS = 300;
-
 const ROW_HEIGHT_DEFAULT = listRowHeight(false);
 
 // Order-sensitive 32-bit digest of a row list's uids, for cache keys that
@@ -100,22 +101,6 @@ function uidDigest(rows) {
   let h = 0;
   for (const e of rows) h = (Math.imul(h, 31) + (e.uid | 0)) | 0;
   return h;
-}
-
-function getDateRange(emails) {
-  if (!emails || emails.length === 0) return null;
-  let oldest = null;
-  let newest = null;
-  for (const e of emails) {
-    const d = e.date ? new Date(e.date) : null;
-    if (!d || isNaN(d)) continue;
-    if (!oldest || d < oldest) oldest = d;
-    if (!newest || d > newest) newest = d;
-  }
-  if (!oldest || !newest) return null;
-  const fmt = (d) => formatDateOnly(d, { alwaysShowYear: true });
-  if (oldest.toDateString() === newest.toDateString()) return fmt(newest);
-  return `${fmt(oldest)} – ${fmt(newest)}`;
 }
 
 export { formatPurgeEverywhereOutcome };
@@ -368,10 +353,7 @@ function EmailListComponent({ stacked = false }) {
   const minimizeBulkModal = useMailStore(s => s.minimizeBulkModal);
   const bulkSession = useMailStore(s => s.bulkSession);
   const endBulkSession = useMailStore(s => s.endBulkSession);
-  const [bulkOpProgress, setBulkOpProgress] = useState(null);
-  // Only a bulk selection's run (or one recovered after a relaunch) reports in
-  // the corner panel; any other delete answers with its toast alone.
-  useEffect(() => bulkOperationManager.subscribe((op, lifecycle) => { if (lifecycle?.panel) setBulkOpProgress(op); }), []);
+  const { bulkOpProgress, setBulkOpProgress, handleBulkConfirm, handleBulkCancel } = useBulkActions({ formatArchiveBackupDeleteOutcome });
 
   // A bulk session is bound to the (account, mailbox, viewMode) it was opened
   // against. The modal never unmounts on minimize, so a session for Spam
@@ -401,42 +383,7 @@ function EmailListComponent({ stacked = false }) {
   // Sender-grouped accordion state
   const [senderGroups, setSenderGroups] = useState(null);
   const senderGroupCacheRef = useRef({ fingerprint: null, groups: null });
-  const [expandedSender, setExpandedSender] = useState(null);
-  const [expandedTopics, setExpandedTopics] = useState(new Set());
-  const [expandedEmail, setExpandedEmail] = useState(null);
-  const [focusedRow, setFocusedRow] = useState(null);
-  // Lifted row menu state — only one menu can be active at a time. A row
-  // mounts its quick actions only while hovered or focused; the row whose
-  // menu (or the folder/snooze picker it opened) is up stays mounted through
-  // this, after the pointer has left it.
-  const [activeMenuRowId, setActiveMenuRowId] = useState(null);
-  // Pending delete confirmation lifted out of rows so the modal escapes the
-  // virtualizer's transform stacking context.
-  // { executor, copy: { title, description, confirmLabel } } | null
-  const [pendingDelete, setPendingDelete] = useState(null);
-  const confirmationReturnRef = useRef(null);
-  // Lifted saving state — tracks which rows have active save operations
-  const [savingRowIds, setSavingRowIds] = useState(() => new Set());
-  const startSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.add(id); return next; }), []);
-  const stopSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.delete(id); return next; }), []);
-
-  // Rows are React.memo'd, so every prop has to be referentially stable or the
-  // whole render window re-renders on any list state change. These four are the
-  // ones each row used to receive as a freshly-minted closure or object.
-  const openRowMenu = useCallback((id) => setActiveMenuRowId(id), []);
-  // A row closing its own menu must not release another row's.
-  const closeRowMenu = useCallback((id) => setActiveMenuRowId(current => (id === undefined || current === id ? null : current)), []);
-  const handleRowActionStart = useCallback((_event, trigger, entry) => {
-    if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive'].includes(entry?.action)) {
-      confirmationReturnRef.current = { trigger, row: trigger?.closest?.('.group') };
-    }
-  }, []);
-  // `options` carries `confirmOptional`, which is what lets the
-  // skip-confirmation setting reach this delete — see DeleteConfirmModal.
-  const requestRowDelete = useCallback((executor, copy, options) => {
-    setActiveMenuRowId(null);
-    setPendingDelete({ executor, copy, ...options });
-  }, []);
+  const { activeMenuRowId, setActiveMenuRowId, pendingDelete, setPendingDelete, confirmationReturnRef, savingRowIds, setSavingRowIds, startSaving, stopSaving, openRowMenu, closeRowMenu, handleRowActionStart, requestRowDelete } = useRowMenuState();
   const scrollContainerRef = useRef(null);
   // Two-finger trackpad swipes on the chronological list's rows (not the
   // sender grouping, not the explorer). The row is found under the pointer
@@ -458,94 +405,7 @@ function EmailListComponent({ stacked = false }) {
     return () => observer.disconnect();
   }, []);
 
-  const expandedSenderRef = useRef(expandedSender);
-  const expandedTopicsRef = useRef(expandedTopics);
-  const expandedEmailRef = useRef(expandedEmail);
-  const focusedRowRef = useRef(focusedRow);
-  const senderGroupsRef = useRef(senderGroups);
-
-  useEffect(() => { expandedSenderRef.current = expandedSender; }, [expandedSender]);
-  useEffect(() => { expandedTopicsRef.current = expandedTopics; }, [expandedTopics]);
-  useEffect(() => { expandedEmailRef.current = expandedEmail; }, [expandedEmail]);
-  useEffect(() => { focusedRowRef.current = focusedRow; }, [focusedRow]);
-  useEffect(() => { senderGroupsRef.current = senderGroups; }, [senderGroups]);
-
-  useEffect(() => {
-    if (isExplorer || emailListGrouping !== 'sender') return;
-
-    const handleKeyDown = (e) => {
-      if (e.defaultPrevented || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-      const groups = senderGroupsRef.current;
-      if (!groups?.length) return;
-
-      if (e.key === 'j' || e.key === 'k') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const items = [];
-        for (const sender of groups) {
-          items.push({ type: 'sender', senderEmail: sender.senderEmail });
-          if (expandedSenderRef.current === sender.senderEmail) {
-            sender.topics.forEach((topic) => {
-              const topicKey = `${sender.senderEmail}-${topic.topicId}`;
-              items.push({ type: 'topic', senderEmail: sender.senderEmail, topicKey });
-              if (expandedTopicsRef.current.has(topicKey)) {
-                topic.emails.forEach(email => {
-                  items.push({ type: 'email', senderEmail: sender.senderEmail, topicKey, emailUid: email.uid });
-                });
-              }
-            });
-          }
-        }
-
-        const current = focusedRowRef.current;
-        const currentIdx = current ? items.findIndex(item =>
-          item.type === current.type &&
-          item.senderEmail === current.senderEmail &&
-          item.topicKey === current.topicKey &&
-          item.emailUid === current.emailUid
-        ) : -1;
-
-        const nextIdx = e.key === 'j'
-          ? Math.min(currentIdx + 1, items.length - 1)
-          : Math.max(currentIdx - 1, 0);
-
-        setFocusedRow(items[nextIdx] || null);
-      }
-
-      if (e.key === 'Enter' && focusedRowRef.current) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const fr = focusedRowRef.current;
-        if (fr.type === 'sender') {
-          setExpandedSender(expandedSenderRef.current === fr.senderEmail ? null : fr.senderEmail);
-          setExpandedTopics(new Set());
-          setExpandedEmail(null);
-        } else if (fr.type === 'topic') {
-          setExpandedTopics(prev => {
-            const next = new Set(prev);
-            if (next.has(fr.topicKey)) next.delete(fr.topicKey);
-            else next.add(fr.topicKey);
-            return next;
-          });
-          setExpandedEmail(null);
-        } else if (fr.type === 'email') {
-          if (expandedEmailRef.current === fr.emailUid) {
-            setExpandedEmail(null);
-          } else {
-            setExpandedEmail(fr.emailUid);
-            const groups = senderGroupsRef.current;
-            const sender = groups.find(s => s.senderEmail === fr.senderEmail);
-            const topic = sender?.topics.find(t => `${fr.senderEmail}-${t.topicId}` === fr.topicKey);
-            const email = topic?.emails.find(e => e.uid === fr.emailUid);
-            if (email) selectEmailRow(rowKey(email, spansMailboxes(useMailStore.getState())), email);
-          }
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isExplorer, emailListGrouping, selectEmailRow]);
+  const { expandedSender, setExpandedSender, expandedTopics, setExpandedTopics, expandedEmail, setExpandedEmail, focusedRow, setFocusedRow } = useSenderAccordion({ senderGroups, isExplorer, emailListGrouping, selectEmailRow });
 
   useEffect(() => {
     setFocusedRow(null);
@@ -578,11 +438,6 @@ function EmailListComponent({ stacked = false }) {
     setPendingDelete(null);
   }, [activeAccountId, activeMailbox]);
 
-  // Pull-to-refresh
-  const [pullDistance, setPullDistance] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const pullStartY = useRef(null);
-  const isPulling = useRef(false);
 
   // sortedEmails is already combined (server + local-only), flagged (isLocal, isArchived, source),
   // and sorted by updateSortedEmails(). Use directly to avoid redundant 17k-object spread + sort.
@@ -606,62 +461,7 @@ function EmailListComponent({ stacked = false }) {
   // placeholders for good. A skeleton only ever means "still loading".
   const skeletonOn = showSkeleton && loading;
 
-  const dateRange = useMemo(() => getDateRange(displayEmails), [displayEmails]);
-
-  // What share of the loaded window is already on this machine. A claim about
-  // the rows the list is holding, never about the server total — the meter and
-  // the sentence beside it read off the same two numbers, so colour is never
-  // the only carrier. Null (renders nothing) when nothing is loaded.
-  const vaultShare = useMemo(() => {
-    const loaded = sortedEmails.length;
-    if (!loaded) return null;
-    let inVault = 0;
-    for (const e of sortedEmails) if (e.isArchived) inVault++;
-    return { loaded, inVault, pct: Math.round((inVault / loaded) * 100) };
-  }, [sortedEmails]);
-
-  // "Hide view mail": how many of the folder's messages the switch keeps off
-  // this list, so the header's total is the folder as shown. The header only:
-  // store `totalEmails` stays the server's. Never inside a view or a search,
-  // whose rows nothing hides, and unknown membership (null) subtracts nothing.
-  const hiddenByMailbox = useViewHideStore(s => s.hiddenByMailbox);
-  const viewHeldKeys = useViewHideStore(s => s.keys);
-  const loadedEmails = useMessageListStore(s => s.emails);
-  // Inside a view by its id, as the toggle reads it: a view whose row is not
-  // loaded yet is still open.
-  const hidingViewMail = hideViewMail && !activeViewId && !searchActive;
-  const hiddenFromTotal = useMemo(() => {
-    if (!hidingViewMail) return 0;
-    // All Inboxes counts what its accounts' inboxes loaded, so it gives back
-    // only the loaded rows the daemon's key set holds (each message once).
-    // Spanning as rowVisibility reads it.
-    if (unifiedInbox || activeMailbox === 'UNIFIED') {
-      if (!viewHeldKeys?.size || !loadedEmails?.length) return 0;
-      const view = { activeAccountId, activeMailbox };
-      const held = new Set();
-      for (const e of loadedEmails) {
-        const id = rowIdentity(e, view);
-        const key = id && `${id.accountId}|${id.mailbox}|${id.uid}`;
-        if (key && viewHeldKeys.has(key)) held.add(key);
-      }
-      return held.size;
-    }
-    // A folder (or a folder branch, whose total is its folders' sum) gives
-    // back what the daemon says it hides in each of them.
-    if (!hiddenByMailbox) return 0;
-    const paths = mailboxScope?.paths?.length ? mailboxScope.paths : [activeMailbox];
-    return paths.reduce((sum, path) => sum + (hiddenByMailbox[`${activeAccountId}|${path}`] || 0), 0);
-  }, [hidingViewMail, unifiedInbox, activeMailbox, activeAccountId, mailboxScope, viewHeldKeys, loadedEmails, hiddenByMailbox]);
-  // The folder's total as this list shows it.
-  const shownTotal = hidingViewMail ? totalEmails - hiddenFromTotal : totalEmails;
-
-  // ponytail: the "loaded" suffix only earns its place while the server still
-  // holds rows this window hasn't paged in — otherwise it invites a scroll that
-  // can never move either number. Vault view is never partial in that sense:
-  // its rows come off disk, while totalEmails keeps counting the server.
-  // A hidden message is not one still to page in: measured against the
-  // total less what "hide view mail" keeps off.
-  const windowIsPartial = viewMode !== 'local' && sortedEmails.length < shownTotal;
+  const { dateRange, vaultShare, hidingViewMail, shownTotal, windowIsPartial } = useListHeaderMetrics({ displayEmails, sortedEmails, hideViewMail, activeViewId, searchActive, unifiedInbox, activeMailbox, activeAccountId, mailboxScope, totalEmails, viewMode });
 
   // Count emails with alerts — used in fingerprints to invalidate caches when alerts change
   const alertCount = useMemo(() => {
@@ -672,10 +472,6 @@ function EmailListComponent({ stacked = false }) {
     return count;
   }, [displayEmails]);
 
-  // Deferred threading — buildThreads(17k+) is too slow for synchronous render.
-  // Show flat list instantly, then compute threads in background and re-render.
-  const threadCache = useRef({ fingerprint: '', threads: new Map() });
-  const [deferredThreads, setDeferredThreads] = useState(null); // null = not computed yet
 
   // Threads unfolded in place (expandable mode). Reset with the list, and
   // whenever the mode changes: a folded row must not remember a stale unfold.
@@ -714,42 +510,7 @@ function EmailListComponent({ stacked = false }) {
     [mergedEmails, flagSeq, viewMode, archivedSize, alertCount, activeAccountId, activeMailbox]
   );
 
-  // Compute threads in a deferred callback to avoid blocking render
-  useEffect(() => {
-    // Flat mode still builds threads when the marking mode needs them: they
-    // answer "which rows are siblings", never "which rows group".
-    // Not inside a saved view either: its rows are not the folder's, and the
-    // folder's threads must not re-read (add to, drop from) a thread opened
-    // there. While the view runs, the list shows its loading state anyway.
-    if (isExplorer || !mergedEmails || searchActive || activeViewId || (threadMode === 'flat' && emailRowHighlight !== 'selection')) {
-      setDeferredThreads(null);
-      return;
-    }
-
-    // Use cached threads if fingerprint matches
-    if (threadCache.current.fingerprint === threadFingerprint) {
-      setDeferredThreads(threadCache.current.threads);
-      syncSelectedThread(threadCache.current.threads);
-      return;
-    }
-
-    // Schedule thread computation after paint — keeps UI responsive
-    // Note: requestIdleCallback is NOT available in WebKit/Safari (Tauri macOS webview)
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      if (cancelled) return; // Guard against stale callback after view change
-      // Threads that did not change keep their object, so their rows bail.
-      const threads = reconcileThreads(threadCache.current.threads, buildThreads(mergedEmails));
-      threadCache.current = { fingerprint: threadFingerprint, threads };
-      setDeferredThreads(threads);
-      // The reader's open thread is a snapshot of one of these. This is the
-      // only place the whole pool is threaded, so it is where the snapshot is
-      // re-read — a reply sent from inside a thread reaches the pane here.
-      syncSelectedThread(threads);
-    }, 0);
-
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [isExplorer, mergedEmails, threadFingerprint, searchActive, activeViewId, viewMode, threadMode, emailRowHighlight, syncSelectedThread]);
+  const { threadCache, deferredThreads, setDeferredThreads } = useDeferredThreads({ isExplorer, mergedEmails, threadFingerprint, searchActive, activeViewId, viewMode, threadMode, emailRowHighlight, syncSelectedThread });
 
   // Deferred sender grouping computation
   useEffect(() => {
@@ -783,146 +544,12 @@ function EmailListComponent({ stacked = false }) {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [isExplorer, displayEmails, sentEmails, emailListGrouping, archivedSize, userAddress, mergesSent, activeMailbox, alertCount, unreadOnly, unreadKeep, selectedEmailId]);
 
-  // ── Cached display-row builder ──
-  // Separates structural rebuilds (membership/order) from lightweight flag-freshening passes.
-  // Structural rebuild: when thread set or display email UIDs change.
-  // Freshening: when only flags/archived state change, reuse existing rows and update email refs.
-  const displayRowCache = useRef({ deferredThreads: null, rows: [], displayEmails: null });
+  const { displayRowCache, emailKey, threadedDisplay } = useThreadedDisplay({ displayEmails, searchActive, deferredThreads, expandedThreads, threadMode, threadSortOrder });
 
-  // Account, folder AND uid. `freshen` below swaps a thread's rows for the
-  // list's current copies by this key, and an INBOX thread holds the Sent
-  // copies merged in for context — keyed by uid alone, a reply of yours whose
-  // Sent uid matched an INBOX uid in the same thread was replaced by that
-  // INBOX message, and drawn as it.
-  const emailKey = messageKey;
 
-  const threadedDisplay = useMemo(() => {
-    // `threadMode === 'flat'` explicitly: threads may now exist in flat mode
-    // purely to answer which rows are siblings, and must never regroup the list.
-    const isFlat = searchActive || threadMode === 'flat' || !deferredThreads || deferredThreads.size === 0;
+  const { rowKeyOf, isFreshRow } = useRowAppearance({ threadedDisplay, emailKey });
 
-    const cache = displayRowCache.current;
-
-    if (isFlat) {
-      // Flat list — reuse row array if displayEmails identity hasn't changed
-      if (cache.displayEmails === displayEmails && cache.rows.length === displayEmails.length) {
-        return cache.rows;
-      }
-      // Rebuild — either structural change or flag-only change (new sortedEmails array)
-      const rows = displayEmails.map(email => ({ type: 'email', email }));
-      displayRowCache.current = { deferredThreads: null, rows, displayEmails };
-      return rows;
-    }
-
-    // Threaded path — build lookup for freshening
-    const freshByKey = new Map();
-    for (const e of displayEmails) {
-      freshByKey.set(emailKey(e), e);
-    }
-    const freshen = (e) => freshByKey.get(emailKey(e)) || e;
-
-    // Reuse cached rows only when thread model AND display emails are both unchanged.
-    // deferredThreads is a new Map on every recomputation, so identity check is reliable.
-    if (cache.deferredThreads === deferredThreads && cache.displayEmails === displayEmails
-        && cache.expandedThreads === expandedThreads && cache.threadMode === threadMode
-        && cache.threadSortOrder === threadSortOrder) {
-      return cache.rows;
-    }
-
-    // Structural rebuild — filter, sort, wrap
-    const result = [];
-    for (const thread of deferredThreads.values()) {
-      if (thread.emails.some(e => freshByKey.has(emailKey(e)))) {
-        result.push(thread);
-      }
-    }
-    result.sort((a, b) => b.lastDate - a.lastDate);
-
-    const rows = [];
-    const unfold = threadMode === 'expandable';
-    for (const thread of result) {
-      if (thread.messageCount === 1) {
-        rows.push({ type: 'email', email: freshen(thread.emails[0]) });
-      } else {
-        // Only a thread whose rows really were replaced gets a new array: the
-        // row reads the array's identity to know it has to repaint.
-        const fresh = thread.emails.map(freshen);
-        if (fresh.some((e, i) => e !== thread.emails[i])) thread.emails = fresh;
-        thread.lastEmail = freshen(thread.lastEmail) || thread.emails[thread.emails.length - 1];
-        rows.push({ type: 'thread', thread });
-        if (unfold && expandedThreads.has(thread.threadId)) {
-          // The whole conversation, the Sent copies an INBOX list merges in
-          // included: a reply you wrote is part of what you unfold. Each row
-          // carries its own folder (`_mailbox`), so opening one opens the
-          // right message and ticking one keys by folder (selectionKey). The
-          // thread row's own checkbox and menu still act on threadRowMembers.
-          const ordered = threadSortOrder === 'newest-first' ? [...thread.emails].reverse() : thread.emails;
-          for (const email of ordered) rows.push({ type: 'thread-member', email, threadId: thread.threadId });
-        }
-      }
-    }
-
-    displayRowCache.current = { deferredThreads, rows, displayEmails, expandedThreads, threadMode, threadSortOrder };
-    return rows;
-  }, [displayEmails, searchActive, deferredThreads, emailKey, expandedThreads, threadMode, threadSortOrder]);
-
-  // Rows that joined the list since the last paint fade in: a batch landing
-  // while All Inboxes fills, new mail, the first rows after a skeleton. A list
-  // replaced wholesale (a folder switch with rows on both sides) does not
-  // animate, nor does the first paint. A row stays marked for the length of
-  // its animation, whatever re-derives meanwhile (threads land right after the
-  // flat pass), so the fade is never cut short. Keys are committed after
-  // render so a StrictMode double render cannot swallow them.
-  // A thread row goes by its newest message, the row that stood for it in the
-  // flat pass before the threads were built, so threading does not fade it.
-  const rowKeyOf = useCallback(r => emailKey(r.type === 'thread' ? r.thread.lastEmail : r.email), [emailKey]);
-  const committedRowKeys = useRef(null);
-  const appearedAt = useRef(new Map());
-  useMemo(() => {
-    const prev = committedRowKeys.current;
-    const now = performance.now();
-    for (const [k, t] of appearedAt.current) if (now - t > ROW_APPEAR_MS) appearedAt.current.delete(k);
-    if (!prev) return;
-    const fresh = [];
-    let overlap = prev.size === 0;
-    for (const r of threadedDisplay) {
-      const k = rowKeyOf(r);
-      if (prev.has(k)) overlap = true;
-      else fresh.push(k);
-    }
-    if (overlap) for (const k of fresh) if (!appearedAt.current.has(k)) appearedAt.current.set(k, now);
-  }, [threadedDisplay, rowKeyOf]);
-  useEffect(() => { committedRowKeys.current = new Set(threadedDisplay.map(rowKeyOf)); }, [threadedDisplay, rowKeyOf]);
-  const isFreshRow = (item) => {
-    const t = appearedAt.current.get(rowKeyOf(item));
-    return t !== undefined && performance.now() - t < ROW_APPEAR_MS;
-  };
-
-  // Through the helper: a uid is unique only inside one mailbox of one account,
-  // and a key built here by hand is a key the store cannot read back.
-  // Stable: it reads the store at call time, and the explorer's Unread cut
-  // memoizes on it.
-  const selKey = useCallback((email) => selectionKey(email, useMailStore.getState()), []);
-
-  // Checkbox ticks. Shift held ticks every row between the last box ticked
-  // (or, before any, the open message) and this one. Refs keep the callbacks
-  // stable: the rows are memoized.
-  const rowsRef = useRef(threadedDisplay);
-  rowsRef.current = threadedDisplay;
-  const selectionAnchorRef = useRef(null);
-  const checkRows = useCallback((emails, selected, shiftKey) => {
-    const target = selKey(emails[0]);
-    const anchor = selectionAnchorRef.current ?? useMailStore.getState().selectedEmailId;
-    const range = shiftKey && anchor ? emailsInRowRange(rowsRef.current, anchor, target, selKey) : null;
-    setEmailsSelected(range || emails, range ? true : selected);
-    selectionAnchorRef.current = target;
-  }, [selKey, setEmailsSelected]);
-  const checkEmailRow = useCallback((uid, accountId, mailbox, shiftKey) => {
-    const email = { uid, _accountId: accountId || undefined, _mailbox: mailbox || undefined };
-    checkRows([email], !useMailStore.getState().selectedEmailIds.has(selKey(email)), shiftKey);
-  }, [checkRows, selKey]);
-  useEffect(() => { if (selectedEmailIds.size === 0) selectionAnchorRef.current = null; }, [selectedEmailIds]);
-  useEffect(() => { selectionAnchorRef.current = null; }, [activeAccountId, activeMailbox]);
+  const { selKey, checkRows, checkEmailRow } = useRowSelection({ threadedDisplay, setEmailsSelected, selectedEmailIds, activeAccountId, activeMailbox });
 
   // The rest of the open message's conversation, as selection keys. A merged
   // Sent copy shares its uid with an INBOX message, so the set is keyed the way
@@ -985,23 +612,7 @@ function EmailListComponent({ stacked = false }) {
     return null;
   }, [senderGroups, emailListGrouping, selectedEmailId]);
 
-  const SENDER_ROW_HEIGHT = 56;
-  const TOPIC_ROW_HEIGHT = 52;
-  const SENDER_EMAIL_ROW_HEIGHT = 44;
-  const EMAIL_BODY_HEIGHT = 120;
-
-  // Identity-based key functions — stable keys prevent row shell churn during re-renders
-  const getSenderItemKey = useCallback((index) => {
-    const item = senderFlatItems[index];
-    if (!item) return index;
-    switch (item.type) {
-      case 'sender': return `s-${item.sender.senderEmail}`;
-      case 'topic': return `t-${item.topicKey}`;
-      case 'sender-email': return `e-${item.email._accountId || ''}:${item.email.uid}`;
-      case 'email-body': return `b-${item.email._accountId || ''}:${item.email.uid}`;
-      default: return index;
-    }
-  }, [senderFlatItems]);
+  const { senderVirtualizer } = useSenderVirtualizer({ senderFlatItems, scrollContainerRef, isExplorer, emailListGrouping });
 
   const getChronoItemKey = useCallback((index) => {
     const item = threadedDisplay[index];
@@ -1012,24 +623,6 @@ function EmailListComponent({ stacked = false }) {
     return `em-${item.email._accountId || ''}:${item.email.uid}`;
   }, [threadedDisplay]);
 
-  const senderVirtualizer = useVirtualizer({
-    count: senderFlatItems.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: (index) => {
-      const item = senderFlatItems[index];
-      if (!item) return SENDER_ROW_HEIGHT;
-      switch (item.type) {
-        case 'sender': return SENDER_ROW_HEIGHT;
-        case 'topic': return TOPIC_ROW_HEIGHT;
-        case 'sender-email': return SENDER_EMAIL_ROW_HEIGHT;
-        case 'email-body': return EMAIL_BODY_HEIGHT;
-        default: return SENDER_ROW_HEIGHT;
-      }
-    },
-    getItemKey: getSenderItemKey,
-    overscan: 5,
-    enabled: !isExplorer && emailListGrouping === 'sender',
-  });
 
   // Date scrubber (list mode only): a header band on each month's first row.
   // Heights change, indices do not — rows stay 1:1 with threadedDisplay.
@@ -1072,215 +665,10 @@ function EmailListComponent({ stacked = false }) {
     histogramEligible: windowIsPartial && !unifiedInbox && activeMailbox !== 'UNIFIED' && !searchActive && !unreadOnly,
   });
 
-  // Diagnostic: trace loading spinner condition
-  useEffect(() => {
-    if (loading && rowCount === 0) {
-      const state = useMailStore.getState();
-      console.log('[EmailList] SPINNER VISIBLE — loading=%s, rowCount=%d, emails=%d, sortedEmails=%d, viewMode=%s, activeMailbox=%s',
-        loading, rowCount, state.emails.length, state.sortedEmails.length, state.viewMode, state.activeMailbox);
-    }
-  }, [loading, rowCount]);
+  useListScrollEffects({ loading, rowCount, scrollContainerRef, activeMailbox, activeAccountId, viewMode, isExplorer, searchActive, loadingMore, hasMoreEmails, virtualizer, threadedDisplay, loadMoreEmails, ROW_HEIGHT_DEFAULT });
 
-  // Reset scroll position when switching mailbox, account, or view mode
-  useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-  }, [activeMailbox, activeAccountId, viewMode]);
+  const { pullDistance, isRefreshing, handleTouchStart, handleTouchMove, handleTouchEnd, PULL_THRESHOLD } = usePullToRefresh({ scrollContainerRef });
 
-  // Auto-load more emails when approaching the end of the loaded list
-  useEffect(() => {
-    if (isExplorer || searchActive || loadingMore || !hasMoreEmails || viewMode === 'local') return;
-    const items = virtualizer.getVirtualItems();
-    const lastVisible = items[items.length - 1];
-    if (lastVisible && lastVisible.index >= threadedDisplay.length - 20) {
-      const timer = setTimeout(() => { loadMoreEmails(); }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isExplorer, virtualizer, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
-
-  // Tracker verdicts for rows nobody has opened. The scan needs a body and the
-  // header cache has none, so the glyph used to appear only on messages that
-  // had been read — invisible on a list of a thousand tracked newsletters.
-  // Bodies already in the vault answer for free; this reads only what is on
-  // screen, and only once per message.
-  useEffect(() => {
-    if (isExplorer) return;
-    const container = scrollContainerRef.current;
-    let timer = null;
-    const run = () => {
-      const headers = [];
-      for (const item of virtualizer.getVirtualItems()) {
-        const row = threadedDisplay[item.index];
-        if (!row) continue;
-        if (row.type === 'thread') headers.push(...row.thread.emails);
-        else if (row.email) headers.push(row.email);
-      }
-      backfillTrackerVerdicts(headers, useMailStore.getState());
-    };
-    // Settle, then read. Mid-fling the visible window is a different set every
-    // frame, and each one would cost a vault read per row.
-    const arm = () => { clearTimeout(timer); timer = setTimeout(run, 400); };
-    arm();
-    container?.addEventListener('scroll', arm, { passive: true });
-    return () => { clearTimeout(timer); container?.removeEventListener('scroll', arm); };
-  }, [isExplorer, virtualizer, threadedDisplay]);
-
-  // Idle memory trim — after scrolling settles, check pressure and trim if needed
-  const scrollIdleTimerRef = useRef(null);
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const handleScroll = () => {
-      // Re-arm pagination from the real scroll position. The auto-load effect
-      // above cannot fire on scroll — the virtualizer instance is referentially
-      // stable, so that effect's deps only change when the DATA changes. It
-      // keeps a running load chain going but can never restart a dead one,
-      // which left the list permanently stuck when the chain died silently
-      // (offline blip, aborted probe). loadMoreEmails self-guards against
-      // double-entry via `loadingMore`.
-      if (currentListView() !== 'explorer'
-        && container.scrollTop + container.clientHeight >= container.scrollHeight - 20 * ROW_HEIGHT_DEFAULT) {
-        const { hasMoreEmails, loadingMore, viewMode, loadMoreEmails } = useMailStore.getState();
-        if (hasMoreEmails && !loadingMore && viewMode !== 'local' && !useSearchStore.getState().searchActive) {
-          loadMoreEmails();
-        }
-      }
-      if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
-      scrollIdleTimerRef.current = setTimeout(() => {
-        if (!shouldPrefetch()) {
-          const { evictPrefetchEntries } = useMailStore.getState();
-          if (evictPrefetchEntries) evictPrefetchEntries();
-        }
-      }, 1500);
-    };
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-      if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
-    };
-  }, []);
-
-  // Pull-to-refresh handlers
-  const PULL_THRESHOLD = 80;
-
-  const handleTouchStart = useCallback((e) => {
-    if (scrollContainerRef.current?.scrollTop === 0 && !isRefreshing) {
-      pullStartY.current = e.touches[0].clientY;
-      isPulling.current = true;
-    }
-  }, [isRefreshing]);
-
-  const handleTouchMove = useCallback((e) => {
-    if (!isPulling.current || pullStartY.current === null) return;
-    const y = e.touches[0].clientY;
-    const distance = Math.max(0, (y - pullStartY.current) * 0.5);
-    if (distance > 0 && scrollContainerRef.current?.scrollTop === 0) {
-      setPullDistance(Math.min(distance, PULL_THRESHOLD * 1.5));
-    }
-  }, []);
-
-  const handleTouchEnd = useCallback(async () => {
-    if (!isPulling.current) return;
-    isPulling.current = false;
-    pullStartY.current = null;
-
-    if (pullDistance >= PULL_THRESHOLD) {
-      setIsRefreshing(true);
-      setPullDistance(PULL_THRESHOLD * 0.6);
-      try {
-        await useMailStore.getState().refreshCurrentView();
-      } finally {
-        setIsRefreshing(false);
-        setPullDistance(0);
-      }
-    } else {
-      setPullDistance(0);
-    }
-  }, [pullDistance]);
-
-  const handleBulkConfirm = async ({ action, uids }) => {
-    const selectionState = useMailStore.getState();
-    const scope = captureBulkScope(uids, selectionState);
-    const { activeAccountId, accounts, activeMailbox } = selectionState;
-    let account = accounts.find(a => a.id === activeAccountId);
-    if (!account) return;
-
-    // The run consumes the selection; the session is done either way.
-    useMailStore.getState().endBulkSession();
-
-    // Handle unarchive separately — not a bulk operation manager action
-    if (action === 'unarchive') {
-      const state = useMailStore.getState();
-      const { removeLocalEmails, archivedEmailIds } = state;
-      // Only archived messages have anything to remove, read by the selection
-      // bar's rule: a key's own row, or the open folder's uids for a bare
-      // key. One call for the run: one vault delete and one re-read per
-      // (account, mailbox).
-      const rows = loadedRows(state, useSearchStore.getState().searchResults);
-      const targets = archivedSelectionKeys(uids, rows, archivedEmailIds, state);
-      try { if (targets.length) await removeLocalEmails(targets); } catch (e) { console.error('Failed to unarchive the selection:', e); }
-      useMailStore.getState().updateSortedEmails();
-      return;
-    }
-
-    // Delete everywhere took its rows off the list at the click and retries
-    // quietly; only what it could not do is said, as a toast. No panel.
-    if (action === 'delete_everywhere') {
-      purgeEverywhereReporting(uids, { scope }).catch(err => {
-        console.error('[EmailList] Delete everywhere failed:', err);
-        useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) });
-      });
-      return;
-    }
-
-    try {
-      // The selection's keys can name any account and folder; a bare uid
-      // names the open folder's message only where the view is one folder.
-      // A delete leaves the list at the click and reports by toast alone; the
-      // corner panel is for archiving.
-      if (action === 'delete') await bulkDeleteFromServer(scope);
-      else {
-        await bulkOperationManager.start({ type: action, scope, onProgress: op => setBulkOpProgress({ ...op }), panel: true });
-        if (bulkOperationManager.operation?.status === 'complete') {
-          await useMailStore.getState().loadEmails();
-        }
-      }
-
-      // Only delete_everywhere and archive_backup_delete populate `result`
-      // (BulkOperationManager.js) — null for every other action type, so this is a
-      // no-op for them. The two shapes differ, so each has its own formatter.
-      const opResult = bulkOperationManager.operation?.result;
-      const skipped = bulkOperationManager.operation?.skipped || 0;
-      const skippedLocal = bulkOperationManager.operation?.skippedLocal || 0;
-      // What the manager refused (no one folder to run it in, or a folder no
-      // server holds) is said, not dropped.
-      const outcomeMessage = [
-        action === 'archive_backup_delete' ? formatArchiveBackupDeleteOutcome(opResult) : formatPurgeEverywhereOutcome(opResult),
-        skipped > 0 ? t('bulk.result.skippedNoFolder', { count: skipped }) : null,
-        skippedLocal > 0 ? t('bulk.result.skippedLocalFolder', { count: skippedLocal }) : null,
-      ].filter(Boolean).join(' ') || null;
-      if (outcomeMessage) {
-        // Reuses the store's `error` field, the one feedback channel already
-        // wired to a Toast at the app root (App.jsx renders it off `error`/
-        // `errorType`/`errorTypeFor`/`clearError`). `failed`/`queuedBackup`/
-        // `needsResync` are caveats on a run that otherwise succeeded, not a
-        // hard failure — `errorType: 'warning'` gets the warning-styled, 8s
-        // Toast per docs/modal-standards.md instead of the default
-        // error-red one. `errorTypeFor` must be set to this exact message:
-        // App.jsx only trusts `errorType` when the two still match, which is
-        // what stops this warning from tinting an unrelated later error.
-        useMailStore.setState({ error: outcomeMessage, errorType: 'warning', errorTypeFor: outcomeMessage });
-      }
-    } catch (err) {
-      console.error('[EmailList] Bulk operation failed:', err);
-    }
-  };
-
-  const handleBulkCancel = async () => {
-    try { await bulkOperationManager.cancel(); }
-    catch (error) { useMailStore.setState({ error: error.message || String(error) }); }
-  };
 
   const mailboxTitle = activeView ? viewLabel(activeView, t)
     : searchActive ? t('list.searchResults')

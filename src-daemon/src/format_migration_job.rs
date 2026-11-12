@@ -32,7 +32,8 @@
 //!   payload is the `migration` object `storage_format_get` answers.
 
 use crate::handlers::common::{vault_root, with_mailbox_write, with_vault_write};
-use crate::server::DaemonState;
+use crate::job_support::{self, lock, now_ms, ProgressThrottle, Settled};
+use crate::state::DaemonState;
 use mailvault_core::custody::cache;
 use mailvault_core::message_store;
 use mailvault_core::search_index::text::vault_dir_name;
@@ -43,7 +44,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 /// A conversion is running or paused in this daemon, or the old files are
@@ -216,12 +217,7 @@ pub(crate) struct Job {
     finished: AtomicBool,
     /// The worker is at a checkpoint and writes nothing more until woken:
     /// held by a pause, held for a quit, or gone.
-    settled: Mutex<bool>,
-    settled_wake: Condvar,
-}
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
+    settled: Settled,
 }
 
 impl Job {
@@ -232,27 +228,17 @@ impl Job {
             wake: Condvar::new(),
             view: Mutex::new(view),
             finished: AtomicBool::new(false),
-            settled: Mutex::new(false),
-            settled_wake: Condvar::new(),
+            settled: Settled::default(),
         }
     }
 
     fn set_settled(&self, settled: bool) {
-        *lock(&self.settled) = settled;
-        self.settled_wake.notify_all();
+        self.settled.set(settled);
     }
 
     /// Waits until the worker settles, or `until`. Whether it settled.
     fn wait_settled(&self, until: Instant) -> bool {
-        let mut settled = lock(&self.settled);
-        while !*settled {
-            let now = Instant::now();
-            if now >= until {
-                return false;
-            }
-            settled = self.settled_wake.wait_timeout(settled, until - now).unwrap_or_else(|p| p.into_inner()).0;
-        }
-        true
+        self.settled.wait(until)
     }
 
     fn ctl(&self) -> Ctl {
@@ -421,42 +407,21 @@ impl Drop for Registered {
 
 // ── the journal ─────────────────────────────────────────────────────────────
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
-}
-
-/// A job id names files: only what `uuid` writes gets through.
-fn is_job_id(id: &str) -> bool {
-    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-}
-
 fn journal_dir(app_dir: &Path) -> PathBuf {
     app_dir.join(JOURNAL_DIR)
 }
 
-fn journal_path(app_dir: &Path, id: &str) -> PathBuf {
-    journal_dir(app_dir).join(format!("{id}.json"))
-}
-
 fn write_journal(app_dir: &Path, journal: &Journal) -> Result<(), String> {
-    std::fs::create_dir_all(journal_dir(app_dir)).map_err(|e| format!("Failed to create the conversion journal dir: {e}"))?;
-    let bytes = serde_json::to_vec(journal).map_err(|e| e.to_string())?;
-    mailvault_core::fsx::write_atomic(&journal_path(app_dir, &journal.job_id), &bytes)
-        .map_err(|e| format!("Failed to write the conversion journal: {e}"))
+    job_support::write_json(&journal_dir(app_dir), &journal.job_id, journal, "conversion journal")
 }
 
 /// `None` for a journal this build cannot read (another version) or none.
 fn read_journal(app_dir: &Path, id: &str) -> Option<Journal> {
-    let raw = std::fs::read(journal_path(app_dir, id)).ok()?;
-    serde_json::from_slice::<Journal>(&raw).ok().filter(|j| j.version == JOURNAL_VERSION && j.job_id == id)
+    job_support::read_json::<Journal>(&journal_dir(app_dir), id).filter(|j| j.version == JOURNAL_VERSION && j.job_id == id)
 }
 
 fn remove_journal(app_dir: &Path, id: &str) {
-    if let Err(e) = std::fs::remove_file(journal_path(app_dir, id)) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            warn!("[format_migration] job {id}: its journal was not removed: {e}");
-        }
-    }
+    job_support::remove_json(&journal_dir(app_dir), id, "format_migration");
 }
 
 /// This vault's journal of a conversion that is not done: the newest one,
@@ -464,11 +429,8 @@ fn remove_journal(app_dir: &Path, id: &str) {
 /// file starts with a dot and never ends in `.json`, so it is never one.
 fn pending_journal(app_dir: &Path, root: &Path) -> Option<Journal> {
     let vault = root.to_string_lossy();
-    std::fs::read_dir(journal_dir(app_dir))
+    job_support::list_ids(&journal_dir(app_dir))
         .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".json").filter(|id| is_job_id(id)).map(str::to_string))
         .filter_map(|id| read_journal(app_dir, &id))
         .filter(|j| j.vault == vault && j.state != DONE)
         .max_by_key(|j| j.updated_at)
@@ -958,7 +920,7 @@ fn format_finish_pause(state: &Arc<DaemonState>) {
 
 fn spawn(state: &Arc<DaemonState>, live: &mut Option<Arc<Job>>, root: &Path, journal: Journal, owner: crate::account_lifecycle::OperationPermit, preflight_error: Option<String>) -> Result<(), String> {
     let job = Arc::new(Job::new(&journal.job_id, view(&journal, true, RUNNING)));
-    let runner = Runner { state: Arc::clone(state), root: root.to_path_buf(), job: Arc::clone(&job), journal, preflight_error, emitted: None, seen: 0, link: false, damaged_now: 0 };
+    let runner = Runner { state: Arc::clone(state), root: root.to_path_buf(), job: Arc::clone(&job), journal, preflight_error, throttle: ProgressThrottle::default(), seen: 0, link: false, damaged_now: 0 };
     std::thread::Builder::new()
         .name("format-migration".into())
         .spawn(move || {
@@ -989,7 +951,7 @@ struct Runner {
     job: Arc<Job>,
     journal: Journal,
     preflight_error: Option<String>,
-    emitted: Option<Instant>,
+    throttle: ProgressThrottle,
     /// Messages this run has tried.
     seen: u64,
     /// Retire mode on a volume that takes hard links: old files are linked
@@ -1021,11 +983,9 @@ impl Runner {
     /// Reports the job: at once when `force` (a change of state), else at
     /// most every `PROGRESS_EVERY`.
     fn progress(&mut self, state: &str, active: bool, force: bool) {
-        let now = Instant::now();
-        if !force && self.emitted.is_some_and(|at| now.duration_since(at) < PROGRESS_EVERY) {
+        if !self.throttle.should_emit(force, PROGRESS_EVERY, Instant::now()) {
             return;
         }
-        self.emitted = Some(now);
         let v = view(&self.journal, active, state);
         *lock(&self.job.view) = v.clone();
         self.state.events.emit(EVENT, v);
@@ -2503,7 +2463,7 @@ mod tests {
         let deadline = Instant::now() + limit;
         while Instant::now() < deadline {
             if let Some(job) = s.format_migration.live() {
-                if job.ctl() == Ctl::Run && *lock(&job.settled) {
+                if job.ctl() == Ctl::Run && job.settled.is_set() {
                     return true;
                 }
             }

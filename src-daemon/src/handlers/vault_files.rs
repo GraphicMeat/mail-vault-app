@@ -7,7 +7,7 @@
 //! here touches disk.
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, vault_root, vec_arg, with_mailbox_write, with_vault_write};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::{maildir, message_store, vault_eml, vault_files};
 use serde_json::Value;
 use std::sync::Arc;

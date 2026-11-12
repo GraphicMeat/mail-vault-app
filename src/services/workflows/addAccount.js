@@ -1,7 +1,7 @@
 // Native account authority; this adapter owns successful view effects only.
 import * as db from '../db';
 export async function addAccount(accountData) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const reply = await db.addAccountNative(accountData);
   const account = reply.account;
   useMailStore.setState(state => ({ accounts: [...state.accounts, account] }));

@@ -15,6 +15,10 @@ vi.mock('../../services/workflows/retryKeychainAccess', () => ({ retryKeychainAc
 
 const { PortableBadge, PortableDriveBanner } = await import('../PortableIndicators');
 const { usePortableStore, __resetPortableForTests } = await import('../../stores/portableStore');
+// Stores reach workflows through ports; the card under test needs the mocked retry bound.
+const { bindWorkflowPorts } = await import('../../stores/workflowPorts');
+const { retryKeychainAccess: portRetry } = await import('../../services/workflows/retryKeychainAccess');
+bindWorkflowPorts({ retryKeychainAccess: (...a) => portRetry(...a) });
 
 beforeEach(() => __resetPortableForTests());
 afterEach(cleanup);

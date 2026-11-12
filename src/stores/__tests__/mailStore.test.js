@@ -135,6 +135,7 @@ vi.mock('../../services/cacheManager', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { serverUids, NO_SERVER_UIDS } = await import('../slices/serverUids');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
 const { useSnoozeStore } = await import('../snoozeStore');

@@ -111,6 +111,7 @@ vi.mock('../settingsStore', async () => {
 });
 
 const { useMailStore } = await import('../mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { useViewHideStore } = await import('../viewHideStore');
 const { useSettingsStore } = await import('../settingsStore');
 const { daemonCall } = await import('../../services/daemonClient');

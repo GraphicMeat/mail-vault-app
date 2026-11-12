@@ -54,6 +54,7 @@ vi.mock('../../services/authUtils', async (importOriginal) => ({
 
 const { MboxUploadProgress, RENDER_EVERY_MS } = await import('../MboxUploadProgress');
 const { useMailStore } = await import('../../stores/mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { takeForcedMailboxRefetch } = await import('../../services/workflows/helpers/mailboxRefetch');
 const en = (await import('../../i18n/locales/en.json')).default;
 

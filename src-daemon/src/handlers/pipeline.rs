@@ -4,7 +4,7 @@
 
 use crate::ipc::{self, RpcResponse};
 use crate::pipeline_focus::{FocusInput, PipelineFocus};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::pipeline::{Focus, Observation, Scope};
 use serde_json::{Map, Value};
 use std::sync::Arc;
@@ -97,7 +97,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: Value,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use serde_json::json;
     use std::path::Path;
 

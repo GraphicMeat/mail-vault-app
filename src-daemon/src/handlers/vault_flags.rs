@@ -18,7 +18,7 @@
 use crate::custody as daemon_custody;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, vec_arg, with_mailbox_write, with_vault_write};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::{cache, entries};
 use mailvault_core::vault_flags::{self, AdoptReport, Applied, FlagChange, RenamePair};
 use serde_json::Value;

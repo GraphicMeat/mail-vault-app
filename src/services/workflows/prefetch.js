@@ -11,7 +11,7 @@ import { fetchAccountMailboxes, shouldUseFreshMailboxCache, isSuspiciousEmptyMai
 // ── _prefetchAllMailboxes workflow ──
 
 export async function _prefetchAllMailboxes({ limit = MAILBOX_PREFETCH_LIMIT } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const { accounts, activeAccountId } = get();
@@ -60,7 +60,7 @@ export async function _prefetchAllMailboxes({ limit = MAILBOX_PREFETCH_LIMIT } =
 // ── _prewarmAccountCaches workflow ──
 
 export async function _prewarmAccountCaches() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const { accounts, activeAccountId } = get();

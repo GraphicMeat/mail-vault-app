@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import * as explorerModule from '../ExplorerView';
 import { useSettingsStore } from '../../stores/settingsStore';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('../../stores/safeStorage', () => ({ safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } }));
 vi.mock('../../services/rowVerdicts', () => ({ backfillTrackerVerdicts: vi.fn() }));

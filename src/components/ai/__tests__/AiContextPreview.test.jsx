@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { AiContextPreview, destinationLabel } from '../AiContextPreview';
+import '../../../services/workflows/bindStoreActions';
 
 afterEach(cleanup);
 

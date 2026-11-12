@@ -63,7 +63,7 @@ async function _withQuietRetries(send) {
 // The one place a delete that is not queued (Graph, a local-only copy) and
 // failed, or one the queue refused for good, is said.
 async function _reportDeleteFailure(error) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   useMailStore.setState({ error: tr('list.deleteFailed', { err: error?.message || String(error) }) });
 }
 
@@ -94,7 +94,7 @@ async function _reportNotDeletedYet(reason) {
     const why = String(capture instanceof Error ? capture.message : tErr(reason)).trim().replace(/[.。]+$/u, '');
     message = tr('list.deleteNotYet', { reason: why });
   }
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   // `errorTypeFor` pins the warning tint to this exact message (utils/errorToast.js).
   useMailStore.setState({ error: message, errorType: 'warning', errorTypeFor: message });
 }
@@ -121,7 +121,7 @@ async function _reportNotDeletedYet(reason) {
  * same bug wearing a timer.
  */
 export async function reloadListInView() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   // Every caller put mail back or moved it: the saved views hold other mail now.
   viewCountsStale();
@@ -225,7 +225,7 @@ export async function _pruneIfGone(error, uid, { accountId, mailbox, isUnified =
 // ── saveEmailLocally workflow ──
 
 export async function saveEmailLocally(uid) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const state = get();
@@ -324,7 +324,7 @@ export async function saveEmailLocally(uid) {
 // message under this uid.
 
 export async function saveEmailsLocally(rows) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const state = get();
@@ -523,7 +523,7 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
 // ── saveSelectedLocally workflow ──
 
 export async function saveSelectedLocally() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const state = get();
@@ -610,7 +610,7 @@ function _removalContext(state, uidOrKey, location) {
 }
 
 export async function removeLocalEmail(uidOrKey, location = null) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const context = _removalContext(useMailStore.getState(), uidOrKey, location);
   if (!context) return;
   const { uid, accountId, mailbox } = context;
@@ -635,7 +635,7 @@ export async function removeLocalEmail(uidOrKey, location = null) {
 // replaces paid a delete, a custody write, two vault reads and a publish per
 // message.
 export async function removeLocalEmails(targets) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const state = useMailStore.getState();
   const groups = new Map();
   for (const target of targets || []) {
@@ -1010,7 +1010,7 @@ const CANCELLED = 'cancelled';
 export async function deleteMessages(targets, opts = {}) {
   const how = { ...SELECTION_DELETE, ...opts };
   const skipRefresh = !!opts.skipRefresh;
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
 
   await _restoreInFlight;
   const state = useMailStore.getState();
@@ -1789,7 +1789,7 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
       console.warn('[undo] The messages are back; the view that asked could not repaint:', error);
     }
   };
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   // The slot this call set, read as it is set (null when it set none).
   let filed = null;
   const setUndo = (entry) => {
@@ -1852,7 +1852,7 @@ export async function setDeleteUndo(outcomes, { afterRestore } = {}) {
 // What did not come back goes out again, and when nothing did, runUndo says
 // "Undo failed" around what this throws.
 async function _restoreFromTrash(outcomes) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const back = _reinsertRestored(useMailStore, outcomes);
   _restoredUids.clear();
@@ -1969,7 +1969,7 @@ export async function recoverFromBin(ids, target = 'server') {
   _lastBinned = _lastBinned.filter(id => !ids.includes(id));
   const res = await daemonCall('deleted.recover', { ids, target });
   if (res?.recovered?.length) {
-    const { useMailStore } = await import('../../stores/mailStore');
+    const { useMailStore } = await import('./boundStore');
     // A recover that answers the uid the delete tombstoned (a local one, or a
     // JMAP label put back under its ledger uid) shows that row again. An IMAP
     // server recover answers the new uid, so this deletes nothing there and
@@ -1991,7 +1991,7 @@ export async function recoverFromBin(ids, target = 'server') {
  * delete's bin copies, back on the server. False when there was nothing.
  */
 export async function undoLastAction() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const state = useMailStore.getState();
   if (state.undo?.canUndo) return state.runUndo();
   // A delete undo still running (the slot's own run, spent the moment it
@@ -2103,7 +2103,7 @@ export async function stampVaultEntry(accountId, mailbox, uid, extra) {
     //
     // Only for a message the vault actually holds: writing an entry for one it
     // does not would put a row on screen with nothing behind it.
-    const { useMailStore } = await import('../../stores/mailStore');
+    const { useMailStore } = await import('./boundStore');
     const state = useMailStore.getState();
     if (!state.archivedEmailIds?.has(vaultKey(accountId, mailbox, uid))) return false;
     // The row of THIS message: found by where it lives, never by its bare uid.
@@ -2215,7 +2215,7 @@ export async function applyServerRemoval(uid, {
   accountId, mailbox, isUnified = false, skipRefresh = false, clearSelection = true,
   deletedByUs = false, counted = false,
 } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   // The server copy is gone now, not just hidden (_hideDeleted counted then).
   viewCountsStale();
@@ -2526,7 +2526,7 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
 // ── markEmailReadStatus workflow ──
 
 export async function markEmailReadStatus(uid, read) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const state = get();
@@ -2571,7 +2571,7 @@ export async function markEmailReadStatus(uid, read) {
 // ── exportEmail workflow ──
 
 export async function exportEmail(uid, subject) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const state = get();
@@ -2615,7 +2615,7 @@ export async function exportEmail(uid, subject) {
  * journal entry it leaves behind is what finishes the change (replayOps).
  */
 export async function applyFlagToTargets(targets, flag, on, { undoable = true, detachTail = false } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   if (_restoreInFlight || _restoredUids.size) {
@@ -2763,7 +2763,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
  * unified list's does, is the real fix for that ambiguity.
  */
 export async function applyFlagToKeys(keys, flag, on, opts) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   if (_restoreInFlight || _restoredUids.size) keys = await _keysAfterUndo(get, keys);
   const state = get();
@@ -2800,7 +2800,7 @@ export async function applyFlagToKeys(keys, flag, on, opts) {
 // ── bulk mark read/unread workflow ──
 
 async function _markSelected(read) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const { selectedEmailIds } = useMailStore.getState();
   if (selectedEmailIds.size === 0) return;
   return applyFlagToKeys([...selectedEmailIds], '\\Seen', read);
@@ -2813,7 +2813,7 @@ export const markSelectedAsUnread = () => _markSelected(false);
 // ── star (\Flagged) ──
 
 export async function setSelectedFlagged(on) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const { selectedEmailIds } = useMailStore.getState();
   if (selectedEmailIds.size === 0) return;
   return applyFlagToKeys([...selectedEmailIds], '\\Flagged', on);
@@ -2839,7 +2839,7 @@ export async function setSelectedFlagged(on) {
  * folder, so the two agree on which way this message is going.
  */
 export async function toggleFlagged(key) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const state = useMailStore.getState();
   const sameKey = (e) => String(selectionKey(e, state)) === String(key);
   const row = resolvePool(state).find(sameKey);
@@ -2863,7 +2863,7 @@ export async function toggleFlagged(key) {
 // Not undoable — the user asked to send, not to set a flag.
 async function _flagRepliedTo(replyTo, flag) {
   if (!replyTo || typeof replyTo.uid !== 'number' || replyTo._localStaged || replyTo.source === 'local-only') return;
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const state = useMailStore.getState();
   const loc = resolveEmailLocation(replyTo, state);
   if (!loc) return;
@@ -2928,7 +2928,7 @@ function _resolveKeyContext(key, state, emailMap, { require = true } = {}) {
 // The ticked selection, in one deleteMessages call. Returns `{ deleted }`, the
 // undo records of what reached Trash (or the bin).
 export async function deleteSelectedFromServer() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   // A ticked row an undo put back keeps its selection key through the rewrite
   // to its new uid (_rekeyRestored), so the selection is read after the wait.
   await _restoreInFlight;
@@ -3466,7 +3466,7 @@ export async function purgeEverywhereReporting(keys, opts) {
   const result = await purgeEverywhere(keys, opts);
   const message = formatPurgeEverywhereOutcome(result);
   if (message) {
-    const { useMailStore } = await import('../../stores/mailStore');
+    const { useMailStore } = await import('./boundStore');
     // `errorTypeFor` pins the warning tint to this exact message (utils/errorToast.js).
     useMailStore.setState({ error: message, errorType: 'warning', errorTypeFor: message });
   }
@@ -3499,7 +3499,7 @@ export async function purgeEverywhereReporting(keys, opts) {
 // record: their move is addressed by a per-session id, not a uid.
 
 export async function moveEmails(keys, targetMailbox) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   if (_restoreInFlight || _restoredUids.size) keys = await _keysAfterUndo(get, keys);
@@ -3686,7 +3686,7 @@ function _liftTombstones(useMailStore, { accountId, from, srcUids }) {
 }
 
 async function _undoMove(records) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   // A throw on the second record must still repaint what the first one moved.
   try {
     for (const r of records) {

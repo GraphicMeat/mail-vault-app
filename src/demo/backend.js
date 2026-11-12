@@ -1001,6 +1001,12 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
           if (op === 'invalidate') return { invalidated: true };
           throw new DemoUnsupportedError(`folders.status:${op}`);
         }
+        // The demo's folder list is stamped at session start, as its
+        // `load_mailbox_cache` has it: fresh unless a Refresh forces it.
+        if (method === 'mailboxes.load') {
+          const p = args.params || {};
+          return { mailboxes: clone(accountMailboxes(p.accountId)), fetchedAt: sessionNow, source: p.force ? 'server' : 'cache', suspectEmpty: false, changed: false };
+        }
         // The browser demo has no native provider worker. Keep the protocol
         // observable, with a settled unavailable receipt and no fake mail.
         if (method === 'sync.context') {

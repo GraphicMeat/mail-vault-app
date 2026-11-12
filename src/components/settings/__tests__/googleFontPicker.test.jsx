@@ -17,6 +17,7 @@ import { AppearanceSettings } from '../AppearanceSettings';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useFontStore } from '../../../services/fontService';
 import { t } from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 
 let installed;
 let downloadAnswer;

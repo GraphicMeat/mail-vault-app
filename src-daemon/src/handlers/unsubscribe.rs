@@ -11,7 +11,7 @@ use crate::export_fetch::send_guarded;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg};
 use crate::handlers::insights::{begin_snapshot, configured_account_ids};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use base64::Engine;
 use mailvault_core::app_db::{self, unsubscribe::{self as store, Unsubscribe}};
 use mailvault_core::unsubscribe::{self as parse, ONE_CLICK_BODY};
@@ -28,9 +28,7 @@ const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 const BIMI_TTL_MS: i64 = 7 * DAY_MS;
 const BIMI_NEGATIVE_TTL_MS: i64 = DAY_MS;
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
+use mailvault_core::clock::now_ms;
 
 /// The one-click request itself. Kept apart from the SSRF gate so a test can
 /// send it to a loopback server the gate (rightly) refuses.
@@ -313,7 +311,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn st() -> (tempfile::TempDir, Arc<DaemonState>) {

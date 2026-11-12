@@ -2,6 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal()),

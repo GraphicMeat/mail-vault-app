@@ -36,7 +36,7 @@
 use crate::handlers::common;
 use crate::account_lifecycle::{AccountStamp, ImportTargetReservation, ImportTargetStamp, OperationPermit};
 use crate::account_workflows::AccountWriteScope;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::accounts_doc;
 use mailvault_core::maildir::{has_info, info_flags};
 use mailvault_core::message_store;

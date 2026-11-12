@@ -4,6 +4,7 @@ import { afterEach, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { useMailStore } from '../../stores/mailStore';
 import { ReadDelayProgress } from '../ReadDelayProgress';
+import '../../services/workflows/bindStoreActions';
 
 afterEach(() => {
   cleanup();

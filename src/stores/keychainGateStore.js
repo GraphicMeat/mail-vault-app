@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
-import { retryKeychainAccess } from '../services/workflows/retryKeychainAccess';
+import { workflowPort } from './workflowPorts';
 import { notify } from './focusStore';
 import { t } from '../i18n/index.js';
+
+const retryKeychainAccess = workflowPort('retryKeychainAccess');
 
 // The daemon's keychain gate (src-daemon/src/credentials.rs): blocked while a
 // keychain item the daemon needs cannot be read for a reason unlocking would

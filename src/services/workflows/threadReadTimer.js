@@ -56,7 +56,7 @@ export function cancelThreadReadTimers() {
 
 export async function startThreadReadTimer(threadId, email) {
   const epoch = _epoch;
-  _store ??= (await import('../../stores/mailStore')).useMailStore;
+  _store ??= (await import('./boundStore')).useMailStore;
   if (epoch !== _epoch) return;
   if (threadId !== _threadId) {
     _clearAll();

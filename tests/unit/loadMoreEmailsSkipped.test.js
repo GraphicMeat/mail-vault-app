@@ -12,6 +12,7 @@
  * the assertion is on what the app does, not on a re-implementation of it.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import '../../src/services/workflows/bindStoreActions';
 
 // ── Store dependencies, mocked exactly as src/stores/__tests__/mailStore.test.js
 // does (that file is the proof this store constructs), plus the three db calls

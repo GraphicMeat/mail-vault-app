@@ -20,6 +20,7 @@ vi.stubGlobal('window', { __TAURI__: {}, location: { origin: 'tauri://localhost'
 vi.stubGlobal('navigator', { onLine: true });
 
 const { useMailStore } = await import('../mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { applySeenLocally } = await import('../../services/workflows/messageMutations');
 const { useSettingsStore } = await import('../settingsStore');
 let views;

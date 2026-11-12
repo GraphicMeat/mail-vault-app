@@ -32,7 +32,7 @@ import { _resolveUnifiedContext, spansMailboxes, sameMessage, vaultKey } from '.
  *                    failed?: string[], checkedAt?: string}>}
  */
 export async function probeServerCopy(uid, scope = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const state = get();
 

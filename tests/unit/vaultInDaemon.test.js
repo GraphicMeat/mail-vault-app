@@ -10,8 +10,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 
-const main = readFileSync('src-tauri/src/main.rs', 'utf8');
+const main = shellSource();
 const handlerList = main.slice(main.indexOf('generate_handler!['), main.indexOf(']', main.indexOf('generate_handler![')));
 
 // Task 2.6: the vault read family and the attachment cache.

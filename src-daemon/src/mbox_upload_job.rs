@@ -62,10 +62,11 @@
 //! folder names or credentials.
 
 use crate::handlers::common::blocking;
+use crate::job_support::{self, lock, now_ms, ProgressThrottle, Settled};
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::mbox::{for_each_mbox_span, Span};
 use crate::mbox_upload::{FailKind, MboxUpload, Outcome};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_engine::SyncAccount;
 use mailvault_core::custody::cache;
 use mailvault_core::imap::ImapConfig;
@@ -224,8 +225,7 @@ pub(crate) struct Job {
     wake: Condvar,
     /// Held with its journal checkpointed, or ended: what an app quit waits
     /// for (`pause_all_and_wait`).
-    settled: Mutex<bool>,
-    settled_wake: Condvar,
+    settled: Settled,
     /// `finish` ran (or the test crash stopped it dead): the worker's own
     /// last event is out, or deliberately none.
     ended: std::sync::atomic::AtomicBool,
@@ -242,10 +242,6 @@ pub(crate) struct Job {
     rehomed: Mutex<Vec<String>>,
 }
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
 impl Job {
     fn new(id: &str, account_id: &str) -> Self {
         Job {
@@ -253,8 +249,7 @@ impl Job {
             account_id: account_id.to_string(),
             ctl: Mutex::new(Ctl::Run),
             wake: Condvar::new(),
-            settled: Mutex::new(false),
-            settled_wake: Condvar::new(),
+            settled: Settled::default(),
             ended: Default::default(),
             view: Mutex::new(Value::Null),
             #[cfg(test)]
@@ -322,21 +317,12 @@ impl Job {
     }
 
     fn set_settled(&self, settled: bool) {
-        *lock(&self.settled) = settled;
-        self.settled_wake.notify_all();
+        self.settled.set(settled);
     }
 
     /// Whether the job held (its journal checkpointed) or ended by `until`.
     fn wait_settled(&self, until: Instant) -> bool {
-        let mut settled = lock(&self.settled);
-        while !*settled {
-            let now = Instant::now();
-            if now >= until {
-                return false;
-            }
-            settled = self.settled_wake.wait_timeout(settled, until - now).unwrap_or_else(|p| p.into_inner()).0;
-        }
-        true
+        self.settled.wait(until)
     }
 
     fn view(&self) -> Value {
@@ -473,21 +459,14 @@ impl Journal {
     }
 }
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
-}
-
-/// A job id names files: only what `uuid` writes gets through.
-pub(crate) fn is_job_id(id: &str) -> bool {
-    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-}
+pub(crate) use crate::job_support::is_job_id;
 
 fn journal_dir(app_dir: &Path) -> PathBuf {
     app_dir.join(JOURNAL_DIR)
 }
 
 fn journal_path(app_dir: &Path, id: &str) -> PathBuf {
-    journal_dir(app_dir).join(format!("{id}.json"))
+    job_support::journal_file(&journal_dir(app_dir), id)
 }
 
 fn tail_path(app_dir: &Path, id: &str) -> PathBuf {
@@ -495,26 +474,18 @@ fn tail_path(app_dir: &Path, id: &str) -> PathBuf {
 }
 
 fn write_journal(app_dir: &Path, journal: &Journal) -> Result<(), String> {
-    std::fs::create_dir_all(journal_dir(app_dir)).map_err(|e| format!("Failed to create the upload journal dir: {e}"))?;
-    let bytes = serde_json::to_vec(journal).map_err(|e| e.to_string())?;
-    mailvault_core::fsx::write_atomic(&journal_path(app_dir, &journal.job_id), &bytes).map_err(|e| format!("Failed to write the upload journal: {e}"))
+    job_support::write_json(&journal_dir(app_dir), &journal.job_id, journal, "upload journal")
 }
 
 /// `None` for a journal this build cannot read (another version) or none.
 fn read_journal(app_dir: &Path, id: &str) -> Option<Journal> {
-    let raw = std::fs::read(journal_path(app_dir, id)).ok()?;
-    serde_json::from_slice::<Journal>(&raw).ok().filter(|j| j.version == JOURNAL_VERSION && j.job_id == id)
+    job_support::read_json::<Journal>(&journal_dir(app_dir), id).filter(|j| j.version == JOURNAL_VERSION && j.job_id == id)
 }
 
 /// The job id of every `*.json` in the journal dir. An atomic write's temp
 /// file starts with a dot and never ends in `.json`, so it is never one.
 fn journal_ids(app_dir: &Path) -> Vec<String> {
-    std::fs::read_dir(journal_dir(app_dir))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".json").filter(|id| is_job_id(id)).map(str::to_string))
-        .collect()
+    job_support::list_ids(&journal_dir(app_dir))
 }
 
 /// Every readable journal.
@@ -531,11 +502,7 @@ fn damaged_journals(app_dir: &Path) -> Vec<String> {
 
 fn remove_journal(app_dir: &Path, id: &str) {
     for path in [journal_path(app_dir, id), tail_path(app_dir, id)] {
-        if let Err(e) = std::fs::remove_file(&path) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                warn!("[mbox_upload] job {id}: its journal was not removed: {e}");
-            }
-        }
+        job_support::remove_logged(&path, "mbox_upload", id);
     }
 }
 
@@ -704,12 +671,7 @@ fn backoff(level: u32, t: &Tuning) -> Duration {
     full.mul_f64(1.0 + rand::random::<f64>() / 2.0).min(t.backoff_max)
 }
 
-pub(crate) fn background_qos() {
-    #[cfg(target_os = "macos")]
-    unsafe {
-        libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_BACKGROUND, 0);
-    }
-}
+pub(crate) use crate::job_support::background_qos;
 
 /// The account's credentials, read again by the worker itself (a token the
 /// app refreshed since): quietly, a background job never raises the
@@ -1003,7 +965,7 @@ fn spawn(
         handled: 0,
         since_checkpoint: 0,
         checkpointed: Instant::now(),
-        emitted: None,
+        throttle: ProgressThrottle::default(),
         eta: Eta::default(),
         throttled: false,
         changed: false,
@@ -1049,7 +1011,7 @@ struct Runner {
     handled: u64,
     since_checkpoint: u32,
     checkpointed: Instant,
-    emitted: Option<Instant>,
+    throttle: ProgressThrottle,
     eta: Eta,
     throttled: bool,
     /// The next event goes out whatever the rate: something changed.
@@ -1445,9 +1407,8 @@ impl Runner {
         };
         let payload = progress(&self.journal, true, state, self.throttled, self.hold_reason, eta);
         *lock(&self.job.view) = payload.clone();
-        if force || self.emitted.is_none_or(|at| at.elapsed() >= self.tuning.progress_every) {
+        if self.throttle.should_emit(force, self.tuning.progress_every, Instant::now()) {
             self.state.events.emit(EVENT, payload);
-            self.emitted = Some(Instant::now());
         }
     }
 
@@ -1626,7 +1587,7 @@ pub(crate) fn folder_list_stale(state: &DaemonState, account: &str) -> Result<()
 mod tests {
     use super::*;
     use crate::ipc::RpcResponse;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mock_imap::{Action, Mailbox, Message, MockImap, Scenario, Trigger};
     use tokio::sync::broadcast;
 

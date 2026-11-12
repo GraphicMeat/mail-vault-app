@@ -1,7 +1,7 @@
 //! Daemon lifecycle methods: ping, heartbeat, status, shutdown, log verbosity.
 
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -46,7 +46,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
 #[cfg(test)]
 mod tests {
-    use crate::server::DaemonState;
+    use crate::state::DaemonState;
     use serde_json::json;
     use std::path::PathBuf;
     use std::sync::Arc;

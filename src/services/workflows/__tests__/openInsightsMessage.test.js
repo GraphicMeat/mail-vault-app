@@ -104,6 +104,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 
 const { openInsightsMessage, cancelInsightsSelection } = await import('../openInsightsMessage.js');
 const { applyFlagToKeys } = await import('../messageMutations');

@@ -29,7 +29,7 @@
 use crate::custody as daemon_custody;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, vault_root, with_mailbox_write, with_vault_write};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::account_lifecycle::{AccountStamp, LifecycleError, LocalCommitPermit, OperationPermit};
 use mailvault_core::custody::{cache, entries};
 use mailvault_core::filename_safety::fs_safe;

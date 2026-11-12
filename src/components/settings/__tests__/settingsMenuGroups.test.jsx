@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useMailStore } from '../../../stores/mailStore';
 import { IS_APPSTORE_BUILD } from '../../../utils/buildFlags';
 import { SettingsPage } from '../../SettingsPage';
+import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
 

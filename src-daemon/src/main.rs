@@ -50,6 +50,7 @@ mod idle_watch;
 mod inference;
 mod insights;
 mod ipc;
+mod job_support;
 mod jmap_push;
 mod jmap_sessions;
 mod launch_resync;
@@ -72,9 +73,13 @@ mod people_index;
 mod people_snapshot;
 mod raw_message;
 mod restore;
+mod rpc_registry;
 mod scheduled_send_worker;
 pub mod search_index;
 mod server;
+mod state;
+#[cfg(test)]
+mod test_support;
 mod snapshot;
 mod snooze_worker;
 pub mod sync_engine;
@@ -419,7 +424,7 @@ fn startup_eml_migration(
 /// Flush the contacts index to disk, refusing while the vault is unreachable
 /// or mid-move (final fix wave I-1). Extracted for testing: the ticker in
 /// `daemon_main` cannot be unit-tested directly.
-fn flush_contacts_if_open(state: &Arc<server::DaemonState>) {
+fn flush_contacts_if_open(state: &Arc<state::DaemonState>) {
     let _ = handlers::common::with_vault_write(state, |_root| {
         state.contacts.flush_dirty();
         Ok::<(), String>(())
@@ -575,7 +580,7 @@ async fn daemon_main() {
     // Keyed by the CONFIGURED vault, not `mail_dir`: an unplugged drive falls
     // back to `data_dir`, and opening the registry under that root would wipe
     // the real vault's rows for a session that cannot read them anyway.
-    let vault_registry = server::open_vault_registry(
+    let vault_registry = state::open_vault_registry(
         &data_dir,
         Path::new(&vault_location.display_path),
         &search_index_state,
@@ -596,7 +601,7 @@ async fn daemon_main() {
         blitz::spawn_reaper(Arc::clone(&pool));
         pool
     };
-    let state = Arc::new(server::DaemonState {
+    let state = Arc::new(state::DaemonState {
         recent: Default::default(),
         token,
         data_dir: mail_dir.clone(),
@@ -1143,7 +1148,7 @@ mod tests {
     fn a_flush_while_vault_closed_writes_nothing() {
         let mail = scratch("contacts-flush-closed-mail");
         let app = scratch("contacts-flush-closed-app");
-        let state = server::DaemonState::for_test(mail.clone(), app.clone(), true);
+        let state = state::DaemonState::for_test(mail.clone(), app.clone(), true);
         std::fs::write(app.join("accounts.json"), r#"[{"id":"acc1"}]"#).unwrap();
         state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&app)).unwrap());
         state.contacts.seed_dirty_for_test("acc1");
@@ -1153,7 +1158,7 @@ mod tests {
 
         flush_contacts_if_open(&state);
 
-        let stored = |state: &server::DaemonState| {
+        let stored = |state: &state::DaemonState| {
             crate::custody::with_conn(state, |c| {
                 Ok(mailvault_core::custody::contacts::load(c, "acc1").len())
             })

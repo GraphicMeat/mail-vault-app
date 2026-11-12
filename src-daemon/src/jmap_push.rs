@@ -30,7 +30,7 @@
 use crate::handlers::common::blocking;
 use crate::idle_watch::WatchStatus;
 use crate::jmap_sessions::JmapMeta;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_engine::SyncAccount;
 use mailvault_core::backoff::RetryPolicy;
 use mailvault_core::jmap::push::{SseParser, StateChange};

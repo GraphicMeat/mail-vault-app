@@ -7,7 +7,7 @@
 //! The worker keeps the first faces it sees for a family and ignores later
 //! ones, so a family is sent once, with every installed face in one frame; the
 //! host remembers it and replays it to a respawned worker.
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use base64::Engine;
 use mailvault_core::google_fonts as gf;
 use serde_json::{json, Value};

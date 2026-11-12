@@ -8,6 +8,7 @@ import { useTagStore, tagRowKey } from './tagStore';
 import { flattenMailboxes } from './slices/unifiedHelpers';
 import { registerRows, patchEverywhere } from './messageRows';
 import { compareNames } from '../utils/collation';
+import { workflowPort } from './workflowPorts';
 
 /// The columns the daemon files an untagged note into, in board order. A
 /// `#tag` column comes before them, A to Z.
@@ -168,8 +169,7 @@ export const useNotesStore = create((set, get) => ({
     const before = get().cards.find(other => other.key === card.key);
     get().applyCopyFlag(targets, '\\Flagged', starred);
     try {
-      const { applyFlagToTargets } = await import('../services/workflows/messageMutations');
-      await applyFlagToTargets(targets, '\\Flagged', starred);
+      await workflowPort('applyFlagToTargets')(targets, '\\Flagged', starred);
     } catch (error) {
       if (before) set({ cards: get().cards.map(other => (other.key === card.key ? before : other)) });
       throw error;
@@ -240,9 +240,6 @@ export const useNotesStore = create((set, get) => ({
   deleteCard: card => guarded(card, async () => {
     const copies = serverCopies(card, get().accounts);
     if (!copies.length) return { deleted: 0, kept: (card.copies || []).length };
-    // Started first, awaited after the paint: a cold module load is not the
-    // click's to wait for.
-    const loading = import('../services/workflows/messageMutations');
     const gone = new Set();
     const outcomes = [];
     const index = get().cards.findIndex(other => other.key === card.key);
@@ -255,14 +252,14 @@ export const useNotesStore = create((set, get) => ({
       set({ cards: rest });
       return left.length;
     };
-    const offerUndo = async tagged => (await loading).setDeleteUndo(outcomes.filter(Boolean), {
+    const offerUndo = async tagged => workflowPort('setDeleteUndo')(outcomes.filter(Boolean), {
       afterRestore: async () => {
         if (tagged) await daemonCall('notes.set_done', { copies: card.copies, done: false });
         if (get().isOpen) await get().load();
       },
     });
     const kept = paint((card.copies || []).filter(copy => !copies.includes(copy)));
-    const { deleteEmailFromServer } = await loading;
+    const deleteEmailFromServer = workflowPort('deleteEmailFromServer');
     // Every copy at once: a refused one retries for up to half a minute, and
     // the others must not wait behind it.
     const settled = await Promise.allSettled(copies.map(copy =>

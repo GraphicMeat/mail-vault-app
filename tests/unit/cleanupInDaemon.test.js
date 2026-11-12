@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 import { join } from 'node:path';
 
 const api = readFileSync('src/services/cleanupApi.js', 'utf8');
@@ -45,7 +46,7 @@ describe('the auto-cleanup rules run in the daemon', () => {
     expect(api).toContain("send('cleanup_run_now'");
     expect(owned).not.toContain("'cleanup_run_now'");
     expect(demo).toContain("case 'cleanup_run_now'");
-    const main = readFileSync('src-tauri/src/main.rs', 'utf8');
+    const main = shellSource();
     const handlerStart = main.indexOf('generate_handler![');
     expect(main.slice(handlerStart, main.indexOf(']', handlerStart))).toContain('cleanup::cleanup_run_now');
     expect(main).toContain('.manage(cleanup::HeldCleanupPath::default())');

@@ -108,6 +108,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const ACCT = { id: 'a1', email: 'me@mock.test' };
 
 // The INBOX row and the reply the list merged in from Sent. Same account, same

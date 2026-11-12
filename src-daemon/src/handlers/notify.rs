@@ -17,7 +17,7 @@
 //! settings file mid-write must not silence mail.
 
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::notify_policy::{self, Ctx};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -124,7 +124,8 @@ fn ctx_from_params(params: &Value) -> Ctx {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
 
     fn rig() -> (tempfile::TempDir, Arc<DaemonState>) {
         let dir = tempfile::tempdir().unwrap();

@@ -2,6 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: (p) => <button onClick={() => p.onOpenInWindow?.()}>bar-window</button> }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex: vi.fn(), measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 700,

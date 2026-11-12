@@ -17,7 +17,7 @@ use crate::custody as daemon_custody;
 use crate::handlers::common::{str_arg, vault_root};
 use crate::imap::ImapConfig;
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::aliases::{self, DetectedAlias, ProviderAliases, ProviderStatus, Source};
 use mailvault_core::custody::cache as sql_cache;
 use mailvault_core::{header_cache, message_store};
@@ -144,7 +144,7 @@ fn scan(state: &Arc<DaemonState>, account_id: &str, login: &str) -> Vec<Detected
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mailvault_core::maildir::{INFO_PREFIX, IMPORT_UID_BASE};
     use mailvault_core::vault_files;
     use std::path::Path;

@@ -24,7 +24,7 @@ use std::time::Duration;
 pub mod list;
 
 /// The Network Activity purpose of the provider lookup.
-pub const PURPOSE: &str = "alias lookup";
+pub const PURPOSE: &str = crate::net_activity::ALIAS_LOOKUP_PURPOSE;
 /// How many of a folder's newest messages detection reads.
 pub const SCAN_LIMIT: usize = 300;
 /// At most this many suggestions per source.

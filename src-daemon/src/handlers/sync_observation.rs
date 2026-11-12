@@ -1,7 +1,7 @@
 //! Native probe and closed-folder STATUS routes.
 
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_observation::{self, Origin, SourceKey};
 use mailvault_core::sync_policy::{self, MailboxNode};
 use serde_json::{json, Map, Value};

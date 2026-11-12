@@ -27,6 +27,10 @@ const { PortableSettings } = await import('../PortableSettings');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { __resetPortableForTests } = await import('../../../stores/portableStore');
 const { t } = await import('../../../i18n/index.js');
+// Stores reach workflows through ports; the card under test needs the mocked retry bound.
+const { bindWorkflowPorts } = await import('../../../stores/workflowPorts');
+const { retryKeychainAccess: portRetry } = await import('../../../services/workflows/retryKeychainAccess');
+bindWorkflowPorts({ retryKeychainAccess: (...a) => portRetry(...a) });
 
 const PREMIUM = { hasSubscription: true, status: 'active' };
 const GIB = 1024 ** 3;

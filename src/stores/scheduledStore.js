@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
 import { zonedTimeToEpoch, resolveSuggestedTz } from '../utils/scheduledTime';
+import { listenTo } from '../services/listenTo.js';
 
 // Rows from `scheduled.*` (src-daemon/src/handlers/scheduled.rs). Modeled on
 // tagStore.js: one flat list, refetched on mount, patched in place from the
@@ -102,14 +103,6 @@ export const useScheduledStore = create((set, get) => ({
   },
 }));
 
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await import('@tauri-apps/api/event');
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
-  }
-}
 
 let _initialized = false;
 

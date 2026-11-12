@@ -17,7 +17,7 @@
 use crate::backup_zip::{self, AccountsJsonEntry, BackupAccount};
 use crate::handlers::common::{blocking, str_arg};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -102,7 +102,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use serde_json::json;
     use std::io::Write as _;
 

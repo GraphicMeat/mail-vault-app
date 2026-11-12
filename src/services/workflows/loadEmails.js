@@ -49,7 +49,7 @@ import { t } from '../../i18n/index.js';
  * reply), and never writes over a view that moved on during the round trip.
  */
 export async function proveServerUidsIfUnproven(account, mailbox, serverTotal) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const { activeAccountId, activeMailbox, serverUids: current } = get();
   if (current.complete || activeMailbox !== mailbox) return;
@@ -96,7 +96,7 @@ function isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds)
  * `isCurrent` lets the caller's own abort stop a paint as well.
  */
 export async function loadLocalFolder(accountId, mailbox, { isCurrent = () => true } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const generation = bumpLoadEmailsGeneration();
   const draftFrame = await refreshDraftProjection();
@@ -133,7 +133,7 @@ export async function loadLocalFolder(accountId, mailbox, { isCurrent = () => tr
 // device) into the cache and the mailbox's modseq with it, so no exit below
 // sees a difference. The store's rows take their flags from the cache.
 export async function loadEmails({ rereadFlags = false } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const { activeAccountId, accounts, activeMailbox, mailboxScope } = get();
@@ -901,7 +901,7 @@ function _revalidateGraphTail({ account, accountId, mailbox, folderId, from, flo
   _graphRevalidations.set(key, entry);
   entry.running = (async () => {
     try {
-      const { useMailStore } = await import('../../stores/mailStore');
+      const { useMailStore } = await import('./boundStore');
       const get = () => useMailStore.getState();
       const base = get().emails;
       const listed = new Map();
@@ -976,7 +976,7 @@ function _headerDateMs(email) {
 
 export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation, draftFrame) {
   draftFrame ||= await refreshDraftProjection();
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const isStale = () => get().activeAccountId !== activeAccountId || get().activeMailbox !== activeMailbox || getLoadEmailsGeneration() !== generation;
@@ -1334,7 +1334,7 @@ async function _readSentWindow(accountId, sentPath, reachMs) {
  * rows the list now reaches and reads nothing when the mirror already covers it.
  */
 export async function extendSentWindows() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const state = useMailStore.getState();
   if (!mergesSentIntoThreads(state)) return;
   const hidden = useSettingsStore.getState()?.hiddenAccounts || {};
@@ -1353,7 +1353,7 @@ async function _loadSentHeaders(accountId, cacheOnly) {
   // Read before the first await, so it names the cache this read will see.
   const startMerges = _sentFullMerges.get(accountId) || 0;
   const startFillGen = _sentFillGen.get(accountId) || 0;
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const isActive = () => get().activeAccountId === accountId;
   const spansAccounts = () => get().activeMailbox === 'UNIFIED';

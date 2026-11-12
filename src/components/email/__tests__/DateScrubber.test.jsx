@@ -5,6 +5,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { DateScrubber, MonthHeader, MONTH_HEADER_H } from '../DateScrubber';
 import { monthBuckets, railSegments } from '../../../utils/dateBuckets';
+import '../../../services/workflows/bindStoreActions';
 
 afterEach(cleanup);
 

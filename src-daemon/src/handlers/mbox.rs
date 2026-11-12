@@ -21,7 +21,7 @@ use crate::handlers::common::{blocking, done, opt_str_arg, str_arg};
 use crate::ipc::{self, RpcResponse};
 use crate::mbox;
 use crate::mbox_upload_job;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -169,7 +169,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use serde_json::json;
 
     fn st(mail_dir_ok: bool) -> (tempfile::TempDir, tempfile::TempDir, Arc<DaemonState>) {

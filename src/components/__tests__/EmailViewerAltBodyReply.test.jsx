@@ -13,6 +13,7 @@ import { registerBodyRenderer, _resetBodyRenderersForTest } from '../email/bodyR
 import { openActiveReply } from '../../utils/composeOpener';
 import { replySelection } from '../../utils/replySelection';
 import { EmailViewer } from '../EmailViewer';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex: vi.fn(), measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 700,

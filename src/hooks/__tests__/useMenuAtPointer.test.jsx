@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useMenuAtPointer } from '../useMenuAtPointer';
 import { QuickActions } from '../../components/QuickActions';
+import '../../services/workflows/bindStoreActions';
 
 function Row() {
   const [menuAt, handlers] = useMenuAtPointer();

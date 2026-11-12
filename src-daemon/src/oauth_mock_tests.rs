@@ -15,7 +15,8 @@
 
 use crate::events::captured_logs;
 use crate::ipc::RpcResponse;
-use crate::server::{handle_request_for_test, DaemonState};
+use crate::test_support::handle_request_for_test;
+use crate::state::DaemonState;
 use mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID;
 use mock_imap::oauth::{GrantSpec, MockOAuth, SignIn, TokenAuthority};
 use mock_imap::state::{synthetic_mailbox, Message};

@@ -1,6 +1,7 @@
 // S2 owns a dormant native refresh path while the production hook still owns refresh.
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 
 const read = path => readFileSync(path, 'utf8');
 const executable = source => source.split('\n')
@@ -14,7 +15,7 @@ describe('native refresh foundation', () => {
     const server = executable(read('src-daemon/src/server.rs'));
     const handler = read('src-daemon/src/handlers/refresh.rs');
     const demo = read('src/demo/backend.js');
-    const shell = read('src-tauri/src/main.rs');
+    const shell = shellSource();
     for (const method of ['sync.refresh', 'sync.refresh_status', 'sync.context']) {
       expect(owned).toContain(`'${method}'`);
       expect(server).toContain(`"${method}"`);

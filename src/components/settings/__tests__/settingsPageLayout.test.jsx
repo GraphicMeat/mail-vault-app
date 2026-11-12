@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { allTabs, settingsHosts, SettingsPage } from '../../SettingsPage';
 import { useMailStore } from '../../../stores/mailStore';
+import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {}, readOps: async () => [], opFailures: () => [] }));
 

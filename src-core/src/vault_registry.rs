@@ -42,8 +42,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use tracing::warn;
 
-use crate::search_index::reconcile::{read_mailbox, DiskFile};
-use crate::search_index::text::vault_dir_name;
+use crate::disk_listing::{read_mailbox, DiskFile};
+use crate::vault_dir::vault_dir_name;
 use crate::vault_eml::{light_row_json, parse_flags_from_filename};
 
 pub const DB_FILE: &str = "vault_registry.db";

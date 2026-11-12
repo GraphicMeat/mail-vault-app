@@ -26,10 +26,11 @@
 //! Graph accounts: the daemon holds no Graph token, so it cannot fetch one
 //! here. What `graph_cache_mime` fetched for an open and did not keep is in
 //! the in-memory copy; past that, the vault's error stands.
+use mailvault_core::imap::Transport;
 use crate::handlers::common::{blocking, vault_root, with_vault_write};
 use crate::account_lifecycle::AccountStamp;
 use crate::imap::{self, ImapConfig};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::fetch_mode::{same_message, RawLru};
 use mailvault_core::vault_files;
 use serde_json::Value;
@@ -324,12 +325,15 @@ async fn listed_message_id(state: &Arc<DaemonState>, account_id: &str, mailbox: 
 /// its server ids (Plan A Task 14); an IMAP one has none.
 async fn from_server(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<(Vec<u8>, Option<mailvault_core::jmap_store::record::ServerIds>)>, String> {
     let config = account_config(state, account_id).await?;
-    if config.uses_jmap() {
-        let fetched = crate::handlers::jmap_bridge::fetch_by_uid(state, &config, account_id, mailbox, uid).await?;
-        return Ok(fetched.map(|body| (body.raw, Some(body.ids))));
-    }
-    if config.oauth2_transport.as_deref() == Some("graph") {
-        return Err("a Graph account's message is fetched through the app's Graph token, which the daemon does not hold".to_string());
+    match config.transport() {
+        Transport::Jmap => {
+            let fetched = crate::handlers::jmap_bridge::fetch_by_uid(state, &config, account_id, mailbox, uid).await?;
+            return Ok(fetched.map(|body| (body.raw, Some(body.ids))));
+        }
+        Transport::Graph => {
+            return Err("a Graph account's message is fetched through the app's Graph token, which the daemon does not hold".to_string());
+        }
+        Transport::Imap => {}
     }
     let mb = mailbox.to_string();
     let fetch = state.imap_pool.run_read(&config, true, |mut session| {
@@ -395,7 +399,7 @@ pub(crate) async fn account_config(state: &DaemonState, account_id: &str) -> Res
 mod tests {
     use super::*;
     use crate::ipc::RpcResponse;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use base64::Engine;
     use mock_imap::state::{Mailbox, Message};
     use mock_imap::{MockImap, Scenario};
@@ -557,7 +561,11 @@ mod tests {
         let held = Arc::clone(&state);
         let second = tokio::spawn(async move { raw_message(&held, "acc1", "INBOX", 1, false).await });
         let key = ("acc1".to_owned(), "INBOX".to_owned(), 1);
-        for _ in 0..1000 {
+        // The second awaiter reads the vault on the blocking pool before it
+        // reaches the lock: wait on the clock, not on a spin count, which a
+        // loaded test run can exhaust. Well inside the 250 ms bound set above.
+        let joined = tokio::time::Instant::now() + Duration::from_millis(200);
+        while tokio::time::Instant::now() < joined {
             if locked(&state.raw_messages.fetching).get(&key).is_some_and(|arc| Arc::strong_count(arc) >= 3) { break }
             tokio::task::yield_now().await;
         }

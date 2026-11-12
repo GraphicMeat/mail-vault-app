@@ -10,7 +10,7 @@
 //!   kept; setting it prunes at once.
 use crate::handlers::common::{blocking, done};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::net_log::{self, Query, Retention};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -94,11 +94,11 @@ fn from_memory(q: &Query) -> Vec<mailvault_core::net_activity::NetEvent> {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::DaemonState;
+    use crate::state::DaemonState;
     use serde_json::json;
 
     async fn call(state: &std::sync::Arc<DaemonState>, method: &str, params: serde_json::Value) -> serde_json::Value {
-        serde_json::to_value(crate::server::handle_request_for_test(state, method, params).await).unwrap()
+        serde_json::to_value(crate::test_support::handle_request_for_test(state, method, params).await).unwrap()
     }
 
     #[tokio::test]

@@ -11,7 +11,7 @@ import { invalidateRestoreDescriptors as _invalidateRestore, clearGraphIdMap as 
 // ── removeAccount workflow ──
 
 export async function removeAccount(accountId) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const removal = await db.deleteAccount(accountId);

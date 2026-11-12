@@ -12,7 +12,7 @@ use crate::credentials;
 use crate::handlers::common::{blocking, str_arg};
 use crate::handlers::people_write;
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use base64::Engine;
 use mailvault_core::app_db;
 use mailvault_core::transfer::{app_config, bundle, crypto, phone};
@@ -278,7 +278,7 @@ mod tests {
                 "transfer.phone_qr" => json!({ "password": "short", "accounts": [] }),
                 _ => json!({ "appConfig": {}, "accountMap": {} }),
             };
-            let resp = crate::server::handle_request_for_test(&s, method, params).await;
+            let resp = crate::test_support::handle_request_for_test(&s, method, params).await;
             assert!(resp.result.is_some() || resp.error.is_some(), "{method} is not routed");
             // Unknown method is the one shape a wired-but-erroring route never
             // produces; that text is the registration-guard signal.
@@ -477,7 +477,7 @@ mod tests {
         std::env::set_var("MAILVAULT_TEST_AI_KEY", dir.path().join("ai_key"));
         let rpc = |s: &Arc<DaemonState>, m: &'static str, p: Value| {
             let s = Arc::clone(s);
-            async move { serde_json::to_value(crate::server::handle_request_for_test(&s, m, p).await).unwrap() }
+            async move { serde_json::to_value(crate::test_support::handle_request_for_test(&s, m, p).await).unwrap() }
         };
 
         let src = st();

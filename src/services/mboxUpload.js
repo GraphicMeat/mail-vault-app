@@ -1,6 +1,7 @@
 import { send } from './transport.js';
 import { t } from '../i18n/index.js';
 import { forceMailboxRefetch } from './workflows/helpers/mailboxRefetch';
+import { listenTo } from './listenTo.js';
 
 /**
  * "Import and restore to the server" (MBOX import mode 1) is a daemon job
@@ -88,20 +89,6 @@ export async function resume({ jobId, sourcePath, fileName }) {
     if (!picked) return null;
     if (fileName && baseName(picked) !== fileName) throw new Error(OTHER_FILE);
     return send('mbox_upload_resume', { jobId, sourcePath: picked });
-  }
-}
-
-// One load of the event API, shared by every listener: the chip asks for two
-// in the same tick, and under vitest two overlapping dynamic imports of one
-// mocked module can resolve the second to the real module (whose `listen`
-// then throws without Tauri, and the listener is silently lost).
-let eventApi = null;
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await (eventApi ||= import('@tauri-apps/api/event'));
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
   }
 }
 

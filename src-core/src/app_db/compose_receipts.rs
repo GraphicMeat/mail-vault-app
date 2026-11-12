@@ -3,7 +3,7 @@
 //! the complete proof in pending work before exact retirement; receipts confer
 //! no server UID, mirror or scheduled-queue authority.
 use super::{db, Connection};
-use crate::{bulk_worker::bytes_hash, compose::normalize_message_id, maildir};
+use crate::{bulk_types::bytes_hash, compose::normalize_message_id, maildir};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 

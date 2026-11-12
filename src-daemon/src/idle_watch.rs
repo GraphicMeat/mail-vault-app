@@ -14,7 +14,7 @@
 use crate::imap::async_imap::extensions::idle::IdleResponse;
 use crate::imap::{self, ImapPool};
 use crate::netgate::NetGate;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_engine::{SyncAccount, SyncEngine};
 use serde::Serialize;
 use mailvault_core::backoff::RetryPolicy;
@@ -1079,7 +1079,7 @@ mod tests {
     async fn an_arrival_body_is_stored_as_a_cache_copy_and_indexed() {
         use mailvault_core::search_index::query::SearchRequest;
         let dir = scratch_dir("idle_body");
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
         std::fs::write(dir.join("accounts.json"), serde_json::json!([{
             "id":"acc1", "email":"user@example.com", "imapHost":server.host(),
@@ -1125,7 +1125,7 @@ mod tests {
     async fn p2_waiting_idle_is_revocable_but_arrival_child_finishes_after_watcher_abort() {
         let dir = scratch_dir("p2_idle_child");
         std::fs::write(dir.join("frontend-settings.json"), serde_json::json!({"mailvault-settings":{"state":{"fetchMode":"hoarder"}}}).to_string()).unwrap();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
         std::fs::write(dir.join("accounts.json"), serde_json::json!([{
             "id":"acc1", "email":"user@example.com", "imapHost":server.host(),
@@ -1169,7 +1169,7 @@ mod tests {
     async fn s4_idle_arrival_body_is_kept_when_a_newer_inbox_observation_lands_first() {
         let dir = scratch_dir("s4_superseded_ticket");
         std::fs::write(dir.join("frontend-settings.json"), serde_json::json!({"mailvault-settings":{"state":{"fetchMode":"hoarder"}}}).to_string()).unwrap();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
         std::fs::write(dir.join("accounts.json"), serde_json::json!([{
             "id":"acc1", "email":"user@example.com", "imapHost":server.host(),

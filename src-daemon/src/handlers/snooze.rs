@@ -10,7 +10,7 @@
 use crate::handlers::common::{blocking, done, opt_str_arg, opt_u32_arg, str_arg, u64_arg};
 use crate::imap::{self, pool::PooledSessionGuard, ImapConfig};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::snooze_worker;
 use mailvault_core::app_db::{self, snooze};
 use serde_json::{json, Value};
@@ -184,7 +184,7 @@ mod tests {
     #[tokio::test]
     async fn the_routes_are_reachable_through_the_servers_dispatch() {
         let s = st();
-        let resp = crate::server::handle_request_for_test(&s, "snooze.list", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "snooze.list", json!({})).await;
         assert!(resp.result.is_some(), "snooze.list is not routed: {:?}", resp.error);
     }
 

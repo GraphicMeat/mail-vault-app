@@ -16,6 +16,7 @@ vi.mock('lucide-react', () => {
 
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { useSettingsStore } from '../../stores/settingsStore';
+import '../../services/workflows/bindStoreActions';
 
 const copy = { title: 'Delete from server?', description: 'It leaves the server.', confirmLabel: 'Delete' };
 

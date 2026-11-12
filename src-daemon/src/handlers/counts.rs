@@ -1,6 +1,6 @@
 //! Read-only, original-bound unread reduction. This route never resolves credentials.
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::unread_counts::{reduce_unread, UnreadInput};
 use mailvault_core::{accounts_doc, custody::cache};
 use rusqlite::{params, Connection, OpenFlags};

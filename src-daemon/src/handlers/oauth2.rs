@@ -28,7 +28,7 @@
 //! listening socket under inheritance has never been tested; P0.1 only
 //! proved file-access and SCM_RIGHTS inheritance).
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::oauth2::{
     own_google_client_available, own_google_client_id, DEFAULT_NEW_GOOGLE_CLIENT,
     GOOGLE_THUNDERBIRD_CLIENT_ID,

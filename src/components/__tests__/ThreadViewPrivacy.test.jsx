@@ -7,6 +7,7 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const { bodies } = vi.hoisted(() => ({ bodies: new Map() }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({

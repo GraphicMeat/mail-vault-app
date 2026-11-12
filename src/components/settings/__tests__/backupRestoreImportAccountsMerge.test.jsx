@@ -61,6 +61,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 const { default: BackupRestore } = await import('../BackupRestore');
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../../../services/workflows/bindStoreActions');
 const { safeStorage } = await import('../../../stores/safeStorage');
 
 const NEW_ACCOUNTS = [

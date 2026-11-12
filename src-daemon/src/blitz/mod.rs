@@ -266,6 +266,9 @@ impl Silence {
 
 /// RPCs a person waits on. `render.hit` and `render.inspect` are deliberately
 /// absent: hover and harness traffic must not pause the search index.
+/// The method table (`rpc_registry`) answers this now; the list is kept as the
+/// oracle its tests compare the table with.
+#[cfg(test)]
 pub fn is_foreground(method: &str) -> bool {
     matches!(method, "render.open" | "render.tile" | "render.textRuns")
 }

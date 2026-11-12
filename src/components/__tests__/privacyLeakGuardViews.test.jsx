@@ -9,6 +9,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent, screen, act } from '@testing-library/react';
 import { PEOPLE, FIXTURE_MESSAGE, expectNoLeak } from '../../test/privacyFixtures';
+import '../../services/workflows/bindStoreActions';
 
 const [JOANNA, ROKAS, OWEN] = PEOPLE.names;
 const [JOANNA_ADDR, ROKAS_ADDR, OWEN_ADDR] = PEOPLE.emails;

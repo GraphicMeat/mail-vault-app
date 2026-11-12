@@ -105,6 +105,7 @@ vi.mock('../../syncService', () => ({
 vi.mock('../folderStatus', () => ({ refreshFolderStatus: vi.fn().mockResolvedValue(null) }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const cacheManager = await import('../../cacheManager');
 const { openNotificationTarget } = await import('../../../utils/notificationOpen');
 

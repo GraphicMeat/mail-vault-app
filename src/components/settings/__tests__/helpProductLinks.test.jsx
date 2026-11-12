@@ -2,7 +2,6 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
-import { readFileSync } from 'node:fs';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
 const openInBrowser = vi.fn(() => Promise.resolve(true));
@@ -14,11 +13,12 @@ vi.mock('../../../stores/settingsStore', () => ({
 }));
 
 import { HelpSettings } from '../HelpSettings';
+import { shellSource } from '../../../../tests/unit/helpers/rustSources.js';
 
 afterEach(() => { cleanup(); openInBrowser.mockClear(); });
 
-// jsdom's import.meta.url is not a file: URL — resolve from the vitest root.
-const mainRs = readFileSync('src-tauri/src/main.rs', 'utf8');
+// The native menu lives in a sibling module of main.rs; scan the whole shell.
+const mainRs = shellSource();
 
 describe('Help & Support product links', () => {
   it('opens the live website, not the dead mailvault.app domain', () => {

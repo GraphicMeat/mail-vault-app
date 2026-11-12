@@ -17,7 +17,7 @@
 //! never on the vault drive.
 
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use base64::Engine;
 use mailvault_core::google_fonts::{self as gf, CatalogueEntry, Fetch, FetchError, FontError, InstallOptions};
 use serde_json::{json, Value};
@@ -245,7 +245,7 @@ impl Fetch for NetFetch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use std::sync::mpsc;
 
     const CSS: &str = include_str!("../../../src-core/tests/fixtures/google_fonts_css2.css");

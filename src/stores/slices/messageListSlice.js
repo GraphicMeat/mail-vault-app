@@ -1,6 +1,6 @@
 // ── messageListSlice — email list, sorting, pagination, loading ──
 // Large async orchestration functions are extracted to src/services/workflows/.
-// This slice contains state, pure synchronous derivations, and passthrough wrappers.
+// This slice contains state, pure synchronous derivations, and unbound stubs for workflow actions.
 
 import { projectDraftUids } from '../../services/draftProjection';
 import * as api from '../../services/api';
@@ -9,12 +9,7 @@ import { buildThreads } from '../../utils/emailParser';
 import { annotateRowAlerts } from '../../services/rowVerdicts';
 import { NO_SERVER_UIDS } from './serverUids';
 import { custodySource } from './custody';
-import {
-  loadEmails as _loadEmails,
-  _loadEmailsViaGraph,
-  loadSentHeaders as _loadSentHeaders,
-} from '../../services/workflows/loadEmails';
-import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/loadMoreEmails';
+import { unboundAction } from './unboundAction';
 import { sentMailboxPathFor } from '../../utils/sentFolder';
 import { _resolveMailboxPath, rowIdentity, vaultHas, vaultKey } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
@@ -541,12 +536,12 @@ export const createMessageListSlice = (set, get) => ({
     commit(keys, scopes);
   },
 
-  // ── Passthrough wrappers to workflow functions ──
+  // ── Actions implemented by workflows (bound in bindStoreActions) ──
 
-  loadEmails: (opts) => _loadEmails(opts),
-  _loadEmailsViaGraph: (account, activeAccountId, activeMailbox, generation) => _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation),
-  loadMoreEmails: () => _loadMoreEmails(),
-  loadSentHeaders: (accountId, opts) => _loadSentHeaders(accountId, opts),
+  loadEmails: unboundAction('loadEmails'),
+  _loadEmailsViaGraph: unboundAction('_loadEmailsViaGraph'),
+  loadMoreEmails: unboundAction('loadMoreEmails'),
+  loadSentHeaders: unboundAction('loadSentHeaders'),
 
   // ── Pure synchronous derivations (stay inline) ──
 

@@ -16,7 +16,7 @@
 //! `serde_json::to_value(...)` with no `{success: true, ...}` wrapper —
 //! unlike oauth2/smtp/graph's routes.
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::dns;
 use serde_json::{json, Value};
 use std::sync::Arc;

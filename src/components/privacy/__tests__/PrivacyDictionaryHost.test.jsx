@@ -10,6 +10,7 @@ import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useMailStore } from '../../../stores/mailStore';
 import { getPrivacyDictionary, usePrivacyDictStore } from '../../../utils/privacy/privacyDictionary';
 import { daemonCall } from '../../../services/daemonClient';
+import '../../../services/workflows/bindStoreActions';
 
 const mail = (name) => ({ uid: 1, from: { name, address: 'a@x.com' }, to: [], cc: [], bcc: [] });
 

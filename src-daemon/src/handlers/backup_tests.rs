@@ -7,7 +7,7 @@ fn mailbox_concurrency_clamps_to_one_through_five() {
     assert_eq!(mailbox_concurrency(&json!({"mailboxConcurrency": 3})), 3);
     assert_eq!(mailbox_concurrency(&json!({"mailboxConcurrency": 9})), 5);
 }
-use crate::server::handle_request_for_test;
+use crate::test_support::handle_request_for_test;
 use serde_json::json;
 
 // `test_daemon_state()`/`test_account_json()` (named in the plan brief) don't

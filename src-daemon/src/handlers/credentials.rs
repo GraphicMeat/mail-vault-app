@@ -22,7 +22,7 @@
 
 use crate::credentials::{self, CredChange, CredError};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -115,7 +115,8 @@ fn delete(params: &Value) -> Option<CredChange> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use std::time::Duration;
 
     const SECRET: &str = "hunter2-SECRET-pw";

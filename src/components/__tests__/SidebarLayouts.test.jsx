@@ -8,6 +8,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { openFolder } from '../../services/workflows/loadSubtree';
 import { t } from '../../i18n';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('../../services/workflows/loadSubtree', () => ({ openFolder: vi.fn() }));
 const openInBrowser = vi.fn(() => Promise.resolve(true));

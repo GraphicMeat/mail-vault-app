@@ -7,7 +7,7 @@ use crate::credentials;
 use crate::handlers::common::str_arg;
 use crate::ipc::{self, RpcResponse};
 use crate::llm;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -98,7 +98,7 @@ mod tests {
     #[tokio::test]
     async fn the_routes_are_reachable_through_the_servers_dispatch() {
         let s = st();
-        let resp = crate::server::handle_request_for_test(&s, "ai.providers", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "ai.providers", json!({})).await;
         assert!(resp.result.is_some(), "ai.providers is not routed: {:?}", resp.error);
     }
 

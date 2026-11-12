@@ -106,15 +106,15 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: async (name, callback) => {
   return () => { if (snoozeListener === callback) snoozeListener = null; };
 } }));
 const mockReload = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../services/workflows/messageMutations', () => ({
-  reloadListInView: (...args) => mockReload(...args), applySeenLocally: vi.fn(),
-}));
 window.__TAURI__ = { core: { invoke: vi.fn().mockResolvedValue(undefined) } };
 const { ownAddresses } = await import('../../utils/ownAddresses.js');
 const { useEmailScheduler, notifyArrival } = await import('../useEmailScheduler.js');
 const { useFocusStore, getNotificationDecisions, clearNotificationDecisions } = await import('../../stores/focusStore.js');
 const { usePrivacyStore } = await import('../../stores/privacyStore.js');
 const { useCodeBubbleStore } = await import('../../stores/codeBubbleStore.js');
+// The snooze store starts these workflows through ports (stores/workflowPorts.js).
+const { bindWorkflowPorts } = await import('../../stores/workflowPorts.js');
+bindWorkflowPorts({ reloadListInView: (...args) => mockReload(...args), applySeenLocally: vi.fn() });
 const { useSnoozeStore, initSnooze } = await import('../../stores/snoozeStore.js');
 
 const account = { id: 'a1', email: 'a@one.co', imapHost: 'imap.one.co', imapPort: 993 };

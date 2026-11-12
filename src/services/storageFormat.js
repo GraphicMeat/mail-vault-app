@@ -2,6 +2,7 @@ import { send } from './transport.js';
 import { t, tErr } from '../i18n/index.js';
 import { formatBytes } from '../utils/formatBytes';
 import { formatCount } from '../utils/formatCount';
+import { listenTo } from './listenTo.js';
 
 /**
  * Settings > Storage > Message format. The vault's storage format lives in
@@ -82,18 +83,6 @@ export function failureText(error) {
   if (!hit) return raw ? errorMessage(raw) : '';
   const count = Number(raw.slice(hit[0].length).trim().split(/\s/)[0]) || 0;
   return t(hit[1], { count: formatCount(count) });
-}
-
-// One load of the event API, shared by every listener (mboxUpload.js has
-// the reason: two overlapping dynamic imports of one mocked module).
-let eventApi = null;
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await (eventApi ||= import('@tauri-apps/api/event'));
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
-  }
 }
 
 export const onProgress = (cb) => listenTo('format-migration-progress', cb);

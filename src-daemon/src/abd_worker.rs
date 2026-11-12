@@ -20,12 +20,13 @@
 //! Secrets: an access token lives in `AbdState.tokens`, in memory only. It is
 //! never in `job.json`, a frame, an RPC result, a plan file or a log line.
 
+use mailvault_core::imap::Transport;
 use crate::abd_local::DaemonLocal;
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::credentials;
 use crate::handlers::common;
 use crate::imap::ImapConfig;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use futures::FutureExt;
 use mailvault_core::abd::graph_ops::{GraphOps, LeaseStore, TokenLease, LEASE_MARGIN_MS};
 use mailvault_core::abd::imap_ops::{build_preview, ImapOps};
@@ -751,14 +752,11 @@ pub(crate) enum Kind {
 }
 
 pub(crate) fn kind_of(cfg: &ImapConfig) -> Kind {
-    if cfg.uses_jmap() {
-        Kind::Jmap
-    } else if cfg.oauth2_transport.as_deref() == Some("graph") {
-        Kind::Graph
-    } else if cfg.is_oauth2() {
-        Kind::ImapOauth
-    } else {
-        Kind::Password
+    match cfg.transport() {
+        Transport::Jmap => Kind::Jmap,
+        Transport::Graph => Kind::Graph,
+        Transport::Imap if cfg.is_oauth2() => Kind::ImapOauth,
+        Transport::Imap => Kind::Password,
     }
 }
 

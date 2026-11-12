@@ -51,7 +51,7 @@
 use crate::account_lifecycle::AccountStamp;
 use crate::handlers::deleted::{self, CaptureFailure, Source};
 use crate::imap::{self, pool::ImapPool, ImapConfig};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::actions::policy::{delete_disposition, imap_trash_place, DeleteDisposition, FolderRole, TrashPlace, WithoutTrash};
 use serde_json::Value;
 use std::sync::Arc;

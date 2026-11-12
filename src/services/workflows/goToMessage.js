@@ -46,7 +46,7 @@ function waitFor(store, read, ms) {
  * navigation took the view while the folder loaded.
  */
 export async function goToMessage(email, { threadWaitMs = THREAD_WAIT_MS } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const { useSearchStore } = await import('../../stores/searchStore');
   const { useViewStore } = await import('../../stores/viewStore');
 

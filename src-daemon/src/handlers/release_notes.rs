@@ -9,7 +9,7 @@
 //! Best effort by design: offline, rate-limited or slow, the answer is `[]`
 //! (`null` for commits) and the dialog keeps whatever notes the feed carried.
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::update_track::{commit_log, git_ref, release_notes_between, GithubCompare, GithubRelease};
 use serde_json::Value;
 use std::sync::Arc;
@@ -83,7 +83,7 @@ fn answer(params: &Value, fetched: Result<Vec<GithubRelease>, String>) -> Value 
 
 #[cfg(test)]
 mod tests {
-    use crate::server::DaemonState;
+    use crate::state::DaemonState;
     use mailvault_core::update_track::GithubRelease;
     use serde_json::json;
     use std::path::PathBuf;

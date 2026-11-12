@@ -1,7 +1,7 @@
 //! Volatile native refresh receipts and the dedicated header worker.
 
 use crate::account_lifecycle::AccountStamp;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_engine::SyncAccount;
 use crate::sync_observation::{self, Origin};
 use mailvault_core::{accounts_doc, refresh_policy, settings_doc};
@@ -512,7 +512,7 @@ impl RefreshState {
     }
 }
 
-fn now_ms() -> i64 { mailvault_core::people::model::now_ms() }
+use mailvault_core::clock::now_ms;
 
 #[cfg(test)]
 mod race_test_pause {

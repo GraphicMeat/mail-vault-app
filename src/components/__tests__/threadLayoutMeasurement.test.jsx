@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ThreadView } from '../email/ThreadView';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMailStore } from '../../stores/mailStore';
+import '../../services/workflows/bindStoreActions';
 
 // Keep the real virtualizer: fixed-position stubs cannot catch overlapping rows.
 // Only browser geometry is simulated. An expanded message has the same height

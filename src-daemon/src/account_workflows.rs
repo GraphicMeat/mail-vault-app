@@ -3,7 +3,7 @@
 use crate::account_lifecycle::{LifecycleError, PersistenceAuthority, PersistenceOwner};
 use crate::credentials::{self, CredChange, CredError};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::accounts_doc::{self, Listing};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1661,7 +1661,7 @@ mod tests {
                 .unwrap()
         }
         async fn call(&self, method: &str, params: Value) -> Result<Value, String> {
-            let r = crate::server::handle_request_for_test(&self.state, method, params).await;
+            let r = crate::test_support::handle_request_for_test(&self.state, method, params).await;
             if let Some(e) = r.error {
                 Err(e.message)
             } else {
@@ -1925,7 +1925,7 @@ mod tests {
             row("retired", "retired@example.test", "h"),
             row("fresh", "fresh@example.test", "h")
         ],"ifAbsent":true});
-        let response = crate::server::handle_request_for_test(&rig.state, "accounts.save", request.clone()).await;
+        let response = crate::test_support::handle_request_for_test(&rig.state, "accounts.save", request.clone()).await;
         println!("P6_NATIVE_REFUSAL_FRAME {}", json!({"request":request,"response":serde_json::to_value(&response).unwrap()}));
         assert_eq!(rig.blob(), before_blob);
         assert_eq!(rig.meta(), before_meta);
@@ -1939,7 +1939,7 @@ mod tests {
             row("remapped", "retired@example.test", "h"),
             row("fresh", "fresh@example.test", "h")
         ],"ifAbsent":true});
-        let accepted = crate::server::handle_request_for_test(&rig.state, "accounts.save", retry.clone()).await;
+        let accepted = crate::test_support::handle_request_for_test(&rig.state, "accounts.save", retry.clone()).await;
         println!("P6_NATIVE_ACCEPTED_FRAME {}", json!({"request":retry,"response":serde_json::to_value(&accepted).unwrap()}));
         assert!(accepted.error.is_none());
         assert_eq!(accepted.result.as_ref().unwrap()["accepted"], json!(["remapped", "fresh"]));
@@ -1979,7 +1979,7 @@ mod tests {
         let state = Arc::clone(&rig.state);
         pause.spawned = true;
         let pending = tokio::spawn(async move {
-            crate::server::handle_request_for_test(&state, "accounts.save", request).await
+            crate::test_support::handle_request_for_test(&state, "accounts.save", request).await
         });
         pause.entered().await;
 
@@ -2016,7 +2016,7 @@ mod tests {
     async fn p6_unknown_save_never_claims_pre_effect_refusal() {
         let rig = Rig::new(vec![], vec![]);
         post_commit_uncertainty_paths().lock().unwrap().insert(rig.state.app_dir.clone());
-        let result = crate::server::handle_request_for_test(&rig.state, "accounts.save",
+        let result = crate::test_support::handle_request_for_test(&rig.state, "accounts.save",
             json!({"entries":[row("fresh", "fresh@example.test", "h")],"ifAbsent":true})).await;
         assert!(result.error.is_some());
         assert!(result.result.is_none());

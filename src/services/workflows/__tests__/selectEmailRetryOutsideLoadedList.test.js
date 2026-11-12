@@ -117,6 +117,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 
 const ACCT_A = { id: 'acct-a', email: 'info@moderniosaplikacijos.lt', imapHost: 'h', password: 'x' };
 const MESSAGE_ID = '<640a1b1e-b1be-41bb-a270-9566012b3ef4@Spark>';

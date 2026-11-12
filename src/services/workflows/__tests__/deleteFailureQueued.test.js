@@ -111,6 +111,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { onDeleteQueueLanded } = await import('../messageMutations');
 const { t } = await import('../../../i18n/index.js');
 

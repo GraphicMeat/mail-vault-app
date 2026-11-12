@@ -40,7 +40,7 @@
 use crate::handlers::common::{opt_str_arg, str_arg};
 use crate::ipc::{self, RpcResponse};
 use crate::oauth_tokens::{self, FailKind, Read, TokenError};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::aliases::{self, list};
 use mailvault_core::settings_doc::{Change, SettingsDoc, SettingsError};
 use serde_json::{json, Map, Value};
@@ -439,7 +439,7 @@ fn schedule(state: &Arc<DaemonState>, account_id: &str, login: &str, delay: Dura
 mod tests {
     use super::*;
     use crate::custody as daemon_custody;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mailvault_core::custody::cache as sql_cache;
     use mailvault_core::maildir::INFO_PREFIX;
     use mailvault_core::vault_files;

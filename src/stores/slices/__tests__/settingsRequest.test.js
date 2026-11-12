@@ -3,6 +3,7 @@
 // the account and the section (Accounts > Aliases); every other caller names
 // only the tab, and its request keeps the shape it always had.
 import { expect, it, vi } from 'vitest';
+import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
 

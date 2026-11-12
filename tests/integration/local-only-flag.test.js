@@ -3,6 +3,7 @@ import { startSeededServer, createClient, deliver } from './mockHarness.js';
 import { deriveDisplayRows } from '../../src/stores/slices/messageListSlice.js';
 import { serverUids } from '../../src/stores/slices/serverUids.js';
 import { vaultKeys } from '../../src/stores/slices/unifiedHelpers.js';
+import '../../src/services/workflows/bindStoreActions';
 
 // The production derivation, imported directly. This file used to call
 // `services/emailListUtils.js`, a test-only reimplementation of it that had

@@ -3,6 +3,7 @@ import { describe,it,expect,vi } from 'vitest';
 import { createInsightsStore } from '../insightsStore';
 import { createInsightsSession } from '../../services/insightsSession';
 import { A, B, COUNT_FIXTURE } from '../../../tests/fixtures/insights';
+import '../../services/workflows/bindStoreActions';
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 function harness() {
   const result={totals:{received:5,sent:2,both:7},senders:[],days:[],lanes:[]};

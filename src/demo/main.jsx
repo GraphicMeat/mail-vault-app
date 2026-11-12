@@ -13,7 +13,7 @@ initializeDemoSession()
     // Both imports remain behind the hydration barrier. safeStorage captures
     // the Tauri invoke seam at module evaluation, so importing App or Shell
     // earlier would overwrite restored settings with the seed defaults.
-    return Promise.all([import('../App.jsx'), import('./DemoShell.jsx'), import('../stores/settingsStore.js'), import('../stores/themeStore.js')]);
+    return Promise.all([import('../App.jsx'), import('./DemoShell.jsx'), import('../stores/settingsStore.js'), import('../stores/themeStore.js'), import('../services/workflows/bindStoreActions.js')]);
   })
   .then(async ([{ default: App }, { DemoShell }, { useSettingsStore }, { useThemeStore }]) => {
     const persist = useSettingsStore.persist;
@@ -44,6 +44,8 @@ initializeDemoSession()
     // Storage is best effort; a failed IndexedDB must never leave a blank
     // demo. Globals are still installed before the fallback import.
     installDemoGlobals();
-    import('../App.jsx').then(({ default: App }) => root.render(<App />)).catch(() => {});
+    import('../services/workflows/bindStoreActions.js')
+      .then(() => import('../App.jsx'))
+      .then(({ default: App }) => root.render(<App />)).catch(() => {});
     console.warn('[MailVault demo] bootstrap fallback', error);
   });

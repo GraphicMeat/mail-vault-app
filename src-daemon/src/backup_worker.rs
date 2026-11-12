@@ -2,7 +2,7 @@
 use crate::{
     handlers::{backup as adapter, common},
     ipc::{self, RpcResponse},
-    server::DaemonState,
+    state::DaemonState,
 };
 use mailvault_core::{
     app_db::{self, db},

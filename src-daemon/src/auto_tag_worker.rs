@@ -18,7 +18,7 @@
 use crate::handlers::auto_tags::{emit_assigned, evaluate, load_candidates, now_secs, on_device, provider_from_rule};
 use crate::handlers::common::blocking;
 use crate::llm::Provider;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, auto_tags, tags::Target};
 use mailvault_core::custody::cache;
 use std::sync::Arc;

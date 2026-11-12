@@ -8,6 +8,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const resolveMessageBody = vi.fn();
 vi.mock('../../services/export/bodyResolver', () => ({ resolveMessageBody: (...a) => resolveMessageBody(...a) }));

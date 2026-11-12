@@ -89,6 +89,7 @@ vi.mock('../../syncService', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { forget: forgetMemo } = await import('../../headerMemo');
 const { _graphRevalidationFor, _resetGraphRevalidation } = await import('../loadEmails');
 const { getLoadMoreTimer, setLoadMoreTimer } = await import('../../../stores/slices/messageListSlice');

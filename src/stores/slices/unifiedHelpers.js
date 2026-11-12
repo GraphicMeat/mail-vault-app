@@ -1,6 +1,6 @@
 import { t } from '../../i18n/index.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
-import { isLocalMailbox } from '../../services/workflows/mailboxTree.js';
+import { isLocalMailbox } from '../../utils/localMailbox.js';
 import { ownAddresses } from '../../utils/ownAddresses.js';
 // ── Shared helpers used across multiple mail store slices ──
 

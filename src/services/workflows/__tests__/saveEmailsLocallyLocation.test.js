@@ -126,6 +126,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { saveEmailsLocally, saveSelectedLocally } = await import('../messageMutations.js');
 
 const LUKE = { id: 'luke-id', email: 'luke@mock.test' };

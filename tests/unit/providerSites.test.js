@@ -14,7 +14,8 @@ const IMAP_PATH = 'Graph-only branch; JMAP takes the IMAP path';
 const ALLOWED = {
   'src/components/ComposeModal.jsx': IMAP_PATH,
   'src/components/GraphImapBanner.jsx': 'Banner is Graph-only; JMAP accounts need no switch-to-IMAP prompt',
-  'src/App.jsx': 'Detached compose admission uses the same follow-up reminder policy; JMAP takes the IMAP path',
+  'src/components/compose/useComposeSend.js': IMAP_PATH,
+  'src/hooks/app/useComposeWindows.js': 'Detached compose admission uses the same follow-up reminder policy; JMAP takes the IMAP path',
   'src/components/settings/MboxImportDialog.jsx': IMAP_PATH,
   'src/components/settings/MigrationSettings.jsx': IMAP_PATH,
   'src/components/settings/VaultGapRow.jsx': IMAP_PATH,

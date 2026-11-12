@@ -37,7 +37,7 @@ export async function refreshFolderStatus(account, mailboxes, activeMailbox) {
   const accountId = account.id;
   const context = accountExpectedContext(account, 'all');
   const generation = advance(accountId);
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   let invalidated = false;
   const observe = state => {
     if (invalidated) return;

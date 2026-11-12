@@ -25,7 +25,7 @@ use crate::handlers::common::{blocking, opt_str_arg, str_arg, u32_arg, vault_roo
 use crate::handlers::custody::repair_generation_for;
 use crate::handlers::imap::account_arg;
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::{entries, probe};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -180,7 +180,7 @@ async fn probe_server_copy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mock_imap::state::Mailbox;
     use mock_imap::{Action, MockImap, Scenario, Trigger};
 

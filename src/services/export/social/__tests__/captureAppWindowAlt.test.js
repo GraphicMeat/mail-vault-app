@@ -10,6 +10,7 @@ import { EMPTY_DICTIONARY } from '../../../../utils/privacy/piiDetector';
 import { registerBodyRenderer, _resetBodyRenderersForTest } from '../../../../components/email/bodyRendererRegistry';
 import { useSettingsStore } from '../../../../stores/settingsStore';
 import { usePrivacyStore } from '../../../../stores/privacyStore';
+import '../../../workflows/bindStoreActions';
 
 const box = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
 const altBody = (busy, parent = document.getElementById('root')) => {

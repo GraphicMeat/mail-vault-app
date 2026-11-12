@@ -6,6 +6,7 @@ import InsightsPage from '../InsightsPage';
 import {useInsightsStore} from '../../../stores/insightsStore';
 import {useMailStore} from '../../../stores/mailStore';
 import {t} from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 const actions={setTab:vi.fn(),setQuery:vi.fn(),refresh:vi.fn(),selectDay:vi.fn(),loadMessages:vi.fn()};
 beforeEach(()=>{
   useMailStore.setState({accounts:[{id:'a',email:'me@example.test'}]});

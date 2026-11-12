@@ -2,7 +2,7 @@
 
 use crate::classification;
 use mailvault_core::learning;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::cache;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1086,7 +1086,7 @@ mod tests {
             if first.swap(false, std::sync::atomic::Ordering::SeqCst) {
                 let resp = tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current()
-                        .block_on(crate::server::handle_request_for_test(&state, method, params.clone()))
+                        .block_on(crate::test_support::handle_request_for_test(&state, method, params.clone()))
                 });
                 assert!(resp.error.is_none(), "{method}: {:?}", resp.error.map(|e| e.message));
             }

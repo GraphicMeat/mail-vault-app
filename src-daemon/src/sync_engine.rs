@@ -217,7 +217,7 @@ pub struct SyncEngine {
     /// `DaemonState::jmap`, the uid ledgers and custody. Set once at startup
     /// (`set_daemon`); weak, so the state and its engine do not keep each
     /// other alive.
-    daemon: std::sync::OnceLock<std::sync::Weak<crate::server::DaemonState>>,
+    daemon: std::sync::OnceLock<std::sync::Weak<crate::state::DaemonState>>,
 }
 
 impl SyncEngine {
@@ -266,13 +266,13 @@ impl SyncEngine {
 
     /// Hand the engine the daemon state the JMAP sync works through. Called
     /// once, right after the state is built (`main.rs`, `DaemonState::for_test`).
-    pub fn set_daemon(&self, state: &Arc<crate::server::DaemonState>) {
+    pub fn set_daemon(&self, state: &Arc<crate::state::DaemonState>) {
         let _ = self.daemon.set(Arc::downgrade(state));
     }
 
     /// The daemon state, `None` before `set_daemon` (an engine built alone,
     /// as the IMAP tests build one) or once the state is gone.
-    pub(crate) fn daemon_state(&self) -> Option<Arc<crate::server::DaemonState>> {
+    pub(crate) fn daemon_state(&self) -> Option<Arc<crate::state::DaemonState>> {
         self.daemon.get().and_then(std::sync::Weak::upgrade)
     }
 
@@ -2081,7 +2081,7 @@ pub(crate) async fn cache_io<T: Send + 'static>(
 /// A strict JMAP cache step owns the account exclusion in its blocking child.
 /// An abandoned async waiter cannot release the exclusion before this write.
 pub(crate) async fn cache_io_strict<T: Send + 'static>(
-    state: &Arc<crate::server::DaemonState>, ctx: &CacheCtx,
+    state: &Arc<crate::state::DaemonState>, ctx: &CacheCtx,
     expected_hash: &str,
     f: impl FnOnce(CacheCtx) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
@@ -2165,12 +2165,7 @@ const BACKFILL_CHUNK: usize = 1000;
 /// `fetch_headers_by_uids` chunk.
 const HEAL_MAX_PER_SYNC: usize = 200;
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
+use crate::job_support::now_ms;
 
 fn unix_now() -> u64 {
     now_ms() / 1000
@@ -2678,7 +2673,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn p2_actual_cachectx_rejects_retired_empty_owner_and_new_mailbox() {
         let dir = tempfile::tempdir().unwrap();
-        let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        let state = crate::state::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
         fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
         state.account_lifecycle.seed(
             &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap(),
@@ -2712,7 +2707,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn p2_admitted_sql_contact_child_survives_waiter_loss() {
         let dir = tempfile::tempdir().unwrap();
-        let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        let state = crate::state::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
         fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
         state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
         let ctx = state.sync_engine.cache_ctx("a", "INBOX");

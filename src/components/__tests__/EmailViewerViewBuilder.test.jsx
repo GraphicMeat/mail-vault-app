@@ -12,6 +12,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const daemon = vi.hoisted(() => ({ members: { available: true, members: {} } }));
 vi.mock('../../services/daemonClient', async (importOriginal) => ({

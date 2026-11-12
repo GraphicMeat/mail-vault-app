@@ -8,7 +8,7 @@
 use crate::credentials::{self, SealedStore};
 use crate::handlers::common::{blocking, done, str_arg};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -425,7 +425,7 @@ mod tests {
             "portable.get_credentials",
             "portable.set_credentials",
         ] {
-            let resp = crate::server::handle_request_for_test(&s, method, json!({})).await;
+            let resp = crate::test_support::handle_request_for_test(&s, method, json!({})).await;
             if let Some(err) = &resp.error {
                 assert!(!err.message.contains("Unknown method"), "{method} is not routed: {err:?}");
             }

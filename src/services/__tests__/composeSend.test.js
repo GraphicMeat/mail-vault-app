@@ -68,7 +68,7 @@ vi.mock('../../stores/scheduledStore', () => ({
     cancel: (...args) => cancelSchedule(...args),
   }) },
 }));
-vi.mock('../../components/RichTextEditor', () => ({
+vi.mock('../../utils/editorHtml', () => ({
   htmlToText: html => (html || '').replace(/<[^>]*>/g, ''),
   inlineComposeSpacing: html => html,
 }));

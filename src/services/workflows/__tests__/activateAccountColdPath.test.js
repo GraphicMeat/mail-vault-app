@@ -55,11 +55,14 @@ vi.mock('../../db', () => ({
 const mockFetchEmails = vi.fn();
 const mockCheckMailboxStatus = vi.fn();
 const mockFetchMailboxes = vi.fn().mockResolvedValue([]);
+const serverListing = (mailboxes) => ({ mailboxes, source: 'server', suspectEmpty: false });
+const mockLoadMailboxes = vi.fn().mockResolvedValue(serverListing([]));
 const mockSearchAllUids = vi.fn().mockResolvedValue([]);
 vi.mock('../../api', () => ({
   fetchEmails: (...a) => mockFetchEmails(...a),
   checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
   fetchMailboxes: (...a) => mockFetchMailboxes(...a),
+  loadMailboxes: (...a) => mockLoadMailboxes(...a),
   searchAllUids: (...a) => mockSearchAllUids(...a),
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
@@ -135,6 +138,7 @@ vi.mock('../../syncService', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 // Real module — an in-memory, module-level cache (see headerMemo.js). Not
 // mocked, but explicitly cleared per test below so a header set memoized by
 // one test's activation can't be recalled (and reconciled against an io that
@@ -200,6 +204,7 @@ beforeEach(() => {
   mockGetArchivedEmailIds.mockResolvedValue(new Set());
   mockGetSavedEmailIds.mockResolvedValue(new Set());
   mockFetchMailboxes.mockResolvedValue([]);
+  mockLoadMailboxes.mockResolvedValue(serverListing([]));
   mockGetRestoreDescriptor.mockReturnValue(null);
   mockGetDaemonHealth.mockReturnValue({ alive: false });
   mockSearchAllUids.mockResolvedValue([]);
@@ -719,24 +724,33 @@ describe('activateAccount: a forced refetch bypasses a fresh mailbox cache', () 
     mockFetchEmails.mockResolvedValue({ total: 0, emails: [] });
   }
 
-  it('a fresh, complete cache is left alone without the force', async () => {
+  it('a fresh cache is left alone: the daemon is not asked at all', async () => {
     primeCold();
     primeFreshMailboxCache();
+    const cachedAt = Date.now() - 1000;
+    mockGetCachedMailboxEntry.mockResolvedValue({
+      fetchedAt: cachedAt,
+      mailboxes: [{ path: 'INBOX' }, { path: 'Archive' }],
+    });
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
 
-    expect(mockFetchMailboxes).not.toHaveBeenCalled();
+    // The app's own freshness check stands; no IPC for a list that is not due.
+    expect(mockLoadMailboxes).not.toHaveBeenCalled();
+    expect(useMailStore.getState().mailboxes).toEqual([{ path: 'INBOX' }, { path: 'Archive' }]);
+    expect(useMailStore.getState().mailboxesFetchedAt).toBe(cachedAt);
+    expect(mockSaveMailboxes).not.toHaveBeenCalled();
   });
 
   it('forces a live folder fetch even though the cache is fresh and complete', async () => {
     primeCold();
     primeFreshMailboxCache();
-    mockFetchMailboxes.mockResolvedValue([{ path: 'INBOX' }, { path: 'Archive' }]);
+    mockLoadMailboxes.mockResolvedValue(serverListing([{ path: 'INBOX' }, { path: 'Archive' }]));
     forceMailboxRefetch(ACCOUNT.id);
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
 
-    expect(mockFetchMailboxes).toHaveBeenCalled();
+    expect(mockLoadMailboxes).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), { force: true });
   });
 });
 

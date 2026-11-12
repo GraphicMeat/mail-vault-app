@@ -1,6 +1,6 @@
 //! Bounded foreground reads for compose policy. No body lookup or mail mutation.
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::compose_prep::{self, Account, Context};
 use mailvault_core::settings_doc::{SettingsDoc, Snapshot};
 use serde_json::Value;

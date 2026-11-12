@@ -30,7 +30,7 @@
 //! plan, Task 2b); the gate stays off.
 use crate::handlers::common::{self, blocking, opt_str_arg, str_arg, u32_arg, vec_arg};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::graph::GraphClient;
 use mailvault_core::vault_eml;
 use mailvault_core::vault_files;
@@ -991,14 +991,14 @@ mod tests {
                 json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7, "accountEmail": named}),
             ),
         ] {
-            let resp = crate::server::handle_request_for_test(&s, method, params).await;
+            let resp = crate::test_support::handle_request_for_test(&s, method, params).await;
             assert!(resp.result.is_some(), "{method}: {:?}", resp.error);
             let e = newest();
             assert_eq!(e.purpose, "open message", "{method}");
             assert_eq!(e.account.as_deref(), Some(named), "{method}");
         }
 
-        let resp = crate::server::handle_request_for_test(&s, "graph_get_message", json!({"accessToken": "tok", "messageId": "m1"})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "graph_get_message", json!({"accessToken": "tok", "messageId": "m1"})).await;
         assert!(resp.result.is_some());
         assert_eq!(newest().account, None, "no account named, none shown");
     }

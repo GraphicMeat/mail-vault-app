@@ -18,7 +18,7 @@ use crate::account_workflows::{
 };
 use crate::events::EventBus;
 use crate::imap::ImapConfig;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 
 // Same service/key the app writes to (src-tauri/src/main.rs KEYRING_SERVICE /
 // CREDENTIALS_KEY) — must match exactly, it's the same OS keychain entry.
@@ -3271,7 +3271,7 @@ mod tests {
         let _restore_env = TestEnvRestore::capture();
         let dir = std::env::temp_dir().join(format!("mv-cred-notice-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir, true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir, true);
         let blob = |v: &str| Some(HashMap::from([("acct-1".to_string(), v.to_string())]));
 
         let started = Started::default();

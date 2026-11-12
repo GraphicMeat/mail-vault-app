@@ -7,6 +7,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 // Account settings stay real; reading cached folders is the disk boundary.
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));

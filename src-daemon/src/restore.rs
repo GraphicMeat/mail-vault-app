@@ -14,7 +14,7 @@ use tracing::{info, warn};
 
 use crate::imap::{self, ImapConfig};
 use crate::migration;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::jmap::client::received_at_of;
 use mailvault_core::jmap::headers::flags_to_keywords;
 use mailvault_core::jmap::ImportResult;

@@ -10,6 +10,7 @@ vi.mock('../../services/transport', () => ({ send: async (_method, params) => {
   return prepareDemoCompose(params, { accounts: [{ id: 'one', email: 'me@example.test' }], values: {}, version: 0 });
 } }));
 import { useReplyFillController } from '../../hooks/useReplyFillController';
+import '../../services/workflows/bindStoreActions';
 const header = { uid: 8, _accountId: 'one', _mailbox: 'INBOX', from: { address: 'writer@example.test' }, subject: 'Replay', text: '' };
 const full = { ...header, html: '<p>complete replay body</p>' };
 const original = [{ id: 8, mode: 'reply', replyTo: header, minimized: true,

@@ -48,7 +48,7 @@ fn req(id: &str, revision: u64, text: &str) -> Value {
     json!({"draftId":id,"revision":revision,"accountId":"one","fromAddress":"alias@example.test","displayName":"Alias","snippet":text,"snapshot":{"to":"next@example.test","cc":"copy@example.test","bcc":"blind@example.test","subject":"Draft","html":format!("<p>{text}</p>"),"text":text,"inReplyTo":"<parent@example.test>","references":"<root@example.test> <parent@example.test>","attachments":[]}})
 }
 async fn rpc(s: &Arc<DaemonState>, method: &str, p: Value) -> Result<Value, String> {
-    let r = crate::server::handle_request_for_test(s, method, p).await;
+    let r = crate::test_support::handle_request_for_test(s, method, p).await;
     r.result.ok_or_else(|| r.error.unwrap().message)
 }
 async fn saved(s: &Arc<DaemonState>, p: Value) -> Value {
@@ -901,7 +901,7 @@ async fn drafts_partial_requests_have_no_draft_local_effects() {
     ] {
         let mut value = req("partial", 1, "words");
         value["snapshot"].as_object_mut().unwrap().remove(field);
-        let result = crate::server::handle_request_for_test(&h.s, "drafts.save", value).await;
+        let result = crate::test_support::handle_request_for_test(&h.s, "drafts.save", value).await;
         assert_eq!(result.error.unwrap().code, ipc::INVALID_PARAMS);
     }
     assert!(app_db::with(&h.s.app_dir, db::all).unwrap().is_empty());

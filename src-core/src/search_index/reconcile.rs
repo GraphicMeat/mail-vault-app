@@ -10,6 +10,7 @@ use super::db::{meta_get, meta_set};
 use super::text::{cap_chars, cjk_units};
 use super::{lock, SharedConn};
 use crate::message_store;
+pub(crate) use crate::disk_listing::{read_mailbox, DiskFile};
 use crate::search_index::query::MSG_KEY_SQL;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
@@ -127,30 +128,6 @@ fn db_err(e: rusqlite::Error) -> String {
     e.to_string()
 }
 
-/// One listed message (a `message_store::Entry`) as the index and the vault
-/// registry store it.
-pub(crate) struct DiskFile {
-    pub(crate) uid: u32,
-    /// `Entry.name`: with size and mtime, what change detection compares.
-    pub(crate) filename: String,
-    pub(crate) size: i64,
-    pub(crate) mtime_ns: i64,
-    /// `Entry.flags` as the letters the index stores (`messages.flags`).
-    pub(crate) flags: String,
-}
-
-impl DiskFile {
-    fn of(entry: message_store::Entry) -> Self {
-        DiskFile {
-            uid: entry.uid,
-            size: i64::try_from(entry.size).unwrap_or(i64::MAX),
-            mtime_ns: entry.mtime_ns as i64,
-            flags: message_store::flag_letters(&entry.flags),
-            filename: entry.name,
-        }
-    }
-}
-
 struct Row {
     id: i64,
     filename: String,
@@ -199,17 +176,6 @@ fn without_archived(filename: &str) -> String {
     }
 }
 
-/// The listing's uid is this message unless both sides carry a Message-ID and
-/// they differ: uids restart after a UIDVALIDITY change, so the uid alone can
-/// name another message.
-fn same_message(ours: Option<&str>, listed: Option<&str>) -> bool {
-    let norm = |id: Option<&str>| id.map(crate::maildir::normalize_message_id).filter(|id| !id.is_empty());
-    match (norm(ours), norm(listed)) {
-        (Some(a), Some(b)) => a == b,
-        _ => true,
-    }
-}
-
 /// `(account_id, vault_dir)` for every `Maildir/<account>/<dir>` holding a
 /// `cur` directory. Depth one only: the nested `maildir/…` custody dirs have
 /// no `cur`. No `Maildir` yet is an empty vault; any other read error is `Err`,
@@ -245,16 +211,6 @@ fn subdirs(path: &Path) -> std::io::Result<Vec<String>> {
 /// deleted" (a folder that is gone is `prune_missing_dirs`'s job).
 fn list_files(mailbox_dir: &Path) -> Option<(HashMap<u32, DiskFile>, HashSet<u32>)> {
     read_mailbox(mailbox_dir).ok()
-}
-
-/// `list_files` with the listing's error kept, for the vault registry: there a
-/// `NotFound` is a verified-empty folder, and only other errors are unknown.
-/// The strict listing is `message_store::scan_dir`'s (a failure part way is
-/// the whole listing's error, never a shorter folder).
-pub(crate) fn read_mailbox(mailbox_dir: &Path) -> std::io::Result<(HashMap<u32, DiskFile>, HashSet<u32>)> {
-    let scan = message_store::scan_dir(mailbox_dir)?;
-    let files = scan.entries.into_iter().map(|entry| (entry.uid, DiskFile::of(entry))).collect();
-    Ok((files, scan.unstatted.into_iter().collect()))
 }
 
 /// The connection at a later lock point, only if it is still the database
@@ -350,7 +306,7 @@ pub fn reconcile_mailbox_guarded(
         // listing that could not be read removes nothing: the next pass decides.
         if let Ok(listed) = server(&uids) {
             for (uid, row) in gone {
-                let kept = listed.get(uid).is_some_and(|id| same_message(row.message_id.as_deref(), id.as_deref()));
+                let kept = listed.get(uid).is_some_and(|id| crate::maildir::same_message_ids(row.message_id.as_deref(), id.as_deref()));
                 if !kept {
                     ops.push((row.id, Op::Remove));
                     continue;

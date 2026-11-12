@@ -124,6 +124,7 @@ vi.mock('../../services/cacheManager', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { serverUids } = await import('../slices/serverUids');
 const { _resetArchivedGroupsForTest, setArchivedGroup, getLoadEmailsGeneration } = await import('../slices/messageListSlice');
 const { AccountPipeline } = await import('../../services/AccountPipeline');

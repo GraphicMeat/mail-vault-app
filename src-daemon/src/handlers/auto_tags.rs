@@ -14,7 +14,7 @@ use crate::handlers::common::{blocking, done, MessageRef};
 use crate::inference;
 use crate::ipc::RpcResponse;
 use crate::llm::{self, Provider};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, auto_tags, tags::Target};
 use mailvault_core::custody::cache;
 use serde_json::{json, Value};
@@ -469,7 +469,7 @@ mod tests {
     #[tokio::test]
     async fn the_routes_are_reachable_through_the_servers_dispatch() {
         let s = st();
-        let resp = crate::server::handle_request_for_test(&s, "auto_tags.list", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "auto_tags.list", json!({})).await;
         assert!(resp.result.is_some(), "auto_tags.list is not routed: {:?}", resp.error);
     }
 

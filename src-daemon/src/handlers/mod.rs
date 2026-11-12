@@ -8,7 +8,7 @@ use crate::contacts_index;
 use crate::inference;
 use crate::ipc::{self, RpcResponse};
 use crate::llm;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::snapshot;
 use crate::sync_engine;
 use serde_json::Value;
@@ -50,6 +50,7 @@ pub(crate) mod insights_aggregate;
 pub(crate) mod journal;
 pub(crate) mod bulk;
 pub(crate) mod mail_search;
+pub(crate) mod mailboxes;
 pub(crate) mod mbox;
 pub(crate) mod message;
 pub(crate) mod migration;
@@ -155,7 +156,7 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
     // before this returns, and comes down when the spawned task ends.
     let complete = params.get("complete").and_then(|v| v.as_bool()).unwrap_or(false);
     let fill = complete.then(|| state.sync_engine.begin_fill(&account.id, mailbox));
-    let graph = account.imap_config.uses_graph() && !account.imap_config.uses_jmap();
+    let graph = account.imap_config.transport() == mailvault_core::imap::Transport::Graph;
 
     // Bind optional source evidence before issuing the ticket and spawning.
     // Existing callers without a strict account origin still keep sync.now's

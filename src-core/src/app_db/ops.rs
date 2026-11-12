@@ -154,7 +154,7 @@ impl MirrorPurgeTarget {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum MirrorPurgeProvenance {
-    Server { account_id: String, origin: String, identity: crate::bulk_worker::Identity },
+    Server { account_id: String, origin: String, identity: crate::bulk_types::Identity },
     Local { receipt: crate::app_db::compose_receipts::Receipt },
 }
 
@@ -167,23 +167,23 @@ pub struct MirrorPurgeProof {
     version: u32,
     target: MirrorPurgeTarget,
     provenance: MirrorPurgeProvenance,
-    artifact: crate::bulk_worker::StoredProof,
+    artifact: crate::bulk_types::StoredProof,
 }
 impl MirrorPurgeProof {
     pub fn server(email: &str, group: &crate::bulk::Group, origin: &str,
-        identity: &crate::bulk_worker::Identity, artifact: &crate::bulk_worker::StoredProof) -> Result<Self, String> {
+        identity: &crate::bulk_types::Identity, artifact: &crate::bulk_types::StoredProof) -> Result<Self, String> {
         if !group.uids.contains(&artifact.uid) { return Err("artifact outside original group".into()); }
         // Keep only this target without cloning a whole mailbox's identity.
         let one = |ids: &std::collections::HashMap<u32,String>| ids.get(&artifact.uid)
             .map(|id| (artifact.uid,id.clone())).into_iter().collect();
         let identity = match identity {
-            crate::bulk_worker::Identity::Imap { validity, message_ids } => crate::bulk_worker::Identity::Imap {
+            crate::bulk_types::Identity::Imap { validity, message_ids } => crate::bulk_types::Identity::Imap {
                 validity: *validity, message_ids: one(message_ids),
             },
-            crate::bulk_worker::Identity::Jmap { mailbox_id, ids } => crate::bulk_worker::Identity::Jmap {
+            crate::bulk_types::Identity::Jmap { mailbox_id, ids } => crate::bulk_types::Identity::Jmap {
                 mailbox_id: mailbox_id.clone(), ids: one(ids),
             },
-            crate::bulk_worker::Identity::Graph { ids } => crate::bulk_worker::Identity::Graph { ids: one(ids) },
+            crate::bulk_types::Identity::Graph { ids } => crate::bulk_types::Identity::Graph { ids: one(ids) },
         };
         let proof = Self { version: 1,
             target: MirrorPurgeTarget { email: email.into(), mailbox: group.mailbox.clone(), uid: artifact.uid },
@@ -195,7 +195,7 @@ impl MirrorPurgeProof {
     /// Only a freshly validated Present receipt can authorize a mirror
     /// artifact. Cleaned proves local absence and cannot authorize a collision.
     pub fn local(email: &str, receipt: &crate::app_db::compose_receipts::Receipt,
-        artifact: &crate::bulk_worker::StoredProof) -> Result<Self, String> {
+        artifact: &crate::bulk_types::StoredProof) -> Result<Self, String> {
         Self { version: 1,
             target: MirrorPurgeTarget { email: email.into(), mailbox: receipt.identity.scope.mailbox.clone(), uid: artifact.uid },
             provenance: MirrorPurgeProvenance::Local { receipt: receipt.clone() }, artifact: artifact.clone(),
@@ -225,9 +225,9 @@ impl MirrorPurgeProof {
             && match &self.provenance {
                 MirrorPurgeProvenance::Server { account_id, origin, identity } => {
                     !account_id.trim().is_empty() && digest(origin) && match identity {
-                        crate::bulk_worker::Identity::Imap { validity, message_ids } => *validity != 0 && message_ids.keys().all(|u| *u == uid),
-                        crate::bulk_worker::Identity::Jmap { mailbox_id, ids } => !mailbox_id.is_empty() && ids.len() == 1 && ids.get(&uid).is_some_and(|s| !s.is_empty()),
-                        crate::bulk_worker::Identity::Graph { ids } => ids.len() == 1 && ids.get(&uid).is_some_and(|s| !s.is_empty()),
+                        crate::bulk_types::Identity::Imap { validity, message_ids } => *validity != 0 && message_ids.keys().all(|u| *u == uid),
+                        crate::bulk_types::Identity::Jmap { mailbox_id, ids } => !mailbox_id.is_empty() && ids.len() == 1 && ids.get(&uid).is_some_and(|s| !s.is_empty()),
+                        crate::bulk_types::Identity::Graph { ids } => ids.len() == 1 && ids.get(&uid).is_some_and(|s| !s.is_empty()),
                     }
                 }
                 MirrorPurgeProvenance::Local { receipt } => receipt.is_valid()
@@ -376,10 +376,10 @@ mod tests {
     fn protected_proof(bytes: &[u8]) -> MirrorPurgeProof {
         MirrorPurgeProof::server("me@test", &crate::bulk::Group {
             account_id: "account".into(), mailbox: "INBOX".into(), uids: vec![7],
-        }, &"a".repeat(64), &crate::bulk_worker::Identity::Imap {
+        }, &"a".repeat(64), &crate::bulk_types::Identity::Imap {
             validity: 19, message_ids: Default::default(),
-        }, &crate::bulk_worker::StoredProof {
-            uid: 7, name: "7.eml".into(), sha256: crate::bulk_worker::bytes_hash(bytes),
+        }, &crate::bulk_types::StoredProof {
+            uid: 7, name: "7.eml".into(), sha256: crate::bulk_types::bytes_hash(bytes),
         }).unwrap()
     }
 
@@ -426,7 +426,7 @@ mod tests {
         use crate::app_db::compose_receipts::{Identity, Scope, Receipt, State};
         let raw = b"Message-ID: <m@test>\r\n\r\nA";
         let mut receipt = Receipt::present(Identity::from_bytes(Scope::new("account", "Drafts", 7, "m@test").unwrap(), raw).unwrap());
-        let artifact = crate::bulk_worker::StoredProof {uid:7, name:"7.eml".into(), sha256:crate::bulk_worker::bytes_hash(raw)};
+        let artifact = crate::bulk_types::StoredProof {uid:7, name:"7.eml".into(), sha256:crate::bulk_types::bytes_hash(raw)};
         let proof = MirrorPurgeProof::local("me@test", &receipt, &artifact).unwrap();
         let (dir,c) = conn("protected-local");
         purge_enqueue_proved(&c,&proof).unwrap();
@@ -434,7 +434,7 @@ mod tests {
         receipt.state = State::Cleaned;
         assert!(MirrorPurgeProof::local("me@test", &receipt, &artifact).is_err());
         receipt.state = State::Present;
-        receipt.identity.sha256 = crate::bulk_worker::bytes_hash(b"B");
+        receipt.identity.sha256 = crate::bulk_types::bytes_hash(b"B");
         assert!(MirrorPurgeProof::local("me@test", &receipt, &artifact).is_err());
         let _ = std::fs::remove_dir_all(dir);
     }

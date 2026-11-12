@@ -3,12 +3,12 @@
 // Shared by ComposeModal (the live editor) and App's compose-window state
 // (patching a minimized window's saved snapshot, which has no live editor to
 // react to a fuller `replyTo` — see openCompose's `_fillFrom` branch). Pulls
-// in RichTextEditor's textToHtml, so App only reaches this through a dynamic
+// in textToHtml (utils/textToHtml.js); App still reaches this through a dynamic
 // import() at call time, never a static one — see composeSend.js for the
 // same rule and why (TipTap must stay out of the eagerly-loaded App chunk).
 
 import { formatDateTime } from './dateFormat';
-import { textToHtml } from '../components/RichTextEditor';
+import { textToHtml } from './textToHtml';
 
 // Fields of a received message go into the quote's HTML as text.
 const escapeHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));

@@ -85,7 +85,7 @@ pub struct BuiltMime {
 /// never inside a quoted display name like `"Doe, John" <j@d.com>` or inside
 /// angle brackets). A list the check accepts is a list this builds.
 pub(crate) fn split_address_line(raw: &str) -> Vec<String> {
-    crate::compose_prep::split_recipients(raw)
+    crate::recipient_split::split_recipients(raw)
 }
 
 /// Parse a recipient string (`split_address_line`) into a list of mailboxes.
@@ -836,7 +836,7 @@ fn jmap_no_submission(account: &ImapConfig) -> String {
 /// The identities `account` may send as (`Identity/get`), for the alias list.
 /// Needs the submission capability, as sending does.
 pub async fn jmap_identities(account: &ImapConfig) -> Result<Vec<Identity>, String> {
-    let client = jmap_connect(account, crate::aliases::PURPOSE).await?;
+    let client = jmap_connect(account, crate::net_activity::ALIAS_LOOKUP_PURPOSE).await?;
     if !client.has_submission() {
         return Err(jmap_no_submission(account));
     }

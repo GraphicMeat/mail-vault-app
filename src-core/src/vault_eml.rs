@@ -86,34 +86,7 @@ impl HeaderMeta {
     }
 }
 
-/// The flags a vault file name carries, as the Maildir words AND as the IMAP
-/// names — `seen` and `\Seen` both, for a file named `12:2,AS.eml`.
-///
-/// Every row in the app asks `flags.includes('\Seen')`; a row built from its
-/// .eml used to get the words alone and render unread whatever the file said.
-/// The words stay, because `build_maildir_filename` and the archived checks
-/// read them; the names are what the rest of the app reads.
-pub fn parse_flags_from_filename(filename: &str) -> Vec<String> {
-    let Some(flags_part) = crate::maildir::info_flags(filename) else { return Vec::new() };
-    let mut flags = Vec::new();
-    for c in flags_part.chars() {
-        match c {
-            'A' => flags.push("archived".to_string()),
-            'D' => flags.push("draft".to_string()),
-            'F' => flags.push("flagged".to_string()),
-            'R' => flags.push("replied".to_string()),
-            'S' => flags.push("seen".to_string()),
-            'T' => flags.push("trashed".to_string()),
-            _ => {}
-        }
-    }
-    for (word, name) in [("seen", "\\Seen"), ("flagged", "\\Flagged"), ("replied", "\\Answered")] {
-        if flags.iter().any(|f| f == word) {
-            flags.push(name.to_string());
-        }
-    }
-    flags
-}
+pub use crate::maildir::parse_flags_from_filename;
 
 pub use crate::maildir::find_by_uid as find_file_by_uid;
 

@@ -81,6 +81,8 @@ vi.mock('../../api', () => ({
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
   fetchMailboxes: vi.fn().mockResolvedValue([]),
+  // The daemon lists (and stores) IMAP/JMAP folders: the server's answer, as fetchMailboxes was before.
+  loadMailboxes: vi.fn().mockResolvedValue({ mailboxes: [], source: 'server', suspectEmpty: false, changed: true }),
   moveEmails: vi.fn().mockResolvedValue(undefined),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
 }));
@@ -184,6 +186,7 @@ vi.mock('../../daemonClient', async importOriginal => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { whenUnreadIdle } = await import('../../unreadCountsClient');
 

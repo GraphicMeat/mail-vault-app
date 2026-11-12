@@ -8,6 +8,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
 import { useSettingsWindow } from '../../../hooks/useSettingsWindow';
 import { SettingsBubble } from '../SettingsBubble';
+import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
 // Keep Settings' account navigation real; the feature's mail-loading view is

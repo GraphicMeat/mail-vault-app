@@ -7,6 +7,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/transport', () => ({ send: vi.fn().mockResolvedValue(null) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: vi.fn() }));

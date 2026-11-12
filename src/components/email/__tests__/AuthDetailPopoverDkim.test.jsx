@@ -9,6 +9,7 @@ vi.mock('../../../services/daemonClient', () => ({ daemonCall: (...a) => daemonC
 
 import { AuthDetailPopover, formatDkimKey, _resetDkimKeyLookups } from '../EmailHeaderComponent';
 import { _resetSenderVerdicts } from '../../../services/senderVerdict';
+import '../../../services/workflows/bindStoreActions';
 
 const base = {
   from: { name: 'Erikas from Kaching Appz', address: 'team@kachingappz.com' },

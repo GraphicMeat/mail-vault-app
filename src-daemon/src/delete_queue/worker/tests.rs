@@ -68,7 +68,7 @@ async fn a_pass_lands_imap_and_jmap_entries_and_drops_entries_no_account_can_sen
     let (_trap, port) = support::imap_trap();
     f.s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), support::config(&m, port));
     // A listing first: the JMAP ledger issues the uid a delete addresses.
-    let listing = crate::server::handle_request_for_test(&f.s, "imap_get_emails", json!({"account": support::account_json(&m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
+    let listing = crate::test_support::handle_request_for_test(&f.s, "imap_get_emails", json!({"account": support::account_json(&m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
         .await
         .result
         .expect("listed");
@@ -555,7 +555,7 @@ async fn a_jmap_entry_is_sent_whatever_generation_it_records() {
     let m = mock_jmap::MockJmap::start(support::scenario());
     let (_trap, port) = support::imap_trap();
     f.s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), support::config(&m, port));
-    let listing = crate::server::handle_request_for_test(&f.s, "imap_get_emails", json!({"account": support::account_json(&m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
+    let listing = crate::test_support::handle_request_for_test(&f.s, "imap_get_emails", json!({"account": support::account_json(&m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
         .await
         .result
         .expect("listed");

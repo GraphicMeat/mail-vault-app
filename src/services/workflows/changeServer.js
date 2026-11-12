@@ -21,7 +21,7 @@ function probeError(error, candidate, jmap = false) {
 }
 
 export async function changeServer(accountId, { imapHost, imapPort, imapSecurity, smtpHost, smtpPort, password, jmapSessionUrl, jmapUsername }) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const existing = get().accounts.find(a => a.id === accountId);

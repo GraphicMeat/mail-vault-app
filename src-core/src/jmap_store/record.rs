@@ -65,17 +65,7 @@ pub struct ServerIds {
 /// The letter a flag gives a vault filename, read as the vault filename
 /// builder reads it: the word or the letter, in any case. Anything else
 /// (`\Seen`, `$junk`) gives none, as it gives a filename none.
-fn letter_of(flag: &str) -> Option<char> {
-    match flag.to_lowercase().as_str() {
-        "archived" | "a" => Some('A'),
-        "draft" | "d" => Some('D'),
-        "flagged" | "f" => Some('F'),
-        "replied" | "r" => Some('R'),
-        "seen" | "s" => Some('S'),
-        "trashed" | "t" => Some('T'),
-        _ => None,
-    }
-}
+use crate::maildir::flag_letter as letter_of;
 
 /// The letters these flags give a vault filename: sorted, deduped.
 fn letters(flags: &[String]) -> String {

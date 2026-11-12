@@ -26,7 +26,7 @@
 
 use crate::credentials;
 use crate::imap::{self, pool::PooledSessionGuard, ImapConfig};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_engine::SyncAccount;
 use mailvault_core::app_db::{self, snooze};
 use mailvault_core::jmap::SetOutcome;
@@ -83,9 +83,7 @@ async fn run(state: Arc<DaemonState>) {
     }
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
-}
+use mailvault_core::clock::now_ms;
 
 fn next_wait(state: &Arc<DaemonState>) -> Duration {
     match app_db::with(&state.app_dir, snooze::next_wake_at).ok().flatten() {
@@ -439,7 +437,7 @@ mod tests {
                 .mailbox(Mailbox::new("Snoozed").push_msg(Message::new(0, raw).with_flags(&["\\Seen"]))),
         );
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let creds = dir.join("credentials.json");
         let account = serde_json::json!({
             "id": "acct", "email": "user@example.com", "password": "hunter2",
@@ -482,7 +480,7 @@ mod tests {
             mock_imap::Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(Message::new(0, raw).with_flags(&["\\Seen"]))),
         );
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         // The wake proof rereads the authoritative source. Seed a complete
         // stored account, not only the lifecycle ID used by older wake tests.
         std::fs::write(dir.join("accounts.json"), json!([{
@@ -550,7 +548,7 @@ mod tests {
         assert_eq!(reference["instanceId"], json!(state.refresh.instance_id()));
         let request = json!({"snoozeId":"l","wakeRef":reference,"rearm":true});
         let fetches_before_notice = server.count_commands("FETCH");
-        let first = crate::server::handle_request_for_test(&state, "notify.arrival", request.clone()).await;
+        let first = crate::test_support::handle_request_for_test(&state, "notify.arrival", request.clone()).await;
         assert!(first.error.is_none(), "native wake route: {:?}", first.error);
         let prepared = first.result.unwrap();
         assert_eq!(prepared["status"], json!("prepared"), "real wake must resolve its own cached UID: {prepared:?}");
@@ -558,7 +556,7 @@ mod tests {
         assert_eq!(prepared["notification"]["target"]["uid"], json!(uid));
         assert_eq!(server.count_commands("FETCH"), fetches_before_notice,
             "a local wake needs the exact cached UID and must not fetch a body for a new code");
-        let duplicate = crate::server::handle_request_for_test(&state, "notify.arrival", request).await;
+        let duplicate = crate::test_support::handle_request_for_test(&state, "notify.arrival", request).await;
         assert_eq!(duplicate.result.unwrap(), json!({"status":"unavailable","reason":"consumed-proof"}),
             "the same event/RPC cannot rearm twice");
     }
@@ -576,7 +574,7 @@ mod tests {
                 .push_msg(Message::new(0, raw).with_flags(&["\\Seen"]))),
         );
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let account = json!({
             "id":"acct", "email":"user@example.com",
             "imapHost":server.host(), "imapPort":server.port(),
@@ -622,14 +620,14 @@ mod tests {
         }]).to_string()).unwrap();
         let request = json!({"snoozeId":"retired","wakeRef":wake_ref,"rearm":true});
         let fetches = server.count_commands("FETCH");
-        let refusal = crate::server::handle_request_for_test(&state,
+        let refusal = crate::test_support::handle_request_for_test(&state,
             "notify.arrival", request.clone()).await;
         assert!(refusal.error.is_none(), "local wake reply: {:?}", refusal.error);
         assert_eq!(refusal.result.unwrap(), json!({"status":"unavailable","reason":"stale-source"}),
             "W4S4_LOCAL_WAKE_SOURCE_RED: old proof cannot be announced under a replacement source");
         assert_eq!(server.count_commands("FETCH"), fetches,
             "a retired local wake performs no body read");
-        let repeat = crate::server::handle_request_for_test(&state,
+        let repeat = crate::test_support::handle_request_for_test(&state,
             "notify.arrival", request).await;
         assert_eq!(repeat.result.unwrap(), json!({"status":"unavailable","reason":"consumed-proof"}));
         while let Ok(line) = events.try_recv() {
@@ -725,7 +723,7 @@ mod tests {
         let m = mock_jmap::MockJmap::start(scenario);
         let (trap, port) = support::imap_trap();
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let creds = dir.join("credentials.json");
         std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
@@ -759,7 +757,7 @@ mod tests {
         let m = mock_jmap::MockJmap::start(scenario);
         let (trap, port) = support::imap_trap();
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let creds = dir.join("credentials.json");
         std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);

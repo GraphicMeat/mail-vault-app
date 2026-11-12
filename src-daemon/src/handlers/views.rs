@@ -7,7 +7,7 @@
 use crate::handlers::common::{blocking, done};
 use crate::handlers::vault_files::ExportJob;
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db;
 use serde_json::Value;
 use std::sync::Arc;
@@ -1339,7 +1339,7 @@ mod tests {
     #[tokio::test]
     async fn the_routes_are_reachable_through_the_servers_dispatch() {
         let s = st();
-        let resp = crate::server::handle_request_for_test(&s, "views.list", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "views.list", json!({})).await;
         assert!(resp.result.is_some(), "views.list is not routed: {:?}", resp.error);
     }
 

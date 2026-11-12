@@ -1,106 +1,13 @@
 // ── accountSlice — accounts, activation, unified inbox, and workflow actions ──
-// Large async orchestration functions are extracted to src/services/workflows/.
-// This slice contains only state declarations and passthrough wrappers.
+// Large async orchestration functions live in src/services/workflows/. This
+// slice holds state and the inline actions; every action a workflow
+// implements is declared as an unbound stub, replaced by
+// services/workflows/bindStoreActions.js (stores never import workflows).
 
-import {
-  activateAccount as _activateAccount,
-  init as _init,
-  setActiveAccount as _setActiveAccount,
-} from '../../services/workflows/activateAccount';
-import { loadSubtree as _loadSubtree } from '../../services/workflows/loadSubtree';
 import { send } from '../../services/transport.js';
-import { _prefetchAllMailboxes, _prewarmAccountCaches } from '../../services/workflows/prefetch';
-import { addAccount as _addAccount } from '../../services/workflows/addAccount';
-import { updateAccount as _updateAccount } from '../../services/workflows/updateAccount';
-import { changeServer as _changeServer } from '../../services/workflows/changeServer';
-import { removeAccount as _removeAccount } from '../../services/workflows/removeAccount';
-import { refreshCurrentView as _refreshCurrentView, refreshAllAccounts as _refreshAllAccounts } from '../../services/workflows/refreshAccounts';
-import { retryKeychainAccess as _retryKeychainAccess } from '../../services/workflows/retryKeychainAccess';
-import {
-  createFolder as _createFolder,
-  renameFolder as _renameFolder,
-  deleteFolder as _deleteFolder,
-  deleteLocalFolder as _deleteLocalFolder,
-} from '../../services/workflows/folderOps';
-import {
-  setUnifiedInbox as _setUnifiedInbox,
-  switchUnifiedFolder as _switchUnifiedFolder,
-  loadUnifiedInbox as _loadUnifiedInbox,
-} from '../../services/workflows/loadUnifiedInbox';
-import {
-  saveEmailLocally as _saveEmailLocally,
-  saveEmailsLocally as _saveEmailsLocally,
-  saveSelectedLocally as _saveSelectedLocally,
-  removeLocalEmail as _removeLocalEmail,
-  removeLocalEmails as _removeLocalEmails,
-  deleteEmailFromServer as _deleteEmailFromServer,
-  markEmailReadStatus as _markEmailReadStatus,
-  exportEmail as _exportEmail,
-} from '../../services/workflows/messageMutations';
+import { unboundAction } from './unboundAction';
 
-// ── Manual-refresh throttle ──
-// UI fires instantly on every click (brief spinner). Actual sync runs at most
-// once per REFRESH_COOLDOWN_MS, and at most one at a time. Clicks during the
-// cooldown or during an in-flight sync are coalesced into a single trailing
-// run.
-const REFRESH_COOLDOWN_MS = 15_000;
-const REFRESH_SPINNER_MIN_MS = 600;
-let _lastRefreshAt = 0;
-let _refreshInFlight = false;
-let _pendingRefresh = false;
-let _pendingTimer = null;
-
-function _flashSpinner(set) {
-  set({ manualRefreshSpinning: true });
-  setTimeout(() => set({ manualRefreshSpinning: false }), REFRESH_SPINNER_MIN_MS);
-}
-
-function _scheduleTrailingRefresh(set, delayMs) {
-  if (_pendingTimer) return;
-  _pendingTimer = setTimeout(() => {
-    _pendingTimer = null;
-    if (_pendingRefresh) {
-      _pendingRefresh = false;
-      _runRefresh(set);
-    }
-  }, Math.max(0, delayMs));
-}
-
-async function _runRefresh(set) {
-  if (_refreshInFlight) {
-    _pendingRefresh = true;
-    return;
-  }
-  const now = Date.now();
-  const elapsed = now - _lastRefreshAt;
-  if (elapsed < REFRESH_COOLDOWN_MS) {
-    _pendingRefresh = true;
-    _scheduleTrailingRefresh(set, REFRESH_COOLDOWN_MS - elapsed);
-    return;
-  }
-  _refreshInFlight = true;
-  _lastRefreshAt = Date.now();
-  try {
-    await _refreshCurrentView();
-  } catch (err) {
-    console.warn('[accountSlice] refreshCurrentView failed:', err);
-  } finally {
-    _refreshInFlight = false;
-    if (_pendingRefresh) {
-      // The timer consumes this intent. Clearing it here drops a click made
-      // while the first refresh was in flight.
-      const wait = Math.max(0, REFRESH_COOLDOWN_MS - (Date.now() - _lastRefreshAt));
-      _scheduleTrailingRefresh(set, wait);
-    }
-  }
-}
-
-function _throttledRefreshCurrentView(set) {
-  _flashSpinner(set);
-  _runRefresh(set);
-}
-
-export const createAccountSlice = (set, get) => ({
+export const createAccountSlice = (set) => ({
   // Accounts
   accounts: [],
   activeAccountId: null,
@@ -139,48 +46,48 @@ export const createAccountSlice = (set, get) => ({
   unifiedInbox: false,
   unifiedFolder: 'INBOX',
 
-  // ── Passthrough wrappers to workflow functions ──
+  // ── Actions implemented by workflows (bound in bindStoreActions) ──
 
-  init: () => _init(),
-  _prefetchAllMailboxes: (opts) => _prefetchAllMailboxes(opts),
-  _prewarmAccountCaches: () => _prewarmAccountCaches(),
-  addAccount: (accountData) => _addAccount(accountData),
-  updateAccount: (accountId, patch) => _updateAccount(accountId, patch),
-  changeServer: (accountId, patch) => _changeServer(accountId, patch),
-  removeAccount: (accountId) => _removeAccount(accountId),
-  setActiveAccount: (accountId) => _setActiveAccount(accountId),
-  activateAccount: (accountId, mailbox, opts) => _activateAccount(accountId, mailbox, opts),
-  loadSubtree: (accountId, rootPath, opts) => _loadSubtree(accountId, rootPath, opts),
-  setUnifiedInbox: (enabled) => _setUnifiedInbox(enabled),
-  switchUnifiedFolder: (mailbox) => _switchUnifiedFolder(mailbox),
-  loadUnifiedInbox: (preUnifiedSnapshot, mailbox) => _loadUnifiedInbox(preUnifiedSnapshot, mailbox),
-  saveEmailLocally: (uid) => _saveEmailLocally(uid),
-  saveEmailsLocally: (rows) => _saveEmailsLocally(rows),
+  init: unboundAction('init'),
+  _prefetchAllMailboxes: unboundAction('_prefetchAllMailboxes'),
+  _prewarmAccountCaches: unboundAction('_prewarmAccountCaches'),
+  addAccount: unboundAction('addAccount'),
+  updateAccount: unboundAction('updateAccount'),
+  changeServer: unboundAction('changeServer'),
+  removeAccount: unboundAction('removeAccount'),
+  setActiveAccount: unboundAction('setActiveAccount'),
+  activateAccount: unboundAction('activateAccount'),
+  loadSubtree: unboundAction('loadSubtree'),
+  setUnifiedInbox: unboundAction('setUnifiedInbox'),
+  switchUnifiedFolder: unboundAction('switchUnifiedFolder'),
+  loadUnifiedInbox: unboundAction('loadUnifiedInbox'),
+  saveEmailLocally: unboundAction('saveEmailLocally'),
+  saveEmailsLocally: unboundAction('saveEmailsLocally'),
 
   cancelArchive: () => {
     if (window.__TAURI__?.core?.invoke) send('cancel_archive').catch(() => {});
     set({ bulkSaveProgress: null });
   },
 
-  saveSelectedLocally: () => _saveSelectedLocally(),
-  removeLocalEmail: (uid, location) => _removeLocalEmail(uid, location),
-  removeLocalEmails: (targets) => _removeLocalEmails(targets),
-  deleteEmailFromServer: (uid, opts) => _deleteEmailFromServer(uid, opts),
-  markEmailReadStatus: (uid, read) => _markEmailReadStatus(uid, read),
-  exportEmail: (uid, subject) => _exportEmail(uid, subject),
+  saveSelectedLocally: unboundAction('saveSelectedLocally'),
+  removeLocalEmail: unboundAction('removeLocalEmail'),
+  removeLocalEmails: unboundAction('removeLocalEmails'),
+  deleteEmailFromServer: unboundAction('deleteEmailFromServer'),
+  markEmailReadStatus: unboundAction('markEmailReadStatus'),
+  exportEmail: unboundAction('exportEmail'),
 
   // Manual-refresh UI spinner — briefly spins on every click so the button
   // feels instant even when the underlying sync is throttled or already running.
   manualRefreshSpinning: false,
 
-  // Folder management — the active account is implied, as it is for every
-  // other sidebar action. Failures reach the caller, which owns the toast.
-  createFolder: (parentPath, name) => _createFolder(get().activeAccountId, parentPath, name),
-  renameFolder: (path, name) => _renameFolder(get().activeAccountId, path, name),
-  deleteFolder: (path) => _deleteFolder(get().activeAccountId, path),
-  deleteLocalFolder: (name) => _deleteLocalFolder(get().activeAccountId, name),
-
-  refreshCurrentView: () => _throttledRefreshCurrentView(set),
-  refreshAllAccounts: (options) => _refreshAllAccounts(options),
-  retryKeychainAccess: () => _retryKeychainAccess(),
+  // Folder management, the manual-refresh throttle and the rest: bound in
+  // bindStoreActions. The folder actions imply the active account, as every
+  // other sidebar action does; failures reach the caller, which owns the toast.
+  createFolder: unboundAction('createFolder'),
+  renameFolder: unboundAction('renameFolder'),
+  deleteFolder: unboundAction('deleteFolder'),
+  deleteLocalFolder: unboundAction('deleteLocalFolder'),
+  refreshCurrentView: unboundAction('refreshCurrentView'),
+  refreshAllAccounts: unboundAction('refreshAllAccounts'),
+  retryKeychainAccess: unboundAction('retryKeychainAccess'),
 });

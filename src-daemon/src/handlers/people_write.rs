@@ -2,7 +2,7 @@
 use super::common::done;
 use super::people::{blocking_db as db_blocking, db, opt_str, str_param, strings};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::people::{journal, merge, review, store, vcard};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -204,7 +204,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, p: &Value, id:
 
 #[cfg(test)]
 mod tests {
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use serde_json::{json, Value};
     use std::sync::Arc;
 

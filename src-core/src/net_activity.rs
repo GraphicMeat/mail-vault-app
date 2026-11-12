@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::future::Future;
 use std::sync::{Mutex, OnceLock, RwLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,6 +122,10 @@ impl std::fmt::Debug for Pending {
         f.debug_struct("Pending").field("ev", &self.ev).finish()
     }
 }
+
+/// The Network Activity purpose of the alias provider lookup (`aliases::PURPOSE`,
+/// and the JMAP identity read in `smtp`).
+pub const ALIAS_LOOKUP_PURPOSE: &str = "alias lookup";
 
 pub const CAPACITY: usize = 2000;
 
@@ -282,9 +286,7 @@ pub fn purpose() -> &'static str {
     PURPOSE.try_with(|p| *p).unwrap_or("sync")
 }
 
-pub fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
-}
+pub use crate::clock::now_ms_u64 as now_ms;
 
 /// A reqwest client that records every request sent through `send`.
 /// Derefs to the client so call sites build requests as before, but the

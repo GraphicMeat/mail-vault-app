@@ -33,7 +33,7 @@ use crate::account_lifecycle::AccountStamp;
 use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_stamped_mailbox_write, with_vault_write};
 use crate::imap::{self, pool::ImapPool, ImapConfig, MailboxStatus};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::fetch_mode::{FetchMode, FetchPolicy};
 use mailvault_core::vault_files;
 use serde_json::{json, Value};
@@ -307,9 +307,7 @@ fn prepared_cache_pause(path: &std::path::Path) {
     }
 }
 
-pub(crate) fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
+pub(crate) use mailvault_core::clock::now_ms;
 
 /// A message's date in epoch ms from its `Date:` header, else its
 /// INTERNALDATE (RFC 3339 once `LightFullEmail` carries it): a Date that is

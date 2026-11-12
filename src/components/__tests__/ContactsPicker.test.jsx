@@ -2,6 +2,7 @@
 import React, { useRef } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent, act, screen } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 

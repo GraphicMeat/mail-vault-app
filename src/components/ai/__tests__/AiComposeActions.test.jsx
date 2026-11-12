@@ -9,6 +9,7 @@ import { AiComposeActions } from '../AiComposeActions';
 
 vi.mock('../../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 import { daemonCall } from '../../../services/daemonClient';
+import '../../../services/workflows/bindStoreActions';
 
 afterEach(cleanup);
 

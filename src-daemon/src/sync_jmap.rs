@@ -30,7 +30,7 @@
 use crate::handlers::common::{blocking, vault_root, with_vault_write};
 use crate::imap::{EmailHeader, ImapConfig};
 use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta, Mailboxes};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_engine::{cache_io, cache_io_strict, CacheCtx, SyncAccount, SyncEngine, SyncResult};
 use crate::account_lifecycle::AccountStamp;
 use mailvault_core::custody::{cache, Connection};
@@ -963,7 +963,7 @@ async fn write_meta(state: &Arc<DaemonState>, engine: &SyncEngine, config: &Imap
 mod tests {
     use crate::handlers::common::vault_root;
     use crate::jmap_sessions::{jmap_ledger_path, JmapMeta};
-    use crate::server::DaemonState;
+    use crate::state::DaemonState;
     use crate::sync_engine::{SyncAccount, SyncResult};
     use mailvault_core::custody::cache;
     use mailvault_core::graph_ledger;

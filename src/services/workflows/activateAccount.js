@@ -76,6 +76,42 @@ async function fetchAccountMailboxes(account) {
 }
 
 /**
+ * The server half of loadMailboxes: the folder list the account's server (or the
+ * stored copy, when the daemon finds it fresh) amounts to, as
+ * `{ mailboxes, suspectEmpty, fetchedAt?, stored }`, or null when the stored list
+ * stands (fresh, so the server was not asked) or no list arrived.
+ *
+ * IMAP and JMAP accounts: the daemon (`mailboxes.load`) decides cache or server,
+ * retries a failed listing once, rejects an empty answer over a real list and
+ * stores what it keeps. Graph accounts stay here: their listing is converted with
+ * the UI's folder labels and its folder keys adopted in the app, so the app asks
+ * Graph itself, with the same freshness, retry and empty-list rules.
+ */
+async function listFromServer(account, cachedEntry, force, signal) {
+  // A fresh stored list that nothing forced a refetch of stands: no IPC, no
+  // credential read, exactly as before the daemon took the listing.
+  if (!force && shouldUseFreshMailboxCache(cachedEntry)) return null;
+  if (isGraphAccount(account)) {
+    // One retry: fetchAccountMailboxes resolves credentials up front, so this
+    // now only guards a transient failure (network blip, timeout), not
+    // the password race it used to paper over.
+    const mailboxes = await retryOnce(() => fetchAccountMailboxes(account), { isAborted: () => signal.aborted });
+    if (!mailboxes) return null;
+    return { mailboxes, suspectEmpty: isSuspiciousEmptyMailboxResult(mailboxes, cachedEntry), stored: false };
+  }
+  // Activation hands us the accounts.json copy, which never carries a
+  // password (regression 71779b49): resolve credentials first, the way
+  // fetchAccountMailboxes does. An OAuth2 token is the daemon's to send.
+  // Only the stale or forced paths get here, so the credentials are always
+  // resolved. If the daemon finds the stored list fresh after all (a race with
+  // another writer) it answers `source: 'cache'` and the stored list stands.
+  const resolved = await resolveServerAccount(account.id, account);
+  const answer = await api.loadMailboxes(resolved.ok ? resolved.account : account, { force });
+  if (answer?.source === 'cache' || !Array.isArray(answer?.mailboxes)) return null;
+  return { mailboxes: answer.mailboxes, suspectEmpty: !!answer.suspectEmpty, fetchedAt: answer.fetchedAt, stored: true };
+}
+
+/**
  * loadMailboxes — two-stream folder loading for activateAccount.
  */
 async function loadMailboxes(accountId, account, requestedMailbox, signal, useMailStoreRef, { isBackgroundRefresh = false } = {}) {
@@ -129,85 +165,86 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
     }
   }
 
-  const isFresh = !takeForcedMailboxRefetch(accountId) && shouldUseFreshMailboxCache(cachedEntry);
-  const serverMailboxesPromise = isFresh
-    ? Promise.resolve(null)
-    // One retry: fetchAccountMailboxes resolves credentials up front, so this
-    // now only guards a transient IMAP failure (network blip, timeout), not
-    // the password race it used to paper over.
-    : retryOnce(() => fetchAccountMailboxes(account), { isAborted: () => signal.aborted })
-        .then(freshMailboxes => {
-          if (!freshMailboxes) return null;
-          if (signal.aborted) return null;
-          if (useMailStoreRef.getState().activeAccountId !== accountId) return null;
+  // One-shot flag from Refresh: consumed on every load, whether or not it ends
+  // up mattering, exactly as before.
+  const force = takeForcedMailboxRefetch(accountId);
+  const serverMailboxesPromise = listFromServer(account, cachedEntry, force, signal)
+    .then(listing => {
+      if (!listing) return null;
+      const freshMailboxes = listing.mailboxes;
+      if (signal.aborted) return null;
+      if (useMailStoreRef.getState().activeAccountId !== accountId) return null;
 
-          if (isSuspiciousEmptyMailboxResult(freshMailboxes, cachedEntry)) {
-            console.warn(
-              '[loadMailboxes] Server returned [] mailboxes for %s but prior cache had %d — rejecting as suspicious',
-              account.email,
-              countMailboxes(cachedEntry.lastKnownGoodMailboxes || cachedEntry.mailboxes)
-            );
-            useMailStoreRef.setState({
-              suspectEmptyServerData: {
-                accountId,
-                type: 'mailboxes',
-                message: t('svc.activateAccount.serverReturnedEmptyFolderList'),
-                timestamp: Date.now(),
-              },
-            });
-            return null;
-          }
-
-          const currentSuspect = useMailStoreRef.getState().suspectEmptyServerData;
-          if (currentSuspect?.accountId === accountId && currentSuspect?.type === 'mailboxes') {
-            useMailStoreRef.setState({ suspectEmptyServerData: null });
-          }
-
-          const currentMailboxes = useMailStoreRef.getState().mailboxes;
-          const changed = _mailboxesChanged(currentMailboxes, freshMailboxes);
-
-          if (changed) {
-            const freshPaths = new Set();
-            const collect = (mboxes) => { for (const m of mboxes) { freshPaths.add(m.path); if (m.children?.length) collect(m.children); } };
-            collect(freshMailboxes);
-
-            const updates = {
-              mailboxes: freshMailboxes,
-              mailboxesFetchedAt: Date.now(),
-            };
-
-            const currentActive = useMailStoreRef.getState().activeMailbox;
-            // Page one may have been counted before this listing landed. Only
-            // while the folder still pages: past the last page the rows are the count.
-            const { hasMoreEmails, mailboxScope, emails } = useMailStoreRef.getState();
-            const folderTotal = freshMailboxes.find(m => m.path === currentActive)?._graphTotal;
-            if (folderTotal != null && hasMoreEmails && !mailboxScope) {
-              updates.totalEmails = Math.max(emails.filter(e => e.source !== 'local').length, folderTotal);
-            }
-            if (currentActive !== 'INBOX' && currentActive !== 'UNIFIED' && !freshPaths.has(currentActive) && !isLocal(currentActive)) {
-              console.warn(`[loadMailboxes] Active mailbox "${currentActive}" not found on server, switching to INBOX`);
-              updates.activeMailbox = 'INBOX';
-              useSettingsStore.getState().setLastMailbox(accountId, 'INBOX');
-            }
-
-            useMailStoreRef.setState(updates);
-          } else {
-            useMailStoreRef.setState({ mailboxesFetchedAt: Date.now() });
-          }
-
-          db.saveMailboxes(accountId, freshMailboxes);
-
-          const existing = _getRestore(accountId, useMailStoreRef.getState().activeMailbox, useMailStoreRef.getState().viewMode || 'all');
-          if (existing) {
-            _saveRestore({ ...existing, mailboxes: freshMailboxes, mailboxesFetchedAt: Date.now() });
-          }
-
-          return freshMailboxes;
-        })
-        .catch(e => {
-          console.warn('[loadMailboxes] Server fetch failed (non-fatal):', e.message);
-          return null;
+      if (listing.suspectEmpty) {
+        console.warn(
+          '[loadMailboxes] Server returned [] mailboxes for %s but prior cache had %d — rejecting as suspicious',
+          account.email,
+          cachedEntry ? countMailboxes(cachedEntry.lastKnownGoodMailboxes || cachedEntry.mailboxes) : 0
+        );
+        useMailStoreRef.setState({
+          suspectEmptyServerData: {
+            accountId,
+            type: 'mailboxes',
+            message: t('svc.activateAccount.serverReturnedEmptyFolderList'),
+            timestamp: Date.now(),
+          },
         });
+        return null;
+      }
+
+      const currentSuspect = useMailStoreRef.getState().suspectEmptyServerData;
+      if (currentSuspect?.accountId === accountId && currentSuspect?.type === 'mailboxes') {
+        useMailStoreRef.setState({ suspectEmptyServerData: null });
+      }
+
+      // The daemon stamps the list it stores; a list the app fetched itself is stamped now.
+      const fetchedAt = listing.fetchedAt ?? Date.now();
+      const currentMailboxes = useMailStoreRef.getState().mailboxes;
+      const changed = _mailboxesChanged(currentMailboxes, freshMailboxes);
+
+      if (changed) {
+        const freshPaths = new Set();
+        const collect = (mboxes) => { for (const m of mboxes) { freshPaths.add(m.path); if (m.children?.length) collect(m.children); } };
+        collect(freshMailboxes);
+
+        const updates = {
+          mailboxes: freshMailboxes,
+          mailboxesFetchedAt: fetchedAt,
+        };
+
+        const currentActive = useMailStoreRef.getState().activeMailbox;
+        // Page one may have been counted before this listing landed. Only
+        // while the folder still pages: past the last page the rows are the count.
+        const { hasMoreEmails, mailboxScope, emails } = useMailStoreRef.getState();
+        const folderTotal = freshMailboxes.find(m => m.path === currentActive)?._graphTotal;
+        if (folderTotal != null && hasMoreEmails && !mailboxScope) {
+          updates.totalEmails = Math.max(emails.filter(e => e.source !== 'local').length, folderTotal);
+        }
+        if (currentActive !== 'INBOX' && currentActive !== 'UNIFIED' && !freshPaths.has(currentActive) && !isLocal(currentActive)) {
+          console.warn(`[loadMailboxes] Active mailbox "${currentActive}" not found on server, switching to INBOX`);
+          updates.activeMailbox = 'INBOX';
+          useSettingsStore.getState().setLastMailbox(accountId, 'INBOX');
+        }
+
+        useMailStoreRef.setState(updates);
+      } else {
+        useMailStoreRef.setState({ mailboxesFetchedAt: fetchedAt });
+      }
+
+      // The daemon has stored the list it fetched; only the app's own Graph listing is stored here.
+      if (!listing.stored) db.saveMailboxes(accountId, freshMailboxes);
+
+      const existing = _getRestore(accountId, useMailStoreRef.getState().activeMailbox, useMailStoreRef.getState().viewMode || 'all');
+      if (existing) {
+        _saveRestore({ ...existing, mailboxes: freshMailboxes, mailboxesFetchedAt: fetchedAt });
+      }
+
+      return freshMailboxes;
+    })
+    .catch(e => {
+      console.warn('[loadMailboxes] Server fetch failed (non-fatal):', e.message);
+      return null;
+    });
 
   return { cachedEntry, localMailboxes, effectiveMailbox, serverMailboxesPromise };
 }
@@ -416,7 +453,7 @@ function commitToStore(uidMap, signal, accountId, useMailStoreRef, extras = {}) 
 // ── Main activateAccount workflow ──
 
 export async function activateAccount(accountId, mailbox, options = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const set = (s) => useMailStore.setState(typeof s === 'function' ? s(get()) : s);
   const useMailStoreRef = { getState: get, setState: (s) => useMailStore.setState(s) };
@@ -1462,7 +1499,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 // ── init workflow ──
 
 export async function init() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const set = (s) => useMailStore.setState(typeof s === 'function' ? s(get()) : s);
 

@@ -19,8 +19,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 
-const main = readFileSync('src-tauri/src/main.rs', 'utf8');
+const main = shellSource();
 const handlerStart = main.indexOf('generate_handler![');
 const handlerEnd = main.indexOf('])', handlerStart);
 const handlerBlock = main.slice(handlerStart, handlerEnd);

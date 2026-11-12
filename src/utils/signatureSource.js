@@ -10,7 +10,7 @@
 // types is never what is saved.
 
 import { Editor } from '@tiptap/core';
-import { editorExtensions, padEmptyLines } from '../components/RichTextEditor';
+import { editorExtensions, padEmptyLines } from './editorHtml';
 import { isHtmlSignature, signatureMarkupForEditor, unwrapSignatureHtml } from './htmlSignature';
 
 /**

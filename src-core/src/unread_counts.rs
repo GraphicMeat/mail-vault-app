@@ -14,14 +14,7 @@ pub struct UnreadOutput {
     pub wrote: bool,
 }
 
-fn truthy(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null | Value::Bool(false)) => false,
-        Some(Value::Number(n)) => n.as_f64().is_some_and(|n| n != 0.0 && !n.is_nan()),
-        Some(Value::String(s)) => !s.is_empty(),
-        _ => true,
-    }
-}
+use crate::js_value::truthy;
 fn text<'a>(v: &'a Value, key: &str) -> Option<&'a str> { v.get(key).and_then(Value::as_str) }
 fn number(value: Option<&Value>) -> i64 { value.and_then(Value::as_i64).unwrap_or(0) }
 fn strings(value: Option<&Value>) -> HashSet<String> {

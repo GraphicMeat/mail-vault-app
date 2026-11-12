@@ -2,6 +2,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import '../../../services/workflows/bindStoreActions';
 
 const data = vi.hoisted(() => ({ list: vi.fn(), remove: vi.fn(), errors: [] }));
 vi.mock('../../../services/db.js', () => ({

@@ -25,7 +25,7 @@
 //! seven minutes. It now runs on its own thread once the socket is up, taking
 //! the custody lock one mailbox at a time.
 
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::{db, import, lock, Connection, SharedConn};
 use mailvault_core::search_index::slot::{install_if_current, SwitchGuard};
 use serde_json::{json, Value};

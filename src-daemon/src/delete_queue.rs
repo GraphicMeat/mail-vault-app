@@ -69,10 +69,11 @@
 //! `failures`; `delete_queue.cancel {id, uids}` clears those uids of one
 //! entry and announces `delete-queue-changed`.
 
+use mailvault_core::imap::Transport;
 use crate::handlers::common::{blocking, done, str_arg, u64_arg, vec_arg};
 use crate::ipc::{self, RpcResponse};
 use crate::message_delete::{self, Mode, Outcome, Provider, Refusal};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::op_journal::{self, OpEntry};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -554,7 +555,7 @@ async fn send_owed_answering(state: &Arc<DaemonState>, s: &Submit, owners: &[(u3
                 warn!("[delete-queue] {}/{}: credentials unavailable, round {} not sent: {e}", s.account_id, s.mailbox, round + 1);
                 failed.extend(pending.iter().map(|uid| (*uid, e.clone())));
             }
-            Ok(config) if config.uses_graph() && !config.uses_jmap() => {
+            Ok(config) if config.transport() == Transport::Graph => {
                 dropped.extend(pending.iter().map(|uid| (*uid, GRAPH_UNSUPPORTED.to_string())));
             }
             Ok(config) => match resolve_mode(state, &config, s, how.priority).await {

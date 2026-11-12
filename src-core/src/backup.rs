@@ -232,6 +232,65 @@ fn terminal_backup_progress(
     }
 }
 
+/// The three counters every runner keeps for one run, and the two shapes they
+/// are reported in: the per-folder `active: true` frame and the final
+/// `BackupResult`. Each runner still owns and updates its own locals (their
+/// update sites differ); it builds this from them where it reports.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct RunCounters {
+    backed_up: usize,
+    errors: usize,
+    ext_failures: usize,
+}
+
+impl RunCounters {
+    /// The mid-run frame after a folder: always `active: true`, nothing has
+    /// failed the run yet (only the terminal frame's `success` is ever read).
+    fn folder_progress(self, account_id: &str, folder: String, total_folders: usize, completed_folders: usize) -> BackupProgress {
+        BackupProgress {
+            account_id: account_id.to_string(),
+            folder,
+            total_folders,
+            completed_folders,
+            total_emails: self.backed_up + self.errors,
+            completed_emails: self.backed_up,
+            errors: self.errors,
+            active: true,
+            last_error: None,
+            missing_in_folder: 0,
+            cancelled: false,
+            success: true,
+            external_copy_ok: self.ext_failures == 0,
+            external_copy_error: None,
+            external_copy_failed_count: self.ext_failures,
+            stop_reason: None,
+            limit_bytes: None,
+            resume_after_ms: None,
+        }
+    }
+
+    /// The run's result. `success` is `!cancelled`: a message the server
+    /// refused is a partial result, not a failed run.
+    fn into_result(self, duration_secs: f64, cancelled: bool, error_message: Option<String>, completed_folders: usize) -> BackupResult {
+        BackupResult {
+            emails_backed_up: self.backed_up,
+            errors: self.errors,
+            duration_secs,
+            success: !cancelled,
+            error_message,
+            cancelled,
+            completed_folders,
+            external_copy_ok: self.ext_failures == 0,
+            external_copy_error: if self.ext_failures > 0 {
+                Some(format!("{} emails failed to copy to external backup", self.ext_failures))
+            } else {
+                None
+            },
+            external_copy_failed_count: self.ext_failures,
+        }
+    }
+}
+
 // ── Injected context ─────────────────────────────────────────────────────────
 
 /// Everything one account's IMAP backup run needs beyond what the caller
@@ -317,12 +376,8 @@ pub async fn run_imap_account(ctx: BackupRunContext) -> Result<BackupResult, Str
 
     if let Some(ref root) = ctx.mirror_root {
         info!("backup: using external path: {:?}", root);
-        // Drain BEFORE any mirroring work — a run that copies first would put
-        // back the very files the queue is about to delete.
-        drain_purge_queue_blocking(&ctx).await?;
     }
-    mirror_local_folders_blocking(&ctx).await;
-    mirror_contacts_blocking(&ctx).await;
+    backup_prelude(&ctx, true).await?;
 
     // Every IMAP connection this run opens shows as "backup" on Network
     // Activity (the folder workers below are spawned: scoped again there).
@@ -364,18 +419,7 @@ async fn run_imap_backup_inner(
                 ),
                 limit,
             ));
-            return Ok(BackupResult {
-                emails_backed_up: 0,
-                errors: 0,
-                duration_secs: start.elapsed().as_secs_f64(),
-                success: false,
-                error_message: None,
-                cancelled: true,
-                completed_folders: ctx.skip_folders,
-                external_copy_ok: true,
-                external_copy_error: None,
-                external_copy_failed_count: 0,
-            });
+            return Ok(RunCounters::default().into_result(start.elapsed().as_secs_f64(), true, None, ctx.skip_folders));
         }
     }
 
@@ -451,26 +495,8 @@ async fn run_imap_backup_inner(
             }
             completed_folders =
                 contiguous_completed_checkpoint(ctx.skip_folders, &done).min(total_folders);
-            (ctx.on_progress)(BackupProgress {
-                account_id: account_id.clone(),
-                folder: outcome.mailbox,
-                total_folders,
-                completed_folders,
-                total_emails: total_backed_up + total_errors,
-                completed_emails: total_backed_up,
-                errors: total_errors,
-                active: true,
-                last_error: None,
-                missing_in_folder: 0,
-                cancelled: false,
-                success: true,
-                external_copy_ok: total_ext_failures == 0,
-                external_copy_error: None,
-                external_copy_failed_count: total_ext_failures,
-                stop_reason: None,
-                limit_bytes: None,
-                resume_after_ms: None,
-            });
+            let counters = RunCounters { backed_up: total_backed_up, errors: total_errors, ext_failures: total_ext_failures };
+            (ctx.on_progress)(counters.folder_progress(account_id, outcome.mailbox, total_folders, completed_folders));
         })
         .await?;
         if ctx.cancel.load(Ordering::Relaxed) {
@@ -543,27 +569,8 @@ async fn run_imap_backup_inner(
         );
     }
 
-    Ok(BackupResult {
-        emails_backed_up: total_backed_up,
-        errors: total_errors,
-        duration_secs: duration,
-        // A message the server refused is a partial result, not a failed run:
-        // the other N-1 are on disk and re-running is what fixes the one.
-        success: !cancelled,
-        error_message,
-        cancelled,
-        completed_folders,
-        external_copy_ok: total_ext_failures == 0,
-        external_copy_error: if total_ext_failures > 0 {
-            Some(format!(
-                "{} emails failed to copy to external backup",
-                total_ext_failures
-            ))
-        } else {
-            None
-        },
-        external_copy_failed_count: total_ext_failures,
-    })
+    Ok(RunCounters { backed_up: total_backed_up, errors: total_errors, ext_failures: total_ext_failures }
+        .into_result(duration, cancelled, error_message, completed_folders))
 }
 
 /// A backup of exactly `plan`'s uids, folder by folder: Phase 5's "Save them
@@ -665,19 +672,8 @@ pub async fn run_imap_uids(
             completed_folders,
             total_folders
         );
-        Ok(BackupResult {
-            emails_backed_up: backed_up,
-            errors,
-            duration_secs: start.elapsed().as_secs_f64(),
-            success: !cancelled,
-            error_message,
-            cancelled,
-            completed_folders,
-            external_copy_ok: ext_failures == 0,
-            external_copy_error: (ext_failures > 0)
-                .then(|| format!("{} emails failed to copy to external backup", ext_failures)),
-            external_copy_failed_count: ext_failures,
-        })
+        Ok(RunCounters { backed_up, errors, ext_failures }
+            .into_result(start.elapsed().as_secs_f64(), cancelled, error_message, completed_folders))
     })
     .await
 }
@@ -881,12 +877,8 @@ pub async fn run_graph_account(ctx: BackupRunContext) -> Result<BackupResult, St
 
     if let Some(ref root) = ctx.mirror_root {
         info!("backup(graph): using external path: {:?}", root);
-        // Same ordering rule as the IMAP runner: drain BEFORE any mirroring
-        // work touches the files the queue is about to delete.
-        drain_purge_queue_blocking(&ctx).await?;
     }
-    mirror_local_folders_blocking(&ctx).await;
-    mirror_contacts_blocking(&ctx).await;
+    backup_prelude(&ctx, true).await?;
 
     run_graph_backup_inner(ctx, start).await
 }
@@ -1146,26 +1138,8 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         // twin shape: this used to compute `completed_folders < total_folders`
         // and so never fired `active: false` on a cancel-`break` or a
         // zero-folder account (Problem 2 this task fixes).
-        (ctx.on_progress)(BackupProgress {
-            account_id: account_id.clone(),
-            folder: mailbox_path,
-            total_folders,
-            completed_folders,
-            total_emails: total_backed_up + total_errors,
-            completed_emails: total_backed_up,
-            errors: total_errors,
-            active: true,
-            last_error: None,
-            missing_in_folder: 0,
-            cancelled: false,
-            // Mid-run: nothing has failed the run yet. Only the terminal
-            // frame's value is ever read for completion.
-            success: true,
-            external_copy_ok: total_ext_failures == 0,
-            external_copy_error: None,
-            external_copy_failed_count: total_ext_failures,
-            stop_reason: None, limit_bytes: None, resume_after_ms: None,
-        });
+        let counters = RunCounters { backed_up: total_backed_up, errors: total_errors, ext_failures: total_ext_failures };
+        (ctx.on_progress)(counters.folder_progress(account_id, mailbox_path, total_folders, completed_folders));
     }
 
     // Emit final completion/cancelled event (single event per account),
@@ -1212,25 +1186,11 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         total_folders
     );
 
-    Ok(BackupResult {
-        emails_backed_up: total_backed_up,
-        errors: total_errors,
-        duration_secs: duration,
-        success: !cancelled,
-        error_message,
-        cancelled,
-        // What the scheduler resumes from after a cancel. A folder the
-        // ledger refused stored nothing, and a resumed run would skip it.
-        // Same value the terminal frame above carries, by construction.
-        completed_folders: checkpoint,
-        external_copy_ok: total_ext_failures == 0,
-        external_copy_error: if total_ext_failures > 0 {
-            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
-        } else {
-            None
-        },
-        external_copy_failed_count: total_ext_failures,
-    })
+    // `completed_folders` is what the scheduler resumes from after a cancel.
+    // A folder the ledger refused stored nothing, and a resumed run would skip
+    // it: the same checkpoint the terminal frame above carries, by construction.
+    Ok(RunCounters { backed_up: total_backed_up, errors: total_errors, ext_failures: total_ext_failures }
+        .into_result(duration, cancelled, error_message, checkpoint))
 }
 
 struct GraphFolderOutcome {
@@ -1294,26 +1254,8 @@ async fn run_graph_backup_parallel(
                 last_error = out.last_error;
             }
             let completed = contiguous_completed_checkpoint(skip, &done).min(total_folders);
-            (ctx.on_progress)(BackupProgress {
-                account_id: ctx.account_id.clone(),
-                folder: out.mailbox,
-                total_folders,
-                completed_folders: completed,
-                total_emails: backed + errors,
-                completed_emails: backed,
-                errors,
-                active: true,
-                last_error: None,
-                missing_in_folder: 0,
-                cancelled: false,
-                success: true,
-                external_copy_ok: external_failures == 0,
-                external_copy_error: None,
-                external_copy_failed_count: external_failures,
-                stop_reason: None,
-                limit_bytes: None,
-                resume_after_ms: None,
-            });
+            let counters = RunCounters { backed_up: backed, errors, ext_failures: external_failures };
+            (ctx.on_progress)(counters.folder_progress(&ctx.account_id, out.mailbox, total_folders, completed));
         })
         .await?;
     }
@@ -1335,23 +1277,8 @@ async fn run_graph_backup_parallel(
         error_message.clone(),
     ));
     let duration = start.elapsed().as_secs_f64();
-    Ok(BackupResult {
-        emails_backed_up: backed,
-        errors,
-        duration_secs: duration,
-        success: !cancelled,
-        error_message,
-        cancelled,
-        completed_folders: checkpoint,
-        external_copy_ok: external_failures == 0,
-        external_copy_error: (external_failures > 0).then(|| {
-            format!(
-                "{} emails failed to copy to external backup",
-                external_failures
-            )
-        }),
-        external_copy_failed_count: external_failures,
-    })
+    Ok(RunCounters { backed_up: backed, errors, ext_failures: external_failures }
+        .into_result(duration, cancelled, error_message, checkpoint))
 }
 
 async fn backup_graph_folder(
@@ -1500,11 +1427,8 @@ pub async fn run_jmap_account(ctx: BackupRunContext) -> Result<BackupResult, Str
 
     if let Some(ref root) = ctx.mirror_root {
         info!("backup(jmap): using external path: {:?}", root);
-        // Same ordering rule as the other runners: drain BEFORE any mirroring
-        // work touches the files the queue is about to delete.
-        drain_purge_queue_blocking(&ctx).await?;
     }
-    mirror_local_folders_blocking(&ctx).await;
+    backup_prelude(&ctx, false).await?;
 
     run_jmap_backup_inner(ctx, start).await
 }
@@ -1765,26 +1689,8 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
 
         completed_folders += 1;
 
-        (ctx.on_progress)(BackupProgress {
-            account_id: account_id.clone(),
-            folder: mailbox_path,
-            total_folders,
-            completed_folders,
-            total_emails: total_backed_up + total_errors,
-            completed_emails: total_backed_up,
-            errors: total_errors,
-            active: true,
-            last_error: None,
-            missing_in_folder: 0,
-            cancelled: false,
-            success: true,
-            external_copy_ok: total_ext_failures == 0,
-            external_copy_error: None,
-            external_copy_failed_count: total_ext_failures,
-            stop_reason: None,
-            limit_bytes: None,
-            resume_after_ms: None,
-        });
+        let counters = RunCounters { backed_up: total_backed_up, errors: total_errors, ext_failures: total_ext_failures };
+        (ctx.on_progress)(counters.folder_progress(account_id, mailbox_path, total_folders, completed_folders));
     }
 
     // One terminal frame on every path out of the loop, sharing its values
@@ -1817,22 +1723,8 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         total_folders
     );
 
-    Ok(BackupResult {
-        emails_backed_up: total_backed_up,
-        errors: total_errors,
-        duration_secs: duration,
-        success: !cancelled,
-        error_message,
-        cancelled,
-        completed_folders: checkpoint,
-        external_copy_ok: total_ext_failures == 0,
-        external_copy_error: if total_ext_failures > 0 {
-            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
-        } else {
-            None
-        },
-        external_copy_failed_count: total_ext_failures,
-    })
+    Ok(RunCounters { backed_up: total_backed_up, errors: total_errors, ext_failures: total_ext_failures }
+        .into_result(duration, cancelled, error_message, checkpoint))
 }
 
 // ── Backup status comparison ─────────────────────────────────────────────────
@@ -2216,12 +2108,12 @@ pub async fn get_backup_status(
     external_status: Option<String>,
     external_error: Option<String>,
 ) -> Result<AccountBackupStatus, String> {
-    let mut status = if account.uses_jmap() {
-        get_jmap_backup_status(account_id, account, vault_root, mirror_root).await?
-    } else if account.oauth2_transport.as_deref() == Some("graph") {
-        get_graph_backup_status(account_id, account, vault_root, mirror_root).await?
-    } else {
-        net_activity::with_purpose("backup", get_imap_backup_status(pool, account_id, account, vault_root, mirror_root)).await?
+    let mut status = match account.transport() {
+        crate::imap::Transport::Jmap => get_jmap_backup_status(account_id, account, vault_root, mirror_root).await?,
+        crate::imap::Transport::Graph => get_graph_backup_status(account_id, account, vault_root, mirror_root).await?,
+        crate::imap::Transport::Imap => {
+            net_activity::with_purpose("backup", get_imap_backup_status(pool, account_id, account, vault_root, mirror_root)).await?
+        }
     };
 
     status.external_status = external_status;
@@ -2514,6 +2406,21 @@ fn mirror_local_folders(ctx: &BackupRunContext) {
 
 /// `mirror_local_folders` off the runtime workers: directory listings and file
 /// copies on whatever drive the vault and the backup are on.
+/// What every runner does before it lists a folder. Drain BEFORE any
+/// mirroring work: a run that copies first would put back the very files the
+/// queue is about to delete. The contacts copy is IMAP's and Graph's only
+/// (`mirror_contacts`): the JMAP runner has none.
+async fn backup_prelude(ctx: &BackupRunContext, mirror_contacts: bool) -> Result<(), String> {
+    if ctx.mirror_root.is_some() {
+        drain_purge_queue_blocking(ctx).await?;
+    }
+    mirror_local_folders_blocking(ctx).await;
+    if mirror_contacts {
+        mirror_contacts_blocking(ctx).await;
+    }
+    Ok(())
+}
+
 async fn mirror_local_folders_blocking(ctx: &BackupRunContext) {
     let ctx = ctx.clone();
     if let Err(e) = tokio::task::spawn_blocking(move || mirror_local_folders(&ctx)).await {
@@ -3666,6 +3573,34 @@ mod tests {
         assert_eq!(uids, HashSet::from([5]), "the import copy stays out of the vault");
         assert_eq!(crate::maildir::mirror_file_map(&mirror_cur).into_keys().collect::<HashSet<_>>(), HashSet::from([5]));
         assert!(mirror.path().join("INBOX").join(crate::maildir::ORPHAN_DIR).read_dir().unwrap().next().is_some(), "set aside in the mirror, not deleted");
+    }
+
+    // ── RunCounters ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn run_counters_into_result_maps_every_field() {
+        let c = RunCounters { backed_up: 7, errors: 2, ext_failures: 3 };
+        let r = c.into_result(1.5, false, Some("why".into()), 4);
+        assert_eq!((r.emails_backed_up, r.errors, r.completed_folders, r.external_copy_failed_count), (7, 2, 4, 3));
+        assert!(r.success && !r.cancelled && !r.external_copy_ok);
+        assert_eq!(r.duration_secs, 1.5);
+        assert_eq!(r.error_message.as_deref(), Some("why"));
+        assert_eq!(r.external_copy_error.as_deref(), Some("3 emails failed to copy to external backup"));
+        let r = c.into_result(0.0, true, None, 1);
+        assert!(!r.success && r.cancelled, "success is the inverse of cancelled");
+        let clean = RunCounters::default().into_result(0.0, false, None, 0);
+        assert!(clean.external_copy_ok && clean.external_copy_error.is_none() && clean.success);
+    }
+
+    #[test]
+    fn run_counters_folder_progress_is_an_active_success_frame() {
+        let c = RunCounters { backed_up: 5, errors: 1, ext_failures: 2 };
+        let p = c.folder_progress("acct", "INBOX".into(), 9, 3);
+        assert_eq!((p.account_id.as_str(), p.folder.as_str(), p.total_folders, p.completed_folders), ("acct", "INBOX", 9, 3));
+        assert_eq!((p.total_emails, p.completed_emails, p.errors, p.external_copy_failed_count), (6, 5, 1, 2));
+        assert!(p.active && p.success && !p.cancelled && !p.external_copy_ok);
+        assert!(p.last_error.is_none() && p.external_copy_error.is_none() && p.stop_reason.is_none());
+        assert_eq!(p.missing_in_folder, 0);
     }
 
     // ── contacts safety copy ─────────────────────────────────────────────────

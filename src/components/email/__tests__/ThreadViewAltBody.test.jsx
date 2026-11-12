@@ -2,6 +2,7 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 const { bodies, seen, mounts, autosized, highlighted } = vi.hoisted(() => ({ bodies: new Map(), seen: [], autosized: [], highlighted: [], mounts: { count: 0, unmounts: 0 } }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({

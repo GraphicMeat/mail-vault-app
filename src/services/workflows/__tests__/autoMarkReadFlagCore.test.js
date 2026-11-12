@@ -119,6 +119,7 @@ vi.mock('../../mailSearch.js', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { replayOps } = await import('../replayOps');
 

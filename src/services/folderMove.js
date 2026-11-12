@@ -1,5 +1,6 @@
 import { send } from './transport.js';
 import { forceMailboxRefetch } from './workflows/helpers/mailboxRefetch';
+import { listenTo } from './listenTo.js';
 
 /**
  * Move folder is a daemon job (src-daemon/src/folder_move_job.rs):
@@ -37,19 +38,6 @@ export function errorKey(e, fallback = 'folderMove.failed') {
   return CODES.has(code) ? `errors.E_FOLDER_MOVE_${code}` : fallback;
 }
 export const isNotFound = (e) => /^E_FOLDER_MOVE_NOT_FOUND(?::|$)/.test(text(e));
-
-// One load of the event API, shared by every listener: two overlapping
-// dynamic imports of one mocked module can resolve the second to the real
-// one under vitest (see mboxUpload.js).
-let eventApi = null;
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await (eventApi ||= import('@tauri-apps/api/event'));
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
-  }
-}
 
 export const onProgress = (cb) => listenTo('folder-move-progress', cb);
 /** A restarted daemon: its live jobs are gone, their journals read as stopped. */

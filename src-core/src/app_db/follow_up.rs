@@ -108,12 +108,7 @@ pub fn backoff_ms(attempt: i64) -> i64 {
 
 const RETRY: RetryPolicy = RetryPolicy::new(Duration::from_secs(30), Duration::from_secs(30 * 1024), Some(MAX_ATTEMPTS as u32));
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
+use crate::clock::now_ms;
 
 const COLUMNS: &str = "id, account_id, message_id, subject, recipients, sent_at, remind_at, created_at, state, \
      sent_mailbox, sent_uid, seen, announced, attempts, retry_at, last_error, own_addresses";

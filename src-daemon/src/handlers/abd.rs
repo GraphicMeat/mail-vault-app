@@ -20,7 +20,7 @@ use crate::abd_worker::{
 };
 use crate::handlers::common;
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::abd::graph_ops::TokenLease;
 use mailvault_core::abd::state as jobfile;
 use mailvault_core::abd::{

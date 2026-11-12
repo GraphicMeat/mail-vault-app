@@ -24,6 +24,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const { useKeychainGateStore, initKeychainGate, __resetKeychainGateForTests } = await import('../keychainGateStore');
+// Stores reach workflows through ports; the card under test needs the mocked retry bound.
+const { bindWorkflowPorts } = await import('../workflowPorts');
+const { retryKeychainAccess: portRetry } = await import('../../services/workflows/retryKeychainAccess');
+bindWorkflowPorts({ retryKeychainAccess: (...a) => portRetry(...a) });
 const gate = () => useKeychainGateStore.getState();
 
 beforeEach(() => {

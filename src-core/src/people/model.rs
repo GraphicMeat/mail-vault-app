@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub fn now_ms() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
-}
+pub use crate::clock::now_ms;
 pub fn new_id() -> String { uuid::Uuid::new_v4().to_string() }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

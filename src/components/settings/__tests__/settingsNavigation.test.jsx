@@ -9,6 +9,7 @@ import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { SettingsPage } from '../../SettingsPage';
 import { t } from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 
 // Account settings stay real; reading cached folders is the disk boundary.
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));

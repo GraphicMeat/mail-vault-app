@@ -18,7 +18,7 @@ export async function remindOfUnfinished(kept, now = Date.now()) {
   const settings = useSettingsStore.getState();
   if (now - (settings.pendingActionsRemindedAt || 0) < REMIND_EVERY_MS) return false;
   settings.markPendingActionsReminded(now);
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   useMailStore.setState({ pendingActionsReminder: { count: kept } });
   return true;
 }

@@ -1,7 +1,7 @@
 //! `render.*`: the Blitz renderer. Thin: validate params, then hand the call to `RenderPool`, which
 //! opens a doc on one of its workers and routes every later op on it to the worker that holds it.
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use base64::Engine;
 use serde_json::{json, Value};
 use std::sync::Arc;

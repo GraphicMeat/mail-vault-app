@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
 import { useTagStore } from './tagStore';
+import { listenTo } from '../services/listenTo.js';
 
 // Auto Tags (Phase 4) — natural-language rules that assign an existing tag.
 // Modeled on scheduledStore.js: one flat list, refetched on mount, patched
@@ -92,14 +93,6 @@ export const useAutoTagStore = create((set, get) => ({
   },
 }));
 
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await import('@tauri-apps/api/event');
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
-  }
-}
 
 let _initialized = false;
 

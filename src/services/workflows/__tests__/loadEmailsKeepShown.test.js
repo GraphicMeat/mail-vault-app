@@ -83,6 +83,7 @@ vi.mock('../../../stores/settingsStore', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { applySeenLocally } = await import('../messageMutations');
 
 const { useConnectivityStore } = await import('../../../stores/connectivityStore');

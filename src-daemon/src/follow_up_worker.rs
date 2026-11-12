@@ -41,7 +41,7 @@
 use crate::credentials;
 use crate::handlers::common::blocking;
 use crate::imap::{self, pool::PooledSessionGuard, ImapConfig};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, follow_up};
 use mailvault_core::custody::cache as sql_cache;
 use mailvault_core::follow_up::matcher;
@@ -93,9 +93,7 @@ async fn run(state: Arc<DaemonState>) {
     }
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
-}
+use mailvault_core::clock::now_ms;
 
 fn next_wait(state: &Arc<DaemonState>) -> Duration {
     match app_db::with(&state.app_dir, follow_up::next_wake_at).ok().flatten() {
@@ -519,7 +517,7 @@ mod tests {
     /// `rig`, signed in as `login`.
     fn rig_as(server: &mock_imap::MockImap, login: &str) -> (std::path::PathBuf, Arc<DaemonState>) {
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let creds = dir.join("credentials.json");
         let account = serde_json::json!({
             "id": "acct", "email": login, "password": "hunter2",
@@ -952,7 +950,7 @@ mod tests {
     async fn one_cache_read_answers_every_due_reminder_of_a_pass() {
         let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         cache(&state, &[("INBOX", vec![
             cached(1, "ana@example.com", "Re: one", json!({"inReplyTo": "<one@me>"})),
             cached(2, "bo@example.com", "Re: two", json!({"inReplyTo": "<two@me>"})),
@@ -1017,7 +1015,7 @@ mod tests {
     #[tokio::test]
     async fn a_pass_tells_the_app_about_each_row_that_changed_state() {
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         seed(&dir, "a", "<a@x>", 1_000);
         let mut events = state.events.subscribe();
         let results = process_due_with(&dir, 5_000, |_| async { Outcome::NoReply { sent_mailbox: "Sent".into(), sent_uid: 2 } }).await;
@@ -1036,7 +1034,7 @@ mod tests {
     #[tokio::test]
     async fn a_scheduled_send_records_its_reminder_from_the_sent_bytes() {
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let raw = b"Message-ID: <sched-1@me>\r\nSubject: =?UTF-8?Q?Caf=C3=A9?=\r\nFrom: me@example.com\r\n\r\nbody\r\n";
         record_after_send(&state, "acct", raw, "ana@example.com", Some("Sent"), &own(), 3);
         record_after_send(&state, "acct", b"Subject: no id\r\n\r\nbody\r\n", "ana@example.com", Some("Sent"), &own(), 3);
@@ -1079,7 +1077,7 @@ mod tests {
         let m = mock_jmap::MockJmap::start(scenario);
         let (trap, port) = support::imap_trap();
         let dir = app_dir();
-        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let state = crate::state::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let creds = dir.join("credentials.json");
         std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
         std::fs::write(dir.join("accounts.json"), r#"[{"id":"acct1"}]"#).unwrap();

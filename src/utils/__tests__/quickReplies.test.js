@@ -7,6 +7,7 @@ import { useMailStore } from '../../stores/mailStore';
 
 vi.mock('../../services/daemonClient', () => ({ daemonCall: vi.fn() }));
 import { daemonCall } from '../../services/daemonClient';
+import '../../services/workflows/bindStoreActions';
 
 const person = {
   from: { address: 'ann@example.test' },

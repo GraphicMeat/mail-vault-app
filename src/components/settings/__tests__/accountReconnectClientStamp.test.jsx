@@ -6,6 +6,7 @@ import { AccountSettings } from '../AccountSettings';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 
 // Reconnect saves `{...account, ...tokens}`. A refresh token only works with
 // the OAuth client that issued it, so the save must also carry the client the

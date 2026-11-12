@@ -19,7 +19,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tokio::sync::{watch, Mutex, Notify};
 use tracing::{info, warn};
 
@@ -232,12 +232,7 @@ fn worth_probing(host: &str) -> bool {
     }
 }
 
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
+use crate::job_support::now_ms;
 
 #[cfg(test)]
 mod tests {

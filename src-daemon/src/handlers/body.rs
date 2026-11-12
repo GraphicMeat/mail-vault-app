@@ -26,7 +26,7 @@
 //! Nothing here reaches the network, and nothing is logged but counts.
 use crate::handlers::common::{blocking, done, vault_root};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::body_scan::{self, RowSettings, Texts};
 use mailvault_core::settings_doc::SettingsDoc;
 use mailvault_core::vault_files;
@@ -145,14 +145,6 @@ struct Wanted {
     message_id: Option<String>,
 }
 
-fn same_message(header: Option<&str>, body: Option<&str>) -> bool {
-    // A missing id on either side proves nothing and is let through (bodyMatchesHeader).
-    match (header.and_then(mailvault_core::compose::normalize_message_id), body.and_then(mailvault_core::compose::normalize_message_id)) {
-        (Some(h), Some(b)) => h == b,
-        _ => true,
-    }
-}
-
 /// Tracker verdicts for rows nobody opened, from the vault's copy: one folder
 /// read at a time, at background priority, never the network.
 fn backfill(state: &Arc<DaemonState>, list: &[Value], limit: usize) -> Map<String, Value> {
@@ -173,7 +165,7 @@ fn backfill(state: &Arc<DaemonState>, list: &[Value], limit: usize) -> Map<Strin
             let Some(body) = body else { continue };
             // The vault is keyed (account, mailbox, uid) with no generation
             // proof: a uid reissued under a newer UIDVALIDITY can be another message.
-            if !same_message(w.message_id.as_deref(), body.message_id.as_deref()) {
+            if !mailvault_core::maildir::same_message_ids(w.message_id.as_deref(), body.message_id.as_deref()) {
                 continue;
             }
             let Some(html) = body.html.as_deref().filter(|h| !h.is_empty()) else { continue };
@@ -188,7 +180,8 @@ fn backfill(state: &Arc<DaemonState>, list: &[Value], limit: usize) -> Map<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
 
     fn rig() -> (tempfile::TempDir, Arc<DaemonState>) {
         let dir = tempfile::tempdir().unwrap();

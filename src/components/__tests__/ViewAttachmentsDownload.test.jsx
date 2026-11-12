@@ -2,6 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => props => React.createElement('span', { 'data-icon': name, ...props });

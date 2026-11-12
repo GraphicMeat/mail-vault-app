@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { setLocale } from '../../../i18n/index.js';
 import * as keychainSession from '../../../services/keychainSession';
 import { onboardingSteps } from '../steps.js';
+import '../../../services/workflows/bindStoreActions';
 
 // Same stubs as onboardingBack.test.jsx: the shell's flow is under test.
 vi.mock('../Splash', () => ({ Splash: ({ onContinue }) => <button data-testid="go" onClick={onContinue}>splash</button> }));

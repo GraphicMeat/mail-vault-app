@@ -43,7 +43,7 @@ use crate::abd_worker::{self, JobOps, Kind};
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::handlers::common;
 use crate::imap::ImapConfig;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::abd::imap_ops::build_preview_of;
 use mailvault_core::abd::state as jobfile;
 use mailvault_core::abd::{

@@ -28,11 +28,14 @@ vi.mock('../../services/db', () => ({
 vi.mock('../../services/api', () => ({
   vaultApplyFlags: (...args) => harness.vaultApplyFlags(...args),
 }));
-vi.mock('../../services/workflows/messageMutations', () => ({
+
+// The store starts these workflows through ports (stores/workflowPorts.js).
+const { bindWorkflowPorts } = await import('../workflowPorts');
+bindWorkflowPorts({
   applyFlagToTargets: (...args) => harness.applyFlagToTargets(...args),
   deleteEmailFromServer: (...args) => harness.deleteEmailFromServer(...args),
   setDeleteUndo: (...args) => harness.setDeleteUndo(...args),
-}));
+});
 
 const { useNotesStore, boardColumns, serverCopies, canToggleStar, AUTO_COLUMNS, scheduleNotesReload } = await import('../notesStore');
 const { useTagStore } = await import('../tagStore');

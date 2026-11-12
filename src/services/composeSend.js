@@ -61,7 +61,7 @@ export async function buildOutgoingPayload({ snapshot, account, settings = {} })
   // ComposeModal is lazy-loaded from App. Import its small serialization
   // helpers only when a queued send actually starts, or the detached-owner
   // bridge would pull the editor and TipTap into the initial App chunk.
-  const { htmlToText, inlineComposeSpacing } = await import('../components/RichTextEditor');
+  const { htmlToText, inlineComposeSpacing } = await import('../utils/editorHtml');
   const displayName = settings.displayName || account.name || account.email;
   const fromAddress = snapshot._fromAddress || account.email;
   const sendAsEmail = fromAddress !== account.email ? fromAddress : '';

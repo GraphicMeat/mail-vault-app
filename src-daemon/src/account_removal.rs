@@ -1,11 +1,12 @@
 //! One finite, claim-owned account retirement. Started children finish under
 //! the claim even if the RPC waiter disappears.
+use mailvault_core::imap::Transport;
 use crate::account_lifecycle::{LifecycleError, PersistenceAuthority, RemovalClaim};
 use crate::account_workflows::{AccountLease, AccountWriteScope};
 use crate::credentials::{self, CredChange};
 use crate::handlers::common::{vault_root, with_vault_write};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::accounts_doc::{self, Listing, LiveScrub};
 use mailvault_core::app_db::{self, compose_receipts, follow_up};
 use mailvault_core::custody::cache as sql_cache;
@@ -531,7 +532,7 @@ impl PoolContext {
 
     fn record(&mut self, id: &str, row_id: &str, row: &Value) {
         match credentials::config_from_record(row) {
-            Ok(config) if config.uses_graph() || config.uses_jmap() => {
+            Ok(config) if config.transport() != Transport::Imap => {
                 if row_id == id { self.non_imap_target = true; }
             }
             Ok(config) => {

@@ -33,7 +33,7 @@
 use crate::custody as daemon_custody;
 use crate::handlers::common::{vault_root, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::{cache, entries};
 use mailvault_core::imap::{self, ImapConfig, MailboxInfo};
 use mailvault_core::{app_db, message_store, transport_switch, vault_files};

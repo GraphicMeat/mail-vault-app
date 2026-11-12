@@ -7,7 +7,7 @@
 
 use crate::ordinary_runner::{BodyUnitOutcome, Spec};
 use crate::sync_observation::SourceKey;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use std::sync::Arc;
 
 /// The Graph message id a ledger holds for `uid`. `Ok(None)`: no mapping, which

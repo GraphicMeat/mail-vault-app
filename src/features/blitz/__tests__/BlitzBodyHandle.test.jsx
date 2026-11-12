@@ -12,6 +12,7 @@ vi.mock('../BlitzTiles', () => ({
 }));
 vi.mock('../prepass/privacyDict', () => ({ usePrivacyDict: () => ({ active: false, dict: null, hold: tilesProps.hold }) }));
 import BlitzBody from '../BlitzBody';
+import '../../../services/workflows/bindStoreActions';
 
 afterEach(() => { cleanup(); tilesProps.hold = false; });
 

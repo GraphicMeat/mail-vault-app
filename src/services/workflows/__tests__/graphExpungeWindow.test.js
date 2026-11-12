@@ -85,6 +85,7 @@ vi.mock('../../../stores/settingsStore', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { _loadEmailsViaGraph } = await import('../loadEmails');
 const { getLoadEmailsGeneration } = await import('../../../stores/slices/messageListSlice');
 

@@ -11,6 +11,7 @@ import { guardViewCounts } from '../../../test/viewCountsGuard';
 guardViewCounts();
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 const ROW = {
   id: 'b1', accountId: 'a1', mailbox: 'INBOX', uid: 7, deletedAt: Date.UTC(2026, 8, 27, 10),

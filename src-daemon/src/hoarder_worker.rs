@@ -35,7 +35,7 @@ use crate::handlers::common::{blocking, with_mailbox_write};
 use crate::handlers::imap::{auto_cache, auto_cache_with_ids, email_date_ms, fetch_policy, now_ms, BODY_FETCH_TIMEOUT};
 use crate::imap::{self, has_attr, ImapConfig, MailboxInfo};
 use crate::jmap_sessions::{in_mailbox, AccountJmap};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use futures::FutureExt;
 use mailvault_core::custody::cache;
 use mailvault_core::search_index::text::vault_dir_name;
@@ -414,7 +414,7 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) -> bool {
         };
         // Hoarding lists over IMAP or JMAP; a Graph listing is not built
         // here (the token would be the daemon's own, `oauth_tokens`).
-        if config.oauth2_transport.as_deref() == Some("graph") {
+        if config.uses_graph() {
             info!("[hoard] {account_id}: skipped_reason=graph_account");
             continue;
         }
@@ -1198,7 +1198,7 @@ mod tests {
     #[tokio::test]
     async fn fetch_mode_changed_wakes_the_hoarder_worker() {
         let (_dir, s) = state();
-        let resp = crate::server::handle_request_for_test(&s, "storage.fetch_mode_changed", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "storage.fetch_mode_changed", json!({})).await;
         assert_eq!(resp.result, Some(json!({"ok": true})));
         tokio::time::timeout(Duration::from_secs(1), s.hoarder_worker.notify.notified())
             .await

@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 import { join } from 'node:path';
 
 const safeStorage = readFileSync('src/stores/safeStorage.js', 'utf8');
@@ -16,7 +17,7 @@ const handler = readFileSync('src-daemon/src/handlers/settings.rs', 'utf8');
 const server = readFileSync('src-daemon/src/server.rs', 'utf8');
 const handlersMod = readFileSync('src-daemon/src/handlers/mod.rs', 'utf8');
 const demo = readFileSync('src/demo/backend.js', 'utf8');
-const shell = readFileSync('src-tauri/src/main.rs', 'utf8');
+const shell = shellSource();
 
 const RPCS = ['settings.get', 'settings.patch', 'settings.replace'];
 

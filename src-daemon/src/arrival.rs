@@ -3,7 +3,7 @@
 //! account stamp and native mailbox owner, so a later same-ID account cannot
 //! borrow an earlier arrival.
 
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_engine::ChangeRecord;
 use crate::sync_observation::SourceKey;
 use mailvault_core::{accounts_doc, arrival, custody::cache, notify_policy, settings_doc, verification_code};

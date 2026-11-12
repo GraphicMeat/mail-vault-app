@@ -2,7 +2,7 @@
 
 use crate::ipc::{self, RpcResponse};
 use crate::refresh_worker::{ContextInput, ContextPhase, ContextView, Intent, Reason, RefreshState};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::{Map, Value};
 use std::sync::Arc;
 use std::time::Duration;

@@ -10,10 +10,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 import * as transport from '../../src/services/transport.js';
 
 const read = (p) => readFileSync(p, 'utf8');
-const main = read('src-tauri/src/main.rs');
+const main = shellSource();
 const handlerStart = main.indexOf('generate_handler![');
 const handlerList = main.slice(handlerStart, main.indexOf(']', handlerStart));
 const shell = read('src-tauri/src/abd.rs');

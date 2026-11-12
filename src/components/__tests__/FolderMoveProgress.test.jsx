@@ -43,6 +43,7 @@ vi.mock('../../services/transport', () => ({ send: (...a) => sendMock(...a) }));
 
 const { FolderMoveProgress, RENDER_EVERY_MS } = await import('../FolderMoveProgress');
 const { useMailStore } = await import('../../stores/mailStore');
+await import('../../services/workflows/bindStoreActions');
 const en = (await import('../../i18n/locales/en.json')).default;
 const originalRefresh = useMailStore.getState().refreshCurrentView;
 

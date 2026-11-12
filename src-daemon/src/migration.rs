@@ -10,7 +10,7 @@ use crate::graph::GraphClient;
 use crate::imap::pool::PooledSessionGuard;
 use crate::imap::{self, ImapConfig, ImapSession, MailboxInfo};
 use crate::jmap_sessions::{AccountJmap, Mailboxes};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::jmap::client::received_at_of;
 use mailvault_core::jmap::headers::{flags_to_keywords, keywords_to_flags};
 use mailvault_core::jmap::mailbox_map::DELIMITER;

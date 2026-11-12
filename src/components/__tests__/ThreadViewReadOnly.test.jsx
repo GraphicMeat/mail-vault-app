@@ -9,6 +9,7 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const { scrollToIndex, bodies, timers, opener, mutations } = vi.hoisted(() => ({
   scrollToIndex: vi.fn(),

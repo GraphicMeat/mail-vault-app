@@ -495,15 +495,7 @@ pub fn import_rules(fb: &mut Feedback, rules: &[Value], now_ms: i64) -> usize {
 mod js {
     use serde_json::{json, Value};
 
-    pub fn truthy(v: Option<&Value>) -> bool {
-        match v {
-            None | Some(Value::Null) => false,
-            Some(Value::Bool(b)) => *b,
-            Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0),
-            Some(Value::String(s)) => !s.is_empty(),
-            Some(Value::Array(_)) | Some(Value::Object(_)) => true,
-        }
-    }
+    pub use crate::js_value::truthy;
 
     /// `===`. Two objects or arrays are never the same object here.
     pub fn strict_eq(a: Option<&Value>, b: Option<&Value>) -> bool {

@@ -53,7 +53,8 @@
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::handlers::common::blocking;
 use crate::migration::{self, CopyCtx, CopyOutcome, FolderMapping, Lane, Side, SourceItem, WriteAck};
-use crate::server::DaemonState;
+use crate::job_support::{self, lock, now_ms, ProgressThrottle, Settled};
+use crate::state::DaemonState;
 use mailvault_core::folder_move::{self as fm, FolderPhase, Journal, JournalFolder, Kind, Outcome, Record, Target};
 use mailvault_core::imap::{self, ImapConfig, MailboxInfo};
 use serde::{Deserialize, Serialize};
@@ -61,8 +62,8 @@ use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 /// A job for one of the two accounts is already running or held here; the
@@ -117,14 +118,6 @@ impl Default for Tuning {
     }
 }
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
-fn now_ms() -> u64 {
-    std::time::SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
-}
-
 // ── the job and its registry ────────────────────────────────────────────────
 
 /// A live job: running, or held by a pause.
@@ -136,8 +129,7 @@ pub(crate) struct Job {
     discard: AtomicBool,
     notify: tokio::sync::Notify,
     /// Held with its journal checkpointed, or ended: what a quit waits for.
-    settled: Mutex<bool>,
-    settled_wake: Condvar,
+    settled: Settled,
     /// The worker sent its own last event.
     ended: AtomicBool,
     view: Mutex<Value>,
@@ -154,8 +146,7 @@ impl Job {
             pause: AtomicBool::new(false),
             discard: AtomicBool::new(false),
             notify: tokio::sync::Notify::new(),
-            settled: Mutex::new(false),
-            settled_wake: Condvar::new(),
+            settled: Settled::default(),
             ended: AtomicBool::new(false),
             view: Mutex::new(Value::Null),
             #[cfg(test)]
@@ -172,20 +163,11 @@ impl Job {
     }
 
     fn set_settled(&self, settled: bool) {
-        *lock(&self.settled) = settled;
-        self.settled_wake.notify_all();
+        self.settled.set(settled);
     }
 
     fn wait_settled(&self, until: Instant) -> bool {
-        let mut settled = lock(&self.settled);
-        while !*settled {
-            let now = Instant::now();
-            if now >= until {
-                return false;
-            }
-            settled = self.settled_wake.wait_timeout(settled, until - now).unwrap_or_else(|p| p.into_inner()).0;
-        }
-        true
+        self.settled.wait(until)
     }
 
     fn view(&self) -> Value {
@@ -238,14 +220,14 @@ impl FolderMoves {
         };
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
-            .on_thread_start(crate::mbox_upload_job::background_qos)
+            .on_thread_start(crate::job_support::background_qos)
             .build()
             .map_err(|e| format!("the folder move could not start: {e}"))?;
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Task>();
         std::thread::Builder::new()
             .name("folder-move".into())
             .spawn(move || {
-                crate::mbox_upload_job::background_qos();
+                crate::job_support::background_qos();
                 rt.block_on(async move {
                     while let Some(task) = rx.recv().await {
                         tokio::spawn(task);
@@ -329,47 +311,26 @@ pub(crate) struct JobFile {
     pub updated_at: u64,
 }
 
-/// A job id names files: only what `uuid` writes gets through.
-pub(crate) fn is_job_id(id: &str) -> bool {
-    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-}
+pub(crate) use crate::job_support::is_job_id;
 
 fn journal_dir(app_dir: &Path) -> PathBuf {
     app_dir.join(JOURNAL_DIR)
 }
 
-fn journal_path(app_dir: &Path, id: &str) -> PathBuf {
-    journal_dir(app_dir).join(format!("{id}.json"))
-}
-
 fn write_journal(app_dir: &Path, file: &JobFile) -> Result<(), String> {
-    std::fs::create_dir_all(journal_dir(app_dir)).map_err(|e| format!("Failed to create the folder move journal dir: {e}"))?;
-    let bytes = serde_json::to_vec(file).map_err(|e| e.to_string())?;
-    mailvault_core::fsx::write_atomic(&journal_path(app_dir, &file.journal.job_id), &bytes)
-        .map_err(|e| format!("Failed to write the folder move journal: {e}"))
+    job_support::write_json(&journal_dir(app_dir), &file.journal.job_id, file, "folder move journal")
 }
 
 fn read_journal(app_dir: &Path, id: &str) -> Option<JobFile> {
-    let raw = std::fs::read(journal_path(app_dir, id)).ok()?;
-    serde_json::from_slice::<JobFile>(&raw).ok().filter(|f| f.journal.job_id == id)
+    job_support::read_json::<JobFile>(&journal_dir(app_dir), id).filter(|f| f.journal.job_id == id)
 }
 
 fn list_journals(app_dir: &Path) -> Vec<JobFile> {
-    std::fs::read_dir(journal_dir(app_dir))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| e.file_name().to_string_lossy().strip_suffix(".json").filter(|id| is_job_id(id)).map(str::to_string))
-        .filter_map(|id| read_journal(app_dir, &id))
-        .collect()
+    job_support::list_ids(&journal_dir(app_dir)).into_iter().filter_map(|id| read_journal(app_dir, &id)).collect()
 }
 
 fn remove_journal(app_dir: &Path, id: &str) {
-    if let Err(e) = std::fs::remove_file(journal_path(app_dir, id)) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            warn!("[folder_move] job {id}: its journal was not removed: {e}");
-        }
-    }
+    job_support::remove_json(&journal_dir(app_dir), id, "folder_move");
 }
 
 // ── progress ────────────────────────────────────────────────────────────────
@@ -792,7 +753,7 @@ fn spawn(
         stamps,
         since_checkpoint: 0,
         checkpointed: Instant::now(),
-        emitted: None,
+        throttle: ProgressThrottle::default(),
         current: None,
         rate_limited_for: None,
         touched: BTreeSet::new(),
@@ -907,7 +868,7 @@ struct Runner {
     stamps: Vec<AccountStamp>,
     since_checkpoint: u32,
     checkpointed: Instant,
-    emitted: Option<Instant>,
+    throttle: ProgressThrottle,
     current: Option<String>,
     rate_limited_for: Option<u64>,
     /// Destination folders a message was written to.
@@ -1494,9 +1455,8 @@ impl Runner {
         payload["currentFolder"] = json!(self.current);
         payload["rateLimitedFor"] = json!(self.rate_limited_for);
         *lock(&self.job.view) = payload.clone();
-        if force || self.emitted.is_none_or(|at| at.elapsed() >= self.tuning.progress_every) {
+        if self.throttle.should_emit(force, self.tuning.progress_every, Instant::now()) {
             self.state.events.emit(EVENT, payload);
-            self.emitted = Some(Instant::now());
         }
     }
 
@@ -1576,7 +1536,7 @@ mod tests {
     use super::*;
     use crate::ipc::RpcResponse;
     use crate::jmap_test_support as support;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mock_imap::{Action, Mailbox, Message, MockImap, Scenario, Trigger};
     use tokio::sync::broadcast;
 

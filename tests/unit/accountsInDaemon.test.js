@@ -9,6 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 import { join } from 'node:path';
 
 const read = (path) => readFileSync(path, 'utf8');
@@ -20,7 +21,7 @@ const demo = read('src/demo/backend.js');
 const core = read('src-core/src/accounts_doc.rs');
 const credHandler = read('src-daemon/src/handlers/credentials.rs');
 const tokens = read('src-daemon/src/oauth_tokens.rs');
-const shell = read('src-tauri/src/main.rs');
+const shell = shellSource();
 const accountsJs = read('src/services/db/accounts.js');
 const keychainJs = read('src/services/db/keychain.js');
 const en = JSON.parse(read('src/i18n/locales/en.json'));

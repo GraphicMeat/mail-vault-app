@@ -3,7 +3,7 @@
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::account_workflows::{AccountLease, AccountWriteScope};
 use crate::imap::{ImapConfig, NativeHeaderIdentity};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::accounts_doc;
 use mailvault_core::sync_policy::{FOLDER_TTL_MS, PROBE_TTL_MS};
 use serde_json::Value;

@@ -1,28 +1,17 @@
-import { checkCompose, composeCheckInput } from './services/composePrep';
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { bootstrapTags } from './services/tagMigration';
-import { flushSafeStorage } from './stores/safeStorage';
 import { initTagEvents } from './stores/tagStore';
 import { initScheduledSend } from './stores/scheduledStore';
 import { initSnooze } from './stores/snoozeStore';
 import { initFollowUp } from './stores/followUpStore';
 import { initAutoTags } from './stores/autoTagStore';
 import { useMailStore } from './stores/mailStore';
-import { useInsightsStore } from './stores/insightsStore';
-import { useNotesStore } from './stores/notesStore';
-import { useContactsViewStore } from './stores/contactsViewStore';
 import { useNetActivityStore } from './stores/netActivityStore';
-import { createInsightsReaderScope } from './services/insightsReaderScope';
-import * as selectionWorkflow from './services/workflows/selectEmail';
-import { undoLastAction } from './services/workflows/messageMutations';
 import { useAccountStore } from './stores/accountStore';
 import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
-import { isGraphAccount } from './services/graphConfig';
-import { useSettingsStore, hasPremiumAccess } from './stores/settingsStore';
-import { composeSenderName } from './utils/sendAsSuggestions';
-import { currentListView } from './stores/viewStore';
+import { useSettingsStore } from './stores/settingsStore';
 import {
   clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH,
   clampListPaneHeight, MIN_LIST_HEIGHT, MIN_VIEWER_HEIGHT,
@@ -70,7 +59,6 @@ import { FormatMigrationProgress } from './components/FormatMigrationProgress';
 import { OfflineBanner } from './components/OfflineBanner';
 import { GraphImapBanner } from './components/GraphImapBanner';
 import { BugReportDialog } from './components/BugReportDialog';
-import { anonymousLogsAttachment, ANONYMOUS_LOGS_FILENAME } from './utils/anonymousLogs';
 import { FocusLock } from './components/FocusLock';
 import { PrivacyDictionaryHost } from './components/privacy/PrivacyDictionaryHost';
 import { usePrivacyStore, isPrivacyMasking } from './stores/privacyStore';
@@ -89,44 +77,38 @@ import { useLifecycleMail } from './hooks/useLifecycleMail';
 import { useLifecycleStore } from './stores/lifecycleStore';
 import { useUpdateAvailable } from './hooks/useUpdateAvailable';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAfterSettingsClose, useSettingsWindow } from './hooks/useSettingsWindow';
 import { useExportWindow } from './hooks/useExportWindow';
 import { currentQuickActionScopeSnapshot, watchQuickActionScope } from './hooks/useQuickActionConfiguration';
 import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
+import { useOverlayPages } from './hooks/app/useOverlayPages';
+import { useWindowSize } from './hooks/app/useWindowSize';
+import { useAutoCollapseSidebar } from './hooks/app/useAutoCollapseSidebar';
+import { useComposeWindows } from './hooks/app/useComposeWindows';
+import { useAppShortcuts } from './hooks/app/useAppShortcuts';
+import { useNativeBridges } from './hooks/app/useNativeBridges';
+import { useStartupLoad } from './hooks/app/useStartupLoad';
+import { useComposePrefills } from './hooks/app/useComposePrefills';
+import { useDmgWarning } from './hooks/app/useDmgWarning';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
-import { bulkOperationManager, isDeleteBulkType } from './services/BulkOperationManager';
 import { BulkPendingOperationBanner } from './components/BulkPendingOperationBanner';
 import { resolveErrorToastProps } from './utils/errorToast';
-import { resolveEscapeAction, resolveContactsEscape } from './utils/escapeAction';
 import { shouldStartFullInit } from './utils/shouldStartFullInit';
-import { filterUnread } from './utils/emailParser';
-import { rowKey, stepThroughList, spansMailboxes } from './stores/slices/unifiedHelpers';
 import { migrationManager } from './services/migrationManager.js';
 import { initAbd } from './services/abd.js';
 import { initOAuthCredentialProjection } from './services/oauthCredentialProjection.js';
 import { useAbdStore } from './stores/abdStore';
 import { restoreManager } from './services/restoreManager.js';
-import { setComposeOpener } from './services/localDrafts';
-import { useReplyFillController } from './hooks/useReplyFillController';
-import { setMailtoComposeOpener, startMailtoBridge, retryMailtoCompose } from './utils/mailto';
-import { startActivationBridge, announceActivation } from './services/billingActivation';
-import { openNotificationTarget, startNotificationOpenBridge, startNotificationDeleteBridge } from './utils/notificationOpen';
-import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
-import { openComposeResolved } from './utils/replyTarget';
-import { useComposeSessionHydration, isTerminalCompose, composeSessionData, mergeComposeSnapshot } from './services/composeSession';
-import { sameReply } from './utils/sameReply';
+import { retryMailtoCompose } from './utils/mailto';
+import { openNotificationTarget } from './utils/notificationOpen';
+import { isTerminalCompose, composeSessionData } from './services/composeSession';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
-import { version } from '../package.json';
 import { tErr, t as tr, useT, setLocale } from './i18n/index.js';
 import { invoke } from '@tauri-apps/api/core';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { createComposeWindowOwner } from './services/composeWindow';
-import { startPrivacySync } from './utils/privacy/privacySync';
-import { createComposeSend, scheduleCompose } from './services/composeSend';
 import { getAccountCacheMailboxes } from './services/cacheManager';
 
 // Surfaces that only exist once the user asks for them. Keeping them in the
@@ -136,12 +118,6 @@ import { getAccountCacheMailboxes } from './services/cacheManager';
 const InsightsPage = lazy(() => import('./components/insights/InsightsPage'));
 const NotesBoard = lazy(() => import('./components/notes/NotesBoard'));
 const ContactsView = lazy(() => import('./components/contacts/ContactsView').then(m => ({ default: m.ContactsView })));
-// Undo too: the toast offers it over the board (a card's star, Done or
-// delete), and Cmd+Z there did nothing.
-const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts', 'undo'];
-// Leaving Insights or Notes for the mail the user picked: never bring the
-// earlier selection back over it.
-const KEEP_NO_SELECTION = { restoreSelection: false };
 
 const AccountModal = lazy(() => import('./components/AccountModal').then(m => ({ default: m.AccountModal })));
 const ExportModal = lazy(() => import('./components/transfer/ExportModal').then(m => ({ default: m.ExportModal })));
@@ -208,75 +184,9 @@ function ResizeDivider({ orientation, onResize, onResizeEnd }) {
   );
 }
 
-// Debug: log to Rust side via invoke
-const debugLog = (...args) => {
-  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-  console.log(msg);
-  window.__TAURI__?.core?.invoke?.('log_from_frontend', { message: msg }).catch(() => {});
-};
-
 function App() {
   const t = useT();
-  const insightsOpen = useInsightsStore(s => s.isOpen);
-  const notesOpen = useNotesStore(s => s.isOpen);
-  const contactsOpen = useContactsViewStore(s => s.isOpen);
-  // Insights, Notes to Self and Contacts are full pages over the mail view, one
-  // at a time; they share the reader scope that puts the open message back.
-  const overlayOpen = insightsOpen || notesOpen || contactsOpen;
-  const insightsReaderScope = useRef(null);
-  if (!insightsReaderScope.current) insightsReaderScope.current = createInsightsReaderScope(useMailStore, {
-    cancelSelection: () => selectionWorkflow.cancelInsightsSelection?.(),
-    getSelectionGeneration: () => selectionWorkflow.getSelectionGeneration(),
-  });
-  const openInsights = useCallback(() => {
-    if (useInsightsStore.getState().isOpen) return;
-    insightsReaderScope.current.enter();
-    if (useNotesStore.getState().isOpen) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
-    if (useContactsViewStore.getState().isOpen) useContactsViewStore.getState().close();
-    void useInsightsStore.getState().openInsights();
-  }, []);
-  const closeInsights = useCallback(() => {
-    useInsightsStore.getState().closeInsights();
-    void insightsReaderScope.current.exit();
-    requestAnimationFrame(() => document.querySelector('[data-testid="open-insights"]')?.focus());
-  }, []);
-  const openNotes = useCallback(() => {
-    if (useNotesStore.getState().isOpen) return;
-    insightsReaderScope.current.enter();
-    if (useInsightsStore.getState().isOpen) useInsightsStore.getState().closeInsights();
-    if (useContactsViewStore.getState().isOpen) useContactsViewStore.getState().close();
-    void useNotesStore.getState().open();
-  }, []);
-  const closeNotes = useCallback(() => {
-    selectionWorkflow.cancelInsightsSelection?.();
-    useNotesStore.getState().close();
-    void insightsReaderScope.current.exit();
-    requestAnimationFrame(() => document.querySelector('[data-testid="open-notes"]')?.focus());
-  }, []);
-  const openContacts = useCallback(() => {
-    if (useContactsViewStore.getState().isOpen) return;
-    insightsReaderScope.current.enter();
-    if (useInsightsStore.getState().isOpen) useInsightsStore.getState().closeInsights();
-    if (useNotesStore.getState().isOpen) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
-    useContactsViewStore.getState().open();
-  }, []);
-  const closeContacts = useCallback(() => {
-    selectionWorkflow.cancelInsightsSelection?.();
-    useContactsViewStore.getState().close();
-    void insightsReaderScope.current.exit();
-    requestAnimationFrame(() => document.querySelector('[data-testid="open-contacts"]')?.focus());
-  }, []);
-  const openMailFromSidebar = useCallback(() => {
-    insightsReaderScope.current.cancelRestore();
-    const insights = useInsightsStore.getState().isOpen, notes = useNotesStore.getState().isOpen;
-    const contacts = useContactsViewStore.getState().isOpen;
-    if (!insights && !notes && !contacts) return;
-    if (insights) useInsightsStore.getState().closeInsights();
-    if (notes) { selectionWorkflow.cancelInsightsSelection?.(); useNotesStore.getState().close(); }
-    if (contacts) { selectionWorkflow.cancelInsightsSelection?.(); useContactsViewStore.getState().close(); }
-    void insightsReaderScope.current.exit(KEEP_NO_SELECTION);
-  }, []);
-  useEffect(() => () => { useInsightsStore.getState().resetSession(); useNotesStore.getState().close(); useContactsViewStore.getState().close(); }, []);
+  const { insightsOpen, notesOpen, contactsOpen, overlayOpen, openInsights, closeInsights, openNotes, closeNotes, openContacts, closeContacts, openMailFromSidebar } = useOverlayPages();
   const init = useAccountStore(s => s.init);
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -313,15 +223,7 @@ function App() {
   const [showPhoneQrModal, setShowPhoneQrModal] = useState(false);
 
   // ── Responsive layout adaptation ─────────────────────────────────────────
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
-  const [windowHeight, setWindowHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 800);
-  const autoCollapsedRef = useRef(false); // true = sidebar was collapsed by responsive, not by user
-
-  useEffect(() => {
-    const onResize = () => { setWindowWidth(window.innerWidth); setWindowHeight(window.innerHeight); };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+  const { windowWidth, windowHeight } = useWindowSize();
 
   // Warm the deferred overlay chunks once the window is idle. They are off the
   // startup path but a person clicking Compose should never wait on a fetch.
@@ -340,259 +242,11 @@ function App() {
     return () => clearTimeout(t);
   }, []);
 
-  // If user manually expands sidebar while auto-collapsed, clear the flag
-  // (so window resize won't re-expand what user explicitly collapsed later)
-  const prevCollapsedRef = useRef(sidebarCollapsed);
-  useEffect(() => {
-    const prev = prevCollapsedRef.current;
-    prevCollapsedRef.current = sidebarCollapsed;
-    // User manually expanded while we auto-collapsed → clear flag
-    if (prev && !sidebarCollapsed && autoCollapsedRef.current) {
-      autoCollapsedRef.current = false;
-    }
-    // User manually collapsed while window is wide → ensure we don't auto-expand
-    if (!prev && sidebarCollapsed && windowWidth >= 900) {
-      autoCollapsedRef.current = false;
-    }
-  }, [sidebarCollapsed]);
-
-  // Auto-collapse sidebar on narrow windows
-  useEffect(() => {
-    if (windowWidth < 900 && !sidebarCollapsed) {
-      autoCollapsedRef.current = true;
-      setSidebarCollapsed(true);
-    } else if (windowWidth >= 900 && sidebarCollapsed && autoCollapsedRef.current) {
-      autoCollapsedRef.current = false;
-      setSidebarCollapsed(false);
-    }
-  }, [windowWidth]);
+  useAutoCollapseSidebar({ windowWidth, sidebarCollapsed, setSidebarCollapsed });
 
   // Auto-switch to two-column on very narrow windows
   const layoutMode = windowWidth < 768 ? 'two-column' : userLayoutMode;
-  const [composeWindows, setComposeWindows] = useState([]);
-  const replyFillController = useReplyFillController({
-    windows: composeWindows, setWindows: setComposeWindows,
-    getContext: () => ({ mail: useMailStore.getState(), settings: useSettingsStore.getState() }),
-    onError: () => useMailStore.setState({ error: tr('compose.preparationUnavailable') }),
-  });
-  const [mailtoError, setMailtoError] = useState(false);
-  const composeIdRef = useRef(0);
-  const composeWindowOwnerRef = useRef(null);
-  const focusNativeCompose = useCallback(async (label) => {
-    const native = await WebviewWindow.getByLabel(label);
-    if (!native) return;
-    await native.unminimize();
-    await native.setFocus();
-  }, []);
-
-  const { openDraft: openDraftCompose, saveState: saveComposeState, canMount: canMountCompose, terminalCleanup: cleanupComposeDraft, retryCleanup: retryComposeCleanup, removeSource: removeComposeSource, restoreCompose: restoreOwnedCompose } = useComposeSessionHydration({
-    windows: composeWindows, setWindows: setComposeWindows, idRef: composeIdRef, focus: focusNativeCompose,
-  });
-
-  // A reply already open on this message comes forward instead of stacking —
-  // see utils/sameReply.js for why the header made that necessary.
-  const openCompose = useCallback((state = {}) => {
-    // Fill-only: a radial reply/replyAll opens on the header right away
-    // (RowQuickActions.jsx) and calls back in here once resolveMessageBody
-    // lands, carrying the ORIGINAL header as `_fillFrom` instead of the
-    // resolved copy — matched with `sameReply` below, so a messageId that
-    // only shows up once the fetch lands can never change the match key and
-    // stack a duplicate. This path never opens, un-minimizes or focuses a
-    // window: the fetch finishing late must not reopen a reply the user
-    // already sent, discarded or closed, or pull one they minimized back out.
-    if (state._fillFrom) {
-      void replyFillController.fill(state);
-      return;
-    }
-    const restoredData = state.snapshot || state.initialData;
-    if (restoredData?._draftId || restoredData?._draftUid) {
-      restoreOwnedCompose(state);
-      return;
-    }
-    setComposeWindows(prev => {
-      const already = prev.find(w => !isTerminalCompose(composeSessionData(w)) && sameReply(w, state));
-      if (already) {
-        if (already.detached && already.nativeLabel) void focusNativeCompose(already.nativeLabel).catch(() => {});
-        return prev.map(w => w.id === already.id ? { ...w, minimized: false } : w);
-      }
-      composeIdRef.current += 1;
-      return [...prev, { id: composeIdRef.current, minimized: false, ...state }];
-    });
-  }, [focusNativeCompose, restoreOwnedCompose]);
-
-  const closeCompose = removeComposeSource;
-
-  const minimizeCompose = useCallback((id) => {
-    setComposeWindows(prev => prev.map(w => w.id === id
-      ? { ...w, initialData: w.snapshot || w.initialData, minimized: true }
-      : w));
-  }, []);
-
-  const patchComposeWindow = useCallback((id, patch) => {
-    setComposeWindows(prev => prev.map(window => window.id === id ? {
-      ...window, ...patch,
-      ...(patch.snapshot ? { snapshot: mergeComposeSnapshot(composeSessionData(window), patch.snapshot) } : {}),
-      ...(isTerminalCompose(composeSessionData(window)) ? { minimized: true, detached: false, nativeLabel: null } : {}),
-    } : window));
-  }, []);
-
-  if (!composeWindowOwnerRef.current) {
-    composeWindowOwnerRef.current = createComposeWindowOwner({
-      open: async ({ composeId, token }) => {
-        // The size the user last resized a detached compose window to
-        // (setComposeSize, relayed from any window through installSettingRelays
-        // below). Rust clamps it to its own floor and the primary monitor.
-        const size = useSettingsStore.getState().composeSize;
-        const label = await invoke('open_compose_window', { composeId, token, width: size?.width, height: size?.height });
-        const native = await WebviewWindow.getByLabel(label);
-        if (!native) throw new Error(tr('errors.composeWindowClosed'));
-        await native.once('tauri://destroyed', () => composeWindowOwnerRef.current?.recoverLabel(label, token));
-        return label;
-      },
-      emitTo,
-      update: (id, patch) => patchComposeWindow(id, patch),
-      remove: id => removeComposeSource(id),
-      discard: (snapshot, id) => cleanupComposeDraft(snapshot, 'discard', id),
-      // A compose moved back from its own window. Popping out is remembered
-      // (ComposeModal popOut), so popping back in is too: left on 'window',
-      // the compose about to open here would hand itself straight back.
-      attached: () => {
-        useSettingsStore.getState().setComposeOpenMode('app');
-        // A minimized main would take the draft out of sight: it comes forward
-        // the way a focused native compose does (focusNativeCompose).
-        void WebviewWindow.getByLabel('main')
-          .then(async window => { await window?.unminimize(); await window?.setFocus(); })
-          .catch(() => {});
-      },
-      close: label => WebviewWindow.getByLabel(label).then(window => window?.destroy()).catch(() => {}),
-      queueSend: async (snapshot, delay, session, scheduled, context) => {
-        const account = context.account;
-        if (!account) throw new Error(tr('compose.noAccountSelected'));
-        const replyTo = snapshot._replyTo || null;
-        const settings = context.settings;
-        if (scheduled) {
-          await scheduleCompose({ snapshot, account, settings, cleanupDraft: (data, kind) => cleanupComposeDraft(data, kind, session.id) });
-          return;
-        }
-        const composeState = { mode: session.mode, replyTo, initialData: snapshot };
-        useMailStore.getState().queueSend(
-          composeState,
-          createComposeSend({ snapshot, mode: session.mode, replyTo, account, settings, cleanupDraft: (data, kind) => cleanupComposeDraft(data, kind, session.id) }),
-          snapshot._composeDelay ?? delay,
-        );
-      },
-      acknowledgePreparation: options => flushSafeStorage({ acknowledge: true, ...options }),
-      checkPreparation: ({ settingsVersion, isCurrent, ...input }) => checkCompose(composeCheckInput(input), { settingsVersion, isCurrent }),
-      sendContext: snapshot => {
-        const account = useMailStore.getState().accounts?.find(item => item.id === snapshot?._accountId);
-        const prefs = useSettingsStore.getState();
-        return { account, senderSettings: { displayName: composeSenderName({ account, fromAddress: snapshot._fromAddress,
-          displayName: prefs.getDisplayName(account?.id), aliases: prefs.aliases?.[account?.id], sendAsAddress: prefs.sendAsAddresses?.[account?.id] }) },
-          remindAllowed: !!account && !isGraphAccount(account) && hasPremiumAccess(prefs.billingProfile) };
-      },
-      settings: {
-        composeContextVisible: value => {
-          const store = useSettingsStore.getState();
-          store.setComposeContextVisible(value);
-          return { composeContextVisible: useSettingsStore.getState().composeContextVisible };
-        },
-        composeContextSplit: value => {
-          useSettingsStore.getState().setComposeContextSplit(value);
-          return { composeContextSplit: useSettingsStore.getState().composeContextSplit };
-        },
-        composeSize: value => {
-          useSettingsStore.getState().setComposeSize(value);
-          return { composeSize: useSettingsStore.getState().composeSize };
-        },
-        addEmailTemplate: value => {
-          const store = useSettingsStore.getState();
-          store.addEmailTemplate(value.name, value.body);
-          return { emailTemplates: useSettingsStore.getState().emailTemplates };
-        },
-        spellcheckEnabled: value => {
-          const store = useSettingsStore.getState();
-          store.setSpellcheckEnabled(value);
-          return { spellcheckEnabled: useSettingsStore.getState().spellcheckEnabled };
-        },
-        aiSettings: value => {
-          const store = useSettingsStore.getState();
-          store.setAiSettings(value);
-          return { aiSettings: useSettingsStore.getState().aiSettings };
-        },
-      },
-    });
-  }
-  useEffect(() => {
-    let unlisten;
-    let disposed = false;
-    listen('compose-window-request', ({ payload }) => composeWindowOwnerRef.current?.receive(payload)).then(stop => {
-      if (disposed) stop();
-      else unlisten = stop;
-    });
-    return () => { disposed = true; unlisten?.(); };
-  }, []);
-  // A compose window of its own was handed the billing profile, font and text
-  // size at detach; a change made here afterwards has to reach it too.
-  useEffect(() => useSettingsStore.subscribe((state, prev) => {
-    // Aliases too: a compose window's "Add address..." sends the user to
-    // Settings here, and the address they add belongs in that window's From row.
-    const relevant = ['aliases', 'sendAsAddresses', 'displayNames', 'attachmentReminder', 'billingProfile', 'shareGrant', 'sendDelay', 'undoSendEnabled', 'undoSendDelay'];
-    if (relevant.some(key => state[key] !== prev[key])) composeWindowOwnerRef.current?.invalidateSendPreparation();
-    const keys = [...relevant, 'appFont', 'textScale', 'showMenuBar'];
-    if (keys.some(key => state[key] !== prev[key])) composeWindowOwnerRef.current?.pushSettings(Object.fromEntries(keys.map(key => [key, state[key]])));
-  }), []);
-
-  useEffect(() => useMailStore.subscribe((state, previous) => {
-    if (state.accounts !== previous.accounts) composeWindowOwnerRef.current?.invalidateSendPreparation();
-    if (state.accounts !== previous.accounts || state.activeAccountId !== previous.activeAccountId)
-      composeWindowOwnerRef.current?.pushAccounts(state.accounts, state.activeAccountId);
-  }), []);
-
-  const restoreCompose = useCallback((id) => {
-    setComposeWindows(prev => prev.map(w => {
-      if (w.id !== id || isTerminalCompose(composeSessionData(w))) return w;
-      if (w.detached && w.nativeLabel) void focusNativeCompose(w.nativeLabel).catch(() => {});
-      return { ...w, initialData: w.snapshot || w.initialData, minimized: false };
-    }));
-  }, [focusNativeCompose]);
-
-  // Clicking a draft row in the Drafts folder reopens it here rather than in
-  // the viewer (services/localDrafts.js does the reading; a service cannot
-  // reach this state, so it is handed the opener).
-  //
-  // A draft already open comes forward instead of opening a second window on
-  // it: two windows autosaving one vault uid interleave their writes, and the
-  // loser's text is gone.
-  useEffect(() => {
-    setComposeOpener(openDraftCompose);
-    return () => setComposeOpener(null);
-  }, [openDraftCompose]);
-
-  // A mailto: link in a message body opens compose here rather than handing
-  // the address to the OS mail client (see utils/mailto.js).
-  useEffect(() => {
-    setMailtoComposeOpener(initialData => openCompose({ initialData }), { onError: () => setMailtoError(true) });
-    return () => setMailtoComposeOpener(null);
-  }, [openCompose]);
-
-  // Backwards-compatible helpers
-  const composeState = composeWindows.find(w => !w.minimized && !w.detached) || null;
-  const setComposeState = useCallback((val) => {
-    if (val === null) {
-      // Close the active (non-minimized) window
-      setComposeWindows(prev => prev.filter(w => w.minimized || w.detached));
-    } else {
-      // A reader's snippet stand-in is not the message: every entry point
-      // (shortcuts, other views, the row seam) gets the real body first.
-      void openComposeResolved(val, openCompose, useMailStore.getState());
-    }
-  }, [openCompose]);
-
-  // The list's row menus reach compose through the same kind of seam.
-  useEffect(() => {
-    registerComposeOpener(setComposeState);
-    return () => registerComposeOpener(null);
-  }, [setComposeState]);
+  const { composeWindows, mailtoError, setMailtoError, composeState, setComposeState, openCompose, closeCompose, minimizeCompose, restoreCompose, canMountCompose, saveComposeState, cleanupComposeDraft, retryComposeCleanup, composeWindowOwnerRef } = useComposeWindows();
 
   // A minimized Archive & delete job shares the corner stack below.
   const abdMinimized = useAbdStore(s => !!s.panel?.minimized && !!s.jobs[s.panel.accountId]);
@@ -703,28 +357,6 @@ function App() {
     };
   }, []);
 
-  // j/k walk the list the user can actually see: with the unread filter on,
-  // the store still holds every loaded message, so navigating the raw
-  // sortedEmails would select rows that aren't on screen.
-  //
-  // Every comparison goes through rowKey. Comparing the open message's id to a
-  // bare `e.uid` is what made this do nothing at all in the unified inbox.
-  const step = (delta) => {
-    if (currentListView() === 'explorer' && useSettingsStore.getState().viewStyle !== 'chat') {
-      window.dispatchEvent(new CustomEvent('mailvault:explorer-step', { detail: delta }));
-      return;
-    }
-    const state = useMailStore.getState();
-    const { sortedEmails, selectedEmailId, selectedEmail, selectEmail, unreadOnly, unreadKeep } = state;
-    const spans = spansMailboxes(state);
-    const keyOf = (e) => rowKey(e, spans);
-    const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId, keyOf, unreadKeep);
-    // The open email places the step when the list no longer shows it. Not
-    // matched by key: a body fetched from the server carries no _accountId.
-    const open = selectedEmail || state.selectedThread?.lastEmail || null;
-    const target = stepThroughList(visible, selectedEmailId, spans, delta, open);
-    if (target) selectEmail(keyOf(target));
-  };
 
   const privacyOn = usePrivacyStore(isPrivacyMasking);
   useEffect(() => {
@@ -732,143 +364,7 @@ function App() {
   }, [privacyOn]);
   usePrivacyPeekListeners();
 
-  // Keyboard shortcuts — wire all shortcut actions to app state/store methods
-  useKeyboardShortcuts({
-    compose: () => setComposeState({}),
-    reply: () => {
-      if (!openActiveReply('reply')) {
-        const email = useMailStore.getState().selectedEmail;
-        if (email) setComposeState({ mode: 'reply', replyTo: email });
-      }
-    },
-    replyAll: () => {
-      if (!openActiveReply('replyAll')) {
-        const email = useMailStore.getState().selectedEmail;
-        if (email) setComposeState({ mode: 'replyAll', replyTo: email });
-      }
-    },
-    forward: () => {
-      // The reader first, like reply: it resolves a snippet stand-in's body
-      // and shows the forward button busy meanwhile.
-      if (!openActiveReply('forward')) {
-        const email = useMailStore.getState().selectedEmail;
-        if (email) setComposeState({ mode: 'forward', replyTo: email });
-      }
-    },
-    // The open message's own row knows where it lives; the id alone does not
-    // once the list spans mailboxes.
-    archive: () => {
-      const email = useMailStore.getState().selectedEmail;
-      if (email) useMailStore.getState().saveEmailsLocally([email]);
-    },
-    delete: () => {
-      const { selectedEmail, selectedEmailId } = useMailStore.getState();
-      // deleteEmailFromServer resolves a composite key itself; in a list that
-      // spans mailboxes selectedEmailId IS that key, and a key it cannot place
-      // is refused rather than aimed at the active folder. Report the refusal —
-      // unreported it reads as a keypress that did nothing. Same toast the
-      // reading pane's delete uses.
-      if (selectedEmail || selectedEmailId) {
-        useMailStore.getState().deleteEmailFromServer(selectedEmailId)
-          .catch(err => useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) }));
-      }
-    },
-    // selectedEmailId IS the selection key in every view (see selectEmail's
-    // rowKey write), which is exactly what the toggle wants: a bare uid in a
-    // single folder's list, the full key in one that spans mailboxes.
-    toggleStar: () => {
-      // On the key this actually spends: with only `selectedEmail` set, the
-      // old test passed and `null` went to toggleFlagged, which resolves
-      // nothing and warns.
-      const { selectedEmailId } = useMailStore.getState();
-      if (selectedEmailId) useMailStore.getState().toggleFlagged(selectedEmailId);
-    },
-    // One slot, not a stack: whatever the last mutation left there. The slot
-    // outlives its toast, so this still works long after the toast has gone.
-    // useKeyboardShortcuts ignores typing targets, so a text field's own Cmd+Z
-    // never reaches here. Past the slot, the last delete comes back from the
-    // deleted-mail bin. Never over an open compose: its Cmd+Z is the editor's.
-    undo: () => { if (!composeState) undoLastAction(); },
-    // j/k walk the list the user can actually see: with the unread filter on,
-    // the store still holds every loaded message, so navigating the raw
-    // sortedEmails would select rows that aren't on screen.
-    nextEmail: () => step(+1),
-    prevEmail: () => step(-1),
-    goToInbox: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'INBOX'); },
-    goToSent: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'Sent'); },
-    goToDrafts: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'Drafts'); },
-    toggleSelect: () => {
-      const email = useMailStore.getState().selectedEmail;
-      if (email) {
-        useMailStore.getState().toggleEmailSelection(email.uid, email._accountId, email._mailbox, email);
-      }
-    },
-    escape: () => {
-      if (insightsOpen && !composeState && !showSettings && !showShortcutsModal) {
-        const insights = useInsightsStore.getState();
-        if (insights.detailOpen) { selectionWorkflow.cancelInsightsSelection?.(); insights.setDetailOpen(false); }
-        else if (insights.selection) insights.closeMessages();
-        else closeInsights();
-        return;
-      }
-      if (notesOpen && !composeState && !showSettings && !showShortcutsModal) {
-        const notes = useNotesStore.getState();
-        if (notes.detailOpen) { selectionWorkflow.cancelInsightsSelection?.(); notes.setDetailOpen(false); }
-        else closeNotes();
-        return;
-      }
-      if (contactsOpen && !composeState && !showSettings && !showShortcutsModal) {
-        const el = document.activeElement;
-        const what = resolveContactsEscape(el);
-        if (what === 'blur') el.blur();
-        else if (what === 'close') closeContacts();
-        return;
-      }
-      const {
-        selectedEmailIds, clearSelection, bulkModalOpen, bulkSession, endBulkSession,
-      } = useMailStore.getState();
-      const action = resolveEscapeAction({
-        bulkModalOpen,
-        bulkSessionActive: !!bulkSession?.active,
-        selectedCount: selectedEmailIds.size,
-        composeOpen: !!composeState,
-        settingsOpen: showSettings,
-        shortcutsOpen: showShortcutsModal,
-      });
-      if (action === 'end-bulk-session') endBulkSession();
-      else if (action === 'clear-selection') clearSelection();
-      else if (action === 'close-compose') setComposeState(null);
-      else if (action === 'close-settings') useUnsavedStore.getState().leave(closeSettings);
-      else if (action === 'close-shortcuts') setShowShortcutsModal(false);
-    },
-    focusSearch: () => {
-      if ([...document.querySelectorAll('[role="dialog"]')].some(dialog =>
-        !dialog.closest('[hidden], [inert], [aria-hidden="true"]'))) return;
-      const input = document.querySelector('[data-testid="mail-search-input"]');
-      if (input) input.focus();
-      else document.querySelector('[data-testid="mail-search-toggle"]')?.click();
-    },
-    showShortcuts: () => setShowShortcutsModal(prev => !prev),
-    openSettings,
-    togglePrivacyMode: () => {
-      const p = usePrivacyStore.getState();
-      if (p.setEnabled(!p.enabled) === 'premium') openSettings({ tab: 'billing' });
-    },
-    moveToFolder: () => {
-      const { selectedEmailIds, selectedEmailId } = useMailStore.getState();
-      // Only open if there's something to move
-      if (selectedEmailIds.size > 0 || selectedEmailId) {
-        setShowMoveDropdown(true);
-      }
-    },
-    // Gmail's key. The picker refuses nothing itself; snoozeEmails skips what
-    // cannot be snoozed.
-    snooze: () => {
-      const { selectedEmailIds, selectedEmailId } = useMailStore.getState();
-      const keys = selectedEmailIds.size > 0 ? [...selectedEmailIds] : selectedEmailId ? [selectedEmailId] : [];
-      if (keys.length) setSnoozeKeys(keys);
-    },
-  }, { allowedActions: overlayOpen ? INSIGHTS_SHORTCUTS : null });
+  useAppShortcuts({ setComposeState, composeState, insightsOpen, notesOpen, contactsOpen, overlayOpen, showSettings, showShortcutsModal, setShowShortcutsModal, closeInsights, closeNotes, closeContacts, closeSettings, openSettings, setShowMoveDropdown, setSnoozeKeys });
 
   // Handle resize for email list pane
   const handleListResize = useCallback((position) => {
@@ -886,44 +382,7 @@ function App() {
     }
   }, [layoutMode, setListPaneSize, setListPaneHeight, sidebarCollapsed]);
 
-  const composeBugEmail = useCallback(async () => {
-    // Read before the window opens, so the logs ride along from the first
-    // frame. Null (no shell, unreadable log) opens the report without them.
-    const logs = await anonymousLogsAttachment(invoke);
-    const os = navigator.platform || navigator.userAgent || 'Unknown';
-    const accountCount = accounts.length;
-    const activeAccount = accounts.find(a => a.id === activeAccountId);
-    const activeProvider = activeAccount?.oauth2Provider || 'password';
-
-    // The compose editor renders this as HTML, so the template has to be HTML —
-    // a \n-separated string collapses into one unreadable line.
-    const esc = (v) => String(v).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    const section = (title, ...lines) =>
-      `<p><strong>${title}</strong></p><p>${lines.join('<br>')}</p>`;
-
-    setComposeState({
-      // Marks this window for the cooldown stamp below: the report is filed
-      // when the email actually SENDS, not when compose merely opens.
-      bugReport: true,
-      initialData: {
-        to: 'prime@graphicmeat.com',
-        subject: `[Bug Report] MailVault v${version}`,
-        ...(logs ? { attachments: [logs] } : {}),
-        body: [
-          section('System info (auto-collected)',
-            `App version: ${esc(version)}`,
-            `Platform: ${esc(os)}`,
-            `Accounts: ${accountCount}`,
-            `Active provider: ${esc(activeProvider)}`,
-            ...(logs ? [`Logs: attached as ${ANONYMOUS_LOGS_FILENAME} (email addresses masked)`] : [])),
-          section('What happened?', '&nbsp;'),
-          section('Steps to reproduce', '1.', '2.', '3.'),
-          section('What you expected instead', '&nbsp;'),
-        ].join('')
-      }
-    });
-    setShowBugModal(false);
-  }, [accounts, activeAccountId]);
+  const { composeBugEmail, handleReferFriend } = useComposePrefills({ setComposeState, setShowBugModal, accounts, activeAccountId });
 
   // The button opens the choice of channel; the email template above is only
   // one of them (GitHub Discussions is the one others can find later).
@@ -1042,27 +501,6 @@ function App() {
     };
   }, [closeSettings, handleReportBug]);
 
-  const handleReferFriend = useCallback(() => {
-    setComposeState({
-      initialData: {
-        subject: tr('app.shouldTryMailvault'),
-        body: [
-          // Prose goes through the catalog; the markup stays literal, so a
-          // translator receives sentences rather than HTML to preserve.
-          `<p>${tr('referral.intro')}</p>`,
-          `<p>${tr('referral.what')}</p>`,
-          '<ul>',
-          `<li><strong>${tr('referral.ownDiskTitle')}</strong> ${tr('referral.ownDiskBody')}</li>`,
-          `<li><strong>${tr('referral.confidenceTitle')}</strong> ${tr('referral.confidenceBody')}</li>`,
-          `<li><strong>${tr('referral.offlineTitle')}</strong> ${tr('referral.offlineBody')}</li>`,
-          `<li><strong>${tr('referral.anyImapTitle')}</strong> ${tr('referral.anyImapBody')}</li>`,
-          `<li><strong>${tr('referral.freeTitle')}</strong> ${tr('referral.freeBody')}</li>`,
-          '</ul>',
-          '<p><a href="https://mailvaultapp.com">https://mailvaultapp.com</a></p>',
-        ].join('')
-      }
-    });
-  }, [setComposeState]);
 
   // Debug: log accounts changes
   useEffect(() => {
@@ -1076,282 +514,11 @@ function App() {
     initTheme();
   }, []);
 
-  // Check if running from DMG and warn user
-  const [dmgWarning, setDmgWarning] = useState(null);
-  useEffect(() => {
-    const invoke = window.__TAURI__?.core?.invoke;
-    if (invoke) {
-      invoke('check_running_from_dmg')
-        .then(isFromDmg => {
-          if (isFromDmg) {
-            setDmgWarning('Running from disk image. For best experience, please move MailVault to your Applications folder.');
-          }
-        })
-        .catch(e => console.warn('[App] Could not check DMG status:', e));
-    }
-  }, []);
+  const { dmgWarning, setDmgWarning } = useDmgWarning();
 
-  // `mailto:` handed over by the OS — a link clicked in a browser, a PDF, a chat
-  // app. The bridge drains a queue in Rust rather than reading an event payload:
-  // when the click *launches* MailVault the URL is queued before this webview
-  // exists, so a listener alone would drop the first mailto of every cold start.
-  useEffect(() => {
-    let stop = null;
-    let active = true;
-    Promise.all([
-      import('@tauri-apps/api/core'),
-      import('@tauri-apps/api/event'),
-    ]).then(([{ invoke }, { listen }]) => {
-      const bridge = startMailtoBridge({ invoke, listen, onError: () => { if (active) setMailtoError(true); } });
-      void bridge.ready.catch(() => { if (active) setMailtoError(true); });
-      // Unmounted while the imports were in flight — same guard the listeners
-      // below use, or the bridge outlives the component that owns it.
-      if (!active) bridge.stop();
-      else stop = bridge.stop;
-    }).catch(() => {}); // not in Tauri
-    return () => { active = false; if (stop) stop(); };
-  }, []);
+  useNativeBridges({ setMailtoError, openSettings, setShowShortcutsModal, setComposeState, showSettings, settingsMinimized, minimizeSettings, openMailFromSidebar, handleReportBug });
 
-  // mailvault://activate links from the website's web checkout: spend the token, sign in.
-  useEffect(() => {
-    let stop = null;
-    let active = true;
-    Promise.all([
-      import('@tauri-apps/api/core'),
-      import('@tauri-apps/api/event'),
-    ]).then(([{ invoke }, { listen }]) => {
-      const bridge = startActivationBridge({ invoke, listen, onResult: announceActivation });
-      if (!active) bridge.stop();
-      else stop = bridge.stop;
-    }).catch(() => {}); // not in Tauri
-    return () => { active = false; if (stop) stop(); };
-  }, []);
-
-  // Broadcast privacy-mode changes to the detached windows.
-  useEffect(() => startPrivacySync(), []);
-
-  // Listen for server crash events from the Rust backend
-  useEffect(() => {
-    let unlisten;
-    let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('server-crashed', (event) => {
-        console.error('[App] Server crashed:', event.payload);
-        useMailStore.setState({
-          connectionStatus: 'error',
-          connectionError: event.payload,
-          connectionErrorType: 'serverError',
-          connectionErrorCode: null,
-        });
-      }).then(fn => {
-        if (!active) fn(); // unmounted before listener ready — detach immediately
-        else unlisten = fn;
-      });
-    }).catch(() => {}); // not in Tauri environment
-    return () => { active = false; if (unlisten) unlisten(); };
-  }, []);
-
-  // Listen for open-settings event from native menu, or from a compose window
-  // of its own asking for a tab (its Upgrade). That one comes forward first:
-  // Settings opened behind the compose window reads as a dead button.
-  useEffect(() => {
-    let unlisten;
-    let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('open-settings', ({ payload }) => {
-        if (typeof payload?.tab !== 'string') { openSettings(); return; }
-        void WebviewWindow.getByLabel('main').then(window => window?.setFocus()).catch(() => {});
-        // A compose window's "Add address..." names the account and its Aliases section.
-        const accountId = typeof payload.accountId === 'string' ? payload.accountId : undefined;
-        const section = typeof payload.section === 'string' ? payload.section : undefined;
-        openSettings({ tab: payload.tab, accountId, section });
-      }).then(fn => {
-        if (!active) fn();
-        else unlisten = fn;
-      });
-    }).catch(() => {});
-    return () => { active = false; if (unlisten) unlisten(); };
-  }, [openSettings]);
-
-  // Listen for open-shortcuts event from native menu
-  useEffect(() => {
-    let unlisten;
-    let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('open-shortcuts', () => {
-        setShowShortcutsModal(prev => !prev);
-      }).then(fn => {
-        if (!active) fn();
-        else unlisten = fn;
-      });
-    }).catch(() => {});
-    return () => { active = false; if (unlisten) unlisten(); };
-  }, []);
-
-  // The tray menu's Compose and account rows. Rust has already brought the
-  // window forward; these do what the sidebar's Compose button and account
-  // row do. Settings open over the mail goes to its minimized chip, unsaved
-  // edits and all, rather than hiding the inbox the click asked for.
-  const trayActions = useRef(null);
-  trayActions.current = {
-    compose: () => setComposeState({}),
-    showMail: () => {
-      if (showSettings && !settingsMinimized) minimizeSettings();
-      openMailFromSidebar();
-    },
-  };
-  useEffect(() => {
-    let unlisteners = [];
-    let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) => Promise.all([
-      listen('tray-compose', () => trayActions.current.compose()),
-      listen('tray-open-account', ({ payload: accountId }) => {
-        if (typeof accountId !== 'string') return;
-        trayActions.current.showMail();
-        void import('./stores/viewStore').then(({ useViewStore }) => {
-          if (useViewStore.getState().activeViewId) useViewStore.getState().closeView();
-          return useMailStore.getState().activateAccount(accountId, 'INBOX');
-        }).catch(e => console.warn('[tray] could not open the account inbox:', e));
-      }),
-    ])).then(fns => {
-      if (!active) fns.forEach(fn => fn());
-      else unlisteners = fns;
-    }).catch(() => {}); // not in Tauri
-    return () => { active = false; unlisteners.forEach(fn => fn()); };
-  }, []);
-
-  // Listen for report-bug event from native menu
-  useEffect(() => {
-    let unlisten;
-    let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('report-bug', () => {
-        handleReportBug();
-      }).then(fn => {
-        if (!active) fn();
-        else unlisten = fn;
-      });
-    }).catch(() => {});
-    return () => { active = false; if (unlisten) unlisten(); };
-  }, [handleReportBug]);
-
-  // Track if quick load is done
-  const [quickLoadDone, setQuickLoadDone] = useState(false);
-  const quickLoadHadAccountsRef = useRef(false);
-
-  // Quick load: get accounts from disk ASAP, then activateAccount handles all email loading.
-  useEffect(() => {
-    const quickLoadAccounts = async () => {
-      try {
-        const db = await import('./services/db');
-        await db.initBasic();
-
-        // Start keychain loading in background immediately — the macOS prompt
-        // appears sooner, and getAccounts() in init() won't block as long.
-        db.startKeychainLoad();
-
-        const accounts = await db.getAccountsWithoutPasswords();
-        // Before any pipeline can touch a Graph sidecar: folders written under
-        // a localized name move under their storage key once.
-        const { adoptGraphFolderKeys } = await import('./services/workflows/adoptGraphFolderKeys');
-        await adoptGraphFolderKeys(accounts);
-        // One-time migration: move .eml files from email-address dirs to UUID dirs
-        db.migrateMaildirEmailDirs(accounts).catch(() => {});
-        quickLoadHadAccountsRef.current = accounts.length > 0;
-        if (accounts.length > 0) {
-          const { hiddenAccounts } = useSettingsStore.getState();
-          const firstVisible = accounts.find(a => !hiddenAccounts[a.id]) || accounts[0];
-          debugLog('[QuickLoad] Setting', accounts.length, 'accounts, firstVisible:', firstVisible.email);
-
-          // Set accounts FIRST so the main UI renders immediately
-          useMailStore.setState({
-            accounts,
-            activeAccountId: firstVisible.id,
-            activeMailbox: 'INBOX',
-            loading: true,
-          });
-
-          // Before the first paint: a delete still owed to the server from an
-          // earlier session keeps its rows hidden. Deletes come from the
-          // daemon's queue (`delete_queue.list`), purges from the journal.
-          try {
-            const { hideQueuedDeletes } = await import('./services/workflows/messageMutations');
-            // Capped: a daemon still starting must not hold the first paint.
-            // If the cap wins, the queue's launch sync (wireDeleteQueueEvents
-            // re-reads it once wired) hides the deletes, and the launch replay
-            // hides the purges; that replay never touches delete entries.
-            await Promise.race([hideQueuedDeletes(), new Promise(resolve => setTimeout(resolve, 300))]);
-          } catch (e) {
-            console.warn('[QuickLoad] Could not hide queued deletes:', e);
-          }
-
-          // activateAccount handles all local cache + server loading in parallel
-          useMailStore.getState().activateAccount(firstVisible.id, 'INBOX')
-            .catch(e => console.warn('[QuickLoad] activateAccount failed (non-fatal):', e));
-
-          // Check for pending bulk operations
-          try {
-            const status = await bulkOperationManager.status();
-            if (status.active) void bulkOperationManager.attach(status.active, () => {}).catch(error => {
-              useMailStore.setState({ error: tErr(error) });
-            });
-            // An interrupted delete finishes on its own: its rows left the list
-            // when it was clicked, and its journal entry owns any retry. Only
-            // an archive run asks Resume or Discard.
-            if (status.pending && isDeleteBulkType(status.pending.type)) {
-              void bulkOperationManager.resume(status.pending, null, () => {}).catch(error => {
-                console.warn('[QuickLoad] Could not resume the interrupted delete:', error);
-              });
-            } else if (status.pending) setPendingOperation(status.pending);
-          } catch (e) {
-            console.warn('[QuickLoad] Failed to check pending operations:', e);
-          }
-        }
-      } catch (e) {
-        console.error('[App] Quick load failed:', e);
-      } finally {
-        setQuickLoadDone(true);
-      }
-    };
-    quickLoadAccounts();
-  }, []);
-
-  // A click on a new-mail banner, and Delete or Copy & delete on a code
-  // banner. Gated on quick load: a press that launched the app is already
-  // queued, and acting on it needs the accounts in the store.
-  useEffect(() => {
-    if (!quickLoadDone) return;
-    let stops = [];
-    let active = true;
-    Promise.all([
-      import('@tauri-apps/api/core'),
-      import('@tauri-apps/api/event'),
-    ]).then(([{ invoke }, { listen }]) => {
-      const bridges = [
-        startNotificationOpenBridge({
-          invoke,
-          listen,
-          open: (target) => {
-            openMailFromSidebar();
-            return openNotificationTarget(target, useMailStore.getState)
-              .catch(e => console.warn('[notification] could not open the clicked email:', e));
-          },
-        }),
-        // The code bubble's own delete (Trash, with its undo); its bubble goes too.
-        startNotificationDeleteBridge({
-          invoke,
-          listen,
-          remove: async ({ accountId, mailbox, uid }) => {
-            await useMailStore.getState().deleteEmailFromServer(uid, { accountId, mailboxOverride: mailbox });
-            useCodeBubbleStore.getState().dismiss(`${accountId}|${mailbox}|${uid}`);
-          },
-        }),
-      ];
-      stops = bridges.map(b => b.stop);
-      if (!active) stops.forEach(stop => stop());
-    }).catch(() => {}); // not in Tauri
-    return () => { active = false; stops.forEach(stop => stop()); };
-  }, [quickLoadDone, openMailFromSidebar]);
+  const { quickLoadDone, quickLoadHadAccountsRef } = useStartupLoad({ setPendingOperation, openMailFromSidebar });
 
   // Full initialization with delay (includes keychain access)
   // Gated on shouldStartFullInit(): fires once quick load has run and either

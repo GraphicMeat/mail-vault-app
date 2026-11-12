@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
-import { retryKeychainAccess } from '../services/workflows/retryKeychainAccess';
+import { workflowPort } from './workflowPorts';
+
+const retryKeychainAccess = workflowPort('retryKeychainAccess');
 
 // Portable mode (src-daemon/src/handlers/portable.rs): a copy running from a
 // drive keeps its accounts sealed there, locked at every launch. The daemon

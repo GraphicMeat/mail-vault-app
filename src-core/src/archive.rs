@@ -258,7 +258,7 @@ pub(crate) async fn run_with_backup_config(
     // Graph's per-mailbox concurrency limit, which answers a fifth with 429.
     // A session URL decides first, as `abd_worker::kind_of` does: a JMAP account
     // never takes the Graph path, whatever else its config says.
-    let graph = (account.uses_graph() && !account.uses_jmap()).then(|| {
+    let graph = (account.transport() == crate::imap::Transport::Graph).then(|| {
         let token = account.access_token.clone().unwrap_or_default();
         Arc::new(crate::graph::GraphClient::for_purpose(&token, "archive").for_account(&account.email))
     });
@@ -266,7 +266,7 @@ pub(crate) async fn run_with_backup_config(
     // one session for the run (its own, like the JMAP send). A session that
     // will not open fails each message with the reason, never the run. Four
     // at a time, like Graph. Nothing to fetch opens no session.
-    let jmap: Option<Result<Arc<crate::jmap::JmapClient>, String>> = if account.uses_jmap() && !uids.is_empty() {
+    let jmap: Option<Result<Arc<crate::jmap::JmapClient>, String>> = if account.transport() == crate::imap::Transport::Jmap && !uids.is_empty() {
         Some(match account.jmap_auth() {
             None => Err(crate::jmap::JmapError::Unauthorized.to_string()),
             Some(auth) => {

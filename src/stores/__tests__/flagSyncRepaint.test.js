@@ -122,6 +122,7 @@ vi.mock('../settingsStore', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { useSearchStore } = await import('../searchStore');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
 const { registerRows, unregisterRows } = await import('../messageRows');

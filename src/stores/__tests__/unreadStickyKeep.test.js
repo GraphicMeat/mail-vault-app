@@ -26,6 +26,7 @@ vi.mock('../../services/safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+await import('../../services/workflows/bindStoreActions');
 
 beforeEach(() => {
   useMailStore.setState({ unreadOnly: false, unreadKeep: new Set() });

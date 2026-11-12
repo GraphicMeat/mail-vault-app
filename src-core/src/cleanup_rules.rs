@@ -108,15 +108,7 @@ pub enum NoRun {
 // ── JS value semantics ─────────────────────────────────────────────────────
 
 /// JavaScript truthiness of a JSON value.
-pub fn truthy(v: Option<&Value>) -> bool {
-    match v {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0 && !f.is_nan()),
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(Value::Array(_)) | Some(Value::Object(_)) => true,
-    }
-}
+pub use crate::js_value::truthy;
 
 /// JavaScript `Number(v)` for the shapes a stored rule can hold. A string in
 /// a form JS reads but Rust does not (`"0x10"`) is NaN here: refused, which

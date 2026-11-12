@@ -7,10 +7,11 @@
 //! real guard on uncertain drain, and only normal joined completion releases
 //! admission. External-location authorization remains a native shell concern.
 
+use mailvault_core::imap::Transport;
 use crate::handlers::common;
 use crate::handlers::vault_flags as vault_flags_handler;
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::backup::{self, BackupProgress, BackupRunContext};
 use mailvault_core::transfer_limits::BackgroundLimit;
 use mailvault_core::vault_flags::{Applied, FlagChange};
@@ -210,9 +211,7 @@ fn run_context(
     // work). Graph and JMAP traffic is not wire-counted, so neither run has
     // a limit. A JMAP account is checked first: it never reaches the IMAP
     // runner, which would dial `imapHost` with the JMAP credentials.
-    let is_jmap = account.uses_jmap();
-    let is_graph = account.oauth2_transport.as_deref() == Some("graph");
-    let limit = (!is_graph && !is_jmap).then(|| {
+    let limit = (account.transport() == Transport::Imap).then(|| {
         BackgroundLimit::for_account(
             state.app_dir.clone(),
             account_id.clone(),
@@ -257,12 +256,10 @@ pub(crate) type Provider = Arc<
 pub(crate) fn provider() -> Provider {
     Arc::new(|ctx| {
         Box::pin(async move {
-            if ctx.account.uses_jmap() {
-                backup::run_jmap_account(ctx).await
-            } else if ctx.account.oauth2_transport.as_deref() == Some("graph") {
-                backup::run_graph_account(ctx).await
-            } else {
-                backup::run_imap_account(ctx).await
+            match ctx.account.transport() {
+                Transport::Jmap => backup::run_jmap_account(ctx).await,
+                Transport::Graph => backup::run_graph_account(ctx).await,
+                Transport::Imap => backup::run_imap_account(ctx).await,
             }
         })
     })

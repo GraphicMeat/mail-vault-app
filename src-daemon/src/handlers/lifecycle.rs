@@ -19,7 +19,7 @@
 //! and a store that cannot be written costs one message delivered again later.
 
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::lifecycle_mail::{self, Inputs, Store};
 use serde_json::{json, Value};
 use std::path::Path;
@@ -48,9 +48,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     })
 }
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
+use mailvault_core::clock::now_ms;
 
 fn run(app_dir: &Path, method: &str, params: &Value, now_ms: i64) -> Value {
     let _guard = STORE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -86,7 +84,8 @@ fn run(app_dir: &Path, method: &str, params: &Value, now_ms: i64) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use mailvault_core::lifecycle_mail::{DAY_MS, HOUR_MS};
 
     fn rig() -> (tempfile::TempDir, Arc<DaemonState>) {

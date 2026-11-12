@@ -1,7 +1,7 @@
 //! Backfills `message_addr` for vaults that existed before it did. Runs on its
 //! own background-QoS thread, one mailbox chunk (at most 500 rows) at a time,
 //! and waits for a quiet UI before each chunk.
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::people::message_addr::{backfill_chunk, backfill_done};
 use std::sync::Arc;
 use std::time::Duration;

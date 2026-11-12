@@ -7,6 +7,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const captured = { props: null };
 vi.mock('../ai/AiComposeActions', () => ({ AiComposeActions: (props) => { captured.props = props; return null; } }));

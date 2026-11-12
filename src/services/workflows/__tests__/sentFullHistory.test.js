@@ -79,6 +79,7 @@ vi.mock('../../syncService', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { loadSentHeaders, extendSentWindows, _sentFillFor, _resetSentFills, _sentTimings } = await import('../loadEmails');
 
 const IMAP = { id: 'acct-i', email: 'i@mock.test', password: 'pw' };

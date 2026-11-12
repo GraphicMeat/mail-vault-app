@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useId, useMemo, lazy, Suspense, memo } from 'react';
-import { useDialogA11y, hasOpenPopover } from '../hooks/useDialogA11y';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { useOriginalPictures } from '../hooks/useOriginalPictures';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
@@ -9,24 +9,19 @@ import { resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
-import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
+import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
 import { RecipientField } from './RecipientField';
-import { addRecipients, removeRecipientToken } from '../shared/recipientTokens';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
-import { prepareMessage, preparationIdentity, checkCompose, composeCheckInput } from '../services/composePrep';
+import { prepareMessage, preparationIdentity } from '../services/composePrep';
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs';
 import { withoutSnippet } from '../utils/withoutSnippet';
 import { composeIdentities, composeSenderName, composeSignature, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
-import { saveLocalDraft, deleteLocalDraft, newDraftId } from '../services/localDrafts';
-import { t, useT, tErr, getLocale } from '../i18n/index.js';
+import { deleteLocalDraft, newDraftId } from '../services/localDrafts';
+import { t, useT, getLocale } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
-import { emitTo, listen } from '@tauri-apps/api/event';
-import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { invoke } from '@tauri-apps/api/core';
-import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime, formatWallClock } from '../utils/scheduledTime';
@@ -35,20 +30,19 @@ import { DelayPicker, SendPlanNote } from './scheduled/SendLater';
 import { RemindIfNoReply } from './scheduled/RemindIfNoReply';
 import { isGraphAccount } from '../services/graphConfig';
 import { firstRecipient } from '../utils/mailto';
-import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
-import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
 import { replyWireHtml } from '../utils/quoteWire';
-import { clampComposeSize } from '../utils/composeSize';
-import { composeSnapshotForTransfer } from '../services/composeWindow';
-
-// The embedded modal and the detached window both clamp a restored/resized
-// size to whatever space is actually available right now, so a size saved on
-// a bigger monitor never reopens off-screen. `window.innerWidth/Height` is
-// the Tauri webview's own viewport either way — the detached window's is the
-// OS window's client area.
-const viewportBounds = () => ({ width: window.innerWidth - 32, height: window.innerHeight - 32 });
+import { useSendState } from './compose/useSendState';
+import { useComposeSize } from './compose/useComposeSize';
+import { useComposeRecipients } from './compose/useComposeRecipients';
+import { useComposeAttachments } from './compose/useComposeAttachments';
+import { useOriginalWindow } from './compose/useOriginalWindow';
+import { useDismissPopovers } from './compose/useDismissPopovers';
+import { useScheduleZoneSuggestion } from './compose/useScheduleZoneSuggestion';
+import { useDraftState } from './compose/useDraftState';
+import { useDraftAutosave } from './compose/useDraftAutosave';
+import { useComposeSend } from './compose/useComposeSend';
 
 const sizeLabel = (t, bytes) => {
   if (bytes < 1024) return t('settings.backup.account.b', { bytes });
@@ -97,19 +91,7 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 const NO_ALIASES = {};
-// A refused save retries by itself for as long as the window is open. Most
-// refusals are momentary (a sync or backup holding the same mailbox), so the
-// user hears about it only once they persist. From then on the same words also
-// go out under a new revision, since some refusals are about the revision.
-const DRAFT_SAVE_QUIET_FAILURES = 3;
-const draftRetryDelay = failures => Math.min(500 * 2 ** (failures - 1), 30000);
 const SEND_SETTING_KEYS = ['aliases', 'sendAsAddresses', 'displayNames', 'attachmentReminder', 'billingProfile', 'shareGrant', 'sendDelay', 'undoSendEnabled', 'undoSendDelay'];
-// Increment at the setter boundary, before React commits or autosave publishes.
-function useSendState(initial, invalidate) {
-  const [value, setValue] = useState(initial);
-  const change = useCallback(next => { invalidate(); setValue(next); }, [invalidate]);
-  return [value, change];
-}
 
 export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup, acknowledgePreparation, prepareSendCheck, finalizeSendCheck, invalidateSendCheck, sendInvalidationRef, preparedQuote = null }) {
   const sendGeneration = useRef(0);
@@ -212,7 +194,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [autoDetach, setAutoDetach] = useState(() => composeOpenMode === 'window' && !!onDetach && !detached);
   const [autoDetachTick, setAutoDetachTick] = useState(0);
   const [error, setError] = useState(null);
-  const [attachments, setAttachments] = useSendState([], invalidate);
   const [showAttachmentReminder, setShowAttachmentReminder] = useState(false);
   // Bytes a Graph or JMAP account takes, while the "too large" warning is up.
   const [sizeWarningLimit, setSizeWarningLimit] = useState(null);
@@ -231,7 +212,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
   // Context width as a ratio of the layout; null = 400px. A draft's own wins.
   const [contextSplit, setContextSplit] = useState(() => initialData?._contextSplit || composeContextSplit);
-  const [originalDetached, setOriginalDetached] = useState(false);
   // The replied message's thread, as the list threads it; resolved once, so
   // list churn never reshuffles what is being read.
   const [originalThread] = useState(() => (detached ? null : resolveOriginalThread(replyTo || initialData?._replyTo || null, useMailStore.getState())));
@@ -239,22 +219,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const defaultOriginalDark = useDefaultEmailDark();
   const [originalDarkOverride, setOriginalDarkOverride] = useState(() => initialData?._originalDark ?? null);
   const originalDark = originalDarkOverride ?? defaultOriginalDark;
-  const originalWindowRef = useRef(null);
-  const originalCloseStopRef = useRef(null);
   const contextDragRef = useRef(null);
   const [contentWidth, setContentWidth] = useState(Infinity);
-  // A restored/minimized draft keeps the size it was at; a fresh embedded
-  // compose opens at the last size chosen (mirrors contextSplit above). The
-  // detached window's own size is set natively at creation (App.jsx passes
-  // the remembered size to open_compose_window), so it needs no seed here.
-  const [composeSize, setComposeSize] = useState(() => {
-    const seed = initialData?._composeSize || (!detached && composeSizeSetting) || null;
-    return seed ? clampComposeSize(seed, viewportBounds()) : null;
-  });
-  // WebKit reports a null relatedTarget on dragleave, so the old
-  // `contains(relatedTarget)` check never worked — count enter/leave instead.
-  const dragDepth = useRef(0);
-  const [dragging, setDragging] = useState(false);
   // What Send does (utils/sendPlan.js): null sends now under the global send
   // delay; the Send later panel arms `{ kind: 'in', minutes }` or
   // `{ kind: 'at' }` (scheduleDraft). An edit of a scheduled email starts
@@ -295,40 +261,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const shellRef = useRef(null);
   const onSaveStateRef = useRef(onSaveState);
   useEffect(() => { onSaveStateRef.current = onSaveState; }, [onSaveState]);
-  useEffect(() => () => {
-    originalCloseStopRef.current?.();
-    void originalWindowRef.current?.destroy();
-  }, []);
+  const { originalDetached, openOriginalWindow } = useOriginalWindow({ shownContextHtml, originalDark, setError });
 
-  const openOriginalWindow = async () => {
-    if (originalWindowRef.current) {
-      await originalWindowRef.current.setFocus();
-      return;
-    }
-    const token = crypto.randomUUID();
-    let unlisten;
-    try {
-      unlisten = await listen('original-message-ready', async event => {
-        if (event.payload?.token !== token) return;
-        await emitTo(event.payload.label, 'original-message-payload', { token, html: shownContextHtml, dark: originalDark });
-        unlisten?.();
-      });
-      const label = await invoke('open_auxiliary_window', { kind: 'original', token });
-      const window = await WebviewWindow.getByLabel(label);
-      if (!window) throw new Error('Original message window did not open');
-      originalWindowRef.current = window;
-      setOriginalDetached(true);
-      originalCloseStopRef.current = await window?.onCloseRequested(() => {
-        originalCloseStopRef.current?.();
-        originalCloseStopRef.current = null;
-        originalWindowRef.current = null;
-        setOriginalDetached(false);
-      });
-    } catch (cause) {
-      unlisten?.();
-      setError(cause?.message || String(cause));
-    }
-  };
 
   const setComposeShellRef = useCallback((node) => {
     dialogRef.current = node;
@@ -348,99 +282,9 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (detached || !shellRef.current || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(([entry]) => {
-      // The CSS resize handle reports a content box. Persisting that value as
-      // the next border-box style width subtracts the border on every pass.
-      // Use the rendered border box so observing then restoring is stable.
-      const borderBox = Array.isArray(entry.borderBoxSize) ? entry.borderBoxSize[0] : entry.borderBoxSize;
-      const width = borderBox?.inlineSize || shellRef.current?.offsetWidth;
-      const height = borderBox?.blockSize || shellRef.current?.offsetHeight;
-      if (!width || !height) return;
-      setComposeSize(previous => (
-        previous && Math.abs(previous.width - width) < 1 && Math.abs(previous.height - height) < 1
-          ? previous
-          : { width: Math.round(width), height: Math.round(height) }
-      ));
-    });
-    observer.observe(shellRef.current);
-    return () => observer.disconnect();
-  }, [detached]);
+  const { composeSize, resizeComposeWindow } = useComposeSize({ initialData, detached, composeSizeSetting, shellRef, setComposeSizeSetting });
 
-  // Every new compose opens at the last size chosen — same write-through as
-  // chooseContextSplit, debounced so a drag writes once it settles rather
-  // than on every frame. `setComposeSizeSetting` is the relayed setter in a
-  // detached window (ComposeWindow.jsx), so this is correct there too, should
-  // this component ever observe its own resize; today only the embedded
-  // ResizeObserver above feeds it (the effect below covers the detached case).
-  useEffect(() => {
-    if (detached || !composeSize) return undefined;
-    const timer = setTimeout(() => {
-      Promise.resolve(setComposeSizeSetting?.(composeSize)).catch(() => {});
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [detached, composeSize, setComposeSizeSetting]);
-
-  // The detached window is a real OS window: its resize never touches
-  // shellRef, so it gets its own listener straight from Tauri instead of the
-  // ResizeObserver above. Debounced the same way.
-  useEffect(() => {
-    if (!detached || typeof window === 'undefined' || !window.__TAURI__) return undefined;
-    const win = getCurrentWebviewWindow();
-    // Every other spec's WebviewWindow stub is shaped for what it tests (most
-    // only ever read `.label`) — a real one always has this, so skip quietly
-    // rather than widen every mock in the suite for a method it never uses.
-    if (typeof win?.onResized !== 'function') return undefined;
-    let disposed = false;
-    let timer;
-    let stop;
-    win.onResized(({ payload }) => {
-      clearTimeout(timer);
-      timer = setTimeout(async () => {
-        try {
-          const scale = await win.scaleFactor();
-          if (disposed || !payload?.width || !payload?.height) return;
-          Promise.resolve(setComposeSizeSetting?.({ width: payload.width / scale, height: payload.height / scale })).catch(() => {});
-        } catch { /* window gone mid-resize */ }
-      }, 300);
-    }).then(fn => { if (disposed) fn(); else stop = fn; }).catch(() => {});
-    return () => { disposed = true; clearTimeout(timer); stop?.(); };
-  }, [detached, setComposeSizeSetting]);
-
-  // Stable logical identity is independent of the native accepted location.
-  const draftIdRef = useRef(initialData?._draftId || null);
-  const draftUidRef = useRef(initialData?._draftUid || null);
-  const draftMailboxRef = useRef(initialData?._draftMailbox || null);
-  const draftAccountRef = useRef(initialData?._draftAccountId || initialData?._accountId || null);
-  const acceptedRevisionRef = useRef(initialData?._draftAcceptedRevision || 0);
-  const acceptanceUnknownRef = useRef(Boolean(initialData?._draftAcceptanceUnknown));
-  const issuedDraftRef = useRef({
-    revision: initialData?._draftRevision || 0,
-    content: initialData?._draftContent || null,
-    signature: initialData?._draftUiSignature || (initialData?._draftContent ? JSON.stringify(initialData._draftContent) : null),
-  });
-  const initialNativeContentRef = useRef(null);
-  const recoveredContentRef = useRef(initialData?._draftRecoveredContent || null);
-  const recoveryUiBaselineRef = useRef(null);
-  const recoveredKnownRef = useRef(initialData?._draftRecoveredKnown || null);
-  const acceptedContentRef = useRef(!initialData?._draftAcceptanceUnknown && initialData?._draftRevision > 0 && initialData._draftRevision === initialData._draftAcceptedRevision
-    ? initialData._draftContent || null : null);
-  const saveChainRef = useRef(Promise.resolve());
-  const queuedDraftRef = useRef(null);
-  const terminalIntentRef = useRef(null);
-  const terminalOperationRef = useRef(null);
-  const [terminalState, setTerminalState] = useState(null);
-  const [draftSaveError, setDraftSaveError] = useState(null);
-  const [draftRetry, setDraftRetry] = useState(0);
-  const [draftOmitted, setDraftOmitted] = useState(null);
-  const draftFailuresRef = useRef(0);
-  const draftRetryTimerRef = useRef(null);
-  // Only words this window issued may go above a revision it never saw. A
-  // restored snapshot can be older than the vault (the app died before it
-  // reached disk), and resending it would overwrite the newer copy.
-  const wordsIssuedHereRef = useRef(false);
-  useEffect(() => () => clearTimeout(draftRetryTimerRef.current), []);
+  const { draftIdRef, draftUidRef, draftMailboxRef, draftAccountRef, acceptedRevisionRef, acceptanceUnknownRef, issuedDraftRef, initialNativeContentRef, recoveredContentRef, recoveryUiBaselineRef, recoveredKnownRef, acceptedContentRef, saveChainRef, queuedDraftRef, terminalIntentRef, terminalOperationRef, terminalState, setTerminalState, draftSaveError, setDraftSaveError, draftRetry, setDraftRetry, draftOmitted, setDraftOmitted, draftFailuresRef, draftRetryTimerRef, wordsIssuedHereRef } = useDraftState({ initialData });
 
   const [formData, setFormData] = useSendState({
     to: '',
@@ -737,196 +581,17 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     });
   }, [selectedAccountId, composeFrom]);
 
-  // A recipient chip field hands over its whole comma-joined string.
-  const setRecipients = (field) => (value) => {
-    // WebKit blurs the focused field when sending makes the editor inert.
-    // Committing its unchanged draft is not a new mail generation.
-    if (detaching || value === formData[field]) return;
-    editRevision.current[field]++;
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null);
-  };
-
-  // A pasted mailto: link's ?cc= / ?bcc= land in those fields.
-  const routeRecipients = (field, text) => {
-    if (detaching) return;
-    editRevision.current[field]++;
-    setFormData(prev => ({ ...prev, [field]: addRecipients(prev[field] || '', text) }));
-    setError(null);
-  };
-
-  // A chip dragged from one recipient field to another.
-  const moveRecipient = (from, to, token) => {
-    if (detaching) return;
-    editRevision.current[from]++; editRevision.current[to]++;
-    setFormData(prev => ({
-      ...prev,
-      [from]: removeRecipientToken(prev[from] || '', token),
-      [to]: addRecipients(prev[to] || '', token),
-    }));
-    setError(null);
-  };
-
-  const handleChange = (e) => {
-    if (detaching) return;
-    const { name, value } = e.target;
-    if (name in editRevision.current) editRevision.current[name]++;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    setError(null);
-  };
+  const { setRecipients, routeRecipients, moveRecipient, handleChange } = useComposeRecipients({ detaching, formData, editRevision, setFormData, setError });
   
-  // Shared by the file picker, the modal-wide drop fallback, the dashed attach
-  // strip, and non-image files dropped on the editor.
-  const addFiles = (files) => {
-    if (detaching) return;
-    for (const file of files) {
-      // Read file as base64
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result.split(',')[1];
-        setAttachments(prev => [...prev, {
-          filename: file.name,
-          contentType: file.type || 'application/octet-stream',
-          size: file.size,
-          content: base64,
-          isFromOriginal: false
-        }]);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleFileSelect = (e) => {
-    if (detaching) return;
-    addFiles(Array.from(e.target.files || []));
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleDrop = (e) => {
-    if (detaching) return;
-    e.preventDefault();
-    e.stopPropagation();
-    addFiles(Array.from(e.dataTransfer?.files || []));
-  };
-
-  const removeAttachment = (index) => {
-    if (detaching) return;
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // Native file drops. In the app a file drag never reaches WebKit (see
-  // src/utils/nativeDrop.js): Tauri reports enter/leave for the zone visuals
-  // and the drop as pasteboard paths plus the pointer position. The element
-  // under that point picks the zone, as the HTML5 handlers do by target.
-  useEffect(() => {
-    if (!window.__TAURI__ || document.body.dataset.mailvaultDemo === 'true') return undefined;
-    let disposed = false;
-    const stops = [];
-    const onDrop = async ({ paths = [], position } = {}) => {
-      if (detaching) return;
-      dragDepth.current = 0;
-      setDragging(false);
-      const point = toClientPoint(position, {
-        dpr: window.devicePixelRatio, width: window.innerWidth, height: window.innerHeight,
-      });
-      const zone = dropZoneAt(point, (x, y) => document.elementFromPoint(x, y));
-      if (!zone || !paths.length) return;
-      try {
-        const records = (await invoke('read_dropped_files', { paths })).map(toAttachment);
-        const inline = zone === 'editor' ? records.filter(r => r.contentType.startsWith('image/')) : [];
-        const attach = records.filter(r => !inline.includes(r));
-        if (inline.length) {
-          const editor = editorRef.current;
-          const pos = editor?.view?.posAtCoords({ left: point.x, top: point.y })?.pos ?? null;
-          insertImages(editor, inline.map(r => ({ src: `data:${r.contentType};base64,${r.content}`, name: r.filename })), pos);
-        }
-        if (attach.length) setAttachments(prev => [...prev, ...attach]);
-      } catch (e) {
-        setError(String(e?.message ?? e));
-      }
-    };
-    const target = { target: getCurrentWebviewWindow().label };
-    Promise.all([
-      listen('tauri://drag-enter', () => { if (!detaching) setDragging(true); }, target),
-      listen('tauri://drag-leave', () => { if (!detaching) setDragging(false); }, target),
-      listen('tauri://drag-drop', (ev) => onDrop(ev.payload), target),
-    ]).then((fns) => { if (disposed) fns.forEach(f => f()); else stops.push(...fns); }).catch(() => {});
-    return () => { disposed = true; stops.forEach(f => f()); };
-  }, [detaching]);
+  const { attachments, setAttachments, dragging, setDragging, dragDepth, addFiles, handleFileSelect, handleDrop, removeAttachment } = useComposeAttachments({ invalidate, detaching, fileInputRef, editorRef, setError });
   
-  // Close templates dropdown on click outside or Escape
-  useEffect(() => {
-    if (!showTemplates) return;
-    const handleClick = (e) => {
-      if (templatesRef.current && !templatesRef.current.contains(e.target)) {
-        setShowTemplates(false);
-        setSavingTemplate(false);
-      }
-    };
-    const handleKey = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setShowTemplates(false);
-        setSavingTemplate(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    // Capture phase so this runs before the modal-level Escape handler,
-    // letting us stopPropagation and keep the compose modal open while
-    // the templates dropdown is visible.
-    document.addEventListener('keydown', handleKey, true);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey, true);
-    };
-  }, [showTemplates]);
+  useDismissPopovers({ showTemplates, templatesRef, setShowTemplates, setSavingTemplate, showSchedulePicker, scheduleRef, setShowSchedulePicker });
 
-  // Close the schedule popover on click outside or Escape — same shape as
-  // the templates dropdown above. The picker's calendar and zone list are
-  // portaled to body, outside scheduleRef: while one is open it owns the
-  // outside click and the Escape, and only that layer closes.
-  useEffect(() => {
-    if (!showSchedulePicker) return;
-    const handleClick = (e) => {
-      if (hasOpenPopover()) return;
-      if (scheduleRef.current && !scheduleRef.current.contains(e.target)) setShowSchedulePicker(false);
-    };
-    const handleKey = (e) => {
-      if (e.key === 'Escape' && !hasOpenPopover()) { e.stopPropagation(); setShowSchedulePicker(false); }
-    };
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey, true);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey, true);
-    };
-  }, [showSchedulePicker]);
-
-  // Preselect the recipient's zone when the schedule panel opens, and again
-  // if the first To address changes while it is open. Never over a zone
-  // picked by hand, and never on an edit of a scheduled email, whose own
-  // zone is the answer. The panel does not wait for the daemon.
   const suggestFor = firstRecipient(formData.to);
   const suggestAddress = suggestFor?.address.toLowerCase() || '';
   const suggestName = suggestFor?.name || suggestFor?.address || '';
   const editingScheduled = Boolean(initialData?._editScheduledId);
-  useEffect(() => {
-    if (!schedulePremium || !suggestAddress || scheduleDraft.tzPicked || editingScheduled) return undefined;
-    let live = true;
-    const timer = setTimeout(async () => {
-      const suggestion = await useScheduledStore.getState().suggestTz(suggestAddress);
-      if (!live) return;
-      // Back to this machine's zone when there is nothing for this
-      // recipient: a zone already there was suggested for someone else.
-      const tz = suggestion?.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
-      setScheduleDraft(d => (d.tzPicked || d.tz === tz ? d : { ...d, tz }));
-      setTzSuggestion(suggestion && { ...suggestion, name: suggestName, address: suggestAddress });
-    }, 250);
-    return () => { live = false; clearTimeout(timer); };
-  }, [schedulePremium, suggestAddress, suggestName, scheduleDraft.tzPicked, editingScheduled]);
+  useScheduleZoneSuggestion({ schedulePremium, suggestAddress, scheduleDraft, editingScheduled, setScheduleDraft, setTzSuggestion, suggestName });
 
   const insertTemplate = (template) => {
     if (detaching) return;
@@ -982,90 +647,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     else useMailStore.getState().requestSettingsTab('billing');
   };
 
-  // Send and Shift+Enter both land here; the armed plan picks the path.
-  // "Send anyway" on the attachment reminder comes back with `sendAnyway`.
-  const handleSend = async (event, sendAnyway = false) => {
-    event?.preventDefault();
-    if (submission.current || detaching || terminalIntentRef.current || !aliveRef.current) return;
-    if (!preparationReadyRef.current || needsPreparation && (preparedContext.current?.source !== currentPreparation.current.source || preparedContext.current?.identityGeneration !== currentPreparation.current.identityGeneration)) { setError(t('compose.preparationUnavailable')); return; }
-    const generation = sendGeneration.current;
-    const confirmed = sendAnyway && confirmation.current?.generation === generation ? confirmation.current : null;
-    const attempt = ++nextAttempt.current;
-    const claim = { attempt, generation };
-    submission.current = claim;
-    const current = () => aliveRef.current && !terminalIntentRef.current && submission.current === claim && sendGeneration.current === generation;
-    // composeSnapshot/captureDraft synchronously pins the issued content and cleanup bound.
-    const snapshot = composeSnapshotForTransfer(confirmed?.snapshot || latestSnapshotRef.current());
-    const accountSource = selectedAccount;
-    const account = composeSnapshotForTransfer(accountSource);
-    const senderSettings = { displayName: senderNameFor(accountSource, snapshot._fromAddress) };
-    const timeZone = confirmed?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    let draft;
-    const outcome = result => {
-      if (result.kind === 'invalid') { confirmation.current = null; setError(t(result.key, result.args)); return false; }
-      if (result.kind === 'confirm_attachment') {
-        confirmation.current = { snapshot, generation, timeZone, attempt };
-        setShowAttachmentReminder(true); return false;
-      }
-      if (result.kind === 'confirm_size') {
-        confirmation.current = { snapshot, generation, timeZone, attempt };
-        setSizeWarningLimit(result.limitBytes); return false;
-      }
-      if (result.kind !== 'ready') throw new Error('compose.preparationUnavailable');
-      return true;
-    };
-    setSending(true);
-    setError(null);
-    try {
-      await saveChainRef.current.catch(() => {});
-      if (!current()) return;
-      const result = prepareSendCheck
-        ? await prepareSendCheck({ attempt, editorGeneration: generation, ...(confirmed
-          ? { confirmationAttempt: confirmed.attempt }
-          : { snapshot, authoredBodyText: htmlToText(snapshot.body), timeZone }) })
-        : await checkCompose(composeCheckInput({ snapshot, mode, authoredBodyText: htmlToText(snapshot.body), timeZone, sendAnyway: !!confirmed }), { isCurrent: current });
-      if (!current()) return;
-      if (!outcome(result)) return;
-      // Preserve moved-schedule failure recovery through detached finalization.
-      draft = result.route.draft;
-      if (finalizeSendCheck) {
-        const final = await finalizeSendCheck({ attempt, editorGeneration: generation }, !!result.route.draft);
-        if (!current()) return;
-        if (final) outcome(final);
-        return;
-      }
-      // No await between current authority comparison and entering the existing owner.
-      if (useMailStore.getState().accounts?.find(a => a.id === snapshot._accountId) !== accountSource
-        || senderNameFor(accountSource, snapshot._fromAddress) !== senderSettings.displayName) throw new Error('compose.preparationUnavailable');
-      const handoff = composeSnapshotForTransfer(snapshot);
-      handoff._composeDelay = result.route.delay;
-      if (draft) handoff._scheduleDraft = draft;
-      handoff._remindDays = snapshot._remindDays > 0 && !isGraphAccount(account) && hasPremiumAccess(useSettingsStore.getState().billingProfile) ? snapshot._remindDays : 0;
-      confirmation.current = null;
-      if (draft) {
-        if (onSchedule) await onSchedule(handoff);
-        else {
-          await scheduleCompose({ snapshot: handoff, account, settings: senderSettings, cleanupDraft: onDraftCleanup });
-          onSend?.(); onClose();
-        }
-      } else if (onQueueSend) await onQueueSend(handoff, result.route.delay);
-      else {
-        const composeState = { mode, replyTo: handoff._replyTo || actionReplyTo, initialData: handoff };
-        useMailStore.getState().queueSend(composeState,
-          createComposeSend({ snapshot: handoff, mode, replyTo: composeState.replyTo, account, settings: senderSettings, cleanupDraft: onDraftCleanup }), result.route.delay);
-        onSend?.(); onClose();
-      }
-    } catch (err) {
-      if (!current()) return;
-      confirmation.current = null;
-      if (draft && initialData?._editScheduledId && initialData._editScheduledRow?.accountId !== selectedAccountId) initialSnapshot.current = null;
-      setError(err?.message ? tErr(err) : t('scheduled.errors.scheduleFailed'));
-      invalidate();
-    } finally {
-      if (submission.current === claim) submission.current = null;
-      if (aliveRef.current) setSending(false);
-    }
-  };
 
   const hasUserContent = initialSnapshot.current
     ? (formData.to !== initialSnapshot.current.to ||
@@ -1182,6 +763,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
+  const { handleSend } = useComposeSend({ submission, detaching, terminalIntentRef, aliveRef, preparationReadyRef, needsPreparation, preparedContext, currentPreparation, setError, sendGeneration, confirmation, nextAttempt, latestSnapshotRef, selectedAccount, senderNameFor, setShowAttachmentReminder, setSizeWarningLimit, setSending, saveChainRef, prepareSendCheck, mode, finalizeSendCheck, onSchedule, onDraftCleanup, onSend, onClose, onQueueSend, actionReplyTo, initialData, selectedAccountId, initialSnapshot, invalidate });
   if (snapshotRef) snapshotRef.current = async () => {
     await saveChainRef.current.catch(() => {});
     return latestSnapshotRef.current();
@@ -1210,67 +792,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     return () => clearTimeout(timer);
   }, [hasSessionState, sending, sessionSignature, publishSnapshot]);
 
-  // Issue complete revisions at the existing 300 ms pause. The request is
-  // immutable while queued; native code alone chooses folders and physical UIDs.
-  useEffect(() => {
-    if (!maySaveDraft || sending || terminalIntentRef.current || !selectedAccount) return;
-    const timer = setTimeout(() => {
-      if (terminalIntentRef.current) return;
-      const issued = captureDraft();
-      if (!issued.content || (issued.content === acceptedContentRef.current && !draftSaveError) || queuedDraftRef.current === issued) return;
-      const request = JSON.parse(JSON.stringify({ draftId: draftIdRef.current, revision: issued.revision, ...issued.content }));
-      queuedDraftRef.current = issued;
-      publishSnapshot();
-      saveChainRef.current = saveChainRef.current.then(async () => {
-        let superseded = false;
-        try {
-          if (terminalIntentRef.current) return;
-          const result = await saveLocalDraft(request);
-          superseded = result?.disposition === 'superseded';
-          const current = result?.current;
-          const revision = current?.entry?.revision ?? result?.revision;
-          if (result?.draftId === draftIdRef.current && current && revision >= acceptedRevisionRef.current) {
-            acceptedRevisionRef.current = revision;
-            draftAccountRef.current = current.identity.accountId;
-            draftMailboxRef.current = current.identity.mailbox;
-            draftUidRef.current = current.identity.uid;
-          }
-          if (result?.draftId !== request.draftId || result.disposition === 'superseded' || revision !== request.revision || revision < acceptedRevisionRef.current) {
-            throw new Error(t('compose.draftContentNotAccepted'));
-          }
-          acceptedContentRef.current = issued.content;
-          if (issuedDraftRef.current === issued) {
-            acceptanceUnknownRef.current = false;
-            draftFailuresRef.current = 0;
-            // The words are saved. An old copy still waiting to retire is the
-            // daemon's to finish on a later save, not something to alarm about.
-            setDraftSaveError(null);
-            setDraftOmitted(result.omittedAttachments?.length ? result.omittedAttachments.join(', ') : null);
-          }
-        } catch (err) {
-          console.warn('[compose:autosave_fail]', err);
-          // Restored words the vault has already moved past: nothing is lost,
-          // and the next edit lands above the revision adopted just now.
-          if (superseded && !wordsIssuedHereRef.current) return;
-          if (issuedDraftRef.current === issued && aliveRef.current) {
-            const failures = ++draftFailuresRef.current;
-            const persisting = failures >= DRAFT_SAVE_QUIET_FAILURES;
-            // A superseded revision can never land, so it does not wait its turn.
-            if ((superseded || persisting) && wordsIssuedHereRef.current) {
-              issuedDraftRef.current = { ...issued, revision: Math.max(issued.revision, acceptedRevisionRef.current) + 1 };
-            }
-            if (persisting) setDraftSaveError(t('compose.draftContentNotAccepted'));
-            clearTimeout(draftRetryTimerRef.current);
-            draftRetryTimerRef.current = setTimeout(() => setDraftRetry(value => value + 1), draftRetryDelay(failures));
-          }
-        } finally {
-          if (queuedDraftRef.current === issued) queuedDraftRef.current = null;
-          publishSnapshot();
-        }
-      });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [draftSignature, maySaveDraft, sending, selectedAccountId, draftRetry, publishSnapshot]);
+  useDraftAutosave({ maySaveDraft, sending, terminalIntentRef, selectedAccount, captureDraft, acceptedContentRef, draftSaveError, queuedDraftRef, draftIdRef, publishSnapshot, saveChainRef, acceptedRevisionRef, draftAccountRef, draftMailboxRef, draftUidRef, issuedDraftRef, acceptanceUnknownRef, draftFailuresRef, setDraftSaveError, setDraftOmitted, wordsIssuedHereRef, aliveRef, draftRetryTimerRef, setDraftRetry, draftSignature, selectedAccountId, draftRetry });
 
   /** Freeze intent before waiting for saves; retries retain this exact ID. */
   const closeDiscarding = useCallback(() => {
@@ -1477,23 +999,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const composeWindowStyle = {
     ...(!detached && composeSize ? { width: composeSize.width, height: composeSize.height } : {}),
     ...(detaching ? { pointerEvents: 'none' } : {}),
-  };
-  const resizeComposeWindow = (event) => {
-    const { key, shiftKey } = event;
-    const widthDelta = key === 'ArrowLeft' ? -24 : key === 'ArrowRight' ? 24 : 0;
-    const heightDelta = shiftKey && key === 'ArrowUp' ? -24 : shiftKey && key === 'ArrowDown' ? 24 : 0;
-    if (!widthDelta && !heightDelta) return;
-    event.preventDefault();
-    setComposeSize(previous => {
-      const current = previous || {
-        width: shellRef.current?.clientWidth || 640,
-        height: shellRef.current?.clientHeight || 520,
-      };
-      return clampComposeSize(
-        { width: current.width + widthDelta, height: current.height + heightDelta },
-        viewportBounds(),
-      );
-    });
   };
 
   return (

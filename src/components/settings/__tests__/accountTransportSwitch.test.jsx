@@ -6,6 +6,7 @@ import { AccountSettings } from '../AccountSettings';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 
 // Settings > Accounts > Connection switches a Microsoft account between Graph
 // and IMAP in place: a sign-in with the new transport's scopes, then one

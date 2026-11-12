@@ -19,6 +19,7 @@ import { useThemeStore } from '../../../stores/themeStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { FullViewEmailModal } from '../FullViewEmailModal';
 import { cancelSelection, getSelectionGeneration, selectEmail as realSelectEmail } from '../../../services/workflows/selectEmail';
+import '../../../services/workflows/bindStoreActions';
 
 const actionMutations = vi.hoisted(() => ({
   applyFlagToKeys: vi.fn().mockResolvedValue(undefined),

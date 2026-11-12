@@ -16,6 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { registryRows } from './helpers/rustSources.js';
 
 function sources(dir) {
   const out = [];
@@ -95,16 +96,18 @@ describe('the daemon owns the token', () => {
 
   it('routes only credential-free sync, compose and backup controls before injection', () => {
     const handle = server.slice(server.indexOf('async fn handle_request('), server.indexOf('fn jmap_refusal_log_line')).replace(/\/\/[^\n]*/g, '');
-    const exempt = /if matches!\(\s*method\.as_str\(\),\s*([^)]*)\s*\) \{\s*return route_request\(state, req\)\.await;\s*\}/.exec(handle);
+    // The exempt set is the method table's `.strict()` rows (rpc_registry.rs);
+    // handle_request asks the table and routes those before any injection.
+    const exempt = /if crate::rpc_registry::is_strict\(&method\) \{\s*return route_request\(state, req\)\.await;\s*\}/.exec(handle);
     expect(exempt).not.toBeNull();
-    expect([...exempt[1].matchAll(/"([^"]+)"/g)].map(match => match[1])).toEqual([
+    expect(registryRows().filter(row => row.strict).map(row => row.name).sort()).toEqual([
       'sync.probe', 'counts.unread', 'sync.refresh', 'sync.refresh_status', 'sync.context',
       'pipeline.focus', 'pipeline.status', 'folders.status',
       'compose.reply_context', 'compose.check',
       'backup.schedule.get', 'backup.schedule.set', 'backup.run_now',
       'backup.cancel', 'backup.stop', 'backup.schedule.status',
       'backup.attach_access', 'backup.access_status', 'backup.context', 'backup.surface_retire',
-    ]);
+    ].sort());
     expect([...handle.matchAll(/route_request\(state, req\)/g)]).toHaveLength(3);
     const ordinary = handle.slice(exempt.index + exempt[0].length);
     const injection = ordinary.indexOf('oauth_tokens::inject(');

@@ -21,7 +21,7 @@
 //! exact message is never fetched by both at once.
 
 use crate::account_lifecycle::AccountStamp;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::fetch_mode::FetchMode;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};

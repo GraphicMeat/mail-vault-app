@@ -11,6 +11,7 @@ import { PRIVACY_GATE_ID, maskOriginal } from '../../utils/iframePrivacyRedact';
 import { applySearchHighlight } from '../../utils/iframeSearchHighlight';
 import { useSearchHighlight } from '../useSearchHighlight';
 import { useSearchStore } from '../../stores/searchStore';
+import '../../services/workflows/bindStoreActions';
 
 // jsdom does not load srcdoc, so the test frame's document is written by hand.
 function Frame({ html, show = true }) {

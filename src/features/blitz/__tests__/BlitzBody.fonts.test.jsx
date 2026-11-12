@@ -17,6 +17,7 @@ vi.mock('../../../services/fontService', () => ({
 import { familyForMail, refreshFonts } from '../../../services/fontService';
 import BlitzBody from '../BlitzBody';
 import { _resetDocRegistryForTest } from '../surfaces/docRegistry';
+import '../../../services/workflows/bindStoreActions';
 
 beforeEach(() => { order.length = 0; vi.clearAllMocks(); });
 afterEach(() => { cleanup(); _resetDocRegistryForTest(); });

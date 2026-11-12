@@ -105,6 +105,7 @@ vi.mock('../../safeStorage', () => ({
 vi.mock('../../transport', () => ({ send: (...a) => mockTauriInvoke(...a) }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { saveEmailLocally } = await import('../messageMutations.js');
 
 const ACCOUNT = { id: 'acct1', email: 'luke@mock.test' };

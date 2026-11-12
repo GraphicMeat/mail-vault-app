@@ -2,6 +2,7 @@
 // reaches it by name, and the demo answers it without a server.
 import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { shellSource, registryRow } from './helpers/rustSources.js';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
 import { createDemoBackend } from '../../src/demo/backend.js';
 
@@ -10,9 +11,10 @@ it('routes messages.restore to the daemon, which implements it and lets the inde
   const deleted = readFileSync('src-daemon/src/handlers/deleted.rs', 'utf8');
   expect(deleted).toContain('"messages.restore"');
   expect(readFileSync('src-daemon/src/server.rs', 'utf8')).toContain('crate::handlers::deleted::route(');
-  expect(readFileSync('src-daemon/src/search_index.rs', 'utf8')).toMatch(/is_foreground_method[\s\S]*"messages\.restore"/);
+  // The index yields to it: its row in the method table is flagged foreground.
+  expect(registryRow('messages.restore')).toMatchObject({ foreground: true, domain: 'Deleted' });
   // A user-facing call that can talk to the server: a finite reply budget.
-  expect(readFileSync('src-tauri/src/main.rs', 'utf8')).toMatch(/"messages\.restore" => Some\(Duration::from_secs\(\d+\)\)/);
+  expect(shellSource()).toMatch(/"messages\.restore" => Some\(Duration::from_secs\(\d+\)\)/);
 });
 
 it('the demo puts a message deleted to Trash back, by its Trash uid or its Message-ID', async () => {

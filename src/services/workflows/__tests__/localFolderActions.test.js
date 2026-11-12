@@ -113,6 +113,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { canSnooze } = await import('../snooze');
 const { purgeEverywhere, applyFlagToKeys } = await import('../messageMutations');
 const { resolveMessageBody } = await import('../../export/bodyResolver');

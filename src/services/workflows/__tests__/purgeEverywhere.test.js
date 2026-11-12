@@ -37,6 +37,7 @@ import {
 } from './purgeEverywhereHarness';
 import { captureBulkScope } from '../../bulkSelection.js';
 import { captureSelectionSnapshot } from '../../headerIdentity.js';
+import '../bindStoreActions';
 const row = (uid) => ({
   ...serverMsg(uid),
   _nativeIdentity: {

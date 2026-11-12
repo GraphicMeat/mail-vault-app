@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
 import { normalizeMessageId } from '../utils/emailParser.js';
+import { workflowPort } from './workflowPorts';
+import { listenTo } from '../services/listenTo.js';
 
 // Rows from `snooze.*` (src-daemon/src/handlers/snooze.rs), modeled on
 // scheduledStore.js: one flat list of snoozed/failed rows, refetched on
@@ -102,14 +104,6 @@ async function markWokenUnread(row, applySeenLocally) {
   }
 }
 
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await import('@tauri-apps/api/event');
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
-  }
-}
 
 let _initialized = false;
 
@@ -126,7 +120,8 @@ export function initSnooze() {
     const row = useSnoozeStore.getState().rows.find(r => r.id === payload?.id);
     useSnoozeStore.getState().applyEvent(payload);
     if (payload?.state !== 'woken') return;
-    const { reloadListInView, applySeenLocally } = await import('../services/workflows/messageMutations');
+    const reloadListInView = workflowPort('reloadListInView');
+    const applySeenLocally = workflowPort('applySeenLocally');
     // `woke` is false for an undo, which left \Seen alone: that is no news.
     const localWake = payload.woke && payload.arrival?.kind === 'local-wake'
       && payload.arrival.wakeRef;

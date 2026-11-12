@@ -24,6 +24,7 @@ import * as accounts from '../../../services/db/accounts.js';
 import * as keychain from '../../../services/db/keychain.js';
 import { resolveSentMailboxForAccount } from '../../../services/composeSend';
 import { applyImport } from '../../../services/workflows/transferAccounts';
+import '../../../services/workflows/bindStoreActions';
 const stale=()=>({id:'g',name:'Personal',email:'me@example.test',imapHost:'h',authType:'oauth2',oauth2Provider:'google',oauth2AccessToken:'synthetic-old-at',oauth2RefreshToken:'synthetic-old-rt',oauth2ExpiresAt:1});
 const fresh=a=>({...a,oauth2AccessToken:'synthetic-new-at',oauth2RefreshToken:'synthetic-new-rt',oauth2ExpiresAt:99});
 const metadata=a=>Object.fromEntries(Object.entries(a).filter(([k])=>!['password','oauth2AccessToken','oauth2RefreshToken'].includes(k)));

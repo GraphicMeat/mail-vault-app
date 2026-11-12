@@ -13,7 +13,7 @@
 //! running in production because no caller exists before the S7 cutover.
 
 use crate::refresh_worker::{Intent, Reason, RefreshState};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::fetch_mode::{FetchMode, FetchPolicy};
 use crate::account_lifecycle::AccountStamp;
 use crate::ordinary_runner::{Origin, Spec};
@@ -291,7 +291,7 @@ struct Read {
     identity: Option<String>,
 }
 
-fn now_ms() -> i64 { chrono::Utc::now().timestamp_millis() }
+use mailvault_core::clock::now_ms;
 
 /// Cache rows per custody hold.
 const CACHE_PAGE: usize = 1000;

@@ -123,6 +123,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 
 const ACCT_A = { id: 'acct-a', email: 'a@mock.test' };

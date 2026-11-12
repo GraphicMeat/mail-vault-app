@@ -9,6 +9,7 @@ import { expect, it, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 import { fakeDeleteQueueSubmit } from './fakeDeleteQueue.js';
+import '../bindStoreActions';
 guardViewCounts();
 if (!globalThis.window) globalThis.window={addEventListener(){},removeEventListener(){}};
 else { window.addEventListener ||= (()=>{}); window.removeEventListener ||= (()=>{}); }

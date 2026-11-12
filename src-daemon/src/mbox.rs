@@ -31,7 +31,7 @@
 
 use crate::handlers::common::{self, blocking};
 use crate::handlers::deleted::{capture, Source};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::import_rehome;
 use mailvault_core::local_folder;
 use mailvault_core::maildir::info_flags;

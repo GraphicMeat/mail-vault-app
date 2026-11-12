@@ -48,7 +48,7 @@
 
 use crate::handlers::common::{self, blocking};
 use crate::imap::{self, pool, ImapConfig, ImapSession};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::cache;
 use mailvault_core::import_rehome::{self, Head, ServerView};
 use crate::jmap_sessions::AccountJmap;
@@ -216,7 +216,7 @@ impl MboxUpload {
     /// dialog's pick); without `use_labels` every message goes there, with no
     /// flags, as mode 2 files it.
     pub fn new(state: Arc<DaemonState>, config: ImapConfig, account_id: String, fallback: String, use_labels: bool) -> Result<Self, String> {
-        if config.oauth2_transport.as_deref() == Some("graph") {
+        if config.uses_graph() {
             return Err(format!("{E_MBOX_SERVER_GRAPH}: an Outlook account takes no upload over IMAP"));
         }
         Ok(MboxUpload {

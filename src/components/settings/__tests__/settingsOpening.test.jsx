@@ -6,6 +6,7 @@ import { ChunkErrorBoundary } from '../../ChunkErrorBoundary';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useThemeStore } from '../../../stores/themeStore';
+import '../../../services/workflows/bindStoreActions';
 
 // Exercise the same lazy entry as App. Do not mock General or Appearance:
 // rendering those screens is the behavior this regression test protects.

@@ -5,7 +5,7 @@
 //!
 //! Runs on its own background-QoS thread, a page of people (at most 200) per
 //! custody call, waiting for a quiet UI between pages.
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::db::{meta_get, meta_set};
 use mailvault_core::people::{model::new_id, store, vcard};
 use std::hash::{Hash, Hasher};

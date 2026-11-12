@@ -17,7 +17,7 @@ use crate::handlers::imap::{auto_cache_with_ids, backfill_refusal, body_fetch_ti
 use crate::imap::{EmailHeader, ImapConfig, MailboxStatus, MessageIdLocation, MessageIdProbe, ServerSearch};
 use crate::ipc::{self, RpcResponse};
 use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta, Mailboxes};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::cache;
 use mailvault_core::graph_ledger;
 use mailvault_core::jmap::headers::{flag_to_keyword, keywords_to_flags, to_header, HEADER_PROPS};

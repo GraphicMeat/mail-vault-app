@@ -5,9 +5,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { shellSource, shellModuleSource } from './helpers/rustSources.js';
 import { join } from 'node:path';
 
-const main = readFileSync('src-tauri/src/main.rs', 'utf8');
+const main = shellSource();
 const handlerList = main.slice(main.indexOf('generate_handler!['), main.indexOf(']', main.indexOf('generate_handler![')));
 const COMMANDS = ['search_index_configure', 'search_index_status', 'search_index_rebuild', 'search_index_destroy', 'vault_search', 'vault_rows'];
 
@@ -42,11 +43,12 @@ describe('the search index lives in the daemon', () => {
   // that call site directly by source, since it's addendum D's whole point
   // (a vault-move-suspended daemon must never be spawned fresh).
   it('ensure_daemon_socket refuses to spawn while suspended, before it spawns', () => {
-    const start = main.indexOf('fn ensure_daemon_socket(');
+    const lifecycle = shellModuleSource('daemon_lifecycle');
+    const start = lifecycle.indexOf('fn ensure_daemon_socket(');
     expect(start).toBeGreaterThan(-1);
-    const spawnComment = main.indexOf('// Spawn new daemon', start);
+    const spawnComment = lifecycle.indexOf('// Spawn new daemon', start);
     expect(spawnComment).toBeGreaterThan(start);
-    const guardSection = main.slice(start, spawnComment);
+    const guardSection = lifecycle.slice(start, spawnComment);
     expect(guardSection).toContain('may_spawn_daemon()');
   });
 });

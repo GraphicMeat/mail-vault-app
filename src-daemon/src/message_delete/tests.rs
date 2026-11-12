@@ -5,7 +5,7 @@ use super::*;
 use crate::handlers::common::with_mailbox_write;
 use crate::handlers::deleted::{self, Source};
 use crate::message_delete_characterization_tests::{bin_rows, break_the_bin, plain_state, seed_accounts, RAW};
-use crate::server::handle_request_for_test;
+use crate::test_support::handle_request_for_test;
 use mailvault_core::custody::cache;
 use mailvault_core::vault_files;
 use mock_imap::state::{Mailbox, Message};

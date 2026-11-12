@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, Weak};
 use tokio::sync::Notify;
 use tokio::time::Instant;
 
-pub(crate) fn start_bootstrap(state: Arc<crate::server::DaemonState>) {
+pub(crate) fn start_bootstrap(state: Arc<crate::state::DaemonState>) {
     if !state.account_lifecycle.begin_bootstrap() {
         return;
     }
@@ -1015,7 +1015,7 @@ mod tests {
         done: Option<std::sync::mpsc::Receiver<()>>,
     }
     impl BootstrapPause {
-        fn arm(state: &Arc<crate::server::DaemonState>) -> Self {
+        fn arm(state: &Arc<crate::state::DaemonState>) -> Self {
             let (release, gate) = std::sync::mpsc::channel();
             let (entered, notice) = std::sync::mpsc::channel();
             let (done, finished) = std::sync::mpsc::channel();
@@ -1062,7 +1062,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("accounts.json");
         std::fs::create_dir(&path).unwrap();
-        let state = crate::server::DaemonState::for_test(
+        let state = crate::state::DaemonState::for_test(
             dir.path().join("mail"),
             dir.path().to_path_buf(),
             true,

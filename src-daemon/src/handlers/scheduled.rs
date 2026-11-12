@@ -9,7 +9,7 @@ use crate::account_lifecycle::AccountStamp;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u64_arg, vault_root, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
 use crate::scheduled_send_worker;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, scheduled};
 use mailvault_core::custody::cache as sql_cache;
 use mailvault_core::imap::ImapConfig;
@@ -649,9 +649,9 @@ mod tests {
     #[tokio::test]
     async fn the_routes_are_reachable_through_the_servers_dispatch() {
         let s = st();
-        let resp = crate::server::handle_request_for_test(&s, "scheduled.list", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "scheduled.list", json!({})).await;
         assert!(resp.result.is_some(), "scheduled.list is not routed: {:?}", resp.error);
-        let resp = crate::server::handle_request_for_test(&s, "scheduled.suggest_tz", json!({"address": "x@example.com"})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "scheduled.suggest_tz", json!({"address": "x@example.com"})).await;
         assert!(resp.result.is_some(), "scheduled.suggest_tz is not routed: {:?}", resp.error);
     }
 
@@ -924,10 +924,10 @@ mod tests {
             "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecure": false,
         });
         let email = json!({"to": "partner@example.com", "subject": "Later, edited", "text": "EDITED-CUT-AFTER-DATA"});
-        let staged = crate::server::handle_request_for_test(&s, "compose.stage", json!({
+        let staged = crate::test_support::handle_request_for_test(&s, "compose.stage", json!({
             "accountId": "acc1", "account": account, "email": email, "mailbox": "Sent", "snippet": "x", "hasAttachments": false,
         })).await.result.expect("staged");
-        let reply = crate::server::handle_request_for_test(&s, "compose.send", json!({
+        let reply = crate::test_support::handle_request_for_test(&s, "compose.send", json!({
             "accountId": "acc1", "account": account, "email": email,
             "mailbox": staged["mailbox"], "uid": staged["uid"], "messageId": staged["messageId"],
             "snippet": "x", "hasAttachments": false, "cancelScheduledId": id,

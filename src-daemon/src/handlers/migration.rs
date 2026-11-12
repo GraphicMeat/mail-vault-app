@@ -12,7 +12,7 @@
 use crate::handlers::common::{self, cancel_kind, pause_kind, resume_kind, str_arg, RunGuard};
 use crate::ipc::{self, RpcResponse};
 use crate::migration::{self, FolderMapping};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::imap::ImapConfig;
 use serde_json::Value;
 use std::sync::Arc;
@@ -221,7 +221,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mock_imap::state::{synthetic_mailbox, Mailbox};
     use mock_imap::{Action, MockImap, Scenario, Trigger};
     use serde_json::json;

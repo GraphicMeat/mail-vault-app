@@ -9,6 +9,7 @@ import { EmailViewer } from '../EmailViewer';
 import InsightsMessages from '../insights/InsightsMessages';
 import { cancelInsightsSelection, getSelectionGeneration } from '../../services/workflows/selectEmail';
 import * as api from '../../services/api';
+import '../../services/workflows/bindStoreActions';
 
 const { native } = vi.hoisted(() => ({ native: vi.fn(async () => null) }));
 vi.mock('../../services/transport.js', () => ({ send: (...args) => native(...args) }));

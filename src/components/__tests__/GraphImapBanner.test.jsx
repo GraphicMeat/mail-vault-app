@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
 import { t } from '../../i18n';
+import '../../services/workflows/bindStoreActions';
 
 const { GraphImapBanner } = await import('../GraphImapBanner');
 const { useMailStore } = await import('../../stores/mailStore');

@@ -10,6 +10,7 @@ import { AppearanceStep } from '../AppearanceStep';
 import { DEFAULT_QUICK_ACTIONS, normalizeQuickActions } from '../../../utils/quickActions';
 import { QUICK_ACTION_PRESETS } from '../../../utils/quickActionPresets';
 import { previewNotificationSound } from '../../../services/api';
+import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/api', async (importOriginal) => ({
   ...(await importOriginal()),

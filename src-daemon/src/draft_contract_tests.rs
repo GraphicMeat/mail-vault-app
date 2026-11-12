@@ -1,6 +1,6 @@
 //! Row 12 initial native RED reaches the existing real RPC dispatcher.
 //! No draft implementation or fake dispatcher is installed for this test.
-use crate::{ipc, server::{handle_request_for_test, DaemonState}};
+use crate::{ipc, state::DaemonState, test_support::handle_request_for_test};
 use serde_json::{json, Value};
 
 #[tokio::test]

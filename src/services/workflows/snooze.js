@@ -47,7 +47,7 @@ export function canSnooze(email, state) {
  * Resolves `{ snoozed, skipped }`; rows `canSnooze` refuses are skipped.
  */
 export async function snoozeEmails(keys, wakeAt) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   if (!useConnectivityStore.getState().online) throw new Error(tr('snooze.offline'));
 

@@ -47,10 +47,12 @@ vi.mock('../../db', () => ({
 const mockFetchEmails = vi.fn();
 const mockCheckMailboxStatus = vi.fn();
 const mockFetchMailboxes = vi.fn().mockResolvedValue([]);
+const mockLoadMailboxes = vi.fn().mockResolvedValue({ mailboxes: [], source: 'server', suspectEmpty: false, changed: true });
 vi.mock('../../api', () => ({
   fetchEmails: (...a) => mockFetchEmails(...a),
   checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
   fetchMailboxes: (...a) => mockFetchMailboxes(...a),
+  loadMailboxes: (...a) => mockLoadMailboxes(...a),
   searchAllUids: vi.fn().mockResolvedValue([]),
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
@@ -117,6 +119,7 @@ vi.mock('../../syncService', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 // Real module — an in-memory, module-level cache (see headerMemo.js). Not
 // mocked, but explicitly cleared per test below so a header set memoized by
 // one test's activation can't be recalled (and reconciled against an io that
@@ -160,6 +163,7 @@ beforeEach(() => {
   mockGetArchivedEmailIds.mockResolvedValue(new Set());
   mockGetSavedEmailIds.mockResolvedValue(new Set());
   mockFetchMailboxes.mockResolvedValue([]);
+  mockLoadMailboxes.mockResolvedValue({ mailboxes: [], source: 'server', suspectEmpty: false, changed: true });
   mockGetRestoreDescriptor.mockReturnValue(null);
   // The path under test: the daemon IS alive, which is the normal case and the
   // one the old code never checked connectivity on.

@@ -26,6 +26,7 @@ import { SenderVerificationBadge } from '../EmailHeaderComponent';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { setPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
 import { buildNameDictionary } from '../../../utils/privacy/piiDetector';
+import '../../../services/workflows/bindStoreActions';
 
 const email = {
   uid: 3, _accountId: 'acct', _mailbox: 'Junk',

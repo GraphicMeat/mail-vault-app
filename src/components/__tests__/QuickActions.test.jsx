@@ -10,6 +10,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { CATEGORY_WHEEL, QuickActions, QuickActionWheelInPlace } from "../QuickActions";
+import '../../services/workflows/bindStoreActions';
 
 const icon = () => <span aria-hidden="true">•</span>;
 const descriptors = [

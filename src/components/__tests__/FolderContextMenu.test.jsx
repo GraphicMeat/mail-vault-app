@@ -22,6 +22,7 @@ vi.mock('../../services/authUtils', () => ({ ensureFreshToken: async (a) => a })
 
 import { FolderContextMenu } from '../FolderContextMenu';
 import { t } from '../../i18n/index.js';
+import '../../services/workflows/bindStoreActions';
 
 const MAILBOXES = [
   { path: 'INBOX', delimiter: '/' },

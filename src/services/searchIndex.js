@@ -1,4 +1,5 @@
 import { send } from './transport.js';
+import { listenTo } from './listenTo.js';
 
 // The offline search index lives in the daemon (spec 2026-09-14 §5). These go through DAEMON_OWNED.
 // Resolves `true` on success and `false` on a caught failure, never rejects —
@@ -16,14 +17,6 @@ export const rebuild = () => send('search_index_rebuild', {});
 /** Resolves `{ok:true}` or `{ok:false, error:<catalog key>}`; rejects only when the daemon is unreachable. */
 export const destroy = () => send('search_index_destroy', {});
 
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await import('@tauri-apps/api/event');
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
-  }
-}
 
 export const onProgress = (cb) => listenTo('search-index-progress', cb);
 /** A (re)started daemon holds no config and no status the UI has seen. */

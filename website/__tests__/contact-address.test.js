@@ -7,7 +7,7 @@ const CONTACT = 'prime@graphicmeat.com';
 
 const gitGrep = (flags) => (pattern, ...paths) => {
   try {
-    return execFileSync('git', ['grep', flags, pattern, '--', ...paths], { encoding: 'utf8' });
+    return execFileSync('git', ['grep', '--untracked', flags, pattern, '--', ...paths], { encoding: 'utf8' });
   } catch {
     return '';
   }
@@ -32,6 +32,7 @@ describe('contact address', () => {
   });
 
   it('the bug-report compose is addressed to the contact inbox', () => {
-    expect(grep(`to: '${CONTACT}'`, 'src/App.jsx')).not.toBe('');
+    // The prefill moved out of App.jsx into the app hooks (useComposePrefills).
+    expect(grep(`to: '${CONTACT}'`, 'src/App.jsx', 'src/hooks/app')).not.toBe('');
   });
 });

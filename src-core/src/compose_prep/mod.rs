@@ -42,12 +42,11 @@ impl Account {
     /// How the account sends (the rule of `ImapConfig::uses_jmap` / `uses_graph`).
     pub fn send_kind(&self) -> crate::send::limits::SendKind {
         use crate::send::limits::SendKind;
-        if self.jmap_session_url.as_deref().is_some_and(|u| !u.trim().is_empty()) {
-            SendKind::Jmap
-        } else if self.oauth2_transport.as_deref() == Some("graph") {
-            SendKind::Graph
-        } else {
-            SendKind::Smtp
+        use crate::imap::Transport;
+        match Transport::from_fields(self.jmap_session_url.as_deref(), self.oauth2_transport.as_deref()) {
+            Transport::Jmap => SendKind::Jmap,
+            Transport::Graph => SendKind::Graph,
+            Transport::Imap => SendKind::Smtp,
         }
     }
 }
@@ -57,22 +56,8 @@ pub struct Context {
     pub settings_version: u64,
 }
 
-// ECMAScript whitespace differs from Rust's (FEFF yes, 0085 no).
-fn ws(c: char) -> bool {
-    matches!(c, '\u{9}'..='\u{d}'|' '| '\u{a0}'|'\u{1680}'|'\u{2000}'..='\u{200a}'|'\u{2028}'|'\u{2029}'|'\u{202f}'|'\u{205f}'|'\u{3000}'|'\u{feff}')
-}
-fn trim(s: &str) -> &str {
-    s.trim_matches(ws)
-}
-fn truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => n.as_f64().is_some_and(|n| n != 0.0),
-        Value::String(s) => !s.is_empty(),
-        _ => true,
-    }
-}
+use crate::recipient_split::{trim, ws};
+use crate::js_value::truthy_value as truthy;
 fn js_string(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
@@ -570,45 +555,7 @@ enum Mode {
     ReplyAll,
     Forward,
 }
-/// A recipient line's addresses: split on `,` `;` and line breaks, never
-/// inside a quoted display name or angle brackets, each trimmed, empties
-/// skipped. Core's one recipient tokenizer: the check (`recipient_problem`)
-/// and the MIME builder (`smtp::build_mime`) both split with it.
-pub fn split_recipients(s: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut current = String::new();
-    let mut quoted = false;
-    let mut angle = false;
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c == '\\' && quoted {
-            current.push(c);
-            if let Some(c) = chars.next() {
-                current.push(c)
-            }
-            continue;
-        }
-        if c == '"' {
-            quoted = !quoted
-        } else if c == '<' && !quoted {
-            angle = true
-        } else if c == '>' && !quoted {
-            angle = false
-        }
-        if matches!(c, ',' | ';' | '\n' | '\r') && !quoted && !angle {
-            if !trim(&current).is_empty() {
-                out.push(trim(&current).into())
-            }
-            current.clear();
-        } else {
-            current.push(c);
-        }
-    }
-    if !trim(&current).is_empty() {
-        out.push(trim(&current).into())
-    }
-    out
-}
+pub use crate::recipient_split::split_recipients;
 fn valid_recipient(s: &str) -> bool {
     let candidate = s
         .rfind('>')

@@ -2,6 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 const { scrollToIndex, bodies } = vi.hoisted(() => ({ scrollToIndex: vi.fn(), bodies: new Map() }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex, measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 144,

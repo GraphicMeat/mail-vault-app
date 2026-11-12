@@ -42,6 +42,7 @@ vi.mock('../../services/workflows/activateAccount', async (importOriginal) => ({
 
 const { MoveFolderDialog } = await import('../MoveFolderDialog');
 const { useMailStore } = await import('../../stores/mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { useSettingsStore } = await import('../../stores/settingsStore');
 const en = (await import('../../i18n/locales/en.json')).default;
 

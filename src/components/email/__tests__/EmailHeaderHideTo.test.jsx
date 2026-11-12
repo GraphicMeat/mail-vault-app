@@ -14,6 +14,7 @@ vi.mock('../../../services/senderVerdict', async (importOriginal) => {
 });
 import { EmailHeader } from '../EmailHeaderComponent';
 import { usePrivacyStore } from '../../../stores/privacyStore';
+import '../../../services/workflows/bindStoreActions';
 
 const email = {
   uid: 3, _accountId: 'acct', _mailbox: 'INBOX', subject: 'Hello', date: new Date('2026-09-01T10:00:00Z'),

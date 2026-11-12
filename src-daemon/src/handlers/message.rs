@@ -16,7 +16,7 @@
 //! Both read only what they are handed: no vault, no network.
 use crate::handlers::common::{blocking, done};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::{sender_check, verification_code};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -48,7 +48,7 @@ pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Valu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
 
     fn st() -> Arc<DaemonState> {
         let dir = std::env::temp_dir().join(format!("mv-message-handler-{}", uuid::Uuid::new_v4()));

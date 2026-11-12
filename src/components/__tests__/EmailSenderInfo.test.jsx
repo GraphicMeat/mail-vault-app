@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('framer-motion', () => ({
   motion: { div: React.forwardRef((props, ref) => React.createElement('div', { ...props, ref })) },

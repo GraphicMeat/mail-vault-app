@@ -8,6 +8,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 const mode = vi.hoisted(() => ({ value: 'reject' }));
 vi.mock('@tauri-apps/api/event', () => ({

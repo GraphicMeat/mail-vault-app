@@ -59,7 +59,7 @@ const log = (...args) => {
  * write the server refused.
  */
 export async function replayOps({ reason = 'launch' } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const finish = (result) => {
     // Park the outcome in the store. It is the only trace this leaves: the work
     // happens before any UI exists, and on a packaged build the console goes
@@ -236,7 +236,7 @@ const RETRY_INTERVAL_MS = 5 * 60_000;
  */
 export async function shouldRetryNow() {
   if (!useConnectivityStore.getState().online) return false;
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const { undo } = useMailStore.getState();
   return !undo || Date.now() - undo.at >= UNDO_TOAST_MS;
 }

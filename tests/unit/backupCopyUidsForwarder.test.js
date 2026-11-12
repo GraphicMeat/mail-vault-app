@@ -13,10 +13,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 import * as transport from '../../src/services/transport.js';
 
 const read = (p) => readFileSync(p, 'utf8');
-const main = read('src-tauri/src/main.rs');
+const main = shellSource();
 const handlerList = main.slice(main.indexOf('generate_handler!['), main.indexOf(']', main.indexOf('generate_handler![')));
 const shell = read('src-tauri/src/backup.rs');
 const daemon = read('src-daemon/src/handlers/backup.rs');

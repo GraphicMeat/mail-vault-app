@@ -596,15 +596,7 @@ pub fn scan_body(html: &str, policy: TrackerPolicy, links: bool, texts: &Texts) 
 
 // ── list rows ───────────────────────────────────────────────────────────────
 
-/// A JavaScript truthiness test on a JSON value.
-fn truthy(v: Option<&Value>) -> bool {
-    match v {
-        None | Some(Value::Null) | Some(Value::Bool(false)) => false,
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0),
-        _ => true,
-    }
-}
+use crate::js_value::truthy;
 
 fn str_at<'a>(v: &'a Value, path: &[&str]) -> &'a str {
     let mut at = v;

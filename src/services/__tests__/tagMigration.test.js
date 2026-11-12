@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import '../workflows/bindStoreActions';
 
 const mockDaemonCall = vi.fn();
 vi.mock('../daemonClient', () => ({

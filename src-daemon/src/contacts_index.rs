@@ -593,7 +593,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn p2_delayed_flush_cannot_replace_retired_account() {
         let dir = tempfile::tempdir().unwrap();
-        let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        let state = crate::state::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
         std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
         state.account_lifecycle.seed(
             &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap(),
@@ -623,7 +623,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn p2_dirty_arriving_after_flush_snapshot_is_preserved() {
         let dir = tempfile::tempdir().unwrap();
-        let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        let state = crate::state::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
         std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
         state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
         state.contacts.seed_dirty_for_test("a");
@@ -653,7 +653,7 @@ mod tests {
     async fn p2_cold_build_and_legacy_load_keep_original_authority() {
         for kind in ["load", "snapshot"] {
             let dir = tempfile::tempdir().unwrap();
-            let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+            let state = crate::state::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
             std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
             state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
             let legacy = state.data_dir.join(contacts_db::LEGACY_DIR).join("a.json");

@@ -87,16 +87,7 @@ impl Ctx {
     }
 }
 
-/// JavaScript truthiness of a JSON value.
-fn truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
-        Value::String(s) => !s.is_empty(),
-        Value::Array(_) | Value::Object(_) => true,
-    }
-}
+use crate::js_value::truthy_value as truthy;
 
 /// `String(v || '')` for the scalar values settings hold.
 fn js_string(v: Option<&Value>) -> String {

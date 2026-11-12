@@ -31,7 +31,7 @@ use crate::handlers::common::{blocking, done, vec_arg, with_mailbox_write};
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::imap::{self, ImapConfig};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, deleted::{self as bin, Capture, Deleted}};
 use mailvault_core::custody::{cache, entries};
 use mailvault_core::search_index::text::vault_dir_name;
@@ -44,9 +44,7 @@ use tracing::{info, warn};
 /// How often the purge looks for mail past its retention.
 const PURGE_EVERY: Duration = Duration::from_secs(60 * 60);
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
+use mailvault_core::clock::now_ms;
 
 /// Where a message about to be deleted can be read from when neither the
 /// vault nor memory holds it.
@@ -518,7 +516,7 @@ async fn recover_local(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, St
 /// The server credentials a recover uses; a Graph account has none here.
 async fn imap_config(state: &Arc<DaemonState>, account_id: &str) -> Result<ImapConfig, String> {
     let config = crate::raw_message::account_config(state, account_id).await?;
-    if config.oauth2_transport.as_deref() == Some("graph") {
+    if config.uses_graph() {
         return Err("deletedBin.graphServerUnsupported".to_string());
     }
     Ok(config)
@@ -1535,7 +1533,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mock_imap::state::{Mailbox, Message};
     use mock_imap::{Action, MockImap, Scenario, Trigger};
     use std::sync::{mpsc, Mutex, OnceLock};

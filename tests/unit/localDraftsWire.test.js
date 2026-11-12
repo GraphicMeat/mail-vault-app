@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { shellModuleSource } from './helpers/rustSources.js';
 import { expect, it } from 'vitest';
 it('gives metadata reads and complete draft IO explicit shell reply budgets', () => {
-  const source = readFileSync('src-tauri/src/main.rs', 'utf8');
+  const source = shellModuleSource('rpc_proxy');
   const table = source.slice(source.indexOf('fn reply_timeout('), source.indexOf('\n}', source.indexOf('fn reply_timeout(')));
   const budgets = new Map();
   for (const arm of table.matchAll(/((?:"[^"]+"\s*(?:\|\s*)?)+)=> Some\(Duration::from_secs\((\d+)\)\)/g)) {

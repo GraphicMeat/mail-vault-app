@@ -5,7 +5,7 @@ use crate::{
     custody,
     handlers::common::{self, blocking, with_mailbox_write},
     ipc::{self, RpcResponse},
-    server::DaemonState,
+    state::DaemonState,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use mailvault_core::{

@@ -3,6 +3,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { setLocale, t } from '../../i18n/index.js';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...(await importOriginal()),

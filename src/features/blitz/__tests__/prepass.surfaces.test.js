@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { runPrepass } from '../prepass';
 import { PRIVACY_GATE_ID, PRIVACY_GATE_CSS } from '../../../utils/emailIframeTemplate';
+import '../../../services/workflows/bindStoreActions';
 
 const SIG = '<div class="gmail_signature">-- <br>Alice, Acme</div>';
 const QUOTE = '<blockquote><p>Quoted text</p></blockquote>';

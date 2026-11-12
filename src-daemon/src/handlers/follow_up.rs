@@ -9,7 +9,7 @@
 use crate::follow_up_worker;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u64_arg};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, follow_up};
 use serde_json::Value;
 use std::sync::Arc;
@@ -162,7 +162,7 @@ mod tests {
     #[tokio::test]
     async fn the_routes_are_reachable_through_the_servers_dispatch() {
         let s = st();
-        let resp = crate::server::handle_request_for_test(&s, "follow_up.list", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "follow_up.list", json!({})).await;
         assert!(resp.result.is_some(), "follow_up.list is not routed: {:?}", resp.error);
     }
 

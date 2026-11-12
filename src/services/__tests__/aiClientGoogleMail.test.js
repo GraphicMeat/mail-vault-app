@@ -15,6 +15,7 @@ import {
   accountIdsOf, aiErrorText, E_GOOGLE_MAIL_ON_DEVICE_ONLY, endpointIsOnDevice, generate, isGoogleAccount,
   isOnDevice, mailMustStayOnDevice, providerForMail,
 } from '../aiClient';
+import '../workflows/bindStoreActions';
 
 const CLOUD = { type: 'endpoint', url: 'https://api.openai.com/v1', model: 'gpt' };
 const ACCOUNTS = [

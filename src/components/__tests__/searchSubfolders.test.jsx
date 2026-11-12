@@ -39,6 +39,7 @@ vi.mock('../../stores/accountStore', () => ({
 }));
 
 import { SearchBar } from '../SearchBar';
+import '../../services/workflows/bindStoreActions';
 
 const scopeSelect = () => document.querySelector('[data-testid="search-folder-scope"]');
 const subBox = () => document.querySelector('[data-testid="search-include-subfolders"]');

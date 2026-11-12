@@ -5,6 +5,7 @@ const saver = vi.hoisted(() => ({ openInDefaultApp: vi.fn(async () => '/cache/x'
 vi.mock('../../services/export/exportSaver', () => saver);
 
 import { imageFileFromSrc, openEmailImage, inlineImageAt, imageForDoubleClick, canOpenImage, attachImageDoubleClick } from '../emailImages';
+import '../../services/workflows/bindStoreActions';
 
 const PNG = 'iVBORw0KGgo=';
 

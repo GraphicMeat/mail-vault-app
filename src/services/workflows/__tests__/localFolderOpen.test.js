@@ -55,6 +55,7 @@ vi.mock('../../db', () => db);
 // Every server-facing call the list workflows make, as spies.
 const api = vi.hoisted(() => ({
   fetchMailboxes: vi.fn(),
+  loadMailboxes: vi.fn(),
   fetchEmails: vi.fn(),
   checkMailboxStatus: vi.fn(),
   searchAllUids: vi.fn(),
@@ -108,6 +109,7 @@ vi.mock('../../syncService', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { forget: forgetMemo } = await import('../../headerMemo');
 const { inLocalFolder } = await import('../../../stores/slices/unifiedHelpers');
 
@@ -171,6 +173,10 @@ beforeEach(() => {
   db.clearMailboxCache.mockResolvedValue(undefined);
 
   api.fetchMailboxes.mockResolvedValue([...SERVER_LIST, { path: 'Projects', name: 'Projects', delimiter: '/', children: [] }]);
+  api.loadMailboxes.mockResolvedValue({
+    mailboxes: [...SERVER_LIST, { path: 'Projects', name: 'Projects', delimiter: '/', children: [] }],
+    source: 'server', suspectEmpty: false, changed: true,
+  });
   api.fetchEmails.mockResolvedValue({ emails: [], total: 0 });
   api.checkMailboxStatus.mockResolvedValue({ exists: 0, uidValidity: 1, uidNext: 1 });
   api.searchAllUids.mockResolvedValue([]);
@@ -221,16 +227,16 @@ describe('opening a local folder', () => {
     await useMailStore.getState().activateAccount(ACCOUNT.id, NAME);
 
     const s = useMailStore.getState();
-    expect(api.fetchMailboxes).toHaveBeenCalled();
+    expect(api.loadMailboxes).toHaveBeenCalled();
     expect(s.mailboxes.map(m => m.path)).toEqual(['INBOX', 'Archive', 'Projects']);
     expect(s.activeMailbox).toBe(NAME);
     expect(setLastMailbox).not.toHaveBeenCalledWith(ACCOUNT.id, 'INBOX');
     expect(s.localFolders[ACCOUNT.id]).toEqual([FOLDER]);
     expect(shownUids()).toEqual([1, 2]);
-    // The local folders are never written into the server list's cache.
-    for (const [, list] of db.saveMailboxes.mock.calls) {
-      expect(list.some(m => m.path === NAME || m.local)).toBe(false);
-    }
+    // The local folders are never written into the server list's cache: the
+    // app no longer writes that cache for an IMAP account (the daemon stores
+    // the server's own list, which cannot hold a vault-only folder).
+    expect(db.saveMailboxes).not.toHaveBeenCalled();
     expectNoServerCallFor(NAME);
   });
 

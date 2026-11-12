@@ -43,7 +43,7 @@ function validName(name, d) {
 }
 
 async function _ctx(accountId) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const s = useMailStore.getState();
   const account = s.accounts.find(a => a.id === accountId);
   return { s, account, mailboxes: s.mailboxes || [], d: folderDelimiter(s.mailboxes), email: account?.email || null };
@@ -101,7 +101,7 @@ export async function loadLocalFolders(accountId) {
     return;
   }
   if (!Array.isArray(folders)) return;
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   useMailStore.setState(s => ({ localFolders: { ...s.localFolders, [accountId]: folders } }));
 }
 
@@ -128,7 +128,7 @@ export async function deleteLocalFolder(accountId, name) {
     failure = e;
   }
   await loadLocalFolders(accountId);
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const s = useMailStore.getState();
   if (s.activeAccountId === accountId && s.activeMailbox === name) {
     // A delete that answered ok went, whatever a failed relist left behind.

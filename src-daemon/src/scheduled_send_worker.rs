@@ -18,7 +18,7 @@
 //! what the periodic pass does.
 
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, scheduled};
 use mailvault_core::backoff::RetryPolicy;
 use mailvault_core::imap::ImapConfig;
@@ -159,9 +159,7 @@ async fn run(state: Arc<DaemonState>) {
     }
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
-}
+use mailvault_core::clock::now_ms;
 
 async fn next_wait(state: &Arc<DaemonState>) -> Duration {
     let next = app_db::with(&state.app_dir, |c| scheduled::next_fire_at(c)).ok().flatten();
@@ -883,7 +881,7 @@ mod tests {
         pause.wait();
         record["oauth2AccessToken"] = json!("synthetic-new-token");
         record["oauth2RefreshToken"] = json!("synthetic-new-refresh");
-        let reply = crate::server::handle_request_for_test(
+        let reply = crate::test_support::handle_request_for_test(
             &state,
             "credentials.save",
             json!({"records":{"g":record.to_string()}}),

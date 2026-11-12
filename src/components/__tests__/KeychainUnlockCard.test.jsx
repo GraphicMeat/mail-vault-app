@@ -29,6 +29,10 @@ vi.mock('../../stores/focusStore', () => ({ notify: vi.fn() }));
 
 const { KeychainUnlockCard } = await import('../KeychainUnlockCard');
 const { useKeychainGateStore, __resetKeychainGateForTests } = await import('../../stores/keychainGateStore');
+// Stores reach workflows through ports; the card under test needs the mocked retry bound.
+const { bindWorkflowPorts } = await import('../../stores/workflowPorts');
+const { retryKeychainAccess: portRetry } = await import('../../services/workflows/retryKeychainAccess');
+bindWorkflowPorts({ retryKeychainAccess: (...a) => portRetry(...a) });
 
 const CARD = 'keychain-unlock-card';
 

@@ -2,6 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 300,
   getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({ index, key: index, start: index * 96 })),

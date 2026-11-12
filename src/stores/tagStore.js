@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
+import { listenTo } from '../services/listenTo.js';
 
 // The durable key an assignment is stored under lives in the daemon
 // (`app_db::identity::msg_key`) and is deliberately not mirrored here. This is
@@ -228,15 +229,6 @@ export function requestRowTags(email, location) {
   if (!key || useTagStore.getState().byRow[key] || pendingRows.has(key)) return;
   pendingRows.set(key, { email, location });
   if (!pendingTimer) pendingTimer = setTimeout(flushRowTags, 0);
-}
-
-async function listenTo(event, cb) {
-  try {
-    const { listen } = await import('@tauri-apps/api/event');
-    return await listen(event, (e) => cb(e.payload));
-  } catch {
-    return () => {};
-  }
 }
 
 let _eventsInitialized = null;

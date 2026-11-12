@@ -7,6 +7,8 @@ import { MotionConfig } from 'framer-motion';
 import { setLocale } from './i18n/index.js';
 import { useSettingsStore } from './stores/settingsStore';
 import './stores/settingsFollow';
+// Plugs the workflows into the mail store's actions; before any action can run.
+import './services/workflows/bindStoreActions';
 import { wireConnectivityEvents, installNetMock } from './stores/connectivityStore';
 import { watchTextAppearance } from './utils/appFont';
 import { watchMenuBar, watchQuitShortcut } from './utils/menuBar';

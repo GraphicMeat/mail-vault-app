@@ -11,7 +11,7 @@ use crate::credentials;
 use crate::account_lifecycle::AccountStamp;
 use crate::handlers::common::{str_arg, vault_root, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::message_store;
 use mailvault_core::pgp::{self as core_pgp, KeyInfo, StoredKey};
 use serde_json::{json, Value};
@@ -196,7 +196,8 @@ pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Valu
 #[cfg(test)]
 mod tests {
     use super::{key_gates, render, DECRYPTED};
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use mailvault_core::search_index::plan::Signal;
     use mailvault_core::vault_files;
     use pgp::composed::{ArmorOptions, EncryptionCaps, KeyType, MessageBuilder, SecretKeyParamsBuilder, SignedSecretKey, SubkeyParamsBuilder};

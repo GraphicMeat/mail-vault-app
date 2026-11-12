@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useMailStore } from '../../../stores/mailStore';
 import { useUnsavedStore } from '../../../stores/unsavedStore';
 import { SettingsPage } from '../../SettingsPage';
+import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
 

@@ -32,7 +32,7 @@
 use crate::credentials;
 use crate::handlers::common::{blocking, with_mailbox_write};
 use crate::imap::{self, ImapConfig};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::cache;
 use mailvault_core::fetch_mode::{eviction_plan, FetchMode, FetchPolicy};
 use mailvault_core::search_index::text::vault_dir_name;
@@ -174,7 +174,7 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) {
                 continue;
             }
         };
-        if config.oauth2_transport.as_deref() == Some("graph") {
+        if config.uses_graph() {
             info!("[evict] {account_id}: skipped_reason=graph_account");
             continue;
         }
@@ -641,7 +641,7 @@ mod tests {
     #[tokio::test]
     async fn fetch_mode_changed_wakes_the_worker() {
         let (_dir, s) = state(&[]);
-        let resp = crate::server::handle_request_for_test(&s, "storage.fetch_mode_changed", json!({})).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "storage.fetch_mode_changed", json!({})).await;
         assert_eq!(resp.result, Some(json!({"ok": true})));
         tokio::time::timeout(Duration::from_secs(1), s.eviction_worker.notify.notified())
             .await

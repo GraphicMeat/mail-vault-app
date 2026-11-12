@@ -6,6 +6,7 @@ import { AccountSettings } from '../AccountSettings';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 
 // A Gmail account signs in through one of two Google apps: Thunderbird's or
 // MailVault's own. Settings shows which, lets the user switch (a fresh sign-in

@@ -19,7 +19,7 @@
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::handlers::archive::{archive_ctx, archive_ctx_owned};
 use crate::handlers::common;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::abd::{Fetched, LocalError, LocalStore, StoreOutcome, Stored, Verify};
 use mailvault_core::backup::{copy_uids_to_mirror_from, MirrorListing};
 use mailvault_core::{archive, graph_ledger, header_cache, maildir, message_store};

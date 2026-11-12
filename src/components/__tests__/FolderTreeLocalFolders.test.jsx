@@ -24,6 +24,7 @@ vi.mock('../../services/authUtils', () => ({ ensureFreshToken: async (a) => a })
 import { FolderTree, FolderBubbles } from '../FolderTree';
 import { FolderContextMenu } from '../FolderContextMenu';
 import { withLocalFolders } from '../../services/workflows/mailboxTree';
+import '../../services/workflows/bindStoreActions';
 
 const box = (path, extra = {}) => ({
   path, name: path.split('.').pop(), delimiter: '.', specialUse: null, noselect: false, children: [], ...extra,

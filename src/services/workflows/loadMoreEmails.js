@@ -190,7 +190,7 @@ async function _loadMoreGraph(useMailStore, account, accountId, mailbox) {
 // ── loadMoreEmails workflow ──
 
 export async function loadMoreEmails() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const { activeAccountId, accounts, activeMailbox, emails, currentPage, hasMoreEmails, loadingMore } = get();

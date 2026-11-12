@@ -6,6 +6,7 @@
 // that did nothing.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const { useMailStore } = await import('../../stores/mailStore');
 const { useSearchStore } = await import('../../stores/searchStore');

@@ -8,6 +8,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const { stageFile, startFileDrag } = vi.hoisted(() => ({
   stageFile: vi.fn(async () => '/cache/mailvault-export/chart.png'),

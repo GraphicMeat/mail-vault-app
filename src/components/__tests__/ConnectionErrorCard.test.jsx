@@ -22,6 +22,7 @@ vi.mock('../../stores/settingsStore', () => ({
 
 import { ConnectionErrorCard } from '../Sidebar';
 import { t } from '../../i18n';
+import '../../services/workflows/bindStoreActions';
 
 const account = { id: 'acct-1', email: 'user@example.com', authType: 'password' };
 

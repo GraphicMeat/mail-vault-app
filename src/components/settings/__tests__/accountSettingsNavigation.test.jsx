@@ -6,6 +6,7 @@ import { AccountSettings } from '../AccountSettings';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 
 // These account preferences remain real; only disk/network reads are isolated.
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));

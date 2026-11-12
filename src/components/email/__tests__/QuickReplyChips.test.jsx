@@ -8,6 +8,7 @@ import { QuickReplyChips } from '../QuickReplyChips';
 
 vi.mock('../../../utils/composeOpener', () => ({ openCompose: vi.fn() }));
 import { openCompose } from '../../../utils/composeOpener';
+import '../../../services/workflows/bindStoreActions';
 
 afterEach(cleanup);
 

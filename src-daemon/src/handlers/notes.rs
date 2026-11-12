@@ -9,7 +9,7 @@
 //! never carries a parsed/ISO date), not a formatted string.
 use crate::handlers::common::{blocking, done, MessageRef};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, tags};
 use mailvault_core::notes_to_self::{self, normalize_identity, Column};
 use mailvault_core::search_index::query::NoteAttachment;
@@ -343,7 +343,7 @@ mod tests {
     #[tokio::test]
     async fn the_routes_are_reachable_through_the_servers_dispatch() {
         let s = st();
-        let resp = crate::server::handle_request_for_test(&s, "notes.list", json!({ "accounts": accounts(&[]) })).await;
+        let resp = crate::test_support::handle_request_for_test(&s, "notes.list", json!({ "accounts": accounts(&[]) })).await;
         assert!(resp.result.is_some(), "notes.list is not routed: {:?}", resp.error);
     }
 

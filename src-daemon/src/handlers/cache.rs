@@ -26,7 +26,7 @@
 use crate::handlers::common::{blocking, done, opt_f64_arg, opt_str_arg, str_arg, u32_arg, vault_root, vec_arg, with_vault_write};
 use crate::custody as daemon_custody;
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::{graph_ledger, header_cache};
 use mailvault_core::custody::cache as sql_cache;
 use sha2::{Digest, Sha256};

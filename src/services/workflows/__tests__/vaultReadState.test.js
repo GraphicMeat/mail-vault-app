@@ -103,6 +103,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 import { _selKey, selectionKey } from '../../../stores/slices/unifiedHelpers';
 

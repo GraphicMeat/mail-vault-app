@@ -34,7 +34,8 @@
 use crate::handlers::common::with_mailbox_write;
 use crate::imap::ImapConfig;
 use crate::ipc::RpcResponse;
-use crate::server::{handle_request_for_test, DaemonState};
+use crate::test_support::handle_request_for_test;
+use crate::state::DaemonState;
 use mailvault_core::app_db::{self, deleted::{self as bin, Deleted}};
 use mailvault_core::custody::cache;
 use mailvault_core::vault_files;

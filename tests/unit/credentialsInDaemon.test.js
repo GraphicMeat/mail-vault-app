@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { shellSource, shellModuleSource } from './helpers/rustSources.js';
 import { createDemoBackend } from '../../src/demo/backend.js';
 
 const read = path => readFileSync(path, 'utf8');
@@ -7,14 +8,15 @@ const RPCS = ['credentials.get', 'credentials.save', 'credentials.update', 'cred
 const transport = read('src/services/transport.js');
 const owned = transport.slice(transport.indexOf('export const DAEMON_OWNED'), transport.indexOf(']);', transport.indexOf('export const DAEMON_OWNED')));
 const handler = read('src-daemon/src/handlers/credentials.rs');
-const shell = read('src-tauri/src/main.rs');
+const shell = shellSource();
 const locales = ['de', 'en', 'es', 'fr', 'it', 'ja', 'ko', 'pt-BR', 'zh-Hans'];
 
 describe('staged native credential capability', () => {
   it.each(RPCS)('%s is registered in transport, native handler and shell budget', rpc => {
     expect(owned).toContain(`'${rpc}'`);
     expect(handler).toContain(`"${rpc}"`);
-    const budget = shell.slice(shell.indexOf('fn reply_timeout('), shell.indexOf('fn reply_timeout(') + 11000);
+    const proxy = shellModuleSource('rpc_proxy');
+    const budget = proxy.slice(proxy.indexOf('fn reply_timeout('), proxy.indexOf('fn reply_timeout(') + 11000);
     expect(budget).toContain(`"${rpc}"`);
   });
 

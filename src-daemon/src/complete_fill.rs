@@ -25,7 +25,7 @@
 //! pruned.
 
 use crate::refresh_worker::{self, Extent};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use crate::sync_engine::{FillGuard, SyncAccount, SyncResult};
 use crate::sync_observation;
 use std::sync::Arc;

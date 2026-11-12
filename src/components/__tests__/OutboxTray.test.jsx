@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { OutboxTray } from '../OutboxTray';
 import { useMailStore } from '../../stores/mailStore';
 import { t } from '../../i18n';
+import '../../services/workflows/bindStoreActions';
 
 const activateAccount = vi.fn();
 const item = (error, status = 'error') => ({

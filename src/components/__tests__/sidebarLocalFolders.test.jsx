@@ -8,6 +8,7 @@
 import React from 'react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const sent = vi.hoisted(() => ({ calls: [], answer: {} }));
 vi.mock('../../services/transport', async importOriginal => ({

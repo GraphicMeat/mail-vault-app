@@ -23,7 +23,7 @@ use crate::custody;
 use crate::handlers::common::{blocking, opt_str_arg, str_arg, vault_root, vec_arg};
 use crate::insights;
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -183,7 +183,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
 
     fn st(mail_dir_ok: bool) -> (tempfile::TempDir, std::path::PathBuf, Arc<DaemonState>) {
         let vault = tempfile::tempdir().unwrap();

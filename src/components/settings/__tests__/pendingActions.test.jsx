@@ -36,6 +36,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 import { PendingActionsSettings } from '../PendingActionsSettings';
 import { useMailStore } from '../../../stores/mailStore';
+import '../../../services/workflows/bindStoreActions';
 
 const entry = (over = {}) => ({ id: 1, op: 'delete', accountId: 'acct-a', mailbox: 'INBOX', uids: [7, 9], arg: {}, at: Date.now() - 3600_000, attempts: 1, failures: {}, ...over });
 const failure = (message) => ({ message, at: Date.now() });

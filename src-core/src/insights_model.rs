@@ -49,15 +49,7 @@ fn js_cmp(a: &str, b: &str) -> Ordering {
     a.encode_utf16().cmp(b.encode_utf16())
 }
 
-fn truthy(v: Option<&Value>) -> bool {
-    match v {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0 && !f.is_nan()),
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(_) => true,
-    }
-}
+use crate::js_value::truthy;
 
 /// `clean`: a trimmed string, or `''` for anything that is not one.
 fn clean(v: Option<&Value>) -> String {

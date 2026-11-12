@@ -52,6 +52,8 @@ vi.mock('../../db', () => ({
 vi.mock('../../api', () => ({
   vaultApplyFlags: (...a) => mockVaultApplyFlags(...a),
   fetchMailboxes: vi.fn().mockResolvedValue([]),
+  // The daemon lists (and stores) IMAP/JMAP folders: the server's answer, as fetchMailboxes was before.
+  loadMailboxes: vi.fn().mockResolvedValue({ mailboxes: [], source: 'server', suspectEmpty: false, changed: true }),
 }));
 vi.mock('../../authUtils', () => ({
   ensureFreshToken: (a) => Promise.resolve(a),
@@ -91,6 +93,7 @@ vi.mock('../../syncService', () => ({
 // The real cache manager, header memo and unified folder cache: the copies
 // under test are module state in those.
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { saveRestoreDescriptor, getRestoreDescriptor, invalidateRestoreDescriptors } = await import('../../cacheManager');
 const memo = await import('../../headerMemo');
 const unifiedCache = await import('../unifiedFolderCache');

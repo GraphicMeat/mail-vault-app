@@ -5,7 +5,7 @@
 //! and `tests/e2e/connected-cleanup-rules.test.js`.
 
 use super::*;
-use crate::server::handle_request_for_test;
+use crate::test_support::handle_request_for_test;
 use mailvault_core::abd::Provider;
 use mailvault_core::custody::entries;
 use mailvault_core::vault_files;

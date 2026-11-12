@@ -10,6 +10,7 @@ import { useBackupStore } from '../../stores/backupStore';
 import { useViewStore } from '../../stores/viewStore';
 import { setHoveredAccount, clearHoveredAccount, useAccountHoverStore } from '../../stores/accountHoverStore';
 import { t } from '../../i18n';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('../../services/db', async importOriginal => ({
   ...await importOriginal(),

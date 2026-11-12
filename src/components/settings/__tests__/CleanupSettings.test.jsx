@@ -39,6 +39,7 @@ import * as classification from '../../../services/classificationService';
 import { bulkOperationManager } from '../../../services/BulkOperationManager';
 import * as api from '../../../services/api';
 import * as db from '../../../services/db';
+import '../../../services/workflows/bindStoreActions';
 
 const account = { id: 'cleanup-account', email: 'cleanup@example.test' };
 const item = { messageId: 'message-42', uid: 42, mailbox: 'INBOX', subject: 'Cleanup regression message', from: 'sender@example.test', classification: { category: 'newsletter', action: 'archive', confidence: 0.9 } };

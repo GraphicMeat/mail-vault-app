@@ -23,7 +23,7 @@
 use crate::format_migration_job;
 use crate::handlers::common::{blocking, done, str_arg};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::{vault_layout, vault_ops};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -233,7 +233,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::DaemonState;
+    use crate::state::DaemonState;
     use mailvault_core::maildir::INFO_PREFIX;
     use serde_json::json;
     use std::path::PathBuf;

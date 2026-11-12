@@ -14,6 +14,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent, screen, act } from '@testing-library/react';
 import { PEOPLE, FIXTURE_MESSAGE, expectNoLeak } from '../../test/privacyFixtures';
+import '../../services/workflows/bindStoreActions';
 
 const { bodies } = vi.hoisted(() => ({ bodies: new Map() }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({

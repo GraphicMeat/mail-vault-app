@@ -11,7 +11,7 @@
 
 use crate::account_lifecycle::AccountStamp;
 use crate::ipc::{self, RpcResponse};
-use crate::server::{DaemonState, RunTokens};
+use crate::state::{DaemonState, RunTokens};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};

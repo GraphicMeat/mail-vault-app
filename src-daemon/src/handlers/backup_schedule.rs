@@ -1,6 +1,6 @@
 //! Configuration only. JavaScript remains the scheduling/run owner in slice 1.
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::{
     backup_schedule as policy,
     settings_doc::{SettingsDoc, SettingsError, Snapshot},
@@ -195,7 +195,8 @@ fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     async fn call(state: &Arc<DaemonState>, method: &str, params: Value) -> Result<Value, String> {
         let response = handle_request_for_test(state, method, params).await;
         if let Some(error) = response.error {

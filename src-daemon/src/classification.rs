@@ -398,7 +398,7 @@ impl ClassificationState {
         self.enqueue_inner(account_id, emails, tier, true, |commit| { commit(); true }).await
     }
 
-    pub(crate) async fn enqueue_with_source(&self, state: std::sync::Arc<crate::server::DaemonState>,
+    pub(crate) async fn enqueue_with_source(&self, state: std::sync::Arc<crate::state::DaemonState>,
         origin: crate::sync_observation::Origin,
         owners: Vec<(String, Option<crate::imap::NativeHeaderIdentity>)>,
         emails: Vec<EmailForClassification>, tier: QueueTier) -> usize {

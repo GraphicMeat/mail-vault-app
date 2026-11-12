@@ -7,7 +7,7 @@
 // asks the configured provider for three starters and falls back to Tier 1
 // silently on any failure or timeout.
 
-import { htmlToText } from '../components/RichTextEditor';
+import { htmlToText } from './editorHtml';
 import { generate, currentProvider, accountIdsOf, providerForMail } from '../services/aiClient';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';

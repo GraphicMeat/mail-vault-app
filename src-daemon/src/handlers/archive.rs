@@ -33,7 +33,7 @@
 use crate::handlers::common::{self, blocking, cancel_kind, done, str_arg, vec_arg, with_vault_write, RunGuard};
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::archive::{self, ArchiveCtx, ArchiveGate, ArchiveSinks};
 use mailvault_core::custody::entries;
 use serde_json::Value;
@@ -607,7 +607,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mailvault_core::daemon_ipc::parse_event;
     use serde_json::json;
     use std::sync::atomic::Ordering;

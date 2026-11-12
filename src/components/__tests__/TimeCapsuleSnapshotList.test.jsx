@@ -4,6 +4,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { SnapshotList } from '../TimeCapsule';
 import en from '../../i18n/locales/en.json';
+import '../../services/workflows/bindStoreActions';
 
 // Fix 0.8 round 1 (I1): a pre-response daemon_rpc failure now carries the
 // literal catalog key `errors.daemonUnavailable` as its message. Every

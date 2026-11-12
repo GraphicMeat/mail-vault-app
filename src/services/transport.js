@@ -346,6 +346,9 @@ export const DAEMON_OWNED = new Set([
   'cleanup.status', 'cleanup.run_now', 'cleanup.preview', 'cleanup.rules.get',
   // Native mailbox observation and closed-folder counts.
   'sync.probe', 'folders.status',
+  // The folder list of an account: the daemon decides cache or server
+  // (activateAccount's loadMailboxes is the caller).
+  'mailboxes.load',
   'sync.refresh', 'sync.refresh_status', 'sync.context', 'counts.unread',
   // Wave 4 S5: native download-ahead focus. Inert until the S7 cutover calls it.
   'pipeline.focus', 'pipeline.status',

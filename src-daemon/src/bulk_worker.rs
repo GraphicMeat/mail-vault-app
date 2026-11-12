@@ -4,7 +4,7 @@ use crate::{
     account_lifecycle::{AccountStamp, OperationPermit},
     account_workflows::AccountWriteScope,
     handlers::{archive, common},
-    server::DaemonState,
+    state::DaemonState,
 };
 use mailvault_core::{
     bulk::{FrozenIntent, Group, Mailbox, Scope},
@@ -13,6 +13,7 @@ use mailvault_core::{
         PurgeTarget, PurgeProof, PurgeEffect, PurgeMirror, Prepared,
     },
 };
+use mailvault_core::imap::Transport;
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -335,7 +336,8 @@ impl MailPorts {
         let config = self.config(g).await?;
         let origin = bulk_worker::origin_hash(&config);
         self.origins.insert(g.account_id.clone(), origin.clone());
-        if config.uses_jmap() {
+        let transport = config.transport();
+        if transport == Transport::Jmap {
             let acct = self
                 .state
                 .jmap
@@ -372,7 +374,7 @@ impl MailPorts {
             }
             return Ok((Identity::Jmap { mailbox_id, ids }, origin));
         }
-        if config.uses_graph() {
+        if transport == Transport::Graph {
             let selected = self
                 .selected
                 .get(&(g.account_id.clone(), g.mailbox.clone()))
@@ -1537,7 +1539,7 @@ impl MailPorts {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::handle_request_for_test;
+    use crate::test_support::handle_request_for_test;
     use mock_imap::{MockImap, Scenario};
     use std::time::Duration;
 

@@ -11,6 +11,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import '../../services/workflows/bindStoreActions';
 
 const { purge } = vi.hoisted(() => ({ purge: vi.fn() }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({

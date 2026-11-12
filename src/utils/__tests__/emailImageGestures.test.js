@@ -11,6 +11,7 @@ vi.mock('../../services/fileDrag', () => ({
   DRAG_FALLBACK_PNG: 'data:image/png;base64,FALLBACK', startFileDrag,
 }));
 import { attachImageGestures } from '../emailImageGestures';
+import '../../services/workflows/bindStoreActions';
 
 afterEach(() => { delete window.__TAURI__; document.body.innerHTML = ''; vi.clearAllMocks(); });
 

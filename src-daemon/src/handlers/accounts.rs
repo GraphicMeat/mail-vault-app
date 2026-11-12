@@ -17,7 +17,7 @@
 
 use crate::account_lifecycle::{ImportTargetReservation, PersistenceAuthority, PersistenceOwner};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::accounts_doc::{self, AccountsError};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -509,7 +509,8 @@ async fn pause_after_preservation(path: &std::path::Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use std::io::Write;
 
     fn p6_zip_fixture(dir: &std::path::Path) -> std::path::PathBuf {

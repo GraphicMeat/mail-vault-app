@@ -66,7 +66,7 @@ function settleLoading(get, useMailStore) {
 // ── setUnifiedInbox workflow ──
 
 export async function setUnifiedInbox(enabled) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   if (enabled) {
@@ -103,7 +103,7 @@ export async function setUnifiedInbox(enabled) {
 // ── switchUnifiedFolder workflow ──
 
 export async function switchUnifiedFolder(mailbox) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const { unifiedInbox } = get();
@@ -149,7 +149,7 @@ export async function switchUnifiedFolder(mailbox) {
 // ── loadUnifiedInbox workflow ──
 
 export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const { accounts, unifiedFolder } = get();

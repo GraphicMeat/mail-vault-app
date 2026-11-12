@@ -141,6 +141,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { useNotesStore } = await import('../../../stores/notesStore');
 await import('../../headerMemo');

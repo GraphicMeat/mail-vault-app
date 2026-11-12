@@ -9,7 +9,7 @@
 
 use crate::handlers::common::{vault_root, with_vault_write};
 use crate::imap::ImapConfig;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::custody::Connection;
 use mailvault_core::jmap::mailbox_map::mailbox_tree;
 use mailvault_core::jmap::{ImportResult, JMailbox, JmapClient, JmapError};

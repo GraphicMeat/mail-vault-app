@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { isFastmailAccount } from '../AccountModal.jsx';
+import '../../services/workflows/bindStoreActions';
 
 // Which accounts get "Login Address" instead of "Email Address" in the two
 // account forms. The reporter's own account is the third case: a custom domain

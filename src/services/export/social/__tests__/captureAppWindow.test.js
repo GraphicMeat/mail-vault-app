@@ -43,6 +43,7 @@ import { usePrivacyStore } from '../../../../stores/privacyStore';
 import { useThemeStore } from '../../../../stores/themeStore';
 import { NEEDLES, PEOPLE } from '../../../../test/privacyFixtures';
 import { Private } from '../../../../components/privacy/Private';
+import '../../../workflows/bindStoreActions';
 
 afterEach(() => {
   document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; mailThemeDuringCapture = null; revealDuringCapture = null; detailsDuringCapture = null; hideToDuringCapture = null; marksDuringCapture = null; calls = [];

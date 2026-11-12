@@ -19,14 +19,7 @@ impl ProbeDecision {
     }
 }
 
-fn truthy(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) | Some(Value::Bool(false)) => false,
-        Some(Value::Number(number)) => number.as_f64().is_some_and(|number| number != 0.0),
-        Some(Value::String(text)) => !text.is_empty(),
-        Some(Value::Bool(true) | Value::Array(_) | Value::Object(_)) => true,
-    }
-}
+use crate::js_value::truthy;
 
 fn js_string(value: &Value) -> String {
     match value {

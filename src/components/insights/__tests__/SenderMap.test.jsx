@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import SenderMap from '../SenderMap';
 import SenderList from '../SenderList';
+import '../../../services/workflows/bindStoreActions';
 afterEach(cleanup);
 const endAt = Date.parse('2026-09-09T12:00:00Z');
 const senders = [

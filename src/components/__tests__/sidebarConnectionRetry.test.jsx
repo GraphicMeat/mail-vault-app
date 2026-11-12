@@ -13,6 +13,7 @@ import { Sidebar } from '../Sidebar';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { t } from '../../i18n';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('framer-motion', async importOriginal => ({
   ...await importOriginal(),

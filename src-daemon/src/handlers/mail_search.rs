@@ -1,6 +1,6 @@
 use crate::handlers::common::vault_root;
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use futures::{stream, Stream, StreamExt};
 use mailvault_core::search_index::{
     self as core_search,
@@ -1516,7 +1516,8 @@ where
 mod tests {
     use super::*;
     use crate::ipc;
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use chrono::TimeZone;
     use mailvault_core::maildir::INFO_PREFIX;
     use mailvault_core::search_index::{self as core_search, db};

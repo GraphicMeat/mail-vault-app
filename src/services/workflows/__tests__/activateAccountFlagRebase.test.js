@@ -43,6 +43,8 @@ vi.mock('../../api', () => ({
   fetchEmails: (...a) => mockFetchEmails(...a),
   checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
   fetchMailboxes: vi.fn().mockResolvedValue([]),
+  // The daemon lists (and stores) IMAP/JMAP folders: the server's answer, as fetchMailboxes was before.
+  loadMailboxes: vi.fn().mockResolvedValue({ mailboxes: [], source: 'server', suspectEmpty: false, changed: true }),
   searchAllUids: (...a) => mockSearchAllUids(...a),
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
@@ -110,6 +112,7 @@ vi.mock('../../syncService', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { applySeenLocally } = await import('../messageMutations');
 const { forget: forgetMemo } = await import('../../headerMemo');
 

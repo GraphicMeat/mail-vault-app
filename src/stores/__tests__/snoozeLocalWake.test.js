@@ -26,11 +26,13 @@ vi.mock('../../services/db/accounts.js', () => ({ accountExpectedContext: accoun
 }) }));
 vi.mock('../mailStore.js', () => ({ useMailStore: { getState: () => mail } }));
 vi.mock('../../services/cacheManager.js', () => ({ invalidateRestoreDescriptors: vi.fn() }));
-vi.mock('../../services/workflows/messageMutations.js', () => ({
+
+// The store starts these workflows through ports (stores/workflowPorts.js).
+const { bindWorkflowPorts } = await import('../workflowPorts.js');
+bindWorkflowPorts({
   reloadListInView: (...args) => mockReload(...args),
   applySeenLocally: (...args) => mockApplySeen(...args),
-}));
-
+});
 const { initSnooze, useSnoozeStore } = await import('../snoozeStore.js');
 const fire = payload => listeners.snooze({ payload });
 

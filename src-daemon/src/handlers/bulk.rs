@@ -1,7 +1,7 @@
 //! User bulk RPCs only claim/control work. Admission receipts are registered
 //! before filesystem work, and a fence can rule out a late timed-out request.
 use crate::handlers::common::{blocking, done};
-use crate::{ipc::RpcResponse, server::DaemonState};
+use crate::{ipc::RpcResponse, state::DaemonState};
 use mailvault_core::bulk::{Action, Scope};
 use serde_json::{json, Value};
 use std::sync::{atomic::Ordering, Arc};

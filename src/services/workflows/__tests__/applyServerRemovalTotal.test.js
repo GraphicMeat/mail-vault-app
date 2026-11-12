@@ -97,6 +97,7 @@ vi.mock('../../safeStorage', () => ({
 vi.mock('../../transport', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { applyServerRemoval } = await import('../messageMutations.js');
 
 const ACCOUNT = { id: 'acct1', email: 'luke@mock.test' };

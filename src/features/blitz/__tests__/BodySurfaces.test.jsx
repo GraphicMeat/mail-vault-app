@@ -8,6 +8,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 const svc = vi.hoisted(() => ({ opens: [], next: 1, meta: {}, hit: { link: null, fold: null } }));
 vi.mock('../service', () => ({

@@ -173,6 +173,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { whenUnreadIdle } = await import('../../unreadCountsClient');
 const { removeLocalEmail: removeLocalEmailWorkflow, removeLocalEmails: removeLocalEmailsWorkflow } = await import('../messageMutations');
 const { loadEmails: realLoadEmails } = await import('../loadEmails');

@@ -3,6 +3,8 @@ pub mod parts;
 pub mod refusal;
 pub mod pool;
 pub mod tls;
+mod origin;
+pub use origin::origin_hash;
 
 use async_imap::types::{Fetch, Flag, Mailbox, Name};
 use async_std::net::TcpStream;
@@ -67,6 +69,29 @@ pub struct ImapConfig {
     pub jmap_username: Option<String>,
 }
 
+/// How an account talks to its server. The precedence is fixed here: a JMAP
+/// session URL decides first, then the Graph OAuth transport, else IMAP/SMTP.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Transport {
+    Imap,
+    Graph,
+    Jmap,
+}
+
+impl Transport {
+    /// The decision from the two raw account fields, for the account shapes
+    /// that are not an [`ImapConfig`] (`jmapSessionUrl`, `oauth2Transport`).
+    pub fn from_fields(jmap_session_url: Option<&str>, oauth2_transport: Option<&str>) -> Self {
+        if jmap_session_url.is_some_and(|u| !u.trim().is_empty()) {
+            Transport::Jmap
+        } else if oauth2_transport == Some("graph") {
+            Transport::Graph
+        } else {
+            Transport::Imap
+        }
+    }
+}
+
 impl ImapConfig {
     pub fn effective_port(&self) -> u16 {
         self.port.unwrap_or(993)
@@ -87,6 +112,13 @@ impl ImapConfig {
     /// through JMAP, never IMAP or SMTP (the app's `isJmapAccount`).
     pub fn uses_jmap(&self) -> bool {
         self.jmap_session_url.as_deref().is_some_and(|u| !u.trim().is_empty())
+    }
+
+    /// The one provider decision: a session URL makes it JMAP, else the
+    /// `graph` OAuth transport makes it Graph, else IMAP/SMTP. Branch on this
+    /// (a `match`), not on a ladder of the two predicates.
+    pub fn transport(&self) -> Transport {
+        Transport::from_fields(self.jmap_session_url.as_deref(), self.oauth2_transport.as_deref())
     }
 
     /// What every JMAP request authenticates with, or `None` when there is
@@ -196,7 +228,7 @@ pub struct NativeHeaderIdentity {
 
 impl NativeHeaderIdentity {
     pub fn new(config: &ImapConfig, account_id: &str, mailbox: &str, uid_validity: Option<u32>) -> Self {
-        Self { account_id: account_id.into(), mailbox: mailbox.into(), uid_validity, origin_hash: crate::bulk_worker::origin_hash(config), jmap_mailbox_id: None }
+        Self { account_id: account_id.into(), mailbox: mailbox.into(), uid_validity, origin_hash: origin_hash(config), jmap_mailbox_id: None }
     }
     /// The ID used by the actual query/membership filter, never a later listing.
     pub fn with_jmap_mailbox(mut self, mailbox_id: &str) -> Self {
@@ -4219,6 +4251,51 @@ mod tests {
             jmap_auth: None,
             jmap_username: None,
         }
+    }
+
+    // ── ImapConfig::transport ───────────────────────────────────────────
+
+    #[test]
+    fn transport_table_jmap_first_then_graph_then_imap() {
+        let cases: [(&str, Option<&str>, Option<&str>, Option<&str>, Transport); 8] = [
+            ("plain IMAP", None, None, None, Transport::Imap),
+            ("oauth2 without graph transport is IMAP", Some("oauth2"), None, None, Transport::Imap),
+            ("oauth2 with another transport is IMAP", Some("oauth2"), Some("imap"), None, Transport::Imap),
+            ("graph", Some("oauth2"), Some("graph"), None, Transport::Graph),
+            ("jmap", Some("password"), None, Some("https://j.example.test/session"), Transport::Jmap),
+            ("jmap wins over graph", Some("oauth2"), Some("graph"), Some("https://j.example.test/session"), Transport::Jmap),
+            ("blank session URL is not jmap", None, None, Some(""), Transport::Imap),
+            ("whitespace session URL is not jmap, graph still graph", Some("oauth2"), Some("graph"), Some("  \t"), Transport::Graph),
+        ];
+        for (name, auth, transport, url, want) in cases {
+            let mut c = config_with(None, None);
+            c.auth_type = auth.map(String::from);
+            c.oauth2_transport = transport.map(String::from);
+            c.jmap_session_url = url.map(String::from);
+            assert_eq!(c.transport(), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn transport_agrees_with_the_two_predicates_it_replaces() {
+        for graph in [false, true] {
+            for url in [None, Some(""), Some("https://j.example.test/s")] {
+                let mut c = config_with(None, None);
+                c.oauth2_transport = graph.then(|| "graph".to_string());
+                c.jmap_session_url = url.map(String::from);
+                assert_eq!(c.transport() == Transport::Jmap, c.uses_jmap());
+                assert_eq!(c.transport() == Transport::Graph, c.uses_graph() && !c.uses_jmap());
+            }
+        }
+    }
+
+    #[test]
+    fn transport_from_fields_is_the_same_rule() {
+        assert_eq!(Transport::from_fields(None, None), Transport::Imap);
+        assert_eq!(Transport::from_fields(None, Some("graph")), Transport::Graph);
+        assert_eq!(Transport::from_fields(Some(" "), Some("graph")), Transport::Graph);
+        assert_eq!(Transport::from_fields(Some("https://x"), Some("graph")), Transport::Jmap);
+        assert_eq!(Transport::from_fields(None, Some("Graph")), Transport::Imap);
     }
 
     #[test]

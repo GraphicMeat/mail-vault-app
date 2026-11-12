@@ -25,7 +25,7 @@ const newestFirst = (rows) =>
   [...rows].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
 export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADERS_PER_FOLDER } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const set = (patch) => useMailStore.setState(patch);
 
@@ -142,7 +142,7 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
  * alone, listing a fraction of what the same click had shown.
  */
 export async function openFolder(accountId, path) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   // The store holds ONE folder list: the active account's. At a cold start

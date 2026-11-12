@@ -118,6 +118,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { deleteMessages, onDeleteQueueLanded, onDeleteQueueChanged, onDeleteQueueStatus, hideQueuedDeletes, __resetDeleteQueueForTests } = await import('../messageMutations');
 const { useSettingsStore } = await import('../../../stores/settingsStore');

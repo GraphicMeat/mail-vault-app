@@ -173,7 +173,7 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, acc
 // ── _prefetchAdjacentEmails workflow ──
 
 export async function _prefetchAdjacentEmails(currentUid) {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const { sortedEmails, activeAccountId, activeMailbox, emailCache } = get();
@@ -297,7 +297,7 @@ function _snippetWhileLoading({ get, publish, selectedEmailId, accountId, mailbo
 async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
   cancelInsightsSelection();
   const generation = _insightsSelectionGeneration;
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const openedView = get();
   const isCurrent = () => generation === _insightsSelectionGeneration
@@ -419,7 +419,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   if (locationOverride) return _selectExplicitEmail(uid, source, mailboxOverride, locationOverride);
   cancelInsightsSelection();
   const generation = _insightsSelectionGeneration;
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
   const openedView = get();
   const isCurrent = () => generation === _insightsSelectionGeneration

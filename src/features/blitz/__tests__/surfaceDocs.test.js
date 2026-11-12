@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { surfaceDocs, workerTheme } from '../surfaces/surfaceDocs';
+import '../../../services/workflows/bindStoreActions';
 
 const RAW = '<html><body><p>Hello</p></body></html>';
 const label = (d) => `${d.surface}${d.variant ? `-${d.variant}` : ''}-${d.width}`;

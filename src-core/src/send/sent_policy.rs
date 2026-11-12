@@ -27,7 +27,7 @@ pub enum SentCopy {
 
 /// The Sent copy rule for `result`, sent from `account`.
 pub fn sent_copy_policy(account: &ImapConfig, result: &SendResult) -> SentCopy {
-    if result.server_saved_sent || account.uses_graph() || account.uses_jmap() {
+    if result.server_saved_sent || account.transport() != crate::imap::Transport::Imap {
         SentCopy::ServerFiled
     } else {
         SentCopy::Append

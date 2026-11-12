@@ -119,6 +119,23 @@ export async function fetchMailboxes(account) {
   return data.mailboxes;
 }
 
+/**
+ * The account's folder list, decided and fetched by the daemon: its stored copy
+ * when that is fresh and complete (and `force` is not set), otherwise the
+ * server's list, which it also stores. Not for a Graph account (the app lists
+ * those itself). Resolves to
+ * `{ mailboxes, fetchedAt, source: 'cache' | 'server', suspectEmpty? }`;
+ * `suspectEmpty` means the server sent no folders over a real list and nothing
+ * was stored.
+ */
+export async function loadMailboxes(account, { force = false } = {}) {
+  // The dev-mode sidecar has no daemon to keep a stored copy: it lists, as it always did.
+  if (!IS_TAURI) {
+    return { mailboxes: await fetchMailboxes(account), fetchedAt: Date.now(), source: 'server', suspectEmpty: false };
+  }
+  return tauriInvoke('mailboxes.load', { accountId: account.id, account, force });
+}
+
 export async function fetchEmails(account, mailbox = 'INBOX', page = 1, limit = 200) {
   if (IS_TAURI) {
     return bindNativeBatch(await tauriInvoke('imap_get_emails', { account, mailbox, page, limit }), account.id, mailbox);

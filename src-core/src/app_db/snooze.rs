@@ -79,12 +79,7 @@ pub fn pick_uid(stored: Option<u32>, found: &[u32]) -> Option<u32> {
     }
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
+use crate::clock::now_ms;
 
 const COLUMNS: &str =
     "id, account_id, from_mailbox, snoozed_mailbox, uid_in_snoozed, message_id, wake_at, created_at, state, attempts, retry_at, last_error";

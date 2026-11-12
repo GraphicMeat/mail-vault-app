@@ -65,6 +65,12 @@ vi.mock('../RichTextEditor', () => ({
   htmlToText: (h) => (h || '').replace(/<[^>]*>/g, ''),
   inlineComposeSpacing: (h) => h,
 }));
+// The utils that used to import these from the component read the same stubs.
+vi.mock('../../utils/editorHtml', () => ({
+  htmlToText: (h) => (h || '').replace(/<[^>]*>/g, ''),
+  inlineComposeSpacing: (h) => h,
+}));
+vi.mock('../../utils/textToHtml', () => ({ textToHtml: (s) => s || '' }));
 vi.mock('../ContactsPicker', () => ({ ContactsPickerButton: () => null, ContactsAutocomplete: () => null }));
 vi.mock('../../services/localDrafts', async () => ({
   resolveDraftsMailbox: vi.fn().mockResolvedValue('Drafts'),

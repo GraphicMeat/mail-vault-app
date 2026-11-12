@@ -7,7 +7,7 @@ import { t } from '../../i18n/index.js';
 // ── retryKeychainAccess workflow ──
 
 export async function retryKeychainAccess() {
-  const { useMailStore } = await import('../../stores/mailStore');
+  const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   const { activeAccountId } = get();

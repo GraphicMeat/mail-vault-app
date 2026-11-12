@@ -29,7 +29,7 @@ use crate::custody as daemon_custody;
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::handlers::common::{blocking, opt_str_arg, str_arg, u32_arg, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::compose::{self, RowHints};
 use mailvault_core::custody::entries;
 use mailvault_core::app_db::{self, compose_receipts::{self, Identity, Receipt, Scope, State}};
@@ -782,7 +782,7 @@ mod tests {
 
     /// Through the server's dispatch, so a module never wired in fails here.
     async fn rpc(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
-        crate::server::handle_request_for_test(s, method, params).await
+        crate::test_support::handle_request_for_test(s, method, params).await
     }
 
     async fn ok(s: &Arc<DaemonState>, method: &str, params: Value) -> Value {

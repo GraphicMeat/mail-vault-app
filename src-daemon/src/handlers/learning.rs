@@ -23,7 +23,7 @@
 
 use crate::handlers::common::str_arg;
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::{learned_rules, learning};
 use serde_json::{json, Value};
 use std::path::Path;
@@ -81,9 +81,7 @@ fn object_arg(params: &Value, key: &str) -> Option<Value> {
     params.get(key).filter(|v| v.is_object()).cloned()
 }
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
+use mailvault_core::clock::now_ms;
 
 /// Answer something read from the account's feedback.
 fn read(app_dir: &Path, params: &Value, id: Value, answer: impl FnOnce(learning::Feedback) -> Value) -> RpcResponse {
@@ -150,7 +148,8 @@ fn import(state: &DaemonState, params: &Value, id: Value) -> RpcResponse {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use serde_json::{json, Value};
     use std::sync::Arc;
 

@@ -31,6 +31,7 @@ import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { setPrivacyDictionary } from '../../../utils/privacy/privacyDictionary';
 import { buildNameDictionary, EMPTY_DICTIONARY } from '../../../utils/privacy/piiDetector';
+import '../../../services/workflows/bindStoreActions';
 
 const meta = (over = {}) => ({ cssWidth: 600, cssHeight: 300, tileCssHeight: 512, tileCount: 1, links: [], plainText: '', folds: [], ...over });
 const opened = (docId) => ({ docId, rev: 1, meta: meta() });

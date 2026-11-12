@@ -18,7 +18,7 @@
 //! journal, old or new, never a torn one.
 use crate::handlers::common::{blocking, done, str_arg, vec_arg};
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::op_journal::{self, OpEntry};
 use serde_json::Value;
 use std::sync::Arc;
@@ -344,7 +344,7 @@ mod tests {
         .await
         .error
         .is_none());
-        let reply = crate::server::handle_request_for_test(
+        let reply = crate::test_support::handle_request_for_test(
             &state,
             "bulk.resume",
             json!({"operationId":"legacy-hints","attemptId":"attempt"}),

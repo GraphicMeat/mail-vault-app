@@ -24,6 +24,7 @@ import {
   mockSearch,
 } from './purgeEverywhereHarness';
 import { retryAfterResync } from '../purgeResync.js';
+import '../bindStoreActions';
 
 const MAILBOX = 'INBOX.Spam';
 const identity = { accountId: ACCOUNT.id, mailbox: MAILBOX, uidValidity: 1, originHash: 'A' };

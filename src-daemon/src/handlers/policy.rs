@@ -27,7 +27,7 @@
 //! is shown what the daemon enforces.
 
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::fetch_mode::{FetchPolicy, KeepBodies};
 use mailvault_core::settings_doc::SettingsDoc;
 use mailvault_core::{search_index::text, transfer_limits, transfer_stats};
@@ -68,9 +68,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     }
 }
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
+use mailvault_core::clock::now_ms;
 
 fn accounts_reply(app_dir: &Path, accounts: &[(String, String)], now_ms: i64) -> Value {
     let doc = SettingsDoc::shared(app_dir).read().ok();
@@ -114,7 +112,8 @@ fn fetch_view(policy: &FetchPolicy, now_ms: i64) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use serde_json::{json, Value};
     use std::sync::Arc;
 

@@ -30,9 +30,10 @@
 //!
 //! No token ever reaches a log line, an event, or a `TokenError` message.
 
+use mailvault_core::imap::Transport;
 use crate::credentials;
 use crate::imap::ImapConfig;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -600,12 +601,7 @@ impl Drop for TestPersistenceWorker {
     }
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
+use mailvault_core::clock::now_ms;
 
 // Only these two persistence-only fields may coexist with an in-flight
 // refresh. Unknown fields and every auth/config/token presence remain exact.
@@ -1022,7 +1018,7 @@ async fn retire_pending(state: &DaemonState, account_id: &str) -> Result<(), Tok
         tests::before_pending_retirement(account_id);
         tokio::task::yield_now().await;
     }
-    if !config.uses_graph() && !config.uses_jmap() {
+    if config.transport() == Transport::Imap {
         state.imap_pool.retire_idle(&config).await;
     }
     Ok(())
@@ -1999,7 +1995,7 @@ mod tests {
         ) -> std::sync::mpsc::Receiver<crate::ipc::RpcResponse> {
             let state = Arc::clone(&self.state);
             self.spawn(async move {
-                crate::server::handle_request_for_test(&state, method, params).await
+                crate::test_support::handle_request_for_test(&state, method, params).await
             })
         }
         fn shared_pause(&mut self) -> std::sync::mpsc::Receiver<()> {
@@ -3622,7 +3618,7 @@ mod tests {
         });
         store(&s, &[("o1", &outlook)]);
 
-        let listed = crate::server::handle_request_for_test(
+        let listed = crate::test_support::handle_request_for_test(
             &s,
             "graph_set_read",
             json!({"accountId": "o1", "messageId": "m1", "isRead": true}),
@@ -3858,12 +3854,12 @@ mod tests {
         let call = json!({"accountId": "o9", "accountEmail": "o9@outlook.test", "messageId": "m1", "isRead": true});
 
         let no_record =
-            crate::server::handle_request_for_test(&s, "graph_set_read", call.clone()).await;
+            crate::test_support::handle_request_for_test(&s, "graph_set_read", call.clone()).await;
         std::env::set_var(
             "MAILVAULT_TEST_CREDENTIALS",
             s.app_dir.join("not-there.json"),
         );
-        let unreadable = crate::server::handle_request_for_test(&s, "graph_set_read", call).await;
+        let unreadable = crate::test_support::handle_request_for_test(&s, "graph_set_read", call).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         let message = |r: &crate::ipc::RpcResponse| {
@@ -3942,7 +3938,7 @@ mod tests {
         ] {
             let (_trap, lookups) = lookup_trap("backup-control-trap");
             let before = test_token_posts().len();
-            let response=crate::server::handle_request_for_test(&s,method,json!({"accountId":"backup-control-trap","requestId":"control","accountJson":account.to_string()})).await;
+            let response=crate::test_support::handle_request_for_test(&s,method,json!({"accountId":"backup-control-trap","requestId":"control","accountJson":account.to_string()})).await;
             assert_eq!(response.error.unwrap().message, "errors.settingsInvalid");
             assert_eq!(
                 lookups.load(std::sync::atomic::Ordering::SeqCst),
@@ -4013,7 +4009,7 @@ mod tests {
                 };
                 let (_trap, lookups) = lookup_trap("compose-prep-oauth-trap");
                 let before_posts = test_token_posts().len();
-                let response = crate::server::handle_request_for_test(&s, method, params).await;
+                let response = crate::test_support::handle_request_for_test(&s, method, params).await;
                 observed.push((
                     kind,
                     field,

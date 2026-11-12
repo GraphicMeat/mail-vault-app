@@ -8,6 +8,7 @@ import { render, screen } from '@testing-library/react';
 import { setLocale } from '../../src/i18n/index.js';
 import { formatEmailDate } from '../../src/utils/dateFormat.js';
 import { MailboxHeaderSummary, MailboxCustodyStatus } from '../../src/components/EmailList.jsx';
+import '../../src/services/workflows/bindStoreActions';
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../../src');
 

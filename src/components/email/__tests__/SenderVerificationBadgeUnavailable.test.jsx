@@ -4,6 +4,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, waitFor } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 const daemonCall = vi.fn();
 vi.mock('../../../services/daemonClient', () => ({ daemonCall: (...a) => daemonCall(...a) }));

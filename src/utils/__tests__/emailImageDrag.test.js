@@ -11,6 +11,7 @@ vi.mock('../../services/fileDrag', () => ({
 }));
 
 import { attachImageDrag, dragThumbnail } from '../emailImageDrag';
+import '../../services/workflows/bindStoreActions';
 
 const png = 'data:image/png;base64,AAAA';
 const dispatch = (element) => {

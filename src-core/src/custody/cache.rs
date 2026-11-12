@@ -8,10 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 fn err(e: rusqlite::Error) -> String { e.to_string() }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64).unwrap_or(0)
-}
+use crate::clock::now_ms;
 
 pub(crate) fn sort_ms(row: &Value) -> i64 {
     ["internalDate", "date"].iter()

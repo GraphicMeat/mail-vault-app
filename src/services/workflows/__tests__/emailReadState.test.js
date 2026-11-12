@@ -137,6 +137,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { whenUnreadIdle } = await import('../../unreadCountsClient');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 

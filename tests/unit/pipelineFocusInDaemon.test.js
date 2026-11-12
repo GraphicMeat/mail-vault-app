@@ -1,6 +1,7 @@
 // S5 owns a native download-ahead focus beside the JS pipelines, which keep running until S7.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { shellSource } from './helpers/rustSources.js';
 import { join, sep } from 'node:path';
 
 const read = path => readFileSync(path, 'utf8');
@@ -31,7 +32,7 @@ describe('native pipeline focus', () => {
     const server = executable(read('src-daemon/src/server.rs'));
     const handler = read('src-daemon/src/handlers/pipeline.rs');
     const demo = read('src/demo/backend.js');
-    const shell = read('src-tauri/src/main.rs');
+    const shell = shellSource();
     for (const method of ['pipeline.focus', 'pipeline.status']) {
       expect(owned).toContain(`'${method}'`);
       expect(server).toContain(`"${method}"`);
@@ -47,6 +48,8 @@ describe('native pipeline focus', () => {
   it('has one production reporter: the thin client the coordinator hook uses', () => {
     for (const path of walk('src')) {
       if (path === 'src/services/transport.js' || path === 'src/demo/backend.js' || path === 'src/services/nativePipeline.js') continue;
+      // The generated list of every daemon method name is data, not a reporter.
+      if (path === 'src/services/rpcMethods.generated.js') continue;
       const source = executable(read(path));
       expect(source, path).not.toMatch(/['"]pipeline\.(focus|status)['"]/);
     }

@@ -74,6 +74,7 @@ vi.mock('../../../services/authUtils', async (importOriginal) => ({
 
 const { default: BackupRestore } = await import('../BackupRestore');
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../../../services/workflows/bindStoreActions');
 
 const LABELS = { hasLabels: true, foldersKnown: true, bytes: 1024, sampledMessages: 3 };
 const NO_LABELS = { hasLabels: false, foldersKnown: true, bytes: 1024, sampledMessages: 3 };

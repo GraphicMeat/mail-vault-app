@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { AppearanceSettings } from '../AppearanceSettings';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 
 beforeEach(() => {
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {} })));

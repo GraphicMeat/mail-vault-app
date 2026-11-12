@@ -2,7 +2,7 @@
 //! every database call runs on a blocking thread through `custody::with_conn`.
 use super::common::done;
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::people::{correspondence as corr, journal, merge, review, seen, store, suggest};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -118,9 +118,7 @@ pub(crate) fn num(p: &Value, k: &str, default: usize) -> usize {
 fn own(p: &Value) -> Vec<String> {
     strings(p, "ownAddresses").iter().filter_map(|a| mailvault_core::people::message_addr::normalize(a)).collect()
 }
-fn now_ms() -> i64 {
-    mailvault_core::people::model::now_ms()
-}
+use mailvault_core::clock::now_ms;
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     if !method.starts_with("people.") {
@@ -232,7 +230,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
 #[cfg(test)]
 mod tests {
-    use crate::server::{handle_request_for_test, DaemonState};
+    use crate::test_support::handle_request_for_test;
+    use crate::state::DaemonState;
     use serde_json::{json, Value};
     use std::sync::Arc;
 

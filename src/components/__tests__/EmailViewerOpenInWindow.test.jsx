@@ -12,6 +12,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { usePrivacyStore } from '../../stores/privacyStore';
 import { EmailViewer } from '../EmailViewer';
 import { t } from '../../i18n';
+import '../../services/workflows/bindStoreActions';
 
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex: vi.fn(), measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 700,

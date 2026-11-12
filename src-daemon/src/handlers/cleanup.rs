@@ -18,7 +18,7 @@
 use crate::cleanup_worker::{self, Cmd, NoPick, RUN_EVENT};
 use crate::handlers::common;
 use crate::ipc::RpcResponse;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::cleanup_rules::{self, NoRun, RUN_INTERVAL_MS};
 use serde_json::{json, Value};
 use std::sync::Arc;

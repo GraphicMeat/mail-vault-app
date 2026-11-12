@@ -23,6 +23,7 @@ vi.mock('../../services/safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+await import('../../services/workflows/bindStoreActions');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
 
 beforeEach(() => {

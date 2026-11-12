@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { GeneralSettings } from '../GeneralSettings';
 import { useSettingsStore, DEFAULT_SHORTCUTS } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
+import '../../../services/workflows/bindStoreActions';
 
 let settingsState;
 beforeEach(() => {

@@ -131,6 +131,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+await import('../bindStoreActions');
 const { useSearchStore } = await import('../../../stores/searchStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { applyFlagToKeys } = await import('../messageMutations');

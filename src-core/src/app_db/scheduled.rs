@@ -55,12 +55,7 @@ pub enum AttemptOutcome {
     CeilingExceeded,
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
+use crate::clock::now_ms;
 
 const COLUMNS: &str =
     "id, account_id, mailbox, uid, envelope, local_time, tz, fire_at, status, attempts, last_error, created_at, updated_at";

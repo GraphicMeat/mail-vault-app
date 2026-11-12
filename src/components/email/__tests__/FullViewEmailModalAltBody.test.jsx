@@ -2,6 +2,7 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '../../../services/workflows/bindStoreActions';
 
 const { opened, dblclick } = vi.hoisted(() => ({ opened: { calls: [] }, dblclick: [] }));
 vi.mock('../EmailActionBar', () => ({ EmailActionBar: (p) => <button onClick={() => p.onReply(p.email)}>bar-reply</button> }));
