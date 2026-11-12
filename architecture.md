@@ -170,6 +170,12 @@ Stores sit below workflows, so a store action a workflow implements is declared 
 
 The three largest components keep layout and wiring and take their state from hooks by concern: `src/hooks/app/` for `App.jsx`, `src/hooks/emailList/` for `EmailList.jsx`, `src/components/compose/` for `ComposeModal.jsx`. `tests/unit/componentSize.test.js` caps their line counts; a new concern gets its own hook, and a limit is only ever lowered.
 
+#### Message actions, delete confirmation and body links
+
+What a quick action does lives in one table, `src/utils/messageActions.js` (`MESSAGE_ACTIONS`, `runMessageAction`): each action id names an operation and its arguments, plus whether it confirms, closes a row menu first, or opens a picker. The row menu and swipe (`RowQuickActions`), the selection bar (`SelectionActionBar`) and a reader's bar (`EmailActionBar`) each build a context of operations over what they act on (a row's messages made the selection for the call, the live selection, or the reader's one message and its host's handlers) and call the table; which buttons a surface shows stays in `quickActionCatalog`. `src/components/__tests__/__snapshots__/quickActionActivation.txt` pins what every action reaches on each surface.
+
+Every surface that confirms a delete or unarchive takes its pending state, modal props and focus return from `src/hooks/useDeleteConfirmation.js` (the list through `useRowMenuState`, which returns focus to the row once its trigger is gone). Every reader of a message body (reading pane, thread, chat bubble, full view) gets its body scan and link click rule from `src/hooks/useEmailLinks.js`: the scan marks flagged links whenever link safety is on, and the iframe and the alternative renderer route clicks through `utils/emailLinkActivation.js` under the same settings. Keyboard shortcuts (`hooks/app/useAppShortcuts.js`) act on the open message directly and are not routed through the table.
+
 ### Tauri shell
 
 The shell owns:
