@@ -332,6 +332,36 @@ async fn a_dropped_list_inside_the_move_is_retried_and_the_delete_lands() {
 }
 
 #[tokio::test]
+async fn a_sent_delete_whose_trash_lookup_is_cut_short_still_moves_to_trash() {
+    let srv = MockImap::start(
+        rule_scenario("Sent", Some("Trash"))
+            .fault(Trigger::nth("LIST", 1), Action::TruncateResponse("* LIST (\\HasNoChildren) \"/\" \"Sent\"\r\n".len())),
+    );
+    let (s, config) = rule_state(&srv, "Sent");
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "Sent", 1, Mode::Auto, true)
+        .await.expect("cut Trash lookup retries before deciding delete mode");
+    assert_eq!(out.trash.as_deref(), Some("Trash"));
+    assert!(srv.state().find("Sent").unwrap().messages.is_empty());
+    assert_eq!(srv.state().find("Trash").unwrap().messages.len(), 1);
+    assert!(srv.connection_count() >= 2);
+}
+
+#[tokio::test]
+async fn a_move_whose_list_is_cut_short_lands_in_the_existing_trash() {
+    let srv = MockImap::start(
+        rule_scenario("INBOX", Some("Trash"))
+            .fault(Trigger::nth("LIST", 1), Action::TruncateResponse("* LIST (\\HasNoChildren) \"/\" \"INBOX\"\r\n".len())),
+    );
+    let (s, config) = rule_state(&srv, "INBOX");
+    let out = delete_one(&s, Provider::Imap(&config), "acc1", "INBOX", 1, Mode::Trash, false)
+        .await.expect("cut LIST retries before CREATE");
+    assert_eq!(out.trash.as_deref(), Some("Trash"));
+    assert!(srv.state().find("INBOX").unwrap().messages.is_empty());
+    assert_eq!(srv.state().find("Trash").unwrap().messages.len(), 1);
+    assert_eq!(srv.count_commands("CREATE"), 0);
+}
+
+#[tokio::test]
 async fn a_note_in_inbox_and_sent_deleted_at_once_both_land_in_trash() {
     let srv = MockImap::start(rule_scenario("Sent", Some("Trash")));
     srv.mutate(|state| { state.find_mut("INBOX").unwrap().add(Message::new(1, RAW)); });

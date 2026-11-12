@@ -230,6 +230,48 @@ async fn a_trash_lookup_whose_list_drops_is_asked_again_on_a_new_connection() {
     assert_eq!(server.connection_count(), 2, "the retry opens a new socket");
 }
 
+#[async_std::test]
+async fn a_list_cut_after_the_first_mailbox_is_an_error_not_a_short_list() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"]))
+            .fault(Trigger::on("LIST"), Action::TruncateResponse("* LIST (\\HasNoChildren) \"/\" \"INBOX\"\r\n".len())),
+    );
+    let mut sess = session(&server).await;
+    let err = list_mailboxes(&mut sess).await.expect_err("cut LIST must not return a short list");
+    assert!(pool::is_connection_lost(&err), "{err}");
+}
+
+#[async_std::test]
+async fn a_trash_lookup_cut_short_is_asked_again_on_a_new_connection() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"]))
+            .fault(Trigger::nth("LIST", 1), Action::TruncateResponse("* LIST (\\HasNoChildren) \"/\" \"INBOX\"\r\n".len())),
+    );
+    let trash = pool().run_read(&config_for(&server), true, |mut session| async move {
+        let trash = resolve_trash_path(&mut session).await?;
+        Ok((trash, session, None))
+    }).await.expect("fresh connection retries cut LIST");
+    assert_eq!(trash.as_deref(), Some("Trash"));
+    assert_eq!(server.connection_count(), 2);
+}
+
+#[async_std::test]
+async fn a_refused_list_is_the_servers_answer_not_a_lost_connection() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .fault(Trigger::on("LIST"), Action::RefuseWith("NO".into(), "list refused".into())),
+    );
+    let mut sess = session(&server).await;
+    let err = list_mailboxes(&mut sess).await.expect_err("server refused LIST");
+    assert!(!pool::is_connection_lost(&err), "{err}");
+    assert!(err.contains("list refused"), "{err}");
+}
+
 /// async-imap's `parse_mailbox` returns whatever it collected when the stream
 /// ends before the tagged reply — on a dead socket that is `Mailbox::default()`,
 /// EXISTS 0 and no error, which the daemon's reconcile once pruned 1399 cached
