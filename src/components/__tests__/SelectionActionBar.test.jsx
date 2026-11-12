@@ -257,6 +257,20 @@ describe('SelectionActionBar delete confirmation', () => {
     await waitFor(() => expect(useMailStoreMock.getState().deleteSelectedFromServer).toHaveBeenCalledTimes(1));
     expect(useMailStoreMock.getState().purgeSelectedEverywhere).not.toHaveBeenCalled();
   });
+
+  // Cancel deletes nothing. (Focus return is not checked here: this file's
+  // motion double mints a new component per render, so the bar remounts and
+  // the trigger it noted is gone.)
+  it.each([['Delete from server'], ['Delete everywhere']])('Cancel after %s closes the confirm and deletes nothing', async (title) => {
+    render(<SelectionActionBar />);
+    fireEvent.click(quickAction(title));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => { await new Promise(r => requestAnimationFrame(() => r())); });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(useMailStoreMock.getState().deleteSelectedFromServer).not.toHaveBeenCalled();
+    expect(useMailStoreMock.getState().purgeSelectedEverywhere).not.toHaveBeenCalled();
+  });
 });
 
 // W6. The destroying actions refuse a row they cannot place — which account,
