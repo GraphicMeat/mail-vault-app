@@ -105,7 +105,7 @@ async function searchList(text) {
   await fill(tid('contacts-search'), text);
 }
 
-/** Tabs of the person card are a radio group: details, mail, activity. */
+/** Tabs of the person card are a radio group: mail, details, activity. */
 async function openPersonTab(index) {
   const clicked = await browser.execute((i) => {
     const radio = document.querySelectorAll('[data-testid="person-card"] [role="radio"]')[i];
@@ -153,6 +153,7 @@ describe('Contacts', function () {
     await createContact(ADA);
     await searchList(TAG);
     const id = await rowFor(ADA.name);
+    await openPersonTab(1);
     const text = await browser.execute((sel) => document.querySelector(sel).textContent, tid(id));
     assert.ok(text.includes(ADA.email), `Row shows the address: ${text}`);
     assert.equal(await valueOf(tid('person-name')), ADA.name);
@@ -162,6 +163,7 @@ describe('Contacts', function () {
   it('edits the notes, saves, and finds them again after closing and reopening', async () => {
     await searchList(TAG);
     await clickReachable(tid(await rowFor(ADA.name)));
+    await openPersonTab(1);
     await waitFor(async () => (await valueOf(tid('person-name'))) === ADA.name, 'Ada card never opened');
     await fill(tid('person-notes'), NOTES);
     await waitFor(() => browser.execute(() => !document.querySelector('[data-testid="person-save"]')?.disabled), 'Save never enabled after editing the notes');
@@ -173,6 +175,7 @@ describe('Contacts', function () {
     await openContacts();
     await searchList(TAG);
     await clickReachable(tid(await rowFor(ADA.name)));
+    await openPersonTab(1);
     await waitFor(async () => (await valueOf(tid('person-notes'))) === NOTES, 'Saved notes did not come back after reopening');
   });
 
@@ -186,6 +189,7 @@ describe('Contacts', function () {
   it('merges the two contacts through the dialog into one row', async () => {
     await searchList(TAG);
     await clickReachable(tid(await rowFor(ADA.name)));
+    await openPersonTab(1);
     await waitFor(async () => (await valueOf(tid('person-name'))) === ADA.name, 'Ada card never opened');
     await clickReachable(tid('person-merge'));
     await waitShown(tid('merge-search'), 10000);
@@ -203,6 +207,7 @@ describe('Contacts', function () {
     await waitForRows(TAG, 1);
     assert.equal((await rowIds(ADA.name)).length, 1, 'The kept contact stays');
     assert.equal((await rowIds(BOB.name)).length, 0, 'The merged contact is gone');
+    await openPersonTab(1);
     await waitFor(async () => (await valueOf(tid('person-email-1'))) !== null, 'The merged card never showed the second address');
     const emails = [await valueOf(tid('person-email-0')), await valueOf(tid('person-email-1'))];
     assert.deepEqual(emails.sort(), [ADA.email, BOB.email].sort());
