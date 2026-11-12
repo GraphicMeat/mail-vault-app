@@ -1,8 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
+import { MESSAGE_ACTIONS } from '../utils/messageActions';
 
-// The quick actions that raise a confirmation: the trigger is noted for them,
-// so Cancel or Delete hands focus back to the button that asked.
-export const CONFIRMING_ACTIONS = Object.freeze(['delete', 'deleteServer', 'deleteEverywhere', 'unarchive']);
+// The quick actions that raise a confirmation (the action table's `confirms`):
+// the trigger is noted for them, so Cancel or Delete hands focus back to the
+// button that asked.
+export const CONFIRMING_ACTIONS = Object.freeze(Object.keys(MESSAGE_ACTIONS).filter(id => MESSAGE_ACTIONS[id].confirms));
 // A reader's Archive on a message already archived is Unarchive, which asks.
 export const READER_CONFIRMING_ACTIONS = Object.freeze([...CONFIRMING_ACTIONS, 'archive']);
 
