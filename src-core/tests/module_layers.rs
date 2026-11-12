@@ -335,19 +335,52 @@ fn the_clock_copy_scanner_sees_each_form_and_skips_the_legitimate_ones() {
     assert!(clock_copies("let m = meta.modified().duration_since(UNIX_EPOCH).as_millis();").is_empty(), "a file mtime is not the clock");
 }
 
+/// The provider words: every tag and the first label of every provider
+/// domain (`provider::DOMAINS`) longer than two letters (`mx` of
+/// `mx.microsoft` is not a name), plus `icloud`, which is not a `Provider`
+/// yet and whose hosts belong in provider.rs too.
+fn provider_words() -> Vec<String> {
+    use mailvault_core::provider::DOMAINS;
+    let mut words: Vec<String> = vec!["icloud".into()];
+    for (provider, domains) in DOMAINS {
+        words.push(provider.tag().to_string());
+        let first = domains.iter().filter_map(|d| d.split('.').next()).filter(|l| l.len() > 2);
+        words.extend(first.map(str::to_string));
+    }
+    words.sort();
+    words.dedup();
+    words
+}
+
+/// A string literal one of whose dot-separated labels is a provider word, so
+/// `"[gmail]/trash"` (a folder) and `"oauth2_google_clients"` (an RPC name)
+/// are not one.
+fn provider_literal() -> String {
+    format!(r#""\.?(?:[a-z0-9-]+\.)*(?:{})(?:\.[a-z0-9-]+)*""#, provider_words().join("|"))
+}
+
 /// What a source line (comments dropped) does that `crate::provider` owns:
 /// compares a provider's name or host (`== "google"`, `"imap.gmail.com" ==`,
-/// `"microsoft" =>`) or looks for one inside a host (`.contains("gmail")`).
-/// A literal counts when one of its dot-separated labels is a provider word,
-/// so `"[gmail]/trash"` (a folder) and `"oauth2_google_clients"` (an RPC
-/// name) do not.
+/// `"microsoft" =>`, a `"google" | ..` pattern, `matches!(p, "google")`) or
+/// looks for one inside a host (`.contains("gmail")`). Plus, over the whole
+/// file, an array of string literals holding one (`&["gmail.com", ..]`),
+/// reported by the line it opens on.
 fn provider_checks(code: &str) -> Vec<String> {
-    let lit = r#""\.?(?:[a-z0-9-]+\.)*(?:gmail|googlemail|google|outlook|hotmail|office365|microsoft|yahoo|yahoodns|icloud)(?:\.[a-z0-9-]+)*""#;
+    let lit = provider_literal();
     let check = regex::Regex::new(&format!(
-        r"(?i)(?:==|!=)\s*&?{lit}|{lit}\s*(?:==|!=|=>)|\.(?:contains|starts_with|ends_with|eq_ignore_ascii_case|strip_suffix)\(\s*&?{lit}"
+        r"(?i)(?:==|!=)\s*&?{lit}|{lit}\s*(?:==|!=|=>|\|)|\.(?:contains|starts_with|ends_with|eq_ignore_ascii_case|strip_suffix)\(\s*&?{lit}|matches!\(.*{lit}"
     ))
     .unwrap();
-    code.lines().filter(|l| check.is_match(l)).map(|l| l.trim().to_string()).collect()
+    let array = regex::Regex::new(&format!(r#"(?is)\[\s*(?:"[^"]*"\s*,\s*)*{lit}\s*(?:,\s*"[^"]*"\s*)*,?\s*\]"#)).unwrap();
+    let lines: Vec<&str> = code.lines().collect();
+    let mut out: Vec<String> = lines.iter().filter(|l| check.is_match(l)).map(|l| l.trim().to_string()).collect();
+    for m in array.find_iter(code) {
+        let line = lines[code[..m.start()].matches('\n').count()].trim().to_string();
+        if !out.contains(&line) {
+            out.push(line);
+        }
+    }
+    out
 }
 
 /// `(file, text on the line, why it may compare a provider word itself)`.
@@ -355,7 +388,12 @@ fn provider_checks(code: &str) -> Vec<String> {
 /// not which provider serves a host or an account.
 const MAY_CHECK_PROVIDER: &[(&str, &str, &str)] = &[
     ("src-core/src/log_redact.rs", "=>", "an address domain to its log token (`<gmail#..>`), country domains included"),
-    ("src-core/src/aliases.rs", "domain !=", "Gmail's address identity (dots and +tag ignored), mirrors src/utils/emailIdentity.js"),
+    ("src-core/src/notes_to_self.rs", "GMAIL_DOMAINS", "Gmail's address identity (dots and +tag ignored), mirrors src/utils/emailIdentity.js"),
+    ("src-core/src/graph.rs", "PERSONAL_MS_DOMAINS", "personal Microsoft address domains (outlook.fr, live.co.uk) that sign in through Graph"),
+    ("src-core/src/learned_rules.rs", "SHARED_DOMAIN", "address domains strangers share, where a domain rule would sort them all"),
+    ("src-core/src/jmap/discover.rs", "FASTMAIL_DOMAINS", "Fastmail's own address domains, whose credentials may go to its API host"),
+    ("src-daemon/src/classification.rs", "tx_domains", "sender address domains that send receipts"),
+    ("src-core/src/dns.rs", "DKIM_SELECTORS", "DKIM selector names some providers publish, not hosts"),
 ];
 
 /// Source roots scanned for provider checks: core, daemon and the shell.
@@ -416,9 +454,17 @@ fn the_provider_check_scanner_sees_each_form_and_skips_the_legitimate_ones() {
         r#".is_none_or(|p| p == "microsoft")"#,
         r#"if h.ends_with(".yahoo.com") {"#,
         r#"if h.eq_ignore_ascii_case("IMAP.GMAIL.COM") {"#,
+        r#"matches!(p.as_str(), "google" | "gmail")"#,
+        r#""gmail.com" | "googlemail.com" => return "gmail","#,
+        r#"if host.ends_with(".zoho.com") {"#,
+        r#"if mx.contains("messagingengine") {"#,
+        r#"const GMAIL_DOMAINS: [&str; 2] = ["gmail.com", "googlemail.com"];"#,
+        "const MS: &[&str] = &[\n    \"live.com\",\n    \"outlook.com\",\n];",
     ] {
         assert_eq!(provider_checks(hit).len(), 1, "{hit}");
     }
+    assert!(provider_words().iter().any(|w| w == "fastmail"), "words come from provider::DOMAINS");
+    assert!(!provider_words().iter().any(|w| w == "mx" || w == "com"), "{:?}", provider_words());
     for miss in [
         r#"|| lower.starts_with("[gmail]/trash")"#,
         r#""oauth2_google_clients" => RpcResponse::success("#,
@@ -427,6 +473,8 @@ fn the_provider_check_scanner_sees_each_form_and_skips_the_legitimate_ones() {
         r#""outlook.com","#,
         r#"Provider::from_host(host) == Some(Provider::Google)"#,
         r#"let p = "outlook";"#,
+        r#"let hosts = ["imap.example.test", "smtp.example.test"];"#,
+        r#"let modes = [Mode::Google, Mode::Other];"#,
     ] {
         assert!(provider_checks(miss).is_empty(), "{miss}");
     }

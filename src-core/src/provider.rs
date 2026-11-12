@@ -23,8 +23,10 @@ pub enum Provider {
 
 /// Each provider's domains: its IMAP and SMTP hosts and its MX hosts sit on or
 /// under one of these. Hosts on one base domain already match each other in
-/// `dns`, so this lists what ties different bases to one provider.
-const DOMAINS: &[(Provider, &[&str])] = &[
+/// `dns`, so this lists what ties different bases to one provider. Public for
+/// the source ratchet (`tests/module_layers.rs`), whose provider words come
+/// from here.
+pub const DOMAINS: &[(Provider, &[&str])] = &[
     (Provider::Google, &["gmail.com", "googlemail.com", "google.com"]),
     // `mx.microsoft` is the MX zone of newer Exchange Online tenants;
     // `office365.us` serves the US government cloud.
@@ -33,7 +35,7 @@ const DOMAINS: &[(Provider, &[&str])] = &[
         &["outlook.com", "hotmail.com", "office365.com", "office365.us", "microsoft.com", "mx.microsoft"],
     ),
     (Provider::Hostinger, &["hostinger.com"]),
-    (Provider::Zoho, &["zoho.com", "zoho.com.au"]),
+    (Provider::Zoho, &["zoho.com"]),
     (Provider::Yahoo, &["yahoo.com", "yahoodns.net"]),
     (Provider::Proton, &["protonmail.ch", "protonmail.com", "proton.me"]),
     (Provider::Fastmail, &["fastmail.com", "fastmail.fm", "messagingengine.com"]),
@@ -113,6 +115,9 @@ mod tests {
             ("mx1.hostinger.com", Some(Provider::Hostinger)),
             ("imap.hostinger.com", Some(Provider::Hostinger)),
             ("mx.zoho.com", Some(Provider::Zoho)),
+            // Zoho's Australian data centre has its own servers (imap.zoho.com.au):
+            // classed as Zoho, its MX was handed imap.zoho.com, the wrong server.
+            ("mx.zoho.com.au", None),
             ("mta5.am0.yahoodns.net", Some(Provider::Yahoo)),
             ("imap.mail.yahoo.com", Some(Provider::Yahoo)),
             ("mail.protonmail.ch", Some(Provider::Proton)),

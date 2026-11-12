@@ -123,7 +123,7 @@ pub fn is_jmap(account: &Value) -> bool {
 /// primary entry. The server only lists what it lets the account send as, so
 /// every entry is verified.
 pub fn aliases_from_identities(identities: &[Identity], login: &str) -> Vec<ProviderAlias> {
-    let own = mailbox_identity(login);
+    let own = crate::notes_to_self::normalize_identity(login);
     let mut out: Vec<ProviderAlias> = Vec::new();
     for identity in identities {
         if identity.email.contains('*') {
@@ -134,7 +134,7 @@ pub fn aliases_from_identities(identities: &[Identity], login: &str) -> Vec<Prov
             continue;
         }
         out.push(ProviderAlias {
-            is_primary: mailbox_identity(&address) == own,
+            is_primary: crate::notes_to_self::normalize_identity(&address) == own,
             address,
             name: identity.name.trim().to_string(),
             verified: true,
@@ -241,20 +241,6 @@ async fn fetch_send_as_at(url: &str, access_token: &str, account_email: &str) ->
 
 // ── Detection ───────────────────────────────────────────────────────────────
 
-/// The address as one mailbox: Gmail ignores dots and a `+tag` in the local
-/// part, and googlemail.com is gmail.com. Every other domain compares by
-/// case only. Mirrors `src/utils/emailIdentity.js`; used to drop the login
-/// address, never to merge two different aliases.
-pub fn mailbox_identity(address: &str) -> String {
-    let lower = address.trim().to_lowercase();
-    let Some((local, domain)) = lower.rsplit_once('@') else { return lower };
-    if domain != "gmail.com" && domain != "googlemail.com" {
-        return lower;
-    }
-    let local = local.split('+').next().unwrap_or_default().replace('.', "");
-    format!("{local}@gmail.com")
-}
-
 /// A bare `local@domain.tld`, lowercased; `None` for anything else.
 fn clean_address(raw: &str) -> Option<String> {
     let a = raw.trim().trim_start_matches('<').trim_end_matches('>').trim();
@@ -310,11 +296,11 @@ pub fn senders_of_rows(rows: &[Value]) -> Vec<Seen> {
 /// dropped, Gmail's dot and `+tag` spellings of it too. The name is the
 /// newest non-empty one.
 pub fn rank(source: Source, seen: &[Seen], login: &str) -> Vec<DetectedAlias> {
-    let own = mailbox_identity(login);
+    let own = crate::notes_to_self::normalize_identity(login);
     let mut out: Vec<DetectedAlias> = Vec::new();
     for s in seen {
         let Some(address) = clean_address(&s.address) else { continue };
-        if mailbox_identity(&address) == own {
+        if crate::notes_to_self::normalize_identity(&address) == own {
             continue;
         }
         let name = s.name.trim();

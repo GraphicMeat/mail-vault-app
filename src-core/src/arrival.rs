@@ -98,9 +98,9 @@ pub fn banner_allowed(count: usize, mailbox: &str, sent_override: Option<&str>,
     if count == 0 || outgoing_leaf(mailbox) || special_use_sent
         || sent_override.is_some_and(|sent| sent == mailbox) { return false; }
     if count != 1 { return true; }
-    let sender = crate::aliases::mailbox_identity(from_address);
+    let sender = crate::notes_to_self::normalize_identity(from_address);
     sender.is_empty() || !own_addresses.iter()
-        .any(|own| crate::aliases::mailbox_identity(own) == sender)
+        .any(|own| crate::notes_to_self::normalize_identity(own) == sender)
 }
 
 #[cfg(test)]

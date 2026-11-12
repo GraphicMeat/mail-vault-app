@@ -52,8 +52,6 @@ pub const FASTMAIL_API_HOST: &str = "api.fastmail.com";
 /// Fastmail's own address domains. Its many other personal domains are
 /// found by MX, like a custom domain.
 const FASTMAIL_DOMAINS: &[&str] = &["fastmail.com", "fastmail.fm", "messagingengine.com"];
-/// MX hosts that mean "this domain's mail is at Fastmail".
-const FASTMAIL_MX_DOMAINS: &[&str] = &["messagingengine.com", "fastmail.com"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Discovered {
@@ -153,9 +151,9 @@ fn is_fastmail_domain(domain: &str) -> bool {
     FASTMAIL_DOMAINS.contains(&domain)
 }
 
+/// An MX host that means "this domain's mail is at Fastmail".
 fn is_fastmail_mx(host: &str) -> bool {
-    let h = norm(host);
-    FASTMAIL_MX_DOMAINS.iter().any(|d| h == *d || h.ends_with(&format!(".{d}")))
+    crate::provider::Provider::from_host(host) == Some(crate::provider::Provider::Fastmail)
 }
 
 /// May credentials for an address at `email_domain` go to `host` without
