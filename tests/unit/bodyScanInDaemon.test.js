@@ -54,8 +54,12 @@ describe('the body scan lives in the daemon', () => {
     expect(code(read('src/services/bodyScan.js'))).toContain("'body.scan'");
     expect(code(read('src/services/bodyScan.js'))).toContain("'body.classify_links'");
     expect(code(read('src/services/rowVerdicts.js'))).toContain("'body.verdicts'");
+    // The four message readers scan through useEmailLinks, which asks with the link scan.
     for (const f of ['src/components/EmailViewer.jsx', 'src/components/email/ThreadView.jsx', 'src/components/ChatBubbleView.jsx',
-      'src/components/email/FullViewEmailModal.jsx', 'src/components/OriginalFrame.jsx', 'src/components/email/EmailPreviewFrame.jsx']) {
+      'src/components/email/FullViewEmailModal.jsx']) {
+      expect(code(read(f)), f).toMatch(/useEmailLinks\(/);
+    }
+    for (const f of ['src/hooks/useEmailLinks.js', 'src/components/OriginalFrame.jsx', 'src/components/email/EmailPreviewFrame.jsx']) {
       expect(code(read(f)), f).toMatch(/useBodyScan\(/);
     }
     expect(code(read('src/stores/slices/messageListSlice.js'))).toMatch(/from '..\/..\/services\/rowVerdicts'/);
