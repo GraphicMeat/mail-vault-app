@@ -26,7 +26,7 @@ vi.mock('../../../stores/sendersStore', async () => {
 });
 vi.mock('../../../stores/peopleStore', async () => {
   const { create } = await import('zustand');
-  h.freshPeople = () => ({ selectedId: null, sender: null, items: [], select: vi.fn(), selectSender: vi.fn() });
+  h.freshPeople = () => ({ selectedId: null, sender: null, items: [], changed: 0, select: vi.fn(), selectSender: vi.fn() });
   h.people = create(() => h.freshPeople());
   return { usePeopleStore: h.people };
 });
@@ -82,10 +82,16 @@ describe('SendersList', () => {
     expect(h.senders.getState().setSort).toHaveBeenCalledWith('total');
   });
 
-  it('reloads when the contacts list changes (a sender was saved or starred)', () => {
+  it('a contacts reload alone does not reload the senders', () => {
     render(<SendersList />);
-    h.senders.getState().load.mockClear();
+    expect(h.senders.getState().load).toHaveBeenCalledTimes(1);
     act(() => h.people.setState({ items: [{ id: 'p9' }] }));
     expect(h.senders.getState().load).toHaveBeenCalledTimes(1);
+  });
+
+  it('a contact write reloads the senders', () => {
+    render(<SendersList />);
+    act(() => h.people.setState({ changed: 1 }));
+    expect(h.senders.getState().load).toHaveBeenCalledTimes(2);
   });
 });

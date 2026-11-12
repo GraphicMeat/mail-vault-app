@@ -19,6 +19,7 @@ const initial = {
   selectedId: null, card: null, sender: null, stats: {},
   mail: [], mailNext: null, mailFilters: {}, mailLoading: false,
   review: [], journal: [], proposals: [],
+  changed: 0, // writes that can change who owns an address or whether it is a favorite
   status: 'idle', error: null,
 };
 
@@ -34,7 +35,9 @@ export const usePeopleStore = create((set, get) => {
     try { set({ error: null }); return await fn(); }
     catch (e) { return fail(e); }
   };
-  const refresh = async () => { await get().load(); if (get().selectedId) await get().select(get().selectedId); };
+  // A contact write: tell other lists (senders, email people) to re-resolve, then reload this one.
+  const reloadAfterWrite = async () => { set((s) => ({ changed: s.changed + 1 })); await get().load(); };
+  const refresh = async () => { await reloadAfterWrite(); if (get().selectedId) await get().select(get().selectedId); };
 
   return {
     ...initial,
@@ -132,7 +135,7 @@ export const usePeopleStore = create((set, get) => {
       const id = r?.ids?.[0];
       if (!id) return null;
       await get().select(id);
-      await get().load();
+      await reloadAfterWrite();
       return id;
     },
     // A favorite is always a contact: save first, then star.
@@ -144,24 +147,24 @@ export const usePeopleStore = create((set, get) => {
 
     create: async (fields) => {
       const card = await run(() => daemonCall('people.create', fields));
-      if (card) { await get().load(); await get().select(card.id); await get().loadProposals(); }
+      if (card) { await reloadAfterWrite(); await get().select(card.id); await get().loadProposals(); }
       return card;
     },
     update: async (id, patch) => {
       const card = await run(() => daemonCall('people.update', { id, patch }));
-      if (card) { if (get().selectedId === id) set({ card }); await get().load(); }
+      if (card) { if (get().selectedId === id) set({ card }); await reloadAfterWrite(); }
       return card;
     },
     remove: async (id) => {
       const ok = await run(() => daemonCall('people.delete', { id }));
-      if (ok) { set({ selectedId: null, card: null }); await get().load(); await get().loadProposals(); }
+      if (ok) { set({ selectedId: null, card: null }); await reloadAfterWrite(); await get().loadProposals(); }
       return ok;
     },
 
     previewMerge: (ids, keepId) => run(() => daemonCall('people.merge_preview', { ids, keepId })),
     merge: async (ids, keepId) => {
       const card = await run(() => daemonCall('people.merge', { ids, keepId }));
-      if (card) { await get().load(); await get().select(card.id); await get().loadProposals(); }
+      if (card) { await reloadAfterWrite(); await get().select(card.id); await get().loadProposals(); }
       return card;
     },
     split: async (id, recordIds) => {
@@ -184,7 +187,7 @@ export const usePeopleStore = create((set, get) => {
     acceptReview: async (items) => {
       const r = await run(() => daemonCall('people.review.accept', { items }));
       await get().loadReview();
-      await get().load();
+      await reloadAfterWrite();
       return r;
     },
     dismissReview: async (addresses) => {
@@ -195,7 +198,7 @@ export const usePeopleStore = create((set, get) => {
     loadProposals: async () => { const r = await run(() => daemonCall('people.proposals', {})); if (r) set({ proposals: r }); },
     importVcf: async (text) => {
       const r = await run(() => daemonCall('people.import_vcf', { text }));
-      await get().load();
+      await reloadAfterWrite();
       await get().loadProposals();
       return r;
     },
@@ -205,7 +208,7 @@ export const usePeopleStore = create((set, get) => {
       set({ indexReady: !!done, indexing: !done });
       if (!finished) return;
       // The counts and the list were built on a partial index.
-      get().load();
+      reloadAfterWrite();
       const id = get().selectedId;
       if (id && id !== 'new') get().refreshStats([id]);
       else if (get().sender) get().refreshStats([], [get().sender.address]);

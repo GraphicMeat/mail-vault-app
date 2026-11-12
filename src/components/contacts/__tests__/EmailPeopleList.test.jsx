@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 
 vi.mock('../../../i18n', () => ({ useT: () => (k) => k }));
 vi.mock('lucide-react', () => new Proxy({}, {
@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({ people: null, view: null, freshPeople: null }));
 vi.mock('../../../stores/peopleStore', async () => {
   const { create } = await import('zustand');
   h.freshPeople = () => ({
-    selectedId: null, sender: null, items: [], select: vi.fn(), selectSender: vi.fn(),
+    selectedId: null, sender: null, items: [], changed: 0, select: vi.fn(), selectSender: vi.fn(),
     owners: vi.fn(async () => ({ 'amy@x.io': { personId: 'p1', favorite: true } })),
   });
   h.people = create(() => h.freshPeople());
@@ -53,6 +53,15 @@ describe('EmailPeopleList', () => {
     expect(h.people.getState().select).toHaveBeenCalledWith('p1');
     fireEvent.click(screen.getByTestId('email-person-bo@x.io'));
     expect(h.people.getState().selectSender).toHaveBeenCalledWith(expect.objectContaining({ address: 'bo@x.io' }));
+  });
+
+  it('owners re-resolve after a write, not after a list reload', async () => {
+    render(<EmailPeopleList />);
+    await waitFor(() => expect(h.people.getState().owners).toHaveBeenCalledTimes(1));
+    await act(async () => h.people.setState({ items: [{ id: 'p9' }] }));
+    expect(h.people.getState().owners).toHaveBeenCalledTimes(1);
+    await act(async () => h.people.setState({ changed: 1 }));
+    await waitFor(() => expect(h.people.getState().owners).toHaveBeenCalledTimes(2));
   });
 
   it('selects the first participant on mount', async () => {

@@ -117,6 +117,36 @@ describe('peopleStore', () => {
     await vi.waitFor(() => expect(harness.daemonCall).toHaveBeenCalledWith('people.stats', expect.objectContaining({ ids: ['p1'] })));
   });
 
+  it('a contact write bumps changed, a plain load does not', async () => {
+    harness.daemonCall.mockImplementation(async (m) => (m === 'people.list' ? { items: [], total: 0, indexReady: true } : { id: 'p1' }));
+    const store = usePeopleStore.getState();
+    await store.load();
+    await store.setQuery('a');
+    await store.setVipOnly(true);
+    expect(usePeopleStore.getState().changed).toBe(0);
+    await store.update('p1', { vip: true });
+    expect(usePeopleStore.getState().changed).toBe(1);
+  });
+
+  it('saving a sender bumps changed', async () => {
+    harness.daemonCall.mockImplementation(async (m) => {
+      if (m === 'people.review.accept') return { ids: ['p7'] };
+      if (m === 'people.list') return { items: [], total: 0, indexReady: true };
+      return { id: 'p7' };
+    });
+    await usePeopleStore.getState().saveSender({ address: 'bo@x.io', name: 'Bo' });
+    expect(usePeopleStore.getState().changed).toBe(1);
+  });
+
+  it('a finished index bumps changed, progress does not', () => {
+    harness.daemonCall.mockResolvedValue({ items: [], total: 0, indexReady: true });
+    usePeopleStore.setState({ indexReady: false, indexing: true });
+    usePeopleStore.getState().applyIndexEvent({ indexed: 3, done: false });
+    expect(usePeopleStore.getState().changed).toBe(0);
+    usePeopleStore.getState().applyIndexEvent({ indexed: 9, done: true });
+    expect(usePeopleStore.getState().changed).toBe(1);
+  });
+
   it('a progress event that is not the finish reloads nothing', () => {
     usePeopleStore.setState({ indexReady: false, indexing: true });
     usePeopleStore.getState().applyIndexEvent({ indexed: 3, done: false });

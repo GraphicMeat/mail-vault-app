@@ -15,7 +15,7 @@ export function SendersList() {
   const selectedSender = usePeopleStore((s) => s.sender);
   const select = usePeopleStore((s) => s.select);
   const selectSender = usePeopleStore((s) => s.selectSender);
-  const contacts = usePeopleStore((s) => s.items);
+  const changed = usePeopleStore((s) => s.changed);
   // The box shows what was typed at once; the store searches once typing pauses.
   const [text, setText] = useState(query);
   useEffect(() => {
@@ -23,8 +23,8 @@ export function SendersList() {
     const timer = setTimeout(() => setQuery(text), 250);
     return () => clearTimeout(timer);
   }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Loads on mount, and again when a contact was saved or starred from here (the contacts list reloads).
-  useEffect(() => { load(); }, [load, contacts]);
+  // Loads on mount, and again after a contact write or a finished index.
+  useEffect(() => { load(); }, [load, changed]);
   const parentRef = useRef(null);
   const v = useVirtualizer({ count: items.length, getScrollElement: () => parentRef.current, estimateSize: () => ROW, overscan: 8 });
   const rows = v.getVirtualItems();

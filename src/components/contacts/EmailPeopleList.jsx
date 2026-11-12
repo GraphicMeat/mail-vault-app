@@ -10,15 +10,15 @@ const ROLE_LABEL = { from: 'common.from', to: 'common.to', cc: 'contacts.role.cc
 export function EmailPeopleList() {
   const t = useT();
   const participants = useContactsViewStore((s) => s.participants);
-  const { selectedId, sender, select, selectSender, owners, items: contacts } = usePeopleStore();
+  const { selectedId, sender, select, selectSender, owners, changed } = usePeopleStore();
   const [owned, setOwned] = useState(null); // null until the first lookup lands
 
-  // Re-resolved when the contacts list reloads, so a star or save made here shows at once.
+  // Re-resolved after a contact write, so a star or save made here shows at once.
   useEffect(() => {
     let live = true;
     owners(participants.map((p) => p.address)).then((map) => { if (live) setOwned(map); });
     return () => { live = false; };
-  }, [participants, contacts, owners]);
+  }, [participants, changed, owners]);
 
   const open = (p) => {
     const own = owned?.[p.address.toLowerCase()];
