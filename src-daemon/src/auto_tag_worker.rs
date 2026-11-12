@@ -7,7 +7,7 @@
 //! keeping a second persisted queue next to `classification_queue`.
 //!
 //! Woken by the same "new mail arrived" signals that already feed the
-//! classification path, never by polling the vault: `handlers::handle_sync_now`
+//! classification path, never by polling the vault: `handlers::sync::handle_sync_now`
 //! (a manual/periodic sync) and `idle_watch` (an IDLE wake-up sync) both call
 //! `state.auto_tag_worker.wake()` the moment they see new mail.
 //!
@@ -46,7 +46,7 @@ impl Default for AutoTagWorkerState {
 
 impl AutoTagWorkerState {
     /// Called from wherever the daemon already learns new mail arrived
-    /// (`handlers::handle_sync_now`, `idle_watch`) — never on its own timer.
+    /// (`handlers::sync::handle_sync_now`, `idle_watch`) — never on its own timer.
     pub fn wake(&self) {
         self.notify.notify_one();
     }

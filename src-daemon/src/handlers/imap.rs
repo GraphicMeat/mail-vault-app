@@ -827,7 +827,7 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
                     "messageCount": message_count,
                     "fromAddress": account.from_address(),
                 })),
-                Err(e) => RpcResponse::success(id, super::failed_connection_test(&e, &account.host, account.effective_port())),
+                Err(e) => RpcResponse::success(id, super::common::failed_connection_test(&e, None, &account.host, account.effective_port())),
             }
         }
 

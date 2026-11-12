@@ -473,10 +473,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let (host, port) = (account.smtp_host.as_deref().unwrap_or(""), account.smtp_port.unwrap_or(587));
             match outcome {
                 Ok(Ok(())) => RpcResponse::success(id, json!({"success": true, "message": "SMTP connection successful"})),
-                Ok(Err(e)) => RpcResponse::success(id, super::failed_connection_test(&e, host, port)),
+                Ok(Err(e)) => RpcResponse::success(id, super::common::failed_connection_test(&e, None, host, port)),
                 Err(_) => RpcResponse::success(
                     id,
-                    super::failed_connection_test(&format!("SMTP connection test timed out for {}", account.email), host, port),
+                    super::common::failed_connection_test(&format!("SMTP connection test timed out for {}", account.email), None, host, port),
                 ),
             }
         }

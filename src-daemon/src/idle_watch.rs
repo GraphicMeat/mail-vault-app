@@ -147,7 +147,7 @@ impl IdleWatchers {
     }
 
     /// Share Auto Tags' wake signal so an IDLE arrival sweeps auto-tag rules
-    /// too, exactly like a manual `sync.now` does (`handlers::handle_sync_now`).
+    /// too, exactly like a manual `sync.now` does (`handlers::sync::handle_sync_now`).
     pub fn set_auto_tag_notify(&self, notify: Arc<tokio::sync::Notify>) {
         let _ = self.auto_tag_notify.set(notify);
     }
@@ -507,7 +507,7 @@ impl IdleWatchers {
             return;
         }
         // Same signal Auto Tags' worker wakes on for a manual sync
-        // (`handlers::handle_sync_now`) — an IDLE arrival must not need a
+        // (`handlers::sync::handle_sync_now`) — an IDLE arrival must not need a
         // second, separate trigger to be swept.
         if let Some(notify) = self.auto_tag_notify.get() {
             notify.notify_one();

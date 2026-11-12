@@ -192,6 +192,28 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     Some(done(id, res))
 }
 
+/// `contacts_index.get`: the in-memory contacts index's snapshot for the
+/// given accounts (answered by `server::route_inline`).
+pub(crate) fn handle_contacts_index_get(
+    contacts: Arc<crate::contacts_index::ContactsState>,
+    params: Value,
+    id: Value,
+) -> RpcResponse {
+    use crate::ipc;
+    let account_ids: Vec<String> = match params.get("accountIds").and_then(|v| v.as_array()) {
+        Some(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect(),
+        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountIds"),
+    };
+    let snapshot = contacts.get_snapshot(&account_ids);
+    match serde_json::to_value(&snapshot) {
+        Ok(v) => RpcResponse::success(id, v),
+        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Serialize: {}", e)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::test_support::handle_request_for_test;

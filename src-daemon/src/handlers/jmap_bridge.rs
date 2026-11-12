@@ -286,7 +286,7 @@ async fn test_connection(account: &ImapConfig, id: Value) -> RpcResponse {
         ),
         Err(e) => RpcResponse::success(
             id,
-            super::failed_connection_test_with_code(&e.to_string(), e.code(), &host, port),
+            super::common::failed_connection_test(&e.to_string(), Some(e.code()), &host, port),
         ),
     }
 }

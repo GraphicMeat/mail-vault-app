@@ -708,18 +708,18 @@ async fn route_inline(state: &Arc<DaemonState>, req: RpcRequest, id: Value) -> R
         }
 
         // ── Sync engine (Phase 3) ───────────────────────────────────
-        "sync.now" => handle_sync_now(Arc::clone(state), req.params, id).await,
-        "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
-        "sync.status" => handle_sync_status(&state.sync_engine, req.params, id).await,
+        "sync.now" => crate::handlers::sync::handle_sync_now(Arc::clone(state), req.params, id).await,
+        "sync.wait" => crate::handlers::sync::handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
+        "sync.status" => crate::handlers::sync::handle_sync_status(&state.sync_engine, req.params, id).await,
         "sync.probe" | "folders.status" => crate::handlers::sync_observation::route(state, &req.method, req.params, id).await,
         "counts.unread" => crate::handlers::counts::route(state, req.params, id).await,
         "sync.refresh" | "sync.refresh_status" | "sync.context" => crate::handlers::refresh::route(state, &req.method, req.params, id).await,
         "pipeline.focus" | "pipeline.status" => crate::handlers::pipeline::route(state, &req.method, req.params, id).await,
 
         // ── IDLE watchers + the change feed they push into ──────────
-        "sync.watch" => handle_sync_watch(Arc::clone(state), req.params, id).await,
-        "sync.unwatch" => handle_sync_unwatch(Arc::clone(state), req.params, id).await,
-        "sync.events" => handle_sync_events(Arc::clone(state), req.params, id).await,
+        "sync.watch" => crate::handlers::sync::handle_sync_watch(Arc::clone(state), req.params, id).await,
+        "sync.unwatch" => crate::handlers::sync::handle_sync_unwatch(Arc::clone(state), req.params, id).await,
+        "sync.events" => crate::handlers::sync::handle_sync_events(Arc::clone(state), req.params, id).await,
         "sync.watch_status" => RpcResponse::success(
             id,
             serde_json::to_value(state.idle.status().await).unwrap_or_default(),
@@ -731,31 +731,31 @@ async fn route_inline(state: &Arc<DaemonState>, req: RpcRequest, id: Value) -> R
         // Tauri sidecar implementation, and the daemon writes that same format
         // from sync_engine.
 
-        "snapshot.create" => handle_snapshot_create(&state.data_dir, req.params, id),
-        "snapshot.create_from_maildir" => handle_snapshot_create_from_maildir(&state.data_dir, req.params, id),
-        "snapshot.list" => handle_snapshot_list(&state.data_dir, req.params, id),
-        "snapshot.load" => handle_snapshot_load(&state.data_dir, req.params, id),
-        "snapshot.delete" => handle_snapshot_delete(&state.data_dir, req.params, id),
+        "snapshot.create" => crate::handlers::snapshot::handle_snapshot_create(&state.data_dir, req.params, id),
+        "snapshot.create_from_maildir" => crate::handlers::snapshot::handle_snapshot_create_from_maildir(&state.data_dir, req.params, id),
+        "snapshot.list" => crate::handlers::snapshot::handle_snapshot_list(&state.data_dir, req.params, id),
+        "snapshot.load" => crate::handlers::snapshot::handle_snapshot_load(&state.data_dir, req.params, id),
+        "snapshot.delete" => crate::handlers::snapshot::handle_snapshot_delete(&state.data_dir, req.params, id),
 
-        "llm.status" => handle_llm_status(&state.llm, id).await,
-        "llm.list_models" => handle_llm_list_models(&state.llm, id).await,
-        "llm.download" => handle_llm_download(Arc::clone(&state.llm), req.params, id).await,
-        "llm.cancel_download" => handle_llm_cancel_download(&state.llm, id).await,
-        "llm.delete_model" => handle_llm_delete_model(&state.llm, req.params, id),
-        "llm.load" => handle_llm_load(&state.app_dir, &state.llm, &state.inference, req.params, id).await,
-        "llm.unload" => handle_llm_unload(&state.inference, id).await,
-        "llm.classify" => handle_llm_classify(&state.inference, req.params, id).await,
+        "llm.status" => crate::handlers::llm::handle_llm_status(&state.llm, id).await,
+        "llm.list_models" => crate::handlers::llm::handle_llm_list_models(&state.llm, id).await,
+        "llm.download" => crate::handlers::llm::handle_llm_download(Arc::clone(&state.llm), req.params, id).await,
+        "llm.cancel_download" => crate::handlers::llm::handle_llm_cancel_download(&state.llm, id).await,
+        "llm.delete_model" => crate::handlers::llm::handle_llm_delete_model(&state.llm, req.params, id),
+        "llm.load" => crate::handlers::llm::handle_llm_load(&state.app_dir, &state.llm, &state.inference, req.params, id).await,
+        "llm.unload" => crate::handlers::llm::handle_llm_unload(&state.inference, id).await,
+        "llm.classify" => crate::handlers::llm::handle_llm_classify(&state.inference, req.params, id).await,
 
-        "classification.run" => handle_classification_run(Arc::clone(state), req.params, id).await,
-        "classification.reclassify_all" => handle_reclassify_all(Arc::clone(state), req.params, id).await,
-        "classification.cancel" => handle_classification_cancel(&state.classification, id).await,
-        "classification.summary" => handle_classification_summary(&state.app_dir, req.params, id),
-        "classification.results" => handle_classification_results(&state.app_dir, req.params, id),
-        "classification.override" => handle_classification_override(&state.app_dir, req.params, id),
-        "classification.status" => handle_classification_status(&state.classification, id).await,
+        "classification.run" => crate::handlers::classification::handle_classification_run(Arc::clone(state), req.params, id).await,
+        "classification.reclassify_all" => crate::handlers::classification::handle_reclassify_all(Arc::clone(state), req.params, id).await,
+        "classification.cancel" => crate::handlers::classification::handle_classification_cancel(&state.classification, id).await,
+        "classification.summary" => crate::handlers::classification::handle_classification_summary(&state.app_dir, req.params, id),
+        "classification.results" => crate::handlers::classification::handle_classification_results(&state.app_dir, req.params, id),
+        "classification.override" => crate::handlers::classification::handle_classification_override(&state.app_dir, req.params, id),
+        "classification.status" => crate::handlers::classification::handle_classification_status(&state.classification, id).await,
 
 
-        "contacts_index.get" => handle_contacts_index_get(Arc::clone(&state.contacts), req.params, id),
+        "contacts_index.get" => crate::handlers::people::handle_contacts_index_get(Arc::clone(&state.contacts), req.params, id),
 
         _ => RpcResponse::error(id, ipc::METHOD_NOT_FOUND, format!("Unknown method: {}", req.method)),
     }

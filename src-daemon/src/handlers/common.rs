@@ -335,10 +335,46 @@ pub(crate) fn resume_kind(state: &Arc<DaemonState>, kind: &'static str) -> usize
     }
 }
 
+/// A connection test that failed, as `imap_test_connection`,
+/// `smtp_test_connection` and a JMAP account's test answer it: the daemon's
+/// own text, the code the app words its message by, and the host and port a
+/// blocked-port message names. `code` is one the caller already knows (a
+/// JMAP account's `JmapError::code()`, `E_JMAP_AUTH`, ...); without one it is
+/// classified from the text (`net::classify_connection_error`). A result, not
+/// an RPC error, because the shell forwards only an error's message and the
+/// code must reach the app; `api.js` turns it back into a rejection for every
+/// caller.
+pub(crate) fn failed_connection_test(error: &str, code: Option<&str>, host: &str, port: u16) -> Value {
+    let code = code.unwrap_or_else(|| mailvault_core::net::classify_connection_error(error).code());
+    serde_json::json!({
+        "success": false,
+        "error": error,
+        "errorCode": code,
+        "host": host,
+        "port": port,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// One shape for both callers: a code classified from the text (IMAP,
+    /// SMTP) and one the caller already knows (JMAP).
+    #[test]
+    fn a_failed_connection_test_names_its_code_host_and_port() {
+        assert_eq!(
+            failed_connection_test("Login failed: auth failed", None, "imap.example.test", 993),
+            json!({"success": false, "error": "Login failed: auth failed", "errorCode": "auth",
+                "host": "imap.example.test", "port": 993}),
+        );
+        assert_eq!(
+            failed_connection_test("401", Some("E_JMAP_AUTH"), "jmap.example.test", 443),
+            json!({"success": false, "error": "401", "errorCode": "E_JMAP_AUTH",
+                "host": "jmap.example.test", "port": 443}),
+        );
+    }
 
     fn state(mail_dir_ok: bool) -> Arc<DaemonState> {
         let dir = std::env::temp_dir().join(format!("mv-common-{}", uuid::Uuid::new_v4()));
