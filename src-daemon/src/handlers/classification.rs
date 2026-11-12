@@ -55,17 +55,11 @@ fn result_rows(
         .map(|(mid, c)| build_entry(mid, c))
         .collect();
 
-    // Sort by snapshot date descending (newest first); missing/empty dates sort to end.
-    entries.sort_by(|a, b| {
-        let da = a.get("date").and_then(|v| v.as_str()).unwrap_or("");
-        let db = b.get("date").and_then(|v| v.as_str()).unwrap_or("");
-        match (da.is_empty(), db.is_empty()) {
-            (true, true) => std::cmp::Ordering::Equal,
-            (true, false) => std::cmp::Ordering::Greater,
-            (false, true) => std::cmp::Ordering::Less,
-            _ => db.cmp(da),
-        }
-    });
+    // Newest first by the time the snapshot date names (the cached header's
+    // `date`: RFC 2822 or RFC 3339, never compared as text); a missing or
+    // unreadable date sorts to the end.
+    let when = |row: &Value| row.get("date").and_then(Value::as_str).and_then(mailvault_core::maildir::header_date_secs);
+    entries.sort_by_cached_key(|row| std::cmp::Reverse(when(row)));
     entries
 }
 
@@ -190,6 +184,23 @@ mod tests {
         assert_eq!(rows[0]["uid"], 7);
         assert_eq!(rows[0]["classification"]["category"], "work");
         assert_eq!((rows[2]["mailbox"].as_str(), rows[2]["uid"].as_u64()), (Some("INBOX"), Some(0)));
+    }
+
+    /// Snapshot dates are the cached header's `date` as the server gave it:
+    /// RFC 2822 (`Tue, 06 Jan 2026 ..`) as often as RFC 3339. Sorted as text,
+    /// a Tuesday in January ran ahead of a Friday in March.
+    #[test]
+    fn rows_sort_by_the_time_a_date_names_not_its_text() {
+        let all = HashMap::from([
+            ("jan".to_string(), classified("news", Some("Tue, 06 Jan 2026 10:00:00 +0000"))),
+            ("mar".to_string(), classified("news", Some("Fri, 06 Mar 2026 10:00:00 +0000"))),
+            ("feb".to_string(), classified("news", Some("2026-02-06T10:00:00Z"))),
+            ("garbled".to_string(), classified("news", Some("sometime"))),
+            ("undated".to_string(), classified("news", None)),
+        ]);
+        let rows = result_rows(&all, None);
+        assert_eq!(&ids(&rows)[..3], ["mar", "feb", "jan"]);
+        assert_eq!(ids(&rows)[3..].len(), 2, "unreadable and missing dates sort last");
     }
 
     #[test]
