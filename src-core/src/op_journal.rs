@@ -96,11 +96,6 @@ impl OpEntry {
     pub fn uid_validity(&self) -> Option<u32> {
         uid_validity_of(&self.arg)
     }
-
-    /// The uids a stop took off this entry (`stop_by_id`), still listed.
-    pub fn stopped_uids(&self) -> Vec<u32> {
-        self.failures.iter().filter(|(uid, f)| f.stopped && !self.uids.contains(uid)).map(|(uid, _)| *uid).collect()
-    }
 }
 
 use crate::clock::now_ms_u64 as now_ms;

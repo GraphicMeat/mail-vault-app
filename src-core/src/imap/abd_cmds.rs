@@ -9,7 +9,7 @@
 //! Nothing here sends a plain `EXPUNGE` and nothing CREATEs a folder.
 
 use super::{
-    compress_uid_ranges, list_mailboxes, patient, quote_mailbox, run_checked, select_mailbox, uid_search_to_tag,
+    compress_uid_ranges, patient, quote_mailbox, run_checked, select_mailbox, uid_search_to_tag,
     uids_of, ImapSession, MailboxInfo,
 };
 use crate::abd::ops::Caps;
@@ -67,11 +67,6 @@ pub fn resolve_trash(boxes: &[MailboxInfo]) -> Option<String> {
         }
     }
     None
-}
-
-/// The Trash folder's path. Never CREATEs one.
-pub async fn find_trash(session: &mut ImapSession) -> Result<Option<String>, String> {
-    Ok(resolve_trash(&list_mailboxes(session).await?))
 }
 
 // ── Reading ──────────────────────────────────────────────────────────────────

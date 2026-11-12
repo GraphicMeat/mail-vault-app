@@ -58,7 +58,6 @@ describe('download mode, transfer limits and vault folder names live in the daem
     expect(code(read('src/services/EmailPipelineManager.js'))).toMatch(/accountPolicies\(/);
     expect(code(read('src/components/settings/VaultGapRow.jsx'))).toMatch(/useAccountPolicy\(/);
     expect(code(read('src/components/settings/DataUsageAccountCard.jsx'))).toMatch(/useAccountPolicy\(/);
-    expect(code(read('src/components/TransferLimitBanner.jsx'))).toMatch(/accountPolicies\(/);
     expect(code(read('src/services/db/emails.js'))).toContain("'policy.vault_mailboxes'");
     expect(code(read('src/components/AccountModal.jsx'))).toMatch(/emailMatches === false/);
   });

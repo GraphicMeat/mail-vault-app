@@ -107,10 +107,6 @@ impl AllMailMap {
         self.gm_msgids.binary_search(&gm_msgid).ok().map(|k| self.uids[k])
     }
 
-    pub fn gm_for_uid(&self, uid: u32) -> Option<u64> {
-        self.uids.iter().position(|&u| u == uid).map(|k| self.gm_msgids[k])
-    }
-
     /// Build from unsorted pairs.
     pub fn from_pairs(path: &str, uid_validity: u32, mut pairs: Vec<(u64, u32)>) -> AllMailMap {
         pairs.sort_unstable();

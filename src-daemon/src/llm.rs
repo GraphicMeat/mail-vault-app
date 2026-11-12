@@ -308,11 +308,6 @@ pub async fn cancel_download(state: Arc<LlmState>) {
     *state.cancel_flag.lock().await = true;
 }
 
-/// Get current download progress.
-pub async fn get_download_progress(state: &LlmState) -> DownloadProgress {
-    state.download_progress.lock().await.clone()
-}
-
 /// Download tokenizer.json from a URL to the models directory.
 async fn download_tokenizer(url: &str, dest: &Path) -> Result<(), String> {
     let client = mailvault_core::net_activity::http_client("AI model", None);

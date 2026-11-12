@@ -562,19 +562,6 @@ impl ImapPool {
         // _permit drops here — the slot frees for a fresh connection
     }
 
-    /// Clear all background sessions for an account (force re-auth on next use).
-    /// Used during long backups to prevent OAuth2 token expiry.
-    pub async fn clear_background(&self, config: &ImapConfig) {
-        let key = conn_key(config);
-        let mut pool = self.background.lock().await;
-        if let Some(sessions) = pool.remove(&key) {
-            info!("[IMAP pool] Cleared {} background sessions for {}", sessions.len(), key);
-            for mut s in sessions {
-                let _ = s.session.logout().await;
-            }
-        }
-    }
-
     /// Log out the account's idle pooled sessions, both lanes, so the next
     /// request signs in again. For a new OAuth2 token: a provider that ends a
     /// session once the token it signed in with expires (Outlook, "Session

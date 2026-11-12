@@ -664,10 +664,6 @@ struct Prepared<'a> {
 }
 
 impl Model {
-    pub fn copy_count(&self) -> usize {
-        self.rows.len()
-    }
-
     fn scoped_events(&self, account_ids: &[String]) -> (Vec<Event<'_>>, HashMap<&str, Vec<String>>) {
         let scope: HashSet<&str> =
             account_ids.iter().map(String::as_str).filter(|id| self.account_ids.contains(*id)).collect();

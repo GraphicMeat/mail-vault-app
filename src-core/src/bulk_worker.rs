@@ -229,10 +229,6 @@ impl PurgeTarget {
     fn approved(&self) -> bool {
         !self.refused && !self.skipped && self.proof.is_some() && (self.local_only() || self.server == PurgeEffect::Complete)
     }
-    pub fn proof_matches(&self, intent: &FrozenIntent) -> bool {
-        let Some(hint) = self.hint(intent) else { return false; };
-        self.proof_matches_hint(hint)
-    }
     fn proof_matches_hint(&self,hint:&crate::bulk::TargetHint)->bool {
         if self.uid == 0 || (!hint.message_id_present && hint.message_id.is_some()) { return false; }
         let valid_stored = |stored: &Option<StoredProof>| stored.as_ref().is_none_or(|p| p.uid == self.uid && valid_artifact(p));

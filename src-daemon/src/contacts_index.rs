@@ -258,14 +258,6 @@ impl ContactsState {
         g.dirty.insert(account_id.to_string(), stamp.clone());
     }
 
-    /// Header rows the app cached itself (`save_email_cache`), each new to the
-    /// header cache. Before an account is seeded the seed replaces them.
-    pub fn observe_saved_rows(&self, account_id: &str, mailbox: &str, rows: &[serde_json::Value]) {
-        let Ok(stamp) = self.lifecycle.capture(account_id) else { return };
-        let Ok(permit) = self.lifecycle.try_commit(std::slice::from_ref(&stamp)) else { return };
-        self.observe_saved_rows_owned(&stamp, &permit, mailbox, rows);
-    }
-
     pub(crate) fn observe_saved_rows_owned(&self, stamp: &AccountStamp, permit: &LocalCommitPermit, mailbox: &str, rows: &[serde_json::Value]) {
         if is_excluded_mailbox(mailbox) || rows.is_empty() {
             return;
@@ -349,18 +341,6 @@ impl ContactsState {
         if !had_store {
             warn!("[contacts_index] no custody store attached — {} account(s) stay in memory", to_write.len());
         }
-    }
-
-    /// Scan `email_cache/{account_id_sanitized}_*` directories, parse every
-    /// `{uid}.json`, and feed through `observe_headers` to seed the index.
-    /// Runs once per account lifetime — gated by `cold_built_accounts`.
-    /// Seed the index from every cached header the account has, once per
-    /// account lifetime — gated by `cold_built_accounts`. Reads `custody.db`;
-    /// it used to walk `email_cache/<account>_*` and open every `<uid>.json`.
-    pub fn cold_build_account(&self, account_id: &str) {
-        let Ok(stamp) = self.lifecycle.capture(account_id) else { return };
-        let Ok(permit) = self.lifecycle.try_commit(std::slice::from_ref(&stamp)) else { return };
-        self.cold_build_account_owned(&stamp, &permit);
     }
 
     fn cold_build_account_owned(&self, stamp: &AccountStamp, permit: &LocalCommitPermit) {
