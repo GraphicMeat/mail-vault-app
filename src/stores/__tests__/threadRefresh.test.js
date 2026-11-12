@@ -89,6 +89,22 @@ describe('promoteOpenEmail', () => {
 });
 
 describe('refreshSelectedThread', () => {
+  it('keeps the promoted reply across the server-copy swap', () => {
+    const promoted = promoteOpenEmail({
+      ...state(null), selectedEmailId: 10,
+      followReply: { replyId: '<mine@example.test>', emailId: 10 },
+    }, buildThreads([parent, reply()]));
+    const serverReply = reply({ uid: 4211, _optimistic: false });
+
+    const update = refreshSelectedThread(state(promoted.selectedThread, {
+      selectedEmailId: promoted.selectedEmailId,
+    }), buildThreads([parent, serverReply]));
+
+    expect(update.selectedThread.emails.map(email => email.uid)).toEqual([10, 4211]);
+    expect(update.selectedThread.messageCount).toBe(2);
+    expect(update.selectedEmailId).toBe('acct-1:Sent:4211');
+  });
+
   it('adds the reply that landed after the thread was opened', () => {
     const open = threadOf([parent]);
     const threads = buildThreads([parent, reply()]);

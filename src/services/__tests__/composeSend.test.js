@@ -125,6 +125,10 @@ beforeEach(() => {
   const state = mailStore.useMailStore.getState();
   state.sentEmails = [];
   state.emails = [];
+  state.localEmails = [];
+  state.activeAccountId = 'acct-1';
+  state.activeMailbox = 'Sent';
+  state.loadSentHeaders.mockReset();
   listeners.length = 0;
   vi.useRealTimers();
 });
@@ -376,7 +380,11 @@ describe('the Sent copy the send leaves behind', () => {
 
   /// Same account, another message (a scheduled send, a second reply): its
   /// APPEND says nothing about this row, so the row stays.
-  it('drops its row only on its own message\'s APPEND', async () => {
+  it('drops its row only once its own server copy is in Sent', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [{ uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
     await createComposeSend({ snapshot, mode: 'new', replyTo: null, account })();
     const { handler, unlisten } = appendListener();
 
@@ -386,8 +394,57 @@ describe('the Sent copy the send leaves behind', () => {
     expect(unlisten).not.toHaveBeenCalled();
 
     await handler(appendEvent({ messageIdHeader: 'one@example.test' }));
-    expect(sentRows()).toEqual([]);
+    expect(sentRows().map(item => item.uid)).toEqual([900]);
     expect(unlisten).toHaveBeenCalled();
+  });
+
+  it('keeps the staged reply while the Sent reload brings no server copy', async () => {
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(sentRows().map(item => item.uid)).toEqual([STAGED_UID]);
+    expect(mailStore.useMailStore.getState().emails.map(item => item.uid)).toContain(STAGED_UID);
+  });
+
+  it('keeps the staged reply when the Sent reload fails', async () => {
+    mailStore.useMailStore.getState().loadSentHeaders.mockRejectedValueOnce(new Error('offline'));
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(sentRows().map(item => item.uid)).toEqual([STAGED_UID]);
+  });
+
+  it('never leaves the reply out of Sent between APPEND and reload', async () => {
+    const state = mailStore.useMailStore.getState();
+    let stagedAtReload = false;
+    state.loadSentHeaders.mockImplementation(async () => {
+      stagedAtReload = sentRows().some(item => item.uid === STAGED_UID);
+      state.sentEmails = [{ uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(stagedAtReload).toBe(true);
+  });
+
+  it('drops the staged row from an open Sent folder once the server copy lands', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [{ uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    expect(state.emails.map(item => item.uid)).toContain(STAGED_UID);
+    state.localEmails = [...state.emails];
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(state.emails.map(item => item.uid)).not.toContain(STAGED_UID);
+    expect(state.localEmails.map(item => item.uid)).not.toContain(STAGED_UID);
+  });
+
+  it('matches the server copy by canonical Message-ID', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [{ uid: 900, messageId: ' <one@example.test>', _accountId: 'acct-1' }];
+    });
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(state.emails.map(item => item.uid)).not.toContain(STAGED_UID);
   });
 });
 

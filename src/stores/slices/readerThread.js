@@ -116,5 +116,10 @@ export function refreshSelectedThread(state, threads, held = null) {
   // hands back fresh objects each time; swapping one in for an identical one
   // only re-renders the pane and re-keys its body loader.
   if (!fresh || fresh === open || memberKeys(fresh.emails) === memberKeys(open.emails)) return null;
+  const selectedWasOpen = open.emails.some(email => selectionKey(email, state) === state.selectedEmailId);
+  const selectedStillPresent = fresh.emails.some(email => selectionKey(email, state) === state.selectedEmailId);
+  if (selectedWasOpen && !selectedStillPresent) {
+    return { selectedThread: fresh, selectedEmailId: selectionKey(fresh.lastEmail, state) };
+  }
   return { selectedThread: fresh };
 }

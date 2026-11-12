@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- A reply sent from an open email now shows in the reader as part of its conversation, and stays there when the server's Sent copy arrives.
 - Settings > Mail preferences > Behavior > After Deleting has more choices for what opens once you delete the open email: the next email, the previous email, the next unread email or the previous unread email. A new "Stay in the same account" switch prefers an email from the account of the one you deleted, for All Inboxes. With no unread email left, or none left in that account, the nearest email opens rather than nothing.
 - With "Select nothing" after a delete, pressing j or k now continues from where the deleted email was instead of starting again at the top of the list.
 - Deleting in All Inboxes no longer ends with "Delete failed: Native refresh failed" when the delete worked and only one account could not be refreshed afterwards. The list repaints with what did arrive, and Undo is still offered. A refresh you start yourself now says "Some accounts could not be refreshed" and still shows the mail that did arrive.
@@ -10,8 +11,6 @@
 - Open Contacts while reading a message and the This email tab lists its sender and recipients.
 - Star a contact to add it to Favorites; the Favorites tab lists them and the list marks them with a star.
 - A contact card has Email and Copy address buttons and opens on its emails.
- - A reply sent from an open email now appears in its conversation without reopening the message.
-- A reply sent from an open email now appears in its conversation without reopening the message.
 - The MailVault phone app now opens with a short welcome tour on a fresh install, as the desktop app does: pick the app language first, then import your accounts from your computer or add one by hand, then see what is free and what Premium adds. Back and Skip tour work as on the desktop. Phones that already have accounts skip it, and Settings has Replay tour.
 - The MailVault phone app can import your accounts from your computer. Add account has a new first choice, "Import from computer", which explains the steps on the computer, links to the FAQ entry, scans the set-up code with the camera (showing "Part 2 of 3" while the parts cycle) and asks for the password you picked there. It then lists the accounts it added, the ones already on the phone, and any it could not use with the reason.
 - Settings > Accounts has a new "Set up the mobile app" section. Pick a password and MailVault shows a QR code holding all your accounts, encrypted with that password, for the MailVault phone app to scan. When the accounts do not fit one code, the parts cycle automatically. The code hides itself after 5 minutes, and accounts the phone cannot sign in with are listed with the reason.

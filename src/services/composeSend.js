@@ -10,7 +10,7 @@ import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
 import { withAttachmentBytes } from './attachmentUtils';
-import { splitRecipients } from '../utils/emailParser';
+import { normalizeMessageId, splitRecipients } from '../utils/emailParser';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { zonedTimeToEpoch } from '../utils/scheduledTime';
 import { serverSavesSent } from './providerKind.js';
@@ -159,30 +159,32 @@ function stageError(err) {
 // daemon's to remove, listener or not.
 const APPEND_LISTEN_MS = 90_000;
 
-/// The list's side of the server's Sent copy: once the server holds it, the
-/// optimistic row goes (the daemon already removed the staged copy), and the
-/// account's Sent is reloaded either way.
+/// The list's side of the server's Sent copy: the optimistic row stays until
+/// the server copy is visible in Sent, even if the daemon has removed the
+/// staged file. The account's Sent is reloaded either way.
 function refreshOnServerCopy({ freshAccount, sentFolderPath, pseudoUid, messageId, allowCleanup }) {
   return async (event) => {
     const payload = event.payload || {};
     await allowCleanup;
-    if (payload.ok) {
-      const other = item => !(item.uid === pseudoUid && item._accountId === freshAccount.id);
-      useMailStore.setState(state => ({
-        sentEmails: (state.sentEmails || []).filter(other),
-        emails: (state.emails || []).filter(other),
-        localEmails: (state.localEmails || []).filter(other),
-      }));
-    }
-
     const state = useMailStore.getState();
     try { await state.loadSentHeaders?.(freshAccount.id); } catch (err) { console.warn('[composeSend] refresh Sent failed:', err); }
     if (sentFolderPath && state.activeAccountId === freshAccount.id && state.activeMailbox === sentFolderPath) {
       try { await state.activateAccount?.(freshAccount.id, sentFolderPath, { _backgroundRefresh: true }); } catch (err) { console.warn('[composeSend] refresh active Sent failed:', err); }
     }
+    const targetId = normalizeMessageId(messageId);
+    const sent = useMailStore.getState().sentEmails || [];
+    const landed = !!payload.ok && !!targetId && sent.some(item =>
+      !item._optimistic && item._accountId === freshAccount.id && normalizeMessageId(item.messageId) === targetId);
+    if (landed) {
+      const other = item => !(item.uid === pseudoUid && item._accountId === freshAccount.id);
+      useMailStore.setState(current => ({
+        sentEmails: (current.sentEmails || []).filter(other),
+        emails: (current.emails || []).filter(other),
+        localEmails: (current.localEmails || []).filter(other),
+      }));
+    }
     if (messageId) {
-      const sent = useMailStore.getState().sentEmails || [];
-      console.log('[composeSend] server append reconciled', { messageId, found: sent.some(item => !item._optimistic && item.messageId === messageId) });
+      console.log('[composeSend] server append reconciled', { messageId, found: landed });
     }
   };
 }
