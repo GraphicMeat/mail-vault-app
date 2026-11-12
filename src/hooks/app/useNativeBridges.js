@@ -45,27 +45,6 @@ export function useNativeBridges({ setMailtoError, openSettings, setShowShortcut
   // Broadcast privacy-mode changes to the detached windows.
   useEffect(() => startPrivacySync(), []);
 
-  // Listen for server crash events from the Rust backend
-  useEffect(() => {
-    let unlisten;
-    let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('server-crashed', (event) => {
-        console.error('[App] Server crashed:', event.payload);
-        useMailStore.setState({
-          connectionStatus: 'error',
-          connectionError: event.payload,
-          connectionErrorType: 'serverError',
-          connectionErrorCode: null,
-        });
-      }).then(fn => {
-        if (!active) fn(); // unmounted before listener ready — detach immediately
-        else unlisten = fn;
-      });
-    }).catch(() => {}); // not in Tauri environment
-    return () => { active = false; if (unlisten) unlisten(); };
-  }, []);
-
   // Listen for open-settings event from native menu, or from a compose window
   // of its own asking for a tab (its Upgrade). That one comes forward first:
   // Settings opened behind the compose window reads as a dead button.
