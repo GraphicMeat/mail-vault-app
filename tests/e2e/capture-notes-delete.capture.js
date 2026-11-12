@@ -62,6 +62,17 @@ async function waitForCard(subject) {
   }, { timeout: 90_000, interval: 2000, timeoutMsg: `${subject} never appeared` });
 }
 
+async function setMode(theme) {
+  await browser.execute((value) => {
+    if (document.documentElement.getAttribute('data-theme') === value) return;
+    [...document.querySelectorAll('button')]
+      .find((button) => /^switch to (light|dark) mode$/i.test((button.getAttribute('aria-label') || button.title || '').trim()))
+      ?.click();
+  }, theme);
+  await browser.waitUntil(() => browser.execute((value) => document.documentElement.getAttribute('data-theme') === value, theme),
+    { timeout: 5_000, interval: 100, timeoutMsg: `App did not switch to ${theme}` });
+}
+
 describe('Notes delete capture', function () {
   this.timeout(300_000);
   const restores = [];
@@ -111,7 +122,7 @@ describe('Notes delete capture', function () {
     assert.equal(await browser.execute(() =>
       [...document.querySelectorAll('[role="alert"], [data-testid*="toast"]')].some((el) => el.textContent.includes('Not deleted yet'))), false);
 
-    const out = resolve('.artifacts');
+    const out = resolve(process.env.HARNESS_SHOTS_OUT || '.artifacts');
     mkdirSync(out, { recursive: true });
     assert.equal(await raiseWindow(1280, 800), 'ok');
     const layout = await browser.execute(() => {
@@ -131,7 +142,7 @@ describe('Notes delete capture', function () {
     process.env.SHOTS_OUT = out;
     const { capture } = await import('../../scripts/screenshots/capture.js');
     for (const theme of ['light', 'dark']) {
-      await browser.execute((value) => document.documentElement.setAttribute('data-theme', value), theme);
+      await setMode(theme);
       await browser.pause(500);
       capture(`notes-board-after-delete-${theme}`);
     }
