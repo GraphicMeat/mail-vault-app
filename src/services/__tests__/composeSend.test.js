@@ -436,11 +436,11 @@ describe('the Sent copy the send leaves behind', () => {
     expect(state.emails.map(item => item.uid)).toContain(STAGED_UID);
     state.localEmails = [...state.emails];
     await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
-    expect(state.emails.map(item => item.uid)).not.toContain(STAGED_UID);
+    expect(state.emails.map(item => item.uid)).toEqual([900]);
     expect(state.localEmails.map(item => item.uid)).not.toContain(STAGED_UID);
   });
 
-  it('rebuilds the real Sent list when the active folder refresh fails', async () => {
+  it('keeps the server copy visible when the active Sent refresh fails', async () => {
     const { deriveDisplayRows } = await import('../../stores/slices/messageListSlice');
     const state = mailStore.useMailStore.getState();
     state.updateSortedEmails.mockImplementation(() => {
@@ -458,6 +458,7 @@ describe('the Sent copy the send leaves behind', () => {
     await listeners.find(l => l.name === 'send-server-append-complete')
       .handler({ payload: { accountId: account.email, mailbox: 'Sent', ok: true, messageIdHeader: 'one@example.test' } });
 
+    expect(state.sortedEmails.map(item => item.uid)).toContain(900);
     expect(state.sortedEmails.map(item => item.uid)).not.toContain(STAGED_UID);
   });
 

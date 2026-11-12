@@ -173,19 +173,24 @@ function refreshOnServerCopy({ freshAccount, sentFolderPath, pseudoUid, messageI
     }
     const targetId = normalizeMessageId(messageId);
     const sent = useMailStore.getState().sentEmails || [];
-    const landed = !!payload.ok && !!targetId && sent.some(item =>
+    const serverCopy = payload.ok && targetId && sent.find(item =>
       !item._optimistic && item._accountId === freshAccount.id && normalizeMessageId(item.messageId) === targetId);
-    if (landed) {
+    if (serverCopy) {
       const other = item => !(item.uid === pseudoUid && item._accountId === freshAccount.id);
-      useMailStore.setState(current => ({
-        sentEmails: (current.sentEmails || []).filter(other),
-        emails: (current.emails || []).filter(other),
-        localEmails: (current.localEmails || []).filter(other),
-      }));
+      useMailStore.setState(current => {
+        const emails = (current.emails || []).filter(other);
+        if (sentFolderPath && current.activeAccountId === freshAccount.id && current.activeMailbox === sentFolderPath
+          && !emails.some(item => item.uid === serverCopy.uid)) emails.unshift(serverCopy);
+        return {
+          sentEmails: (current.sentEmails || []).filter(other),
+          emails,
+          localEmails: (current.localEmails || []).filter(other),
+        };
+      });
       useMailStore.getState().updateSortedEmails?.();
     }
     if (messageId) {
-      console.log('[composeSend] server append reconciled', { messageId, found: landed });
+      console.log('[composeSend] server append reconciled', { messageId, found: !!serverCopy });
     }
   };
 }
