@@ -54,7 +54,7 @@ export function registryRows() {
   if (start < 0 || end < 0) throw new Error('METHODS table not found in rpc_registry.rs');
   const table = src.slice(start, end);
   const rows = [];
-  for (const m of table.matchAll(/row\(\s*"([^"]+)"\s*,\s*Domain::(\w+)\s*,\s*[\w()]+\s*\)((?:\s*\.\w+\(\))*)/g)) {
+  for (const m of table.matchAll(/row\(\s*"([^"]+)"\s*,\s*Domain::(\w+)\s*,\s*[\w():]+\s*\)((?:\s*\.\w+\(\))*)/g)) {
     const flags = m[3];
     rows.push({
       name: m[1],

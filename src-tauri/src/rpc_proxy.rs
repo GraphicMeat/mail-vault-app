@@ -44,26 +44,7 @@ pub(crate) fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         .flatten()
 }
 
-/// `methods.json` rows to budgets. A row without `replySecs` is an error,
-/// never a silent "no budget".
-pub(crate) fn parse_reply_budgets(
-    json: &str,
-) -> Result<std::collections::HashMap<String, Option<std::time::Duration>>, String> {
-    let rows: Vec<serde_json::Value> = serde_json::from_str(json).map_err(|e| e.to_string())?;
-    rows.iter()
-        .map(|row| {
-            let name = row["name"].as_str().ok_or_else(|| format!("row without a name: {row}"))?;
-            let budget = match row.get("replySecs") {
-                None => return Err(format!("{name}: no replySecs")),
-                Some(serde_json::Value::Null) => None,
-                Some(v) => Some(std::time::Duration::from_secs(
-                    v.as_u64().ok_or_else(|| format!("{name}: replySecs is not whole seconds"))?,
-                )),
-            };
-            Ok((name.to_owned(), budget))
-        })
-        .collect()
-}
+pub(crate) use crate::reply_budgets::parse_reply_budgets;
 
 /// Pure decision (C7): may `daemon_rpc` skip `ensure_daemon_running` and its
 /// `spawn_blocking` entirely? Only when the long-lived channel is already

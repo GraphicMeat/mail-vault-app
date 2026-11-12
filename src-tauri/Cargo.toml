@@ -7,6 +7,8 @@ edition = "2021"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# build.rs reads src-daemon/methods.json (src/reply_budgets.rs).
+serde_json = "1.0"
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }

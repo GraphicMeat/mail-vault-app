@@ -120,6 +120,7 @@ pub(crate) use updater::*;
 mod daemon_lifecycle;
 #[allow(unused_imports)]
 pub(crate) use daemon_lifecycle::*;
+mod reply_budgets;
 mod rpc_proxy;
 #[allow(unused_imports)]
 pub(crate) use rpc_proxy::*;

@@ -157,6 +157,10 @@ fn reply_timeout_answers_every_methods_json_row_with_its_budget() {
     let mut bounded = 0;
     for row in &rows {
         let name = row["name"].as_str().unwrap();
+        // The render family answers only with `blitz-render` (`reply_timeout`).
+        if !cfg!(feature = "blitz-render") && name.starts_with("render.") {
+            continue;
+        }
         let want = match row.get("replySecs").unwrap_or_else(|| panic!("{name}: no replySecs")) {
             serde_json::Value::Null => None,
             v => Some(std::time::Duration::from_secs(v.as_u64().unwrap())),
