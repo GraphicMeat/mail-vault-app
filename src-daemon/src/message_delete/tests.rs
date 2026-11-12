@@ -312,6 +312,7 @@ async fn a_dropped_trash_lookup_is_retried_and_the_delete_lands() {
     assert!(srv.state().find("Sent").unwrap().messages.is_empty());
     assert_eq!(srv.state().find("Trash").unwrap().messages.len(), 1);
     assert_eq!(bin_rows(&s).len(), 1);
+    assert!(srv.connection_count() >= 2, "the dropped LIST must retry on a new socket");
 }
 
 #[tokio::test]
@@ -327,6 +328,7 @@ async fn a_dropped_list_inside_the_move_is_retried_and_the_delete_lands() {
     assert_eq!(out.trash.as_deref(), Some("Trash"));
     assert!(srv.state().find("INBOX").unwrap().messages.is_empty());
     assert_eq!(srv.state().find("Trash").unwrap().messages.len(), 1);
+    assert!(srv.connection_count() >= 2, "the dropped LIST must retry on a new socket");
 }
 
 #[tokio::test]
