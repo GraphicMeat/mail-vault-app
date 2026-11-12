@@ -107,13 +107,13 @@ async function searchList(text) {
 
 /** Tabs of the person card are a radio group: mail, details, activity. */
 async function openPersonTab(index) {
-  const clicked = await browser.execute((i) => {
+  // The card renders a beat after its row is clicked: wait for the tab instead of failing on the first look.
+  await waitFor(() => browser.execute((i) => {
     const radio = document.querySelectorAll('[data-testid="person-card"] [role="radio"]')[i];
     if (!radio) return false;
     radio.click();
     return true;
-  }, index);
-  assert.equal(clicked, true, `Person card tab ${index} exists`);
+  }, index), `Person card tab ${index} never appeared`);
 }
 
 async function openContacts() {
