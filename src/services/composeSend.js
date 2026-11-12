@@ -162,7 +162,7 @@ const APPEND_LISTEN_MS = 90_000;
 /// The list's side of the server's Sent copy: the optimistic row stays until
 /// the server copy is visible in Sent, even if the daemon has removed the
 /// staged file. The account's Sent is reloaded either way.
-function refreshOnServerCopy({ freshAccount, sentFolderPath, pseudoUid, messageId, allowCleanup }) {
+function refreshOnServerCopy({ freshAccount, sentFolderPath, messageId, allowCleanup }) {
   return async (event) => {
     const payload = event.payload || {};
     await allowCleanup;
@@ -176,7 +176,8 @@ function refreshOnServerCopy({ freshAccount, sentFolderPath, pseudoUid, messageI
     const serverCopy = payload.ok && targetId && sent.find(item =>
       !item._optimistic && item._accountId === freshAccount.id && normalizeMessageId(item.messageId) === targetId);
     if (serverCopy) {
-      const other = item => !(item.uid === pseudoUid && item._accountId === freshAccount.id);
+      const other = item => !(item._optimistic && item._accountId === freshAccount.id
+        && normalizeMessageId(item.messageId) === targetId);
       useMailStore.setState(current => {
         const emails = (current.emails || []).filter(other);
         if (sentFolderPath && current.activeAccountId === freshAccount.id && current.activeMailbox === sentFolderPath
@@ -267,7 +268,7 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
     try {
       const { listen } = await import('@tauri-apps/api/event');
       let handled = false;
-      const handler = refreshOnServerCopy({ freshAccount, sentFolderPath, pseudoUid, messageId, allowCleanup: localStageDone });
+      const handler = refreshOnServerCopy({ freshAccount, sentFolderPath, messageId, allowCleanup: localStageDone });
       const ownId = bareMessageId(messageId);
       unlistenAppend = await listen('send-server-append-complete', async event => {
         if (handled) return;

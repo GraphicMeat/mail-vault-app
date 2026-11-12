@@ -1185,6 +1185,20 @@ describe('unified inbox — server uid completeness never carries a stale true',
 
     clearUnifiedFolders();
   });
+
+  it('switchUnifiedFolder clears a pending reply follow', async () => {
+    const { putUnifiedFolder, clearUnifiedFolders } = await import('../../services/workflows/unifiedFolderCache');
+    putUnifiedFolder('Archive', []);
+    useMailStore.setState({
+      accounts: [ACCOUNT], unifiedInbox: true, unifiedFolder: 'INBOX',
+      followReply: { emailId: 7, replyId: '<reply@example.test>' },
+    });
+
+    await useMailStore.getState().switchUnifiedFolder('Archive');
+
+    expect(useMailStore.getState().followReply).toBeNull();
+    clearUnifiedFolders();
+  });
 });
 
 // The unified list is fed from three sources that all cover the same rows: the

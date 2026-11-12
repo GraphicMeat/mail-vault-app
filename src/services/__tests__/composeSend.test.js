@@ -462,6 +462,39 @@ describe('the Sent copy the send leaves behind', () => {
     expect(state.sortedEmails.map(item => item.uid)).not.toContain(STAGED_UID);
   });
 
+  it('removes a rebuilt staged row by Message-ID when its UID changed', async () => {
+    const state = mailStore.useMailStore.getState();
+    sendStaged.mockResolvedValueOnce({ ...sentReply(), entry: row({ uid: STAGED_UID + 1 }) });
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [...state.sentEmails, { uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    state.localEmails = [...state.emails];
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+
+    for (const rows of [state.sentEmails, state.emails, state.localEmails]) {
+      expect(rows.some(item => item._optimistic)).toBe(false);
+    }
+    expect(state.sentEmails.map(item => item.uid)).toEqual([900]);
+    expect(state.emails.map(item => item.uid)).toEqual([900]);
+  });
+
+  it('preserves a server copy whose UID equals the staged UID', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [...state.sentEmails, { uid: STAGED_UID, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+
+    expect(state.sentEmails.map(item => item.uid)).toEqual([STAGED_UID]);
+    expect(state.emails.map(item => item.uid)).toEqual([STAGED_UID]);
+    expect(state.sentEmails[0]).not.toHaveProperty('_optimistic');
+    expect(state.emails[0]).not.toHaveProperty('_optimistic');
+  });
+
   it('matches the server copy by canonical Message-ID', async () => {
     const state = mailStore.useMailStore.getState();
     let stagedAtReload = false;

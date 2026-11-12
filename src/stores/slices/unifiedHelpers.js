@@ -433,6 +433,7 @@ export function readerClearOnNavigation(prev, accountId, mailbox) {
     selectedEmail: null,
     selectedEmailSource: null,
     selectedThread: null,
+    followReply: null,
     selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
   };
 }
