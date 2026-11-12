@@ -1,7 +1,7 @@
 //! Lock-paged custody scans behind the `people.*` RPCs. Each loop takes the
 //! custody lock once per page, so no call is one long scan.
 use super::people::blocking_db;
-use crate::server::DaemonState;
+use crate::state::DaemonState;
 use mailvault_core::people::{correspondence as corr, review, seen, senders};
 use std::sync::Arc;
 
