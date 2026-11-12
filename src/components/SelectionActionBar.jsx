@@ -100,19 +100,18 @@ export function SelectionActionBar() {
     if (messages.length) useExportStore.getState().openExport({ messages });
   };
 
-  // `report` for the actions that destroy a message: those refuse a row they
-  // cannot place (which account, which folder) rather than guess, and the
-  // whole selection stays put. Console-only, that reads as a button that does
-  // nothing. Mark and save skip such a row instead, so they keep the log line.
-  const handleAction = async (action, { report = false } = {}) => {
+  // `report` (the catalog key of the failure text) for the actions that
+  // destroy or move a message: those refuse a row they cannot place (which
+  // account, which folder) rather than guess, and the whole selection stays
+  // put. Console-only, that reads as a button that does nothing. Mark and save
+  // skip such a row instead, so they keep the log line.
+  const handleAction = async (action, { report = null } = {}) => {
     try {
       await action();
     } catch (e) {
       console.error("Selection action failed:", e);
       if (report) {
-        useMailStore.setState({
-          error: t("list.deleteFailed", { err: e?.message || e }),
-        });
+        useMailStore.setState({ error: t(report, { err: e?.message || e }) });
       }
     }
   };
@@ -154,12 +153,12 @@ export function SelectionActionBar() {
   const confirmDelete = () => {
     const mode = deleteMode;
     deleteConfirmation.dismiss();
-    if (mode === "unarchive") handleAction(handleUnarchive, { report: true });
+    if (mode === "unarchive") handleAction(handleUnarchive, { report: "list.unarchiveFailed" });
     else {handleAction(
         mode === "everywhere"
           ? purgeSelectedEverywhere
           : deleteSelectedFromServer,
-        { report: true },
+        { report: "list.deleteFailed" },
       );}
   };
 
@@ -278,9 +277,9 @@ export function SelectionActionBar() {
     deleteServer: handleDelete,
     deleteEverywhere: handleDeleteEverywhere,
     export: exportSelected,
-    moveTo: mailbox => handleAction(() => useMailStore.getState().moveEmails(selectionKeys, mailbox), { report: true }),
+    moveTo: mailbox => handleAction(() => useMailStore.getState().moveEmails(selectionKeys, mailbox), { report: "list.moveFailed" }),
     pickFolder: toggleMoveDropdown,
-    spam: () => handleAction(() => useMailStore.getState().moveEmails(selectionKeys, selectionJunkPath), { report: true }),
+    spam: () => handleAction(() => useMailStore.getState().moveEmails(selectionKeys, selectionJunkPath), { report: "list.spamFailed" }),
     setFlagged: flagged => handleAction(() => useMailStore.getState().setSelectedFlagged(flagged)),
     tag: tagId => applyTagToRows(
       selectedRows.map((email, index) => ({ email, location: locations[index] })),

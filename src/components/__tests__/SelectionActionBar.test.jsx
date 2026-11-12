@@ -92,6 +92,8 @@ vi.mock('../../stores/searchStore', () => ({
 }));
 
 import { SelectionActionBar } from '../SelectionActionBar';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { DEFAULT_QUICK_ACTIONS } from '../../utils/quickActions';
 
 function quickAction(title) {
   const visible = screen.queryByTitle(title);
@@ -300,7 +302,8 @@ describe('SelectionActionBar refusal reporting', () => {
       backedUpKeys: new Set(['acct-1:INBOX:1', 'acct-1:INBOX:2']),
     });
   });
-  afterEach(() => { consoleError.mockRestore(); cleanup(); });
+  const savedQuickActions = useSettingsStore.getState().quickActions;
+  afterEach(() => { consoleError.mockRestore(); cleanup(); useSettingsStore.setState({ quickActions: savedQuickActions }); });
 
   const confirmVia = (trigger, confirmLabel) => {
     fireEvent.click(quickAction(trigger));
@@ -325,7 +328,7 @@ describe('SelectionActionBar refusal reporting', () => {
     confirmVia('Unarchive selected', 'Unarchive');
 
     await waitFor(() =>
-      expect(useMailStoreMock.getState().error).toBe(tr('list.deleteFailed', { err: REFUSAL })));
+      expect(useMailStoreMock.getState().error).toBe(tr('list.unarchiveFailed', { err: REFUSAL })));
     expect(removeLocalEmails).toHaveBeenCalledTimes(1);
     expect(useMailStoreMock.getState().clearSelection).not.toHaveBeenCalled();
   });
@@ -336,6 +339,38 @@ describe('SelectionActionBar refusal reporting', () => {
 
     await waitFor(() =>
       expect(useMailStoreMock.getState().error).toBe(tr('list.deleteFailed', { err: REFUSAL })));
+  });
+
+  // A refused move says so, not "Delete failed". Spam and a saved Move
+  // target are not on the default bar: put them there for these two.
+  const withMoveActions = () => {
+    const { defaults } = DEFAULT_QUICK_ACTIONS;
+    const entries = [...defaults.selection.entries,
+      { id: 'spam', action: 'spam' }, { id: 'move:Archive', action: 'move', params: { mailbox: 'Archive' } }];
+    useSettingsStore.setState({ quickActions: { ...DEFAULT_QUICK_ACTIONS, defaults: { ...defaults, selection: { ...defaults.selection, entries } } } });
+    const moveEmails = vi.fn().mockRejectedValue(new Error(REFUSAL));
+    useMailStoreMock.setState({ mailboxes: [{ path: 'Junk', specialUse: '\\Junk' }, { path: 'Archive' }], moveEmails });
+    return moveEmails;
+  };
+
+  it('names a refused move to Junk as such', async () => {
+    const moveEmails = withMoveActions();
+    render(<SelectionActionBar />);
+    fireEvent.click(quickAction('Move to Junk'));
+
+    await waitFor(() =>
+      expect(useMailStoreMock.getState().error).toBe(tr('list.spamFailed', { err: REFUSAL })));
+    expect(moveEmails).toHaveBeenCalledWith([1, 2], 'Junk');
+  });
+
+  it('names a refused move to a saved folder as such', async () => {
+    const moveEmails = withMoveActions();
+    render(<SelectionActionBar />);
+    fireEvent.click(quickAction('Move: Archive'));
+
+    await waitFor(() =>
+      expect(useMailStoreMock.getState().error).toBe(tr('list.moveFailed', { err: REFUSAL })));
+    expect(moveEmails).toHaveBeenCalledWith([1, 2], 'Archive');
   });
 
   // Mark and save SKIP a row they cannot place and carry on with the rest, so

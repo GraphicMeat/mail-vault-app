@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- A Move, Move to Junk or Unarchive on a selection of emails that fails now says which action failed. It used to read "Delete failed".
 - Turning Click Confirmation for flagged links on or off now applies at once to the message you have open, in the reading pane, threads, chat view and the full message view. Before, that message kept the old setting until you opened another one.
 - A flagged link found while a message is open in the full message view now marks its row in the list, as the reading pane already did.
 - Unarchive on a selection of emails now says so when it fails, as Delete does, and keeps the emails selected. It used to clear the selection as if it had worked.
