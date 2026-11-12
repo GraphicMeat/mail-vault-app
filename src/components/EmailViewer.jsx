@@ -1,6 +1,6 @@
 import { captureBulkScope } from '../services/bulkSelection.js';
 import { captureSelectionSnapshot } from '../services/headerIdentity.js';
-import React, { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useMessageListStore } from '../stores/messageListStore';
@@ -41,19 +41,19 @@ import { useViewBuilderStore } from '../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { CloseViewerButton } from './email/CloseViewerButton';
 import { Button } from './ui/Button';
-import { activateEmailLink, openExternalUrl } from '../utils/emailLinkActivation';
+import { useEmailLinks } from '../hooks/useEmailLinks';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
-import { useBodyScan, remoteAllowed, scanForFrame, scanHead, refusalHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
+import { remoteAllowed, scanForFrame, scanHead, refusalHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
 import { ExternalContentBar } from './email/ExternalContentBar';
 import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder, vaultHas } from '../stores/slices/unifiedHelpers';
 import { isRowArchived, withArchivedState } from '../utils/quickActionFacts';
 import { viewportShift } from '../hooks/useViewportShift';
-import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useAltBodyRenderer, useActiveBodyRenderer } from './email/bodyRendererRegistry';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
@@ -64,7 +64,6 @@ import { attachImageGestures } from '../utils/emailImageGestures';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { PgpDecryptedBadge, PgpLockedNotice } from './email/PgpStatus';
 import { getEmailColors } from '../utils/mailChrome';
-import { openMailtoCompose } from '../utils/mailto';
 import { altBodyQuote, replySelection } from '../utils/replySelection';
 import { registerActiveReply } from '../utils/composeOpener';
 import { AddressText } from './email/AddressText';
@@ -114,11 +113,6 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   // which never asks a uid set — see stores/slices/custody.js.
   const serverKnown = useMailStore(s => s.serverUids.complete);
 
-  const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
-  // Effective state, not the raw flag: a stale `true` left behind by a lapsed
-  // subscription must not render as protection. See isTrackerBlockingActive.
-  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
-  const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const privacyOn = usePrivacyFrameGate();
@@ -133,7 +127,6 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const captureMailTheme = useThemeStore(s => s.captureMailTheme);
   // Default email theme: user preference ('light'|'dark') or follow app theme.
   const theme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
-  const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [togglingRead, setTogglingRead] = useState(false);
@@ -456,7 +449,9 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     () => (selectedEmail?.html ? getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments)) : ''),
     [selectedEmail?.html, selectedEmail?.attachments],
   );
-  const bodyScan = useBodyScan(readerBody, { key: scopeKey, blocking: trackerBlocking, links: linkSafetyEnabled });
+  // The click rule for links (compose, link-safety modal, open) is the
+  // shared reader one, for the iframe and the alternative body alike.
+  const { scan: bodyScan, trackerBlocking, onLink: onAltLink, onFrameClick, linkSafetyModal } = useEmailLinks(readerBody, { key: scopeKey, accountId: selectedEmail?._accountId });
 
   const { iframeContent, scanAlertLevel, trackerSummary, altBodyHtml, indicatorCss } = useMemo(() => {
     if (!selectedEmail?.html || !bodyScan) return { iframeContent: '', scanAlertLevel: null, trackerSummary: null, altBodyHtml: '', indicatorCss: '' };
@@ -479,13 +474,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       privacy: privacyOn,
     });
     return { iframeContent: html, scanAlertLevel: bodyScan.maxAlertLevel, trackerSummary: bodyScan.summary, altBodyHtml: renderedBody, indicatorCss: indicatorStyle };
-  }, [selectedEmail?.html, bodyScan, linkSafetyEnabled, effectiveEmailTheme, palette, signatureDisplay, privacyOn]);
-
-  // The alternative body reports a clicked link; the same rule as the iframe's
-  // click handler decides what happens (compose, link-safety modal, open).
-  const onAltLink = useCallback(link => activateEmailLink(link, {
-    accountId: selectedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm, openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
-  }), [selectedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm]);
+  }, [selectedEmail?.html, bodyScan, effectiveEmailTheme, palette, signatureDisplay, privacyOn]);
 
   // Privacy masking first: it must run on `load` before the search highlight.
   useBodyPrivacy(iframeRef, iframeContent, { message: selectedEmail });
@@ -520,17 +509,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     const detachAutoSize = attachEmailIframeAutoSize(iframe, { minHeight: 300 });
 
     // Named handlers so we can remove them in cleanup
-    const handleClick = (e) => {
-      const link = e.target.closest('a');
-      if (!link || !link.href) return;
-      // The rule for what a click does lives in one shared util so the iframe
-      // and the Blitz reader cannot drift.
-      const result = activateEmailLink(
-        { href: link.href, alert: link.getAttribute('data-link-alert'), title: link.getAttribute('title'), text: link.textContent },
-        { accountId: selectedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm, openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl },
-      );
-      if (result !== 'ignored') { e.preventDefault(); e.stopPropagation(); }
-    };
+    const handleClick = onFrameClick;
 
     // Inline images open in the system viewer and save like an attachment.
     // Read at event time: the inline parts' bytes can arrive after the body.
@@ -1032,15 +1011,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
       }} />
 
-      <LinkSafetyModal
-        alert={linkSafetyAlert}
-        onCancel={() => setLinkSafetyAlert(null)}
-        onOpenAnyway={() => {
-          const url = linkSafetyAlert.actualUrl;
-          setLinkSafetyAlert(null);
-          import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
-        }}
-      />
+      <LinkSafetyModal {...linkSafetyModal} />
     </div>
   );
 }

@@ -37,9 +37,9 @@ import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils'
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
-import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
-import { useBodyScan, checkLinkAlert, LINK_ALERT_STYLE, refusalHead } from '../services/bodyScan';
+import { LINK_ALERT_STYLE, refusalHead } from '../services/bodyScan';
 import { ExternalContentBar } from './email/ExternalContentBar';
 import { linkifyHtml } from '../utils/linkify';
 import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
@@ -47,9 +47,8 @@ import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors, getChatLinkColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme, keepImageProportions, emailScriptNonce, PRIVACY_FRAME_HEAD, PRIVACY_HTML_ATTR } from '../utils/emailIframeTemplate';
 import { attachImageGestures } from '../utils/emailImageGestures';
-import { openMailtoCompose } from '../utils/mailto';
 import { useAltBodyRenderer } from './email/bodyRendererRegistry';
-import { activateEmailLink, openExternalUrl } from '../utils/emailLinkActivation';
+import { useEmailLinks } from '../hooks/useEmailLinks';
 import { AddressText } from './email/AddressText';
 import { TagChips } from './TagChips';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
@@ -378,7 +377,6 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const Alt = useAltBodyRenderer('bubble');
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
-  const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const menuOpenRef = useRef(false);
@@ -394,9 +392,6 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const backupConfigured = useMailStore(s => s.backupConfigured);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const privacyOn = usePrivacyFrameGate();
-  const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
-  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
-  const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const theme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -595,7 +590,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     () => (mergedEmail.html ? linkifyHtml(replaceCidUrls(mergedEmail.html, mergedEmail.attachments)) : ''),
     [mergedEmail.html, mergedEmail.attachments],
   );
-  const chatScan = useBodyScan(chatBody, { key: chatScopeKey, blocking: trackerBlocking, links: linkSafetyEnabled });
+  const { scan: chatScan, onLink, onFrameClick, linkSafetyModal } = useEmailLinks(chatBody, { key: chatScopeKey, accountId: mergedEmail?._accountId });
 
   const iframeContent = useMemo(() => {
     if (!mergedEmail.html || !chatScan) return '';
@@ -617,10 +612,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     surface: 'bubble', messageKey: iframeContent.scopeKey, documentHtml: iframeHtmlContent,
     plainText, theme: { dark: false, palette }, signatureDisplay, foldQuotes: true,
     privacy: privacyOn, message: mergedEmail, accountId: mergedEmail?._accountId,
-    onLink: link => activateEmailLink(link, {
-      accountId: mergedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm,
-      openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
-    }),
+    onLink,
     sizing: { collapsedMax: 400 },
     className: BUBBLE_FRAME_CLASS,
     allowRemote: !chatScan.holding,
@@ -682,29 +674,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         if (doc) {
           doc.addEventListener('contextmenu', (e) => e.preventDefault());
           attachImageGestures(doc, () => mergedEmail?.attachments);
-          doc.addEventListener('click', (e) => {
-            const link = e.target.closest('a');
-            if (!link || !link.href) return;
-            // An address in the body composes here instead of waking the OS mail
-            // client, which is not the vault this message lives in.
-            if (link.href.startsWith('mailto:')) {
-              e.preventDefault();
-              e.stopPropagation();
-              openMailtoCompose(link.href, mergedEmail?._accountId);
-              return;
-            }
-            if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
-            e.preventDefault();
-            if (linkSafetyEnabled && linkSafetyClickConfirm) {
-              const alert = checkLinkAlert(link);
-              if (alert) { setLinkSafetyAlert(alert); return; }
-            }
-            import('@tauri-apps/plugin-shell').then(({ open }) => {
-              open(link.href);
-            }).catch(() => {
-              window.open(link.href, '_blank');
-            });
-          });
+          doc.addEventListener('click', onFrameClick);
         }
       } catch (e) { /* iframe access error */ }
     };
@@ -1021,15 +991,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         />
       )}
 
-      <LinkSafetyModal
-        alert={linkSafetyAlert}
-        onCancel={() => setLinkSafetyAlert(null)}
-        onOpenAnyway={() => {
-          const url = linkSafetyAlert.actualUrl;
-          setLinkSafetyAlert(null);
-          import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
-        }}
-      />
+      <LinkSafetyModal {...linkSafetyModal} />
       <DeleteConfirmModal pending={pendingDelete} onClose={closePendingConfirmation} />
     </motion.div>
   );

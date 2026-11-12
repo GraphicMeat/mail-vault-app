@@ -42,7 +42,7 @@ import { useViewBuilderStore } from '../../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
-import { useBodyScan, remoteAllowed, scanForFrame, scanHead, refusalHead, checkLinkAlert, LINK_ALERT_STYLE } from '../../services/bodyScan';
+import { remoteAllowed, scanForFrame, scanHead, refusalHead, LINK_ALERT_STYLE } from '../../services/bodyScan';
 import { ExternalContentBar } from './ExternalContentBar';
 import { recordTrackerSummary, recordLinkAlert } from '../../services/rowVerdicts';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
@@ -50,12 +50,11 @@ import { getSenderName, threadRowMembers } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
 import { getEmailColors } from '../../utils/mailChrome';
-import { openMailtoCompose } from '../../utils/mailto';
 import { replyTarget } from '../../utils/replyTarget';
 import { altBodyQuote, replySelection } from '../../utils/replySelection';
 import { useAltBodyRenderer, useActiveBodyRenderer } from './bodyRendererRegistry';
 import { useSearchStore } from '../../stores/searchStore';
-import { activateEmailLink, openExternalUrl } from '../../utils/emailLinkActivation';
+import { useEmailLinks } from '../../hooks/useEmailLinks';
 import { registerActiveReply, openCompose } from '../../utils/composeOpener';
 import { QuickReplyChips } from './QuickReplyChips';
 import { AiComposeActions } from '../ai/AiComposeActions';
@@ -96,10 +95,6 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
   };
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
-  const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
-  const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
-  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
-  const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const appTheme = useThemeStore(selectTheme);
   const palette = useThemeStore(s => s.palette);
   const theme = effectiveTheme ?? appTheme;
@@ -134,7 +129,13 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
     () => (loadedEmail?.html ? getEmailBodyContent(replaceCidUrls(loadedEmail.html, loadedEmail.attachments)) : ''),
     [loadedEmail?.html, loadedEmail?.attachments],
   );
-  const bodyScan = useBodyScan(threadBody, { key: scopeKey, blocking: trackerBlocking, links: linkSafetyEnabled });
+  // `loadedEmail` is the fetched body alone; the row is what carries the
+  // account. A read-only copy (the compose pane) composes nothing from a
+  // mailto: link: a second compose from inside this one is not what a click
+  // there means.
+  const { scan: bodyScan, onLink, onFrameClick, linkSafetyModal } = useEmailLinks(threadBody, {
+    key: scopeKey, accountId: email?._accountId || loadedEmail?._accountId, composeDisabled: readOnly,
+  });
 
   const { iframeContent, altBody, altIndicator, scanAlertLevel: threadScanAlert, trackerSummary } = useMemo(() => {
     if (!loadedEmail?.html || !bodyScan) return { iframeContent: '', altBody: '', altIndicator: '', scanAlertLevel: null, trackerSummary: null };
@@ -185,34 +186,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
     const iframe = iframeRef.current;
     const detachAutoSize = attachEmailIframeAutoSize(iframe, { minHeight: 100 });
 
-    const handleClick = (e) => {
-      const link = e.target.closest('a');
-      if (!link || !link.href) return;
-      // An address in the body composes here instead of waking the OS mail
-      // client, which is not the vault this message lives in. In a read-only
-      // copy (the compose pane) it does nothing: composing is an action, and a
-      // second compose from inside this one is not what a click there means.
-      if (link.href.startsWith('mailto:')) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (readOnly) return;
-        // `loadedEmail` is the fetched body alone; the row is what carries the account.
-        openMailtoCompose(link.href, email?._accountId || loadedEmail?._accountId);
-        return;
-      }
-      if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (linkSafetyEnabled && linkSafetyClickConfirm) {
-        const alert = checkLinkAlert(link);
-        if (alert) { setLinkSafetyAlert(alert); return; }
-      }
-      import('@tauri-apps/plugin-shell').then(({ open }) => {
-        open(link.href);
-      }).catch(() => {
-        window.open(link.href, '_blank');
-      });
-    };
+    const handleClick = onFrameClick;
 
     const onLoad = () => {
       try {
@@ -289,11 +263,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
               plainText={loadedEmail.text || loadedEmail.textBody || ''} theme={{ dark: isDark, palette }}
               signatureDisplay={signatureDisplay} foldQuotes privacy={privacyOn}
               message={altMessage} searchQuery={searchQuery} accountId={email?._accountId}
-              onLink={link => activateEmailLink(link, {
-                accountId: email?._accountId || loadedEmail?._accountId, linkSafetyEnabled, linkSafetyClickConfirm,
-                // A read-only copy (the compose pane) composes nothing, as the iframe path.
-                openMailtoCompose: readOnly ? () => {} : openMailtoCompose, setLinkSafetyAlert, openUrl: openExternalUrl,
-              })}
+              onLink={onLink}
               sizing="content" style={{ minHeight: 100 }} allowRemote={remoteAllowed(bodyScan)}
             />
           )) : (
@@ -357,15 +327,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, snippet = null,
           )}
         </div>
       )}
-      <LinkSafetyModal
-        alert={linkSafetyAlert}
-        onCancel={() => setLinkSafetyAlert(null)}
-        onOpenAnyway={() => {
-          const url = linkSafetyAlert.actualUrl;
-          setLinkSafetyAlert(null);
-          import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
-        }}
-      />
+      <LinkSafetyModal {...linkSafetyModal} />
     </>
   );
 }
