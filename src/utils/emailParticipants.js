@@ -11,7 +11,7 @@ export function emailParticipants(email, own = []) {
   const seen = new Set();
   const out = [];
   for (const [role, pick] of ROLES) {
-    for (const p of [pick(email)].flat().filter(Boolean)) {
+    for (const p of (pick(email) ?? []).filter(Boolean)) {
       const address = String(p.address || '').trim();
       const key = address.toLowerCase();
       if (!address || seen.has(key) || isOwnAddress(address, own)) continue;

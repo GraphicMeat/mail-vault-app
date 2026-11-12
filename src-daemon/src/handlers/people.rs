@@ -138,7 +138,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             match all_senders(state, own).await {
                 Ok(pool) => {
                     let (items, total) = senders::pick(pool, q.as_deref(), sort, offset, limit);
-                    db(state, move |c| Ok(json!({"items": items, "total": total, "indexReady": message_addr::backfill_done(c)}))).await
+                    Ok(json!({"items": items, "total": total}))
                 }
                 Err(e) => Err(e),
             }
@@ -360,7 +360,6 @@ mod tests {
         assert_eq!(sender_names(&v), ["anna@x.io", "bo@b.io"]);
         assert!(v["result"]["items"][0]["personId"].is_string(), "{v}");
         assert!(v["result"]["items"][1]["personId"].is_null(), "{v}");
-        assert!(v["result"]["indexReady"].is_boolean());
     }
 
     #[tokio::test]

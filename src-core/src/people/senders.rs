@@ -38,7 +38,6 @@ pub(crate) fn aggregate_sql(own_ph: &str, filter: &str, having: &str, after_n: u
     )
 }
 
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Sender {
