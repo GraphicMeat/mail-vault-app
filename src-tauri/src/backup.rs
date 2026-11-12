@@ -214,7 +214,15 @@ pub(crate) fn run_account(
     // before `daemon_call_blocking` here has even returned. An `Err` means
     // nothing started, and the entry is claimed back (`call_holding`).
     let Some(path) = root.as_deref().filter(|_| needs_release) else {
-        return call();
+        // Nothing to park, but a failed start still claims back a hold an
+        // earlier run of this account left (its terminal frame never came).
+        let result = call();
+        if result.is_err() {
+            if let Some(stale) = app.try_state::<Leases>().and_then(|l| l.take(Job::BackupRun, &account_id)) {
+                release_backup_path(&stale);
+            }
+        }
+        return result;
     };
     let Some(leases) = app.try_state::<Leases>() else {
         // Unreachable while the app runs (managed in `main.rs` before any
