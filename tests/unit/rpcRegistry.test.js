@@ -6,7 +6,7 @@
  * daemon does not answer.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { RPC_METHODS } from '../../src/services/rpcMethods.generated.js';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
 
@@ -64,5 +64,42 @@ describe('transport.js names against the daemon table', () => {
       expect(named.has(n), `${n} is no longer in transport.js`).toBe(true);
       expect(known.has(n), `${n} is a daemon method now`).toBe(false);
     }
+  });
+});
+
+/**
+ * `daemon_rpc` (src-tauri/src/rpc_proxy.rs) reports "no daemon" and "daemon
+ * too old for this method" as two catalog keys, and the frontend tells them
+ * apart by exact text. Both sides are read here, so renaming one fails.
+ */
+describe('the shell error keys the frontend matches by text', () => {
+  const proxy = read('src-tauri/src/rpc_proxy.rs');
+  const shellKey = (name) => proxy.match(new RegExp(String.raw`const ${name}: &str = "([^"]+)";`))?.[1];
+  const keys = { unavailable: shellKey('DAEMON_UNAVAILABLE'), outdated: shellKey('DAEMON_OUTDATED') };
+  const catalog = JSON.parse(read('src/i18n/locales/en.json'));
+
+  it('are catalog keys', () => {
+    expect(keys).toEqual({ unavailable: 'errors.daemonUnavailable', outdated: 'errors.daemonOutdated' });
+    for (const key of Object.values(keys)) expect(typeof catalog[key], key).toBe('string');
+  });
+
+  it('are the strings transport.js and safeStorage.js compare against', () => {
+    const transport = read('src/services/transport.js');
+    expect(transport).toContain(`e?.message === '${keys.outdated}'`);
+    expect(transport).toContain(`e?.message === '${keys.unavailable}'`);
+    const safeStorage = read('src/stores/safeStorage.js');
+    expect(safeStorage).toContain(`const UNAVAILABLE = '${keys.unavailable}';`);
+    expect(safeStorage).toContain(`const OUTDATED = '${keys.outdated}';`);
+  });
+
+  it('the shell spells them only through its two consts', () => {
+    const files = readdirSync('src-tauri/src').filter((f) => f.endsWith('.rs') && f !== 'tests.rs' && f !== 'rpc_proxy.rs');
+    const literal = files.filter((f) => {
+      const src = read(`src-tauri/src/${f}`);
+      const tests = src.search(/\n#\[cfg\(test\)\]\s*\n\s*(?:mod \w+\s*\{|#\[test\])/);
+      const code = tests < 0 ? src : src.slice(0, tests);
+      return code.includes(`"${keys.unavailable}"`) || code.includes(`"${keys.outdated}"`);
+    });
+    expect(literal).toEqual([]);
   });
 });

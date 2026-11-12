@@ -101,7 +101,7 @@ pub(crate) async fn accounts_fallback_at(
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     if dir.is_none() && !matches!(method.as_str(), "accounts.list" | "accounts.get") {
-        return Err("errors.daemonOutdated".to_string());
+        return Err(crate::DAEMON_OUTDATED.to_string());
     }
     tokio::task::spawn_blocking(move || {
         let dir = match dir {
