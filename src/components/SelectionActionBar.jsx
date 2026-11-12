@@ -21,6 +21,7 @@ import {
 } from "../stores/slices/unifiedHelpers";
 import { isRowArchived, savedMailboxes, selectionFacts } from "../utils/quickActionFacts";
 import { describeQuickAction } from "../utils/quickActionCatalog";
+import { runMessageAction } from "../utils/messageActions";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { useDeleteConfirmation } from "../hooks/useDeleteConfirmation";
 import { isBackedUp, useBackupScan } from "./email/MessageStateIcon";
@@ -268,52 +269,28 @@ export function SelectionActionBar() {
   } = facts;
   const hasUnread = facts.has.markRead;
   const selectionKeys = [...selectedEmailIds];
-  // What a button does. Which buttons are on offer is the view's.
-  const runAction = async (entry, event) => {
-    if (entry.action === "snooze") {
-      setSnoozeRect(event.currentTarget.getBoundingClientRect());
-    } else if (entry.action === "markRead") await handleAction(markSelectedAsRead);
-    else if (entry.action === "markUnread") {
-      await handleAction(markSelectedAsUnread);
-    } else if (entry.action === "toggleRead") {
-      await handleAction(
-        hasUnread ? markSelectedAsRead : markSelectedAsUnread,
-      );
-    } else if (entry.action === "archive") {
-      await handleAction(saveSelectedLocally);
-    } else if (entry.action === "unarchive") handleDeleteUnarchive();
-    else if (entry.action === "delete" || entry.action === "deleteServer") {
-      handleDelete();
-    } else if (entry.action === "deleteEverywhere") {
-      handleDeleteEverywhere();
-    } else if (entry.action === "export") exportSelected();
-    else if (entry.action === "move" && entry.params?.mailbox) {
-      await handleAction(
-        () =>
-          useMailStore.getState().moveEmails(
-            selectionKeys,
-            entry.params.mailbox,
-          ),
-        { report: true },
-      );
-    } else if (entry.action === "move") toggleMoveDropdown();
-    else if (entry.action === "spam") {
-      await handleAction(() =>
-        useMailStore.getState().moveEmails(
-          selectionKeys,
-          selectionJunkPath,
-        ), { report: true });
-    } else if (entry.action === "star" || entry.action === "unstar") {
-      await handleAction(() =>
-        useMailStore.getState().setSelectedFlagged(entry.action === "star")
-      );
-    } else if (entry.action === "tag") {
-      await applyTagToRows(
-        selectedRows.map((email, index) => ({ email, location: locations[index] })),
-        entry.params.tagId,
-      );
-    }
+  // What a button does on the selection, for runMessageAction. Which
+  // buttons are on offer is the view's.
+  const actionCtx = {
+    hasUnread,
+    pickSnooze: event => setSnoozeRect(event.currentTarget.getBoundingClientRect()),
+    setRead: read => handleAction(read ? markSelectedAsRead : markSelectedAsUnread),
+    archive: () => handleAction(saveSelectedLocally),
+    unarchive: handleDeleteUnarchive,
+    delete: handleDelete,
+    deleteServer: handleDelete,
+    deleteEverywhere: handleDeleteEverywhere,
+    export: exportSelected,
+    moveTo: mailbox => handleAction(() => useMailStore.getState().moveEmails(selectionKeys, mailbox), { report: true }),
+    pickFolder: toggleMoveDropdown,
+    spam: () => handleAction(() => useMailStore.getState().moveEmails(selectionKeys, selectionJunkPath), { report: true }),
+    setFlagged: flagged => handleAction(() => useMailStore.getState().setSelectedFlagged(flagged)),
+    tag: tagId => applyTagToRows(
+      selectedRows.map((email, index) => ({ email, location: locations[index] })),
+      tagId,
+    ),
   };
+  const runAction = (entry, event) => runMessageAction(entry, actionCtx, event);
 
   // What each confirm says, by the button that raised it.
   const serverLabel = localFolder ? t("common.delete") : t("rowMenu.deleteServer");

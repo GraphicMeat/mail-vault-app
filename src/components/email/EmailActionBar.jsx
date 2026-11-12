@@ -14,6 +14,7 @@ import { useT } from '../../i18n/index.js';
 import { DEFAULT_QUICK_ACTIONS } from '../../utils/quickActions';
 import { readerFacts, savedMailboxes } from '../../utils/quickActionFacts';
 import { describeQuickAction } from '../../utils/quickActionCatalog';
+import { runMessageAction } from '../../utils/messageActions';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -48,51 +49,39 @@ export const EmailActionBar = memo(function EmailActionBar({
   const hasExplicitStarModes = facts.explicit.star;
   const ctx = { tags: localLabels, templates, folders: id => savedMailboxes(state, id) };
 
-  const callbacks = {
-    reply: onReply, replyAll: onReplyAll, forward: onForward,
-    archive: onArchive, unarchive: onArchive,
-    delete: onDelete, deleteServer: onDelete, deleteEverywhere: onDeleteEverywhere,
-    move: onMove, toggleRead: onToggleRead, markRead: onToggleRead, markUnread: onToggleRead,
-    star: onToggleFlag, unstar: onToggleFlag, spam: onSpam,
-    export: onExport, open: onOpenInWindow, source: onViewSource, theme: onToggleEmailTheme,
+  // What each action does here, for runMessageAction: this one message, and
+  // the handlers its host wired (a missing one does nothing).
+  const call = (handler, ...args) => (handler ? () => handler(email, ...args) : undefined);
+  const actionCtx = {
+    hasUnread: !read, flagged, starToggles: !hasExplicitStarModes,
+    compose: mode => ({ reply: onReply, replyAll: onReplyAll, forward: onForward }[mode]?.(email)),
+    replyTemplate: async (templateId) => {
+      const template = templates.find(item => item.id === templateId);
+      if (onReplyTemplate) onReplyTemplate(email, template);
+      else openCompose({ mode: 'reply', replyTo: await replyTarget(email, null, useMailStore.getState()), templateBody: template.body });
+    },
+    archive: call(onArchive), unarchive: call(onArchive),
+    delete: call(onDelete), deleteServer: call(onDelete), deleteEverywhere: call(onDeleteEverywhere),
+    // The direction the button shows, not one each handler re-reads off an
+    // email copy that may be older than `read`.
+    setRead: onToggleRead && (value => onToggleRead(email, value)),
+    setFlagged: onToggleFlag && (value => onToggleFlag(email, value)),
+    moveTo: mailbox => useMailStore.getState().moveEmails([selectionKey(email, useMailStore.getState())], mailbox),
+    pickFolder: call(onMove),
+    spam: onSpam ? () => onSpam(email) : facts.junkPath ? () => useMailStore.getState().moveEmails([selectionKey(email, state)], facts.junkPath) : undefined,
+    pickSnooze: (event) => setSnoozeRect(event.currentTarget.getBoundingClientRect()),
+    tag: tagId => (onApplyLocalLabel ? onApplyLocalLabel(email, tagId) : applyTag(email, location, tagId)),
+    export: call(onExport),
+    unsubscribe: () => useUnsubscribeStore.getState().request(unsubscribeTarget(email, accountId)),
+    openInWindow: call(onOpenInWindow), viewSource: call(onViewSource), toggleTheme: call(onToggleEmailTheme),
   };
 
-  const descriptors = config.entries.map(entry => {
-    const callback = callbacks[entry.action];
-    const template = templates.find(item => item.id === entry.params?.templateId);
-    return {
-      ...describeQuickAction('reader', entry, facts, ctx),
-      buttonRef: entry.action === 'move' ? moveButtonRef : undefined,
-      expanded: entry.action === 'move' ? moveDropdownOpen : undefined,
-      onActivate: async (event) => {
-        if (onActionPreview) return onActionPreview(entry, email);
-        if (entry.action === 'snooze') setSnoozeRect(event.currentTarget.getBoundingClientRect());
-        else if (entry.action === 'unsubscribe') useUnsubscribeStore.getState().request(unsubscribeTarget(email, accountId));
-        else if (entry.action === 'tag') {
-          if (onApplyLocalLabel) onApplyLocalLabel(email, entry.params.tagId);
-          else applyTag(email, location, entry.params.tagId);
-        } else if (entry.action === 'replyTemplate') {
-          if (onReplyTemplate) onReplyTemplate(email, template);
-          else openCompose({ mode: 'reply', replyTo: await replyTarget(email, null, useMailStore.getState()), templateBody: template.body });
-        } else if (entry.action === 'move' && entry.params?.mailbox) {
-          await useMailStore.getState().moveEmails([selectionKey(email, useMailStore.getState())], entry.params.mailbox);
-        } else if (entry.action === 'spam' && onSpam) onSpam(email);
-        else if (['markRead', 'markUnread'].includes(entry.action)) onToggleRead?.(email, entry.action === 'markRead');
-        // The direction the button shows, not one each handler re-reads off
-        // an email copy that may be older than `read`.
-        else if (entry.action === 'toggleRead') onToggleRead?.(email, !read);
-        else if (['star', 'unstar'].includes(entry.action)) {
-          const nextFlagged = hasExplicitStarModes ? entry.action === 'star' : entry.action === 'star' ? !flagged : false;
-          onToggleFlag?.(email, nextFlagged);
-        }
-        else if (callback) callback(email);
-        else if (entry.action === 'spam' && facts.junkPath) {
-          const key = selectionKey(email, state);
-          await useMailStore.getState().moveEmails([key], facts.junkPath);
-        }
-      },
-    };
-  }).filter(descriptor => !descriptor.hidden);
+  const descriptors = config.entries.map(entry => ({
+    ...describeQuickAction('reader', entry, facts, ctx),
+    buttonRef: entry.action === 'move' ? moveButtonRef : undefined,
+    expanded: entry.action === 'move' ? moveDropdownOpen : undefined,
+    onActivate: (event) => (onActionPreview ? onActionPreview(entry, email) : runMessageAction(entry, actionCtx, event)),
+  })).filter(descriptor => !descriptor.hidden);
 
   const snoozePicker = snoozeRect && email && (
     <SnoozePicker keys={[selectionKey(email, useMailStore.getState())]} anchorRect={snoozeRect} onClose={() => setSnoozeRect(null)} />

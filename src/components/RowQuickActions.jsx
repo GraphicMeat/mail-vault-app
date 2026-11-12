@@ -18,6 +18,7 @@ import { SnoozePicker } from './SnoozePicker';
 import { registerRowActions } from '../utils/rowActionRegistry';
 import { rowFacts, savedMailboxes, isLocalOnly, isRowArchived } from '../utils/quickActionFacts';
 import { describeQuickAction } from '../utils/quickActionCatalog';
+import { runMessageAction } from '../utils/messageActions';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
 import { useT } from '../i18n/index.js';
@@ -154,48 +155,38 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   };
   const openNewMessage = () => openCompose({ initialData: { to: facts.sender, _prefill: true, ...(newest._accountId ? { _accountId: newest._accountId } : {}) } });
   const ctx = { tags: localLabels, templates, folders: accountId => savedMailboxes(state, accountId) };
+  // What each action does on these rows, for runMessageAction. Read and star
+  // act on the rows made the selection for the call (runScoped).
+  const actionCtx = {
+    hasUnread, close: onClose,
+    compose: openReply,
+    replyTemplate: async (templateId) => {
+      const template = templates.find(item => item.id === templateId);
+      openCompose({ mode: 'reply', replyTo: await replyTarget(newest, null, useMailStore.getState()), templateBody: template.body });
+    },
+    newMessage: openNewMessage,
+    archive: event => (onArchive ? onArchive(event) : actions.saveEmailsLocally?.(emails.filter(email => !isRowArchived(email, state)))),
+    unarchive: requestUnarchive,
+    delete: () => (hasServerBacked ? requestServerDelete() : requestUnarchive()),
+    deleteServer: requestServerDelete,
+    deleteEverywhere: requestEverywhereDelete,
+    setRead: read => runScoped(read ? markRead : markUnread),
+    setFlagged: flagged => runScoped(() => setSelectedFlagged(flagged)),
+    tag: tagId => applyTagToRows(emails.map((email, index) => ({ email, location: locs[index] })), tagId),
+    moveTo: mailbox => useMailStore.getState().moveEmails(keys, mailbox),
+    pickFolder: event => setMoveRect(event.currentTarget.getBoundingClientRect()),
+    pickSnooze: event => setSnoozeRect(event.currentTarget.getBoundingClientRect()),
+    spam: () => useMailStore.getState().moveEmails(keys, junkPath),
+    export: () => useExportStore.getState().openExport({ messages: exportEmails }),
+    unsubscribe: () => useUnsubscribeStore.getState().request(unsubscribe),
+    goToMailbox: () => goToMessage(facts.goTo.email),
+  };
   // One entry's descriptor. Also what a trackpad swipe runs an action through
   // (utils/rowActionRegistry.js), whether or not the row's menu lists it.
-  const describe = entry => {
-    const template = templates.find(item => item.id === entry.params?.templateId);
-    return {
-      ...describeQuickAction('row', entry, facts, ctx),
-      onActivate: preview ? () => {} : async event => {
-        if (entry.action === 'archive') { await (onArchive ? onArchive(event) : actions.saveEmailsLocally?.(emails.filter(email => !isRowArchived(email, state)))); onClose?.(); }
-        else if (entry.action === 'unarchive') { onClose?.(); requestUnarchive(); }
-        else if (entry.action === 'delete') { onClose?.(); hasServerBacked ? requestServerDelete() : requestUnarchive(); }
-        else if (entry.action === 'deleteServer') { onClose?.(); requestServerDelete(); }
-        else if (entry.action === 'deleteEverywhere') { onClose?.(); requestEverywhereDelete(); }
-        else if (entry.action === 'toggleRead') { await runScoped(hasUnread ? markRead : markUnread); onClose?.(); }
-        else if (entry.action === 'markRead') { await runScoped(markRead); onClose?.(); }
-        else if (entry.action === 'markUnread') { await runScoped(markUnread); onClose?.(); }
-        else if (entry.action === 'star') { await runScoped(() => setSelectedFlagged(true)); onClose?.(); }
-        else if (entry.action === 'unstar') { await runScoped(() => setSelectedFlagged(false)); onClose?.(); }
-        else if (entry.action === 'tag') {
-          await applyTagToRows(emails.map((email, index) => ({ email, location: locs[index] })), entry.params.tagId);
-          onClose?.();
-        } else if (entry.action === 'move' && entry.params?.mailbox) {
-          await useMailStore.getState().moveEmails(keys, entry.params.mailbox); onClose?.();
-        } else if (entry.action === 'move') {
-          setMoveRect(event.currentTarget.getBoundingClientRect());
-        } else if (entry.action === 'snooze') {
-          setSnoozeRect(event.currentTarget.getBoundingClientRect());
-        } else if (entry.action === 'spam') {
-          await useMailStore.getState().moveEmails(keys, junkPath); onClose?.();
-        } else if (entry.action === 'reply') { onClose?.(); await openReply('reply'); }
-        else if (entry.action === 'replyAll') { onClose?.(); await openReply('replyAll'); }
-        else if (entry.action === 'forward') { onClose?.(); await openReply('forward'); }
-        else if (entry.action === 'replyTemplate') {
-          onClose?.();
-          openCompose({ mode: 'reply', replyTo: await replyTarget(newest, null, useMailStore.getState()), templateBody: template.body });
-        } else if (entry.action === 'export') {
-          useExportStore.getState().openExport({ messages: exportEmails }); onClose?.();
-        } else if (entry.action === 'newMessage') { onClose?.(); openNewMessage(); }
-        else if (entry.action === 'unsubscribe') { onClose?.(); useUnsubscribeStore.getState().request(unsubscribe); }
-        else if (entry.action === 'goToMailbox') { onClose?.(); await goToMessage(facts.goTo.email); }
-      },
-    };
-  };
+  const describe = entry => ({
+    ...describeQuickAction('row', entry, facts, ctx),
+    onActivate: preview ? () => {} : event => runMessageAction(entry, actionCtx, event),
+  });
   // A thread's toggle offers both directions, as two entries of their own.
   // Only the menu's copy: describe() keeps toggleRead for the swipe registry.
   const menuConfig = emails.length > 1 && config.entries.some(entry => entry.action === 'toggleRead')
