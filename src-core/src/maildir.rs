@@ -932,8 +932,9 @@ pub fn set_aside_copy(mailbox_dir: &Path, name: &str, raw: &[u8]) -> Result<Path
 ///
 /// No-ops when the recorded generation already matches, so this is cheap to
 /// call on every mailbox load. Works on Maildir files only: a mailbox that may
-/// hold JMAP records goes through `message_store::repair_generation`.
-pub fn repair_generation(
+/// hold JMAP records goes through `message_store::repair_generation`, the
+/// only way in from outside the crate.
+pub(crate) fn repair_generation(
     mailbox_dir: &Path,
     current_uid_validity: u32,
     id_to_uid: &HashMap<String, u32>,
