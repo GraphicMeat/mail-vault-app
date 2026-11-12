@@ -2887,10 +2887,7 @@ mod tests {
                 },
             );
             let (owned_done, owned_finished) = std::sync::mpsc::channel();
-            credentials::test_owned_completions()
-                .lock()
-                .unwrap()
-                .insert(rig.state.app_dir.clone(), owned_done);
+            credentials::TEST_OWNED_COMPLETIONS.arm(rig.state.app_dir.clone(), owned_done);
             let _drain = credentials::TestTaskDrain(owned_finished);
             let mut pause = DocumentPause {
                 release: Some(release),
@@ -2940,10 +2937,7 @@ mod tests {
         let (backend, _sealed) = backend(&rig, "keychain");
         let backend = backend.unwrap();
         let (done, finished) = std::sync::mpsc::channel();
-        credentials::test_owned_completions()
-            .lock()
-            .unwrap()
-            .insert(rig.state.app_dir.clone(), done);
+        credentials::TEST_OWNED_COMPLETIONS.arm(rig.state.app_dir.clone(), done);
         let drain = credentials::TestTaskDrain(finished);
         let mut pause = credentials::TestKeychainEntryPause::arm();
         TEST_REPLY_MS.store(300, std::sync::atomic::Ordering::SeqCst);

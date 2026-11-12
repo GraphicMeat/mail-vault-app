@@ -51,6 +51,8 @@ mod inference;
 mod insights;
 mod ipc;
 mod job_support;
+#[cfg(test)]
+mod test_gates;
 mod jmap_push;
 mod jmap_sessions;
 mod launch_resync;

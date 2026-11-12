@@ -1536,7 +1536,7 @@ mod tests {
     use crate::test_support::handle_request_for_test;
     use mock_imap::state::{Mailbox, Message};
     use mock_imap::{Action, MockImap, Scenario, Trigger};
-    use std::sync::{mpsc, Mutex, OnceLock};
+    use std::sync::mpsc;
 
     #[test]
     fn a_capture_failure_wires_as_reason_then_detail() {
@@ -1575,54 +1575,21 @@ mod tests {
         assert_eq!(e.reason(), "write");
     }
 
-    struct RecoveryGate {
-        entered: mpsc::Sender<()>,
-        release: mpsc::Receiver<()>,
-        done: mpsc::Sender<()>,
-    }
-    fn recovery_gates() -> &'static Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>> {
-        static GATES: OnceLock<Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>>> = OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
-    fn capture_gates() -> &'static Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>> {
-        static GATES: OnceLock<Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>>> = OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
-    fn jmap_ledger_gates() -> &'static Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>> {
-        static GATES: OnceLock<Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>>> = OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
-    fn local_recovery_gates() -> &'static Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>> {
-        static GATES: OnceLock<Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>>> = OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
+    static RECOVERY_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::DoneGate> = crate::test_gates::Gates::new();
+    static CAPTURE_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::DoneGate> = crate::test_gates::Gates::new();
+    static JMAP_LEDGER_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::DoneGate> = crate::test_gates::Gates::new();
+    static LOCAL_RECOVERY_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::DoneGate> = crate::test_gates::Gates::new();
     pub(super) fn local_recovery_pause(s: &DaemonState) -> Option<crate::credentials::TestTaskDone> {
-        local_recovery_gates().lock().unwrap().remove(&s.app_dir).map(|gate| {
-            let _ = gate.entered.send(());
-            let _ = gate.release.recv();
-            crate::credentials::TestTaskDone(gate.done)
-        })
+        LOCAL_RECOVERY_GATES.pause_done(&s.app_dir)
     }
     pub(super) fn jmap_ledger_pause(s: &DaemonState) -> Option<crate::credentials::TestTaskDone> {
-        jmap_ledger_gates().lock().unwrap().remove(&s.app_dir).map(|gate| {
-            let _ = gate.entered.send(());
-            let _ = gate.release.recv();
-            crate::credentials::TestTaskDone(gate.done)
-        })
+        JMAP_LEDGER_GATES.pause_done(&s.app_dir)
     }
     pub(super) fn capture_pause(s: &DaemonState) -> Option<crate::credentials::TestTaskDone> {
-        capture_gates().lock().unwrap().remove(&s.app_dir).map(|gate| {
-            let _ = gate.entered.send(());
-            let _ = gate.release.recv();
-            crate::credentials::TestTaskDone(gate.done)
-        })
+        CAPTURE_GATES.pause_done(&s.app_dir)
     }
     pub(super) fn recovery_pause(s: &DaemonState) -> Option<crate::credentials::TestTaskDone> {
-        recovery_gates().lock().unwrap().remove(&s.app_dir).map(|gate| {
-            let _ = gate.entered.send(());
-            let _ = gate.release.recv();
-            crate::credentials::TestTaskDone(gate.done)
-        })
+        RECOVERY_GATES.pause_done(&s.app_dir)
     }
     struct RecoveryPause {
         release: Option<mpsc::Sender<()>>,
@@ -1631,31 +1598,19 @@ mod tests {
     }
     impl RecoveryPause {
         fn arm(s: &DaemonState) -> Self {
-            let (entered, notice) = mpsc::channel();
-            let (release, resume) = mpsc::channel();
-            let (done, finished) = mpsc::channel();
-            recovery_gates().lock().unwrap().insert(s.app_dir.clone(), RecoveryGate { entered, release: resume, done });
+            let (notice, release, finished) = RECOVERY_GATES.hold_done(s.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         fn arm_capture(s: &DaemonState) -> Self {
-            let (entered, notice) = mpsc::channel();
-            let (release, resume) = mpsc::channel();
-            let (done, finished) = mpsc::channel();
-            capture_gates().lock().unwrap().insert(s.app_dir.clone(), RecoveryGate { entered, release: resume, done });
+            let (notice, release, finished) = CAPTURE_GATES.hold_done(s.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         fn arm_jmap_ledger(s: &DaemonState) -> Self {
-            let (entered, notice) = mpsc::channel();
-            let (release, resume) = mpsc::channel();
-            let (done, finished) = mpsc::channel();
-            jmap_ledger_gates().lock().unwrap().insert(s.app_dir.clone(), RecoveryGate { entered, release: resume, done });
+            let (notice, release, finished) = JMAP_LEDGER_GATES.hold_done(s.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         fn arm_local(s: &DaemonState) -> Self {
-            let (entered, notice) = mpsc::channel();
-            let (release, resume) = mpsc::channel();
-            let (done, finished) = mpsc::channel();
-            local_recovery_gates().lock().unwrap().insert(s.app_dir.clone(), RecoveryGate { entered, release: resume, done });
+            let (notice, release, finished) = LOCAL_RECOVERY_GATES.hold_done(s.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         fn entered(&self) { self.entered.recv_timeout(Duration::from_secs(5)).expect("remote recover accepted"); }

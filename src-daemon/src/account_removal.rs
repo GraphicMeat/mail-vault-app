@@ -46,73 +46,47 @@ impl Drop for Waiter {
 }
 
 #[cfg(test)]
-struct Gate {
-    entered: std::sync::mpsc::Sender<()>,
-    release: std::sync::mpsc::Receiver<()>,
-    done: std::sync::mpsc::Sender<()>,
-}
+use crate::test_gates::{DoneGate, Gates};
 #[cfg(test)]
-fn receipt_gates() -> &'static Mutex<HashMap<PathBuf, Gate>> {
-    static G: std::sync::OnceLock<Mutex<HashMap<PathBuf, Gate>>> = std::sync::OnceLock::new();
-    G.get_or_init(Default::default)
-}
+static RECEIPT_GATES: Gates<PathBuf, DoneGate> = Gates::new();
 #[cfg(test)]
-fn document_gates() -> &'static Mutex<HashMap<PathBuf, Gate>> {
-    static G: std::sync::OnceLock<Mutex<HashMap<PathBuf, Gate>>> = std::sync::OnceLock::new();
-    G.get_or_init(Default::default)
-}
+static DOCUMENT_GATES: Gates<PathBuf, DoneGate> = Gates::new();
 #[cfg(test)]
-fn local_gates() -> &'static Mutex<HashMap<PathBuf, Gate>> {
-    static G: std::sync::OnceLock<Mutex<HashMap<PathBuf, Gate>>> = std::sync::OnceLock::new();
-    G.get_or_init(Default::default)
-}
+static LOCAL_GATES: Gates<PathBuf, DoneGate> = Gates::new();
 #[cfg(test)]
-fn exclusion_gates() -> &'static Mutex<HashMap<PathBuf, Gate>> {
-    static G: std::sync::OnceLock<Mutex<HashMap<PathBuf, Gate>>> = std::sync::OnceLock::new();
-    G.get_or_init(Default::default)
-}
+static EXCLUSION_GATES: Gates<PathBuf, DoneGate> = Gates::new();
 #[cfg(test)]
-fn unlink_gates() -> &'static Mutex<HashMap<PathBuf, Gate>> {
-    static G: std::sync::OnceLock<Mutex<HashMap<PathBuf, Gate>>> = std::sync::OnceLock::new();
-    G.get_or_init(Default::default)
-}
+static UNLINK_GATES: Gates<PathBuf, DoneGate> = Gates::new();
 #[cfg(test)]
-fn owned_done() -> &'static Mutex<HashMap<PathBuf, std::sync::mpsc::Sender<()>>> {
-    static G: std::sync::OnceLock<Mutex<HashMap<PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
-    G.get_or_init(Default::default)
-}
+static OWNED_DONE: Gates<PathBuf, std::sync::mpsc::Sender<()>> = Gates::new();
 #[cfg(test)]
 fn fail_after_tree() -> &'static Mutex<BTreeSet<PathBuf>> {
     static G: std::sync::OnceLock<Mutex<BTreeSet<PathBuf>>> = std::sync::OnceLock::new();
     G.get_or_init(Default::default)
 }
 #[cfg(test)]
-fn pause_gate(gates: &Mutex<HashMap<PathBuf, Gate>>, path: &Path) -> Option<credentials::TestTaskDone> {
-    gates.lock().unwrap_or_else(|e| e.into_inner()).remove(path).map(|gate| {
-        let _ = gate.entered.send(());
-        let _ = gate.release.recv();
-        credentials::TestTaskDone(gate.done)
-    })
+fn pause_gate(gates: &Gates<PathBuf, DoneGate>, path: &Path) -> Option<credentials::TestTaskDone> {
+    gates.pause_done(path)
 }
 #[cfg(test)]
 fn pause_receipt(path: &Path) -> Option<credentials::TestTaskDone> {
-    pause_gate(receipt_gates(), path)
+    pause_gate(&RECEIPT_GATES, path)
 }
 #[cfg(test)]
 fn pause_document(path: &Path) -> Option<credentials::TestTaskDone> {
-    pause_gate(document_gates(), path)
+    pause_gate(&DOCUMENT_GATES, path)
 }
 #[cfg(test)]
 fn pause_local(path: &Path) -> Option<credentials::TestTaskDone> {
-    pause_gate(local_gates(), path)
+    pause_gate(&LOCAL_GATES, path)
 }
 #[cfg(test)]
 fn pause_exclusion(path: &Path) -> Option<credentials::TestTaskDone> {
-    pause_gate(exclusion_gates(), path)
+    pause_gate(&EXCLUSION_GATES, path)
 }
 #[cfg(test)]
 fn pause_unlink(path: &Path) -> Option<credentials::TestTaskDone> {
-    pause_gate(unlink_gates(), path)
+    pause_gate(&UNLINK_GATES, path)
 }
 
 fn valid_id(id: &str) -> bool {
@@ -623,8 +597,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, params: &Value, id: Value) -
 async fn remove_owned(state: Arc<DaemonState>, id: String, deadline: Instant,
     progress: Progress) -> Result<Value, String> {
     #[cfg(test)]
-    let _done = owned_done().lock().unwrap_or_else(|e| e.into_inner())
-        .remove(&state.app_dir).map(credentials::TestTaskDone);
+    let _done = OWNED_DONE.take(&state.app_dir).map(credentials::TestTaskDone);
     let root = RootProof::read(&state)?;
     paths(&root.configured, &id)?;
     let doc = accounts_doc::shared(&state.app_dir);
@@ -999,14 +972,9 @@ mod tests {
         tokio::task::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(10)))
             .await.unwrap().unwrap();
     }
-    fn arm(gates: &Mutex<HashMap<PathBuf, Gate>>, path: PathBuf)
+    fn arm(gates: &Gates<PathBuf, DoneGate>, path: PathBuf)
         -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>) {
-        let (entered, entered_rx) = std::sync::mpsc::channel();
-        let (release, release_rx) = std::sync::mpsc::channel();
-        let (done, done_rx) = std::sync::mpsc::channel();
-        gates.lock().unwrap_or_else(|e| e.into_inner()).insert(path,
-            Gate { entered, release: release_rx, done });
-        (entered_rx, release, done_rx)
+        gates.hold_done(path)
     }
 
     struct Rig {
@@ -1110,7 +1078,7 @@ mod tests {
         let a = rig.mock_imap_account("a", "a@b.example-c.example", &server);
         let pooled = rig.state.imap_pool.get_background(&a).await.unwrap();
         rig.state.imap_pool.return_background(&a, pooled).await;
-        let (entered, release, done) = arm(local_gates(), rig.app());
+        let (entered, release, done) = arm(&LOCAL_GATES, rig.app());
         let state = Arc::clone(&rig.state);
         let pending = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -1325,7 +1293,7 @@ mod tests {
         rig.state.imap_pool.return_background(&a, session).await;
         let (entered, release, done) = crate::idle_watch::arm_unwatch_for_test("a");
         let (owned, owned_finished) = std::sync::mpsc::channel();
-        owned_done().lock().unwrap().insert(rig.app(), owned);
+        OWNED_DONE.arm(rig.app(), owned);
         let state = Arc::clone(&rig.state);
         let waiter = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -1359,7 +1327,7 @@ mod tests {
         rig.state.imap_pool.return_background(&a, session).await;
         let (entered, release, done) = crate::idle_watch::arm_unwatch_for_test("a");
         let (owned, owned_finished) = std::sync::mpsc::channel();
-        owned_done().lock().unwrap().insert(rig.app(), owned);
+        OWNED_DONE.arm(rig.app(), owned);
         let state = Arc::clone(&rig.state);
         let pending = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -1399,7 +1367,7 @@ mod tests {
         rig.state.imap_pool.return_background(&a, session).await;
         let mut paused = server.pause_command("LOGOUT");
         let (owned, owned_finished) = std::sync::mpsc::channel();
-        owned_done().lock().unwrap().insert(rig.app(), owned);
+        OWNED_DONE.arm(rig.app(), owned);
         let state = Arc::clone(&rig.state);
         let waiter = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -1434,9 +1402,9 @@ mod tests {
         let tree = rig.mail().join("Maildir/a");
         fs::create_dir_all(&tree).unwrap();
         fs::write(tree.join("keep.eml"), b"target").unwrap();
-        let (entered, release, receipt_done) = arm(receipt_gates(), rig.app());
+        let (entered, release, receipt_done) = arm(&RECEIPT_GATES, rig.app());
         let (owned, owned_finished) = std::sync::mpsc::channel();
-        owned_done().lock().unwrap().insert(rig.app(), owned);
+        OWNED_DONE.arm(rig.app(), owned);
         let mut paused = credentials::TestWritePause::arm_with_timeout(0);
         let state = Arc::clone(&rig.state);
         let pending = tokio::spawn(async move {
@@ -1685,7 +1653,7 @@ mod tests {
                     [target, mailbox]).map_err(|error| error.to_string())?;
                 Ok(())
             }).unwrap();
-            let (entered, release, done) = arm(local_gates(), rig.app());
+            let (entered, release, done) = arm(&LOCAL_GATES, rig.app());
             let state = Arc::clone(&rig.state);
             let requested = target.to_owned();
             let pending = tokio::spawn(async move {
@@ -1720,7 +1688,7 @@ mod tests {
         fs::write(tree.join("keep.eml"), b"shared tree").unwrap();
         assert!(rig.mail().join("Maildir/A/keep.eml").is_file(),
             "S24_CASE_ALIAS_FIXTURE: A must actually resolve to the target child");
-        let (entered, release, done) = arm(local_gates(), rig.app());
+        let (entered, release, done) = arm(&LOCAL_GATES, rig.app());
         let state = Arc::clone(&rig.state);
         let pending = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -1767,9 +1735,9 @@ mod tests {
         let tree = rig.mail().join("Maildir/a");
         fs::create_dir_all(&tree).unwrap();
         fs::write(tree.join("target.eml"), b"target").unwrap();
-        let (entered, release, gate_done) = arm(unlink_gates(), rig.app());
+        let (entered, release, gate_done) = arm(&UNLINK_GATES, rig.app());
         let (finished, owned_finished) = std::sync::mpsc::channel();
-        owned_done().lock().unwrap().insert(rig.app(), finished);
+        OWNED_DONE.arm(rig.app(), finished);
         let state = Arc::clone(&rig.state);
         let waiter = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -1805,9 +1773,9 @@ mod tests {
         let tree = rig.mail().join("Maildir/a");
         fs::create_dir_all(&tree).unwrap();
         fs::write(tree.join("keep.eml"), b"target").unwrap();
-        let (entered, release, gate_done) = arm(exclusion_gates(), rig.app());
+        let (entered, release, gate_done) = arm(&EXCLUSION_GATES, rig.app());
         let (finished, owned_finished) = std::sync::mpsc::channel();
-        owned_done().lock().unwrap().insert(rig.app(), finished);
+        OWNED_DONE.arm(rig.app(), finished);
         let state = Arc::clone(&rig.state);
         let waiter = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -1886,7 +1854,7 @@ mod tests {
         assert_eq!(projection(&rig.state, "a"), (1, 1));
         assert_eq!(projection(&rig.state, "b"), (1, 1));
 
-        let (entered, release, done) = arm(receipt_gates(), rig.app());
+        let (entered, release, done) = arm(&RECEIPT_GATES, rig.app());
         let state = Arc::clone(&rig.state);
         let pending = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -1985,7 +1953,7 @@ mod tests {
         let target_projection = || crate::custody::with_conn(&rig.state, |conn| conn.query_row(
             "SELECT COUNT(*) FROM header_cache_meta WHERE account_id='a' AND mailbox_path='x_INBOX'",
             [], |row| row.get::<_, i64>(0)).map_err(|error| error.to_string())).unwrap();
-        let (entered, release, done) = arm(receipt_gates(), rig.app());
+        let (entered, release, done) = arm(&RECEIPT_GATES, rig.app());
         let state = Arc::clone(&rig.state);
         let pending = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -2079,7 +2047,7 @@ mod tests {
                     .map_err(|error| error.to_string())?;
                 Ok(())
             }).unwrap();
-            let (entered, release, done) = arm(receipt_gates(), rig.app());
+            let (entered, release, done) = arm(&RECEIPT_GATES, rig.app());
             let state = Arc::clone(&rig.state);
             let pending = tokio::spawn(async move {
                 route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -2113,7 +2081,7 @@ mod tests {
         let unrelated = rig.dir.path().join("unrelated/Maildir/b");
         fs::create_dir_all(&unrelated).unwrap();
         fs::write(unrelated.join("keep.eml"), b"unrelated").unwrap();
-        let (entered, release, child_done) = arm(receipt_gates(), rig.app());
+        let (entered, release, child_done) = arm(&RECEIPT_GATES, rig.app());
         let state = Arc::clone(&rig.state);
         let pending = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -2239,9 +2207,9 @@ mod tests {
         fs::create_dir_all(&tree).unwrap();
         fs::write(tree.join("one.eml"), b"A").unwrap();
         let receipt_scope = rig.receipt("a");
-        let (entered, release, child_done) = arm(receipt_gates(), rig.app());
+        let (entered, release, child_done) = arm(&RECEIPT_GATES, rig.app());
         let (done, owned_finished) = std::sync::mpsc::channel();
-        owned_done().lock().unwrap().insert(rig.app(), done);
+        OWNED_DONE.arm(rig.app(), done);
         let state = Arc::clone(&rig.state);
         let waiter = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await
@@ -2278,7 +2246,7 @@ mod tests {
         let drained = claim.wait_local_until(Instant::now() + Duration::from_secs(2)).await.unwrap();
         claim.mark_effects_started(drained).unwrap();
         let claim = Arc::new(claim);
-        let (entered, release, done) = arm(receipt_gates(), rig.app());
+        let (entered, release, done) = arm(&RECEIPT_GATES, rig.app());
         let app = rig.app();
         let child_claim = Arc::clone(&claim);
         let (finished, actual_finished) = std::sync::mpsc::channel();
@@ -2310,7 +2278,7 @@ mod tests {
         fs::create_dir_all(&tree).unwrap();
         fs::write(tree.join("one.eml"), b"A").unwrap();
         let receipt_scope = rig.receipt("a");
-        let (entered, release, done) = arm(document_gates(), rig.app());
+        let (entered, release, done) = arm(&DOCUMENT_GATES, rig.app());
         let state = Arc::clone(&rig.state);
         let pending = tokio::spawn(async move {
             route(&state, &json!({"accountId":"a"}), json!(1)).await

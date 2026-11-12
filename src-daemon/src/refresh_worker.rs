@@ -517,32 +517,15 @@ use mailvault_core::clock::now_ms;
 #[cfg(test)]
 mod race_test_pause {
     use super::DaemonState;
-    use std::collections::HashMap;
+    use crate::test_gates::{AsyncGate, AsyncHold, Gates};
     use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
-    use tokio::sync::oneshot;
 
-    type Gate = (oneshot::Sender<()>, oneshot::Receiver<()>);
-    static GATES: OnceLock<Mutex<HashMap<(PathBuf, &'static str), Gate>>> = OnceLock::new();
-    fn gates() -> &'static Mutex<HashMap<(PathBuf, &'static str), Gate>> {
-        GATES.get_or_init(Default::default)
-    }
-    pub(super) fn install(state: &DaemonState, stage: &'static str)
-        -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
-        let (entered_tx, entered_rx) = oneshot::channel();
-        let (release_tx, release_rx) = oneshot::channel();
-        let old = gates().lock().unwrap_or_else(|e| e.into_inner())
-            .insert((state.app_dir.clone(), stage), (entered_tx, release_rx));
-        assert!(old.is_none(), "one held refresh race per stage and vault");
-        (entered_rx, release_tx)
+    static GATES: Gates<(PathBuf, &'static str), AsyncGate> = Gates::new();
+    pub(super) fn install(state: &DaemonState, stage: &'static str) -> AsyncHold {
+        GATES.hold_once((state.app_dir.clone(), stage), "one held refresh race per stage and vault")
     }
     pub(super) async fn pause(state: &DaemonState, stage: &'static str) {
-        let gate = gates().lock().unwrap_or_else(|e| e.into_inner())
-            .remove(&(state.app_dir.clone(), stage));
-        if let Some((entered, release)) = gate {
-            let _ = entered.send(());
-            let _ = release.await;
-        }
+        GATES.pause(&(state.app_dir.clone(), stage)).await;
     }
 }
 
@@ -566,23 +549,18 @@ async fn test_pause_before_ack_snapshot(state: &DaemonState) {
 }
 
 #[cfg(test)]
-type PublishGate = (tokio::sync::oneshot::Sender<()>, std::sync::mpsc::Receiver<()>);
-#[cfg(test)]
-fn publish_gates() -> &'static Mutex<HashMap<std::path::PathBuf, PublishGate>> {
-    static GATES: OnceLock<Mutex<HashMap<std::path::PathBuf, PublishGate>>> = OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static PUBLISH_GATES: crate::test_gates::Gates<std::path::PathBuf, (tokio::sync::oneshot::Sender<()>, std::sync::mpsc::Receiver<()>)> = crate::test_gates::Gates::new();
 #[cfg(test)]
 pub(crate) fn test_hold_before_publication(state: &DaemonState)
     -> (tokio::sync::oneshot::Receiver<()>, std::sync::mpsc::Sender<()>) {
     let (entered, observed) = tokio::sync::oneshot::channel();
     let (release, held) = std::sync::mpsc::channel();
-    publish_gates().lock().unwrap().insert(state.app_dir.clone(), (entered, held));
+    PUBLISH_GATES.arm(state.app_dir.clone(), (entered, held));
     (observed, release)
 }
 #[cfg(test)]
 fn test_pause_before_publication(state: &DaemonState) {
-    let gate = publish_gates().lock().unwrap().remove(&state.app_dir);
+    let gate = PUBLISH_GATES.take(&state.app_dir);
     if let Some((entered, release)) = gate {
         let _ = entered.send(());
         let _ = release.recv_timeout(std::time::Duration::from_secs(5));
@@ -590,12 +568,7 @@ fn test_pause_before_publication(state: &DaemonState) {
 }
 
 #[cfg(test)]
-type AdmissionGate = (tokio::sync::oneshot::Sender<()>, tokio::sync::oneshot::Receiver<()>);
-#[cfg(test)]
-fn admission_gates() -> &'static Mutex<HashMap<std::path::PathBuf, AdmissionGate>> {
-    static GATES: OnceLock<Mutex<HashMap<std::path::PathBuf, AdmissionGate>>> = OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static ADMISSION_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::AsyncGate> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn admission_counts() -> &'static Mutex<HashMap<std::path::PathBuf, usize>> {
     static COUNTS: OnceLock<Mutex<HashMap<std::path::PathBuf, usize>>> = OnceLock::new();
@@ -608,19 +581,13 @@ pub(crate) fn test_admission_snapshot_count(state: &DaemonState) -> usize {
 #[cfg(test)]
 pub(crate) fn test_hold_after_admission_snapshot(state: &DaemonState)
     -> (tokio::sync::oneshot::Receiver<()>, tokio::sync::oneshot::Sender<()>) {
-    let (entered, observed) = tokio::sync::oneshot::channel();
-    let (release, held) = tokio::sync::oneshot::channel();
-    admission_gates().lock().unwrap().insert(state.app_dir.clone(), (entered, held));
+    let held = ADMISSION_GATES.hold(state.app_dir.clone());
     admission_counts().lock().unwrap().insert(state.app_dir.clone(), 0);
-    (observed, release)
+    held
 }
 #[cfg(test)]
 async fn test_pause_after_admission_snapshot(state: &DaemonState) {
-    let gate = admission_gates().lock().unwrap().remove(&state.app_dir);
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.await;
-    }
+    ADMISSION_GATES.pause(&state.app_dir).await;
 }
 
 struct GraphWarm {

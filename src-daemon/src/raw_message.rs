@@ -251,18 +251,11 @@ async fn fallback(state: &Arc<DaemonState>, stamp: &AccountStamp, key: &Key, loc
 }
 
 #[cfg(test)]
-fn old_server_result_gates() -> &'static Mutex<HashMap<std::path::PathBuf, (tokio::sync::oneshot::Sender<()>, tokio::sync::oneshot::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<Mutex<HashMap<std::path::PathBuf, (tokio::sync::oneshot::Sender<()>, tokio::sync::oneshot::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static OLD_SERVER_RESULT_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::AsyncGate> = crate::test_gates::Gates::new();
 
 #[cfg(test)]
 async fn old_server_result_pause(path: &std::path::Path) {
-    let gate = locked(old_server_result_gates()).remove(path);
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.await;
-    }
+    OLD_SERVER_RESULT_GATES.pause(path).await;
 }
 
 /// `raw` must be the message the header cache lists under `uid`. A header
@@ -525,9 +518,7 @@ mod tests {
         state.account_lifecycle.seed(
             &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap(),
         );
-        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
-        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
-        locked(old_server_result_gates()).insert(dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = OLD_SERVER_RESULT_GATES.hold(dir.clone());
         let held = Arc::clone(&state);
         let old = tokio::spawn(async move { raw_message(&held, "acc1", "INBOX", 1, false).await });
         entered_rx.await.expect("actual server body returned");
@@ -552,9 +543,7 @@ mod tests {
         let server = server_with(1, &raw);
         let (dir, state) = state("onDemand", Some(&server), "<r1@example.com>");
         *state.raw_messages.bound.lock().unwrap() = Duration::from_millis(250);
-        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
-        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
-        locked(old_server_result_gates()).insert(dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = OLD_SERVER_RESULT_GATES.hold(dir.clone());
         let held = Arc::clone(&state);
         let first = tokio::spawn(async move { raw_message(&held, "acc1", "INBOX", 1, false).await });
         entered_rx.await.expect("first actual server result reached old owner");

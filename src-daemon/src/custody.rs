@@ -81,12 +81,8 @@ impl Default for CustodyState {
 fn g<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
-
 #[cfg(test)]
-fn p2_import_gates() -> &'static Mutex<std::collections::BTreeMap<PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<Mutex<std::collections::BTreeMap<PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static P2_IMPORT_GATES: crate::test_gates::Gates<PathBuf> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn p2_import_panics() -> &'static Mutex<std::collections::BTreeSet<PathBuf>> {
     static PATHS: std::sync::OnceLock<Mutex<std::collections::BTreeSet<PathBuf>>> = std::sync::OnceLock::new();
@@ -97,11 +93,7 @@ fn p2_before_import(path: &std::path::Path) {
     if p2_import_panics().lock().unwrap().remove(path) {
         panic!("synthetic import thread panic after owner admission");
     }
-    let gate = p2_import_gates().lock().unwrap().remove(path);
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(Duration::from_secs(5));
-    }
+    P2_IMPORT_GATES.pause(path);
 }
 
 /// Open the store for the current vault root. The legacy import is a
@@ -449,9 +441,7 @@ mod tests {
     #[test]
     fn p2_legacy_import_real_thread_blocks_close_until_completion() {
         let (_vault, _app, state, a, b) = p2_import_state();
-        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        p2_import_gates().lock().unwrap().insert(state.app_dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = P2_IMPORT_GATES.hold(state.app_dir.clone());
         spawn_legacy_import(Arc::clone(&state));
         entered_rx.recv_timeout(Duration::from_secs(5)).expect("actual import unit entered with its finite owner");
         let lease = crate::account_workflows::AccountLease::detached_for_test(

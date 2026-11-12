@@ -536,13 +536,10 @@ impl IdleWatchers {
 }
 
 #[cfg(test)]
-fn p2_arrival_done_gates() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
-    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static P2_ARRIVAL_DONE_GATES: crate::test_gates::Gates<std::path::PathBuf, std::sync::mpsc::Sender<()>> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn p2_arrival_child_done(path: &std::path::Path) {
-    if let Some(done) = p2_arrival_done_gates().lock().unwrap().remove(path) {
+    if let Some(done) = P2_ARRIVAL_DONE_GATES.take(path) {
         let _ = done.send(());
     }
 }
@@ -1138,7 +1135,7 @@ mod tests {
         wait_until(|| server.count_commands("IDLE") >= 1, 5_000, "silent IDLE established").await;
         let (entered, release) = crate::handlers::imap::pause_prepared_cache_for_test(&dir);
         let (done_tx, done_rx) = std::sync::mpsc::channel();
-        p2_arrival_done_gates().lock().unwrap().insert(dir.clone(), done_tx);
+        P2_ARRIVAL_DONE_GATES.arm(dir.clone(), done_tx);
         let uid = add_message(&server, "From: sender@example.com\r\nSubject: delayed\r\nDate: Thu, 01 Jan 2015 00:00:00 +0000\r\n\r\nlate body\r\n");
         entered.recv_timeout(Duration::from_secs(10)).expect("actual arrival child prepared its body");
         state.idle.unwatch("acc1").await;

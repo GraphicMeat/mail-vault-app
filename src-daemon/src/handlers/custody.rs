@@ -38,19 +38,11 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{info, warn};
-
 #[cfg(test)]
-fn p2_gates() -> &'static std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static P2_GATES: crate::test_gates::Gates<(std::path::PathBuf, &'static str)> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn p2_pause(path: &std::path::Path, method: &'static str) {
-    let gate = p2_gates().lock().unwrap().remove(&(path.to_path_buf(), method));
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
-    }
+    P2_GATES.pause(&(path.to_path_buf(), method));
 }
 
 macro_rules! req {
@@ -413,10 +405,7 @@ fn rehome_pauses() -> &'static std::sync::Mutex<std::collections::HashMap<std::p
     ARMED.get_or_init(Default::default)
 }
 #[cfg(test)]
-fn rehome_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
-    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
-    ARMED.get_or_init(Default::default)
-}
+static REHOME_DONE_REGISTRY: crate::test_gates::Gates<std::path::PathBuf, std::sync::mpsc::Sender<()>> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn rehome_stamp_pause(state: &Arc<DaemonState>) {
     let gate = rehome_pauses().lock().unwrap().remove(&state.app_dir);
@@ -461,7 +450,7 @@ pub(crate) fn rehome_imports_soon(state: &Arc<DaemonState>, account_id: &str, ma
     let spawned = std::thread::Builder::new().name("import-rehome".into()).spawn(move || {
         crate::mbox_upload_job::background_qos();
         #[cfg(test)]
-        let done = rehome_done_registry().lock().unwrap().remove(&running.0.app_dir).map(crate::credentials::TestTaskDone);
+        let done = REHOME_DONE_REGISTRY.take(&running.0.app_dir).map(crate::credentials::TestTaskDone);
         let _owner = owner;
         {
             let running = running;
@@ -638,9 +627,7 @@ mod tests {
         let methods = ["local_index_append", "maildir_repair_generation"];
         let mut gates = Vec::new();
         for method in methods {
-            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-            let (release_tx, release_rx) = std::sync::mpsc::channel();
-            p2_gates().lock().unwrap().insert((state.app_dir.clone(), method), (entered_tx, release_rx));
+            let (entered_rx, release_tx) = P2_GATES.hold((state.app_dir.clone(), method));
             gates.push((entered_rx, release_tx));
         }
         let mut old = Vec::new();
@@ -916,7 +903,7 @@ mod tests {
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         rehome_pauses().lock().unwrap().insert(s.app_dir.clone(), RehomePause { entered: entered_tx, release: release_rx });
         let (done_tx, done_rx) = std::sync::mpsc::channel();
-        rehome_done_registry().lock().unwrap().insert(s.app_dir.clone(), done_tx);
+        REHOME_DONE_REGISTRY.arm(s.app_dir.clone(), done_tx);
         rehome_imports_soon(&s, "acc", "INBOX");
         let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
         let entered = entered_rx.recv_timeout(std::time::Duration::from_secs(5)).is_ok();

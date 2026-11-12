@@ -41,19 +41,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
-
 #[cfg(test)]
-fn p2_evict_gates() -> &'static std::sync::Mutex<HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<std::sync::Mutex<HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static P2_EVICT_GATES: crate::test_gates::Gates<std::path::PathBuf> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn p2_before_evict(path: &std::path::Path) {
-    let gate = p2_evict_gates().lock().unwrap().remove(path);
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(Duration::from_secs(5));
-    }
+    P2_EVICT_GATES.pause(path);
 }
 
 /// The first pass waits out the launch (sync, backfill, the user's first
@@ -423,9 +415,7 @@ mod tests {
         std::fs::write(b_cur.join(format!("1{INFO_PREFIX}S.eml")), raw(1)).unwrap();
         let b_headers = json!({"emails": [{"uid":1,"messageId":"<m1@example.com>"}], "uidValidity":1, "totalEmails":1}).to_string();
         crate::custody::with_conn(&state, |c| cache::save_headers(c, "b", "INBOX", &b_headers)).unwrap();
-        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        p2_evict_gates().lock().unwrap().insert(dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = P2_EVICT_GATES.hold(dir.clone());
         let old = tokio::spawn({
             let (state, config) = (Arc::clone(&state), config(&mock));
             async move { evict_mailbox(&state, &config, ACCT, "INBOX", &policy(FetchMode::OnDemand, 3), now()).await }

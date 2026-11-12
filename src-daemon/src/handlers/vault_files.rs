@@ -11,19 +11,11 @@ use crate::state::DaemonState;
 use mailvault_core::{maildir, message_store, vault_eml, vault_files};
 use serde_json::Value;
 use std::sync::Arc;
-
 #[cfg(test)]
-fn p2_gates() -> &'static std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static P2_GATES: crate::test_gates::Gates<(std::path::PathBuf, &'static str)> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn p2_pause(path: &std::path::Path, method: &'static str) {
-    let gate = p2_gates().lock().unwrap().remove(&(path.to_path_buf(), method));
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
-    }
+    P2_GATES.pause(&(path.to_path_buf(), method));
 }
 
 /// A required param, returning early from `route` on a missing key — mirrors
@@ -726,9 +718,7 @@ mod tests {
         let methods = ["cache_attachment", "prefetch_attachments"];
         let mut gates = Vec::new();
         for method in methods {
-            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-            let (release_tx, release_rx) = std::sync::mpsc::channel();
-            p2_gates().lock().unwrap().insert((state.app_dir.clone(), method), (entered_tx, release_rx));
+            let (entered_rx, release_tx) = P2_GATES.hold((state.app_dir.clone(), method));
             gates.push((entered_rx, release_tx));
         }
         let mut tasks = Vec::new();

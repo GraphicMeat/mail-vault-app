@@ -2196,12 +2196,7 @@ pub(crate) async fn change_credentials_admitted_owned_wait_actual(
 }
 
 #[cfg(test)]
-pub(crate) fn test_owned_completions(
-) -> &'static std::sync::Mutex<HashMap<PathBuf, std::sync::mpsc::Sender<()>>> {
-    static G: std::sync::OnceLock<std::sync::Mutex<HashMap<PathBuf, std::sync::mpsc::Sender<()>>>> =
-        std::sync::OnceLock::new();
-    G.get_or_init(Default::default)
-}
+pub(crate) static TEST_OWNED_COMPLETIONS: crate::test_gates::Gates<PathBuf, std::sync::mpsc::Sender<()>> = crate::test_gates::Gates::new();
 
 // Dropping any RPC/worker awaiter cannot cancel the actual mutation owner.
 async fn owned_change(
@@ -2222,10 +2217,7 @@ async fn owned_change(
     let state = Arc::clone(state);
     tokio::spawn(async move {
         #[cfg(test)]
-        let _done = test_owned_completions()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&state.app_dir)
+        let _done = TEST_OWNED_COMPLETIONS.take(&state.app_dir)
             .map(TestTaskDone);
         change_credentials_mode(&state, op, supplied, preowner, mode, wait_actual, deadline_override).await
     })

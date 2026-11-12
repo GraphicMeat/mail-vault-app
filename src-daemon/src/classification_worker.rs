@@ -111,26 +111,17 @@ fn retrain_model(state: &Arc<DaemonState>, account_id: &str) {
 #[cfg(test)]
 mod enqueue_test_pause {
     use super::DaemonState;
-    use std::collections::HashMap;
+    use crate::test_gates::{AsyncGate, Gates};
     use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
     use tokio::sync::oneshot;
 
-    type Gate = (oneshot::Sender<()>, oneshot::Receiver<()>);
-    static GATES: OnceLock<Mutex<HashMap<PathBuf, Gate>>> = OnceLock::new();
-    static DONE: OnceLock<Mutex<HashMap<PathBuf, oneshot::Sender<()>>>> = OnceLock::new();
-    fn gates() -> &'static Mutex<HashMap<PathBuf, Gate>> { GATES.get_or_init(Default::default) }
-    fn done() -> &'static Mutex<HashMap<PathBuf, oneshot::Sender<()>>> { DONE.get_or_init(Default::default) }
+    static GATES: Gates<PathBuf, AsyncGate> = Gates::new();
+    static DONE: Gates<PathBuf, oneshot::Sender<()>> = Gates::new();
     pub(super) fn install(state: &DaemonState)
         -> (oneshot::Receiver<()>, oneshot::Sender<()>, oneshot::Receiver<()>) {
-        let (entered_tx, entered_rx) = oneshot::channel();
-        let (release_tx, release_rx) = oneshot::channel();
+        let (entered_rx, release_tx) = GATES.hold_once(state.app_dir.clone(), "one held classification enqueue per vault");
         let (done_tx, done_rx) = oneshot::channel();
-        let old = gates().lock().unwrap_or_else(|e| e.into_inner())
-            .insert(state.app_dir.clone(), (entered_tx, release_rx));
-        assert!(old.is_none(), "one held classification enqueue per vault");
-        let old = done().lock().unwrap_or_else(|e| e.into_inner())
-            .insert(state.app_dir.clone(), done_tx);
+        let old = DONE.arm(state.app_dir.clone(), done_tx);
         assert!(old.is_none(), "one classification completion per vault");
         (entered_rx, release_tx, done_rx)
     }
@@ -140,18 +131,13 @@ mod enqueue_test_pause {
     }
     impl Drop for Finished {
         fn drop(&mut self) {
-            if let Some(done) = done().lock().unwrap_or_else(|e| e.into_inner()).remove(&self.0) {
+            if let Some(done) = DONE.take(&self.0) {
                 let _ = done.send(());
             }
         }
     }
     pub(super) async fn before_enqueue(state: &DaemonState) {
-        let gate = gates().lock().unwrap_or_else(|e| e.into_inner())
-            .remove(&state.app_dir);
-        if let Some((entered, release)) = gate {
-            let _ = entered.send(());
-            let _ = release.await;
-        }
+        GATES.pause(&state.app_dir).await;
     }
 }
 

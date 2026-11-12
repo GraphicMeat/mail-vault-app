@@ -283,28 +283,18 @@ async fn auto_cache_outcome(
         }
     }
 }
-
 #[cfg(test)]
-fn prepared_cache_gates() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static PREPARED_CACHE_GATES: crate::test_gates::Gates<std::path::PathBuf> = crate::test_gates::Gates::new();
 
 #[cfg(test)]
 pub(crate) fn pause_prepared_cache_for_test(path: &std::path::Path) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
-    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-    let (release_tx, release_rx) = std::sync::mpsc::channel();
-    prepared_cache_gates().lock().unwrap().insert(path.to_path_buf(), (entered_tx, release_rx));
+    let (entered_rx, release_tx) = PREPARED_CACHE_GATES.hold(path.to_path_buf());
     (entered_rx, release_tx)
 }
 
 #[cfg(test)]
 fn prepared_cache_pause(path: &std::path::Path) {
-    let gate = prepared_cache_gates().lock().unwrap().remove(path);
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv();
-    }
+    PREPARED_CACHE_GATES.pause_until_released(path);
 }
 
 pub(crate) use mailvault_core::clock::now_ms;
@@ -1245,9 +1235,7 @@ mod tests {
         );
         write_settings(dir.path(), json!({"fetchMode": "hoarder"}));
 
-        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        prepared_cache_gates().lock().unwrap().insert(state.app_dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = PREPARED_CACHE_GATES.hold(state.app_dir.clone());
         let held = Arc::clone(&state);
         let old_stamp = state.account_lifecycle.capture("a").unwrap();
         let old = tokio::spawn(async move {

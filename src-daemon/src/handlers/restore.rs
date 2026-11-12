@@ -23,21 +23,18 @@ use std::sync::Arc;
 
 #[cfg(test)]
 fn restore_done(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
-    restore_done_registry().lock().unwrap().remove(path).map(crate::credentials::TestTaskDone)
+    RESTORE_DONE_REGISTRY.take(path).map(crate::credentials::TestTaskDone)
 }
 
 #[cfg(test)]
 fn arm_restore_done(path: &std::path::Path) -> std::sync::mpsc::Receiver<()> {
     let (tx, rx) = std::sync::mpsc::channel();
-    restore_done_registry().lock().unwrap().insert(path.to_path_buf(), tx);
+    RESTORE_DONE_REGISTRY.arm(path.to_path_buf(), tx);
     rx
 }
 
 #[cfg(test)]
-fn restore_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
-    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
-    ARMED.get_or_init(Default::default)
-}
+static RESTORE_DONE_REGISTRY: crate::test_gates::Gates<std::path::PathBuf, std::sync::mpsc::Sender<()>> = crate::test_gates::Gates::new();
 
 fn mailbox_concurrency(params: &Value) -> usize {
     params.get("mailboxConcurrency").and_then(Value::as_u64).unwrap_or(1).clamp(1, 5) as usize

@@ -23,19 +23,11 @@ pub(crate) const DECRYPTED: &str = "decrypted";
 /// Encrypted, and no imported key opens it: the reader shows a notice
 /// instead of ciphertext.
 pub(crate) const LOCKED: &str = "locked";
-
 #[cfg(test)]
-fn key_gates() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static KEY_GATES: crate::test_gates::Gates<std::path::PathBuf> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn key_pause(path: &std::path::Path) {
-    let gate = key_gates().lock().unwrap().remove(path);
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
-    }
+    KEY_GATES.pause(path);
 }
 
 /// The bytes a reader renders for `raw`, and its badge (`None`: not
@@ -195,7 +187,7 @@ pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Valu
 
 #[cfg(test)]
 mod tests {
-    use super::{key_gates, render, DECRYPTED};
+    use super::{render, DECRYPTED, KEY_GATES};
     use crate::test_support::handle_request_for_test;
     use crate::state::DaemonState;
     use mailvault_core::search_index::plan::Signal;
@@ -349,9 +341,7 @@ mod tests {
         std::fs::write(b_cur.join(&name), &raw).unwrap();
         let (signals_tx, signals_rx) = std::sync::mpsc::channel();
         *state.search_index.signals.lock().unwrap() = Some(signals_tx);
-        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        key_gates().lock().unwrap().insert(state.app_dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = KEY_GATES.hold(state.app_dir.clone());
         let held = Arc::clone(&state);
         let old_raw = raw.clone();
         let old_stamp = state.account_lifecycle.capture("a").unwrap();

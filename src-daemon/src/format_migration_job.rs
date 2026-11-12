@@ -905,10 +905,7 @@ fn format_finish_pauses() -> &'static std::sync::Mutex<std::collections::HashMap
     ARMED.get_or_init(Default::default)
 }
 #[cfg(test)]
-fn format_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, std::sync::mpsc::Sender<()>>> {
-    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
-    ARMED.get_or_init(Default::default)
-}
+static FORMAT_DONE_REGISTRY: crate::test_gates::Gates<PathBuf, std::sync::mpsc::Sender<()>> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn format_finish_pause(state: &Arc<DaemonState>) {
     let gate = format_finish_pauses().lock().unwrap().remove(&state.app_dir);
@@ -926,7 +923,7 @@ fn spawn(state: &Arc<DaemonState>, live: &mut Option<Arc<Job>>, root: &Path, jou
         .spawn(move || {
             crate::mbox_upload_job::background_qos();
             #[cfg(test)]
-            let done = format_done_registry().lock().unwrap().remove(&runner.state.app_dir).map(crate::credentials::TestTaskDone);
+            let done = FORMAT_DONE_REGISTRY.take(&runner.state.app_dir).map(crate::credentials::TestTaskDone);
             #[cfg(test)]
             format_start_pause(&runner.state);
             let _owner = owner;
@@ -1867,7 +1864,7 @@ mod tests {
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         format_finish_pauses().lock().unwrap().insert(s.app_dir.clone(), FormatFinishPause { entered: entered_tx, release: release_rx });
         let (done_tx, done_rx) = std::sync::mpsc::channel();
-        format_done_registry().lock().unwrap().insert(s.app_dir.clone(), done_tx);
+        FORMAT_DONE_REGISTRY.arm(s.app_dir.clone(), done_tx);
         let mut events = s.events.subscribe();
         start(&s, root, Format::Jmap, OldFiles::Delete).unwrap();
         let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
@@ -2405,12 +2402,12 @@ mod tests {
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let (done_tx, done_rx) = std::sync::mpsc::channel();
         format_start_pauses().lock().unwrap().insert(state.app_dir.clone(), FormatFinishPause { entered: entered_tx, release: release_rx });
-        format_done_registry().lock().unwrap().insert(state.app_dir.clone(), done_tx);
+        FORMAT_DONE_REGISTRY.arm(state.app_dir.clone(), done_tx);
         let mut events = state.events.subscribe();
         let started = start(&state, root, Format::Jmap, OldFiles::Delete);
         if let Err(error) = &started {
             format_start_pauses().lock().unwrap().remove(&state.app_dir);
-            format_done_registry().lock().unwrap().remove(&state.app_dir);
+            FORMAT_DONE_REGISTRY.take(&state.app_dir);
             panic!("top-level failure must enter journaled runner: {error}");
         }
         let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };

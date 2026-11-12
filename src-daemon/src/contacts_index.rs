@@ -112,33 +112,17 @@ pub struct ContactsState {
     data_dir: PathBuf,
     db: Mutex<Option<Arc<mailvault_core::custody::SharedConn>>>,
 }
-
 #[cfg(test)]
-fn flush_gates() -> &'static Mutex<HashMap<PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<Mutex<HashMap<PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static FLUSH_GATES: crate::test_gates::Gates<PathBuf> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn flush_pause(path: &Path) {
-    let gate = flush_gates().lock().unwrap().remove(path);
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
-    }
+    FLUSH_GATES.pause(path);
 }
-
 #[cfg(test)]
-fn entry_gates() -> &'static Mutex<HashMap<(PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<Mutex<HashMap<(PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static ENTRY_GATES: crate::test_gates::Gates<(PathBuf, &'static str)> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn entry_pause(path: &Path, kind: &'static str) {
-    let gate = entry_gates().lock().unwrap().remove(&(path.to_path_buf(), kind));
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
-    }
+    ENTRY_GATES.pause(&(path.to_path_buf(), kind));
 }
 
 impl ContactsState {
@@ -580,9 +564,7 @@ mod tests {
         );
         state.contacts.seed_dirty_for_test("a");
         state.contacts.seed_dirty_for_test("b");
-        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        flush_gates().lock().unwrap().insert(state.data_dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = FLUSH_GATES.hold(state.data_dir.clone());
         let held = Arc::clone(&state);
         let task = tokio::task::spawn_blocking(move || held.contacts.flush_dirty());
         entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("real dirty snapshot created");
@@ -607,9 +589,7 @@ mod tests {
         std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
         state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
         state.contacts.seed_dirty_for_test("a");
-        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        flush_gates().lock().unwrap().insert(state.data_dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = FLUSH_GATES.hold(state.data_dir.clone());
         let held = Arc::clone(&state);
         let old = tokio::task::spawn_blocking(move || held.contacts.flush_dirty());
         entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("old A snapshot taken");
@@ -643,9 +623,7 @@ mod tests {
             } else {
                 crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(conn, "a", "INBOX", r#"{"emails":[{"uid":1,"from":{"address":"old@example.com"},"to":[],"cc":[],"bcc":[]}]}"#)).unwrap();
             }
-            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-            let (release_tx, release_rx) = std::sync::mpsc::channel();
-            entry_gates().lock().unwrap().insert((state.data_dir.clone(), kind), (entered_tx, release_rx));
+            let (entered_rx, release_tx) = ENTRY_GATES.hold((state.data_dir.clone(), kind));
             let held = Arc::clone(&state);
             let task = tokio::task::spawn_blocking(move || {
                 if kind == "load" { held.contacts.load_account("a"); }

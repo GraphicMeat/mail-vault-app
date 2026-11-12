@@ -47,19 +47,11 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
-
 #[cfg(test)]
-fn p2_complete_gates() -> &'static Mutex<HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
-    static GATES: std::sync::OnceLock<Mutex<HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static P2_COMPLETE_GATES: crate::test_gates::Gates<std::path::PathBuf> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn p2_before_complete(path: &Path) {
-    let gate = p2_complete_gates().lock().unwrap().remove(path);
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(Duration::from_secs(5));
-    }
+    P2_COMPLETE_GATES.pause(path);
 }
 
 // ponytail: fixed pacing, sized for Gmail, the strictest provider we know:
@@ -982,9 +974,7 @@ mod tests {
         let (dir, state) = state();
         std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"b"}]"#).unwrap();
         state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
-        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        p2_complete_gates().lock().unwrap().insert(dir.clone(), (entered_tx, release_rx));
+        let (entered_rx, release_tx) = P2_COMPLETE_GATES.hold(dir.clone());
         let old = tokio::spawn({
             let (state, config) = (Arc::clone(&state), config(&mock));
             async move { hoard_account(&state, &config, ACCT).await }

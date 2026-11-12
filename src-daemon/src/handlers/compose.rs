@@ -534,21 +534,9 @@ mod tests {
     use super::*;
     use mock_imap::{MockImap, Scenario};
 
-    struct StageGate {
-        entered: std::sync::mpsc::Sender<()>,
-        release: std::sync::mpsc::Receiver<()>,
-        done: std::sync::mpsc::Sender<()>,
-    }
-    fn stage_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, StageGate>> {
-        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, StageGate>>> = std::sync::OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
+    static STAGE_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::DoneGate> = crate::test_gates::Gates::new();
     pub(super) fn stage_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
-        stage_gates().lock().unwrap().remove(path).map(|gate| {
-            let _ = gate.entered.send(());
-            let _ = gate.release.recv();
-            crate::credentials::TestTaskDone(gate.done)
-        })
+        STAGE_GATES.pause_done(path)
     }
     struct StagePause {
         release: Option<std::sync::mpsc::Sender<()>>,
@@ -557,10 +545,7 @@ mod tests {
     }
     impl StagePause {
         fn arm(state: &Arc<DaemonState>) -> Self {
-            let (release, gate) = std::sync::mpsc::channel();
-            let (entered, notice) = std::sync::mpsc::channel();
-            let (done, finished) = std::sync::mpsc::channel();
-            stage_gates().lock().unwrap().insert(state.app_dir.clone(), StageGate { entered, release: gate, done });
+            let (notice, release, finished) = STAGE_GATES.hold_done(state.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         fn entered(&self) {
@@ -580,21 +565,9 @@ mod tests {
         }
     }
 
-    struct LandedGate {
-        entered: std::sync::mpsc::Sender<()>,
-        release: std::sync::mpsc::Receiver<()>,
-        done: std::sync::mpsc::Sender<()>,
-    }
-    fn landed_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, LandedGate>> {
-        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, LandedGate>>> = std::sync::OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
+    static LANDED_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::DoneGate> = crate::test_gates::Gates::new();
     pub(super) fn landed_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
-        landed_gates().lock().unwrap().remove(path).map(|gate| {
-            let _ = gate.entered.send(());
-            let _ = gate.release.recv();
-            crate::credentials::TestTaskDone(gate.done)
-        })
+        LANDED_GATES.pause_done(path)
     }
     struct LandedPause {
         release: Option<std::sync::mpsc::Sender<()>>,
@@ -603,10 +576,7 @@ mod tests {
     }
     impl LandedPause {
         fn arm(state: &Arc<DaemonState>) -> Self {
-            let (release, gate) = std::sync::mpsc::channel();
-            let (entered, notice) = std::sync::mpsc::channel();
-            let (done, finished) = std::sync::mpsc::channel();
-            landed_gates().lock().unwrap().insert(state.app_dir.clone(), LandedGate { entered, release: gate, done });
+            let (notice, release, finished) = LANDED_GATES.hold_done(state.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         fn entered(&self) { self.entered.recv_timeout(std::time::Duration::from_secs(5)).expect("actual landed cleanup entered"); }

@@ -326,19 +326,10 @@ pub(crate) fn with_native_expectation(mut batch: Value, expected: Option<Value>)
 }
 
 #[cfg(test)]
-type CacheRouteGate = (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>);
-#[cfg(test)]
-fn cache_route_gates() -> &'static std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), CacheRouteGate>> {
-    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), CacheRouteGate>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static CACHE_ROUTE_GATES: crate::test_gates::Gates<(std::path::PathBuf, &'static str)> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn cache_route_pause(path: &std::path::Path, method: &'static str) {
-    let gate = cache_route_gates().lock().unwrap().remove(&(path.to_path_buf(), method));
-    if let Some((entered, release)) = gate {
-        let _ = entered.send(());
-        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
-    }
+    CACHE_ROUTE_GATES.pause(&(path.to_path_buf(), method));
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -677,9 +668,7 @@ mod tests {
         let methods = ["save_email_cache", "save_mailbox_cache", "graph_allocate_uids"];
         let mut gates = Vec::new();
         for method in methods {
-            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
-            let (release_tx, release_rx) = std::sync::mpsc::channel();
-            cache_route_gates().lock().unwrap().insert((state.app_dir.clone(), method), (entered_tx, release_rx));
+            let (entered_rx, release_tx) = CACHE_ROUTE_GATES.hold((state.app_dir.clone(), method));
             gates.push((entered_rx, release_tx));
         }
         let payloads = [

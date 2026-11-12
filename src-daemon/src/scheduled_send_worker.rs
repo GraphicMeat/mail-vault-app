@@ -369,24 +369,10 @@ async fn attempt_row_with(state: &Arc<DaemonState>, snapshot: &scheduled::Schedu
 }
 
 #[cfg(test)]
-struct TerminalGate {
-    entered: std::sync::mpsc::Sender<()>,
-    release: tokio::sync::oneshot::Receiver<()>,
-    done: std::sync::mpsc::Sender<()>,
-}
-#[cfg(test)]
-fn terminal_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<(std::path::PathBuf, String), TerminalGate>> {
-    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<(std::path::PathBuf, String), TerminalGate>>> = std::sync::OnceLock::new();
-    GATES.get_or_init(Default::default)
-}
+static TERMINAL_GATES: crate::test_gates::Gates<(std::path::PathBuf, String), crate::test_gates::AsyncDoneGate> = crate::test_gates::Gates::new();
 #[cfg(test)]
 async fn terminal_pause(path: &std::path::Path, id: &str) -> Option<crate::credentials::TestTaskDone> {
-    let gate = terminal_gates().lock().unwrap().remove(&(path.to_path_buf(), id.to_owned()));
-    if let Some(gate) = gate {
-        let _ = gate.entered.send(());
-        let _ = gate.release.await;
-        Some(crate::credentials::TestTaskDone(gate.done))
-    } else { None }
+    TERMINAL_GATES.pause_done(&(path.to_path_buf(), id.to_owned())).await
 }
 #[cfg(test)]
 pub(crate) struct TerminalPause {
@@ -397,10 +383,7 @@ pub(crate) struct TerminalPause {
 #[cfg(test)]
 impl TerminalPause {
     pub(crate) fn arm(state: &Arc<DaemonState>, id: &str) -> Self {
-        let (release, gate) = tokio::sync::oneshot::channel();
-        let (entered, notice) = std::sync::mpsc::channel();
-        let (done, finished) = std::sync::mpsc::channel();
-        terminal_gates().lock().unwrap().insert((state.app_dir.clone(), id.to_owned()), TerminalGate { entered, release: gate, done });
+        let (notice, release, finished) = TERMINAL_GATES.hold_done((state.app_dir.clone(), id.to_owned()));
         Self { release: Some(release), entered: notice, done: Some(finished) }
     }
     pub(crate) fn entered(&self) { self.entered.recv_timeout(Duration::from_secs(5)).expect("actual terminal transport completed"); }
@@ -663,22 +646,9 @@ mod tests {
     use super::*;
     use serde_json::{json, Value};
 
-    struct AppendGate {
-        entered: std::sync::mpsc::Sender<()>,
-        release: tokio::sync::oneshot::Receiver<()>,
-        done: std::sync::mpsc::Sender<()>,
-    }
-    fn append_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>> {
-        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>>> = std::sync::OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
+    static APPEND_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::AsyncDoneGate> = crate::test_gates::Gates::new();
     pub(super) async fn append_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
-        let gate = append_gates().lock().unwrap().remove(path);
-        if let Some(gate) = gate {
-            let _ = gate.entered.send(());
-            let _ = gate.release.await;
-            Some(crate::credentials::TestTaskDone(gate.done))
-        } else { None }
+        APPEND_GATES.pause_done(path).await
     }
     struct AppendPause {
         release: Option<tokio::sync::oneshot::Sender<()>>,
@@ -687,10 +657,7 @@ mod tests {
     }
     impl AppendPause {
         fn arm(state: &Arc<DaemonState>) -> Self {
-            let (release, gate) = tokio::sync::oneshot::channel();
-            let (entered, notice) = std::sync::mpsc::channel();
-            let (done, finished) = std::sync::mpsc::channel();
-            append_gates().lock().unwrap().insert(state.app_dir.clone(), AppendGate { entered, release: gate, done });
+            let (notice, release, finished) = APPEND_GATES.hold_done(state.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         fn entered(&self) { self.entered.recv_timeout(Duration::from_secs(5)).expect("actual scheduled append child entered"); }

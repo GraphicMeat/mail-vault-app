@@ -543,15 +543,7 @@ pub(crate) mod tests {
     use super::*;
     use mock_imap::{MockImap, Scenario};
 
-    struct AppendGate {
-        entered: std::sync::mpsc::Sender<()>,
-        release: tokio::sync::oneshot::Receiver<()>,
-        done: std::sync::mpsc::Sender<()>,
-    }
-    fn append_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>> {
-        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>>> = std::sync::OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
+    static APPEND_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::AsyncDoneGate> = crate::test_gates::Gates::new();
     fn append_unwinds() -> &'static std::sync::Mutex<std::collections::BTreeSet<std::path::PathBuf>> {
         static PATHS: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeSet<std::path::PathBuf>>> = std::sync::OnceLock::new();
         PATHS.get_or_init(Default::default)
@@ -562,24 +554,11 @@ pub(crate) mod tests {
         }
     }
     pub(super) async fn append_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
-        let gate = append_gates().lock().unwrap().remove(path);
-        if let Some(gate) = gate {
-            let _ = gate.entered.send(());
-            let _ = gate.release.await;
-            Some(crate::credentials::TestTaskDone(gate.done))
-        } else { None }
+        APPEND_GATES.pause_done(path).await
     }
-    fn recovery_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>> {
-        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>>> = std::sync::OnceLock::new();
-        GATES.get_or_init(Default::default)
-    }
+    static RECOVERY_GATES: crate::test_gates::Gates<std::path::PathBuf, crate::test_gates::AsyncDoneGate> = crate::test_gates::Gates::new();
     pub(super) async fn recovery_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
-        let gate = recovery_gates().lock().unwrap().remove(path);
-        if let Some(gate) = gate {
-            let _ = gate.entered.send(());
-            let _ = gate.release.await;
-            Some(crate::credentials::TestTaskDone(gate.done))
-        } else { None }
+        RECOVERY_GATES.pause_done(path).await
     }
     pub(crate) struct AppendPause {
         release: Option<tokio::sync::oneshot::Sender<()>>,
@@ -588,17 +567,11 @@ pub(crate) mod tests {
     }
     impl AppendPause {
         pub(crate) fn arm(state: &Arc<DaemonState>) -> Self {
-            let (release, gate) = tokio::sync::oneshot::channel();
-            let (entered, notice) = std::sync::mpsc::channel();
-            let (done, finished) = std::sync::mpsc::channel();
-            append_gates().lock().unwrap().insert(state.app_dir.clone(), AppendGate { entered, release: gate, done });
+            let (notice, release, finished) = APPEND_GATES.hold_done(state.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         fn arm_recovery(state: &Arc<DaemonState>) -> Self {
-            let (release, gate) = tokio::sync::oneshot::channel();
-            let (entered, notice) = std::sync::mpsc::channel();
-            let (done, finished) = std::sync::mpsc::channel();
-            recovery_gates().lock().unwrap().insert(state.app_dir.clone(), AppendGate { entered, release: gate, done });
+            let (notice, release, finished) = RECOVERY_GATES.hold_done(state.app_dir.clone());
             Self { release: Some(release), entered: notice, done: Some(finished) }
         }
         pub(crate) fn entered(&self) { self.entered.recv_timeout(std::time::Duration::from_secs(5)).expect("actual append child entered"); }

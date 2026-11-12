@@ -916,19 +916,16 @@ pub(crate) fn status(state: &DaemonState) -> Value {
 /// Registers the job and starts its worker. `jobs` is the registry, locked
 /// by the caller: the worker's own unregister waits for this insert.
 #[cfg(test)]
-fn upload_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
-    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
-    ARMED.get_or_init(Default::default)
-}
+static UPLOAD_DONE: crate::test_gates::Gates<std::path::PathBuf, std::sync::mpsc::Sender<()>> = crate::test_gates::Gates::new();
 #[cfg(test)]
 fn arm_upload_done(path: &std::path::Path) -> std::sync::mpsc::Receiver<()> {
     let (tx, rx) = std::sync::mpsc::channel();
-    upload_done_registry().lock().unwrap().insert(path.to_path_buf(), tx);
+    UPLOAD_DONE.arm(path.to_path_buf(), tx);
     rx
 }
 #[cfg(test)]
 fn upload_done(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
-    upload_done_registry().lock().unwrap().remove(path).map(crate::credentials::TestTaskDone)
+    UPLOAD_DONE.take(path).map(crate::credentials::TestTaskDone)
 }
 
 fn spawn(
