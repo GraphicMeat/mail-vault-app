@@ -20,6 +20,13 @@ const handlerList = main.slice(handlerStart, main.indexOf(']', handlerStart));
 const shell = read('src-tauri/src/abd.rs');
 const channel = read('src-tauri/src/daemon_channel.rs');
 const backupRs = read('src-tauri/src/backup.rs');
+const lease = read('src-tauri/src/native_lease.rs');
+/** One row of the shell's job-hold table (`native_lease::KINDS`). */
+const leaseRow = (job) => {
+  const m = new RegExp(`Kind \\{\\s*job: Job::${job},[^}]*\\}`).exec(lease);
+  expect(m, `${job} has a row`).not.toBeNull();
+  return m[0];
+};
 
 /** Source with `//` comment lines and the `#[cfg(test)]` module dropped. */
 const prod = (s) => {
@@ -60,7 +67,7 @@ describe('the three abd commands are shell forwarders', () => {
 
   it('the state and the module are registered', () => {
     expect(main).toMatch(/^mod abd;$/m);
-    expect(main).toMatch(/\.manage\(abd::HeldAbdPaths::default\(\)\)/);
+    expect(main).toMatch(/\.manage\(native_lease::Leases::default\(\)\)/);
   });
 
   it('every command runs on the blocking pool and forwards the right daemon method', () => {
@@ -78,31 +85,35 @@ describe('the three abd commands are shell forwarders', () => {
   });
 });
 
-describe('the drive hold is its own map, released by abd frames only', () => {
-  it('HeldAbdPaths is separate from HeldBackupPaths', () => {
-    expect(shellProd).toMatch(/pub struct HeldAbdPaths\(pub Mutex<HashMap<String, String>>\)/);
-    expect(shellProd).not.toMatch(/HeldBackupPaths/);
-    expect(prod(backupRs)).not.toMatch(/HeldAbdPaths|abd-progress/);
+describe('the drive hold is its own kind, released by abd frames only', () => {
+  it('the abd hold and a backup run hold are separate kinds of the one lease table', () => {
+    expect(leaseRow('Abd')).toMatch(/event: crate::abd::ABD_PROGRESS,/);
+    expect(leaseRow('BackupRun')).toMatch(/event: crate::backup::BACKUP_PROGRESS,/);
+    expect(shellProd).not.toMatch(/Job::BackupRun|HeldBackupPaths/);
+    expect(prod(backupRs)).not.toMatch(/Job::Abd|abd-progress/);
   });
 
   it('the channel releases on the terminal abd-progress frame, on a lag and on a reconnect', () => {
-    expect(channel).toMatch(/name == crate::abd::ABD_PROGRESS/);
-    expect(channel).toMatch(/crate::abd::release_after_frame\(app, &frame\)/);
-    expect(channel).toMatch(/crate::abd::release_all\(app, "the daemon event stream lagged"\)/);
-    expect(channel).toMatch(/crate::abd::release_all\(&app, "the daemon channel reconnected"\)/);
+    expect(leaseRow('Abd')).toMatch(/ends: crate::abd::frame_releases_drive,/);
+    expect(leaseRow('Abd')).toMatch(/release_on_reset: true,/);
+    expect(channel).toMatch(/crate::native_lease::is_lease_event\(&name\)/);
+    expect(channel).toMatch(/crate::native_lease::after_event\(app, &name, &frame\)/);
+    expect(channel).toMatch(/crate::native_lease::release_on_reset\(app, "the daemon event stream lagged"\)/);
+    expect(channel).toMatch(/crate::native_lease::release_on_reset\(&app, "the daemon channel reconnected"\)/);
     expect(shellProd).toMatch(/const ABD_PROGRESS: &str = "abd-progress"/);
   });
 
   it('the frame is re-emitted to the frontend before the hold is released, like backup-progress', () => {
     const emit = channel.indexOf('app.emit(&name, payload)');
     expect(emit).toBeGreaterThan(-1);
-    expect(channel.indexOf('crate::abd::release_after_frame(app, &frame)')).toBeGreaterThan(emit);
+    expect(channel.indexOf('crate::native_lease::after_event(app, &name, &frame)')).toBeGreaterThan(emit);
   });
 
-  it('backup-progress handling is untouched', () => {
-    expect(channel).toMatch(/name == "backup-progress"/);
-    expect(channel).toMatch(/crate::backup::release_after_terminal_progress\(app, &progress\)/);
-    expect(channel).toMatch(/crate::export_folder::release_after_final_frame\(app, &frame\)/);
+  it('backup-progress handling is untouched: a legacy run keeps its mirror across a reconnect', () => {
+    expect(prod(backupRs)).toMatch(/const BACKUP_PROGRESS: &str = "backup-progress"/);
+    expect(leaseRow('BackupRun')).toMatch(/ends: crate::backup::legacy_run_over,/);
+    expect(leaseRow('BackupRun')).toMatch(/release_on_reset: false,/);
+    expect(leaseRow('Export')).toMatch(/event: crate::export_folder::EXPORT_PROGRESS,/);
   });
 
   it('a frame releases on finished:true or a drive_unavailable pause, nothing else', () => {
@@ -129,9 +140,10 @@ describe('archive-only mode never touches the backup drive', () => {
 
   it('a backup-mode start parks the drive before it calls the daemon', () => {
     const body = fnBody(shellProd, 'start_flow');
-    expect(body.indexOf('held.hold(')).toBeGreaterThan(-1);
-    // the archive-only branch calls earlier and holds nothing; the LAST call is the backup one
-    expect(body.indexOf('held.hold(')).toBeLessThan(body.lastIndexOf('ports.call("abd.start"'));
+    expect(body.indexOf('held.call_holding(')).toBeGreaterThan(-1);
+    // the archive-only branch calls earlier and holds nothing; the LAST call is the
+    // backup one, run by `call_holding` after it parks the drive
+    expect(body.indexOf('held.call_holding(')).toBeLessThan(body.lastIndexOf('ports.call("abd.start"'));
     expect(body).toMatch(/ERR_NO_BACKUP_DRIVE/);
     expect(shellProd).toMatch(/const ERR_NO_BACKUP_DRIVE: &str = "E_ABD_NO_BACKUP_DRIVE: /);
   });

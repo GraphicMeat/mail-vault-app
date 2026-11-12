@@ -49,10 +49,12 @@ describe('the auto-cleanup rules run in the daemon', () => {
     const main = shellSource();
     const handlerStart = main.indexOf('generate_handler![');
     expect(main.slice(handlerStart, main.indexOf(']', handlerStart))).toContain('cleanup::cleanup_run_now');
-    expect(main).toContain('.manage(cleanup::HeldCleanupPath::default())');
+    expect(main).toContain('.manage(native_lease::Leases::default())');
     const channel = readFileSync('src-tauri/src/daemon_channel.rs', 'utf8');
-    expect(channel).toContain('crate::cleanup::release_after_event(');
-    expect(channel.match(/crate::cleanup::release_all\(/g)).toHaveLength(2);
+    expect(channel).toContain('crate::native_lease::after_event(app, &name, &frame)');
+    expect(channel.match(/crate::native_lease::release_on_reset\(/g)).toHaveLength(2);
+    const row = /Kind \{\s*job: Job::Cleanup,[^}]*\}/.exec(readFileSync('src-tauri/src/native_lease.rs', 'utf8'));
+    expect(row?.[0]).toMatch(/event: crate::cleanup::CLEANUP_RUN,[\s\S]*ends: crate::cleanup::run_over,[\s\S]*release_on_reset: true,/);
     const shell = readFileSync('src-tauri/src/cleanup.rs', 'utf8');
     expect(shell).toMatch(/#\[tauri::command\]\s*pub async fn cleanup_run_now\(/);
     expect(shell).toContain('ports.call("cleanup.run_now", json!({ "mirrorRoot": root })');

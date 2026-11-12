@@ -106,7 +106,11 @@ function rustEmits(roots, files, notNames = []) {
   return { names: sorted(names), unresolved };
 }
 
-/** Names the shell's event pump compares an incoming event to: `name == "x"`, `name == CONST`, `matches!(name, "a" | "b")`. */
+/**
+ * Names the shell's event pump compares an incoming event to: `name == "x"`,
+ * `name == CONST`, `matches!(name, "a" | "b")`, and the `event:` field of a
+ * declared table row (`native_lease::KINDS`).
+ */
 function rustNameMatches(root, constFiles, files) {
   const consts = rustConsts(constFiles);
   const names = [];
@@ -122,6 +126,14 @@ function rustNameMatches(root, constFiles, files) {
       }
     }
     for (const m of code.matchAll(/matches!\(\s*name\s*,([^)]*)\)/g)) for (const l of m[1].matchAll(/"([^"]+)"/g)) names.push(l[1]);
+    for (const m of code.matchAll(/\bevent:\s*(?:"([^"]+)"|((?:(?:crate|super|self|[a-z_]+)::)*[A-Z][A-Z0-9_]*))\s*,/g)) {
+      if (m[1] !== undefined) names.push(m[1]);
+      else {
+        const v = resolveConst(consts, file, code, root, m[2]);
+        if (v === null) unresolved.push(`${file}: ${m[2]}`);
+        else names.push(v);
+      }
+    }
   }
   return { names: sorted(names), unresolved };
 }
@@ -194,7 +206,8 @@ const LIST = JSON.parse(read('src-daemon/events.json'));
 const DAEMON_ROOTS = ['src-daemon/src', 'src-core/src'];
 const DAEMON_FILES = sources(DAEMON_ROOTS.flatMap((r) => walk(r, ['.rs'], ['/tests/'])));
 const SHELL_FILES = sources(walk('src-tauri/src', ['.rs'], ['/tests/']));
-const PUMP = SHELL_FILES.filter(({ file }) => file === 'src-tauri/src/daemon_channel.rs');
+// The pump, and the table of job holds it hands frames to.
+const PUMP = SHELL_FILES.filter(({ file }) => ['src-tauri/src/daemon_channel.rs', 'src-tauri/src/native_lease.rs'].includes(file));
 // src/mobile has its own list (src-mobile-engine/events.json) and seam test.
 const WEB_FILES = sources(walk('src', ['.js', '.jsx'], ['__tests__', '.test.', '/mobile/', '/demo/']));
 const DEMO_FILES = sources(walk('src/demo', ['.js', '.jsx'], ['__tests__']));
@@ -305,5 +318,15 @@ describe('the scanners catch a mismatch', () => {
   it("a misspelt name in the shell's pump is seen", () => {
     const fx = [{ file: 'p/daemon_channel.rs', src: 'fn p(name: &str) { if name == "bulk-progres" {} matches!(name, "backup-access-neded" | "x"); }' }];
     expect(rustNameMatches('p', fx, fx).names).toEqual(['backup-access-neded', 'bulk-progres', 'x']);
+  });
+
+  it("a misspelt event in the pump's hold table, literal or const, is seen", () => {
+    const fx = [
+      { file: 'p/a.rs', src: 'pub(crate) const EVENT: &str = "abd-progres";' },
+      { file: 'p/native_lease.rs', src: 'static KINDS: [Kind; 2] = [Kind { job: J, event: "cleanup-rn", id: f }, Kind { job: K, event: crate::a::EVENT, id: g }];' },
+    ];
+    const r = rustNameMatches('p', fx, fx);
+    expect(r.unresolved).toEqual([]);
+    expect(r.names).toEqual(['abd-progres', 'cleanup-rn']);
   });
 });

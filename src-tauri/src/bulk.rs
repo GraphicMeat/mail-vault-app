@@ -1,7 +1,7 @@
 //! Native bookmark authority belongs to one execution attempt. A timed-out
 //! request is released only after a matching drain or definitive admission
 //! fence/rejection, never from an instantaneous empty active snapshot.
-use crate::abd::{AppPorts, Ports};
+use crate::native_lease::{AppPorts, Ports};
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Mutex, time::Duration};
 use tauri::Manager;
@@ -316,7 +316,7 @@ pub(crate) fn reconcile_after_channel_change(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abd::Ports;
+    use crate::native_lease::Ports;
     use std::sync::Mutex;
     struct Fake<'a> {
         held: &'a HeldBulkPaths,

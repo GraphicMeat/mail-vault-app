@@ -92,17 +92,13 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 warned = false;
                 info!("daemon channel connected");
                 let _ = app.emit("daemon-reconnected", json!({}));
-                // The app fails every export in flight on a reconnect; their
-                // folders' scoped access goes with them.
-                crate::export_folder::release_all(&app, "the daemon channel reconnected");
-                // Same for a backup-drive hold of an archive/delete job: the
-                // app re-attaches through `abd_attach` once it is connected.
-                crate::abd::release_all(&app, "the daemon channel reconnected");
+                // A job's terminal frame may be lost with the old connection:
+                // the app fails every export in flight and re-attaches an
+                // archive/delete job, so their holds go (`native_lease::KINDS`).
+                crate::native_lease::release_on_reset(&app, "the daemon channel reconnected");
                 crate::bulk::reconcile_after_channel_change(&app);
                 crate::backup::access_connected(&app, owner.clone());
                 crate::backup::reconcile_surface_retirement();
-                // And the drive held for a cleanup run (Run All Now).
-                crate::cleanup::release_all(&app, "the daemon channel reconnected");
                 // Nudges dropped while disconnected: one full pass catches them (spec §3.2).
                 // Runs on the first connect too (CONNECTED is already true above, addendum
                 // C3). Harmless on a fresh daemon (unconfigured until 1.8's re-push); catches
@@ -264,24 +260,12 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
             line = lines.next_line() => match line {
                 Ok(Some(l)) => {
                     if let Some((name, payload)) = parse_event(&l) {
-                        // A backup run is fire-and-forget (Task 5): its Tauri
-                        // command returned as soon as the daemon ACKed the
-                        // start, still holding the mirror's security-scoped
-                        // access, and the run's terminal frame is the only
-                        // thing that says it can be let go. Cloned only for
-                        // this one event name; the frontend is served first.
-                        let finished_backup = (name == "backup-progress").then(|| payload.clone());
-                        // An attachment export holds its folder the same way
-                        // (`export_folder.rs`): its final frame lets go, and a
-                        // lag may have eaten one, so it lets every job go.
-                        let export_frame = (name == crate::export_folder::EXPORT_PROGRESS).then(|| payload.clone());
-                        // An archive/delete job holds the backup drive the same way
-                        // (`abd.rs`): its terminal frame, or one saying it paused
-                        // for the drive, lets go.
+                        // A job holding a folder's scoped access (`native_lease`):
+                        // its terminal frame lets go, after the frontend is served.
+                        // Cloned only for those event names.
+                        let lease_frame = crate::native_lease::is_lease_event(&name).then(|| payload.clone());
+                        // A bulk operation's hold has its own attempt protocol (`bulk.rs`).
                         let bulk_frame = (name == "bulk-progress").then(|| payload.clone());
-                        let abd_frame = (name == crate::abd::ABD_PROGRESS).then(|| payload.clone());
-                        // And a cleanup run's: its done event lets go.
-                        let cleanup_event = (name == crate::cleanup::CLEANUP_RUN).then(|| payload.clone());
                         let lagged = name == "daemon-events-lagged";
                         if name == "settings-changed" {
                             crate::follow_settings_log_level(&payload);
@@ -289,25 +273,14 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         if app.emit(&name, payload).is_err() {
                             debug!("daemon channel: failed to emit {name} to the frontend");
                         }
-                        if let Some(progress) = finished_backup {
-                            crate::backup::release_after_terminal_progress(app, &progress);
-                        }
-                        if let Some(frame) = export_frame {
-                            crate::export_folder::release_after_final_frame(app, &frame);
+                        if let Some(frame) = lease_frame {
+                            crate::native_lease::after_event(app, &name, &frame);
                         }
                         if let Some(frame) = bulk_frame {crate::bulk::release_after_frame(app,&frame);}
-                        if let Some(frame) = abd_frame {
-                            crate::abd::release_after_frame(app, &frame);
-                        }
-                        if let Some(event) = cleanup_event {
-                            crate::cleanup::release_after_event(app, &event);
-                        }
                         schedule_backup_access_event(&name, || crate::backup::reconcile_native_access(app));
                         if lagged {
                             crate::bulk::reconcile_after_channel_change(app);
-                            crate::export_folder::release_all(app, "the daemon event stream lagged");
-                            crate::abd::release_all(app, "the daemon event stream lagged");
-                            crate::cleanup::release_all(app, "the daemon event stream lagged");
+                            crate::native_lease::release_on_reset(app, "the daemon event stream lagged");
                         }
                     }
                 }

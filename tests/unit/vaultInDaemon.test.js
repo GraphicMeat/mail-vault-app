@@ -198,7 +198,8 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
 
   it('the three mirror-broker forwarders reach the daemon, not a local writer', () => {
     const forwarders = readFileSync(`${dir}/vault_flags.rs`, 'utf8');
-    expect(forwarders).toMatch(/daemon_call_blocking/);
+    // Through backup.rs's bounded forwarder, which resolves, calls and releases.
+    expect(forwarders).toMatch(/crate::backup::forward\(/);
     expect(forwarders).not.toMatch(/apply_everywhere|rename_dirs|adopt_dirs/);
   });
 });

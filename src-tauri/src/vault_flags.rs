@@ -23,44 +23,12 @@ pub use mailvault_core::vault_flags::{AdoptReport, RenamePair};
 use mailvault_core::vault_flags::{Applied, FlagChange};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
-use tracing::warn;
 
-/// Every mirror-spanning rename shares this budget (`reply_timeout`'s 600 s
-/// family): a whole-mailbox catch-up renames two files per message across two
-/// filesystems, one of which can be a slow external drive.
-const MIRROR_BUDGET: std::time::Duration = std::time::Duration::from_secs(600);
-
-/// Resolve the mirror, call the daemon with `mirrorRoot`, release, then decide.
-/// Blocking on purpose — every caller is already inside `spawn_blocking`.
-fn forward<T: DeserializeOwned>(app: &tauri::AppHandle, method: &str, mut params: Value) -> Result<T, String> {
-    let (root, needs_release) = crate::backup::resolve_backup_path(app, None);
-    if let Some(obj) = params.as_object_mut() {
-        obj.insert("mirrorRoot".into(), json!(root));
-    }
-    let result = crate::daemon_call_blocking(app, method, params, MIRROR_BUDGET);
-    if needs_release {
-        if let Some(ref p) = root {
-            crate::backup::release_backup_path(p);
-        }
-    }
-    let value = match result {
-        Ok(v) => v,
-        Err(e) => {
-            if needs_release {
-                // task-2.11 carry-in M6: this fires on every error with a
-                // mirror in play, not only a timeout — the daemon may never
-                // have touched the mirror at all (unreachable, outdated).
-                // Say "if", not "a call that timed out", so an unrelated
-                // failure does not read as proof the mirror was mid-rename.
-                warn!(
-                    "{method}: failed ({e}) — the backup mirror's access has been released; \
-                     if this call timed out mid-rename, the mirror may be left partly renamed, \
-                     which the next backup catch-up heals"
-                );
-            }
-            return Err(e);
-        }
-    };
+/// Resolve the mirror, call the daemon with `mirrorRoot`, release on every
+/// path (`backup::forward`, 600 s budget), then decide.
+/// Blocking on purpose: every caller is already inside `spawn_blocking`.
+fn forward<T: DeserializeOwned>(app: &tauri::AppHandle, method: &str, params: Value) -> Result<T, String> {
+    let value = crate::backup::forward(app, method, None, |_| params)?;
     serde_json::from_value(value).map_err(|e| format!("{method}: unreadable reply: {e}"))
 }
 

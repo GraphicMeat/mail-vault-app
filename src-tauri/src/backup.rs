@@ -17,11 +17,11 @@
 //!   leaks the scoped access for the process's life.
 //! - `backup_run_account` is fire-and-forget: the daemon ACKs the start and
 //!   the run keeps going for minutes afterwards, still needing the mirror
-//!   path live. Its forwarder therefore parks the resolved path in
-//!   [`HeldBackupPaths`] and the release happens when that run's terminal
-//!   `backup-progress` frame (`active: false`) comes back up the channel —
-//!   see [`release_after_terminal_progress`], called from
-//!   `daemon_channel.rs`'s re-emit path.
+//!   path live. Its forwarder therefore parks the resolved path in the
+//!   shell's `native_lease::Leases` (`Job::BackupRun`) and the release
+//!   happens when that run's terminal `backup-progress` frame comes back up
+//!   the channel (see [`legacy_run_over`]). Unlike the other jobs there, a
+//!   channel reconnect or lag does not release it: the run goes on.
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -30,6 +30,7 @@ use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::external_location;
+use crate::native_lease::{Job, Leases};
 #[path = "backup_native_access.rs"]
 mod native_access;
 pub(crate) use native_access::{
@@ -97,87 +98,24 @@ pub(crate) fn release_backup_path(path: &str) {
     external_location::release_external_access(path);
 }
 
-// ── Bookmark scopes held for an in-flight run ────────────────────────────────
+// ── The hold of an in-flight run ─────────────────────────────────────────────
 
-/// `account_id` → the resolved mirror path whose security scope that
-/// account's in-flight backup run is still using. An entry's presence IS the
-/// "needs release" flag: `resolve_backup_path` only reports `needs_release`
-/// when it resolved a bookmark, and only then is anything parked here.
+/// Daemon event of a backup run's progress, legacy and native alike.
+pub(crate) const BACKUP_PROGRESS: &str = "backup-progress";
+
+/// Whether a `backup-progress` frame ends a legacy run's hold: the run is
+/// over (`active: false`). A native scheduler frame carries `runId` or
+/// `executionId` and never releases a legacy hold; its access is
+/// `backup_native_access.rs`'s.
 ///
 /// ponytail: two accounts backing up to the same drive resolve the same path,
 /// so the first terminal frame releases a scope the second run is still
-/// using. Pre-existing shape — the app-side runner resolved and released
-/// per-account too — and the next call re-resolves; refcount per path if a
-/// real double-run problem ever shows up.
-#[derive(Default)]
-pub struct HeldBackupPaths(pub Mutex<HashMap<String, String>>);
-
-/// `try_state`, not `state`: `release_after_terminal_progress` runs inside
-/// `daemon_channel.rs`'s read loop, and a panic there would take the app's
-/// one daemon connection down with it.
-fn held(app: &tauri::AppHandle) -> Option<tauri::State<'_, HeldBackupPaths>> {
-    app.try_state::<HeldBackupPaths>()
-}
-
-/// Remember that `account_id`'s run needs `path` kept alive. A path already
-/// parked for this account belonged to a run that never reported a terminal
-/// frame or is a second start over the top of a live run: release it here
-/// rather than leak it for the process's life.
-fn hold_backup_path(app: &tauri::AppHandle, account_id: &str, path: &str) {
-    let Some(held) = held(app) else {
-        // Unreachable while the app runs (registered in `main.rs`'s
-        // `.manage(...)` chain before any command can be invoked); releasing
-        // now is the safe reading if it ever is not.
-        warn!("backup: no HeldBackupPaths state — releasing the mirror scope immediately");
-        release_backup_path(path);
-        return;
-    };
-    let displaced = held
-        .0
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .insert(account_id.to_string(), path.to_string());
-    if let Some(old) = displaced {
-        warn!("backup: releasing a mirror scope left over from a previous run of {}", account_id);
-        release_backup_path(&old);
-    }
-}
-
-/// Claim `account_id`'s parked path, if there still is one. The map entry is
-/// the claim: whoever removes it owns the release, so the two racers below
-/// (this account's terminal frame and its own RPC error path) can never both
-/// release the same scope, and neither can release nothing.
-fn take_backup_path(app: &tauri::AppHandle, account_id: &str) -> Option<String> {
-    held(app).and_then(|h| h.0.lock().unwrap_or_else(|p| p.into_inner()).remove(account_id))
-}
-
-/// A `backup-progress` frame just came up the daemon channel. When it is a
-/// terminal one (`active: false`), the run that owned the mirror scope is
-/// over: release it. Called for every `backup-progress` event, so anything
-/// that is not terminal, or names no account we hold a scope for, is a no-op.
-pub(crate) fn release_legacy_frame(held: &HeldBackupPaths, payload: &Value, release: impl FnOnce(&str)) {
-    if payload.get("runId").is_some() || payload.get("executionId").is_some() {
-        return;
-    }
-    if payload.get("active").and_then(Value::as_bool) != Some(false) {
-        return;
-    }
-    let Some(account) = payload.get("account_id").and_then(Value::as_str) else {
-        return;
-    };
-    let path = held
-        .0
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .remove(account);
-    if let Some(path) = path {
-        release(&path);
-    }
-}
-pub(crate) fn release_after_terminal_progress(app: &tauri::AppHandle, payload: &Value) {
-    if let Some(held) = held(app) {
-        release_legacy_frame(&held, payload, release_backup_path);
-    }
+/// using. Pre-existing shape, and the next call re-resolves; refcount per
+/// path if a real double-run problem ever shows up.
+pub(crate) fn legacy_run_over(payload: &Value) -> bool {
+    payload.get("runId").is_none()
+        && payload.get("executionId").is_none()
+        && payload.get("active").and_then(Value::as_bool) == Some(false)
 }
 
 #[cfg(test)]
@@ -185,26 +123,14 @@ mod native_access_tests {
     use super::*;
     #[test]
     fn backup_access_correlated_terminal_cannot_release_legacy_hold() {
-        let held = HeldBackupPaths::default();
-        held.0
-            .lock()
-            .unwrap()
-            .insert("one".into(), "/same-drive".into());
-        let releases = std::cell::Cell::new(0);
-        release_legacy_frame(
-            &held,
+        let held = Leases::default();
+        held.hold(Job::BackupRun, "one", "/same-drive");
+        let released = held.after_event(
+            BACKUP_PROGRESS,
             &json!({"account_id":"one","active":false,"runId":"native-run","executionId":"native-execution"}),
-            |_| releases.set(releases.get() + 1),
         );
-        assert_eq!(
-            releases.get(),
-            0,
-            "native progress released the independent legacy acquisition"
-        );
-        release_legacy_frame(&held, &json!({"account_id":"one","active":false}), |_| {
-            releases.set(releases.get() + 1)
-        });
-        assert_eq!(releases.get(), 1);
+        assert!(released.is_empty(), "native progress released the independent legacy acquisition");
+        assert_eq!(held.after_event(BACKUP_PROGRESS, &json!({"account_id":"one","active":false})).len(), 1);
     }
 }
 
@@ -212,7 +138,7 @@ mod native_access_tests {
 
 /// Resolve the mirror, let `params` see the resolved root (the status command
 /// reports on that resolution), call the daemon with `mirrorRoot` added, then
-/// release. Blocking on purpose — every caller is already inside
+/// release. Blocking on purpose: every caller is already inside
 /// `spawn_blocking`. The release is unconditional: see the module doc.
 pub(crate) fn forward(
     app: &tauri::AppHandle,
@@ -220,12 +146,24 @@ pub(crate) fn forward(
     caller_path: Option<String>,
     params: impl FnOnce(Option<&str>) -> Value,
 ) -> Result<Value, String> {
-    let (root, needs_release) = resolve_backup_path(app, caller_path);
+    call_with_mirror(app, method, resolve_backup_path(app, caller_path), params, MIRROR_BUDGET)
+}
+
+/// The bounded-call half of [`forward`], for a caller that resolved the
+/// mirror itself: call with `mirrorRoot`, release on EVERY path (success,
+/// daemon error, budget expiry), then answer.
+fn call_with_mirror(
+    app: &tauri::AppHandle,
+    method: &str,
+    (root, needs_release): (Option<String>, bool),
+    params: impl FnOnce(Option<&str>) -> Value,
+    budget: std::time::Duration,
+) -> Result<Value, String> {
     let mut params = params(root.as_deref());
     if let Some(obj) = params.as_object_mut() {
         obj.insert("mirrorRoot".into(), json!(root));
     }
-    let result = crate::daemon_call_blocking(app, method, params, MIRROR_BUDGET);
+    let result = crate::daemon_call_blocking(app, method, params, budget);
     if needs_release {
         if let Some(ref p) = root {
             release_backup_path(p);
@@ -233,12 +171,14 @@ pub(crate) fn forward(
     }
     if let Err(ref e) = result {
         if needs_release {
-            // Same reasoning as `vault_flags.rs`'s: this fires on every error
-            // with a mirror in play, not only a timeout — the daemon may
-            // never have touched the mirror at all.
+            // This fires on every error with a mirror in play, not only a
+            // timeout: the daemon may never have touched the mirror at all.
+            // Say "if", so an unrelated failure does not read as proof the
+            // mirror was mid-write.
             warn!(
-                "{method}: failed ({e}) — the backup mirror's access has been released; \
-                 if this call timed out mid-purge, the next run's queue drain heals it"
+                "{method}: failed ({e}): the backup mirror's access has been released; \
+                 if this call timed out mid-write, the mirror may be left partly written, \
+                 which the next backup run or catch-up heals"
             );
         }
     }
@@ -248,7 +188,7 @@ pub(crate) fn forward(
 /// Start one account's backup run. Fire-and-forget: the reply is the
 /// daemon's `{"runId": accountId}` ACK, and the run's own `backup-progress`
 /// events carry its outcome. The mirror's scoped access is held until the
-/// terminal frame — see the module doc and [`hold_backup_path`].
+/// terminal frame (see the module doc).
 pub(crate) fn run_account(
     app: &tauri::AppHandle,
     account_id: String,
@@ -258,20 +198,6 @@ pub(crate) fn run_account(
     mailbox_concurrency: usize,
 ) -> Result<Value, String> {
     let (root, needs_release) = resolve_backup_path(app, caller_path);
-    // Park the path BEFORE the call, not after it. The daemon spawns the run
-    // and only then writes this reply, and the reply and the event stream are
-    // two different connections read by two different app-side tasks: a run
-    // that fails in microseconds (a bad credential refused by
-    // `pool.get_background`) can have its terminal frame reach
-    // `release_after_terminal_progress` before `daemon_call_blocking` here
-    // has even returned. Parked first, that frame finds the entry and
-    // releases it; parked after, it would find nothing, and this function
-    // would then park a path with no run left to release it.
-    if needs_release {
-        if let Some(ref path) = root {
-            hold_backup_path(app, &account_id, path);
-        }
-    }
     let params = json!({
         "accountId": account_id,
         "accountJson": account_json,
@@ -279,19 +205,25 @@ pub(crate) fn run_account(
         "skipFolders": skip_folders,
         "mailboxConcurrency": mailbox_concurrency.clamp(1, 5),
     });
-    let result = crate::daemon_call_blocking(app, "backup_run_account", params, RUN_ACK_BUDGET);
-    // An `Ok` leaves it parked for the run. An `Err` means nothing started,
-    // so nothing will ever report a terminal frame for it — but the frame may
-    // already have arrived and released it (the daemon can spawn a run whose
-    // reply then fails to reach us), so claim the entry instead of releasing
-    // `root` blindly. Whichever side removes it owns the release; the other
-    // finds nothing and does nothing.
-    if result.is_err() {
-        if let Some(path) = take_backup_path(app, &account_id) {
-            release_backup_path(&path);
-        }
-    }
-    result
+    let call = || crate::daemon_call_blocking(app, "backup_run_account", params, RUN_ACK_BUDGET);
+    // Park the path BEFORE the call, not after it. The daemon spawns the run
+    // and only then writes this reply, and the reply and the event stream are
+    // two different connections read by two different app-side tasks: a run
+    // that fails in microseconds (a bad credential refused by
+    // `pool.get_background`) can have its terminal frame reach the channel
+    // before `daemon_call_blocking` here has even returned. An `Err` means
+    // nothing started, and the entry is claimed back (`call_holding`).
+    let Some(path) = root.as_deref().filter(|_| needs_release) else {
+        return call();
+    };
+    let Some(leases) = app.try_state::<Leases>() else {
+        // Unreachable while the app runs (managed in `main.rs` before any
+        // command can be invoked); releasing now is the safe reading.
+        warn!("backup: no lease registry, releasing the mirror scope immediately");
+        release_backup_path(path);
+        return call();
+    };
+    leases.call_holding(Job::BackupRun, &account_id, path, &release_backup_path, call, Result::is_ok)
 }
 
 #[tauri::command]
@@ -352,21 +284,11 @@ pub async fn backup_copy_uids(
 pub async fn accounts_switch_transport(app_handle: tauri::AppHandle, params: Value) -> Result<Value, String> {
     tokio::task::spawn_blocking(move || {
         let configured = external_location_status().as_deref().is_some_and(|s| s != "not_configured");
-        let (root, needs_release) = if configured { resolve_backup_path(&app_handle, None) } else { (None, false) };
-        if configured && root.is_none() {
+        let resolved = if configured { resolve_backup_path(&app_handle, None) } else { (None, false) };
+        if configured && resolved.0.is_none() {
             return Err("errors.transportSwitchBackupUnavailable".to_string());
         }
-        let mut params = params;
-        if let Some(obj) = params.as_object_mut() {
-            obj.insert("mirrorRoot".into(), json!(root));
-        }
-        let result = crate::daemon_call_blocking(&app_handle, "accounts.switch_transport", params, SWITCH_BUDGET);
-        if needs_release {
-            if let Some(ref p) = root {
-                release_backup_path(p);
-            }
-        }
-        result
+        call_with_mirror(&app_handle, "accounts.switch_transport", resolved, |_| params, SWITCH_BUDGET)
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?

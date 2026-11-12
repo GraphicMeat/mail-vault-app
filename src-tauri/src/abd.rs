@@ -11,16 +11,16 @@
 //!   path is sent as `mirrorRoot` and released on EVERY path (same discipline as
 //!   `backup::forward`). It never parks anything.
 //! - [`abd_start`]: fire-and-forget like `backup::run_account`. In backup mode
-//!   the resolved path is parked in [`HeldAbdPaths`] BEFORE the call (a job that
-//!   fails at once can send its terminal frame before the reply is read), and is
-//!   let go by the terminal `abd-progress` frame, a frame saying the job paused
-//!   for the drive, a failed start, an event-stream lag or a channel reconnect.
+//!   the resolved path is parked in the shell's `native_lease::Leases` under
+//!   the account BEFORE the call, and is let go by the terminal `abd-progress`
+//!   frame, a frame saying the job paused for the drive ([`frame_releases_drive`]),
+//!   a failed start, an event-stream lag or a channel reconnect.
 //!   Archive-only mode never resolves or holds the drive.
 //! - [`abd_attach`]: re-hands the drive to a job that is already running (app
 //!   restart, channel reconnect, "drive is back"). Only the shell can resolve
 //!   the bookmark, so this is how a job paused for the drive resumes.
 //!
-//! [`HeldAbdPaths`] is a separate map from `backup::HeldBackupPaths`: a
+//! The hold is its own kind (`Job::Abd`), apart from a backup run's: a
 //! `backup-progress` frame must never release a job's drive and an
 //! `abd-progress` frame must never release a backup run's.
 //!
@@ -33,13 +33,10 @@
 //! unit tested without a Tauri runtime or a real bookmark.
 
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::sync::Mutex;
 use std::time::Duration;
 use tauri::Manager;
-use tracing::{info, warn};
 
-use crate::external_location;
+use crate::native_lease::{AppPorts, Job, Leases, Ports};
 
 /// Daemon event carrying one job's progress frame (6.6 of the design).
 pub(crate) const ABD_PROGRESS: &str = "abd-progress";
@@ -60,38 +57,6 @@ const ATTACH_BUDGET: Duration = Duration::from_secs(30);
 /// the mirror to count what is already on the drive, possibly a slow external one.
 const SUMMARIZE_BUDGET: Duration = Duration::from_secs(600);
 
-/// `account_id` -> the resolved mirror path held for that account's job.
-/// Separate from `HeldBackupPaths`. The entry is the claim: whoever removes it
-/// owns the release, so a terminal frame and a failed-start path can never both
-/// release one scope.
-#[derive(Default)]
-pub struct HeldAbdPaths(pub Mutex<HashMap<String, String>>);
-
-impl HeldAbdPaths {
-    fn map(&self) -> std::sync::MutexGuard<'_, HashMap<String, String>> {
-        self.0.lock().unwrap_or_else(|p| p.into_inner())
-    }
-    /// Park `path` for `account_id`; answers the path it displaced (a second
-    /// start or attach over a live job), which the caller must release.
-    pub fn hold(&self, account_id: &str, path: &str) -> Option<String> {
-        self.map().insert(account_id.to_string(), path.to_string())
-    }
-    pub fn take(&self, account_id: &str) -> Option<String> {
-        self.map().remove(account_id)
-    }
-    pub fn take_all(&self) -> Vec<String> {
-        self.map().drain().map(|(_, path)| path).collect()
-    }
-    /// The path a frame lets go of, if the frame ends the hold and names an
-    /// account we hold a path for.
-    fn take_for_frame(&self, frame: &Value) -> Option<String> {
-        if !frame_releases_drive(frame) {
-            return None;
-        }
-        self.take(frame.get("accountId").and_then(Value::as_str)?)
-    }
-}
-
 /// Whether an `abd-progress` frame ends the shell's hold on the drive: the job
 /// is over (`finished: true`, exactly once per job end) or it paused because
 /// the drive went away (`status.state == "paused"`, `status.reason ==
@@ -103,40 +68,6 @@ pub(crate) fn frame_releases_drive(frame: &Value) -> bool {
     let Some(status) = frame.get("status") else { return false };
     status.get("state").and_then(Value::as_str) == Some("paused")
         && status.get("reason").and_then(Value::as_str) == Some("drive_unavailable")
-}
-
-// ── Ports: everything the flows touch outside their own arguments ────────────
-
-pub(crate) trait Ports {
-    /// Resolve the backup slot and start its scoped access. `Some` means the
-    /// access is started and the caller owns one release.
-    fn resolve(&self) -> Option<String>;
-    fn external_status(&self) -> Option<String> { None }
-    fn exists(&self, path: &str) -> bool;
-    fn release(&self, path: &str);
-    fn call(&self, method: &str, params: Value, budget: Duration) -> Result<Value, String>;
-}
-
-pub(crate) struct AppPorts<'a>(pub(crate) &'a tauri::AppHandle);
-
-impl Ports for AppPorts<'_> {
-    fn external_status(&self) -> Option<String> {
-        crate::backup::external_location_status()
-    }
-    fn resolve(&self) -> Option<String> {
-        // `needs_release` is true exactly when a bookmark resolved (no caller
-        // path is passed), so `Some` always owes one release.
-        crate::backup::resolve_backup_path(self.0, None).0
-    }
-    fn exists(&self, path: &str) -> bool {
-        std::path::Path::new(path).exists()
-    }
-    fn release(&self, path: &str) {
-        external_location::release_external_access(path);
-    }
-    fn call(&self, method: &str, params: Value, budget: Duration) -> Result<Value, String> {
-        crate::daemon_call_blocking(self.0, method, params, budget)
-    }
 }
 
 // ── Flows ────────────────────────────────────────────────────────────────────
@@ -189,7 +120,7 @@ fn summarize_flow(ports: &dyn Ports, mut params: Value) -> Result<Value, String>
     result
 }
 
-fn start_flow(held: &HeldAbdPaths, ports: &dyn Ports, mut params: Value) -> Result<Value, String> {
+fn start_flow(held: &Leases, ports: &dyn Ports, mut params: Value) -> Result<Value, String> {
     let account = account_id(&params)?;
     if !is_backup_mode(&params)? {
         // Archive-only: no drive is resolved, held or sent.
@@ -205,29 +136,13 @@ fn start_flow(held: &HeldAbdPaths, ports: &dyn Ports, mut params: Value) -> Resu
         ports.release(&root);
         return Err(ERR_NO_BACKUP_DRIVE.to_string());
     }
-    // Parked BEFORE the call, not after it: the daemon spawns the job and only
-    // then writes its reply, and the reply and the event stream are read by two
-    // different app-side tasks, so a job that fails in microseconds can have its
-    // terminal frame reach `release_after_frame` before this function returns
-    // (same race as `backup::run_account`).
-    if let Some(displaced) = held.hold(&account, &root) {
-        warn!("abd: releasing a drive scope left over from a previous start of {account}");
-        ports.release(&displaced);
-    }
+    // Parked BEFORE the call, not after it: a job that fails in microseconds
+    // can have its terminal frame reach the channel before this returns.
     set_mirror_root(&mut params, Some(&root));
-    let result = ports.call("abd.start", params, START_BUDGET);
-    // An Ok leaves it parked for the job. An Err means nothing started, but the
-    // frame may already have released it: claim the entry instead of releasing
-    // `root` blindly, so exactly one side releases.
-    if result.is_err() {
-        if let Some(path) = held.take(&account) {
-            ports.release(&path);
-        }
-    }
-    result
+    held.call_holding(Job::Abd, &account, &root, &|p| ports.release(p), || ports.call("abd.start", params, START_BUDGET), Result::is_ok)
 }
 
-fn attach_flow(held: &HeldAbdPaths, ports: &dyn Ports, account: &str) -> Result<Value, String> {
+fn attach_flow(held: &Leases, ports: &dyn Ports, account: &str) -> Result<Value, String> {
     let Some(root) = ports.resolve() else {
         return Ok(json!({"attached": false}));
     };
@@ -236,57 +151,15 @@ fn attach_flow(held: &HeldAbdPaths, ports: &dyn Ports, account: &str) -> Result<
         return Ok(json!({"attached": false}));
     }
     // Same parking-first order as `start_flow`.
-    if let Some(displaced) = held.hold(account, &root) {
-        ports.release(&displaced);
-    }
     let params = json!({"accountId": account, "mirrorRoot": root});
-    let result = ports.call("abd.attach_mirror", params, ATTACH_BUDGET);
-    let attached = matches!(&result, Ok(v) if v.get("attached").and_then(Value::as_bool) == Some(true));
-    if !attached {
-        if let Some(path) = held.take(account) {
-            ports.release(&path);
-        }
-    }
-    result
-}
-
-/// Release what a frame lets go of. Pure over the map and a release callback.
-pub(crate) fn release_after_frame_with(held: &HeldAbdPaths, frame: &Value, mut release: impl FnMut(&str)) {
-    if let Some(path) = held.take_for_frame(frame) {
-        release(&path);
-    }
-}
-
-pub(crate) fn release_all_with(held: &HeldAbdPaths, mut release: impl FnMut(&str)) -> usize {
-    let paths = held.take_all();
-    let n = paths.len();
-    for path in paths {
-        release(&path);
-    }
-    n
-}
-
-// ── Called from daemon_channel.rs ────────────────────────────────────────────
-
-/// An `abd-progress` frame just came up the daemon channel. `try_state`, not
-/// `state`: this runs inside the channel's read loop, and a panic there would
-/// take the app's one daemon connection down with it.
-pub(crate) fn release_after_frame(app: &tauri::AppHandle, payload: &Value) {
-    let Some(held) = app.try_state::<HeldAbdPaths>() else { return };
-    release_after_frame_with(&held, payload, |path| {
-        info!("abd: job over or paused for the drive, releasing the backup drive's scoped access");
-        external_location::release_external_access(path);
-    });
-}
-
-/// The event stream lagged or the channel reconnected: a terminal frame may be
-/// gone. Every hold goes; the app re-attaches through `abd_attach`.
-pub(crate) fn release_all(app: &tauri::AppHandle, why: &str) {
-    let Some(held) = app.try_state::<HeldAbdPaths>() else { return };
-    let n = release_all_with(&held, external_location::release_external_access);
-    if n > 0 {
-        warn!("abd: {why}, releasing {n} backup drive scope(s)");
-    }
+    held.call_holding(
+        Job::Abd,
+        account,
+        &root,
+        &|p| ports.release(p),
+        || ports.call("abd.attach_mirror", params, ATTACH_BUDGET),
+        |r| matches!(r, Ok(v) if v.get("attached").and_then(Value::as_bool) == Some(true)),
+    )
 }
 
 // ── Tauri commands ───────────────────────────────────────────────────────────
@@ -305,7 +178,7 @@ pub async fn abd_summarize(app_handle: tauri::AppHandle, params: Value) -> Resul
 #[tauri::command]
 pub async fn abd_start(app_handle: tauri::AppHandle, params: Value) -> Result<Value, String> {
     tokio::task::spawn_blocking(move || {
-        let Some(held) = app_handle.try_state::<HeldAbdPaths>() else {
+        let Some(held) = app_handle.try_state::<Leases>() else {
             return Err("Backup drive access is not set up".to_string());
         };
         start_flow(&held, &AppPorts(&app_handle), params)
@@ -319,7 +192,7 @@ pub async fn abd_start(app_handle: tauri::AppHandle, params: Value) -> Result<Va
 #[tauri::command]
 pub async fn abd_attach(app_handle: tauri::AppHandle, account_id: String) -> Result<Value, String> {
     tokio::task::spawn_blocking(move || {
-        let Some(held) = app_handle.try_state::<HeldAbdPaths>() else {
+        let Some(held) = app_handle.try_state::<Leases>() else {
             return Err("Backup drive access is not set up".to_string());
         };
         attach_flow(&held, &AppPorts(&app_handle), &account_id)
@@ -332,6 +205,24 @@ pub async fn abd_attach(app_handle: tauri::AppHandle, account_id: String) -> Res
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    const A: Job = Job::Abd;
+
+    fn release_after_frame_with(held: &Leases, frame: &Value, mut release: impl FnMut(&str)) {
+        for (_, path) in held.after_event(ABD_PROGRESS, frame) {
+            release(&path);
+        }
+    }
+    fn release_all_with(held: &Leases, mut release: impl FnMut(&str)) -> usize {
+        let paths = held.on_reset();
+        for (_, path) in &paths {
+            release(path);
+        }
+        paths.len()
+    }
+    fn take_all(held: &Leases) -> Vec<String> {
+        held.on_reset().into_iter().map(|(_, p)| p).collect()
+    }
 
     type CallHook = Box<dyn Fn(&str, &Value)>;
 
@@ -395,10 +286,10 @@ mod tests {
         json!({"accountId": account, "finished": false,
                "status": {"state": "paused", "reason": "drive_unavailable"}})
     }
-    fn held_of(pairs: &[(&str, &str)]) -> HeldAbdPaths {
-        let h = HeldAbdPaths::default();
+    fn held_of(pairs: &[(&str, &str)]) -> Leases {
+        let h = Leases::default();
         for (a, p) in pairs {
-            h.hold(a, p);
+            h.hold(A, a, p);
         }
         h
     }
@@ -411,8 +302,8 @@ mod tests {
         let out = RefCell::new(vec![]);
         release_after_frame_with(&held, &finished("acc1"), |p| out.borrow_mut().push(p.to_string()));
         assert_eq!(*out.borrow(), vec!["/drive/a".to_string()]);
-        assert!(held.take("acc1").is_none());
-        assert_eq!(held.take("acc2"), Some("/drive/b".to_string()));
+        assert!(held.take(A, "acc1").is_none());
+        assert_eq!(held.take(A, "acc2"), Some("/drive/b".to_string()));
     }
 
     #[test]
@@ -432,7 +323,7 @@ mod tests {
         let out = RefCell::new(vec![]);
         release_after_frame_with(&held, &drive_paused("acc1"), |p| out.borrow_mut().push(p.to_string()));
         assert_eq!(*out.borrow(), vec!["/drive/a".to_string()]);
-        assert!(held.take("acc1").is_none());
+        assert!(held.take(A, "acc1").is_none());
     }
 
     /// The predicate is pinned to the daemon's real serde, not to hand-typed
@@ -456,7 +347,7 @@ mod tests {
             assert!(!frame_releases_drive(&frame(&live, "a")), "{live:?}");
         }
         let held = held_of(&[("a", "/drive")]);
-        assert_eq!(held.take_for_frame(&frame(&paused(PauseReason::DriveUnavailable), "a")), Some("/drive".to_string()));
+        assert_eq!(held.after_event(ABD_PROGRESS, &frame(&paused(PauseReason::DriveUnavailable), "a")).pop().map(|(_, p)| p), Some("/drive".to_string()));
     }
 
     #[test]
@@ -477,7 +368,7 @@ mod tests {
             release_after_frame_with(&held, &frame, |p| out.borrow_mut().push(p.to_string()));
         }
         assert!(out.borrow().is_empty());
-        assert_eq!(held.take("acc1"), Some("/drive/a".to_string()));
+        assert_eq!(held.take(A, "acc1"), Some("/drive/a".to_string()));
     }
 
     #[test]
@@ -486,7 +377,7 @@ mod tests {
         let out = RefCell::new(vec![]);
         release_after_frame_with(&held, &finished("other"), |p| out.borrow_mut().push(p.to_string()));
         assert!(out.borrow().is_empty());
-        assert_eq!(held.take("acc1"), Some("/drive/a".to_string()));
+        assert_eq!(held.take(A, "acc1"), Some("/drive/a".to_string()));
     }
 
     #[test]
@@ -500,19 +391,19 @@ mod tests {
 
     #[test]
     fn a_second_hold_releases_the_displaced_path() {
-        let held = HeldAbdPaths::default();
-        assert_eq!(held.hold("acc1", "/drive/old"), None);
-        assert_eq!(held.hold("acc1", "/drive/new"), Some("/drive/old".to_string()));
-        assert_eq!(held.take("acc1"), Some("/drive/new".to_string()));
+        let held = Leases::default();
+        assert_eq!(held.hold(A, "acc1", "/drive/old"), None);
+        assert_eq!(held.hold(A, "acc1", "/drive/new"), Some("/drive/old".to_string()));
+        assert_eq!(held.take(A, "acc1"), Some("/drive/new".to_string()));
     }
 
     #[test]
     fn take_all_empties_the_map() {
         let held = held_of(&[("a", "/one"), ("b", "/two")]);
-        let mut all = held.take_all();
+        let mut all = take_all(&held);
         all.sort();
         assert_eq!(all, vec!["/one".to_string(), "/two".to_string()]);
-        assert!(held.take_all().is_empty());
+        assert!(take_all(&held).is_empty());
     }
 
     // ── lag and reconnect ──
@@ -533,7 +424,7 @@ mod tests {
 
     #[test]
     fn a_backup_start_parks_the_drive_and_injects_mirror_root() {
-        let held = HeldAbdPaths::default();
+        let held = Leases::default();
         let fake = Fake::with_drive("/drive");
         // A stale mirrorRoot from the caller is replaced by the shell's own.
         let mut params = start_params(MODE_BACKUP);
@@ -547,21 +438,21 @@ mod tests {
         assert_eq!(calls[0].1["accountId"], json!("acc1"));
         assert_eq!(calls[0].1["confirmed"], json!(true));
         assert!(fake.released.borrow().is_empty(), "a running job keeps its scope");
-        assert_eq!(held.take("acc1"), Some("/drive".to_string()));
+        assert_eq!(held.take(A, "acc1"), Some("/drive".to_string()));
     }
 
     #[test]
     fn the_drive_is_parked_before_the_daemon_is_called() {
         // A job that fails at once can send its terminal frame before the reply
         // is read: the entry must already be there for that frame to claim.
-        let held = std::rc::Rc::new(HeldAbdPaths::default());
+        let held = std::rc::Rc::new(Leases::default());
         let seen = std::rc::Rc::new(RefCell::new(None));
         let mut fake = Fake::with_drive("/drive");
         {
             let held = held.clone();
             let seen = seen.clone();
             fake.on_call = Some(Box::new(move |_, _| {
-                *seen.borrow_mut() = held.0.lock().unwrap().get("acc1").cloned();
+                *seen.borrow_mut() = held.peek(A, "acc1");
             }));
         }
         start_flow(&held, &fake, start_params(MODE_BACKUP)).unwrap();
@@ -570,7 +461,7 @@ mod tests {
 
     #[test]
     fn a_terminal_frame_during_the_start_leaves_a_failed_start_with_nothing_to_release_twice() {
-        let held = std::rc::Rc::new(HeldAbdPaths::default());
+        let held = std::rc::Rc::new(Leases::default());
         let mut fake = Fake::with_drive("/drive").reply(Err("boom".into()));
         let released_by_frame = std::rc::Rc::new(RefCell::new(0u32));
         {
@@ -588,12 +479,12 @@ mod tests {
 
     #[test]
     fn a_failed_start_releases_the_drive() {
-        let held = HeldAbdPaths::default();
+        let held = Leases::default();
         let fake = Fake::with_drive("/drive").reply(Err("E_ABD_JOB_EXISTS: already running".into()));
         let err = start_flow(&held, &fake, start_params(MODE_BACKUP)).unwrap_err();
         assert!(err.starts_with("E_ABD_JOB_EXISTS:"), "daemon error text passes through: {err}");
         assert_eq!(*fake.released.borrow(), vec!["/drive".to_string()]);
-        assert!(held.take("acc1").is_none());
+        assert!(held.take(A, "acc1").is_none());
     }
 
     #[test]
@@ -602,42 +493,42 @@ mod tests {
         let fake = Fake::with_drive("/drive/new");
         start_flow(&held, &fake, start_params(MODE_BACKUP)).unwrap();
         assert_eq!(*fake.released.borrow(), vec!["/drive/old".to_string()]);
-        assert_eq!(held.take("acc1"), Some("/drive/new".to_string()));
+        assert_eq!(held.take(A, "acc1"), Some("/drive/new".to_string()));
     }
 
     #[test]
     fn a_backup_start_without_a_resolvable_drive_never_calls_the_daemon() {
-        let held = HeldAbdPaths::default();
+        let held = Leases::default();
         let mut fake = Fake::with_drive("/drive");
         fake.root = None;
         let err = start_flow(&held, &fake, start_params(MODE_BACKUP)).unwrap_err();
         assert!(err.starts_with("E_ABD_NO_BACKUP_DRIVE:"), "{err}");
         assert!(fake.calls.borrow().is_empty());
-        assert!(held.take("acc1").is_none());
+        assert!(held.take(A, "acc1").is_none());
     }
 
     #[test]
     fn a_backup_start_with_a_missing_drive_releases_what_it_resolved() {
-        let held = HeldAbdPaths::default();
+        let held = Leases::default();
         let mut fake = Fake::with_drive("/drive");
         fake.drive_present = false;
         let err = start_flow(&held, &fake, start_params(MODE_BACKUP)).unwrap_err();
         assert!(err.starts_with("E_ABD_NO_BACKUP_DRIVE:"), "{err}");
         assert!(fake.calls.borrow().is_empty());
         assert_eq!(*fake.released.borrow(), vec!["/drive".to_string()]);
-        assert!(held.take("acc1").is_none());
+        assert!(held.take(A, "acc1").is_none());
     }
 
     #[test]
     fn an_archive_only_start_never_touches_the_slot() {
-        let held = HeldAbdPaths::default();
+        let held = Leases::default();
         let fake = Fake::with_drive("/drive");
         let mut params = start_params(MODE_ARCHIVE_ONLY);
         params["mirrorRoot"] = json!("/attacker");
         start_flow(&held, &fake, params).unwrap();
         assert_eq!(*fake.resolves.borrow(), 0, "the slot is never resolved");
         assert!(fake.released.borrow().is_empty());
-        assert!(held.take_all().is_empty(), "nothing is held");
+        assert!(take_all(&held).is_empty(), "nothing is held");
         let calls = fake.calls.borrow();
         assert_eq!(calls[0].0, "abd.start");
         assert!(calls[0].1.get("mirrorRoot").is_none(), "no mirrorRoot reaches an archive-only job");
@@ -649,12 +540,12 @@ mod tests {
         let fake = Fake::with_drive("/drive").reply(Err("E_ABD_PREVIEW_EXPIRED:".into()));
         assert!(start_flow(&held, &fake, start_params(MODE_ARCHIVE_ONLY)).is_err());
         assert!(fake.released.borrow().is_empty());
-        assert_eq!(held.take("acc1"), Some("/drive/live-job".to_string()));
+        assert_eq!(held.take(A, "acc1"), Some("/drive/live-job".to_string()));
     }
 
     #[test]
     fn a_start_needs_an_account_and_a_known_mode() {
-        let held = HeldAbdPaths::default();
+        let held = Leases::default();
         let fake = Fake::with_drive("/drive");
         assert!(start_flow(&held, &fake, json!({"mode": MODE_BACKUP})).is_err());
         assert!(start_flow(&held, &fake, json!({"accountId": "acc1", "mode": "other"})).is_err());
@@ -705,7 +596,7 @@ mod tests {
 
     #[test]
     fn an_attach_parks_the_drive_and_sends_it_to_the_daemon() {
-        let held = HeldAbdPaths::default();
+        let held = Leases::default();
         let fake = Fake::with_drive("/drive").reply(Ok(json!({"attached": true})));
         let out = attach_flow(&held, &fake, "acc1").unwrap();
         assert_eq!(out, json!({"attached": true}));
@@ -713,12 +604,12 @@ mod tests {
         assert_eq!(calls[0].0, "abd.attach_mirror");
         assert_eq!(calls[0].1, json!({"accountId": "acc1", "mirrorRoot": "/drive"}));
         assert!(fake.released.borrow().is_empty());
-        assert_eq!(held.take("acc1"), Some("/drive".to_string()));
+        assert_eq!(held.take(A, "acc1"), Some("/drive".to_string()));
     }
 
     #[test]
     fn an_attach_with_no_drive_answers_not_attached_without_a_call() {
-        let held = HeldAbdPaths::default();
+        let held = Leases::default();
         let mut fake = Fake::with_drive("/drive");
         fake.root = None;
         assert_eq!(attach_flow(&held, &fake, "acc1").unwrap(), json!({"attached": false}));
@@ -729,17 +620,17 @@ mod tests {
         assert_eq!(attach_flow(&held, &gone, "acc1").unwrap(), json!({"attached": false}));
         assert!(gone.calls.borrow().is_empty());
         assert_eq!(*gone.released.borrow(), vec!["/drive".to_string()], "the resolved scope is let go");
-        assert!(held.take_all().is_empty());
+        assert!(take_all(&held).is_empty());
     }
 
     #[test]
     fn an_attach_the_daemon_refuses_or_fails_releases_the_drive() {
         for reply in [Ok(json!({"attached": false})), Err("boom".to_string())] {
-            let held = HeldAbdPaths::default();
+            let held = Leases::default();
             let fake = Fake::with_drive("/drive").reply(reply);
             let _ = attach_flow(&held, &fake, "acc1");
             assert_eq!(*fake.released.borrow(), vec!["/drive".to_string()]);
-            assert!(held.take("acc1").is_none());
+            assert!(held.take(A, "acc1").is_none());
         }
     }
 
@@ -749,31 +640,29 @@ mod tests {
         let fake = Fake::with_drive("/drive/new").reply(Ok(json!({"attached": true})));
         attach_flow(&held, &fake, "acc1").unwrap();
         assert_eq!(*fake.released.borrow(), vec!["/drive/old".to_string()]);
-        assert_eq!(held.take("acc1"), Some("/drive/new".to_string()));
+        assert_eq!(held.take(A, "acc1"), Some("/drive/new".to_string()));
     }
 
     // ── separation from the backup hold ──
 
     #[test]
-    fn the_hold_map_is_separate_from_the_backup_one() {
-        use crate::backup::HeldBackupPaths;
-        let backup = HeldBackupPaths::default();
-        backup.0.lock().unwrap().insert("acc1".into(), "/drive/backup-run".into());
-        let abd = held_of(&[("acc1", "/drive/abd-job")]);
+    fn the_hold_is_separate_from_a_backup_runs() {
+        let held = held_of(&[("acc1", "/drive/abd-job")]);
+        held.hold(Job::BackupRun, "acc1", "/drive/backup-run");
 
         // an abd terminal frame releases the job's path, never the backup run's
         let out = RefCell::new(vec![]);
-        release_after_frame_with(&abd, &finished("acc1"), |p| out.borrow_mut().push(p.to_string()));
+        release_after_frame_with(&held, &finished("acc1"), |p| out.borrow_mut().push(p.to_string()));
         assert_eq!(*out.borrow(), vec!["/drive/abd-job".to_string()]);
-        assert_eq!(backup.0.lock().unwrap().get("acc1").map(String::as_str), Some("/drive/backup-run"));
+        assert_eq!(held.peek(Job::BackupRun, "acc1").as_deref(), Some("/drive/backup-run"));
 
         // and a lag releasing every abd hold leaves the backup run's alone
-        abd.hold("acc2", "/drive/abd-2");
-        release_all_with(&abd, |_| {});
-        assert_eq!(backup.0.lock().unwrap().len(), 1);
+        held.hold(A, "acc2", "/drive/abd-2");
+        release_all_with(&held, |_| {});
+        assert!(held.is_held(Job::BackupRun, "acc1"));
 
-        // a backup run's map never sees an abd hold
-        abd.hold("acc3", "/drive/abd-3");
-        assert!(backup.0.lock().unwrap().get("acc3").is_none());
+        // a backup run's hold never sees an abd hold
+        held.hold(A, "acc3", "/drive/abd-3");
+        assert!(!held.is_held(Job::BackupRun, "acc3"));
     }
 }

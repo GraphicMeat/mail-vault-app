@@ -216,12 +216,9 @@ fn main() {
     // app-side IMAP callers.
     let builder = builder
         .manage(NativeText::default())
-        .manage(backup::HeldBackupPaths::default())
+        .manage(native_lease::Leases::default())
         .manage(backup::NativeBackupAccess::default())
-        .manage(abd::HeldAbdPaths::default())
         .manage(bulk::HeldBulkPaths::default())
-        .manage(cleanup::HeldCleanupPath::default())
-        .manage(export_folder::HeldExportPaths::default())
         .manage(dropped_files::DroppedPaths::default())
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())

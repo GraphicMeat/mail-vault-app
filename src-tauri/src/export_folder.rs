@@ -18,12 +18,10 @@
 //! reconnects (either can have eaten a final frame).
 
 use serde_json::Value;
-use std::collections::HashMap;
-use std::sync::Mutex;
 use tauri::Manager;
-use tracing::{info, warn};
 
 use crate::external_location::{self, ExternalLocation, SLOT_ATTACHMENT_EXPORT};
+use crate::native_lease::{Job, Leases};
 
 /// The daemon routes this forwards; anything else is refused.
 const EXPORT_METHODS: [&str; 3] = ["export_attachments", "views.export_attachments", "people.export_vcf"];
@@ -33,32 +31,9 @@ const START_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
 
 pub(crate) const EXPORT_PROGRESS: &str = "attachment-export-progress";
 
-/// Job id -> the resolved folder whose scoped access that job still uses.
-/// The entry is the claim: whoever removes it owns the release.
-#[derive(Default)]
-pub struct HeldExportPaths(pub Mutex<HashMap<String, String>>);
-
-impl HeldExportPaths {
-    fn map(&self) -> std::sync::MutexGuard<'_, HashMap<String, String>> {
-        self.0.lock().unwrap_or_else(|p| p.into_inner())
-    }
-    /// Park `path` for `job_id`; answers a path a reused id displaced.
-    pub(crate) fn hold(&self, job_id: &str, path: &str) -> Option<String> {
-        self.map().insert(job_id.to_string(), path.to_string())
-    }
-    pub(crate) fn take(&self, job_id: &str) -> Option<String> {
-        self.map().remove(job_id)
-    }
-    /// The path a final frame lets go of, if the frame is final and ours.
-    pub(crate) fn take_finished(&self, frame: &Value) -> Option<String> {
-        if frame.get("finished").and_then(Value::as_bool) != Some(true) {
-            return None;
-        }
-        self.take(frame.get("jobId").and_then(Value::as_str)?)
-    }
-    pub(crate) fn take_all(&self) -> Vec<String> {
-        self.map().drain().map(|(_, path)| path).collect()
-    }
+/// Whether an `attachment-export-progress` frame is its job's last.
+pub(crate) fn job_over(frame: &Value) -> bool {
+    frame.get("finished").and_then(Value::as_bool) == Some(true)
 }
 
 /// A resolution or write-check failure says why in `lastError`; the rest is
@@ -96,45 +71,19 @@ fn start(app: &tauri::AppHandle, method: &str, folder: &str, params: Value) -> R
     }
     let (resolved, _) = external_location::resolve_external_location(&data_dir, SLOT_ATTACHMENT_EXPORT).map_err(reason)?;
     // Parked BEFORE the call: a job that fails at once can send its final
-    // frame before this reply is read (see `backup::run_account`).
-    let Some(held) = app.try_state::<HeldExportPaths>() else {
+    // frame before this reply is read (see `native_lease`).
+    let Some(leases) = app.try_state::<Leases>() else {
         external_location::release_external_access(&resolved);
         return Err("Export folder access is not set up".to_string());
     };
-    if let Some(displaced) = held.hold(&job_id, &resolved) {
-        external_location::release_external_access(&displaced);
-    }
-    let result = crate::daemon_call_blocking(app, method, params, START_BUDGET);
-    if result.is_err() {
-        if let Some(path) = held.take(&job_id) {
-            external_location::release_external_access(&path);
-        }
-    }
-    result
-}
-
-/// An `attachment-export-progress` frame came up the daemon channel: a final
-/// one ends its job's hold on the folder.
-pub(crate) fn release_after_final_frame(app: &tauri::AppHandle, frame: &Value) {
-    let Some(held) = app.try_state::<HeldExportPaths>() else { return };
-    if let Some(path) = held.take_finished(frame) {
-        info!("export: job finished, releasing the folder's scoped access");
-        external_location::release_external_access(&path);
-    }
-}
-
-/// The event stream lagged or the channel reconnected: a final frame may be
-/// gone, and the app has already failed every job in flight, so every hold
-/// goes.
-pub(crate) fn release_all(app: &tauri::AppHandle, why: &str) {
-    let Some(held) = app.try_state::<HeldExportPaths>() else { return };
-    let paths = held.take_all();
-    if !paths.is_empty() {
-        warn!("export: {why}, releasing {} export folder(s)", paths.len());
-    }
-    for path in paths {
-        external_location::release_external_access(&path);
-    }
+    leases.call_holding(
+        Job::Export,
+        &job_id,
+        &resolved,
+        &external_location::release_external_access,
+        || crate::daemon_call_blocking(app, method, params, START_BUDGET),
+        Result::is_ok,
+    )
 }
 
 #[cfg(test)]
@@ -150,23 +99,24 @@ mod tests {
 
     #[test]
     fn only_a_final_frame_of_a_held_job_releases_it() {
-        let held = HeldExportPaths::default();
-        assert_eq!(held.hold("j1", "/picked"), None);
-        assert_eq!(held.take_finished(&json!({"jobId": "j1", "done": 1, "total": 2})), None);
-        assert_eq!(held.take_finished(&json!({"jobId": "other", "finished": true})), None);
-        assert_eq!(held.take_finished(&json!({"jobId": "j1", "finished": true, "error": "x"})), Some("/picked".to_string()));
-        assert_eq!(held.take_finished(&json!({"jobId": "j1", "finished": true})), None, "released once");
+        let held = Leases::default();
+        assert_eq!(held.hold(Job::Export, "j1", "/picked"), None);
+        let take = |frame: Value| held.after_event(EXPORT_PROGRESS, &frame).into_iter().map(|(_, p)| p).next();
+        assert_eq!(take(json!({"jobId": "j1", "done": 1, "total": 2})), None);
+        assert_eq!(take(json!({"jobId": "other", "finished": true})), None);
+        assert_eq!(take(json!({"jobId": "j1", "finished": true, "error": "x"})), Some("/picked".to_string()));
+        assert_eq!(take(json!({"jobId": "j1", "finished": true})), None, "released once");
     }
 
     #[test]
     fn a_lag_or_reconnect_releases_every_job() {
-        let held = HeldExportPaths::default();
-        held.hold("a", "/one");
-        held.hold("b", "/two");
-        let mut all = held.take_all();
+        let held = Leases::default();
+        held.hold(Job::Export, "a", "/one");
+        held.hold(Job::Export, "b", "/two");
+        let mut all: Vec<_> = held.on_reset().into_iter().map(|(_, p)| p).collect();
         all.sort();
         assert_eq!(all, vec!["/one".to_string(), "/two".to_string()]);
-        assert!(held.take_all().is_empty());
+        assert!(held.on_reset().is_empty());
     }
 
     #[test]
