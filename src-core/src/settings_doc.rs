@@ -21,13 +21,9 @@ pub const CORRUPT_NAME: &str = "frontend-settings.json.corrupt";
 /// The app settings store's key in the document: the Zustand persist name of
 /// `src/stores/settingsStore.js`. Every Rust reader of an app setting looks
 /// under it, at `<STORE>.state.<key>` ([`app_state`]); a vitest
-/// (`settingsStoreRustKey.test.js`) pins it, and [`STORE_VERSION`], to the
-/// store.
+/// (`settingsStoreRustKey.test.js`) pins the name, and that every key a Rust
+/// reader uses is still in the store's defaults with the type it reads.
 pub const STORE: &str = "mailvault-settings";
-/// The store's persist version this Rust code was last checked against. A
-/// frontend migration may rename or reshape a key a Rust reader uses: before
-/// raising this, check every reader of [`STORE`] the migration touches.
-pub const STORE_VERSION: u64 = 17;
 const SPEC: Spec = Spec {
     file: FILE_NAME,
     kind: Kind::Object,
