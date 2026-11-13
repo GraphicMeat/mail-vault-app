@@ -330,4 +330,10 @@ fn header_syntax_around_a_foreign_domain_still_warns() {
     assert_eq!(reply_to_mismatch(&row).unwrap()["replyToDomain"], "evil.test");
     let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "\"a:b\"@evil.test"}});
     assert_eq!(reply_to_mismatch(&row).unwrap()["replyToDomain"], "evil.test");
+    // The sender's domain inside a quoted local part is not the domain.
+    let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "\"x@bank.test;\"@evil.test"}});
+    assert_eq!(reply_to_mismatch(&row).unwrap()["replyToDomain"], "evil.test");
+    // Nothing that reads as a hostname after the '@': still a warning.
+    let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "x@;bank.test"}});
+    assert!(reply_to_mismatch(&row).is_some());
 }
