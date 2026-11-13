@@ -6,11 +6,13 @@ import React from 'react';
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
 import { t } from '../i18n.js';
 
-const engine = vi.hoisted(() => ({ calls: [], reply: null }));
+const engine = vi.hoisted(() => ({ calls: [], reply: null, inline: null }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
     engine.calls.push([method, params]);
+    if (method === 'mobile.message.inlineImages' && engine.inline) return engine.inline;
+    if (method === 'mobile.attachment.fetch' && engine.inline) return { jobId: 1 };
     if (method !== 'mobile.message.body') throw Object.assign(new Error(method), { code: 'UNSUPPORTED' });
     const r = typeof engine.reply === 'function' ? engine.reply(params) : engine.reply;
     if (r instanceof Error) throw r;
@@ -42,7 +44,7 @@ const renderViewer = (props = {}) =>
 
 const frame = () => document.querySelector('iframe');
 
-beforeEach(() => { engine.calls = []; engine.reply = body(); });
+beforeEach(() => { engine.calls = []; engine.reply = body(); engine.inline = null; });
 afterEach(cleanup);
 
 describe('Viewer', () => {
@@ -250,7 +252,7 @@ describe('Viewer', () => {
       ],
     });
     renderViewer();
-    // Every part is a chip, an inline `cid:` image too: the frame does not draw those yet.
+    // Every part is a chip, an inline `cid:` image too while its bytes are not on the phone.
     const list = await screen.findByRole('list', { name: t('common.attachmentCount', { count: 3 }) });
     const items = list.querySelectorAll('li');
     expect(items).toHaveLength(3);
@@ -262,6 +264,33 @@ describe('Viewer', () => {
     const buttons = list.querySelectorAll('button');
     expect([...buttons].map((b) => b.getAttribute('data-mv-attachment'))).toEqual(['2', '3', '4']);
     expect(list.querySelector('a')).toBeNull();
+  });
+
+  it('draws inline cid: images from the parts on the phone, as data: URLs, without a chip', async () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+    engine.reply = body({
+      html: '<p>Logo <img src="cid:logo%40x"> and <img src="cid:chart@x"></p>',
+      attachments: [
+        { section: '1.2', filename: 'logo.png', mime: 'image/png', size: 90, contentId: '<logo@x>', kind: 'file' },
+        { section: '1.3', filename: 'chart.png', mime: 'image/png', size: 90, contentId: '<chart@x>', kind: 'file' },
+        { section: '2', filename: 'report.pdf', mime: 'application/pdf', size: 900, contentId: null, kind: 'file' },
+      ],
+    });
+    engine.inline = { images: { 'logo@x': PNG }, missing: ['1.3'] };
+    renderViewer();
+    await waitFor(() => expect(frame()?.getAttribute('srcdoc')).toContain(PNG));
+    const doc = frame().getAttribute('srcdoc');
+    expect(doc).not.toContain('cid:logo');
+    // Not on the phone yet: fetched like a tapped attachment, and its reference stays.
+    expect(doc).toContain('cid:chart@x');
+    expect(engine.calls).toContainEqual(['mobile.message.inlineImages', { accountId: 'a1', folder: 'INBOX', uid: 7 }]);
+    await waitFor(() => expect(engine.calls).toContainEqual(['mobile.attachment.fetch', { accountId: 'a1', folder: 'INBOX', uid: 7, section: '1.3' }]));
+    // The drawn image is no chip; the others still are.
+    expect(screen.queryByText('logo.png')).toBeNull();
+    expect(screen.getByText('chart.png')).toBeTruthy();
+    expect(screen.getByText('report.pdf')).toBeTruthy();
+    // Remote images stay blocked by the CSP.
+    expect(doc).toContain("img-src data: cid:;");
   });
 
   it('an error shows the reason and retries', async () => {

@@ -26,6 +26,8 @@ import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
 import { EnvelopeIcon, FlagIcon, MoreIcon, MoveIcon, ShieldIcon, TrashIcon } from './icons.jsx';
 import { openPaywall } from './premium.js';
+import { useInlineImages, withInlineImages } from './inlineImages.js';
+import { bareContentId, htmlReferencesCid } from '../utils/cidRefs.js';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
 export const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
@@ -249,8 +251,12 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const trackerLabel = t('mobile.viewer.trackerBlocked');
   // The expensive part (parse, clean, re-parse to a fixpoint, check) once per body; Load images
   // and a theme change only re-assemble our head around it (string work).
-  const html = body?.html;
+  const rawHtml = body?.html;
   const text = body?.text;
+  const allAttachments = body?.attachments || [];
+  // Inline `cid:` images, from the parts on the phone as `data:` URLs (inlineImages.js).
+  const images = useInlineImages({ accountId, folder, uid: row.uid, html: rawHtml, attachments: body?.attachments });
+  const html = useMemo(() => withInlineImages(rawHtml, images), [rawHtml, images]);
   const prepared = useMemo(() => {
     if (!hasContent) return null;
     const t0 = performance.now();
@@ -262,8 +268,11 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
     () => (prepared ? assembleMailFrame(prepared, { allowRemote, theme, trackerLabel }) : null),
     [prepared, allowRemote, theme, trackerLabel],
   );
-  // Every part is a chip, inline `cid:` images too: the frame does not draw those yet.
-  const attachments = body?.attachments || [];
+  // Every part is a chip, except an inline image the frame draws.
+  const attachments = useMemo(
+    () => allAttachments.filter((a) => !(a.contentId && images?.[bareContentId(a.contentId)] && htmlReferencesCid(rawHtml, a.contentId))),
+    [allAttachments, images, rawHtml],
+  );
   const remoteImages = body?.remoteImages || 0;
   // Tracker pixels are stripped for Premium only (core `tracker_policy`, decided by the engine on
   // every open): a free body keeps them, blocked with every other remote image until Load images,
