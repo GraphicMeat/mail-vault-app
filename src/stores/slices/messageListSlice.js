@@ -27,10 +27,12 @@ let _flagChangeCounter = 0;
 // Module-level cache for getChatEmails() — avoids calling set() during render
 let _chatEmailsCache = [];
 let _chatEmailsFingerprint = '';
+let _chatEmailsInputs = null;
 
 // Module-level cache for getThreads() — avoids rebuilding threads on every call
 let _threadsCache = new Map();
 let _threadsFingerprint = '';
+let _threadsInput = null;
 
 // The exact input collections the last updateSortedEmails() ran on, compared by
 // identity. The string fingerprint below can only summarise a Set or an array
@@ -180,8 +182,10 @@ export function bumpFlagChangeCounter() { _flagChangeCounter++; }
 export function invalidateChatAndThreadCaches() {
   _chatEmailsCache = [];
   _chatEmailsFingerprint = '';
+  _chatEmailsInputs = null;
   _threadsCache = new Map();
   _threadsFingerprint = '';
+  _threadsInput = null;
 }
 
 /**
@@ -580,7 +584,9 @@ export const createMessageListSlice = (set, get) => ({
     const { hiddenAccounts } = useSettingsStore.getState() || {};
     const hiddenKey = Object.keys(hiddenAccounts || {}).filter(id => hiddenAccounts[id]).sort().join(',');
     const fp = `${activeAccountId}-${activeMailbox}-${unifiedFolder}-${hiddenKey}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
-    if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0) return _chatEmailsCache;
+    if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0
+      && _chatEmailsInputs?.sortedEmails === sortedEmails && _chatEmailsInputs?.sentEmails === sentEmails) return _chatEmailsCache;
+    _chatEmailsInputs = { sortedEmails, sentEmails };
 
     // Stamp the folder each message came from. This list mixes two mailboxes,
     // and UIDs only identify a message within one — without the tag, readers
@@ -642,12 +648,13 @@ export const createMessageListSlice = (set, get) => ({
     const chatEmails = get().getChatEmails();
     const { viewMode } = get();
     const fp = `${viewMode}-${chatEmails.length}-${chatEmails[0]?.uid || 0}-${chatEmails[chatEmails.length - 1]?.uid || 0}-${_flagChangeCounter}`;
-    if (fp === _threadsFingerprint && _threadsCache.size > 0) {
+    if (fp === _threadsFingerprint && _threadsInput === chatEmails && _threadsCache.size > 0) {
       return _threadsCache;
     }
     const threads = buildThreads(chatEmails);
     _threadsCache = threads;
     _threadsFingerprint = fp;
+    _threadsInput = chatEmails;
     return threads;
   },
 });

@@ -105,6 +105,17 @@ describe('refreshSelectedThread', () => {
     expect(update.selectedEmailId).toBe('acct-1:Sent:4211');
   });
 
+  it('replaces a staged reply when the server assigns the same UID', () => {
+    const staged = reply();
+    const open = threadOf([parent, staged]);
+    const server = reply({ _optimistic: false, source: 'server' });
+
+    const update = refreshSelectedThread(state(open), buildThreads([parent, server]));
+
+    expect(update.selectedThread.emails[1]).toBe(server);
+    expect(update.selectedThread.messageCount).toBe(2);
+  });
+
   it('adds the reply that landed after the thread was opened', () => {
     const open = threadOf([parent]);
     const threads = buildThreads([parent, reply()]);
@@ -117,9 +128,10 @@ describe('refreshSelectedThread', () => {
   });
 
   it('returns null when the membership is unchanged — the reader must not churn', () => {
-    const open = threadOf([parent, reply()]);
-    // A fresh buildThreads run over the same messages: new objects, same members.
-    const threads = buildThreads([parent, reply()]);
+    const sent = reply();
+    const open = threadOf([parent, sent]);
+    // A fresh buildThreads run over the same row objects changes no message.
+    const threads = buildThreads([parent, sent]);
 
     expect(refreshSelectedThread(state(open), threads)).toBeNull();
   });

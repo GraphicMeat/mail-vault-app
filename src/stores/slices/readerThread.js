@@ -112,10 +112,10 @@ export function refreshSelectedThread(state, threads, held = null) {
       fresh = { ...fresh, emails, lastEmail, messageCount: emails.length };
     }
   }
-  // Same members = same reader. buildThreads runs on every list change and
-  // hands back fresh objects each time; swapping one in for an identical one
-  // only re-renders the pane and re-keys its body loader.
-  if (!fresh || fresh === open || memberKeys(fresh.emails) === memberKeys(open.emails)) return null;
+  // A server copy can reuse the staged UID. Keep the reader only when its
+  // actual message rows remain the same.
+  if (!fresh || fresh === open || (memberKeys(fresh.emails) === memberKeys(open.emails)
+    && fresh.emails.every((email, index) => email === open.emails[index]))) return null;
   const selectedWasOpen = open.emails.some(email => selectionKey(email, state) === state.selectedEmailId);
   const selectedStillPresent = fresh.emails.some(email => selectionKey(email, state) === state.selectedEmailId);
   if (selectedWasOpen && !selectedStillPresent) {

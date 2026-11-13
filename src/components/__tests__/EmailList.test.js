@@ -335,6 +335,68 @@ describe('EmailList virtualization', () => {
     virtualizerConfigs = [];
   });
 
+  it('rebuilds the open thread for a server reply with the staged UID', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const previous = { sortedEmails: mail.sortedEmails, sentEmails: mail.sentEmails, getChatEmails: mail.getChatEmails };
+    const parent = { ...makeEmails(1)[0], subject: 'Reply' };
+    const staged = { ...makeEmails(1)[0], uid: 19, subject: 'Reply', _optimistic: true };
+    const server = { ...staged, _optimistic: false, source: 'server' };
+    try {
+      mail.sortedEmails = [parent];
+      mail.sentEmails = [staged];
+      mail.getChatEmails = vi.fn(() => [parent, staged]);
+      mail.syncSelectedThread.mockClear();
+      const view = render(React.createElement(EmailList));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+      expect([...mail.syncSelectedThread.mock.lastCall[0].values()][0].emails).toContain(staged);
+
+      mail.sentEmails = [server];
+      mail.getChatEmails = vi.fn(() => [parent, server]);
+      view.rerender(React.createElement(EmailList, { stacked: true }));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+      expect([...mail.syncSelectedThread.mock.lastCall[0].values()][0].emails).toContain(server);
+    } finally {
+      Object.assign(mail, previous);
+    }
+  });
+
+  it('rebuilds sender groups for a server reply with the staged UID', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { groupBySender } = await import('../../utils/emailParser');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const previous = { sortedEmails: mail.sortedEmails, sentEmails: mail.sentEmails, getChatEmails: mail.getChatEmails };
+    const grouping = useSettingsStore.getState().emailListGrouping;
+    const parent = makeEmails(1)[0];
+    const staged = { ...parent, uid: 19, _optimistic: true };
+    const server = { ...staged, _optimistic: false, source: 'server' };
+    let merged = [parent, staged];
+    try {
+      mail.sortedEmails = [parent];
+      mail.sentEmails = [staged];
+      mail.getChatEmails = () => merged;
+      useSettingsStore.setState({ emailListGrouping: 'sender' });
+      groupBySender.mockClear();
+      const view = render(React.createElement(EmailList.type));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+      const calls = groupBySender.mock.calls.length;
+      expect(calls).toBeGreaterThan(0);
+
+      mail.sentEmails = [server];
+      merged = [parent, server];
+      view.rerender(React.createElement(EmailList.type));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+      expect(groupBySender.mock.calls.length).toBeGreaterThan(calls);
+      expect(groupBySender.mock.lastCall[0]).toContain(server);
+    } finally {
+      Object.assign(mail, previous);
+      useSettingsStore.setState({ emailListGrouping: grouping });
+    }
+  });
+
   it('virtualizer renders only visible rows, not all 500 items (PERF-01)', async () => {
     const { EmailList } = await import('../EmailList.jsx');
     const { container } = render(React.createElement(EmailList));

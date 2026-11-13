@@ -20,7 +20,7 @@ export function useDeferredThreads({ isExplorer, mergedEmails, threadFingerprint
     }
 
     // Use cached threads if fingerprint matches
-    if (threadCache.current.fingerprint === threadFingerprint) {
+    if (threadCache.current.fingerprint === threadFingerprint && threadCache.current.emails === mergedEmails) {
       setDeferredThreads(threadCache.current.threads);
       syncSelectedThread(threadCache.current.threads);
       return;
@@ -33,7 +33,7 @@ export function useDeferredThreads({ isExplorer, mergedEmails, threadFingerprint
       if (cancelled) return; // Guard against stale callback after view change
       // Threads that did not change keep their object, so their rows bail.
       const threads = reconcileThreads(threadCache.current.threads, buildThreads(mergedEmails));
-      threadCache.current = { fingerprint: threadFingerprint, threads };
+      threadCache.current = { fingerprint: threadFingerprint, emails: mergedEmails, threads };
       setDeferredThreads(threads);
       // The reader's open thread is a snapshot of one of these. This is the
       // only place the whole pool is threaded, so it is where the snapshot is
