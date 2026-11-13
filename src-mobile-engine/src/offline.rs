@@ -235,7 +235,15 @@ pub(crate) const NEEDS_FULL: &str = "noselect = 0 AND (synced_ms IS NULL OR full
 pub(crate) fn left(shared: &Shared, account: &str, now: i64) -> Result<Left, EngineError> {
     let b = bounds(shared, account, now);
     shared.read(|c| {
-        let folders: i64 = c.query_row(&format!("SELECT count(*) FROM folders WHERE account_id = ?1 AND {NEEDS_FULL}"), (account, b.fetch_from), |r| r.get(0))?;
+        // An account whose folder list never came counts its list as a folder to go.
+        let folders: i64 = c.query_row(
+            &format!(
+                "SELECT (SELECT count(*) FROM folders WHERE account_id = ?1 AND {NEEDS_FULL})
+                      + NOT EXISTS (SELECT 1 FROM folders WHERE account_id = ?1)"
+            ),
+            (account, b.fetch_from),
+            |r| r.get(0),
+        )?;
         let bodies: i64 = c.query_row(
             "SELECT count(*) FROM messages m JOIN folders f ON f.account_id = m.account_id AND f.path = m.folder
              WHERE m.account_id = ?1 AND m.date_ms >= ?2 AND m.out_of_window_ms IS NULL AND m.local_deleted IS NULL AND f.noselect = 0
@@ -316,7 +324,8 @@ impl Engine {
         let was = downloads_allowed(self.shared());
         st.constrained.store(constrained, Ordering::SeqCst);
         st.metered.store(expensive, Ordering::SeqCst);
-        if !was && downloads_allowed(self.shared()) || !expensive {
+        // Downloads may go again, or attachments may: look for work now.
+        if (!was && downloads_allowed(self.shared())) || (!expensive && !constrained) {
             self.offline_wake();
         }
     }
@@ -412,7 +421,8 @@ fn front_round(shared: &Arc<Shared>, worker: &Worker) -> Round {
         }
         let now = crate::compose::now_ms();
         let before = left(shared, &account, now).unwrap_or_default();
-        if before.total() == 0 && !attachments_allowed(shared) {
+        // Nothing to list or download: no sign-in (a pass would still sweep every folder).
+        if before.total() == 0 && !(attachments_allowed(shared) && crate::attachments::prefetch_left(shared, &account)) {
             continue;
         }
         let until = Instant::now() + FRONT_SLICE;

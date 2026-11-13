@@ -783,23 +783,7 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn Backend, account: &str
     let Some(dir) = crate::offline::attachments_dir(shared, account) else {
         return Ok(0);
     };
-    let from = crate::offline::bounds(shared, account, crate::compose::now_ms()).fetch_from;
-    let rows: Vec<(String, Option<i64>, u32, String)> = shared.read(|c| {
-        let mut st = c.prepare_cached(
-            "SELECT a.folder, f.uid_validity, a.uid, a.section FROM attachments a
-             JOIN messages m ON m.account_id = a.account_id AND m.folder = a.folder AND m.uid = a.uid
-             JOIN folders f ON f.account_id = a.account_id AND f.path = a.folder
-             WHERE a.account_id = ?1 AND m.date_ms >= ?2 AND m.out_of_window_ms IS NULL AND m.local_deleted IS NULL
-               AND f.noselect = 0 AND a.size <= ?3 AND (a.encoding IS NULL OR a.encoding != ?4)
-             ORDER BY m.date_ms DESC, m.uid DESC, a.section",
-        )?;
-        let rows = st
-            .query_map((account, from, crate::offline::ATTACHMENT_PREFETCH_MAX as i64, crate::backend::graph::LINK), |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? as u32, r.get(3)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(rows)
-    })?;
+    let rows = prefetch_rows(shared, account)?;
     if rows.is_empty() {
         return Ok(0);
     }
@@ -835,6 +819,44 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn Backend, account: &str
         }
     }
     Ok(done)
+}
+
+/// Whether some attachment [`prefetch`] would download for `account` is not among its offline
+/// files yet (and not waiting for a retry).
+pub(crate) fn prefetch_left(shared: &Shared, account: &str) -> bool {
+    let Some(dir) = crate::offline::attachments_dir(shared, account) else {
+        return false;
+    };
+    let Ok(rows) = prefetch_rows(shared, account) else { return false };
+    rows.into_iter().any(|(folder, validity, uid, section)| {
+        let Some(validity) = validity else { return false };
+        let key = PartKey { account_id: account.to_string(), folder, uid, section };
+        let retry = (key.account_id.clone(), key.folder.clone(), key.uid, key.section.clone());
+        !dir.join(file_name(&key, validity)).is_file() && !crate::offline::attachment_waits(shared, &retry)
+    })
+}
+
+/// The attachments of `account`'s offline window [`prefetch`] takes: `(folder, validity, uid,
+/// section)`, newest message first.
+fn prefetch_rows(shared: &Shared, account: &str) -> Result<Vec<(String, Option<i64>, u32, String)>, Fail> {
+    let from = crate::offline::bounds(shared, account, crate::compose::now_ms()).fetch_from;
+    let rows: Vec<(String, Option<i64>, u32, String)> = shared.read(|c| {
+        let mut st = c.prepare_cached(
+            "SELECT a.folder, f.uid_validity, a.uid, a.section FROM attachments a
+             JOIN messages m ON m.account_id = a.account_id AND m.folder = a.folder AND m.uid = a.uid
+             JOIN folders f ON f.account_id = a.account_id AND f.path = a.folder
+             WHERE a.account_id = ?1 AND m.date_ms >= ?2 AND m.out_of_window_ms IS NULL AND m.local_deleted IS NULL
+               AND f.noselect = 0 AND a.size <= ?3 AND (a.encoding IS NULL OR a.encoding != ?4)
+             ORDER BY m.date_ms DESC, m.uid DESC, a.section",
+        )?;
+        let rows = st
+            .query_map((account, from, crate::offline::ATTACHMENT_PREFETCH_MAX as i64, crate::backend::graph::LINK), |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? as u32, r.get(3)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    })?;
+    Ok(rows)
 }
 
 /// Largest inline image handed to the viewer as a `data:` URL, and most bytes for one message.

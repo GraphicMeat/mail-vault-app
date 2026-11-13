@@ -636,6 +636,74 @@ fn apply_returns_fast_while_sync_writes() {
     assert_eq!(f.page("INBOX")["total"], 5_001);
 }
 
+/// The amplified variant against the foreground downloader (`offline.rs`): with the app in front
+/// it writes 600 large bodies, one short transaction each, as fast as the mock serves them, while
+/// `apply` is called back to back with no pause (the race window widened: every apply lands
+/// beside a body write). Every apply still returns in under 20 ms.
+#[test]
+fn apply_returns_fast_while_the_foreground_downloader_writes() {
+    let server = MockImap::start(scenario(&[1]));
+    let f = setup(&server);
+    f.sync(None);
+    let mut pause = server.pause_command("STORE");
+    let base = now_ms() - 30 * DAY;
+    // About 60 KB of html each.
+    let filler = "<p>lorem ipsum dolor sit amet, consectetur adipiscing elit</p>\r\n".repeat(1000);
+    server.mutate(|s| {
+        let mb = s.find_mut("INBOX").unwrap();
+        for uid in 2..=601u32 {
+            mb.add(
+                Message::new(
+                    uid,
+                    format!(
+                        "From: S <s{uid}@example.com>\r\nSubject: big {uid}\r\nMessage-ID: <big-{uid}@x>\r\n\
+                         Content-Type: text/html; charset=utf-8\r\n\r\n<html><body>{filler}</body></html>\r\n"
+                    ),
+                )
+                .with_internal_ms(base + uid as i64 * 60_000),
+            );
+        }
+    });
+    f.sync(Some("INBOX"));
+    let db = rusqlite::Connection::open(f.tmp.path().join("mobile.db")).unwrap();
+    let bodies = || -> i64 { db.query_row("SELECT count(*) FROM bodies", [], |r| r.get(0)).unwrap() };
+    assert_eq!(bodies(), 0);
+
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true })).unwrap();
+    // The downloader is under way.
+    let deadline = Instant::now() + WAIT;
+    while bodies() == 0 {
+        assert!(Instant::now() < deadline, "the foreground downloader never stored a body");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let mut lat: Vec<Duration> = Vec::new();
+    let mut seen: HashSet<i64> = HashSet::new();
+    let mut i = 0;
+    while bodies() < 601 && Instant::now() < deadline {
+        let t0 = Instant::now();
+        f.engine
+            .rpc("mobile.actions.apply", json!({ "accountId": f.account, "folder": "INBOX", "uids": [1], "kind": if i % 2 == 0 { "seen" } else { "unseen" } }))
+            .unwrap();
+        lat.push(t0.elapsed());
+        seen.insert(bodies());
+        i += 1;
+    }
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    pause.release();
+    lat.sort();
+    let max = *lat.last().unwrap();
+    let p99 = lat[(lat.len() * 99 / 100).min(lat.len() - 1)];
+    eprintln!(
+        "apply_returns_fast_while_the_foreground_downloader_writes: {} applies, {} distinct body counts, p50 {:?}, p99 {p99:?}, max {max:?}",
+        lat.len(),
+        seen.len(),
+        lat[lat.len() / 2]
+    );
+    assert!(seen.len() >= 20, "applies did not overlap the body writes: {} distinct counts", seen.len());
+    assert!(max < Duration::from_millis(20), "max apply latency {max:?} (p99 {p99:?})");
+    assert_eq!(bodies(), 601, "the downloader did not finish the window");
+}
+
 // ── Fix round 1 ─────────────────────────────────────────────────────────────
 
 impl Fixture {
