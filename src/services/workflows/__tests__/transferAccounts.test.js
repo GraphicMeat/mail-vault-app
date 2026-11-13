@@ -25,13 +25,15 @@ const mockSetSettings = vi.fn((patch) => Object.assign(h.settings, patch));
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => h.settings, setState: (...a) => mockSetSettings(...a) },
   hasPremiumAccess: () => false,
+  // The override, else a stand-in for the hashed default.
+  getAccountColor: (colors, a) => colors[a.id] || `#hash-${a.email}`,
 }));
 vi.mock('../../../stores/themeStore', () => ({ useThemeStore: { getState: () => ({ theme: 'dark', setTheme: vi.fn() }) } }));
 const mockFlush = vi.fn(async () => {});
 vi.mock('../../../stores/safeStorage', () => ({ flushSafeStorage: (...a) => mockFlush(...a) }));
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: async () => '9.9.9' }));
 
-const { exportTransfer, applyImport, planImport } = await import('../transferAccounts');
+const { exportTransfer, applyImport, planImport, phoneQr } = await import('../transferAccounts');
 
 const acct = (id, email, extra = {}) => ({ id, email, imapHost: 'imap.x.test', password: 'pw', ...extra });
 
@@ -184,5 +186,22 @@ describe('exportTransfer', () => {
     expect(params.bundle.appSettings).toBeNull();
     expect(params.bundle.theme).toBeNull();
     expect(params.bundle.appVersion).toBe('9.9.9');
+  });
+});
+
+describe('phoneQr', () => {
+  it('sends the accounts in the desktop order, each with the color it shows', async () => {
+    h.existing = [acct('a', 'a@x.test'), acct('b', 'b@x.test'), acct('c', 'c@x.test')];
+    // The store's own sort: listed ids first, the rest after in their order.
+    const getOrderedAccounts = (list) => {
+      const at = new Map(h.settings.accountOrder.map((id, i) => [id, i]));
+      return [...list].sort((x, y) => (at.get(x.id) ?? Infinity) - (at.get(y.id) ?? Infinity));
+    };
+    Object.assign(h.settings, { accountOrder: ['c', 'a'], accountColors: { a: '#ec4899' }, getOrderedAccounts });
+    await phoneQr({ password: 'correct horse battery' });
+    const [method, params] = mockDaemonCall.mock.calls[0];
+    expect(method).toBe('transfer.phone_qr');
+    expect(params.accounts.map(a => [a.id, a.color])).toEqual([['c', '#hash-c@x.test'], ['a', '#ec4899'], ['b', '#hash-b@x.test']]);
+    expect(h.existing.every(a => !('color' in a))).toBe(true);
   });
 });

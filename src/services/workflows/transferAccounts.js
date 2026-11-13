@@ -10,6 +10,7 @@ import { daemonCall } from '../daemonClient';
 import { getAccounts, saveAccounts, accountLogicalKey } from '../db';
 import * as keychainSession from '../keychainSession';
 import { collectSettings, applySettings } from '../transfer/settingsTransfer';
+import { useSettingsStore, getAccountColor } from '../../stores/settingsStore';
 
 async function appVersion() {
   try {
@@ -48,12 +49,15 @@ export async function exportTransfer({ accountIds, includeAppSettings, password 
  * Seal every account (with secrets) for the phone. The daemon maps, encrypts
  * and renders the QR frames: `{ frames: [svg], count, skipped: [{ email, reason }] }`.
  * Same keychain gate as exportTransfer: a locked keychain would otherwise
- * read as every account "no saved password".
+ * read as every account "no saved password". The accounts go in the order the
+ * desktop lists them, each with the color it shows, so the phone matches.
  */
 export async function phoneQr({ password }) {
   const accounts = await getAccounts();
   if (!['granted', 'empty'].includes(keychainSession.getStatus())) throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
-  return daemonCall('transfer.phone_qr', { password, accounts });
+  const { getOrderedAccounts, accountColors = {} } = useSettingsStore.getState();
+  const shown = getOrderedAccounts(accounts).map(a => ({ ...a, color: getAccountColor(accountColors, a) }));
+  return daemonCall('transfer.phone_qr', { password, accounts: shown });
 }
 
 /** Decrypt a transfer file's base64 contents into its bundle. */
