@@ -60,7 +60,21 @@ body {
   overscroll-behavior: none;
 }
 
-.mv-app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+/* Every full-screen layer (the app, compose, search, settings and premium, the tour, the add-account
+   overlay). While the on-screen keyboard is up a layer with fields covers only the visible part of
+   the screen (--mv-vv-top / --mv-vv-height and [data-mv-keyboard], from visualViewport in
+   keyboardViewport.js, set by KeyboardLayer.jsx or the hook itself): iOS pans the visual viewport
+   over a fixed layer, so `inset: 0` would put its top bar off the screen and its bottom under the
+   keyboard. Placed with top/height, never a transform: the sheets inside are fixed to the screen
+   too. A layer's own rule sets only its stacking, layout and background. */
+.mv-kb-layer {
+  position: fixed;
+  top: var(--mv-vv-top, 0px);
+  right: 0;
+  left: 0;
+  height: var(--mv-vv-height, 100%);
+}
+.mv-app { display: flex; flex-direction: column; }
 
 .mv-header {
   flex: none;
@@ -678,7 +692,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   box-sizing: border-box;
   padding: calc(var(--mv-safe-top) + 4px) calc(var(--mv-safe-right) + 20px) calc(var(--mv-safe-bottom) + 24px) calc(var(--mv-safe-left) + 20px);
 }
-.mv-add-overlay { position: fixed; inset: 0; z-index: 30; display: flex; background: var(--mail-bg); }
+.mv-add-overlay { z-index: 30; display: flex; background: var(--mail-bg); }
 .mv-add__bar { min-height: 44px; margin: 0 -12px; display: flex; }
 .mv-add__title { margin: 8px 0 4px; font-size: 1.5rem; font-weight: 600; line-height: 1.25; }
 .mv-add__lead { margin: 0 0 20px; color: var(--mail-text-muted); }
@@ -713,8 +727,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 /* The first-run tour (onboarding/): a full-screen layer. One bar (Back, Step N of M, Skip tour),
    the step, and one action place at the bottom, so Continue never moves. */
 .mv-tour {
-  position: fixed;
-  inset: 0;
   z-index: 35;
   display: flex;
   flex-direction: column;
@@ -940,17 +952,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-sheet__action:active { background: var(--mail-surface-hover); }
 .mv-sheet__action--danger { color: var(--mv-danger); }
 
-/* Compose: a bar, then the fields and the body scrolling above the keyboard. While the keyboard is
-   up the layer covers only the visible part of the screen (--mv-vv-top / --mv-vv-height and
-   [data-mv-keyboard], from visualViewport in keyboardViewport.js): iOS pans the visual viewport
-   over a fixed layer, so `inset: 0` would put the bar off the top and the bottom under the keyboard.
-   Placed with top/height, never a transform: the sheets inside are fixed to the screen too. */
+/* Compose: a bar, then the fields and the body scrolling above the keyboard (an .mv-kb-layer). */
 .mv-compose {
-  position: fixed;
-  top: var(--mv-vv-top, 0px);
-  right: 0;
-  left: 0;
-  height: var(--mv-vv-height, 100%);
   z-index: 15;
   display: flex;
   flex-direction: column;
@@ -1139,8 +1142,6 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 
 /* Settings: a full-screen layer like the drafts list; every row is at least 44 pt. */
 .mv-settings {
-  position: fixed;
-  inset: 0;
   z-index: 12;
   display: flex;
   flex-direction: column;
@@ -1230,13 +1231,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-settings__link:active { background: var(--mail-surface-hover); }
 
 /* The search screen: a full-screen layer under the viewer (z 10), so a result opens over it. With
-   the keyboard up it covers only the visible part of the screen, like compose. */
+   the keyboard up it covers only the visible part of the screen, like compose (.mv-kb-layer). */
 .mv-search {
-  position: fixed;
-  top: var(--mv-vv-top, 0px);
-  right: 0;
-  left: 0;
-  height: var(--mv-vv-height, 100%);
   z-index: 8;
   display: flex;
   flex-direction: column;

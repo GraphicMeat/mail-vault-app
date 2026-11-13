@@ -52,6 +52,7 @@ import Settings from './Settings.jsx';
 import Search from './Search.jsx';
 import Premium from './Premium.jsx';
 import Onboarding from './onboarding/Onboarding.jsx';
+import KeyboardLayer from './KeyboardLayer.jsx';
 import { mobileOnboardingSteps, onboardingGate } from './onboarding/steps.js';
 import { startPremiumSync } from './premium.js';
 
@@ -634,7 +635,7 @@ function App() {
 
   if (tour) {
     return (
-      <div className="mv-app">
+      <div className="mv-kb-layer mv-app">
         <Onboarding steps={tour.steps} onAdd={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onFinish={closeTour} />
         <Toasts />
       </div>
@@ -645,7 +646,7 @@ function App() {
   // be swapped for the tour a moment later, unmounting a sign-in or import already under way.
   if (status === 'loading' || status === 'failed' || (status === 'noAccount' && !tourChecked)) {
     return (
-      <div className="mv-app">
+      <div className="mv-kb-layer mv-app">
         {status !== 'failed' ? (
           <p className="mv-status">{t('explorer.loading')}</p>
         ) : (
@@ -660,9 +661,9 @@ function App() {
 
   if (status === 'noAccount') {
     return (
-      <div className="mv-app">
+      <KeyboardLayer className="mv-app" scroll=".mv-add">
         <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onImport={onImport} onImported={onImported} autoStart={DEMO_SIGNIN ? 'google' : null} />
-      </div>
+      </KeyboardLayer>
     );
   }
 
@@ -671,7 +672,7 @@ function App() {
   const listKey = `${activeAccountId}/${activeFolder}`;
 
   return (
-    <div className="mv-app">
+    <div className="mv-kb-layer mv-app">
       <header className="mv-header">
         <button type="button" className="mv-iconbtn" aria-label={t('mobile.drawer.open')} onClick={() => setPanel('drawer')}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -763,9 +764,9 @@ function App() {
         />
       )}
       {panel === 'add' && (
-        <div className="mv-add-overlay">
+        <KeyboardLayer className="mv-add-overlay" scroll=".mv-add">
           <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onCancel={closePanel} onImport={onImport} onImported={onImported} autoStart={DEMO_SIGNIN ? 'google' : null} />
-        </div>
+        </KeyboardLayer>
       )}
       {open && (
         <Viewer

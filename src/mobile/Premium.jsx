@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { daemonCall, storeProducts, storePurchase, storeRestore } from './transport.js';
 import { useMobileStore } from './store.js';
+import KeyboardLayer from './KeyboardLayer.jsx';
 import { useT, getMobileLocale } from './i18n.js';
 import { errorKey } from './errors.js';
 import { PREMIUM_FEATURES, storeOf, premiumSummary, introText } from './premium.js';
@@ -365,12 +366,12 @@ export default function Premium({ feature = null, signIn = false, onClose }) {
   );
 
   return (
-    <section className="mv-settings mv-premium" role="dialog" aria-modal="true" aria-label={t('mobile.premium.title')} data-mv-sign-in={signIn ? 'true' : undefined}>
+    <KeyboardLayer as="section" className="mv-settings mv-premium" scroll=".mv-settings__body" role="dialog" aria-modal="true" aria-label={t('mobile.premium.title')} data-mv-sign-in={signIn ? 'true' : undefined}>
       <header className="mv-compose__bar">
         <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.back')}</button>
         <h1 className="mv-compose__title">{t('mobile.premium.title')}</h1>
       </header>
       <div className="mv-settings__body mv-premium__body">{body}</div>
-    </section>
+    </KeyboardLayer>
   );
 }

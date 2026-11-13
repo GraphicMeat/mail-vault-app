@@ -195,7 +195,7 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
   const firstServer = local.rows.length;
 
   return (
-    <section ref={layer} className="mv-search" role="dialog" aria-modal="true" aria-label={t('mobile.search.title')}>
+    <section ref={layer} className="mv-kb-layer mv-search" role="dialog" aria-modal="true" aria-label={t('mobile.search.title')}>
       <header className="mv-search__bar">
         <form className="mv-search__form" role="search" onSubmit={onSubmit}>
           <span className="mv-search__glass"><SearchIcon /></span>

@@ -475,7 +475,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   else if (noTo && (ccAll.length || bccAll.length)) hint = t('mobile.compose.needTo');
 
   return (
-    <section ref={sheet} className="mv-compose" role="dialog" aria-modal="true" aria-label={title}>
+    <section ref={sheet} className="mv-kb-layer mv-compose" role="dialog" aria-modal="true" aria-label={title}>
       <header className="mv-compose__bar">
         <button type="button" className="mv-compose__back" data-mv-compose-close onClick={requestLeave}>
           {t('common.back')}

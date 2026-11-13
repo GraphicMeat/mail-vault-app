@@ -20,6 +20,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { daemonCall, notificationPermission, requestNotificationPermission } from './transport.js';
 import { useMobileStore } from './store.js';
+import KeyboardLayer from './KeyboardLayer.jsx';
 import { useT } from './i18n.js';
 import { Avatar } from './AccountSwitcher.jsx';
 import { errorKey } from './errors.js';
@@ -214,7 +215,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION 
   const reauthCode = reauthState && !reauthState.busy ? reauthState.code : null;
 
   return (
-    <section className="mv-settings" role="dialog" aria-modal="true" aria-label={t('mobile.settings.title')}>
+    <KeyboardLayer as="section" className="mv-settings" scroll=".mv-settings__body" role="dialog" aria-modal="true" aria-label={t('mobile.settings.title')}>
       <header className="mv-compose__bar">
         <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.back')}</button>
         <h1 className="mv-compose__title">{t('mobile.settings.title')}</h1>
@@ -298,6 +299,6 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION 
           </a>
         </div>
       </div>
-    </section>
+    </KeyboardLayer>
   );
 }

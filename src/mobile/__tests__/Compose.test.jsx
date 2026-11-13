@@ -886,8 +886,12 @@ describe('Compose over the iOS keyboard', () => {
     expect(css.length).toBeGreaterThan(1000);
     const rule = (sel) => css.match(new RegExp(`(?:^|\\n)${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`))?.[1] ?? '';
     expect(rule('.mv-compose__bar')).toContain('--mv-safe-top');
-    expect(rule('.mv-compose')).toContain('var(--mv-vv-height');
-    expect(rule('.mv-compose')).toContain('var(--mv-vv-top');
+    // The placement is the shared keyboard layer rule (keyboardLayers.test.jsx), which the sheet wears.
+    expect(rule('.mv-kb-layer')).toContain('var(--mv-vv-height');
+    expect(rule('.mv-kb-layer')).toContain('var(--mv-vv-top');
+    renderCompose();
+    await flush();
+    expect(screen.getByRole('dialog').classList.contains('mv-kb-layer')).toBe(true);
     expect(rule('.mv-compose__scroll')).not.toContain('--mv-keyboard');
   });
 });

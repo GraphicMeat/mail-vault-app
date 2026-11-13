@@ -15,6 +15,7 @@ import { pushLayer } from '../backStack.js';
 import { useT } from '../i18n.js';
 import { daemonCall } from '../transport.js';
 import { useMobileStore } from '../store.js';
+import KeyboardLayer from '../KeyboardLayer.jsx';
 import LanguageStep from './LanguageStep.jsx';
 import AccountStep from './AccountStep.jsx';
 import FreeStep from './FreeStep.jsx';
@@ -60,14 +61,14 @@ export default function Onboarding({ steps, onAdd, onOAuth, onOAuthCancel, onFin
 
   if (step === 'account' && flow) {
     return (
-      <div className="mv-tour mv-tour--flow" data-testid="onboarding-account">
+      <KeyboardLayer className="mv-tour mv-tour--flow" scroll=".mv-add" data-testid="onboarding-account">
         <AccountStep flow={flow} onFlow={setFlow} onAdd={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onAdded={next} />
-      </div>
+      </KeyboardLayer>
     );
   }
 
   return (
-    <div className="mv-tour" data-testid={`onboarding-${step}`}>
+    <KeyboardLayer className="mv-tour" scroll=".mv-tour__body" data-testid={`onboarding-${step}`}>
       <header className="mv-tour__bar">
         {index > 0 ? (
           <button type="button" className="mv-textbtn" onClick={back} disabled={finishing} data-testid="onboarding-back">
@@ -108,6 +109,6 @@ export default function Onboarding({ steps, onAdd, onOAuth, onOAuthCancel, onFin
           </button>
         )}
       </footer>
-    </div>
+    </KeyboardLayer>
   );
 }
