@@ -2,7 +2,7 @@
 // The preferences a desktop import carries, where the app acts on them (W1a): when opening marks
 // a message read, the question before a delete, what the viewer shows after one, and hidden
 // accounts left out of the switcher.
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, cleanup, act, waitFor, screen, fireEvent } from '@testing-library/react';
 import { t } from '../i18n.js';
@@ -68,7 +68,18 @@ async function fresh() {
   return { App, store: useMobileStore };
 }
 
+// The list is virtualized: it lays rows out only with a measured viewport.
+let sizes = [];
+beforeEach(() => {
+  sizes = [
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800),
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(375),
+  ];
+  window.history.replaceState({}, '', '/mobile.html');
+});
+
 afterEach(() => {
+  for (const s of sizes) s.mockRestore();
   cleanup();
   engine.calls.length = 0;
   engine.handlers.clear();

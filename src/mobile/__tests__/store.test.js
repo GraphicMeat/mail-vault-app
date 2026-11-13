@@ -284,7 +284,7 @@ describe('mobile store', () => {
     await store.getState().init();
     const frames = ['MVQR1:aaaaaaaa:1/1:QUJD'];
     await expect(store.getState().importFromDesktop({ frames, password: 'right-password' })).resolves.toEqual({
-      ok: true, imported: ['imp@example.test'], existing: ['a1@example.test'], skipped: [{ email: 'x@example.test', reason: 'invalid' }],
+      ok: true, settingsApplied: false, imported: ['imp@example.test'], existing: ['a1@example.test'], skipped: [{ email: 'x@example.test', reason: 'invalid' }],
     });
     expect(callsOf('mobile.transfer.import')).toEqual([{ frames, password: 'right-password' }]);
     // Listed at once; the screen with the result stays until Done.
