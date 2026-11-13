@@ -629,14 +629,23 @@ pub fn reply_to_mismatch(row: &Value) -> Option<Value> {
     let mut reply_domain = domain_part(reply_to);
     // A row cached before the header parser was anchored can hold the tail of
     // a DKIM-Signature here ("Message-ID:Content-Type; i=reply@d; bh=...").
-    // Tag syntax after the '@' is no part of a domain: judge the hostname it
-    // starts with, so that tail (whose i= is the signer's own) raises nothing
-    // while a foreign domain dressed up the same way still warns.
+    // Tag syntax after the '@' is no part of a domain: judge the hostname the
+    // LAST '@' starts (a quoted local part can hold an '@' and a ';' of its
+    // own), so that tail (whose i= is the signer's own) raises nothing while a
+    // foreign domain dressed up the same way still warns. No hostname there:
+    // keep the raw domain, which warns.
     if reply_domain.contains(';') {
-        reply_domain = reply_domain
+        let lower = reply_to.to_lowercase();
+        let host: String = lower
+            .rsplit('@')
+            .next()
+            .unwrap_or("")
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
             .collect();
+        if !host.is_empty() {
+            reply_domain = host;
+        }
     }
     if reply_domain.is_empty()
         || reply_domain == from_domain
