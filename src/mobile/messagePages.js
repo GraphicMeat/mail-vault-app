@@ -18,10 +18,16 @@
 export const MAX_PAGES = 20;
 export const PAGE_SIZE = 100;
 
-/** The engine's list order, `(dateMs DESC, uid DESC)`: negative when `a` sorts before `b`. */
+/**
+ * The engine's list order, `(dateMs DESC, uid DESC)`, then `accountId DESC` in a list that spans
+ * accounts (All Inboxes), where one `(dateMs, uid)` can repeat: negative when `a` sorts before `b`.
+ */
 export function compareKeys(a, b) {
   if (a.dateMs !== b.dateMs) return b.dateMs - a.dateMs;
-  return b.uid - a.uid;
+  if (a.uid !== b.uid) return b.uid - a.uid;
+  const x = a.accountId ?? '';
+  const y = b.accountId ?? '';
+  return x === y ? 0 : x < y ? 1 : -1;
 }
 
 const END = Symbol('end');
@@ -30,8 +36,15 @@ const END = Symbol('end');
  * @param {(cursor: null|{dateMs:number, uid:number}, limit: number) =>
  *   Promise<{ rows: object[], nextCursor: null|{dateMs:number, uid:number}, total: number, listGen: number }>} fetchPage
  * @param {number} pageSize
+ * @param {{ spansAccounts?: boolean }} options `spansAccounts`: the rows come from several
+ *   accounts (All Inboxes, each row with its `accountId`). A uid then names a row only with its
+ *   account, so rows are hidden and found by `keyFor(accountId, uid)`. The list's generation is a
+ *   sum over the accounts and is not comparable with one folder's event: such a list ignores it
+ *   and drops its pages on every `invalidate()`.
  */
-export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
+export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts = false } = {}) {
+  const keyFor = spansAccounts ? (accountId, uid) => `${accountId}:${uid}` : (_accountId, uid) => uid;
+  const keyOf = (r) => keyFor(r.accountId, r.uid);
   const pages = new Map(); // page number -> rows; Map order is recency, oldest first
   const cursors = new Map([[0, null]]); // page number -> cursor that fetches it, or END
   const inflight = new Map(); // page number -> promise
@@ -40,9 +53,9 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
   let listGen = null;
   let epoch = 0; // bumped by every reset; a reply from an older epoch is dropped
   let version = 0;
-  let anchor = null; // { dateMs, uid, from, to: number|null }
+  let anchor = null; // { dateMs, uid, accountId?, from, to: number|null }
   let topIndex = 0; // first row on screen (raw index), set by the list as it scrolls
-  const hidden = new Set(); // uids taken out of the view
+  const hidden = new Set(); // keys (`keyFor`) of the rows taken out of the view
   let hiddenAt = []; // sorted raw indices of hidden rows on held pages; null = recount
 
   const notify = () => {
@@ -62,7 +75,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
     const out = [];
     for (const [p, rows] of pages) {
       rows.forEach((r, j) => {
-        if (r && hidden.has(r.uid)) out.push(p * pageSize + j);
+        if (r && hidden.has(keyOf(r))) out.push(p * pageSize + j);
       });
     }
     hiddenAt = out.sort((a, b) => a - b);
@@ -100,7 +113,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
   function dropAll(gen, top) {
     const p = Math.floor(top / pageSize);
     const row = top > 0 ? pages.get(p)?.[top - p * pageSize] : undefined;
-    anchor = row ? { dateMs: row.dateMs, uid: row.uid, from: top, to: null } : null;
+    anchor = row ? { dateMs: row.dateMs, uid: row.uid, accountId: row.accountId, from: top, to: null } : null;
     reset(gen);
   }
 
@@ -114,8 +127,9 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
   function load(p) {
     const mine = epoch;
     const promise = fetchPage(cursors.get(p), pageSize).then(
-      (res) => {
+      (reply) => {
         if (mine !== epoch) return; // the list moved on while this page was on its way
+        const res = spansAccounts ? { ...reply, listGen: null } : reply;
         inflight.delete(p);
         if (listGen != null && res.listGen != null && res.listGen > listGen) {
           // The engine's list moved under the pages held: start over in the new generation,
@@ -197,26 +211,32 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE) {
     ensure(i) {
       return ensurePage(Math.floor(toRaw(i) / pageSize));
     },
-    /** View index of the row `uid` on the held pages, or -1 (not held, or hidden). */
-    indexOfUid(uid) {
+    /** The key that names the row `uid` of `accountId` here: the uid, or both in a spanning list. */
+    keyFor,
+    /** View index of the row `key` (`keyFor`) on the held pages, or -1 (not held, or hidden). */
+    indexOf(key) {
       for (const [p, rows] of pages) {
-        const j = rows.findIndex((r) => r && r.uid === uid);
+        const j = rows.findIndex((r) => r && keyOf(r) === key);
         if (j < 0) continue;
-        if (hidden.has(uid)) return -1;
+        if (hidden.has(key)) return -1;
         const raw = p * pageSize + j;
         return raw - hiddenIndices().filter((h) => h < raw).length;
       }
       return -1;
     },
-    /** Takes the rows of `uids` out of the view (the engine still lists them). */
-    hide(uids) {
-      for (const uid of uids) hidden.add(uid);
+    /** View index of the row `uid` of a one-folder list on the held pages, or -1. */
+    indexOfUid(uid) {
+      return this.indexOf(uid);
+    },
+    /** Takes the rows of `keys` (`keyFor`) out of the view (the engine still lists them). */
+    hide(keys) {
+      for (const key of keys) hidden.add(key);
       hiddenAt = null;
       notify();
     },
     /** Puts hidden rows back (an undo), or forgets them once the engine has taken them out. */
-    unhide(uids) {
-      for (const uid of uids) hidden.delete(uid);
+    unhide(keys) {
+      for (const key of keys) hidden.delete(key);
       hiddenAt = null;
       notify();
     },

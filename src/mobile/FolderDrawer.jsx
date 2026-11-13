@@ -1,4 +1,5 @@
-// The folder drawer: the active account's folders, depth first as the engine lists them, with
+// The folder drawer: with two or more accounts, All Inboxes first (every account's inbox as one
+// list, with their unread count, as desktop has it); then the active account's folders, depth first as the engine lists them, with
 // unread counts. Special-use folders get their translated name; a folder that cannot be opened
 // (`noselect`) is shown as a heading for its children. Names come from `folders.js`. Below the
 // folders, Drafts (the account's local drafts, with their count) opens the drafts list, and Follow up
@@ -7,16 +8,33 @@
 import React from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
-import { folderLabel } from './folders.js';
+import { folderLabel, ALL_INBOXES } from './folders.js';
 
-export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings }) {
+export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, allInboxes = null, onAllInboxes }) {
   const t = useT();
+  const allActive = activeFolder === ALL_INBOXES;
   return (
     <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
       <div className="mv-drawer__head">
         <h2 className="mv-drawer__title">{t('mobile.drawer.title')}</h2>
         {account && <p className="mv-drawer__account" dir="auto">{account.email}</p>}
       </div>
+      {allInboxes && onAllInboxes && (
+        <div className="mv-drawer__local mv-drawer__all">
+          <button
+            type="button"
+            className={allActive ? 'mv-folder mv-folder--active' : 'mv-folder'}
+            data-mv-all-inboxes
+            aria-current={allActive ? 'true' : undefined}
+            onClick={onAllInboxes}
+          >
+            <span className="mv-folder__name">{t('sidebar.allInboxes')}</span>
+            {allInboxes.unread > 0 && (
+              <span className="mv-folder__count" aria-label={t('mobile.unreadCount', { count: allInboxes.unread })}>{allInboxes.unread}</span>
+            )}
+          </button>
+        </div>
+      )}
       {folders.length === 0 ? (
         <p className="mv-drawer__empty">{t('mobile.drawer.empty')}</p>
       ) : (

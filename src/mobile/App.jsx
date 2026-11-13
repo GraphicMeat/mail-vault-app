@@ -30,9 +30,9 @@
 //
 // A fresh install (no accounts, tour never finished) opens the first-run tour (onboarding/) before
 // anything else; Settings' Replay tour opens it again, without its account step.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, takeNotificationTap } from './transport.js';
-import { useMobileStore } from './store.js';
+import { useMobileStore, ALL_INBOXES } from './store.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
 import AddAccount from './AddAccount.jsx';
@@ -318,8 +318,7 @@ function App() {
     if (!VIEWER_SCRIPT || !perfGate || viewerScriptStarted || status !== 'ready' || listState !== 'ready' || !list) return;
     viewerScriptStarted = true;
     const openRow = (row) => {
-      const { activeAccountId: accountId, activeFolder: folder } = useMobileStore.getState();
-      setOpen({ row, accountId, folder });
+      setOpen({ row, ...useMobileStore.getState().placeOf(row) });
     };
     import('./viewerProbe.js')
       .then(({ runViewerProbe }) => runViewerProbe({ query: QUERY, list, open: openRow, close: () => setOpen(null), log: logLine }))
@@ -333,8 +332,8 @@ function App() {
   useEffect(() => {
     if (!DEMO_COMPOSE || demoComposeStarted || status !== 'ready' || listState !== 'ready' || !list) return;
     demoComposeStarted = true;
-    const { activeAccountId: accountId, activeFolder: folder } = useMobileStore.getState();
     const row = list.rowAt(0);
+    const { accountId, folder } = useMobileStore.getState().placeOf(row);
     setCompose(DEMO_COMPOSE === 'reply' && row
       ? { key: 1, accountId, mode: 'reply', original: { folder, uid: row.uid, dateMs: row.dateMs } }
       : { key: 1, accountId, mode: 'new' });
@@ -396,11 +395,11 @@ function App() {
     setPulled(Date.now());
     useMobileStore.getState().refresh();
   }, []);
-  // The viewer keeps the account and folder the row was opened from, whatever the list does next.
-  // Opening a message marks it read.
+  // The viewer keeps the account and folder the row was opened from (in All Inboxes, the row's
+  // own), whatever the list does next. Opening a message marks it read.
   const onOpen = useCallback((row, index) => {
     const s = useMobileStore.getState();
-    const { activeAccountId: accountId, activeFolder: folder } = s;
+    const { accountId, folder } = s.placeOf(row);
     s.markSeen(accountId, folder, row);
     setOpen({ row: row.seen ? row : { ...row, seen: true }, index, accountId, folder });
   }, []);
@@ -449,7 +448,7 @@ function App() {
 
   const onSwipe = useCallback((kind, row) => {
     const s = useMobileStore.getState();
-    s.act(kind, { accountId: s.activeAccountId, folder: s.activeFolder, uids: [row.uid] });
+    s.act(kind, { ...s.placeOf(row), uids: [row.uid] });
   }, []);
   const onViewerAction = useCallback((kind) => {
     if (!open) return undefined;
@@ -467,15 +466,18 @@ function App() {
     if (!open) return;
     const s = useMobileStore.getState();
     const { accountId, folder } = open;
-    const sameList = s.list && s.activeAccountId === accountId && s.activeFolder === folder;
+    const list = s.listShowing(accountId, folder);
     // Where the message is now: the list may have moved since it was opened (new mail, an undo).
-    const index = sameList ? s.list.indexOfUid(open.row.uid) : -1;
-    const below = index >= 0 ? s.list.rowAt(index + 1) : undefined;
-    const next = below && below.uid !== open.row.uid ? below : undefined;
+    const key = list ? list.keyFor(accountId, open.row.uid) : null;
+    const index = list ? list.indexOf(key) : -1;
+    const below = index >= 0 ? list.rowAt(index + 1) : undefined;
+    const next = below && list.keyFor(below.accountId, below.uid) !== key ? below : undefined;
     s.act('delete', { accountId, folder, uids: [open.row.uid] });
     if (next) {
-      s.markSeen(accountId, folder, next);
-      setOpen({ row: next.seen ? next : { ...next, seen: true }, index, accountId, folder });
+      // In All Inboxes the next row can be another account's.
+      const place = s.placeOf(next);
+      s.markSeen(place.accountId, place.folder, next);
+      setOpen({ row: next.seen ? next : { ...next, seen: true }, index, ...place });
     } else {
       setOpen(null);
     }
@@ -544,6 +546,17 @@ function App() {
     setPanel(null);
     useMobileStore.getState().selectFolder(path);
   }, []);
+  const onAllInboxes = useCallback(() => {
+    setPanel(null);
+    useMobileStore.getState().selectAllInboxes();
+  }, []);
+  // All Inboxes marks each row with its account (desktop's account dot).
+  const allInboxes = activeFolder === ALL_INBOXES;
+  const accountOf = useMemo(() => {
+    if (!allInboxes) return null;
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    return (row) => byId.get(row.accountId);
+  }, [allInboxes, accounts]);
   const onSelectAccount = useCallback((id) => {
     setPanel(null);
     useMobileStore.getState().selectAccount(id);
@@ -666,7 +679,7 @@ function App() {
           </svg>
         </button>
         <div className="mv-header__titles">
-          <h1 className="mv-header__title" dir="auto">{folderLabel(folder)}</h1>
+          <h1 className="mv-header__title" dir="auto">{allInboxes ? t('sidebar.allInboxes') : folderLabel(folder)}</h1>
           {account && (
             <button
               type="button"
@@ -699,6 +712,7 @@ function App() {
           cache={list}
           onOpen={onOpen}
           onSwipe={onSwipe}
+          accountOf={accountOf}
           onRefresh={onRefresh}
           refreshing={Boolean(pulled)}
           demoSwipe={DEMO_SWIPE}
@@ -724,6 +738,8 @@ function App() {
           folders={folders}
           activeFolder={activeFolder}
           onSelect={onSelectFolder}
+          allInboxes={accounts.length >= 2 ? { unread: accounts.reduce((n, a) => n + (unread[a.id] || 0), 0) } : null}
+          onAllInboxes={onAllInboxes}
           onClose={closePanel}
           drafts={drafts.length}
           onDrafts={onDrafts}

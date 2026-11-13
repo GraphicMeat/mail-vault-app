@@ -16,6 +16,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
+import { ALL_INBOXES } from './folders.js';
 import MessageRow, { ROW_HEIGHT } from './MessageRow.jsx';
 import { errorKey } from './errors.js';
 import { useT } from './i18n.js';
@@ -44,11 +45,12 @@ function SearchIcon() {
 export default function Search({ onOpen, onClose, initialQuery = '' }) {
   const t = useT();
   const accountId = useMobileStore((s) => s.activeAccountId);
-  const folder = useMobileStore((s) => s.activeFolder);
+  // All Inboxes is no one folder: search opens on All accounts there, without "This folder".
+  const folder = useMobileStore((s) => (s.activeFolder === ALL_INBOXES ? null : s.activeFolder));
   const recent = useMobileStore((s) => s.recentSearches);
 
   const [query, setQuery] = useState(initialQuery);
-  const [scope, setScope] = useState('folder'); // 'folder' | 'all'
+  const [scope, setScope] = useState(folder ? 'folder' : 'all'); // 'folder' | 'all'
   // The device search: idle (no query) | loading | more (a later page loading) | done | failed
   const [local, setLocal] = useState({ state: 'idle', rows: [], cursor: null, code: null });
   // The server search: idle | loading | done | failed
@@ -216,9 +218,11 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
         <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.cancel')}</button>
       </header>
       <div className="mv-search__scopes" role="group" aria-label={t('mobile.search.scope')}>
-        <button type="button" className="mv-search__chip" aria-pressed={scope === 'folder'} onClick={() => setScope('folder')}>
-          {t('mobile.search.thisFolder')}
-        </button>
+        {folder && (
+          <button type="button" className="mv-search__chip" aria-pressed={scope === 'folder'} onClick={() => setScope('folder')}>
+            {t('mobile.search.thisFolder')}
+          </button>
+        )}
         <button type="button" className="mv-search__chip" aria-pressed={scope === 'all'} onClick={() => setScope('all')}>
           {t('mobile.search.allAccounts')}
         </button>

@@ -236,6 +236,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   .mv-row { transition: none; }
 }
 .mv-row:active { background: var(--mail-surface-hover); }
+/* All Inboxes: the row's account, in that account's colour (desktop's account dot). */
+.mv-row__acct { flex: none; width: 8px; height: 8px; border-radius: 50%; align-self: center; }
 .mv-row__flag { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mv-flag); align-self: center; }
 .mv-row__top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .mv-row__sender, .mv-row__subject, .mv-row__snippet {

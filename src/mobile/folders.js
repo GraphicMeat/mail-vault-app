@@ -2,6 +2,13 @@
 // (see i18n.js), so the module `t` is safe here.
 import { t } from './i18n.js';
 
+/**
+ * The open "folder" while All Inboxes is open: every account's inbox as one list (desktop's All
+ * Inboxes), offered with two or more accounts. Never a real path (a NUL cannot be in one) and
+ * never sent to the engine: rows of that list name their own `accountId` and `folder`.
+ */
+export const ALL_INBOXES = '\u0000allInboxes';
+
 const SPECIAL_KEYS = {
   '\\inbox': 'sidebar.inbox',
   '\\drafts': 'sidebar.drafts',

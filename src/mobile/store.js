@@ -17,6 +17,7 @@
 import { create } from 'zustand';
 import { daemonCall, listen } from './transport.js';
 import { createPageCache, PAGE_SIZE } from './messagePages.js';
+import { ALL_INBOXES } from './folders.js';
 import { errorCodeOf, errorKey } from './errors.js';
 import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
 
@@ -82,10 +83,22 @@ function inboxUnread(folders) {
   return inbox ? inbox.unseen || 0 : 0;
 }
 
+/** `activeFolder` while All Inboxes is open (folders.js). */
+export { ALL_INBOXES };
+
+const isInboxPath = (path) => typeof path === 'string' && path.toUpperCase() === INBOX;
+
 function listFor(accountId, folder) {
+  if (folder === ALL_INBOXES) {
+    return createPageCache((cursor, limit) =>
+      daemonCall('mobile.messages.page', { scope: 'allInboxes', cursor, limit }), PAGE_SIZE, { spansAccounts: true });
+  }
   return createPageCache((cursor, limit) =>
     daemonCall('mobile.messages.page', { accountId, folder, cursor, limit }), PAGE_SIZE);
 }
+
+/** The keys `list` names the rows `uids` of `accountId` by. */
+const keysIn = (list, accountId, uids) => uids.map((uid) => list.keyFor(accountId, uid));
 
 export function createMobileStore() {
   let initRun = null;
@@ -153,10 +166,14 @@ export function createMobileStore() {
       loadOutbox();
     }
 
-    /** The open list, when it shows `folder` of `accountId`. */
+    /** The open list, when it shows `folder` of `accountId` (All Inboxes shows every inbox). */
     function listOf(accountId, folder) {
       const s = get();
-      return s.list && s.activeAccountId === accountId && s.activeFolder === folder ? s.list : null;
+      if (!s.list) return null;
+      if (s.activeFolder === ALL_INBOXES) {
+        return isInboxPath(folder) && s.accounts.some((a) => a.id === accountId) ? s.list : null;
+      }
+      return s.activeAccountId === accountId && s.activeFolder === folder ? s.list : null;
     }
 
     async function loadPending() {
@@ -191,7 +208,7 @@ export function createMobileStore() {
       // After a failure the reload brings back whatever was not applied.
       if (list && (hides || skipped.length || failed)) {
         list.invalidate();
-        if (hides) list.unhide(uids);
+        if (hides) list.unhide(keysIn(list, accountId, uids));
       }
       if (failed) notice('mobile.actions.failed');
       loadPending();
@@ -249,7 +266,8 @@ export function createMobileStore() {
         // No folder list yet (a new account before its first sync): INBOX is always there.
       }
       if (get().activeAccountId !== accountId) return; // another switch won
-      const wanted = folder && folders.some((f) => f.path === folder && !f.noselect) ? folder : INBOX;
+      const spans = folder === ALL_INBOXES && get().accounts.length >= 2;
+      const wanted = spans || (folder && folders.some((f) => f.path === folder && !f.noselect)) ? folder : INBOX;
       open(accountId, wanted);
       set({ status: 'ready' });
       if (!get().autoSync) return;
@@ -261,7 +279,10 @@ export function createMobileStore() {
     function onFolderChanged(p) {
       if (!p || !p.accountId) return;
       const s = get();
-      if (p.accountId === s.activeAccountId && p.folder === s.activeFolder && s.list) {
+      if (s.list && s.activeFolder === ALL_INBOXES) {
+        // One inbox's generation says nothing about the merged list's: any inbox change reloads it.
+        if (isInboxPath(p.folder) && s.accounts.some((a) => a.id === p.accountId)) s.list.invalidate();
+      } else if (p.accountId === s.activeAccountId && p.folder === s.activeFolder && s.list) {
         if (s.list.invalidate(p.listGen)) set({ listGen: s.list.listGen });
       }
       loadFoldersQuietly(p.accountId);
@@ -359,7 +380,7 @@ export function createMobileStore() {
         if (!HIDES.has(kind)) return send({ accountId, folder, uids, kind, list: listOf(accountId, folder) });
         const before = flush();
         const list = listOf(accountId, folder);
-        list?.hide(uids);
+        list?.hide(keysIn(list, accountId, uids));
         const id = ++serial;
         const timer = setTimeout(() => { if (deferred?.id === id) flush(); }, UNDO_MS);
         deferred = { id, accountId, folder, uids: [...uids], kind, target, list, timer };
@@ -379,10 +400,23 @@ export function createMobileStore() {
         if (!d || d.id !== id) return false;
         deferred = null;
         clearTimeout(d.timer);
-        d.list?.unhide(d.uids);
+        d.list?.unhide(keysIn(d.list, d.accountId, d.uids));
         set({ undo: null });
         return true;
       },
+
+      /**
+       * Where `row` lives: its own account and folder in All Inboxes, else the open list's. Every
+       * action on a row and every open goes there.
+       */
+      placeOf(row) {
+        if (row?.accountId && row.folder) return { accountId: row.accountId, folder: row.folder };
+        const { activeAccountId: accountId, activeFolder: folder } = get();
+        return { accountId, folder };
+      },
+
+      /** The open list, when it holds `folder` of `accountId`'s rows; else null. */
+      listShowing: listOf,
 
       flush,
       loadPending,
@@ -703,11 +737,12 @@ export function createMobileStore() {
           await daemonCall('mobile.accounts.remove', { accountId: id });
         } catch (err) {
           // The account stays: its dropped action's rows come back, and the switcher keeps asking.
-          dropped?.list?.unhide(dropped.uids);
+          dropped?.list?.unhide(keysIn(dropped.list, dropped.accountId, dropped.uids));
           notice('mobile.switcher.removeFailed');
           throw err;
         }
-        const { accounts, activeAccountId } = get();
+        const { accounts, activeAccountId, activeFolder, list } = get();
+        const spans = activeFolder === ALL_INBOXES;
         const at = accounts.findIndex((a) => a.id === id);
         const rest = accounts.filter((a) => a.id !== id);
         set((s) => {
@@ -715,7 +750,12 @@ export function createMobileStore() {
           const { [id]: _state, ...syncState } = s.syncState;
           return { accounts: rest, unread, syncState };
         });
-        if (activeAccountId !== id) return;
+        if (activeAccountId !== id) {
+          // All Inboxes loses that account's mail; with one account left it is that account's inbox.
+          if (spans && rest.length < 2) open(activeAccountId, INBOX);
+          else if (spans) list?.invalidate();
+          return;
+        }
         if (!rest.length) {
           writeStorage(STORAGE_ACCOUNT, null);
           writeStorage(STORAGE_FOLDER, null);
@@ -725,12 +765,22 @@ export function createMobileStore() {
         }
         // The next account in the list, or the one before when the last was removed.
         const next = rest[Math.min(at, rest.length - 1)];
-        await activate(next.id, INBOX);
+        await activate(next.id, spans ? ALL_INBOXES : INBOX);
       },
 
+      /** Picks an account in the switcher: that account's own folder, never All Inboxes. */
       async selectAccount(id) {
         if (!get().accounts.some((a) => a.id === id)) return;
-        await activate(id, savedFolder(id));
+        const saved = savedFolder(id);
+        await activate(id, saved === ALL_INBOXES ? INBOX : saved);
+      },
+
+      /** Opens All Inboxes (two or more accounts), with the account in front kept for compose. */
+      async selectAllInboxes() {
+        const { activeAccountId, activeFolder, accounts } = get();
+        if (!activeAccountId || accounts.length < 2) return;
+        if (activeFolder !== ALL_INBOXES) open(activeAccountId, ALL_INBOXES);
+        await get().refresh();
       },
 
       /**
@@ -775,8 +825,19 @@ export function createMobileStore() {
        * so the inbox gets that form (the folder list stays fresh) and any other folder is named.
        */
       async refresh() {
-        const { activeAccountId: accountId, activeFolder: folder } = get();
+        const { activeAccountId: accountId, activeFolder: folder, accounts } = get();
         if (!accountId) return;
+        if (folder === ALL_INBOXES) {
+          // Every account's inbox (the inbox form also keeps each folder list fresh).
+          await Promise.all(accounts.map(async ({ id }) => {
+            try {
+              await daemonCall('mobile.sync.refresh', { accountId: id });
+            } catch (err) {
+              set((s) => ({ syncState: { ...s.syncState, [id]: { state: 'error', code: errorCodeOf(err?.code), at: Date.now() } } }));
+            }
+          }));
+          return;
+        }
         try {
           await daemonCall('mobile.sync.refresh', folder && folder !== INBOX ? { accountId, folder } : { accountId });
         } catch (err) {
