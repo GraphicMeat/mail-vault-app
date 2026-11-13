@@ -723,7 +723,104 @@ fn apply_returns_fast_while_the_foreground_downloader_writes() {
     assert_eq!(bodies(), 601, "the downloader did not finish the window");
 }
 
-// ── Fix round 1 ─────────────────────────────────────────────────────────────
+/// `mobile.db-wal` stays bounded while the foreground downloader writes a window larger than the
+/// bound (1,200 bodies of about 60 KB) and taps and list reads go on beside it: under 64 MB at
+/// every sample, and back under 16 MB once the downloader is idle. A checkpoint that never
+/// catches up with a writer that never pauses leaves SQLite no point at which it can start the
+/// log over, so without a bound the file grows by every byte written.
+#[test]
+fn the_wal_stays_bounded_while_the_foreground_downloader_writes() {
+    const BODIES: u32 = 1_200;
+    const MAX_WAL: u64 = 64 * 1024 * 1024;
+    const IDLE_WAL: u64 = 16 * 1024 * 1024;
+    let server = MockImap::start(scenario(&[1]));
+    let f = setup(&server);
+    f.sync(None);
+    let mut pause = server.pause_command("STORE");
+    let base = now_ms() - 30 * DAY;
+    let filler = "<p>lorem ipsum dolor sit amet, consectetur adipiscing elit</p>\r\n".repeat(1000);
+    server.mutate(|s| {
+        let mb = s.find_mut("INBOX").unwrap();
+        for uid in 2..=BODIES + 1 {
+            mb.add(
+                Message::new(
+                    uid,
+                    format!(
+                        "From: S <s{uid}@example.com>\r\nSubject: big {uid}\r\nMessage-ID: <wal-{uid}@x>\r\n\
+                         Content-Type: text/html; charset=utf-8\r\n\r\n<html><body>{filler}</body></html>\r\n"
+                    ),
+                )
+                .with_internal_ms(base + uid as i64 * 60_000),
+            );
+        }
+    });
+    f.sync(Some("INBOX"));
+    let wal = f.tmp.path().join("mobile.db-wal");
+    let wal_len = || std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
+    let db = rusqlite::Connection::open(f.tmp.path().join("mobile.db")).unwrap();
+    let bodies = || -> i64 { db.query_row("SELECT count(*) FROM bodies", [], |r| r.get(0)).unwrap() };
+
+    // Taps and list reads all along, at a brisk human pace.
+    let stop = Arc::new(AtomicBool::new(false));
+    let tapper = {
+        let (engine, account, stop) = (Arc::clone(&f.engine), f.account.clone(), Arc::clone(&stop));
+        std::thread::spawn(move || {
+            let mut lat: Vec<Duration> = Vec::new();
+            let mut i = 0;
+            while !stop.load(Ordering::SeqCst) {
+                let t0 = Instant::now();
+                engine
+                    .rpc("mobile.actions.apply", json!({ "accountId": account, "folder": "INBOX", "uids": [1], "kind": if i % 2 == 0 { "seen" } else { "unseen" } }))
+                    .unwrap();
+                lat.push(t0.elapsed());
+                engine.rpc("mobile.messages.page", json!({ "accountId": account, "folder": "INBOX", "cursor": null, "limit": 50 })).unwrap();
+                i += 1;
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            lat
+        })
+    };
+
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true })).unwrap();
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(180);
+    let mut max_wal = 0u64;
+    let mut samples = 0u64;
+    while bodies() < BODIES as i64 + 1 && Instant::now() < deadline {
+        max_wal = max_wal.max(wal_len());
+        samples += 1;
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let stored = bodies();
+    let took = started.elapsed();
+    max_wal = max_wal.max(wal_len());
+    // Idle: the downloader has nothing left; taps and reads go on.
+    let idle_deadline = Instant::now() + Duration::from_secs(15);
+    while wal_len() >= IDLE_WAL && Instant::now() < idle_deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let idle_wal = wal_len();
+    stop.store(true, Ordering::SeqCst);
+    let mut lat = tapper.join().unwrap();
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    pause.release();
+    lat.sort();
+    let mb = |b: u64| b as f64 / (1024.0 * 1024.0);
+    eprintln!(
+        "the_wal_stays_bounded_while_the_foreground_downloader_writes: {stored} bodies in {took:?}, {samples} samples, max wal {:.1} MB, idle wal {:.1} MB; {} applies, p50 {:?}, p99 {:?}, max {:?}",
+        mb(max_wal),
+        mb(idle_wal),
+        lat.len(),
+        lat[lat.len() / 2],
+        lat[(lat.len() * 99 / 100).min(lat.len() - 1)],
+        lat.last().unwrap()
+    );
+    assert_eq!(stored, BODIES as i64 + 1, "the downloader did not finish the window");
+    assert!(max_wal < MAX_WAL, "the WAL reached {:.1} MB while the downloader wrote", mb(max_wal));
+    assert!(idle_wal < IDLE_WAL, "the WAL was still {:.1} MB with the downloader idle", mb(idle_wal));
+}
+
+// ── Fix round 1─────────────────────────────────────────────────────────────
 
 impl Fixture {
     /// Queues a refresh of `folder` without waiting for it.
