@@ -13,11 +13,16 @@
 //! Never log or put in an error: the password, a bundle, a frame or a secret.
 pub mod frames;
 pub mod qr;
+pub mod settings;
 #[cfg(test)]
 mod tests;
 
 pub use frames::{frames, parse_frame, Assembler, FrameError, FrameHeader, Progress, MAX_FRAMES, MAX_FRAME_CHARS};
 pub use qr::qr_svg;
+pub use settings::{
+    offline_window, Degrade, PhoneAccountNotifications, PhoneAccountSettings, PhoneAlias, PhoneImportantSender, PhoneQuietHours, PhoneSettings,
+    PhoneSignature, PhoneTemplate,
+};
 
 use super::crypto::{self, Params, TransferError};
 use crate::provider::Provider;
@@ -32,6 +37,8 @@ pub const MIN_PASSWORD_CHARS: usize = 12;
 /// The inflated bundle may not exceed this (a hostile code must not inflate
 /// into gigabytes).
 pub const MAX_PLAIN_BYTES: u64 = 1024 * 1024;
+/// What sealing adds to the deflated bundle: the `.mvtransfer` header and the AEAD tag.
+pub const SEALED_OVERHEAD: usize = crypto::HEADER_LEN + 16;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -118,6 +125,16 @@ pub struct PhoneAccount {
     /// The account's position in the desktop's account list, from 0.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub order: Option<u32>,
+    /// Hidden on the desktop: the phone leaves it out of its lists until shown again.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
+    /// The account's own settings (signature, aliases, notifications, offline window).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "settings::lenient_object")]
+    pub settings: Option<PhoneAccountSettings>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 impl Drop for PhoneAccount {
@@ -151,6 +168,8 @@ impl std::fmt::Debug for PhoneAccount {
             .field("client_id", &self.client_id)
             .field("color", &self.color)
             .field("order", &self.order)
+            .field("hidden", &self.hidden)
+            .field("settings", &self.settings.is_some())
             .finish()
     }
 }
@@ -159,6 +178,9 @@ impl std::fmt::Debug for PhoneAccount {
 pub struct PhoneBundle {
     pub v: u32,
     pub accounts: Vec<PhoneAccount>,
+    /// The desktop's global settings; the phone applies them on its first import that has them.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "settings::lenient_object")]
+    pub settings: Option<PhoneSettings>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -234,6 +256,12 @@ impl From<TransferError> for PhoneError {
 /// included, in the desktop's account order, each with its shown `color`) to a
 /// phone bundle. Pure; the order is kept and each account carries its position.
 pub fn phone_bundle(accounts: &Value) -> (PhoneBundle, Vec<Skipped>) {
+    phone_bundle_with_settings(accounts, None)
+}
+
+/// [`phone_bundle`] with the desktop's global settings snapshot (the wire names of
+/// [`PhoneSettings`]); each account object may carry `hidden` and a `phoneSettings` block.
+pub fn phone_bundle_with_settings(accounts: &Value, settings: Option<&Value>) -> (PhoneBundle, Vec<Skipped>) {
     let mut out = Vec::new();
     let mut skipped = Vec::new();
     for (i, a) in accounts.as_array().map(Vec::as_slice).unwrap_or_default().iter().enumerate() {
@@ -245,7 +273,7 @@ pub fn phone_bundle(accounts: &Value) -> (PhoneBundle, Vec<Skipped>) {
             Err(reason) => skipped.push(Skipped { email: text(a, "email").unwrap_or("").to_string(), reason }),
         }
     }
-    (PhoneBundle { v: PHONE_BUNDLE_VERSION, accounts: out }, skipped)
+    (PhoneBundle { v: PHONE_BUNDLE_VERSION, accounts: out, settings: settings::global_settings(settings) }, skipped)
 }
 
 /// A non-blank trimmed string field.
@@ -305,6 +333,8 @@ fn phone_account(a: &Value) -> Result<PhoneAccount, SkipReason> {
         client_id: None,
         color: text(a, "color").and_then(hex_color),
         order: None,
+        hidden: a.get("hidden").and_then(Value::as_bool) == Some(true),
+        settings: settings::account_settings(a),
     };
 
     match kind {
@@ -468,18 +498,26 @@ pub fn decode_phone_bundle<S: AsRef<str>>(password: &str, frames: &[S]) -> Resul
 
 /// The desktop's whole path: map, seal and split into frame texts. No
 /// supported account means no frames (and no key derivation).
-pub fn encode_phone_qr(password: &str, accounts: &Value) -> Result<PhoneQr, PhoneError> {
-    encode_phone_qr_with(password, accounts, crypto::EXPORT_PARAMS)
+pub fn encode_phone_qr(password: &str, accounts: &Value, settings: Option<&Value>) -> Result<PhoneQr, PhoneError> {
+    encode_phone_qr_settings_with(password, accounts, settings, crypto::EXPORT_PARAMS)
 }
 
-/// [`encode_phone_qr`] with chosen key derivation parameters. For tests only.
+/// [`encode_phone_qr`] without settings, with chosen key derivation parameters. For tests only.
 #[doc(hidden)]
 pub fn encode_phone_qr_with(password: &str, accounts: &Value, params: Params) -> Result<PhoneQr, PhoneError> {
+    encode_phone_qr_settings_with(password, accounts, None, params)
+}
+
+/// [`encode_phone_qr`] with chosen key derivation parameters. For tests only. The settings are
+/// cut to fit the code ([`settings::fit`]) before the one sealing.
+#[doc(hidden)]
+pub fn encode_phone_qr_settings_with(password: &str, accounts: &Value, settings: Option<&Value>, params: Params) -> Result<PhoneQr, PhoneError> {
     check_password(password)?;
-    let (bundle, skipped) = phone_bundle(accounts);
+    let (mut bundle, skipped) = phone_bundle_with_settings(accounts, settings);
     if bundle.accounts.is_empty() {
         return Ok(PhoneQr { frames: Vec::new(), skipped });
     }
+    settings::fit(&mut bundle);
     let sealed = seal_with(password, &bundle, params)?;
     Ok(PhoneQr { frames: frames::frames(&sealed, MAX_FRAME_CHARS)?, skipped })
 }

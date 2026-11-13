@@ -17,6 +17,8 @@ pub const MAX_FRAME_CHARS: usize = 800;
 pub const MAX_FRAMES: usize = 99;
 /// `MVQR1:` + 8 hex + `:` + `99/99` + `:`.
 const HEADER_MAX: usize = FRAME_MAGIC.len() + 1 + 8 + 1 + 5 + 1;
+/// Ciphertext bytes in one frame of [`MAX_FRAME_CHARS`].
+pub const CHUNK_BYTES: usize = (MAX_FRAME_CHARS - HEADER_MAX) / 4 * 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FrameError {

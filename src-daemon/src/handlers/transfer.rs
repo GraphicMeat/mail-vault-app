@@ -134,7 +134,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             RpcResponse::success(id, bundle_val)
         }
 
-        // The accounts (with secrets) sealed for the phone and shown as QR
+        // The accounts (with secrets) and the desktop's settings (`settings`,
+        // optional) sealed for the phone and shown as QR
         // frames: `{frames: [svg], count, skipped: [{email, reason}]}`. No
         // supported account is no frames, not an error.
         "transfer.phone_qr" => {
@@ -146,9 +147,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Some(v) if v.is_array() => v.clone(),
                 _ => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing or invalid accounts".to_string())),
             };
+            // The desktop's settings for the phone (optional: an older app sends none).
+            let settings = params.get("settings").filter(|v| v.is_object()).cloned();
             // argon2 and the QR rendering both stay off the async worker.
             let built = blocking(move || -> Result<(Vec<String>, Vec<phone::Skipped>), String> {
-                let qr = phone::encode_phone_qr(&password, &accounts).map_err(|e| e.to_string())?;
+                let qr = phone::encode_phone_qr(&password, &accounts, settings.as_ref()).map_err(|e| e.to_string())?;
                 let svgs = qr.frames.iter().map(|f| phone::qr_svg(f)).collect::<Result<Vec<_>, _>>()?;
                 Ok((svgs, qr.skipped))
             })
@@ -313,6 +316,21 @@ mod tests {
             assert!(!svg.contains("b@gmail.com") && !svg.contains("correct horse"));
         }
         assert_eq!(out["skipped"], json!([{ "email": "c@x.com", "reason": "no-secret" }]));
+    }
+
+    #[tokio::test]
+    async fn phone_qr_takes_the_desktop_settings_and_never_fails_on_them() {
+        let s = st();
+        let big = "x".repeat(200_000);
+        for settings in [
+            json!({ "theme": "dark", "sendDelay": 10, "templates": [{ "name": "t", "body": big }] }),
+            json!("not an object"),
+            json!(null),
+        ] {
+            let resp = call(&s, "transfer.phone_qr", json!({ "password": "correct horse battery", "accounts": phone_accounts(), "settings": settings })).await;
+            let out = resp.result.expect("phone_qr must succeed with any settings");
+            assert!(out["count"].as_u64().unwrap() >= 1);
+        }
     }
 
     #[tokio::test]

@@ -347,7 +347,7 @@ fn nothing_to_send_is_no_frames() {
 
 #[test]
 fn open_refuses_another_version_and_garbage() {
-    let future = PhoneBundle { v: 2, accounts: vec![] };
+    let future = PhoneBundle { v: 2, accounts: vec![], settings: None };
     let sealed = seal_with(PW, &future, cheap()).unwrap();
     assert!(matches!(open(PW, &sealed).unwrap_err(), PhoneError::Invalid(_)));
     // sealed but not deflate
@@ -376,7 +376,7 @@ fn errors_name_no_secret() {
 #[test]
 fn production_seal_uses_the_export_parameters() {
     // header bytes 7..19 carry m, t, p
-    let bundle = PhoneBundle { v: 1, accounts: vec![] };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None };
     let sealed = seal(PW, &bundle).unwrap();
     let u32_at = |i: usize| u32::from_le_bytes([sealed[i], sealed[i + 1], sealed[i + 2], sealed[i + 3]]);
     assert_eq!(Params { m_kib: u32_at(7), t: u32_at(11), p: u32_at(15) }, crypto::EXPORT_PARAMS);
@@ -386,7 +386,7 @@ fn production_seal_uses_the_export_parameters() {
 fn open_refuses_key_derivation_above_the_export_parameters() {
     // A crafted code must not make the phone derive with more memory or time than the desktop
     // ever seals with (1 GiB at the crypto ceiling). Refused from the header, before argon2.
-    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![] }, cheap()).unwrap();
+    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None }, cheap()).unwrap();
     let e = crypto::EXPORT_PARAMS;
     for (at, value) in [(7, e.m_kib + 1), (11, e.t + 1), (15, e.p + 1)] {
         let mut s = sealed.clone();
@@ -397,7 +397,7 @@ fn open_refuses_key_derivation_above_the_export_parameters() {
 
 #[test]
 fn open_accepts_exactly_the_export_parameters() {
-    let bundle = PhoneBundle { v: 1, accounts: vec![] };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None };
     assert_eq!(open(PW, &seal(PW, &bundle).unwrap()).unwrap(), bundle);
 }
 
@@ -451,4 +451,250 @@ fn an_old_bundle_without_color_or_order_still_opens() {
     let b = open(PW, &sealed).unwrap();
     assert_eq!(b.accounts.len(), 1);
     assert_eq!((b.accounts[0].color.clone(), b.accounts[0].order), (None, None));
+}
+
+// ── settings ────────────────────────────────────────────────────────────────
+
+fn desktop_settings() -> Value {
+    json!({ "language": "de", "theme": "light", "palette": "teal", "markAsReadMode": "delay", "markAsReadDelay": 5,
+        "confirmBeforeDelete": true, "afterDeleteSelect": "previous", "swipeLeftAction": "archive", "swipeRightAction": "star",
+        "sendDelay": 10, "holdExternalContent": false, "dateFormat": "yyyy-MM-dd", "timeFormat": "24h", "notificationPreview": false,
+        "importantSenders": [{ "match": "boss@corp.test", "throughQuietHours": true }],
+        "templates": [{ "name": "Thanks", "body": "Thank you!" }],
+        "someFutureSetting": { "x": 1 } })
+}
+
+fn with_phone_settings(mut a: Value, block: Value) -> Value {
+    a["phoneSettings"] = block;
+    a
+}
+
+#[test]
+fn hidden_accounts_are_carried_as_hidden() {
+    let mut g = gmail_oauth();
+    g["hidden"] = json!(true);
+    let a = one(g);
+    assert!(a.hidden);
+    assert_eq!(serde_json::to_value(&a).unwrap()["hidden"], json!(true));
+    // not hidden: no field on the wire at all
+    let v = serde_json::to_value(one(imap_password())).unwrap();
+    assert!(v.get("hidden").is_none() && v.get("settings").is_none(), "{v}");
+}
+
+#[test]
+fn global_and_account_settings_are_carried() {
+    let g = with_phone_settings(
+        gmail_oauth(),
+        json!({ "signature": { "html": "<p>Gee</p>", "text": "Gee", "enabled": true }, "sendAs": "alias@gmail.com",
+            "aliases": [{ "address": "alias@gmail.com", "name": "Alias" }], "sentFolderOverride": "[Gmail]/Sent Mail",
+            "notifications": { "enabled": false, "folders": ["INBOX"], "quietHours": { "enabled": true, "start": "22:00", "end": "07:00" } },
+            "fetchMode": "keepRecent", "cacheMonths": 6 }),
+    );
+    let (b, _) = phone_bundle_with_settings(&json!([g, imap_password()]), Some(&desktop_settings()));
+    let s = b.settings.clone().unwrap();
+    assert_eq!((s.language.as_deref(), s.theme.as_deref(), s.palette.as_deref()), (Some("de"), Some("light"), Some("teal")));
+    assert_eq!((s.mark_as_read_mode.as_deref(), s.mark_as_read_delay, s.send_delay), (Some("delay"), Some(5), Some(10)));
+    assert_eq!((s.hold_external_content, s.notification_preview, s.confirm_before_delete), (Some(false), Some(false), Some(true)));
+    assert_eq!(s.templates.as_ref().unwrap()[0].name, "Thanks");
+    assert_eq!(s.important_senders.as_ref().unwrap()[0].matches, "boss@corp.test");
+    let a = b.accounts[0].settings.clone().unwrap();
+    assert_eq!(a.signature.as_ref().unwrap().text, "Gee");
+    assert_eq!(a.send_as.as_deref(), Some("alias@gmail.com"));
+    assert_eq!(a.aliases.as_ref().unwrap()[0].name, "Alias");
+    assert_eq!(a.sent_folder_override.as_deref(), Some("[Gmail]/Sent Mail"));
+    assert_eq!(a.notifications.as_ref().unwrap().enabled, Some(false));
+    assert_eq!(a.notifications.as_ref().unwrap().quiet_hours.as_ref().unwrap().start, "22:00");
+    assert_eq!(a.offline_window.as_deref(), Some("6m"));
+    // an account without a block carries none
+    assert!(b.accounts[1].settings.is_none());
+    // and it all survives the trip
+    let g = with_phone_settings(gmail_oauth(), json!({ "fetchMode": "hoarder" }));
+    let qr = encode_phone_qr_settings_with(PW, &json!([g]), Some(&desktop_settings()), cheap()).unwrap();
+    let got = decode_phone_bundle(PW, &qr.frames).unwrap();
+    assert_eq!(got.settings.unwrap().palette.as_deref(), Some("teal"));
+    assert_eq!(got.accounts[0].settings.as_ref().unwrap().offline_window.as_deref(), Some("all"));
+}
+
+#[test]
+fn a_setting_of_another_shape_loses_only_that_setting() {
+    let mut s = desktop_settings();
+    s["sendDelay"] = json!("ten");
+    s["templates"] = json!("not a list");
+    let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+    let got = b.settings.unwrap();
+    assert_eq!((got.send_delay, got.templates.clone()), (None, None));
+    assert_eq!(got.language.as_deref(), Some("de"));
+    // A newer desktop's odd shapes, straight on the wire: the code still opens with every account.
+    let wire = br#"{"v":1,"settings":{"theme":7,"language":"fr"},"accounts":[{"email":"a@x.test","kind":"imap","auth":"password",
+        "imapHost":"imap.x.test","password":"pw","hidden":true,"settings":{"signature":"oops","sendAs":"b@x.test"}},
+        {"email":"c@x.test","kind":"imap","auth":"password","imapHost":"imap.x.test","password":"pw","settings":[1,2]}]}"#;
+    let b: PhoneBundle = serde_json::from_slice(wire).unwrap();
+    assert_eq!(b.accounts.len(), 2);
+    let s = b.settings.clone().unwrap();
+    assert_eq!((s.theme, s.language.as_deref()), (None, Some("fr")));
+    let a = b.accounts[0].settings.clone().unwrap();
+    assert_eq!((a.signature, a.send_as.as_deref()), (None, Some("b@x.test")));
+    assert!(b.accounts[0].hidden);
+    assert!(b.accounts[1].settings.is_none());
+}
+
+#[test]
+fn an_older_phone_reads_a_bundle_with_settings() {
+    // The phone's structs before settings, as an older build has them.
+    #[derive(serde::Deserialize)]
+    #[allow(dead_code)]
+    #[serde(rename_all = "camelCase")]
+    struct OldAccount {
+        email: String,
+        #[serde(default)]
+        display_name: String,
+        kind: PhoneKind,
+        auth: PhoneAuth,
+        #[serde(default)]
+        imap_host: Option<String>,
+        #[serde(default)]
+        password: Option<String>,
+        #[serde(default)]
+        refresh: Option<String>,
+        #[serde(default)]
+        color: Option<String>,
+        #[serde(default)]
+        order: Option<u32>,
+    }
+    #[derive(serde::Deserialize)]
+    struct OldBundle {
+        v: u32,
+        accounts: Vec<OldAccount>,
+    }
+    let mut g = with_phone_settings(gmail_oauth(), json!({ "signature": { "html": "<b>x</b>", "text": "x" }, "fetchMode": "keepRecent" }));
+    g["hidden"] = json!(true);
+    let (b, _) = phone_bundle_with_settings(&json!([g, imap_password()]), Some(&desktop_settings()));
+    let text = serde_json::to_string(&b).unwrap();
+    assert!(text.contains("\"settings\"") && text.contains("\"hidden\""));
+    let old: OldBundle = serde_json::from_str(&text).unwrap();
+    assert_eq!(old.v, 1);
+    assert_eq!(old.accounts.len(), 2);
+    assert_eq!(old.accounts[0].refresh.as_deref(), Some("rt-google"));
+}
+
+#[test]
+fn a_bundle_from_an_older_desktop_has_no_settings() {
+    let old = br##"{"v":1,"accounts":[{"email":"a@x.test","kind":"imap","auth":"password","imapHost":"imap.x.test","password":"pw","color":"#112233","order":0}]}"##;
+    let mut enc = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::best());
+    enc.write_all(old).unwrap();
+    let sealed = crypto::encrypt_with(PW, &enc.finish().unwrap(), cheap()).unwrap();
+    let b = open(PW, &sealed).unwrap();
+    assert!(b.settings.is_none());
+    assert!(!b.accounts[0].hidden && b.accounts[0].settings.is_none());
+}
+
+#[test]
+fn offline_window_maps_the_desktop_fetch_mode() {
+    let table: [(Option<&str>, Option<f64>, &str); 14] = [
+        (Some("hoarder"), None, "all"),
+        (Some("hoarder"), Some(3.0), "all"),
+        (Some("keepRecent"), Some(1.0), "1m"),
+        (Some("keepRecent"), Some(3.0), "3m"),
+        (Some("keepRecent"), Some(6.0), "6m"),
+        (Some("keepRecent"), Some(12.0), "12m"),
+        (Some("keepRecent"), Some(2.0), "3m"),
+        (Some("keepRecent"), Some(9.0), "12m"),
+        (Some("keepRecent"), Some(24.0), "12m"),
+        (Some("keepRecent"), None, "3m"),
+        (Some("keepRecent"), Some(0.0), "3m"),
+        (Some("onDemand"), Some(12.0), "3m"),
+        (Some("indexOnly"), Some(1.0), "3m"),
+        (None, None, "3m"),
+    ];
+    for (mode, months, want) in table {
+        assert_eq!(offline_window(mode, months), want, "{mode:?} {months:?}");
+    }
+}
+
+#[test]
+fn strip_data_images_keeps_everything_else() {
+    let html = r#"<p>Hi</p><IMG alt="logo" SRC="data:image/png;base64,AAAA"><img src="https://x.test/a.png"><b>bye</b>"#;
+    assert_eq!(settings::strip_data_images(html), r#"<p>Hi</p><img src="https://x.test/a.png"><b>bye</b>"#);
+    assert_eq!(settings::strip_data_images("<p>plain</p>"), "<p>plain</p>");
+}
+
+/// Five OAuth accounts with long random tokens, each with a `signature`, plus `templates`.
+fn heavy(signature: impl Fn(usize) -> Value, templates: usize) -> (Value, Value) {
+    let accounts: Vec<Value> = (0..5)
+        .map(|i| {
+            let mut a = outlook_graph();
+            a["email"] = json!(format!("user{i}@outlook.com"));
+            a["oauth2RefreshToken"] = json!(noise(i as u64 + 7, 1200));
+            with_phone_settings(a, json!({ "signature": signature(i), "sendAs": "", "fetchMode": "keepRecent", "cacheMonths": 3 }))
+        })
+        .collect();
+    let mut s = desktop_settings();
+    s["templates"] = json!((0..templates).map(|i| json!({ "name": format!("t{i}"), "body": noise(i as u64 + 500, 900) })).collect::<Vec<_>>());
+    (Value::Array(accounts), s)
+}
+
+fn fit_of(accounts: &Value, s: &Value) -> (Degrade, PhoneBundle) {
+    let (mut b, _) = phone_bundle_with_settings(accounts, Some(s));
+    let d = settings::fit(&mut b);
+    (d, b)
+}
+
+fn assert_accounts_intact(accounts: &Value, s: &Value) {
+    let qr = encode_phone_qr_settings_with(PW, accounts, Some(s), cheap()).unwrap();
+    let got = decode_phone_bundle(PW, &qr.frames).unwrap();
+    assert_eq!(got.accounts.len(), 5);
+    for (i, a) in got.accounts.iter().enumerate() {
+        assert_eq!(a.refresh.as_deref(), Some(noise(i as u64 + 7, 1200).as_str()));
+    }
+    assert!(got.settings.is_some(), "the scalars always fit");
+}
+
+#[test]
+fn small_settings_fit_whole() {
+    let (accounts, s) = heavy(|i| json!({ "html": format!("<p>User {i}</p>"), "text": format!("User {i}") }), 1);
+    let (d, b) = fit_of(&accounts, &s);
+    assert_eq!(d, Degrade::Full);
+    assert_eq!(b.settings.unwrap().templates.unwrap().len(), 1);
+}
+
+#[test]
+fn too_many_templates_go_first() {
+    let (accounts, s) = heavy(|i| json!({ "html": format!("<p>User {i}</p>"), "text": format!("User {i}") }), 20);
+    let (d, b) = fit_of(&accounts, &s);
+    assert_eq!(d, Degrade::NoTemplates);
+    assert!(b.settings.as_ref().unwrap().templates.is_none());
+    assert_eq!(b.settings.as_ref().unwrap().language.as_deref(), Some("de"));
+    assert!(b.accounts.iter().all(|a| a.settings.as_ref().unwrap().signature.as_ref().unwrap().html.starts_with("<p>User")));
+    assert_accounts_intact(&accounts, &s);
+}
+
+#[test]
+fn then_images_inside_signatures() {
+    let sig = |i: usize| {
+        json!({ "html": format!("<p>User {i}</p><img src=\"data:image/png;base64,{}\">", noise(i as u64 + 900, 3000)), "text": format!("User {i}") })
+    };
+    let (accounts, s) = heavy(sig, 20);
+    let (d, b) = fit_of(&accounts, &s);
+    assert_eq!(d, Degrade::NoSignatureImages);
+    assert!(b.settings.as_ref().unwrap().templates.is_none());
+    for (i, a) in b.accounts.iter().enumerate() {
+        let sig = a.settings.as_ref().unwrap().signature.as_ref().unwrap();
+        assert_eq!((sig.html.clone(), sig.text.clone()), (format!("<p>User {i}</p>"), format!("User {i}")));
+    }
+    assert_accounts_intact(&accounts, &s);
+}
+
+#[test]
+fn then_the_signatures() {
+    let sig = |i: usize| json!({ "html": format!("<p>{}</p>", noise(i as u64 + 300, 2500)), "text": noise(i as u64 + 400, 2500) });
+    let (accounts, s) = heavy(sig, 20);
+    let (d, b) = fit_of(&accounts, &s);
+    assert_eq!(d, Degrade::NoSignatures);
+    for a in &b.accounts {
+        let st = a.settings.as_ref().unwrap();
+        assert!(st.signature.is_none());
+        assert_eq!(st.offline_window.as_deref(), Some("3m"));
+    }
+    assert_eq!(b.settings.as_ref().unwrap().theme.as_deref(), Some("light"));
+    assert_accounts_intact(&accounts, &s);
 }
