@@ -626,13 +626,18 @@ pub fn reply_to_mismatch(row: &Value) -> Option<Value> {
         Some(other) => str_at(other, &["address"]),
         None => "",
     };
+    let mut reply_domain = domain_part(reply_to);
     // A row cached before the header parser was anchored can hold the tail of
-    // a DKIM-Signature here ("Message-ID:Content-Type; i=...; bh=..."). A colon
-    // or semicolon is header syntax, never part of an unquoted address.
-    if reply_to.contains([':', ';']) {
-        return None;
+    // a DKIM-Signature here ("Message-ID:Content-Type; i=reply@d; bh=...").
+    // Tag syntax after the '@' is no part of a domain: judge the hostname it
+    // starts with, so that tail (whose i= is the signer's own) raises nothing
+    // while a foreign domain dressed up the same way still warns.
+    if reply_domain.contains(';') {
+        reply_domain = reply_domain
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+            .collect();
     }
-    let reply_domain = domain_part(reply_to);
     if reply_domain.is_empty()
         || reply_domain == from_domain
         || from_domain.ends_with(&format!(".{reply_domain}"))
