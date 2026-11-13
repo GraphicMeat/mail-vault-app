@@ -333,6 +333,9 @@ fn header_syntax_around_a_foreign_domain_still_warns() {
     // The sender's domain inside a quoted local part is not the domain.
     let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "\"x@bank.test;\"@evil.test"}});
     assert_eq!(reply_to_mismatch(&row).unwrap()["replyToDomain"], "evil.test");
+    // A later address of the sender's cannot hide an earlier foreign one.
+    let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "x@evil.test; i=y@bank.test"}});
+    assert_eq!(reply_to_mismatch(&row).unwrap()["replyToDomain"], "evil.test");
     // Nothing that reads as a hostname after the '@': still a warning.
     let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "x@;bank.test"}});
     assert!(reply_to_mismatch(&row).is_some());
