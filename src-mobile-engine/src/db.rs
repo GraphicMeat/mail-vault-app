@@ -327,8 +327,10 @@ pub struct Engine {
 /// file at the first commit after a restart, and once the log passes [`CATCH_UP_FRAMES`] the
 /// checkpointer catches up: bulk writers ([`Shared::bulk_gate`], before each unit of the
 /// downloader and of a sync pass) wait for it (at most [`BULK_WAIT_MAX`]) while it checkpoints
-/// without the settle delay until the log starts over. Taps never wait on it. With the whole log
-/// copied and no commit since, a TRUNCATE that waits on no reader empties the file.
+/// without the settle delay until the log starts over. Taps never wait on a checkpoint. With the
+/// whole log copied and no commit since, a TRUNCATE that waits on no reader empties the file; it
+/// holds the writer, so a tap may wait behind it as behind any short write (nothing is left to
+/// copy, so it only cuts the file).
 pub(crate) struct Checkpointer {
     state: Mutex<CkptState>,
     /// Wakes the checkpoint thread.

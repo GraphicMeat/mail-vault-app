@@ -662,3 +662,28 @@ fn a_v7_file_migrates_to_v8_and_keeps_its_folders() {
     let n: i64 = c.query_row("SELECT count(*) FROM body_retry", [], |r| r.get(0)).unwrap();
     assert_eq!(n, 0);
 }
+
+/// An engine that wrote a lot and then went quiet (no write, no read) empties its WAL file: the
+/// checkpointer copies the whole log, then truncates it, since no commit will come to start the
+/// log over and let `journal_size_limit` cut it.
+#[test]
+fn an_idle_engine_empties_its_wal() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path()).unwrap();
+    let filler = "x".repeat(64 * 1024);
+    for i in 0..128 {
+        e.set_setting(&format!("walFill.{i}"), &filler).unwrap();
+    }
+    let wal = tmp.path().join("mobile.db-wal");
+    let wal_len = || std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
+    let written = wal_len();
+    assert!(written > 6 * 1024 * 1024, "the writes filled only {written} bytes of WAL");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while wal_len() >= 1024 * 1024 && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let idle = wal_len();
+    eprintln!("an_idle_engine_empties_its_wal: {written} bytes written, {idle} bytes idle");
+    assert!(idle < 1024 * 1024, "the idle WAL is still {idle} bytes");
+    assert_eq!(e.setting("walFill.127").unwrap().as_deref(), Some(filler.as_str()));
+}
