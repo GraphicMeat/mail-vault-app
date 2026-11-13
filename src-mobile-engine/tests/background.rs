@@ -691,6 +691,31 @@ fn a_background_download_does_not_run_while_the_app_is_in_front() {
     assert_eq!(f.bodies(&account, "INBOX"), 1, "downloaded once the app left the front");
 }
 
+/// The app comes to the front while a download is still queued behind another pass: the download
+/// never signs in, so the page's own passes do not wait behind its connect and LOGIN.
+#[test]
+fn a_queued_download_does_not_sign_in_once_the_app_is_in_front() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.run(BUDGET);
+    // A page pass holds the sync worker: it stalls at its folder list.
+    let mut stall = server.pause_command("LIST");
+    assert_eq!(f.engine.rpc("mobile.sync.refresh", json!({ "accountId": account })).unwrap(), json!({ "queued": true }));
+    assert!(stall.entered(BUDGET), "the page pass reached its LIST");
+    let logins = server.count_commands("LOGIN");
+    std::thread::scope(|s| {
+        let run = s.spawn(|| f.engine.background_fetch(Duration::from_secs(5)).unwrap());
+        // The run's download is queued behind the stalled pass; then the app comes to the front.
+        std::thread::sleep(Duration::from_millis(300));
+        f.engine.rpc("mobile.app.state", json!({ "foreground": true })).unwrap();
+        stall.release();
+        run.join().unwrap();
+    });
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(server.count_commands("LOGIN"), logins, "the queued download signed in with the app in front");
+}
+
 // ── Scheduled send (plan 4 Task 8, Ruling 13) ───────────────────────────────
 
 const MIN: i64 = 60_000;

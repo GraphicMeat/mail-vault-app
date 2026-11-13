@@ -331,6 +331,11 @@ fn run_job(shared: &Shared, job: &Job) -> Ended {
     if job.deadline.is_some_and(|d| Instant::now() >= d) {
         return Ended::Failed(Code::Timeout.as_str());
     }
+    // A background download whose turn came with the app in front (or the task ended): no
+    // sign-in, so the page's passes queued behind it start at once.
+    if job.download && crate::background::stop_downloading(shared, job.deadline) {
+        return Ended::Done;
+    }
     // A parked account never shows a pass starting: only that it needs a new sign-in.
     let parked = shared
         .read(|c| c.query_row("SELECT needs_auth FROM accounts WHERE id = ?1", [&job.account], |r| r.get::<_, i64>(0)).optional())
