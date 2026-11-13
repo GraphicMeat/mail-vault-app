@@ -42,6 +42,7 @@ fn sentence(rng: &mut Rng, words: u64) -> String {
 
 /// Replaces nothing: adds `count` rows (uids 1..=count) for [`ACCOUNT_ID`] / [`FOLDER`].
 pub fn seed(engine: &Engine, count: usize) -> Result<(), EngineError> {
+    crate::offline::hold_front(engine.shared());
     engine.write(|c| {
         insert_account_and_folder(c, count)?;
         insert_rows(c, count)
@@ -53,6 +54,8 @@ pub fn seed(engine: &Engine, count: usize) -> Result<(), EngineError> {
 /// deterministic seed over uids 1..=count, which rewrites the rows that exist with the same values
 /// and adds the rest. Returns whether it wrote anything; a second launch writes nothing.
 pub fn ensure_seeded(engine: &Engine, count: usize) -> Result<bool, EngineError> {
+    // No server stands behind the seed accounts: nothing to download in front.
+    crate::offline::hold_front(engine.shared());
     let (wrote, showcase) = engine.write(|c| {
         insert_showcase(c)?;
         let n: i64 = c.query_row(

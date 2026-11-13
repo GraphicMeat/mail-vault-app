@@ -172,6 +172,12 @@ pub(crate) fn attachments_dir(shared: &Shared, account: &str) -> Option<PathBuf>
     Some(base.join("offline").join("att").join(hash))
 }
 
+/// Perf-gate seed: its accounts have no server, so the foreground downloader leaves them alone.
+#[cfg(feature = "perf-gate")]
+pub(crate) fn hold_front(shared: &Shared) {
+    shared.offline.front_off.store(true, Ordering::SeqCst);
+}
+
 /// Drops `account`'s offline files (the account is being removed).
 pub(crate) fn forget_account(shared: &Shared, account: &str) {
     if let Some(dir) = attachments_dir(shared, account) {
@@ -842,6 +848,15 @@ mod tests {
         assert!(got["accounts"][0]["attachmentsBytes"].as_u64().unwrap() > 0, "{got}");
         assert_eq!(got["accounts"][0]["offline"], 2);
         assert_eq!(got["accounts"][0]["messages"], 2);
+        // Expunged on the server: the next download drops message 1's files.
+        server.mutate(|s| s.find_mut("INBOX").unwrap().expunge(&[1], false));
+        crate::sync::sync_now_for_test(f.e.shared(), &f.account, Some("INBOX"));
+        let before = f.e.rpc("mobile.offline.get", json!({})).unwrap()["accounts"][0]["attachmentsBytes"].as_u64().unwrap();
+        f.download();
+        assert_eq!(files(), 1, "message 2's inline image stays, message 1's files go");
+        assert!(!std::path::Path::new(path).exists());
+        let after = f.e.rpc("mobile.offline.get", json!({})).unwrap()["accounts"][0]["attachmentsBytes"].as_u64().unwrap();
+        assert!(after < before, "{before} -> {after}");
         // Removing the account takes its offline files.
         f.e.rpc("mobile.accounts.remove", json!({ "accountId": f.account })).unwrap();
         assert!(!dir.exists());

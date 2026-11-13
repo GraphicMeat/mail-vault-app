@@ -563,6 +563,7 @@ fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, dead
             return Ok(());
         }
         crate::offline::prune_aged(shared, account, now_ms())?;
+        crate::attachments::sweep_offline(shared, account)?;
         go_on(shared, &stop)?;
         sync_folder_list(shared, backend, account)?;
         let fetch_from = crate::offline::bounds(shared, account, now_ms()).fetch_from;

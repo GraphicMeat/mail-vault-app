@@ -821,6 +821,39 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn Backend, account: &str
     Ok(done)
 }
 
+/// Deletes `account`'s offline files whose message is no longer on the phone (expunged, moved,
+/// or beyond a window the user shrank; a Premium lapse removes no row, so it removes no file),
+/// with partial downloads of such parts. Returns how many finished files went.
+pub(crate) fn sweep_offline(shared: &Shared, account: &str) -> Result<usize, Fail> {
+    let Some(dir) = crate::offline::attachments_dir(shared, account) else {
+        return Ok(0);
+    };
+    let Ok(rd) = fs::read_dir(&dir) else { return Ok(0) };
+    let rows: Vec<(String, i64, u32, String)> = shared.read(|c| {
+        let mut st = c.prepare_cached(
+            "SELECT a.folder, f.uid_validity, a.uid, a.section FROM attachments a
+             JOIN messages m ON m.account_id = a.account_id AND m.folder = a.folder AND m.uid = a.uid
+             JOIN folders f ON f.account_id = a.account_id AND f.path = a.folder
+             WHERE a.account_id = ?1 AND f.uid_validity IS NOT NULL",
+        )?;
+        let rows = st.query_map([account], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? as u32, r.get(3)?)))?.collect();
+        rows
+    })?;
+    let keep: HashSet<String> = rows
+        .into_iter()
+        .map(|(folder, validity, uid, section)| file_name(&PartKey { account_id: account.to_string(), folder, uid, section }, validity))
+        .collect();
+    let mut removed = 0;
+    for e in rd.filter_map(|e| e.ok()) {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let base = name.strip_suffix(META).or_else(|| name.strip_suffix(PART)).unwrap_or(&name);
+        if is_final_name(base) && !keep.contains(base) && fs::remove_file(e.path()).is_ok() && base == name {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
 /// Whether some attachment [`prefetch`] would download for `account` is not among its offline
 /// files yet (and not waiting for a retry).
 pub(crate) fn prefetch_left(shared: &Shared, account: &str) -> bool {
