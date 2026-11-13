@@ -413,7 +413,7 @@ impl<'a> GraphBackend<'a> {
             return Err(Fail::Code(Code::Invalid, format!("generation of {} changed during sync", folder.path)));
         }
         if self.listed.as_ref().is_none_or(|(p, _)| *p != folder.path) {
-            self.window(&folder.path, sync::window_start_ms(crate::compose::now_ms()))?;
+            self.window(&folder.path, crate::offline::bounds(self.shared, &self.account, crate::compose::now_ms()).fetch_from)?;
         }
         Ok(&self.listed.as_ref().expect("listed just now").1)
     }
@@ -912,7 +912,7 @@ impl Backend for GraphBackend<'_> {
             return Ok(None);
         }
         let remote = remote_folder(&folder.path).to_string();
-        let since = timestamp((newest_ms - 1000).max(sync::window_start_ms(crate::compose::now_ms())));
+        let since = timestamp((newest_ms - 1000).max(crate::offline::bounds(self.shared, &self.account, crate::compose::now_ms()).fetch_from));
         let mut rows: Vec<GraphSynced> = Vec::new();
         let mut next: Option<String> = None;
         let mut slowest = Duration::ZERO;

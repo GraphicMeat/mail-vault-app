@@ -1,5 +1,6 @@
 //! The sync worker: one background thread per engine that pulls an account's folder list and a
-//! folder's last 90 days of headers into `mobile.db`, plus the RPCs around it
+//! folder's headers inside the account's offline window (`offline.rs`, 3 months unless the user
+//! chose otherwise) into `mobile.db`, plus the RPCs around it
 //! (`mobile.sync.refresh`, `mobile.folders.list`).
 //!
 //! The worker never degrades the UI: it runs at background QoS, does its network work outside any
@@ -23,14 +24,17 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-/// Header window per folder.
+/// The default header window (`offline::DEFAULT_WINDOW`), in days.
 const WINDOW_DAYS: i64 = 90;
 /// Most message rows one write transaction touches.
 const BATCH: usize = 200;
 const DAY_MS: i64 = 86_400_000;
 /// How long a row outside the window that a server search stored (or the user last opened) is kept
 /// when the pass does not list it: sync's removals leave it alone until this long after its mark.
-const OUT_OF_WINDOW_KEEP_MS: i64 = 30 * DAY_MS;
+pub(crate) const OUT_OF_WINDOW_KEEP_MS: i64 = 30 * DAY_MS;
+/// A page pass runs at least this long before it gives way to another page pass waiting behind
+/// it (it is queued again and goes on from where it stopped).
+const PAGE_SLICE: std::time::Duration = std::time::Duration::from_secs(2);
 
 // ── The worker and its queue ────────────────────────────────────────────────
 
@@ -46,12 +50,15 @@ pub(crate) struct Job {
     folder: Option<String>,
     quick: bool,
     download: bool,
+    /// A download of the foreground downloader (`offline.rs`): it stops when the app leaves the
+    /// front or a page pass waits, not when the app is in front.
+    front: bool,
     deadline: Option<Instant>,
 }
 
 impl Job {
     pub(crate) fn new(account: &str, folder: Option<&str>) -> Job {
-        Job { account: account.to_string(), folder: folder.map(String::from), quick: false, download: false, deadline: None }
+        Job { account: account.to_string(), folder: folder.map(String::from), quick: false, download: false, front: false, deadline: None }
     }
 
     /// Running `self` also does everything `other` asks for. A full pass covers a quick one,
@@ -59,6 +66,7 @@ impl Job {
     fn covers(&self, other: &Job) -> bool {
         self.account == other.account
             && self.download == other.download
+            && self.front == other.front
             && (!self.quick || other.quick)
             && (self.folder == other.folder || (self.folder.is_none() && other.folder.as_deref().is_some_and(is_inbox)))
     }
@@ -153,7 +161,7 @@ impl Worker {
     /// what that pass left to notify.
     pub(crate) fn enqueue_waited(&self, shared: &Arc<Shared>, account: &str, deadline: Instant) -> Result<Arc<Ticket>, String> {
         let ticket = Arc::new(Ticket { collect: true, ..Ticket::default() });
-        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, download: false, deadline: Some(deadline) };
+        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, download: false, front: false, deadline: Some(deadline) };
         self.enqueue_with(shared, job, Some(Arc::clone(&ticket)))?;
         Ok(ticket)
     }
@@ -162,7 +170,16 @@ impl Worker {
     /// and returns a ticket that ends with it.
     pub(crate) fn enqueue_download(&self, shared: &Arc<Shared>, account: &str, deadline: Instant) -> Result<Arc<Ticket>, String> {
         let ticket = Arc::new(Ticket::default());
-        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, download: true, deadline: Some(deadline) };
+        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, download: true, front: false, deadline: Some(deadline) };
+        self.enqueue_with(shared, job, Some(Arc::clone(&ticket)))?;
+        Ok(ticket)
+    }
+
+    /// Queues one slice of the foreground downloader's download of `account` (`offline.rs`), which
+    /// stops at `deadline`, and returns a ticket that ends with it.
+    pub(crate) fn enqueue_front_download(&self, shared: &Arc<Shared>, account: &str, deadline: Instant) -> Result<Arc<Ticket>, String> {
+        let ticket = Arc::new(Ticket::default());
+        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, download: true, front: true, deadline: Some(deadline) };
         self.enqueue_with(shared, job, Some(Arc::clone(&ticket)))?;
         Ok(ticket)
     }
@@ -194,6 +211,7 @@ impl Worker {
                 q.deadline = job.deadline;
             }
             tickets.extend(ticket);
+            count_waiting(shared, &st);
             return Ok(());
         }
         // Jobs the new one covers go, and their waiters wait on it instead.
@@ -208,6 +226,7 @@ impl Worker {
         }
         st.pending = kept;
         st.pending.push_back((job, tickets));
+        count_waiting(shared, &st);
         self.queue.cv.notify_one();
         Ok(())
     }
@@ -231,6 +250,13 @@ impl Worker {
     }
 }
 
+/// Publishes how many page passes (not downloads) wait in the queue: a download in front stops
+/// for them ([`crate::offline::stop_download`]), a long page pass gives way to them.
+fn count_waiting(shared: &Shared, st: &QueueState) {
+    let n = st.pending.iter().filter(|(j, _)| !j.download).count();
+    shared.offline.page_waiting.store(n, std::sync::atomic::Ordering::SeqCst);
+}
+
 fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
     background_qos();
     loop {
@@ -241,12 +267,32 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
                     return;
                 }
                 if let Some(next) = st.pending.pop_front() {
+                    count_waiting(&shared, &st);
                     break next;
                 }
                 st = queue.cv.wait(st).unwrap_or_else(|p| p.into_inner());
             }
         };
-        let ended = run_job(&shared, &job);
+        let (ended, again) = run_job(&shared, &job);
+        if again {
+            // A page pass that gave way to another: queued again behind it with its waiters, and
+            // it goes on from what it committed.
+            let mut st = lock(&queue.state);
+            if !st.stop {
+                match st.pending.iter_mut().find(|(q, _)| q.covers(&job)) {
+                    Some((_, t)) => t.extend(tickets),
+                    None => st.pending.push_back((job, tickets)),
+                }
+                count_waiting(&shared, &st);
+                queue.cv.notify_one();
+                continue;
+            }
+            drop(st);
+        }
+        if !job.download && ended == Ended::Done {
+            // New rows may want their bodies.
+            crate::offline::wake(&shared);
+        }
         // On this thread, before the next pass starts: no other pass is half way through the
         // folder's inserts while a background run reads what is new.
         if ended == Ended::Done && tickets.iter().any(|t| t.collect) {
@@ -325,16 +371,18 @@ impl Fail {
     }
 }
 
-fn run_job(shared: &Shared, job: &Job) -> Ended {
+/// Runs one queued pass; the second value is true when a page pass gave way to another waiting
+/// behind it and must be queued again.
+fn run_job(shared: &Shared, job: &Job) -> (Ended, bool) {
     // A background run's pass whose share of the budget is gone (it waited behind a slow pass):
     // the run has moved on, so no network and no events.
     if job.deadline.is_some_and(|d| Instant::now() >= d) {
-        return Ended::Failed(Code::Timeout.as_str());
+        return (Ended::Failed(Code::Timeout.as_str()), false);
     }
-    // A background download whose turn came with the app in front (or the task ended): no
-    // sign-in, so the page's passes queued behind it start at once.
-    if job.download && crate::background::stop_downloading(shared, job.deadline) {
-        return Ended::Done;
+    // A background download whose turn came with the app in front (or the task ended), or a
+    // foreground one with a page pass waiting: no sign-in, so the passes behind it start at once.
+    if job.download && crate::offline::stop_download(shared, job.deadline, job.front) {
+        return (Ended::Done, false);
     }
     // A parked account never shows a pass starting: only that it needs a new sign-in.
     let parked = shared
@@ -344,10 +392,11 @@ fn run_job(shared: &Shared, job: &Job) -> Ended {
         .is_some_and(|n| n != 0);
     if parked {
         shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "error", "code": Code::NeedsAuth.as_str() }));
-        return Ended::Failed(Code::NeedsAuth.as_str());
+        return (Ended::Failed(Code::NeedsAuth.as_str()), false);
     }
     shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "syncing" }));
-    let out = sync_job(shared, job);
+    let gave_way = std::cell::Cell::new(false);
+    let out = sync_job(shared, job, &gave_way);
     if let Err(Fail::Code(code, why)) = &out {
         crate::hold::note_failure(shared, &job.account, *code, why);
     }
@@ -366,12 +415,12 @@ fn run_job(shared: &Shared, job: &Job) -> Ended {
         }
     };
     shared.emit(SYNC_STATE, end);
-    ended
+    (ended, gave_way.get())
 }
 
-fn sync_job(shared: &Shared, job: &Job) -> Result<(), Fail> {
+fn sync_job(shared: &Shared, job: &Job, gave_way: &std::cell::Cell<bool>) -> Result<(), Fail> {
     let mut backend = backend::open(shared, &job.account)?;
-    let out = sync_session(shared, backend.as_mut(), job);
+    let out = sync_session(shared, backend.as_mut(), job, gave_way);
     // Signs out.
     drop(backend);
     out
@@ -381,19 +430,27 @@ fn sync_job(shared: &Shared, job: &Job) -> Result<(), Fail> {
 #[cfg(test)]
 pub(crate) fn sync_now_for_test(shared: &Shared, account: &str, folder: Option<&str>) {
     let job = Job::new(account, folder);
-    match sync_job(shared, &job) {
+    match sync_job(shared, &job, &std::cell::Cell::new(false)) {
         Ok(()) => {}
         Err(Fail::Code(code, why)) => panic!("sync failed: {} {why}", code.as_str()),
         Err(_) => panic!("sync stopped early"),
     }
 }
 
-fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result<(), Fail> {
+/// Unit tests: runs one download pass (a background run's with no deadline, or the foreground
+/// downloader's) on the calling thread.
+#[cfg(test)]
+pub(crate) fn download_now_for_test(shared: &Shared, account: &str, front: bool) -> Result<(), Fail> {
+    let job = Job { account: account.into(), folder: Some("INBOX".into()), quick: true, download: true, front, deadline: None };
+    sync_job(shared, &job, &std::cell::Cell::new(false))
+}
+
+fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way: &std::cell::Cell<bool>) -> Result<(), Fail> {
     // A background run's pass: only what arrived since the newest message held, within its
     // share of the budget. A folder never synced (or a backend with no cheap way) gets the full
     // pass.
     if job.download {
-        return download_pass(shared, backend, &job.account, job.deadline);
+        return download_pass(shared, backend, &job.account, job.deadline, job.front);
     }
     if job.quick {
         backend.set_deadline(job.deadline);
@@ -418,7 +475,23 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result
             }
         },
     };
-    sync_folder(shared, backend, &job.account, &folder, &|| false)
+    // A page pass of a large window gives way to another page pass waiting behind it once it has
+    // run a slice: queued again, it goes on from what it committed (`run`).
+    let started = Instant::now();
+    let give_way = || {
+        let yes = started.elapsed() >= PAGE_SLICE && shared.offline.page_waiting.load(std::sync::atomic::Ordering::SeqCst) > 0;
+        if yes {
+            gave_way.set(true);
+        }
+        yes
+    };
+    match sync_folder(shared, backend, &job.account, &folder, &give_way) {
+        Err(Fail::Code(Code::Timeout, _)) if gave_way.get() => Ok(()),
+        other => {
+            gave_way.set(false);
+            other
+        }
+    }
 }
 
 /// `Fail` once a background pass's share of the budget is spent.
@@ -466,51 +539,61 @@ fn quick_mark(shared: &Shared, account: &str, folder: &str, validity: i64) -> Re
     Ok(parsed.and_then(|(v, uid, ms)| (v == validity).then_some((uid, ms))))
 }
 
-/// Most folders besides INBOX one download pass looks at (the most recently synced first).
-const DOWNLOAD_FOLDERS: usize = 20;
-
-/// A background run's download of `account` (`background.rs`), inside `deadline`: INBOX's new
-/// headers (the full pass when INBOX was never synced), then the bodies of its recent mail
-/// ([`crate::body::prefetch`]), then the new headers of every other folder the list has synced
-/// (a folder that would need its full pass is left for the foreground). One sign-in for all of
-/// it. It stops between steps, and inside a step between write chunks (headers) or bodies, once
-/// the deadline passes or the app comes to the front, so the page's own pass never waits long
-/// behind it on the sync worker; a step cut that way ends the pass cleanly, keeping what it
-/// wrote: headers resume from their quick mark (or the next full pass), bodies from the first one
-/// not cached, on the next run.
-fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) -> Result<(), Fail> {
+/// A download of `account`'s offline window (`offline.rs`): a background run's (`background.rs`)
+/// inside `deadline`, or a slice of the foreground downloader's (`front`). One sign-in for all of
+/// it: the folder list, then INBOX's headers, then the bodies of the window newest first across
+/// every folder ([`crate::body::prefetch`]), then every other selectable folder's headers (the
+/// full pass for a folder whose last full pass does not cover the window: never synced, a wider
+/// window, a pass cut part way; the quick pass for the rest), never synced first, then the least
+/// recently synced; then the bodies again, then the attachments up to 10 MB each when the network
+/// is not metered ([`crate::attachments::prefetch`]). Mail older than the window the account keeps
+/// goes first ([`crate::offline::prune_aged`]).
+///
+/// It stops between steps, and inside a step between write chunks (headers) or bodies, once its
+/// deadline passes, the network turns constrained, or (background) the app comes to the front or
+/// (front) the app leaves it or a page pass waits, so the page's own pass never waits long behind
+/// it on the sync worker; a step cut that way ends the pass cleanly, keeping what it wrote: a full
+/// pass's headers stay and the next one fetches only the rest, a quick pass resumes from its mark,
+/// bodies from the first one not cached, on the next pass.
+fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>, front: bool) -> Result<(), Fail> {
     backend.set_deadline(deadline);
-    let stop = || crate::background::stop_downloading(shared, deadline);
+    let stop = || crate::offline::stop_download(shared, deadline, front);
     let out = (|| -> Result<(), Fail> {
         if stop() {
             return Ok(());
         }
-        if !quick_pass(shared, backend, account, "INBOX", deadline, &stop)? {
-            go_on(shared, &stop)?;
-            sync_folder_list(shared, backend, account)?;
-            if let Some(inbox) = folder_path(shared, account, "INBOX")? {
-                sync_folder(shared, backend, account, &inbox, &stop)?;
-            }
+        crate::offline::prune_aged(shared, account, now_ms())?;
+        go_on(shared, &stop)?;
+        sync_folder_list(shared, backend, account)?;
+        let fetch_from = crate::offline::bounds(shared, account, now_ms()).fetch_from;
+        if let Some(inbox) = folder_path(shared, account, "INBOX")? {
+            folder_headers(shared, backend, account, &inbox, fetch_from, deadline, &stop)?;
         }
         if stop() {
             return Ok(());
         }
-        if let Some(inbox) = folder_path(shared, account, "INBOX")? {
-            crate::body::prefetch(shared, backend, account, &inbox, &stop)?;
-        }
+        crate::body::prefetch(shared, backend, account, &stop)?;
         let others: Vec<String> = shared.read(|c| {
             let mut st = c.prepare(&format!(
-                "SELECT path FROM folders WHERE account_id = ?1 AND synced_ms IS NOT NULL AND noselect = 0
-                   AND NOT (path = 'INBOX' COLLATE NOCASE) ORDER BY synced_ms DESC, path LIMIT {DOWNLOAD_FOLDERS}"
+                "SELECT path FROM folders WHERE account_id = ?1 AND noselect = 0 AND NOT (path = 'INBOX' COLLATE NOCASE)
+                 ORDER BY CASE WHEN {} THEN 0 ELSE 1 END, synced_ms IS NOT NULL, synced_ms, path",
+                crate::offline::NEEDS_FULL
             ))?;
-            let rows = st.query_map([account], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+            let rows = st.query_map((account, fetch_from), |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         })?;
         for folder in others {
             if stop() {
-                break;
+                return Ok(());
             }
-            quick_pass(shared, backend, account, &folder, deadline, &stop)?;
+            folder_headers(shared, backend, account, &folder, fetch_from, deadline, &stop)?;
+        }
+        if stop() {
+            return Ok(());
+        }
+        crate::body::prefetch(shared, backend, account, &stop)?;
+        if !stop() && crate::offline::attachments_allowed(shared) {
+            crate::attachments::prefetch(shared, backend, account, &stop)?;
         }
         Ok(())
     })();
@@ -522,6 +605,33 @@ fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, dead
         }
         other => other,
     }
+}
+
+/// A download's headers of `folder`: its full pass when its last completed full pass does not
+/// cover the window starting at `fetch_from` (or the cheap way is not there), else the quick pass.
+fn folder_headers(
+    shared: &Shared,
+    backend: &mut dyn Backend,
+    account: &str,
+    folder: &str,
+    fetch_from: i64,
+    deadline: Option<Instant>,
+    stop: &dyn Fn() -> bool,
+) -> Result<(), Fail> {
+    let full: bool = shared.read(|c| {
+        c.query_row(
+            &format!("SELECT {} FROM folders WHERE account_id = ?1 AND path = ?3", crate::offline::NEEDS_FULL),
+            (account, fetch_from, folder),
+            |r| r.get(0),
+        )
+        .optional()
+        .map(|o| o.unwrap_or(false))
+    })?;
+    if full || !quick_pass(shared, backend, account, folder, deadline, stop)? {
+        go_on(shared, stop)?;
+        sync_folder(shared, backend, account, folder, stop)?;
+    }
+    Ok(())
 }
 
 /// A background run's pass over `folder` (INBOX for notifications; any synced folder for a
@@ -695,6 +805,7 @@ pub(crate) fn delete_uids(shared: &Shared, account: &str, folder: &str, uids: &[
         for (table, key, cols, counts) in [
             ("attachments", "(uid, section)", "uid, section", false),
             ("bodies", "uid", "uid", false),
+            ("body_retry", "uid", "uid", false),
             ("messages", "uid", "uid", true),
             ("remote_ids", "uid", "uid", false),
         ] {
@@ -848,6 +959,11 @@ fn delete_folder_rows(shared: &Shared, account: &str, folder: &str) -> Result<us
                (SELECT uid, section FROM attachments WHERE account_id = ?1 AND folder = ?2 LIMIT 200)",
             false,
         ),
+        (
+            "DELETE FROM body_retry WHERE account_id = ?1 AND folder = ?2 AND uid IN
+               (SELECT uid FROM body_retry WHERE account_id = ?1 AND folder = ?2 LIMIT 200)",
+            false,
+        ),
     ] {
         loop {
             let n = write_for(shared, account, |c| c.execute(sql, (account, folder)))?;
@@ -937,14 +1053,15 @@ fn sync_folder_pass(
         pass.removed += delete_folder_rows(shared, account, folder)?;
         write_for(shared, account, |c| {
             c.execute(
-                "UPDATE folders SET uid_validity = ?3, uid_next = NULL WHERE account_id = ?1 AND path = ?2",
+                "UPDATE folders SET uid_validity = ?3, uid_next = NULL, full_from_ms = NULL WHERE account_id = ?1 AND path = ?2",
                 (account, folder, validity),
             )
         })?;
     }
 
     let here = FolderRow::new(folder, Some(validity));
-    let backend::Window { uids: window, unseen } = backend.window(folder, window_start_ms(now_ms()))?;
+    let bounds = crate::offline::bounds(shared, account, now_ms());
+    let backend::Window { uids: window, unseen } = backend.window(folder, bounds.fetch_from)?;
     let in_window: HashSet<u32> = window.iter().copied().collect();
     // Read before the flag FETCH: whether this pass may clear a disagreeing override (see
     // `write_flags`) is judged against it.
@@ -952,14 +1069,20 @@ fn sync_folder_pass(
     let existing: HashMap<u32, Held> = shared.read(|c| {
         let mut st = c.prepare_cached(
             "SELECT uid, seen, flagged, local_seen IS NOT NULL OR local_flagged IS NOT NULL OR local_deleted IS NOT NULL,
-                    out_of_window_ms
+                    out_of_window_ms, date_ms
              FROM messages WHERE account_id = ?1 AND folder = ?2",
         )?;
         let rows = st
             .query_map((account, folder), |r| {
                 Ok((
                     r.get::<_, i64>(0)? as u32,
-                    Held { seen: r.get::<_, i64>(1)? != 0, flagged: r.get::<_, i64>(2)? != 0, overridden: r.get(3)?, out_of_window_ms: r.get(4)? },
+                    Held {
+                        seen: r.get::<_, i64>(1)? != 0,
+                        flagged: r.get::<_, i64>(2)? != 0,
+                        overridden: r.get(3)?,
+                        out_of_window_ms: r.get(4)?,
+                        date_ms: r.get(5)?,
+                    },
                 ))
             })?
             .collect::<Result<HashMap<_, _>, _>>()?;
@@ -986,14 +1109,17 @@ fn sync_folder_pass(
         crate::search::reflag(shared, account, folder, &uids);
     }
 
-    // Rows no longer in the window: expunged, moved away, or aged out of the 90 days. A row a
-    // journaled action names stays until that action settles: replay decides (GONE removes it).
-    // A row outside the window that a server search stored, or the user opened, within the last 30
-    // days stays whatever the pass lists (`out_of_window_ms`).
+    // Rows no longer in the window: expunged or moved away (dated inside the window the pass
+    // listed), or aged out of the window the account keeps. A row dated between the two (Premium's
+    // `all` lapsed: listed from 3 months, kept from the start) stays: a lapse never deletes what is
+    // on the phone. A row a journaled action names stays until that action settles: replay decides
+    // (GONE removes it). A row outside the window that a server search stored, or the user opened,
+    // within the last 30 days stays whatever the pass lists (`out_of_window_ms`).
     let now = now_ms();
     let mut gone: Vec<u32> = existing
         .iter()
         .filter(|(u, h)| !in_window.contains(u) && !h.out_of_window_ms.is_some_and(|m| now - m <= OUT_OF_WINDOW_KEEP_MS))
+        .filter(|(_, h)| h.date_ms >= bounds.fetch_from || h.date_ms < bounds.keep_from)
         .map(|(u, _)| *u)
         .collect();
     gone.sort_unstable();
@@ -1033,8 +1159,8 @@ fn sync_folder_pass(
         // A completed pass holds the whole window: a cut quick pass's mark is spent.
         c.execute("DELETE FROM settings WHERE key = ?1", [quick_mark_key(account, folder)])?;
         c.execute(
-            "UPDATE folders SET uid_next = ?3, unseen = ?4, total = ?5, synced_ms = ?6 WHERE account_id = ?1 AND path = ?2",
-            (account, folder, mbox.uid_next, unseen, total, now_ms()),
+            "UPDATE folders SET uid_next = ?3, unseen = ?4, total = ?5, synced_ms = ?6, full_from_ms = ?7 WHERE account_id = ?1 AND path = ?2",
+            (account, folder, mbox.uid_next, unseen, total, now_ms(), bounds.fetch_from),
         )
     })?;
     backend.pass_done(folder)?;
@@ -1050,6 +1176,7 @@ struct Held {
     overridden: bool,
     /// When a server search stored the row or the user last opened it, for a row outside the window.
     out_of_window_ms: Option<i64>,
+    date_ms: i64,
 }
 
 /// Writes the server's flags of `chunk` (one write transaction) and settles local overrides: an
@@ -1151,7 +1278,7 @@ fn header_uids(headers: &[Header]) -> Vec<u32> {
 /// the list. Nothing in the list changes. Returns the stored uids, in the order given.
 pub(crate) fn store_found(shared: &Shared, account: &str, folder: &str, headers: &[Header]) -> Result<Vec<u32>, Fail> {
     let now = now_ms();
-    let start = window_start_ms(now);
+    let start = crate::offline::bounds(shared, account, now).fetch_from;
     let held: HashSet<u32> = shared.read(|c| {
         let mut st = c.prepare_cached("SELECT 1 FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3")?;
         let mut out = HashSet::new();
@@ -1208,7 +1335,8 @@ fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
-/// The first instant of the sync window's first day (UTC): [`WINDOW_DAYS`] days before today.
+/// The first instant of the default window's first day (UTC): [`WINDOW_DAYS`] days before today.
+/// An account's own window is `offline::bounds`.
 pub(crate) fn window_start_ms(now_ms: i64) -> i64 {
     (now_ms.div_euclid(DAY_MS) - WINDOW_DAYS) * DAY_MS
 }
@@ -1425,7 +1553,7 @@ mod tests {
 
     fn sync_ok(e: &Engine, account: &str, folder: Option<&str>) {
         let job = Job::new(account, folder);
-        match sync_job(e.shared(), &job) {
+        match sync_job(e.shared(), &job, &std::cell::Cell::new(false)) {
             Ok(()) => {}
             Err(Fail::Code(code, why)) => panic!("sync failed: {} {why}", code.as_str()),
             Err(_) => panic!("sync stopped early"),

@@ -44,9 +44,10 @@
 //!
 //! Download (setting `backgroundDownload`, on by default; notifications on or off): after the
 //! INBOX passes, each account in turn gets one download pass on the sync worker (`sync.rs`
-//! `download_pass`): INBOX's new headers, the bodies of its recent mail (`body::prefetch`, bounded
-//! by count, age and bytes inside the body cache's LRU), then the new headers of every other
-//! folder the list has synced. So mail is there offline when the app opens. Same budget rules as
+//! `download_pass`) that works through the account's offline window (`offline.rs`): headers of
+//! every selectable folder, every body, and attachments up to 10 MB on an unmetered network,
+//! going on next run from where it stopped. So mail is there offline when the app opens. None
+//! runs on a constrained network. Same budget rules as
 //! the INBOX passes (an equal share of what is left, none started past 80%), and the INBOX passes
 //! go first, so a slow download never costs a notification. A download stops between steps (and
 //! inside one between header chunks and between bodies) at its share's end, when the app comes to the front ([`set_in_front`]: the page's passes never
@@ -59,7 +60,6 @@ use crate::followup::FollowUpDue;
 use crate::sync::{folder_path, Ended};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -142,14 +142,16 @@ pub(crate) struct Pending {
     /// returns at once with nothing, so it never clears the running one's stop nor moves the
     /// rotation twice.
     running: Mutex<()>,
-    /// Bodies a download fetched and could not cache (attachments not listed, cut short, gone):
-    /// not asked for again while the engine runs. `(account, folder, uid)`.
-    skipped: Mutex<HashSet<(String, String, u32)>>,
 }
 
 /// The app came to the front (`true`) or left it.
 pub(crate) fn set_in_front(shared: &Shared, front: bool) {
     shared.background.in_front.store(front, Ordering::SeqCst);
+}
+
+/// The app is in front (`mobile.app.state`).
+pub(crate) fn is_in_front(shared: &Shared) -> bool {
+    shared.background.in_front.load(Ordering::SeqCst)
 }
 
 /// Whether a download pass stops now: its share of the budget is spent, the app is in front, the
@@ -161,14 +163,6 @@ pub(crate) fn stop_downloading(shared: &Shared, deadline: Option<Instant>) -> bo
         || shared.is_closing()
 }
 
-/// The uids of `folder` a download does not ask for again ([`Pending::skipped`]).
-pub(crate) fn skipped_bodies(shared: &Shared, account: &str, folder: &str) -> HashSet<u32> {
-    lock(&shared.background.skipped).iter().filter(|(a, f, _)| a == account && f == folder).map(|(_, _, u)| *u).collect()
-}
-
-pub(crate) fn skip_body(shared: &Shared, account: &str, folder: &str, uid: u32) {
-    lock(&shared.background.skipped).insert((account.to_string(), folder.to_string(), uid));
-}
 
 fn now_ms() -> i64 {
     crate::compose::now_ms()

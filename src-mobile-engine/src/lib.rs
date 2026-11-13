@@ -17,6 +17,7 @@ mod live;
 pub mod events;
 pub mod net;
 mod oauth;
+mod offline;
 pub mod outgoing;
 mod outbox;
 mod premium;

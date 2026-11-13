@@ -95,6 +95,8 @@ impl Events {
 
 fn engine(tmp: &tempfile::TempDir, secrets: Arc<MemorySecrets>) -> (Engine, Arc<Events>, Arc<Mutex<Vec<String>>>) {
     let engine = Engine::open(tmp.path(), &tmp.path().join("cache"), secrets).unwrap();
+    // These tests watch the page's and the background run's passes alone.
+    engine.set_front_downloads_for_tests(false);
     // Short enough for a test, long enough that a busy loop would show.
     engine.set_live_timing(Duration::from_millis(300), Duration::from_secs(25 * 60), Duration::from_millis(100), Duration::from_millis(400));
     let events = Arc::new(Events::default());

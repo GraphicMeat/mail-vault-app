@@ -10,11 +10,14 @@
 //! CSP blocks every one, tracking pixels included, until the user asks). The result is cached in `bodies`, with the
 //! attachment list in `attachments`, and the list row's `snippet` is filled from the text.
 //!
-//! The cache is an LRU of at most [`CACHE_CAP`] bytes of `bodies`: each insert stamps the row as
-//! newest and then deletes the oldest rows, at most 200 per write transaction, until the total
-//! fits. A background download (`prefetch`) never evicts: it stores only what fits under the cap,
-//! stamped oldest. A cache hit is answered from the reader pool and bumps its row only when the writer is
-//! free, so opening a message never waits on a sync write.
+//! A body of a message inside the account's offline window (its list row is there with no
+//! `out_of_window_ms`) is pinned: it stays as long as the row does (sync removes the row, and the
+//! body with it, when the message leaves the window the account keeps). The other bodies (a
+//! message a server search found outside the window, opened) form an LRU of at most
+//! [`CACHE_CAP`] bytes: each insert stamps the row as newest and then deletes the oldest unpinned
+//! rows, at most 200 per write transaction, until their total fits. A download (`prefetch`) stores
+//! only pinned bodies and never evicts. A cache hit is answered from the reader pool and bumps its
+//! row only when the writer is free, so opening a message never waits on a sync write.
 
 use crate::db::{Engine, EngineError, Shared};
 use crate::rpc::{parse, RpcError};
@@ -27,8 +30,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Most bytes of cached bodies (html + text + parts_json of every `bodies` row).
+/// Most bytes of unpinned cached bodies (html + text + parts_json of every `bodies` row whose
+/// message is outside the offline window).
 pub(crate) const CACHE_CAP: u64 = 50 * 1024 * 1024;
+/// A body row that is not pinned (its message has no list row inside the window), as SQL over `bodies b`.
+const UNPINNED: &str = "NOT EXISTS (SELECT 1 FROM messages m WHERE m.account_id = b.account_id AND m.folder = b.folder AND m.uid = b.uid AND m.out_of_window_ms IS NULL)";
 /// Most rows one write transaction touches.
 const BATCH: usize = 200;
 const SNIPPET_CHARS: usize = 200;
@@ -314,89 +320,88 @@ fn fetch(shared: &Shared, p: &BodyParams, stored_validity: Option<i64>) -> Resul
     }))
 }
 
-/// Most bodies one background download fetches per account.
-const PREFETCH_MAX: usize = 50;
-/// Only mail that arrived this recently is downloaded ahead of an open.
-const PREFETCH_DAYS: i64 = 14;
-/// Most body bytes one background download caches per account: a small share of [`CACHE_CAP`],
-/// so a run never pushes most of what the user opened out of the LRU.
-const PREFETCH_BYTES: u64 = CACHE_CAP / 10;
+/// Most candidates one read of [`prefetch`] lists.
+const PREFETCH_BATCH: i64 = 50;
+/// Most body bytes one download pass stores; the next pass goes on from there. Time is the
+/// caller's budget (`stop`).
+const PASS_BYTES: u64 = 64 * 1024 * 1024;
 
-/// A background download (`sync.rs` `download_pass`): caches the bodies of `folder`'s recent mail
-/// (newest first, [`PREFETCH_DAYS`]) that has none yet, over the caller's signed-in `backend`,
-/// exactly as an open would (`BODY.PEEK`, the same scan, the same cache rules: a body whose
-/// attachments could not be listed, or that the server cut short, is not cached, and is not
-/// asked for again while the engine runs). At most [`PREFETCH_MAX`] bodies and about
-/// [`PREFETCH_BYTES`]; `stop` is asked before each one. Each body is written in its own short
-/// transactions, so what was fetched stays when the run is cut. Returns how many were cached.
+/// A download (`sync.rs` `download_pass`): caches the body of every message in `account`'s offline
+/// window that has none yet, in every selectable folder, newest first, over the caller's signed-in
+/// `backend`, exactly as an open would (`BODY.PEEK`, the same scan). A body whose attachments
+/// could not be listed, that the server cut short, or whose uid is gone is not cached and waits
+/// before it is asked for again (`body_retry`, doubling from 15 minutes to a day). `stop` is asked
+/// before each body; a pass stores at most [`PASS_BYTES`]. Each body is written in its own short
+/// transactions, so what was fetched stays when the pass is cut. Returns how many were cached.
 ///
-/// It never evicts: the cache's total is read once, a message whose size (`messages.size`, the
-/// whole message, so at least its body) would take the total past the cap is not fetched, and a
-/// fetched body that would is not stored and ends the download (asked for again only by the next
-/// engine). So a full cache costs a run no network, and a body the user opened is never pushed
-/// out by one nobody opened. A downloaded body is stamped as the oldest row (`store`).
-pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, account: &str, folder: &str, stop: &dyn Fn() -> bool) -> Result<usize, Fail> {
-    let validity: Option<Option<i64>> = shared.read(|c| {
-        c.query_row("SELECT uid_validity FROM folders WHERE account_id = ?1 AND path = ?2", (account, folder), |r| r.get(0)).optional()
-    })?;
-    let Some(validity) = validity else { return Ok(0) };
-    let since = now_ms() - PREFETCH_DAYS * 86_400_000;
-    let skipped = crate::background::skipped_bodies(shared, account, folder);
-    let rows: Vec<(u32, u64)> = shared.read(|c| {
-        let mut st = c.prepare_cached(
-            "SELECT m.uid, m.size FROM messages m
-             WHERE m.account_id = ?1 AND m.folder = ?2 AND m.date_ms >= ?3
-               AND m.out_of_window_ms IS NULL AND m.local_deleted IS NULL
-               AND NOT EXISTS (SELECT 1 FROM bodies b WHERE b.account_id = m.account_id AND b.folder = m.folder AND b.uid = m.uid)
-             ORDER BY m.date_ms DESC, m.uid DESC LIMIT ?4",
-        )?;
-        let rows = st
-            .query_map((account, folder, since, (PREFETCH_MAX + skipped.len()) as i64), |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(rows.into_iter().map(|(u, s)| (u as u32, s.max(0) as u64)).collect())
-    })?;
-    let limit = cap(shared);
-    let mut total: u64 = shared.read(|c| c.query_row("SELECT COALESCE(sum(bytes), 0) FROM bodies", [], |r| r.get::<_, i64>(0)))?.max(0) as u64;
-    let here = FolderRow::new(folder, validity);
+/// Bodies inside the window are pinned: no cap applies to them and nothing is evicted. A
+/// downloaded body is stamped as the oldest row (`store`).
+pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, account: &str, stop: &dyn Fn() -> bool) -> Result<usize, Fail> {
     let (mut cached, mut bytes) = (0usize, 0u64);
-    for (uid, size) in rows.into_iter().filter(|(u, _)| !skipped.contains(u)).take(PREFETCH_MAX) {
-        if stop() || bytes >= PREFETCH_BYTES || total >= limit {
-            break;
+    loop {
+        let now = now_ms();
+        let from = crate::offline::bounds(shared, account, now).fetch_from;
+        let rows: Vec<(String, Option<i64>, u32)> = shared.read(|c| {
+            let mut st = c.prepare_cached(
+                "SELECT m.folder, f.uid_validity, m.uid FROM messages m
+                 JOIN folders f ON f.account_id = m.account_id AND f.path = m.folder
+                 WHERE m.account_id = ?1 AND m.date_ms >= ?2 AND f.noselect = 0
+                   AND m.out_of_window_ms IS NULL AND m.local_deleted IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM bodies b WHERE b.account_id = m.account_id AND b.folder = m.folder AND b.uid = m.uid)
+                   AND NOT EXISTS (SELECT 1 FROM body_retry r WHERE r.account_id = m.account_id AND r.folder = m.folder AND r.uid = m.uid AND r.next_ms > ?3)
+                 ORDER BY m.date_ms DESC, m.uid DESC LIMIT ?4",
+            )?;
+            let rows = st
+                .query_map((account, from, now, PREFETCH_BATCH), |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? as u32)))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })?;
+        if rows.is_empty() {
+            return Ok(cached);
         }
-        // Too big for what the cache has left: a smaller one further down may still fit.
-        if total + size > limit {
-            continue;
-        }
-        crate::sync::not_closing(shared)?;
-        let p = BodyParams { account_id: account.to_string(), folder: folder.to_string(), uid };
-        let Some(RawBody { parts, html, text, attachments_unknown, truncated }) = backend.body(&here, uid)? else {
-            // Gone, or another generation: the next pass sorts the row out.
-            crate::background::skip_body(shared, account, folder, uid);
-            continue;
-        };
-        let (mut body, snippet) = scanned(html, text, parts.into_iter().map(Part::from).collect());
-        body.attachments_unknown = attachments_unknown;
-        body.truncated = truncated;
-        if attachments_unknown || truncated {
-            if truncated {
-                store_attachments(shared, &p, &body)?;
+        for (folder, validity, uid) in rows {
+            if stop() || bytes >= PASS_BYTES {
+                return Ok(cached);
             }
-            crate::background::skip_body(shared, account, folder, uid);
-            continue;
+            crate::sync::not_closing(shared)?;
+            let p = BodyParams { account_id: account.to_string(), folder: folder.clone(), uid };
+            let failed = |shared: &Shared| -> Result<(), Fail> {
+                crate::sync::write_for(shared, account, |c| crate::offline::body_failed(c, account, &folder, uid, now_ms()))
+            };
+            let got = match backend.body(&FolderRow::new(&folder, validity), uid) {
+                Ok(got) => got,
+                // This message alone (the server refused its parts): the others go on.
+                Err(Fail::Code(crate::accounts::Code::Invalid, why)) => {
+                    shared.log(&format!("[body] {account} {folder} {uid}: download refused: {why}"));
+                    failed(shared)?;
+                    continue;
+                }
+                Err(f) => return Err(f),
+            };
+            let Some(RawBody { parts, html, text, attachments_unknown, truncated }) = got else {
+                // Gone, or another generation: the next pass sorts the row out.
+                failed(shared)?;
+                continue;
+            };
+            let (mut body, snippet) = scanned(html, text, parts.into_iter().map(Part::from).collect());
+            body.attachments_unknown = attachments_unknown;
+            body.truncated = truncated;
+            if attachments_unknown || truncated {
+                if truncated {
+                    store_attachments(shared, &p, &body)?;
+                }
+                failed(shared)?;
+                continue;
+            }
+            let text_bytes = (body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len)) as u64;
+            store(shared, &p, &body, &snippet, false)?;
+            crate::sync::write_for(shared, account, |c| {
+                c.execute("DELETE FROM body_retry WHERE account_id = ?1 AND folder = ?2 AND uid = ?3", (account, &folder, uid as i64))
+            })?;
+            cached += 1;
+            bytes += text_bytes;
         }
-        let text_bytes = (body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len)) as u64;
-        let row_bytes = text_bytes + serde_json::to_string(&body.stored).map_or(0, |s| s.len()) as u64;
-        if total + row_bytes > limit {
-            // Larger than its message size said (none listed): kept out, and the cache is full.
-            crate::background::skip_body(shared, account, folder, uid);
-            break;
-        }
-        store(shared, &p, &body, &snippet, false)?;
-        cached += 1;
-        total += row_bytes;
-        bytes += text_bytes;
     }
-    Ok(cached)
 }
 
 /// Finds the html's tracking pixels and counts the remote images it would load, with and without
@@ -610,22 +615,22 @@ fn store_attachments(shared: &Shared, p: &BodyParams, body: &Body) -> Result<boo
     Ok(true)
 }
 
-/// Deletes the least recently opened bodies until the total is at most `cap`, never the row of
-/// `keep` (the body just stored). Each round reads through the pool and deletes at most
-/// [`BATCH`] rows in its own write transaction.
+/// Deletes the least recently opened unpinned bodies until their total is at most `cap`, never
+/// the row of `keep` (the body just stored) and never a pinned one. Each round reads through the
+/// pool and deletes at most [`BATCH`] rows in its own write transaction.
 fn evict(shared: &Shared, cap: u64, keep: &BodyParams) -> Result<usize, EngineError> {
     let mut removed = 0;
     loop {
-        let total: i64 = shared.read(|c| c.query_row("SELECT COALESCE(sum(bytes), 0) FROM bodies", [], |r| r.get(0)))?;
+        let total: i64 = shared.read(|c| c.query_row(&format!("SELECT COALESCE(sum(b.bytes), 0) FROM bodies b WHERE {UNPINNED}"), [], |r| r.get(0)))?;
         let mut over = total - cap as i64;
         if over <= 0 {
             return Ok(removed);
         }
         let oldest: Vec<(String, String, i64, i64)> = shared.read(|c| {
             let mut st = c.prepare_cached(&format!(
-                "SELECT account_id, folder, uid, bytes FROM bodies
-                 WHERE NOT (account_id = ?1 AND folder = ?2 AND uid = ?3)
-                 ORDER BY last_access_ms ASC LIMIT {BATCH}"
+                "SELECT b.account_id, b.folder, b.uid, b.bytes FROM bodies b
+                 WHERE NOT (b.account_id = ?1 AND b.folder = ?2 AND b.uid = ?3) AND {UNPINNED}
+                 ORDER BY b.last_access_ms ASC LIMIT {BATCH}"
             ))?;
             let rows = st
                 .query_map((&keep.account_id, &keep.folder, keep.uid as i64), |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
@@ -771,6 +776,8 @@ mod tests {
             .unwrap();
         let account = added["account"]["id"].as_str().unwrap().to_string();
         crate::sync::sync_now_for_test(e.shared(), &account, None);
+        // Outside the offline window (a server search's rows): not pinned, so the LRU applies.
+        e.write(|c| c.execute("UPDATE messages SET out_of_window_ms = ?1", [now_ms()])).unwrap();
         let body = |uid: u32| {
             let v = e.rpc("mobile.message.body", json!({ "accountId": account, "folder": "INBOX", "uid": uid })).unwrap();
             assert_eq!(v["gone"], false, "{v}");
@@ -809,15 +816,37 @@ mod tests {
         assert!(max > 0 && max <= 200, "an eviction transaction changed {max} rows");
     }
 
-    /// A background download never evicts: at the cap it caches what fits and stops, the bodies
-    /// the user opened stay, and the next run downloads nothing.
+    /// A download stores every body of the window whatever the cap (they are pinned), evicts
+    /// nothing the user opened, and the next one fetches nothing again.
     #[test]
-    fn prefetch_at_the_cap_keeps_opened_bodies_and_downloads_nothing_more() {
+    fn prefetch_downloads_the_whole_window_past_the_cap_and_evicts_nothing() {
+        let (server, tmp, e, account) = setup_six(10);
+        let _keep = tmp;
+        for uid in [1u32, 2] {
+            let v = e.rpc("mobile.message.body", json!({ "accountId": account, "folder": "INBOX", "uid": uid })).unwrap();
+            assert_eq!(v["gone"], false, "{v}");
+        }
+        // A cap far below one body: it holds for opened bodies outside the window only.
+        e.shared().body_cap.store(1, Ordering::SeqCst);
+        let fetches = || server.commands().iter().filter(|c| c.to_uppercase().contains("BODY.PEEK[1")).count();
+
+        assert_eq!(prefetch_once(&e, &account), 4);
+        assert_eq!(uids_cached(&e), [1, 2, 3, 4, 5, 6], "every body of the window is on the phone");
+
+        let before = fetches();
+        assert_eq!(prefetch_once(&e, &account), 0);
+        assert_eq!(fetches(), before, "a cached body was fetched again");
+        // Opening one evicts no pinned body.
+        e.rpc("mobile.message.body", json!({ "accountId": account, "folder": "INBOX", "uid": 3 })).unwrap();
+        assert_eq!(uids_cached(&e), [1, 2, 3, 4, 5, 6]);
+    }
+
+    fn setup_six(kb: usize) -> (mock_imap::MockImap, tempfile::TempDir, Engine, String) {
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
         std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
         let mut mb = Mailbox::new("INBOX");
         for uid in 1..=6 {
-            mb.add(html_message(uid, 10));
+            mb.add(html_message(uid, kb));
         }
         let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(mb));
         let tmp = tempfile::tempdir().unwrap();
@@ -830,32 +859,48 @@ mod tests {
             .unwrap();
         let account = added["account"]["id"].as_str().unwrap().to_string();
         crate::sync::sync_now_for_test(e.shared(), &account, None);
-        for uid in [1u32, 2] {
-            let v = e.rpc("mobile.message.body", json!({ "accountId": account, "folder": "INBOX", "uid": uid })).unwrap();
-            assert_eq!(v["gone"], false, "{v}");
-        }
-        // Room for one more ~10 KB body, not two.
-        let opened = total_bytes(&e);
-        let cap = (opened + opened / 2 + opened / 4) as u64;
-        e.shared().body_cap.store(cap, Ordering::SeqCst);
-        let fetches = || server.commands().iter().filter(|c| c.to_uppercase().contains("BODY.PEEK[1")).count();
-        let prefetch_once = || {
-            let mut backend = crate::backend::open(e.shared(), &account).unwrap_or_else(|_| panic!("sign-in"));
-            let got = prefetch(e.shared(), backend.as_mut(), &account, "INBOX", &|| false).unwrap_or_else(|_| panic!("prefetch"));
-            drop(backend);
-            got
+        (server, tmp, e, account)
+    }
+
+    fn prefetch_once(e: &Engine, account: &str) -> usize {
+        let mut backend = crate::backend::open(e.shared(), account).unwrap_or_else(|_| panic!("sign-in"));
+        let got = prefetch(e.shared(), backend.as_mut(), account, &|| false).unwrap_or_else(|_| panic!("prefetch"));
+        drop(backend);
+        got
+    }
+
+    /// A body the server no longer has waits before it is asked for again, and is asked for again
+    /// once its wait is over (never skipped for the engine's whole life).
+    #[test]
+    fn a_body_that_could_not_be_kept_is_retried_after_a_wait() {
+        let (server, tmp, e, account) = setup_six(1);
+        let _keep = tmp;
+        // Expunged on the server after the list took it: there is no body to fetch.
+        server.mutate(|s| s.find_mut("INBOX").unwrap().expunge(&[2], false));
+        let retry = || -> (i64, i64) {
+            e.read(|c| c.query_row("SELECT attempts, next_ms FROM body_retry WHERE uid = 2", [], |r| Ok((r.get(0)?, r.get(1)?)))).unwrap()
         };
+        let sessions = || server.count_commands("LOGIN");
+        assert_eq!(prefetch_once(&e, &account), 5);
+        let (attempts, next) = retry();
+        assert_eq!(attempts, 1);
+        assert!(next > now_ms() + 10 * 60 * 1000, "the first wait is about 15 minutes: {next}");
+        assert_eq!(crate::offline::left(e.shared(), &account, now_ms()).unwrap().bodies, 0, "a waiting body is not work left");
+        let before = server.commands().len();
+        assert_eq!(prefetch_once(&e, &account), 0);
+        // Only the sign-in and sign-out of the empty pass.
+        let extra: Vec<String> = server.commands()[before..].iter().filter(|c| c.to_uppercase().contains("FETCH")).cloned().collect();
+        assert!(extra.is_empty(), "asked again before its wait was over: {extra:?}");
 
-        let got = prefetch_once();
-        let cached = uids_cached(&e);
-        assert!(cached.contains(&1) && cached.contains(&2), "a download evicted an opened body: {cached:?}");
-        assert!(total_bytes(&e) as u64 <= cap, "the cache grew past its cap: {} > {cap}", total_bytes(&e));
-        assert_eq!(got, 1, "one body fits: {cached:?}");
-        assert_eq!(cached, [1, 2, 6], "the newest one");
-
-        let before = fetches();
-        assert_eq!(prefetch_once(), 0);
-        assert_eq!(fetches(), before, "a run at the cap downloaded a body again");
-        assert_eq!(uids_cached(&e), [1, 2, 6]);
+        // `Download now` forgives the wait: asked again, and the wait doubles.
+        e.rpc("mobile.offline.downloadNow", json!({ "accountId": account })).unwrap();
+        let before = server.commands().len();
+        assert_eq!(prefetch_once(&e, &account), 0);
+        let again = server.commands()[before..].iter().filter(|c| c.to_uppercase().contains("FETCH")).count();
+        assert!(again > 0, "never asked again");
+        let (attempts, next) = retry();
+        assert_eq!(attempts, 2);
+        assert!(next > now_ms() + 25 * 60 * 1000, "the second wait is about 30 minutes: {next}");
+        assert!(sessions() > 0);
     }
 }

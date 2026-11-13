@@ -514,7 +514,7 @@ impl<'a> JmapBackend<'a> {
             return Err(Fail::Code(Code::Invalid, format!("generation of {} changed during sync", folder.path)));
         }
         if self.listed.as_ref().is_none_or(|(p, _)| *p != folder.path) {
-            self.window(&folder.path, sync::window_start_ms(crate::compose::now_ms()))?;
+            self.window(&folder.path, crate::offline::bounds(self.shared, &self.account, crate::compose::now_ms()).fetch_from)?;
         }
         Ok(&self.listed.as_ref().expect("listed just now").1)
     }
@@ -801,7 +801,7 @@ impl Backend for JmapBackend<'_> {
         }
         let path = folder.path.clone();
         let mailbox = self.mailbox_id(&path)?;
-        let after = timestamp((newest_ms - 1000).max(sync::window_start_ms(crate::compose::now_ms())));
+        let after = timestamp((newest_ms - 1000).max(crate::offline::bounds(self.shared, &self.account, crate::compose::now_ms()).fetch_from));
         let account = self.account.clone();
         let known = self.shared.read(|c| remote_ids::folder_map(c, &account, &path))?;
         let ids = self.call(async |c| c.query_mailbox_since(&mailbox, &after).await)?;

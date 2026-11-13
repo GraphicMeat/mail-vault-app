@@ -27,6 +27,14 @@
 //! Cleanup on open: a `.part` with no `.part.meta`, or whose meta was last written more than
 //! [`STALE_PART`] ago, is deleted with its meta; so are a meta without its `.part` and leftover
 //! `.tmp` files.
+//!
+//! Offline attachments (`offline.rs`): a download pass ([`prefetch`]) fetches the attachments of
+//! the messages in the account's offline window, up to 10 MB each, when the network is not
+//! metered, into `<data_dir>/offline/att/<account hash>/<hash>` the same way (resumable, the same
+//! names). That directory is never purged by the OS nor evicted here: it follows the window (a
+//! file whose message left it is no longer looked up, and the account's directory goes with the
+//! account). `local` and compose look there first, then in the cache. `mobile.message.inlineImages`
+//! hands the viewer the `cid:` images of a message as `data:` URLs from either place.
 
 use crate::db::{lock, Engine, Shared};
 use crate::events::{ATTACHMENT_DONE, ATTACHMENT_FAILED, ATTACHMENT_PROGRESS};
@@ -199,28 +207,32 @@ pub(crate) struct Attachments {
     state: Arc<State>,
 }
 
+impl State {
+    fn new(dir: PathBuf) -> State {
+        State {
+            dir,
+            table: Mutex::new(Table::default()),
+            cv: Condvar::new(),
+            peak_buffer: AtomicU64::new(0),
+            #[cfg(test)]
+            cap: AtomicU64::new(CACHE_CAP),
+            #[cfg(test)]
+            lease_ttl_ms: AtomicU64::new(LEASE_TTL.as_millis() as u64),
+            #[cfg(test)]
+            before_finish: Mutex::new(None),
+            #[cfg(test)]
+            after_scan: Mutex::new(None),
+        }
+    }
+}
+
 impl Attachments {
     /// `<cache_dir>/att`, created if missing, with partial files that can no longer resume removed.
     pub(crate) fn open(cache_dir: &Path) -> Attachments {
         let dir = cache_dir.join(DIR);
         let _ = fs::create_dir_all(&dir);
         cleanup(&dir, STALE_PART);
-        Attachments {
-            state: Arc::new(State {
-                dir,
-                table: Mutex::new(Table::default()),
-                cv: Condvar::new(),
-                peak_buffer: AtomicU64::new(0),
-                #[cfg(test)]
-                cap: AtomicU64::new(CACHE_CAP),
-                #[cfg(test)]
-                lease_ttl_ms: AtomicU64::new(LEASE_TTL.as_millis() as u64),
-                #[cfg(test)]
-                before_finish: Mutex::new(None),
-                #[cfg(test)]
-                after_scan: Mutex::new(None),
-            }),
-        }
+        Attachments { state: Arc::new(State::new(dir)) }
     }
 
     /// Asks the workers to exit; a running job stops before its next write. Does not wait.
@@ -314,6 +326,8 @@ enum Stop {
     /// after it: the end cannot be trusted, so the file is not finished.
     Short { at: u64, total: u64 },
     Io(io::Error),
+    /// The part is already among the offline files (here).
+    Offline(PathBuf),
 }
 
 impl From<Fail> for Stop {
@@ -346,9 +360,14 @@ struct Meta {
 
 fn run(state: &State, shared: &Shared, id: u64, key: &PartKey, name: &str, uid_validity: i64, cancel: &AtomicBool) -> End {
     let final_path = state.path(name);
+    let cancel = &|| cancel.load(Ordering::SeqCst);
     let out = (|| -> Result<(), Stop> {
         // A job cancelled while it waited in the queue ends before any network work.
         checkpoint(shared, cancel)?;
+        if let Some(found) = offline_file(shared, &key.account_id, name) {
+            // The download pass has it.
+            return Err(Stop::Offline(found));
+        }
         if final_path.is_file() {
             // Another job (or an earlier run) finished it.
             touch(&final_path)?;
@@ -365,6 +384,7 @@ fn run(state: &State, shared: &Shared, id: u64, key: &PartKey, name: &str, uid_v
             evict(state, name);
             End::Done(final_path)
         }
+        Err(Stop::Offline(path)) => End::Done(path),
         Err(Stop::Fail(Fail::Closing)) => End::Closing,
         Err(Stop::Fail(Fail::Gone)) | Err(Stop::Gone) => {
             remove_partial(state, name);
@@ -394,9 +414,9 @@ fn run(state: &State, shared: &Shared, id: u64, key: &PartKey, name: &str, uid_v
 
 /// Stops the job when the engine closed or the job was cancelled: checked after every network
 /// return and before every file write, so a job that outlives its engine never writes again.
-fn checkpoint(shared: &Shared, cancel: &AtomicBool) -> Result<(), Stop> {
+fn checkpoint(shared: &Shared, cancel: &dyn Fn() -> bool) -> Result<(), Stop> {
     not_closing(shared)?;
-    if cancel.load(Ordering::SeqCst) {
+    if cancel() {
         return Err(Stop::Cancelled);
     }
     Ok(())
@@ -411,7 +431,7 @@ fn download(
     key: &PartKey,
     name: &str,
     uid_validity: i64,
-    cancel: &AtomicBool,
+    cancel: &dyn Fn() -> bool,
 ) -> Result<(), Stop> {
     // Selects the folder, proves the uid is there under the same UIDVALIDITY and names the part's
     // encoding; every range fetch after it runs on this selection.
@@ -472,7 +492,7 @@ fn download(
                 // this (the job ends CANCELLED, no file) or after it (the job is already off the
                 // table and the cancel answers false). Never a cancelled job that ends `done`.
                 let mut t = lock(&state.table);
-                if cancel.load(Ordering::SeqCst) {
+                if cancel() {
                     return Err(Stop::Cancelled);
                 }
                 fs::rename(&part_path, state.path(name))?;
@@ -487,7 +507,10 @@ fn download(
         file.sync_data()?;
         meta.raw_offset = offset - decoder.held() as u64;
         write_meta(&meta_path, &meta)?;
-        shared.emit(ATTACHMENT_PROGRESS, json!({ "jobId": id, "received": offset, "total": total }));
+        // A download pass's (job 0) has nobody waiting on it.
+        if id != 0 {
+            shared.emit(ATTACHMENT_PROGRESS, json!({ "jobId": id, "received": offset, "total": total }));
+        }
     }
 }
 
@@ -720,6 +743,9 @@ pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let Some((name, _)) = name_of(engine.shared(), &key)? else {
         return Ok(json!({ "path": null }));
     };
+    if let Some(found) = offline_file(engine.shared(), &key.account_id, &name) {
+        return Ok(json!({ "path": found.to_string_lossy() }));
+    }
     let path = engine.attachments().state.path(&name);
     match touch(&path) {
         Ok(()) => Ok(json!({ "path": path.to_string_lossy() })),
@@ -732,8 +758,154 @@ pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
 pub(crate) fn cached_part(engine: &Engine, account_id: &str, folder: &str, uid: u32, section: &str) -> Option<PathBuf> {
     let key = PartKey { account_id: account_id.into(), folder: folder.into(), uid, section: section.into() };
     let (name, _) = name_of(engine.shared(), &key).ok()??;
+    if let Some(found) = offline_file(engine.shared(), account_id, &name) {
+        return Some(found);
+    }
     let path = engine.attachments().state.path(&name);
     touch(&path).ok().map(|()| path)
+}
+
+/// The finished offline file `name` of `account`, if the download pass has it.
+fn offline_file(shared: &Shared, account: &str, name: &str) -> Option<PathBuf> {
+    let p = crate::offline::attachments_dir(shared, account)?.join(name);
+    p.is_file().then_some(p)
+}
+
+/// A download pass (`sync.rs` `download_pass`, on an unmetered network): fetches the attachments
+/// of the messages in `account`'s offline window that are at most
+/// [`crate::offline::ATTACHMENT_PREFETCH_MAX`] each and not among the offline files yet, newest
+/// message first, over the caller's signed-in `backend`, into the account's offline directory. A
+/// link (Graph) has no bytes and is skipped. `stop` is asked between chunks: a cut download keeps
+/// its `.part` and resumes on the next pass. One that fails for itself (gone, refused) waits
+/// before it is tried again ([`crate::offline::attachment_failed`]); a network failure ends the
+/// pass. Returns how many files were finished.
+pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn Backend, account: &str, stop: &dyn Fn() -> bool) -> Result<usize, Fail> {
+    let Some(dir) = crate::offline::attachments_dir(shared, account) else {
+        return Ok(0);
+    };
+    let from = crate::offline::bounds(shared, account, crate::compose::now_ms()).fetch_from;
+    let rows: Vec<(String, Option<i64>, u32, String)> = shared.read(|c| {
+        let mut st = c.prepare_cached(
+            "SELECT a.folder, f.uid_validity, a.uid, a.section FROM attachments a
+             JOIN messages m ON m.account_id = a.account_id AND m.folder = a.folder AND m.uid = a.uid
+             JOIN folders f ON f.account_id = a.account_id AND f.path = a.folder
+             WHERE a.account_id = ?1 AND m.date_ms >= ?2 AND m.out_of_window_ms IS NULL AND m.local_deleted IS NULL
+               AND f.noselect = 0 AND a.size <= ?3 AND (a.encoding IS NULL OR a.encoding != ?4)
+             ORDER BY m.date_ms DESC, m.uid DESC, a.section",
+        )?;
+        let rows = st
+            .query_map((account, from, crate::offline::ATTACHMENT_PREFETCH_MAX as i64, crate::backend::graph::LINK), |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? as u32, r.get(3)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    })?;
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    let _ = fs::create_dir_all(&dir);
+    let state = State::new(dir);
+    let mut done = 0;
+    for (folder, validity, uid, section) in rows {
+        let Some(validity) = validity else { continue };
+        if stop() {
+            break;
+        }
+        let key = PartKey { account_id: account.to_string(), folder, uid, section };
+        let name = file_name(&key, validity);
+        if state.path(&name).is_file() {
+            continue;
+        }
+        let retry = (key.account_id.clone(), key.folder.clone(), key.uid, key.section.clone());
+        if crate::offline::attachment_waits(shared, &retry) {
+            continue;
+        }
+        not_closing(shared)?;
+        match download(&state, shared, backend, 0, &key, &name, validity, stop) {
+            Ok(()) => done += 1,
+            Err(Stop::Fail(Fail::Closing)) => return Err(Fail::Closing),
+            Err(Stop::Fail(Fail::Gone)) => return Err(Fail::Gone),
+            // Cut by `stop`: the `.part` stays for the next pass.
+            Err(Stop::Cancelled) => break,
+            Err(Stop::Fail(Fail::Code(code, why))) if code != crate::accounts::Code::Invalid => return Err(Fail::Code(code, why)),
+            Err(_) => {
+                remove_partial(&state, &name);
+                crate::offline::attachment_failed(shared, retry);
+            }
+        }
+    }
+    Ok(done)
+}
+
+/// Largest inline image handed to the viewer as a `data:` URL, and most bytes for one message.
+const INLINE_MAX: u64 = 5 * 1024 * 1024;
+const INLINE_TOTAL: u64 = 20 * 1024 * 1024;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InlineParams {
+    account_id: String,
+    folder: String,
+    uid: u32,
+}
+
+/// A raster image type a `data:` URL may carry (never SVG).
+fn inline_mime(mime: &str) -> Option<String> {
+    let m = mime.trim().to_ascii_lowercase();
+    let sub = m.strip_prefix("image/")?;
+    (!sub.is_empty() && !sub.contains("svg") && sub.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'+' | b'-'))).then_some(m)
+}
+
+/// `mobile.message.inlineImages {accountId, folder, uid}` -> `{images: {contentId: dataUrl},
+/// missing: [section]}`: the message's inline images (parts with a Content-ID, a raster image
+/// type) whose bytes are on the phone (offline files, else the cache), as `data:` URLs keyed by
+/// the bare Content-ID (no angle brackets), for the viewer to put in place of their `cid:`
+/// references; `missing` names the sections that are not on the phone yet (a tap's fetch brings
+/// them). At most 5 MB per image and 20 MB per message.
+pub(crate) fn inline_images(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    use base64::Engine as _;
+    let p: InlineParams = parse(params)?;
+    let rows: Vec<(String, String, i64, String)> = engine
+        .read(|c| {
+            let mut st = c.prepare_cached(
+                "SELECT section, mime, size, content_id FROM attachments
+                 WHERE account_id = ?1 AND folder = ?2 AND uid = ?3 AND content_id IS NOT NULL AND content_id != ''
+                 ORDER BY section",
+            )?;
+            let rows = st.query_map((&p.account_id, &p.folder, p.uid as i64), |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect();
+            rows
+        })
+        .map_err(internal)?;
+    let mut images = serde_json::Map::new();
+    let mut missing = Vec::new();
+    let mut total = 0u64;
+    for (section, mime, size, cid) in rows {
+        let Some(mime) = inline_mime(&mime) else { continue };
+        let bare = cid.trim().trim_start_matches('<').trim_end_matches('>').to_string();
+        if bare.is_empty() || images.contains_key(&bare) {
+            continue;
+        }
+        let key = PartKey { account_id: p.account_id.clone(), folder: p.folder.clone(), uid: p.uid, section: section.clone() };
+        let Ok(Some((name, _))) = name_of(engine.shared(), &key) else { continue };
+        let found = offline_file(engine.shared(), &p.account_id, &name).or_else(|| {
+            let c = engine.attachments().state.path(&name);
+            c.is_file().then_some(c)
+        });
+        let Some(path) = found else {
+            if (size.max(0) as u64) <= INLINE_MAX {
+                missing.push(section);
+            }
+            continue;
+        };
+        let len = fs::metadata(&path).map(|m| m.len()).unwrap_or(u64::MAX);
+        if len > INLINE_MAX || total + len > INLINE_TOTAL {
+            continue;
+        }
+        let Ok(bytes) = fs::read(&path) else { continue };
+        total += len;
+        images.insert(bare, Value::String(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))));
+    }
+    Ok(json!({ "images": images, "missing": missing }))
 }
 
 /// Perf-gate seed only: `bytes` as the finished cache file of one part, as if it had been fetched

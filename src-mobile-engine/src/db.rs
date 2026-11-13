@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
 const READERS: usize = 2;
 
 /// Schema 2, frozen: a new file is built as schema 2 plus every forward step, so it cannot drift
@@ -211,8 +211,27 @@ ALTER TABLE accounts ADD COLUMN color TEXT;
 ALTER TABLE accounts ADD COLUMN sort_order INTEGER;
 ";
 
+/// Schema 7 to 8, full offline (`offline.rs`). `folders.full_from_ms`: the start of the window
+/// the folder's last completed full pass listed (NULL: none completed since this step), so a wider
+/// window (the user's choice, Premium coming back) or a pass cut part way takes the folder's full
+/// pass again. `body_retry`: a body a download fetched and could not keep (the server cut it
+/// short, the attachments could not be listed, the uid was gone) waits until `next_ms` before it
+/// is asked for again, the wait doubling with each attempt.
+const V7_TO_V8: &str = "
+ALTER TABLE folders ADD COLUMN full_from_ms INTEGER;
+CREATE TABLE body_retry (
+  account_id TEXT NOT NULL,
+  folder     TEXT NOT NULL,
+  uid        INTEGER NOT NULL,
+  attempts   INTEGER NOT NULL,
+  next_ms    INTEGER NOT NULL,
+  PRIMARY KEY (account_id, folder, uid)
+) WITHOUT ROWID;
+";
+
 /// Every table any schema version created; a rebuild drops them all (their indexes go with them).
 const ALL_TABLES: &[&str] = &[
+    "body_retry",
     "follow_ups",
     "notified",
     "sync_state",
@@ -246,6 +265,7 @@ pub(crate) const PER_ACCOUNT_TABLES: &[&str] = &[
     "notified",
     "sync_state",
     "follow_ups",
+    "body_retry",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -284,6 +304,8 @@ pub struct Engine {
     attachments: crate::attachments::Attachments,
     /// New mail while the app is open: the foreground account's listener (`live.rs`).
     live: crate::live::Live,
+    /// Downloads the offline window while the app is in front (`offline.rs`).
+    downloader: crate::offline::Downloader,
     /// `open` found a journal or queued sends: replay starts once the shell can hear its results, when the event
     /// sink is installed or the first RPC arrives, whichever is first.
     startup_replay: AtomicBool,
@@ -327,6 +349,9 @@ pub(crate) struct Shared {
     pub(crate) premium: crate::premium::Premium,
     /// The follow-up reminders' worker (`followup.rs`).
     pub(crate) followup: crate::followup::Worker,
+    /// The network the shell reported, offline attachments' place, the downloader's wake-up
+    /// (`offline.rs`).
+    pub(crate) offline: crate::offline::State,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -422,6 +447,9 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         if found < 7 {
             tx.execute_batch(V6_TO_V7)?;
         }
+        if found < 8 {
+            tx.execute_batch(V7_TO_V8)?;
+        }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;
     } else {
@@ -510,6 +538,7 @@ impl Engine {
                 search: crate::search::Search::default(),
                 premium: crate::premium::Premium::default(),
                 followup: crate::followup::Worker::default(),
+                offline: crate::offline::State::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -521,8 +550,10 @@ impl Engine {
             replay: crate::actions::Replay::default(),
             outbox: crate::outbox::Outbox::new(cache_dir),
             live: crate::live::Live::default(),
+            downloader: crate::offline::Downloader::default(),
             startup_replay: AtomicBool::new(journal || queued),
         };
+        engine.shared.offline.set_data_dir(data_dir);
         crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
         crate::premium::load(&engine.shared);
         if let Err(e) = crate::body::drop_stale_graph_bodies(&engine.shared) {
@@ -567,6 +598,10 @@ impl Engine {
 
     pub(crate) fn live(&self) -> &crate::live::Live {
         &self.live
+    }
+
+    pub(crate) fn offline_downloader(&self) -> &crate::offline::Downloader {
+        &self.downloader
     }
 
     /// Tests: the most bytes one attachment job has held in a buffer at once (a raw chunk in, or
@@ -694,6 +729,8 @@ impl Drop for Engine {
         self.shared.followup.stop();
         self.attachments.stop();
         self.live.stop();
+        // The foreground downloader sees `closing` once woken.
+        crate::offline::wake(&self.shared);
         // Closes search.db now: its EXCLUSIVE lock would outlive this engine in a worker's Arc.
         crate::search::close(&self.shared);
         // Frees the loopback port if a sign-in was still open; flows are forgotten.

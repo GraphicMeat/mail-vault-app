@@ -68,6 +68,8 @@ fn fx() -> Fx {
     std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
     let tmp = tempfile::tempdir().unwrap();
     let engine = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(MemorySecrets::default())).unwrap();
+    // These tests watch the page's and the background run's passes alone.
+    engine.set_front_downloads_for_tests(false);
     Fx { tmp, engine }
 }
 

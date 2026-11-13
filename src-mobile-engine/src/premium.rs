@@ -764,6 +764,18 @@ impl Engine {
     }
 }
 
+/// Unit tests: Premium on (entitled for a day) or off, as if the server had answered.
+#[cfg(test)]
+pub(crate) fn set_active_for_test(shared: &Shared, on: bool) {
+    let now = now(shared);
+    let mut st = lock(&shared.premium.state);
+    st.cached = if on {
+        Cached { entitled: true, source: Some(APPLE.into()), expires_ms: now + 86_400_000, checked_ms: now }
+    } else {
+        Cached::not_entitled(now)
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

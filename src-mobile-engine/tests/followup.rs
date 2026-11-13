@@ -84,6 +84,8 @@ struct Fixture {
 
 fn open(dir: &Path, secrets: &Arc<MemorySecrets>) -> (Arc<Engine>, Arc<Events>) {
     let engine = Arc::new(Engine::open(dir, &dir.join("cache"), Arc::clone(secrets) as _).unwrap());
+    // These tests watch the page's and the background run's passes alone.
+    engine.set_front_downloads_for_tests(false);
     let events = Arc::new(Events::default());
     let sink = Arc::clone(&events);
     assert!(engine.set_event_sink(move |name, payload| {
