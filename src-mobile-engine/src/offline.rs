@@ -437,6 +437,12 @@ impl Engine {
     /// The network as the OS sees it: `constrained` (iOS Low Data Mode, Android data saver on a
     /// metered network) stops every download; `expensive` (cellular, a hotspot) holds back
     /// attachments only. Called by the shell on every change.
+    /// Where offline attachments live (`<data>/offline/att`), spelled as the engine spells the
+    /// paths it hands out: the shell checks a path the page sends against this.
+    pub fn offline_attachments_root(&self) -> Option<PathBuf> {
+        self.shared().offline.data_dir.get().map(|d| d.join("offline").join("att"))
+    }
+
     pub fn set_network(&self, constrained: bool, expensive: bool) {
         let st = &self.shared().offline;
         let was = downloads_allowed(self.shared());
@@ -701,6 +707,13 @@ pub(crate) fn download_now(engine: &Engine, params: Value) -> Result<Value, RpcE
         })
         .map_err(internal)?;
     lock(&engine.shared().offline.att_retry).retain(|k, _| p.account_id.as_ref().is_some_and(|a| *a != k.0));
+    // Folders waiting after a failure are tried again too.
+    engine
+        .write(|c| match &p.account_id {
+            Some(a) => c.execute("DELETE FROM settings WHERE substr(key, 1, ?2) = ?1", rusqlite::params![folder_retry_key(a, ""), folder_retry_key(a, "").chars().count() as i64]),
+            None => c.execute("DELETE FROM settings WHERE key LIKE 'acct.%.folderRetry.%'", []),
+        })
+        .map_err(internal)?;
     engine.offline_wake();
     Ok(json!({ "queued": true }))
 }
@@ -1071,5 +1084,22 @@ mod tests {
         let _e = Engine::open(tmp.path(), &cache, Arc::new(crate::MemorySecrets::default())).unwrap();
         assert!(!gone_dir.exists(), "the removed account's files are still there");
         assert!(live_dir.join("0".repeat(64)).exists(), "a live account's files went");
+    }
+
+    /// A folder waiting after a failure counts as nothing left; Download now tries it again at
+    /// once (its wait goes), for the account named or for every account.
+    #[test]
+    fn download_now_ends_a_folder_wait() {
+        let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")).mailbox(Mailbox::new("Broken")));
+        let f = fx(&server);
+        crate::sync::sync_now_for_test(f.e.shared(), &f.account, None);
+        folder_failed(f.e.shared(), &f.account, "Broken", now());
+        assert!(folder_waits(f.e.shared(), &f.account, "Broken", now()));
+        assert!(!folder_waits(f.e.shared(), &f.account, "INBOX", now()));
+        f.e.rpc("mobile.offline.downloadNow", json!({ "accountId": f.account })).unwrap();
+        assert!(!folder_waits(f.e.shared(), &f.account, "Broken", now()));
+        folder_failed(f.e.shared(), &f.account, "Broken", now());
+        f.e.rpc("mobile.offline.downloadNow", json!({})).unwrap();
+        assert!(!folder_waits(f.e.shared(), &f.account, "Broken", now()));
     }
 }

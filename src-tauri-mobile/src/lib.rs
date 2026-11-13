@@ -148,15 +148,16 @@ async fn hand_out(app: tauri::AppHandle, path: String, name: String, mime: Strin
         let engine = background::wait_engine(ENGINE_WAIT).map_err(|reason| NativeError::new("INTERNAL", reason))?;
         let cache = app.path().app_cache_dir().map_err(|e| NativeError::new("INTERNAL", e.to_string()))?;
         let share = cache.join("share");
-        // A cache file, else an offline one (`<data>/offline/att/<account hash>/<name>`, the
-        // engine's data directory being the app's).
+        // A cache file, else an offline one (`<data>/offline/att/<account hash>/<name>`), under
+        // the root as the engine spells it (on Android a worker may have opened the engine with
+        // the data directory Java gave it).
         let real = match files::validate_cache_file(Path::new(&path), &cache.join("att")) {
-            Err(PathError::Invalid(why)) => match app.path().app_data_dir() {
-                Ok(data) => files::validate_offline_file(Path::new(&path), &data.join("offline").join("att")).map_err(|e| match e {
+            Err(PathError::Invalid(why)) => match engine.offline_attachments_root() {
+                Some(root) => files::validate_offline_file(Path::new(&path), &root).map_err(|e| match e {
                     PathError::Invalid(_) => PathError::Invalid(why),
                     gone => gone,
                 }),
-                Err(_) => Err(PathError::Invalid(why)),
+                None => Err(PathError::Invalid(why)),
             },
             other => other,
         }
