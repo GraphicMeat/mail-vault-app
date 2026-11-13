@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- With emails ticked in the list, the delete key now deletes all of them, even with another email open in the reading pane. It used to delete only the open email. The Delete and Backspace keys now delete too, as well as #.
+- The Reply-To warning no longer fires on emails that have no Reply-To at all. A sender's DKIM signature names its signed headers, and MailVault read the rest of that signature as the reply address, so receipts from senders like PlayStation showed a "Reply-To domain mismatch" with a long garbled address. Threading headers named inside a signature are no longer mistaken for the real ones either.
+- The Reply-To warning dialog now wraps a long reply domain instead of spilling past its edge with a sideways scrollbar.
 - A Move, Move to Junk or Unarchive on a selection of emails that fails now says which action failed. It used to read "Delete failed".
 - Turning Click Confirmation for flagged links on or off now applies at once to the message you have open, in the reading pane, threads, chat view and the full message view. Before, that message kept the old setting until you opened another one.
 - A flagged link found while a message is open in the full message view now marks its row in the list, as the reading pane already did.

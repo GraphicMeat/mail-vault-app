@@ -626,6 +626,12 @@ pub fn reply_to_mismatch(row: &Value) -> Option<Value> {
         Some(other) => str_at(other, &["address"]),
         None => "",
     };
+    // A row cached before the header parser was anchored can hold the tail of
+    // a DKIM-Signature here ("Message-ID:Content-Type; i=...; bh=..."). A colon
+    // or semicolon is header syntax, never part of an unquoted address.
+    if reply_to.contains([':', ';']) {
+        return None;
+    }
     let reply_domain = domain_part(reply_to);
     if reply_domain.is_empty()
         || reply_domain == from_domain

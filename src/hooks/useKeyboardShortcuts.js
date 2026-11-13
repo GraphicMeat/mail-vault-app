@@ -79,6 +79,12 @@ function buildShortcutMap(shortcuts) {
       }
     }
   }
+  // Delete and Backspace delete too, as in every mail app, while `delete` is
+  // bound at all and neither key is bound to something else. A text field
+  // keeps both: typing targets never reach a non-Escape action.
+  if (shortcuts.delete) {
+    for (const key of ['Backspace', 'Delete']) if (!(key in map)) map[key] = 'delete';
+  }
   return map;
 }
 

@@ -49,6 +49,19 @@ describe('ReplyToAlertIcon', () => {
     expect(screen.getAllByText('evil.ru').length).toBeGreaterThan(0);
   });
 
+  // A long reply domain ran past the dialog's edge and gave it a horizontal
+  // scrollbar: the orange domain line was the one value line left unwrapped.
+  it('wraps every value line, the reply domain included', () => {
+    const domain = 'txn-email.playstation.com;bh=ibqyscc4uce8+gwszgtxzwajwsyykrkt0eae2h98fdc=';
+    render(
+      <ReplyToAlertIcon
+        mismatch={{ fromDomain: 'bank.com', replyToAddress: `x@${domain}`, replyToDomain: domain }}
+      />
+    );
+    fireEvent.click(screen.getByRole('button'));
+    expect(screen.getByText(domain).className).toMatch(/\bbreak-all\b/);
+  });
+
   it('closes the modal on Escape', () => {
     render(
       <ReplyToAlertIcon

@@ -1002,19 +1002,19 @@ fn parse_threading_headers(raw: &[u8]) -> (Option<String>, Option<Vec<String>>) 
     let header_section = raw_str.split("\r\n\r\n").next()
         .or_else(|| raw_str.split("\n\n").next())
         .unwrap_or(&raw_str);
-    let lower = header_section.to_lowercase();
+    let field = |name| crate::imap::header_value_start(header_section, name);
 
-    let in_reply_to = lower.find("in-reply-to:")
+    let in_reply_to = field("In-Reply-To")
         .and_then(|idx| {
-            let after = &header_section[idx + "in-reply-to:".len()..];
+            let after = &header_section[idx..];
             let start = after.find('<')?;
             let end = after[start..].find('>')? + start;
             Some(after[start..=end].trim().to_string())
         });
 
-    let references = lower.find("references:")
+    let references = field("References")
         .map(|idx| {
-            let after = &header_section[idx + "references:".len()..];
+            let after = &header_section[idx..];
             let mut refs = Vec::new();
             let mut start = None;
             for (i, ch) in after.char_indices() {
@@ -1276,5 +1276,20 @@ mod tests {
             pace.record(SLOW_WRITE_MS);
         }
         assert_eq!(pace.slow(), Some(SLOW_WRITE_MS));
+    }
+}
+
+#[cfg(test)]
+mod threading_header_tests {
+    use super::parse_threading_headers;
+
+    // A DKIM-Signature's `h=` tag names the signed headers with colons; an
+    // unanchored search took "In-Reply-To:" there for the header itself.
+    #[test]
+    fn threading_headers_named_inside_a_dkim_signature_are_ignored() {
+        let raw = b"DKIM-Signature: v=1; h=From:In-Reply-To:References; b=<sig@x>\r\nFrom: a@a.test\r\nSubject: hi\r\n\r\nbody";
+        assert_eq!(parse_threading_headers(raw), (None, None));
+        let raw = b"DKIM-Signature: v=1; h=From:In-Reply-To:References; b=<sig@x>\r\nIn-Reply-To: <p@a.test>\r\nReferences: <r@a.test> <p@a.test>\r\n\r\nbody";
+        assert_eq!(parse_threading_headers(raw), (Some("<p@a.test>".into()), Some(vec!["<r@a.test>".into(), "<p@a.test>".into()])));
     }
 }
