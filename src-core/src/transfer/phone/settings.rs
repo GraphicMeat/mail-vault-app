@@ -14,7 +14,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::io::Write;
-use zeroize::Zeroizing;
 
 /// A field read as JSON first, then as `T`: a value of another shape is `None`, not an error.
 pub(crate) fn lenient<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
@@ -275,14 +274,38 @@ pub fn strip_data_images(html: &str) -> String {
     out
 }
 
-/// Deflated length of `bundle` as JSON (what the code carries, before the fixed sealing overhead).
+/// Deflated length of `bundle` as JSON (what the code carries, before the fixed sealing overhead)
+/// and the JSON's own length. The JSON (passwords and tokens in it) is streamed into the encoder
+/// and never held: a buffer that grows reallocates and leaves the old block, secrets and all,
+/// unwiped.
 fn deflated_len(bundle: &PhoneBundle) -> Option<(usize, usize)> {
-    let json = Zeroizing::new(serde_json::to_vec(bundle).ok()?);
     let mut counter = Counter(0);
-    let mut enc = flate2::write::DeflateEncoder::new(&mut counter, flate2::Compression::best());
-    enc.write_all(&json).ok()?;
-    enc.finish().ok()?;
-    Some((counter.0, json.len()))
+    let json_len = {
+        let enc = flate2::write::DeflateEncoder::new(&mut counter, flate2::Compression::best());
+        let mut plain = Counted { n: 0, inner: enc };
+        serde_json::to_writer(&mut plain, bundle).ok()?;
+        let Counted { n, inner } = plain;
+        inner.finish().ok()?;
+        n
+    };
+    Some((counter.0, json_len))
+}
+
+/// Passes writes on to `inner`, counting the bytes.
+struct Counted<W> {
+    n: usize,
+    inner: W,
+}
+
+impl<W: Write> Write for Counted<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.n += n;
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 struct Counter(usize);
