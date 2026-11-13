@@ -76,10 +76,7 @@ export function useSurfaceDoc(params, { deferOnUnmount = false, registry = getDo
   useEffect(() => {
     if (!state.key || !state.doc) return undefined;
     const k = state.key;
-    return registry.subscribe(k, (doc) => setState(s => {
-      if (s.key !== k || s.doc === doc || (s.doc?.docId === doc.docId && s.doc.rev > doc.rev)) return s;
-      return { ...s, doc };
-    }));
+    return registry.subscribe(k, (doc) => setState(s => (s.key === k ? { ...s, doc } : s)));
   }, [state.key, state.doc?.docId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

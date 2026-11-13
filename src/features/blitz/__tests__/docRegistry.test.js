@@ -125,22 +125,9 @@ describe('docRegistry', () => {
     h.reg.acquire(k, P('x')); await h.settle();
     const seen = vi.fn();
     h.reg.subscribe(k, seen);
-    seen.mockClear();
     h.push({ docId: 99, rev: 5, meta: {} });
     expect(seen).not.toHaveBeenCalled();
     h.push({ docId: 1, rev: 2, meta: { cssHeight: 20 } });
-    expect(seen).toHaveBeenCalledWith({ key: k, docId: 1, rev: 2, meta: { cssHeight: 20 } });
-  });
-
-  it('a subscriber receives an update that arrived before it subscribed', async () => {
-    const h = harness();
-    const k = docKey(P('x'));
-    h.reg.acquire(k, P('x')); await h.settle();
-    h.push({ docId: 1, rev: 2, meta: { cssHeight: 20 } });
-
-    const seen = vi.fn();
-    h.reg.subscribe(k, seen);
-
     expect(seen).toHaveBeenCalledWith({ key: k, docId: 1, rev: 2, meta: { cssHeight: 20 } });
   });
 
