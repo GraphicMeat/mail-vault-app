@@ -29,8 +29,10 @@
 // went out. A choice without Premium opens the paywall instead and stays off. Not offered on a
 // Graph account (desktop parity). The engine's refusal (PREMIUM_REQUIRED) is shown in place.
 //
-// Keyboard: the focused field is kept above the keyboard (`visualViewport`); targets are 44 pt.
+// Keyboard: the screen is laid on the visible part of the screen above the keyboard and only its
+// fields scroll (keyboardViewport.js); targets are 44 pt.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useKeyboardViewport } from './keyboardViewport.js';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall, pickFiles } from './transport.js';
 import { ensureAttachmentEvents, watchJob } from './attachmentJobs.js';
@@ -125,33 +127,6 @@ function fetchPart(accountId, folder, uid, section, cancels) {
   );
 }
 
-/** Keeps the focused field above the on-screen keyboard. */
-function useKeyboardInset(ref) {
-  useEffect(() => {
-    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    const el = ref.current;
-    if (!vv || !el) return undefined;
-    const reveal = () => {
-      const focused = document.activeElement;
-      if (focused && el.contains(focused) && typeof focused.scrollIntoView === 'function') {
-        focused.scrollIntoView({ block: 'nearest' });
-      }
-    };
-    const onResize = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      el.style.setProperty('--mv-keyboard', `${Math.round(inset)}px`);
-      reveal();
-    };
-    vv.addEventListener('resize', onResize);
-    el.addEventListener('focusin', reveal);
-    onResize();
-    return () => {
-      vv.removeEventListener('resize', onResize);
-      el.removeEventListener('focusin', reveal);
-    };
-  }, [ref]);
-}
-
 export default function Compose({ accountId, fromEmail, mode = 'new', original = null, draftId: openDraft = null, onClose }) {
   const t = useT();
   const [to, setTo] = useState({ entries: [], text: '' });
@@ -187,6 +162,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const chain = useRef(Promise.resolve());
   const removedSections = cancels.current.removed;
   const live = useRef(true);
+  const sheet = useRef(null);
   const scroller = useRef(null);
 
   // What a save or a send carries, typed-but-uncommitted addresses included.
@@ -491,7 +467,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   useBackLayer(confirming, keepEditing);
   useBackLayer(attaching, closeAttach);
   useBackLayer(later, closeLater);
-  useKeyboardInset(scroller);
+  useKeyboardViewport(sheet, scroller);
 
   const title = t(TITLE_KEYS[shownMode] || TITLE_KEYS.new);
   let hint = null;
@@ -499,7 +475,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   else if (noTo && (ccAll.length || bccAll.length)) hint = t('mobile.compose.needTo');
 
   return (
-    <section className="mv-compose" role="dialog" aria-modal="true" aria-label={title}>
+    <section ref={sheet} className="mv-compose" role="dialog" aria-modal="true" aria-label={title}>
       <header className="mv-compose__bar">
         <button type="button" className="mv-compose__back" data-mv-compose-close onClick={requestLeave}>
           {t('common.back')}

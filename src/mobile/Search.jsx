@@ -19,6 +19,7 @@ import { useMobileStore } from './store.js';
 import MessageRow, { ROW_HEIGHT } from './MessageRow.jsx';
 import { errorKey } from './errors.js';
 import { useT } from './i18n.js';
+import { useKeyboardViewport } from './keyboardViewport.js';
 
 /** Quiet time after the last keystroke before the search runs. */
 export const SEARCH_DEBOUNCE_MS = 250;
@@ -52,7 +53,10 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
   const [local, setLocal] = useState({ state: 'idle', rows: [], cursor: null, code: null });
   // The server search: idle | loading | done | failed
   const [server, setServer] = useState({ state: 'idle', rows: [], code: null });
+  const layer = useRef(null);
   const scroller = useRef(null);
+  // The results end above the keyboard, not under it (keyboardViewport.js).
+  useKeyboardViewport(layer, scroller);
   const gen = useRef(0); // bumps with every new query or scope: older replies are dropped
   const timer = useRef(null);
   const busyMore = useRef(false);
@@ -189,7 +193,7 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
   const firstServer = local.rows.length;
 
   return (
-    <section className="mv-search" role="dialog" aria-modal="true" aria-label={t('mobile.search.title')}>
+    <section ref={layer} className="mv-search" role="dialog" aria-modal="true" aria-label={t('mobile.search.title')}>
       <header className="mv-search__bar">
         <form className="mv-search__form" role="search" onSubmit={onSubmit}>
           <span className="mv-search__glass"><SearchIcon /></span>

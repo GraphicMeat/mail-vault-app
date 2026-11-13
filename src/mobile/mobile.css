@@ -938,11 +938,17 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-sheet__action:active { background: var(--mail-surface-hover); }
 .mv-sheet__action--danger { color: var(--mv-danger); }
 
-/* Compose: a bar, then the fields and the body scrolling above the keyboard (--mv-keyboard is set
-   from visualViewport while the keyboard is up). */
+/* Compose: a bar, then the fields and the body scrolling above the keyboard. While the keyboard is
+   up the layer covers only the visible part of the screen (--mv-vv-top / --mv-vv-height and
+   [data-mv-keyboard], from visualViewport in keyboardViewport.js): iOS pans the visual viewport
+   over a fixed layer, so `inset: 0` would put the bar off the top and the bottom under the keyboard.
+   Placed with top/height, never a transform: the sheets inside are fixed to the screen too. */
 .mv-compose {
   position: fixed;
-  inset: 0;
+  top: var(--mv-vv-top, 0px);
+  right: 0;
+  left: 0;
+  height: var(--mv-vv-height, 100%);
   z-index: 15;
   display: flex;
   flex-direction: column;
@@ -989,9 +995,11 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  padding: 0 calc(var(--mv-safe-right) + 16px) calc(var(--mv-safe-bottom) + var(--mv-keyboard, 0px) + 16px) calc(var(--mv-safe-left) + 16px);
-  scroll-padding-bottom: calc(var(--mv-keyboard, 0px) + 24px);
+  padding: 0 calc(var(--mv-safe-right) + 16px) calc(var(--mv-safe-bottom) + 16px) calc(var(--mv-safe-left) + 16px);
+  scroll-padding-bottom: 24px;
 }
+/* The keyboard covers the home indicator: no safe-area gap above it. */
+.mv-compose[data-mv-keyboard] .mv-compose__scroll { padding-bottom: 16px; }
 .mv-compose__error { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--mv-danger) 14%, transparent); color: var(--mv-danger); }
 .mv-compose__line {
   display: flex;
@@ -1219,10 +1227,14 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-settings__link { color: var(--mail-accent-text); text-decoration: none; font-weight: 500; }
 .mv-settings__link:active { background: var(--mail-surface-hover); }
 
-/* The search screen: a full-screen layer under the viewer (z 10), so a result opens over it. */
+/* The search screen: a full-screen layer under the viewer (z 10), so a result opens over it. With
+   the keyboard up it covers only the visible part of the screen, like compose. */
 .mv-search {
   position: fixed;
-  inset: 0;
+  top: var(--mv-vv-top, 0px);
+  right: 0;
+  left: 0;
+  height: var(--mv-vv-height, 100%);
   z-index: 8;
   display: flex;
   flex-direction: column;

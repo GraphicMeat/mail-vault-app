@@ -801,3 +801,93 @@ describe('scheduled in the outbox', () => {
     await waitFor(() => expect(screen.getByText(t('mobile.outbox.waiting', { count: 1 }))).toBeTruthy());
   });
 });
+
+// iOS keyboard: WKWebView keeps the layout viewport (innerHeight) and shrinks the visual viewport
+// (`resize`), then pans it to the focused field (`scroll`, offsetTop > 0). A `position: fixed`
+// sheet sits on the layout viewport, so the pan pushes its bar off the top of the screen.
+describe('Compose over the iOS keyboard', () => {
+  const saved = {};
+  let vv;
+  beforeEach(() => {
+    saved.innerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+    saved.scrollY = Object.getOwnPropertyDescriptor(window, 'scrollY');
+    saved.scrollTo = window.scrollTo;
+    saved.scrollIntoView = Element.prototype.scrollIntoView;
+    vv = new EventTarget();
+    vv.height = 844;
+    vv.offsetTop = 0;
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
+    Object.defineProperty(window, 'scrollY', { configurable: true, writable: true, value: 0 });
+    window.scrollTo = vi.fn();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+  afterEach(() => {
+    delete window.visualViewport;
+    Object.defineProperty(window, 'innerHeight', saved.innerHeight);
+    if (saved.scrollY) Object.defineProperty(window, 'scrollY', saved.scrollY);
+    else delete window.scrollY;
+    window.scrollTo = saved.scrollTo;
+    if (saved.scrollIntoView) Element.prototype.scrollIntoView = saved.scrollIntoView;
+    else delete Element.prototype.scrollIntoView;
+  });
+
+  // The order iOS reports it in: the shrink first (offsetTop still 0), the pan after.
+  const keyboardUp = (offsetTop) => {
+    act(() => {
+      vv.height = 508;
+      vv.dispatchEvent(new Event('resize'));
+    });
+    act(() => {
+      vv.offsetTop = offsetTop;
+      vv.dispatchEvent(new Event('scroll'));
+    });
+  };
+
+  it('sizes the sheet to the visible area and adds no keyboard padding', async () => {
+    renderCompose();
+    await flush();
+    const sheet = screen.getByRole('dialog');
+    const scroller = body().parentElement;
+    act(() => { field(t('compose.subject')).focus(); });
+    keyboardUp(280);
+    expect(sheet.style.getPropertyValue('--mv-vv-top')).toBe('280px');
+    expect(sheet.style.getPropertyValue('--mv-vv-height')).toBe('508px');
+    expect(sheet.hasAttribute('data-mv-keyboard')).toBe(true);
+    // The sheet already ends at the keyboard: padding by its height again counts it twice.
+    expect(scroller.style.getPropertyValue('--mv-keyboard')).toBe('');
+    // scrollIntoView scrolls every scrollable ancestor, the document included.
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+
+    act(() => {
+      vv.height = 844;
+      vv.offsetTop = 0;
+      vv.dispatchEvent(new Event('resize'));
+    });
+    expect(sheet.style.getPropertyValue('--mv-vv-top')).toBe('');
+    expect(sheet.style.getPropertyValue('--mv-vv-height')).toBe('');
+    expect(sheet.hasAttribute('data-mv-keyboard')).toBe(false);
+  });
+
+  it('puts a scrolled document back at the top', async () => {
+    renderCompose();
+    await flush();
+    act(() => { field(t('compose.subject')).focus(); });
+    window.scrollY = 120;
+    keyboardUp(0);
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('styles the sheet from the visual viewport, not the keyboard padding', async () => {
+    // Read from disk: vitest stubs CSS imports (even `?raw`) to an empty string.
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const css = readFileSync(resolve(process.cwd(), 'src/mobile/mobile.css'), 'utf8');
+    expect(css.length).toBeGreaterThan(1000);
+    const rule = (sel) => css.match(new RegExp(`(?:^|\\n)${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`))?.[1] ?? '';
+    expect(rule('.mv-compose__bar')).toContain('--mv-safe-top');
+    expect(rule('.mv-compose')).toContain('var(--mv-vv-height');
+    expect(rule('.mv-compose')).toContain('var(--mv-vv-top');
+    expect(rule('.mv-compose__scroll')).not.toContain('--mv-keyboard');
+  });
+});
