@@ -275,6 +275,21 @@ fn imported_accounts_take_the_desktop_order_and_colors() {
     assert_eq!(listed(&e), vec![pair("amy@example.test", Some("#14b8a6")), pair("zed@example.test", Some("#ec4899"))]);
 }
 
+/// An address with a non-ASCII capital (SQLite's NOCASE folds ASCII only) still takes its
+/// desktop position and color, and a phone-only account still follows the bundle's.
+#[test]
+fn a_non_ascii_capital_address_takes_the_desktop_order_and_color() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    phone_only(tmp.path(), "acc_phone", "phone@phone.test", 1);
+    let reply = import(&e, &code(PW, vec![shown("Ünal@example.test", "#ec4899", 1), shown("amy@example.test", "#14B8A6", 0)]), PW);
+    assert_eq!(reply["imported"], json!(["Ünal@example.test", "amy@example.test"]), "{reply}");
+    assert_eq!(
+        listed(&e),
+        vec![pair("amy@example.test", Some("#14b8a6")), pair("Ünal@example.test", Some("#ec4899")), pair("phone@phone.test", None)]
+    );
+}
+
 #[test]
 fn an_existing_account_takes_the_desktop_color_and_order_and_phone_only_ones_follow() {
     let tmp = tempfile::tempdir().unwrap();

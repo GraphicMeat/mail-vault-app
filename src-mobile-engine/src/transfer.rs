@@ -21,6 +21,7 @@ use crate::db::Engine;
 use crate::rpc::RpcError;
 use crate::secrets::Credential;
 use mailvault_core::transfer::phone::{decode_phone_bundle, hex_color, PhoneAccount, PhoneAuth, PhoneError, PhoneKind, MAX_FRAMES, MAX_FRAME_CHARS, MIN_PASSWORD_CHARS};
+use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use zeroize::Zeroizing;
@@ -83,8 +84,9 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
     // in; a skipped address is named once.
     let mut here = HashSet::new();
     let mut named_skipped = HashSet::new();
-    // Each bundle account now here (new or already present): its desktop position, lowercase
-    // address and color.
+    // Each bundle account now here (new or already present): its desktop position, account id
+    // and color. By id: SQLite's NOCASE folds ASCII only, so an address with a non-ASCII capital
+    // would not match its lowercase key.
     let mut placed: Vec<(u64, String, Option<String>)> = Vec::new();
     for (i, acct) in bundle.accounts.iter().enumerate() {
         let desktop = (acct.order.map_or(i as u64, u64::from), acct.color.as_deref().and_then(hex_color));
@@ -106,21 +108,23 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
                 continue;
             }
         };
-        if accounts::email_taken(engine, &email)? {
+        if let Some(id) = account_with(engine, &email)? {
             here.insert(key.clone());
-            placed.push((desktop.0, key, desktop.1));
+            placed.push((desktop.0, id, desktop.1));
             existing.push(email);
             continue;
         }
         match accounts::insert_new(engine, &row, &cred, |_, _| Ok(())) {
-            Ok(_) => {
+            Ok(id) => {
                 here.insert(key.clone());
-                placed.push((desktop.0, key, desktop.1));
+                placed.push((desktop.0, id, desktop.1));
                 imported.push(email);
             }
             Err(InsertError::Duplicate) => {
                 here.insert(key.clone());
-                placed.push((desktop.0, key, desktop.1));
+                if let Some(id) = account_with(engine, &email)? {
+                    placed.push((desktop.0, id, desktop.1));
+                }
                 existing.push(email);
             }
             Err(InsertError::Secret(_)) => skip(&mut skipped, &mut named_skipped, email, "internal"),
@@ -135,25 +139,29 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
     Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped }))
 }
 
-/// The desktop's look on the phone: the bundle's accounts take the desktop's order and colors
-/// (an account without a color keeps its own), every other account follows them in the order it
-/// had. One write.
+/// The id of the account already here under `email` (matched as `email_taken` does), if any.
+fn account_with(engine: &Engine, email: &str) -> Result<Option<String>, RpcError> {
+    engine
+        .read(|c| c.query_row("SELECT id FROM accounts WHERE email = ?1 COLLATE NOCASE", [email], |r| r.get(0)).optional())
+        .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// The desktop's look on the phone: the bundle's accounts (by id) take the desktop's order and
+/// colors (an account without a color keeps its own), every other account follows them in the
+/// order it had. One write.
 fn place(engine: &Engine, mut placed: Vec<(u64, String, Option<String>)>) -> Result<(), RpcError> {
     placed.sort_by_key(|p| p.0);
     engine
         .write(|c| {
-            let mut st = c.prepare(&format!("SELECT id, email FROM accounts ORDER BY {}", accounts::LIST_ORDER))?;
-            let rest = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<Result<Vec<_>, _>>()?;
+            let mut st = c.prepare(&format!("SELECT id FROM accounts ORDER BY {}", accounts::LIST_ORDER))?;
+            let rest = st.query_map([], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>()?;
             let mut pos = 0i64;
-            for (_, email, color) in &placed {
-                c.execute(
-                    "UPDATE accounts SET sort_order = ?1, color = COALESCE(?2, color) WHERE email = ?3 COLLATE NOCASE",
-                    rusqlite::params![pos, color, email],
-                )?;
+            for (_, id, color) in &placed {
+                c.execute("UPDATE accounts SET sort_order = ?1, color = COALESCE(?2, color) WHERE id = ?3", rusqlite::params![pos, color, id])?;
                 pos += 1;
             }
             let ours: HashSet<&str> = placed.iter().map(|p| p.1.as_str()).collect();
-            for (id, email) in rest.iter().filter(|(_, e)| !ours.contains(e.to_lowercase().as_str())) {
+            for id in rest.iter().filter(|id| !ours.contains(id.as_str())) {
                 c.execute("UPDATE accounts SET sort_order = ?1 WHERE id = ?2", rusqlite::params![pos, id])?;
                 pos += 1;
             }
