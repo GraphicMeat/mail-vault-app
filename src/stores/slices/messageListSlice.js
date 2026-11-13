@@ -5,7 +5,7 @@
 import { projectDraftUids } from '../../services/draftProjection';
 import * as api from '../../services/api';
 import { useSettingsStore } from '../settingsStore';
-import { buildThreads } from '../../utils/emailParser';
+import { buildThreads, normalizeMessageId } from '../../utils/emailParser';
 import { annotateRowAlerts } from '../../services/rowVerdicts';
 import { NO_SERVER_UIDS } from './serverUids';
 import { custodySource } from './custody';
@@ -608,7 +608,7 @@ export const createMessageListSlice = (set, get) => ({
     const merged = [];
 
     for (const email of sortedEmails) {
-      if (email.messageId) seen.add(email.messageId);
+      if (email.messageId) seen.add(normalizeMessageId(email.messageId));
       merged.push(email);
     }
 
@@ -619,8 +619,8 @@ export const createMessageListSlice = (set, get) => ({
     for (const email of sentEmails) {
       const foreign = activeAccountId && email._accountId && email._accountId !== activeAccountId;
       if (spans ? hiddenAccounts?.[email._accountId] : foreign) continue;
-      if (email.messageId && seen.has(email.messageId)) continue;
-      if (email.messageId) seen.add(email.messageId);
+      if (email.messageId && seen.has(normalizeMessageId(email.messageId))) continue;
+      if (email.messageId) seen.add(normalizeMessageId(email.messageId));
       email._fromSentFolder = true;
       // The active account's path fits the active account's rows only.
       if (!email._mailbox && sentPath && !foreign) email._mailbox = sentPath;

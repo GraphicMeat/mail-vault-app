@@ -1196,11 +1196,11 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 // account's view `sentEmails` is that account's alone, as it always was.
 function _mergeOptimisticSent(fresh, existing, accountId, accountEmail, sentPath, keepOthers) {
   const freshMessageIds = new Set(
-    fresh.map(e => e.messageId).filter(Boolean)
+    fresh.map(e => normalizeMessageId(e.messageId)).filter(Boolean)
   );
   const others = keepOthers ? (existing || []).filter(e => e._accountId !== accountId) : [];
   const pendingOptimistic = (existing || []).filter(
-    e => e._optimistic && e._accountId === accountId && !freshMessageIds.has(e.messageId)
+    e => e._optimistic && e._accountId === accountId && !freshMessageIds.has(normalizeMessageId(e.messageId))
   );
   return [
     ...others,
@@ -1493,10 +1493,10 @@ async function _loadSentHeaders(accountId, cacheOnly) {
     const added = rows
       .filter(e => !have.has(e.uid) && !tombstones?.has(`${accountId}|${sentPath}|${e.uid}`))
       .map(e => ({ ...e, _accountId: accountId, _accountEmail: accountEmail, _mailbox: sentPath, _fromSentFolder: true }));
-    const arrived = new Set(added.map(e => e.messageId).filter(Boolean));
+    const arrived = new Set(added.map(e => normalizeMessageId(e.messageId)).filter(Boolean));
     const drop = new Set(gone);
     const kept = current.filter(e => e._accountId !== accountId
-      || !((e._optimistic && e.messageId && arrived.has(e.messageId)) || (!e._optimistic && drop.has(e.uid))));
+      || !((e._optimistic && e.messageId && arrived.has(normalizeMessageId(e.messageId))) || (!e._optimistic && drop.has(e.uid))));
     if (!added.length && kept.length === current.length) return true;
     // Only a fill's end outranks a load that began before it.
     if (fill) _sentFillGen.set(accountId, (_sentFillGen.get(accountId) || 0) + 1);

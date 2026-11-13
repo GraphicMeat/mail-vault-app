@@ -577,6 +577,20 @@ describe('network recovery (STAB-02)', () => {
 });
 
 describe('getChatEmails provenance stamping', () => {
+  it('counts a Sent copy with padded Message-ID only once', () => {
+    const staged = { uid: 19, messageId: '<reply@x>', date: '2026-01-02T00:00:00Z' };
+    const server = { uid: 20, messageId: ' <reply@x> ', date: '2026-01-02T00:00:00Z', _accountId: 'acct-1' };
+    invalidateChatAndThreadCaches();
+    useMailStore.setState({
+      activeAccountId: 'acct-1', activeMailbox: 'INBOX',
+      mailboxes: [{ path: 'Sent', name: 'Sent', specialUse: '\\Sent' }],
+      accounts: [{ id: 'acct-1', email: 'user@example.com' }],
+      sortedEmails: [staged], sentEmails: [server], archivedEmailIds: new Set(), viewMode: 'all',
+    });
+
+    expect(useMailStore.getState().getChatEmails()).toEqual([staged]);
+  });
+
   // The merged list mixes INBOX and Sent, whose UIDs overlap. Readers
   // downstream (body loader, attachments, delete) need each message's own
   // folder — guessing from the active view returns a different message.
