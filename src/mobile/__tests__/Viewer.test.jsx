@@ -293,6 +293,24 @@ describe('Viewer', () => {
     expect(doc).toContain("img-src data: cid:;");
   });
 
+  // iOS WKWebView drops a second srcdoc change made while the first one loads, so the frame
+  // keeps the broken cid: version: the images must arrive in a fresh frame, not a changed one.
+  it('inline images that arrive after the body are drawn in a new frame', async () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+    engine.reply = body({
+      html: '<p>Logo <img src="cid:logo@x"></p>',
+      attachments: [{ section: '1.2', filename: 'logo.png', mime: 'image/png', size: 90, contentId: '<logo@x>', kind: 'file' }],
+    });
+    let answer;
+    engine.inline = new Promise((resolve) => { answer = resolve; });
+    renderViewer();
+    await waitFor(() => expect(frame()?.getAttribute('srcdoc')).toContain('cid:logo@x'));
+    const first = frame();
+    await act(async () => { answer({ images: { 'logo@x': PNG }, missing: [] }); });
+    await waitFor(() => expect(frame()?.getAttribute('srcdoc')).toContain(PNG));
+    expect(frame()).not.toBe(first);
+  });
+
   it('an error shows the reason and retries', async () => {
     engine.reply = Object.assign(new Error('HOST_UNREACHABLE'), { code: 'INTERNAL' });
     renderViewer();

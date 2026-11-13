@@ -84,8 +84,22 @@ describe('Settings > Offline', () => {
     engine.state.premium = false;
     engine.state.accounts[0].effectiveWindow = '3m';
     render(<OfflineSettings />);
-    await waitFor(() => expect(screen.getByText(t('mobile.offline.lapsed'))).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(t('mobile.offline.allNeedsPremium'))).toBeTruthy());
     expect(option('Ada', 'all').getAttribute('aria-checked')).toBe('true');
+  });
+
+  // An import from the computer can store All mail on a phone that never had Premium: the note
+  // must not speak of a Premium that ended.
+  it('All mail stored without Premium (never had it) shows a neutral note', async () => {
+    engine.state.accounts[0] = entry('a1', { window: 'all', effectiveWindow: '3m' });
+    render(<OfflineSettings />);
+    const note = await waitFor(() => {
+      const el = document.querySelector('[data-mv-offline-account="a1"] [data-mv-offline-lapsed]');
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(note.textContent).toBe(t('mobile.offline.allNeedsPremium'));
+    expect(note.textContent).not.toMatch(/ended/i);
   });
 
   it('says when Low Data Mode holds downloads, and Download now asks the engine', async () => {

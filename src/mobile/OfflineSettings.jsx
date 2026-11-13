@@ -1,8 +1,9 @@
 // Settings > Offline, per account (the engine's `offline.rs`): how much mail stays on the phone
 // (1, 3, 6 or 12 months, or All mail with Premium), how much room it takes (bodies and
 // attachments), how far the download is ("X of Y messages offline") and "Download now". All mail
-// without Premium opens the Premium screen instead; a Premium that lapsed keeps the choice, and
-// the engine downloads 3 months meanwhile (the note says so). Read again every few seconds while
+// without Premium opens the Premium screen instead; All mail stored without Premium (a lapse, or
+// an import from the computer on a phone that never had it) keeps the choice, and the engine
+// downloads 3 months meanwhile (a neutral note says so). Read again every few seconds while
 // the screen is open, so the progress moves as the download runs.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { daemonCall } from './transport.js';
@@ -15,7 +16,8 @@ const REFRESH_MS = 4000;
 
 function AccountOffline({ entry, label, premium, busy, onPick }) {
   const t = useT();
-  const lapsed = entry.window === 'all' && entry.effectiveWindow !== 'all';
+  // All mail stored, 3 months downloaded: worded for a phone that never had Premium too.
+  const needsPremium = entry.window === 'all' && entry.effectiveWindow !== 'all';
   const bytes = (entry.bodiesBytes || 0) + (entry.attachmentsBytes || 0);
   return (
     <li className="mv-offline" data-mv-offline-account={entry.accountId}>
@@ -42,7 +44,7 @@ function AccountOffline({ entry, label, premium, busy, onPick }) {
         {' · '}
         {t('mobile.offline.storage', { size: formatSize(bytes) })}
       </span>
-      {lapsed && <span className="mv-setting__hint" data-mv-offline-lapsed>{t('mobile.offline.lapsed')}</span>}
+      {needsPremium && <span className="mv-setting__hint" data-mv-offline-lapsed>{t('mobile.offline.allNeedsPremium')}</span>}
     </li>
   );
 }

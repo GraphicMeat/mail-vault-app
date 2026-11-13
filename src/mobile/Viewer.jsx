@@ -197,6 +197,9 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const t = useT();
   const [seen, setSeen] = useState(row.seen !== false);
   const [flagged, setFlagged] = useState(Boolean(row.flagged));
+  // The row can change under an open viewer (a delayed `markAsReadMode` marks it read): follow it.
+  useEffect(() => { setSeen(row.seen !== false); }, [row.seen]);
+  useEffect(() => { setFlagged(Boolean(row.flagged)); }, [row.flagged]);
   const [picking, setPicking] = useState(initialPicking);
   const closePicker = useCallback(() => setPicking(false), []);
   useBackLayer(picking, closePicker);
@@ -331,9 +334,12 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
         </div>
       )}
       {state.phase === 'ready' && !hasContent && <p className="mv-viewer__notice">{t('mobile.viewer.empty')}</p>}
+      {/* A fresh frame per change, never a changed srcdoc: iOS WKWebView drops a second srcdoc
+          change made while the first loads, which kept the broken cid: version once the inline
+          images arrived. */}
       {srcDoc && (
         <iframe
-          key={`${remoteOn ? 'remote' : 'local'}-${theme}`}
+          key={`${remoteOn ? 'remote' : 'local'}-${theme}-${images ? Object.keys(images).length : 0}`}
           className="mv-viewer__frame"
           title={t('mobile.viewer.frameTitle')}
           sandbox={FRAME_SANDBOX}
