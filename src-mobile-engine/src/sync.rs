@@ -460,7 +460,7 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way:
     }
     let folder = match &job.folder {
         None => {
-            sync_folder_list(shared, backend, &job.account)?;
+            sync_folder_list(shared, backend, &job.account, &|| false)?;
             match folder_path(shared, &job.account, "INBOX")? {
                 Some(p) => p,
                 None => return Ok(()),
@@ -470,7 +470,7 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way:
             Some(p) => p,
             None => {
                 // A folder the list has not seen yet: list first.
-                sync_folder_list(shared, backend, &job.account)?;
+                sync_folder_list(shared, backend, &job.account, &|| false)?;
                 folder_path(shared, &job.account, f)?.ok_or_else(|| Fail::Code(Code::Invalid, format!("no folder {f}")))?
             }
         },
@@ -565,10 +565,10 @@ fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, dead
         crate::offline::prune_aged(shared, account, now_ms())?;
         crate::attachments::sweep_offline(shared, account)?;
         go_on(shared, &stop)?;
-        sync_folder_list(shared, backend, account)?;
+        sync_folder_list(shared, backend, account, &stop)?;
         let fetch_from = crate::offline::bounds(shared, account, now_ms()).fetch_from;
         if let Some(inbox) = folder_path(shared, account, "INBOX")? {
-            folder_headers(shared, backend, account, &inbox, fetch_from, deadline, &stop)?;
+            folder_or_wait(shared, backend, account, &inbox, fetch_from, deadline, &stop)?;
         }
         if stop() {
             return Ok(());
@@ -576,18 +576,19 @@ fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, dead
         crate::body::prefetch(shared, backend, account, &stop)?;
         let others: Vec<String> = shared.read(|c| {
             let mut st = c.prepare(&format!(
-                "SELECT path FROM folders WHERE account_id = ?1 AND noselect = 0 AND NOT (path = 'INBOX' COLLATE NOCASE)
+                "SELECT path FROM folders WHERE account_id = ?1 AND noselect = 0 AND NOT (path = 'INBOX' COLLATE NOCASE) AND NOT {}
                  ORDER BY CASE WHEN {} THEN 0 ELSE 1 END, synced_ms IS NOT NULL, synced_ms, path",
+                crate::offline::FOLDER_WAITS,
                 crate::offline::NEEDS_FULL
             ))?;
-            let rows = st.query_map((account, fetch_from), |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+            let rows = st.query_map((account, fetch_from, now_ms()), |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         })?;
         for folder in others {
             if stop() {
                 return Ok(());
             }
-            folder_headers(shared, backend, account, &folder, fetch_from, deadline, &stop)?;
+            folder_or_wait(shared, backend, account, &folder, fetch_from, deadline, &stop)?;
         }
         if stop() {
             return Ok(());
@@ -606,6 +607,41 @@ fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, dead
         }
         other => other,
     }
+}
+
+/// A download's headers of `folder` ([`folder_headers`]), unless it waits for a retry. A failure
+/// of the folder itself (the server refused to open it, a reply that did not read) does not end
+/// the pass: the folder waits ([`crate::offline::folder_failed`]) and the next one goes on. The
+/// network, a refused sign-in, a timeout, a stop, the engine closing or the account going end it.
+fn folder_or_wait(
+    shared: &Shared,
+    backend: &mut dyn Backend,
+    account: &str,
+    folder: &str,
+    fetch_from: i64,
+    deadline: Option<Instant>,
+    stop: &dyn Fn() -> bool,
+) -> Result<(), Fail> {
+    if crate::offline::folder_waits(shared, account, folder, now_ms()) {
+        return Ok(());
+    }
+    match folder_headers(shared, backend, account, folder, fetch_from, deadline, stop) {
+        Ok(()) => {
+            crate::offline::folder_ok(shared, account, folder);
+            Ok(())
+        }
+        Err(Fail::Code(code, why)) if folder_own_failure(code) && !stop() => {
+            shared.log(&format!("[offline] {account}: {folder} waits for a retry ({} {why})", code.as_str()));
+            crate::offline::folder_failed(shared, account, folder, now_ms());
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// A failure that belongs to one folder, not to the connection or the account.
+fn folder_own_failure(code: Code) -> bool {
+    matches!(code, Code::Invalid)
 }
 
 /// A download's headers of `folder`: its full pass when its last completed full pass does not
@@ -843,8 +879,8 @@ struct StoredFolder {
     total: i64,
 }
 
-fn sync_folder_list(shared: &Shared, backend: &mut dyn Backend, account: &str) -> Result<(), Fail> {
-    let infos: Vec<FolderInfo> = backend.folders()?;
+fn sync_folder_list(shared: &Shared, backend: &mut dyn Backend, account: &str, stop: &dyn Fn() -> bool) -> Result<(), Fail> {
+    let infos: Vec<FolderInfo> = backend.folders_until(stop)?;
 
     let existing: HashMap<String, StoredFolder> = shared.read(|c| {
         let mut st = c.prepare_cached(

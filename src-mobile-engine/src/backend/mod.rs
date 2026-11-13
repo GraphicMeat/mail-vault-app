@@ -274,6 +274,12 @@ impl Watch {
 pub(crate) trait Backend: Send {
     /// Every folder the server lists, with its counts.
     fn folders(&mut self) -> Result<Vec<FolderInfo>, Fail>;
+    /// [`Backend::folders`] for a download: `stop` is asked between the folders' counts, and once
+    /// it says stop the rest are listed without counts (they keep the counts they had), so a page
+    /// pass waiting behind the download does not wait for every folder's.
+    fn folders_until(&mut self, _stop: &dyn Fn() -> bool) -> Result<Vec<FolderInfo>, Fail> {
+        self.folders()
+    }
     /// Opens `folder` for a pass: its generation, next uid and message count.
     fn select(&mut self, folder: &str) -> Result<Selected, Fail>;
     /// The uids in `folder` that arrived on or after the day of `window_start_ms`, and its unread

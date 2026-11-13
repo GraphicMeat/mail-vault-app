@@ -139,7 +139,8 @@ async fn mobile_share_file(app: tauri::AppHandle, path: String, name: String, mi
     hand_out(app, path, name, mime, HandOut::Share).await
 }
 
-/// Checks the path is a finished file of `<cache>/att/`, leases it while a named link or copy is
+/// Checks the path is a finished file of `<cache>/att/` or of the offline attachments
+/// (`<data>/offline/att/<account hash>/`), leases it while a named link or copy is
 /// made under `<cache>/share/<fresh dir>/`, then hands that copy out. Off the webview thread: on
 /// iOS the native call answers only when the previewer or sheet is dismissed.
 async fn hand_out(app: tauri::AppHandle, path: String, name: String, mime: String, how: HandOut) -> Result<(), NativeError> {
@@ -147,7 +148,19 @@ async fn hand_out(app: tauri::AppHandle, path: String, name: String, mime: Strin
         let engine = background::wait_engine(ENGINE_WAIT).map_err(|reason| NativeError::new("INTERNAL", reason))?;
         let cache = app.path().app_cache_dir().map_err(|e| NativeError::new("INTERNAL", e.to_string()))?;
         let share = cache.join("share");
-        let real = files::validate_cache_file(Path::new(&path), &cache.join("att")).map_err(|e| match e {
+        // A cache file, else an offline one (`<data>/offline/att/<account hash>/<name>`, the
+        // engine's data directory being the app's).
+        let real = match files::validate_cache_file(Path::new(&path), &cache.join("att")) {
+            Err(PathError::Invalid(why)) => match app.path().app_data_dir() {
+                Ok(data) => files::validate_offline_file(Path::new(&path), &data.join("offline").join("att")).map_err(|e| match e {
+                    PathError::Invalid(_) => PathError::Invalid(why),
+                    gone => gone,
+                }),
+                Err(_) => Err(PathError::Invalid(why)),
+            },
+            other => other,
+        }
+        .map_err(|e| match e {
             PathError::Gone => NativeError::new("GONE", "the file is gone"),
             PathError::Invalid(why) => NativeError::new("INVALID", why),
         })?;

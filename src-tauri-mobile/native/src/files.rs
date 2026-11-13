@@ -3,7 +3,10 @@
 //! real name. So the shell checks that the path JS sent really is one of those cache files, then
 //! puts a named link (or copy) of it in a fresh per-open directory under `<cache>/share/`, which is
 //! the only directory the Android FileProvider exposes. The directory is removed when the
-//! previewer or sheet closes (iOS) or by a later sweep (Android has no close callback).
+//! previewer or sheet closes (iOS) or by a later sweep (Android has no close callback). An
+//! attachment the offline download stored lives at `<data>/offline/att/<account hash>/<64 hex>`
+//! instead, outside the purgeable cache, and is checked the same way
+//! ([`validate_offline_file`]).
 
 use std::fs;
 use std::io;
@@ -48,6 +51,54 @@ pub fn validate_cache_file(given: &Path, att_dir: &Path) -> Result<PathBuf, Path
     let real_dir = fs::canonicalize(att_dir).map_err(|_| PathError::Invalid("no attachment cache"))?;
     if real.parent() != Some(real_dir.as_path()) {
         return Err(PathError::Invalid("outside the attachment cache"));
+    }
+    Ok(real)
+}
+
+fn is_hex(s: &str, len: usize) -> bool {
+    s.len() == len && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// An attachment the offline download stored, checked: `given` must be
+/// `<offline_root>/<16 lowercase hex>/<64 lowercase hex>` spelled exactly so (`offline_root` is
+/// `<data>/offline/att`; no `..`, no other directory, no `.part`), a regular file under a real
+/// directory (no symlink at either level), and must resolve two levels under `offline_root` once
+/// both are canonicalised. Returns the canonical path.
+pub fn validate_offline_file(given: &Path, offline_root: &Path) -> Result<PathBuf, PathError> {
+    if !given.is_absolute() {
+        return Err(PathError::Invalid("not absolute"));
+    }
+    let (Some(dir), Some(name)) = (given.parent(), given.file_name().and_then(|n| n.to_str())) else {
+        return Err(PathError::Invalid("no file name"));
+    };
+    let Some(account) = dir.file_name().and_then(|n| n.to_str()) else {
+        return Err(PathError::Invalid("no account directory"));
+    };
+    if dir.parent() != Some(offline_root) {
+        return Err(PathError::Invalid("not in the offline attachments"));
+    }
+    if !is_hex(account, 16) {
+        return Err(PathError::Invalid("not an account directory"));
+    }
+    if !is_hex(name, 64) {
+        return Err(PathError::Invalid("not an attachment file name"));
+    }
+    let meta = match fs::symlink_metadata(given) {
+        Ok(m) => m,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(PathError::Gone),
+        Err(_) => return Err(PathError::Invalid("unreadable")),
+    };
+    if !meta.file_type().is_file() {
+        return Err(PathError::Invalid("not a regular file"));
+    }
+    match fs::symlink_metadata(dir) {
+        Ok(m) if m.file_type().is_dir() => {}
+        _ => return Err(PathError::Invalid("not a real account directory")),
+    }
+    let real = fs::canonicalize(given).map_err(|_| PathError::Gone)?;
+    let real_root = fs::canonicalize(offline_root).map_err(|_| PathError::Invalid("no offline attachments"))?;
+    if real.parent().and_then(Path::parent) != Some(real_root.as_path()) {
+        return Err(PathError::Invalid("outside the offline attachments"));
     }
     Ok(real)
 }
@@ -587,5 +638,72 @@ mod tests {
         fs::write(cache.join("secret"), b"x").unwrap();
         std::os::unix::fs::symlink(cache.join("secret"), scratch.join("0")).unwrap();
         assert!(finish_pick(&cache, &scratch, "0", "a.pdf", "application/pdf").is_err());
+    }
+
+    const ACCT: &str = "0123456789abcdef";
+
+    /// `<data>/offline/att/<16 hex>/<64 hex>`: an attachment the offline download stored.
+    fn offline(t: &Tmp) -> (PathBuf, PathBuf) {
+        let root = t.0.join("offline").join("att");
+        fs::create_dir_all(root.join(ACCT)).unwrap();
+        let file = root.join(ACCT).join(HASH);
+        fs::write(&file, b"%PDF-1.4 offline").unwrap();
+        (root, file)
+    }
+
+    #[test]
+    fn an_offline_attachment_is_accepted() {
+        let t = Tmp::new("off-ok");
+        let (root, file) = offline(&t);
+        let real = validate_offline_file(&file, &root).unwrap();
+        assert_eq!(fs::read(real).unwrap(), b"%PDF-1.4 offline");
+    }
+
+    #[test]
+    fn only_the_exact_offline_shape_counts() {
+        let t = Tmp::new("off-bad");
+        let (root, file) = offline(&t);
+        // One level only, a directory that is not an account hash, two levels down, `..`.
+        let flat = root.join(HASH);
+        fs::write(&flat, b"x").unwrap();
+        let odd = root.join("ACCOUNT-not-hex!").join(HASH);
+        fs::create_dir_all(odd.parent().unwrap()).unwrap();
+        fs::write(&odd, b"x").unwrap();
+        let upper = root.join(ACCT.to_uppercase()).join(HASH);
+        let deep = root.join(ACCT).join(ACCT).join(HASH);
+        fs::create_dir_all(deep.parent().unwrap()).unwrap();
+        fs::write(&deep, b"x").unwrap();
+        let dotted = root.join(ACCT).join("..").join(ACCT).join(HASH);
+        let part = root.join(ACCT).join(format!("{HASH}.part"));
+        fs::write(&part, b"x").unwrap();
+        for p in [&flat, &odd, &upper, &deep, &dotted, &part] {
+            assert!(matches!(validate_offline_file(p, &root), Err(PathError::Invalid(_))), "{}", p.display());
+        }
+        // The cache check still refuses an offline file, and the offline check a cache file.
+        let (att, cached) = cache(&t);
+        assert!(matches!(validate_cache_file(&file, &att), Err(PathError::Invalid(_))));
+        assert!(matches!(validate_offline_file(&cached, &root), Err(PathError::Invalid(_))));
+        fs::remove_file(&file).unwrap();
+        assert_eq!(validate_offline_file(&file, &root), Err(PathError::Gone));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_offline_symlink_is_refused() {
+        let t = Tmp::new("off-link");
+        let (root, file) = offline(&t);
+        fs::remove_file(&file).unwrap();
+        let target = t.0.join("private.db");
+        fs::write(&target, b"secret").unwrap();
+        std::os::unix::fs::symlink(&target, &file).unwrap();
+        assert!(matches!(validate_offline_file(&file, &root), Err(PathError::Invalid(_))));
+        // An account directory that is a link out of the root.
+        fs::remove_file(&file).unwrap();
+        fs::remove_dir(root.join(ACCT)).unwrap();
+        let elsewhere = t.0.join("elsewhere");
+        fs::create_dir_all(&elsewhere).unwrap();
+        fs::write(elsewhere.join(HASH), b"secret").unwrap();
+        std::os::unix::fs::symlink(&elsewhere, root.join(ACCT)).unwrap();
+        assert!(matches!(validate_offline_file(&file, &root), Err(PathError::Invalid(_))));
     }
 }

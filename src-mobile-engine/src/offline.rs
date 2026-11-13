@@ -172,6 +172,56 @@ pub(crate) fn attachments_dir(shared: &Shared, account: &str) -> Option<PathBuf>
     Some(base.join("offline").join("att").join(hash))
 }
 
+/// `path` is spelled exactly as an offline attachment: `<data>/offline/att/<16 lowercase hex>/<64
+/// lowercase hex>` (no `..`, no other directory, no `.part`). Says nothing about the file being
+/// there.
+pub(crate) fn is_offline_attachment(shared: &Shared, path: &Path) -> bool {
+    let Some(base) = shared.offline.data_dir.get() else { return false };
+    let root = base.join("offline").join("att");
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else { return false };
+    let Some(acct) = dir.file_name().and_then(|n| n.to_str()) else { return false };
+    dir.parent() == Some(root.as_path())
+        && acct.len() == 16
+        && acct.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        && crate::attachments::is_final_name(name)
+}
+
+/// Removes the offline directories of accounts that are gone (a download that finished a file
+/// while its account was being removed). At open, before any download runs.
+pub(crate) fn sweep_orphans(shared: &Shared) {
+    let Some(base) = shared.offline.data_dir.get() else { return };
+    let root = base.join("offline").join("att");
+    let Ok(rd) = std::fs::read_dir(&root) else { return };
+    let ids: Vec<String> = match shared.read(|c| {
+        let mut st = c.prepare("SELECT id FROM accounts")?;
+        let rows = st.query_map([], |r| r.get(0))?.collect();
+        rows
+    }) {
+        Ok(ids) => ids,
+        Err(e) => {
+            shared.log(&format!("[offline] orphan sweep: {e}"));
+            return;
+        }
+    };
+    let live: std::collections::HashSet<PathBuf> = ids.iter().filter_map(|id| attachments_dir(shared, id)).collect();
+    for e in rd.filter_map(|e| e.ok()) {
+        let p = e.path();
+        if e.file_type().is_ok_and(|t| t.is_dir()) && !live.contains(&p) {
+            if let Err(err) = std::fs::remove_dir_all(&p) {
+                shared.log(&format!("[offline] orphan sweep {}: {err}", p.display()));
+            }
+        }
+    }
+}
+
+/// `account` is still on the phone (a download checks before it puts a file in place).
+pub(crate) fn account_exists(shared: &Shared, account: &str) -> bool {
+    shared
+        .read(|c| c.query_row("SELECT 1 FROM accounts WHERE id = ?1", [account], |_| Ok(())).optional())
+        .map(|o| o.is_some())
+        .unwrap_or(true)
+}
+
 /// Perf-gate seed: its accounts have no server, so the foreground downloader leaves them alone.
 #[cfg(feature = "perf-gate")]
 pub(crate) fn hold_front(shared: &Shared) {
@@ -235,6 +285,64 @@ impl Left {
     }
 }
 
+/// The first wait before a folder a download could not open is tried again; doubles per attempt
+/// up to [`RETRY_MAX_MS`] (the same curve as a body's).
+fn folder_retry_key(account: &str, folder: &str) -> String {
+    format!("acct.{account}.folderRetry.{folder}")
+}
+
+/// SQL, on a `folders` row: the folder waits for a retry at `?3` (now). Its row is the setting
+/// `acct.<account>.folderRetry.<path>` = `<next_ms> <attempts>`.
+pub(crate) const FOLDER_WAITS: &str = "EXISTS (SELECT 1 FROM settings s WHERE s.key = 'acct.' || folders.account_id || '.folderRetry.' || folders.path
+      AND CAST(substr(s.value, 1, instr(s.value, ' ') - 1) AS INTEGER) > ?3)";
+
+/// A folder a download could not open (refused by the server, not the network): it waits before
+/// it is tried again, the wait doubling per attempt, so the folders after it go on. Persisted in
+/// `settings` (removed with the account).
+pub(crate) fn folder_failed(shared: &Shared, account: &str, folder: &str, now: i64) {
+    let key = folder_retry_key(account, folder);
+    let out = shared.write(|c| {
+        let attempts: u32 = c
+            .query_row("SELECT value FROM settings WHERE key = ?1", [&key], |r| r.get::<_, String>(0))
+            .optional()?
+            .and_then(|v| v.split(' ').nth(1).and_then(|a| a.parse().ok()))
+            .unwrap_or(0);
+        c.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (&key, format!("{} {}", now + retry_wait_ms(attempts), attempts + 1)),
+        )
+        .map(|_| ())
+    });
+    if let Err(e) = out {
+        shared.log(&format!("[offline] {account}: folder retry: {e}"));
+    }
+}
+
+/// The folder opened again: its wait goes (a read first, so a healthy folder costs no write).
+pub(crate) fn folder_ok(shared: &Shared, account: &str, folder: &str) {
+    let key = folder_retry_key(account, folder);
+    let had = shared.read(|c| c.query_row("SELECT 1 FROM settings WHERE key = ?1", [&key], |_| Ok(())).optional()).ok().flatten().is_some();
+    if had {
+        let _ = shared.write(|c| c.execute("DELETE FROM settings WHERE key = ?1", [&key]).map(|_| ()));
+    }
+}
+
+/// `folder` of `account` waits for a retry at `now`.
+pub(crate) fn folder_waits(shared: &Shared, account: &str, folder: &str, now: i64) -> bool {
+    shared
+        .read(|c| {
+            c.query_row(
+                &format!("SELECT {FOLDER_WAITS} FROM folders WHERE account_id = ?1 AND path = ?2"),
+                (account, folder, now),
+                |r| r.get::<_, bool>(0),
+            )
+            .optional()
+        })
+        .ok()
+        .flatten()
+        .unwrap_or(false)
+}
+
 /// SQL: a selectable folder of `?1` that needs its full pass for a window starting at `?2`.
 pub(crate) const NEEDS_FULL: &str = "noselect = 0 AND (synced_ms IS NULL OR full_from_ms IS NULL OR full_from_ms > ?2)";
 
@@ -244,10 +352,10 @@ pub(crate) fn left(shared: &Shared, account: &str, now: i64) -> Result<Left, Eng
         // An account whose folder list never came counts its list as a folder to go.
         let folders: i64 = c.query_row(
             &format!(
-                "SELECT (SELECT count(*) FROM folders WHERE account_id = ?1 AND {NEEDS_FULL})
+                "SELECT (SELECT count(*) FROM folders WHERE account_id = ?1 AND {NEEDS_FULL} AND NOT {FOLDER_WAITS})
                       + NOT EXISTS (SELECT 1 FROM folders WHERE account_id = ?1)"
             ),
-            (account, b.fetch_from),
+            (account, b.fetch_from, now),
             |r| r.get(0),
         )?;
         let bodies: i64 = c.query_row(
@@ -270,13 +378,17 @@ pub(crate) fn prune_aged(shared: &Shared, account: &str, now: i64) -> Result<usi
     if b.keep_from <= 0 {
         return Ok(0);
     }
+    // IMAP SINCE compares whole days in the server's time zone: the window's first day lists mail
+    // dated (UTC) up to a day before `keep_from`. Pruning that would delete and fetch it again
+    // on every pass, so a day of slack.
+    let prune_below = b.keep_from - DAY_MS;
     let rows: Vec<(String, u32)> = shared.read(|c| {
         let mut st = c.prepare(
             "SELECT folder, uid FROM messages WHERE account_id = ?1 AND date_ms < ?2
                AND NOT (out_of_window_ms IS NOT NULL AND ?3 - out_of_window_ms <= ?4)",
         )?;
         let rows = st
-            .query_map((account, b.keep_from, now, crate::sync::OUT_OF_WINDOW_KEEP_MS), |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u32)))?
+            .query_map((account, prune_below, now, crate::sync::OUT_OF_WINDOW_KEEP_MS), |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u32)))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     })?;
@@ -870,5 +982,94 @@ mod tests {
         assert_eq!(f.e.rpc("mobile.offline.set", json!({ "accountId": "nobody", "window": "1m" })).unwrap_err().code(), "INVALID");
         assert_eq!(f.set("1m").unwrap()["window"], "1m");
         assert_eq!(f.e.setting(&window_key(&f.account)).unwrap().as_deref(), Some("1m"));
+    }
+
+    /// An attachment the download stored offline is a file the shell may hand to the previewer
+    /// or share sheet: the lease takes its path (the shell leases before it stages a copy). A
+    /// path that only looks like one is refused.
+    #[test]
+    fn an_offline_attachment_can_be_leased_for_open_and_share() {
+        let mut mb = Mailbox::new("INBOX");
+        mb.add(with_parts(1));
+        let server = MockImap::start(Scenario::new().mailbox(mb));
+        let f = fx(&server);
+        f.e.set_network(false, false);
+        f.download();
+        let dir = attachments_dir(f.e.shared(), &f.account).unwrap();
+        let section: String = f.e.read(|c| c.query_row("SELECT section FROM attachments WHERE uid = 1 AND filename = 'data.bin'", [], |r| r.get(0))).unwrap();
+        let local = f.e.rpc("mobile.attachment.local", json!({ "accountId": f.account, "folder": "INBOX", "uid": 1, "section": section })).unwrap();
+        let path = local["path"].as_str().unwrap().to_string();
+        assert!(path.starts_with(dir.to_str().unwrap()), "{path}");
+        let lease = f.e.rpc("mobile.attachment.lease", json!({ "path": path })).unwrap();
+        assert!(lease["ttlMs"].as_u64().unwrap() > 0, "{lease}");
+        assert!(f.e.rpc("mobile.attachment.release", json!({ "leaseId": lease["leaseId"] })).is_ok());
+        let name = std::path::Path::new(&path).file_name().unwrap().to_owned();
+        let root = dir.parent().unwrap();
+        for bad in [
+            root.join("not-an-account").join(&name),
+            root.join(&name),
+            dir.join("..").join(dir.file_name().unwrap()).join(&name),
+            dir.join(format!("{}.part", name.to_string_lossy())),
+        ] {
+            let err = f.e.rpc("mobile.attachment.lease", json!({ "path": bad.to_string_lossy() })).unwrap_err();
+            assert_eq!(err.code(), "INVALID", "{}", bad.display());
+        }
+    }
+
+    /// IMAP SINCE compares whole days in the server's time zone, so the first day of the window
+    /// lists mail dated (in UTC) a few hours before it. That mail stays: pruning it would delete
+    /// and fetch it again on every pass. A day and more before the window goes.
+    #[test]
+    fn pruning_keeps_the_day_the_server_still_lists() {
+        let mut mb = Mailbox::new("INBOX");
+        mb.add(mail(1, 1));
+        mb.add(mail(2, 2));
+        let server = MockImap::start(Scenario::new().mailbox(mb));
+        let f = fx(&server);
+        f.set("1m").unwrap();
+        crate::sync::sync_now_for_test(f.e.shared(), &f.account, Some("INBOX"));
+        assert_eq!(f.uids("INBOX"), [1, 2]);
+        let keep_from = bounds(f.e.shared(), &f.account, now()).keep_from;
+        f.e.write(|c| {
+            c.execute("UPDATE messages SET date_ms = ?1 WHERE uid = 1", [keep_from - 2 * 3_600_000])?;
+            c.execute("UPDATE messages SET date_ms = ?1 WHERE uid = 2", [keep_from - DAY_MS - 1])
+        })
+        .unwrap();
+        assert_eq!(prune_aged(f.e.shared(), &f.account, now()).ok(), Some(1));
+        assert_eq!(f.uids("INBOX"), [1], "the boundary day stays, the day before it goes");
+    }
+
+    /// An account's offline directory with no account behind it (a download that finished its
+    /// file while the account was being removed) is swept when the engine opens; a live
+    /// account's directory stays.
+    #[test]
+    fn opening_sweeps_offline_directories_of_removed_accounts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = tmp.path().join("cache");
+        let live_dir = {
+            let e = Engine::open(tmp.path(), &cache, Arc::new(crate::MemorySecrets::default())).unwrap();
+            e.write(|c| {
+                c.execute(
+                    "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, created_ms) VALUES ('live', 'l@example.test', '', 'h', 993, 'tls', 0)",
+                    [],
+                )
+            })
+            .unwrap();
+            let live = attachments_dir(e.shared(), "live").unwrap();
+            let gone = attachments_dir(e.shared(), "gone").unwrap();
+            for d in [&live, &gone] {
+                std::fs::create_dir_all(d).unwrap();
+                std::fs::write(d.join("0".repeat(64)), b"x").unwrap();
+            }
+            live
+        };
+        let gone_dir = live_dir.parent().unwrap().join({
+            use sha2::{Digest, Sha256};
+            Sha256::digest(b"gone").iter().take(8).map(|b| format!("{b:02x}")).collect::<String>()
+        });
+        assert!(gone_dir.exists());
+        let _e = Engine::open(tmp.path(), &cache, Arc::new(crate::MemorySecrets::default())).unwrap();
+        assert!(!gone_dir.exists(), "the removed account's files are still there");
+        assert!(live_dir.join("0".repeat(64)).exists(), "a live account's files went");
     }
 }

@@ -639,6 +639,7 @@ impl Engine {
             startup_replay: AtomicBool::new(journal || queued),
         };
         engine.shared.offline.set_data_dir(data_dir);
+        crate::offline::sweep_orphans(&engine.shared);
         crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
         crate::premium::load(&engine.shared);
         if let Err(e) = crate::body::drop_stale_graph_bodies(&engine.shared) {

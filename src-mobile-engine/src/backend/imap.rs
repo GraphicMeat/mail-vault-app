@@ -370,6 +370,32 @@ impl Backend for ImapBackend {
         })
     }
 
+    fn folders_until(&mut self, stop: &dyn Fn() -> bool) -> Result<Vec<FolderInfo>, Fail> {
+        self.step(async |session| {
+            let infos = imap::list_mailboxes(session).await?;
+            let mut counts: HashMap<String, (i64, i64)> = HashMap::new();
+            for m in infos.iter().filter(|m| !m.noselect) {
+                if stop() {
+                    break;
+                }
+                for s in imap::mailbox_statuses(session, std::slice::from_ref(&m.path)).await? {
+                    counts.insert(s.path.clone(), (s.unseen.unwrap_or(0) as i64, s.messages as i64));
+                }
+            }
+            Ok(infos
+                .iter()
+                .map(|m| FolderInfo {
+                    path: m.path.clone(),
+                    name: m.name.clone(),
+                    special_use: m.special_use.clone(),
+                    delimiter: m.delimiter.clone(),
+                    noselect: m.noselect,
+                    counts: counts.get(m.path.as_str()).copied(),
+                })
+                .collect())
+        })
+    }
+
     fn select(&mut self, folder: &str) -> Result<Selected, Fail> {
         self.step(async |session| {
             let mbox = imap::select_mailbox(session, folder).await?;

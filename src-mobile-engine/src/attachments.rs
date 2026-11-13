@@ -95,7 +95,7 @@ fn file_name(k: &PartKey, uid_validity: i64) -> String {
     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn is_final_name(name: &str) -> bool {
+pub(crate) fn is_final_name(name: &str) -> bool {
     name.len() == 64 && name.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
@@ -787,6 +787,10 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn Backend, account: &str
     if rows.is_empty() {
         return Ok(0);
     }
+    // The account may have been removed since its rows were read: its directory is not made again.
+    if !crate::offline::account_exists(shared, account) {
+        return Err(Fail::Gone);
+    }
     let _ = fs::create_dir_all(&dir);
     let state = State::new(dir);
     let mut done = 0;
@@ -805,7 +809,13 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn Backend, account: &str
             continue;
         }
         not_closing(shared)?;
-        match download(&state, shared, backend, 0, &key, &name, validity, stop) {
+        let got = download(&state, shared, backend, 0, &key, &name, validity, stop);
+        // Removed while the file came down: what this pass put back goes again.
+        if !crate::offline::account_exists(shared, account) {
+            let _ = fs::remove_dir_all(state.dir.as_path());
+            return Err(Fail::Gone);
+        }
+        match got {
             Ok(()) => done += 1,
             Err(Stop::Fail(Fail::Closing)) => return Err(Fail::Closing),
             Err(Stop::Fail(Fail::Gone)) => return Err(Fail::Gone),
@@ -990,11 +1000,22 @@ struct LeaseParams {
 /// `mobile.attachment.lease {path}` -> `{leaseId, ttlMs}`: eviction skips the file until
 /// `mobile.attachment.release {leaseId}` or until the lease lapses. Leasing a file that already
 /// has a live lease renews it and answers the same `leaseId`. `path` must be a finished
-/// file this engine handed out.
+/// file this engine handed out: a cache file, or an offline one
+/// (`<data>/offline/att/<account hash>/<name>`, which no LRU evicts: its lease is not recorded,
+/// and its release answers false).
 pub(crate) fn lease(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: LeaseParams = parse(params)?;
     let state = &engine.attachments().state;
     let path = Path::new(&p.path);
+    if crate::offline::is_offline_attachment(engine.shared(), path) {
+        if !path.is_file() {
+            return Err(RpcError::Invalid("the file is gone".into()));
+        }
+        let ttl = state.lease_ttl();
+        let mut t = lock(&state.table);
+        t.next_lease += 1;
+        return Ok(json!({ "leaseId": t.next_lease, "ttlMs": ttl.as_millis() as u64 }));
+    }
     let name = match (path.parent(), path.file_name().and_then(|n| n.to_str())) {
         (Some(dir), Some(n)) if dir == state.dir && is_final_name(n) => n.to_string(),
         _ => return Err(RpcError::Invalid("not an attachment file".into())),

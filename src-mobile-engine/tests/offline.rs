@@ -181,3 +181,59 @@ fn low_data_mode_holds_the_foreground_downloader() {
     f.wait_for("the bodies after Low Data Mode ended", || f.count("SELECT count(*) FROM bodies") == 10);
     f.front(false);
 }
+
+/// A folder the server refuses to open (here it sorts first, so it comes first in every pass)
+/// waits for a later try instead of ending the download: the folders after it and their bodies
+/// still come down, and once the rest is done nothing counts as left.
+#[test]
+fn a_folder_that_fails_does_not_stop_the_download_of_the_others() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailboxes(vec![
+                mailbox("INBOX", (1..=3).map(|u| mail(u, 2))),
+                mailbox("Aaa Broken", (1..=2).map(|u| mail(u, 4))),
+                mailbox("Zzz Archive", (1..=4).map(|u| mail(u, 6))),
+            ])
+            .fault(Trigger::with("SELECT", "Aaa Broken"), Action::Respond("NO".into(), "Mailbox is broken".into()))
+            .fault(Trigger::with("EXAMINE", "Aaa Broken"), Action::Respond("NO".into(), "Mailbox is broken".into())),
+    );
+    let f = fx(&server);
+    f.front(true);
+    f.wait_for("the folder after the broken one", || f.count("SELECT count(*) FROM bodies") == 7);
+    assert_eq!(f.count("SELECT count(*) FROM messages WHERE folder = 'Zzz Archive'"), 4);
+    f.wait_for("nothing left while the broken folder waits", || !f.engine.offline_pending());
+    f.front(false);
+}
+
+/// The foreground downloader is asking the server for each folder's counts (STATUS, slow here)
+/// when the user pulls to refresh INBOX: the refresh runs after the folder in hand, not after
+/// every folder's counts.
+#[test]
+fn a_page_refresh_does_not_wait_behind_the_downloads_folder_counts() {
+    let mut boxes = vec![mailbox("INBOX", (1..=2).map(|u| mail(u, 1)))];
+    for i in 0..15 {
+        boxes.push(mailbox(&format!("F{i:02}"), [mail(1, 3)]));
+    }
+    let server = MockImap::start(
+        Scenario::new().mailboxes(boxes).fault(Trigger::on("STATUS"), Action::Delay(Duration::from_millis(300))),
+    );
+    let f = fx(&server);
+    f.front(true);
+    f.wait_for("the first download", || f.count("SELECT count(*) FROM bodies") == 17 && !f.engine.offline_pending());
+    let statuses = server.count_commands("STATUS");
+    // A wider window: every folder's full pass again, after the folder list and its counts.
+    f.engine.rpc("mobile.offline.set", json!({ "accountId": f.account, "window": "6m" })).unwrap();
+    f.wait_for("the next download asks for counts", || server.count_commands("STATUS") > statuses);
+    server.mutate(|s| {
+        let mb = s.find_mut("INBOX").unwrap();
+        let uid = mb.uid_next;
+        mb.add(mail(uid, 0));
+    });
+    let from = f.events.list.lock().unwrap().len();
+    let t0 = Instant::now();
+    f.engine.rpc("mobile.sync.refresh", json!({ "accountId": f.account, "folder": "INBOX" })).unwrap();
+    f.wait_idle(from);
+    let took = t0.elapsed();
+    assert!(took < Duration::from_millis(2500), "the refresh waited {took:?} behind the folder counts");
+    f.front(false);
+}
