@@ -10,12 +10,14 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+		<string>processing</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>MailVault uses the camera to scan the set-up code shown by MailVault on your computer.</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.mailvault.app.refresh</string>
+		<string>com.mailvault.app.sync</string>
 	</array>
 </dict>
 </plist>

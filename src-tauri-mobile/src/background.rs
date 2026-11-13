@@ -503,6 +503,20 @@ pub extern "C" fn mv_background_fetch(budget_ms: u32) -> *mut std::ffi::c_char {
     }))
 }
 
+/// iOS, the app just left the front (`beginBackgroundTask`): marks the engine as away first
+/// (`mobile.app.state {foreground: false}`, as the shell's own suspend does, whichever comes
+/// first), so the run downloads and the mail the user saw listed is no news; then one run as
+/// [`mv_background_fetch`].
+#[no_mangle]
+pub extern "C" fn mv_background_continue(budget_ms: u32) -> *mut std::ffi::c_char {
+    guarded((), || {
+        if let Some(engine) = opened() {
+            let _ = engine.rpc("mobile.app.state", json!({ "foreground": false }));
+        }
+    });
+    mv_background_fetch(budget_ms)
+}
+
 /// iOS: the notifications of the run that answered `token` were posted ([`commit`]).
 ///
 /// # Safety
@@ -515,6 +529,20 @@ pub unsafe extern "C" fn mv_background_commit(token: *const std::ffi::c_char) {
     // SAFETY: a NUL-terminated string the caller keeps alive for the call.
     let text = unsafe { std::ffi::CStr::from_ptr(token) }.to_string_lossy().into_owned();
     guarded((), || commit(&text));
+}
+
+/// The OS is ending the background task: the engine's download in flight stops before its next
+/// body or folder (`Engine::background_stop`). Nothing when no engine is open.
+pub(crate) fn stop() {
+    if let Some(engine) = opened() {
+        engine.background_stop();
+    }
+}
+
+/// iOS: the task's expiration handler ([`stop`]). Returns at once.
+#[no_mangle]
+pub extern "C" fn mv_background_stop() {
+    guarded((), stop);
 }
 
 /// iOS, perf-gate builds only: the device check's way to start a run with no `BGTask` (the

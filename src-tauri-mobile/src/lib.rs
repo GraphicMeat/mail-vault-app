@@ -48,16 +48,19 @@ async fn daemon_rpc(app: tauri::AppHandle, method: String, params: Value, daemon
 }
 
 /// The RPCs after which `Engine::wants_background` may answer differently (plan Ruling 13):
-/// notifications turned on or off, a send held back for later, a scheduled message moved, sent
+/// notifications or background download turned on or off, an account added (by password, OAuth
+/// or an import), a send held back for later, a scheduled message moved, sent
 /// now or cancelled, an account (and its outbox) removed, a send that asks for a follow-up
 /// reminder (its row is written once the send goes out; leaving the front re-applies too), a
 /// reminder dismissed.
 fn changes_background(method: &str, params: &Value) -> bool {
     let set = |key: &str| params.get(key).is_some_and(|v| !v.is_null());
     match method {
-        "mobile.settings.set" => params.get("notifications").is_some(),
+        "mobile.settings.set" => params.get("notifications").is_some() || params.get("backgroundDownload").is_some(),
         "mobile.compose.send" => set("sendAtMs") || set("remindAfterDays"),
         "mobile.outbox.reschedule" | "mobile.outbox.retry" | "mobile.outbox.discard" | "mobile.accounts.remove" | "mobile.followup.dismiss" => true,
+        // A first account gives a background download someone to dial.
+        "mobile.accounts.add" | "mobile.oauth.finish" | "mobile.transfer.import" => true,
         _ => false,
     }
 }
@@ -617,6 +620,10 @@ mod tests {
             ("mobile.accounts.remove", json!({ "accountId": "a" })),
             ("mobile.compose.send", json!({ "accountId": "a", "remindAfterDays": 3 })),
             ("mobile.followup.dismiss", json!({ "id": "fu_1" })),
+            ("mobile.settings.set", json!({ "backgroundDownload": false })),
+            ("mobile.accounts.add", json!({ "email": "a@example.test" })),
+            ("mobile.oauth.finish", json!({ "flowId": "f" })),
+            ("mobile.transfer.import", json!({})),
         ] {
             assert!(changes_background(method, &params), "{method} {params}");
         }

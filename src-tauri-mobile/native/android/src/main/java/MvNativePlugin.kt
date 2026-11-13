@@ -320,6 +320,16 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    // The app is out of sight: a run soon finishes the sync it was in and downloads new mail
+    // (`BackgroundFetchWorker.catchUp`; nothing when the engine wants no background runs).
+    override fun onStop(activity: AppCompatActivity) {
+        try {
+            BackgroundFetchWorker.catchUp(activity)
+        } catch (e: Exception) {
+            // The periodic run still comes.
+        }
+    }
+
     override fun onResume(activity: AppCompatActivity) {
         if (authInvoke != null && authAway) answerAuth(!authClosing)
     }

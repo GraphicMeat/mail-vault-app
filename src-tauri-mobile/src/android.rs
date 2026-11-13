@@ -168,6 +168,13 @@ pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeC
     let _ = std::panic::catch_unwind(|| crate::background::commit(&text));
 }
 
+/// `BackgroundFetchWorker.nativeStop()`: WorkManager stopped the worker (`onStopped`); the
+/// download in flight stops (`background::stop`).
+#[no_mangle]
+pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeStop(_env: JNIEnv, _this: JObject) {
+    let _ = std::panic::catch_unwind(crate::background::stop);
+}
+
 /// `Notifier.nativeTapped(json)`: a notification was tapped.
 #[no_mangle]
 pub extern "system" fn Java_com_mailvault_mvnative_Notifier_nativeTapped(mut env: JNIEnv, _class: JObject, json: JString) {
