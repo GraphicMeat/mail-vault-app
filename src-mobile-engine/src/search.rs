@@ -12,8 +12,9 @@
 //!
 //! An index write that fails is logged as `[search] ...` (no subject, address or query text) and
 //! never fails the sync pass, action or body open that triggered it. A tap (an action applied from
-//! the UI, a body opened) never waits on the search lock: when the backfill holds it, the work goes
-//! to the index worker, which re-reads the rows when it runs.
+//! the UI, a body opened) never writes the index at all: its work goes to the index worker ahead of
+//! anything queued, and the worker re-reads the rows when it runs. A search.db commit is a file
+//! write; on Windows one took 40 to 70 ms beside the downloader's ingest, the whole of a slow tap.
 
 use crate::db::{lock, Engine, EngineError, Shared};
 use crate::rpc::{parse, RpcError};
@@ -191,6 +192,12 @@ fn run(shared: &Arc<Shared>) {
 
 fn enqueue(shared: &Shared, job: Job) {
     lock(&shared.search.work).jobs.push_back(job);
+    shared.search.cv.notify_all();
+}
+
+/// A tap's index work: next for the worker, after the unit it is on.
+fn enqueue_first(shared: &Shared, job: Job) {
+    lock(&shared.search.work).jobs.push_front(job);
     shared.search.cv.notify_all();
 }
 
@@ -379,7 +386,15 @@ pub(crate) fn index_uids(shared: &Shared, account: &str, folder: &str, uids: &[u
     }
 }
 
-/// [`index_uids`] for a tap (a body just opened): when the lock is busy the worker does it.
+/// [`index_uids`] for a tap (a body just opened): the index worker does it next; the tap writes
+/// nothing.
+pub(crate) fn index_uids_for_tap(shared: &Shared, account: &str, folder: &str, uids: &[u32]) {
+    if !uids.is_empty() {
+        enqueue_first(shared, Job::Index { account: account.into(), folder: folder.into(), uids: uids.to_vec() });
+    }
+}
+
+/// [`index_uids`] for a sync pass: now when the lock is free, else the worker does it.
 pub(crate) fn index_uids_soon(shared: &Shared, account: &str, folder: &str, uids: &[u32]) {
     let docs = match read_docs(shared, account, folder, uids) {
         Ok(d) => d,
@@ -450,26 +465,11 @@ pub(crate) fn reflag(shared: &Shared, account: &str, folder: &str, uids: &[u32])
     }
 }
 
-/// [`reflag`] for a tap: when the lock is busy the worker does it.
+/// [`reflag`] for a tap (an action applied): the index worker does it next; the tap writes
+/// nothing.
 pub(crate) fn reflag_soon(shared: &Shared, account: &str, folder: &str, uids: &[u32]) {
-    if uids.is_empty() {
-        return;
-    }
-    let flags = match read_flags(shared, account, folder, uids) {
-        Ok(f) => f,
-        Err(e) => return log_err(shared, "reading flags", e),
-    };
-    let guard = match shared.search.conn.try_lock() {
-        Ok(g) => g,
-        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
-        Err(std::sync::TryLockError::WouldBlock) => {
-            return enqueue(shared, Job::Reflag { account: account.into(), folder: folder.into(), uids: uids.to_vec() })
-        }
-    };
-    if let Some(c) = guard.as_ref() {
-        if let Err(e) = write_flags(c, account, folder, &flags) {
-            log_err(shared, "writing flags", e);
-        }
+    if !uids.is_empty() {
+        enqueue_first(shared, Job::Reflag { account: account.into(), folder: folder.into(), uids: uids.to_vec() });
     }
 }
 

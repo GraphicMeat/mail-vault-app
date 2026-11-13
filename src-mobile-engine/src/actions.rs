@@ -279,7 +279,7 @@ pub(crate) fn apply(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     if n > 0 {
         let (removed, updated) = if kind.hides() { (n, 0) } else { (0, n) };
         emit_folder_changed(shared, &account, &folder, gen, removed, updated);
-        // A tap: the index takes the new flags now, or from its worker when it is busy. A hidden
+        // A tap: the index worker takes the new flags next (the tap writes no index). A hidden
         // row needs nothing: search shows only rows the list shows.
         if !kind.hides() {
             let kept: Vec<u32> = uids.iter().copied().filter(|u| !skipped.contains(u)).collect();
