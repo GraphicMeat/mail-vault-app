@@ -10,7 +10,8 @@
 //   Both live in the engine (`mobile.settings.*`): the background run has no page, and reads the
 //   same rows.
 // - Offline: "Download in the background" (`backgroundDownload`, on by default): background runs
-//   fetch new mail and the bodies of recent INBOX mail, so it opens without a connection.
+//   keep the offline window up to date, so mail opens without a connection; then, per account,
+//   the window, the room it takes, the progress and "Download now" (OfflineSettings.jsx).
 // - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
 //   screen; a phone whose place another device took says so, with Sign in again.
 // - Replay tour (`onReplayTour`): the first-run tour again, without its account step (App.jsx).
@@ -25,6 +26,7 @@ import { useT } from './i18n.js';
 import { Avatar } from './AccountSwitcher.jsx';
 import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
+import OfflineSettings from './OfflineSettings.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
@@ -283,6 +285,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION 
             onChange={(v) => save('backgroundDownload', { backgroundDownload: v })}
           />
         </div>
+        <OfflineSettings />
 
         <h2 className="mv-settings__heading">{t('mobile.settings.about')}</h2>
         <div className="mv-settings__list">

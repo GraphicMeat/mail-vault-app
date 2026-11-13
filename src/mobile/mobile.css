@@ -1372,3 +1372,29 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-schedule__confirm:disabled { opacity: 0.5; }
 .mv-outbox__heading { margin: 8px 8px 0; font-size: 0.8125rem; font-weight: 600; color: var(--mail-text-muted); }
 .mv-outbox__item--scheduled .mv-outbox__actions { flex-wrap: wrap; }
+
+/* Settings > Offline (OfflineSettings.jsx): per account, the window picker as a row of chips that
+   wraps on a narrow screen, then the progress and the room it takes. */
+.mv-offline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--mail-border);
+}
+.mv-offline__windows { display: flex; flex-wrap: wrap; gap: 8px; }
+.mv-offline__window {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--mail-border);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+.mv-offline__window[aria-checked="true"] { border-color: var(--mail-accent); background: var(--mail-accent); color: #fff; }
+.mv-offline__window:disabled { opacity: 0.6; }
+.mv-offline__badge { font-size: 0.6875rem; }
