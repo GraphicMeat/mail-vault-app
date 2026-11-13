@@ -348,6 +348,20 @@ describe('All Inboxes in the app', () => {
     expect(callsOf('mobile.actions.apply').at(-1)).toEqual({ accountId: 'a1', folder: 'INBOX', uids: [5], kind: 'delete' });
   });
 
+  it('a single account gets no All Inboxes entry', async () => {
+    engine.accounts = [acct('a1')];
+    window.history.replaceState({}, '', '/mobile.html');
+    vi.resetModules();
+    const { default: App } = await import('../App.jsx');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    render(<App />);
+    await waitFor(() => expect(document.querySelector('[data-index="0"][data-loaded="1"]')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
+    expect(screen.getByRole('dialog', { name: t('mobile.drawer.title') })).toBeTruthy();
+    expect(screen.queryByText(t('sidebar.allInboxes'))).toBeNull();
+    expect(document.querySelector('.mv-row__acct')).toBeNull();
+  });
+
   it('pull to refresh syncs every account', async () => {
     await mountUnified();
     engine.calls = [];
