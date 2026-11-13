@@ -3388,9 +3388,7 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
 fn parse_references_header(raw: &str) -> Vec<String> {
     let mut refs = Vec::new();
     // Find the header value after "References:"
-    let value = if let Some(idx) = raw.to_lowercase().find("references:") {
-        &raw[idx + "references:".len()..]
-    } else {
+    let Some(value) = parse_single_header(raw, "References") else {
         return refs;
     };
     // Extract all <...> message-id tokens
@@ -3458,35 +3456,47 @@ pub fn is_own_mail_path(path: &str) -> bool {
         .any(|word| OWN_MAIL_WORDS.contains(&word.to_lowercase().as_str()))
 }
 
-fn parse_single_header(raw: &str, header_name: &str) -> Option<String> {
-    let search = format!("{}:", header_name);
-    // Case-insensitive search for the header name
-    let lower_raw = raw.to_lowercase();
-    let lower_search = search.to_lowercase();
-
-    if let Some(start) = lower_raw.find(&lower_search) {
-        let value_start = start + search.len();
-        let rest = &raw[value_start..];
-
-        // Collect lines until we hit a non-continuation line (not starting with whitespace)
-        let mut value = String::new();
-        for (i, line) in rest.lines().enumerate() {
-            if i == 0 {
-                value.push_str(line.trim());
-            } else if line.starts_with(' ') || line.starts_with('\t') {
-                // Continuation line (folded header)
-                value.push(' ');
-                value.push_str(line.trim());
-            } else {
-                break;
-            }
+/// Byte offset just past `name:` where a header field of that name starts in
+/// `raw`: at the start of a line (never inside another field's value, such as
+/// a DKIM-Signature's `h=From:Reply-To:...` list, nor as the tail of a longer
+/// name like In-Reply-To), before the blank line that ends the header block.
+/// The name matches ASCII case-insensitively, on `raw`'s own bytes.
+pub(crate) fn header_value_start(raw: &str, name: &str) -> Option<usize> {
+    let bytes = raw.as_bytes();
+    let name = name.as_bytes();
+    let mut line = 0;
+    while line < bytes.len() {
+        let end = raw[line..].find('\n').map_or(bytes.len(), |i| line + i);
+        let text = raw[line..end].trim_end_matches('\r');
+        if text.is_empty() {
+            return None;
         }
-
-        let value = value.trim().to_string();
-        if value.is_empty() { None } else { Some(value) }
-    } else {
-        None
+        let field = text.as_bytes();
+        if field.len() > name.len() && field[name.len()] == b':' && field[..name.len()].eq_ignore_ascii_case(name) {
+            return Some(line + name.len() + 1);
+        }
+        line = end + 1;
     }
+    None
+}
+
+fn parse_single_header(raw: &str, header_name: &str) -> Option<String> {
+    let rest = &raw[header_value_start(raw, header_name)?..];
+    // Collect lines until we hit a non-continuation line (not starting with whitespace)
+    let mut value = String::new();
+    for (i, line) in rest.lines().enumerate() {
+        if i == 0 {
+            value.push_str(line.trim());
+        } else if line.starts_with(' ') || line.starts_with('\t') {
+            // Continuation line (folded header)
+            value.push(' ');
+            value.push_str(line.trim());
+        } else {
+            break;
+        }
+    }
+    let value = value.trim().to_string();
+    if value.is_empty() { None } else { Some(value) }
 }
 
 /// Parse an email address from a header value like "<user@example.com>" or "Name <user@example.com>"
@@ -3945,6 +3955,40 @@ pub async fn fetch_email_by_uid_light_timed_owned(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A DKIM-Signature's `h=` tag lists signed header names, each followed by
+    // a colon: "Reply-To:" sat inside it, and the unanchored search read the
+    // rest of the signature as the Reply-To address.
+    const DKIM_FIRST: &str = "DKIM-Signature: v=1; a=rsa-sha256; d=txn-email.playstation.com;\r\n\th=From:To:Subject:Reply-To:Message-ID:Content-Type; i=reply@txn-email.playstation.com;\r\n\tbh=IBQYScc4uCe8+gwSZGtxzwAjW=; b=o3x8y3/MLvodV6zcK+5eH=\r\nFrom: PlayStation <reply@txn-email.playstation.com>\r\nIn-Reply-To: <parent@a.test>\r\nSubject: Thanks\r\n";
+
+    #[test]
+    fn a_header_named_inside_a_dkim_signature_is_not_that_header() {
+        assert_eq!(parse_single_header(DKIM_FIRST, "Reply-To"), None);
+        assert_eq!(parse_single_header(DKIM_FIRST, "Message-ID"), None);
+        assert_eq!(parse_single_header(DKIM_FIRST, "Subject").as_deref(), Some("Thanks"));
+    }
+
+    #[test]
+    fn the_real_header_after_a_dkim_signature_is_found() {
+        let raw = format!("{DKIM_FIRST}Reply-To: Help <help@other.test>\r\n");
+        assert_eq!(parse_single_header(&raw, "Reply-To").as_deref(), Some("Help <help@other.test>"));
+        // "In-Reply-To:" ends in "Reply-To:" too.
+        let only_in_reply = "In-Reply-To: <p@a.test>\r\nFrom: a@a.test\r\n";
+        assert_eq!(parse_single_header(only_in_reply, "Reply-To"), None);
+    }
+
+    #[test]
+    fn a_non_ascii_header_before_the_one_asked_for_does_not_shift_it() {
+        // 'İ' lowercases to two chars of different byte length.
+        let raw = "Subject: İİİİ\r\nReply-To: <r@b.test>\r\n";
+        assert_eq!(parse_single_header(raw, "Reply-To").as_deref(), Some("<r@b.test>"));
+    }
+
+    #[test]
+    fn references_named_inside_a_dkim_signature_are_not_references() {
+        let raw = "DKIM-Signature: v=1; h=From:References:Subject; b=<x@y>\r\nFrom: a@a.test\r\nReferences: <r1@a.test>\r\n\t<r2@a.test>\r\nSubject: <not@ref>\r\n";
+        assert_eq!(parse_references_header(raw), vec!["<r1@a.test>".to_string(), "<r2@a.test>".to_string()]);
+    }
 
     #[test]
     fn header_fetch_asks_for_the_dkim_signature_and_summarises_it() {

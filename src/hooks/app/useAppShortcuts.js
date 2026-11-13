@@ -76,7 +76,15 @@ export function useAppShortcuts({ setComposeState, composeState, insightsOpen, n
       if (email) useMailStore.getState().saveEmailsLocally([email]);
     },
     delete: () => {
-      const { selectedEmail, selectedEmailId } = useMailStore.getState();
+      const { selectedEmail, selectedEmailId, selectedEmailIds } = useMailStore.getState();
+      // Ticked rows are what the key acts on, like Move and Snooze: with a
+      // message open beside a selection, deleting only the open one left the
+      // ticked rows in place. Same workflow as the selection bar's Delete.
+      if (selectedEmailIds?.size > 0) {
+        useMailStore.getState().deleteSelectedFromServer()
+          .catch(err => useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) }));
+        return;
+      }
       // deleteEmailFromServer resolves a composite key itself; in a list that
       // spans mailboxes selectedEmailId IS that key, and a key it cannot place
       // is refused rather than aimed at the active folder. Report the refusal —

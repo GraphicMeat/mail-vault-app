@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- With emails ticked in the list, the delete key now deletes all of them, even with another email open in the reading pane. It used to delete only the open email. The Delete and Backspace keys now delete too, as well as #.
+- The Reply-To warning no longer fires on emails that have no Reply-To at all. A sender's DKIM signature names its signed headers, and MailVault read the rest of that signature as the reply address, so receipts from senders like PlayStation showed a "Reply-To domain mismatch" with a long garbled address. Threading headers named inside a signature are no longer mistaken for the real ones either.
+- The Reply-To warning dialog now wraps a long reply domain instead of spilling past its edge with a sideways scrollbar.
 - A reply sent from an open email now shows in its conversation, stays there through delayed Sent copy arrival, and does not reopen Sent after you leave it.
 - Settings > Mail preferences > Behavior > After Deleting has more choices for what opens once you delete the open email: the next email, the previous email, the next unread email or the previous unread email. A new "Stay in the same account" switch prefers an email from the account of the one you deleted, for All Inboxes. With no unread email left, or none left in that account, the nearest email opens rather than nothing.
 - With "Select nothing" after a delete, pressing j or k now continues from where the deleted email was instead of starting again at the top of the list.

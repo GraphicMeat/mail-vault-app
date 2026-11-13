@@ -71,7 +71,7 @@ export function ReplyToAlertIcon({ mismatch, size = 14 }) {
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
           <div className="text-xs text-mail-text-muted mb-1">{t('alert.replyTo.repliesWouldGo')}</div>
           <div className="text-sm font-mono text-mail-text break-all"><Private kind="email">{mismatch.replyToAddress || mismatch.replyToDomain}</Private></div>
-          <div className="text-xs text-mail-warning mt-0.5">{mismatch.replyToDomain}</div>
+          <div className="text-xs text-mail-warning mt-0.5 break-all">{mismatch.replyToDomain}</div>
         </div>
       </Dialog>
     </>

@@ -306,3 +306,15 @@ fn the_app_sends_every_template_a_scan_writes_with() {
     let keys: Vec<&str> = list.split('\'').skip(1).step_by(2).collect();
     assert_eq!(keys, TEXT_KEYS);
 }
+
+// A Reply-To cached before the header parser was anchored holds the tail of a
+// DKIM-Signature ("Message-ID:Content-Type; i=reply@…; bh=…"). Header syntax
+// is no address: no warning off it.
+#[test]
+fn a_reply_to_that_is_header_syntax_raises_no_mismatch() {
+    let row = json!({
+        "from": {"address": "reply@txn-email.playstation.com"},
+        "replyTo": {"address": "Message-ID:Content-Type; i=reply@txn-email.playstation.com; bh=IBQY="},
+    });
+    assert_eq!(reply_to_mismatch(&row), None);
+}
