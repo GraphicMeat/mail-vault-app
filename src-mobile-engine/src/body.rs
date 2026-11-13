@@ -12,7 +12,8 @@
 //!
 //! The cache is an LRU of at most [`CACHE_CAP`] bytes of `bodies`: each insert stamps the row as
 //! newest and then deletes the oldest rows, at most 200 per write transaction, until the total
-//! fits. A cache hit is answered from the reader pool and bumps its row only when the writer is
+//! fits. A background download (`prefetch`) never evicts: it stores only what fits under the cap,
+//! stamped oldest. A cache hit is answered from the reader pool and bumps its row only when the writer is
 //! free, so opening a message never waits on a sync write.
 
 use crate::db::{Engine, EngineError, Shared};
@@ -258,7 +259,7 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
         if body.truncated {
             store_attachments(shared, &p, &body).map_err(internal)?;
         } else {
-            store(shared, &p, &body, &snippet).map_err(internal)?;
+            store(shared, &p, &body, &snippet, true).map_err(internal)?;
             evict(shared, cap(shared), &p).map_err(internal)?;
         }
     }
@@ -328,6 +329,12 @@ const PREFETCH_BYTES: u64 = CACHE_CAP / 10;
 /// asked for again while the engine runs). At most [`PREFETCH_MAX`] bodies and about
 /// [`PREFETCH_BYTES`]; `stop` is asked before each one. Each body is written in its own short
 /// transactions, so what was fetched stays when the run is cut. Returns how many were cached.
+///
+/// It never evicts: the cache's total is read once, a message whose size (`messages.size`, the
+/// whole message, so at least its body) would take the total past the cap is not fetched, and a
+/// fetched body that would is not stored and ends the download (asked for again only by the next
+/// engine). So a full cache costs a run no network, and a body the user opened is never pushed
+/// out by one nobody opened. A downloaded body is stamped as the oldest row (`store`).
 pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, account: &str, folder: &str, stop: &dyn Fn() -> bool) -> Result<usize, Fail> {
     let validity: Option<Option<i64>> = shared.read(|c| {
         c.query_row("SELECT uid_validity FROM folders WHERE account_id = ?1 AND path = ?2", (account, folder), |r| r.get(0)).optional()
@@ -335,24 +342,30 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, acco
     let Some(validity) = validity else { return Ok(0) };
     let since = now_ms() - PREFETCH_DAYS * 86_400_000;
     let skipped = crate::background::skipped_bodies(shared, account, folder);
-    let uids: Vec<u32> = shared.read(|c| {
+    let rows: Vec<(u32, u64)> = shared.read(|c| {
         let mut st = c.prepare_cached(
-            "SELECT m.uid FROM messages m
+            "SELECT m.uid, m.size FROM messages m
              WHERE m.account_id = ?1 AND m.folder = ?2 AND m.date_ms >= ?3
                AND m.out_of_window_ms IS NULL AND m.local_deleted IS NULL
                AND NOT EXISTS (SELECT 1 FROM bodies b WHERE b.account_id = m.account_id AND b.folder = m.folder AND b.uid = m.uid)
              ORDER BY m.date_ms DESC, m.uid DESC LIMIT ?4",
         )?;
         let rows = st
-            .query_map((account, folder, since, (PREFETCH_MAX + skipped.len()) as i64), |r| r.get::<_, i64>(0))?
+            .query_map((account, folder, since, (PREFETCH_MAX + skipped.len()) as i64), |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(rows.into_iter().map(|u| u as u32).collect())
+        Ok(rows.into_iter().map(|(u, s)| (u as u32, s.max(0) as u64)).collect())
     })?;
+    let limit = cap(shared);
+    let mut total: u64 = shared.read(|c| c.query_row("SELECT COALESCE(sum(bytes), 0) FROM bodies", [], |r| r.get::<_, i64>(0)))?.max(0) as u64;
     let here = FolderRow::new(folder, validity);
     let (mut cached, mut bytes) = (0usize, 0u64);
-    for uid in uids.into_iter().filter(|u| !skipped.contains(u)).take(PREFETCH_MAX) {
-        if stop() || bytes >= PREFETCH_BYTES {
+    for (uid, size) in rows.into_iter().filter(|(u, _)| !skipped.contains(u)).take(PREFETCH_MAX) {
+        if stop() || bytes >= PREFETCH_BYTES || total >= limit {
             break;
+        }
+        // Too big for what the cache has left: a smaller one further down may still fit.
+        if total + size > limit {
+            continue;
         }
         crate::sync::not_closing(shared)?;
         let p = BodyParams { account_id: account.to_string(), folder: folder.to_string(), uid };
@@ -371,10 +384,17 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, acco
             crate::background::skip_body(shared, account, folder, uid);
             continue;
         }
-        store(shared, &p, &body, &snippet)?;
-        evict(shared, cap(shared), &p)?;
+        let text_bytes = (body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len)) as u64;
+        let row_bytes = text_bytes + serde_json::to_string(&body.stored).map_or(0, |s| s.len()) as u64;
+        if total + row_bytes > limit {
+            // Larger than its message size said (none listed): kept out, and the cache is full.
+            crate::background::skip_body(shared, account, folder, uid);
+            break;
+        }
+        store(shared, &p, &body, &snippet, false)?;
         cached += 1;
-        bytes += (body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len)) as u64;
+        total += row_bytes;
+        bytes += text_bytes;
     }
     Ok(cached)
 }
@@ -526,12 +546,15 @@ fn message_exists(c: &Connection, p: &BodyParams) -> rusqlite::Result<bool> {
 
 /// Writes the attachment rows (at most [`BATCH`] per transaction), then the body row and the
 /// snippet in one last transaction, so a body row means its attachment rows are in place.
-fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str) -> Result<(), EngineError> {
+fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str, opened: bool) -> Result<(), EngineError> {
     if !store_attachments(shared, p, body)? {
         return Ok(());
     }
     let parts_json = serde_json::to_string(&body.stored).map_err(|e| EngineError::Db(e.to_string()))?;
     let bytes = body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len) + parts_json.len();
+    // A body nobody opened yet (a download's) is the oldest row: an open's eviction takes it
+    // before any body the user read; opening it later stamps it as any hit does.
+    let stamp = if opened { STAMP } else { "0" };
     shared.write(|c| {
         if !message_exists(c, p)? {
             return Ok(());
@@ -540,7 +563,7 @@ fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str) -> Result<
         c.execute(
             &format!(
                 "INSERT OR REPLACE INTO bodies (account_id, folder, uid, html, text, parts_json, bytes, last_access_ms)
-                 VALUES (?1, ?2, ?3, ?5, ?6, ?7, ?8, {STAMP})"
+                 VALUES (?1, ?2, ?3, ?5, ?6, ?7, ?8, {stamp})"
             ),
             (account, folder, uid, now, &body.html, &body.text, &parts_json, bytes as i64),
         )?;
@@ -784,5 +807,55 @@ mod tests {
         assert_eq!(uids_cached(&e), [2], "only the body just fetched stays");
         let max = e.shared().max_txn_rows(false);
         assert!(max > 0 && max <= 200, "an eviction transaction changed {max} rows");
+    }
+
+    /// A background download never evicts: at the cap it caches what fits and stops, the bodies
+    /// the user opened stay, and the next run downloads nothing.
+    #[test]
+    fn prefetch_at_the_cap_keeps_opened_bodies_and_downloads_nothing_more() {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        let mut mb = Mailbox::new("INBOX");
+        for uid in 1..=6 {
+            mb.add(html_message(uid, 10));
+        }
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(mb));
+        let tmp = tempfile::tempdir().unwrap();
+        let e = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(crate::MemorySecrets::default())).unwrap();
+        let added = e
+            .rpc(
+                "mobile.accounts.add",
+                json!({ "email": "u@example.test", "password": "pw", "imapHost": server.host(), "imapPort": server.port(), "security": "none", "smtpHost": server.host(), "smtpPort": server.smtp_port(), "smtpSecurity": "starttls" }),
+            )
+            .unwrap();
+        let account = added["account"]["id"].as_str().unwrap().to_string();
+        crate::sync::sync_now_for_test(e.shared(), &account, None);
+        for uid in [1u32, 2] {
+            let v = e.rpc("mobile.message.body", json!({ "accountId": account, "folder": "INBOX", "uid": uid })).unwrap();
+            assert_eq!(v["gone"], false, "{v}");
+        }
+        // Room for one more ~10 KB body, not two.
+        let opened = total_bytes(&e);
+        let cap = (opened + opened / 2 + opened / 4) as u64;
+        e.shared().body_cap.store(cap, Ordering::SeqCst);
+        let fetches = || server.commands().iter().filter(|c| c.to_uppercase().contains("BODY.PEEK[1")).count();
+        let prefetch_once = || {
+            let mut backend = crate::backend::open(e.shared(), &account).unwrap_or_else(|_| panic!("sign-in"));
+            let got = prefetch(e.shared(), backend.as_mut(), &account, "INBOX", &|| false).unwrap_or_else(|_| panic!("prefetch"));
+            drop(backend);
+            got
+        };
+
+        let got = prefetch_once();
+        let cached = uids_cached(&e);
+        assert!(cached.contains(&1) && cached.contains(&2), "a download evicted an opened body: {cached:?}");
+        assert!(total_bytes(&e) as u64 <= cap, "the cache grew past its cap: {} > {cap}", total_bytes(&e));
+        assert_eq!(got, 1, "one body fits: {cached:?}");
+        assert_eq!(cached, [1, 2, 6], "the newest one");
+
+        let before = fetches();
+        assert_eq!(prefetch_once(), 0);
+        assert_eq!(fetches(), before, "a run at the cap downloaded a body again");
+        assert_eq!(uids_cached(&e), [1, 2, 6]);
     }
 }
