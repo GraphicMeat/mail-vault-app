@@ -311,6 +311,83 @@ pub struct Engine {
     startup_replay: AtomicBool,
 }
 
+/// The WAL's checkpoints, on their own background thread (`mv-engine-ckpt`): the writer has
+/// `wal_autocheckpoint` off, so no commit (a tap's least of all) pays for copying the WAL into
+/// the file and syncing it. Woken by every committed write, it lets writes gather for
+/// [`CKPT_SETTLE`], then runs a PASSIVE checkpoint on a connection of its own, opened for that
+/// one checkpoint and closed after it: PASSIVE takes no lock a writer or reader waits on (a commit
+/// goes on appending to the WAL meanwhile), and copies what no open read still needs. With no
+/// connection held between runs, the engine's last close still checkpoints the rest.
+pub(crate) struct Checkpointer {
+    /// (committed writes so far, stopping)
+    state: Mutex<(u64, bool)>,
+    cv: std::sync::Condvar,
+}
+
+/// How long the checkpointer lets writes gather before it runs: at most one checkpoint (one
+/// sync of the file) a second while the downloader writes, about as often as SQLite's own
+/// 1000-page trigger would fire for its bodies.
+const CKPT_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
+
+impl Checkpointer {
+    fn start(path: &Path) -> Arc<Checkpointer> {
+        let c = Arc::new(Checkpointer { state: Mutex::new((0, false)), cv: std::sync::Condvar::new() });
+        let (me, path) = (Arc::clone(&c), path.to_path_buf());
+        let spawned = std::thread::Builder::new().name("mv-engine-ckpt".into()).spawn(move || me.run(&path));
+        if let Err(e) = spawned {
+            // No thread: commits checkpoint as SQLite does by default, rather than never.
+            eprintln!("[db] checkpoint thread: {e}");
+            c.stop();
+        }
+        c
+    }
+
+    fn wrote(&self) {
+        let mut g = lock(&self.state);
+        g.0 = g.0.wrapping_add(1);
+        self.cv.notify_all();
+    }
+
+    fn stop(&self) {
+        lock(&self.state).1 = true;
+        self.cv.notify_all();
+    }
+
+    fn run(&self, path: &Path) {
+        crate::sync::background_qos();
+        let mut seen = 0u64;
+        loop {
+            {
+                let mut g = lock(&self.state);
+                while g.0 == seen && !g.1 {
+                    g = self.cv.wait(g).unwrap_or_else(|p| p.into_inner());
+                }
+                if g.1 {
+                    return;
+                }
+            }
+            // Let the burst settle: one checkpoint for many commits.
+            {
+                let g = lock(&self.state);
+                let (g, _) = self.cv.wait_timeout_while(g, CKPT_SETTLE, |s| !s.1).unwrap_or_else(|p| p.into_inner());
+                if g.1 {
+                    return;
+                }
+                seen = g.0;
+            }
+            if let Err(e) = checkpoint(path) {
+                eprintln!("[db] checkpoint: {e}");
+            }
+        }
+    }
+}
+
+/// One PASSIVE checkpoint of `path` on a connection opened for it.
+fn checkpoint(path: &Path) -> rusqlite::Result<()> {
+    let c = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+    c.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |_| Ok(()))
+}
+
 /// What the RPC threads and the sync worker thread both use.
 pub(crate) struct Shared {
     path: PathBuf,
@@ -318,6 +395,8 @@ pub(crate) struct Shared {
     /// the WAL into the file, and a read-only one cannot (the index worker reads through them).
     readers: Mutex<Vec<Connection>>,
     writer: Mutex<Connection>,
+    /// Checkpoints the WAL off every caller's path; told after each committed write.
+    ckpt: Arc<Checkpointer>,
     /// Account secrets. Never copied into `mobile.db`, a log line or an event.
     secrets: Arc<dyn SecretStore>,
     /// Where the engine's own log lines go. The shell installs its platform logger (unified log on
@@ -420,6 +499,11 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         return Err(OpenFail::Fatal(EngineError::Db(format!("journal_mode is {mode}, not wal"))));
     }
     w.execute_batch("PRAGMA synchronous = NORMAL;")?;
+    // No checkpoint on commit: SQLite runs one inside whichever commit takes the WAL past 1000
+    // pages, and with the downloader writing bodies that is often a tap's (`actions.apply`
+    // measured 57 to 82 ms on Windows, the writer held throughout). [`Checkpointer`] runs them on
+    // its own thread instead.
+    w.execute_batch("PRAGMA wal_autocheckpoint = 0;")?;
     if found < SCHEMA_VERSION {
         // One transaction for every step, so a crash leaves the old file. A new file (version 0)
         // or the v1 prototype is rebuilt from schema 2; from 2 on each step goes forward and keeps
@@ -525,6 +609,7 @@ impl Engine {
                 path: db.path,
                 writer: Mutex::new(db.writer),
                 readers: Mutex::new(db.readers),
+                ckpt: Checkpointer::start(&path),
                 secrets,
                 log_sink: OnceLock::new(),
                 event_sink: OnceLock::new(),
@@ -700,6 +785,12 @@ impl Engine {
         self.shared.read(f)
     }
 
+    /// Test seam: the writer's `wal_autocheckpoint`.
+    #[cfg(test)]
+    pub(crate) fn autocheckpoint_for_test(&self) -> i64 {
+        lock(&self.shared.writer).query_row("PRAGMA wal_autocheckpoint", [], |r| r.get(0)).unwrap()
+    }
+
     /// Test seam for `read_not_blocked_by_writer`: runs `f` inside a write transaction that stays
     /// open until `f` returns. Unit tests only, so no build of the crate (shipping or perf-gate)
     /// carries it.
@@ -723,6 +814,7 @@ impl Drop for Engine {
         // The worker stops at its next batch (a network call in flight is bounded by core's
         // timeouts) and exits; nothing waits for it.
         self.shared.closing.store(true, Ordering::SeqCst);
+        self.shared.ckpt.stop();
         self.sync.stop();
         self.replay.stop();
         self.outbox.stop();
@@ -765,6 +857,7 @@ impl Shared {
         #[cfg(test)]
         self.max_txn_rows.fetch_max(w.total_changes() - before, Ordering::SeqCst);
         tx.commit().map_err(|e| EngineError::Db(e.to_string()))?;
+        self.ckpt.wrote();
         Ok(out)
     }
 
@@ -899,6 +992,32 @@ mod tests {
     fn page(e: &Engine) -> Value {
         e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "cursor": null, "limit": 50 }))
             .unwrap()
+    }
+
+    /// No commit checkpoints (the writer's autocheckpoint is off): the checkpointer copies the
+    /// WAL into the file on its own thread once writes gather.
+    #[test]
+    fn the_wal_is_checkpointed_off_the_writers_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let e = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(crate::MemorySecrets::default())).unwrap();
+        assert_eq!(e.autocheckpoint_for_test(), 0);
+        let file = tmp.path().join(DB_FILE);
+        let before = std::fs::metadata(&file).unwrap().len();
+        let filler = "x".repeat(4000);
+        for chunk in 0..20i64 {
+            e.write(|c| {
+                for i in 0..50i64 {
+                    c.execute("INSERT INTO settings (key, value) VALUES (?1, ?2)", (format!("k{chunk}-{i}"), &filler))?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while std::fs::metadata(&file).unwrap().len() < before + 2_000_000 {
+            assert!(std::time::Instant::now() < deadline, "the WAL never reached the file");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
     }
 
     #[test]
