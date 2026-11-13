@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 6;
+pub const SCHEMA_VERSION: u32 = 7;
 const READERS: usize = 2;
 
 /// Schema 2, frozen: a new file is built as schema 2 plus every forward step, so it cannot drift
@@ -201,6 +201,14 @@ ALTER TABLE outbox ADD COLUMN not_before_ms INTEGER NOT NULL DEFAULT 0;
 const V5_TO_V6: &str = "
 ALTER TABLE messages ADD COLUMN out_of_window_ms INTEGER;
 ALTER TABLE outbox ADD COLUMN scheduled_ms INTEGER;
+";
+
+/// Schema 6 to 7: an account's color (`#rrggbb`) and list position (`sort_order`) as the desktop
+/// had them, set by an import from the computer. NULL for an account added on the phone: it lists
+/// after the positioned ones, oldest first.
+const V6_TO_V7: &str = "
+ALTER TABLE accounts ADD COLUMN color TEXT;
+ALTER TABLE accounts ADD COLUMN sort_order INTEGER;
 ";
 
 /// Every table any schema version created; a rebuild drops them all (their indexes go with them).
@@ -410,6 +418,9 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         if found < 6 {
             tx.execute_batch(V5_TO_V6)?;
             tx.execute_batch(mailvault_core::app_db::follow_up::TABLE_SQL)?;
+        }
+        if found < 7 {
+            tx.execute_batch(V6_TO_V7)?;
         }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;

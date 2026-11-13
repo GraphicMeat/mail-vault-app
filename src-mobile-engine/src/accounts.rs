@@ -317,14 +317,18 @@ fn internal(e: impl ToString) -> RpcError {
     RpcError::Internal(e.to_string())
 }
 
+/// The account list's order: the desktop's positions from an import first, then accounts added on
+/// the phone, oldest first.
+pub(crate) const LIST_ORDER: &str = "sort_order IS NULL, sort_order, created_ms, id";
+
 pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
     let accounts = engine
         .read(|c| {
-            let mut st = c.prepare_cached(
+            let mut st = c.prepare_cached(&format!(
                 "SELECT id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, kind, provider, needs_auth,
-                        auth, EXISTS(SELECT 1 FROM settings s WHERE s.key = 'bg.authRefused.' || accounts.id)
-                 FROM accounts ORDER BY created_ms, id",
-            )?;
+                        auth, EXISTS(SELECT 1 FROM settings s WHERE s.key = 'bg.authRefused.' || accounts.id), color
+                 FROM accounts ORDER BY {LIST_ORDER}"
+            ))?;
             let rows = st
                 .query_map([], |r| {
                     let mut a = account_json(
@@ -343,6 +347,8 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
                     a["oauth"] = json!(r.get::<_, String>(12)? == "oauth2");
                     // The server refused its password: nothing dials it until the user's Retry.
                     a["authRefused"] = json!(r.get::<_, bool>(13)?);
+                    // The desktop's color, from an import; none for an account added here.
+                    a["color"] = json!(r.get::<_, Option<String>>(14)?);
                     Ok(a)
                 })?
                 .collect::<Result<Vec<_>, _>>()?;

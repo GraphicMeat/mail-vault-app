@@ -461,7 +461,9 @@ fn a_v5_file_migrates_to_v6_and_keeps_its_rows() {
         let c = Connection::open(&path).unwrap();
         // Back to what a v5 build wrote.
         c.execute_batch(
-            "ALTER TABLE messages DROP COLUMN out_of_window_ms;
+            "ALTER TABLE accounts DROP COLUMN color;
+             ALTER TABLE accounts DROP COLUMN sort_order;
+             ALTER TABLE messages DROP COLUMN out_of_window_ms;
              ALTER TABLE outbox DROP COLUMN scheduled_ms;
              DROP TABLE follow_ups;
              INSERT INTO outbox (id, account_id, message_id, draft_json, state, attempts, created_ms, updated_ms, not_before_ms)
@@ -473,7 +475,7 @@ fn a_v5_file_migrates_to_v6_and_keeps_its_rows() {
     let e = open(tmp.path());
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 6);
+    assert_eq!(ver, 7);
     let kept: (i64, Option<i64>) = c
         .query_row("SELECT count(*), max(out_of_window_ms) FROM messages WHERE account_id = 'acc_a'", [], |r| Ok((r.get(0)?, r.get(1)?)))
         .unwrap();

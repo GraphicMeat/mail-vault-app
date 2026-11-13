@@ -35,7 +35,44 @@ fn account(email: &str, kind: PhoneKind, auth: PhoneAuth) -> PhoneAccount {
         password: None,
         refresh: None,
         client_id: None,
+        color: None,
+        order: None,
     }
+}
+
+/// `imap(email)` as the desktop lists it: at `order`, in `color`.
+fn shown(email: &str, color: &str, order: u32) -> PhoneAccount {
+    let mut a = imap(email);
+    a.color = Some(color.into());
+    a.order = Some(order);
+    a
+}
+
+/// An account added on the phone itself (no desktop color or order), `created_ms` after the rest.
+fn phone_only(dir: &std::path::Path, id: &str, email: &str, created_ms: i64) {
+    Connection::open(dir.join("mobile.db"))
+        .unwrap()
+        .execute(
+            "INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, created_ms)
+             VALUES (?1, ?2, ?2, 'imap.phone.test', 993, 'ssl', ?3)",
+            rusqlite::params![id, email, created_ms],
+        )
+        .unwrap();
+}
+
+/// `mobile.accounts.list` as (email, color) in list order.
+fn listed(e: &Engine) -> Vec<(String, Option<String>)> {
+    let list = e.rpc("mobile.accounts.list", json!({})).unwrap();
+    list["accounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| (a["email"].as_str().unwrap().to_string(), a["color"].as_str().map(str::to_string)))
+        .collect()
+}
+
+fn pair(email: &str, color: Option<&str>) -> (String, Option<String>) {
+    (email.to_string(), color.map(str::to_string))
 }
 
 fn imap(email: &str) -> PhoneAccount {
@@ -226,6 +263,52 @@ fn an_address_already_here_is_existing_and_left_alone() {
     assert_eq!(reply["existing"], json!(["ANN@example.test", "bob@example.test"]));
     assert_eq!(count(tmp.path()), 2);
     assert_eq!(cred(&secrets, &first).password.as_deref(), Some("imap-secret-1"), "the stored secret is untouched");
+}
+
+#[test]
+fn imported_accounts_take_the_desktop_order_and_colors() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    // The bundle's list order is not the desktop order: `order` is.
+    let reply = import(&e, &code(PW, vec![shown("zed@example.test", "#ec4899", 1), shown("amy@example.test", "#14B8A6", 0)]), PW);
+    assert_eq!(reply["imported"], json!(["zed@example.test", "amy@example.test"]), "{reply}");
+    assert_eq!(listed(&e), vec![pair("amy@example.test", Some("#14b8a6")), pair("zed@example.test", Some("#ec4899"))]);
+}
+
+#[test]
+fn an_existing_account_takes_the_desktop_color_and_order_and_phone_only_ones_follow() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, secrets) = engine(tmp.path());
+    assert_eq!(import(&e, &code(PW, vec![imap("ann@example.test")]), PW)["ok"], true);
+    let ann = row(tmp.path(), "ann@example.test").id;
+    // Added on the phone, in this order: older, then newer.
+    phone_only(tmp.path(), "acc_older", "older@phone.test", 1);
+    phone_only(tmp.path(), "acc_newer", "newer@phone.test", i64::MAX);
+
+    let mut again = shown("ANN@example.test", "#8b5cf6", 1);
+    again.password = Some("a-newer-password".into());
+    let reply = import(&e, &code(PW, vec![again, shown("bob@example.test", "#84cc16", 0)]), PW);
+    assert_eq!(reply["imported"], json!(["bob@example.test"]), "{reply}");
+    assert_eq!(reply["existing"], json!(["ANN@example.test"]));
+    assert_eq!(
+        listed(&e),
+        vec![
+            pair("bob@example.test", Some("#84cc16")),
+            pair("ann@example.test", Some("#8b5cf6")),
+            pair("older@phone.test", None),
+            pair("newer@phone.test", None),
+        ]
+    );
+    assert_eq!(cred(&secrets, &ann).password.as_deref(), Some("imap-secret-1"), "the stored secret is untouched");
+}
+
+#[test]
+fn a_color_that_is_not_hex_is_dropped_and_the_account_kept() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    let reply = import(&e, &code(PW, vec![shown("ann@example.test", "red; background:url(https://x.test/)", 0)]), PW);
+    assert_eq!(reply["imported"], json!(["ann@example.test"]), "{reply}");
+    assert_eq!(listed(&e), vec![pair("ann@example.test", None)]);
 }
 
 #[test]

@@ -4,7 +4,9 @@
 //! shell already runs every RPC on a blocking thread) and each account becomes a row and a secret
 //! through [`accounts::insert_new`], like every other add. No sign-in test: the first sync says
 //! whether an account works, through the usual banners (a refused OAuth grant parks it as
-//! `needsAuth`, a refused password holds it).
+//! `needsAuth`, a refused password holds it). Every account of the code that is here afterwards,
+//! new or already present, takes the desktop's list position and color; the phone's other
+//! accounts follow them.
 //!
 //! Reply: `{ok: true, imported: [email], existing: [email], skipped: [{email, reason}]}`, or
 //! `{ok: false, code}` with `PASSWORD_SHORT` (under 12 characters, nothing tried), `BAD_PASSWORD`
@@ -18,7 +20,7 @@ use crate::accounts::{self, AccountRow, InsertError};
 use crate::db::Engine;
 use crate::rpc::RpcError;
 use crate::secrets::Credential;
-use mailvault_core::transfer::phone::{decode_phone_bundle, PhoneAccount, PhoneAuth, PhoneError, PhoneKind, MAX_FRAMES, MAX_FRAME_CHARS, MIN_PASSWORD_CHARS};
+use mailvault_core::transfer::phone::{decode_phone_bundle, hex_color, PhoneAccount, PhoneAuth, PhoneError, PhoneKind, MAX_FRAMES, MAX_FRAME_CHARS, MIN_PASSWORD_CHARS};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use zeroize::Zeroizing;
@@ -81,7 +83,11 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
     // in; a skipped address is named once.
     let mut here = HashSet::new();
     let mut named_skipped = HashSet::new();
-    for acct in &bundle.accounts {
+    // Each bundle account now here (new or already present): its desktop position, lowercase
+    // address and color.
+    let mut placed: Vec<(u64, String, Option<String>)> = Vec::new();
+    for (i, acct) in bundle.accounts.iter().enumerate() {
+        let desktop = (acct.order.map_or(i as u64, u64::from), acct.color.as_deref().and_then(hex_color));
         let email = acct.email.trim().to_string();
         let key = email.to_lowercase();
         if here.contains(&key) {
@@ -101,17 +107,20 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
             }
         };
         if accounts::email_taken(engine, &email)? {
-            here.insert(key);
+            here.insert(key.clone());
+            placed.push((desktop.0, key, desktop.1));
             existing.push(email);
             continue;
         }
         match accounts::insert_new(engine, &row, &cred, |_, _| Ok(())) {
             Ok(_) => {
-                here.insert(key);
+                here.insert(key.clone());
+                placed.push((desktop.0, key, desktop.1));
                 imported.push(email);
             }
             Err(InsertError::Duplicate) => {
-                here.insert(key);
+                here.insert(key.clone());
+                placed.push((desktop.0, key, desktop.1));
                 existing.push(email);
             }
             Err(InsertError::Secret(_)) => skip(&mut skipped, &mut named_skipped, email, "internal"),
@@ -120,7 +129,37 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
     }
     // A skipped copy whose address a later copy brought in is not skipped after all.
     skipped.retain(|s| !s["email"].as_str().is_some_and(|e| here.contains(&e.to_lowercase())));
+    if !placed.is_empty() {
+        place(engine, placed)?;
+    }
     Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped }))
+}
+
+/// The desktop's look on the phone: the bundle's accounts take the desktop's order and colors
+/// (an account without a color keeps its own), every other account follows them in the order it
+/// had. One write.
+fn place(engine: &Engine, mut placed: Vec<(u64, String, Option<String>)>) -> Result<(), RpcError> {
+    placed.sort_by_key(|p| p.0);
+    engine
+        .write(|c| {
+            let mut st = c.prepare(&format!("SELECT id, email FROM accounts ORDER BY {}", accounts::LIST_ORDER))?;
+            let rest = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<Result<Vec<_>, _>>()?;
+            let mut pos = 0i64;
+            for (_, email, color) in &placed {
+                c.execute(
+                    "UPDATE accounts SET sort_order = ?1, color = COALESCE(?2, color) WHERE email = ?3 COLLATE NOCASE",
+                    rusqlite::params![pos, color, email],
+                )?;
+                pos += 1;
+            }
+            let ours: HashSet<&str> = placed.iter().map(|p| p.1.as_str()).collect();
+            for (id, email) in rest.iter().filter(|(_, e)| !ours.contains(e.to_lowercase().as_str())) {
+                c.execute("UPDATE accounts SET sort_order = ?1 WHERE id = ?2", rusqlite::params![pos, id])?;
+                pos += 1;
+            }
+            Ok(())
+        })
+        .map_err(|e| RpcError::Internal(e.to_string()))
 }
 
 /// A bundle account as the row and secret every add path stores, or why the phone cannot use it.
