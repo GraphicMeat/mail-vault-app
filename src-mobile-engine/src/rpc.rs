@@ -241,22 +241,43 @@ fn ping(_: &Engine, _: Value) -> Result<Value, RpcError> {
     Ok(json!({ "engine": env!("CARGO_PKG_VERSION"), "schema": SCHEMA_VERSION, "perfGate": cfg!(feature = "perf-gate") }))
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct Cursor {
     date_ms: i64,
     uid: i64,
+    /// The row's account, in the All Inboxes list only: there `(date_ms, uid)` repeats across
+    /// accounts, and the account breaks the tie.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    account_id: Option<String>,
+}
+
+/// A list that spans accounts instead of one folder.
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum Scope {
+    /// Every account's inbox, merged newest first: desktop's All Inboxes.
+    AllInboxes,
 }
 
 /// `{accountId, folder, cursor: null|{dateMs, uid}, limit}`: the rows strictly after `cursor` in
 /// `(date_ms DESC, uid DESC)` order. New mail lands above every cursor, so a page already read
 /// never shifts. Unknown fields are refused, so a caller still on the removed Plan 1 `{offset}`
 /// form fails instead of reading the first page forever.
+///
+/// `{scope: "allInboxes", cursor: null|{dateMs, uid, accountId}, limit}` (no account, no folder):
+/// every account's inbox as one list in `(date_ms DESC, uid DESC, account_id DESC)` order, each row
+/// with its own `accountId` and `folder`. Every account the engine holds is in it, a held or
+/// signed-out one's stored mail too (as on desktop); a removed account's rows are gone with it.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CursorPageParams {
-    account_id: String,
-    folder: String,
+    #[serde(default)]
+    account_id: Option<String>,
+    #[serde(default)]
+    folder: Option<String>,
+    #[serde(default)]
+    scope: Option<Scope>,
     #[serde(default)]
     cursor: Option<Cursor>,
     limit: u64,
@@ -296,48 +317,119 @@ fn count_listed(c: &rusqlite::Connection, account: &str, folder: &str) -> rusqli
     c.query_row(&format!("SELECT count(*) FROM messages WHERE {LISTED}"), (account, folder), |r| r.get(0))
 }
 
+/// Up to `limit` listed rows of one folder in `(date_ms DESC, uid DESC)` order, those strictly
+/// below `bound` when there is one, each with the cursor that follows it.
+fn listed_page(
+    c: &rusqlite::Connection,
+    account: &str,
+    folder: &str,
+    bound: Option<(i64, i64)>,
+    limit: i64,
+) -> rusqlite::Result<Vec<(Cursor, Value)>> {
+    let key = |r: &rusqlite::Row<'_>| -> rusqlite::Result<(Cursor, Value)> {
+        Ok((Cursor { date_ms: r.get(4)?, uid: r.get(0)?, account_id: None }, row_json(r)?))
+    };
+    match bound {
+        None => {
+            let mut st = c.prepare_cached(&format!(
+                "SELECT {ROW_COLUMNS} FROM messages WHERE {LISTED} ORDER BY date_ms DESC, uid DESC LIMIT ?3"
+            ))?;
+            let rows = st.query_map((account, folder, limit), key)?.collect();
+            rows
+        }
+        Some((date_ms, uid)) => {
+            let mut st = c.prepare_cached(&format!(
+                "SELECT {ROW_COLUMNS} FROM messages WHERE {LISTED} AND (date_ms, uid) < (?3, ?4)
+                 ORDER BY date_ms DESC, uid DESC LIMIT ?5"
+            ))?;
+            let rows = st.query_map((account, folder, date_ms, uid, limit), key)?.collect();
+            rows
+        }
+    }
+}
+
+/// The reply for `rows` read with `limit + 1`: the extra row tells whether anything follows, so
+/// `nextCursor` is null exactly at the end.
+fn page_json(mut rows: Vec<(Cursor, Value)>, limit: i64, total: i64, list_gen: i64) -> Value {
+    let more = rows.len() as i64 > limit;
+    rows.truncate(limit as usize);
+    let next = if more { rows.last().map(|(k, _)| json!(k)) } else { None };
+    let rows: Vec<Value> = rows.into_iter().map(|(_, v)| v).collect();
+    json!({ "rows": rows, "nextCursor": next, "total": total, "listGen": list_gen })
+}
+
 /// `mobile.messages.page` -> `{rows, nextCursor, total, listGen}`. `listGen` is read before the
 /// rows, so it is never newer than them.
 fn messages_page(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: CursorPageParams = parse(params)?;
     let limit = p.limit.min(MAX_PAGE) as i64;
-    let list_gen = engine.shared().list_gen(&p.account_id, &p.folder).map_err(|e| RpcError::Internal(e.to_string()))?;
+    let (account_id, folder) = match (p.scope, p.account_id, p.folder) {
+        (Some(Scope::AllInboxes), None, None) => return all_inboxes_page(engine, p.cursor, limit),
+        (None, Some(a), Some(f)) => (a, f),
+        (Some(_), ..) => return Err(RpcError::Invalid("scope takes no accountId or folder".into())),
+        (None, ..) => return Err(RpcError::Invalid("accountId and folder are required".into())),
+    };
+    let list_gen = engine.shared().list_gen(&account_id, &folder).map_err(|e| RpcError::Internal(e.to_string()))?;
     engine
         .read(|c| {
-            let total = count_listed(c, &p.account_id, &p.folder)?;
-            // limit + 1 tells whether anything follows, so `nextCursor` is null exactly at the end.
-            let mut rows: Vec<(Cursor, Value)> = match p.cursor {
-                None => {
-                    let mut st = c.prepare_cached(&format!(
-                        "SELECT {ROW_COLUMNS} FROM messages WHERE {LISTED} ORDER BY date_ms DESC, uid DESC LIMIT ?3"
-                    ))?;
-                    let rows = st
-                        .query_map((&p.account_id, &p.folder, limit + 1), |r| {
-                            Ok((Cursor { date_ms: r.get(4)?, uid: r.get(0)? }, row_json(r)?))
-                        })?
-                        .collect::<Result<Vec<_>, _>>()?;
-                    rows
-                }
-                Some(cur) => {
-                    let mut st = c.prepare_cached(&format!(
-                        "SELECT {ROW_COLUMNS} FROM messages WHERE {LISTED} AND (date_ms, uid) < (?3, ?4)
-                         ORDER BY date_ms DESC, uid DESC LIMIT ?5"
-                    ))?;
-                    let rows = st
-                        .query_map((&p.account_id, &p.folder, cur.date_ms, cur.uid, limit + 1), |r| {
-                            Ok((Cursor { date_ms: r.get(4)?, uid: r.get(0)? }, row_json(r)?))
-                        })?
-                        .collect::<Result<Vec<_>, _>>()?;
-                    rows
-                }
-            };
-            let more = rows.len() as i64 > limit;
-            rows.truncate(limit as usize);
-            let next = if more { rows.last().map(|(k, _)| json!(k)) } else { None };
-            let rows: Vec<Value> = rows.into_iter().map(|(_, v)| v).collect();
-            Ok(json!({ "rows": rows, "nextCursor": next, "total": total, "listGen": list_gen }))
+            let total = count_listed(c, &account_id, &folder)?;
+            let rows = listed_page(c, &account_id, &folder, p.cursor.map(|k| (k.date_ms, k.uid)), limit + 1)?;
+            Ok(page_json(rows, limit, total, list_gen))
         })
         .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// The All Inboxes page: each account's inbox read through its own index (at most `limit + 1`
+/// rows each, after the cursor), then merged. `total` and `listGen` are sums over the inboxes; the
+/// sum moves whenever one inbox's generation does.
+fn all_inboxes_page(engine: &Engine, cursor: Option<Cursor>, limit: i64) -> Result<Value, RpcError> {
+    let internal = |e: String| RpcError::Internal(e);
+    // Each account's inbox as sync stores it (`INBOX`, any case). An account with no folder row
+    // yet has no mail either; it is named the way sync will name it.
+    let inboxes: Vec<(String, String)> = engine
+        .read(|c| {
+            let mut st = c.prepare_cached(
+                "SELECT a.id, COALESCE(
+                   (SELECT f.path FROM folders f WHERE f.account_id = a.id AND f.path = 'INBOX' COLLATE NOCASE),
+                   'INBOX')
+                 FROM accounts a ORDER BY a.id",
+            )?;
+            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect();
+            rows
+        })
+        .map_err(|e| internal(e.to_string()))?;
+    let mut list_gen = 0_i64;
+    for (account, folder) in &inboxes {
+        list_gen += engine.shared().list_gen(account, folder).map_err(|e| internal(e.to_string()))?;
+    }
+    engine
+        .read(|c| {
+            let mut total = 0;
+            let mut rows = Vec::new();
+            for (account, folder) in &inboxes {
+                total += count_listed(c, account, folder)?;
+                // Strictly after `(d, u, a)` in (date, uid, account) DESC order: for an account
+                // below `a` the row `(d, u)` itself still follows; for any other, only what is below.
+                let bound = cursor.as_ref().map(|k| match &k.account_id {
+                    Some(a) if account.as_str() < a.as_str() => (k.date_ms, k.uid.saturating_add(1)),
+                    _ => (k.date_ms, k.uid),
+                });
+                for (mut key, mut row) in listed_page(c, account, folder, bound, limit + 1)? {
+                    key.account_id = Some(account.clone());
+                    if let Some(o) = row.as_object_mut() {
+                        o.insert("accountId".into(), json!(account));
+                        o.insert("folder".into(), json!(folder));
+                    }
+                    rows.push((key, row));
+                }
+            }
+            rows.sort_by(|(x, _), (y, _)| {
+                (y.date_ms, y.uid, y.account_id.as_deref()).cmp(&(x.date_ms, x.uid, x.account_id.as_deref()))
+            });
+            rows.truncate(limit as usize + 1);
+            Ok(page_json(rows, limit, total, list_gen))
+        })
+        .map_err(|e| internal(e.to_string()))
 }
 
 /// Logs the in-app perf probe's result as exactly one `MV_MOBILE {"perf":<object>}` line, the line
