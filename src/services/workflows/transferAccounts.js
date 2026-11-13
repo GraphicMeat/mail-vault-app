@@ -11,6 +11,7 @@ import { getAccounts, saveAccounts, accountLogicalKey } from '../db';
 import * as keychainSession from '../keychainSession';
 import { collectSettings, applySettings } from '../transfer/settingsTransfer';
 import { useSettingsStore, getAccountColor } from '../../stores/settingsStore';
+import { useThemeStore } from '../../stores/themeStore';
 
 async function appVersion() {
   try {
@@ -46,18 +47,84 @@ export async function exportTransfer({ accountIds, includeAppSettings, password 
 }
 
 /**
- * Seal every account (with secrets) for the phone. The daemon maps, encrypts
- * and renders the QR frames: `{ frames: [svg], count, skipped: [{ email, reason }] }`.
+ * Seal every account (with secrets) and the desktop's phone-relevant settings for the phone. The
+ * daemon maps, fits the settings into the code (dropping templates, then images in signatures,
+ * then signatures), encrypts and renders the QR frames:
+ * `{ frames: [svg], count, skipped: [{ email, reason }] }`.
  * Same keychain gate as exportTransfer: a locked keychain would otherwise
  * read as every account "no saved password". The accounts go in the order the
- * desktop lists them, each with the color it shows, so the phone matches.
+ * desktop lists them, each with the color it shows, the name it sends mail with and whether it is
+ * hidden, so the phone matches.
  */
 export async function phoneQr({ password }) {
   const accounts = await getAccounts();
   if (!['granted', 'empty'].includes(keychainSession.getStatus())) throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
-  const { getOrderedAccounts, accountColors = {} } = useSettingsStore.getState();
-  const shown = getOrderedAccounts(accounts).map(a => ({ ...a, color: getAccountColor(accountColors, a) }));
-  return daemonCall('transfer.phone_qr', { password, accounts: shown });
+  const s = useSettingsStore.getState();
+  const { getOrderedAccounts, accountColors = {}, displayNames = {}, hiddenAccounts = {} } = s;
+  const shown = getOrderedAccounts(accounts).map(a => ({
+    ...a,
+    color: getAccountColor(accountColors, a),
+    // The name the desktop sends with (sendAsSuggestions: alias name, else this, else the form's).
+    name: displayNames[a.id] || a.name,
+    hidden: !!hiddenAccounts[a.id],
+    phoneSettings: phoneAccountSettings(s, a),
+  }));
+  return daemonCall('transfer.phone_qr', { password, accounts: shown, settings: phoneGlobalSettings(s, useThemeStore.getState()) });
+}
+
+// The desktop settings the phone takes (the phone applies them on its first import that carries
+// them). Never: backup*, snapshot*, cleanupRules, transferLimits, billing, AI keys, PGP, sound,
+// badge, refreshInterval, daemon*, onboarding, layout or other UI memory.
+const PHONE_GLOBAL_KEYS = [
+  'language', 'emailViewerTheme', 'dateFormat', 'customDateFormat', 'timeFormat', 'threadMode', 'threadSortOrder',
+  'markAsReadMode', 'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction',
+  'sendDelay', 'autoSaveDrafts', 'attachmentReminder', 'defaultSignatureEnabled', 'holdExternalContent',
+  'linkSafetyEnabled', 'linkSafetyClickConfirm', 'trackerBlockingEnabled',
+];
+
+function phoneGlobalSettings(s, theme) {
+  const out = Object.fromEntries(PHONE_GLOBAL_KEYS.filter(k => s[k] !== undefined && s[k] !== null).map(k => [k, s[k]]));
+  if (theme?.theme) out.theme = theme.theme;
+  if (theme?.palette) out.palette = theme.palette;
+  const n = s.notificationSettings || {};
+  if (typeof n.showPreview === 'boolean') out.notificationPreview = n.showPreview;
+  if (Array.isArray(n.importantSenders)) {
+    out.importantSenders = n.importantSenders
+      .filter(e => e && typeof e.match === 'string')
+      .map(e => ({ match: e.match, throughQuietHours: !!e.throughQuietHours }));
+  }
+  if (Array.isArray(s.emailTemplates) && s.emailTemplates.length) {
+    out.templates = s.emailTemplates
+      .filter(tpl => tpl && typeof tpl.body === 'string')
+      .map(tpl => ({ name: String(tpl.name || ''), body: tpl.body }));
+  }
+  return out;
+}
+
+function phoneAccountSettings(s, account) {
+  const id = account.id;
+  const out = {};
+  const sig = s.signatures?.[id];
+  if (sig && (sig.html || sig.text)) out.signature = { html: sig.html || '', text: sig.text || '', enabled: sig.enabled !== false };
+  const sendAs = s.sendAsAddresses?.[id];
+  if (typeof sendAs === 'string' && sendAs) out.sendAs = sendAs;
+  const aliases = s.aliases?.[id];
+  if (Array.isArray(aliases) && aliases.length) {
+    out.aliases = aliases.filter(a => a?.address).map(a => ({ address: a.address, name: a.name || '' }));
+  }
+  if (account.sentFolderOverride) out.sentFolderOverride = account.sentFolderOverride;
+  const notify = s.notificationSettings?.accounts?.[id];
+  if (notify && typeof notify === 'object') {
+    out.notifications = {
+      ...(typeof notify.enabled === 'boolean' ? { enabled: notify.enabled } : {}),
+      ...(Array.isArray(notify.folders) ? { folders: notify.folders } : {}),
+      ...(notify.quietHours ? { quietHours: notify.quietHours } : {}),
+    };
+  }
+  const mode = s.fetchModes?.[id] || s.fetchMode;
+  if (mode) out.fetchMode = mode;
+  if (typeof s.localCacheDurationMonths === 'number') out.cacheMonths = s.localCacheDurationMonths;
+  return out;
 }
 
 /** Decrypt a transfer file's base64 contents into its bundle. */
