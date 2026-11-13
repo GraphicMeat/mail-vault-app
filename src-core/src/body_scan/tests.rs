@@ -318,3 +318,16 @@ fn a_reply_to_that_is_header_syntax_raises_no_mismatch() {
     });
     assert_eq!(reply_to_mismatch(&row), None);
 }
+
+// The same shape cannot hide a foreign domain, and a colon in a quoted local
+// part is no reason to stay quiet.
+#[test]
+fn header_syntax_around_a_foreign_domain_still_warns() {
+    let row = json!({
+        "from": {"address": "a@bank.test"},
+        "replyTo": {"address": "x; i=reply@evil.test; bh=AAA="},
+    });
+    assert_eq!(reply_to_mismatch(&row).unwrap()["replyToDomain"], "evil.test");
+    let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "\"a:b\"@evil.test"}});
+    assert_eq!(reply_to_mismatch(&row).unwrap()["replyToDomain"], "evil.test");
+}
