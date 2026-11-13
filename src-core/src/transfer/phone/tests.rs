@@ -400,3 +400,55 @@ fn open_accepts_exactly_the_export_parameters() {
     let bundle = PhoneBundle { v: 1, accounts: vec![] };
     assert_eq!(open(PW, &seal(PW, &bundle).unwrap()).unwrap(), bundle);
 }
+
+// ── color and order ─────────────────────────────────────────────────────────
+
+#[test]
+fn color_and_desktop_order_are_carried() {
+    let mut g = gmail_oauth();
+    g["color"] = json!("#EC4899");
+    let mut broken = imap_password();
+    broken["password"] = json!("");
+    let mut o = outlook_graph();
+    o["color"] = json!("red; background:url(https://x.test/)");
+    let (b, _) = phone_bundle(&json!([g, broken, o, jmap_token()]));
+    let got: Vec<_> = b.accounts.iter().map(|a| (a.email.as_str(), a.color.as_deref(), a.order)).collect();
+    // The order is the desktop list's position (a skipped account keeps its slot); a color that is
+    // not `#rrggbb` is dropped, never the account.
+    assert_eq!(
+        got,
+        vec![("g@gmail.com", Some("#ec4899"), Some(0)), ("o@outlook.com", None, Some(2)), ("j@fastmail.com", None, Some(3))]
+    );
+    let v = serde_json::to_value(&b.accounts[0]).unwrap();
+    assert_eq!((v["color"].clone(), v["order"].clone()), (json!("#ec4899"), json!(0)));
+}
+
+#[test]
+fn color_and_order_roundtrip_through_frames() {
+    let mut g = gmail_oauth();
+    g["color"] = json!("#8b5cf6");
+    let mut p = imap_password();
+    p["color"] = json!("#14b8a6");
+    let qr = encode_phone_qr_with(PW, &json!([p, g]), cheap()).unwrap();
+    let got = decode_phone_bundle(PW, &qr.frames).unwrap();
+    let got: Vec<_> = got.accounts.iter().map(|a| (a.email.clone(), a.color.clone(), a.order)).collect();
+    assert_eq!(
+        got,
+        vec![
+            ("p@example.com".to_string(), Some("#14b8a6".to_string()), Some(0)),
+            ("g@gmail.com".to_string(), Some("#8b5cf6".to_string()), Some(1)),
+        ]
+    );
+}
+
+#[test]
+fn an_old_bundle_without_color_or_order_still_opens() {
+    // What a desktop before color and order sealed.
+    let old = br#"{"v":1,"accounts":[{"email":"a@x.test","kind":"imap","auth":"password","imapHost":"imap.x.test","password":"pw"}]}"#;
+    let mut enc = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::best());
+    enc.write_all(old).unwrap();
+    let sealed = crypto::encrypt_with(PW, &enc.finish().unwrap(), cheap()).unwrap();
+    let b = open(PW, &sealed).unwrap();
+    assert_eq!(b.accounts.len(), 1);
+    assert_eq!((b.accounts[0].color.clone(), b.accounts[0].order), (None, None));
+}

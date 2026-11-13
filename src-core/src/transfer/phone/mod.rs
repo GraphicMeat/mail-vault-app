@@ -112,6 +112,12 @@ pub struct PhoneAccount {
     pub refresh: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
+    /// The account's color on the desktop (its own pick or the hashed default), `#rrggbb`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// The account's position in the desktop's account list, from 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<u32>,
 }
 
 impl Drop for PhoneAccount {
@@ -143,6 +149,8 @@ impl std::fmt::Debug for PhoneAccount {
             .field("password", &redact(&self.password))
             .field("refresh", &redact(&self.refresh))
             .field("client_id", &self.client_id)
+            .field("color", &self.color)
+            .field("order", &self.order)
             .finish()
     }
 }
@@ -223,13 +231,17 @@ impl From<TransferError> for PhoneError {
 }
 
 /// Map the desktop's account objects (what `getAccounts()` returns, secrets
-/// included) to a phone bundle. Pure; the order is kept.
+/// included, in the desktop's account order, each with its shown `color`) to a
+/// phone bundle. Pure; the order is kept and each account carries its position.
 pub fn phone_bundle(accounts: &Value) -> (PhoneBundle, Vec<Skipped>) {
     let mut out = Vec::new();
     let mut skipped = Vec::new();
-    for a in accounts.as_array().map(Vec::as_slice).unwrap_or_default() {
+    for (i, a) in accounts.as_array().map(Vec::as_slice).unwrap_or_default().iter().enumerate() {
         match phone_account(a) {
-            Ok(acct) => out.push(acct),
+            Ok(mut acct) => {
+                acct.order = u32::try_from(i).ok();
+                out.push(acct)
+            }
             Err(reason) => skipped.push(Skipped { email: text(a, "email").unwrap_or("").to_string(), reason }),
         }
     }
@@ -244,6 +256,14 @@ fn text<'a>(a: &'a Value, key: &str) -> Option<&'a str> {
 /// A non-empty secret, untouched (a password may start or end with a space).
 fn secret(a: &Value, key: &str) -> Option<String> {
     a.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+/// `#rrggbb` (any case) as lowercase, else nothing. A color from a scanned code lands in a style
+/// attribute, so nothing but a plain hex color passes.
+pub fn hex_color(s: &str) -> Option<String> {
+    let s = s.trim();
+    let hex = s.strip_prefix('#')?;
+    (hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit())).then(|| s.to_ascii_lowercase())
 }
 
 /// A port stored as a number or as the form's string.
@@ -283,6 +303,8 @@ fn phone_account(a: &Value) -> Result<PhoneAccount, SkipReason> {
         password: None,
         refresh: None,
         client_id: None,
+        color: text(a, "color").and_then(hex_color),
+        order: None,
     };
 
     match kind {
