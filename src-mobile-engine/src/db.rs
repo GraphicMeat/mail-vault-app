@@ -322,6 +322,9 @@ pub(crate) struct Checkpointer {
     /// (committed writes so far, stopping)
     state: Mutex<(u64, bool)>,
     cv: std::sync::Condvar,
+    /// The thread, joined when the engine drops: a checkpoint in flight keeps `mobile.db` open,
+    /// which Windows would not let a caller remove or rewrite.
+    thread: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 /// How long the checkpointer lets writes gather before it runs: at most one checkpoint (one
@@ -330,16 +333,30 @@ pub(crate) struct Checkpointer {
 const CKPT_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
 
 impl Checkpointer {
-    fn start(path: &Path) -> Arc<Checkpointer> {
-        let c = Arc::new(Checkpointer { state: Mutex::new((0, false)), cv: std::sync::Condvar::new() });
+    /// Starts the thread; with none (the spawn failed), the writer's commits checkpoint as
+    /// SQLite does by default, rather than never.
+    fn start(path: &Path, writer: &Connection) -> Arc<Checkpointer> {
+        let c = Arc::new(Checkpointer { state: Mutex::new((0, false)), cv: std::sync::Condvar::new(), thread: Mutex::new(None) });
         let (me, path) = (Arc::clone(&c), path.to_path_buf());
-        let spawned = std::thread::Builder::new().name("mv-engine-ckpt".into()).spawn(move || me.run(&path));
-        if let Err(e) = spawned {
-            // No thread: commits checkpoint as SQLite does by default, rather than never.
-            eprintln!("[db] checkpoint thread: {e}");
-            c.stop();
+        match std::thread::Builder::new().name("mv-engine-ckpt".into()).spawn(move || me.run(&path)) {
+            Ok(handle) => *lock(&c.thread) = Some(handle),
+            Err(e) => {
+                eprintln!("[db] checkpoint thread: {e}");
+                c.stop();
+                if let Err(e) = writer.execute_batch("PRAGMA wal_autocheckpoint = 1000;") {
+                    eprintln!("[db] wal_autocheckpoint: {e}");
+                }
+            }
         }
         c
+    }
+
+    /// Stops the thread and waits for it (at most the checkpoint in flight).
+    fn stop_and_join(&self) {
+        self.stop();
+        if let Some(handle) = lock(&self.thread).take() {
+            let _ = handle.join();
+        }
     }
 
     fn wrote(&self) {
@@ -604,12 +621,13 @@ impl Engine {
             .map_err(|e| EngineError::Db(e.to_string()))?;
         // A send that was on the wire when the engine died may have gone out: `uncertain`.
         let queued = crate::outbox::on_open(&db.writer, crate::compose::now_ms()).map_err(|e| EngineError::Db(e.to_string()))?;
+        let ckpt = Checkpointer::start(&path, &db.writer);
         let engine = Engine {
             shared: Arc::new(Shared {
                 path: db.path,
                 writer: Mutex::new(db.writer),
                 readers: Mutex::new(db.readers),
-                ckpt: Checkpointer::start(&path),
+                ckpt,
                 secrets,
                 log_sink: OnceLock::new(),
                 event_sink: OnceLock::new(),
@@ -815,7 +833,7 @@ impl Drop for Engine {
         // The worker stops at its next batch (a network call in flight is bounded by core's
         // timeouts) and exits; nothing waits for it.
         self.shared.closing.store(true, Ordering::SeqCst);
-        self.shared.ckpt.stop();
+        self.shared.ckpt.stop_and_join();
         self.sync.stop();
         self.replay.stop();
         self.outbox.stop();
