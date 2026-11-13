@@ -53,6 +53,7 @@ import Search from './Search.jsx';
 import Premium from './Premium.jsx';
 import Onboarding from './onboarding/Onboarding.jsx';
 import KeyboardLayer from './KeyboardLayer.jsx';
+import { combinedSync } from './syncSummary.js';
 import { mobileOnboardingSteps, onboardingGate } from './onboarding/steps.js';
 import { startPremiumSync } from './premium.js';
 
@@ -181,7 +182,13 @@ function App() {
   const activeFolder = useMobileStore((s) => s.activeFolder);
   const unread = useMobileStore((s) => s.unread);
   const list = useMobileStore((s) => s.list);
-  const sync = useMobileStore((s) => (s.activeAccountId ? s.syncState[s.activeAccountId] : null));
+  // In All Inboxes the header and the pull spinner follow every account's pass, not only the one
+  // in front: syncing until all are done, a failed one shown as the account's own would be.
+  const syncState = useMobileStore((s) => s.syncState);
+  const sync = useMemo(() => {
+    const ids = activeFolder === ALL_INBOXES ? accounts.map((a) => a.id) : activeAccountId ? [activeAccountId] : [];
+    return combinedSync(syncState, ids);
+  }, [syncState, accounts, activeFolder, activeAccountId]);
 
   const [listState, setListState] = useState('loading'); // 'loading' | 'ready' | 'failed'
   const [panel, setPanel] = useState(null); // null | 'switcher' | 'drawer' | 'add'

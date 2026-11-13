@@ -11,7 +11,7 @@ import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-libra
 import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({
-  calls: [], handlers: new Map(), accounts: [], folders: {}, rows: {}, gen: 1,
+  calls: [], handlers: new Map(), accounts: [], folders: {}, rows: {}, gen: 1, pending: {},
 }));
 
 /** The engine's unified order: (dateMs DESC, uid DESC, accountId DESC). */
@@ -37,7 +37,7 @@ vi.mock('../transport.js', () => ({
       case 'mobile.sync.refresh':
         return { queued: true };
       case 'mobile.actions.pending':
-        return { pending: [] };
+        return { pending: (engine.pending[params.accountId] || []).map((p) => ({ ...p })) };
       case 'mobile.actions.apply':
         return { queued: 1, skipped: [] };
       case 'mobile.message.body':
@@ -105,6 +105,7 @@ beforeEach(() => {
   engine.calls = [];
   engine.handlers = new Map();
   engine.gen = 1;
+  engine.pending = {};
   engine.accounts = [acct('a1'), acct('a2')];
   engine.folders = { a1: [inbox(3), folder('Sent')], a2: [inbox(4)] };
   // uid 5 lives in both accounts: only the account tells the two apart.
@@ -205,6 +206,16 @@ describe('All Inboxes store', () => {
     const single = createMobileStore();
     await single.getState().init({ sync: false });
     expect(single.getState().activeFolder).toBe('INBOX');
+  });
+
+  it('counts every account\'s waiting actions, and only the active one\'s once it is left', async () => {
+    engine.pending = { a1: [], a2: [{ id: 1 }, { id: 2 }] };
+    const store = await unifiedStore();
+    await waitFor(() => expect(store.getState().pending).toBe(2));
+    engine.pending = { a1: [{ id: 3 }], a2: [{ id: 1 }, { id: 2 }] };
+    await store.getState().selectAccount('a1');
+    await waitFor(() => expect(store.getState().pending).toBe(1));
+    expect(store.getState().activeFolder).not.toBe(ALL_INBOXES);
   });
 
   it('picking an account in the switcher opens that account, not All Inboxes', async () => {
@@ -360,6 +371,39 @@ describe('All Inboxes in the app', () => {
     expect(screen.getByRole('dialog', { name: t('mobile.drawer.title') })).toBeTruthy();
     expect(screen.queryByText(t('sidebar.allInboxes'))).toBeNull();
     expect(document.querySelector('.mv-row__acct')).toBeNull();
+  });
+
+  const syncState = (accountId, state, code) => act(async () => { emit('mobile.sync.state', { accountId, state, ...(code ? { code } : {}) }); });
+  const later = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+
+  it('shows another inbox\'s sync and its failure, not only the account in front', async () => {
+    await mountUnified();
+    await syncState('a1', 'idle');
+    await syncState('a2', 'syncing');
+    expect(screen.getByText(t('mobile.sync.syncing'))).toBeTruthy();
+    await syncState('a2', 'error', 'NETWORK');
+    const chip = screen.getByRole('button', { name: new RegExp(t('mobile.sync.failed')) });
+    expect(chip).toBeTruthy();
+    // Retry syncs every inbox again.
+    engine.calls = [];
+    await act(async () => { fireEvent.click(chip); });
+    expect(callsOf('mobile.sync.refresh')).toEqual([{ accountId: 'a1' }, { accountId: 'a2' }]);
+    await syncState('a2', 'idle');
+    expect(screen.queryByRole('button', { name: new RegExp(t('mobile.sync.failed')) })).toBeNull();
+  });
+
+  it('the pull spinner runs until every account\'s pass is done', async () => {
+    await mountUnified();
+    const list = document.querySelector('.mv-list');
+    fireEvent.touchStart(list, { touches: [{ clientY: 0 }] });
+    fireEvent.touchMove(list, { touches: [{ clientY: 300 }] });
+    await act(async () => { fireEvent.touchEnd(list, { touches: [] }); });
+    expect(document.querySelector('.mv-pull--busy')).toBeTruthy();
+    await later();
+    await syncState('a1', 'idle');
+    expect(document.querySelector('.mv-pull--busy')).toBeTruthy();
+    await syncState('a2', 'idle');
+    expect(document.querySelector('.mv-pull--busy')).toBeNull();
   });
 
   it('pull to refresh syncs every account', async () => {

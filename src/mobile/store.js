@@ -176,12 +176,19 @@ export function createMobileStore() {
       return s.activeAccountId === accountId && s.activeFolder === folder ? s.list : null;
     }
 
+    // Bumped by every read: an older reply (another account, or before All Inboxes opened) is dropped.
+    let pendingRead = 0;
+
+    /** The waiting-actions chip: the active account's count, or every account's in All Inboxes. */
     async function loadPending() {
-      const accountId = get().activeAccountId;
-      if (!accountId) return;
+      const { activeAccountId, activeFolder, accounts } = get();
+      if (!activeAccountId) return;
+      const ids = activeFolder === ALL_INBOXES ? accounts.map((a) => a.id) : [activeAccountId];
+      const read = ++pendingRead;
       try {
-        const { pending } = await daemonCall('mobile.actions.pending', { accountId });
-        if (get().activeAccountId === accountId) set({ pending: Array.isArray(pending) ? pending.length : 0 });
+        const replies = await Promise.all(ids.map((accountId) => daemonCall('mobile.actions.pending', { accountId })));
+        const count = replies.reduce((n, r) => n + (Array.isArray(r?.pending) ? r.pending.length : 0), 0);
+        if (read === pendingRead) set({ pending: count });
       } catch {
         // The chip is a hint: a failed read keeps the last count.
       }
@@ -250,6 +257,8 @@ export function createMobileStore() {
       set({ activeAccountId: accountId, activeFolder: folder, list, listGen: null });
       writeStorage(STORAGE_ACCOUNT, accountId);
       writeStorage(STORAGE_FOLDER, JSON.stringify({ accountId, path: folder }));
+      // Into or out of All Inboxes the chip counts other accounts.
+      loadPending();
       return list;
     }
 
@@ -357,7 +366,7 @@ export function createMobileStore() {
       list: null, // the open folder's page cache
       listGen: null,
       autoSync: true, // false under the perf probe: no sync pass during a measurement
-      pending: 0, // the active account's actions still to reach the server
+      pending: 0, // the active account's actions still to reach the server (every account's in All Inboxes)
       undo: null, // the deferred move or delete's toast: { id, kind, count, target }
       notice: null, // a one-line toast: { id, key }
       outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError, scheduledMs, notBeforeMs }]
@@ -753,7 +762,10 @@ export function createMobileStore() {
         if (activeAccountId !== id) {
           // All Inboxes loses that account's mail; with one account left it is that account's inbox.
           if (spans && rest.length < 2) open(activeAccountId, INBOX);
-          else if (spans) list?.invalidate();
+          else if (spans) {
+            list?.invalidate();
+            loadPending();
+          }
           return;
         }
         if (!rest.length) {
