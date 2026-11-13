@@ -504,17 +504,33 @@ pub extern "C" fn mv_background_fetch(budget_ms: u32) -> *mut std::ffi::c_char {
 }
 
 /// iOS, the app just left the front (`beginBackgroundTask`): marks the engine as away first
-/// (`mobile.app.state {foreground: false}`, as the shell's own suspend does, whichever comes
-/// first), so the run downloads and the mail the user saw listed is no news; then one run as
-/// [`mv_background_fetch`].
+/// (`mobile.app.state {foreground: false, seq}`, numbered with the shell's own suspend and
+/// resume, whichever comes first), so the run downloads and the mail the user saw listed is no
+/// news; then one run as [`mv_background_fetch`].
 #[no_mangle]
 pub extern "C" fn mv_background_continue(budget_ms: u32) -> *mut std::ffi::c_char {
     guarded((), || {
         if let Some(engine) = opened() {
-            let _ = engine.rpc("mobile.app.state", json!({ "foreground": false }));
+            let _ = engine.rpc("mobile.app.state", leave_front_params());
         }
     });
     mv_background_fetch(budget_ms)
+}
+
+/// Numbers the shell's own `mobile.app.state` calls (the OS's suspend and resume, and
+/// [`mv_background_continue`]'s leave) in the order they were made: each is delivered on its own
+/// thread, and the engine ignores one older than the newest it applied.
+static LIFECYCLE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub(crate) fn next_lifecycle_seq() -> u64 {
+    LIFECYCLE_SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+}
+
+/// [`mv_background_continue`]'s leave, numbered when it is made: a resume that follows it but
+/// lands first (each goes out on its own thread) wins, so a late leave never turns live mail off
+/// with the app in front.
+fn leave_front_params() -> serde_json::Value {
+    json!({ "foreground": false, "seq": next_lifecycle_seq() })
 }
 
 /// iOS: the notifications of the run that answered `token` were posted ([`commit`]).
@@ -906,5 +922,17 @@ mod tests {
         assert_eq!(take_tap(), None);
         tapped(r#"{"accountId":"a","folder":"INBOX"}"#);
         assert_eq!(serde_json::to_value(take_tap().unwrap()).unwrap(), json!({ "accountId": "a", "folder": "INBOX" }));
+    }
+
+    /// iOS's leave-front run marks the engine as away on its own thread: an OS resume numbered
+    /// after it that lands first wins, and the late leave never turns live mail off in front.
+    #[test]
+    fn the_leave_front_call_is_numbered_so_a_later_resume_wins() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::open(dir.path(), &dir.path().join("cache"), Arc::new(MemorySecrets::default())).unwrap();
+        let leave = leave_front_params();
+        let resume = json!({ "foreground": true, "resumed": true, "seq": next_lifecycle_seq() });
+        engine.rpc("mobile.app.state", resume).unwrap();
+        assert_eq!(engine.rpc("mobile.app.state", leave).unwrap(), json!({ "live": false, "stale": true }));
     }
 }
