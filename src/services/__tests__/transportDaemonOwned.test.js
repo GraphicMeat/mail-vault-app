@@ -33,6 +33,8 @@ describe('daemon-owned commands', () => {
     }
   });
 
+  // Sent uses this read to merge its cached replies into an open conversation.
+  // Tauri registers daemon_rpc, not a native load_email_cache_window command.
   it('routes the Sent header window read to the daemon', async () => {
     const method = 'load_email_cache_window';
     expect(declaredDaemonOwned.has(method)).toBe(true);

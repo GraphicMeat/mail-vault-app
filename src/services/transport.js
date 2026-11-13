@@ -128,6 +128,7 @@ export const DAEMON_OWNED = new Set([
   'vault_gap_count', 'vault_gap_save',
   'cache_attachment', 'cached_attachment_path', 'prefetch_attachments', 'export_attachments',
   // Task 2.7: header caches, mailbox cache, Outlook uid ledger, op journal, pending operation.
+  // Sent thread merge needs the cache window; Tauri has no native command for it.
   'save_email_cache', 'load_email_cache', 'load_email_cache_partial', 'load_email_cache_window', 'load_email_cache_meta',
   'load_email_cache_by_uids', 'list_cached_uids', 'header_cache_month_histogram', 'clear_email_cache',
   'save_mailbox_cache', 'load_mailbox_cache', 'delete_mailbox_cache',
