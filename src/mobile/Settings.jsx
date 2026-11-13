@@ -59,6 +59,44 @@ function Switch({ checked, busy, disabled, label, hint, onChange }) {
   );
 }
 
+/**
+ * One account's notifications (`acct.<id>.notify`, `mobile.accountSettings.*`): on unless turned
+ * off. Usable only while notifications are on (`enabled`): the switch above decides first.
+ */
+function AccountNotify({ account, enabled }) {
+  const t = useT();
+  const [on, setOn] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    daemonCall('mobile.accountSettings.get', { accountId: account.id }).then(
+      (v) => { if (live) setOn(v?.notify !== false); },
+      () => { if (live) setOn(true); },
+    );
+    return () => { live = false; };
+  }, [account.id]);
+  const change = useCallback(async (next) => {
+    setBusy(true);
+    try {
+      const v = await daemonCall('mobile.accountSettings.set', { accountId: account.id, values: { notify: next } });
+      setOn(v?.notify !== false);
+    } catch {
+      // The switch stays where it was.
+    } finally {
+      setBusy(false);
+    }
+  }, [account.id]);
+  return (
+    <Switch
+      checked={on !== false}
+      busy={busy}
+      disabled={!enabled || on == null}
+      label={t('mobile.settings.notifyAccount', { account: account.email })}
+      onChange={change}
+    />
+  );
+}
+
 function AccountRow({ account, reauthBusy }) {
   const t = useT();
   const [confirming, setConfirming] = useState(false);
@@ -290,6 +328,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION 
             hint={t('mobile.settings.previewHint')}
             onChange={(v) => save('notificationPreview', { notificationPreview: v })}
           />
+          {accounts.map((a) => <AccountNotify key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
         </div>
         {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
         {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}

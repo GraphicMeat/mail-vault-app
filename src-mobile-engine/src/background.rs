@@ -372,6 +372,9 @@ pub(crate) fn collect(shared: &Shared, account: &str) -> Result<Option<Collected
             key: r.key,
         })
         .collect();
+    // The account's own notifications are off (`acct.<id>.notify`): nothing to post, and the
+    // watermark moves as if it had been posted, so turning them back on announces no backlog.
+    let mail = if crate::account_settings::notify_on(shared, account) { mail } else { Vec::new() };
     if mail.is_empty() {
         // Nothing to post: nothing a lost commit could lose.
         if scanned > mark {

@@ -279,6 +279,17 @@ pub(crate) fn forget(c: &Connection, account_id: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// The account's notifications are on (`acct.<id>.notify`, on unless `false`). A read failure
+/// counts as on.
+pub(crate) fn notify_on(shared: &crate::db::Shared, account_id: &str) -> bool {
+    shared
+        .read(|c| c.query_row("SELECT value FROM settings WHERE key = ?1", [key(account_id, "notify")], |r| r.get::<_, String>(0)).optional())
+        .ok()
+        .flatten()
+        .as_deref()
+        != Some("false")
+}
+
 impl Engine {
     /// The account's notifications are on (`acct.<id>.notify`, on unless set to `false`). Counts
     /// only while `notifications` is on. A read failure counts as on: the global switch decides.

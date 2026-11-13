@@ -970,3 +970,31 @@ fn a_second_run_while_one_is_running_returns_at_once() {
         f.engine.background_commit(&t).unwrap();
     }
 }
+
+/// An account whose own notifications are off (`acct.<id>.notify`, from a desktop import or
+/// Settings) is left out of what a run posts, while its watermark still moves: turned back on,
+/// it announces only mail that arrives after that, never the backlog.
+#[test]
+fn an_account_with_its_notifications_off_posts_nothing_and_announces_no_backlog_when_back_on() {
+    let a_server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "a old")])));
+    let b_server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "b old")])));
+    let f = fx();
+    let a = f.add(&a_server, "a@example.test");
+    let b = f.add(&b_server, "b@example.test");
+    f.notifications(true);
+    let notify = |on: bool| {
+        f.engine.rpc("mobile.accountSettings.set", json!({ "accountId": b, "values": { "notify": on } })).unwrap();
+    };
+    notify(false);
+    assert!(f.run(BUDGET).is_empty());
+
+    deliver(&a_server, "for a", false);
+    deliver(&b_server, "for b, quiet", false);
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["for a"]);
+    assert_eq!(f.watermark(&b), Some(2), "the quiet account's watermark moves all the same");
+    assert_eq!(f.watermark(&a), Some(2));
+
+    notify(true);
+    deliver(&b_server, "for b, heard", false);
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["for b, heard"], "no backlog once back on");
+}

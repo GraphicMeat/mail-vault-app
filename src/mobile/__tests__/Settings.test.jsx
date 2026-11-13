@@ -6,7 +6,7 @@ import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import { t } from '../i18n.js';
 
-const engine = vi.hoisted(() => ({ calls: [], settings: null, granted: true, failRemove: false, permissionAsked: 0, osAllows: true, statusAsked: 0 }));
+const engine = vi.hoisted(() => ({ calls: [], settings: null, granted: true, failRemove: false, permissionAsked: 0, osAllows: true, statusAsked: 0, notify: {} }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
@@ -17,6 +17,11 @@ vi.mock('../transport.js', () => ({
       case 'mobile.settings.set':
         engine.settings = { ...engine.settings, ...params };
         return { ...engine.settings };
+      case 'mobile.accountSettings.get':
+        return { accountId: params.accountId, notify: engine.notify[params.accountId] ?? true };
+      case 'mobile.accountSettings.set':
+        engine.notify[params.accountId] = params.values.notify;
+        return { accountId: params.accountId, notify: engine.notify[params.accountId] ?? true };
       case 'mobile.accounts.remove':
         if (engine.failRemove) throw Object.assign(new Error('no'), { code: 'INTERNAL' });
         return { removed: true };
@@ -50,6 +55,7 @@ beforeEach(() => {
   engine.permissionAsked = 0;
   engine.osAllows = true;
   engine.statusAsked = 0;
+  engine.notify = {};
   useMobileStore.setState({ accounts: [A1, A2], activeAccountId: 'a1', reauthState: null });
 });
 afterEach(cleanup);
@@ -184,6 +190,22 @@ describe('Settings', () => {
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
     await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('false'));
     expect(sets()).toEqual([{ notifications: 'off' }, { notifications: 'on' }, { notifications: 'off' }]);
+  });
+
+  it('each account has its own notifications switch, usable while notifications are on', async () => {
+    engine.notify = { a2: false };
+    const perAccount = (email) => screen.getByRole('switch', { name: t('mobile.settings.notifyAccount', { account: email }) });
+    render(<Settings onClose={() => {}} />);
+    await waitFor(() => expect(perAccount('grace@example.test').getAttribute('aria-checked')).toBe('false'));
+    expect(perAccount('ada@example.test').getAttribute('aria-checked')).toBe('true');
+    // Notifications off: the per-account choice waits for them.
+    expect(perAccount('ada@example.test').disabled).toBe(true);
+    fireEvent.click(toggle());
+    await waitFor(() => expect(perAccount('ada@example.test').disabled).toBe(false));
+    fireEvent.click(perAccount('ada@example.test'));
+    await waitFor(() => expect(perAccount('ada@example.test').getAttribute('aria-checked')).toBe('false'));
+    expect(engine.calls.filter(([m]) => m === 'mobile.accountSettings.set').map(([, p]) => p))
+      .toEqual([{ accountId: 'a1', values: { notify: false } }]);
   });
 
   it('Replay tour hands over to the tour', () => {
