@@ -13,8 +13,10 @@ export function initialOf(account) {
   return (Array.from(source)[0] || '?').toUpperCase();
 }
 
+/** The avatar wears the account's color from the desktop (an import), else the accent. */
 export function Avatar({ account, small = false }) {
-  return <span className={small ? 'mv-avatar mv-avatar--small' : 'mv-avatar'} aria-hidden="true">{initialOf(account)}</span>;
+  const style = account?.color ? { backgroundColor: account.color } : undefined;
+  return <span className={small ? 'mv-avatar mv-avatar--small' : 'mv-avatar'} style={style} aria-hidden="true">{initialOf(account)}</span>;
 }
 
 function AccountRow({ account, active, unread, onSelect, onRemove, onReauth, reauthBusy }) {

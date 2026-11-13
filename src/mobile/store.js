@@ -590,8 +590,9 @@ export function createMobileStore() {
        * "Import from computer": the engine opens the set-up code's `frames` with `password` and
        * stores its accounts (`mobile.transfer.import`, no sign-in). Answers `{ ok: true, imported,
        * existing, skipped }` or `{ ok: false, code }` (`BAD_PASSWORD`, `PASSWORD_SHORT`, `INVALID`,
-       * else an accounts code or `INTERNAL`). The new accounts are listed at once; the open one
-       * stays until `openImported`, so the result screen is not replaced under the user.
+       * else an accounts code or `INTERNAL`). The accounts are listed again at once, new ones and
+       * ones already here alike (both take the desktop's order and colors); the open one stays
+       * until `openImported`, so the result screen is not replaced under the user.
        * Never keeps the password.
        */
       async importFromDesktop({ frames, password }) {
@@ -611,7 +612,7 @@ export function createMobileStore() {
           existing: Array.isArray(reply.existing) ? reply.existing : [],
           skipped: Array.isArray(reply.skipped) ? reply.skipped.map((s) => ({ email: s?.email, reason: s?.reason })) : [],
         };
-        if (result.imported.length) {
+        if (result.imported.length || result.existing.length) {
           try {
             const { accounts } = await daemonCall('mobile.accounts.list');
             const known = new Set(get().accounts.map((a) => a.id));

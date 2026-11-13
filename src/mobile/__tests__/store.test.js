@@ -32,6 +32,12 @@ vi.mock('../transport.js', () => ({
         return { ok: true, account };
       }
       case 'mobile.transfer.import': {
+        if (params.password === 'all-here-password') {
+          // Every account was already here: the engine only takes the desktop's order and colors.
+          const [a1, a2, ...rest] = engine.accounts;
+          engine.accounts = [{ ...a2, color: '#ec4899' }, { ...a1, color: '#14b8a6' }, ...rest];
+          return { ok: true, imported: [], existing: ['a2@example.test', 'a1@example.test'], skipped: [] };
+        }
         if (params.password !== 'right-password') return { ok: false, code: params.password === 'odd' ? 'SOMETHING_NEW' : 'BAD_PASSWORD' };
         const account = { id: 'acc_imp', email: 'imp@example.test', displayName: 'imp@example.test' };
         engine.accounts.push(account);
@@ -288,6 +294,14 @@ describe('mobile store', () => {
     expect(store.getState().activeAccountId).toBe('acc_imp');
     expect(callsOf('mobile.sync.refresh').some((p) => p.accountId === 'acc_imp')).toBe(true);
     expect(JSON.stringify(store.getState())).not.toContain('right-password');
+  });
+
+  it('importFromDesktop of accounts already here lists them again in the desktop order and colors', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    await store.getState().importFromDesktop({ frames: ['f'], password: 'all-here-password' });
+    expect(store.getState().accounts.map((a) => [a.id, a.color])).toEqual([['a2', '#ec4899'], ['a1', '#14b8a6'], ['a3', undefined]]);
+    expect(store.getState().activeAccountId).toBe('a1');
   });
 
   it('importFromDesktop on a fresh install keeps the add screen until Done', async () => {
