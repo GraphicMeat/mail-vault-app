@@ -488,12 +488,15 @@ function App() {
   useBackLayer(Boolean(open), onClose);
   useBackLayer(Boolean(panel), closePanel);
 
-  // A swipe runs the action its side is set to (`swipeLeftAction` / `swipeRightAction`).
-  const onSwipe = useCallback((kind, row) => {
+  // A swipe runs the action its side is set to (`swipeLeftAction` / `swipeRightAction`), from the
+  // list or from search. `done(kind, target)`, when given, hears when the action really runs:
+  // after the delete question (`confirmBeforeDelete`), after a folder is picked for a move;
+  // never for a question cancelled or a picker closed.
+  const onSwipe = useCallback((kind, row, done) => {
     const s = useMobileStore.getState();
     const place = s.placeOf(row);
     if (kind === 'move') {
-      setMoving({ row, ...place, folders: place.accountId === s.activeAccountId ? s.folders : null });
+      setMoving({ row, ...place, done, folders: place.accountId === s.activeAccountId ? s.folders : null });
       if (place.accountId !== s.activeAccountId) {
         daemonCall('mobile.folders.list', { accountId: place.accountId }).then(
           (reply) => setMoving((m) => (m && m.row === row ? { ...m, folders: reply?.folders ?? [] } : m)),
@@ -502,13 +505,17 @@ function App() {
       }
       return;
     }
-    const run = () => s.act(kind, { ...place, uids: [row.uid] });
+    const run = () => {
+      s.act(kind, { ...place, uids: [row.uid] });
+      done?.(kind);
+    };
     if (kind === 'delete') confirmThen(run);
     else run();
   }, [confirmThen]);
   const onSwipeMove = useCallback((target) => {
     if (!moving) return;
     useMobileStore.getState().act('move', { accountId: moving.accountId, folder: moving.folder, uids: [moving.row.uid], target });
+    moving.done?.('move', target);
     setMoving(null);
   }, [moving]);
   const closeMoving = useCallback(() => setMoving(null), []);
@@ -872,7 +879,7 @@ function App() {
           </div>
         </Sheet>
       )}
-      {searchOpen && <Search onOpen={onOpenResult} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} />}
+      {searchOpen && <Search onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
       {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} />}

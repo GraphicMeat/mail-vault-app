@@ -4,7 +4,7 @@
 // accounts left out of the switcher.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, cleanup, act, waitFor, screen, fireEvent } from '@testing-library/react';
+import { render, cleanup, act, waitFor, screen, fireEvent, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({ handlers: new Map(), calls: [], prefs: {}, hidden: false, rows: 1 }));
@@ -28,7 +28,16 @@ vi.mock('../transport.js', () => ({
       case 'mobile.settings.get':
         return { notifications: 'off', notificationPreview: true };
       case 'mobile.folders.list':
-        return { folders: [{ path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: 0, total: 3, depth: 0, noselect: false }] };
+        return {
+          folders: [
+            { path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: 0, total: 3, depth: 0, noselect: false },
+            { path: 'Archive', name: 'Archive', specialUse: null, unseen: 0, total: 0, depth: 0, noselect: false },
+          ],
+        };
+      case 'mobile.search.local':
+        return { rows: [{ uid: 42, accountId: 'a1', folder: 'INBOX', dateMs: 900, subject: 'Found 42', fromName: 'Bea', fromAddress: 'bea@example.test', snippet: '', seen: true, flagged: false }], cursor: null };
+      case 'mobile.search.server':
+        return { rows: [] };
       case 'mobile.sync.refresh':
         return { queued: true };
       case 'mobile.messages.page':
@@ -59,6 +68,24 @@ vi.mock('../transport.js', () => ({
 }));
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
+// jsdom has no PointerEvent: a MouseEvent with a pointer id is enough for the swipe.
+if (!window.PointerEvent) {
+  window.PointerEvent = class PointerEvent extends MouseEvent {
+    constructor(type, init = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 1;
+      this.isPrimary = init.isPrimary ?? true;
+      this.pointerType = init.pointerType ?? 'touch';
+    }
+  };
+}
+
+function swipe(el, from, to) {
+  fireEvent.pointerDown(el, { pointerId: 1, clientX: from, clientY: 20, button: 0, isPrimary: true });
+  fireEvent.pointerMove(el, { pointerId: 1, clientX: from + Math.sign(to - from) * 20, clientY: 21, isPrimary: true });
+  fireEvent.pointerMove(el, { pointerId: 1, clientX: to, clientY: 22, isPrimary: true });
+  fireEvent.pointerUp(el, { pointerId: 1, clientX: to, clientY: 22, isPrimary: true });
+}
 
 async function fresh() {
   globalThis.localStorage?.clear();
@@ -119,7 +146,11 @@ describe('preferences in the app', () => {
     const { App, store } = await fresh();
     await openFirst(App, store);
     expect(seenApplies()).toHaveLength(0);
+    const tool = () => document.querySelector('[data-mv-tool="seen"]');
+    expect(tool().getAttribute('aria-label')).toBe(t('mobile.actions.markRead'));
     await waitFor(() => expect(seenApplies()).toHaveLength(1), { timeout: 2500 });
+    // The viewer's toggle follows: the message is read now, so it offers Mark unread.
+    await waitFor(() => expect(tool().getAttribute('aria-label')).toBe(t('mobile.actions.markUnread')));
   });
 
   it('confirmBeforeDelete asks first; Cancel keeps the message', async () => {
@@ -163,5 +194,54 @@ describe('preferences in the app', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('mobile.switcher.open', { email: 'a1@example.test' }) })); });
     expect(screen.queryByText('a3@example.test')).toBeTruthy();
     expect(screen.queryByText('a2@example.test')).toBe(null);
+  });
+  // Search rows swipe the way list rows do (`swipeLeftAction` / `swipeRightAction`).
+  async function searchFor(App, store) {
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Mail 1')).toBeTruthy());
+    await waitFor(() => expect(store.getState().prefs).toMatchObject(engine.prefs));
+    await act(async () => { fireEvent.click(document.querySelector('[data-mv-search-open]')); });
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'found' } });
+    await waitFor(() => expect(screen.getByText('Found 42')).toBeTruthy());
+    return () => document.querySelector('.mv-search .mv-row');
+  }
+  const applies = () => engine.calls.filter(([m]) => m === 'mobile.actions.apply').map(([, p]) => p);
+
+  it('a search row swiped to delete asks first when confirmBeforeDelete is on', async () => {
+    engine.prefs = { confirmBeforeDelete: true, swipeLeftAction: 'delete' };
+    const { App, store } = await fresh();
+    const row = await searchFor(App, store);
+    await act(async () => { swipe(row(), 300, 20); });
+    expect(document.querySelector('[data-mv-confirm-delete]')).toBeTruthy();
+    expect(store.getState().undo).toBe(null);
+    expect(screen.getByText('Found 42')).toBeTruthy();
+    await act(async () => { fireEvent.click(document.querySelector('[data-mv-confirm-delete] .mv-textbtn--danger')); });
+    expect(store.getState().undo).toMatchObject({ kind: 'delete', count: 1 });
+    await waitFor(() => expect(screen.queryByText('Found 42')).toBe(null));
+  });
+
+  it('a search row swiped to move opens the folder picker and moves where picked', async () => {
+    engine.prefs = { swipeLeftAction: 'move' };
+    const { App, store } = await fresh();
+    const row = await searchFor(App, store);
+    await act(async () => { swipe(row(), 300, 20); });
+    // Nothing moves before a folder is picked.
+    expect(store.getState().undo).toBe(null);
+    expect(screen.getByText('Found 42')).toBeTruthy();
+    const picker = screen.getByRole('dialog', { name: t('mobile.actions.moveTitle') });
+    await act(async () => { fireEvent.click(within(picker).getByText('Archive')); });
+    expect(store.getState().undo).toMatchObject({ kind: 'move', count: 1, target: 'Archive' });
+    await waitFor(() => expect(screen.queryByText('Found 42')).toBe(null));
+  });
+
+  it('a search row swiped to flag is flagged, not marked unread', async () => {
+    engine.prefs = { swipeRightAction: 'flag' };
+    const { App, store } = await fresh();
+    const row = await searchFor(App, store);
+    await act(async () => { swipe(row(), 10, 330); });
+    await waitFor(() => expect(applies().map((p) => p.kind)).toEqual(['flag']));
+    expect(applies()[0]).toMatchObject({ accountId: 'a1', folder: 'INBOX', uids: [42] });
+    expect(row().className).not.toContain('mv-row--unread');
+    expect(row().querySelector('.mv-row__flag')).toBeTruthy();
   });
 });

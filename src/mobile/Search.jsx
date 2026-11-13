@@ -42,7 +42,7 @@ function SearchIcon() {
   );
 }
 
-export default function Search({ onOpen, onClose, initialQuery = '' }) {
+export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQuery = '' }) {
   const t = useT();
   const accountId = useMobileStore((s) => s.activeAccountId);
   // All Inboxes is no one folder: search opens on All accounts there, without "This folder".
@@ -165,13 +165,27 @@ export default function Search({ onOpen, onClose, initialQuery = '' }) {
     onOpen(row);
   }, [text, onOpen]);
 
+  // A swipe runs through the app's own swipe handling (the delete question, the folder picker
+  // for a move); the row changes here only once the action really runs.
   const onSwipe = useCallback((kind, row) => {
-    useMobileStore.getState().act(kind, { accountId: row.accountId, folder: row.folder, uids: [row.uid] });
     const same = (r) => keyOf(r) === keyOf(row);
-    const change = (rows) => (kind === 'delete' ? rows.filter((r) => !same(r)) : rows.map((r) => (same(r) ? { ...r, seen: kind === 'seen' } : r)));
-    setLocal((l) => ({ ...l, rows: change(l.rows) }));
-    setServer((s) => ({ ...s, rows: change(s.rows) }));
-  }, []);
+    const applied = (done) => {
+      const change = (rows) => {
+        if (done === 'delete' || done === 'move') return rows.filter((r) => !same(r));
+        const patch = done === 'seen' || done === 'unseen' ? { seen: done === 'seen' }
+          : done === 'flag' || done === 'unflag' ? { flagged: done === 'flag' } : null;
+        return patch ? rows.map((r) => (same(r) ? { ...r, ...patch } : r)) : rows;
+      };
+      setLocal((l) => ({ ...l, rows: change(l.rows) }));
+      setServer((s) => ({ ...s, rows: change(s.rows) }));
+    };
+    if (swipeAction) {
+      swipeAction(kind, row, applied);
+    } else if (kind !== 'move') {
+      useMobileStore.getState().act(kind, { accountId: row.accountId, folder: row.folder, uids: [row.uid] });
+      applied(kind);
+    }
+  }, [swipeAction]);
 
   const onSubmit = (e) => {
     e.preventDefault();
