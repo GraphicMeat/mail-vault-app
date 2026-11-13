@@ -56,6 +56,9 @@ import KeyboardLayer from './KeyboardLayer.jsx';
 import { combinedSync } from './syncSummary.js';
 import { mobileOnboardingSteps, onboardingGate } from './onboarding/steps.js';
 import { startPremiumSync } from './premium.js';
+import MovePicker from './MovePicker.jsx';
+import Sheet from './Sheet.jsx';
+import { visibleAccounts, markReadPlan, afterDeleteRow } from './prefs.js';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -185,10 +188,13 @@ function App() {
   // In All Inboxes the header and the pull spinner follow every account's pass, not only the one
   // in front: syncing until all are done, a failed one shown as the account's own would be.
   const syncState = useMobileStore((s) => s.syncState);
+  // A hidden account (Settings > Accounts, or hidden on the desktop) stays out of the switcher,
+  // the drawer and All Inboxes.
+  const shownAccounts = useMemo(() => visibleAccounts(accounts), [accounts]);
   const sync = useMemo(() => {
-    const ids = activeFolder === ALL_INBOXES ? accounts.map((a) => a.id) : activeAccountId ? [activeAccountId] : [];
+    const ids = activeFolder === ALL_INBOXES ? shownAccounts.map((a) => a.id) : activeAccountId ? [activeAccountId] : [];
     return combinedSync(syncState, ids);
-  }, [syncState, accounts, activeFolder, activeAccountId]);
+  }, [syncState, shownAccounts, activeFolder, activeAccountId]);
 
   const [listState, setListState] = useState('loading'); // 'loading' | 'ready' | 'failed'
   const [panel, setPanel] = useState(null); // null | 'switcher' | 'drawer' | 'add'
@@ -403,15 +409,43 @@ function App() {
     setPulled(Date.now());
     useMobileStore.getState().refresh();
   }, []);
-  // The viewer keeps the account and folder the row was opened from (in All Inboxes, the row's
-  // own), whatever the list does next. Opening a message marks it read.
-  const onOpen = useCallback((row, index) => {
+  // Every path that opens a message comes here: it marks the message read as `markAsReadMode`
+  // says (at once; after `markAsReadDelay` seconds, below; or never: the toolbar does it).
+  const show = useCallback((row, index, place) => {
     const s = useMobileStore.getState();
-    const { accountId, folder } = s.placeOf(row);
-    s.markSeen(accountId, folder, row);
-    setOpen({ row: row.seen ? row : { ...row, seen: true }, index, accountId, folder });
+    if (markReadPlan(s.prefs).now) {
+      s.markSeen(place.accountId, place.folder, row);
+      setOpen({ row: row.seen ? row : { ...row, seen: true }, index, ...place });
+    } else {
+      setOpen({ row, index, ...place });
+    }
   }, []);
+  // The viewer keeps the account and folder the row was opened from (in All Inboxes, the row's
+  // own), whatever the list does next.
+  const onOpen = useCallback((row, index) => {
+    show(row, index, useMobileStore.getState().placeOf(row));
+  }, [show]);
+  // `markAsReadMode` delay: still open after the delay, it is read.
+  useEffect(() => {
+    if (!open || open.row.seen) return undefined;
+    const plan = markReadPlan(useMobileStore.getState().prefs);
+    if (!plan.afterMs) return undefined;
+    const { accountId, folder, row } = open;
+    const timer = setTimeout(() => {
+      useMobileStore.getState().markSeen(accountId, folder, row);
+      setOpen((o) => (o && o.accountId === accountId && o.folder === folder && o.row.uid === row.uid ? { ...o, row: { ...o.row, seen: true } } : o));
+    }, plan.afterMs);
+    return () => clearTimeout(timer);
+  }, [open]);
   const onClose = useCallback(() => setOpen(null), []);
+  // `confirmBeforeDelete`: a delete asks first ({ run } while the question shows).
+  const [askDelete, setAskDelete] = useState(null);
+  const confirmThen = useCallback((run) => {
+    if (useMobileStore.getState().prefs.confirmBeforeDelete) setAskDelete({ run });
+    else run();
+  }, []);
+  // A swipe's Move: the folder picker for that row ({ row, accountId, folder, folders }).
+  const [moving, setMoving] = useState(null);
   const closePanel = useCallback(() => setPanel(null), []);
 
   // A tap opens its account and folder, then the message: from the list's first page (asked
@@ -454,10 +488,30 @@ function App() {
   useBackLayer(Boolean(open), onClose);
   useBackLayer(Boolean(panel), closePanel);
 
+  // A swipe runs the action its side is set to (`swipeLeftAction` / `swipeRightAction`).
   const onSwipe = useCallback((kind, row) => {
     const s = useMobileStore.getState();
-    s.act(kind, { ...s.placeOf(row), uids: [row.uid] });
-  }, []);
+    const place = s.placeOf(row);
+    if (kind === 'move') {
+      setMoving({ row, ...place, folders: place.accountId === s.activeAccountId ? s.folders : null });
+      if (place.accountId !== s.activeAccountId) {
+        daemonCall('mobile.folders.list', { accountId: place.accountId }).then(
+          (reply) => setMoving((m) => (m && m.row === row ? { ...m, folders: reply?.folders ?? [] } : m)),
+          () => setMoving((m) => (m && m.row === row ? { ...m, folders: [] } : m)),
+        );
+      }
+      return;
+    }
+    const run = () => s.act(kind, { ...place, uids: [row.uid] });
+    if (kind === 'delete') confirmThen(run);
+    else run();
+  }, [confirmThen]);
+  const onSwipeMove = useCallback((target) => {
+    if (!moving) return;
+    useMobileStore.getState().act('move', { accountId: moving.accountId, folder: moving.folder, uids: [moving.row.uid], target });
+    setMoving(null);
+  }, [moving]);
+  const closeMoving = useCallback(() => setMoving(null), []);
   const onViewerAction = useCallback((kind) => {
     if (!open) return undefined;
     return useMobileStore.getState().act(kind, { accountId: open.accountId, folder: open.folder, uids: [open.row.uid] });
@@ -467,10 +521,11 @@ function App() {
     useMobileStore.getState().act('move', { accountId: open.accountId, folder: open.folder, uids: [open.row.uid], target });
     setOpen(null);
   }, [open]);
-  // Delete closes the message and opens the next row of the list (the one below it), if any.
-  // The delete keeps its own undo toast either way; undo puts the row back in the list (the viewer
-  // stays where it is). Moving on with another delete or move sends this one first.
-  const onViewerDelete = useCallback(() => {
+  // Delete closes the message and opens the row `afterDeleteSelect` names (the one below, the one
+  // above, or none: back to the list). The delete keeps its own undo toast either way; undo puts
+  // the row back in the list (the viewer stays where it is). Moving on with another delete or move
+  // sends this one first.
+  const deleteOpen = useCallback(() => {
     if (!open) return;
     const s = useMobileStore.getState();
     const { accountId, folder } = open;
@@ -478,18 +533,20 @@ function App() {
     // Where the message is now: the list may have moved since it was opened (new mail, an undo).
     const key = list ? list.keyFor(accountId, open.row.uid) : null;
     const index = list ? list.indexOf(key) : -1;
-    const below = index >= 0 ? list.rowAt(index + 1) : undefined;
-    const next = below && list.keyFor(below.accountId, below.uid) !== key ? below : undefined;
+    const next = list
+      ? afterDeleteRow(s.prefs.afterDeleteSelect, index, (i) => list.rowAt(i), (r) => list.keyFor(r.accountId, r.uid) === key)
+      : undefined;
     s.act('delete', { accountId, folder, uids: [open.row.uid] });
     if (next) {
-      // In All Inboxes the next row can be another account's.
-      const place = s.placeOf(next);
-      s.markSeen(place.accountId, place.folder, next);
-      setOpen({ row: next.seen ? next : { ...next, seen: true }, index, ...place });
+      // In All Inboxes the next row can be another account's. The row below takes the deleted
+      // one's place in the list, so its index is the deleted one's.
+      const above = index > 0 && list.rowAt(index - 1) === next;
+      show(next, above ? index - 1 : index, s.placeOf(next));
     } else {
       setOpen(null);
     }
-  }, [open]);
+  }, [open, show]);
+  const onViewerDelete = useCallback(() => confirmThen(deleteOpen), [confirmThen, deleteOpen]);
   const onNewMessage = useCallback(() => {
     const { activeAccountId: accountId } = useMobileStore.getState();
     if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new' });
@@ -537,9 +594,15 @@ function App() {
   // A search result is opened from its own account and folder, which need not be the open list's.
   const onOpenResult = useCallback((row) => {
     const { accountId, folder } = row;
-    useMobileStore.getState().markSeen(accountId, folder, row);
-    setOpen({ row: row.seen ? row : { ...row, seen: true }, accountId, folder });
-  }, []);
+    show(row, undefined, { accountId, folder });
+  }, [show]);
+  // An undone send comes back as a draft: compose opens it.
+  const reopenDraft = useMobileStore((s) => s.reopenDraft);
+  useEffect(() => {
+    if (!reopenDraft) return;
+    useMobileStore.getState().clearReopenDraft();
+    setCompose({ key: Date.now(), accountId: reopenDraft.accountId, mode: 'new', draftId: reopenDraft.draftId });
+  }, [reopenDraft]);
   useBackLayer(searchOpen, closeSearch);
   useBackLayer(draftsOpen, closeDrafts);
   useBackLayer(followUpsOpen, closeFollowUps);
@@ -746,7 +809,7 @@ function App() {
           folders={folders}
           activeFolder={activeFolder}
           onSelect={onSelectFolder}
-          allInboxes={accounts.length >= 2 ? { unread: accounts.reduce((n, a) => n + (unread[a.id] || 0), 0) } : null}
+          allInboxes={shownAccounts.length >= 2 ? { unread: shownAccounts.reduce((n, a) => n + (unread[a.id] || 0), 0) } : null}
           onAllInboxes={onAllInboxes}
           onClose={closePanel}
           drafts={drafts.length}
@@ -759,7 +822,7 @@ function App() {
       )}
       {panel === 'switcher' && (
         <AccountSwitcher
-          accounts={accounts}
+          accounts={shownAccounts}
           activeAccountId={activeAccountId}
           unread={unread}
           onSelect={onSelectAccount}
@@ -789,6 +852,25 @@ function App() {
           onCompose={onViewerCompose}
           initialPicking={DEMO_MOVE}
         />
+      )}
+      {moving && (
+        <MovePicker folders={moving.folders || []} current={moving.folder} onPick={onSwipeMove} onClose={closeMoving} />
+      )}
+      {askDelete && (
+        <Sheet kind="sheet" label={t('mobile.confirmDelete.title')} onClose={() => setAskDelete(null)}>
+          <div className="mv-sheet__grip" aria-hidden="true" />
+          <h2 className="mv-sheet__title">{t('mobile.confirmDelete.title')}</h2>
+          <div className="mv-acct__actions" data-mv-confirm-delete>
+            <button type="button" className="mv-textbtn" onClick={() => setAskDelete(null)}>{t('common.cancel')}</button>
+            <button
+              type="button"
+              className="mv-textbtn mv-textbtn--danger"
+              onClick={() => { const { run } = askDelete; setAskDelete(null); run(); }}
+            >
+              {t('common.delete')}
+            </button>
+          </div>
+        </Sheet>
       )}
       {searchOpen && <Search onOpen={onOpenResult} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}

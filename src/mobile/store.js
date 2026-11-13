@@ -14,12 +14,18 @@
 // uncertain send shows a toast once per message and outcome. Store-free of the
 // desktop: it imports nothing from src/stores, and reaches the engine only through transport.js
 // with literal method and event names (the seam test reads them off this file).
+//
+// Preferences (`prefs`): the engine's `mobile.prefs.*` over prefs.js defaults (the phone as it
+// was), read on start and after an import that applied the desktop's settings; `setPrefs` writes
+// and keeps the engine's answer. The theme and palette land on the root element at once.
 import { create } from 'zustand';
 import { daemonCall, listen } from './transport.js';
 import { createPageCache, PAGE_SIZE } from './messagePages.js';
 import { ALL_INBOXES } from './folders.js';
 import { errorCodeOf, errorKey } from './errors.js';
 import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
+import { PREF_DEFAULTS, readPrefs, applyLook } from './prefs.js';
+import { loadMobileLocale } from './i18n.js';
 
 // The import's own refusals (`mobile.transfer.import`), shown by ImportFromDesktop.
 const IMPORT_CODES = ['BAD_PASSWORD', 'PASSWORD_SHORT', 'INVALID'];
@@ -378,6 +384,9 @@ export function createMobileStore() {
       premiumLapsed: false, // Premium was on in this session and has ended
       paywall: null, // the paywall layer: { feature, signIn } while open, else null
       reauthState: null, // the last "Sign in again": { accountId, busy, code } (code null when fine)
+      prefs: PREF_DEFAULTS, // the engine's preferences (prefs.js), defaults until read
+      undoSend: null, // a send held for `sendDelay`: { id, accountId, fields, until } while it can be undone
+      reopenDraft: null, // an undone send, back as a draft for compose to open: { accountId, draftId }
 
       /**
        * Applies `kind` (seen|unseen|flag|unflag|move|delete) to `uids` of `folder`. A move or
@@ -397,7 +406,95 @@ export function createMobileStore() {
         return before;
       },
 
-      /** Opening a message marks it read. */
+      /** Reads the preferences; a failed read keeps what the page has. */
+      async loadPrefs() {
+        try {
+          const prefs = readPrefs(await daemonCall('mobile.prefs.get'));
+          set({ prefs });
+          applyLook(prefs);
+          return prefs;
+        } catch {
+          return get().prefs;
+        }
+      },
+
+      /** Writes `patch` to the preferences; resolves true once stored. A refusal keeps the old ones. */
+      async setPrefs(patch) {
+        try {
+          const prefs = readPrefs(await daemonCall('mobile.prefs.set', patch));
+          set({ prefs });
+          applyLook(prefs);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+
+      /**
+       * A send held back `seconds` (`sendDelay`, undo send): the toast offers Undo until it goes.
+       * `fields` are what was sent, so an undo puts them back as a draft.
+       */
+      offerUndoSend(id, accountId, fields, seconds) {
+        const until = Date.now() + seconds * 1000;
+        set({ undoSend: { id, accountId, fields, until } });
+        setTimeout(() => {
+          if (get().undoSend?.id === id) set({ undoSend: null });
+        }, seconds * 1000);
+      },
+
+      /**
+       * Undo send: the held message leaves the outbox and comes back as a draft that compose
+       * opens. False when it already went (or is going) out.
+       */
+      async undoSendNow() {
+        const u = get().undoSend;
+        if (!u) return false;
+        set({ undoSend: null });
+        // The draft first: it then holds the attachments' files, which the discard would free.
+        let draftId = null;
+        try {
+          ({ id: draftId } = await daemonCall('mobile.drafts.save', { accountId: u.accountId, ...u.fields }));
+        } catch {
+          draftId = null;
+        }
+        let discarded = false;
+        try {
+          ({ discarded } = await daemonCall('mobile.outbox.discard', { id: u.id }));
+        } catch {
+          discarded = false;
+        }
+        loadOutbox();
+        if (!discarded) {
+          // Already on its way: the draft would be a second copy.
+          if (draftId) daemonCall('mobile.drafts.delete', { id: draftId }).catch(() => {});
+          notice('mobile.undoSend.tooLate');
+          return false;
+        }
+        if (draftId) {
+          set({ reopenDraft: { accountId: u.accountId, draftId } });
+          loadDrafts();
+        } else {
+          notice('mobile.compose.saveFailed');
+        }
+        return true;
+      },
+
+      /** Compose opened the undone send's draft. */
+      clearReopenDraft() {
+        set({ reopenDraft: null });
+      },
+
+      /** Re-reads the accounts (after a rename, or hiding or showing one in Settings). */
+      async reloadAccounts() {
+        try {
+          const { accounts } = await daemonCall('mobile.accounts.list');
+          set({ accounts });
+        } catch {
+          // The list stays as it was.
+        }
+      },
+
+      /** Marks a message read (the viewer calls it as `markAsReadMode` says). */
       markSeen(accountId, folder, row) {
         if (!row || row.seen) return Promise.resolve();
         return get().act('seen', { accountId, folder, uids: [row.uid] });
@@ -583,12 +680,14 @@ export function createMobileStore() {
           }
           set({ accounts });
           loadOutbox();
+          get().loadPrefs();
           if (!accounts.length) {
             set({ status: 'noAccount', list: null });
             return;
           }
           const saved = readStorage(STORAGE_ACCOUNT);
-          const active = accounts.find((a) => a.id === saved) || accounts[0];
+          // A hidden account opens only when it was the one open last (it is still an account).
+          const active = accounts.find((a) => a.id === saved) || accounts.find((a) => !a.hidden) || accounts[0];
           for (const a of accounts) if (a.id !== active.id) loadFoldersQuietly(a.id);
           await activate(active.id, savedFolder(active.id));
         })();
@@ -654,7 +753,18 @@ export function createMobileStore() {
           imported: Array.isArray(reply.imported) ? reply.imported : [],
           existing: Array.isArray(reply.existing) ? reply.existing : [],
           skipped: Array.isArray(reply.skipped) ? reply.skipped.map((s) => ({ email: s?.email, reason: s?.reason })) : [],
+          settingsApplied: reply.settingsApplied === true,
         };
+        // The desktop's settings took effect: the page follows them now, not at the next launch.
+        if (result.settingsApplied) {
+          await get().loadPrefs();
+          try {
+            const { language } = await daemonCall('mobile.settings.get');
+            if (language) await loadMobileLocale(undefined, language);
+          } catch {
+            // The language follows at the next launch.
+          }
+        }
         if (result.imported.length || result.existing.length) {
           try {
             const { accounts } = await daemonCall('mobile.accounts.list');

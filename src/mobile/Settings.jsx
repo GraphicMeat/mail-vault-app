@@ -1,7 +1,10 @@
 // The settings screen: a full-screen layer opened from the folder drawer's footer.
 //
-// - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one reauth)
-//   and Remove after an inline confirm (the store's removeAccount; a refusal keeps the question).
+// - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one reauth),
+//   Remove after an inline confirm (the store's removeAccount; a refusal keeps the question), and
+//   Edit (AccountEditor.jsx: name, signature, hidden, its notifications). A hidden account is
+//   listed here, marked, so it can be shown again.
+// - Preferences (SettingsPrefs.jsx): look, date and time, reading, deleting, swipes, sending.
 // - Notifications: the switch asks the system's permission before it turns on, and stays off with
 //   a pointer to the system settings when the answer is no. Each time the screen shows (and when
 //   the app comes back to the front) it reads the system's current answer without asking: turned
@@ -27,6 +30,8 @@ import { Avatar } from './AccountSwitcher.jsx';
 import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
+import SettingsPrefs from './SettingsPrefs.jsx';
+import AccountEditor from './AccountEditor.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
@@ -58,6 +63,7 @@ function AccountRow({ account, reauthBusy }) {
   const t = useT();
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
   const name = account.displayName && account.displayName !== account.email ? account.displayName : null;
@@ -92,13 +98,25 @@ function AccountRow({ account, reauthBusy }) {
     );
   }
 
+  if (editing) {
+    return (
+      <li className="mv-setrow mv-acct--confirm">
+        <AccountEditor account={account} onDone={() => setEditing(false)} />
+      </li>
+    );
+  }
+
   return (
-    <li className="mv-setrow">
+    <li className="mv-setrow" data-mv-hidden={account.hidden ? '' : undefined}>
       <Avatar account={account} />
       <span className="mv-acct__text">
         {name && <span className="mv-acct__name" dir="auto">{name}</span>}
         <span className={name ? 'mv-acct__email mv-acct__email--sub' : 'mv-acct__email'} dir="auto">{account.email}</span>
+        {account.hidden && <span className="mv-setting__hint">{t('mobile.accounts.hidden')}</span>}
       </span>
+      <button type="button" className="mv-textbtn" data-mv-acct-edit onClick={() => setEditing(true)}>
+        {t('outbox.edit')}
+      </button>
       {account.needsAuth && account.oauth !== false && (
         <button
           type="button"
@@ -250,6 +268,8 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION 
         <ul className="mv-settings__list">
           {accounts.map((a) => <AccountRow key={a.id} account={a} reauthBusy={reauthBusy} />)}
         </ul>
+
+        <SettingsPrefs />
 
         <h2 className="mv-settings__heading">{t('mobile.settings.notifications')}</h2>
         {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}

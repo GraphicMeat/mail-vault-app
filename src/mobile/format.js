@@ -1,20 +1,35 @@
-// The list's date column on mobile: the shared core (`src/utils/emailDateCore.js`) with mobile's
-// defaults. Mobile has no date settings yet, so it uses desktop's defaults ('auto' date and time)
-// and the mobile language picked at launch.
+// The list's date column on mobile: the shared core (`src/utils/emailDateCore.js`) with the
+// phone's date preferences (`dateFormat`, `customDateFormat`, `timeFormat`; desktop's defaults,
+// 'auto' date and time, until set) and the mobile language picked at launch.
 import { formatEmailDateWith } from '../utils/emailDateCore.js';
 import { t, getMobileLocale } from './i18n.js';
 
 export const MOBILE_DATE_SETTINGS = Object.freeze({ dateFormat: 'auto', customDateFormat: '', timeFormat: 'auto' });
 
-/** `dateMs` from the engine; a missing value is an empty column, not 1 January 1970. */
-export function formatEmailDate(dateMs, now = new Date()) {
-  if (dateMs == null) return '';
-  return formatEmailDateWith(dateMs, { ...MOBILE_DATE_SETTINGS, appLocale: getMobileLocale(), translate: t, now });
+/** The date preferences out of `prefs` (the store's), defaults for any missing. */
+export function dateSettingsOf(prefs) {
+  return {
+    dateFormat: prefs?.dateFormat || MOBILE_DATE_SETTINGS.dateFormat,
+    customDateFormat: prefs?.customDateFormat || '',
+    timeFormat: prefs?.timeFormat || MOBILE_DATE_SETTINGS.timeFormat,
+  };
 }
 
-/** The viewer header's date: day and time in full, in the mobile language. */
-export function formatFullDate(dateMs) {
+/** `dateMs` from the engine; a missing value is an empty column, not 1 January 1970. */
+export function formatEmailDate(dateMs, now = new Date(), prefs = null) {
+  if (dateMs == null) return '';
+  return formatEmailDateWith(dateMs, { ...dateSettingsOf(prefs), appLocale: getMobileLocale(), translate: t, now });
+}
+
+/** The viewer header's date: day and time in full, in the mobile language (`timeFormat` 12h/24h). */
+export function formatFullDate(dateMs, prefs = null) {
   if (dateMs == null || !Number.isFinite(dateMs)) return '';
+  const tf = prefs?.timeFormat;
+  if (tf === '12h' || tf === '24h') {
+    return new Intl.DateTimeFormat(getMobileLocale(), {
+      year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: tf === '12h',
+    }).format(dateMs);
+  }
   return new Intl.DateTimeFormat(getMobileLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(dateMs);
 }
 

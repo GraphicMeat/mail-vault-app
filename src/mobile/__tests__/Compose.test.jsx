@@ -12,7 +12,7 @@ const DRAFT_ID = 'drf_0123456789abcdef';
 
 const engine = vi.hoisted(() => ({
   calls: [], handlers: new Map(), prepare: null, sendError: null, sendErrorData: undefined, outbox: [], drafts: 0,
-  draftList: [], draft: null, saveError: false, sendGate: null, rescheduleError: null,
+  draftList: [], draft: null, saveError: false, sendGate: null, rescheduleError: null, accountSettings: null,
 }));
 
 vi.mock('../transport.js', () => ({
@@ -34,6 +34,8 @@ vi.mock('../transport.js', () => ({
           rows: [{ uid: 1, dateMs: 1000, subject: 'Hello', fromName: 'Ada', fromAddress: 'ada@example.test', snippet: '', seen: true }],
           nextCursor: null, total: 1, listGen: 1,
         };
+      case 'mobile.accountSettings.get':
+        return engine.accountSettings || { accountId: params.accountId, signature: null };
       case 'mobile.compose.prepare':
         return typeof engine.prepare === 'function' ? engine.prepare(params) : engine.prepare;
       case 'mobile.compose.send':
@@ -123,7 +125,9 @@ beforeEach(() => {
   engine.saveError = false;
   engine.sendGate = null;
   engine.rescheduleError = null;
+  engine.accountSettings = null;
   useMobileStore.setState({ paywall: null, premium: { premium: false, source: null, expiresMs: null } });
+  useMobileStore.setState((st) => ({ prefs: { ...st.prefs, sendDelay: 0, defaultSignatureEnabled: true }, undoSend: null, reopenDraft: null }));
   window.localStorage.clear();
 });
 afterEach(() => {
@@ -893,5 +897,76 @@ describe('Compose over the iOS keyboard', () => {
     await flush();
     expect(screen.getByRole('dialog').classList.contains('mv-kb-layer')).toBe(true);
     expect(rule('.mv-compose__scroll')).not.toContain('--mv-keyboard');
+  });
+});
+
+describe('Signature and undo send (desktop settings)', () => {
+  const SIG = { html: '<p>Ann <b>Example</b></p>', text: '', enabled: true };
+
+  it('a new message starts with the account signature, as text', async () => {
+    engine.accountSettings = { accountId: 'a1', signature: SIG };
+    renderCompose();
+    await waitFor(() => expect(body().value).toBe('\n\n-- \nAnn Example'));
+    expect(callsOf('mobile.accountSettings.get')).toEqual([{ accountId: 'a1' }]);
+  });
+
+  it('a reply puts the signature between the room to write and the quote', async () => {
+    engine.accountSettings = { accountId: 'a1', signature: { html: '', text: 'Ann', enabled: true } };
+    engine.prepare = { ...EMPTY, subject: 'Re: Weekly', quoteText: QUOTE };
+    renderCompose({ mode: 'reply', original: { folder: 'INBOX', uid: 7, dateMs: DATE_MS } });
+    await waitFor(() => expect(body().value).toBe(`\n\n-- \nAnn\n\n${QUOTE}`));
+  });
+
+  it('no signature when it is off, signatures are off, or a draft reopens', async () => {
+    engine.accountSettings = { accountId: 'a1', signature: { ...SIG, enabled: false } };
+    renderCompose();
+    await flush();
+    expect(body().value).toBe('');
+    cleanup();
+    engine.accountSettings = { accountId: 'a1', signature: SIG };
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, defaultSignatureEnabled: false } }));
+    renderCompose();
+    await flush();
+    expect(body().value).toBe('');
+    cleanup();
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, defaultSignatureEnabled: true } }));
+    engine.draft = { id: DRAFT_ID, accountId: 'a1', to: '', cc: '', bcc: '', subject: 'Kept', text: 'Draft body', attachments: [] };
+    renderCompose({ draftId: DRAFT_ID });
+    await waitFor(() => expect(body().value).toBe('Draft body'));
+    await flush();
+    expect(body().value).toBe('Draft body');
+    expect(callsOf('mobile.accountSettings.get')).toHaveLength(2);
+  });
+
+  it('sendDelay holds the message and Undo brings it back as a draft', async () => {
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, sendDelay: 10 } }));
+    const { onClose } = renderCompose();
+    await flush();
+    typeInto(toInput(), 'bob@example.test,');
+    typeInto(field(t('compose.subject')), 'Hi');
+    const before = Date.now();
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const [sent] = callsOf('mobile.compose.send');
+    expect(sent.sendAtMs).toBeGreaterThanOrEqual(before + 10_000);
+    expect(sent.sendAtMs).toBeLessThan(before + 15_000);
+    const held = useMobileStore.getState().undoSend;
+    expect(held).toMatchObject({ id: 'out_1', accountId: 'a1' });
+    engine.outbox = [{ id: 'out_1', accountId: 'a1', subject: 'Hi', state: 'queued' }];
+    await act(async () => { await useMobileStore.getState().undoSendNow(); });
+    expect(callsOf('mobile.drafts.save').at(-1)).toMatchObject({ accountId: 'a1', subject: 'Hi', to: 'bob@example.test' });
+    expect(callsOf('mobile.outbox.discard')).toEqual([{ id: 'out_1' }]);
+    expect(useMobileStore.getState().reopenDraft).toEqual({ accountId: 'a1', draftId: DRAFT_ID });
+    expect(useMobileStore.getState().undoSend).toBe(null);
+  });
+
+  it('without a delay a send goes at once, with no undo offer', async () => {
+    const { onClose } = renderCompose();
+    await flush();
+    typeInto(toInput(), 'bob@example.test,');
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(callsOf('mobile.compose.send')[0].sendAtMs).toBeUndefined();
+    expect(useMobileStore.getState().undoSend).toBe(null);
   });
 });

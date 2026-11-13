@@ -37,6 +37,7 @@ import { displayText } from '../utils/bidiText.js';
 import { daemonCall, pickFiles } from './transport.js';
 import { ensureAttachmentEvents, watchJob } from './attachmentJobs.js';
 import { fieldsOf, initialText, isEmpty, isValidEntry, sendError, splitList } from './compose.js';
+import { signatureFor, withSignature } from './prefs.js';
 import RecipientField, { commitText } from './RecipientField.jsx';
 import Sheet from './Sheet.jsx';
 import SendLater from './SendLater.jsx';
@@ -153,6 +154,15 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   // The draft's id only once its stored version is loaded: nothing may save over it before.
   const draftId = useRef(null);
   const [loading, setLoading] = useState(Boolean(openDraft));
+  // The account's signature (Settings > Accounts, or the desktop's), read once: '' for none, or
+  // when it or signatures overall are off. A reopened draft already has its text: none added.
+  const signature = useRef(null);
+  if (signature.current === null) {
+    signature.current = openDraft
+      ? Promise.resolve('')
+      : daemonCall('mobile.accountSettings.get', { accountId })
+        .then((s) => signatureFor(s, useMobileStore.getState().prefs), () => '');
+  }
   const [shownMode, setShownMode] = useState(mode);
   const modeRef = useRef(mode);
   modeRef.current = shownMode;
@@ -284,6 +294,15 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── A new message starts with the signature ──────────────────────────────
+  useEffect(() => {
+    if (mode !== 'new' || openDraft) return;
+    signature.current.then((sig) => {
+      if (!sig || !live.current || touched.current.has('text')) return;
+      setText((cur) => (cur ? cur : withSignature('', sig)));
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Prepare (reply, reply all, forward) ───────────────────────────────────
   useEffect(() => {
     if (mode === 'new' || !original) return undefined;
@@ -318,7 +337,10 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       fill('cc', { entries: ccEntries, text: '' }, setCc);
       if (ccEntries.length) setShowCc(true);
       fill('subject', p.subject || '', setSubject);
-      fill('text', initialText(p.quoteText || ''), setText);
+      // Room to write, the signature, then the quote.
+      const sig = await signature.current;
+      if (!live.current) return;
+      fill('text', sig ? `${withSignature('', sig)}${p.quoteText ? `\n\n${p.quoteText}` : ''}` : initialText(p.quoteText || ''), setText);
       setAttachments((list) => [...list, ...forwardsOf(p.attachments)]);
       const pending = Array.isArray(p.pending) ? p.pending : [];
       if (!pending.length) return;
@@ -406,9 +428,14 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     setError(null);
     await stopSaving();
     const id = draftId.current;
+    // Undo send (`sendDelay`): a message sent now waits that long in the outbox, with Undo.
+    const hold = sendAtMs == null ? useMobileStore.getState().prefs.sendDelay || 0 : 0;
+    const fields = fieldsOf(current());
+    let sent = null;
     try {
-      await daemonCall('mobile.compose.send', {
-        accountId, ...(id ? { draftId: id } : {}), ...fieldsOf(current()), ...(sendAtMs != null ? { sendAtMs } : {}),
+      sent = await daemonCall('mobile.compose.send', {
+        accountId, ...(id ? { draftId: id } : {}), ...fields,
+        ...(sendAtMs != null ? { sendAtMs } : hold > 0 ? { sendAtMs: Date.now() + hold * 1000 } : {}),
         ...(remind > 0 && remindOffered ? { remindAfterDays: remind } : {}),
       });
     } catch (err) {
@@ -421,6 +448,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       scroller.current?.scrollTo?.({ top: 0 });
       return;
     }
+    if (hold > 0 && sent?.id) useMobileStore.getState().offerUndoSend(sent.id, accountId, fields, hold);
     useMobileStore.getState().loadOutbox();
     onClose();
   };

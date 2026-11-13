@@ -26,8 +26,10 @@
   --mv-toast-action: #4338ca;
   --mv-font: var(--app-font, "Instrument Sans", system-ui, sans-serif);
 }
+/* Light: the system's, unless the user picked a theme (`theme` preference, prefs.js sets
+   data-theme on the root); a picked theme wins over the system. */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     color-scheme: light;
     --mail-bg: #f6f7fb;
     --mail-surface: #ffffff;
@@ -47,6 +49,35 @@
     --mv-toast-action: #a5b4fc;
   }
 }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --mail-bg: #f6f7fb;
+  --mail-surface: #ffffff;
+  --mail-surface-hover: #eceef6;
+  --mail-border: #dfe3ee;
+  --mail-text: #1a1a2e;
+  --mail-text-muted: #5c5c73;
+  --mail-accent: #4f46e5;
+  --mail-accent-text: #4338ca;
+  --mv-danger: #b91c1c;
+  --mv-scrim: rgba(15, 15, 30, 0.35);
+  --mv-swipe-read: #4f46e5;
+  --mv-swipe-delete: #b91c1c;
+  --mv-flag: #b45309;
+  --mv-toast-bg: #1a1a2e;
+  --mv-toast-text: #f6f7fb;
+  --mv-toast-action: #a5b4fc;
+}
+/* The desktop's palettes (src/styles/index.css): graphite and teal recolor the accent; indigo is
+   the tokens above. */
+:root[data-palette="graphite"] { --mail-accent: #9b8ade; --mail-accent-text: #cebefa; --mv-swipe-read: #6351a8; }
+:root[data-palette="teal"] { --mail-accent: #2fb0c0; --mail-accent-text: #86dfe9; --mv-swipe-read: #0b6f80; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"])[data-palette="graphite"] { --mail-accent: #7160b6; --mail-accent-text: #5a4597; --mv-toast-action: #cebefa; }
+  :root:not([data-theme="dark"])[data-palette="teal"] { --mail-accent: #0b7384; --mail-accent-text: #08596b; --mv-toast-action: #86dfe9; }
+}
+:root[data-theme="light"][data-palette="graphite"] { --mail-accent: #7160b6; --mail-accent-text: #5a4597; --mv-toast-action: #cebefa; }
+:root[data-theme="light"][data-palette="teal"] { --mail-accent: #0b7384; --mail-accent-text: #08596b; --mv-toast-action: #86dfe9; }
 
 html, body, #root { height: 100%; margin: 0; }
 body {
@@ -218,8 +249,10 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-swipe__act--read { background: var(--mv-swipe-read); }
 .mv-swipe__act--delete { background: var(--mv-swipe-delete); }
 /* The side not being revealed stays out of sight: the row only covers it while at rest. */
-.mv-swipe[data-side="left"] .mv-swipe__act:not(:first-child),
-.mv-swipe[data-side="right"] .mv-swipe__act:first-child { visibility: hidden; }
+.mv-swipe[data-side="left"] .mv-swipe__act--trailing,
+.mv-swipe[data-side="right"] .mv-swipe__act--leading { visibility: hidden; }
+.mv-swipe__act--flag { background: var(--mv-flag); }
+.mv-swipe__act--move { background: var(--mail-accent); }
 [dir="rtl"] .mv-swipe[data-side="left"] .mv-swipe__act:not(:first-child),
 [dir="rtl"] .mv-swipe[data-side="right"] .mv-swipe__act:first-child { visibility: visible; }
 [dir="rtl"] .mv-swipe[data-side="left"] .mv-swipe__act:first-child,
@@ -1398,3 +1431,30 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-offline__window[aria-checked="true"] { border-color: var(--mail-accent); background: var(--mail-accent); color: #fff; }
 .mv-offline__window:disabled { opacity: 0.6; }
 .mv-offline__badge { font-size: 0.6875rem; }
+/* Preference rows (SettingsPrefs.jsx) and the account editor (AccountEditor.jsx). */
+.mv-setting--choice { cursor: default; }
+.mv-setting__select {
+  flex: none;
+  max-width: 50%;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px solid var(--mail-border);
+  border-radius: 8px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font: inherit;
+}
+.mv-setting__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--mail-border);
+  border-radius: 8px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font: inherit;
+}
+.mv-acct-edit { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 0; }
+.mv-acct-edit__field { display: flex; flex-direction: column; gap: 4px; padding: 0 16px; }
+.mv-acct-edit__sig { min-height: 96px; resize: vertical; }

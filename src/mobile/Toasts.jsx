@@ -1,6 +1,7 @@
 // The toasts over the bottom of the app: the undo toast of a deferred move or delete (store `undo`,
 // which the store clears once the action is sent) and a one-line notice (store `notice`: a dropped
-// action's translated reason, or a failed apply), which goes by itself after NOTICE_MS.
+// action's translated reason, or a failed apply), which goes by itself after NOTICE_MS. A send held
+// back for `sendDelay` (store `undoSend`) offers Undo until it goes out.
 import React, { useEffect } from 'react';
 import { useMobileStore } from './store.js';
 import { folderLabel } from './folders.js';
@@ -13,6 +14,7 @@ export default function Toasts() {
   const undo = useMobileStore((s) => s.undo);
   const notice = useMobileStore((s) => s.notice);
   const folders = useMobileStore((s) => s.folders);
+  const undoSend = useMobileStore((s) => s.undoSend);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -20,7 +22,7 @@ export default function Toasts() {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  if (!undo && !notice) return null;
+  if (!undo && !notice && !undoSend) return null;
   let undoText = null;
   if (undo) {
     if (undo.kind === 'move') {
@@ -37,6 +39,14 @@ export default function Toasts() {
           <span className="mv-toast__text">{t(notice.key)}</span>
           <button type="button" className="mv-toast__btn" onClick={() => useMobileStore.getState().dismissNotice(notice.id)}>
             {t('mobile.actions.dismiss')}
+          </button>
+        </div>
+      )}
+      {undoSend && (
+        <div className="mv-toast" role="status" aria-live="polite" data-mv-undo-send>
+          <span className="mv-toast__text">{t('mobile.undoSend.sending')}</span>
+          <button type="button" className="mv-toast__btn" onClick={() => useMobileStore.getState().undoSendNow()}>
+            {t('mobile.actions.undo')}
           </button>
         </div>
       )}

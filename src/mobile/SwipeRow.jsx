@@ -4,7 +4,7 @@
 // the action runs at once. The drag writes the row's transform straight to the element (no React
 // render, no layout per frame); the snap is a CSS transition, off under reduced motion.
 // `touch-action: pan-y` leaves vertical scrolling to the browser, which cancels the pointer once
-// a scroll starts.
+// a scroll starts. A side given as null (its swipe set to "none") does not move that way.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 /** How far (px) an open row stays slid: the width of the revealed button. */
@@ -93,7 +93,11 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
       try { content.current?.setPointerCapture?.(e.pointerId); } catch { /* not capturable: fine */ }
     }
     d.dx = dx;
-    const x = Math.max(-d.width, Math.min(d.width, d.base + dx));
+    let x = Math.max(-d.width, Math.min(d.width, d.base + dx));
+    // Physical right is the leading side in a left-to-right layout.
+    const lead = d.rtl ? -x : x;
+    if ((lead > 0 && !leading) || (lead < 0 && !trailing)) x = 0;
+    d.dx = x - d.base;
     place(x, false);
   };
 
@@ -139,8 +143,8 @@ export default function SwipeRow({ leading, trailing, onAction, initialOpen = nu
 
   return (
     <div ref={root} className="mv-swipe">
-      {action('leading', leading)}
-      {action('trailing', trailing)}
+      {leading && action('leading', leading)}
+      {trailing && action('trailing', trailing)}
       {React.cloneElement(children, {
         ref: content,
         onPointerDown,

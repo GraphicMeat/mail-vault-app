@@ -3,7 +3,9 @@
 // document `prepareMailBody` + `assembleMailFrame` build (mailFrame.js: CSP first, links out of the frame, hostile parts
 // taken out). The frame is sandboxed with popups only, so a link opens in the system browser and
 // the mail can never run script or reach the app's origin. Remote images stay blocked by the CSP
-// until the user taps "Load images", which mounts a new frame with https: images allowed.
+// until the user taps "Load images", which mounts a new frame with https: images allowed; with
+// `holdExternalContent` off (a desktop that loads them) they load at once, unless the body still
+// carries tracker pixels (a free phone keeps them): then the button stays.
 // The perf probe's tap-to-paint mark (`viewerPainted`) is raised after the first paint of the
 // header, never on the body: the gate measures navigation, not the network.
 // Each attachment is a chip (AttachmentChip.jsx): tap downloads, opens or retries, a long press
@@ -28,6 +30,7 @@ import { EnvelopeIcon, FlagIcon, MoreIcon, MoveIcon, ShieldIcon, TrashIcon } fro
 import { openPaywall } from './premium.js';
 import { useInlineImages, withInlineImages } from './inlineImages.js';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs.js';
+import { useMobileStore } from './store.js';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
 export const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
@@ -63,7 +66,8 @@ function Header({ row }) {
   const name = displayText(row.fromName, '');
   const address = displayText(row.fromAddress, '');
   const to = recipientsOf(row);
-  const date = formatFullDate(row.dateMs);
+  const prefs = useMobileStore((s) => s.prefs);
+  const date = formatFullDate(row.dateMs, prefs);
   return (
     <div className="mv-viewer__header">
       <h1 className="mv-viewer__subject" dir="auto">{displayText(row.subject, t('common.noSubject'))}</h1>
@@ -264,9 +268,11 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
     notePrepare(performance.now() - t0, (html || text || '').length);
     return out;
   }, [html, text, hasContent]);
+  const autoImages = useMobileStore((s) => s.prefs.holdExternalContent === false);
+  const remoteOn = allowRemote || Boolean(autoImages && body && !((body.trackers || 0) > 0 && !body.trackersStripped));
   const srcDoc = useMemo(
-    () => (prepared ? assembleMailFrame(prepared, { allowRemote, theme, trackerLabel }) : null),
-    [prepared, allowRemote, theme, trackerLabel],
+    () => (prepared ? assembleMailFrame(prepared, { allowRemote: remoteOn, theme, trackerLabel }) : null),
+    [prepared, remoteOn, theme, trackerLabel],
   );
   // Every part is a chip, except an inline image the frame draws.
   const attachments = useMemo(
@@ -308,7 +314,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
           <span>{t('mobile.viewer.truncated')}</span>
         </div>
       )}
-      {remoteImages > 0 && !allowRemote && (
+      {remoteImages > 0 && !remoteOn && (
         <div className="mv-viewer__images">
           <span>{pixelsKept ? t('mobile.viewer.imagesTrack') : t('mobile.viewer.imagesBlocked')}</span>
           <button type="button" data-mv-load-images style={{ minHeight: '44px' }} onClick={() => setAllowRemote(true)}>
@@ -327,7 +333,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       {state.phase === 'ready' && !hasContent && <p className="mv-viewer__notice">{t('mobile.viewer.empty')}</p>}
       {srcDoc && (
         <iframe
-          key={`${allowRemote ? 'remote' : 'local'}-${theme}`}
+          key={`${remoteOn ? 'remote' : 'local'}-${theme}`}
           className="mv-viewer__frame"
           title={t('mobile.viewer.frameTitle')}
           sandbox={FRAME_SANDBOX}
