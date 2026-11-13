@@ -339,6 +339,9 @@ fn header_syntax_around_a_foreign_domain_still_warns() {
     // An '@' followed by no hostname (an IP literal) is not skipped.
     let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "y@bank.test; z@[192.0.2.1]"}});
     assert!(reply_to_mismatch(&row).is_some());
+    // A sender-domain prefix of a longer host is not the sender's host.
+    let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "x;y@bank.test_evil.test"}});
+    assert!(reply_to_mismatch(&row).is_some());
     // Nothing that reads as a hostname after the '@': still a warning.
     let row = json!({"from": {"address": "a@bank.test"}, "replyTo": {"address": "x@;bank.test"}});
     assert!(reply_to_mismatch(&row).is_some());

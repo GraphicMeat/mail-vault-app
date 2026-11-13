@@ -645,7 +645,15 @@ pub fn reply_to_mismatch(row: &Value) -> Option<Value> {
         let hosts: Vec<String> = lower
             .split('@')
             .skip(1)
-            .map(|rest| rest.chars().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-')).collect())
+            .map(|rest| {
+                // A hostname only where it ends at a separator: a cut-off
+                // prefix ("bank.test" of "bank.test_evil.test") is none.
+                let host: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-')).collect();
+                match rest[host.len()..].chars().next() {
+                    None | Some(';' | '>' | '"' | ',' | ' ' | '\t' | '\r' | '\n') => host,
+                    Some(_) => String::new(),
+                }
+            })
             .collect();
         if hosts.iter().all(|host| !host.is_empty() && related(host)) {
             return None;
