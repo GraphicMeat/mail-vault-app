@@ -94,6 +94,17 @@ describe('Settings', () => {
     expect(engine.permissionAsked).toBe(0);
   });
 
+  it('Download in the background shows the stored value and saves the choice, no permission asked', async () => {
+    engine.settings = { notifications: 'off', notificationPreview: true, backgroundDownload: true };
+    render(<Settings onClose={() => {}} />);
+    const download = () => screen.getByRole('switch', { name: t('mobile.settings.downloadToggle') });
+    await waitFor(() => expect(download().getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(download());
+    await waitFor(() => expect(download().getAttribute('aria-checked')).toBe('false'));
+    expect(sets()).toEqual([{ backgroundDownload: false }]);
+    expect(engine.permissionAsked).toBe(0);
+  });
+
   it('remove account confirms, then calls mobile.accounts.remove', async () => {
     render(<Settings onClose={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: t('mobile.switcher.remove', { email: A1.email }) }));

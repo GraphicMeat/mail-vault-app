@@ -14,16 +14,17 @@ const LANGUAGES: [&str; 9] = ["en", "es", "fr", "it", "de", "pt-BR", "ja", "ko",
 #[test]
 fn settings_default_and_round_trip() {
     let tmp = tempfile::tempdir().unwrap();
-    let want = json!({ "notifications": "on", "notificationPreview": false, "language": "de", "onboardingComplete": true });
+    let want = json!({ "notifications": "on", "notificationPreview": false, "language": "de", "onboardingComplete": true, "backgroundDownload": false });
     {
         let e = engine(&tmp);
         assert_eq!(
             e.rpc("mobile.settings.get", json!({})).unwrap(),
-            json!({ "notifications": "off", "notificationPreview": true, "language": null, "onboardingComplete": false })
+            json!({ "notifications": "off", "notificationPreview": true, "language": null, "onboardingComplete": false, "backgroundDownload": true })
         );
         assert_eq!(e.rpc("mobile.settings.set", json!({ "notifications": "on" })).unwrap()["notificationPreview"], true, "a partial set keeps the rest");
         assert_eq!(e.rpc("mobile.settings.set", json!({ "notificationPreview": false })).unwrap()["notifications"], "on");
         assert_eq!(e.rpc("mobile.settings.set", json!({ "language": "de" })).unwrap()["language"], "de");
+        assert_eq!(e.rpc("mobile.settings.set", json!({ "backgroundDownload": false })).unwrap()["notifications"], "on");
         assert_eq!(e.rpc("mobile.settings.set", json!({ "onboardingComplete": true })).unwrap(), want);
     }
     assert_eq!(engine(&tmp).rpc("mobile.settings.get", json!({})).unwrap(), want, "settings survive a reopen");

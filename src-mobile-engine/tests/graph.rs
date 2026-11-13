@@ -705,6 +705,8 @@ fn opening_an_engine_drops_graph_bodies_cached_by_an_earlier_build_once() {
 
 /// Turns notifications on and takes the first run's baseline.
 fn baseline(f: &Fx) {
+    // The notification pass alone, timed by its listing: no background download beside it.
+    f.engine.set_setting("backgroundDownload", "false").unwrap();
     f.rpc("mobile.settings.set", json!({ "notifications": "on" }));
     let run = f.engine.background_fetch(WAIT).unwrap();
     assert!(run.mail.is_empty());

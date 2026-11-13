@@ -41,13 +41,26 @@
 //! (notifications turned on, or a new UIDVALIDITY) is never news either. When the app leaves the
 //! front, the watermark of each account it showed moves past what the list holds
 //! ([`seen_in_front`]): mail the user saw listed is not notified later.
+//!
+//! Download (setting `backgroundDownload`, on by default; notifications on or off): after the
+//! INBOX passes, each account in turn gets one download pass on the sync worker (`sync.rs`
+//! `download_pass`): INBOX's new headers, the bodies of its recent mail (`body::prefetch`, bounded
+//! by count, age and bytes inside the body cache's LRU), then the new headers of every other
+//! folder the list has synced. So mail is there offline when the app opens. Same budget rules as
+//! the INBOX passes (an equal share of what is left, none started past 80%), and the INBOX passes
+//! go first, so a slow download never costs a notification. A download stops between steps at
+//! its share's end, when the app comes to the front ([`set_in_front`]: the page's passes never
+//! wait behind it) or when the platform ends the task ([`Engine::background_stop`]); what it wrote
+//! stays, and the next run goes on from there. It never holds a write transaction across the
+//! network: each body is its own short write, as an open's is.
 
 use crate::db::{lock, Engine, EngineError, Shared};
 use crate::followup::FollowUpDue;
 use crate::sync::{folder_path, Ended};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -62,6 +75,8 @@ const BATCH: usize = 200;
 const PENDING_KEPT: usize = 4;
 /// The settings key of the run counter that rotates which account goes first.
 const ROTATION: &str = "bg.rotation";
+/// The same for the download passes.
+const DOWNLOAD_ROTATION: &str = "bg.downloadRotation";
 
 /// One message a background run found: what a notification shows and what a tap opens.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -117,6 +132,37 @@ struct Posted {
 pub(crate) struct Pending {
     runs: Mutex<Vec<(String, Posted)>>,
     next: AtomicU64,
+    /// The app is in front (`mobile.app.state`): no download runs.
+    in_front: AtomicBool,
+    /// The platform ended the background task: the download in flight stops. Cleared when a run
+    /// starts.
+    stopped: AtomicBool,
+    /// Bodies a download fetched and could not cache (attachments not listed, cut short, gone):
+    /// not asked for again while the engine runs. `(account, folder, uid)`.
+    skipped: Mutex<HashSet<(String, String, u32)>>,
+}
+
+/// The app came to the front (`true`) or left it.
+pub(crate) fn set_in_front(shared: &Shared, front: bool) {
+    shared.background.in_front.store(front, Ordering::SeqCst);
+}
+
+/// Whether a download pass stops now: its share of the budget is spent, the app is in front, the
+/// platform ended the task, or the engine is closing.
+pub(crate) fn stop_downloading(shared: &Shared, deadline: Option<Instant>) -> bool {
+    deadline.is_some_and(|d| Instant::now() >= d)
+        || shared.background.in_front.load(Ordering::SeqCst)
+        || shared.background.stopped.load(Ordering::SeqCst)
+        || shared.is_closing()
+}
+
+/// The uids of `folder` a download does not ask for again ([`Pending::skipped`]).
+pub(crate) fn skipped_bodies(shared: &Shared, account: &str, folder: &str) -> HashSet<u32> {
+    lock(&shared.background.skipped).iter().filter(|(a, f, _)| a == account && f == folder).map(|(_, _, u)| *u).collect()
+}
+
+pub(crate) fn skip_body(shared: &Shared, account: &str, folder: &str, uid: u32) {
+    lock(&shared.background.skipped).insert((account.to_string(), folder.to_string(), uid));
 }
 
 fn now_ms() -> i64 {
@@ -346,7 +392,25 @@ impl Engine {
     /// The shell re-applies its schedule from this after every RPC that can change it. Each
     /// reason is one `||` term.
     pub fn wants_background(&self) -> bool {
-        self.notifications_on() || crate::outbox::has_scheduled(self.shared()) || crate::followup::waiting(self.shared())
+        self.notifications_on()
+            || crate::outbox::has_scheduled(self.shared())
+            || crate::followup::waiting(self.shared())
+            || (self.background_download_on() && self.has_reachable_account())
+    }
+
+    /// Some account is not parked: a download has someone to dial.
+    fn has_reachable_account(&self) -> bool {
+        self.read(|c| c.query_row("SELECT 1 FROM accounts WHERE needs_auth = 0 LIMIT 1", [], |_| Ok(())).optional())
+            .ok()
+            .flatten()
+            .is_some()
+    }
+
+    /// The platform is ending the background task (iOS expiration handler, Android
+    /// `onStopped`): the download in flight stops before its next body or folder. The INBOX
+    /// passes and sends end at their own deadlines. The next run clears it.
+    pub fn background_stop(&self) {
+        self.shared().background.stopped.store(true, Ordering::SeqCst);
     }
 
     /// One background run inside `budget`; see the module doc. The mail is not counted as
@@ -355,10 +419,14 @@ impl Engine {
         let start = Instant::now();
         // Every run raises Premium's clock mark, notifications on or off.
         crate::premium::observe_clock(self.shared());
+        self.shared().background.stopped.store(false, Ordering::SeqCst);
         let notifications = self.notifications_on();
+        let download = self.background_download_on()
+            && !self.shared().background.in_front.load(Ordering::SeqCst)
+            && self.has_reachable_account();
         let due = crate::outbox::due_accounts(self.shared(), now_ms());
         let checks = crate::followup::has_due(self.shared(), now_ms());
-        if !notifications && due.is_empty() && !checks {
+        if !notifications && !download && due.is_empty() && !checks {
             return Ok(BackgroundRun::default());
         }
         let deadline = start + budget;
@@ -366,6 +434,12 @@ impl Engine {
         let sending = (!due.is_empty()).then(|| self.outbox().wake_for_run(self.shared(), &due));
         let checking = checks.then(|| self.shared().followup.wake_for_run());
         let run = if notifications { self.inbox_run(start, budget) } else { Ok((Vec::new(), Vec::new())) };
+        // After the INBOX passes: a slow download never costs a notification.
+        if download {
+            if let Err(e) = self.download_run(start, budget) {
+                self.shared().log(&format!("[background] download: {e}"));
+            }
+        }
         if let Some(mark) = sending {
             if !self.outbox().wait_rounds(mark, deadline) {
                 self.shared().log("[background] the outbox did not finish inside the budget; it goes on while the app runs");
@@ -393,9 +467,9 @@ impl Engine {
 
     /// The INBOX passes of a run that started at `start` with `budget` (notifications on): the
     /// new mail, oldest first, and each INBOX's part with mail in it.
-    fn inbox_run(&self, start: Instant, budget: Duration) -> Result<(Vec<NewMail>, Vec<Collected>), EngineError> {
-        let deadline = start + budget;
-        let last_start = start + budget.mul_f32(0.8);
+    /// The accounts a run may dial (not parked, no refused password), rotated by the counter
+    /// under `rotation`, which moves on by one.
+    fn candidates(&self, rotation: &str) -> Result<Vec<Candidate>, EngineError> {
         let mut accounts: Vec<Candidate> = self.read(|c| {
             let mut st = c.prepare(&format!(
                 "SELECT a.id FROM accounts a WHERE a.needs_auth = 0 AND {} ORDER BY a.created_ms, a.id",
@@ -405,18 +479,57 @@ impl Engine {
             rows
         })?;
         if !accounts.is_empty() {
-            let turn: u64 = self.setting(ROTATION).ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0);
+            let turn: u64 = self.setting(rotation).ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0);
             let first = (turn % accounts.len() as u64) as usize;
             accounts.rotate_left(first);
             if let Err(e) = self.write(|c| {
                 c.execute(
                     "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    (ROTATION, (turn.wrapping_add(1)).to_string()),
+                    (rotation, (turn.wrapping_add(1)).to_string()),
                 )
             }) {
                 self.shared().log(&format!("[background] rotation: {e}"));
             }
         }
+        Ok(accounts)
+    }
+
+    /// The download passes of a run that started at `start` with `budget`: one per account, read
+    /// again after the INBOX passes (one may have found a refused password), each in an equal share
+    /// of what is left, none started past 80% of the budget or while the app is in front.
+    fn download_run(&self, start: Instant, budget: Duration) -> Result<(), EngineError> {
+        let deadline = start + budget;
+        let last_start = start + budget.mul_f32(0.8);
+        let accounts = self.candidates(DOWNLOAD_ROTATION)?;
+        let count = accounts.len();
+        for (i, account) in accounts.into_iter().enumerate() {
+            let now = Instant::now();
+            if now >= last_start || crate::background::stop_downloading(self.shared(), Some(last_start)) {
+                self.shared().log(&format!("[background] download of {} waits for the next run", account.id));
+                break;
+            }
+            let share = deadline.saturating_duration_since(now) / (count - i) as u32;
+            let until = now + share;
+            let ticket = match self.sync_worker().enqueue_download(self.shared(), &account.id, until) {
+                Ok(t) => t,
+                Err(e) => {
+                    self.shared().log(&format!("[background] {}: {e}", account.id));
+                    break;
+                }
+            };
+            match ticket.wait_until(until) {
+                None => self.shared().log(&format!("[background] the download of {} did not finish in its share", account.id)),
+                Some(Ended::Done) => {}
+                Some(Ended::Failed(code)) => self.shared().log(&format!("[background] download of {} ended {code}", account.id)),
+            }
+        }
+        Ok(())
+    }
+
+    fn inbox_run(&self, start: Instant, budget: Duration) -> Result<(Vec<NewMail>, Vec<Collected>), EngineError> {
+        let deadline = start + budget;
+        let last_start = start + budget.mul_f32(0.8);
+        let accounts = self.candidates(ROTATION)?;
         let mut collected: Vec<Collected> = Vec::new();
         let count = accounts.len();
         for (i, account) in accounts.into_iter().enumerate() {

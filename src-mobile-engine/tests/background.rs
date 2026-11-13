@@ -88,6 +88,21 @@ impl Fx {
         self.engine.rpc("mobile.settings.set", json!({ "notifications": if on { "on" } else { "off" } })).unwrap()
     }
 
+    /// Background download on or off. Through `set_setting`, which stores an unknown key as given,
+    /// so a test pinned to "off" reads the same on an engine that has no such setting.
+    fn download(&self, on: bool) {
+        self.engine.set_setting("backgroundDownload", if on { "true" } else { "false" }).unwrap();
+    }
+
+    /// How many bodies of `account`'s `folder` the cache holds.
+    fn bodies(&self, account: &str, folder: &str) -> i64 {
+        self.db().query_row("SELECT count(*) FROM bodies WHERE account_id = ?1 AND folder = ?2", [account, folder], |r| r.get(0)).unwrap()
+    }
+
+    fn rows_in(&self, account: &str, folder: &str) -> i64 {
+        self.db().query_row("SELECT count(*) FROM messages WHERE account_id = ?1 AND folder = ?2", [account, folder], |r| r.get(0)).unwrap()
+    }
+
     /// A run whose notifications were posted: fetched, then committed.
     fn run(&self, budget: Duration) -> Vec<NewMail> {
         let BackgroundRun { mail, commit, .. } = self.engine.background_fetch(budget).unwrap();
@@ -141,10 +156,10 @@ fn settings_default_off_with_preview_and_round_trip() {
     let f = fx();
     assert_eq!(
         f.engine.rpc("mobile.settings.get", json!({})).unwrap(),
-        json!({ "notifications": "off", "notificationPreview": true, "language": null, "onboardingComplete": false })
+        json!({ "notifications": "off", "notificationPreview": true, "language": null, "onboardingComplete": false, "backgroundDownload": true })
     );
     let set = f.engine.rpc("mobile.settings.set", json!({ "notifications": "on", "notificationPreview": false })).unwrap();
-    assert_eq!(set, json!({ "notifications": "on", "notificationPreview": false, "language": null, "onboardingComplete": false }));
+    assert_eq!(set, json!({ "notifications": "on", "notificationPreview": false, "language": null, "onboardingComplete": false, "backgroundDownload": true }));
     assert_eq!(f.engine.rpc("mobile.settings.get", json!({})).unwrap(), set);
     assert!(f.engine.notifications_on());
     assert!(!f.engine.notification_preview());
@@ -256,10 +271,11 @@ fn a_run_out_of_budget_returns_in_time_and_keeps_unreturned_mail_for_next_time()
 }
 
 #[test]
-fn notifications_off_means_no_network() {
+fn notifications_and_background_download_off_means_no_network() {
     let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
     let f = fx();
     let account = f.add(&server, "u@example.test");
+    f.download(false);
     let conns = server.connection_count();
     deliver(&server, "new", false);
 
@@ -533,6 +549,148 @@ fn a_burst_cut_after_one_chunk_is_fetched_and_notified_in_full_over_the_next_run
     assert!(f.run(BUDGET).is_empty());
 }
 
+// ── Background download (mail there offline when the app opens) ────────────
+
+/// The uids whose body part the server was asked for (`UID FETCH n (... BODY.PEEK[1...])`), in order.
+fn body_fetches(server: &MockImap) -> Vec<u32> {
+    server
+        .commands()
+        .iter()
+        .map(|c| c.to_uppercase())
+        .filter(|c| c.contains("BODY.PEEK[1"))
+        .filter_map(|c| c.split("FETCH ").nth(1).and_then(|r| r.split_whitespace().next()).and_then(|u| u.parse().ok()))
+        .collect()
+}
+
+#[test]
+fn background_download_is_a_setting_on_by_default() {
+    let f = fx();
+    assert_eq!(f.engine.rpc("mobile.settings.get", json!({})).unwrap()["backgroundDownload"], true);
+    let set = f.engine.rpc("mobile.settings.set", json!({ "backgroundDownload": false })).unwrap();
+    assert_eq!(set["backgroundDownload"], false);
+    assert_eq!(f.engine.rpc("mobile.settings.get", json!({})).unwrap()["backgroundDownload"], false);
+    assert_eq!(f.engine.rpc("mobile.settings.set", json!({ "backgroundDownload": "yes" })).unwrap_err().code(), "INVALID");
+    // `set_setting` goes through the same checks.
+    assert!(f.engine.set_setting("backgroundDownload", "sometimes").is_err());
+    f.download(true);
+    assert_eq!(f.engine.rpc("mobile.settings.get", json!({})).unwrap()["backgroundDownload"], true);
+}
+
+/// Notifications off (the default), background download on (the default): a run fetches the new
+/// INBOX mail's headers and bodies, so the message opens with no network once the app is back.
+#[test]
+fn a_background_run_downloads_new_inbox_bodies_for_offline_reading() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    assert!(!f.engine.notifications_on());
+    assert!(f.run(BUDGET).is_empty(), "notifications off: nothing to post");
+    deliver(&server, "first new", false);
+    deliver(&server, "second new", false);
+
+    let run = f.engine.background_fetch(BUDGET).unwrap();
+    assert!(run.mail.is_empty() && run.commit.is_none(), "notifications off: nothing to post: {run:?}");
+    assert_eq!(f.rows_in(&account, "INBOX"), 3, "the new headers are in the list");
+    assert_eq!(f.bodies(&account, "INBOX"), 3, "every recent INBOX body is cached");
+    assert_eq!(f.watermark(&account), None, "notifications off: no notify state is taken");
+
+    // The network is gone: the bodies open from the cache.
+    let conns = server.connection_count();
+    let fetches = server.count_commands("FETCH");
+    for uid in [2u32, 3] {
+        let body = f.engine.rpc("mobile.message.body", json!({ "accountId": account, "folder": "INBOX", "uid": uid })).unwrap();
+        assert!(body["text"].as_str().unwrap_or("").contains(&format!("Body {uid}.")), "{body}");
+    }
+    assert_eq!((server.connection_count(), server.count_commands("FETCH")), (conns, fetches), "served with no network");
+    // Read with BODY.PEEK: the server copy is still unread.
+    let st = server.state();
+    let mb = st.mailboxes.iter().find(|m| m.name == "INBOX").unwrap();
+    assert!(mb.messages.iter().all(|m| !m.flags.iter().any(|fl| fl == "\\Seen")), "a download marked mail read");
+
+    // Nothing new: a later run fetches no body again.
+    let before = body_fetches(&server).len();
+    f.run(BUDGET);
+    assert_eq!(body_fetches(&server).len(), before, "a cached body is not fetched again");
+}
+
+/// A run whose download is cut by its budget keeps the bodies it got, still returns the new mail
+/// to notify, and the next run downloads the rest without fetching any body twice.
+#[test]
+fn a_download_cut_by_the_budget_keeps_its_bodies_and_the_next_run_goes_on() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+    assert_eq!(f.bodies(&account, "INBOX"), 1);
+    for i in 0..5 {
+        deliver(&server, &format!("new {i}"), false);
+    }
+    // The third body the server is asked for stalls well past the run's budget.
+    server.reset_scenario(Scenario {
+        state: server.state(),
+        ..Scenario::new().fault(Trigger::nth_with("FETCH", "BODY.PEEK[1", 3), Action::Delay(Duration::from_millis(4000)))
+    });
+    let budget = Duration::from_millis(2000);
+    let t0 = Instant::now();
+    let got = f.run(budget);
+    assert!(t0.elapsed() < budget + Duration::from_millis(700), "the run overran: {:?}", t0.elapsed());
+    assert_eq!(subjects(&got), vec!["new 0", "new 1", "new 2", "new 3", "new 4"], "a cut download still notifies");
+    let cut = f.bodies(&account, "INBOX");
+    assert!((3..6).contains(&cut), "the bodies fetched before the cut are kept: {cut}");
+
+    // The stalled answer comes; the next run downloads what is left.
+    std::thread::sleep(Duration::from_millis(4300).saturating_sub(t0.elapsed()));
+    assert!(f.run(BUDGET).is_empty(), "notified once");
+    assert_eq!(f.bodies(&account, "INBOX"), 6, "the next run goes on");
+    let asked = body_fetches(&server);
+    let distinct: std::collections::HashSet<&u32> = asked.iter().collect();
+    assert_eq!(distinct.len(), asked.len(), "a body was fetched twice: {asked:?}");
+    assert_eq!(asked.len(), 5, "{asked:?}");
+}
+
+/// Every folder the list has synced gets its new headers in a background run, not only INBOX.
+#[test]
+fn a_background_run_brings_new_headers_to_every_synced_folder() {
+    let mut archive = Mailbox::new("Archive");
+    archive.add(msg(1, "archived"));
+    let server = MockImap::start(Scenario::new().mailboxes(vec![inbox(vec![msg(1, "old")]), archive]));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    assert!(f.run(BUDGET).is_empty());
+    // The user opened Archive once: it is a synced folder.
+    assert_eq!(f.engine.rpc("mobile.sync.refresh", json!({ "accountId": account, "folder": "Archive" })).unwrap(), json!({ "queued": true }));
+    let deadline = Instant::now() + BUDGET;
+    while f.rows_in(&account, "Archive") < 1 {
+        assert!(Instant::now() < deadline, "Archive never synced");
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    server.mutate(|st| {
+        let mb = st.find_mut("Archive").unwrap();
+        let uid = mb.uid_next;
+        mb.add(msg(uid, "filed by a rule").with_internal_ms(now_ms()));
+    });
+    f.run(BUDGET);
+    assert_eq!(f.rows_in(&account, "Archive"), 2, "Archive's new header came in the background");
+}
+
+/// While the app is in front a run downloads nothing, so the page's own passes never wait behind
+/// it on the sync worker; once the app leaves, the next run does.
+#[test]
+fn a_background_download_does_not_run_while_the_app_is_in_front() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true, "accountId": account })).unwrap();
+    f.sync(&account);
+    f.wait_rows(&account, 1);
+    f.run(BUDGET);
+    assert_eq!(f.bodies(&account, "INBOX"), 0, "no body downloaded while the app is in front");
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    f.run(BUDGET);
+    assert_eq!(f.bodies(&account, "INBOX"), 1, "downloaded once the app left the front");
+}
+
 // ── Scheduled send (plan 4 Task 8, Ruling 13) ───────────────────────────────
 
 const MIN: i64 = 60_000;
@@ -574,6 +732,8 @@ fn background_run_sends_due_rows_even_with_notifications_off() {
     f.move_time(&id, now_ms() - 1_000);
     std::thread::sleep(Duration::from_millis(300));
     assert!(server.sent_messages().is_empty());
+    // Background download off too: only the send needs the network.
+    f.download(false);
 
     let run = f.engine.background_fetch(BUDGET).unwrap();
     assert!(run.mail.is_empty() && run.commit.is_none(), "{run:?}");
@@ -599,8 +759,11 @@ fn background_run_sends_due_rows_even_with_notifications_off() {
 fn wants_background_follows_scheduled_rows() {
     let server = MockImap::start(Scenario::new().mailbox(inbox(vec![])));
     let f = fx();
+    assert!(!f.engine.wants_background(), "an install with no account asks for no background runs");
     let account = f.add(&server, "u@example.test");
-    assert!(!f.engine.wants_background(), "a fresh install asks for no background runs");
+    assert!(f.engine.wants_background(), "an account downloads its mail in the background by default");
+    f.download(false);
+    assert!(!f.engine.wants_background(), "background download off and nothing else: no runs");
     f.notifications(true);
     assert!(f.engine.wants_background());
     f.notifications(false);

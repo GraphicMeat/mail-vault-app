@@ -37,23 +37,28 @@ const OUT_OF_WINDOW_KEEP_MS: i64 = 30 * DAY_MS;
 /// One sync pass to run: the account's folder list and INBOX (`folder: None`), or one folder.
 /// A `quick` pass (a background run's) asks only for what arrived since the newest message held
 /// ([`Backend::arrivals`]), and stops at its `deadline` (its share of the run's budget).
+/// A `download` pass (a background run's download, [`download_pass`]) is a kind of its own: it
+/// covers only another download pass of the account, and nothing else covers it, so a page's
+/// refresh is never folded into a pass that stops at a background deadline.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Job {
     account: String,
     folder: Option<String>,
     quick: bool,
+    download: bool,
     deadline: Option<Instant>,
 }
 
 impl Job {
     pub(crate) fn new(account: &str, folder: Option<&str>) -> Job {
-        Job { account: account.to_string(), folder: folder.map(String::from), quick: false, deadline: None }
+        Job { account: account.to_string(), folder: folder.map(String::from), quick: false, download: false, deadline: None }
     }
 
     /// Running `self` also does everything `other` asks for. A full pass covers a quick one,
     /// never the other way round.
     fn covers(&self, other: &Job) -> bool {
         self.account == other.account
+            && self.download == other.download
             && (!self.quick || other.quick)
             && (self.folder == other.folder || (self.folder.is_none() && other.folder.as_deref().is_some_and(is_inbox)))
     }
@@ -148,7 +153,16 @@ impl Worker {
     /// what that pass left to notify.
     pub(crate) fn enqueue_waited(&self, shared: &Arc<Shared>, account: &str, deadline: Instant) -> Result<Arc<Ticket>, String> {
         let ticket = Arc::new(Ticket { collect: true, ..Ticket::default() });
-        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, deadline: Some(deadline) };
+        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, download: false, deadline: Some(deadline) };
+        self.enqueue_with(shared, job, Some(Arc::clone(&ticket)))?;
+        Ok(ticket)
+    }
+
+    /// Queues the background download of `account` ([`download_pass`]) that stops at `deadline`,
+    /// and returns a ticket that ends with it.
+    pub(crate) fn enqueue_download(&self, shared: &Arc<Shared>, account: &str, deadline: Instant) -> Result<Arc<Ticket>, String> {
+        let ticket = Arc::new(Ticket::default());
+        let job = Job { account: account.to_string(), folder: Some("INBOX".into()), quick: true, download: true, deadline: Some(deadline) };
         self.enqueue_with(shared, job, Some(Arc::clone(&ticket)))?;
         Ok(ticket)
     }
@@ -373,9 +387,12 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result
     // A background run's pass: only what arrived since the newest message held, within its
     // share of the budget. A folder never synced (or a backend with no cheap way) gets the full
     // pass.
+    if job.download {
+        return download_pass(shared, backend, &job.account, job.deadline);
+    }
     if job.quick {
         backend.set_deadline(job.deadline);
-        if quick_pass(shared, backend, &job.account, job.deadline)? {
+        if quick_pass(shared, backend, &job.account, "INBOX", job.deadline)? {
             return Ok(());
         }
     }
@@ -433,7 +450,63 @@ fn quick_mark(shared: &Shared, account: &str, folder: &str, validity: i64) -> Re
     Ok(parsed.and_then(|(v, uid, ms)| (v == validity).then_some((uid, ms))))
 }
 
-/// A background run's INBOX pass: the backend's cheap news check, then every message that
+/// Most folders besides INBOX one download pass looks at (the most recently synced first).
+const DOWNLOAD_FOLDERS: usize = 20;
+
+/// A background run's download of `account` (`background.rs`), inside `deadline`: INBOX's new
+/// headers (the full pass when INBOX was never synced), then the bodies of its recent mail
+/// ([`crate::body::prefetch`]), then the new headers of every other folder the list has synced
+/// (a folder that would need its full pass is left for the foreground). One sign-in for all of
+/// it. It stops between steps once the deadline passes or the app comes to the front; a step cut
+/// that way ends the pass cleanly, keeping what it wrote: headers resume from their quick mark,
+/// bodies from the first one not cached, on the next run.
+fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) -> Result<(), Fail> {
+    backend.set_deadline(deadline);
+    let stop = || crate::background::stop_downloading(shared, deadline);
+    let out = (|| -> Result<(), Fail> {
+        if stop() {
+            return Ok(());
+        }
+        if !quick_pass(shared, backend, account, "INBOX", deadline)? {
+            sync_folder_list(shared, backend, account)?;
+            if let Some(inbox) = folder_path(shared, account, "INBOX")? {
+                sync_folder(shared, backend, account, &inbox)?;
+            }
+        }
+        if stop() {
+            return Ok(());
+        }
+        if let Some(inbox) = folder_path(shared, account, "INBOX")? {
+            crate::body::prefetch(shared, backend, account, &inbox, &stop)?;
+        }
+        let others: Vec<String> = shared.read(|c| {
+            let mut st = c.prepare(&format!(
+                "SELECT path FROM folders WHERE account_id = ?1 AND synced_ms IS NOT NULL AND noselect = 0
+                   AND NOT (path = 'INBOX' COLLATE NOCASE) ORDER BY synced_ms DESC, path LIMIT {DOWNLOAD_FOLDERS}"
+            ))?;
+            let rows = st.query_map([account], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })?;
+        for folder in others {
+            if stop() {
+                break;
+            }
+            quick_pass(shared, backend, account, &folder, deadline)?;
+        }
+        Ok(())
+    })();
+    match out {
+        // Cut by the budget or the app coming back: a clean stop, not a failure.
+        Err(Fail::Code(code, why)) if stop() => {
+            shared.log(&format!("[background] {account}: download stopped ({} {why})", code.as_str()));
+            Ok(())
+        }
+        other => other,
+    }
+}
+
+/// A background run's pass over `folder` (INBOX for notifications; any synced folder for a
+/// download): the backend's cheap news check, then every message that
 /// arrived since the newest one held, oldest first, inserted in write chunks. Each chunk moves
 /// the pass's own mark ([`quick_mark_key`]) in the same transaction, so a pass cut part way (its
 /// budget, the network) leaves a mark below which nothing is missing, and the next quick pass
@@ -441,8 +514,8 @@ fn quick_mark(shared: &Shared, account: &str, folder: &str, validity: i64) -> Re
 /// page by page) is inserted and keeps the mark, so the next pass lists on from it. No flags, no removals, no delta state: the next
 /// foreground pass does those. `false` when the folder needs the full pass (never synced, empty,
 /// a new generation, or a backend with no cheap way).
-fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) -> Result<bool, Fail> {
-    let Some(folder) = folder_path(shared, account, "INBOX")? else {
+fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, folder: &str, deadline: Option<Instant>) -> Result<bool, Fail> {
+    let Some(folder) = folder_path(shared, account, folder)? else {
         return Ok(false);
     };
     let held: Option<(Option<i64>, Option<i64>, Option<i64>, Option<i64>)> = shared.read(|c| {

@@ -284,6 +284,9 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
         }
         *applied = seq;
     }
+    // A background download stops (and none starts) while the app is in front: the page's own
+    // passes never wait behind one on the sync worker.
+    crate::background::set_in_front(engine.shared(), p.foreground);
     let account = match (p.foreground, p.account_id) {
         (true, Some(a)) => {
             let mut shown = lock(&engine.live().shown);

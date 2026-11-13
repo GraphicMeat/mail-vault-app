@@ -107,6 +107,9 @@ fn setup(server: &MockImap) -> Fixture {
         .unwrap();
     assert_eq!(added["ok"], true, "{added}");
     let account = added["account"]["id"].as_str().unwrap().to_string();
+    // The reminders alone decide whether background runs are wanted and dial: no background
+    // download of the INBOX beside them (`backgroundDownload` is on by default).
+    engine.set_setting("backgroundDownload", "false").unwrap();
     Fixture { tmp, secrets, engine, events, account }
 }
 

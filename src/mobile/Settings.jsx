@@ -9,6 +9,8 @@
 //   whether a notification names sender and subject, so it can only change while they are on.
 //   Both live in the engine (`mobile.settings.*`): the background run has no page, and reads the
 //   same rows.
+// - Offline: "Download in the background" (`backgroundDownload`, on by default): background runs
+//   fetch new mail and the bodies of recent INBOX mail, so it opens without a connection.
 // - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
 //   screen; a phone whose place another device took says so, with Sign in again.
 // - Replay tour (`onReplayTour`): the first-run tour again, without its account step (App.jsx).
@@ -268,6 +270,18 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION 
         </div>
         {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
         {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+
+        <h2 className="mv-settings__heading">{t('mobile.settings.offline')}</h2>
+        <div className="mv-settings__list">
+          <Switch
+            checked={values ? values.backgroundDownload !== false : true}
+            busy={busy === 'backgroundDownload'}
+            disabled={!ready}
+            label={t('mobile.settings.downloadToggle')}
+            hint={t('mobile.settings.downloadHint')}
+            onChange={(v) => save('backgroundDownload', { backgroundDownload: v })}
+          />
+        </div>
 
         <h2 className="mv-settings__heading">{t('mobile.settings.about')}</h2>
         <div className="mv-settings__list">

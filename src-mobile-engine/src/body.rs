@@ -313,6 +313,72 @@ fn fetch(shared: &Shared, p: &BodyParams, stored_validity: Option<i64>) -> Resul
     }))
 }
 
+/// Most bodies one background download fetches per account.
+const PREFETCH_MAX: usize = 50;
+/// Only mail that arrived this recently is downloaded ahead of an open.
+const PREFETCH_DAYS: i64 = 14;
+/// Most body bytes one background download caches per account: a small share of [`CACHE_CAP`],
+/// so a run never pushes most of what the user opened out of the LRU.
+const PREFETCH_BYTES: u64 = CACHE_CAP / 10;
+
+/// A background download (`sync.rs` `download_pass`): caches the bodies of `folder`'s recent mail
+/// (newest first, [`PREFETCH_DAYS`]) that has none yet, over the caller's signed-in `backend`,
+/// exactly as an open would (`BODY.PEEK`, the same scan, the same cache rules: a body whose
+/// attachments could not be listed, or that the server cut short, is not cached, and is not
+/// asked for again while the engine runs). At most [`PREFETCH_MAX`] bodies and about
+/// [`PREFETCH_BYTES`]; `stop` is asked before each one. Each body is written in its own short
+/// transactions, so what was fetched stays when the run is cut. Returns how many were cached.
+pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, account: &str, folder: &str, stop: &dyn Fn() -> bool) -> Result<usize, Fail> {
+    let validity: Option<Option<i64>> = shared.read(|c| {
+        c.query_row("SELECT uid_validity FROM folders WHERE account_id = ?1 AND path = ?2", (account, folder), |r| r.get(0)).optional()
+    })?;
+    let Some(validity) = validity else { return Ok(0) };
+    let since = now_ms() - PREFETCH_DAYS * 86_400_000;
+    let skipped = crate::background::skipped_bodies(shared, account, folder);
+    let uids: Vec<u32> = shared.read(|c| {
+        let mut st = c.prepare_cached(
+            "SELECT m.uid FROM messages m
+             WHERE m.account_id = ?1 AND m.folder = ?2 AND m.date_ms >= ?3
+               AND m.out_of_window_ms IS NULL AND m.local_deleted IS NULL
+               AND NOT EXISTS (SELECT 1 FROM bodies b WHERE b.account_id = m.account_id AND b.folder = m.folder AND b.uid = m.uid)
+             ORDER BY m.date_ms DESC, m.uid DESC LIMIT ?4",
+        )?;
+        let rows = st
+            .query_map((account, folder, since, (PREFETCH_MAX + skipped.len()) as i64), |r| r.get::<_, i64>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows.into_iter().map(|u| u as u32).collect())
+    })?;
+    let here = FolderRow::new(folder, validity);
+    let (mut cached, mut bytes) = (0usize, 0u64);
+    for uid in uids.into_iter().filter(|u| !skipped.contains(u)).take(PREFETCH_MAX) {
+        if stop() || bytes >= PREFETCH_BYTES {
+            break;
+        }
+        crate::sync::not_closing(shared)?;
+        let p = BodyParams { account_id: account.to_string(), folder: folder.to_string(), uid };
+        let Some(RawBody { parts, html, text, attachments_unknown, truncated }) = backend.body(&here, uid)? else {
+            // Gone, or another generation: the next pass sorts the row out.
+            crate::background::skip_body(shared, account, folder, uid);
+            continue;
+        };
+        let (mut body, snippet) = scanned(html, text, parts.into_iter().map(Part::from).collect());
+        body.attachments_unknown = attachments_unknown;
+        body.truncated = truncated;
+        if attachments_unknown || truncated {
+            if truncated {
+                store_attachments(shared, &p, &body)?;
+            }
+            crate::background::skip_body(shared, account, folder, uid);
+            continue;
+        }
+        store(shared, &p, &body, &snippet)?;
+        evict(shared, cap(shared), &p)?;
+        cached += 1;
+        bytes += (body.html.as_ref().map_or(0, String::len) + body.text.as_ref().map_or(0, String::len)) as u64;
+    }
+    Ok(cached)
+}
+
 /// Finds the html's tracking pixels and counts the remote images it would load, with and without
 /// them; the html itself is kept as it came (the tracker rule applies when it is answered). The
 /// snippet comes with it.
