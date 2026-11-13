@@ -766,6 +766,8 @@ export function createMobileStore() {
             list?.invalidate();
             loadPending();
           }
+          // The accounts on screen changed: the engine listens on those left.
+          if (spans && get().autoSync) get().appState();
           return;
         }
         if (!rest.length) {
@@ -791,7 +793,11 @@ export function createMobileStore() {
       async selectAllInboxes() {
         const { activeAccountId, activeFolder, accounts } = get();
         if (!activeAccountId || accounts.length < 2) return;
-        if (activeFolder !== ALL_INBOXES) open(activeAccountId, ALL_INBOXES);
+        if (activeFolder !== ALL_INBOXES) {
+          open(activeAccountId, ALL_INBOXES);
+          // Every account's inbox is on screen now: each listens for new mail.
+          if (get().autoSync) get().appState();
+        }
         await get().refresh();
       },
 
@@ -809,19 +815,26 @@ export function createMobileStore() {
       async selectFolder(path) {
         const { activeAccountId, activeFolder } = get();
         if (!activeAccountId) return;
-        if (path !== activeFolder) open(activeAccountId, path);
+        if (path !== activeFolder) {
+          open(activeAccountId, path);
+          // Out of All Inboxes: only this account's inbox listens again.
+          if (activeFolder === ALL_INBOXES && get().autoSync) get().appState();
+        }
         await get().refresh();
       },
 
       /**
        * Tells the engine whether the page is in front and on which account, so it listens for new
        * mail on that account's INBOX while the app is open (and on nothing in the background).
-       * Sent on every visibility change (`resumed` when visible again) and account switch; a
-       * failure is left to the next one.
+       * All Inboxes shows every account's INBOX, so every account is named (`shownAccountIds`):
+       * each listens, and none notifies mail that was on screen once the app leaves.
+       * Sent on every visibility change (`resumed` when visible again), account switch and change
+       * into or out of All Inboxes; a failure is left to the next one.
        */
       async appState(foreground = isForeground(), resumed = false) {
-        const { activeAccountId: accountId } = get();
+        const { activeAccountId: accountId, activeFolder, accounts } = get();
         const params = accountId ? { foreground, accountId } : { foreground };
+        if (accountId && activeFolder === ALL_INBOXES) params.shownAccountIds = accounts.map((a) => a.id);
         // Back in the front after being away: the engine replaces a listener whose connection may
         // have died silently meanwhile (a network change, a carrier NAT timeout).
         if (foreground && resumed) params.resumed = true;

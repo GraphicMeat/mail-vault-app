@@ -303,6 +303,39 @@ fn removing_the_listening_account_stops_its_thread() {
     wait_until(Duration::from_secs(2), "the removed account's listener stopped", || !f.engine.live_running());
 }
 
+/// All Inboxes shows every account's inbox, so every one of them listens while it is open; back on
+/// one account's folder, only that account's listener stays (untouched).
+#[test]
+fn all_inboxes_listens_on_every_account_it_shows() {
+    let a_server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "a")])));
+    let b_server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "b")])));
+    let f = imap_engine();
+    let a = f.add_imap(&a_server);
+    let b = f.add_imap_as(&b_server, "b@example.test");
+    f.sync(&a);
+    f.sync(&b);
+
+    let r = f.engine.rpc("mobile.app.state", json!({ "foreground": true, "accountId": a, "shownAccountIds": [a, b] })).unwrap();
+    assert_eq!(r["live"], true);
+    wait_until(QUICK, "both inboxes idle", || a_server.count_commands("IDLE") >= 1 && b_server.count_commands("IDLE") >= 1);
+    let from = f.events.len();
+    deliver(&b_server, "b live");
+    f.events.inbox_added(from, &b, QUICK);
+    assert!(f.subjects(&b).contains(&"b live".to_string()));
+
+    // Back to A's own folder: B's listener ends, A's keeps its connection.
+    let (a_conns, b_dones) = (a_server.connection_count(), b_server.count_commands("DONE"));
+    f.app_state(true, Some(&a));
+    wait_until(Duration::from_secs(2), "B's IDLE ended", || b_server.count_commands("DONE") > b_dones);
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(a_server.connection_count(), a_conns, "A's listener was churned");
+    let from = f.events.len();
+    deliver(&a_server, "a live");
+    f.events.inbox_added(from, &a, QUICK);
+    f.app_state(false, None);
+    wait_until(Duration::from_secs(2), "every listener stopped", || !f.engine.live_running());
+}
+
 #[test]
 fn a_server_without_idle_polls_instead() {
     let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])).without_cap("IDLE"));

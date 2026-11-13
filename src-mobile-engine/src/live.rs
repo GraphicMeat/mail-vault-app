@@ -1,5 +1,6 @@
 //! New mail while the app is open (plan Ruling 8): one `mv-engine-live` thread listens on the
-//! foreground account's INBOX, and a change queues the normal INBOX pass on the sync worker, so
+//! foreground account's INBOX (on every account's INBOX while All Inboxes shows them all:
+//! `shownAccountIds`), and a change queues the normal INBOX pass on the sync worker, so
 //! every write stays in `sync.rs`. IMAP idles (IDLE issued again every 10 min, so a socket a
 //! carrier NAT dropped silently is found; a server without IDLE gets a STATUS poll every 60 s),
 //! JMAP reads its EventSource (`Email,Mailbox`, ping 60), Graph asks for its newest message every
@@ -74,12 +75,13 @@ struct Current {
 /// the shell's OS resume both report one return to the front.
 const RESUME_SETTLE: Duration = Duration::from_secs(1);
 
-/// The engine's live listener: at most one current thread.
+/// The engine's live listener: at most one current thread per account on screen.
 #[derive(Default)]
 pub(crate) struct Live {
-    current: Mutex<Option<Current>>,
-    /// The account the last foreground named: what a resume without one (the shell's) resumes.
-    last: Mutex<Option<String>>,
+    current: Mutex<Vec<Current>>,
+    /// The accounts the last foreground put on screen (the account in front first): what a
+    /// resume without one (the shell's) resumes.
+    last: Mutex<Vec<String>>,
     /// Serializes `mobile.app.state`; holds the highest shell `seq` applied.
     order: Mutex<u64>,
     timing: Mutex<Timing>,
@@ -95,20 +97,31 @@ pub(crate) struct Live {
 }
 
 impl Live {
-    /// Listens on `account`'s INBOX: nothing to do when its thread is already running, unless
-    /// `resumed` (the app came back to the front: its connection may have died silently while it
-    /// was away, so it is replaced); otherwise stops the current thread (without waiting for it)
-    /// and starts one for `account`.
-    fn foreground(&self, shared: &Arc<Shared>, sync: &Worker, account: &str, resumed: bool) -> Result<(), String> {
+    /// Listens on the INBOX of each of `accounts`: a thread already running for one of them is
+    /// kept, unless `resumed` (the app came back to the front: its connection may have died
+    /// silently while it was away, so it is replaced); a thread for an account not among them is
+    /// stopped (without waiting for it); each account without one gets one.
+    fn foreground(&self, shared: &Arc<Shared>, sync: &Worker, accounts: &[String], resumed: bool) -> Result<(), String> {
         let mut current = lock(&self.current);
-        if let Some(c) = current.as_ref() {
+        current.retain(|c| {
             let fresh = !resumed || c.started.elapsed() < RESUME_SETTLE;
-            if c.account == account && !c.done.load(Ordering::SeqCst) && fresh {
-                return Ok(());
+            let keep = accounts.contains(&c.account) && !c.done.load(Ordering::SeqCst) && fresh;
+            if !keep {
+                c.stop.stop();
             }
-            c.stop.stop();
+            keep
+        });
+        *lock(&self.last) = accounts.to_vec();
+        for account in accounts {
+            if !current.iter().any(|c| &c.account == account) {
+                current.push(self.spawn(shared, sync, account)?);
+            }
         }
-        *current = None;
+        Ok(())
+    }
+
+    /// Starts the thread listening on `account`'s INBOX.
+    fn spawn(&self, shared: &Arc<Shared>, sync: &Worker, account: &str) -> Result<Current, String> {
         let timing = *lock(&self.timing);
         let stop = Arc::new(StopFlag::default());
         let done = Arc::new(AtomicBool::new(false));
@@ -134,28 +147,24 @@ impl Live {
             self.alive.fetch_sub(1, Ordering::SeqCst);
             return Err(format!("live thread: {e}"));
         }
-        *current = Some(Current { account: account.to_string(), stop, done, started: Instant::now() });
-        *lock(&self.last) = Some(account.to_string());
-        Ok(())
+        Ok(Current { account: account.to_string(), stop, done, started: Instant::now() })
     }
 
-    /// Stops the current thread when it listens on `account` (being removed); returns at once.
+    /// Stops the thread listening on `account` (being removed), if any; returns at once.
     pub(crate) fn stop_account(&self, account: &str) {
-        let mut current = lock(&self.current);
-        if current.as_ref().is_some_and(|c| c.account == account) {
-            if let Some(c) = current.take() {
+        lock(&self.current).retain(|c| {
+            if c.account == account {
                 c.stop.stop();
             }
-        }
-        let mut last = lock(&self.last);
-        if last.as_deref() == Some(account) {
-            *last = None;
-        }
+            c.account != account
+        });
+        lock(&self.last).retain(|a| a != account);
+        lock(&self.shown).retain(|a| a != account);
     }
 
-    /// Stops the current thread, if any; returns at once.
+    /// Stops every current thread; returns at once.
     pub(crate) fn stop(&self) {
-        if let Some(c) = lock(&self.current).take() {
+        for c in lock(&self.current).drain(..) {
             c.stop.stop();
         }
     }
@@ -266,13 +275,18 @@ struct AppStateParams {
     /// carry none.
     #[serde(default)]
     seq: Option<u64>,
+    /// Every account whose INBOX is on screen besides `accountId` (All Inboxes): each listens,
+    /// and its watermark moves past what it listed when the app leaves.
+    #[serde(default)]
+    shown_account_ids: Vec<String>,
 }
 
-/// `mobile.app.state {foreground, accountId?, resumed?, seq?}` -> `{live}`: the page went to the
-/// foreground (on `accountId`) or the background. `resumed`: the app came back to the front, so a
-/// thread already listening on the account is replaced (its socket may be dead), and with no
-/// `accountId` (the shell's OS resume) the account last put in front is resumed. Starts or stops
-/// the live thread and returns at once; `live` says whether a thread was asked to listen.
+/// `mobile.app.state {foreground, accountId?, shownAccountIds?, resumed?, seq?}` -> `{live}`: the
+/// page went to the foreground (on `accountId`, with `shownAccountIds` also on screen) or the
+/// background. `resumed`: the app came back to the front, so a thread already listening on an
+/// account is replaced (its socket may be dead), and with no `accountId` (the shell's OS resume)
+/// the accounts last put on screen are resumed. Starts or stops the live threads and returns at
+/// once; `live` says whether a thread was asked to listen.
 pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: AppStateParams = parse(params)?;
     // One call at a time, check and action together: a stale call can neither pass the check
@@ -287,31 +301,37 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
     // A background download stops (and none starts) while the app is in front: the page's own
     // passes never wait behind one on the sync worker.
     crate::background::set_in_front(engine.shared(), p.foreground);
-    let account = match (p.foreground, p.account_id) {
+    let accounts: Vec<String> = match (p.foreground, p.account_id) {
         (true, Some(a)) => {
-            let mut shown = lock(&engine.live().shown);
-            if !shown.contains(&a) {
-                shown.push(a.clone());
+            let mut accounts = vec![a];
+            for s in p.shown_account_ids {
+                if !accounts.contains(&s) {
+                    accounts.push(s);
+                }
             }
-            a
+            accounts
         }
-        // The shell's OS resume: the account the page last put in front.
-        (true, None) if p.resumed => match lock(&engine.live().last).clone() {
-            Some(a) => a,
-            None => return Ok(json!({ "live": false })),
-        },
+        // The shell's OS resume: the accounts the page last put on screen.
+        (true, None) if p.resumed => {
+            let last = lock(&engine.live().last).clone();
+            if last.is_empty() {
+                return Ok(json!({ "live": false }));
+            }
+            last
+        }
         _ => {
             engine.live().stop();
             if !p.foreground {
                 // The user saw these accounts' lists: what they showed is no news for a later
-                // background run. The account in front stays shown until the app comes back.
+                // background run. The accounts on screen stay shown until the app comes back.
                 let mut shown: Vec<String> = std::mem::take(&mut *lock(&engine.live().shown));
-                if let Some(last) = lock(&engine.live().last).clone() {
-                    if !shown.contains(&last) {
-                        shown.push(last.clone());
+                let last = lock(&engine.live().last).clone();
+                for a in &last {
+                    if !shown.contains(a) {
+                        shown.push(a.clone());
                     }
-                    lock(&engine.live().shown).push(last);
                 }
+                *lock(&engine.live().shown) = last;
                 crate::background::seen_in_front(engine.shared(), &shown);
                 // Only when the app was in front since it last left: a reminder that went due
                 // while it was away (a background run cut before posting it) is still posted.
@@ -322,15 +342,33 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
             return Ok(json!({ "live": false }));
         }
     };
-    let known = engine
-        .read(|c| c.query_row("SELECT 1 FROM accounts WHERE id = ?1", [&account], |_| Ok(())).optional())
-        .map_err(|e| RpcError::Internal(e.to_string()))?
-        .is_some();
-    if !known {
+    let known = |account: &String| -> Result<bool, RpcError> {
+        engine
+            .read(|c| c.query_row("SELECT 1 FROM accounts WHERE id = ?1", [account], |_| Ok(())).optional())
+            .map(|o| o.is_some())
+            .map_err(|e| RpcError::Internal(e.to_string()))
+    };
+    // The account in front must exist; another one on screen that is gone (removed while the
+    // page still listed it) is left out.
+    if !known(&accounts[0])? {
         engine.live().stop();
         return Err(RpcError::Invalid("unknown account".into()));
     }
-    engine.live().foreground(engine.shared(), engine.sync_worker(), &account, p.resumed).map_err(RpcError::Internal)?;
+    let mut here = Vec::with_capacity(accounts.len());
+    for a in accounts {
+        if known(&a)? {
+            here.push(a);
+        }
+    }
+    {
+        let mut shown = lock(&engine.live().shown);
+        for a in &here {
+            if !shown.contains(a) {
+                shown.push(a.clone());
+            }
+        }
+    }
+    engine.live().foreground(engine.shared(), engine.sync_worker(), &here, p.resumed).map_err(RpcError::Internal)?;
     engine.live().fronted.store(true, Ordering::SeqCst);
     Ok(json!({ "live": true }))
 }

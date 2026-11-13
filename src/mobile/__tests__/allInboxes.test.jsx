@@ -218,6 +218,25 @@ describe('All Inboxes store', () => {
     expect(store.getState().activeFolder).not.toBe(ALL_INBOXES);
   });
 
+  it('tells the engine every account is on screen while All Inboxes is open, and narrows it after', async () => {
+    const store = createMobileStore();
+    await store.getState().init({ sync: true });
+    const states = () => callsOf('mobile.app.state');
+    expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a1' });
+
+    await store.getState().selectAllInboxes();
+    // Every inbox is listed, so every account is live and its mail counts as seen on leaving.
+    expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a1', shownAccountIds: ['a1', 'a2'] });
+
+    // Visibility changes carry the same set.
+    await store.getState().appState(false);
+    expect(states().at(-1)).toEqual({ foreground: false, accountId: 'a1', shownAccountIds: ['a1', 'a2'] });
+
+    // Back on one account's folder: only that account.
+    await store.getState().selectFolder('INBOX');
+    expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a1' });
+  });
+
   it('picking an account in the switcher opens that account, not All Inboxes', async () => {
     const store = await unifiedStore();
     await store.getState().selectAccount('a2');
