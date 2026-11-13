@@ -28,7 +28,7 @@ let package = Package(
         "MvShellC",
       ],
       path: "Sources",
-      // App Store subscriptions (Store.swift).
-      linkerSettings: [.linkedFramework("StoreKit")])
+      // App Store subscriptions (Store.swift); the network's state for downloads (Background.swift).
+      linkerSettings: [.linkedFramework("StoreKit"), .linkedFramework("Network")])
   ]
 )

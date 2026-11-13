@@ -27,12 +27,20 @@
 // completes the task at once; nothing is committed: the next run returns the same mail (a repost
 // replaces, the ids are per message). A tap hands its payload to `mv_notification_tapped`.
 //
+// Full offline: the engine downloads each account's whole offline window over the runs. While
+// work is left (`mv_offline_pending`) the processing task is asked for with no earliest date, so
+// iOS runs it as soon as it allows; with none left, an hour on. The network's state goes to the
+// engine from `NWPathMonitor` (`mv_set_network`): Low Data Mode (`isConstrained`) stops every
+// download, cellular (`isExpensive`) holds attachments back. The offline attachments directory is
+// excluded from the iCloud backup (re-downloadable; `mobile.db` with drafts and accounts is not).
+//
 // The shell's exports are declared in C (`ShellC/include/mv_shell.h`), so they are called with the
 // C calling convention.
 
 import BackgroundTasks
 import Foundation
 import MvShellC
+import Network
 import UIKit
 import UserNotifications
 
@@ -70,6 +78,8 @@ enum MvBackground {
   /// The notification center holds its delegate weakly.
   static let taps = TapDelegate()
   private static var registered = false
+  /// Reports every path change to the engine for the process's life.
+  private static let paths = NWPathMonitor()
 
   static var enabled: Bool {
     get { UserDefaults.standard.bool(forKey: enabledKey) }
@@ -81,6 +91,11 @@ enum MvBackground {
     registered = true
     // Kept only by perf-gate builds of the shell (the device check); dropped by shipping ones.
     mv_set_device_check_runner(mvDeviceCheckRun)
+    paths.pathUpdateHandler = { path in
+      mv_set_network(path.isConstrained, path.isExpensive)
+    }
+    paths.start(queue: DispatchQueue.global(qos: .utility))
+    excludeOfflineFromBackup()
     UNUserNotificationCenter.current().delegate = taps
     BGTaskScheduler.shared.register(forTaskWithIdentifier: taskId, using: nil) { task in
       guard task is BGAppRefreshTask else {
@@ -117,7 +132,8 @@ enum MvBackground {
     let processing = BGProcessingTaskRequest(identifier: processingId)
     processing.requiresNetworkConnectivity = true
     processing.requiresExternalPower = false
-    processing.earliestBeginDate = Date(timeIntervalSinceNow: processingEarliest)
+    // Offline mail left to download: as soon as iOS allows.
+    processing.earliestBeginDate = mv_offline_pending() ? nil : Date(timeIntervalSinceNow: processingEarliest)
     for request in [refresh, processing] as [BGTaskRequest] {
       do {
         try BGTaskScheduler.shared.submit(request)
@@ -144,6 +160,8 @@ enum MvBackground {
       post(reply.notes) {
         // Counted as notified only once posted, and only while the task is still ours.
         if let token = reply.commit { done.commitIfRunning(token) }
+        // Asked again with what the run left: offline work still to do comes back soon.
+        schedule()
         done.finish(true)
       }
     }
@@ -198,6 +216,24 @@ enum MvBackground {
     defer { mv_free_string(raw) }
     guard let raw = raw, let data = String(cString: raw).data(using: .utf8) else { return nil }
     return try? JSONDecoder().decode(BackgroundReply.self, from: data)
+  }
+
+  /// `<Application Support>/com.mailvault.app/offline` (the engine's offline attachments, see
+  /// `offline.rs`): created if missing and marked excluded from the backup.
+  static func excludeOfflineFromBackup() {
+    guard
+      let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    else { return }
+    var dir = support.appendingPathComponent("com.mailvault.app", isDirectory: true)
+      .appendingPathComponent("offline", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      try dir.setResourceValues(values)
+    } catch {
+      NSLog("MV_MOBILE {\"offlineBackupExcludeError\":\"%@\"}", String(describing: error))
+    }
   }
 
   /// Posts `notes` (a repeat id replaces, never doubles), then calls `finished`.

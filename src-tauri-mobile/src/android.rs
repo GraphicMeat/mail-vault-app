@@ -175,6 +175,26 @@ pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeS
     let _ = std::panic::catch_unwind(crate::background::stop);
 }
 
+/// `BackgroundFetchWorker.nativeSetNetwork(constrained, expensive)` (static): the network as
+/// `ConnectivityManager` sees it (`background::set_network`). Data saver on a metered network is
+/// `constrained`; metered is `expensive`.
+#[no_mangle]
+pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeSetNetwork(
+    _env: JNIEnv,
+    _class: JObject,
+    constrained: jni::sys::jboolean,
+    expensive: jni::sys::jboolean,
+) {
+    let _ = std::panic::catch_unwind(|| crate::background::set_network(constrained != 0, expensive != 0));
+}
+
+/// `BackgroundFetchWorker.nativeOfflinePending()`: offline work is left
+/// (`background::offline_pending`), so another run is queued right after this one.
+#[no_mangle]
+pub extern "system" fn Java_com_mailvault_mvnative_BackgroundFetchWorker_nativeOfflinePending(_env: JNIEnv, _this: JObject) -> jni::sys::jboolean {
+    std::panic::catch_unwind(crate::background::offline_pending).unwrap_or(false) as jni::sys::jboolean
+}
+
 /// `Notifier.nativeTapped(json)`: a notification was tapped.
 #[no_mangle]
 pub extern "system" fn Java_com_mailvault_mvnative_Notifier_nativeTapped(mut env: JNIEnv, _class: JObject, json: JString) {

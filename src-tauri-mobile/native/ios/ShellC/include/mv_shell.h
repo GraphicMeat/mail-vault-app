@@ -15,6 +15,12 @@ char *mv_background_continue(uint32_t budget_ms);
 void mv_background_commit(const char *token);
 // The OS is ending the background task: the download in flight stops. Returns at once.
 void mv_background_stop(void);
+// The network as NWPathMonitor sees it: constrained is Low Data Mode (every download waits),
+// expensive is cellular or a hotspot (attachments wait). Returns at once.
+void mv_set_network(_Bool constrained, _Bool expensive);
+// Whether the engine still has offline mail to download (the processing task is asked for again
+// at once). False when no engine is open.
+_Bool mv_offline_pending(void);
 // Frees a string an mv_* call answered (mv_background_fetch, mv_store_verify, mv_store_account_token).
 void mv_free_string(char *s);
 // A notification was tapped; `json` is its payload {accountId, folder, uid?}.

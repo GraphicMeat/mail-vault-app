@@ -19,6 +19,9 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -92,6 +95,27 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
         webView.webChromeClient = PopupChromeClient(activity, inner)
         Notifier.takeTap(activity, activity.intent)
         store.start()
+        watchNetwork()
+    }
+
+    // The network for the engine's offline download (BackgroundFetchWorker.reportNetwork), now
+    // and on every change while the app runs.
+    private fun watchNetwork() {
+        try {
+            BackgroundFetchWorker.reportNetwork(activity)
+            val cm = activity.getSystemService(ConnectivityManager::class.java) ?: return
+            cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                    BackgroundFetchWorker.reportNetwork(activity)
+                }
+
+                override fun onLost(network: Network) {
+                    BackgroundFetchWorker.reportNetwork(activity)
+                }
+            })
+        } catch (e: Exception) {
+            // Without it the engine downloads headers and bodies and holds attachments back.
+        }
     }
 
     // Google Play (Store.kt): one billing client for the plugin's life.

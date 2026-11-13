@@ -204,7 +204,36 @@ pub(crate) fn open_platform(data: &Path, cache: &Path) -> Result<Engine, String>
     let engine = Engine::open(data, cache, secrets.clone()).map_err(|e| e.to_string())?;
     engine.set_log_sink(crate::log_line);
     crate::migrate_secrets(&engine, &secrets);
+    apply_network(&engine);
     Ok(engine)
+}
+
+// ── Network ─────────────────────────────────────────────────────────────────
+
+/// The network as the OS last reported it (`constrained`, `expensive`): iOS `NWPathMonitor`
+/// (Background.swift), Android `ConnectivityManager` (MvNativePlugin.kt). Kept here so an engine
+/// opened after the report (a cold background launch) starts with it.
+static NETWORK: Mutex<Option<(bool, bool)>> = Mutex::new(None);
+
+/// The OS reported the network: the engine's downloads follow it (`Engine::set_network`: Low
+/// Data Mode / data saver stops every download, a metered network holds attachments back).
+pub(crate) fn set_network(constrained: bool, expensive: bool) {
+    *NETWORK.lock().unwrap_or_else(|e| e.into_inner()) = Some((constrained, expensive));
+    if let Some(engine) = opened() {
+        engine.set_network(constrained, expensive);
+    }
+}
+
+fn apply_network(engine: &Engine) {
+    if let Some((constrained, expensive)) = *NETWORK.lock().unwrap_or_else(|e| e.into_inner()) {
+        engine.set_network(constrained, expensive);
+    }
+}
+
+/// Whether the open engine still has offline work (folders to list, bodies to download): the
+/// platform then asks for the next background run as early as it allows. False with no engine.
+pub(crate) fn offline_pending() -> bool {
+    opened().is_some_and(|e| e.offline_pending())
 }
 
 /// The engine for a background entry point, opened here when `setup` has not opened it (an iOS
@@ -559,6 +588,20 @@ pub(crate) fn stop() {
 #[no_mangle]
 pub extern "C" fn mv_background_stop() {
     guarded((), stop);
+}
+
+/// iOS: `NWPathMonitor` saw the path change ([`set_network`]). `constrained`: Low Data Mode;
+/// `expensive`: cellular or a hotspot.
+#[no_mangle]
+pub extern "C" fn mv_set_network(constrained: bool, expensive: bool) {
+    guarded((), || set_network(constrained, expensive));
+}
+
+/// iOS: whether offline work is left ([`offline_pending`]), so the processing task is asked for
+/// again at once rather than an hour later.
+#[no_mangle]
+pub extern "C" fn mv_offline_pending() -> bool {
+    guarded(false, offline_pending)
 }
 
 /// iOS, perf-gate builds only: the device check's way to start a run with no `BGTask` (the
