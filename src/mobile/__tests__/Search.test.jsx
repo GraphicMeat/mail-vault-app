@@ -233,3 +233,34 @@ describe('search screen', () => {
     expect(screen.queryByText('Recent searches')).toBeNull();
   });
 });
+
+// iOS keyboard: innerHeight stays, the visual viewport shrinks (`resize`) and pans (`scroll`). The
+// layer follows the visible box so the results end above the keyboard (keyboardViewport.js).
+describe('search over the iOS keyboard', () => {
+  const saved = {};
+  let vv;
+  beforeEach(() => {
+    saved.innerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+    vv = new EventTarget();
+    vv.height = 844;
+    vv.offsetTop = 0;
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
+  });
+  afterEach(() => {
+    delete window.visualViewport;
+    Object.defineProperty(window, 'innerHeight', saved.innerHeight);
+  });
+
+  it('sizes the layer to the visible area and back', async () => {
+    render(<Search onOpen={() => {}} onClose={() => {}} />);
+    await settle();
+    const layer = screen.getByRole('dialog');
+    act(() => { vv.height = 508; vv.dispatchEvent(new Event('resize')); });
+    act(() => { vv.offsetTop = 120; vv.dispatchEvent(new Event('scroll')); });
+    expect(layer.style.getPropertyValue('--mv-vv-top')).toBe('120px');
+    expect(layer.style.getPropertyValue('--mv-vv-height')).toBe('508px');
+    act(() => { vv.height = 844; vv.offsetTop = 0; vv.dispatchEvent(new Event('resize')); });
+    expect(layer.style.getPropertyValue('--mv-vv-height')).toBe('');
+  });
+});
