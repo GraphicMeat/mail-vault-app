@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
 import { errorKey } from './errors.js';
+import { accountColor } from './accountColor.js';
 
 /** The avatar letter: the display name's first letter, else the address's. */
 export function initialOf(account) {
@@ -13,10 +14,16 @@ export function initialOf(account) {
   return (Array.from(source)[0] || '?').toUpperCase();
 }
 
-/** The avatar wears the account's color from the desktop (an import), else the accent. */
+/**
+ * The avatar wears the account's colour (accountColor.js): the desktop's for an import, else the
+ * one hashed from its address, so it matches the account's row dot in All Inboxes.
+ */
 export function Avatar({ account, small = false }) {
-  const style = account?.color ? { backgroundColor: account.color } : undefined;
-  return <span className={small ? 'mv-avatar mv-avatar--small' : 'mv-avatar'} style={style} aria-hidden="true">{initialOf(account)}</span>;
+  return (
+    <span className={small ? 'mv-avatar mv-avatar--small' : 'mv-avatar'} style={{ backgroundColor: accountColor(account) }} aria-hidden="true">
+      {initialOf(account)}
+    </span>
+  );
 }
 
 function AccountRow({ account, active, unread, onSelect, onRemove, onReauth, reauthBusy }) {
