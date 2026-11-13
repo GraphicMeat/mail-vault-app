@@ -326,8 +326,9 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
         .read(|c| {
             let mut st = c.prepare_cached(&format!(
                 "SELECT id, email, display_name, imap_host, imap_port, security, smtp_host, smtp_port, smtp_security, kind, provider, needs_auth,
-                        auth, EXISTS(SELECT 1 FROM settings s WHERE s.key = 'bg.authRefused.' || accounts.id), color
-                 FROM accounts ORDER BY {LIST_ORDER}"
+                        auth, EXISTS(SELECT 1 FROM settings s WHERE s.key = 'bg.authRefused.' || accounts.id), color, {hidden}
+                 FROM accounts ORDER BY {LIST_ORDER}",
+                hidden = crate::account_settings::HIDDEN_SQL.replace("{account}", "accounts.id")
             ))?;
             let rows = st
                 .query_map([], |r| {
@@ -349,6 +350,9 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
                     a["authRefused"] = json!(r.get::<_, bool>(13)?);
                     // The desktop's color, from an import; none for an account added here.
                     a["color"] = json!(r.get::<_, Option<String>>(14)?);
+                    // Hidden (from the desktop, or in Settings): left out of the switcher, the
+                    // drawer and All Inboxes, still listed in Settings.
+                    a["hidden"] = json!(r.get::<_, bool>(15)?);
                     Ok(a)
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -518,6 +522,7 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
                 c.execute(&format!("DELETE FROM {t} WHERE account_id = ?1"), [&p.account_id])?;
             }
             crate::background::forget(c, &p.account_id)?;
+            crate::account_settings::forget(c, &p.account_id)?;
             Ok(c.execute("DELETE FROM accounts WHERE id = ?1", [&p.account_id])? > 0)
         })
         .map_err(internal)?;

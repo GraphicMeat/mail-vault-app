@@ -37,6 +37,8 @@ fn account(email: &str, kind: PhoneKind, auth: PhoneAuth) -> PhoneAccount {
         client_id: None,
         color: None,
         order: None,
+        hidden: false,
+        settings: None,
     }
 }
 
@@ -119,7 +121,7 @@ fn jmap(email: &str, auth: PhoneAuth) -> PhoneAccount {
 
 /// The frame texts the desktop shows for `accounts`, sealed with `password`.
 fn code(password: &str, accounts: Vec<PhoneAccount>) -> Vec<String> {
-    let bundle = PhoneBundle { v: 1, accounts };
+    let bundle = PhoneBundle { v: 1, accounts, settings: None };
     let sealed = seal_with(password, &bundle, CHEAP).unwrap();
     frames(&sealed, MAX_FRAME_CHARS).unwrap()
 }

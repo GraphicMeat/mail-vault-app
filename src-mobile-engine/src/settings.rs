@@ -16,6 +16,11 @@
 //!   (headers of every synced folder, bodies of recent INBOX mail) so it is there offline when the
 //!   app opens, notifications on or off (`background.rs`). Off, a run dials only for what
 //!   notifications, scheduled sends and follow-up reminders need.
+//! - The preferences in [`PREFS`] (theme, palette, mark as read, delete, swipes, send delay, dates,
+//!   remote images, and the ones only stored for now), through `mobile.prefs.get` /
+//!   `mobile.prefs.set`: each with the default that is the phone's behaviour without it. A desktop
+//!   import sets them once (`desktopSettingsAppliedAt`, the time the first import that carried the
+//!   desktop's settings applied them; later imports leave them).
 
 use crate::db::{Engine, EngineError};
 use crate::rpc::{parse, RpcError};
@@ -28,6 +33,91 @@ pub(crate) const NOTIFICATION_PREVIEW: &str = "notificationPreview";
 pub(crate) const LANGUAGE: &str = "language";
 pub(crate) const ONBOARDING_COMPLETE: &str = "onboardingComplete";
 pub(crate) const BACKGROUND_DOWNLOAD: &str = "backgroundDownload";
+/// When (epoch ms) a desktop import first applied the desktop's global settings.
+pub(crate) const DESKTOP_SETTINGS_APPLIED_AT: &str = "desktopSettingsAppliedAt";
+
+/// How a preference is stored (always as text in `settings`) and what the page may set.
+#[derive(Clone, Copy)]
+pub(crate) enum Kind {
+    Bool,
+    OneOf(&'static [&'static str]),
+    Int(i64, i64),
+    /// A string of at most this many characters.
+    Text(usize),
+    /// A JSON list of at most this many bytes.
+    List(usize),
+}
+
+/// What a swipe may do on the phone.
+pub(crate) const SWIPES: &[&str] = &["toggleRead", "delete", "flag", "move", "none"];
+
+/// The phone's preferences: key, kind, and the default (as JSON) that is the phone's behaviour
+/// without the setting. Shown and applied: theme .. timeFormat. Stored for later waves: the rest.
+pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
+    ("theme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
+    ("palette", Kind::OneOf(&["indigo", "graphite", "teal"]), "\"indigo\""),
+    // Opening a message marks it read, as before.
+    ("markAsReadMode", Kind::OneOf(&["auto", "delay", "manual"]), "\"auto\""),
+    ("markAsReadDelay", Kind::Int(0, 60), "3"),
+    // Delete has its undo toast; no question first.
+    ("confirmBeforeDelete", Kind::Bool, "false"),
+    // After a delete the viewer opens the message below.
+    ("afterDeleteSelect", Kind::OneOf(&["next", "previous", "none"]), "\"next\""),
+    // Swiping left shows the trailing action (delete), swiping right the leading one (read).
+    ("swipeLeftAction", Kind::OneOf(SWIPES), "\"delete\""),
+    ("swipeRightAction", Kind::OneOf(SWIPES), "\"toggleRead\""),
+    // Seconds a sent message waits with Undo; 0 sends at once. Within the free schedule limit.
+    ("sendDelay", Kind::Int(0, 300), "0"),
+    ("defaultSignatureEnabled", Kind::Bool, "true"),
+    // Remote images wait for "Load images".
+    ("holdExternalContent", Kind::Bool, "true"),
+    ("trackerBlockingEnabled", Kind::Bool, "true"),
+    ("dateFormat", Kind::OneOf(&["auto", "MM/dd/yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "dd MMM yyyy", "custom"]), "\"auto\""),
+    ("customDateFormat", Kind::Text(64), "\"\""),
+    ("timeFormat", Kind::OneOf(&["auto", "12h", "24h"]), "\"auto\""),
+    // Stored only.
+    ("emailViewerTheme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
+    ("threadMode", Kind::OneOf(&["grouped", "expandable", "flat"]), "\"expandable\""),
+    ("threadSortOrder", Kind::OneOf(&["oldest-first", "newest-first"]), "\"oldest-first\""),
+    ("autoSaveDrafts", Kind::Bool, "true"),
+    ("attachmentReminder", Kind::Bool, "true"),
+    ("linkSafetyEnabled", Kind::Bool, "true"),
+    ("linkSafetyClickConfirm", Kind::Bool, "true"),
+    ("importantSenders", Kind::List(64 * 1024), "[]"),
+    ("templates", Kind::List(512 * 1024), "[]"),
+];
+
+pub(crate) fn pref(key: &str) -> Option<(Kind, &'static str)> {
+    PREFS.iter().find(|p| p.0 == key).map(|p| (p.1, p.2))
+}
+
+/// `value` as stored for a preference of `kind`, or `None` when it is not one it takes.
+pub(crate) fn encode(kind: Kind, value: &Value) -> Option<String> {
+    match kind {
+        Kind::Bool => value.as_bool().map(|b| b.to_string()),
+        Kind::OneOf(allowed) => value.as_str().filter(|s| allowed.contains(s)).map(str::to_string),
+        Kind::Int(lo, hi) => value.as_i64().filter(|n| (lo..=hi).contains(n)).map(|n| n.to_string()),
+        Kind::Text(max) => value.as_str().filter(|s| s.chars().count() <= max && !s.contains(['\n', '\r'])).map(str::to_string),
+        Kind::List(max) => value.is_array().then(|| value.to_string()).filter(|s| s.len() <= max),
+    }
+}
+
+/// A stored preference as JSON; a missing or unreadable one is its default.
+pub(crate) fn decode(kind: Kind, stored: Option<String>, default: &str) -> Value {
+    let fallback = || serde_json::from_str(default).unwrap_or(Value::Null);
+    let Some(s) = stored else { return fallback() };
+    let v = match kind {
+        Kind::Bool => match s.as_str() {
+            "true" => Some(json!(true)),
+            "false" => Some(json!(false)),
+            _ => None,
+        },
+        Kind::OneOf(_) | Kind::Text(_) => Some(json!(s)),
+        Kind::Int(..) => s.parse::<i64>().ok().map(|n| json!(n)),
+        Kind::List(_) => serde_json::from_str::<Value>(&s).ok(),
+    };
+    v.filter(|v| encode(kind, v).is_some()).unwrap_or_else(fallback)
+}
 
 /// The app languages (the catalogs in `src/i18n/locales`). Nothing else is ever stored.
 pub(crate) const LANGUAGES: [&str; 9] = ["en", "es", "fr", "it", "de", "pt-BR", "ja", "ko", "zh-Hans"];
@@ -107,6 +197,21 @@ impl Engine {
             "backgroundDownload": preview(d),
         }))
     }
+
+    fn prefs_json(&self) -> Result<Value, EngineError> {
+        let stored = self.read(|c| {
+            let mut out = Vec::with_capacity(PREFS.len());
+            for (key, _, _) in PREFS {
+                out.push(get_in(c, key)?);
+            }
+            Ok(out)
+        })?;
+        let mut out = serde_json::Map::new();
+        for ((key, kind, default), v) in PREFS.iter().zip(stored) {
+            out.insert((*key).to_string(), decode(*kind, v, default));
+        }
+        Ok(Value::Object(out))
+    }
 }
 
 /// `mobile.settings.get {}` -> `{notifications: "on"|"off", notificationPreview: bool,
@@ -138,6 +243,38 @@ pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: SetParams = parse(params)?;
     apply(engine, &p)?;
     get(engine, Value::Null)
+}
+
+/// `mobile.prefs.get {}` -> every preference of [`PREFS`] under its key, a missing one at its
+/// default, plus `desktopSettingsAppliedAt` (epoch ms, or `null` before any import applied the
+/// desktop's settings).
+pub(crate) fn prefs_get(engine: &Engine, _params: Value) -> Result<Value, RpcError> {
+    let mut out = engine.prefs_json().map_err(|e| RpcError::Internal(e.to_string()))?;
+    let at = engine.setting(DESKTOP_SETTINGS_APPLIED_AT).map_err(|e| RpcError::Internal(e.to_string()))?;
+    out["desktopSettingsAppliedAt"] = json!(at.and_then(|v| v.parse::<i64>().ok()));
+    Ok(out)
+}
+
+/// `mobile.prefs.set {<preference>: value, ...}` -> the preferences after the write. A key not in
+/// [`PREFS`], or a value it does not take, is `INVALID` and changes nothing.
+pub(crate) fn prefs_set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let params = if params.is_null() { json!({}) } else { params };
+    let obj = params.as_object().ok_or_else(|| RpcError::Invalid("params must be an object".into()))?;
+    let mut writes = Vec::with_capacity(obj.len());
+    for (key, value) in obj {
+        let (kind, _) = pref(key).ok_or_else(|| RpcError::Invalid(format!("{key} is not a preference")))?;
+        let stored = encode(kind, value).ok_or_else(|| RpcError::Invalid(format!("{key} has a value it does not take")))?;
+        writes.push((key.as_str(), stored));
+    }
+    engine
+        .write(|c| {
+            for (key, value) in &writes {
+                put_in(c, key, value)?;
+            }
+            Ok(())
+        })
+        .map_err(|e| RpcError::Internal(e.to_string()))?;
+    prefs_get(engine, Value::Null)
 }
 
 fn apply(engine: &Engine, p: &SetParams) -> Result<(), RpcError> {
@@ -201,7 +338,15 @@ pub(crate) fn set_user_key(engine: &Engine, key: &str, value: &str) -> Option<Re
             Some(v) => SetParams { onboarding_complete: Some(v), ..none },
             None => return Some(Err(EngineError::Db(format!("{ONBOARDING_COMPLETE} is true or false")))),
         },
-        _ => return None,
+        _ => {
+            let (kind, _) = pref(key)?;
+            // Stored as text: a flag or number arrives as its text, read here as JSON first.
+            let v = serde_json::from_str::<Value>(value).ok().filter(|v| encode(kind, v).is_some()).unwrap_or_else(|| json!(value));
+            return Some(match encode(kind, &v) {
+                Some(stored) => engine.write(|c| put_in(c, key, &stored)),
+                None => Err(EngineError::Db(format!("{key} has a value it does not take"))),
+            });
+        }
     };
     Some(apply(engine, &p).map_err(|e| EngineError::Db(e.to_string())))
 }

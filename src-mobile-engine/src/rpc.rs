@@ -108,6 +108,8 @@ pub(crate) type Handler = fn(&Engine, Value) -> Result<Value, RpcError>;
 /// with `Unsupported`.
 #[cfg(feature = "perf-gate")]
 const TABLE: &[(&str, Handler)] = &[
+    ("mobile.accountSettings.get", crate::account_settings::get),
+    ("mobile.accountSettings.set", crate::account_settings::set),
     ("mobile.accounts.add", crate::accounts::add),
     ("mobile.accounts.list", crate::accounts::list),
     ("mobile.accounts.remove", crate::accounts::remove),
@@ -150,6 +152,8 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.perf.report", perf_report),
     ("mobile.ping", ping),
+    ("mobile.prefs.get", crate::settings::prefs_get),
+    ("mobile.prefs.set", crate::settings::prefs_set),
     ("mobile.premium.installId", crate::premium::install),
     ("mobile.premium.refresh", crate::premium::refresh),
     ("mobile.premium.status", crate::premium::status),
@@ -166,6 +170,8 @@ const TABLE: &[(&str, Handler)] = &[
 ];
 #[cfg(not(feature = "perf-gate"))]
 const TABLE: &[(&str, Handler)] = &[
+    ("mobile.accountSettings.get", crate::account_settings::get),
+    ("mobile.accountSettings.set", crate::account_settings::set),
     ("mobile.accounts.add", crate::accounts::add),
     ("mobile.accounts.list", crate::accounts::list),
     ("mobile.accounts.remove", crate::accounts::remove),
@@ -205,6 +211,8 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.outbox.reschedule", crate::outbox::reschedule),
     ("mobile.outbox.retry", crate::outbox::retry),
     ("mobile.ping", ping),
+    ("mobile.prefs.get", crate::settings::prefs_get),
+    ("mobile.prefs.set", crate::settings::prefs_set),
     ("mobile.premium.installId", crate::premium::install),
     ("mobile.premium.refresh", crate::premium::refresh),
     ("mobile.premium.status", crate::premium::status),
@@ -398,12 +406,14 @@ fn all_inboxes_page(engine: &Engine, cursor: Option<Cursor>, limit: i64) -> Resu
     // yet has no mail either; it is named the way sync will name it.
     let inboxes: Vec<(String, String)> = engine
         .read(|c| {
-            let mut st = c.prepare_cached(
+            // A hidden account's inbox is left out (`acct.<id>.hidden`).
+            let mut st = c.prepare_cached(&format!(
                 "SELECT a.id, COALESCE(
                    (SELECT f.path FROM folders f WHERE f.account_id = a.id AND f.path = 'INBOX' COLLATE NOCASE),
                    'INBOX')
-                 FROM accounts a ORDER BY a.id",
-            )?;
+                 FROM accounts a WHERE NOT {} ORDER BY a.id",
+                crate::account_settings::HIDDEN_SQL.replace("{account}", "a.id")
+            ))?;
             let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect();
             rows
         })

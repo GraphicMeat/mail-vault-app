@@ -8,7 +8,16 @@
 //! new or already present, takes the desktop's list position and color; the phone's other
 //! accounts follow them.
 //!
-//! Reply: `{ok: true, imported: [email], existing: [email], skipped: [{email, reason}]}`, or
+//! The desktop's settings come along. Its global ones (theme, swipes, mark as read, ...) apply on
+//! the first import that carries them only: `desktopSettingsAppliedAt` marks it, and a later
+//! import leaves what the user has on the phone since. Each account's own (display name, hidden,
+//! signature, aliases, notifications, offline window) apply to the accounts this import adds; one
+//! already here keeps the phone's. Every value is checked key by key: one the phone does not take
+//! (from a newer desktop, say) is left out, never a failed import. Notifications are never turned
+//! on: that needs the system's permission, asked on the phone.
+//!
+//! Reply: `{ok: true, imported: [email], existing: [email], skipped: [{email, reason}],
+//! settingsApplied: bool}` (`settingsApplied`: this import applied the desktop's global settings), or
 //! `{ok: false, code}` with `PASSWORD_SHORT` (under 12 characters, nothing tried), `BAD_PASSWORD`
 //! (wrong password or a modified code, indistinguishable) or `INVALID` (not a whole MailVault
 //! code, or bad params). A skip `reason` is `invalid` (settings the phone cannot use),
@@ -20,8 +29,11 @@ use crate::accounts::{self, AccountRow, InsertError};
 use crate::db::Engine;
 use crate::rpc::RpcError;
 use crate::secrets::Credential;
-use mailvault_core::transfer::phone::{decode_phone_bundle, hex_color, PhoneAccount, PhoneAuth, PhoneError, PhoneKind, MAX_FRAMES, MAX_FRAME_CHARS, MIN_PASSWORD_CHARS};
-use rusqlite::OptionalExtension;
+use crate::settings::{self as prefs, put_in};
+use mailvault_core::transfer::phone::{
+    decode_phone_bundle, hex_color, PhoneAccount, PhoneAuth, PhoneError, PhoneKind, PhoneSettings, MAX_FRAMES, MAX_FRAME_CHARS, MIN_PASSWORD_CHARS,
+};
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use zeroize::Zeroizing;
@@ -88,6 +100,8 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
     // and color. By id: SQLite's NOCASE folds ASCII only, so an address with a non-ASCII capital
     // would not match its lowercase key.
     let mut placed: Vec<(u64, String, Option<String>)> = Vec::new();
+    // The accounts this import added (their id), which take the desktop's own settings.
+    let mut added: Vec<(String, &PhoneAccount)> = Vec::new();
     for (i, acct) in bundle.accounts.iter().enumerate() {
         let desktop = (acct.order.map_or(i as u64, u64::from), acct.color.as_deref().and_then(hex_color));
         let email = acct.email.trim().to_string();
@@ -117,6 +131,7 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
         match accounts::insert_new(engine, &row, &cred, |_, _| Ok(())) {
             Ok(id) => {
                 here.insert(key.clone());
+                added.push((id.clone(), acct));
                 placed.push((desktop.0, id, desktop.1));
                 imported.push(email);
             }
@@ -136,7 +151,116 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
     if !placed.is_empty() {
         place(engine, placed)?;
     }
-    Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped }))
+    let settings_applied = apply_settings(engine, &added, bundle.settings.as_ref())?;
+    Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped, "settingsApplied": settings_applied }))
+}
+
+/// One write: each added account's own settings, and the desktop's global ones when no import
+/// applied them before. Answers whether the global ones were applied now.
+fn apply_settings(engine: &Engine, added: &[(String, &PhoneAccount)], global: Option<&PhoneSettings>) -> Result<bool, RpcError> {
+    engine
+        .write(|c| {
+            for (id, acct) in added {
+                crate::account_settings::apply_import(c, id, acct.hidden, acct.settings.as_ref())?;
+            }
+            let Some(global) = global else { return Ok(false) };
+            if prefs::get_in(c, prefs::DESKTOP_SETTINGS_APPLIED_AT)?.is_some() {
+                return Ok(false);
+            }
+            apply_global(c, global)?;
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
+            put_in(c, prefs::DESKTOP_SETTINGS_APPLIED_AT, &now.to_string())?;
+            Ok(true)
+        })
+        .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// A desktop swipe as the phone has it: star is flag, archive the closest the phone has (move,
+/// which asks where), snooze nothing.
+pub(crate) fn phone_swipe(desktop: &str) -> &'static str {
+    match desktop {
+        "toggleRead" => "toggleRead",
+        "delete" => "delete",
+        "star" | "flag" => "flag",
+        "archive" | "move" => "move",
+        _ => "none",
+    }
+}
+
+/// The desktop's "after delete" as the phone has it: the unread variants are plain next/previous.
+fn phone_after_delete(desktop: &str) -> &'static str {
+    match desktop {
+        "next" | "nextUnread" => "next",
+        "previous" | "previousUnread" => "previous",
+        _ => "none",
+    }
+}
+
+/// The desktop's global settings into the phone's preference rows, each through its own check.
+fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
+    let mut values: Vec<(&str, Value)> = Vec::new();
+    let mut text = |key: &'static str, v: &Option<String>| {
+        if let Some(v) = v {
+            values.push((key, json!(v)));
+        }
+    };
+    text("theme", &s.theme);
+    text("palette", &s.palette);
+    text("markAsReadMode", &s.mark_as_read_mode);
+    text("dateFormat", &s.date_format);
+    text("customDateFormat", &s.custom_date_format);
+    text("timeFormat", &s.time_format);
+    text("emailViewerTheme", &s.email_viewer_theme);
+    text("threadMode", &s.thread_mode);
+    text("threadSortOrder", &s.thread_sort_order);
+    if let Some(v) = &s.after_delete_select {
+        values.push(("afterDeleteSelect", json!(phone_after_delete(v))));
+    }
+    if let Some(v) = &s.swipe_left_action {
+        values.push(("swipeLeftAction", json!(phone_swipe(v))));
+    }
+    if let Some(v) = &s.swipe_right_action {
+        values.push(("swipeRightAction", json!(phone_swipe(v))));
+    }
+    for (key, v) in [("markAsReadDelay", s.mark_as_read_delay), ("sendDelay", s.send_delay)] {
+        if let Some(v) = v {
+            values.push((key, json!(v)));
+        }
+    }
+    for (key, v) in [
+        ("confirmBeforeDelete", s.confirm_before_delete),
+        ("autoSaveDrafts", s.auto_save_drafts),
+        ("attachmentReminder", s.attachment_reminder),
+        ("defaultSignatureEnabled", s.default_signature_enabled),
+        ("holdExternalContent", s.hold_external_content),
+        ("linkSafetyEnabled", s.link_safety_enabled),
+        ("linkSafetyClickConfirm", s.link_safety_click_confirm),
+        ("trackerBlockingEnabled", s.tracker_blocking_enabled),
+    ] {
+        if let Some(v) = v {
+            values.push((key, json!(v)));
+        }
+    }
+    if let Some(list) = &s.important_senders {
+        values.push(("importantSenders", json!(list.iter().map(|e| json!({ "match": e.matches, "throughQuietHours": e.through_quiet_hours })).collect::<Vec<_>>())));
+    }
+    if let Some(list) = &s.templates {
+        values.push(("templates", json!(list.iter().map(|t| json!({ "name": t.name, "body": t.body })).collect::<Vec<_>>())));
+    }
+    for (key, v) in values {
+        if let Some((kind, _)) = prefs::pref(key) {
+            if let Some(stored) = prefs::encode(kind, &v) {
+                put_in(c, key, &stored)?;
+            }
+        }
+    }
+    if let Some(l) = s.language.as_deref().filter(|l| prefs::LANGUAGES.contains(l)) {
+        put_in(c, prefs::LANGUAGE, l)?;
+    }
+    if let Some(p) = s.notification_preview {
+        put_in(c, prefs::NOTIFICATION_PREVIEW, if p { "true" } else { "false" })?;
+    }
+    Ok(())
 }
 
 /// The id of the account already here under `email` (matched as `email_taken` does), if any.
