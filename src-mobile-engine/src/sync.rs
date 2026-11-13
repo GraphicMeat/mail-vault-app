@@ -1184,6 +1184,8 @@ fn sync_folder_pass(
     let mut new: Vec<u32> = window.iter().copied().filter(|u| !existing.contains_key(u)).collect();
     new.sort_unstable_by(|a, b| b.cmp(a));
     for chunk in new.chunks(BATCH) {
+        // A long WAL is caught up before the next batch joins it (`db.rs` `Checkpointer`).
+        shared.bulk_gate();
         go_on(shared, stop)?;
         let headers = backend.headers(&here, chunk)?;
         let n = write_for(shared, account, |c| insert_headers(c, account, folder, &headers, pass.gen))?;

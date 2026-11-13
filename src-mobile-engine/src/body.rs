@@ -360,6 +360,9 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, acco
             return Ok(cached);
         }
         for (folder, validity, uid) in rows {
+            // A long WAL is caught up before the next body joins it (`db.rs` `Checkpointer`);
+            // asked before `stop`, so a pass that waited behind it still stops at once.
+            shared.bulk_gate();
             if stop() || bytes >= PASS_BYTES {
                 return Ok(cached);
             }

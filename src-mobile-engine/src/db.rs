@@ -318,37 +318,79 @@ pub struct Engine {
 /// one checkpoint and closed after it: PASSIVE takes no lock a writer or reader waits on (a commit
 /// goes on appending to the WAL meanwhile), and copies what no open read still needs. With no
 /// connection held between runs, the engine's last close still checkpoints the rest.
+///
+/// SQLite starts the log over only when a write begins after a checkpoint copied ALL of it and no
+/// read is still inside the log, and it never shrinks the file by itself. With the downloader
+/// writing and taps and list reads beside it, that moment came by luck (measured on Windows: the
+/// log ran to 26,000 pages before one restart) and the file stayed at its largest, 107 MB for a
+/// 72 MB download. So the writer has a `journal_size_limit` ([`WAL_SIZE_LIMIT`]), which cuts the
+/// file at the first commit after a restart, and once the log passes [`CATCH_UP_FRAMES`] the
+/// checkpointer catches up: bulk writers ([`Shared::bulk_gate`], before each unit of the
+/// downloader and of a sync pass) wait for it (at most [`BULK_WAIT_MAX`]) while it checkpoints
+/// without the settle delay until the log starts over. Taps never wait on it. With the whole log
+/// copied and no commit since, a TRUNCATE that waits on no reader empties the file.
 pub(crate) struct Checkpointer {
-    /// (committed writes so far, stopping)
-    state: Mutex<(u64, bool)>,
+    state: Mutex<CkptState>,
+    /// Wakes the checkpoint thread.
     cv: std::sync::Condvar,
+    /// Wakes bulk writers waiting for a catch-up to end.
+    caught_up: std::sync::Condvar,
     /// The thread, joined when the engine drops: a checkpoint in flight keeps `mobile.db` open,
     /// which Windows would not let a caller remove or rewrite.
     thread: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+#[derive(Default)]
+struct CkptState {
+    /// Committed writes so far.
+    writes: u64,
+    stopping: bool,
+    /// The log passed [`CATCH_UP_FRAMES`] and is not all in the file yet: bulk writers wait.
+    catching_up: bool,
 }
 
 /// How long the checkpointer lets writes gather before it runs: at most one checkpoint (one
 /// sync of the file) a second while the downloader writes, about as often as SQLite's own
 /// 1000-page trigger would fire for its bodies.
 const CKPT_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
+/// The log size (pages, 4 KiB each: about 16 MB) past which the checkpointer catches up. A
+/// downloader adds about 14 MB a second on a desktop (Windows, mock server), so the file peaks
+/// near 32 MB before bulk writers wait.
+const CATCH_UP_FRAMES: i64 = 4096;
+/// Between two catch-up checkpoints: what taps wrote meanwhile is a few pages.
+const CATCH_UP_PAUSE: std::time::Duration = std::time::Duration::from_millis(20);
+/// The longest a bulk writer waits for a catch-up; then it goes on regardless.
+const BULK_WAIT_MAX: std::time::Duration = std::time::Duration::from_secs(2);
+/// The writer's `journal_size_limit`: what a WAL file is cut back to when the log starts over.
+const WAL_SIZE_LIMIT: u64 = 4 * 1024 * 1024;
+/// The writer's busy wait (another process, or a checkpoint's brief lock).
+const WRITER_BUSY: std::time::Duration = std::time::Duration::from_secs(5);
 
 impl Checkpointer {
+    fn new() -> Arc<Checkpointer> {
+        Arc::new(Checkpointer {
+            state: Mutex::new(CkptState::default()),
+            cv: std::sync::Condvar::new(),
+            caught_up: std::sync::Condvar::new(),
+            thread: Mutex::new(None),
+        })
+    }
+
     /// Starts the thread; with none (the spawn failed), the writer's commits checkpoint as
     /// SQLite does by default, rather than never.
-    fn start(path: &Path, writer: &Connection) -> Arc<Checkpointer> {
-        let c = Arc::new(Checkpointer { state: Mutex::new((0, false)), cv: std::sync::Condvar::new(), thread: Mutex::new(None) });
-        let (me, path) = (Arc::clone(&c), path.to_path_buf());
-        match std::thread::Builder::new().name("mv-engine-ckpt".into()).spawn(move || me.run(&path)) {
+    fn start(shared: &Arc<Shared>) {
+        let c = Arc::clone(&shared.ckpt);
+        let (me, weak, path) = (Arc::clone(&c), Arc::downgrade(shared), shared.path.clone());
+        match std::thread::Builder::new().name("mv-engine-ckpt".into()).spawn(move || me.run(&path, &weak)) {
             Ok(handle) => *lock(&c.thread) = Some(handle),
             Err(e) => {
                 eprintln!("[db] checkpoint thread: {e}");
                 c.stop();
-                if let Err(e) = writer.execute_batch("PRAGMA wal_autocheckpoint = 1000;") {
+                if let Err(e) = lock(&shared.writer).execute_batch("PRAGMA wal_autocheckpoint = 1000;") {
                     eprintln!("[db] wal_autocheckpoint: {e}");
                 }
             }
         }
-        c
     }
 
     /// Stops the thread and waits for it (at most the checkpoint in flight).
@@ -361,48 +403,152 @@ impl Checkpointer {
 
     fn wrote(&self) {
         let mut g = lock(&self.state);
-        g.0 = g.0.wrapping_add(1);
+        g.writes = g.writes.wrapping_add(1);
         self.cv.notify_all();
     }
 
     fn stop(&self) {
-        lock(&self.state).1 = true;
+        lock(&self.state).stopping = true;
         self.cv.notify_all();
+        self.caught_up.notify_all();
     }
 
-    fn run(&self, path: &Path) {
+    fn set_catching_up(&self, on: bool) {
+        let mut g = lock(&self.state);
+        g.catching_up = on;
+        if !on {
+            self.caught_up.notify_all();
+        }
+    }
+
+    /// Waits while a catch-up runs, at most [`BULK_WAIT_MAX`].
+    fn wait_caught_up(&self) {
+        let until = std::time::Instant::now() + BULK_WAIT_MAX;
+        let mut g = lock(&self.state);
+        while g.catching_up && !g.stopping {
+            let left = until.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            g = self.caught_up.wait_timeout(g, left).unwrap_or_else(|p| p.into_inner()).0;
+        }
+    }
+
+    fn run(&self, path: &Path, shared: &std::sync::Weak<Shared>) {
         crate::sync::background_qos();
         let mut seen = 0u64;
+        // The last checkpoint left work (part of the log, or a file past the limit) and no write
+        // may come to wake the thread: it looks again after a settle.
+        let mut retry = false;
+        // When the catch-up in progress began.
+        let mut since: Option<std::time::Instant> = None;
+        // The log size that starts the next catch-up: one that gave up waits for the log to
+        // grow by as much again, so a writer that never lets it start over cannot hold the
+        // downloader back for more than one wait per CATCH_UP_FRAMES.
+        let mut arm_at = CATCH_UP_FRAMES;
         loop {
-            {
+            let catching = {
                 let mut g = lock(&self.state);
-                while g.0 == seen && !g.1 {
+                while g.writes == seen && !g.stopping && !g.catching_up {
+                    if retry {
+                        g = self.cv.wait_timeout(g, CKPT_SETTLE).unwrap_or_else(|p| p.into_inner()).0;
+                        break;
+                    }
                     g = self.cv.wait(g).unwrap_or_else(|p| p.into_inner());
                 }
-                if g.1 {
+                if g.stopping {
                     return;
                 }
-            }
-            // Let the burst settle: one checkpoint for many commits.
+                g.catching_up
+            };
+            // Let the burst settle: one checkpoint for many commits. A catch-up only pauses.
             {
                 let g = lock(&self.state);
-                let (g, _) = self.cv.wait_timeout_while(g, CKPT_SETTLE, |s| !s.1).unwrap_or_else(|p| p.into_inner());
-                if g.1 {
+                let wait = if catching { CATCH_UP_PAUSE } else { CKPT_SETTLE };
+                let (g, _) = self.cv.wait_timeout_while(g, wait, |s| !s.stopping).unwrap_or_else(|p| p.into_inner());
+                if g.stopping {
                     return;
                 }
-                seen = g.0;
+                seen = g.writes;
             }
-            if let Err(e) = checkpoint(path) {
-                eprintln!("[db] checkpoint: {e}");
+            let (log, done) = match checkpoint(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("[db] checkpoint: {e}");
+                    self.set_catching_up(false);
+                    retry = false;
+                    continue;
+                }
+            };
+            // The whole log is in the file: with no commit since, empty the file now.
+            let emptied = done >= log && wal_len(path) > WAL_SIZE_LIMIT && self.truncate(shared, seen);
+            if emptied || log < CATCH_UP_FRAMES {
+                // A short log (it started over, or never grew): bulk writers go on.
+                self.set_catching_up(false);
+                since = None;
+                arm_at = CATCH_UP_FRAMES;
+            } else if !catching {
+                if log >= arm_at {
+                    since = Some(std::time::Instant::now());
+                    self.set_catching_up(true);
+                }
+            } else if since.is_some_and(|t| t.elapsed() >= BULK_WAIT_MAX) {
+                // Taps or reads keep the log from starting over (each checkpoint ends with their
+                // newest pages still ahead of it): bulk writers stopped waiting by now and the
+                // downloader goes on; the next catch-up comes after another CATCH_UP_FRAMES.
+                self.set_catching_up(false);
+                since = None;
+                arm_at = log + CATCH_UP_FRAMES;
+            }
+            // Copied in full but not started over yet: once SQLite can, the next commit restarts
+            // the log, and `journal_size_limit` cuts the file.
+            retry = done < log || (!emptied && wal_len(path) > WAL_SIZE_LIMIT);
+        }
+    }
+
+    /// Empties the WAL file when no commit came since the checkpoint that copied the whole log
+    /// (`seen` writes): nothing is left to copy, so this holds the writer only while SQLite checks
+    /// that no reader still reads the log and cuts the file, and never while a write holds it. A
+    /// reader in the log makes it give up at once (no busy wait). True when the file was emptied.
+    fn truncate(&self, shared: &std::sync::Weak<Shared>, seen: u64) -> bool {
+        let Some(shared) = shared.upgrade() else { return false };
+        let w = match shared.writer.try_lock() {
+            Ok(w) => w,
+            Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => return false,
+        };
+        // Commits bump the count under the writer: with it held, the count is final.
+        if lock(&self.state).writes != seen {
+            return false;
+        }
+        let busy = w
+            .busy_timeout(std::time::Duration::ZERO)
+            .and_then(|()| w.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get::<_, i64>(0)));
+        if let Err(e) = w.busy_timeout(WRITER_BUSY) {
+            eprintln!("[db] writer busy_timeout: {e}");
+        }
+        match busy {
+            Ok(busy) => busy == 0,
+            Err(e) => {
+                eprintln!("[db] truncating the WAL: {e}");
+                false
             }
         }
     }
 }
 
-/// One PASSIVE checkpoint of `path` on a connection opened for it.
-fn checkpoint(path: &Path) -> rusqlite::Result<()> {
+/// The WAL file's length (0 when there is none).
+fn wal_len(path: &Path) -> u64 {
+    let mut s = path.as_os_str().to_owned();
+    s.push("-wal");
+    std::fs::metadata(PathBuf::from(s)).map(|m| m.len()).unwrap_or(0)
+}
+
+/// One PASSIVE checkpoint of `path` on a connection opened for it: the log's size and how much of
+/// it is now in the file, in pages.
+fn checkpoint(path: &Path) -> rusqlite::Result<(i64, i64)> {
     let c = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
-    c.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |_| Ok(()))
+    c.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |r| Ok((r.get(1)?, r.get(2)?)))
 }
 
 /// What the RPC threads and the sync worker thread both use.
@@ -504,7 +650,7 @@ struct Db {
 
 fn try_open(path: &Path) -> Result<Db, OpenFail> {
     let w = Connection::open(path)?;
-    w.busy_timeout(std::time::Duration::from_secs(5))?;
+    w.busy_timeout(WRITER_BUSY)?;
     // Version first, before any pragma that rewrites the header (journal_mode=WAL does): a newer
     // file must come out of this untouched. A garbage file fails right here with NOTADB.
     let found: u32 = w.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -521,6 +667,9 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
     // measured 57 to 82 ms on Windows, the writer held throughout). [`Checkpointer`] runs them on
     // its own thread instead.
     w.execute_batch("PRAGMA wal_autocheckpoint = 0;")?;
+    // A log that starts over leaves the file at its largest unless cut: the first commit after a
+    // restart cuts it back to this (`Checkpointer`).
+    let _: i64 = w.query_row(&format!("PRAGMA journal_size_limit = {WAL_SIZE_LIMIT}"), [], |r| r.get(0))?;
     if found < SCHEMA_VERSION {
         // One transaction for every step, so a crash leaves the old file. A new file (version 0)
         // or the v1 prototype is rebuilt from schema 2; from 2 on each step goes forward and keeps
@@ -621,7 +770,7 @@ impl Engine {
             .map_err(|e| EngineError::Db(e.to_string()))?;
         // A send that was on the wire when the engine died may have gone out: `uncertain`.
         let queued = crate::outbox::on_open(&db.writer, crate::compose::now_ms()).map_err(|e| EngineError::Db(e.to_string()))?;
-        let ckpt = Checkpointer::start(&path, &db.writer);
+        let ckpt = Checkpointer::new();
         let engine = Engine {
             shared: Arc::new(Shared {
                 path: db.path,
@@ -656,6 +805,7 @@ impl Engine {
             downloader: crate::offline::Downloader::default(),
             startup_replay: AtomicBool::new(journal || queued),
         };
+        Checkpointer::start(&engine.shared);
         engine.shared.offline.set_data_dir(data_dir);
         crate::offline::sweep_orphans(&engine.shared);
         crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
@@ -878,6 +1028,13 @@ impl Shared {
         tx.commit().map_err(|e| EngineError::Db(e.to_string()))?;
         self.ckpt.wrote();
         Ok(out)
+    }
+
+    /// Bulk writers (the downloader, a sync pass) call this before each unit of work: it waits
+    /// while the checkpointer catches up with a long WAL, at most [`BULK_WAIT_MAX`], so the log
+    /// can start over. Taps never call it.
+    pub(crate) fn bulk_gate(&self) {
+        self.ckpt.wait_caught_up();
     }
 
     /// Runs `f` in one deferred read transaction on a pooled read-only connection. Never touches
