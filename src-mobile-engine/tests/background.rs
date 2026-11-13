@@ -814,3 +814,157 @@ fn wants_background_follows_scheduled_rows() {
     f.engine.rpc("mobile.outbox.discard", json!({ "id": c })).unwrap();
     assert!(f.engine.wants_background(), "notifications on still asks");
 }
+
+// ── All Inboxes, a download cut by the app, one run at a time ──────────────
+
+impl Fx {
+    /// Waits until `account`'s INBOX holds `n` rows (counted in the table: a page stops at 200).
+    fn wait_count(&self, account: &str, n: i64) {
+        let deadline = Instant::now() + BUDGET;
+        while self.rows_in(account, "INBOX") < n {
+            assert!(Instant::now() < deadline, "INBOX never reached {n} rows: {}", self.rows_in(account, "INBOX"));
+            std::thread::sleep(Duration::from_millis(30));
+        }
+    }
+
+    /// Waits until `account`'s INBOX has a completed full pass (`synced_ms` set).
+    fn wait_synced(&self, account: &str) {
+        let deadline = Instant::now() + BUDGET;
+        loop {
+            let synced: Option<i64> = self
+                .db()
+                .query_row("SELECT synced_ms FROM folders WHERE account_id = ?1 AND path = 'INBOX'", [account], |r| r.get(0))
+                .unwrap_or(None);
+            if synced.is_some() {
+                return;
+            }
+            assert!(Instant::now() < deadline, "INBOX never completed a pass");
+            std::thread::sleep(Duration::from_millis(30));
+        }
+    }
+}
+
+/// All Inboxes lists every account's inbox: leaving the app moves the watermark of every account
+/// it showed, not only the one in front, and so does the shell's own resume and suspend after it.
+#[test]
+fn all_inboxes_mail_seen_in_front_is_not_notified_for_any_account() {
+    let sa = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "a old")])));
+    let sb = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "b old")])));
+    let f = fx();
+    let a = f.add(&sa, "a@example.test");
+    let b = f.add(&sb, "b@example.test");
+    f.download(false);
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true, "accountId": a, "shownAccountIds": [a, b] })).unwrap();
+    deliver(&sa, "a listed", false);
+    deliver(&sb, "b listed", false);
+    f.sync(&a);
+    f.sync(&b);
+    f.wait_rows(&a, 2);
+    f.wait_rows(&b, 2);
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    assert_eq!((f.watermark(&a), f.watermark(&b)), (Some(2), Some(2)), "both inboxes were on screen");
+    let got = f.run(BUDGET);
+    assert!(got.is_empty(), "mail listed in All Inboxes was notified: {:?}", subjects(&got));
+
+    // The shell's OS resume names no account: the whole spanning view comes back, and the next
+    // suspend marks every inbox it showed again.
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true, "resumed": true, "seq": 1 })).unwrap();
+    deliver(&sb, "b after resume", false);
+    f.sync(&b);
+    f.wait_rows(&b, 3);
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false, "seq": 2 })).unwrap();
+    let got = f.run(BUDGET);
+    assert!(got.is_empty(), "mail listed after the shell's resume was notified: {:?}", subjects(&got));
+}
+
+/// The app comes to the front while a download fetches a burst of headers: the pass stops after
+/// the chunk in flight, the run returns, and the page's own refresh brings the rest.
+#[test]
+fn a_download_in_flight_stops_at_its_next_chunk_when_the_app_comes_to_the_front() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.sync(&account);
+    f.wait_synced(&account);
+    for i in 0..450 {
+        deliver(&server, &format!("burst {i}"), false);
+    }
+    let mut stall = server.pause_command_nth("FETCH", 2);
+    let (entered, at_stall) = std::thread::scope(|s| {
+        let run = s.spawn(|| f.engine.background_fetch(BUDGET).unwrap());
+        let entered = stall.entered(BUDGET);
+        let at_stall = f.rows_in(&account, "INBOX");
+        f.engine.rpc("mobile.app.state", json!({ "foreground": true })).unwrap();
+        stall.release();
+        run.join().unwrap();
+        (entered, at_stall)
+    });
+    assert!(entered, "the download reached its second FETCH");
+    assert_eq!(f.rows_in(&account, "INBOX"), at_stall + 200, "the download went on past the chunk in flight");
+    assert_eq!(f.bodies(&account, "INBOX"), 0, "no body fetched with the app in front");
+    // The page's own refresh runs and brings the rest.
+    f.sync(&account);
+    f.wait_count(&account, 451);
+}
+
+/// The same for a download that runs INBOX's full pass (INBOX never synced).
+#[test]
+fn a_download_full_pass_stops_at_its_next_chunk_when_the_app_comes_to_the_front() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox((1..=450).map(|u| msg(u, &format!("m {u}"))).collect())));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    let mut stall = server.pause_command_nth("FETCH", 2);
+    let (entered, at_stall) = std::thread::scope(|s| {
+        let run = s.spawn(|| f.engine.background_fetch(BUDGET).unwrap());
+        let entered = stall.entered(BUDGET);
+        let at_stall = f.rows_in(&account, "INBOX");
+        f.engine.rpc("mobile.app.state", json!({ "foreground": true })).unwrap();
+        stall.release();
+        run.join().unwrap();
+        (entered, at_stall)
+    });
+    assert!(entered, "the download reached its second FETCH");
+    let rows = f.rows_in(&account, "INBOX");
+    assert!(rows <= at_stall + 200 && rows < 450, "the full pass went on past the chunk in flight: {at_stall} -> {rows}");
+    assert_eq!(f.bodies(&account, "INBOX"), 0);
+    f.sync(&account);
+    f.wait_count(&account, 450);
+}
+
+/// Two runs at once (the leave-front run and an OS task, or Android's two workers): the second
+/// returns at once with nothing, and neither clears the first's stop nor moves the rotation again.
+#[test]
+fn a_second_run_while_one_is_running_returns_at_once() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let _account = f.add(&server, "u@example.test");
+    f.download(false);
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+    let turn = || f.engine.setting("bg.rotation").unwrap();
+    let before = turn();
+    deliver(&server, "new", false);
+    let mut stall = server.pause_command("LOGIN");
+    let (entered, second, took, during, first) = std::thread::scope(|s| {
+        let first = s.spawn(|| f.engine.background_fetch(BUDGET).unwrap());
+        let entered = stall.entered(BUDGET);
+        let t0 = Instant::now();
+        let second = f.engine.background_fetch(Duration::from_secs(3)).unwrap();
+        let took = t0.elapsed();
+        let during = turn();
+        stall.release();
+        (entered, second, took, during, first.join().unwrap())
+    });
+    assert!(entered, "the first run signed in");
+    assert_eq!(second, BackgroundRun::default(), "the overlapping run did work");
+    assert!(took < Duration::from_millis(500), "the overlapping run waited: {took:?}");
+    let n = |v: Option<String>| v.and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+    assert_eq!(n(during), n(before) + 1, "the overlapping run moved the rotation");
+    assert_eq!(subjects(&first.mail), vec!["new"]);
+    if let Some(t) = first.commit {
+        f.engine.background_commit(&t).unwrap();
+    }
+}

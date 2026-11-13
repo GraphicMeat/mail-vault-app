@@ -397,7 +397,7 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result
     }
     if job.quick {
         backend.set_deadline(job.deadline);
-        if quick_pass(shared, backend, &job.account, "INBOX", job.deadline)? {
+        if quick_pass(shared, backend, &job.account, "INBOX", job.deadline, &|| false)? {
             return Ok(());
         }
     }
@@ -418,7 +418,7 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job) -> Result
             }
         },
     };
-    sync_folder(shared, backend, &job.account, &folder)
+    sync_folder(shared, backend, &job.account, &folder, &|| false)
 }
 
 /// `Fail` once a background pass's share of the budget is spent.
@@ -427,6 +427,17 @@ fn within(deadline: Option<Instant>) -> Result<(), Fail> {
         Some(d) if Instant::now() >= d => Err(Fail::Code(Code::Timeout, "the background run's budget is spent".into())),
         _ => Ok(()),
     }
+}
+
+/// Checked before each network request and write chunk of a pass: `Fail` once the engine is
+/// closing, or once `stop` says a background download must stop (the app came to the front, the
+/// platform ended the task, the budget is spent). A download treats the latter as a clean cut.
+fn go_on(shared: &Shared, stop: &dyn Fn() -> bool) -> Result<(), Fail> {
+    not_closing(shared)?;
+    if stop() {
+        return Err(Fail::Code(Code::Timeout, "the background download was stopped".into()));
+    }
+    Ok(())
 }
 
 /// Where a cut quick pass of `account`'s `folder` stopped: `<validity> <uid> <ms>`, the newest uid
@@ -462,9 +473,11 @@ const DOWNLOAD_FOLDERS: usize = 20;
 /// headers (the full pass when INBOX was never synced), then the bodies of its recent mail
 /// ([`crate::body::prefetch`]), then the new headers of every other folder the list has synced
 /// (a folder that would need its full pass is left for the foreground). One sign-in for all of
-/// it. It stops between steps once the deadline passes or the app comes to the front; a step cut
-/// that way ends the pass cleanly, keeping what it wrote: headers resume from their quick mark,
-/// bodies from the first one not cached, on the next run.
+/// it. It stops between steps, and inside a step between write chunks (headers) or bodies, once
+/// the deadline passes or the app comes to the front, so the page's own pass never waits long
+/// behind it on the sync worker; a step cut that way ends the pass cleanly, keeping what it
+/// wrote: headers resume from their quick mark (or the next full pass), bodies from the first one
+/// not cached, on the next run.
 fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) -> Result<(), Fail> {
     backend.set_deadline(deadline);
     let stop = || crate::background::stop_downloading(shared, deadline);
@@ -472,10 +485,11 @@ fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, dead
         if stop() {
             return Ok(());
         }
-        if !quick_pass(shared, backend, account, "INBOX", deadline)? {
+        if !quick_pass(shared, backend, account, "INBOX", deadline, &stop)? {
+            go_on(shared, &stop)?;
             sync_folder_list(shared, backend, account)?;
             if let Some(inbox) = folder_path(shared, account, "INBOX")? {
-                sync_folder(shared, backend, account, &inbox)?;
+                sync_folder(shared, backend, account, &inbox, &stop)?;
             }
         }
         if stop() {
@@ -496,7 +510,7 @@ fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, dead
             if stop() {
                 break;
             }
-            quick_pass(shared, backend, account, &folder, deadline)?;
+            quick_pass(shared, backend, account, &folder, deadline, &stop)?;
         }
         Ok(())
     })();
@@ -518,8 +532,16 @@ fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, dead
 /// resumes there; a pass that completes drops it. A listing that stopped at the deadline (Graph,
 /// page by page) is inserted and keeps the mark, so the next pass lists on from it. No flags, no removals, no delta state: the next
 /// foreground pass does those. `false` when the folder needs the full pass (never synced, empty,
-/// a new generation, or a backend with no cheap way).
-fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, folder: &str, deadline: Option<Instant>) -> Result<bool, Fail> {
+/// a new generation, or a backend with no cheap way). `stop` (a download's) is asked before each
+/// request and chunk, as the deadline is.
+fn quick_pass(
+    shared: &Shared,
+    backend: &mut dyn Backend,
+    account: &str,
+    folder: &str,
+    deadline: Option<Instant>,
+    stop: &dyn Fn() -> bool,
+) -> Result<bool, Fail> {
     let Some(folder) = folder_path(shared, account, folder)? else {
         return Ok(false);
     };
@@ -541,13 +563,13 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, folder:
     let mark_key = quick_mark_key(account, &folder);
     let resume = quick_mark(shared, account, &folder, validity)?;
     let (from_uid, from_ms) = resume.unwrap_or((newest_uid, newest_ms));
-    within(deadline)?;
+    within(deadline).and_then(|()| go_on(shared, stop))?;
     // A cut pass left mail below the newest row held: the news check (is the newest listed?)
     // would say there is none.
     if resume.is_none() && !backend.has_news(&here)? {
         return Ok(true);
     }
-    within(deadline)?;
+    within(deadline).and_then(|()| go_on(shared, stop))?;
     let Some(backend::Arrivals { uids: arrived, complete }) = backend.arrivals(&here, from_uid as u32, from_ms)? else {
         return Ok(false);
     };
@@ -570,7 +592,7 @@ fn quick_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, folder:
     let mut mark = (from_uid, from_ms);
     let mut out = Ok(true);
     for chunk in new.chunks(BATCH) {
-        if let Err(f) = within(deadline).and_then(|()| not_closing(shared)) {
+        if let Err(f) = within(deadline).and_then(|()| go_on(shared, stop)) {
             out = Err(f);
             break;
         }
@@ -858,7 +880,9 @@ impl Pass {
     }
 }
 
-fn sync_folder(shared: &Shared, backend: &mut dyn Backend, account: &str, folder: &str) -> Result<(), Fail> {
+/// One folder's full pass. `stop` (a background download's) is asked before each request and
+/// write chunk; the page's passes never stop (`|| false`).
+fn sync_folder(shared: &Shared, backend: &mut dyn Backend, account: &str, folder: &str, stop: &dyn Fn() -> bool) -> Result<(), Fail> {
     let stored = shared.read(|c| {
         c.query_row(
             "SELECT uid_validity, noselect, unseen, total FROM folders WHERE account_id = ?1 AND path = ?2",
@@ -874,7 +898,7 @@ fn sync_folder(shared: &Shared, backend: &mut dyn Backend, account: &str, folder
         return Ok(());
     }
     let mut pass = Pass { added: 0, removed: 0, updated: 0, gen: shared.list_gen(account, folder)? + 1 };
-    let out = sync_folder_pass(shared, backend, account, folder, stored_validity, &mut pass);
+    let out = sync_folder_pass(shared, backend, account, folder, stored_validity, &mut pass, stop);
     // Published even when the pass failed part-way: what it committed is in the table.
     if pass.changed() {
         let gen = shared.publish_list_gen(account, folder, pass.gen);
@@ -901,7 +925,9 @@ fn sync_folder_pass(
     folder: &str,
     stored_validity: Option<i64>,
     pass: &mut Pass,
+    stop: &dyn Fn() -> bool,
 ) -> Result<(i64, i64), Fail> {
+    go_on(shared, stop)?;
     let mbox = backend.select(folder)?;
     let validity = mbox.uid_validity;
     if stored_validity != Some(validity) {
@@ -995,7 +1021,7 @@ fn sync_folder_pass(
     let mut new: Vec<u32> = window.iter().copied().filter(|u| !existing.contains_key(u)).collect();
     new.sort_unstable_by(|a, b| b.cmp(a));
     for chunk in new.chunks(BATCH) {
-        not_closing(shared)?;
+        go_on(shared, stop)?;
         let headers = backend.headers(&here, chunk)?;
         let n = write_for(shared, account, |c| insert_headers(c, account, folder, &headers, pass.gen))?;
         crate::search::index_uids(shared, account, folder, &header_uids(&headers));

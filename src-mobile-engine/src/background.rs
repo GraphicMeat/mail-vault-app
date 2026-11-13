@@ -48,8 +48,8 @@
 //! by count, age and bytes inside the body cache's LRU), then the new headers of every other
 //! folder the list has synced. So mail is there offline when the app opens. Same budget rules as
 //! the INBOX passes (an equal share of what is left, none started past 80%), and the INBOX passes
-//! go first, so a slow download never costs a notification. A download stops between steps at
-//! its share's end, when the app comes to the front ([`set_in_front`]: the page's passes never
+//! go first, so a slow download never costs a notification. A download stops between steps (and
+//! inside one between header chunks and between bodies) at its share's end, when the app comes to the front ([`set_in_front`]: the page's passes never
 //! wait behind it) or when the platform ends the task ([`Engine::background_stop`]); what it wrote
 //! stays, and the next run goes on from there. It never holds a write transaction across the
 //! network: each body is its own short write, as an open's is.
@@ -137,6 +137,11 @@ pub(crate) struct Pending {
     /// The platform ended the background task: the download in flight stops. Cleared when a run
     /// starts.
     stopped: AtomicBool,
+    /// Held by the run in progress: one run at a time (the iOS leave-front run and a
+    /// `BGAppRefreshTask`, Android's refresh and catch-up workers). A run that finds it held
+    /// returns at once with nothing, so it never clears the running one's stop nor moves the
+    /// rotation twice.
+    running: Mutex<()>,
     /// Bodies a download fetched and could not cache (attachments not listed, cut short, gone):
     /// not asked for again while the engine runs. `(account, folder, uid)`.
     skipped: Mutex<HashSet<(String, String, u32)>>,
@@ -414,9 +419,18 @@ impl Engine {
     }
 
     /// One background run inside `budget`; see the module doc. The mail is not counted as
-    /// notified until [`Engine::background_commit`] is called with the returned token.
+    /// notified until [`Engine::background_commit`] is called with the returned token. One run at
+    /// a time: a call while another runs returns an empty run at once.
     pub fn background_fetch(&self, budget: Duration) -> Result<BackgroundRun, EngineError> {
         let start = Instant::now();
+        let _running = match self.shared().background.running.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                self.shared().log("[background] a run is already in progress; this one returns with nothing");
+                return Ok(BackgroundRun::default());
+            }
+        };
         // Every run raises Premium's clock mark, notifications on or off.
         crate::premium::observe_clock(self.shared());
         self.shared().background.stopped.store(false, Ordering::SeqCst);
