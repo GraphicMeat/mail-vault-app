@@ -626,32 +626,35 @@ pub fn reply_to_mismatch(row: &Value) -> Option<Value> {
         Some(other) => str_at(other, &["address"]),
         None => "",
     };
+    let related = |domain: &str| {
+        domain == from_domain
+            || from_domain.ends_with(&format!(".{domain}"))
+            || domain.ends_with(&format!(".{from_domain}"))
+    };
     let mut reply_domain = domain_part(reply_to);
     // A row cached before the header parser was anchored can hold the tail of
     // a DKIM-Signature here ("Message-ID:Content-Type; i=reply@d; bh=...").
-    // Tag syntax after the '@' is no part of a domain: judge the hostname the
-    // LAST '@' starts (a quoted local part can hold an '@' and a ';' of its
-    // own), so that tail (whose i= is the signer's own) raises nothing while a
-    // foreign domain dressed up the same way still warns. No hostname there:
-    // keep the raw domain, which warns.
+    // Tag syntax after an '@' is no part of a domain, so such a value is
+    // judged by the hostname after EVERY '@' in it: any unrelated one warns
+    // (a quoted local part or a second address cannot hide it), all related
+    // (that tail, whose i= is the signer's own) raises nothing. No hostname
+    // anywhere: keep the raw domain, which warns.
     if reply_domain.contains(';') {
         let lower = reply_to.to_lowercase();
-        let host: String = lower
-            .rsplit('@')
-            .next()
-            .unwrap_or("")
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+        let hosts: Vec<String> = lower
+            .split('@')
+            .skip(1)
+            .map(|rest| rest.chars().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-')).collect::<String>())
+            .filter(|host| !host.is_empty())
             .collect();
-        if !host.is_empty() {
-            reply_domain = host;
+        if !hosts.is_empty() {
+            match hosts.into_iter().find(|host| !related(host)) {
+                Some(foreign) => reply_domain = foreign,
+                None => return None,
+            }
         }
     }
-    if reply_domain.is_empty()
-        || reply_domain == from_domain
-        || from_domain.ends_with(&format!(".{reply_domain}"))
-        || reply_domain.ends_with(&format!(".{from_domain}"))
-    {
+    if reply_domain.is_empty() || related(&reply_domain) {
         return None;
     }
     Some(json!({"fromDomain": from_domain, "replyToAddress": reply_to, "replyToDomain": reply_domain}))
