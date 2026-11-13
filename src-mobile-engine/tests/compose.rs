@@ -1008,3 +1008,25 @@ fn a_retry_wait_keeps_the_scheduled_time() {
     assert!(row["lastError"].is_string(), "{row}");
     assert!(server.sent_messages().is_empty());
 }
+
+/// Undo send (`mobile.outbox.undo`) takes back only a message still waiting: one being sent,
+/// sent, or of unknown fate (`uncertain`, it may have gone) stays, and the answer says so, so the
+/// page never reopens as a draft a message that was delivered (a second send would deliver it
+/// twice). Discard keeps working on every row the Outbox lists.
+#[test]
+fn undo_takes_back_only_a_waiting_message() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    for state in ["sending", "sent", "uncertain"] {
+        let id = f.scheduled(&format!("Gone {state}"), now_ms() + 4 * MIN);
+        assert_eq!(f.db().execute("UPDATE outbox SET state = ?2 WHERE id = ?1", [&id, state]).unwrap(), 1);
+        assert_eq!(f.engine.rpc("mobile.outbox.undo", json!({ "id": id })).unwrap(), json!({ "undone": false, "state": state }));
+        assert!(f.row(&id).is_some(), "a {state} row was taken back");
+    }
+    let waiting = f.scheduled("Still waiting", now_ms() + 4 * MIN);
+    assert_eq!(f.engine.rpc("mobile.outbox.undo", json!({ "id": waiting })).unwrap(), json!({ "undone": true, "state": "queued" }));
+    assert!(f.row(&waiting).is_none());
+    assert_eq!(f.engine.rpc("mobile.outbox.undo", json!({ "id": waiting })).unwrap(), json!({ "undone": false, "state": null }));
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(server.sent_messages().iter().all(|m| !text(m).contains("Still waiting")));
+}

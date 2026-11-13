@@ -365,6 +365,34 @@ pub(crate) fn discard(engine: &Engine, params: Value) -> Result<Value, RpcError>
     Ok(json!({ "discarded": discarded }))
 }
 
+/// `mobile.outbox.undo {id}` -> `{undone, state}`: undo send. Takes back the row only while it
+/// still waits (`queued`), with the files only it held; `state` is what the row was (`null`: no
+/// such row). A row being sent, sent, failed or of unknown fate (`uncertain`: it may have gone
+/// out) stays: reopening it as a draft could deliver the message twice.
+pub(crate) fn undo(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: IdParams = parse(params)?;
+    let shared = engine.shared();
+    let (state, taken) = shared
+        .write(|c| {
+            let row: Option<(String, String)> =
+                c.query_row("SELECT state, draft_json FROM outbox WHERE id = ?1", [&p.id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+            match row {
+                Some((state, json)) if state == OutboxState::Queued.as_str() => {
+                    c.execute("DELETE FROM outbox WHERE id = ?1 AND state = ?2", (&p.id, OutboxState::Queued.as_str()))?;
+                    Ok((Some(state), Some(json)))
+                }
+                Some((state, _)) => Ok((Some(state), None)),
+                None => Ok((None, None)),
+            }
+        })
+        .map_err(internal)?;
+    let undone = taken.is_some();
+    if let Some(json) = taken {
+        release_dirs(shared, engine.cache_dir(), &Fields::read(&json).dirs());
+    }
+    Ok(json!({ "undone": undone, "state": state }))
+}
+
 // ── The worker ──────────────────────────────────────────────────────────────
 
 struct Retry {

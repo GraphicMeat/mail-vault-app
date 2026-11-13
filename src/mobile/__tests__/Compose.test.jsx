@@ -13,6 +13,7 @@ const DRAFT_ID = 'drf_0123456789abcdef';
 const engine = vi.hoisted(() => ({
   calls: [], handlers: new Map(), prepare: null, sendError: null, sendErrorData: undefined, outbox: [], drafts: 0,
   draftList: [], draft: null, saveError: false, sendGate: null, rescheduleError: null, accountSettings: null,
+  undoState: 'queued',
 }));
 
 vi.mock('../transport.js', () => ({
@@ -67,6 +68,11 @@ vi.mock('../transport.js', () => ({
       case 'mobile.outbox.discard':
         engine.outbox = engine.outbox.filter((r) => r.id !== params.id);
         return { discarded: true };
+      case 'mobile.outbox.undo':
+        // Only a row still waiting is taken back; one sent or on its way stays.
+        if (engine.undoState !== 'queued') return { undone: false, state: engine.undoState };
+        engine.outbox = engine.outbox.filter((r) => r.id !== params.id);
+        return { undone: true, state: 'queued' };
       default:
         throw Object.assign(new Error(method), { code: 'UNSUPPORTED' });
     }
@@ -124,6 +130,7 @@ beforeEach(() => {
   engine.draft = null;
   engine.saveError = false;
   engine.sendGate = null;
+  engine.undoState = 'queued';
   engine.rescheduleError = null;
   engine.accountSettings = null;
   useMobileStore.setState({ paywall: null, premium: { premium: false, source: null, expiresMs: null } });
@@ -955,9 +962,59 @@ describe('Signature and undo send (desktop settings)', () => {
     engine.outbox = [{ id: 'out_1', accountId: 'a1', subject: 'Hi', state: 'queued' }];
     await act(async () => { await useMobileStore.getState().undoSendNow(); });
     expect(callsOf('mobile.drafts.save').at(-1)).toMatchObject({ accountId: 'a1', subject: 'Hi', to: 'bob@example.test' });
-    expect(callsOf('mobile.outbox.discard')).toEqual([{ id: 'out_1' }]);
+    expect(callsOf('mobile.outbox.undo')).toEqual([{ id: 'out_1' }]);
+    expect(callsOf('mobile.outbox.discard')).toEqual([]);
     expect(useMobileStore.getState().reopenDraft).toEqual({ accountId: 'a1', draftId: DRAFT_ID });
     expect(useMobileStore.getState().undoSend).toBe(null);
+  });
+
+  it('the Undo offer ends when the message is due, not a full delay after the send answered', async () => {
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, sendDelay: 10 } }));
+    let open;
+    engine.sendGate = new Promise((resolve) => { open = resolve; });
+    const { onClose } = renderCompose();
+    await flush();
+    typeInto(toInput(), 'bob@example.test,');
+    fireEvent.click(sendButton());
+    await flush();
+    // The engine answers late: the message is due sooner than 10 s from now.
+    await new Promise((r) => setTimeout(r, 80));
+    open();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const [sent] = callsOf('mobile.compose.send');
+    expect(useMobileStore.getState().undoSend.until).toBe(sent.sendAtMs);
+  });
+
+  it('an Undo after the message went out says so and brings back no draft', async () => {
+    for (const state of ['sent', 'uncertain', 'sending']) {
+      engine.calls = [];
+      engine.undoState = state;
+      useMobileStore.setState({ notice: null, reopenDraft: null });
+      useMobileStore.getState().offerUndoSend('out_1', 'a1', { to: 'bob@example.test', subject: 'Hi' }, Date.now() + 10_000);
+      let undone;
+      await act(async () => { undone = await useMobileStore.getState().undoSendNow(); });
+      expect(undone).toBe(false);
+      expect(callsOf('mobile.outbox.discard')).toEqual([]);
+      expect(useMobileStore.getState().reopenDraft).toBe(null);
+      // The draft saved for the undo is a second copy: it goes.
+      expect(callsOf('mobile.drafts.delete')).toEqual([{ id: DRAFT_ID }]);
+      expect(useMobileStore.getState().notice?.key).toBe('mobile.undoSend.tooLate');
+    }
+  });
+
+  it('an Undo whose draft cannot be saved keeps the message and says it will be sent', async () => {
+    engine.saveError = true;
+    engine.outbox = [{ id: 'out_1', accountId: 'a1', subject: 'Hi', state: 'queued' }];
+    useMobileStore.setState({ notice: null, reopenDraft: null });
+    useMobileStore.getState().offerUndoSend('out_1', 'a1', { to: 'bob@example.test', subject: 'Hi' }, Date.now() + 10_000);
+    let undone;
+    await act(async () => { undone = await useMobileStore.getState().undoSendNow(); });
+    expect(undone).toBe(false);
+    expect(callsOf('mobile.outbox.undo')).toEqual([]);
+    expect(callsOf('mobile.outbox.discard')).toEqual([]);
+    expect(engine.outbox).toHaveLength(1);
+    expect(useMobileStore.getState().reopenDraft).toBe(null);
+    expect(useMobileStore.getState().notice?.key).toBe('mobile.undoSend.saveFailed');
   });
 
   it('without a delay a send goes at once, with no undo offer', async () => {

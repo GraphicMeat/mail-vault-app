@@ -430,12 +430,14 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     const id = draftId.current;
     // Undo send (`sendDelay`): a message sent now waits that long in the outbox, with Undo.
     const hold = sendAtMs == null ? useMobileStore.getState().prefs.sendDelay || 0 : 0;
+    // Computed once: the Undo offer ends when the message is due, however long the send took.
+    const heldUntil = hold > 0 ? Date.now() + hold * 1000 : null;
     const fields = fieldsOf(current());
     let sent = null;
     try {
       sent = await daemonCall('mobile.compose.send', {
         accountId, ...(id ? { draftId: id } : {}), ...fields,
-        ...(sendAtMs != null ? { sendAtMs } : hold > 0 ? { sendAtMs: Date.now() + hold * 1000 } : {}),
+        ...(sendAtMs != null ? { sendAtMs } : heldUntil != null ? { sendAtMs: heldUntil } : {}),
         ...(remind > 0 && remindOffered ? { remindAfterDays: remind } : {}),
       });
     } catch (err) {
@@ -448,7 +450,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       scroller.current?.scrollTo?.({ top: 0 });
       return;
     }
-    if (hold > 0 && sent?.id) useMobileStore.getState().offerUndoSend(sent.id, accountId, fields, hold);
+    if (heldUntil != null && sent?.id) useMobileStore.getState().offerUndoSend(sent.id, accountId, fields, heldUntil);
     useMobileStore.getState().loadOutbox();
     onClose();
   };

@@ -431,51 +431,53 @@ export function createMobileStore() {
       },
 
       /**
-       * A send held back `seconds` (`sendDelay`, undo send): the toast offers Undo until it goes.
-       * `fields` are what was sent, so an undo puts them back as a draft.
+       * A send held back for `sendDelay` (undo send): the toast offers Undo until `untilMs`, the
+       * time the message is due (the `sendAtMs` it was sent with). `fields` are what was sent, so
+       * an undo puts them back as a draft.
        */
-      offerUndoSend(id, accountId, fields, seconds) {
-        const until = Date.now() + seconds * 1000;
-        set({ undoSend: { id, accountId, fields, until } });
+      offerUndoSend(id, accountId, fields, untilMs) {
+        set({ undoSend: { id, accountId, fields, until: untilMs } });
         setTimeout(() => {
           if (get().undoSend?.id === id) set({ undoSend: null });
-        }, seconds * 1000);
+        }, Math.max(0, untilMs - Date.now()));
       },
 
       /**
        * Undo send: the held message leaves the outbox and comes back as a draft that compose
-       * opens. False when it already went (or is going) out.
+       * opens. The draft is saved first: without it the message would be lost, so a failed save
+       * keeps the message (it is sent) and says so. Only a message still waiting is taken back
+       * (`mobile.outbox.undo`); one already sent, being sent or of unknown fate stays, the toast
+       * says it went, and the draft saved for it goes. False when nothing was undone.
        */
       async undoSendNow() {
         const u = get().undoSend;
         if (!u) return false;
         set({ undoSend: null });
-        // The draft first: it then holds the attachments' files, which the discard would free.
         let draftId = null;
         try {
           ({ id: draftId } = await daemonCall('mobile.drafts.save', { accountId: u.accountId, ...u.fields }));
         } catch {
           draftId = null;
         }
-        let discarded = false;
+        if (!draftId) {
+          notice('mobile.undoSend.saveFailed');
+          return false;
+        }
+        let undone = false;
         try {
-          ({ discarded } = await daemonCall('mobile.outbox.discard', { id: u.id }));
+          ({ undone } = await daemonCall('mobile.outbox.undo', { id: u.id }));
         } catch {
-          discarded = false;
+          undone = false;
         }
         loadOutbox();
-        if (!discarded) {
+        if (!undone) {
           // Already on its way: the draft would be a second copy.
-          if (draftId) daemonCall('mobile.drafts.delete', { id: draftId }).catch(() => {});
+          daemonCall('mobile.drafts.delete', { id: draftId }).catch(() => {});
           notice('mobile.undoSend.tooLate');
           return false;
         }
-        if (draftId) {
-          set({ reopenDraft: { accountId: u.accountId, draftId } });
-          loadDrafts();
-        } else {
-          notice('mobile.compose.saveFailed');
-        }
+        set({ reopenDraft: { accountId: u.accountId, draftId } });
+        loadDrafts();
         return true;
       },
 
