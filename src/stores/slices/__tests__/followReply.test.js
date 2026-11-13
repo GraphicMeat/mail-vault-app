@@ -11,6 +11,7 @@ vi.mock('../../../services/workflows/selectEmail', () => ({
 }));
 
 const { useMailStore } = await import('../../mailStore');
+await import('../../../services/workflows/bindStoreActions');
 const { useSettingsStore } = await import('../../settingsStore');
 const { buildThreads } = await import('../../../utils/emailParser');
 
