@@ -19,6 +19,7 @@ export const PREF_DEFAULTS = Object.freeze({
   dateFormat: 'auto',
   customDateFormat: '',
   timeFormat: 'auto',
+  emailViewerTheme: 'system',
 });
 
 /** What a swipe may do on the phone (the engine's SWIPES). */
@@ -27,6 +28,18 @@ export const THEMES = ['system', 'light', 'dark'];
 export const PALETTES = ['indigo', 'graphite', 'teal'];
 export const SEND_DELAYS = [0, 5, 10, 20, 30];
 export const MARK_READ_DELAYS = [1, 3, 5, 10];
+
+/**
+ * The theme a message is shown in, as desktop decides it: the email viewer's own choice, else the
+ * app's theme, else the system's (`systemLight`).
+ */
+export function viewerTheme(systemLight, prefs) {
+  const own = prefs?.emailViewerTheme;
+  if (own === 'light' || own === 'dark') return own;
+  const app = prefs?.theme;
+  if (app === 'light' || app === 'dark') return app;
+  return systemLight ? 'light' : 'dark';
+}
 
 /** The engine's answer over the defaults; a value of the wrong type keeps the default. */
 export function readPrefs(reply) {

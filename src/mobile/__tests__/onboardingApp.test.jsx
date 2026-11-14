@@ -120,6 +120,7 @@ describe('App onboarding gate', () => {
     await waitFor(() => expect(screen.getByText('a1@example.test')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: en['mobile.drawer.open'] }));
     fireEvent.click(await screen.findByText(en['mobile.settings.title']));
+    fireEvent.click(await waitFor(() => document.querySelector('[data-mv-settings-page="help"]')));
     fireEvent.click(await screen.findByRole('button', { name: en['mobile.settings.replayTour'] }));
     await waitFor(() => expect(screen.getByTestId('onboarding-language')).toBeTruthy());
     expect(screen.getByText(progress(1, 4))).toBeTruthy();

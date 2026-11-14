@@ -152,18 +152,28 @@ describe('row swipes follow the preferences', () => {
 describe('Settings preference rows', () => {
   const pick = (name) => document.querySelector(`[data-mv-pref="${name}"]`);
 
+  const go = (page) => {
+    const back = document.querySelector('[data-mv-settings-on]:not([data-mv-settings-on="root"])');
+    if (back) fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    fireEvent.click(document.querySelector(`[data-mv-settings-page="${page}"]`));
+  };
+
   it('changing a row writes the preference and the page follows', async () => {
     render(<Settings onClose={() => {}} />);
+    go('appearance');
     await act(async () => { fireEvent.change(pick('theme'), { target: { value: 'dark' } }); });
     await waitFor(() => expect(useMobileStore.getState().prefs.theme).toBe('dark'));
     expect(engine.calls).toContainEqual(['mobile.prefs.set', { theme: 'dark' }]);
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    go('mail');
     await act(async () => { fireEvent.change(pick('swipeLeftAction'), { target: { value: 'flag' } }); });
     await waitFor(() => expect(useMobileStore.getState().prefs.swipeLeftAction).toBe('flag'));
     await act(async () => { fireEvent.click(pick('confirmBeforeDelete')); });
     await waitFor(() => expect(useMobileStore.getState().prefs.confirmBeforeDelete).toBe(true));
+    go('privacy');
     await act(async () => { fireEvent.click(pick('holdExternalContent')); });
     await waitFor(() => expect(useMobileStore.getState().prefs.holdExternalContent).toBe(false));
+    go('mail');
     await act(async () => { fireEvent.change(pick('sendDelay'), { target: { value: '10' } }); });
     await waitFor(() => expect(useMobileStore.getState().prefs.sendDelay).toBe(10));
     // the delay row shows only for the delay mode
@@ -173,7 +183,7 @@ describe('Settings preference rows', () => {
   });
 
   it('the language row stores the language', async () => {
-    render(<Settings onClose={() => {}} />);
+    render(<Settings onClose={() => {}} page="appearance" />);
     await act(async () => { fireEvent.change(pick('language'), { target: { value: 'de' } }); });
     expect(engine.calls).toContainEqual(['mobile.settings.set', { language: 'de' }]);
     await act(async () => { fireEvent.change(pick('language'), { target: { value: 'en' } }); });
@@ -181,7 +191,7 @@ describe('Settings preference rows', () => {
 
   it('the account editor saves the name, the signature and hidden', async () => {
     engine.account = { accountId: 'a1', displayName: 'Ada', hidden: false, signature: { html: '<p>Desk sig</p>', text: '', enabled: true }, notify: true };
-    render(<Settings onClose={() => {}} />);
+    render(<Settings onClose={() => {}} page="accounts" />);
     await act(async () => { fireEvent.click(document.querySelector('[data-mv-acct-edit]')); });
     const nameInput = await screen.findByLabelText(t('settings.accounts.displayName'));
     expect(nameInput.value).toBe('Ada');
@@ -199,5 +209,26 @@ describe('Settings preference rows', () => {
     await waitFor(() => expect(useMobileStore.getState().accounts[0]).toMatchObject({ displayName: 'Ada L', hidden: true }));
     // Saved and closed: the row is back, marked hidden.
     await waitFor(() => expect(screen.getByText(t('mobile.accounts.hidden'))).toBeTruthy());
+  });
+});
+
+describe('email viewer theme', () => {
+  it('follows desktop: its own choice first, else the app\'s theme, else the system', async () => {
+    const { viewerTheme } = await import('../prefs.js');
+    expect(viewerTheme(true, { theme: 'system', emailViewerTheme: 'system' })).toBe('light');
+    expect(viewerTheme(false, { theme: 'system', emailViewerTheme: 'system' })).toBe('dark');
+    expect(viewerTheme(false, { theme: 'light', emailViewerTheme: 'system' })).toBe('light');
+    expect(viewerTheme(true, { theme: 'dark', emailViewerTheme: 'system' })).toBe('dark');
+    expect(viewerTheme(true, { theme: 'light', emailViewerTheme: 'dark' })).toBe('dark');
+    expect(viewerTheme(false, { theme: 'dark', emailViewerTheme: 'light' })).toBe('light');
+  });
+
+  it('is a preference the engine reads and Settings > Appearance writes', async () => {
+    const { readPrefs } = await import('../prefs.js');
+    expect(readPrefs({ emailViewerTheme: 'dark' }).emailViewerTheme).toBe('dark');
+    expect(readPrefs({}).emailViewerTheme).toBe('system');
+    render(<Settings onClose={() => {}} page="appearance" />);
+    await act(async () => { fireEvent.change(document.querySelector('[data-mv-pref="emailViewerTheme"]'), { target: { value: 'light' } }); });
+    expect(engine.calls).toContainEqual(['mobile.prefs.set', { emailViewerTheme: 'light' }]);
   });
 });

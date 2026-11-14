@@ -1,5 +1,7 @@
-// Settings' preference sections (W1a): what a desktop import carries over and the user can change
-// here. Each row writes one preference (`mobile.prefs.set`, through the store's setPrefs) and the
+// Settings' preference pages (W1a): what a desktop import carries over and the user can change
+// here, split the way desktop's pages split them (`section`): 'appearance' (look, language, email
+// viewer theme, date and time), 'mail' (Mail preferences: reading, deleting, swipes, sending) and
+// 'privacy' (Privacy & security: remote content). Each row writes one preference (`mobile.prefs.set`, through the store's setPrefs) and the
 // page follows at once: theme and palette on the root element, the rest read where they act
 // (viewer, list rows, compose). The language row stores `language` (`mobile.settings.set`) and
 // loads that catalog, as the tour's first step does. Labels reuse the desktop's catalog keys.
@@ -63,7 +65,7 @@ function Toggle({ label, hint, checked, onChange, name }) {
   );
 }
 
-export default function SettingsPrefs() {
+export default function SettingsPrefs({ section }) {
   const t = useT();
   const prefs = useMobileStore((s) => s.prefs);
   const [failed, setFailed] = useState(false);
@@ -91,143 +93,165 @@ export default function SettingsPrefs() {
 
   return (
     <>
-      <h2 className="mv-settings__heading">{t('settings.appearance.section.colors')}</h2>
-      <div className="mv-settings__list" data-mv-settings-look>
-        <Choice
-          name="theme"
-          label={t('settings.appearance.theme')}
-          value={prefs.theme}
-          options={THEMES.map((v) => [v, v === 'system' ? t('settings.section.system') : t(`settings.colors.${v}`)])}
-          onChange={(theme) => set({ theme })}
-        />
-        <Choice
-          name="palette"
-          label={t('settings.colors.palette')}
-          value={prefs.palette}
-          options={PALETTES.map((v) => [v, t(`settings.colors.${v}`)])}
-          onChange={(palette) => set({ palette })}
-        />
-        <Choice
-          name="language"
-          label={t('settings.language.tab')}
-          value={language}
-          options={LOCALES.map((l) => [l.code, l.native])}
-          onChange={pickLanguage}
-        />
-      </div>
-
-      <h2 className="mv-settings__heading">{t('settings.appearance.section.dateTime')}</h2>
-      <div className="mv-settings__list">
-        <Choice
-          name="dateFormat"
-          label={t('settings.appearance.dateFormat')}
-          value={prefs.dateFormat}
-          options={DATE_FORMATS.map((v) => [v, {
-            auto: t('settings.appearance.default'),
-            'MM/dd/yyyy': t('settings.appearance.mmDdYyyyUs'),
-            'dd/MM/yyyy': t('settings.appearance.ddMmYyyyEurope'),
-            'yyyy-MM-dd': t('settings.appearance.yyyyMmDdIso'),
-            'dd MMM yyyy': t('settings.appearance.ddMmmYyyyExample'),
-            custom: t('settings.appearance.custom'),
-          }[v]])}
-          onChange={(dateFormat) => set({ dateFormat })}
-        />
-        {prefs.dateFormat === 'custom' && (
-          <label className="mv-setting mv-setting--choice">
-            <input
-              className="mv-setting__input"
-              data-mv-pref="customDateFormat"
-              defaultValue={prefs.customDateFormat}
-              placeholder={t('settings.appearance.eGDdMmYyyy')}
-              aria-label={t('settings.appearance.custom')}
-              maxLength={64}
-              onBlur={(e) => { if (e.target.value !== prefs.customDateFormat) set({ customDateFormat: e.target.value }); }}
+      {section === 'appearance' && (
+        <>
+          <h2 className="mv-settings__heading">{t('settings.appearance.section.colors')}</h2>
+          <div className="mv-settings__list" data-mv-settings-look>
+            <Choice
+              name="theme"
+              label={t('settings.appearance.theme')}
+              value={prefs.theme}
+              options={THEMES.map((v) => [v, v === 'system' ? t('settings.section.system') : t(`settings.colors.${v}`)])}
+              onChange={(theme) => set({ theme })}
             />
-          </label>
-        )}
-        <Choice
-          name="timeFormat"
-          label={t('settings.appearance.timeFormat')}
-          value={prefs.timeFormat}
-          options={[['auto', t('settings.appearance.default')], ['12h', t('settings.appearance.twelveHour')], ['24h', t('settings.appearance.twentyFourHour')]]}
-          onChange={(timeFormat) => set({ timeFormat })}
-        />
-      </div>
+            <Choice
+              name="palette"
+              label={t('settings.colors.palette')}
+              value={prefs.palette}
+              options={PALETTES.map((v) => [v, t(`settings.colors.${v}`)])}
+              onChange={(palette) => set({ palette })}
+            />
+            <Choice
+              name="language"
+              label={t('settings.language.tab')}
+              value={language}
+              options={LOCALES.map((l) => [l.code, l.native])}
+              onChange={pickLanguage}
+            />
+            <Choice
+              name="emailViewerTheme"
+              label={t('settings.appearance.emailViewerTheme')}
+              value={prefs.emailViewerTheme}
+              options={THEMES.map((v) => [v, v === 'system' ? t('settings.section.system') : t(`settings.colors.${v}`)])}
+              onChange={(emailViewerTheme) => set({ emailViewerTheme })}
+            />
+          </div>
 
-      <h2 className="mv-settings__heading">{t('settings.appearance.section.reading')}</h2>
-      <div className="mv-settings__list">
-        <Choice
-          name="markAsReadMode"
-          label={t('settings.behavior.markEmailsRead')}
-          value={prefs.markAsReadMode}
-          options={[
-            ['auto', t('settings.behavior.immediatelyWhenOpened')],
-            ['delay', t('settings.behavior.afterShortDelay')],
-            ['manual', t('settings.behavior.manuallyOnly')],
-          ]}
-          onChange={(markAsReadMode) => set({ markAsReadMode })}
-        />
-        {prefs.markAsReadMode === 'delay' && (
-          <Choice
-            name="markAsReadDelay"
-            label={t('settings.behavior.delayBeforeMarkingRead')}
-            value={prefs.markAsReadDelay}
-            options={markDelays.map((n) => [n, seconds(n)])}
-            onChange={(markAsReadDelay) => set({ markAsReadDelay })}
-          />
-        )}
-        <Toggle
-          name="holdExternalContent"
-          label={t('mobile.prefs.loadImages')}
-          hint={t('mobile.prefs.loadImagesHint')}
-          checked={!prefs.holdExternalContent}
-          onChange={(on) => set({ holdExternalContent: !on })}
-        />
-      </div>
+          <h2 className="mv-settings__heading">{t('settings.appearance.section.dateTime')}</h2>
+          <div className="mv-settings__list">
+            <Choice
+              name="dateFormat"
+              label={t('settings.appearance.dateFormat')}
+              value={prefs.dateFormat}
+              options={DATE_FORMATS.map((v) => [v, {
+                auto: t('settings.appearance.default'),
+                'MM/dd/yyyy': t('settings.appearance.mmDdYyyyUs'),
+                'dd/MM/yyyy': t('settings.appearance.ddMmYyyyEurope'),
+                'yyyy-MM-dd': t('settings.appearance.yyyyMmDdIso'),
+                'dd MMM yyyy': t('settings.appearance.ddMmmYyyyExample'),
+                custom: t('settings.appearance.custom'),
+              }[v]])}
+              onChange={(dateFormat) => set({ dateFormat })}
+            />
+            {prefs.dateFormat === 'custom' && (
+              <label className="mv-setting mv-setting--choice">
+                <input
+                  className="mv-setting__input"
+                  data-mv-pref="customDateFormat"
+                  defaultValue={prefs.customDateFormat}
+                  placeholder={t('settings.appearance.eGDdMmYyyy')}
+                  aria-label={t('settings.appearance.custom')}
+                  maxLength={64}
+                  onBlur={(e) => { if (e.target.value !== prefs.customDateFormat) set({ customDateFormat: e.target.value }); }}
+                />
+              </label>
+            )}
+            <Choice
+              name="timeFormat"
+              label={t('settings.appearance.timeFormat')}
+              value={prefs.timeFormat}
+              options={[['auto', t('settings.appearance.default')], ['12h', t('settings.appearance.twelveHour')], ['24h', t('settings.appearance.twentyFourHour')]]}
+              onChange={(timeFormat) => set({ timeFormat })}
+            />
+          </div>
 
-      <h2 className="mv-settings__heading">{t('settings.behavior.deleting')}</h2>
-      <div className="mv-settings__list">
-        <Toggle
-          name="confirmBeforeDelete"
-          label={t('settings.behavior.confirmBeforeDelete')}
-          checked={prefs.confirmBeforeDelete}
-          onChange={(confirmBeforeDelete) => set({ confirmBeforeDelete })}
-        />
-        <Choice
-          name="afterDeleteSelect"
-          label={t('settings.behavior.afterDeleting')}
-          value={prefs.afterDeleteSelect}
-          options={[
-            ['next', t('settings.behavior.afterDeleteSelectNext')],
-            ['previous', t('settings.behavior.afterDeleteSelectPrevious')],
-            ['none', t('settings.behavior.afterDeleteSelectNothing')],
-          ]}
-          onChange={(afterDeleteSelect) => set({ afterDeleteSelect })}
-        />
-      </div>
+        </>
+      )}
+      {section === 'mail' && (
+        <>
+          <h2 className="mv-settings__heading">{t('settings.appearance.section.reading')}</h2>
+          <div className="mv-settings__list">
+            <Choice
+              name="markAsReadMode"
+              label={t('settings.behavior.markEmailsRead')}
+              value={prefs.markAsReadMode}
+              options={[
+                ['auto', t('settings.behavior.immediatelyWhenOpened')],
+                ['delay', t('settings.behavior.afterShortDelay')],
+                ['manual', t('settings.behavior.manuallyOnly')],
+              ]}
+              onChange={(markAsReadMode) => set({ markAsReadMode })}
+            />
+            {prefs.markAsReadMode === 'delay' && (
+              <Choice
+                name="markAsReadDelay"
+                label={t('settings.behavior.delayBeforeMarkingRead')}
+                value={prefs.markAsReadDelay}
+                options={markDelays.map((n) => [n, seconds(n)])}
+                onChange={(markAsReadDelay) => set({ markAsReadDelay })}
+              />
+            )}
+          </div>
 
-      <h2 className="mv-settings__heading">{t('settings.behavior.swipe.title')}</h2>
-      <div className="mv-settings__list">
-        <Choice name="swipeLeftAction" label={t('settings.behavior.swipe.left')} value={prefs.swipeLeftAction} options={swipeOptions} onChange={(swipeLeftAction) => set({ swipeLeftAction })} />
-        <Choice name="swipeRightAction" label={t('settings.behavior.swipe.right')} value={prefs.swipeRightAction} options={swipeOptions} onChange={(swipeRightAction) => set({ swipeRightAction })} />
-      </div>
+          <h2 className="mv-settings__heading">{t('settings.behavior.deleting')}</h2>
+          <div className="mv-settings__list">
+            <Toggle
+              name="confirmBeforeDelete"
+              label={t('settings.behavior.confirmBeforeDelete')}
+              checked={prefs.confirmBeforeDelete}
+              onChange={(confirmBeforeDelete) => set({ confirmBeforeDelete })}
+            />
+            <Choice
+              name="afterDeleteSelect"
+              label={t('settings.behavior.afterDeleting')}
+              value={prefs.afterDeleteSelect}
+              options={[
+                ['next', t('settings.behavior.afterDeleteSelectNext')],
+                ['previous', t('settings.behavior.afterDeleteSelectPrevious')],
+                ['none', t('settings.behavior.afterDeleteSelectNothing')],
+              ]}
+              onChange={(afterDeleteSelect) => set({ afterDeleteSelect })}
+            />
+          </div>
 
-      <h2 className="mv-settings__heading">{t('settings.behavior.sending')}</h2>
-      <div className="mv-settings__list">
-        <Choice
-          name="sendDelay"
-          label={t('settings.behavior.sendDelay')}
-          value={prefs.sendDelay}
-          options={sendDelays.map((n) => [n, n === 0 ? t('settings.behavior.offSendImmediately') : seconds(n)])}
-          onChange={(sendDelay) => set({ sendDelay })}
-        />
-        <Toggle
-          name="defaultSignatureEnabled"
-          label={t('settings.accounts.automaticallyAddOutgoingEmails')}
-          checked={prefs.defaultSignatureEnabled}
-          onChange={(defaultSignatureEnabled) => set({ defaultSignatureEnabled })}
-        />
-      </div>
+          <h2 className="mv-settings__heading">{t('settings.behavior.swipe.title')}</h2>
+          <div className="mv-settings__list">
+            <Choice name="swipeLeftAction" label={t('settings.behavior.swipe.left')} value={prefs.swipeLeftAction} options={swipeOptions} onChange={(swipeLeftAction) => set({ swipeLeftAction })} />
+            <Choice name="swipeRightAction" label={t('settings.behavior.swipe.right')} value={prefs.swipeRightAction} options={swipeOptions} onChange={(swipeRightAction) => set({ swipeRightAction })} />
+          </div>
+
+          <h2 className="mv-settings__heading">{t('settings.behavior.sending')}</h2>
+          <div className="mv-settings__list">
+            <Choice
+              name="sendDelay"
+              label={t('settings.behavior.sendDelay')}
+              value={prefs.sendDelay}
+              options={sendDelays.map((n) => [n, n === 0 ? t('settings.behavior.offSendImmediately') : seconds(n)])}
+              onChange={(sendDelay) => set({ sendDelay })}
+            />
+            <Toggle
+              name="defaultSignatureEnabled"
+              label={t('settings.accounts.automaticallyAddOutgoingEmails')}
+              checked={prefs.defaultSignatureEnabled}
+              onChange={(defaultSignatureEnabled) => set({ defaultSignatureEnabled })}
+            />
+          </div>
+        </>
+      )}
+      {section === 'privacy' && (
+        <>
+          <h2 className="mv-settings__heading">{t('settings.tab.security')}</h2>
+          <div className="mv-settings__list">
+            <Toggle
+              name="holdExternalContent"
+              label={t('mobile.prefs.loadImages')}
+              hint={t('mobile.prefs.loadImagesHint')}
+              checked={!prefs.holdExternalContent}
+              onChange={(on) => set({ holdExternalContent: !on })}
+            />
+          </div>
+        </>
+      )}
       {failed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
     </>
   );

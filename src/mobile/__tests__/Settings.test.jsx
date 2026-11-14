@@ -74,7 +74,7 @@ const sets = () => engine.calls.filter(([m]) => m === 'mobile.settings.set').map
 describe('Settings', () => {
   it('turning notifications on asks permission and stays off when denied', async () => {
     engine.granted = false;
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="notifications" onClose={() => {}} />);
     await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('false'));
     fireEvent.click(toggle());
     await waitFor(() => expect(screen.getByText(t('mobile.settings.notifyDenied'))).toBeTruthy());
@@ -98,7 +98,7 @@ describe('Settings', () => {
 
   it('shows the stored values and saves the preview choice', async () => {
     engine.settings = { notifications: 'on', notificationPreview: true };
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="notifications" onClose={() => {}} />);
     await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('true'));
     const preview = screen.getByRole('switch', { name: t('mobile.settings.preview') });
     expect(preview.getAttribute('aria-checked')).toBe('true');
@@ -110,7 +110,7 @@ describe('Settings', () => {
 
   it('Download in the background shows the stored value and saves the choice, no permission asked', async () => {
     engine.settings = { notifications: 'off', notificationPreview: true, backgroundDownload: true };
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="offline" onClose={() => {}} />);
     const download = () => screen.getByRole('switch', { name: t('mobile.settings.downloadToggle') });
     await waitFor(() => expect(download().getAttribute('aria-checked')).toBe('true'));
     fireEvent.click(download());
@@ -126,7 +126,7 @@ describe('Settings', () => {
   });
 
   it('remove account confirms, then calls mobile.accounts.remove', async () => {
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="accounts" onClose={() => {}} />);
     await openRemove(A1);
     expect(engine.calls.some(([m]) => m === 'mobile.accounts.remove')).toBe(false);
     expect(screen.getByText(t('mobile.switcher.removeConfirm', { email: A1.email }))).toBeTruthy();
@@ -138,7 +138,7 @@ describe('Settings', () => {
 
   it('keeps the account and its question when the removal fails', async () => {
     engine.failRemove = true;
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="accounts" onClose={() => {}} />);
     await openRemove(A1);
     fireEvent.click(screen.getByRole('button', { name: t('common.remove') }));
     await waitFor(() => expect(engine.calls.some(([m]) => m === 'mobile.accounts.remove')).toBe(true));
@@ -153,7 +153,7 @@ describe('Settings', () => {
   it('offers Sign in again only on an account that needs it, through the store reauth', async () => {
     const reauth = vi.fn(async () => ({ ok: true }));
     useMobileStore.setState({ reauth });
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="accounts" onClose={() => {}} />);
     const buttons = screen.getAllByRole('button', { name: t('mobile.reauth.action') });
     expect(buttons).toHaveLength(1);
     fireEvent.click(buttons[0]);
@@ -161,7 +161,7 @@ describe('Settings', () => {
   });
 
   it('links the source as a plain https anchor for the shell navigation guard, with the version', async () => {
-    render(<Settings onClose={() => {}} version="9.8.7" />);
+    render(<Settings page="help" onClose={() => {}} version="9.8.7" />);
     const link = screen.getByRole('link', { name: t('mobile.settings.source') });
     expect(link.getAttribute('href')).toBe('https://github.com/GraphicMeat/mail-vault-app');
     expect(link.getAttribute('target')).toBe('_blank');
@@ -178,7 +178,7 @@ describe('Settings', () => {
   });
 
   it('Show preview cannot be changed while notifications are off', async () => {
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="notifications" onClose={() => {}} />);
     await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('false'));
     const preview = screen.getByRole('switch', { name: t('mobile.settings.preview') });
     expect(preview.disabled).toBe(true);
@@ -191,7 +191,7 @@ describe('Settings', () => {
   it('notifications turned off in the system settings show as off, with the pointer there', async () => {
     engine.settings = { notifications: 'on', notificationPreview: true };
     engine.osAllows = false;
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="notifications" onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText(t('mobile.settings.notifyDenied'))).toBeTruthy());
     expect(toggle().getAttribute('aria-checked')).toBe('false');
     expect(sets()).toEqual([{ notifications: 'off' }]);
@@ -211,7 +211,7 @@ describe('Settings', () => {
   it('each account has its own notifications switch, usable while notifications are on', async () => {
     engine.notify = { a2: false };
     const perAccount = (email) => screen.getByRole('switch', { name: t('mobile.settings.notifyAccount', { account: email }) });
-    render(<Settings onClose={() => {}} />);
+    render(<Settings page="notifications" onClose={() => {}} />);
     await waitFor(() => expect(perAccount('grace@example.test').getAttribute('aria-checked')).toBe('false'));
     expect(perAccount('ada@example.test').getAttribute('aria-checked')).toBe('true');
     // Notifications off: the per-account choice waits for them.
@@ -226,8 +226,63 @@ describe('Settings', () => {
 
   it('Replay tour hands over to the tour', () => {
     const onReplayTour = vi.fn();
-    render(<Settings onClose={() => {}} onReplayTour={onReplayTour} />);
+    render(<Settings page="help" onClose={() => {}} onReplayTour={onReplayTour} />);
     fireEvent.click(screen.getByRole('button', { name: t('mobile.settings.replayTour') }));
     expect(onReplayTour).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Settings pages, as desktop lays them out', () => {
+  const pageRows = () => [...document.querySelectorAll('[data-mv-settings-page]')].map((b) => b.getAttribute('data-mv-settings-page'));
+
+  it('the first screen lists the pages in desktop order, under desktop\'s groups, with no settings of its own', () => {
+    render(<Settings onClose={() => {}} />);
+    expect(pageRows()).toEqual(['appearance', 'mail', 'notifications', 'accounts', 'offline', 'privacy', 'help']);
+    const headings = [...document.querySelectorAll('.mv-settings__heading')].map((h) => h.textContent);
+    expect(headings).toEqual([
+      t('common.premium'),
+      t('settings.navigation.general'),
+      t('settings.navigation.accountsImport'),
+      t('settings.navigation.vaultPrivacy'),
+      t('settings.tab.help'),
+    ]);
+    expect(screen.queryAllByRole('switch')).toHaveLength(0);
+    expect(document.querySelector('[data-mv-pref]')).toBeNull();
+    expect(document.querySelector('[data-mv-premium-row]')).toBeTruthy();
+  });
+
+  it('a page opens under its own title; Back returns to the list, and Back there closes Settings', async () => {
+    const onClose = vi.fn();
+    render(<Settings onClose={onClose} />);
+    fireEvent.click(document.querySelector('[data-mv-settings-page="notifications"]'));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.notifications'));
+    await waitFor(() => expect(toggle()).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(pageRows()).toHaveLength(7);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.title'));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('each page holds its desktop page\'s settings', () => {
+    const on = (page) => {
+      const r = render(<Settings onClose={() => {}} page={page} />);
+      const prefs = [...document.querySelectorAll('[data-mv-pref]')].map((e) => e.getAttribute('data-mv-pref'));
+      r.unmount();
+      return prefs;
+    };
+    expect(on('appearance')).toEqual(['theme', 'palette', 'language', 'emailViewerTheme', 'dateFormat', 'timeFormat']);
+    expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled']);
+    // Remote content is a privacy choice on desktop (Privacy & security > Security).
+    expect(on('privacy')).toEqual(['holdExternalContent']);
+  });
+
+  it('the accounts page lists the accounts; the help page has the version and the source', () => {
+    const r = render(<Settings onClose={() => {}} page="accounts" />);
+    expect(screen.getByText(A1.email)).toBeTruthy();
+    r.unmount();
+    render(<Settings onClose={() => {}} page="help" version="1.2.3" />);
+    expect(screen.getByText(t('mobile.settings.version', { version: '1.2.3' }))).toBeTruthy();
   });
 });

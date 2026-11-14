@@ -52,7 +52,7 @@ pub(crate) enum Kind {
 pub(crate) const SWIPES: &[&str] = &["toggleRead", "delete", "flag", "move", "none"];
 
 /// The phone's preferences: key, kind, and the default (as JSON) that is the phone's behaviour
-/// without the setting. Shown and applied: theme .. timeFormat. Stored for later waves: the rest.
+/// without the setting. Shown and applied: theme .. emailViewerTheme. Stored for later waves: the rest.
 pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("theme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
     ("palette", Kind::OneOf(&["indigo", "graphite", "teal"]), "\"indigo\""),
@@ -75,8 +75,9 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("dateFormat", Kind::OneOf(&["auto", "MM/dd/yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "dd MMM yyyy", "custom"]), "\"auto\""),
     ("customDateFormat", Kind::Text(64), "\"\""),
     ("timeFormat", Kind::OneOf(&["auto", "12h", "24h"]), "\"auto\""),
-    // Stored only.
+    // The message's own theme (Settings > Appearance); "system" follows the app's.
     ("emailViewerTheme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
+    // Stored only.
     ("threadMode", Kind::OneOf(&["grouped", "expandable", "flat"]), "\"expandable\""),
     ("threadSortOrder", Kind::OneOf(&["oldest-first", "newest-first"]), "\"oldest-first\""),
     ("autoSaveDrafts", Kind::Bool, "true"),

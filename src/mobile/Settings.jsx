@@ -1,4 +1,8 @@
-// The settings screen: a full-screen layer opened from the folder drawer's footer.
+// The settings screen: a full-screen layer opened from the folder drawer's footer. Laid out as
+// desktop's Settings is: a first screen listing the pages under desktop's groups (General:
+// Appearance, Mail preferences, Notifications; Accounts & import: Accounts; Vault & privacy:
+// Offline, Privacy & security; Help: About), Premium above them, and each page on its own screen
+// with Back to the list (`SETTINGS_PAGES`). What each page holds:
 //
 // - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one reauth),
 //   and Edit (AccountEditor.jsx: name, signature, hidden, and Remove after an inline confirm, as
@@ -25,6 +29,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { daemonCall, notificationPermission, requestNotificationPermission } from './transport.js';
 import { useMobileStore } from './store.js';
 import KeyboardLayer from './KeyboardLayer.jsx';
+import { useBackLayer } from './backStack.js';
 import { useT } from './i18n.js';
 import { Avatar } from './AccountSwitcher.jsx';
 import { errorKey } from './errors.js';
@@ -135,8 +140,33 @@ function AccountRow({ account, reauthBusy }) {
   );
 }
 
-export default function Settings({ onClose, onReplayTour, version = APP_VERSION }) {
+/**
+ * The first screen's pages in desktop's order and groups (SettingsPage.jsx's navigation), less
+ * what a phone has no use for (vault, backup, daemon, shortcuts, ...). `[group, [page, title]]`.
+ */
+export const SETTINGS_PAGES = [
+  ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
+  ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts']]],
+  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity']]],
+  ['settings.tab.help', [['help', 'mobile.settings.about']]],
+];
+const PAGE_TITLES = Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages));
+
+function Chevron() {
+  return (
+    <svg className="mv-setting__chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** `page`: the page to open on (the first screen, `'root'`, by default). */
+export default function Settings({ onClose, onReplayTour, version = APP_VERSION, page: startPage = 'root' }) {
   const t = useT();
+  const [page, setPage] = useState(startPage);
+  // System Back on a page goes to the list first, as the header's Back does.
+  const toList = useCallback(() => setPage('root'), []);
+  useBackLayer(page !== 'root', toList);
   const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
   const [values, setValues] = useState(null); // { notifications: 'on'|'off', notificationPreview: bool }
@@ -228,94 +258,129 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION 
   const reauthBusy = Boolean(reauthState?.busy);
   const reauthCode = reauthState && !reauthState.busy ? reauthState.code : null;
 
+  const title = page === 'root' ? t('mobile.settings.title') : t(PAGE_TITLES[page]);
   return (
     <KeyboardLayer as="section" className="mv-settings" scroll=".mv-settings__body" role="dialog" aria-modal="true" aria-label={t('mobile.settings.title')}>
       <header className="mv-compose__bar">
-        <button type="button" className="mv-compose__back" onClick={onClose}>{t('common.back')}</button>
-        <h1 className="mv-compose__title">{t('mobile.settings.title')}</h1>
+        <button type="button" className="mv-compose__back" onClick={page === 'root' ? onClose : toList}>{t('common.back')}</button>
+        <h1 className="mv-compose__title">{title}</h1>
       </header>
-      <div className="mv-settings__body">
-        <h2 className="mv-settings__heading">{t('common.premium')}</h2>
-        <div className="mv-settings__list">
-          <button
-            type="button"
-            className="mv-setting"
-            data-mv-premium-row
-            onClick={() => useMobileStore.getState().openPaywall(null)}
-          >
-            <span className="mv-setting__text">
-              <span className="mv-setting__label">{premiumSummary(premium)}</span>
-            </span>
-          </button>
-        </div>
-        {premiumLost === 'DEVICE_REPLACED' && !premium.premium && (
-          <div className="mv-settings__note mv-settings__note--error" role="alert" data-mv-premium-lost>
-            {t('mobile.premium.deviceReplaced')}{' '}
-            <button type="button" className="mv-textbtn" onClick={() => useMobileStore.getState().openPaywall(null, { signIn: true })}>
-              {t('mobile.premium.signInAgain')}
-            </button>
-          </div>
+      <div className="mv-settings__body" key={page} data-mv-settings-on={page}>
+        {page === 'root' && (
+          <>
+            <h2 className="mv-settings__heading">{t('common.premium')}</h2>
+            <div className="mv-settings__list">
+              <button
+                type="button"
+                className="mv-setting"
+                data-mv-premium-row
+                onClick={() => useMobileStore.getState().openPaywall(null)}
+              >
+                <span className="mv-setting__text">
+                  <span className="mv-setting__label">{premiumSummary(premium)}</span>
+                </span>
+                <Chevron />
+              </button>
+            </div>
+            {premiumLost === 'DEVICE_REPLACED' && !premium.premium && (
+              <div className="mv-settings__note mv-settings__note--error" role="alert" data-mv-premium-lost>
+                {t('mobile.premium.deviceReplaced')}{' '}
+                <button type="button" className="mv-textbtn" onClick={() => useMobileStore.getState().openPaywall(null, { signIn: true })}>
+                  {t('mobile.premium.signInAgain')}
+                </button>
+              </div>
+            )}
+            {SETTINGS_PAGES.map(([group, pages]) => (
+              <React.Fragment key={group}>
+                <h2 className="mv-settings__heading">{t(group)}</h2>
+                <div className="mv-settings__list">
+                  {pages.map(([key, label]) => (
+                    <button key={key} type="button" className="mv-setting" data-mv-settings-page={key} onClick={() => setPage(key)}>
+                      <span className="mv-setting__text">
+                        <span className="mv-setting__label">{t(label)}</span>
+                      </span>
+                      <Chevron />
+                    </button>
+                  ))}
+                </div>
+              </React.Fragment>
+            ))}
+          </>
         )}
 
-        <h2 className="mv-settings__heading">{t('mobile.settings.accounts')}</h2>
-        {reauthCode && <p className="mv-settings__note mv-settings__note--error" role="alert">{t(errorKey(reauthCode))}</p>}
-        <ul className="mv-settings__list">
-          {accounts.map((a) => <AccountRow key={a.id} account={a} reauthBusy={reauthBusy} />)}
-        </ul>
+        {page === 'appearance' && <SettingsPrefs section="appearance" />}
+        {page === 'mail' && <SettingsPrefs section="mail" />}
+        {page === 'privacy' && <SettingsPrefs section="privacy" />}
 
-        <SettingsPrefs />
+        {page === 'accounts' && (
+          <>
+            {reauthCode && <p className="mv-settings__note mv-settings__note--error" role="alert">{t(errorKey(reauthCode))}</p>}
+            <ul className="mv-settings__list">
+              {accounts.map((a) => <AccountRow key={a.id} account={a} reauthBusy={reauthBusy} />)}
+            </ul>
+          </>
+        )}
 
-        <h2 className="mv-settings__heading">{t('mobile.settings.notifications')}</h2>
-        {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
-        <div className="mv-settings__list">
-          <Switch
-            checked={values?.notifications === 'on'}
-            busy={busy === 'notifications'}
-            disabled={!ready}
-            label={t('mobile.settings.notifyToggle')}
-            hint={t('mobile.settings.notifyHint')}
-            onChange={onNotifications}
-          />
-          <Switch
-            checked={values ? values.notificationPreview !== false : true}
-            busy={busy === 'notificationPreview'}
-            disabled={!ready || values.notifications !== 'on'}
-            label={t('mobile.settings.preview')}
-            hint={t('mobile.settings.previewHint')}
-            onChange={(v) => save('notificationPreview', { notificationPreview: v })}
-          />
-          {accounts.map((a) => <AccountNotify key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
-        </div>
-        {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
-        {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+        {page === 'notifications' && (
+          <>
+            {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
+            <div className="mv-settings__list">
+              <Switch
+                checked={values?.notifications === 'on'}
+                busy={busy === 'notifications'}
+                disabled={!ready}
+                label={t('mobile.settings.notifyToggle')}
+                hint={t('mobile.settings.notifyHint')}
+                onChange={onNotifications}
+              />
+              <Switch
+                checked={values ? values.notificationPreview !== false : true}
+                busy={busy === 'notificationPreview'}
+                disabled={!ready || values.notifications !== 'on'}
+                label={t('mobile.settings.preview')}
+                hint={t('mobile.settings.previewHint')}
+                onChange={(v) => save('notificationPreview', { notificationPreview: v })}
+              />
+              {accounts.map((a) => <AccountNotify key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
+            </div>
+            {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
+            {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+          </>
+        )}
 
-        <h2 className="mv-settings__heading">{t('mobile.settings.offline')}</h2>
-        <div className="mv-settings__list">
-          <Switch
-            checked={values ? values.backgroundDownload !== false : true}
-            busy={busy === 'backgroundDownload'}
-            disabled={!ready}
-            label={t('mobile.settings.downloadToggle')}
-            hint={t('mobile.settings.downloadHint')}
-            onChange={(v) => save('backgroundDownload', { backgroundDownload: v })}
-          />
-        </div>
-        <OfflineSettings />
+        {page === 'offline' && (
+          <>
+            {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
+            <div className="mv-settings__list">
+              <Switch
+                checked={values ? values.backgroundDownload !== false : true}
+                busy={busy === 'backgroundDownload'}
+                disabled={!ready}
+                label={t('mobile.settings.downloadToggle')}
+                hint={t('mobile.settings.downloadHint')}
+                onChange={(v) => save('backgroundDownload', { backgroundDownload: v })}
+              />
+            </div>
+            {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+            <OfflineSettings />
+          </>
+        )}
 
-        <h2 className="mv-settings__heading">{t('mobile.settings.about')}</h2>
-        <div className="mv-settings__list">
-          {onReplayTour && (
-            <button type="button" className="mv-setting" data-mv-replay-tour onClick={onReplayTour}>
-              <span className="mv-setting__text">
-                <span className="mv-setting__label">{t('mobile.settings.replayTour')}</span>
-              </span>
-            </button>
-          )}
-          {version && <p className="mv-settings__row">{t('mobile.settings.version', { version })}</p>}
-          <a className="mv-settings__row mv-settings__link" href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
-            {t('mobile.settings.source')}
-          </a>
-        </div>
+        {page === 'help' && (
+          <div className="mv-settings__list">
+            {onReplayTour && (
+              <button type="button" className="mv-setting" data-mv-replay-tour onClick={onReplayTour}>
+                <span className="mv-setting__text">
+                  <span className="mv-setting__label">{t('mobile.settings.replayTour')}</span>
+                </span>
+              </button>
+            )}
+            {version && <p className="mv-settings__row">{t('mobile.settings.version', { version })}</p>}
+            <a className="mv-settings__row mv-settings__link" href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
+              {t('mobile.settings.source')}
+            </a>
+          </div>
+        )}
       </div>
     </KeyboardLayer>
   );

@@ -1254,6 +1254,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-settings__note { margin: 8px 16px 0; font-size: 0.875rem; color: var(--mail-text-muted); overflow-wrap: anywhere; }
 .mv-settings__note--error { color: var(--mv-danger); }
+.mv-setting__chevron { flex: none; color: var(--mail-text-muted); }
+[dir="rtl"] .mv-setting__chevron { transform: scaleX(-1); }
 .mv-settings__row {
   display: flex;
   align-items: center;

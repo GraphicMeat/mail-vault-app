@@ -31,14 +31,19 @@ import { openPaywall } from './premium.js';
 import { useInlineImages, withInlineImages } from './inlineImages.js';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs.js';
 import { useMobileStore } from './store.js';
+import { viewerTheme } from './prefs.js';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
 export const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
 
 const LIGHT_QUERY = '(prefers-color-scheme: light)';
 
-/** The app's theme: dark by default, light when the system is (mobile.css follows the same rule). */
+/**
+ * The message's theme: Settings > Appearance's email viewer theme, else the app's theme, else the
+ * system's (mobile.css follows the same rule for the app).
+ */
 function useAppTheme() {
+  const prefs = useMobileStore((s) => s.prefs);
   const query = useMemo(() => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(LIGHT_QUERY) : null), []);
   const [light, setLight] = useState(() => Boolean(query?.matches));
   useEffect(() => {
@@ -47,7 +52,7 @@ function useAppTheme() {
     query.addEventListener('change', onChange);
     return () => query.removeEventListener('change', onChange);
   }, [query]);
-  return light ? 'light' : 'dark';
+  return viewerTheme(light, prefs);
 }
 
 /** The engine answers a network failure as `INTERNAL` with the accounts code as the message. */
