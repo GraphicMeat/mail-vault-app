@@ -18,7 +18,18 @@
 //! pass the page started. A quick pass asks only for what arrived since the newest message the
 //! list holds (IMAP `UID n:*`, Graph and JMAP by received date) and inserts those rows; flags and
 //! removals wait for the next foreground pass. A parked account (`needs_auth = 1`) is never
-//! dialled, nor one whose password the server refused (`hold.rs`).
+//! dialled, nor one whose password the server refused (`hold.rs`). The same pass then reads the
+//! account's other watched folders (`acct.<id>.notifyFolders`): each its quick pass, or its full
+//! pass when it was never synced, inside the same share; a failure there never costs INBOX's news.
+//!
+//! What notifies is desktop's policy, `mailvault_core::notify_policy::decide`, at the phone's
+//! local time, over the phone's rows: the account's switch (`notify`), its watched folders and
+//! quiet hours (`quietHours`), and the priority senders (`importantSenders`), which cut through
+//! the switch, the folders and quiet hours (unless the entry says not through quiet hours). INBOX
+//! is read even when not watched, so a priority sender's mail there still notifies. Mail the
+//! policy holds is dropped, not deferred: its watermark moves past it as past posted mail, so the
+//! end of quiet hours brings no backlog. A folder no longer watched loses its watermark
+//! (`account_settings::set`), so watched again it takes a new baseline.
 //!
 //! Budget: each account gets an equal share of what is left when its turn comes, and its pass
 //! stops at the end of that share (between requests; a Graph throttle wait that would cross it is
@@ -58,8 +69,10 @@
 use crate::db::{lock, Engine, EngineError, Shared};
 use crate::followup::FollowUpDue;
 use crate::sync::{folder_path, Ended};
+use mailvault_core::notify_policy;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
+use serde_json::{json, Map, Value};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -84,7 +97,7 @@ const DOWNLOAD_ROTATION: &str = "bg.downloadRotation";
 pub struct NewMail {
     pub account_id: String,
     pub account_email: String,
-    /// The INBOX's stored path (`INBOX`).
+    /// The folder's stored path (`INBOX`, or another watched folder).
     pub folder: String,
     pub uid: u32,
     /// The sender's display name, or the address when it has none.
@@ -203,22 +216,23 @@ pub(crate) fn seed_baselines(c: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-/// The app left the front: each INBOX of `accounts` that has a watermark moves it past every row
-/// the list holds, and records the unseen ones it passed as notified (the user saw them listed).
+/// The app left the front: each folder of `accounts` that has a watermark (INBOX and the watched
+/// folders) moves it past every row the list holds, and records the unseen ones it passed as
+/// notified (the user saw them listed).
 pub(crate) fn seen_in_front(shared: &Shared, accounts: &[String]) {
     for account in accounts {
         let out = (|| -> Result<(), EngineError> {
-            let Some(folder) = folder_path(shared, account, "INBOX")? else {
-                return Ok(());
-            };
-            let mark: Option<i64> = shared.read(|c| {
-                c.query_row("SELECT last_uid FROM notify_state WHERE account_id = ?1 AND folder = ?2", (account, &folder), |r| r.get(0))
-                    .optional()
+            let marks: Vec<(String, i64)> = shared.read(|c| {
+                let mut st = c.prepare("SELECT folder, last_uid FROM notify_state WHERE account_id = ?1")?;
+                let rows = st.query_map([account], |r| Ok((r.get(0)?, r.get(1)?)))?.collect();
+                rows
             })?;
-            let Some(mark) = mark else { return Ok(()) };
-            let (rows, top) = read_above(shared, account, &folder, mark)?;
-            let keys: Vec<String> = rows.into_iter().filter(|r| r.unseen).map(|r| r.key).collect();
-            record(shared, account, &folder, None, top, &keys)
+            for (folder, mark) in marks {
+                let (rows, top) = read_above(shared, account, &folder, mark)?;
+                let keys: Vec<String> = rows.into_iter().filter(|r| r.unseen).map(|r| r.key).collect();
+                record(shared, account, &folder, None, top, &keys)?;
+            }
+            Ok(())
         })();
         if let Err(e) = out {
             shared.log(&format!("[background] {account}: moving the watermark on leaving: {e}"));
@@ -229,7 +243,10 @@ pub(crate) fn seen_in_front(shared: &Shared, accounts: &[String]) {
 /// A row above a watermark.
 struct Above {
     uid: i64,
+    /// The sender's display name, or the address when it has none.
     from: String,
+    /// The sender's address: what the priority senders are matched against.
+    address: String,
     subject: String,
     date_ms: i64,
     /// Unseen and not deleted on the phone.
@@ -261,7 +278,8 @@ fn read_above(shared: &Shared, account: &str, folder: &str, mark: i64) -> Result
                 let remote: Option<String> = r.get(7)?;
                 Ok(Above {
                     uid,
-                    from: if name.trim().is_empty() { address } else { name },
+                    from: if name.trim().is_empty() { address.clone() } else { name },
+                    address,
                     subject: r.get(3)?,
                     date_ms: r.get(4)?,
                     unseen: r.get(5)?,
@@ -303,14 +321,65 @@ fn record(shared: &Shared, account: &str, folder: &str, validity: Option<i64>, t
     })
 }
 
+/// The notification policy of `account` as desktop's `notificationSettings` would hold it, for
+/// `notify_policy::decide`: notifications on (a run reads mail only then), the account's entry
+/// (`account_settings::policy_entry_in`, its folders by their stored paths) and the priority
+/// senders (`importantSenders`).
+fn policy(shared: &Shared, account: &str) -> Result<Value, EngineError> {
+    let (mut entry, important) = shared.read(|c| {
+        let important = crate::settings::get_in(c, "importantSenders")?.and_then(|s| serde_json::from_str::<Value>(&s).ok());
+        Ok((crate::account_settings::policy_entry_in(c, account)?, important))
+    })?;
+    let mut folders = Vec::new();
+    for name in entry["folders"].as_array().cloned().unwrap_or_default() {
+        let Some(name) = name.as_str() else { continue };
+        folders.push(json!(folder_path(shared, account, name)?.unwrap_or_else(|| name.to_string())));
+    }
+    entry["folders"] = Value::Array(folders);
+    let mut accounts = Map::new();
+    accounts.insert(account.to_string(), entry);
+    Ok(json!({
+        "enabled": true,
+        "accounts": accounts,
+        "mutedViewIds": [],
+        "importantSenders": important.filter(Value::is_array).unwrap_or_else(|| json!([])),
+    }))
+}
+
+/// The folders a run reads for `account`, by their stored paths: INBOX always (a priority sender
+/// notifies from it whether it is watched or not), then each watched folder the list knows.
+pub(crate) fn notify_folders(shared: &Shared, account: &str) -> Result<Vec<String>, EngineError> {
+    let names = shared.read(|c| crate::account_settings::notify_folders_in(c, account))?;
+    let mut out: Vec<String> = Vec::new();
+    for name in std::iter::once("INBOX").chain(names.iter().map(String::as_str)) {
+        if let Some(path) = folder_path(shared, account, name)? {
+            if !out.contains(&path) {
+                out.push(path);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Called on the sync worker right after a pass of `account` completed, before any other pass
-/// starts: the new unseen INBOX mail above the watermark (`None`: no INBOX). Takes the baseline
-/// when there is none, or when the folder's generation changed since it was taken; moves the
-/// watermark at once when there is nothing to post.
-pub(crate) fn collect(shared: &Shared, account: &str) -> Result<Option<Collected>, EngineError> {
-    let Some(folder) = folder_path(shared, account, "INBOX")? else {
-        return Ok(None);
-    };
+/// starts: for INBOX and each watched folder ([`notify_folders`]), the new unseen mail above its
+/// watermark that the notification policy lets through (desktop's `notify_policy::decide`, at
+/// the phone's local time: the account's switch, its watched folders and quiet hours, and the
+/// priority senders that cut through them). Mail the policy holds is dropped, not deferred: the
+/// watermark moves past it as past posted mail. Takes a folder's baseline when it has none, or
+/// when its generation changed since it was taken; moves the watermark at once when there is
+/// nothing to post.
+pub(crate) fn collect(shared: &Shared, account: &str) -> Result<Vec<Collected>, EngineError> {
+    let policy = policy(shared, account)?;
+    let minutes = notify_policy::local_minutes_now();
+    let mut out = Vec::new();
+    for folder in notify_folders(shared, account)? {
+        out.push(collect_folder(shared, account, folder, &policy, minutes)?);
+    }
+    Ok(out)
+}
+
+fn collect_folder(shared: &Shared, account: &str, folder: String, policy: &Value, minutes: u32) -> Result<Collected, EngineError> {
     let email: String = shared
         .read(|c| c.query_row("SELECT email FROM accounts WHERE id = ?1", [account], |r| r.get(0)).optional())?
         .unwrap_or_default();
@@ -327,7 +396,7 @@ pub(crate) fn collect(shared: &Shared, account: &str) -> Result<Option<Collected
         let top: i64 = c.query_row("SELECT COALESCE(MAX(uid), 0) FROM messages WHERE account_id = ?1 AND folder = ?2 AND out_of_window_ms IS NULL", (account, &folder), |r| r.get(0))?;
         Ok((validity, state, top))
     })?;
-    let baseline = |shared: &Shared| -> Result<Option<Collected>, EngineError> {
+    let baseline = |shared: &Shared| -> Result<Collected, EngineError> {
         shared.write(|c| {
             c.execute(
                 "INSERT INTO notify_state (account_id, folder, last_uid, uid_validity, since_ms) VALUES (?1, ?2, ?3, ?4, ?5)
@@ -336,7 +405,7 @@ pub(crate) fn collect(shared: &Shared, account: &str) -> Result<Option<Collected
                 (account, &folder, top, validity, now_ms()),
             )
         })?;
-        Ok(Some(Collected { account: account.to_string(), folder: folder.clone(), validity, top, mail: Vec::new() }))
+        Ok(Collected { account: account.to_string(), folder: folder.clone(), validity, top, mail: Vec::new() })
     };
     let (mark, since_ms) = match state {
         // First run, a folder whose uids started over below the mark, or a new UIDVALIDITY.
@@ -358,9 +427,24 @@ pub(crate) fn collect(shared: &Shared, account: &str) -> Result<Option<Collected
         Ok(out)
     })?;
     let floor = since_ms.map(|s| s - ARRIVAL_SLACK_MS);
+    // The policy holds what it does not deliver (the account's switch, a folder not watched, quiet
+    // hours): nothing to post for it, and the watermark moves past it as if it had been posted,
+    // so the end of quiet hours or turning the account back on announces no backlog.
+    let delivered = |r: &Above| {
+        let ctx = notify_policy::Ctx {
+            account_id: Some(account.to_string()),
+            folder: Some(json!(folder)),
+            from: r.address.clone(),
+            // As the daemon derives it (`notify.decide`): what follows the first `@`.
+            domain: r.address.split_once('@').map(|(_, d)| d.to_string()).unwrap_or_default(),
+            view_ids: None,
+            focus_held: false,
+        };
+        notify_policy::decide(&ctx, policy, minutes).deliver
+    };
     let mail: Vec<NewMail> = rows
         .into_iter()
-        .filter(|r| r.unseen && !known.contains(&r.key) && floor.is_none_or(|f| r.date_ms >= f))
+        .filter(|r| r.unseen && !known.contains(&r.key) && floor.is_none_or(|f| r.date_ms >= f) && delivered(r))
         .map(|r| NewMail {
             account_id: account.to_string(),
             account_email: email.clone(),
@@ -372,16 +456,13 @@ pub(crate) fn collect(shared: &Shared, account: &str) -> Result<Option<Collected
             key: r.key,
         })
         .collect();
-    // The account's own notifications are off (`acct.<id>.notify`): nothing to post, and the
-    // watermark moves as if it had been posted, so turning them back on announces no backlog.
-    let mail = if crate::account_settings::notify_on(shared, account) { mail } else { Vec::new() };
     if mail.is_empty() {
         // Nothing to post: nothing a lost commit could lose.
         if scanned > mark {
             record(shared, account, &folder, validity, scanned, &[])?;
         }
     }
-    Ok(Some(Collected { account: account.to_string(), folder, validity, top: scanned, mail }))
+    Ok(Collected { account: account.to_string(), folder, validity, top: scanned, mail })
 }
 
 struct Candidate {
@@ -562,8 +643,8 @@ impl Engine {
             match ticket.wait_until(until) {
                 None => self.shared().log(&format!("[background] {} did not finish in its share of the budget", account.id)),
                 Some(Ended::Done) => match ticket.collected() {
-                    Some(Ok(Some(c))) => collected.push(c),
-                    Some(Ok(None)) | None => {}
+                    Some(Ok(c)) => collected.extend(c),
+                    None => {}
                     Some(Err(e)) => self.shared().log(&format!("[background] {}: {e}", account.id)),
                 },
                 Some(Ended::Failed(code)) => self.shared().log(&format!("[background] {} pass ended {code}", account.id)),

@@ -90,12 +90,12 @@ pub(crate) struct Ticket {
     ended: Mutex<Option<Ended>>,
     cv: Condvar,
     collect: bool,
-    collected: Mutex<Option<Result<Option<crate::background::Collected>, String>>>,
+    collected: Mutex<Option<Result<Vec<crate::background::Collected>, String>>>,
 }
 
 impl Ticket {
     /// What the pass left for a background run (set before the ticket ends).
-    pub(crate) fn collected(&self) -> Option<Result<Option<crate::background::Collected>, String>> {
+    pub(crate) fn collected(&self) -> Option<Result<Vec<crate::background::Collected>, String>> {
         lock(&self.collected).take()
     }
 
@@ -455,6 +455,7 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way:
     if job.quick {
         backend.set_deadline(job.deadline);
         if quick_pass(shared, backend, &job.account, "INBOX", job.deadline, &|| false)? {
+            watched_pass(shared, backend, &job.account, job.deadline);
             return Ok(());
         }
     }
@@ -485,11 +486,49 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way:
         }
         yes
     };
-    match sync_folder(shared, backend, &job.account, &folder, &give_way) {
+    let out = match sync_folder(shared, backend, &job.account, &folder, &give_way) {
         Err(Fail::Code(Code::Timeout, _)) if gave_way.get() => Ok(()),
         other => {
             gave_way.set(false);
             other
+        }
+    };
+    if job.quick && out.is_ok() && !gave_way.get() {
+        watched_pass(shared, backend, &job.account, job.deadline);
+    }
+    out
+}
+
+/// A notification pass's other watched folders (`background::notify_folders` past INBOX, the
+/// account's `notifyFolders`): each its quick pass, or its full pass when it was never synced,
+/// inside the same deadline. A failure here never fails the pass, so INBOX's news still reaches
+/// the run; the folder is read again on the next one. A failure that is not the folder's own
+/// (the network, the deadline, a refused sign-in) ends the rest of the folders too.
+fn watched_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) {
+    let folders = match crate::background::notify_folders(shared, account) {
+        Ok(f) => f,
+        Err(e) => {
+            shared.log(&format!("[background] {account}: watched folders: {e}"));
+            return;
+        }
+    };
+    for folder in folders.into_iter().filter(|f| !is_inbox(f)) {
+        let out = within(deadline).and_then(|()| not_closing(shared)).and_then(|()| {
+            if quick_pass(shared, backend, account, &folder, deadline, &|| false)? {
+                Ok(())
+            } else {
+                sync_folder(shared, backend, account, &folder, &|| false)
+            }
+        });
+        match out {
+            Ok(()) => {}
+            Err(Fail::Code(code, why)) => {
+                shared.log(&format!("[background] {account}: {folder}: {} {why}", code.as_str()));
+                if !folder_own_failure(code) {
+                    return;
+                }
+            }
+            Err(_) => return,
         }
     }
 }

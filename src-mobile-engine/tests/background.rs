@@ -998,3 +998,210 @@ fn an_account_with_its_notifications_off_posts_nothing_and_announces_no_backlog_
     deliver(&b_server, "for b, heard", false);
     assert_eq!(subjects(&f.run(BUDGET)), vec!["for b, heard"], "no backlog once back on");
 }
+
+// ── The notification policy (core `notify_policy::decide`, as desktop applies it) ──────────
+
+/// New unseen mail from `from` arriving now in `folder`.
+fn deliver_in(server: &MockImap, folder: &str, from: &str, subject: &str) {
+    server.mutate(|st| {
+        let mb = st.find_mut(folder).unwrap();
+        let uid = mb.uid_next;
+        mb.add(
+            Message::new(
+                uid,
+                format!(
+                    "From: Someone <{from}>\nTo: user@example.com\nSubject: {subject}\n\
+                     Date: Thu, 01 Jan 2026 12:00:00 +0000\nMessage-ID: <bg-{folder}-{uid}@example.com>\n\
+                     Content-Type: text/plain; charset=UTF-8\n\nBody.\n"
+                ),
+            )
+            .with_internal_ms(now_ms()),
+        );
+    });
+}
+
+/// `HH:MM` of `minutes` past local midnight (wrapping round the day).
+fn hhmm(minutes: i64) -> String {
+    let m = minutes.rem_euclid(24 * 60);
+    format!("{:02}:{:02}", m / 60, m % 60)
+}
+
+/// A quiet-hours window round local now (`inside`), or one that is hours away from now.
+fn quiet_hours(inside: bool) -> Value {
+    let now = mailvault_core::notify_policy::local_minutes_now() as i64;
+    let (start, end) = if inside { (now - 180, now + 180) } else { (now + 180, now + 360) };
+    json!({ "enabled": true, "start": hhmm(start), "end": hhmm(end) })
+}
+
+impl Fx {
+    fn account_settings(&self, account: &str, values: Value) {
+        self.engine.rpc("mobile.accountSettings.set", json!({ "accountId": account, "values": values })).unwrap();
+    }
+
+    fn important(&self, list: Value) {
+        self.engine.rpc("mobile.prefs.set", json!({ "importantSenders": list })).unwrap();
+    }
+
+    fn watermark_of(&self, account: &str, folder: &str) -> Option<i64> {
+        use rusqlite::OptionalExtension;
+        self.db()
+            .query_row("SELECT last_uid FROM notify_state WHERE account_id = ?1 AND folder = ?2", [account, folder], |r| r.get(0))
+            .optional()
+            .unwrap()
+    }
+}
+
+fn work() -> Mailbox {
+    let mut mb = Mailbox::new("Work");
+    mb.add(msg(1, "work old"));
+    mb
+}
+
+/// Quiet hours: nothing posts inside the window, the pass still runs (the list has the mail) and
+/// the watermark moves, so the end of the window brings no backlog; outside it, mail notifies.
+#[test]
+fn quiet_hours_hold_notifications_inside_the_window_and_leave_no_backlog() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "old")])));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+
+    f.account_settings(&account, json!({ "quietHours": quiet_hours(true) }));
+    deliver(&server, "at night", false);
+    assert!(f.run(BUDGET).is_empty(), "inside quiet hours nothing is posted");
+    assert_eq!(f.rows_in(&account, "INBOX"), 2, "the run still synced");
+    assert_eq!(f.watermark(&account), Some(2), "the watermark moves past held mail");
+
+    f.account_settings(&account, json!({ "quietHours": quiet_hours(false) }));
+    deliver(&server, "in the morning", false);
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["in the morning"], "outside the window, and no backlog");
+
+    // Turned off, the window holds nothing.
+    let mut off = quiet_hours(true);
+    off["enabled"] = json!(false);
+    f.account_settings(&account, json!({ "quietHours": off }));
+    deliver(&server, "quiet hours off", false);
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["quiet hours off"]);
+}
+
+/// Notify folders: a run notifies new mail of the account's watched folders (INBOX by default)
+/// and of no other; a watched folder other than INBOX gets its own pass in the run.
+#[test]
+fn a_run_notifies_the_watched_folders_only() {
+    let server = MockImap::start(Scenario::new().mailboxes(vec![inbox(vec![msg(1, "old")]), work()]));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.download(false);
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+
+    // Default: INBOX only.
+    deliver_in(&server, "Work", "a@example.org", "work, unwatched");
+    deliver_in(&server, "INBOX", "a@example.org", "inbox, watched");
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["inbox, watched"]);
+
+    // Work only: its first run takes its baseline (no flood of what it holds).
+    f.account_settings(&account, json!({ "notifyFolders": ["Work"] }));
+    assert!(f.run(BUDGET).is_empty(), "the first run of a newly watched folder is its baseline");
+    deliver_in(&server, "Work", "a@example.org", "work, watched");
+    deliver_in(&server, "INBOX", "a@example.org", "inbox, unwatched");
+    let got = f.run(BUDGET);
+    assert_eq!(subjects(&got), vec!["work, watched"]);
+    assert_eq!((got[0].account_id.as_str(), got[0].folder.as_str()), (account.as_str(), "Work"));
+    assert_eq!(f.rows_in(&account, "Work"), 3, "the run synced Work itself (no background download)");
+    assert_eq!(f.watermark(&account), Some(3), "INBOX's watermark moves past unwatched mail");
+    assert!(f.run(BUDGET).is_empty(), "notified once");
+}
+
+/// A folder no longer watched loses its watermark: watched again later, it takes a new baseline
+/// rather than announcing what came in between.
+#[test]
+fn a_folder_watched_again_takes_a_new_baseline() {
+    let server = MockImap::start(Scenario::new().mailboxes(vec![inbox(vec![msg(1, "old")]), work()]));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.download(false);
+    f.notifications(true);
+    f.account_settings(&account, json!({ "notifyFolders": ["INBOX", "Work"] }));
+    assert!(f.run(BUDGET).is_empty());
+    assert_eq!(f.watermark_of(&account, "Work"), Some(1));
+
+    f.account_settings(&account, json!({ "notifyFolders": ["INBOX"] }));
+    assert_eq!(f.watermark_of(&account, "Work"), None, "unwatching drops the folder's watermark");
+    deliver_in(&server, "Work", "a@example.org", "while unwatched");
+    f.download(true);
+    f.run(BUDGET);
+    assert_eq!(f.rows_in(&account, "Work"), 2, "the download brought it in");
+    f.download(false);
+
+    f.account_settings(&account, json!({ "notifyFolders": ["INBOX", "Work"] }));
+    assert!(f.run(BUDGET).is_empty(), "no backlog from while it was not watched");
+    deliver_in(&server, "Work", "a@example.org", "watched again");
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["watched again"]);
+}
+
+/// Mail the user saw listed in a watched folder while the app was in front is not notified later.
+#[test]
+fn mail_seen_in_a_watched_folder_in_front_is_not_notified_after_the_app_leaves() {
+    let server = MockImap::start(Scenario::new().mailboxes(vec![inbox(vec![msg(1, "old")]), work()]));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.download(false);
+    f.notifications(true);
+    f.account_settings(&account, json!({ "notifyFolders": ["INBOX", "Work"] }));
+    assert!(f.run(BUDGET).is_empty());
+
+    f.engine.rpc("mobile.app.state", json!({ "foreground": true, "accountId": account })).unwrap();
+    deliver_in(&server, "Work", "a@example.org", "seen in Work");
+    assert_eq!(f.engine.rpc("mobile.sync.refresh", json!({ "accountId": account, "folder": "Work" })).unwrap(), json!({ "queued": true }));
+    let deadline = Instant::now() + BUDGET;
+    while f.rows_in(&account, "Work") < 2 {
+        assert!(Instant::now() < deadline, "Work never listed the new mail");
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    f.engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
+    assert_eq!(f.watermark_of(&account, "Work"), Some(2), "leaving moves Work's watermark too");
+    assert!(f.run(BUDGET).is_empty());
+}
+
+/// Priority senders (`importantSenders`, desktop's `notifyPolicy.allowlist`): an address or a bare
+/// domain on the list notifies through the account's own switch, through an unwatched folder and
+/// through quiet hours, unless that entry says `throughQuietHours: false`. Never through the
+/// global switch (a run with notifications off posts nothing at all).
+#[test]
+fn priority_senders_cut_through_mutes_and_quiet_hours_as_on_desktop() {
+    let server = MockImap::start(Scenario::new().mailboxes(vec![inbox(vec![msg(1, "old")]), work()]));
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.download(false);
+    f.notifications(true);
+    f.important(json!([{ "match": "Boss@Corp.example", "throughQuietHours": true }, { "match": "partner.example" }, { "match": "night@owl.example", "throughQuietHours": false }]));
+    assert!(f.run(BUDGET).is_empty());
+
+    // The account's own notifications off: only the priority senders.
+    f.account_settings(&account, json!({ "notify": false }));
+    deliver_in(&server, "INBOX", "boss@corp.example", "from the boss");
+    deliver_in(&server, "INBOX", "someone@partner.example", "from the partner domain");
+    deliver_in(&server, "INBOX", "someone@else.example", "from anyone");
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["from the boss", "from the partner domain"]);
+
+    // INBOX not watched: the same.
+    f.account_settings(&account, json!({ "notify": true, "notifyFolders": ["Work"] }));
+    assert!(f.run(BUDGET).is_empty());
+    deliver_in(&server, "INBOX", "boss@corp.example", "boss, unwatched folder");
+    deliver_in(&server, "INBOX", "someone@else.example", "anyone, unwatched folder");
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["boss, unwatched folder"]);
+
+    // Quiet hours: through them unless the entry says not to.
+    f.account_settings(&account, json!({ "notifyFolders": ["INBOX"], "quietHours": quiet_hours(true) }));
+    deliver_in(&server, "INBOX", "boss@corp.example", "boss at night");
+    deliver_in(&server, "INBOX", "night@owl.example", "owl at night");
+    deliver_in(&server, "INBOX", "someone@else.example", "anyone at night");
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["boss at night"]);
+
+    // Off means off.
+    f.notifications(false);
+    deliver_in(&server, "INBOX", "boss@corp.example", "boss, all off");
+    assert!(f.run(BUDGET).is_empty());
+}

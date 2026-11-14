@@ -20,7 +20,9 @@
 //! A hidden account stays an account (it syncs, it can be shown again in Settings): only the
 //! account switcher, the folder drawer's account list and All Inboxes leave it out.
 //! `notify` takes effect only while notifications are on (`notifications`): an import never turns
-//! them on, since that needs the system's permission.
+//! them on, since that needs the system's permission. `notify`, `notifyFolders` and `quietHours`
+//! (with the `importantSenders` preference) decide what a background run posts, under desktop's
+//! policy (`background.rs`).
 
 use crate::db::Engine;
 use crate::rpc::{parse, RpcError};
@@ -215,6 +217,7 @@ pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
                 let n = if n.is_empty() { email.as_str() } else { n.as_str() };
                 c.execute("UPDATE accounts SET display_name = ?1 WHERE id = ?2", (n, &p.account_id))?;
             }
+            let old_folders = notify_folders_in(c, &p.account_id)?;
             for (k, v) in &writes {
                 match v {
                     Some(v) => put_in(c, k, v)?,
@@ -222,6 +225,9 @@ pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
                         c.execute("DELETE FROM settings WHERE key = ?1", [k])?;
                     }
                 }
+            }
+            if p.values.contains_key("notifyFolders") {
+                drop_unwatched_marks(c, &p.account_id, &old_folders, &notify_folders_in(c, &p.account_id)?)?;
             }
             read_in(c, &p.account_id)
         })
@@ -279,15 +285,45 @@ pub(crate) fn forget(c: &Connection, account_id: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
-/// The account's notifications are on (`acct.<id>.notify`, on unless `false`). A read failure
-/// counts as on.
-pub(crate) fn notify_on(shared: &crate::db::Shared, account_id: &str) -> bool {
-    shared
-        .read(|c| c.query_row("SELECT value FROM settings WHERE key = ?1", [key(account_id, "notify")], |r| r.get::<_, String>(0)).optional())
-        .ok()
-        .flatten()
-        .as_deref()
-        != Some("false")
+/// The account's watched folders (`acct.<id>.notifyFolders`, `["INBOX"]` unless set), as stored.
+pub(crate) fn notify_folders_in(c: &Connection, account_id: &str) -> rusqlite::Result<Vec<String>> {
+    let v = decode("notifyFolders", get_in(c, &key(account_id, "notifyFolders"))?);
+    Ok(v.as_array().map(|a| a.iter().filter_map(|f| f.as_str().map(str::to_string)).collect()).unwrap_or_default())
+}
+
+/// The account's entry of the notification policy, as desktop keeps it under
+/// `notificationSettings.accounts.<id>` (`mailvault_core::notify_policy`): `{enabled, folders,
+/// quietHours}` from its `notify`, `notifyFolders` and `quietHours` rows (each at its default
+/// when unset). The phone always has an entry: its defaults are INBOX, on, no quiet hours.
+pub(crate) fn policy_entry_in(c: &Connection, account_id: &str) -> rusqlite::Result<Value> {
+    let get = |n: &str| -> rusqlite::Result<Value> { Ok(decode(n, get_in(c, &key(account_id, n))?)) };
+    Ok(json!({ "enabled": get("notify")?, "folders": get("notifyFolders")?, "quietHours": get("quietHours")? }))
+}
+
+/// Same name on both sides: INBOX in any case, anything else exactly.
+fn same_folder(a: &str, b: &str) -> bool {
+    a == b || (crate::sync::is_inbox(a) && crate::sync::is_inbox(b))
+}
+
+/// `notifyFolders` changed from `old` to `new`: every background watermark of a folder other than
+/// INBOX that was not watched both before and after goes, so a folder watched again takes a new
+/// baseline on its next run rather than announcing what came while it was not watched. INBOX
+/// keeps its watermark (a run always reads it: a priority sender notifies from it, watched or
+/// not). Inside the write.
+fn drop_unwatched_marks(c: &Connection, account_id: &str, old: &[String], new: &[String]) -> rusqlite::Result<()> {
+    let marks: Vec<String> = {
+        let mut st = c.prepare("SELECT folder FROM notify_state WHERE account_id = ?1")?;
+        let rows = st.query_map([account_id], |r| r.get(0))?.collect::<rusqlite::Result<Vec<String>>>()?;
+        rows
+    };
+    for folder in marks {
+        let kept = crate::sync::is_inbox(&folder)
+            || (old.iter().any(|f| same_folder(f, &folder)) && new.iter().any(|f| same_folder(f, &folder)));
+        if !kept {
+            c.execute("DELETE FROM notify_state WHERE account_id = ?1 AND folder = ?2", (account_id, &folder))?;
+        }
+    }
+    Ok(())
 }
 
 impl Engine {
