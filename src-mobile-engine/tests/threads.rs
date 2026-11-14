@@ -290,3 +290,92 @@ fn a_huge_references_header_groups_quickly() {
     assert_eq!(uids(&p), vec![3], "{p}");
     assert_eq!(row(&p, 3)["threadUids"], json!([3, 2, 1]));
 }
+
+/// How long the first threaded page of a large folder may take (it groups the whole folder), in a
+/// debug build on a test box: far above what linear grouping needs, far below a quadratic one.
+const LARGE_PAGE: std::time::Duration = std::time::Duration::from_secs(3);
+const LARGE: i64 = 40_000;
+
+/// Times the first threaded page (the grouping) and a later one (the kept grouping).
+fn timed_pages(e: &Engine, what: &str) -> Value {
+    let started = std::time::Instant::now();
+    let p = page(e, "a", true, Value::Null, 50);
+    let first = started.elapsed();
+    let started = std::time::Instant::now();
+    page(e, "a", true, p["nextCursor"].clone(), 50);
+    let second = started.elapsed();
+    eprintln!("[threads perf] {what}: first page {first:?}, next page {second:?}");
+    assert!(first < LARGE_PAGE, "{what}: grouping took {first:?}");
+    assert!(second < std::time::Duration::from_millis(500), "{what}: a kept grouping's page took {second:?}");
+    p
+}
+
+/// Many reply-like mails with one subject and no ancestry (a mailing list's "Re:" storm, or a
+/// sender making the list slow on purpose) all within the window: one conversation, grouped in
+/// linear time.
+#[test]
+fn many_same_subject_replies_group_in_linear_time() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let c = db(tmp.path());
+    add_account(&c, "a");
+    c.execute_batch("BEGIN").unwrap();
+    add(&c, "a", Msg { uid: 1, date_ms: 1_000 * DAY, message_id: "<root@x>", subject: "Storm", ..MSG });
+    for uid in 2..=LARGE {
+        add(&c, "a", Msg { uid, date_ms: 1_000 * DAY + uid * 1_000, message_id: "", subject: "Re: Storm", ..MSG });
+    }
+    c.execute_batch("COMMIT").unwrap();
+    let p = timed_pages(&e, "one subject, one conversation");
+    assert_eq!(uids(&p), vec![LARGE], "{}", p["total"]);
+    assert_eq!(p["total"], 1);
+    assert_eq!(row(&p, LARGE)["threadCount"], LARGE);
+}
+
+/// The same storm spread out, each mail more than the window after the one before: every one starts
+/// its own conversation, and none is compared with every earlier one.
+#[test]
+fn same_subject_replies_beyond_the_window_group_in_linear_time() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let c = db(tmp.path());
+    add_account(&c, "a");
+    c.execute_batch("BEGIN").unwrap();
+    for uid in 1..=LARGE {
+        add(&c, "a", Msg { uid, date_ms: uid * 31 * DAY, message_id: "", subject: "Re: Storm", ..MSG });
+    }
+    c.execute_batch("COMMIT").unwrap();
+    let p = timed_pages(&e, "one subject, every mail its own conversation");
+    assert_eq!(p["total"], LARGE);
+    assert_eq!(uids(&p)[..3], [LARGE, LARGE - 1, LARGE - 2]);
+}
+
+/// A large folder of ordinary conversations: the first threaded page stays inside its budget, and
+/// an action that changes no membership (a read flag) does not regroup the folder.
+#[test]
+fn a_large_folder_pages_quickly_and_a_flag_change_does_not_regroup_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let c = db(tmp.path());
+    add_account(&c, "a");
+    c.execute_batch("BEGIN").unwrap();
+    let ids: Vec<String> = (0..=LARGE).map(|uid| format!("<m{uid}@x>")).collect();
+    for uid in 1..=LARGE {
+        // Conversations of four: each reply names the first message of its group.
+        let root = uid - (uid - 1) % 4;
+        let refs = [ids[root as usize].as_str()];
+        let m = Msg { uid, date_ms: uid * 60_000, message_id: &ids[uid as usize], subject: "Topic", seen: false, ..MSG };
+        add(&c, "a", if root == uid { m } else { Msg { references: &refs, subject: "Re: Topic", ..m } });
+    }
+    c.execute_batch("COMMIT").unwrap();
+    let p = timed_pages(&e, "ordinary conversations");
+    assert_eq!(p["total"], LARGE / 4);
+    assert_eq!(row(&p, LARGE)["threadUnread"], 4);
+
+    e.rpc("mobile.actions.apply", json!({ "accountId": "a", "folder": "INBOX", "uids": [LARGE], "kind": "seen" })).unwrap();
+    let started = std::time::Instant::now();
+    let p = page(&e, "a", true, Value::Null, 50);
+    let took = started.elapsed();
+    eprintln!("[threads perf] after a flag change: {took:?}");
+    assert_eq!(row(&p, LARGE)["threadUnread"], 3, "{p}");
+    assert!(took < LARGE_PAGE / 3, "a flag change regrouped the folder: {took:?}");
+}

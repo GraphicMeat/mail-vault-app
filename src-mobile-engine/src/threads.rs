@@ -16,13 +16,17 @@
 //! newest message's `(date, uid)` exactly as the flat list pages by rows, and `total` counts
 //! conversations. It is kept per folder for the folder's list generation and row count (every
 //! sync pass and every action that changes the folder moves the generation), so paging and
-//! scrolling never regroup; a change regroups once, on the next page read.
+//! scrolling never regroup; a change regroups once, on the next page read. A change that leaves
+//! the same messages listed (a read or flag change, which moves the generation too) only reads
+//! their flags again, without regrouping. Grouping is O(n log n) in the folder's rows: a
+//! reply-like orphan finds its nearest same-subject message through an ordered index, so a
+//! storm of `Re:` mails with no ancestry never compares every mail with every other.
 
 use crate::db::Shared;
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 /// A subject alone joins a reply-like orphan to a conversation only this close in time.
@@ -97,20 +101,29 @@ struct Ancestry {
 pub(crate) fn folder_threads(shared: &Shared, c: &Connection, account: &str, folder: &str, gen: i64) -> rusqlite::Result<Arc<Folder>> {
     let count = crate::rpc::count_listed(c, account, folder)?;
     let key = (account.to_string(), folder.to_string());
-    if let Some(f) = lock(&shared.threads.0).get(&key) {
+    let kept = lock(&shared.threads.0).get(&key).cloned();
+    if let Some(f) = &kept {
         if f.gen == gen && f.count == count {
             return Ok(Arc::clone(f));
         }
     }
-    let rows = read_rows(c, account, folder)?;
-    let threads = group(rows);
-    let mut by_uid = HashMap::new();
-    for (i, t) in threads.iter().enumerate() {
-        for m in &t.members {
-            by_uid.insert(m.uid, i);
+    let reflagged = match &kept {
+        Some(f) if f.count == count => reflag(c, account, folder, f, gen)?,
+        _ => None,
+    };
+    let built = Arc::new(match reflagged {
+        Some(f) => f,
+        None => {
+            let threads = group(read_rows(c, account, folder)?);
+            let mut by_uid = HashMap::new();
+            for (i, t) in threads.iter().enumerate() {
+                for m in &t.members {
+                    by_uid.insert(m.uid, i);
+                }
+            }
+            Folder { gen, count, threads, by_uid }
         }
-    }
-    let built = Arc::new(Folder { gen, count, threads, by_uid });
+    });
     let mut cache = lock(&shared.threads.0);
     if cache.len() >= CACHED_FOLDERS && !cache.contains_key(&key) {
         cache.clear();
@@ -121,6 +134,44 @@ pub(crate) fn folder_threads(shared: &Shared, c: &Connection, account: &str, fol
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// `f`'s grouping for generation `gen` when the folder lists exactly the messages it grouped: the
+/// same conversations with each message's read and flag state read again (one narrow read, no
+/// headers, no regroup). `None` when a message came or went.
+fn reflag(c: &Connection, account: &str, folder: &str, f: &Folder, gen: i64) -> rusqlite::Result<Option<Folder>> {
+    let mut st = c.prepare_cached(&format!(
+        "SELECT uid, COALESCE(local_seen, seen), COALESCE(local_flagged, flagged) FROM messages WHERE {}",
+        crate::rpc::LISTED
+    ))?;
+    let mut state: HashMap<i64, (bool, bool)> = HashMap::with_capacity(f.by_uid.len());
+    let mut rows = st.query((account, folder))?;
+    while let Some(r) = rows.next()? {
+        let uid: i64 = r.get(0)?;
+        if !f.by_uid.contains_key(&uid) {
+            return Ok(None);
+        }
+        state.insert(uid, (r.get::<_, i64>(1)? != 0, r.get::<_, i64>(2)? != 0));
+    }
+    if state.len() != f.by_uid.len() {
+        return Ok(None);
+    }
+    let threads = f
+        .threads
+        .iter()
+        .map(|t| Thread {
+            id: t.id.clone(),
+            members: t
+                .members
+                .iter()
+                .map(|m| {
+                    let (seen, flagged) = state[&m.uid];
+                    Member { seen, flagged, ..m.clone() }
+                })
+                .collect(),
+        })
+        .collect();
+    Ok(Some(Folder { gen, count: f.count, threads, by_uid: f.by_uid.clone() }))
 }
 
 fn read_rows(c: &Connection, account: &str, folder: &str) -> rusqlite::Result<Vec<Row>> {
@@ -363,9 +414,12 @@ fn group(rows: Vec<Row>) -> Vec<Thread> {
     }
 
     // A reply-like message that names no ancestor joins the same-subject conversation nearest in
-    // time, oldest orphan first, within the window; else it starts one later orphans may join.
+    // time (the one with a message closest to it; on a tie the conversation met first), oldest
+    // orphan first, within the window; else it starts one later orphans may join. Each subject
+    // keeps its conversations' message dates in order (`(date, conversation)`), so the nearest
+    // message is the one just before or just after the orphan's date: two lookups, not a scan.
     let mut merged: Vec<(usize, Vec<usize>)> = Vec::new();
-    let mut candidates: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut dates: HashMap<String, BTreeSet<(i64, usize)>> = HashMap::new();
     let mut orphans: Vec<(usize, usize)> = Vec::new();
     for root in order {
         let members = groups.remove(&root).unwrap_or_default();
@@ -373,30 +427,33 @@ fn group(rows: Vec<Row>) -> Vec<Thread> {
         if members.len() == 1 && chains[first].len() == 1 && reply_like(&rows[first].subject) {
             orphans.push((root, first));
         } else {
-            candidates.entry(normalize_subject(&rows[first].subject)).or_default().push(merged.len());
+            let at = dates.entry(normalize_subject(&rows[first].subject)).or_default();
+            for &m in &members {
+                at.insert((rows[m].date_ms, merged.len()));
+            }
             merged.push((root, members));
         }
     }
     orphans.sort_by_key(|&(_, r)| (rows[r].date_ms, rows[r].uid));
     for (root, r) in orphans {
-        let key = normalize_subject(&rows[r].subject);
         let t = rows[r].date_ms;
-        let mut best: Option<(i64, usize)> = None;
-        for &g in candidates.get(&key).map(Vec::as_slice).unwrap_or(&[]) {
-            for &m in &merged[g].1 {
-                let gap = (rows[m].date_ms - t).abs();
-                if best.map_or(true, |(b, _)| gap < b) {
-                    best = Some((gap, g));
-                }
+        let at = dates.entry(normalize_subject(&rows[r].subject)).or_default();
+        // The first conversation with a message at `date`.
+        let first_at = |date: i64| at.range((date, 0)..).next().filter(|&&(d, _)| d == date).map(|&(_, g)| g);
+        let before = at.range(..=(t, usize::MAX)).next_back().map(|&(d, _)| d);
+        let after = at.range((t, 0)..).next().map(|&(d, _)| d);
+        let best = [before, after].into_iter().flatten().filter_map(|d| first_at(d).map(|g| ((d - t).abs(), g))).min();
+        let g = match best {
+            Some((gap, g)) if gap <= SUBJECT_MERGE_WINDOW_MS => {
+                merged[g].1.push(r);
+                g
             }
-        }
-        match best {
-            Some((gap, g)) if gap <= SUBJECT_MERGE_WINDOW_MS => merged[g].1.push(r),
             _ => {
-                candidates.entry(key).or_default().push(merged.len());
                 merged.push((root, vec![r]));
+                merged.len() - 1
             }
-        }
+        };
+        at.insert((t, g));
     }
 
     let mut threads: Vec<Thread> = merged
