@@ -7,9 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   invoke, stageOutgoing, sendStaged, cleanupDraftFor, markAnswered, markForwarded, createSchedule, ensureFreshToken,
-  replaceSchedule, cancelSchedule, billing, listeners, daemonCall,
+  replaceSchedule, cancelSchedule, billing, listeners, daemonCall, followSentReply,
 } = vi.hoisted(() => ({
   daemonCall: vi.fn().mockResolvedValue({}),
+  followSentReply: vi.fn(),
   // Every `listen` subscription: its event name, handler, and unlisten spy.
   listeners: [],
   billing: { premium: true },
@@ -50,7 +51,7 @@ vi.mock('../../stores/mailStore', () => {
   const state = {
     activeAccountId: 'acct-1', activeMailbox: 'Sent',
     mailboxes: [{ path: 'Sent', specialUse: '\\Sent' }], sentEmails: [], emails: [], localEmails: [],
-    updateSortedEmails: vi.fn(), loadSentHeaders: vi.fn(),
+    updateSortedEmails: vi.fn(), loadSentHeaders: vi.fn(), followSentReply,
   };
   const hook = vi.fn(selector => selector(state));
   hook.getState = () => state;
@@ -109,6 +110,7 @@ beforeEach(() => {
   cleanupDraftFor.mockReset().mockResolvedValue(undefined);
   markAnswered.mockClear();
   markForwarded.mockClear();
+  followSentReply.mockClear();
   createSchedule.mockReset();
   createSchedule.mockResolvedValue(undefined);
   replaceSchedule.mockReset();
@@ -123,6 +125,13 @@ beforeEach(() => {
   const state = mailStore.useMailStore.getState();
   state.sentEmails = [];
   state.emails = [];
+  state.localEmails = [];
+  state.sortedEmails = [];
+  state.activeAccountId = 'acct-1';
+  state.activeMailbox = 'Sent';
+  state.loadSentHeaders.mockReset();
+  state.updateSortedEmails.mockReset();
+  state.activateAccount = undefined;
   listeners.length = 0;
   vi.useRealTimers();
 });
@@ -205,6 +214,24 @@ describe('the Sent folder a send names', () => {
 const sendParams = () => sendStaged.mock.calls.map(([, , params]) => params);
 
 describe('createComposeSend', () => {
+  it('asks the reader to follow a reply to the open message', async () => {
+    const original = { uid: 7 };
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: original, account })();
+    expect(followSentReply).toHaveBeenCalledWith(original, '<one@example.test>');
+  });
+
+  it.each(['forward', 'new'])('does not follow a %s message', async mode => {
+    await createComposeSend({ snapshot, mode, replyTo: { uid: 7 }, account })();
+    expect(followSentReply).not.toHaveBeenCalled();
+  });
+
+  it('does not follow a send that failed', async () => {
+    sendStaged.mockRejectedValueOnce(new Error('offline'));
+    await expect(createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })())
+      .rejects.toThrow('offline');
+    expect(followSentReply).not.toHaveBeenCalled();
+  });
+
   it('stages once and sends the same uid and Message-ID when the queued closure retries', async () => {
     sendStaged.mockRejectedValueOnce(new Error('offline'));
     const sendFn = createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account, settings: { displayName: 'Alias name' } });
@@ -356,7 +383,11 @@ describe('the Sent copy the send leaves behind', () => {
 
   /// Same account, another message (a scheduled send, a second reply): its
   /// APPEND says nothing about this row, so the row stays.
-  it('drops its row only on its own message\'s APPEND', async () => {
+  it('drops its row only once its own server copy is in Sent', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [{ uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
     await createComposeSend({ snapshot, mode: 'new', replyTo: null, account })();
     const { handler, unlisten } = appendListener();
 
@@ -366,8 +397,129 @@ describe('the Sent copy the send leaves behind', () => {
     expect(unlisten).not.toHaveBeenCalled();
 
     await handler(appendEvent({ messageIdHeader: 'one@example.test' }));
-    expect(sentRows()).toEqual([]);
+    expect(sentRows().map(item => item.uid)).toEqual([900]);
     expect(unlisten).toHaveBeenCalled();
+  });
+
+  it('keeps the staged reply while the Sent reload brings no server copy', async () => {
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(sentRows().map(item => item.uid)).toEqual([STAGED_UID]);
+    expect(mailStore.useMailStore.getState().emails.map(item => item.uid)).toContain(STAGED_UID);
+  });
+
+  it('does not reopen Sent if the reader moved during its reload', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.activateAccount = vi.fn();
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    vi.spyOn(mailStore.useMailStore, 'getState').mockImplementationOnce(() => ({
+      ...state,
+      loadSentHeaders: async () => { state.activeMailbox = 'INBOX'; },
+    }));
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(state.activateAccount).not.toHaveBeenCalled();
+    expect(state.activeMailbox).toBe('INBOX');
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the staged reply when the Sent reload fails', async () => {
+    mailStore.useMailStore.getState().loadSentHeaders.mockRejectedValueOnce(new Error('offline'));
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(sentRows().map(item => item.uid)).toEqual([STAGED_UID]);
+  });
+
+  it('never leaves the reply out of Sent between APPEND and reload', async () => {
+    const state = mailStore.useMailStore.getState();
+    let stagedAtReload = false;
+    state.loadSentHeaders.mockImplementation(async () => {
+      stagedAtReload = sentRows().some(item => item.uid === STAGED_UID);
+      state.sentEmails = [{ uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(stagedAtReload).toBe(true);
+  });
+
+  it('drops the staged row from an open Sent folder once the server copy lands', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [{ uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    expect(state.emails.map(item => item.uid)).toContain(STAGED_UID);
+    state.localEmails = [...state.emails];
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(state.emails.map(item => item.uid)).toEqual([900]);
+    expect(state.localEmails.map(item => item.uid)).not.toContain(STAGED_UID);
+  });
+
+  it('keeps the server copy visible when the active Sent refresh fails', async () => {
+    const { deriveDisplayRows } = await import('../../stores/slices/messageListSlice');
+    const state = mailStore.useMailStore.getState();
+    state.updateSortedEmails.mockImplementation(() => {
+      state.sortedEmails = deriveDisplayRows({
+        emails: state.emails, activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox,
+      });
+    });
+    state.activateAccount = vi.fn().mockRejectedValue(new Error('offline'));
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [{ uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    expect(state.sortedEmails.map(item => item.uid)).toContain(STAGED_UID);
+    await listeners.find(l => l.name === 'send-server-append-complete')
+      .handler({ payload: { accountId: account.email, mailbox: 'Sent', ok: true, messageIdHeader: 'one@example.test' } });
+
+    expect(state.sortedEmails.map(item => item.uid)).toContain(900);
+    expect(state.sortedEmails.map(item => item.uid)).not.toContain(STAGED_UID);
+  });
+
+  it('removes a rebuilt staged row by Message-ID when its UID changed', async () => {
+    const state = mailStore.useMailStore.getState();
+    sendStaged.mockResolvedValueOnce({ ...sentReply(), entry: row({ uid: STAGED_UID + 1 }) });
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [...state.sentEmails, { uid: 900, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    state.localEmails = [...state.emails];
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+
+    for (const rows of [state.sentEmails, state.emails, state.localEmails]) {
+      expect(rows.some(item => item._optimistic)).toBe(false);
+    }
+    expect(state.sentEmails.map(item => item.uid)).toEqual([900]);
+    expect(state.emails.map(item => item.uid)).toEqual([900]);
+  });
+
+  it('preserves a server copy whose UID equals the staged UID', async () => {
+    const state = mailStore.useMailStore.getState();
+    state.loadSentHeaders.mockImplementation(async () => {
+      state.sentEmails = [...state.sentEmails, { uid: STAGED_UID, messageId: '<one@example.test>', _accountId: 'acct-1' }];
+    });
+
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+
+    expect(state.sentEmails.map(item => item.uid)).toEqual([STAGED_UID]);
+    expect(state.emails.map(item => item.uid)).toEqual([STAGED_UID]);
+    expect(state.sentEmails[0]).not.toHaveProperty('_optimistic');
+    expect(state.emails[0]).not.toHaveProperty('_optimistic');
+  });
+
+  it('matches the server copy by canonical Message-ID', async () => {
+    const state = mailStore.useMailStore.getState();
+    let stagedAtReload = false;
+    state.loadSentHeaders.mockImplementation(async () => {
+      stagedAtReload = state.sentEmails.some(item => item.uid === STAGED_UID);
+      state.sentEmails = [{ uid: 900, messageId: ' <one@example.test>', _accountId: 'acct-1' }];
+    });
+    await createComposeSend({ snapshot, mode: 'reply', replyTo: { uid: 7 }, account })();
+    await appendListener().handler(appendEvent({ messageIdHeader: 'one@example.test' }));
+    expect(stagedAtReload).toBe(true);
+    expect(state.emails.map(item => item.uid)).not.toContain(STAGED_UID);
   });
 });
 

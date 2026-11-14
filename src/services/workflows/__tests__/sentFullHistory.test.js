@@ -417,14 +417,15 @@ describe('the daemon fills the whole folder, for every provider', () => {
     let release;
     sync.waitForSync.mockImplementation(() => new Promise(resolve => { release = () => resolve({ success: true }); }));
     await loadSentHeaders(JMAP.id);
-    const staged = { uid: 90002, messageId: '<s300@x>', subject: 'staged', _optimistic: true, _accountId: JMAP.id, flags: [], date: '2026-02-01T00:00:00Z' };
+    const staged = { uid: 90002, messageId: ' <s300@x> ', subject: 'staged', _optimistic: true, _accountId: JMAP.id, flags: [], date: '2026-02-01T00:00:00Z' };
     useMailStore.setState(s => ({ sentEmails: [...s.sentEmails, staged] }));
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     release();
     await _sentFillFor(JMAP.id);
 
-    const copies = (useMailStore.getState().sentEmails || []).filter(e => e.messageId === '<s300@x>');
+    const copies = (useMailStore.getState().sentEmails || []).filter(e => e.uid === 90002 || e.uid === 300);
     expect(copies).toHaveLength(1);
+    expect(copies[0].uid).toBe(300);
     expect(copies[0]._optimistic).toBeFalsy();
   });
 
@@ -486,6 +487,34 @@ describe('an unchanged cache is not read again', () => {
 });
 
 describe('review defects of the window', () => {
+  it('replaces a staged reply when the cached server Message-ID has whitespace', async () => {
+    prime(IMAP);
+    const staged = { ...row(90002), messageId: '<late@x>', _optimistic: true, _accountId: IMAP.id };
+    cache = [{ ...row(90003), messageId: ' <late@x> ' }];
+    useMailStore.setState({ sentEmails: [staged] });
+
+    await loadSentHeaders(IMAP.id, { cacheOnly: true });
+
+    expect(useMailStore.getState().sentEmails.map(email => email.uid)).toEqual([90003]);
+  });
+
+  it('replaces a staged open Sent row when a later reload finds the server copy', async () => {
+    prime(IMAP);
+    const staged = { ...row(90002), messageId: '<late@x>', _optimistic: true, _accountId: IMAP.id };
+    useMailStore.setState({ activeMailbox: 'Sent', sentEmails: [staged], emails: [staged], localEmails: [staged] });
+    api.fetchEmails.mockResolvedValueOnce({ emails: rows(1, PAGE), total: TOTAL });
+    await loadSentHeaders(IMAP.id);
+    expect(useMailStore.getState().emails).toContainEqual(staged);
+
+    const server = { ...row(90003), messageId: staged.messageId };
+    api.fetchEmails.mockResolvedValueOnce({ emails: [server, ...rows(1, PAGE - 1)], total: TOTAL + 1 });
+    await loadSentHeaders(IMAP.id);
+    const state = useMailStore.getState();
+    expect(state.sentEmails.some(e => e._optimistic && e.messageId === staged.messageId)).toBe(false);
+    expect(state.emails.filter(e => e.messageId === staged.messageId).map(e => e.uid)).toEqual([server.uid]);
+    expect(state.localEmails.some(e => e._optimistic && e.messageId === staged.messageId)).toBe(false);
+  });
+
   it('a message moved in long after it was sent (top uid, old date) does not stop the window short', async () => {
     cache = [{ ...row(9000), date: '2001-01-01T00:00:00Z' }, ...rows(1, TOTAL)];
     prime(IMAP, {}, { reach: 250 });

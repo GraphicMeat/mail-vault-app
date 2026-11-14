@@ -86,6 +86,7 @@ export async function setUnifiedInbox(enabled) {
       selectedEmail: null,
       selectedEmailSource: null,
       selectedThread: null,
+      followReply: null,
       selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
       ...paintSeed(unifiedSeed(get(), 'INBOX', preUnifiedSnapshot)),
     });
@@ -95,7 +96,7 @@ export async function setUnifiedInbox(enabled) {
     const _loadAbortController = getLoadAbortController();
     if (_loadAbortController) _loadAbortController.abort();
     clearUnifiedFolders();
-    useMailStore.setState({ unifiedInbox: false, unifiedFolder: 'INBOX', loadingProgress: null });
+    useMailStore.setState({ unifiedInbox: false, unifiedFolder: 'INBOX', followReply: null, loadingProgress: null });
   }
 }
 
@@ -124,6 +125,7 @@ export async function switchUnifiedFolder(mailbox) {
       selectedEmail: null,
       selectedEmailSource: null,
       selectedThread: null,
+      followReply: null,
       selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
       loading: false,
     });
@@ -138,6 +140,7 @@ export async function switchUnifiedFolder(mailbox) {
     selectedEmail: null,
     selectedEmailSource: null,
     selectedThread: null,
+    followReply: null,
     selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
     ...paintSeed(unifiedSeed(get(), mailbox)),
   });

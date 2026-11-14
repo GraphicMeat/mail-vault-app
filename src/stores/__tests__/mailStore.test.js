@@ -69,7 +69,7 @@ vi.mock('../../services/attachmentUtils', () => ({
   hasRealAttachments: () => false,
 }));
 vi.mock('../../utils/emailParser', async (importOriginal) => ({
-  buildThreads: () => new Map(),
+  buildThreads: vi.fn(() => new Map()),
   // A local snooze keys its held message by the canonical Message-ID.
   normalizeMessageId: (await importOriginal()).normalizeMessageId,
 }));
@@ -577,6 +577,45 @@ describe('network recovery (STAB-02)', () => {
 });
 
 describe('getChatEmails provenance stamping', () => {
+  it('replaces a staged Sent row when its server copy has the same UID', async () => {
+    const staged = {
+      uid: 19, messageId: '<reply@x>', subject: 'Reply', date: '2026-01-02T00:00:00Z',
+      from: { address: 'user@example.com' }, to: [{ address: 'friend@example.com' }],
+      _accountId: 'acct-1', _optimistic: true,
+    };
+    const server = { ...staged, _optimistic: false, source: 'server' };
+    invalidateChatAndThreadCaches();
+    useMailStore.setState({
+      activeAccountId: 'acct-1', activeMailbox: 'INBOX',
+      mailboxes: [{ path: 'Sent', name: 'Sent', specialUse: '\\Sent' }],
+      accounts: [{ id: 'acct-1', email: 'user@example.com' }],
+      sortedEmails: [], sentEmails: [staged], archivedEmailIds: new Set(), viewMode: 'all',
+    });
+    const { buildThreads } = await import('../../utils/emailParser');
+    buildThreads.mockImplementationOnce(emails => new Map([['reply', { emails }]]));
+    buildThreads.mockImplementationOnce(emails => new Map([['reply', { emails }]]));
+
+    expect(useMailStore.getState().getChatEmails()).toContain(staged);
+    expect([...useMailStore.getState().getThreads().values()][0].emails).toContain(staged);
+    useMailStore.setState({ sentEmails: [server] });
+    expect(useMailStore.getState().getChatEmails()).toContain(server);
+    expect([...useMailStore.getState().getThreads().values()][0].emails).toContain(server);
+  });
+
+  it('counts a Sent copy with padded Message-ID only once', () => {
+    const staged = { uid: 19, messageId: '<reply@x>', date: '2026-01-02T00:00:00Z' };
+    const server = { uid: 20, messageId: ' <reply@x> ', date: '2026-01-02T00:00:00Z', _accountId: 'acct-1' };
+    invalidateChatAndThreadCaches();
+    useMailStore.setState({
+      activeAccountId: 'acct-1', activeMailbox: 'INBOX',
+      mailboxes: [{ path: 'Sent', name: 'Sent', specialUse: '\\Sent' }],
+      accounts: [{ id: 'acct-1', email: 'user@example.com' }],
+      sortedEmails: [staged], sentEmails: [server], archivedEmailIds: new Set(), viewMode: 'all',
+    });
+
+    expect(useMailStore.getState().getChatEmails()).toEqual([staged]);
+  });
+
   // The merged list mixes INBOX and Sent, whose UIDs overlap. Readers
   // downstream (body loader, attachments, delete) need each message's own
   // folder — guessing from the active view returns a different message.
@@ -1183,6 +1222,20 @@ describe('unified inbox — server uid completeness never carries a stale true',
 
     expect(useMailStore.getState().serverUids.complete).toBe(false);
 
+    clearUnifiedFolders();
+  });
+
+  it('switchUnifiedFolder clears a pending reply follow', async () => {
+    const { putUnifiedFolder, clearUnifiedFolders } = await import('../../services/workflows/unifiedFolderCache');
+    putUnifiedFolder('Archive', []);
+    useMailStore.setState({
+      accounts: [ACCOUNT], unifiedInbox: true, unifiedFolder: 'INBOX',
+      followReply: { emailId: 7, replyId: '<reply@example.test>' },
+    });
+
+    await useMailStore.getState().switchUnifiedFolder('Archive');
+
+    expect(useMailStore.getState().followReply).toBeNull();
     clearUnifiedFolders();
   });
 });

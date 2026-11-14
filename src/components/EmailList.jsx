@@ -519,7 +519,7 @@ function EmailListComponent({ stacked = false }) {
       : displayEmails;
     const fp = `sender-${activeAccountId}-${activeMailbox}-${mergesSent}-${emails.length}-${uidDigest(emails)}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${userAddress}-${sentEmails.length}-${alertCount}-${unreadOnly}-${unreadKeep.size}`;
 
-    if (senderGroupCacheRef.current.fingerprint === fp) {
+    if (senderGroupCacheRef.current.fingerprint === fp && senderGroupCacheRef.current.emails === emails) {
       if (senderGroups !== senderGroupCacheRef.current.groups) {
         setSenderGroups(senderGroupCacheRef.current.groups);
       }
@@ -530,7 +530,7 @@ function EmailListComponent({ stacked = false }) {
     const timer = setTimeout(() => {
       if (cancelled) return;
       const groups = groupBySender(emails, userAddress);
-      senderGroupCacheRef.current = { fingerprint: fp, groups };
+      senderGroupCacheRef.current = { fingerprint: fp, emails, groups };
       setSenderGroups(groups);
     }, 0);
 

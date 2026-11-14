@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildExplorerTree, resolveExplorerPath } from '../explorer.js';
-import { refreshSelectedThread } from '../../stores/slices/unifiedHelpers.js';
+import { refreshSelectedThread } from '../../stores/slices/readerThread.js';
 
 const localDate = (year, month, day, hour = 12) =>
   new Date(year, month - 1, day, hour).toISOString();

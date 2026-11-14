@@ -153,6 +153,18 @@ describe('activateAccount remembers the folder the user chose', () => {
     expect(setLastMailbox).toHaveBeenCalledWith(A.id, 'INBOX');
   });
 
+  it('drops a pending reply follow when a descriptor restores the old selection', async () => {
+    primeOn(A, 'Archive');
+    useMailStore.setState({ followReply: { emailId: 7, replyId: '<reply@example.test>' } });
+    mockGetRestoreDescriptor.mockImplementation((id, mailbox) =>
+      id === A.id && mailbox === 'INBOX' ? { ...descriptorFor(A, 'INBOX'), selectedUid: 7 } : null);
+
+    await useMailStore.getState().activateAccount(A.id, 'INBOX');
+
+    expect(useMailStore.getState().selectedEmailId).toBe(7);
+    expect(useMailStore.getState().followReply).toBeNull();
+  });
+
   it('starts one closed-folder sweep for a foreground descriptor paint', async () => {
     primeOn(A, 'Archive');
     mockGetRestoreDescriptor.mockImplementation((id, mailbox) =>

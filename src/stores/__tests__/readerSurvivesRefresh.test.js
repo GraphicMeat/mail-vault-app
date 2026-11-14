@@ -20,11 +20,12 @@ describe('readerClearOnNavigation', () => {
   });
 
   it('closes the reader when the folder changes', () => {
-    const update = readerClearOnNavigation(view('a', 'INBOX'), 'a', 'Sent');
+    const update = readerClearOnNavigation({ ...view('a', 'INBOX'), followReply: { emailId: 10 } }, 'a', 'Sent');
     expect(update.selectedEmailId).toBeNull();
     expect(update.selectedEmail).toBeNull();
     expect(update.selectedEmailSource).toBeNull();
     expect(update.selectedThread).toBeNull();
+    expect(update.followReply).toBeNull();
     expect(update.selectedEmailIds).toEqual(new Set());
   });
 

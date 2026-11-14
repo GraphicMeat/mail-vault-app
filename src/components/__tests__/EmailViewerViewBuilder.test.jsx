@@ -93,6 +93,24 @@ beforeEach(async () => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+it('shows a sent reply in the reader without reopening the email', async () => {
+  const sent = message(6, { _mailbox: 'Sent', _fromSentFolder: true,
+    inReplyTo: OPEN.messageId, references: [OPEN.messageId], subject: 'Re: Fondue night 5' });
+  useMailStore.setState({ selectedEmailId: 5, selectedEmail: OPEN });
+  const { container } = render(<EmailViewer />);
+
+  act(() => {
+    useMailStore.getState().followSentReply(OPEN, sent.messageId);
+    useMailStore.getState().syncSelectedThread(buildThreads([OPEN, sent]));
+  });
+  await flush();
+
+  expect(useMailStore.getState().selectedThread.messageCount).toBe(2);
+  const sentRow = container.querySelector('[data-email-key="acct-1|Sent|6"]');
+  expect(sentRow).toBeTruthy();
+  expect(within(sentRow).getByText('Body 6')).toBeTruthy();
+});
+
 describe('view builder in the single reader', () => {
   it('the toggle opens and closes the panel', async () => {
     render(<EmailViewer />);
