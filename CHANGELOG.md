@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Mobile: All Inboxes no longer reloads over and over. It now reloads only when an inbox really changed, not for mail it already shows. Pull to refresh moves the list down under its spinner instead of covering the first email. All Inboxes now sits at the top of the accounts list, above your accounts, and there is no remove button next to each account any more: remove an account from its own page in Settings > Accounts > Edit.
 - With emails ticked in the list, the delete key now deletes all of them, even with another email open in the reading pane. It used to delete only the open email. The Delete and Backspace keys now delete too, as well as #.
 - The Reply-To warning no longer fires on emails that have no Reply-To at all. A sender's DKIM signature names its signed headers, and MailVault read the rest of that signature as the reply address, so receipts from senders like PlayStation showed a "Reply-To domain mismatch" with a long garbled address. Threading headers named inside a signature are no longer mistaken for the real ones either.
 - The Reply-To warning dialog now wraps a long reply domain instead of spilling past its edge with a sideways scrollbar.

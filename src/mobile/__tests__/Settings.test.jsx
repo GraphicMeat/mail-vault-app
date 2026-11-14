@@ -60,6 +60,14 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/** Opens `account`'s own page in Settings > Accounts and taps its Remove. */
+async function openRemove(account) {
+  const row = screen.getByText(account.email).closest('li');
+  await act(async () => { fireEvent.click(row.querySelector('[data-mv-acct-edit]')); });
+  const remove = await waitFor(() => screen.getByRole('button', { name: t('settings.accounts.removeAccount2') }));
+  fireEvent.click(remove);
+}
+
 const toggle = () => screen.getByRole('switch', { name: t('mobile.settings.notifyToggle') });
 const sets = () => engine.calls.filter(([m]) => m === 'mobile.settings.set').map(([, p]) => p);
 
@@ -111,9 +119,15 @@ describe('Settings', () => {
     expect(engine.permissionAsked).toBe(0);
   });
 
+  it('has no remove button next to an account: removing is inside the account', async () => {
+    render(<Settings onClose={() => {}} />);
+    expect(document.querySelector('.mv-acct__remove')).toBeNull();
+    expect(screen.queryByRole('button', { name: t('mobile.switcher.remove', { email: A1.email }) })).toBeNull();
+  });
+
   it('remove account confirms, then calls mobile.accounts.remove', async () => {
     render(<Settings onClose={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: t('mobile.switcher.remove', { email: A1.email }) }));
+    await openRemove(A1);
     expect(engine.calls.some(([m]) => m === 'mobile.accounts.remove')).toBe(false);
     expect(screen.getByText(t('mobile.switcher.removeConfirm', { email: A1.email }))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: t('common.remove') }));
@@ -125,12 +139,14 @@ describe('Settings', () => {
   it('keeps the account and its question when the removal fails', async () => {
     engine.failRemove = true;
     render(<Settings onClose={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: t('mobile.switcher.remove', { email: A1.email }) }));
+    await openRemove(A1);
     fireEvent.click(screen.getByRole('button', { name: t('common.remove') }));
     await waitFor(() => expect(engine.calls.some(([m]) => m === 'mobile.accounts.remove')).toBe(true));
     await waitFor(() => expect(screen.getByRole('button', { name: t('common.remove') }).disabled).toBe(false));
     expect(screen.getByText(t('mobile.switcher.removeConfirm', { email: A1.email }))).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: t('common.cancel') }));
+    // The question's own Cancel (the editor has one too).
+    fireEvent.click(document.querySelector('.mv-acct-edit__danger').querySelector('button'));
+    expect(screen.getByRole('button', { name: t('settings.accounts.removeAccount2') })).toBeTruthy();
     expect(screen.getByText(A1.email)).toBeTruthy();
   });
 

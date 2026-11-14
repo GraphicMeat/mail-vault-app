@@ -816,8 +816,6 @@ function App() {
           folders={folders}
           activeFolder={activeFolder}
           onSelect={onSelectFolder}
-          allInboxes={shownAccounts.length >= 2 ? { unread: shownAccounts.reduce((n, a) => n + (unread[a.id] || 0), 0) } : null}
-          onAllInboxes={onAllInboxes}
           onClose={closePanel}
           drafts={drafts.length}
           onDrafts={onDrafts}
@@ -834,7 +832,9 @@ function App() {
           unread={unread}
           onSelect={onSelectAccount}
           onAdd={() => setPanel('add')}
-          onRemove={(id) => useMobileStore.getState().removeAccount(id)}
+          allInboxes={shownAccounts.length >= 2 ? { unread: shownAccounts.reduce((n, a) => n + (unread[a.id] || 0), 0) } : null}
+          allInboxesActive={allInboxes}
+          onAllInboxes={onAllInboxes}
           onReauth={onSwitcherReauth}
           reauthBusy={Boolean(reauthState?.busy)}
           onClose={closePanel}

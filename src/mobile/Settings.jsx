@@ -1,8 +1,8 @@
 // The settings screen: a full-screen layer opened from the folder drawer's footer.
 //
 // - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one reauth),
-//   Remove after an inline confirm (the store's removeAccount; a refusal keeps the question), and
-//   Edit (AccountEditor.jsx: name, signature, hidden, its notifications). A hidden account is
+//   and Edit (AccountEditor.jsx: name, signature, hidden, and Remove after an inline confirm, as
+//   desktop keeps it on the account's own page; no remove button sits next to an account). A hidden account is
 //   listed here, marked, so it can be shown again.
 // - Preferences (SettingsPrefs.jsx): look, date and time, reading, deleting, swipes, sending.
 // - Notifications: the switch asks the system's permission before it turns on, and stays off with
@@ -99,42 +99,8 @@ function AccountNotify({ account, enabled }) {
 
 function AccountRow({ account, reauthBusy }) {
   const t = useT();
-  const [confirming, setConfirming] = useState(false);
-  const [removing, setRemoving] = useState(false);
   const [editing, setEditing] = useState(false);
-  const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
   const name = account.displayName && account.displayName !== account.email ? account.displayName : null;
-
-  if (confirming) {
-    return (
-      <li className="mv-setrow mv-acct--confirm">
-        <p className="mv-acct__question" dir="auto">{t('mobile.switcher.removeConfirm', { email: account.email })}</p>
-        <div className="mv-acct__actions">
-          <button type="button" className="mv-textbtn" disabled={removing} onClick={() => setConfirming(false)}>
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            className="mv-textbtn mv-textbtn--danger"
-            disabled={removing}
-            onClick={async () => {
-              setRemoving(true);
-              try {
-                await useMobileStore.getState().removeAccount(account.id);
-              } catch {
-                // Refused: the row stays, with its question, for another try (the store told the user).
-              } finally {
-                if (mounted.current) setRemoving(false);
-              }
-            }}
-          >
-            {t('common.remove')}
-          </button>
-        </div>
-      </li>
-    );
-  }
 
   if (editing) {
     return (
@@ -165,16 +131,6 @@ function AccountRow({ account, reauthBusy }) {
           {t('mobile.reauth.action')}
         </button>
       )}
-      <button
-        type="button"
-        className="mv-iconbtn mv-acct__remove"
-        aria-label={t('mobile.switcher.remove', { email: account.email })}
-        onClick={() => setConfirming(true)}
-      >
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path d="M9 4h6m-9 3h12m-10 0 .7 12h6.6L16 7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
     </li>
   );
 }

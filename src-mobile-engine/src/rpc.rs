@@ -401,7 +401,7 @@ fn messages_page(engine: &Engine, params: Value) -> Result<Value, RpcError> {
 
 /// The All Inboxes page: each account's inbox read through its own index (at most `limit + 1`
 /// rows each, after the cursor), then merged. `total` and `listGen` are sums over the inboxes; the
-/// sum moves whenever one inbox's generation does.
+/// sum moves whenever one inbox's generation does. `listGens` names each inbox's own.
 fn all_inboxes_page(engine: &Engine, cursor: Option<Cursor>, limit: i64) -> Result<Value, RpcError> {
     let internal = |e: String| RpcError::Internal(e);
     // Each account's inbox as sync stores it (`INBOX`, any case). An account with no folder row
@@ -420,9 +420,14 @@ fn all_inboxes_page(engine: &Engine, cursor: Option<Cursor>, limit: i64) -> Resu
             rows
         })
         .map_err(|e| internal(e.to_string()))?;
+    // Each inbox's own generation too (`listGens`): an inbox's `mobile.folder.changed` names one,
+    // so the page can tell an event it already holds from a newer one.
     let mut list_gen = 0_i64;
+    let mut list_gens = serde_json::Map::new();
     for (account, folder) in &inboxes {
-        list_gen += engine.shared().list_gen(account, folder).map_err(|e| internal(e.to_string()))?;
+        let gen = engine.shared().list_gen(account, folder).map_err(|e| internal(e.to_string()))?;
+        list_gen += gen;
+        list_gens.insert(account.clone(), json!(gen));
     }
     engine
         .read(|c| {
@@ -449,7 +454,9 @@ fn all_inboxes_page(engine: &Engine, cursor: Option<Cursor>, limit: i64) -> Resu
                 (y.date_ms, y.uid, y.account_id.as_deref()).cmp(&(x.date_ms, x.uid, x.account_id.as_deref()))
             });
             rows.truncate(limit as usize + 1);
-            Ok(page_json(rows, limit, total, list_gen))
+            let mut page = page_json(rows, limit, total, list_gen);
+            page["listGens"] = Value::Object(list_gens.clone());
+            Ok(page)
         })
         .map_err(|e| internal(e.to_string()))
 }

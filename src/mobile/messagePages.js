@@ -38,9 +38,11 @@ const END = Symbol('end');
  * @param {number} pageSize
  * @param {{ spansAccounts?: boolean }} options `spansAccounts`: the rows come from several
  *   accounts (All Inboxes, each row with its `accountId`). A uid then names a row only with its
- *   account, so rows are hidden and found by `keyFor(accountId, uid)`. The list's generation is a
- *   sum over the accounts and is not comparable with one folder's event: such a list ignores it
- *   and drops its pages on every `invalidate()`.
+ *   account, so rows are hidden and found by `keyFor(accountId, uid)`. The list's summed generation
+ *   is not comparable with one inbox's event, so such a list keeps each account's own (`listGens`
+ *   on its pages, and every event's) and `invalidate(gen, top, accountId)` drops its pages only
+ *   for an inbox generation newer than the one it holds: a pass or an action the pages already
+ *   show does not reload the list.
  */
 export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts = false } = {}) {
   const keyFor = spansAccounts ? (accountId, uid) => `${accountId}:${uid}` : (_accountId, uid) => uid;
@@ -51,6 +53,10 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
   const listeners = new Set();
   let total = null;
   let listGen = null;
+  const gens = new Map(); // spanning list: accountId -> newest inbox generation held
+  const noteGen = (accountId, gen) => {
+    if (accountId != null && gen != null && !(gens.get(accountId) >= gen)) gens.set(accountId, gen);
+  };
   let epoch = 0; // bumped by every reset; a reply from an older epoch is dropped
   let version = 0;
   let anchor = null; // { dateMs, uid, accountId?, from, to: number|null }
@@ -131,6 +137,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
         if (mine !== epoch) return; // the list moved on while this page was on its way
         const res = spansAccounts ? { ...reply, listGen: null } : reply;
         inflight.delete(p);
+        if (spansAccounts && reply?.listGens) for (const [a, g] of Object.entries(reply.listGens)) noteGen(a, g);
         if (listGen != null && res.listGen != null && res.listGen > listGen) {
           // The engine's list moved under the pages held: start over in the new generation,
           // holding the row on screen like an `invalidate` does.
@@ -244,8 +251,16 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
      * The folder changed to generation `gen`. Drops every page unless `gen` is not newer than the
      * one held, and keeps the row at `top` (the first row on screen by default) as the anchor;
      * none at the very top, where new mail should show. Returns whether anything was dropped.
+     * A spanning list compares `gen` with `accountId`'s inbox generation instead.
      */
-    invalidate(gen, top = topIndex) {
+    invalidate(gen, top = topIndex, accountId = null) {
+      if (spansAccounts) {
+        if (gen != null && accountId != null && gens.get(accountId) >= gen) return false;
+        noteGen(accountId, gen);
+        dropAll(listGen, top);
+        notify();
+        return true;
+      }
       if (gen != null && listGen != null && gen <= listGen) return false;
       dropAll(gen ?? listGen, top);
       notify();

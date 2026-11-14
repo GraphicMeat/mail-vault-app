@@ -11,7 +11,7 @@ import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-libra
 import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({
-  calls: [], handlers: new Map(), accounts: [], folders: {}, rows: {}, gen: 1, pending: {},
+  calls: [], handlers: new Map(), accounts: [], folders: {}, rows: {}, gen: 1, gens: {}, pending: {},
 }));
 
 /** The engine's unified order: (dateMs DESC, uid DESC, accountId DESC). */
@@ -49,7 +49,8 @@ vi.mock('../transport.js', () => ({
           const rows = engine.accounts
             .flatMap((a) => (engine.rows[`${a.id}/INBOX`] || []).map((r) => ({ ...r, accountId: a.id, folder: 'INBOX' })))
             .sort(unifiedOrder);
-          return { rows, nextCursor: null, total: rows.length, listGen: engine.gen };
+          const listGens = Object.fromEntries(engine.accounts.map((a) => [a.id, engine.gens[a.id] ?? 1]));
+          return { rows, nextCursor: null, total: rows.length, listGen: engine.gen, listGens };
         }
         const rows = engine.rows[`${params.accountId}/${params.folder}`] || [];
         return { rows, nextCursor: null, total: rows.length, listGen: engine.gen };
@@ -81,9 +82,11 @@ if (!window.PointerEvent) {
 
 const { createMobileStore, ALL_INBOXES, STORAGE_ACCOUNT, STORAGE_FOLDER } = await import('../store.js');
 const { default: FolderDrawer } = await import('../FolderDrawer.jsx');
+const { default: AccountSwitcher } = await import('../AccountSwitcher.jsx');
 const { default: MessageRow } = await import('../MessageRow.jsx');
 const { accountColor, ACCOUNT_COLORS } = await import('../accountColor.js');
 const { createPageCache, compareKeys } = await import('../messagePages.js');
+const { PULL_REST } = await import('../MessageList.jsx');
 
 const emit = (name, payload) => { for (const h of engine.handlers.get(name) || []) h(payload); };
 const callsOf = (method) => engine.calls.filter(([m]) => m === method).map(([, p]) => p);
@@ -105,6 +108,7 @@ beforeEach(() => {
   engine.calls = [];
   engine.handlers = new Map();
   engine.gen = 1;
+  engine.gens = {};
   engine.pending = {};
   engine.accounts = [acct('a1'), acct('a2')];
   engine.folders = { a1: [inbox(3), folder('Sent')], a2: [inbox(4)] };
@@ -183,6 +187,7 @@ describe('All Inboxes store', () => {
     expect(callsOf('mobile.messages.page').length).toBe(before);
     engine.rows['a2/INBOX'].unshift(row(10, 8000));
     engine.gen = 2;
+    engine.gens.a2 = 2;
     await act(async () => { emit('mobile.folder.changed', { accountId: 'a2', folder: 'INBOX', listGen: 2 }); });
     await store.getState().list.ensure(0);
     expect(keysOf(store.getState().list)[0]).toBe('a2:10');
@@ -237,6 +242,24 @@ describe('All Inboxes store', () => {
     expect(states().at(-1)).toEqual({ foreground: true, accountId: 'a1' });
   });
 
+  it('an inbox event the list already holds does not reload it', async () => {
+    engine.gens = { a1: 4, a2: 9 };
+    const store = await unifiedStore();
+    const before = callsOf('mobile.messages.page').length;
+    // Each inbox's own generation, as the merged page reported it, and an older one: nothing new.
+    await act(async () => { emit('mobile.folder.changed', { accountId: 'a1', folder: 'INBOX', listGen: 4 }); });
+    await act(async () => { emit('mobile.folder.changed', { accountId: 'a2', folder: 'INBOX', listGen: 8 }); });
+    await store.getState().list.ensure(0);
+    expect(callsOf('mobile.messages.page').length).toBe(before);
+    // The same event twice (a pass and its quick listing) reloads once.
+    engine.gens.a1 = 5;
+    await act(async () => { emit('mobile.folder.changed', { accountId: 'a1', folder: 'INBOX', listGen: 5 }); });
+    await store.getState().list.ensure(0);
+    await act(async () => { emit('mobile.folder.changed', { accountId: 'a1', folder: 'INBOX', listGen: 5 }); });
+    await store.getState().list.ensure(0);
+    expect(callsOf('mobile.messages.page').length).toBe(before + 1);
+  });
+
   it('picking an account in the switcher opens that account, not All Inboxes', async () => {
     const store = await unifiedStore();
     await store.getState().selectAccount('a2');
@@ -245,25 +268,40 @@ describe('All Inboxes store', () => {
   });
 });
 
-describe('All Inboxes drawer entry', () => {
-  const props = { account: acct('a1'), folders: [inbox(3)], activeFolder: 'INBOX', onSelect: () => {}, onClose: () => {} };
+describe('All Inboxes in the accounts sheet', () => {
+  const props = { accounts: [acct('a1'), acct('a2')], activeAccountId: 'a1', unread: { a1: 3, a2: 4 }, onSelect: () => {}, onAdd: () => {}, onClose: () => {} };
 
-  it('sits at the top of the drawer with every inbox\'s unread count when there are two accounts', () => {
+  it('sits above every account with every inbox\'s unread count when there are two accounts', () => {
     const onAllInboxes = vi.fn();
-    render(<FolderDrawer {...props} allInboxes={{ unread: 7 }} onAllInboxes={onAllInboxes} />);
-    const buttons = screen.getAllByRole('button').filter((b) => b.classList.contains('mv-folder'));
-    expect(buttons[0].textContent).toContain(t('sidebar.allInboxes'));
-    expect(buttons[0].textContent).toContain('7');
-    fireEvent.click(buttons[0]);
+    render(<AccountSwitcher {...props} allInboxes={{ unread: 7 }} onAllInboxes={onAllInboxes} />);
+    const entries = [...document.querySelectorAll('.mv-acct-list > li')];
+    expect(entries[0].querySelector('[data-mv-all-inboxes]')).toBeTruthy();
+    expect(entries[0].textContent).toContain(t('sidebar.allInboxes'));
+    expect(entries[0].textContent).toContain('7');
+    expect(entries[1].textContent).toContain('a1@example.test');
+    fireEvent.click(entries[0].querySelector('[data-mv-all-inboxes]'));
     expect(onAllInboxes).toHaveBeenCalledTimes(1);
   });
 
-  it('is marked when open, and absent without a second account', () => {
-    const { unmount } = render(<FolderDrawer {...props} activeFolder={ALL_INBOXES} allInboxes={{ unread: 0 }} onAllInboxes={() => {}} />);
-    expect(screen.getByRole('button', { name: t('sidebar.allInboxes') }).getAttribute('aria-current')).toBe('true');
+  it('is checked when open (no account is), and absent without a second account', () => {
+    const { unmount } = render(<AccountSwitcher {...props} allInboxesActive allInboxes={{ unread: 0 }} onAllInboxes={() => {}} />);
+    const current = [...document.querySelectorAll('[aria-current="true"]')];
+    expect(current).toHaveLength(1);
+    expect(current[0].hasAttribute('data-mv-all-inboxes')).toBe(true);
     unmount();
-    render(<FolderDrawer {...props} allInboxes={null} onAllInboxes={() => {}} />);
+    render(<AccountSwitcher {...props} allInboxes={null} onAllInboxes={() => {}} />);
     expect(screen.queryByText(t('sidebar.allInboxes'))).toBeNull();
+  });
+
+  it('the folder drawer no longer lists it', () => {
+    render(<FolderDrawer account={acct('a1')} folders={[inbox(3)]} activeFolder="INBOX" onSelect={() => {}} onClose={() => {}} allInboxes={{ unread: 7 }} onAllInboxes={() => {}} />);
+    expect(screen.queryByText(t('sidebar.allInboxes'))).toBeNull();
+  });
+
+  it('offers no remove button next to an account', () => {
+    render(<AccountSwitcher {...props} onRemove={() => {}} />);
+    expect(document.querySelector('.mv-acct__remove')).toBeNull();
+    expect(screen.queryByRole('button', { name: t('mobile.switcher.remove', { email: 'a1@example.test' }) })).toBeNull();
   });
 });
 
@@ -329,8 +367,8 @@ describe('All Inboxes in the app', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     render(<App />);
     await waitFor(() => expect(document.querySelector('[data-index="0"][data-loaded="1"]')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(t('sidebar.allInboxes')) }));
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.switcher.open', { email: 'a1@example.test' }) }));
+    fireEvent.click(document.querySelector('[data-mv-all-inboxes]'));
     await waitFor(() => expect(document.querySelectorAll('.mv-row__acct').length).toBe(4));
   }
 
@@ -386,8 +424,8 @@ describe('All Inboxes in the app', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     render(<App />);
     await waitFor(() => expect(document.querySelector('[data-index="0"][data-loaded="1"]')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
-    expect(screen.getByRole('dialog', { name: t('mobile.drawer.title') })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.switcher.open', { email: 'a1@example.test' }) }));
+    expect(screen.getByRole('dialog', { name: t('mobile.switcher.title') })).toBeTruthy();
     expect(screen.queryByText(t('sidebar.allInboxes'))).toBeNull();
     expect(document.querySelector('.mv-row__acct')).toBeNull();
   });
@@ -418,11 +456,14 @@ describe('All Inboxes in the app', () => {
     fireEvent.touchMove(list, { touches: [{ clientY: 300 }] });
     await act(async () => { fireEvent.touchEnd(list, { touches: [] }); });
     expect(document.querySelector('.mv-pull--busy')).toBeTruthy();
+    // The rows make room for the spinner instead of sitting under it.
+    expect(list.style.transform).toBe(`translateY(${PULL_REST}px)`);
     await later();
     await syncState('a1', 'idle');
     expect(document.querySelector('.mv-pull--busy')).toBeTruthy();
     await syncState('a2', 'idle');
     expect(document.querySelector('.mv-pull--busy')).toBeNull();
+    expect(list.style.transform).toBe('');
   });
 
   it('pull to refresh syncs every account', async () => {

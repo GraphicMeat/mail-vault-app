@@ -1,7 +1,8 @@
-// The account switcher: a bottom sheet listing every account with its inbox unread count, the
-// active one checked, plus "Add account". Removing asks for a second tap on the same row. An account
-// whose provider sign-in lapsed (`needsAuth`) offers "Sign in again"; `ReauthBanner` says the same
-// above the message list.
+// The account switcher: a bottom sheet listing, with two or more accounts, All Inboxes first
+// (every inbox as one list, with their unread count), then every account with its inbox unread
+// count, the open one checked, plus "Add account". Removing an account lives in Settings > the
+// account, not here. An account whose provider sign-in lapsed (`needsAuth`) offers "Sign in
+// again"; `ReauthBanner` says the same above the message list.
 import React, { useState } from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
@@ -26,43 +27,9 @@ export function Avatar({ account, small = false }) {
   );
 }
 
-function AccountRow({ account, active, unread, onSelect, onRemove, onReauth, reauthBusy }) {
+function AccountRow({ account, active, unread, onSelect, onReauth, reauthBusy }) {
   const t = useT();
-  const [confirming, setConfirming] = useState(false);
-  const [removing, setRemoving] = useState(false);
   const name = account.displayName && account.displayName !== account.email ? account.displayName : null;
-
-  if (confirming) {
-    return (
-      <li className="mv-acct mv-acct--confirm">
-        <p className="mv-acct__question" dir="auto">{t('mobile.switcher.removeConfirm', { email: account.email })}</p>
-        <div className="mv-acct__actions">
-          <button type="button" className="mv-textbtn" disabled={removing} onClick={() => setConfirming(false)}>
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            className="mv-textbtn mv-textbtn--danger"
-            disabled={removing}
-            onClick={async () => {
-              setRemoving(true);
-              try {
-                await onRemove(account.id);
-                setConfirming(false);
-              } catch {
-                // The engine refused: the row stays, and the question with it, for another try.
-              } finally {
-                setRemoving(false);
-              }
-            }}
-          >
-            {t('common.remove')}
-          </button>
-        </div>
-      </li>
-    );
-  }
-
   return (
     <li className="mv-acct">
       <button
@@ -86,35 +53,48 @@ function AccountRow({ account, active, unread, onSelect, onRemove, onReauth, rea
           {t('mobile.reauth.action')}
         </button>
       )}
-      <button
-        type="button"
-        className="mv-iconbtn mv-acct__remove"
-        aria-label={t('mobile.switcher.remove', { email: account.email })}
-        onClick={() => setConfirming(true)}
-      >
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path d="M9 4h6m-9 3h12m-10 0 .7 12h6.6L16 7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+    </li>
+  );
+}
+
+/** All Inboxes, above the accounts: `allInboxes` is `{ unread }`, or null with fewer than two. */
+function AllInboxesRow({ unread, active, onSelect }) {
+  const t = useT();
+  return (
+    <li className="mv-acct mv-acct--all">
+      <button type="button" className="mv-acct__main" data-mv-all-inboxes aria-current={active ? 'true' : undefined} onClick={onSelect}>
+        <span className="mv-avatar mv-avatar--all" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 13h4l1.5 2.5h5L16 13h4" /><path d="M5.5 6h13L20 13v5H4v-5z" />
+          </svg>
+        </span>
+        <span className="mv-acct__text"><span className="mv-acct__email">{t('sidebar.allInboxes')}</span></span>
+        {unread > 0 && (
+          <span className="mv-badge" aria-label={t('mobile.unreadCount', { count: unread })}>{unread}</span>
+        )}
+        <span className="mv-acct__check" aria-hidden="true">{active ? '✓' : ''}</span>
       </button>
     </li>
   );
 }
 
-export default function AccountSwitcher({ accounts, activeAccountId, unread, onSelect, onAdd, onRemove, onReauth, reauthBusy = false, onClose }) {
+export default function AccountSwitcher({ accounts, activeAccountId, unread, onSelect, onAdd, onReauth, reauthBusy = false, onClose, allInboxes = null, allInboxesActive = false, onAllInboxes }) {
   const t = useT();
   return (
     <Sheet kind="sheet" label={t('mobile.switcher.title')} onClose={onClose}>
       <div className="mv-sheet__grip" aria-hidden="true" />
       <h2 className="mv-sheet__title">{t('mobile.switcher.title')}</h2>
       <ul className="mv-acct-list">
+        {allInboxes && onAllInboxes && (
+          <AllInboxesRow unread={allInboxes.unread} active={allInboxesActive} onSelect={onAllInboxes} />
+        )}
         {accounts.map((a) => (
           <AccountRow
             key={a.id}
             account={a}
-            active={a.id === activeAccountId}
+            active={!(allInboxes && allInboxesActive) && a.id === activeAccountId}
             unread={unread[a.id] || 0}
             onSelect={onSelect}
-            onRemove={onRemove}
             onReauth={onReauth}
             reauthBusy={reauthBusy}
           />

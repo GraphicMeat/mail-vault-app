@@ -14,6 +14,8 @@ const OVERSCAN = 8;
 /** How far (px, after damping) a pull has to travel before letting go refreshes. */
 export const PULL_TRIGGER = 64;
 const PULL_MAX = 96;
+/** Where the list rests (px) while a refresh runs: the indicator's height, so it covers no row. */
+export const PULL_REST = 40;
 
 /** The pull indicator. Owns the pull state, so a pull repaints this line and not the rows. */
 const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh, refreshing }) {
@@ -64,6 +66,15 @@ const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh, refres
     };
   }, [scrollRef]);
 
+  // The rows move down with the indicator (and stay down by its height while refreshing), so the
+  // spinner sits in the room they leave instead of over the first row. Written to the scroller's
+  // style, not rendered: the rows never repaint for a pull.
+  const offset = refreshing ? Math.max(PULL_REST, pull) : pull;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.style.transform = offset ? `translateY(${offset}px)` : '';
+  }, [scrollRef, offset]);
+
   const status = refreshing ? 'refreshing' : pull >= PULL_TRIGGER ? 'release' : pull > 0 ? 'pull' : null;
   const statusText = {
     refreshing: t('mobile.list.refreshing'),
@@ -73,7 +84,7 @@ const PullIndicator = memo(function PullIndicator({ scrollRef, onRefresh, refres
   return (
     <div
       className={refreshing ? 'mv-pull mv-pull--busy' : 'mv-pull'}
-      style={{ transform: `translateY(${refreshing ? PULL_TRIGGER : pull}px)`, opacity: status ? 1 : 0 }}
+      style={{ transform: `translateY(${offset}px)`, opacity: status ? 1 : 0 }}
       role="status"
       aria-live="polite"
     >

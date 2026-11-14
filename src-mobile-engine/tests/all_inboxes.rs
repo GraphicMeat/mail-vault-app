@@ -118,6 +118,31 @@ fn merges_every_inbox_newest_first_with_its_account() {
 }
 
 #[test]
+fn names_each_inbox_generation_so_an_event_the_list_holds_is_known() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let c = db(tmp.path());
+    for a in ["acc_a", "acc_b"] {
+        add_account(&c, a);
+        add_folder(&c, a, "INBOX");
+    }
+    add_row(&c, "acc_a", "INBOX", 1, 1_000);
+    add_row(&c, "acc_b", "INBOX", 2, 2_000);
+    // A local action stamps a new generation on acc_a's inbox (what its event announces).
+    e.rpc("mobile.actions.apply", json!({ "accountId": "acc_a", "folder": "INBOX", "uids": [1], "kind": "seen" })).unwrap();
+
+    let p = unified(&e, Value::Null, 50);
+    let gens = p["listGens"].as_object().expect("listGens map");
+    assert_eq!(gens.len(), 2, "{p}");
+    for a in ["acc_a", "acc_b"] {
+        let one = e.rpc("mobile.messages.page", json!({ "accountId": a, "folder": "INBOX", "cursor": null, "limit": 10 })).unwrap();
+        assert_eq!(gens[a], one["listGen"], "{a}: {p}");
+    }
+    let sum: i64 = gens.values().map(|g| g.as_i64().unwrap()).sum();
+    assert_eq!(p["listGen"], sum);
+}
+
+#[test]
 fn pages_through_same_date_same_uid_ties_across_accounts_without_dupes_or_gaps() {
     let tmp = tempfile::tempdir().unwrap();
     let e = open(tmp.path());

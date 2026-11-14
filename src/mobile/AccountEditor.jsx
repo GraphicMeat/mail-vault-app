@@ -4,7 +4,10 @@
 // still listed here to show again). Save writes them in one call and re-reads the accounts. The
 // account's own notification switch is carried from the desktop and stored, not shown yet: the
 // background run does not read it.
-import React, { useEffect, useId, useState } from 'react';
+//
+// Remove (as desktop's account page has it, last and set apart): an inline question, then the
+// store's removeAccount; a refusal keeps the question for another try (the store told the user).
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
@@ -19,6 +22,10 @@ export default function AccountEditor({ account, onDone }) {
   const [signatureOn, setSignatureOn] = useState(true);
   const [hidden, setHidden] = useState(false);
   const [state, setState] = useState('loading'); // loading | ready | saving | failed
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
 
   useEffect(() => {
     let live = true;
@@ -58,9 +65,21 @@ export default function AccountEditor({ account, onDone }) {
     }
   };
 
+  const remove = async () => {
+    setRemoving(true);
+    try {
+      await useMobileStore.getState().removeAccount(account.id);
+    } catch {
+      // Refused: the question stays for another try.
+    } finally {
+      if (mounted.current) setRemoving(false);
+    }
+  };
+
   if (state === 'loading') return <div className="mv-acct-edit" aria-busy="true" />;
   return (
     <div className="mv-acct-edit" data-mv-account-editor>
+      <p className="mv-acct-edit__title" dir="auto">{account.email}</p>
       <label className="mv-acct-edit__field" htmlFor={`${id}-name`}>
         <span className="mv-setting__label">{t('settings.accounts.displayName')}</span>
         <input id={`${id}-name`} className="mv-setting__input" value={name} placeholder={account.email} maxLength={200} onChange={(e) => setName(e.target.value)} />
@@ -84,6 +103,21 @@ export default function AccountEditor({ account, onDone }) {
       <div className="mv-acct__actions">
         <button type="button" className="mv-textbtn" onClick={onDone}>{t('common.cancel')}</button>
         <button type="button" className="mv-textbtn" data-mv-acct-save disabled={state === 'saving' || !loaded} onClick={save}>{t('common.save')}</button>
+      </div>
+      <div className="mv-acct-edit__danger">
+        {confirming ? (
+          <>
+            <p className="mv-acct__question" dir="auto">{t('mobile.switcher.removeConfirm', { email: account.email })}</p>
+            <div className="mv-acct__actions">
+              <button type="button" className="mv-textbtn" disabled={removing} onClick={() => setConfirming(false)}>{t('common.cancel')}</button>
+              <button type="button" className="mv-textbtn mv-textbtn--danger" disabled={removing} onClick={remove}>{t('common.remove')}</button>
+            </div>
+          </>
+        ) : (
+          <button type="button" className="mv-textbtn mv-textbtn--danger" data-mv-acct-remove onClick={() => setConfirming(true)}>
+            {t('settings.accounts.removeAccount2')}
+          </button>
+        )}
       </div>
     </div>
   );

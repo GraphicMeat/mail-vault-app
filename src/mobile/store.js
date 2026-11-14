@@ -295,8 +295,8 @@ export function createMobileStore() {
       if (!p || !p.accountId) return;
       const s = get();
       if (s.list && s.activeFolder === ALL_INBOXES) {
-        // One inbox's generation says nothing about the merged list's: any inbox change reloads it.
-        if (isInboxPath(p.folder) && s.accounts.some((a) => a.id === p.accountId)) s.list.invalidate();
+        // Measured against that inbox's own generation: one the pages already hold does not reload.
+        if (isInboxPath(p.folder) && s.accounts.some((a) => a.id === p.accountId)) s.list.invalidate(p.listGen, undefined, p.accountId);
       } else if (p.accountId === s.activeAccountId && p.folder === s.activeFolder && s.list) {
         if (s.list.invalidate(p.listGen)) set({ listGen: s.list.listGen });
       }
