@@ -273,7 +273,18 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
                 st = queue.cv.wait(st).unwrap_or_else(|p| p.into_inner());
             }
         };
-        let (ended, again) = run_job(&shared, &job);
+        // A background run's INBOX news is collected the moment INBOX's part of the pass is done,
+        // before its watched folders: a watched folder that stalls past the run's wait then
+        // costs only its own news. Collected again once the whole pass ended (below).
+        let collect_now = || {
+            if tickets.iter().any(|t| t.collect) {
+                let got = crate::background::collect(&shared, &job.account).map_err(|e| e.to_string());
+                for t in tickets.iter().filter(|t| t.collect) {
+                    *lock(&t.collected) = Some(got.clone());
+                }
+            }
+        };
+        let (ended, again) = run_job(&shared, &job, &collect_now);
         if again {
             // A page pass that gave way to another: queued again behind it with its waiters, and
             // it goes on from what it committed.
@@ -373,7 +384,7 @@ impl Fail {
 
 /// Runs one queued pass; the second value is true when a page pass gave way to another waiting
 /// behind it and must be queued again.
-fn run_job(shared: &Shared, job: &Job) -> (Ended, bool) {
+fn run_job(shared: &Shared, job: &Job, inbox_done: &dyn Fn()) -> (Ended, bool) {
     // A background run's pass whose share of the budget is gone (it waited behind a slow pass):
     // the run has moved on, so no network and no events.
     if job.deadline.is_some_and(|d| Instant::now() >= d) {
@@ -396,7 +407,7 @@ fn run_job(shared: &Shared, job: &Job) -> (Ended, bool) {
     }
     shared.emit(SYNC_STATE, json!({ "accountId": job.account, "state": "syncing" }));
     let gave_way = std::cell::Cell::new(false);
-    let out = sync_job(shared, job, &gave_way);
+    let out = sync_job_with(shared, job, &gave_way, inbox_done);
     if let Err(Fail::Code(code, why)) = &out {
         crate::hold::note_failure(shared, &job.account, *code, why);
     }
@@ -418,9 +429,16 @@ fn run_job(shared: &Shared, job: &Job) -> (Ended, bool) {
     (ended, gave_way.get())
 }
 
+#[cfg(test)]
 fn sync_job(shared: &Shared, job: &Job, gave_way: &std::cell::Cell<bool>) -> Result<(), Fail> {
+    sync_job_with(shared, job, gave_way, &|| {})
+}
+
+/// [`sync_job`] that calls `inbox_done` once a notification pass has read INBOX, before its
+/// watched folders.
+fn sync_job_with(shared: &Shared, job: &Job, gave_way: &std::cell::Cell<bool>, inbox_done: &dyn Fn()) -> Result<(), Fail> {
     let mut backend = backend::open(shared, &job.account)?;
-    let out = sync_session(shared, backend.as_mut(), job, gave_way);
+    let out = sync_session(shared, backend.as_mut(), job, gave_way, inbox_done);
     // Signs out.
     drop(backend);
     out
@@ -445,7 +463,7 @@ pub(crate) fn download_now_for_test(shared: &Shared, account: &str, front: bool)
     sync_job(shared, &job, &std::cell::Cell::new(false))
 }
 
-fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way: &std::cell::Cell<bool>) -> Result<(), Fail> {
+fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way: &std::cell::Cell<bool>, inbox_done: &dyn Fn()) -> Result<(), Fail> {
     // A background run's pass: only what arrived since the newest message held, within its
     // share of the budget. A folder never synced (or a backend with no cheap way) gets the full
     // pass.
@@ -455,6 +473,7 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way:
     if job.quick {
         backend.set_deadline(job.deadline);
         if quick_pass(shared, backend, &job.account, "INBOX", job.deadline, &|| false)? {
+            inbox_done();
             watched_pass(shared, backend, &job.account, job.deadline);
             return Ok(());
         }
@@ -494,6 +513,7 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way:
         }
     };
     if job.quick && out.is_ok() && !gave_way.get() {
+        inbox_done();
         watched_pass(shared, backend, &job.account, job.deadline);
     }
     out

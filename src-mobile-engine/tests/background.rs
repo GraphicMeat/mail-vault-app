@@ -1141,6 +1141,25 @@ fn a_never_synced_watched_folder_never_costs_inbox_its_notifications() {
     assert_eq!(subjects(&f.run(BUDGET)), vec!["work news"]);
 }
 
+/// A watched folder whose server stalls (its SELECT hangs past the run) still never costs INBOX
+/// its notifications: INBOX's news is collected before the watched folders are read.
+#[test]
+fn a_stalled_watched_folder_never_costs_inbox_its_notifications() {
+    let scenario = || Scenario::new().mailboxes(vec![inbox(vec![msg(1, "old")]), work()]);
+    let server = MockImap::start(scenario());
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.download(false);
+    f.notifications(true);
+    f.account_settings(&account, json!({ "notifyFolders": ["INBOX", "Work"] }));
+    assert!(f.run(BUDGET).is_empty());
+
+    server.reset_scenario(scenario().fault(Trigger::with("SELECT", "Work"), Action::Delay(Duration::from_secs(8))));
+    deliver_in(&server, "INBOX", "a@example.org", "inbox news");
+    let got = f.run(Duration::from_secs(4));
+    assert_eq!(subjects(&got), vec!["inbox news"]);
+}
+
 /// A folder no longer watched loses its watermark: watched again later, it takes a new baseline
 /// rather than announcing what came in between.
 #[test]

@@ -20,7 +20,8 @@
 //! removals wait for the next foreground pass. A parked account (`needs_auth = 1`) is never
 //! dialled, nor one whose password the server refused (`hold.rs`). The same pass then reads the
 //! account's other watched folders (`acct.<id>.notifyFolders`): each its quick pass, within half of
-//! what is left of the share, so the pass ends before the run stops waiting for it; a folder never
+//! what is left of the share, and INBOX's news is collected as INBOX finishes, before them, so a
+//! watched folder that stalls past the run's wait costs only its own news; a folder never
 //! synced gets no full pass here, only a baseline (`sync::baseline_watched`) the next quick passes
 //! read from. A failure there never costs INBOX's news.
 //!
@@ -643,7 +644,15 @@ impl Engine {
                 }
             };
             match ticket.wait_until(until) {
-                None => self.shared().log(&format!("[background] {} did not finish in its share of the budget", account.id)),
+                // Still on its watched folders: INBOX's news was collected as INBOX finished.
+                None => {
+                    self.shared().log(&format!("[background] {} did not finish in its share of the budget", account.id));
+                    match ticket.collected() {
+                        Some(Ok(c)) => collected.extend(c),
+                        None => {}
+                        Some(Err(e)) => self.shared().log(&format!("[background] {}: {e}", account.id)),
+                    }
+                }
                 Some(Ended::Done) => match ticket.collected() {
                     Some(Ok(c)) => collected.extend(c),
                     None => {}
