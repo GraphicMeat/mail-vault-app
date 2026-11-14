@@ -18,6 +18,7 @@ import { accountColor } from './accountColor.js';
 import { EnvelopeIcon, TrashIcon, FlagIcon, MoveIcon } from './icons.jsx';
 import { useMobileStore } from './store.js';
 import { swipeKind } from './prefs.js';
+import { accountRowKey } from './messagePages.js';
 
 /** Row height in px: three lines of text plus padding; well over the 44px tap minimum. */
 export const ROW_HEIGHT = 76;
@@ -66,7 +67,7 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
   return (
     <div className="mv-row-slot" data-index={index} data-loaded="1" style={style} onClick={() => onOpen(row, index)}>
       <SwipeRow
-        key={row.accountId ? `${row.accountId}:${row.uid}` : row.uid}
+        key={row.accountId ? accountRowKey(row.accountId, row.uid) : row.uid}
         initialOpen={initialSwipe}
         onAction={onAction}
         leading={spec(leadingAction)}

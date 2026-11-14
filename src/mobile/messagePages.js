@@ -21,6 +21,12 @@
 // viewer leaves the rest of it listed.
 
 export const MAX_PAGES = 20;
+
+/**
+ * The key that names row `uid` of `accountId` in a list that spans accounts (All Inboxes). The
+ * phone's own page-cache key, not the desktop's selection key (`unifiedHelpers.js`).
+ */
+export const accountRowKey = (accountId, uid) => [accountId, uid].join(':');
 export const PAGE_SIZE = 100;
 
 /**
@@ -50,7 +56,7 @@ const END = Symbol('end');
  *   show does not reload the list.
  */
 export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts = false } = {}) {
-  const keyFor = spansAccounts ? (accountId, uid) => `${accountId}:${uid}` : (_accountId, uid) => uid;
+  const keyFor = spansAccounts ? accountRowKey : (_accountId, uid) => uid;
   const keyOf = (r) => keyFor(r.accountId, r.uid);
   const pages = new Map(); // page number -> rows; Map order is recency, oldest first
   const cursors = new Map([[0, null]]); // page number -> cursor that fetches it, or END
