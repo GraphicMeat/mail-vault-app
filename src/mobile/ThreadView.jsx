@@ -4,7 +4,8 @@
 // a swipe acts on that message alone. The phone has no inline unfolding: expandable opens this
 // screen too. It reads the conversation again whenever the list it came from reloads (the folder
 // changed: a delete, a move, new mail), by any message it last held, and goes back to the list
-// once none is left.
+// once none is left. A message whose move or delete waits out its undo toast (hidden in the list)
+// is left out here too, and comes back with an undo.
 import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import MessageRow, { ROW_HEIGHT } from './MessageRow.jsx';
@@ -26,8 +27,10 @@ export default function ThreadView({ accountId, folder, row, list = null, accoun
   const order = useMobileStore((s) => s.prefs.threadSortOrder);
   const [rows, setRows] = useState(null);
   const known = useRef([row.uid, ...(Array.isArray(row.threadUids) ? row.threadUids : [])]);
-  // Bumped when the list drops its pages (its folder changed).
+  // Bumped when the list drops its pages (its folder changed); `hides` on every other change (a
+  // row hidden or put back).
   const [version, bump] = useReducer((n) => n + 1, 0);
+  const [, hides] = useReducer((n) => n + 1, 0);
   useEffect(() => {
     if (!list) return undefined;
     let seen = list.version;
@@ -35,6 +38,8 @@ export default function ThreadView({ accountId, folder, row, list = null, accoun
       if (list.version !== seen) {
         seen = list.version;
         bump();
+      } else {
+        hides();
       }
     });
   }, [list]);
@@ -57,6 +62,7 @@ export default function ThreadView({ accountId, folder, row, list = null, accoun
     if (rows && rows.length === 0) onClose();
   }, [rows, onClose]);
 
+  const shown = rows && list?.isHidden ? rows.filter((r) => !list.isHidden(list.keyFor(r.accountId ?? accountId, r.uid))) : rows;
   const subject = displayText(row.subject, t('common.noSubject'));
   return (
     <section className="mv-thread" role="dialog" aria-modal="true" aria-label={subject} data-mv-thread>
@@ -67,9 +73,9 @@ export default function ThreadView({ accountId, folder, row, list = null, accoun
         <h1 className="mv-compose__title" dir="auto">{subject}</h1>
       </header>
       <div className="mv-list mv-thread__list" data-mv-thread-list>
-        {rows && (
-          <div className="mv-list__inner" style={{ height: `${rows.length * ROW_HEIGHT}px` }}>
-            {rows.map((r, i) => (
+        {shown && (
+          <div className="mv-list__inner" style={{ height: `${shown.length * ROW_HEIGHT}px` }}>
+            {shown.map((r, i) => (
               <MessageRow
                 key={r.uid}
                 index={i}

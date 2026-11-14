@@ -453,7 +453,9 @@ function App() {
     return () => clearTimeout(timer);
   }, [open]);
   const onClose = useCallback(() => setOpen(null), []);
-  // `confirmBeforeDelete`: a delete asks first ({ run } while the question shows).
+  // `confirmBeforeDelete`: a delete asks first ({ run } while the question shows). A delete or move
+  // of a conversation of several messages always asks, with their count ({ run, kind, count }):
+  // the swipe acts on every message of it, those merged in by subject too.
   const [askDelete, setAskDelete] = useState(null);
   const confirmThen = useCallback((run) => {
     if (useMobileStore.getState().prefs.confirmBeforeDelete) setAskDelete({ run });
@@ -535,18 +537,26 @@ function App() {
       }
       return;
     }
+    const uids = rowUids(row);
     const run = () => {
-      s.act(kind, { ...place, uids: rowUids(row) });
+      s.act(kind, { ...place, uids });
       done?.(kind);
     };
-    if (kind === 'delete') confirmThen(run);
+    if (kind === 'delete' && uids.length > 1) setAskDelete({ run, kind, count: uids.length });
+    else if (kind === 'delete') confirmThen(run);
     else run();
   }, [confirmThen]);
   const onSwipeMove = useCallback((target) => {
     if (!moving) return;
-    useMobileStore.getState().act('move', { accountId: moving.accountId, folder: moving.folder, uids: rowUids(moving.row), target });
-    moving.done?.('move', target);
+    const { accountId, folder, row, done } = moving;
+    const uids = rowUids(row);
+    const run = () => {
+      useMobileStore.getState().act('move', { accountId, folder, uids, target });
+      done?.('move', target);
+    };
     setMoving(null);
+    if (uids.length > 1) setAskDelete({ run, kind: 'move', count: uids.length });
+    else run();
   }, [moving]);
   const closeMoving = useCallback(() => setMoving(null), []);
   const onViewerAction = useCallback((kind) => {
@@ -778,6 +788,12 @@ function App() {
   const folder = folders.find((f) => f.path === activeFolder) || { path: activeFolder || 'INBOX', name: activeFolder };
   const listKey = `${activeAccountId}/${activeFolder}`;
 
+  let askTitle = t('mobile.confirmDelete.title');
+  if (askDelete?.count > 1) {
+    askTitle = askDelete.kind === 'move'
+      ? t('mobile.confirmConversation.move', { count: askDelete.count })
+      : t('mobile.confirmConversation.delete', { count: askDelete.count });
+  }
   return (
     <div className="mv-kb-layer mv-app">
       <header className="mv-header">
@@ -907,17 +923,18 @@ function App() {
         <MovePicker folders={moving.folders || []} current={moving.folder} onPick={onSwipeMove} onClose={closeMoving} />
       )}
       {askDelete && (
-        <Sheet kind="sheet" label={t('mobile.confirmDelete.title')} onClose={() => setAskDelete(null)}>
+        <Sheet kind="sheet" label={askTitle} onClose={() => setAskDelete(null)}>
           <div className="mv-sheet__grip" aria-hidden="true" />
-          <h2 className="mv-sheet__title">{t('mobile.confirmDelete.title')}</h2>
+          <h2 className="mv-sheet__title">{askTitle}</h2>
           <div className="mv-acct__actions" data-mv-confirm-delete>
-            <button type="button" className="mv-textbtn" onClick={() => setAskDelete(null)}>{t('common.cancel')}</button>
+            <button type="button" className="mv-textbtn" data-mv-confirm-cancel onClick={() => setAskDelete(null)}>{t('common.cancel')}</button>
             <button
               type="button"
-              className="mv-textbtn mv-textbtn--danger"
+              className={askDelete.kind === 'move' ? 'mv-textbtn' : 'mv-textbtn mv-textbtn--danger'}
+              data-mv-confirm-run
               onClick={() => { const { run } = askDelete; setAskDelete(null); run(); }}
             >
-              {t('common.delete')}
+              {askDelete.kind === 'move' ? t('mobile.actions.move') : t('common.delete')}
             </button>
           </div>
         </Sheet>

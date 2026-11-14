@@ -16,7 +16,9 @@
 //
 // `hide(uids)` takes rows out of the view without the engine (a move or delete waiting out its
 // undo toast): indices, `total` and `rowAt` skip hidden rows among the pages held. Only rows the
-// user could see are ever hidden, so they are on a held page.
+// user could see are ever hidden, so they are on a held page. A conversation row (`threadUids`)
+// leaves the view only once every message of it is hidden: deleting its newest message from the
+// viewer leaves the rest of it listed.
 
 export const MAX_PAGES = 20;
 export const PAGE_SIZE = 100;
@@ -70,6 +72,10 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
   /** The pages that answer reads: the held ones, or the dropped ones while none is held yet. */
   const shown = () => (stale && !pages.size ? stale.pages : pages);
   const isHidden = (key) => hidden.has(key) || Boolean(stale && !pages.size && stale.hidden.has(key));
+  /** A row is out of the view when it is hidden, a conversation row when all its messages are. */
+  const rowHidden = (r) => (Array.isArray(r.threadUids) && r.threadUids.length
+    ? r.threadUids.every((uid) => isHidden(keyFor(r.accountId, uid)))
+    : isHidden(keyOf(r)));
   let hiddenAt = []; // sorted raw indices of hidden rows on held pages; null = recount
 
   const notify = () => {
@@ -89,7 +95,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
     const out = [];
     for (const [p, rows] of shown()) {
       rows.forEach((r, j) => {
-        if (r && isHidden(keyOf(r))) out.push(p * pageSize + j);
+        if (r && rowHidden(r)) out.push(p * pageSize + j);
       });
     }
     hiddenAt = out.sort((a, b) => a - b);
@@ -247,7 +253,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
       for (const [p, rows] of shown()) {
         const j = rows.findIndex((r) => r && keyOf(r) === key);
         if (j < 0) continue;
-        if (isHidden(key)) return -1;
+        if (rowHidden(rows[j])) return -1;
         const raw = p * pageSize + j;
         return raw - hiddenIndices().filter((h) => h < raw).length;
       }
@@ -257,6 +263,9 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
     indexOfUid(uid) {
       return this.indexOf(uid);
     },
+    /** Whether the message `key` (`keyFor`) is taken out of the view (a conversation's screen
+     *  leaves it out while its move or delete waits out the undo toast). */
+    isHidden,
     /** Takes the rows of `keys` (`keyFor`) out of the view (the engine still lists them). */
     hide(keys) {
       for (const key of keys) hidden.add(key);

@@ -262,6 +262,29 @@ describe('rows stay on screen across a reload', () => {
     expect(c.total).toBe(9);
   });
 
+  it('a conversation row leaves the view only once every message of it is hidden', async () => {
+    const rows = [
+      { uid: 9, dateMs: 9000, threadUids: [9, 5, 2] },
+      { uid: 8, dateMs: 8000 },
+    ];
+    const c = createPageCache(fakeFetch(rows));
+    await c.ensure(0);
+    // The head alone (the viewer's delete): the conversation still has messages to show.
+    c.hide([9]);
+    expect(c.total).toBe(2);
+    expect(c.rowAt(0).uid).toBe(9);
+    expect(c.indexOf(9)).toBe(0);
+    expect(c.isHidden(9)).toBe(true);
+    expect(c.isHidden(5)).toBe(false);
+    // Every message of it (a swipe on the conversation): gone.
+    c.hide([5, 2]);
+    expect(c.total).toBe(1);
+    expect(c.rowAt(0).uid).toBe(8);
+    expect(c.indexOf(9)).toBe(-1);
+    c.unhide([2]);
+    expect(c.rowAt(0).uid).toBe(9);
+  });
+
   it('a spanning list restarts when a page shows an inbox newer than the pages it holds', async () => {
     const rows = (top) => [...(top ? [{ uid: 50, dateMs: 50000, accountId: 'a' }] : []), ...listOf(150).map((r) => ({ ...r, accountId: 'a' }))];
     const state = { top: false, gen: 5 };

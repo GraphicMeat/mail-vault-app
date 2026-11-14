@@ -32,7 +32,12 @@ vi.mock('../transport.js', () => ({
       case 'mobile.settings.get':
         return { notifications: 'off', notificationPreview: true };
       case 'mobile.folders.list':
-        return { folders: [{ path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: 1, total: 3, depth: 0, noselect: false }] };
+        return {
+          folders: [
+            { path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen: 1, total: 3, depth: 0, noselect: false },
+            { path: 'Archive', name: 'Archive', specialUse: '\\Archive', unseen: 0, total: 0, depth: 0, noselect: false },
+          ],
+        };
       case 'mobile.sync.refresh':
         return { queued: true };
       case 'mobile.messages.page':
@@ -136,6 +141,57 @@ describe('conversations', () => {
     await waitFor(() => expect(callsOf('mobile.actions.apply')).toHaveLength(1));
     expect(callsOf('mobile.actions.apply')[0]).toEqual({ accountId: 'a1', folder: 'INBOX', uids: [3, 2, 1], kind: 'seen' });
     expect(t('email.thread.messagesInThread', { count: 3 })).not.toBe('email.thread.messagesInThread');
+  });
+
+  it('deleting a conversation asks first with its message count, and Cancel deletes nothing', async () => {
+    const App = await fresh();
+    render(<App />);
+    await waitFor(() => expect(listRow()).toBeTruthy());
+    const { useMobileStore } = await import('../store.js');
+    // confirmBeforeDelete is off: a conversation asks all the same.
+    await act(async () => { fireEvent.click(listRow().querySelector('[data-mv-swipe-action="trailing"]')); });
+    const title = t('mobile.confirmConversation.delete', { count: 3 });
+    expect(title).not.toBe('mobile.confirmConversation.delete');
+    expect(title).toContain('3');
+    const sheet = screen.getByRole('dialog', { name: title });
+    await act(async () => { fireEvent.click(sheet.querySelector('[data-mv-confirm-cancel]')); });
+    expect(screen.queryByRole('dialog', { name: title })).toBeNull();
+    expect(useMobileStore.getState().undo).toBeNull();
+    expect(listRow()).toBeTruthy();
+
+    await act(async () => { fireEvent.click(listRow().querySelector('[data-mv-swipe-action="trailing"]')); });
+    await act(async () => { fireEvent.click(screen.getByRole('dialog', { name: title }).querySelector('[data-mv-confirm-run]')); });
+    expect(useMobileStore.getState().undo).toMatchObject({ kind: 'delete', count: 3 });
+  });
+
+  it('moving a conversation asks first with its message count', async () => {
+    engine.prefs = { swipeLeftAction: 'move' };
+    const App = await fresh();
+    render(<App />);
+    await waitFor(() => expect(listRow()).toBeTruthy());
+    const { useMobileStore } = await import('../store.js');
+    await act(async () => { fireEvent.click(listRow().querySelector('[data-mv-swipe-action="trailing"]')); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Archive' })); });
+    const title = t('mobile.confirmConversation.move', { count: 3 });
+    expect(title).not.toBe('mobile.confirmConversation.move');
+    expect(useMobileStore.getState().undo).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole('dialog', { name: title }).querySelector('[data-mv-confirm-run]')); });
+    expect(useMobileStore.getState().undo).toMatchObject({ kind: 'move', count: 3, target: 'Archive' });
+  });
+
+  it('a message deleted inside the conversation leaves it during the undo, and the conversation row stays', async () => {
+    const App = await fresh();
+    render(<App />);
+    await waitFor(() => expect(listRow()).toBeTruthy());
+    await act(async () => { fireEvent.click(listRow()); });
+    const members = () => document.querySelectorAll('[data-mv-thread] [data-loaded="1"]');
+    await waitFor(() => expect(members()).toHaveLength(3));
+    await act(async () => { fireEvent.click(document.querySelector('[data-mv-thread] [data-index="1"] [data-mv-swipe-action="trailing"]')); });
+    await waitFor(() => expect(members()).toHaveLength(2));
+    const senders = [...document.querySelectorAll('[data-mv-thread] .mv-row__sender')].map((e) => e.textContent);
+    expect(senders).toEqual(['Ada', 'Bea']);
+    await act(async () => { fireEvent.click(document.querySelector('[data-mv-thread-close]')); });
+    expect(listRow()).toBeTruthy();
   });
 
   it('flat lists every message and opens it straight away', async () => {
