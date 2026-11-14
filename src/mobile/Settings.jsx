@@ -15,7 +15,8 @@
 //   off there, notifications show off here too, with the same pointer. "Show preview" decides
 //   whether a notification names sender and subject, so it can only change while they are on.
 //   Both live in the engine (`mobile.settings.*`): the background run has no page, and reads the
-//   same rows.
+//   same rows. Then each account's switch, folders and quiet hours, and the priority senders
+//   (NotifySettings.jsx).
 // - Offline: "Download in the background" (`backgroundDownload`, on by default): background runs
 //   keep the offline window up to date, so mail opens without a connection; then, per account,
 //   the window, the room it takes, the progress and "Download now" (OfflineSettings.jsx).
@@ -40,6 +41,7 @@ import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
 import AccountEditor from './AccountEditor.jsx';
+import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -65,44 +67,6 @@ function Switch({ checked, busy, disabled, label, hint, onChange }) {
       </span>
       <span className="mv-switch" aria-hidden="true"><span className="mv-switch__knob" /></span>
     </button>
-  );
-}
-
-/**
- * One account's notifications (`acct.<id>.notify`, `mobile.accountSettings.*`): on unless turned
- * off. Usable only while notifications are on (`enabled`): the switch above decides first.
- */
-function AccountNotify({ account, enabled }) {
-  const t = useT();
-  const [on, setOn] = useState(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    let live = true;
-    daemonCall('mobile.accountSettings.get', { accountId: account.id }).then(
-      (v) => { if (live) setOn(v?.notify !== false); },
-      () => { if (live) setOn(true); },
-    );
-    return () => { live = false; };
-  }, [account.id]);
-  const change = useCallback(async (next) => {
-    setBusy(true);
-    try {
-      const v = await daemonCall('mobile.accountSettings.set', { accountId: account.id, values: { notify: next } });
-      setOn(v?.notify !== false);
-    } catch {
-      // The switch stays where it was.
-    } finally {
-      setBusy(false);
-    }
-  }, [account.id]);
-  return (
-    <Switch
-      checked={on !== false}
-      busy={busy}
-      disabled={!enabled || on == null}
-      label={t('mobile.settings.notifyAccount', { account: account.email })}
-      onChange={change}
-    />
   );
 }
 
@@ -348,10 +312,11 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
                 hint={t('mobile.settings.previewHint')}
                 onChange={(v) => save('notificationPreview', { notificationPreview: v })}
               />
-              {accounts.map((a) => <AccountNotify key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
+              {accounts.map((a) => <AccountNotifications key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
             </div>
             {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
             {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+            <PrioritySenders />
           </>
         )}
 

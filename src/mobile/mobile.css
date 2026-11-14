@@ -1459,6 +1459,21 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   color: var(--mail-text);
   font: inherit;
 }
+/* Settings > Notifications: per-account folders and quiet hours, priority senders (NotifySettings.jsx). */
+.mv-notify__account { border-bottom: 1px solid var(--mail-border); }
+.mv-notify__account:last-child { border-bottom: 0; }
+.mv-notify__account > .mv-setting { border-bottom: 0; }
+.mv-notify__more { margin: 0 16px 8px; padding: 0; min-height: 44px; }
+.mv-notify__options { display: flex; flex-direction: column; padding-bottom: 8px; }
+.mv-notify__folders { display: flex; flex-direction: column; margin: 0; padding: 0 16px 8px; border: 0; min-width: 0; }
+.mv-notify__folders legend { padding: 0 0 4px; }
+.mv-notify__check { display: flex; align-items: center; gap: 10px; min-height: 44px; overflow-wrap: anywhere; }
+.mv-notify__check input { flex: none; width: 20px; height: 20px; accent-color: var(--mail-accent); }
+.mv-notify__times { display: flex; gap: 12px; padding: 0 16px; }
+.mv-notify__time { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+[data-mv-priority-senders] .mv-setrow { flex-wrap: wrap; }
+.mv-notify__add { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
+.mv-notify__add .mv-setting__input { flex: 1; min-width: 0; }
 .mv-acct-edit { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 0; }
 .mv-acct-edit__field { display: flex; flex-direction: column; gap: 4px; padding: 0 16px; }
 .mv-acct-edit__sig { min-height: 96px; resize: vertical; }
