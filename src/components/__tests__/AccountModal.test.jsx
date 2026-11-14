@@ -386,7 +386,9 @@ describe('AccountModal native workflow classification',()=>{
     vi.spyOn(window,'open').mockImplementation(()=>{});
     try {
       await openGmailStep2(); fireEvent.click(screen.getByRole('button',{name:/Sign in with Google/i}));
-      expect(await screen.findByText(/The server did not answer in time\./)).toBeTruthy();
+      // The workflow, keychain and DB adapter load on first use; a cold Windows
+      // runner takes over a second, and a timed-out wait leaks the add into the next test.
+      expect(await screen.findByText(/The server did not answer in time\./,{},{timeout:10000})).toBeTruthy();
       expect(screen.queryByText(/Nothing answered on mail\.example\.test, port 993/)).toBeNull();
       expect(screen.queryByText('Connected!')).toBeNull(); expect(nativeBoundary.accounts).toEqual([]);
       expect(nativeBoundary.calls.filter(([name])=>name==='accounts.add')).toHaveLength(1);
@@ -402,7 +404,7 @@ describe('AccountModal native workflow classification',()=>{
     mockExchangeOAuth2Code.mockResolvedValue({accessToken:'synthetic-at',refreshToken:'synthetic-rt',expiresAt:1234567890,email:TYPED_EMAIL,emailMatches:true,clientId:'synthetic-client'});
     vi.spyOn(window,'open').mockImplementation(()=>{});
     try {await openGmailStep2();fireEvent.click(screen.getByRole('button',{name:/Sign in with Google/i}));
-      expect(await screen.findByText(/Nothing answered on mail\.example\.test, port 993/)).toBeTruthy();
+      expect(await screen.findByText(/Nothing answered on mail\.example\.test, port 993/,{},{timeout:10000})).toBeTruthy();
       expect(screen.queryByText('Connected!')).toBeNull();expect(nativeBoundary.accounts).toEqual([]);expect(nativeBoundary.calls.filter(([name])=>name==='accounts.add')).toHaveLength(1);
     } finally {cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();}
   });

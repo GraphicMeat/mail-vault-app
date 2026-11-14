@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 const ALLOWED = {
   listenTo: {
@@ -26,7 +26,7 @@ function walk(dir, out = []) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) {
       if (name !== '__tests__' && name !== 'node_modules') walk(p, out);
-    } else if (/\.(js|jsx|mjs)$/.test(name)) out.push(p);
+    } else if (/\.(js|jsx|mjs)$/.test(name)) out.push(p.split(sep).join('/'));
   }
   return out;
 }
