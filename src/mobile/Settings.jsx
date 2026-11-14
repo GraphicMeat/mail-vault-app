@@ -30,7 +30,10 @@ import { daemonCall, notificationPermission, requestNotificationPermission } fro
 import { useMobileStore } from './store.js';
 import KeyboardLayer from './KeyboardLayer.jsx';
 import { useBackLayer } from './backStack.js';
-import { useT } from './i18n.js';
+import { useT, getMobileLocale } from './i18n.js';
+import { faqUrl } from '../services/faqUrl.js';
+import { appLink } from '../services/appLink.js';
+import { DISCORD_INVITE } from '../utils/communityLinks.js';
 import { Avatar } from './AccountSwitcher.jsx';
 import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
@@ -39,6 +42,7 @@ import SettingsPrefs from './SettingsPrefs.jsx';
 import AccountEditor from './AccountEditor.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
+const SITE = 'https://mailvaultapp.com/';
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 
 function Switch({ checked, busy, disabled, label, hint, onChange }) {
@@ -105,12 +109,15 @@ function AccountNotify({ account, enabled }) {
 function AccountRow({ account, reauthBusy }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
+  // System Back closes the account's page first, as its Cancel does.
+  const stopEditing = useCallback(() => setEditing(false), []);
+  useBackLayer(editing, stopEditing);
   const name = account.displayName && account.displayName !== account.email ? account.displayName : null;
 
   if (editing) {
     return (
       <li className="mv-setrow mv-acct--confirm">
-        <AccountEditor account={account} onDone={() => setEditing(false)} />
+        <AccountEditor account={account} onDone={stopEditing} />
       </li>
     );
   }
@@ -148,7 +155,7 @@ export const SETTINGS_PAGES = [
   ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
   ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts']]],
   ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity']]],
-  ['settings.tab.help', [['help', 'mobile.settings.about']]],
+  ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
 const PAGE_TITLES = Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages));
 
@@ -367,7 +374,24 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         )}
 
         {page === 'help' && (
-          <div className="mv-settings__list">
+          <div className="mv-settings__list" data-mv-help>
+            {/* Desktop's Help & Support links, as plain https anchors: the shell's navigation guard
+                hands each to the system browser. */}
+            {[
+              ['faq', t('settings.help.faq'), t('settings.help.faqSubtitle'), faqUrl(getMobileLocale(), 'mobile_help')],
+              ['bug', t('settings.help.reportBug'), t('settings.help.reportGithubEmailDeveloper'), `${SOURCE_URL}/issues`],
+              ['discord', t('bugReport.joinDiscord'), null, DISCORD_INVITE],
+              ['website', t('settings.help.mailvaultWebsite'), t('settings.help.docsFaqLatestRelease'), appLink(SITE, 'mobile_help')],
+              ['privacy', t('settings.help.privacyPolicy'), t('settings.help.privacyPolicySubtitle'), `${SITE}privacy.html`],
+            ].map(([key, label, hint, href]) => (
+              <a key={key} className="mv-setting mv-settings__link" data-mv-help-link={key} href={href} target="_blank" rel="noopener noreferrer">
+                <span className="mv-setting__text">
+                  <span className="mv-setting__label">{label}</span>
+                  {hint && <span className="mv-setting__hint">{hint}</span>}
+                </span>
+                <Chevron />
+              </a>
+            ))}
             {onReplayTour && (
               <button type="button" className="mv-setting" data-mv-replay-tour onClick={onReplayTour}>
                 <span className="mv-setting__text">

@@ -146,7 +146,8 @@ describe('createPageCache', () => {
     f.state.listGen = 2;
     expect(c.invalidate(2, 150)).toBe(true);
     expect(c.listGen).toBe(2);
-    expect(c.rowAt(150)).toBeUndefined(); // pages dropped
+    // Pages dropped, but the rows on screen stay until the reload lands: no blank flash.
+    expect(c.rowAt(150)).toEqual(top);
     await c.ensure(150);
     // The anchor row is now four rows lower (+5 added, -1 removed above it).
     expect(c.anchor).toEqual({ dateMs: top.dateMs, uid: top.uid, from: 150, to: 154 });
@@ -219,5 +220,67 @@ describe('generation order', () => {
     expect(c.listGen).toBe(2);
     await c.ensure(121);
     expect(c.anchor).toEqual({ dateMs: top.dateMs, uid: top.uid, from: 120, to: 121 });
+  });
+});
+
+describe('rows stay on screen across a reload', () => {
+  it('an invalidate keeps showing the held rows until the first reloaded page lands, then only the new ones', async () => {
+    const f = fakeFetch(listOf(300));
+    const c = createPageCache(f);
+    await c.ensure(0);
+    await c.ensure(150);
+    const before0 = c.rowAt(0);
+    const before150 = c.rowAt(150);
+    f.state.rows = [{ uid: 999, dateMs: 999000 }, ...listOf(300)];
+    f.state.listGen = 2;
+    expect(c.invalidate(2, 0)).toBe(true);
+    expect(c.rowAt(0)).toEqual(before0);
+    expect(c.rowAt(150)).toEqual(before150);
+    expect(c.total).toBe(300);
+    await c.ensure(0);
+    expect(c.rowAt(0)).toEqual({ uid: 999, dateMs: 999000 });
+    // Never two generations side by side: page 1 of the old one is gone with the first new page.
+    expect(c.rowAt(150)).toBeUndefined();
+    expect(c.total).toBe(301);
+  });
+
+  it('a row hidden when the pages drop stays hidden while the old rows show', async () => {
+    const f = fakeFetch(listOf(10));
+    const c = createPageCache(f);
+    await c.ensure(0);
+    c.hide([10]);
+    expect(c.rowAt(0).uid).toBe(9);
+    // A delete: the engine took it out, the list reloads and forgets it was hidden.
+    f.state.rows = listOf(9);
+    f.state.listGen = 2;
+    c.invalidate();
+    c.unhide([10]);
+    expect(c.rowAt(0).uid).toBe(9);
+    expect(c.total).toBe(9);
+    await c.ensure(0);
+    expect(c.rowAt(0).uid).toBe(9);
+    expect(c.total).toBe(9);
+  });
+
+  it('a spanning list restarts when a page shows an inbox newer than the pages it holds', async () => {
+    const rows = (top) => [...(top ? [{ uid: 50, dateMs: 50000, accountId: 'a' }] : []), ...listOf(150).map((r) => ({ ...r, accountId: 'a' }))];
+    const state = { top: false, gen: 5 };
+    const fetch = vi.fn(async (cursor, limit) => {
+      const all = rows(state.top);
+      const from = cursor == null ? 0 : all.findIndex((r) => compareKeys(r, cursor) > 0);
+      const page = all.slice(from, from + limit);
+      const last = page[page.length - 1];
+      return { rows: page, nextCursor: from + limit < all.length ? { dateMs: last.dateMs, uid: last.uid, accountId: 'a' } : null, total: all.length, listGen: state.gen, listGens: { a: state.gen } };
+    });
+    const c = createPageCache(fetch, 100, { spansAccounts: true });
+    await c.ensure(0);
+    // New mail lands in inbox a; page 1 is read in the new generation before its event arrives.
+    state.top = true;
+    state.gen = 6;
+    await c.ensure(120);
+    // The event is then known, so it is skipped: page 0 had to restart on that page instead.
+    expect(c.invalidate(6, 0, 'a')).toBe(false);
+    await c.ensure(0);
+    expect(c.rowAt(0)).toMatchObject({ uid: 50, accountId: 'a' });
   });
 });

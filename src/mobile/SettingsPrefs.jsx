@@ -1,7 +1,8 @@
 // Settings' preference pages (W1a): what a desktop import carries over and the user can change
 // here, split the way desktop's pages split them (`section`): 'appearance' (look, language, email
 // viewer theme, date and time), 'mail' (Mail preferences: reading, deleting, swipes, sending) and
-// 'privacy' (Privacy & security: remote content). Each row writes one preference (`mobile.prefs.set`, through the store's setPrefs) and the
+// 'privacy' (Privacy & security: remote content, and tracking pixels, which Premium strips while
+// the switch is on). Each row writes one preference (`mobile.prefs.set`, through the store's setPrefs) and the
 // page follows at once: theme and palette on the root element, the rest read where they act
 // (viewer, list rows, compose). The language row stores `language` (`mobile.settings.set`) and
 // loads that catalog, as the tour's first step does. Labels reuse the desktop's catalog keys.
@@ -248,6 +249,13 @@ export default function SettingsPrefs({ section }) {
               hint={t('mobile.prefs.loadImagesHint')}
               checked={!prefs.holdExternalContent}
               onChange={(on) => set({ holdExternalContent: !on })}
+            />
+            <Toggle
+              name="trackerBlockingEnabled"
+              label={t('settings.tracking.blockTrackingPixels')}
+              hint={t('mobile.prefs.trackersPremiumHint')}
+              checked={prefs.trackerBlockingEnabled}
+              onChange={(trackerBlockingEnabled) => set({ trackerBlockingEnabled })}
             />
           </div>
         </>

@@ -177,9 +177,11 @@ function TrackerSheet({ count, list, onClose }) {
 }
 
 /** The shield in the bar: with the count once Premium has removed the pixels (tap for the list),
- *  locked while they were kept (tap for the paywall). */
+ *  locked while they were kept (tap for the paywall; with Premium, whose blocking was turned off in
+ *  Settings > Privacy & security, the list). */
 function TrackerShield({ count, stripped, onOpen }) {
   const t = useT();
+  const premium = useMobileStore((s) => s.premium?.premium === true);
   const label = stripped ? t('alert.tracker.trackingBlocked', { count }) : t('alert.tracker.emailTracks', { count });
   return (
     <button
@@ -188,7 +190,7 @@ function TrackerShield({ count, stripped, onOpen }) {
       data-mv-tracker-shield={stripped ? 'blocked' : 'locked'}
       aria-label={label}
       style={{ minHeight: '44px', minWidth: '44px' }}
-      onClick={stripped ? onOpen : () => openPaywall('trackerBlocking')}
+      onClick={stripped || premium ? onOpen : () => openPaywall('trackerBlocking')}
     >
       <ShieldIcon state={stripped ? 'blocked' : 'locked'} />
       {stripped && <span className="mv-viewer__shield-count" aria-hidden="true">{count}</span>}

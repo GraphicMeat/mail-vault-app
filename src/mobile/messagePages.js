@@ -9,7 +9,10 @@
 // are never shown side by side. A page labelled older than the generation held was read after
 // the newer one was announced: its rows are kept and the generation never steps back.
 // A drop keeps the key of the top visible row as an anchor and reports where that row landed
-// once the reloaded pages reach it, so the list can hold its place.
+// once the reloaded pages reach it, so the list can hold its place. Until the first page of the
+// new generation lands, the dropped pages still answer `rowAt`/`total` (rows hidden at the drop
+// stay hidden), so a reload never blanks the rows on screen; that page then replaces them all, so
+// two generations are still never shown side by side.
 //
 // `hide(uids)` takes rows out of the view without the engine (a move or delete waiting out its
 // undo toast): indices, `total` and `rowAt` skip hidden rows among the pages held. Only rows the
@@ -62,6 +65,11 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
   let anchor = null; // { dateMs, uid, accountId?, from, to: number|null }
   let topIndex = 0; // first row on screen (raw index), set by the list as it scrolls
   const hidden = new Set(); // keys (`keyFor`) of the rows taken out of the view
+  // The pages a drop let go, shown until the first page of the new generation lands.
+  let stale = null; // { pages, total, hidden }
+  /** The pages that answer reads: the held ones, or the dropped ones while none is held yet. */
+  const shown = () => (stale && !pages.size ? stale.pages : pages);
+  const isHidden = (key) => hidden.has(key) || Boolean(stale && !pages.size && stale.hidden.has(key));
   let hiddenAt = []; // sorted raw indices of hidden rows on held pages; null = recount
 
   const notify = () => {
@@ -76,12 +84,12 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
   };
 
   function hiddenIndices() {
-    if (!hidden.size) return [];
+    if (!hidden.size && !(stale && !pages.size && stale.hidden.size)) return [];
     if (hiddenAt) return hiddenAt;
     const out = [];
-    for (const [p, rows] of pages) {
+    for (const [p, rows] of shown()) {
       rows.forEach((r, j) => {
-        if (r && hidden.has(keyOf(r))) out.push(p * pageSize + j);
+        if (r && isHidden(keyOf(r))) out.push(p * pageSize + j);
       });
     }
     hiddenAt = out.sort((a, b) => a - b);
@@ -90,7 +98,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
 
   /** View index -> index in the engine's list, stepping over hidden rows. */
   function toRaw(i) {
-    if (!hidden.size) return i;
+    if (!hiddenIndices().length) return i;
     let raw = i;
     for (const h of hiddenIndices()) {
       if (h <= raw) raw++;
@@ -105,6 +113,8 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
   };
 
   function reset(gen) {
+    // A drop before anything of the last one came back keeps showing what was on screen then.
+    if (pages.size) stale = { pages: new Map(pages), total, hidden: new Set(hidden) };
     pages.clear();
     cursors.clear();
     cursors.set(0, null);
@@ -118,7 +128,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
   /** Drops every page for generation `gen`, keeping the row at `top` (if not the first) as anchor. */
   function dropAll(gen, top) {
     const p = Math.floor(top / pageSize);
-    const row = top > 0 ? pages.get(p)?.[top - p * pageSize] : undefined;
+    const row = top > 0 ? shown().get(p)?.[top - p * pageSize] : undefined;
     anchor = row ? { dateMs: row.dateMs, uid: row.uid, accountId: row.accountId, from: top, to: null } : null;
     reset(gen);
   }
@@ -137,7 +147,17 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
         if (mine !== epoch) return; // the list moved on while this page was on its way
         const res = spansAccounts ? { ...reply, listGen: null } : reply;
         inflight.delete(p);
-        if (spansAccounts && reply?.listGens) for (const [a, g] of Object.entries(reply.listGens)) noteGen(a, g);
+        if (spansAccounts && reply?.listGens) {
+          // An inbox moved under the pages held (its event is still on its way): start over, as
+          // a one-folder list does on a newer page, and know that generation so its event is skipped.
+          const moved = pages.size > 0 && Object.entries(reply.listGens).some(([a, g]) => gens.has(a) && g > gens.get(a));
+          for (const [a, g] of Object.entries(reply.listGens)) noteGen(a, g);
+          if (moved) {
+            dropAll(listGen, topIndex);
+            notify();
+            return;
+          }
+        }
         if (listGen != null && res.listGen != null && res.listGen > listGen) {
           // The engine's list moved under the pages held: start over in the new generation,
           // holding the row on screen like an `invalidate` does.
@@ -151,6 +171,7 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
         if (res.listGen != null && (listGen == null || res.listGen > listGen)) listGen = res.listGen;
         total = res.total;
         cursors.set(p + 1, res.nextCursor ?? END);
+        stale = null;
         touch(p, res.rows);
         while (pages.size > MAX_PAGES) pages.delete(pages.keys().next().value);
         hiddenAt = null;
@@ -181,7 +202,8 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
   return {
     /** Rows in the view: the engine's total less the hidden rows. */
     get total() {
-      return total == null ? null : Math.max(0, total - hiddenIndices().length);
+      const t = stale && !pages.size ? stale.total : total;
+      return t == null ? null : Math.max(0, t - hiddenIndices().length);
     },
     get pageSize() {
       return pageSize;
@@ -210,9 +232,9 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
     rowAt(i) {
       const raw = toRaw(i);
       const p = Math.floor(raw / pageSize);
-      const rows = pages.get(p);
+      const rows = shown().get(p);
       if (!rows) return undefined;
-      touch(p, rows);
+      if (rows === pages.get(p)) touch(p, rows);
       return rows[raw - p * pageSize];
     },
     ensure(i) {
@@ -222,10 +244,10 @@ export function createPageCache(fetchPage, pageSize = PAGE_SIZE, { spansAccounts
     keyFor,
     /** View index of the row `key` (`keyFor`) on the held pages, or -1 (not held, or hidden). */
     indexOf(key) {
-      for (const [p, rows] of pages) {
+      for (const [p, rows] of shown()) {
         const j = rows.findIndex((r) => r && keyOf(r) === key);
         if (j < 0) continue;
-        if (hidden.has(key)) return -1;
+        if (isHidden(key)) return -1;
         const raw = p * pageSize + j;
         return raw - hiddenIndices().filter((h) => h < raw).length;
       }

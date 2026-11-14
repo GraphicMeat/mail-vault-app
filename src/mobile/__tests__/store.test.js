@@ -147,7 +147,8 @@ describe('mobile store', () => {
     engine.folders.a1[0] = inbox(5);
     emit('mobile.folder.changed', { accountId: 'a1', folder: 'INBOX', added: 2, removed: 0, updated: 0, listGen: 2 });
     expect(store.getState().listGen).toBe(2);
-    expect(list.rowAt(0)).toBeUndefined();
+    // The old rows stay on screen until the reload lands (no blank flash).
+    expect(list.rowAt(0).uid).toBe(250);
     await list.ensure(0);
     expect(callsOf('mobile.messages.page').length).toBe(before + 1);
     expect(list.rowAt(0).uid).toBe(252);

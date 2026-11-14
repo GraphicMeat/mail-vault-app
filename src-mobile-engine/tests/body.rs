@@ -329,6 +329,21 @@ fn a_premium_body_strips_its_pixel_and_names_it_and_a_lapse_brings_it_back() {
     assert_eq!(server.commands().len(), n, "a lapse changes no cache");
 }
 
+/// Block tracking pixels (Settings > Privacy & security, desktop's `trackerBlockingEnabled`):
+/// turned off, a Premium body keeps its pixel as a free one does; on again, it is stripped.
+#[test]
+fn a_premium_body_keeps_its_pixel_while_blocking_is_turned_off() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, PIXEL_HTML))));
+    let f = setup(&server).premium();
+    f.engine.rpc("mobile.prefs.set", json!({ "trackerBlockingEnabled": false })).unwrap();
+    let off = f.body(1);
+    assert_eq!(off["trackersStripped"], false, "{off}");
+    assert!(off["html"].as_str().unwrap().contains("https://track.example.net/open/abc123.gif"), "{off}");
+    f.engine.rpc("mobile.prefs.set", json!({ "trackerBlockingEnabled": true })).unwrap();
+    let on = f.body(1);
+    assert_eq!(on["trackersStripped"], true, "{on}");
+}
+
 /// A row cached before the tracker list existed no longer reads: the next open fetches it again.
 #[test]
 fn a_row_cached_without_the_tracker_list_is_fetched_once_more() {

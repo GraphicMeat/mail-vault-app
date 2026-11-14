@@ -208,6 +208,21 @@ describe('Viewer', () => {
     expect(useMobileStore.getState().paywall).toEqual({ feature: 'trackerBlocking', signIn: false });
   });
 
+  it('Premium with blocking turned off: the pixels are kept, and the shield opens their list, not the paywall', async () => {
+    useMobileStore.getState().closePaywall();
+    useMobileStore.setState({ premium: { premium: true, source: 'apple', expiresMs: null } });
+    try {
+      engine.reply = body({ remoteImages: 2, trackers: 1, trackersStripped: false, trackerList: [{ vendor: 'x', domain: 'x' }] });
+      renderViewer();
+      const shield = await screen.findByRole('button', { name: t('alert.tracker.emailTracks', { count: 1 }) });
+      fireEvent.click(shield);
+      await waitFor(() => expect(document.querySelector('[data-mv-tracker-list]')).toBeTruthy());
+      expect(useMobileStore.getState().paywall).toBeNull();
+    } finally {
+      useMobileStore.setState({ premium: { premium: false, source: null, expiresMs: null } });
+    }
+  });
+
   it('no shield when the message has no tracking pixel', async () => {
     renderViewer();
     await waitFor(() => expect(frame()).toBeTruthy());

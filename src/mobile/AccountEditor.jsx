@@ -2,8 +2,7 @@
 // is sent with, the signature compose adds (plain text here; a desktop html signature shows as its
 // text and is kept as html until edited), hidden (out of the switcher, the drawer and All Inboxes,
 // still listed here to show again). Save writes them in one call and re-reads the accounts. The
-// account's own notification switch is carried from the desktop and stored, not shown yet: the
-// background run does not read it.
+// account's own notification switch is on Settings > Notifications.
 //
 // Remove (as desktop's account page has it, last and set apart): an inline question, then the
 // store's removeAccount; a refusal keeps the question for another try (the store told the user).

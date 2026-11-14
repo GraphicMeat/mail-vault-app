@@ -117,6 +117,11 @@ fn premium(shared: &Shared) -> bool {
     crate::premium::active(shared)
 }
 
+/// Pixels are stripped with Premium while Block tracking pixels is on (a failed read: on).
+fn strips(shared: &Shared) -> bool {
+    premium(shared) && shared.read(|c| crate::settings::tracker_blocking_on(c)).unwrap_or(true)
+}
+
 /// The marker that replaces a beacon carries no catalog key or English text: empty templates; the
 /// viewer labels `[data-mv-tracker-blocked]` in the UI language.
 fn blank_texts() -> mailvault_core::body_scan::Texts {
@@ -236,7 +241,7 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
             c.execute(&format!("UPDATE bodies SET last_access_ms = {STAMP} WHERE {KEY}"), key(&p))?;
             refresh_out_of_window(c, &p)
         });
-        return Ok(hit.reply(tracker_policy(premium(shared))));
+        return Ok(hit.reply(tracker_policy(strips(shared))));
     }
     let validity: Option<Option<i64>> = shared
         .read(|c| {
@@ -271,7 +276,7 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
     }
     // Opened: a row outside the sync window that a server search stored is kept 30 days from now.
     let _ = shared.write(|c| refresh_out_of_window(c, &p));
-    Ok(body.reply(tracker_policy(premium(shared))))
+    Ok(body.reply(tracker_policy(strips(shared))))
 }
 
 /// Moves the `out_of_window_ms` mark of the opened message to now (a row inside the window has none).

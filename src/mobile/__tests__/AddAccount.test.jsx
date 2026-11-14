@@ -390,7 +390,7 @@ describe('needs_auth', () => {
     return (
       <>
         <ReauthBanner account={accounts.find((a) => a.id === 'a1')} state={state} onReauth={reauth} />
-        <AccountSwitcher accounts={accounts} activeAccountId="a1" unread={{}} onSelect={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onReauth={reauth} reauthBusy={Boolean(state?.busy)} onClose={vi.fn()} />
+        <AccountSwitcher accounts={accounts} activeAccountId="a1" unread={{}} onSelect={vi.fn()} onAdd={vi.fn()} onReauth={reauth} reauthBusy={Boolean(state?.busy)} onClose={vi.fn()} />
       </>
     );
   }
@@ -446,7 +446,7 @@ describe('needs_auth', () => {
   it('the switcher offers Sign in again on a needs_auth row only', () => {
     const onReauth = vi.fn();
     render(
-      <AccountSwitcher accounts={[parked, other]} activeAccountId="a2" unread={{}} onSelect={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onReauth={onReauth} onClose={vi.fn()} />,
+      <AccountSwitcher accounts={[parked, other]} activeAccountId="a2" unread={{}} onSelect={vi.fn()} onAdd={vi.fn()} onReauth={onReauth} onClose={vi.fn()} />,
     );
     const buttons = screen.getAllByRole('button', { name: t('mobile.reauth.action') });
     expect(buttons).toHaveLength(1);

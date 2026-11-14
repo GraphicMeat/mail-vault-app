@@ -71,6 +71,7 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("defaultSignatureEnabled", Kind::Bool, "true"),
     // Remote images wait for "Load images".
     ("holdExternalContent", Kind::Bool, "true"),
+    // Premium strips tracking pixels while it is on (body.rs).
     ("trackerBlockingEnabled", Kind::Bool, "true"),
     ("dateFormat", Kind::OneOf(&["auto", "MM/dd/yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "dd MMM yyyy", "custom"]), "\"auto\""),
     ("customDateFormat", Kind::Text(64), "\"\""),
@@ -140,6 +141,12 @@ pub(crate) fn get_in(c: &Connection, key: &str) -> rusqlite::Result<Option<Strin
     c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get::<_, Option<String>>(0))
         .optional()
         .map(Option::flatten)
+}
+
+/// Block tracking pixels (`trackerBlockingEnabled`, on unless turned off): Premium strips them only
+/// while it is on.
+pub(crate) fn tracker_blocking_on(c: &Connection) -> rusqlite::Result<bool> {
+    Ok(get_in(c, "trackerBlockingEnabled")?.as_deref() != Some("false"))
 }
 
 pub(crate) fn put_in(c: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {

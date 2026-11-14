@@ -275,7 +275,7 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(on('appearance')).toEqual(['theme', 'palette', 'language', 'emailViewerTheme', 'dateFormat', 'timeFormat']);
     expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled']);
     // Remote content is a privacy choice on desktop (Privacy & security > Security).
-    expect(on('privacy')).toEqual(['holdExternalContent']);
+    expect(on('privacy')).toEqual(['holdExternalContent', 'trackerBlockingEnabled']);
   });
 
   it('the accounts page lists the accounts; the help page has the version and the source', () => {
@@ -284,5 +284,14 @@ describe('Settings pages, as desktop lays them out', () => {
     r.unmount();
     render(<Settings onClose={() => {}} page="help" version="1.2.3" />);
     expect(screen.getByText(t('mobile.settings.version', { version: '1.2.3' }))).toBeTruthy();
+  });
+
+  it('Help has desktop\'s links: FAQ, report a bug, Discord, website and privacy policy, each a plain https anchor', () => {
+    render(<Settings onClose={() => {}} page="help" />);
+    const links = [...document.querySelectorAll('[data-mv-help-link]')];
+    expect(links.map((a) => a.getAttribute('data-mv-help-link'))).toEqual(['faq', 'bug', 'discord', 'website', 'privacy']);
+    for (const a of links) expect(a.getAttribute('href')).toMatch(/^https:\/\//);
+    expect(links[0].getAttribute('href')).toContain('mailvaultapp.com/faq.html');
+    expect(links[1].getAttribute('href')).toBe('https://github.com/GraphicMeat/mail-vault-app/issues');
   });
 });
