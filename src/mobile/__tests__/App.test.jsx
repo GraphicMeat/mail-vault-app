@@ -86,7 +86,8 @@ afterEach(() => {
   engine.handlers.clear();
 });
 
-const bodyCalls = () => engine.calls.filter(([m]) => m === 'mobile.message.body').map(([, p]) => p);
+// The message asked for (the link-safety templates the viewer sends with it left out).
+const bodyCalls = () => engine.calls.filter(([m]) => m === 'mobile.message.body').map(([, { texts, ...p }]) => p);
 
 describe('App', () => {
   it('pings and inits exactly once while the store keeps changing', async () => {

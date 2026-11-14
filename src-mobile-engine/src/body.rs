@@ -227,8 +227,43 @@ fn cap(shared: &Shared) -> u64 {
 /// empty for that reason and the body was not cached (the next open asks again). A network failure is an
 /// `INTERNAL` error whose message is the accounts error code (`TIMEOUT`, `HOST_UNREACHABLE`, ...);
 /// the detail goes to the log only.
+///
+/// Link safety (`linkSafetyEnabled`, on unless turned off): `{..., alerts: [{level, textContent,
+/// textDomain, actualUrl, actualDomain, reason}], maxAlertLevel: "red"|"yellow"|null}`, core's
+/// `scan_links` over the html the viewer frames (after the tracker rule, as core's `scan_body`
+/// orders it). `texts` (optional) are the UI language's `linkSafety.reason.*` templates, which the
+/// reasons are written from. Only when a link is flagged is `html` the scan's rewrite (each flagged
+/// link marked `data-link-alert`); otherwise it stays the html as it came. The cache never holds the
+/// rewrite, and compose's quote (`body_for`) never sees it. Off, `alerts` is empty.
 pub(crate) fn message_body(engine: &Engine, params: Value) -> Result<Value, RpcError> {
-    body_for(engine.shared(), params)
+    let texts = params.get("texts").filter(|v| v.is_object()).cloned();
+    let mut reply = body_for(engine.shared(), params)?;
+    let on = engine.shared().read(|c| crate::settings::link_safety_on(c)).unwrap_or(true);
+    scan_reply_links(&mut reply, on, texts.as_ref());
+    Ok(reply)
+}
+
+/// Adds the link scan to a body reply (see [`message_body`]).
+fn scan_reply_links(reply: &mut Value, on: bool, texts: Option<&Value>) {
+    // A gone message has no body to scan: its reply stays as it was.
+    if reply.get("gone") == Some(&Value::Bool(true)) {
+        return;
+    }
+    let scan = match reply.get("html").and_then(Value::as_str) {
+        Some(html) if on => Some(mailvault_core::body_scan::scan_links(html, &mailvault_core::body_scan::Texts::from_value(texts))),
+        _ => None,
+    };
+    let (alerts, level) = match scan {
+        Some(scan) => {
+            if !scan.alerts.is_empty() {
+                reply["html"] = json!(scan.html);
+            }
+            (json!(scan.alerts), json!(scan.max_level))
+        }
+        None => (json!([]), Value::Null),
+    };
+    reply["alerts"] = alerts;
+    reply["maxAlertLevel"] = level;
 }
 
 /// [`message_body`] on the shared state, for a caller on another thread (compose's bounded wait).

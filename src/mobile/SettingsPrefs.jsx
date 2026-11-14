@@ -1,8 +1,8 @@
 // Settings' preference pages (W1a): what a desktop import carries over and the user can change
 // here, split the way desktop's pages split them (`section`): 'appearance' (look, language, email
-// viewer theme, date and time), 'mail' (Mail preferences: reading, deleting, swipes, sending) and
-// 'privacy' (Privacy & security: remote content, and tracking pixels, which Premium strips while
-// the switch is on). Each row writes one preference (`mobile.prefs.set`, through the store's setPrefs) and the
+// viewer theme, conversations, date and time), 'mail' (Mail preferences: reading, deleting, swipes, sending) and
+// 'privacy' (Privacy & security: remote content, tracking pixels, which Premium strips while
+// the switch is on, and link safety: scanning, and click confirmation while it scans). Each row writes one preference (`mobile.prefs.set`, through the store's setPrefs) and the
 // page follows at once: theme and palette on the root element, the rest read where they act
 // (viewer, list rows, compose). The language row stores `language` (`mobile.settings.set`) and
 // loads that catalog, as the tour's first step does. Labels reuse the desktop's catalog keys.
@@ -11,7 +11,7 @@ import { useMobileStore } from './store.js';
 import { useT, getMobileLocale, loadMobileLocale } from './i18n.js';
 import { daemonCall } from './transport.js';
 import { LOCALES } from '../i18n/languages.js';
-import { THEMES, PALETTES, SWIPE_ACTIONS, SEND_DELAYS, MARK_READ_DELAYS } from './prefs.js';
+import { THEMES, PALETTES, SWIPE_ACTIONS, SEND_DELAYS, MARK_READ_DELAYS, THREAD_MODES, THREAD_ORDERS } from './prefs.js';
 
 const DATE_FORMATS = ['auto', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd', 'dd MMM yyyy', 'custom'];
 
@@ -126,6 +126,30 @@ export default function SettingsPrefs({ section }) {
               options={THEMES.map((v) => [v, v === 'system' ? t('settings.section.system') : t(`settings.colors.${v}`)])}
               onChange={(emailViewerTheme) => set({ emailViewerTheme })}
             />
+          </div>
+
+          <h2 className="mv-settings__heading">{t('settings.appearance.section.reading')}</h2>
+          <div className="mv-settings__list" data-mv-settings-threads>
+            <Choice
+              name="threadMode"
+              label={t('settings.appearance.threadMode')}
+              value={prefs.threadMode}
+              options={THREAD_MODES.map((v) => [v, t({
+                grouped: 'settings.appearance.threadModeGrouped',
+                expandable: 'settings.appearance.threadModeExpandable',
+                flat: 'settings.appearance.threadModeFlat',
+              }[v])])}
+              onChange={(threadMode) => set({ threadMode })}
+            />
+            {prefs.threadMode !== 'flat' && (
+              <Choice
+                name="threadSortOrder"
+                label={t('settings.appearance.threadSortOrder')}
+                value={prefs.threadSortOrder}
+                options={THREAD_ORDERS.map((v) => [v, t(v === 'newest-first' ? 'settings.appearance.newestFirst' : 'settings.appearance.oldestFirst')])}
+                onChange={(threadSortOrder) => set({ threadSortOrder })}
+              />
+            )}
           </div>
 
           <h2 className="mv-settings__heading">{t('settings.appearance.section.dateTime')}</h2>
@@ -257,6 +281,22 @@ export default function SettingsPrefs({ section }) {
               checked={prefs.trackerBlockingEnabled}
               onChange={(trackerBlockingEnabled) => set({ trackerBlockingEnabled })}
             />
+            <Toggle
+              name="linkSafetyEnabled"
+              label={t('settings.security.linkSafetyScanning')}
+              hint={t('settings.security.detectSuspiciousLinksEmailsDon')}
+              checked={prefs.linkSafetyEnabled}
+              onChange={(linkSafetyEnabled) => set({ linkSafetyEnabled })}
+            />
+            {prefs.linkSafetyEnabled && (
+              <Toggle
+                name="linkSafetyClickConfirm"
+                label={t('settings.security.clickConfirmation')}
+                hint={t('settings.security.showWarningModalBeforeOpening')}
+                checked={prefs.linkSafetyClickConfirm}
+                onChange={(linkSafetyClickConfirm) => set({ linkSafetyClickConfirm })}
+              />
+            )}
           </div>
         </>
       )}

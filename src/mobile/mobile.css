@@ -288,6 +288,19 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-row:active { background: var(--mail-surface-hover); }
 /* All Inboxes: the row's account, in that account's colour (desktop's account dot). */
 .mv-row__acct { flex: none; width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.mv-row__count {
+  flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--mail-surface-hover, rgba(127, 127, 127, 0.16));
+  color: var(--mail-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  align-self: center;
+}
 .mv-row__flag { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mv-flag); align-self: center; }
 .mv-row__top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .mv-row__sender, .mv-row__subject, .mv-row__snippet {
@@ -338,6 +351,19 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-viewer__shield--locked { color: var(--mail-text-muted); }
 .mv-sheet__note { margin: 0 8px 8px; font-size: 0.8125rem; color: var(--mail-text-muted); }
+/* The warning before a flagged link opens (Viewer.jsx LinkSheet): the app's own, out of the mail's reach. */
+.mv-linksheet { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; max-height: 50vh; }
+.mv-linksheet__item { padding: 8px 0; border-bottom: 1px solid var(--mail-border); }
+.mv-linksheet__title--red { color: var(--mail-danger, #ef4444); }
+.mv-linksheet__title--yellow { color: var(--mail-warning, #f59e0b); }
+.mv-linksheet__label { margin: 8px 0 2px; font-size: 0.75rem; color: var(--mail-text-muted); }
+.mv-linksheet__value { margin: 0; font-size: 0.875rem; overflow-wrap: anywhere; }
+.mv-linksheet__url { font-family: ui-monospace, Menlo, monospace; font-size: 0.8125rem; }
+.mv-linksheet__open {
+  display: flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px;
+  border-radius: 10px; border: 1px solid currentColor; color: var(--mail-danger, #ef4444);
+  font-weight: 600; text-decoration: none;
+}
 .mv-trackers { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; max-height: 40vh; }
 .mv-trackers__item { display: flex; flex-direction: column; padding: 8px 0; border-top: 1px solid var(--mail-border); }
 .mv-trackers__vendor { font-weight: 600; }
@@ -1123,6 +1149,17 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 
 .mv-compose__file--failed .mv-compose__file-size { color: var(--mv-danger); }
 .mv-compose__file--pending { padding-inline-end: 0; }
+
+/* One conversation's messages (ThreadView.jsx): a full-screen layer under the viewer. */
+.mv-thread {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  background: var(--mail-bg);
+}
+.mv-thread__list { position: relative; }
 
 /* The drafts list: a full-screen layer like compose. */
 .mv-drafts {

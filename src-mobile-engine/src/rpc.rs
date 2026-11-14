@@ -138,6 +138,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.message.body", crate::body::message_body),
     ("mobile.message.inlineImages", crate::attachments::inline_images),
     ("mobile.messages.page", messages_page),
+    ("mobile.messages.thread", messages_thread),
     ("mobile.network.state", crate::offline::network),
     ("mobile.oauth.begin", crate::oauth::begin),
     ("mobile.oauth.cancel", crate::oauth::cancel),
@@ -199,6 +200,7 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.message.body", crate::body::message_body),
     ("mobile.message.inlineImages", crate::attachments::inline_images),
     ("mobile.messages.page", messages_page),
+    ("mobile.messages.thread", messages_thread),
     ("mobile.network.state", crate::offline::network),
     ("mobile.oauth.begin", crate::oauth::begin),
     ("mobile.oauth.cancel", crate::oauth::cancel),
@@ -289,6 +291,10 @@ enum Scope {
 /// every account's inbox as one list in `(date_ms DESC, uid DESC, account_id DESC)` order, each row
 /// with its own `accountId` and `folder`. Every account the engine holds is in it, a held or
 /// signed-out one's stored mail too (as on desktop); a removed account's rows are gone with it.
+///
+/// `threads: true` (the page's `threadMode` grouped or expandable): one row per conversation
+/// (`threads.rs`), its newest message's, in the same order and paged by that message's cursor;
+/// `total` counts conversations. In All Inboxes each inbox's conversations are its own.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CursorPageParams {
@@ -301,12 +307,14 @@ struct CursorPageParams {
     #[serde(default)]
     cursor: Option<Cursor>,
     limit: u64,
+    #[serde(default)]
+    threads: bool,
 }
 
 /// The list's view of a row: a pending local change (`local_*`) wins over the server's value, and
 /// a row deleted locally is not listed, nor is one outside the sync window that a server search
 /// stored (it shows in search results, not in the folder).
-const LISTED: &str = "account_id = ?1 AND folder = ?2 AND COALESCE(local_deleted, 0) = 0 AND out_of_window_ms IS NULL";
+pub(crate) const LISTED: &str = "account_id = ?1 AND folder = ?2 AND COALESCE(local_deleted, 0) = 0 AND out_of_window_ms IS NULL";
 pub(crate) const ROW_COLUMNS: &str = "uid, subject, from_name, from_address, date_ms, snippet,
     COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), has_attachments, to_json";
 
@@ -333,7 +341,7 @@ fn recipients(to_json: &str) -> Value {
     }
 }
 
-fn count_listed(c: &rusqlite::Connection, account: &str, folder: &str) -> rusqlite::Result<i64> {
+pub(crate) fn count_listed(c: &rusqlite::Connection, account: &str, folder: &str) -> rusqlite::Result<i64> {
     c.query_row(&format!("SELECT count(*) FROM messages WHERE {LISTED}"), (account, folder), |r| r.get(0))
 }
 
@@ -384,7 +392,7 @@ fn messages_page(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: CursorPageParams = parse(params)?;
     let limit = p.limit.min(MAX_PAGE) as i64;
     let (account_id, folder) = match (p.scope, p.account_id, p.folder) {
-        (Some(Scope::AllInboxes), None, None) => return all_inboxes_page(engine, p.cursor, limit),
+        (Some(Scope::AllInboxes), None, None) => return all_inboxes_page(engine, p.cursor, limit, p.threads),
         (None, Some(a), Some(f)) => (a, f),
         (Some(_), ..) => return Err(RpcError::Invalid("scope takes no accountId or folder".into())),
         (None, ..) => return Err(RpcError::Invalid("accountId and folder are required".into())),
@@ -392,9 +400,72 @@ fn messages_page(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let list_gen = engine.shared().list_gen(&account_id, &folder).map_err(|e| RpcError::Internal(e.to_string()))?;
     engine
         .read(|c| {
-            let total = count_listed(c, &account_id, &folder)?;
-            let rows = listed_page(c, &account_id, &folder, p.cursor.map(|k| (k.date_ms, k.uid)), limit + 1)?;
+            let bound = p.cursor.map(|k| (k.date_ms, k.uid));
+            let (total, rows) = if p.threads {
+                let f = crate::threads::folder_threads(engine.shared(), c, &account_id, &folder, list_gen)?;
+                (f.threads.len() as i64, thread_heads(c, &f, &account_id, &folder, bound, limit + 1)?)
+            } else {
+                (count_listed(c, &account_id, &folder)?, listed_page(c, &account_id, &folder, bound, limit + 1)?)
+            };
             Ok(page_json(rows, limit, total, list_gen))
+        })
+        .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// [`crate::threads::heads_page`] with the list's cursors.
+fn thread_heads(
+    c: &rusqlite::Connection,
+    f: &crate::threads::Folder,
+    account: &str,
+    folder: &str,
+    bound: Option<(i64, i64)>,
+    limit: i64,
+) -> rusqlite::Result<Vec<(Cursor, Value)>> {
+    Ok(crate::threads::heads_page(c, f, account, folder, bound, limit)?
+        .into_iter()
+        .map(|((date_ms, uid), row)| (Cursor { date_ms, uid, account_id: None }, row))
+        .collect())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ThreadParams {
+    account_id: String,
+    folder: String,
+    uid: i64,
+    #[serde(default)]
+    order: Option<String>,
+}
+
+/// `mobile.messages.thread {accountId, folder, uid, order?: "oldest-first"|"newest-first"}` ->
+/// `{rows, threadId}`: the listed messages of the conversation that holds `uid` (`threads.rs`),
+/// oldest first unless `order` says newest first, each a list row with its `accountId` and
+/// `folder`. `rows` is empty and `threadId` null when `uid` is not listed (gone meanwhile).
+fn messages_thread(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: ThreadParams = parse(params)?;
+    let newest_first = match p.order.as_deref() {
+        None | Some("oldest-first") => false,
+        Some("newest-first") => true,
+        Some(_) => return Err(RpcError::Invalid("order is \"oldest-first\" or \"newest-first\"".into())),
+    };
+    let list_gen = engine.shared().list_gen(&p.account_id, &p.folder).map_err(|e| RpcError::Internal(e.to_string()))?;
+    engine
+        .read(|c| {
+            let f = crate::threads::folder_threads(engine.shared(), c, &p.account_id, &p.folder, list_gen)?;
+            let Some(t) = f.of_uid(p.uid) else { return Ok(json!({ "rows": [], "threadId": null })) };
+            let mut rows = Vec::with_capacity(t.members.len());
+            let members: Box<dyn Iterator<Item = &crate::threads::Member>> =
+                if newest_first { Box::new(t.members.iter().rev()) } else { Box::new(t.members.iter()) };
+            for m in members {
+                if let Some(mut row) = crate::threads::row_of(c, &p.account_id, &p.folder, m.uid)? {
+                    if let Some(o) = row.as_object_mut() {
+                        o.insert("accountId".into(), json!(p.account_id));
+                        o.insert("folder".into(), json!(p.folder));
+                    }
+                    rows.push(row);
+                }
+            }
+            Ok(json!({ "rows": rows, "threadId": t.id }))
         })
         .map_err(|e| RpcError::Internal(e.to_string()))
 }
@@ -402,7 +473,7 @@ fn messages_page(engine: &Engine, params: Value) -> Result<Value, RpcError> {
 /// The All Inboxes page: each account's inbox read through its own index (at most `limit + 1`
 /// rows each, after the cursor), then merged. `total` and `listGen` are sums over the inboxes; the
 /// sum moves whenever one inbox's generation does. `listGens` names each inbox's own.
-fn all_inboxes_page(engine: &Engine, cursor: Option<Cursor>, limit: i64) -> Result<Value, RpcError> {
+fn all_inboxes_page(engine: &Engine, cursor: Option<Cursor>, limit: i64, threads: bool) -> Result<Value, RpcError> {
     let internal = |e: String| RpcError::Internal(e);
     // Each account's inbox as sync stores it (`INBOX`, any case). An account with no folder row
     // yet has no mail either; it is named the way sync will name it.
@@ -434,14 +505,22 @@ fn all_inboxes_page(engine: &Engine, cursor: Option<Cursor>, limit: i64) -> Resu
             let mut total = 0;
             let mut rows = Vec::new();
             for (account, folder) in &inboxes {
-                total += count_listed(c, account, folder)?;
                 // Strictly after `(d, u, a)` in (date, uid, account) DESC order: for an account
                 // below `a` the row `(d, u)` itself still follows; for any other, only what is below.
                 let bound = cursor.as_ref().map(|k| match &k.account_id {
                     Some(a) if account.as_str() < a.as_str() => (k.date_ms, k.uid.saturating_add(1)),
                     _ => (k.date_ms, k.uid),
                 });
-                for (mut key, mut row) in listed_page(c, account, folder, bound, limit + 1)? {
+                let page = if threads {
+                    let gen = list_gens.get(account).and_then(Value::as_i64).unwrap_or(0);
+                    let f = crate::threads::folder_threads(engine.shared(), c, account, folder, gen)?;
+                    total += f.threads.len() as i64;
+                    thread_heads(c, &f, account, folder, bound, limit + 1)?
+                } else {
+                    total += count_listed(c, account, folder)?;
+                    listed_page(c, account, folder, bound, limit + 1)?
+                };
+                for (mut key, mut row) in page {
                     key.account_id = Some(account.clone());
                     if let Some(o) = row.as_object_mut() {
                         o.insert("accountId".into(), json!(account));

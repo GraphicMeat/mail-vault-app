@@ -11,10 +11,17 @@
 // Each attachment is a chip (AttachmentChip.jsx): tap downloads, opens or retries, a long press
 // shares. A link tapped in the mail leaves the frame for the system browser: the shell's
 // navigation hook (src-tauri-mobile/native) cancels it in the webview and hands the URL out.
+// Link safety (Settings > Privacy & security): the engine scans the links while
+// `linkSafetyEnabled` is on and sends the flagged ones (`alerts`, reasons written from the
+// `linkSafety.reason.*` templates sent with the request); the frame marks them, and with
+// `linkSafetyClickConfirm` a flagged link no longer holds its URL (mailFrame.js `markLinks`): a
+// tap on it only reloads the frame, and the frame's next `load` opens LinkSheet, the app's own
+// warning with the real URLs, whose Open anyway is the only way to one. The mail is drawn again
+// at once.
 // The toolbar at the bottom acts on the message: read or unread, flag, move (MovePicker.jsx over
 // the account's folders) and delete; App.jsx sends the actions (store `act`). Its More button opens
 // a sheet with Reply, Reply all and Forward (`onCompose(mode)`: App.jsx opens Compose.jsx).
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
 import { assembleMailFrame, prepareMailBody } from './mailFrame.js';
@@ -200,6 +207,48 @@ function TrackerShield({ count, stripped, onOpen }) {
 
 const noop = () => {};
 
+const LINK_REASONS = ['dangerousScheme', 'textMismatch', 'redirect', 'ipAddress'];
+/** A link the Open anyway button may carry (a flagged `javascript:` or `data:` gets none). */
+const WEB_URL = /^\s*https?:\/\//i;
+
+/** The app's warning before a flagged link opens: every flagged link of the message, with its
+ *  text, its real URL and the reason, each with Open anyway (web links only); Cancel closes. */
+function LinkSheet({ alerts, onClose }) {
+  const t = useT();
+  const red = alerts.some((a) => a.level === 'red');
+  const title = red ? t('linkSafety.dangerousLinkDetected') : t('linkSafety.suspiciousLinkDetected');
+  return (
+    <Sheet kind="sheet" label={title} onClose={onClose}>
+      <div className="mv-sheet__grip" aria-hidden="true" />
+      <h2 className={`mv-sheet__title mv-linksheet__title mv-linksheet__title--${red ? 'red' : 'yellow'}`} data-mv-link-sheet={red ? 'red' : 'yellow'}>{title}</h2>
+      <ul className="mv-linksheet">
+        {alerts.map((a, i) => (
+          <li key={i} className="mv-linksheet__item" data-mv-link-alert={a.level}>
+            {a.reason && <p className="mv-sheet__note">{a.reason}</p>}
+            <p className="mv-linksheet__label">{t('linkSafety.linkTextSays')}</p>
+            <p className="mv-linksheet__value" dir="auto">{displayText(a.textContent, '')}</p>
+            <p className="mv-linksheet__label">{t('linkSafety.actuallyRedirects')}</p>
+            <p className="mv-linksheet__value mv-linksheet__url" dir="ltr">{a.actualUrl}</p>
+            {WEB_URL.test(a.actualUrl) && (
+              <a className="mv-linksheet__open" data-mv-link-open href={a.actualUrl} target="_blank" rel="noopener noreferrer" onClick={onClose}>
+                {t('linkSafety.openAnyway')}
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="mv-sheet__actions">
+        <button type="button" className="mv-sheet__action" data-mv-link-cancel onClick={onClose}>{t('common.cancel')}</button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** The engine writes link-safety reasons from these templates, in the UI language. */
+function linkTexts(t) {
+  return Object.fromEntries(LINK_REASONS.map((k) => [`linkSafety.reason.${k}`, t(`linkSafety.reason.${k}`)]));
+}
+
 export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, onCompose = noop, initialPicking = false }) {
   const t = useT();
   const [seen, setSeen] = useState(row.seen !== false);
@@ -249,7 +298,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   useEffect(() => {
     let live = true;
     setState({ phase: 'loading' });
-    daemonCall('mobile.message.body', { accountId, folder, uid: row.uid }).then(
+    daemonCall('mobile.message.body', { accountId, folder, uid: row.uid, texts: linkTexts(t) }).then(
       (body) => {
         if (live) setState(body?.gone ? { phase: 'gone' } : { phase: 'ready', body });
       },
@@ -258,7 +307,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       },
     );
     return () => { live = false; };
-  }, [accountId, folder, row.uid, attempt]);
+  }, [accountId, folder, row.uid, attempt, t]);
 
   const body = state.phase === 'ready' ? state.body : null;
   const hasContent = Boolean(body && ((body.html && body.html.trim()) || (body.text && body.text.trim())));
@@ -271,13 +320,34 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   // Inline `cid:` images, from the parts on the phone as `data:` URLs (inlineImages.js).
   const images = useInlineImages({ accountId, folder, uid: row.uid, html: rawHtml, attachments: body?.attachments });
   const html = useMemo(() => withInlineImages(rawHtml, images), [rawHtml, images]);
+  const linkSafety = useMobileStore((s) => s.prefs.linkSafetyEnabled !== false);
+  const confirmLinks = useMobileStore((s) => s.prefs.linkSafetyEnabled !== false && s.prefs.linkSafetyClickConfirm !== false);
+  const alerts = linkSafety ? body?.alerts : null;
   const prepared = useMemo(() => {
     if (!hasContent) return null;
     const t0 = performance.now();
-    const out = prepareMailBody({ html, text });
+    const out = prepareMailBody({ html, text }, undefined, { alerts, confirm: confirmLinks });
     notePrepare(performance.now() - t0, (html || text || '').length);
     return out;
-  }, [html, text, hasContent]);
+  }, [html, text, hasContent, alerts, confirmLinks]);
+  // A guarded link's tap reloads the frame: every load after its first is one. The mail is put
+  // back in a fresh frame (`frameRun`) and the app asks.
+  const [linkSheet, setLinkSheet] = useState(false);
+  const closeLinkSheet = useCallback(() => setLinkSheet(false), []);
+  useBackLayer(linkSheet, closeLinkSheet);
+  const [frameRun, setFrameRun] = useState(0);
+  const frameLoads = useRef(0);
+  // Each new frame (Load images, the theme, inline images, a tap's reload) starts its own count.
+  const frameRef = useCallback((el) => { if (el) frameLoads.current = 0; }, []);
+  const onFrameLoad = useCallback(() => {
+    frameLoads.current += 1;
+    if (frameLoads.current === 1) {
+      bodyLoaded(performance.now());
+      return;
+    }
+    setFrameRun((n) => n + 1);
+    setLinkSheet(true);
+  }, []);
   const autoImages = useMobileStore((s) => s.prefs.holdExternalContent === false);
   const remoteOn = allowRemote || Boolean(autoImages && body && !((body.trackers || 0) > 0 && !body.trackersStripped));
   const srcDoc = useMemo(
@@ -346,13 +416,14 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
           images arrived. */}
       {srcDoc && (
         <iframe
-          key={`${remoteOn ? 'remote' : 'local'}-${theme}-${images ? Object.keys(images).length : 0}`}
+          key={`${remoteOn ? 'remote' : 'local'}-${theme}-${images ? Object.keys(images).length : 0}-${frameRun}`}
           className="mv-viewer__frame"
           title={t('mobile.viewer.frameTitle')}
           sandbox={FRAME_SANDBOX}
           referrerPolicy="no-referrer"
           srcDoc={srcDoc}
-          onLoad={() => bodyLoaded(performance.now())}
+          ref={frameRef}
+          onLoad={onFrameLoad}
         />
       )}
       {!srcDoc && <div className="mv-viewer__fill" />}
@@ -360,6 +431,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       {picking && <MovePicker folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
       {trackerList && <TrackerSheet count={trackerCount} list={body?.trackerList || []} onClose={closeTrackers} />}
       {more && <MoreSheet onPick={startCompose} onClose={closeMore} />}
+      {linkSheet && prepared?.linkAlerts?.length > 0 && <LinkSheet alerts={prepared.linkAlerts} onClose={closeLinkSheet} />}
     </section>
   );
 }

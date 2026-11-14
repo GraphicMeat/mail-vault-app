@@ -21,6 +21,10 @@
 // its Sent copy the way a notification tap opens a message.
 // The outbox row (Outbox.jsx) sits between the header and the list while anything is unsent.
 //
+// Conversations (`threadMode` grouped or expandable): a list row that stands for several messages
+// opens them on a screen of their own (ThreadView.jsx), under the viewer; a swipe on it acts on all
+// of them.
+//
 // Back (Android) closes the top layer (viewer, picker, sheet, compose) through `backStack.js`.
 //
 // A tapped new-mail notification (`{accountId, folder, uid?}`, held by the shell) is taken on
@@ -35,6 +39,7 @@ import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, take
 import { useMobileStore, ALL_INBOXES } from './store.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
+import ThreadView from './ThreadView.jsx';
 import AddAccount from './AddAccount.jsx';
 import AccountSwitcher, { Avatar, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
@@ -58,6 +63,7 @@ import { mobileOnboardingSteps, onboardingGate } from './onboarding/steps.js';
 import { startPremiumSync } from './premium.js';
 import MovePicker from './MovePicker.jsx';
 import Sheet from './Sheet.jsx';
+import { rowUids } from './prefs.js';
 import { visibleAccounts, markReadPlan, afterDeleteRow } from './prefs.js';
 
 function logLine(payload) {
@@ -199,6 +205,8 @@ function App() {
   const [listState, setListState] = useState('loading'); // 'loading' | 'ready' | 'failed'
   const [panel, setPanel] = useState(null); // null | 'switcher' | 'drawer' | 'add'
   const [open, setOpen] = useState(null);
+  // The conversation on screen ({ row, accountId, folder }): its head row, where it lives.
+  const [thread, setThread] = useState(null);
   // A message opened from another account (a search result in All accounts) moves within that
   // account's folders: they are read for it, so Move offers them.
   const [otherFolders, setOtherFolders] = useState(null); // { accountId, folders }
@@ -422,9 +430,16 @@ function App() {
   }, []);
   // The viewer keeps the account and folder the row was opened from (in All Inboxes, the row's
   // own), whatever the list does next.
+  // A conversation's row opens the conversation; any other row, its message.
   const onOpen = useCallback((row, index) => {
-    show(row, index, useMobileStore.getState().placeOf(row));
+    const place = useMobileStore.getState().placeOf(row);
+    if (row.threadCount > 1) setThread({ row, ...place });
+    else show(row, index, place);
   }, [show]);
+  const onOpenMember = useCallback((row) => {
+    show(row, undefined, useMobileStore.getState().placeOf(row));
+  }, [show]);
+  const closeThread = useCallback(() => setThread(null), []);
   // `markAsReadMode` delay: still open after the delay, it is read.
   useEffect(() => {
     if (!open || open.row.seen) return undefined;
@@ -463,6 +478,7 @@ function App() {
       // Settings sits above the viewer: the message would open underneath it.
       setSettingsOpen(false);
       setOpen(null);
+      setThread(null);
       if (tap.uid == null) return;
       const { list, activeAccountId, activeFolder } = useMobileStore.getState();
       if (!list || activeAccountId !== tap.accountId || activeFolder !== tap.folder) return;
@@ -478,13 +494,27 @@ function App() {
       } catch (err) {
         logLine({ error: errorOf(err) });
       }
-      const row = index >= 0 ? list.rowAt(index) : undefined;
-      const found = Boolean(row && row.uid === tap.uid);
+      let row = index >= 0 ? list.rowAt(index) : undefined;
+      let found = Boolean(row && row.uid === tap.uid);
+      if (!found && list.threads) {
+        // In the list of conversations a message whose conversation has a newer one is no row of
+        // its own: it opens from its conversation.
+        try {
+          const reply = await daemonCall('mobile.messages.thread', { accountId: tap.accountId, folder: tap.folder, uid: tap.uid });
+          row = reply?.rows?.find((r) => r.uid === tap.uid);
+          found = Boolean(row);
+          index = -1;
+        } catch (err) {
+          logLine({ error: errorOf(err) });
+        }
+      }
       logLine({ notificationOpen: found ? 'message' : 'gone' });
-      if (found) onOpen(row, index);
+      // The message itself, even when it heads a conversation.
+      if (found) show(row, index >= 0 ? index : undefined, useMobileStore.getState().placeOf(row));
       else useMobileStore.getState().showNotice('mobile.viewer.gone');
     })();
-  }, [tap, status, onOpen]);
+  }, [tap, status, show]);
+  useBackLayer(Boolean(thread), closeThread);
   useBackLayer(Boolean(open), onClose);
   useBackLayer(Boolean(panel), closePanel);
 
@@ -506,7 +536,7 @@ function App() {
       return;
     }
     const run = () => {
-      s.act(kind, { ...place, uids: [row.uid] });
+      s.act(kind, { ...place, uids: rowUids(row) });
       done?.(kind);
     };
     if (kind === 'delete') confirmThen(run);
@@ -514,7 +544,7 @@ function App() {
   }, [confirmThen]);
   const onSwipeMove = useCallback((target) => {
     if (!moving) return;
-    useMobileStore.getState().act('move', { accountId: moving.accountId, folder: moving.folder, uids: [moving.row.uid], target });
+    useMobileStore.getState().act('move', { accountId: moving.accountId, folder: moving.folder, uids: rowUids(moving.row), target });
     moving.done?.('move', target);
     setMoving(null);
   }, [moving]);
@@ -844,6 +874,19 @@ function App() {
         <KeyboardLayer className="mv-add-overlay" scroll=".mv-add">
           <AddAccount onSubmit={onAdd} onOAuth={onOAuth} onOAuthCancel={onOAuthCancel} onCancel={closePanel} onImport={onImport} onImported={onImported} autoStart={DEMO_SIGNIN ? 'google' : null} />
         </KeyboardLayer>
+      )}
+      {thread && (
+        <ThreadView
+          key={`${thread.accountId}/${thread.folder}/${thread.row.uid}`}
+          accountId={thread.accountId}
+          folder={thread.folder}
+          row={thread.row}
+          list={list}
+          accountOf={accountOf}
+          onOpen={onOpenMember}
+          onSwipe={onSwipe}
+          onClose={closeThread}
+        />
       )}
       {open && (
         <Viewer

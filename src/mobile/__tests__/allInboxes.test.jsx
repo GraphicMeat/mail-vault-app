@@ -142,7 +142,7 @@ describe('All Inboxes store', () => {
     // A real account stays in front: compose and drafts keep working.
     expect(s.activeAccountId).toBe('a1');
     expect(keysOf(s.list)).toEqual(['a2:9', 'a1:5', 'a2:5', 'a1:2']);
-    expect(callsOf('mobile.messages.page').at(-1)).toEqual({ scope: 'allInboxes', cursor: null, limit: 100 });
+    expect(callsOf('mobile.messages.page').at(-1)).toEqual({ scope: 'allInboxes', cursor: null, limit: 100, threads: true });
     // The sentinel is never sent as a folder.
     expect(engine.calls.some(([, p]) => p && p.folder === ALL_INBOXES)).toBe(false);
   });

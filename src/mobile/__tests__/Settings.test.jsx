@@ -272,10 +272,10 @@ describe('Settings pages, as desktop lays them out', () => {
       r.unmount();
       return prefs;
     };
-    expect(on('appearance')).toEqual(['theme', 'palette', 'language', 'emailViewerTheme', 'dateFormat', 'timeFormat']);
+    expect(on('appearance')).toEqual(['theme', 'palette', 'language', 'emailViewerTheme', 'threadMode', 'threadSortOrder', 'dateFormat', 'timeFormat']);
     expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled']);
     // Remote content is a privacy choice on desktop (Privacy & security > Security).
-    expect(on('privacy')).toEqual(['holdExternalContent', 'trackerBlockingEnabled']);
+    expect(on('privacy')).toEqual(['holdExternalContent', 'trackerBlockingEnabled', 'linkSafetyEnabled', 'linkSafetyClickConfirm']);
   });
 
   it('the accounts page lists the accounts; the help page has the version and the source', () => {

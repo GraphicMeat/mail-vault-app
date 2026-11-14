@@ -85,6 +85,26 @@ describe('MessageRow', () => {
     expect(onOpen).toHaveBeenCalledWith(base, 3);
   });
 
+  it('a conversation row shows its message count and reads as its messages do', () => {
+    const conv = { ...base, seen: true, flagged: false, threadId: '<a@x>', threadCount: 3, threadUnread: 1, threadFlagged: true, threadUids: [7, 5, 2] };
+    const onSwipe = vi.fn();
+    const { container } = renderRow(conv, { onSwipe });
+    const badge = container.querySelector('[data-mv-thread-count]');
+    expect(badge.textContent).toBe('3');
+    expect(badge.getAttribute('aria-label')).toBe(t('email.thread.messagesInThread', { count: 3 }));
+    // Unread while any message is, flagged while any is.
+    expect(container.querySelector('.mv-row--unread')).toBeTruthy();
+    expect(container.querySelector('.mv-row__flag')).toBeTruthy();
+    // The read swipe marks the conversation read (every message: App.jsx sends `threadUids`).
+    fireEvent.click(container.querySelector('[data-mv-swipe-action="leading"]'));
+    expect(onSwipe).toHaveBeenCalledWith('seen', expect.objectContaining({ uid: 7, threadUids: [7, 5, 2] }));
+    // Its height is every row's.
+    expect(container.querySelector('[data-index="3"]').style.height).toBe(`${ROW_HEIGHT}px`);
+    cleanup();
+    const single = renderRow(base).container;
+    expect(single.querySelector('[data-mv-thread-count]')).toBeNull();
+  });
+
   it('the list sizes rows by estimate only: no measured elements', () => {
     const src = readFileSync(resolve(process.cwd(), 'src/mobile/MessageList.jsx'), 'utf8');
     expect(src).toContain('useVirtualizer');

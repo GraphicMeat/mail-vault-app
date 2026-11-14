@@ -596,6 +596,8 @@ pub(crate) struct Shared {
     /// The network the shell reported, offline attachments' place, the downloader's wake-up
     /// (`offline.rs`).
     pub(crate) offline: crate::offline::State,
+    /// Each folder's conversations, for the threaded list (`threads.rs`).
+    pub(crate) threads: crate::threads::Cache,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -793,6 +795,7 @@ impl Engine {
                 premium: crate::premium::Premium::default(),
                 followup: crate::followup::Worker::default(),
                 offline: crate::offline::State::default(),
+                threads: crate::threads::Cache::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]

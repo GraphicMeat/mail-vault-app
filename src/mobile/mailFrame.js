@@ -20,6 +20,17 @@
 // serialized again. Whatever the mail has (its own <html>, <head>, a comment first, or none), the
 // parser gives it exactly one head, and ours comes first in it.
 //
+// Link safety: the engine marks each disguised link it listed (`data-link-alert`, core's link scan)
+// and the frame wears desktop's warning marks on them. With click confirmation (`markLinks`) every
+// marked link loses its URL: it points at the frame's own `about:blank` instead (an exact,
+// per-prepare form the cleaner lets through, opened in the frame itself), so a tap only reloads the
+// frame. The frame runs no script and the page cannot read where it went, but the iframe's `load`
+// event reaches the page, and the mail cannot cause one (none of its links may go to `about:`), so
+// Viewer.jsx takes any load after the first as a tap on a marked link: it puts the mail back and
+// asks in the app's own sheet, outside the mail's reach (its CSS cannot hide, restyle or overlay
+// it), listing the flagged links with their real URLs (`prepared.linkAlerts`). A marked link whose
+// URL and level the engine did not list is guarded all the same, never left live.
+//
 // Theme: a text body follows the app theme. An html body is always drawn on a light canvas:
 // without scripts there is no Dark Reader, and mail written for white paper (dark text, no
 // background) would be unreadable on dark. The mail's own `prefers-color-scheme: dark` rules
@@ -47,6 +58,8 @@ const THEMES = {
 const PAPER = { scheme: 'light', bg: '#ffffff', fg: '#1a1a2e', link: '#4338ca' };
 
 const SAFE_HREF = /^\s*(?:https?:|mailto:|tel:|#)/i;
+/** A marked link under click confirmation (`markLinks`): it reloads the frame and goes nowhere. */
+const LINK_TAP = /^about:blank#mv[0-9a-f]{18}-\d+$/;
 
 const escapeHtml = (s) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -81,6 +94,15 @@ export function linkifyTextHtml(text) {
   return out + escapeHtml(text.slice(last));
 }
 
+/** Desktop's marks on a flagged link (bodyScan.js LINK_ALERT_STYLE). */
+const LINK_CSS = [
+  'a[data-link-alert]::before{display:inline!important;margin-right:3px!important;font-size:.9em!important}',
+  'a[data-link-alert="red"]::before{content:"\\26A0"!important;color:#ef4444!important}',
+  'a[data-link-alert="yellow"]::before{content:"\\26A0"!important;color:#f59e0b!important}',
+  'a[data-link-alert="red"]{outline:2px solid rgba(239,68,68,.3)!important;outline-offset:2px!important;border-radius:2px!important}',
+  'a[data-link-alert="yellow"]{outline:2px solid rgba(245,158,11,.3)!important;outline-offset:2px!important;border-radius:2px!important}',
+];
+
 function frameCss({ colors, trackerLabel }) {
   return [
     `:root{color-scheme:${colors.scheme};background:${colors.bg};color:${colors.fg}}`,
@@ -91,6 +113,7 @@ function frameCss({ colors, trackerLabel }) {
     'pre.mv-text{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit}',
     // The engine's marker for a removed tracking pixel carries no text: it is labelled here.
     `[data-mv-tracker-blocked]::after { content: ${cssString(trackerLabel)} }`,
+    ...LINK_CSS,
   ].join('\n');
 }
 
@@ -123,6 +146,7 @@ const isForbidden = (el) => FORBIDDEN.has(el.localName.toLowerCase())
  *  engines follow a MathML href like a link). */
 function hrefAllowed(el, value) {
   if (el.namespaceURI === MATHML_NS) return false;
+  if (isHtmlLink(el) && LINK_TAP.test(value)) return true;
   return isHtmlLink(el) || isSvgLink(el) ? SAFE_HREF.test(value) : LOCAL_REF.test(value);
 }
 
@@ -163,7 +187,7 @@ function cleanMail(doc) {
     }
     if (!isHtmlLink(el) && !isSvgLink(el)) continue;
     const href = el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href');
-    if (href != null && /^\s*#/.test(href)) {
+    if (href != null && (/^\s*#/.test(href) || LINK_TAP.test(href))) {
       // An in-page anchor (a newsletter's table of contents) scrolls the frame; it loads nothing.
       el.setAttribute('target', '_self');
     } else if (href != null) {
@@ -183,6 +207,61 @@ function cleanMail(doc) {
 
 const parseHtml = (source) => new DOMParser().parseFromString(source, 'text/html');
 const serialize = (doc) => `<!doctype html>${doc.documentElement.outerHTML}`;
+
+const LEVELS = new Set(['red', 'yellow']);
+
+/** A fresh, unguessable prefix for one prepare's link taps. */
+function tapPrefix() {
+  const bytes = new Uint8Array(9);
+  try {
+    globalThis.crypto.getRandomValues(bytes);
+  } catch {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return `mv${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Whether `markLinks` has anything to do: a string check, so a clean mail is parsed no more. */
+const hasLinkMarks = (html) => /data-link-alert/i.test(html);
+
+/**
+ * The mail with link safety applied, before it is cleaned (so it is cleaned and checked like the
+ * rest), and the flagged links the app's sheet lists: `{source, alerts}`. With `confirm`, every
+ * marked link (`data-link-alert`) is guarded: its URL and title go, and it points at `about:blank`
+ * in the frame itself. It is listed with the engine's alert for its URL and level (several links
+ * may share a URL, at any level), or, when the engine listed none for it, as red with its own URL
+ * and no reason: a mark never fails open. Without `confirm` the marks only show.
+ */
+function markLinks(html, { alerts, confirm = false }, parse) {
+  if (!confirm) return { source: html, alerts: [] };
+  const doc = parse(html);
+  const listed = new Map(); // `${level} ${url}` -> the engine's alert
+  for (const a of Array.isArray(alerts) ? alerts : []) {
+    if (a && typeof a.actualUrl === 'string' && LEVELS.has(a.level)) listed.set(`${a.level} ${a.actualUrl}`, a);
+  }
+  const shown = new Map(); // the same key -> what the sheet lists, once each
+  const prefix = tapPrefix();
+  let n = 0;
+  for (const link of doc.querySelectorAll('[data-link-alert]')) {
+    const mark = link.getAttribute('data-link-alert');
+    const level = LEVELS.has(mark) ? mark : 'red';
+    const href = link.getAttribute('href') ?? '';
+    const key = `${level} ${href}`;
+    if (!shown.has(key)) {
+      const alert = listed.get(key);
+      shown.set(key, {
+        level,
+        actualUrl: href,
+        textContent: (alert?.textContent ?? link.textContent ?? '').trim(),
+        reason: alert?.reason ?? '',
+      });
+    }
+    link.setAttribute('data-link-alert', level);
+    link.setAttribute('href', `about:blank#${prefix}-${n++}`);
+    link.removeAttribute('title');
+  }
+  return { source: serialize(doc), alerts: [...shown.values()] };
+}
 const MAX_PASSES = 4;
 
 /**
@@ -251,13 +330,16 @@ function assembledClean(doc) {
  * The expensive half, once per message body (Viewer.jsx memoizes it on the body): the cleaned
  * html, checked once more as the frame will parse the assembled document, or the text part (or,
  * for an html body the cleaner cannot settle, what that html says) escaped into a `<pre>`.
- * Assembling with other options changes only our own constant head strings.
+ * Assembling with other options changes only our own constant head strings. `links`:
+ * `{alerts, confirm}` for link safety (`markLinks`), or null; `linkAlerts` then lists what a tap
+ * on a guarded link asks about.
  */
-export function prepareMailBody({ html, text }, parse = parseHtml) {
+export function prepareMailBody({ html, text }, parse = parseHtml, links = null) {
   if (typeof html === 'string' && html.trim() !== '') {
-    const cleaned = cleanToFixpoint(html, parse);
+    const marked = links && hasLinkMarks(html) ? markLinks(html, links, parse) : { source: html, alerts: [] };
+    const cleaned = cleanToFixpoint(marked.source, parse);
     if (cleaned != null && PREFIX.test(cleaned)) {
-      const prepared = { kind: 'html', markup: cleaned };
+      const prepared = { kind: 'html', markup: cleaned, linkAlerts: marked.alerts };
       if (assembledClean(parse(assembleMailFrame(prepared)))) return prepared;
     }
     return { kind: 'text', markup: textMarkup(fallbackText(html, text)) };
@@ -270,6 +352,6 @@ export function prepareMailBody({ html, text }, parse = parseHtml) {
  * into a `<pre>`. `allowRemote` adds https: to the image sources; `theme` ('light' | 'dark') is
  * the app's. `trackerLabel` names the engine's tracker marker in the UI language.
  */
-export function buildMailFrame({ html, text, allowRemote = false, theme = 'light', trackerLabel = '', parse = parseHtml }) {
-  return assembleMailFrame(prepareMailBody({ html, text }, parse), { allowRemote, theme, trackerLabel });
+export function buildMailFrame({ html, text, allowRemote = false, theme = 'light', trackerLabel = '', links = null, parse = parseHtml }) {
+  return assembleMailFrame(prepareMailBody({ html, text }, parse, links), { allowRemote, theme, trackerLabel });
 }

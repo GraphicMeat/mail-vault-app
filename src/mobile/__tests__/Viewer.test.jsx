@@ -43,6 +43,19 @@ const renderViewer = (props = {}) =>
   render(<Viewer accountId="a1" folder="INBOX" row={row} onClose={() => {}} {...props} />);
 
 const frame = () => document.querySelector('iframe');
+// jsdom may load a frame on its own once mounted (the frame's first load, as the webview's srcdoc
+// load is): let it, then count only the loads a test fires.
+const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+/** A tap on a guarded link: the frame loads again. Returns the loads it took (jsdom's own first
+ *  load may not come). */
+function tapGuardedLink() {
+  let n = 0;
+  while (!document.querySelector('[data-mv-link-sheet]') && n < 2) {
+    act(() => { fireEvent.load(frame()); });
+    n += 1;
+  }
+  return n;
+}
 
 beforeEach(() => { engine.calls = []; engine.reply = body(); engine.inline = null; });
 afterEach(cleanup);
@@ -57,7 +70,74 @@ describe('Viewer', () => {
     expect(f.getAttribute('title')).toBe(t('mobile.viewer.frameTitle'));
     expect(f.hasAttribute('src')).toBe(false);
     expect(f.getAttribute('srcdoc')).toContain('<meta http-equiv="Content-Security-Policy"');
-    expect(engine.calls).toEqual([['mobile.message.body', { accountId: 'a1', folder: 'INBOX', uid: 7 }]]);
+    expect(engine.calls).toEqual([['mobile.message.body', { accountId: 'a1', folder: 'INBOX', uid: 7, texts: expect.any(Object) }]]);
+  });
+
+  it('sends the link-safety reason templates in the UI language', async () => {
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const { texts } = engine.calls[0][1];
+    for (const key of ['dangerousScheme', 'textMismatch', 'redirect', 'ipAddress']) {
+      expect(texts[`linkSafety.reason.${key}`]).toBe(t(`linkSafety.reason.${key}`));
+      expect(texts[`linkSafety.reason.${key}`]).not.toBe(`linkSafety.reason.${key}`);
+    }
+  });
+
+  it('link safety: a tap on a flagged link asks in the app, outside the mail, before anything opens', async () => {
+    const evil = 'https://evil.example.net/login';
+    engine.reply = body({
+      html: `<p><a href="${evil}" data-link-alert="red" title="r">https://bank.example.com</a></p>`,
+      alerts: [{ level: 'red', textContent: 'https://bank.example.com', actualUrl: evil, reason: 'goes elsewhere' }],
+      maxAlertLevel: 'red',
+    });
+    const prefs = useMobileStore.getState().prefs;
+    expect(prefs.linkSafetyEnabled).toBe(true);
+    expect(prefs.linkSafetyClickConfirm).toBe(true);
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const doc = new DOMParser().parseFromString(frame().getAttribute('srcdoc'), 'text/html');
+    expect([...doc.querySelectorAll('[href]')].map((e) => e.getAttribute('href'))).not.toContain(evil);
+    expect(doc.querySelector('[data-mv-link-sheet]')).toBeNull();
+
+    // The first load is the mail; a later one is a tap on a guarded link.
+    await settle();
+    expect(document.querySelector('[data-mv-link-sheet]')).toBeNull();
+    const first = frame();
+    expect(tapGuardedLink()).toBeLessThanOrEqual(2);
+    const sheet = screen.getByRole('dialog', { name: t('linkSafety.dangerousLinkDetected') });
+    expect(sheet.textContent).toContain('goes elsewhere');
+    expect(sheet.textContent).toContain(evil);
+    expect(sheet.textContent).toContain('https://bank.example.com');
+    const open = sheet.querySelector('[data-mv-link-open]');
+    expect(open.textContent).toBe(t('linkSafety.openAnyway'));
+    expect(open.getAttribute('href')).toBe(evil);
+    expect(open.getAttribute('target')).toBe('_blank');
+    expect(open.getAttribute('rel')).toBe('noopener noreferrer');
+    // The mail is drawn again in a fresh frame, whose own first load asks nothing.
+    expect(frame()).not.toBe(first);
+    fireEvent.click(sheet.querySelector('[data-mv-link-cancel]'));
+    expect(document.querySelector('[data-mv-link-sheet]')).toBeNull();
+    await settle();
+    expect(document.querySelector('[data-mv-link-sheet]')).toBeNull();
+
+    act(() => useMobileStore.setState({ prefs: { ...prefs, linkSafetyClickConfirm: false } }));
+    const marked = new DOMParser().parseFromString(frame().getAttribute('srcdoc'), 'text/html');
+    expect(marked.querySelector('a[data-link-alert="red"]').getAttribute('href')).toBe(evil);
+    act(() => useMobileStore.setState({ prefs }));
+  });
+
+  it('a flagged script link gets no Open anyway', async () => {
+    engine.reply = body({
+      html: '<p><a href="javascript:alert(1)" data-link-alert="red">click</a></p>',
+      alerts: [{ level: 'red', textContent: 'click', actualUrl: 'javascript:alert(1)', reason: 'script' }],
+    });
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    await settle();
+    tapGuardedLink();
+    const sheet = screen.getByRole('dialog', { name: t('linkSafety.dangerousLinkDetected') });
+    expect(sheet.querySelector('[data-mv-link-open]')).toBeNull();
+    expect(sheet.querySelector('[data-mv-link-cancel]')).toBeTruthy();
   });
 
   it('shows the header from the row before the body arrives', async () => {

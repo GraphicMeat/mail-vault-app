@@ -20,7 +20,23 @@ export const PREF_DEFAULTS = Object.freeze({
   customDateFormat: '',
   timeFormat: 'auto',
   emailViewerTheme: 'system',
+  // Link safety (Viewer.jsx): the engine scans links; a flagged one asks before it opens.
+  linkSafetyEnabled: true,
+  linkSafetyClickConfirm: true,
+  // Conversations (desktop's default): the list shows one row per conversation; flat lists every
+  // message. The phone opens a conversation on a screen of its own in either threaded mode.
+  threadMode: 'expandable',
+  threadSortOrder: 'oldest-first',
 });
+
+export const THREAD_MODES = ['grouped', 'expandable', 'flat'];
+export const THREAD_ORDERS = ['oldest-first', 'newest-first'];
+
+/** Whether the list shows conversations (`threadMode` grouped or expandable). */
+export const threadedList = (prefs) => (prefs || PREF_DEFAULTS).threadMode !== 'flat';
+
+/** The messages a list row stands for: a conversation's every message, else its own. */
+export const rowUids = (row) => (Array.isArray(row?.threadUids) && row.threadUids.length ? row.threadUids : [row.uid]);
 
 /** What a swipe may do on the phone (the engine's SWIPES). */
 export const SWIPE_ACTIONS = ['toggleRead', 'delete', 'flag', 'move', 'none'];
