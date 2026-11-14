@@ -43,6 +43,19 @@ const renderViewer = (props = {}) =>
   render(<Viewer accountId="a1" folder="INBOX" row={row} onClose={() => {}} {...props} />);
 
 const frame = () => document.querySelector('iframe');
+// jsdom may load a frame on its own once mounted (the frame's first load, as the webview's srcdoc
+// load is): let it, then count only the loads a test fires.
+const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+/** A tap on a guarded link: the frame loads again. Returns the loads it took (jsdom's own first
+ *  load may not come). */
+function tapGuardedLink() {
+  let n = 0;
+  while (!document.querySelector('[data-mv-link-sheet]') && n < 2) {
+    act(() => { fireEvent.load(frame()); });
+    n += 1;
+  }
+  return n;
+}
 
 beforeEach(() => { engine.calls = []; engine.reply = body(); engine.inline = null; });
 afterEach(cleanup);
@@ -70,7 +83,7 @@ describe('Viewer', () => {
     }
   });
 
-  it('link safety: a flagged link asks first while click confirmation is on, and is only marked when off', async () => {
+  it('link safety: a tap on a flagged link asks in the app, outside the mail, before anything opens', async () => {
     const evil = 'https://evil.example.net/login';
     engine.reply = body({
       html: `<p><a href="${evil}" data-link-alert="red" title="r">https://bank.example.com</a></p>`,
@@ -82,20 +95,49 @@ describe('Viewer', () => {
     expect(prefs.linkSafetyClickConfirm).toBe(true);
     renderViewer();
     await waitFor(() => expect(frame()).toBeTruthy());
-    const asking = new DOMParser().parseFromString(frame().getAttribute('srcdoc'), 'text/html');
-    const sheet = asking.querySelector('[data-mv-link-sheet]');
-    expect(sheet.textContent).toContain(t('linkSafety.dangerousLinkDetected'));
+    const doc = new DOMParser().parseFromString(frame().getAttribute('srcdoc'), 'text/html');
+    expect([...doc.querySelectorAll('[href]')].map((e) => e.getAttribute('href'))).not.toContain(evil);
+    expect(doc.querySelector('[data-mv-link-sheet]')).toBeNull();
+
+    // The first load is the mail; a later one is a tap on a guarded link.
+    await settle();
+    expect(document.querySelector('[data-mv-link-sheet]')).toBeNull();
+    const first = frame();
+    expect(tapGuardedLink()).toBeLessThanOrEqual(2);
+    const sheet = screen.getByRole('dialog', { name: t('linkSafety.dangerousLinkDetected') });
     expect(sheet.textContent).toContain('goes elsewhere');
-    expect(sheet.querySelector('[data-mv-link-open]').textContent).toBe(t('linkSafety.openAnyway'));
-    expect(sheet.querySelector('[data-mv-link-open]').getAttribute('href')).toBe(evil);
-    expect([...asking.querySelectorAll('a')].filter((a) => a.getAttribute('href') === evil)).toHaveLength(1);
+    expect(sheet.textContent).toContain(evil);
+    expect(sheet.textContent).toContain('https://bank.example.com');
+    const open = sheet.querySelector('[data-mv-link-open]');
+    expect(open.textContent).toBe(t('linkSafety.openAnyway'));
+    expect(open.getAttribute('href')).toBe(evil);
+    expect(open.getAttribute('target')).toBe('_blank');
+    expect(open.getAttribute('rel')).toBe('noopener noreferrer');
+    // The mail is drawn again in a fresh frame, whose own first load asks nothing.
+    expect(frame()).not.toBe(first);
+    fireEvent.click(sheet.querySelector('[data-mv-link-cancel]'));
+    expect(document.querySelector('[data-mv-link-sheet]')).toBeNull();
+    await settle();
+    expect(document.querySelector('[data-mv-link-sheet]')).toBeNull();
 
     act(() => useMobileStore.setState({ prefs: { ...prefs, linkSafetyClickConfirm: false } }));
     const marked = new DOMParser().parseFromString(frame().getAttribute('srcdoc'), 'text/html');
-    expect(marked.querySelector('[data-mv-link-sheet]')).toBeNull();
-    const link = marked.querySelector('a[data-link-alert="red"]');
-    expect(link.getAttribute('href')).toBe(evil);
+    expect(marked.querySelector('a[data-link-alert="red"]').getAttribute('href')).toBe(evil);
     act(() => useMobileStore.setState({ prefs }));
+  });
+
+  it('a flagged script link gets no Open anyway', async () => {
+    engine.reply = body({
+      html: '<p><a href="javascript:alert(1)" data-link-alert="red">click</a></p>',
+      alerts: [{ level: 'red', textContent: 'click', actualUrl: 'javascript:alert(1)', reason: 'script' }],
+    });
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    await settle();
+    tapGuardedLink();
+    const sheet = screen.getByRole('dialog', { name: t('linkSafety.dangerousLinkDetected') });
+    expect(sheet.querySelector('[data-mv-link-open]')).toBeNull();
+    expect(sheet.querySelector('[data-mv-link-cancel]')).toBeTruthy();
   });
 
   it('shows the header from the row before the body arrives', async () => {

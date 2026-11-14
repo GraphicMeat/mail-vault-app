@@ -212,17 +212,27 @@ fn normalize_id(id: &str) -> Option<String> {
     (!bare.is_empty()).then(|| format!("<{bare}>"))
 }
 
-/// The ids in References / In-Reply-To values (each may hold several), oldest first, once each.
+/// Most ids read from one message's References: its root (the first) and its nearest ancestors
+/// (the last). A header is the sender's to write; a long one must not make grouping slow.
+const MAX_IDS: usize = 50;
+
+/// The ids in References / In-Reply-To values (each may hold several), oldest first, once each
+/// (a set, so a header of many ids costs linear time), at most [`MAX_IDS`] of them: the first and
+/// the last `MAX_IDS - 1`.
 fn id_list<'a>(values: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut seen: HashSet<String> = HashSet::new();
     let mut out: Vec<String> = Vec::new();
     for v in values {
         for token in v.split_whitespace() {
             if let Some(id) = normalize_id(token) {
-                if !out.contains(&id) {
+                if seen.insert(id.clone()) {
                     out.push(id);
                 }
             }
         }
+    }
+    if out.len() > MAX_IDS {
+        out.drain(1..out.len() - (MAX_IDS - 1));
     }
     out
 }

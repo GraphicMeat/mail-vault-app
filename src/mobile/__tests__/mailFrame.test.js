@@ -348,9 +348,9 @@ describe('buildMailFrame', () => {
 });
 
 // Link safety: the engine marks a disguised link (`data-link-alert`) and lists it (`alerts`). The
-// frame runs no script and the page cannot see a tap in it, so with click confirmation the flagged
-// link opens a sheet inside the frame (an in-page anchor and `:target`), and only the sheet's own
-// "Open anyway" goes to the real URL.
+// frame runs no script and the page cannot see a tap in it, so with click confirmation every
+// marked link loses its URL and only reloads the frame (the page hears the frame's `load` and
+// asks in its own sheet, Viewer.jsx); `linkAlerts` is what that sheet lists.
 describe('link safety', () => {
   const EVIL = 'https://evil.example.net/login';
   const RISKY = '<p>Sign in at <a href="https://evil.example.net/login" data-link-alert="red" title="shows bank">https://bank.example.com</a>'
@@ -359,92 +359,70 @@ describe('link safety', () => {
     level: 'red', textContent: 'https://bank.example.com', textDomain: 'bank.example.com',
     actualUrl: EVIL, actualDomain: 'evil.example.net', reason: 'Text shows bank.example.com but goes to evil.example.net',
   }];
-  const LABELS = {
-    red: 'Dangerous Link Detected', yellow: 'Suspicious Link Detected', textSays: 'Link text says:',
-    goesTo: 'Actually redirects to:', openAnyway: 'Open Anyway', cancel: 'Cancel',
-  };
-  const links = (over = {}) => ({ alerts: ALERTS, confirm: true, labels: LABELS, ...over });
+  const links = (over = {}) => ({ alerts: ALERTS, confirm: true, ...over });
+  const TAP = /^about:blank#mv[0-9a-f]{18}-\d+$/;
   const linkByText = (doc, text) => [...doc.querySelectorAll('a')].find((a) => a.textContent === text);
+  const liveHrefs = (doc) => [...doc.querySelectorAll('[href]')].map((el) => el.getAttribute('href'));
 
-  it('with click confirmation a flagged link opens a sheet in the frame, never the url', () => {
-    const out = build({ html: RISKY, links: links() });
-    const doc = parse(out);
+  it('with click confirmation a flagged link only reloads the frame, and the app gets what to ask about', () => {
+    const prepared = prepareMailBody({ html: RISKY, text: null }, undefined, links());
+    const doc = parse(assembleMailFrame(prepared));
     const link = linkByText(doc, 'https://bank.example.com');
-    expect(link.getAttribute('href')).toMatch(/^#./);
+    expect(link.getAttribute('href')).toMatch(TAP);
     expect(link.getAttribute('target')).toBe('_self');
     expect(link.getAttribute('data-link-alert')).toBe('red');
-    const sheet = doc.getElementById(link.getAttribute('href').slice(1));
-    expect(sheet?.getAttribute('data-mv-link-sheet')).toBe('red');
-    expect(sheet.textContent).toContain(LABELS.red);
-    expect(sheet.textContent).toContain(ALERTS[0].reason);
-    expect(sheet.textContent).toContain('https://bank.example.com');
-    expect(sheet.textContent).toContain(EVIL);
-    const open = sheet.querySelector('a[data-mv-link-open]');
-    expect(open.textContent).toBe(LABELS.openAnyway);
-    expect(open.getAttribute('href')).toBe(EVIL);
-    expect(open.getAttribute('target')).toBe('_blank');
-    // Only the sheet's button goes to the real URL: a long press on the flagged link finds none.
-    expect([...doc.querySelectorAll('a')].filter((a) => a.getAttribute('href') === EVIL)).toEqual([open]);
-    // Cancel goes to an anchor that names nothing: the sheet closes and the mail stays where it was.
-    const cancel = sheet.querySelector('a[data-mv-link-cancel]');
-    expect(cancel.textContent).toBe(LABELS.cancel);
-    expect(cancel.getAttribute('href')).toMatch(/^#./);
-    expect(doc.getElementById(cancel.getAttribute('href').slice(1))).toBeNull();
-    // Hidden until its link is tapped.
-    const css = doc.head.querySelector('style[data-mv-frame]').textContent;
-    expect(css).toMatch(/\[data-mv-link-sheet\]\s*\{[^}]*display:\s*none\s*!important/);
-    expect(css).toMatch(/\[data-mv-link-sheet\]:target\s*\{[^}]*display:\s*block\s*!important/);
+    expect(link.hasAttribute('title')).toBe(false);
+    expect(liveHrefs(doc)).not.toContain(EVIL);
+    expect(prepared.linkAlerts).toContainEqual({ level: 'red', actualUrl: EVIL, textContent: 'https://bank.example.com', reason: ALERTS[0].reason });
+    // Nothing of the warning is in the mail's document, where its CSS could reach it.
+    expect(doc.querySelector('[data-mv-link-sheet], [data-mv-link-open]')).toBeNull();
   });
 
-  it('a mark the engine did not list is no flag: the link and its url stay as they were', () => {
-    const doc = parse(build({ html: RISKY, links: links() }));
-    const forged = linkByText(doc, 'a link the engine did not flag');
-    expect(forged.getAttribute('href')).toBe('https://ok.example.org/');
-    expect(forged.hasAttribute('data-link-alert')).toBe(false);
-    expect(doc.querySelectorAll('[data-mv-link-sheet]').length).toBe(1);
+  it('never fails open: a mark the engine did not list, or a URL at another level, is guarded too', () => {
+    const html = RISKY + `<a href="${EVIL}" data-link-alert="yellow">again</a><a href="${EVIL}" data-link-alert="red">once more</a>`;
+    const prepared = prepareMailBody({ html, text: null }, undefined, links());
+    const doc = parse(assembleMailFrame(prepared));
+    for (const text of ['https://bank.example.com', 'a link the engine did not flag', 'again', 'once more']) {
+      expect(linkByText(doc, text).getAttribute('href'), text).toMatch(TAP);
+    }
+    expect(liveHrefs(doc).filter((h) => !TAP.test(h))).toEqual([]);
+    expect(prepared.linkAlerts).toEqual([
+      { level: 'red', actualUrl: EVIL, textContent: 'https://bank.example.com', reason: ALERTS[0].reason },
+      { level: 'red', actualUrl: 'https://ok.example.org/', textContent: 'a link the engine did not flag', reason: '' },
+      { level: 'yellow', actualUrl: EVIL, textContent: 'again', reason: '' },
+    ]);
   });
 
-  it('a sheet the mail wrote itself is not ours', () => {
-    const html = '<div data-mv-link-sheet="red" id="fake">Open <a data-mv-link-open href="https://x.test/">here</a></div>';
+  it('the mail cannot reach about: itself: only the exact guarded form passes the cleaner', () => {
+    const html = '<a href="about:blank">a</a><a href="about:blank#mvzz">b</a><a href="about:srcdoc">c</a>';
     const doc = parse(build({ html, links: links({ alerts: [] }) }));
-    expect(doc.querySelectorAll('[data-mv-link-sheet], [data-mv-link-open]').length).toBe(0);
+    expect([...doc.querySelectorAll('a')].filter((a) => a.hasAttribute('href'))).toEqual([]);
   });
 
   it('without click confirmation the flagged link keeps its url and wears the warning mark', () => {
-    const doc = parse(build({ html: RISKY, links: links({ confirm: false }) }));
+    const prepared = prepareMailBody({ html: RISKY, text: null }, undefined, links({ confirm: false }));
+    const doc = parse(assembleMailFrame(prepared));
     const link = linkByText(doc, 'https://bank.example.com');
     expect(link.getAttribute('href')).toBe(EVIL);
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('data-link-alert')).toBe('red');
-    expect(doc.querySelectorAll('[data-mv-link-sheet]').length).toBe(0);
+    expect(prepared.linkAlerts).toEqual([]);
     const css = doc.head.querySelector('style[data-mv-frame]').textContent;
     expect(css).toMatch(/a\[data-link-alert="red"\]::before/);
   });
 
-  it('a flagged script or data link gets no open button', () => {
+  it('a flagged script link loses it and is listed', () => {
     const html = '<a href="javascript:alert(1)" data-link-alert="red">click</a>';
     const alerts = [{ level: 'red', textContent: 'click', actualUrl: 'javascript:alert(1)', reason: 'Dangerous javascript: scheme' }];
-    const doc = parse(build({ html, links: links({ alerts }) }));
-    expect([...doc.querySelectorAll('[href]')].filter((el) => /javascript:/i.test(el.getAttribute('href')))).toEqual([]);
-    const sheet = doc.querySelector('[data-mv-link-sheet]');
-    expect(sheet).toBeTruthy();
-    expect(sheet.querySelector('[data-mv-link-open]')).toBeNull();
-    expect(sheet.querySelector('[data-mv-link-cancel]')).toBeTruthy();
+    const prepared = prepareMailBody({ html, text: null }, undefined, links({ alerts }));
+    const doc = parse(assembleMailFrame(prepared));
+    expect(liveHrefs(doc).filter((h) => /javascript:/i.test(h))).toEqual([]);
+    expect(prepared.linkAlerts.map((a) => a.actualUrl)).toEqual(['javascript:alert(1)']);
   });
 
-  it('the sheet carries text only: a hostile reason or link text adds no markup', () => {
-    const alerts = [{ ...ALERTS[0], reason: '<img src=x onerror=alert(1)>', textContent: '<b>bold</b>' }];
-    const doc = parse(build({ html: RISKY.replace('https://bank.example.com</a>', '&lt;b&gt;bold&lt;/b&gt;</a>'), links: links({ alerts }) }));
-    const sheet = doc.querySelector('[data-mv-link-sheet]');
-    expect(sheet.querySelector('img, b')).toBeNull();
-    expect(sheet.textContent).toContain('<img src=x onerror=alert(1)>');
-  });
-
-  it('names its sheets afresh on every prepare, so a mail cannot aim at them', () => {
-    const a = parse(build({ html: RISKY, links: links() }));
-    const b = parse(build({ html: RISKY, links: links() }));
-    const idOf = (doc) => doc.querySelector('[data-mv-link-sheet]').id;
-    expect(idOf(a)).not.toBe(idOf(b));
+  it('names its taps afresh on every prepare', () => {
+    const href = () => linkByText(parse(build({ html: RISKY, links: links() })), 'https://bank.example.com').getAttribute('href');
+    expect(href()).not.toBe(href());
   });
 });
 

@@ -267,3 +267,26 @@ fn all_inboxes_threads_each_inbox_on_its_own() {
         vec![("b".into(), 2, 2), ("a".into(), 4, 3), ("a".into(), 5, 2), ("a".into(), 7, 1), ("a".into(), 6, 1)];
     assert_eq!(got, want);
 }
+
+/// A header is the sender's to write: a message naming tens of thousands of ids is read in linear
+/// time, and still joins its conversation by its root (the first id) and its parent (the last).
+#[test]
+fn a_huge_references_header_groups_quickly() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let c = db(tmp.path());
+    add_account(&c, "a");
+    add(&c, "a", Msg { uid: 1, date_ms: 10 * DAY, message_id: "<root@x>", subject: "Big", ..MSG });
+    add(&c, "a", Msg { uid: 2, date_ms: 11 * DAY, message_id: "<parent@x>", subject: "Other", ..MSG });
+    let mut refs: Vec<String> = vec!["<root@x>".into()];
+    refs.extend((0..60_000).map(|i| format!("<junk{i}@spam.example>")));
+    refs.push("<parent@x>".into());
+    let refs: Vec<&str> = refs.iter().map(String::as_str).collect();
+    add(&c, "a", Msg { uid: 3, date_ms: 12 * DAY, message_id: "<big@x>", subject: "Re: Big", references: &refs, ..MSG });
+
+    let started = std::time::Instant::now();
+    let p = page(&e, "a", true, Value::Null, 50);
+    assert!(started.elapsed() < std::time::Duration::from_secs(2), "grouping took {:?}", started.elapsed());
+    assert_eq!(uids(&p), vec![3], "{p}");
+    assert_eq!(row(&p, 3)["threadUids"], json!([3, 2, 1]));
+}

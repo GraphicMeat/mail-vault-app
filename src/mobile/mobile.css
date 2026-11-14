@@ -351,6 +351,19 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-viewer__shield--locked { color: var(--mail-text-muted); }
 .mv-sheet__note { margin: 0 8px 8px; font-size: 0.8125rem; color: var(--mail-text-muted); }
+/* The warning before a flagged link opens (Viewer.jsx LinkSheet): the app's own, out of the mail's reach. */
+.mv-linksheet { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; max-height: 50vh; }
+.mv-linksheet__item { padding: 8px 0; border-bottom: 1px solid var(--mail-border); }
+.mv-linksheet__title--red { color: var(--mail-danger, #ef4444); }
+.mv-linksheet__title--yellow { color: var(--mail-warning, #f59e0b); }
+.mv-linksheet__label { margin: 8px 0 2px; font-size: 0.75rem; color: var(--mail-text-muted); }
+.mv-linksheet__value { margin: 0; font-size: 0.875rem; overflow-wrap: anywhere; }
+.mv-linksheet__url { font-family: ui-monospace, Menlo, monospace; font-size: 0.8125rem; }
+.mv-linksheet__open {
+  display: flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 8px;
+  border-radius: 10px; border: 1px solid currentColor; color: var(--mail-danger, #ef4444);
+  font-weight: 600; text-decoration: none;
+}
 .mv-trackers { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; max-height: 40vh; }
 .mv-trackers__item { display: flex; flex-direction: column; padding: 8px 0; border-top: 1px solid var(--mail-border); }
 .mv-trackers__vendor { font-weight: 600; }

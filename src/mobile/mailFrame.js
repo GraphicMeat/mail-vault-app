@@ -21,14 +21,15 @@
 // parser gives it exactly one head, and ours comes first in it.
 //
 // Link safety: the engine marks each disguised link it listed (`data-link-alert`, core's link scan)
-// and the frame wears desktop's warning marks on them. The frame runs no script and the page cannot
-// see a tap inside it, so with click confirmation (`markLinks`) a flagged link becomes an in-page
-// anchor to a sheet of our own at the end of the body, shown by CSS `:target` alone: the warning,
-// the link's text and its real URL, Cancel (an anchor that names nothing, so the sheet closes) and
-// Open anyway, the only element that carries the URL (web links only). The flagged link itself no
-// longer holds the URL, so a long press cannot open it either. Each prepare names its sheets
-// afresh and the mail's own `data-mv-link-*` attributes are dropped, so a mail cannot aim at them;
-// a mail whose CSS hides a sheet leaves a tap that opens nothing, never the URL.
+// and the frame wears desktop's warning marks on them. With click confirmation (`markLinks`) every
+// marked link loses its URL: it points at the frame's own `about:blank` instead (an exact,
+// per-prepare form the cleaner lets through, opened in the frame itself), so a tap only reloads the
+// frame. The frame runs no script and the page cannot read where it went, but the iframe's `load`
+// event reaches the page, and the mail cannot cause one (none of its links may go to `about:`), so
+// Viewer.jsx takes any load after the first as a tap on a marked link: it puts the mail back and
+// asks in the app's own sheet, outside the mail's reach (its CSS cannot hide, restyle or overlay
+// it), listing the flagged links with their real URLs (`prepared.linkAlerts`). A marked link whose
+// URL and level the engine did not list is guarded all the same, never left live.
 //
 // Theme: a text body follows the app theme. An html body is always drawn on a light canvas:
 // without scripts there is no Dark Reader, and mail written for white paper (dark text, no
@@ -57,6 +58,8 @@ const THEMES = {
 const PAPER = { scheme: 'light', bg: '#ffffff', fg: '#1a1a2e', link: '#4338ca' };
 
 const SAFE_HREF = /^\s*(?:https?:|mailto:|tel:|#)/i;
+/** A marked link under click confirmation (`markLinks`): it reloads the frame and goes nowhere. */
+const LINK_TAP = /^about:blank#mv[0-9a-f]{18}-\d+$/;
 
 const escapeHtml = (s) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -91,30 +94,13 @@ export function linkifyTextHtml(text) {
   return out + escapeHtml(text.slice(last));
 }
 
-/** Desktop's marks on a flagged link (bodyScan.js LINK_ALERT_STYLE) and our link sheet. */
+/** Desktop's marks on a flagged link (bodyScan.js LINK_ALERT_STYLE). */
 const LINK_CSS = [
   'a[data-link-alert]::before{display:inline!important;margin-right:3px!important;font-size:.9em!important}',
   'a[data-link-alert="red"]::before{content:"\\26A0"!important;color:#ef4444!important}',
   'a[data-link-alert="yellow"]::before{content:"\\26A0"!important;color:#f59e0b!important}',
   'a[data-link-alert="red"]{outline:2px solid rgba(239,68,68,.3)!important;outline-offset:2px!important;border-radius:2px!important}',
   'a[data-link-alert="yellow"]{outline:2px solid rgba(245,158,11,.3)!important;outline-offset:2px!important;border-radius:2px!important}',
-  '[data-mv-link-sheet] { display: none !important }',
-  '[data-mv-link-sheet]:target { display: block !important; position: fixed !important; inset: auto 0 0 0 !important;'
-    + ' z-index: 2147483647 !important; max-height: 85vh !important; overflow: auto !important; margin: 0 !important;'
-    + ' padding: 16px 16px 24px !important; background: #fff !important; color: #1a1a2e !important;'
-    + ' border: 0 !important; border-top: 4px solid #ef4444 !important; border-radius: 14px 14px 0 0 !important;'
-    + ' box-shadow: 0 -8px 32px rgba(0,0,0,.35) !important; font: 15px/1.45 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif !important;'
-    + ' text-align: start !important; visibility: visible !important; opacity: 1 !important; transform: none !important }',
-  '[data-mv-link-sheet="yellow"]:target { border-top-color: #f59e0b !important }',
-  '[data-mv-link-title]{display:block!important;margin:0 0 6px!important;font-weight:700!important;font-size:17px!important;color:#b91c1c!important}',
-  '[data-mv-link-sheet="yellow"] [data-mv-link-title]{color:#b45309!important}',
-  '[data-mv-link-reason]{display:block!important;margin:0 0 4px!important}',
-  '[data-mv-link-label]{display:block!important;margin:10px 0 2px!important;font-size:12px!important;color:#5b5b70!important}',
-  '[data-mv-link-value]{display:block!important;font:13px/1.4 ui-monospace,Menlo,monospace!important;word-break:break-all!important;color:#1a1a2e!important}',
-  '[data-mv-link-actions]{display:flex!important;gap:12px!important;margin-top:16px!important}',
-  '[data-mv-link-actions] a{flex:1!important;display:flex!important;align-items:center!important;justify-content:center!important;min-height:44px!important;border-radius:10px!important;font-weight:600!important;text-decoration:none!important}',
-  '[data-mv-link-actions] a[data-mv-link-cancel]{background:#4338ca!important;color:#fff!important}',
-  '[data-mv-link-actions] a[data-mv-link-open]{background:#fee2e2!important;color:#b91c1c!important;border:1px solid rgba(185,28,28,.3)!important}',
 ];
 
 function frameCss({ colors, trackerLabel }) {
@@ -160,6 +146,7 @@ const isForbidden = (el) => FORBIDDEN.has(el.localName.toLowerCase())
  *  engines follow a MathML href like a link). */
 function hrefAllowed(el, value) {
   if (el.namespaceURI === MATHML_NS) return false;
+  if (isHtmlLink(el) && LINK_TAP.test(value)) return true;
   return isHtmlLink(el) || isSvgLink(el) ? SAFE_HREF.test(value) : LOCAL_REF.test(value);
 }
 
@@ -200,7 +187,7 @@ function cleanMail(doc) {
     }
     if (!isHtmlLink(el) && !isSvgLink(el)) continue;
     const href = el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href');
-    if (href != null && /^\s*#/.test(href)) {
+    if (href != null && (/^\s*#/.test(href) || LINK_TAP.test(href))) {
       // An in-page anchor (a newsletter's table of contents) scrolls the frame; it loads nothing.
       el.setAttribute('target', '_self');
     } else if (href != null) {
@@ -221,14 +208,10 @@ function cleanMail(doc) {
 const parseHtml = (source) => new DOMParser().parseFromString(source, 'text/html');
 const serialize = (doc) => `<!doctype html>${doc.documentElement.outerHTML}`;
 
-/** Our sheet's attributes: a mail's own are dropped before ours go in. */
-const LINK_ATTRS = ['data-mv-link-sheet', 'data-mv-link-open', 'data-mv-link-cancel', 'data-mv-link-title', 'data-mv-link-reason', 'data-mv-link-label', 'data-mv-link-value', 'data-mv-link-actions'];
 const LEVELS = new Set(['red', 'yellow']);
-/** The URLs an Open anyway button may carry: web links (a flagged `javascript:` or `data:` gets none). */
-const WEB_HREF = /^\s*https?:/i;
 
-/** A fresh, unguessable id prefix for one prepare's sheets. */
-function sheetPrefix() {
+/** A fresh, unguessable prefix for one prepare's link taps. */
+function tapPrefix() {
   const bytes = new Uint8Array(9);
   try {
     globalThis.crypto.getRandomValues(bytes);
@@ -239,68 +222,45 @@ function sheetPrefix() {
 }
 
 /** Whether `markLinks` has anything to do: a string check, so a clean mail is parsed no more. */
-const hasLinkMarks = (html) => /data-link-alert|data-mv-link/i.test(html);
-
-function sheetFor(doc, alert, ids, labels, text) {
-  const part = (tag, attr, content) => {
-    const el = doc.createElement(tag);
-    el.setAttribute(attr, '');
-    if (content != null) el.textContent = String(content);
-    return el;
-  };
-  const value = (content) => {
-    const el = part('div', 'data-mv-link-value', content);
-    el.setAttribute('dir', 'auto');
-    return el;
-  };
-  const sheet = doc.createElement('div');
-  sheet.id = ids.sheet;
-  sheet.setAttribute('data-mv-link-sheet', alert.level);
-  sheet.setAttribute('role', 'alertdialog');
-  sheet.append(part('div', 'data-mv-link-title', alert.level === 'red' ? labels.red : labels.yellow));
-  if (alert.reason) sheet.append(part('div', 'data-mv-link-reason', alert.reason));
-  sheet.append(part('div', 'data-mv-link-label', labels.textSays), value(text), part('div', 'data-mv-link-label', labels.goesTo), value(alert.actualUrl));
-  const actions = part('div', 'data-mv-link-actions');
-  const cancel = part('a', 'data-mv-link-cancel', labels.cancel);
-  cancel.setAttribute('href', `#${ids.cancel}`);
-  actions.append(cancel);
-  if (WEB_HREF.test(alert.actualUrl)) {
-    const open = part('a', 'data-mv-link-open', labels.openAnyway);
-    open.setAttribute('href', alert.actualUrl);
-    actions.append(open);
-  }
-  sheet.append(actions);
-  return sheet;
-}
+const hasLinkMarks = (html) => /data-link-alert/i.test(html);
 
 /**
- * The mail with link safety applied, before it is cleaned (so our markup is cleaned and checked
- * like the mail's): a `data-link-alert` stays only on a link whose URL and level the engine listed
- * in `alerts`; with `confirm`, each such link goes to its sheet instead of its URL. `labels`:
- * `{red, yellow, textSays, goesTo, openAnyway, cancel}` in the UI language.
+ * The mail with link safety applied, before it is cleaned (so it is cleaned and checked like the
+ * rest), and the flagged links the app's sheet lists: `{source, alerts}`. With `confirm`, every
+ * marked link (`data-link-alert`) is guarded: its URL and title go, and it points at `about:blank`
+ * in the frame itself. It is listed with the engine's alert for its URL and level (several links
+ * may share a URL, at any level), or, when the engine listed none for it, as red with its own URL
+ * and no reason: a mark never fails open. Without `confirm` the marks only show.
  */
-function markLinks(html, { alerts, confirm = false, labels = {} }, parse) {
+function markLinks(html, { alerts, confirm = false }, parse) {
+  if (!confirm) return { source: html, alerts: [] };
   const doc = parse(html);
-  for (const name of LINK_ATTRS) for (const el of doc.querySelectorAll(`[${name}]`)) el.removeAttribute(name);
-  const listed = new Map();
+  const listed = new Map(); // `${level} ${url}` -> the engine's alert
   for (const a of Array.isArray(alerts) ? alerts : []) {
-    if (a && typeof a.actualUrl === 'string' && LEVELS.has(a.level) && !listed.has(a.actualUrl)) listed.set(a.actualUrl, a);
+    if (a && typeof a.actualUrl === 'string' && LEVELS.has(a.level)) listed.set(`${a.level} ${a.actualUrl}`, a);
   }
-  const prefix = sheetPrefix();
+  const shown = new Map(); // the same key -> what the sheet lists, once each
+  const prefix = tapPrefix();
   let n = 0;
   for (const link of doc.querySelectorAll('[data-link-alert]')) {
-    const alert = link.localName === 'a' ? listed.get(link.getAttribute('href')) : undefined;
-    if (!alert || alert.level !== link.getAttribute('data-link-alert')) {
-      link.removeAttribute('data-link-alert');
-      continue;
+    const mark = link.getAttribute('data-link-alert');
+    const level = LEVELS.has(mark) ? mark : 'red';
+    const href = link.getAttribute('href') ?? '';
+    const key = `${level} ${href}`;
+    if (!shown.has(key)) {
+      const alert = listed.get(key);
+      shown.set(key, {
+        level,
+        actualUrl: href,
+        textContent: (alert?.textContent ?? link.textContent ?? '').trim(),
+        reason: alert?.reason ?? '',
+      });
     }
-    if (!confirm) continue;
-    const ids = { sheet: `${prefix}-${n++}`, cancel: `${prefix}-none` };
-    link.setAttribute('href', `#${ids.sheet}`);
+    link.setAttribute('data-link-alert', level);
+    link.setAttribute('href', `about:blank#${prefix}-${n++}`);
     link.removeAttribute('title');
-    doc.body.append(sheetFor(doc, alert, ids, labels, alert.textContent ?? link.textContent));
   }
-  return serialize(doc);
+  return { source: serialize(doc), alerts: [...shown.values()] };
 }
 const MAX_PASSES = 4;
 
@@ -371,14 +331,15 @@ function assembledClean(doc) {
  * html, checked once more as the frame will parse the assembled document, or the text part (or,
  * for an html body the cleaner cannot settle, what that html says) escaped into a `<pre>`.
  * Assembling with other options changes only our own constant head strings. `links`:
- * `{alerts, confirm, labels}` for link safety (`markLinks`), or null.
+ * `{alerts, confirm}` for link safety (`markLinks`), or null; `linkAlerts` then lists what a tap
+ * on a guarded link asks about.
  */
 export function prepareMailBody({ html, text }, parse = parseHtml, links = null) {
   if (typeof html === 'string' && html.trim() !== '') {
-    const source = links && hasLinkMarks(html) ? markLinks(html, links, parse) : html;
-    const cleaned = cleanToFixpoint(source, parse);
+    const marked = links && hasLinkMarks(html) ? markLinks(html, links, parse) : { source: html, alerts: [] };
+    const cleaned = cleanToFixpoint(marked.source, parse);
     if (cleaned != null && PREFIX.test(cleaned)) {
-      const prepared = { kind: 'html', markup: cleaned };
+      const prepared = { kind: 'html', markup: cleaned, linkAlerts: marked.alerts };
       if (assembledClean(parse(assembleMailFrame(prepared)))) return prepared;
     }
     return { kind: 'text', markup: textMarkup(fallbackText(html, text)) };
