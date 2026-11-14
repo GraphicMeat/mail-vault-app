@@ -1086,7 +1086,8 @@ fn quiet_hours_hold_notifications_inside_the_window_and_leave_no_backlog() {
 }
 
 /// Notify folders: a run notifies new mail of the account's watched folders (INBOX by default)
-/// and of no other; a watched folder other than INBOX gets its own pass in the run.
+/// and of no other; a watched folder other than INBOX gets its own quick pass in the run (its first
+/// run only takes its baseline: no full pass of it in a background run).
 #[test]
 fn a_run_notifies_the_watched_folders_only() {
     let server = MockImap::start(Scenario::new().mailboxes(vec![inbox(vec![msg(1, "old")]), work()]));
@@ -1109,9 +1110,35 @@ fn a_run_notifies_the_watched_folders_only() {
     let got = f.run(BUDGET);
     assert_eq!(subjects(&got), vec!["work, watched"]);
     assert_eq!((got[0].account_id.as_str(), got[0].folder.as_str()), (account.as_str(), "Work"));
-    assert_eq!(f.rows_in(&account, "Work"), 3, "the run synced Work itself (no background download)");
+    assert_eq!(f.rows_in(&account, "Work"), 1, "the run read Work itself (no background download), only what came after its baseline");
     assert_eq!(f.watermark(&account), Some(3), "INBOX's watermark moves past unwatched mail");
     assert!(f.run(BUDGET).is_empty(), "notified once");
+}
+
+/// A watched folder never synced (desktop's `notifyFolders`, imported) never costs INBOX its
+/// notifications: the run takes the folder's baseline cheaply, with no full pass of it inside the
+/// run, so a server slow to list that folder's window holds nothing up. Mail that reaches the folder
+/// after its baseline notifies on a later run.
+#[test]
+fn a_never_synced_watched_folder_never_costs_inbox_its_notifications() {
+    let scenario = || Scenario::new().mailboxes(vec![inbox(vec![msg(1, "old")]), work()]);
+    let server = MockImap::start(scenario());
+    let f = fx();
+    let account = f.add(&server, "u@example.test");
+    f.download(false);
+    f.notifications(true);
+    assert!(f.run(BUDGET).is_empty());
+
+    f.account_settings(&account, json!({ "notifyFolders": ["INBOX", "Work"] }));
+    // A full pass lists the folder's window (`UID SEARCH SINCE`): here that outlasts the run.
+    server.reset_scenario(scenario().fault(Trigger::OnCommandWith("SEARCH".into(), "SINCE".into()), Action::Delay(Duration::from_secs(8))));
+    deliver_in(&server, "INBOX", "a@example.org", "inbox news");
+    let got = f.run(Duration::from_secs(4));
+    assert_eq!(subjects(&got), vec!["inbox news"]);
+    assert_eq!(f.rows_in(&account, "Work"), 0, "no full pass of Work inside the run");
+
+    deliver_in(&server, "Work", "a@example.org", "work news");
+    assert_eq!(subjects(&f.run(BUDGET)), vec!["work news"]);
 }
 
 /// A folder no longer watched loses its watermark: watched again later, it takes a new baseline
@@ -1125,7 +1152,7 @@ fn a_folder_watched_again_takes_a_new_baseline() {
     f.notifications(true);
     f.account_settings(&account, json!({ "notifyFolders": ["INBOX", "Work"] }));
     assert!(f.run(BUDGET).is_empty());
-    assert_eq!(f.watermark_of(&account, "Work"), Some(1));
+    assert_eq!(f.watermark_of(&account, "Work"), Some(0), "never synced: a baseline with no rows under it");
 
     f.account_settings(&account, json!({ "notifyFolders": ["INBOX"] }));
     assert_eq!(f.watermark_of(&account, "Work"), None, "unwatching drops the folder's watermark");

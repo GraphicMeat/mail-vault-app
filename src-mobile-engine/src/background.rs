@@ -19,8 +19,10 @@
 //! list holds (IMAP `UID n:*`, Graph and JMAP by received date) and inserts those rows; flags and
 //! removals wait for the next foreground pass. A parked account (`needs_auth = 1`) is never
 //! dialled, nor one whose password the server refused (`hold.rs`). The same pass then reads the
-//! account's other watched folders (`acct.<id>.notifyFolders`): each its quick pass, or its full
-//! pass when it was never synced, inside the same share; a failure there never costs INBOX's news.
+//! account's other watched folders (`acct.<id>.notifyFolders`): each its quick pass, within half of
+//! what is left of the share, so the pass ends before the run stops waiting for it; a folder never
+//! synced gets no full pass here, only a baseline (`sync::baseline_watched`) the next quick passes
+//! read from. A failure there never costs INBOX's news.
 //!
 //! What notifies is desktop's policy, `mailvault_core::notify_policy::decide`, at the phone's
 //! local time, over the phone's rows: the account's switch (`notify`), its watched folders and

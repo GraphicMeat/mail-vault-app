@@ -500,10 +500,13 @@ fn sync_session(shared: &Shared, backend: &mut dyn Backend, job: &Job, gave_way:
 }
 
 /// A notification pass's other watched folders (`background::notify_folders` past INBOX, the
-/// account's `notifyFolders`): each its quick pass, or its full pass when it was never synced,
-/// inside the same deadline. A failure here never fails the pass, so INBOX's news still reaches
-/// the run; the folder is read again on the next one. A failure that is not the folder's own
-/// (the network, the deadline, a refused sign-in) ends the rest of the folders too.
+/// account's `notifyFolders`): each its quick pass, inside half of what is left of the pass's
+/// deadline, so the pass ends well before the run stops waiting for it and INBOX's news is always
+/// collected. A folder the quick pass cannot read (never synced: desktop's `notifyFolders`,
+/// imported) gets no full pass here, only its baseline ([`baseline_watched`]); the quick passes
+/// of later runs read what arrives after it. A failure here never fails the pass, so INBOX's news
+/// still reaches the run; the folder is read again on the next one. A failure that is not the
+/// folder's own (the network, the deadline, a refused sign-in) ends the rest of the folders too.
 fn watched_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>) {
     let folders = match crate::background::notify_folders(shared, account) {
         Ok(f) => f,
@@ -512,12 +515,17 @@ fn watched_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadl
             return;
         }
     };
+    let deadline = deadline.map(|d| {
+        let now = Instant::now();
+        now + d.saturating_duration_since(now) / 2
+    });
+    backend.set_deadline(deadline);
     for folder in folders.into_iter().filter(|f| !is_inbox(f)) {
         let out = within(deadline).and_then(|()| not_closing(shared)).and_then(|()| {
             if quick_pass(shared, backend, account, &folder, deadline, &|| false)? {
                 Ok(())
             } else {
-                sync_folder(shared, backend, account, &folder, &|| false)
+                baseline_watched(shared, backend, account, &folder)
             }
         });
         match out {
@@ -531,6 +539,39 @@ fn watched_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadl
             Err(_) => return,
         }
     }
+}
+
+/// A watched folder's baseline in a background run, in place of its full pass: one SELECT for its
+/// generation and next uid, kept as its quick mark ([`quick_mark_key`]: the uid before the next one,
+/// now), so the next quick pass lists only what arrives after it, however large the folder is. The
+/// generation is stored for a folder that has none; a folder stored under another generation is
+/// left to its next full pass. A backend with no next uid (Graph, JMAP list by date) marks uid 0
+/// at now.
+fn baseline_watched(shared: &Shared, backend: &mut dyn Backend, account: &str, folder: &str) -> Result<(), Fail> {
+    let stored: Option<Option<i64>> =
+        shared.read(|c| c.query_row("SELECT uid_validity FROM folders WHERE account_id = ?1 AND path = ?2", (account, folder), |r| r.get(0)).optional())?;
+    let Some(stored) = stored else {
+        return Ok(());
+    };
+    let mbox = backend.select(folder)?;
+    if stored.is_some_and(|v| v != mbox.uid_validity) {
+        shared.log(&format!("[background] {account}: {folder}: a new generation waits for a full pass"));
+        return Ok(());
+    }
+    let mark = (mbox.uid_next.unwrap_or(1) - 1).max(0);
+    let key = quick_mark_key(account, folder);
+    write_for(shared, account, |c| {
+        c.execute(
+            "UPDATE folders SET uid_validity = ?3 WHERE account_id = ?1 AND path = ?2 AND uid_validity IS NULL",
+            (account, folder, mbox.uid_validity),
+        )?;
+        c.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (&key, format!("{} {mark} {}", mbox.uid_validity, now_ms())),
+        )
+    })?;
+    shared.log(&format!("[background] {account}: {folder}: never synced; baseline at uid {mark}, no full pass in a background run"));
+    Ok(())
 }
 
 /// `Fail` once a background pass's share of the budget is spent.
@@ -742,13 +783,18 @@ fn quick_pass(
         )
         .optional()
     })?;
-    let Some((Some(validity), Some(_), Some(newest_uid), Some(newest_ms))) = held else {
+    let Some((Some(validity), synced, newest_uid, newest_ms)) = held else {
         return Ok(false);
     };
     let here = FolderRow::new(&folder, Some(validity));
     let mark_key = quick_mark_key(account, &folder);
     let resume = quick_mark(shared, account, &folder, validity)?;
-    let (from_uid, from_ms) = resume.unwrap_or((newest_uid, newest_ms));
+    // A folder never fully synced reads from its baseline mark alone (`baseline_watched`).
+    let (from_uid, from_ms) = match (resume, synced, newest_uid, newest_ms) {
+        (Some(mark), _, _, _) => mark,
+        (None, Some(_), Some(uid), Some(ms)) => (uid, ms),
+        _ => return Ok(false),
+    };
     within(deadline).and_then(|()| go_on(shared, stop))?;
     // A cut pass left mail below the newest row held: the news check (is the newest listed?)
     // would say there is none.
@@ -812,7 +858,8 @@ fn quick_pass(
         }
     }
     // A listing that stopped at the deadline: what it listed is in, the mark stays for the rest.
-    if out.is_ok() && marked && complete {
+    // A folder never fully synced keeps its mark: it is where its next quick pass starts.
+    if out.is_ok() && marked && complete && synced.is_some() {
         // Left behind, the mark only makes the next quick pass list from lower down.
         if let Err(Fail::Code(_, why)) = write_for(shared, account, |c| c.execute("DELETE FROM settings WHERE key = ?1", [&mark_key])) {
             shared.log(&format!("[sync] {account}: dropping the quick mark: {why}"));
