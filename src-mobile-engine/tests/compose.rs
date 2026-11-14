@@ -1030,3 +1030,23 @@ fn undo_takes_back_only_a_waiting_message() {
     std::thread::sleep(Duration::from_millis(300));
     assert!(server.sent_messages().iter().all(|m| !text(m).contains("Still waiting")));
 }
+
+/// Reply all leaves out every address of the user's own, as desktop does: each account's login,
+/// its `sendAs` and its aliases, not the login alone.
+#[test]
+fn reply_all_leaves_out_every_own_address() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    f.sync();
+    let set = f
+        .engine
+        .rpc(
+            "mobile.accountSettings.set",
+            json!({ "accountId": f.account, "values": { "aliases": [{ "address": "Bob@Example.com", "name": "" }], "sendAs": "carol@example.com" } }),
+        )
+        .unwrap();
+    assert_eq!(set["aliases"][0]["address"], "Bob@Example.com", "{set}");
+    let all = f.prepare("replyAll", 1);
+    assert_eq!(all["to"], "alice@example.com", "{all}");
+    assert_eq!(all["cc"], "", "{all}");
+}

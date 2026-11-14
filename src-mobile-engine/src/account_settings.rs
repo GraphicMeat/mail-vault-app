@@ -350,15 +350,42 @@ pub(crate) fn may_send_from(c: &Connection, account_id: &str, login: &str, from:
     Ok(send_as.eq_ignore_ascii_case(from) || aliases.iter().any(|(a, _)| a.eq_ignore_ascii_case(from)))
 }
 
-/// Who a message of account `account_id` goes out as. `from` is the address compose picked
-/// (checked by [`may_send_from`] when it was queued); empty is the account's default, its `sendAs`
-/// or else the login. The name is the alias's own when it has one, else the account's name
-/// (`display_name`). An alias removed while its message waited still sends from the address it
-/// was written from, under the account's name. A read failure counts as no `sendAs` and no aliases.
+/// The From a message of account `account_id` (signing in as `login`) gets when compose picked
+/// none: its `sendAs`, else the login. Read when the message is queued and stored with it. A read
+/// failure counts as no `sendAs`.
+pub(crate) fn default_from(shared: &Shared, account_id: &str, login: &str) -> String {
+    let (send_as, _) = shared.read(|c| sending(c, account_id)).unwrap_or_default();
+    if send_as.is_empty() {
+        login.trim().to_string()
+    } else {
+        send_as
+    }
+}
+
+/// Every address of the user's own across the accounts: each account's `sendAs` and aliases, by
+/// account id, as core's compose preparation reads them (`sendAsAddresses`, `aliases`). A read
+/// failure leaves that account's out.
+pub(crate) fn own_addresses(c: &Connection, account_ids: &[String]) -> Value {
+    let mut send_as = serde_json::Map::new();
+    let mut aliases = serde_json::Map::new();
+    for id in account_ids {
+        if let Ok((address, list)) = sending(c, id) {
+            send_as.insert(id.clone(), json!(address));
+            aliases.insert(id.clone(), Value::Array(list.into_iter().map(|(a, n)| json!({ "address": a, "name": n })).collect()));
+        }
+    }
+    json!({ "sendAsAddresses": send_as, "aliases": aliases })
+}
+
+/// Who a message of account `account_id` goes out as. `from` is the address stored with it when
+/// it was queued (compose's pick, checked by [`may_send_from`], or the default of then:
+/// [`default_from`]); a row with none (queued before the default was stored) goes out as the
+/// login. The name is the alias's own when it has one, else the account's name (`display_name`).
+/// An alias removed while its message waited still sends from the address it was written from,
+/// under the account's name. A read failure counts as no aliases.
 pub(crate) fn identity(shared: &Shared, account_id: &str, login: &str, display_name: &str, from: &str) -> Identity {
-    let (send_as, aliases) = shared.read(|c| sending(c, account_id)).unwrap_or_default();
+    let (_, aliases) = shared.read(|c| sending(c, account_id)).unwrap_or_default();
     let address = match from.trim() {
-        "" if !send_as.is_empty() => send_as,
         "" => login.trim().to_string(),
         picked => picked.to_string(),
     };

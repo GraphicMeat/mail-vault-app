@@ -309,6 +309,36 @@ fn a_from_the_account_does_not_have_is_refused() {
     assert_eq!(rows, 0);
 }
 
+/// The default From is compose's: a message queued with none goes out as it was queued, even
+/// when the account's `sendAs` is set (a desktop import) while it waits.
+#[test]
+fn a_queued_message_keeps_its_default_from_when_send_as_changes() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let from = f.events.len();
+    let r = f.send(json!({ "to": "rcpt@example.test", "subject": "Later", "sendAtMs": now_ms() + 1500 })).unwrap();
+    let id = r["id"].as_str().unwrap().to_string();
+    f.set(json!({ "sendAs": "me@example.test" }));
+    f.events.send_result(from, &id, "sent");
+    let raw = String::from_utf8_lossy(server.sent_messages().last().unwrap()).into_owned();
+    assert!(from_line(&raw).contains("<u@example.test>"), "{raw}");
+}
+
+/// A row queued before the From was stamped into it (no `from`) keeps the login.
+#[test]
+fn a_queued_row_with_no_from_goes_out_as_the_login() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    let from = f.events.len();
+    let r = f.send(json!({ "to": "rcpt@example.test", "subject": "Old row", "sendAtMs": now_ms() + 1500 })).unwrap();
+    let id = r["id"].as_str().unwrap().to_string();
+    f.db().execute("UPDATE outbox SET draft_json = json_remove(draft_json, '$.from') WHERE id = ?1", [&id]).unwrap();
+    f.set(json!({ "sendAs": "me@example.test" }));
+    f.events.send_result(from, &id, "sent");
+    let raw = String::from_utf8_lossy(server.sent_messages().last().unwrap()).into_owned();
+    assert!(from_line(&raw).contains("<u@example.test>"), "{raw}");
+}
+
 /// A draft keeps its From.
 #[test]
 fn a_draft_keeps_its_from() {

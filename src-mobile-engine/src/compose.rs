@@ -243,7 +243,7 @@ struct SendParams {
 /// 5 minutes ahead without Premium, or `remindAfterDays` without Premium), `SCHEDULE_TOO_FAR`
 /// (more than a day ahead), `INVALID` for `remindAfterDays` other than 1, 3, 7 or on a Graph
 /// account, `INVALID` for a `from` the account does not send from (`account_settings::may_send_from`),
-/// all before any write.
+/// all before any write. No `from` is the account's default From of now, stored in the row.
 pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: SendParams = parse(params)?;
     let shared = engine.shared();
@@ -256,6 +256,10 @@ pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         if !allowed {
             return Err(RpcError::Invalid("the account does not send from that address".into()));
         }
+    } else {
+        // The default From is the one of now (`sendAs`, else the login), kept in the row: a
+        // `sendAs` set while the message waits (a desktop import) does not change who it is from.
+        fields.from = crate::account_settings::default_from(shared, &p.account_id, &acct.email);
     }
     let mut attachments = Vec::with_capacity(fields.attachments.len());
     for a in &fields.attachments {
@@ -479,7 +483,11 @@ pub(crate) fn prepare(engine: &Engine, params: Value) -> Result<Value, RpcError>
             "subjectCandidate": format!("{} {}", if forward { "Fwd:" } else { "Re:" }, header["subject"].as_str().unwrap_or("")),
         },
     });
-    let ctx = Context { accounts, settings: json!({}), settings_version: 0 };
+    // Reply all leaves out every address of the user's own, as desktop does: each account's login,
+    // `sendAs` and aliases.
+    let ids: Vec<String> = accounts.iter().map(|a| a.id.clone()).collect();
+    let settings = shared.read(|c| Ok(crate::account_settings::own_addresses(c, &ids))).map_err(internal)?;
+    let ctx = Context { accounts, settings, settings_version: 0 };
     let out = compose_prep::reply_context(&request, &ctx).map_err(|e| RpcError::Internal(e.to_string()))?;
     let str_of = |k: &str| out[k].as_str().unwrap_or("").to_string();
     let quote_body = text.clone().unwrap_or_default();
