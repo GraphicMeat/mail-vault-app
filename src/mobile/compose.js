@@ -71,8 +71,10 @@ export function joinList(entries) {
 }
 
 /** The message fields a draft save or a send carries (without the account or draft id). */
-export function fieldsOf({ to, cc, bcc, subject, text, inReplyTo, references, attachments }) {
+export function fieldsOf({ to, cc, bcc, subject, text, inReplyTo, references, attachments, from }) {
   return {
+    // The From picked in compose, only when the account has more than one (else its default).
+    ...(from ? { from } : {}),
     to: joinList(to),
     cc: joinList(cc),
     bcc: joinList(bcc),
@@ -82,6 +84,40 @@ export function fieldsOf({ to, cc, bcc, subject, text, inReplyTo, references, at
     references: references || '',
     attachments: attachments.map((a) => ({ handle: a.handle })),
   };
+}
+
+/**
+ * The addresses an account sends from, for compose's From picker: the login (under the account's
+ * name), then each alias (under its own name), then a `sendAs` that is neither. `label` is what
+ * the picker shows: `Name <address>`, or the bare address when there is no name.
+ */
+export function identitiesOf(login, settings) {
+  const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const label = (address, name) => (name && !same(name, address) ? `${name} <${address}>` : address);
+  const out = [{ address: login, label: label(login, settings?.displayName) }];
+  for (const a of Array.isArray(settings?.aliases) ? settings.aliases : []) {
+    if (a?.address && !out.some((o) => same(o.address, a.address))) out.push({ address: a.address, label: label(a.address, a.name) });
+  }
+  const sendAs = settings?.sendAs;
+  if (sendAs && !out.some((o) => same(o.address, sendAs))) out.push({ address: sendAs, label: sendAs });
+  return out;
+}
+
+/** The From a new message starts with: the account's `sendAs` when it is one of `list`, else the login. */
+export function defaultFrom(list, settings) {
+  const sendAs = String(settings?.sendAs || '').trim().toLowerCase();
+  return (sendAs && list.find((i) => i.address.toLowerCase() === sendAs)?.address) || list[0]?.address || '';
+}
+
+/**
+ * `body` with a template's text put in: at `caret` (the body's last caret position) when known,
+ * else at the top, above the room a new message or reply starts with (its signature and quote stay
+ * below).
+ */
+export function insertTemplate(body, text, caret) {
+  if (caret != null && caret >= 0 && caret <= body.length) return body.slice(0, caret) + text + body.slice(caret);
+  if (!body.trim()) return text;
+  return body.startsWith('\n') ? text + body : `${text}\n\n${body}`;
 }
 
 /** Nothing a draft would keep. */

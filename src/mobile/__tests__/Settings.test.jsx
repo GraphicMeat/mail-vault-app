@@ -147,7 +147,8 @@ describe('Settings', () => {
     // The question's own Cancel (the editor has one too).
     fireEvent.click(document.querySelector('.mv-acct-edit__danger').querySelector('button'));
     expect(screen.getByRole('button', { name: t('settings.accounts.removeAccount2') })).toBeTruthy();
-    expect(screen.getByText(A1.email)).toBeTruthy();
+    // The editor stays open: its title (and the default From's choices) name the account.
+    expect(screen.getAllByText(A1.email).length).toBeGreaterThan(0);
   });
 
   it('offers Sign in again only on an account that needs it, through the store reauth', async () => {
@@ -273,7 +274,7 @@ describe('Settings pages, as desktop lays them out', () => {
       return prefs;
     };
     expect(on('appearance')).toEqual(['theme', 'palette', 'language', 'emailViewerTheme', 'threadMode', 'threadSortOrder', 'dateFormat', 'timeFormat']);
-    expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled']);
+    expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled', 'attachmentReminder']);
     // Remote content is a privacy choice on desktop (Privacy & security > Security).
     expect(on('privacy')).toEqual(['holdExternalContent', 'trackerBlockingEnabled', 'linkSafetyEnabled', 'linkSafetyClickConfirm']);
   });

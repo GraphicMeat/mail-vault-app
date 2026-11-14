@@ -1,8 +1,13 @@
 // One account's own settings in Settings > Accounts (`mobile.accountSettings.*`): the name mail
 // is sent with, the signature compose adds (plain text here; a desktop html signature shows as its
 // text and is kept as html until edited), hidden (out of the switcher, the drawer and All Inboxes,
-// still listed here to show again). Save writes them in one call and re-reads the accounts. The
-// account's own notification switch is on Settings > Notifications.
+// still listed here to show again), its aliases and default From (AccountIdentities.jsx) and, for
+// an IMAP account, the folder its Sent copies go to (SentFolderPicker.jsx). Save writes them in one
+// call (only what changed, so nothing a desktop import set is rewritten) and re-reads the
+// accounts. The account's own notification switch is on Settings > Notifications.
+//
+// A password account also has its password and mail servers here (AccountServer.jsx), saved on
+// their own: the engine signs in with them before it keeps them.
 //
 // Remove (as desktop's account page has it, last and set apart): an inline question, then the
 // store's removeAccount; a refusal keeps the question for another try (the store told the user).
@@ -11,6 +16,11 @@ import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
 import { htmlToText } from './prefs.js';
+import AccountServer, { hasServerSettings } from './AccountServer.jsx';
+import AccountIdentities from './AccountIdentities.jsx';
+import SentFolderPicker, { picksSentFolder } from './SentFolderPicker.jsx';
+
+const sameAliases = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 export default function AccountEditor({ account, onDone }) {
   const t = useT();
@@ -20,6 +30,8 @@ export default function AccountEditor({ account, onDone }) {
   const [signature, setSignature] = useState('');
   const [signatureOn, setSignatureOn] = useState(true);
   const [hidden, setHidden] = useState(false);
+  const [sending, setSending] = useState({ aliases: [], sendAs: '' });
+  const [sentFolder, setSentFolder] = useState('');
   const [state, setState] = useState('loading'); // loading | ready | saving | failed
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -36,6 +48,8 @@ export default function AccountEditor({ account, onDone }) {
         setSignature(s.signature ? (s.signature.text || htmlToText(s.signature.html)) : '');
         setSignatureOn(s.signature ? s.signature.enabled !== false : true);
         setHidden(Boolean(s.hidden));
+        setSending({ aliases: Array.isArray(s.aliases) ? s.aliases : [], sendAs: s.sendAs || '' });
+        setSentFolder(s.sentFolder || '');
         setState('ready');
       },
       () => { if (live) setState('failed'); },
@@ -55,6 +69,10 @@ export default function AccountEditor({ account, onDone }) {
         ? { html: signature.trim() === beforeText.trim() && before ? before.html : '', text: signature.trim(), enabled: signatureOn }
         : null;
     }
+    const aliases = sending.aliases.map((a) => ({ address: a.address, name: (a.name || '').trim() }));
+    if (!sameAliases(aliases, Array.isArray(loaded.aliases) ? loaded.aliases : [])) values.aliases = aliases;
+    if (sending.sendAs !== (loaded.sendAs || '')) values.sendAs = sending.sendAs;
+    if (sentFolder !== (loaded.sentFolder || '')) values.sentFolder = sentFolder || null;
     try {
       await daemonCall('mobile.accountSettings.set', { accountId: account.id, values });
       await useMobileStore.getState().reloadAccounts();
@@ -98,11 +116,14 @@ export default function AccountEditor({ account, onDone }) {
         </span>
         <span className="mv-switch" aria-hidden="true"><span className="mv-switch__knob" /></span>
       </button>
+      <AccountIdentities email={account.email} aliases={sending.aliases} sendAs={sending.sendAs} onChange={setSending} />
+      {picksSentFolder(account) && <SentFolderPicker accountId={account.id} value={sentFolder} onChange={setSentFolder} />}
       {state === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
       <div className="mv-acct__actions">
         <button type="button" className="mv-textbtn" onClick={onDone}>{t('common.cancel')}</button>
         <button type="button" className="mv-textbtn" data-mv-acct-save disabled={state === 'saving' || !loaded} onClick={save}>{t('common.save')}</button>
       </div>
+      {hasServerSettings(account) && <AccountServer account={account} />}
       <div className="mv-acct-edit__danger">
         {confirming ? (
           <>

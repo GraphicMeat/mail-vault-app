@@ -27,6 +27,10 @@ export const PREF_DEFAULTS = Object.freeze({
   // message. The phone opens a conversation on a screen of its own in either threaded mode.
   threadMode: 'expandable',
   threadSortOrder: 'oldest-first',
+  // Compose asks before sending a message that mentions an attachment and carries none.
+  attachmentReminder: true,
+  // Compose's "Templates": `[{name, body}]` (Settings > Mail preferences).
+  templates: Object.freeze([]),
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];
@@ -62,7 +66,8 @@ export function readPrefs(reply) {
   const out = { ...PREF_DEFAULTS };
   if (!reply || typeof reply !== 'object') return out;
   for (const key of Object.keys(PREF_DEFAULTS)) {
-    if (typeof reply[key] === typeof PREF_DEFAULTS[key]) out[key] = reply[key];
+    const list = Array.isArray(PREF_DEFAULTS[key]);
+    if (list ? Array.isArray(reply[key]) : typeof reply[key] === typeof PREF_DEFAULTS[key]) out[key] = reply[key];
   }
   return out;
 }

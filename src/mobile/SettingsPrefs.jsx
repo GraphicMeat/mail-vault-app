@@ -1,7 +1,8 @@
 // Settings' preference pages (W1a): what a desktop import carries over and the user can change
 // here, split the way desktop's pages split them (`section`): 'appearance' (look, language, email
-// viewer theme, conversations, date and time), 'mail' (Mail preferences: reading, deleting, swipes, sending) and
-// 'privacy' (Privacy & security: remote content, tracking pixels, which Premium strips while
+// viewer theme, conversations, date and time), 'mail' (Mail preferences: reading, deleting, swipes,
+// sending with its attachment reminder, and the templates compose inserts, TemplatesSettings.jsx)
+// and 'privacy' (Privacy & security: remote content, tracking pixels, which Premium strips while
 // the switch is on, and link safety: scanning, and click confirmation while it scans). Each row writes one preference (`mobile.prefs.set`, through the store's setPrefs) and the
 // page follows at once: theme and palette on the root element, the rest read where they act
 // (viewer, list rows, compose). The language row stores `language` (`mobile.settings.set`) and
@@ -12,6 +13,7 @@ import { useT, getMobileLocale, loadMobileLocale } from './i18n.js';
 import { daemonCall } from './transport.js';
 import { LOCALES } from '../i18n/languages.js';
 import { THEMES, PALETTES, SWIPE_ACTIONS, SEND_DELAYS, MARK_READ_DELAYS, THREAD_MODES, THREAD_ORDERS } from './prefs.js';
+import TemplatesSettings from './TemplatesSettings.jsx';
 
 const DATE_FORMATS = ['auto', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd', 'dd MMM yyyy', 'custom'];
 
@@ -260,7 +262,15 @@ export default function SettingsPrefs({ section }) {
               checked={prefs.defaultSignatureEnabled}
               onChange={(defaultSignatureEnabled) => set({ defaultSignatureEnabled })}
             />
+            <Toggle
+              name="attachmentReminder"
+              label={t('settings.behavior.attachmentReminder')}
+              hint={t('settings.behavior.attachmentReminderDesc')}
+              checked={prefs.attachmentReminder}
+              onChange={(attachmentReminder) => set({ attachmentReminder })}
+            />
           </div>
+          <TemplatesSettings onFailed={setFailed} />
         </>
       )}
       {section === 'privacy' && (

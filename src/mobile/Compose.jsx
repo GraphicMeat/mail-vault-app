@@ -29,6 +29,18 @@
 // went out. A choice without Premium opens the paywall instead and stays off. Not offered on a
 // Graph account (desktop parity). The engine's refusal (PREMIUM_REQUIRED) is shown in place.
 //
+// From: an account with aliases (or a `sendAs` other than its login) shows a picker of them all,
+// starting at its `sendAs`, else the login (`identitiesOf`); the pick goes with the send and the
+// draft as `from`, and the engine checks it is the account's. One address shows as plain text.
+//
+// Templates (Settings > Mail preferences, pref `templates`): "Templates" under the subject lists
+// them; one picked goes in where the caret last was, else at the top of the body.
+//
+// Attachment reminder (pref `attachmentReminder`, on unless turned off): Send and Send later first
+// ask when what the user wrote (the subject of a new message, the body above the quote) mentions
+// an attachment and none is attached or downloading (desktop's word list, utils/missingAttachment.js):
+// Send anyway, Attach file or Cancel.
+//
 // Keyboard: the screen is laid on the visible part of the screen above the keyboard and only its
 // fields scroll (keyboardViewport.js); targets are 44 pt.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -36,7 +48,8 @@ import { useKeyboardViewport } from './keyboardViewport.js';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall, pickFiles } from './transport.js';
 import { ensureAttachmentEvents, watchJob } from './attachmentJobs.js';
-import { fieldsOf, initialText, isEmpty, isValidEntry, sendError, splitList } from './compose.js';
+import { defaultFrom, fieldsOf, identitiesOf, initialText, insertTemplate, isEmpty, isValidEntry, sendError, splitList } from './compose.js';
+import { missingAttachment } from '../utils/missingAttachment.js';
 import { signatureFor, withSignature } from './prefs.js';
 import RecipientField, { commitText } from './RecipientField.jsx';
 import Sheet from './Sheet.jsx';
@@ -145,6 +158,13 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const [attaching, setAttaching] = useState(false);
   const [later, setLater] = useState(false);
   const [remind, setRemind] = useState(0); // follow-up reminder in days, 0 for none
+  const [identities, setIdentities] = useState([]); // [{ address, label }]: the From picker's
+  const [from, setFrom] = useState('');
+  const [picking, setPicking] = useState(false); // the templates sheet
+  const [reminding, setReminding] = useState(null); // null | { later } : the attachment question
+  const templates = useMobileStore((s) => s.prefs.templates) || [];
+  const caret = useRef(null); // where a template goes: the body's caret, once it had one
+  const quote = useRef(''); // the quote prepare put under the body: not the user's words
   const premium = usePremium();
   const remindOffered = useMobileStore((s) => s.accounts.find((a) => a.id === accountId)?.kind !== 'graph');
   const [edits, setEdits] = useState(0);
@@ -157,11 +177,13 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   // The account's signature (Settings > Accounts, or the desktop's), read once: '' for none, or
   // when it or signatures overall are off. A reopened draft already has its text: none added.
   const signature = useRef(null);
+  // The account's settings, read once: its signature, aliases and `sendAs`.
+  const settings = useRef(null);
+  if (settings.current === null) settings.current = daemonCall('mobile.accountSettings.get', { accountId }).catch(() => null);
   if (signature.current === null) {
     signature.current = openDraft
       ? Promise.resolve('')
-      : daemonCall('mobile.accountSettings.get', { accountId })
-        .then((s) => signatureFor(s, useMobileStore.getState().prefs), () => '');
+      : settings.current.then((s) => (s ? signatureFor(s, useMobileStore.getState().prefs) : ''));
   }
   const [shownMode, setShownMode] = useState(mode);
   const modeRef = useRef(mode);
@@ -184,10 +206,11 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     subject: latest.current.subject,
     text: latest.current.text,
     attachments: latest.current.attachments,
+    ...(latest.current.identities.length > 1 && latest.current.from ? { from: latest.current.from } : {}),
     ...threading.current,
   });
   const latest = useRef(null);
-  latest.current = { to, cc, bcc, subject, text, attachments };
+  latest.current = { to, cc, bcc, subject, text, attachments, from, identities };
 
   const locked = useRef(Boolean(openDraft));
   const edit = (name) => {
@@ -287,11 +310,23 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       setSubject(d.subject || '');
       setText(d.text || '');
       setAttachments((Array.isArray(d.attachments) ? d.attachments : []).map((a) => ({ handle: a.handle, name: a.name, size: a.size, mime: a.mime })));
+      if (d.from) setFrom(d.from);
       if (Object.hasOwn(TITLE_KEYS, d.mode)) setShownMode(d.mode);
       draftId.current = openDraft;
       locked.current = false;
       setLoading(false);
     })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── From: the account's addresses ────────────────────────────────────────
+  useEffect(() => {
+    settings.current.then((s) => {
+      if (!live.current || !s) return;
+      const list = identitiesOf(fromEmail, s);
+      setIdentities(list);
+      // A reopened draft's own From wins over the default.
+      setFrom((cur) => cur || defaultFrom(list, s));
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── A new message starts with the signature ──────────────────────────────
@@ -332,6 +367,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       }
       if (!live.current || !p) return;
       threading.current = { inReplyTo: p.inReplyTo || '', references: p.references || '' };
+      quote.current = p.quoteText || '';
       fill('to', { entries: splitList(p.to), text: '' }, setTo);
       const ccEntries = splitList(p.cc);
       fill('cc', { entries: ccEntries, text: '' }, setCc);
@@ -455,6 +491,40 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     onClose();
   };
 
+  /** The message talks about an attachment and carries none (and the reminder is on). */
+  const forgotAttachment = () => {
+    if (useMobileStore.getState().prefs.attachmentReminder === false) return false;
+    const all = latest.current.text;
+    const at = quote.current ? all.indexOf(quote.current) : -1;
+    return missingAttachment({
+      mode: modeRef.current,
+      subject: latest.current.subject,
+      bodyText: at >= 0 ? all.slice(0, at) : all,
+      attachmentCount: latest.current.attachments.length + fetching.filter((f) => !f.failed).length,
+    });
+  };
+  /** Send (or open Send later), asking first about a forgotten attachment. */
+  const trySend = (later) => {
+    if (!canSend) return;
+    if (forgotAttachment()) setReminding({ later });
+    else if (later) setLater(true);
+    else send();
+  };
+  const sendAnyway = () => {
+    const r = reminding;
+    setReminding(null);
+    if (r?.later) setLater(true);
+    else send();
+  };
+
+  const applyTemplate = (tpl) => {
+    setPicking(false);
+    if (locked.current) return;
+    setText((cur) => insertTemplate(cur, tpl.body || '', caret.current));
+    caret.current = null;
+    edit('text');
+  };
+
   // ── Leave ─────────────────────────────────────────────────────────────────
   const discard = useCallback(async () => {
     setConfirming(false);
@@ -492,8 +562,12 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const keepEditing = useCallback(() => setConfirming(false), []);
   const closeAttach = useCallback(() => setAttaching(false), []);
   const closeLater = useCallback(() => setLater(false), []);
+  const closePicking = useCallback(() => setPicking(false), []);
+  const closeReminding = useCallback(() => setReminding(null), []);
 
-  useBackLayer(!confirming && !attaching && !later, requestLeave);
+  useBackLayer(!confirming && !attaching && !later && !picking && !reminding, requestLeave);
+  useBackLayer(picking, closePicking);
+  useBackLayer(Boolean(reminding), closeReminding);
   useBackLayer(confirming, keepEditing);
   useBackLayer(attaching, closeAttach);
   useBackLayer(later, closeLater);
@@ -514,7 +588,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
         <button type="button" className="mv-iconbtn" aria-label={t('mobile.compose.attach')} disabled={locked.current} onClick={() => setAttaching(true)}>
           <PaperclipIcon />
         </button>
-        <button type="button" className="mv-iconbtn" data-mv-send-later-open aria-label={t('mobile.compose.sendLater')} disabled={!canSend} onClick={() => setLater(true)}>
+        <button type="button" className="mv-iconbtn" data-mv-send-later-open aria-label={t('mobile.compose.sendLater')} disabled={!canSend} onClick={() => trySend(true)}>
           <ClockIcon />
         </button>
         <button
@@ -524,7 +598,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           aria-label={sending ? t('mobile.compose.sending') : t('compose.send')}
           aria-busy={sending ? 'true' : undefined}
           disabled={!canSend}
-          onClick={() => send()}
+          onClick={() => trySend(false)}
         >
           {sending && <span className="mv-chip__spinner" aria-hidden="true" />}
           {sending ? t('mobile.compose.sending') : t('compose.send')}
@@ -532,10 +606,26 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       </header>
       <div ref={scroller} className="mv-compose__scroll">
         {error && <p className="mv-compose__error" role="alert">{typeof error === 'string' ? t(error) : t(error.key, error.vars)}</p>}
-        <div className="mv-compose__line">
-          <span className="mv-compose__label">{t('common.from')}</span>
-          <span className="mv-compose__from" dir="auto">{fromEmail}</span>
-        </div>
+        {identities.length > 1 ? (
+          <div className="mv-compose__line" data-mv-from>
+            <label className="mv-compose__label" htmlFor="mv-compose-from">{t('common.from')}</label>
+            <select
+              id="mv-compose-from"
+              className="mv-compose__select mv-compose__from"
+              dir="auto"
+              value={from}
+              disabled={loading || locked.current}
+              onChange={(e) => { if (!locked.current) { setFrom(e.target.value); edit('from'); } }}
+            >
+              {identities.map((i) => <option key={i.address} value={i.address}>{i.label}</option>)}
+            </select>
+          </div>
+        ) : (
+          <div className="mv-compose__line">
+            <span className="mv-compose__label">{t('common.from')}</span>
+            <span className="mv-compose__from" dir="auto">{fromEmail}</span>
+          </div>
+        )}
         <RecipientField label={t('common.to')} entries={to.entries} text={to.text} readOnly={loading || locked.current} onChange={(v) => { if (!locked.current) { setTo(v); edit('to'); } }} />
         {showCc ? (
           <>
@@ -557,6 +647,11 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
             onChange={(e) => { if (!locked.current) { setSubject(e.target.value); edit('subject'); } }}
           />
         </div>
+        {templates.length > 0 && (
+          <button type="button" className="mv-compose__more" data-mv-templates-open disabled={loading || locked.current} onClick={() => setPicking(true)}>
+            {t('compose.templates')}
+          </button>
+        )}
         {remindOffered && (
           <div className="mv-compose__line" data-mv-remind>
             <label className="mv-compose__label mv-compose__remind-label" htmlFor="mv-compose-remind">
@@ -623,6 +718,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           readOnly={loading || locked.current}
           placeholder={loading ? t('mobile.drafts.loading') : undefined}
           onChange={(e) => { if (!locked.current) { setText(e.target.value); edit('text'); } }}
+          onSelect={(e) => { caret.current = e.target.selectionStart; }}
         />
       </div>
       {confirming && (
@@ -637,6 +733,31 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
         </Sheet>
       )}
       {later && <SendLater title={t('mobile.compose.sendLater')} onPick={(at) => send(at)} onClose={closeLater} />}
+      {picking && (
+        <Sheet kind="sheet" label={t('compose.templates')} onClose={closePicking}>
+          <div className="mv-sheet__grip" aria-hidden="true" />
+          <h2 className="mv-sheet__title">{t('compose.templates')}</h2>
+          <div className="mv-sheet__actions">
+            {templates.map((tpl, i) => (
+              // eslint-disable-next-line react/no-array-index-key -- an imported template may have no id
+              <button key={i} type="button" className="mv-sheet__action" dir="auto" onClick={() => applyTemplate(tpl)}>{tpl.name}</button>
+            ))}
+            <button type="button" className="mv-sheet__action" onClick={closePicking}>{t('common.cancel')}</button>
+          </div>
+        </Sheet>
+      )}
+      {reminding && (
+        <Sheet kind="sheet" label={t('compose.attachmentReminder.title')} onClose={closeReminding}>
+          <div className="mv-sheet__grip" aria-hidden="true" />
+          <h2 className="mv-sheet__title">{t('compose.attachmentReminder.title')}</h2>
+          <p className="mv-sheet__text">{t('compose.attachmentReminder.description')}</p>
+          <div className="mv-sheet__actions">
+            <button type="button" className="mv-sheet__action" onClick={() => { setReminding(null); setAttaching(true); }}>{t('compose.attachmentReminder.attach')}</button>
+            <button type="button" className="mv-sheet__action" onClick={sendAnyway}>{t('compose.attachmentReminder.sendAnyway')}</button>
+            <button type="button" className="mv-sheet__action" onClick={closeReminding}>{t('common.cancel')}</button>
+          </div>
+        </Sheet>
+      )}
       {attaching && (
         <Sheet kind="sheet" label={t('mobile.compose.attach')} onClose={closeAttach}>
           <div className="mv-sheet__grip" aria-hidden="true" />

@@ -33,6 +33,24 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// Who a message goes out as: the From address and the name beside it (`account_settings::identity`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Identity {
+    pub(crate) address: String,
+    pub(crate) name: String,
+}
+
+/// `config` sending as `from`: core's send-as override (`fromEmail`) for an address other than the
+/// login, and `from`'s name. Core then builds the From header from them, and each transport honours
+/// it: SMTP as is, Graph as a draft whose `from` is set before it is sent (`send_mime_as`), JMAP
+/// through the server identity of that address.
+pub(crate) fn sending_as(mut config: mailvault_core::imap::ImapConfig, from: &Identity) -> mailvault_core::imap::ImapConfig {
+    let address = from.address.trim();
+    config.from_email = (!address.is_empty() && !address.eq_ignore_ascii_case(config.email.trim())).then(|| address.to_string());
+    config.name = Some(from.name.trim().to_string()).filter(|n| !n.is_empty());
+    config
+}
+
 /// What [`Backend::arrivals`] listed, oldest first.
 pub(crate) struct Arrivals {
     pub uids: Vec<u32>,
@@ -356,15 +374,17 @@ pub(crate) trait Backend: Send {
     fn reply_check(&mut self, _row: &FollowUp, _own: &[String], _cache_miss: bool) -> Result<ReplyOutcome, Fail> {
         Err(Fail::unsupported("a follow-up reply check"))
     }
-    /// Builds `email` (core's `smtp::build_mime`, under `email.message_id`) and submits it.
+    /// Builds `email` (core's `smtp::build_mime`, under `email.message_id`) from `from` (the
+    /// address and name it goes out under, [`sending_as`]) and submits it.
     /// `Ok` means the server accepted it; nothing is filed in Sent yet. A failure says whether
     /// the message may have gone out anyway ([`SendFail`]); its text is scrubbed, for the log.
-    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail>;
+    fn send(&mut self, email: &OutgoingEmail, from: &Identity) -> Result<SendOutcome, SendFail>;
     /// Files the bytes of an accepted send in the account's Sent folder, read, unless the server
     /// does that itself (`server_saved_sent`: Graph and JMAP, core's `sent_copy_policy`; Gmail over
-    /// SMTP is appended like any SMTP account). Called after the outbox row is
-    /// committed `sent`, so a failure here never sends the message again.
-    fn file_sent(&mut self, sent: &SendOutcome) -> Result<(), Fail>;
+    /// SMTP is appended like any SMTP account). `folder` is the one the user picked for it
+    /// (`sentFolder`); one that is gone falls back to the server's Sent. Called after the outbox
+    /// row is committed `sent`, so a failure here never sends the message again.
+    fn file_sent(&mut self, sent: &SendOutcome, folder: Option<&str>) -> Result<(), Fail>;
     /// Waits until `folder` changes on the server ([`Change::Changed`]) or the wait ends without
     /// news ([`Change::Quiet`]: `watch` was stopped, or an IMAP IDLE reached `watch.reissue`).
     /// Checks `watch` at least once a second between requests (a request on the wire, such as

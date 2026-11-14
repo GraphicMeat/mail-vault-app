@@ -111,7 +111,12 @@ pub(crate) fn record_sent(shared: &Shared, account: &str, message_id: &str, fiel
         }
     };
     let sent_mailbox = sent_folder(shared, account).unwrap_or_default();
-    let own = vec![acct.email.clone()];
+    // The address it went out from is ours too (an alias): a reply from it is no reply.
+    let from = crate::account_settings::identity(shared, account, &acct.email, &acct.display_name, &fields.from).address;
+    let mut own = vec![acct.email.clone()];
+    if !from.eq_ignore_ascii_case(&acct.email) {
+        own.push(from);
+    }
     let now = compose::now_ms();
     let id = format!("fu_{}", compose::random_hex());
     let inserted = shared.write(|c| {
@@ -123,11 +128,15 @@ pub(crate) fn record_sent(shared: &Shared, account: &str, message_id: &str, fiel
     }
 }
 
-/// The account's Sent folder as the list stores it, when it has one.
+/// The account's Sent folder: the one the user picked (`sentFolder`), else the `\Sent` one as the
+/// list stores it, when it has one.
 fn sent_folder(shared: &Shared, account: &str) -> Option<String> {
     shared
         .read(|c| {
             use rusqlite::OptionalExtension;
+            if let Some(picked) = crate::account_settings::sent_folder_in(c, account)? {
+                return Ok(Some(picked));
+            }
             c.query_row(
                 "SELECT path FROM folders WHERE account_id = ?1 AND special_use = '\\Sent' COLLATE NOCASE ORDER BY path LIMIT 1",
                 [account],
@@ -279,6 +288,10 @@ fn local_answer(c: &Connection, row: &FollowUp, own: &[String]) -> rusqlite::Res
         if own_mail || mailvault_core::imap::is_own_mail_path(&path) {
             skip.insert(path);
         }
+    }
+    // The Sent folder the user picked holds our own mail too.
+    if let Some(picked) = crate::account_settings::sent_folder_in(c, &row.account_id)? {
+        skip.insert(picked);
     }
     let mut st = c.prepare_cached("SELECT DISTINCT folder FROM messages WHERE account_id = ?1")?;
     let read_any = st.query_map([&row.account_id], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?.iter().any(|f| !skip.contains(f));

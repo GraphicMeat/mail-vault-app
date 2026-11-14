@@ -53,8 +53,9 @@ pub(crate) const SWIPES: &[&str] = &["toggleRead", "delete", "flag", "move", "no
 
 /// The phone's preferences: key, kind, and the default (as JSON) that is the phone's behaviour
 /// without the setting. Shown and applied: theme .. emailViewerTheme, the conversation list
-/// (threadMode, threadSortOrder: the page asks for `threads`, `threads.rs`) and link safety.
-/// Stored for later waves: the rest.
+/// (threadMode, threadSortOrder: the page asks for `threads`, `threads.rs`), link safety,
+/// `attachmentReminder` (compose asks before such a send) and `templates` (`[{name, body}]`,
+/// compose inserts them). Stored for later waves: the rest.
 pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("theme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
     ("palette", Kind::OneOf(&["indigo", "graphite", "teal"]), "\"indigo\""),

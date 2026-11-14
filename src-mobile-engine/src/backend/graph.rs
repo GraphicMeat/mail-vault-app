@@ -28,7 +28,7 @@
 //! the server's `Retry-After` (capped) and retries, a few times, as a transient condition and
 //! never as an error. `open` makes no request.
 
-use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Watch, Window};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Watch, Window};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -847,7 +847,10 @@ impl Backend for GraphBackend<'_> {
         }
     }
 
-    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {
+    /// An alias goes out through core's `send_mime_as` (a draft whose `from` is the alias, then
+    /// sent), the way desktop sends one; Graph refuses an address the mailbox may not send as
+    /// (`ErrorSendAsDenied`), a final refusal.
+    fn send(&mut self, email: &OutgoingEmail, from: &Identity) -> Result<SendOutcome, SendFail> {
         let not_sent = SendFail::unsent;
         let mut refreshed = false;
         loop {
@@ -858,6 +861,7 @@ impl Backend for GraphBackend<'_> {
             };
             let cred = Credential { access: Some(self.token.clone()), ..Credential::default() };
             let config = crate::net::core_config(&acct, &cred).map_err(|e| not_sent(Fail::Code(Code::Invalid, e), true))?;
+            let config = super::sending_as(config, from);
             let built = smtp::build_mime(&config, email).map_err(|e| not_sent(Fail::Code(Code::Invalid, self.scrub(e)), true))?;
             // Core's Graph send (`sendMail`, Bcc carried in the MIME since Graph reads recipients
             // from it). Graph files the Sent copy itself.
@@ -885,7 +889,7 @@ impl Backend for GraphBackend<'_> {
         }
     }
 
-    fn file_sent(&mut self, _sent: &SendOutcome) -> Result<(), Fail> {
+    fn file_sent(&mut self, _sent: &SendOutcome, _folder: Option<&str>) -> Result<(), Fail> {
         // Graph's sendMail filed it in Sent Items.
         Ok(())
     }

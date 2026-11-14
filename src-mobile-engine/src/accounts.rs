@@ -1,4 +1,4 @@
-//! Accounts: `mobile.accounts.{list,test,add,remove}` (IMAP password accounts; `add` with
+//! Accounts: `mobile.accounts.{list,test,add,update,remove}` (IMAP password accounts; `add` with
 //! `kind: "jmap"` is `backend::jmap::add`) and
 //! [`AccountRow`], the one way the engine reads an account's settings.
 //!
@@ -415,6 +415,79 @@ pub(crate) fn add(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             &id,
             &form.email,
             &display_name,
+            &form.imap_host,
+            form.imap_port as i64,
+            &form.security,
+            (Some(form.smtp_host.clone()), Some(form.smtp_port as i64), Some(form.smtp_security.clone())),
+        ),
+    }))
+}
+
+/// `mobile.accounts.update {accountId, password, imapHost, imapPort, security, smtpHost?,
+/// smtpPort?, smtpSecurity?}` -> `{ok: true, account}` or `{ok: false, code, message}` like `add`:
+/// a password IMAP account's password and servers, changed in place. A blank password keeps the
+/// stored one (`INVALID` when there is none: a password lost from the secret store needs a new
+/// one). The new values sign in to IMAP and SMTP first; only then is the secret stored, the row
+/// updated, and the refused-password hold ([`crate::hold`]) and `needsAuth` dropped, and the
+/// account gets an INBOX pass and the outbox and replay look at it again.
+///
+/// The address is the account's key and never changes here. An OAuth account (its provider's
+/// sign-in), a Graph account and a JMAP account (session URL and app password or token, its own
+/// form) are `INVALID`: removed and added again, as before. Read by hand like `add` ([`read_form`]):
+/// no error names the password.
+pub(crate) fn update(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let account_id = params.get("accountId").and_then(Value::as_str).ok_or_else(|| RpcError::Invalid("accountId must be a string".into()))?.to_string();
+    let row = load_account(engine.shared(), &account_id).map_err(internal)?.ok_or_else(|| RpcError::Invalid("no such account".into()))?;
+    if row.kind != "imap" || row.auth != "password" {
+        return Err(RpcError::Invalid("only a password IMAP account has a password and servers to change".into()));
+    }
+    let mut params = params;
+    params["email"] = json!(row.email);
+    let old_secret = engine.secrets().get(&account_id).map_err(internal)?;
+    if params.get("password").and_then(Value::as_str).is_some_and(str::is_empty) {
+        // Blank: the stored password, if the secret store still has one.
+        match old_secret.as_deref().map(Credential::parse).and_then(|c| c.password).filter(|p| !p.is_empty()) {
+            Some(stored) => params["password"] = json!(stored),
+            None => return Ok(failure(Code::Invalid, "password is empty")),
+        }
+    }
+    let form = match Form::from_params(&params) {
+        Ok(f) => f,
+        Err(reply) => return Ok(reply),
+    };
+    drop(params);
+    if let Err(reply) = form.test_login() {
+        return Ok(reply);
+    }
+    let cred = Credential::from_password(&form.password);
+    let secret = cred.to_secret();
+    if let Err(e) = engine.secrets().set(&account_id, &secret) {
+        return Err(internal(mailvault_core::secret_scrub::scrub(&e, &[form.password.as_str(), secret.as_str()])));
+    }
+    let written = engine.write(|c| {
+        c.execute(
+            "UPDATE accounts SET imap_host = ?2, imap_port = ?3, security = ?4, smtp_host = ?5, smtp_port = ?6, smtp_security = ?7,
+                                 needs_auth = 0
+             WHERE id = ?1",
+            rusqlite::params![&account_id, &form.imap_host, form.imap_port as i64, &form.security, &form.smtp_host, form.smtp_port as i64, &form.smtp_security],
+        )?;
+        crate::hold::forget(c, &account_id)
+    });
+    if let Err(e) = written {
+        // The row still names the old servers: the old secret goes back with it.
+        let _ = match &old_secret {
+            Some(old) => engine.secrets().set(&account_id, old),
+            None => engine.secrets().delete(&account_id),
+        };
+        return Err(internal(e));
+    }
+    crate::hold::changed(engine, &account_id);
+    Ok(json!({
+        "ok": true,
+        "account": account_json(
+            &account_id,
+            &row.email,
+            &row.display_name,
             &form.imap_host,
             form.imap_port as i64,
             &form.security,
