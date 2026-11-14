@@ -420,6 +420,37 @@ describe('link safety', () => {
     expect(prepared.linkAlerts.map((a) => a.actualUrl)).toEqual(['javascript:alert(1)']);
   });
 
+  it('under link safety no link the engine could not scan stays live: SVG xlink:href and image-map areas', () => {
+    const XLINK = 'http://www.w3.org/1999/xlink';
+    const html = '<svg><a xlink:href="https://evil.example.net/svg"><text>https://bank.example.com</text></a></svg>'
+      + '<img usemap="#m" src="data:image/png;base64,AA=="><map name="m"><area shape="rect" coords="0,0,9,9" href="https://evil.example.net/area"></map>'
+      + '<p><a href="https://ok.example.org/">plain</a></p>';
+    const live = (doc) => [...doc.querySelectorAll('*')].flatMap((el) => [el.getAttribute('href'), el.getAttributeNS(XLINK, 'href')]).filter(Boolean);
+    for (const confirm of [true, false]) {
+      const doc = parse(assembleMailFrame(prepareMailBody({ html, text: null }, undefined, links({ alerts: [], confirm, safety: true }))));
+      expect(live(doc).filter((h) => /evil/.test(h)), `confirm ${confirm}`).toEqual([]);
+      // What the scan saw stays a link, and the text of the dropped ones stays.
+      expect(live(doc)).toContain('https://ok.example.org/');
+      expect(doc.body.textContent).toContain('https://bank.example.com');
+    }
+    // Link safety off: the cleaner alone decides, as before.
+    const off = parse(assembleMailFrame(prepareMailBody({ html, text: null }, undefined, links({ alerts: null, confirm: false, safety: false }))));
+    expect(live(off)).toContain('https://evil.example.net/svg');
+  });
+
+  it('a mail cannot forge a tap: a well-formed guarded href of its own is dropped', () => {
+    const forged = '<a href="about:blank#mv0123456789abcdef01-0">forged</a>';
+    for (const over of [{}, { confirm: false }, { alerts: [] }]) {
+      const prepared = prepareMailBody({ html: RISKY + forged, text: null }, undefined, links(over));
+      const doc = parse(assembleMailFrame(prepared));
+      expect(prepared.kind, JSON.stringify(over)).toBe('html');
+      expect(linkByText(doc, 'forged').hasAttribute('href'), JSON.stringify(over)).toBe(false);
+    }
+    // Our own taps of the same prepare still pass.
+    const doc = parse(assembleMailFrame(prepareMailBody({ html: RISKY + forged, text: null }, undefined, links())));
+    expect(linkByText(doc, 'https://bank.example.com').getAttribute('href')).toMatch(TAP);
+  });
+
   it('names its taps afresh on every prepare', () => {
     const href = () => linkByText(parse(build({ html: RISKY, links: links() })), 'https://bank.example.com').getAttribute('href');
     expect(href()).not.toBe(href());

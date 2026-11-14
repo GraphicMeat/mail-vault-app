@@ -140,6 +140,51 @@ describe('Viewer', () => {
     expect(sheet.querySelector('[data-mv-link-cancel]')).toBeTruthy();
   });
 
+  it('Open anyway stays in the page until its own click has opened the link', async () => {
+    const evil = 'https://evil.example.net/login';
+    engine.reply = body({
+      html: `<p><a href="${evil}" data-link-alert="red">https://bank.example.com</a></p>`,
+      alerts: [{ level: 'red', textContent: 'https://bank.example.com', actualUrl: evil, reason: 'goes elsewhere' }],
+    });
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    await settle();
+    tapGuardedLink();
+    const open = screen.getByRole('dialog', { name: t('linkSafety.dangerousLinkDetected') }).querySelector('[data-mv-link-open]');
+    // A real tap: React commits the click's updates in a microtask, before the link's own
+    // activation (the navigation) runs, and a link no longer in the page goes nowhere.
+    const actEnv = globalThis.IS_REACT_ACT_ENVIRONMENT;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+      open.dispatchEvent(click);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(click.defaultPrevented).toBe(false);
+      expect(open.isConnected).toBe(true);
+      await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      globalThis.IS_REACT_ACT_ENVIRONMENT = actEnv;
+    }
+    await waitFor(() => expect(document.querySelector('[data-mv-link-sheet]')).toBeNull());
+  });
+
+  it('a frame reload with no flagged link to list opens no sheet and leaves no Back layer', async () => {
+    engine.reply = body({ html: '<p>No links here</p>', alerts: [] });
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    await settle();
+    const push = vi.spyOn(window.history, 'pushState');
+    try {
+      act(() => { fireEvent.load(frame()); });
+      act(() => { fireEvent.load(frame()); });
+      expect(document.querySelector('[data-mv-link-sheet]')).toBeNull();
+      expect(push).not.toHaveBeenCalled();
+    } finally {
+      push.mockRestore();
+    }
+  });
+
   it('shows the header from the row before the body arrives', async () => {
     let resolve;
     engine.reply = () => new Promise((r) => { resolve = r; });

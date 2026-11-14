@@ -230,7 +230,9 @@ function LinkSheet({ alerts, onClose }) {
             <p className="mv-linksheet__label">{t('linkSafety.actuallyRedirects')}</p>
             <p className="mv-linksheet__value mv-linksheet__url" dir="ltr">{a.actualUrl}</p>
             {WEB_URL.test(a.actualUrl) && (
-              <a className="mv-linksheet__open" data-mv-link-open href={a.actualUrl} target="_blank" rel="noopener noreferrer" onClick={onClose}>
+              // The sheet closes after this click has run its course: a link taken out of the
+              // page before its own activation opens nothing.
+              <a className="mv-linksheet__open" data-mv-link-open href={a.actualUrl} target="_blank" rel="noopener noreferrer" onClick={() => setTimeout(onClose, 0)}>
                 {t('linkSafety.openAnyway')}
               </a>
             )}
@@ -327,10 +329,12 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const prepared = useMemo(() => {
     if (!hasContent) return null;
     const t0 = performance.now();
-    const out = prepareMailBody({ html, text }, undefined, { alerts, confirm: confirmLinks });
+    const out = prepareMailBody({ html, text }, undefined, { alerts, confirm: confirmLinks, safety: linkSafety });
     notePrepare(performance.now() - t0, (html || text || '').length);
     return out;
-  }, [html, text, hasContent, alerts, confirmLinks]);
+  }, [html, text, hasContent, alerts, confirmLinks, linkSafety]);
+  const preparedRef = useRef(prepared);
+  preparedRef.current = prepared;
   // A guarded link's tap reloads the frame: every load after its first is one. The mail is put
   // back in a fresh frame (`frameRun`) and the app asks.
   const [linkSheet, setLinkSheet] = useState(false);
@@ -347,7 +351,8 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       return;
     }
     setFrameRun((n) => n + 1);
-    setLinkSheet(true);
+    // Nothing flagged to list: the mail is put back, and no sheet (nor its Back layer) stays open.
+    if (preparedRef.current?.linkAlerts?.length > 0) setLinkSheet(true);
   }, []);
   const autoImages = useMobileStore((s) => s.prefs.holdExternalContent === false);
   const remoteOn = allowRemote || Boolean(autoImages && body && !((body.trackers || 0) > 0 && !body.trackersStripped));

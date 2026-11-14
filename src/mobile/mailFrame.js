@@ -29,7 +29,9 @@
 // Viewer.jsx takes any load after the first as a tap on a marked link: it puts the mail back and
 // asks in the app's own sheet, outside the mail's reach (its CSS cannot hide, restyle or overlay
 // it), listing the flagged links with their real URLs (`prepared.linkAlerts`). A marked link whose
-// URL and level the engine did not list is guarded all the same, never left live.
+// URL and level the engine did not list is guarded all the same, never left live. With link safety
+// on, a link core's scan cannot read (it reads `a` with a plain `href`) loses its URL: an SVG
+// `xlink:href` link and an image map's `<area href>` would otherwise stay live and unchecked.
 //
 // Theme: a text body follows the app theme. An html body is always drawn on a light canvas:
 // without scripts there is no Dark Reader, and mail written for white paper (dark text, no
@@ -58,8 +60,14 @@ const THEMES = {
 const PAPER = { scheme: 'light', bg: '#ffffff', fg: '#1a1a2e', link: '#4338ca' };
 
 const SAFE_HREF = /^\s*(?:https?:|mailto:|tel:|#)/i;
-/** A marked link under click confirmation (`markLinks`): it reloads the frame and goes nowhere. */
-const LINK_TAP = /^about:blank#mv[0-9a-f]{18}-\d+$/;
+/** A marked link under click confirmation (`markLinks`): it reloads the frame and goes nowhere.
+ *  Only this prepare's own prefix passes (`rules.tap`), so a mail cannot write one of its own. */
+const LINK_TAP = /^about:blank#(mv[0-9a-f]{18})-\d+$/;
+const isTap = (value, rules) => Boolean(rules.tap) && LINK_TAP.exec(value)?.[1] === rules.tap;
+/** What one prepare's cleaning allows beyond the fixed rules: `tap`, its tap prefix (none: no
+ *  `about:` link at all); `safety`, link safety is on, so no link the engine's scan cannot see (an
+ *  SVG `xlink:href`, an image map's `<area href>`) stays a link. */
+const NO_RULES = { tap: null, safety: false };
 
 const escapeHtml = (s) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -142,11 +150,14 @@ const isSvgLink = (el) => el.namespaceURI !== HTML_NS && el.namespaceURI !== MAT
 const isForbidden = (el) => FORBIDDEN.has(el.localName.toLowerCase())
   || (el.localName === 'meta' && el.namespaceURI === HTML_NS && (el.hasAttribute('http-equiv') || isReferrerMeta(el)));
 
-/** Whether an `href` / `xlink:href` value may stay on this element (MathML keeps none: some
- *  engines follow a MathML href like a link). */
-function hrefAllowed(el, value) {
+/** Whether an `href` / `xlink:href` (`ns`) value may stay on this element (MathML keeps none:
+ *  some engines follow a MathML href like a link). Under link safety a link keeps only what core's
+ *  scan reads (`a` with a plain `href`): an `<area>` or an SVG `xlink:href` link was never
+ *  checked, so it loses its URL and keeps its text. */
+function hrefAllowed(el, value, ns, rules) {
   if (el.namespaceURI === MATHML_NS) return false;
-  if (isHtmlLink(el) && LINK_TAP.test(value)) return true;
+  if (rules.safety && (ns || (isHtmlLink(el) && el.localName === 'area'))) return isSvgLink(el) || isHtmlLink(el) ? false : LOCAL_REF.test(value);
+  if (isHtmlLink(el) && isTap(value, rules)) return true;
   return isHtmlLink(el) || isSvgLink(el) ? SAFE_HREF.test(value) : LOCAL_REF.test(value);
 }
 
@@ -158,17 +169,17 @@ function hrefsOf(el) {
 }
 
 /** What the cleaning pass removes, still in `doc`: empty for a clean document. */
-function violations(doc) {
+function violations(doc, rules) {
   const found = [];
   for (const el of doc.querySelectorAll('*')) {
     if (isForbidden(el)) found.push(el.localName);
     for (const name of STRIPPED) if (el.hasAttribute(name)) found.push(name);
-    for (const [, , value] of hrefsOf(el)) if (!hrefAllowed(el, value)) found.push(`${el.localName} href`);
+    for (const [, ns, value] of hrefsOf(el)) if (!hrefAllowed(el, value, ns, rules)) found.push(`${el.localName} href`);
   }
   return found;
 }
 
-function cleanMail(doc) {
+function cleanMail(doc, rules) {
   for (const el of [...doc.querySelectorAll('*')].filter(isForbidden)) el.remove();
   const root = doc.documentElement;
   for (const { name } of [...root.attributes]) {
@@ -181,13 +192,13 @@ function cleanMail(doc) {
     // URL must never reach a popup, which the sandbox lets escape); any other SVG reference
     // stays inside the document.
     for (const [name, ns, value] of hrefsOf(el)) {
-      if (hrefAllowed(el, value)) continue;
+      if (hrefAllowed(el, value, ns, rules)) continue;
       if (ns) el.removeAttributeNS(ns, name);
       else el.removeAttribute(name);
     }
     if (!isHtmlLink(el) && !isSvgLink(el)) continue;
     const href = el.getAttribute('href') ?? el.getAttributeNS(XLINK, 'href');
-    if (href != null && (/^\s*#/.test(href) || LINK_TAP.test(href))) {
+    if (href != null && (/^\s*#/.test(href) || isTap(href, rules))) {
       // An in-page anchor (a newsletter's table of contents) scrolls the frame; it loads nothing.
       el.setAttribute('target', '_self');
     } else if (href != null) {
@@ -233,7 +244,7 @@ const hasLinkMarks = (html) => /data-link-alert/i.test(html);
  * and no reason: a mark never fails open. Without `confirm` the marks only show.
  */
 function markLinks(html, { alerts, confirm = false }, parse) {
-  if (!confirm) return { source: html, alerts: [] };
+  if (!confirm) return { source: html, alerts: [], tap: null };
   const doc = parse(html);
   const listed = new Map(); // `${level} ${url}` -> the engine's alert
   for (const a of Array.isArray(alerts) ? alerts : []) {
@@ -260,7 +271,7 @@ function markLinks(html, { alerts, confirm = false }, parse) {
     link.setAttribute('href', `about:blank#${prefix}-${n++}`);
     link.removeAttribute('title');
   }
-  return { source: serialize(doc), alerts: [...shown.values()] };
+  return { source: serialize(doc), alerts: [...shown.values()], tap: prefix };
 }
 const MAX_PASSES = 4;
 
@@ -270,18 +281,18 @@ const MAX_PASSES = 4;
  * Every pass serializes with a doctype, so it is parsed in no-quirks mode as the frame parses
  * it. `null` when it never settles or something forbidden is still there. `parse` is for tests.
  */
-export function cleanToFixpoint(source, parse = parseHtml) {
+export function cleanToFixpoint(source, parse = parseHtml, rules = NO_RULES) {
   let previous = null;
   let current = source;
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     const doc = parse(current);
-    cleanMail(doc);
+    cleanMail(doc, rules);
     previous = current;
     current = serialize(doc);
     if (current === previous) break;
   }
   if (current !== previous) return null;
-  return violations(parse(current)).length === 0 ? current : null;
+  return violations(parse(current), rules).length === 0 ? current : null;
 }
 
 /** The text of a mail the cleaner refused: its text part, else what its html says, as text. */
@@ -314,7 +325,7 @@ export function assembleMailFrame(prepared, options = {}) {
 
 /** Whether the frame's parse of an assembled document is exactly ours and clean: our five head
  *  elements first, nothing forbidden anywhere else. */
-function assembledClean(doc) {
+function assembledClean(doc, rules) {
   const [csp, referrer, dns, base, style] = doc.head.children;
   const ours = csp?.getAttribute('http-equiv') === 'Content-Security-Policy'
     && referrer?.getAttribute('name') === 'referrer' && referrer.getAttribute('content') === 'no-referrer'
@@ -323,7 +334,7 @@ function assembledClean(doc) {
     && style?.localName === 'style' && style.hasAttribute('data-mv-frame');
   if (!ours) return false;
   for (const el of [csp, referrer, dns, base]) el.remove();
-  return violations(doc).length === 0;
+  return violations(doc, rules).length === 0;
 }
 
 /**
@@ -331,16 +342,18 @@ function assembledClean(doc) {
  * html, checked once more as the frame will parse the assembled document, or the text part (or,
  * for an html body the cleaner cannot settle, what that html says) escaped into a `<pre>`.
  * Assembling with other options changes only our own constant head strings. `links`:
- * `{alerts, confirm}` for link safety (`markLinks`), or null; `linkAlerts` then lists what a tap
- * on a guarded link asks about.
+ * `{alerts, confirm, safety}` for link safety (`markLinks`; `safety`: link safety is on, so no link
+ * the engine's scan cannot see stays live), or null; `linkAlerts` then lists what a tap on a
+ * guarded link asks about.
  */
 export function prepareMailBody({ html, text }, parse = parseHtml, links = null) {
   if (typeof html === 'string' && html.trim() !== '') {
-    const marked = links && hasLinkMarks(html) ? markLinks(html, links, parse) : { source: html, alerts: [] };
-    const cleaned = cleanToFixpoint(marked.source, parse);
+    const marked = links && hasLinkMarks(html) ? markLinks(html, links, parse) : { source: html, alerts: [], tap: null };
+    const rules = { tap: marked.tap, safety: Boolean(links?.safety) };
+    const cleaned = cleanToFixpoint(marked.source, parse, rules);
     if (cleaned != null && PREFIX.test(cleaned)) {
       const prepared = { kind: 'html', markup: cleaned, linkAlerts: marked.alerts };
-      if (assembledClean(parse(assembleMailFrame(prepared)))) return prepared;
+      if (assembledClean(parse(assembleMailFrame(prepared)), rules)) return prepared;
     }
     return { kind: 'text', markup: textMarkup(fallbackText(html, text)) };
   }
