@@ -109,6 +109,30 @@ describe('From', () => {
   });
 });
 
+describe('From of a draft the account no longer sends from', () => {
+  const gone = { id: 'drf_0123456789abcdef', accountId: 'a1', to: 'bob@example.test', cc: '', bcc: '', subject: 's', text: 'x', attachments: [], from: 'gone@example.test' };
+  for (const order of ['draft first', 'draft last']) {
+    it(`starts again from the default From (${order})`, async () => {
+      engine.settings.aliases = [{ address: 'hi@example.test', name: '' }];
+      engine.settings.sendAs = 'hi@example.test';
+      let release = null;
+      engine.draft = order === 'draft first' ? gone : new Promise((r) => { release = () => r(gone); });
+      await renderCompose({ draftId: 'drf_0123456789abcdef' });
+      if (release) {
+        release();
+        await flush();
+      }
+      await flush();
+      const pick = screen.getByRole('combobox', { name: t('common.from') });
+      expect(pick.value).toBe('hi@example.test');
+      type(body(), 'x y');
+      await act(async () => { fireEvent.click(sendButton()); });
+      await flush();
+      expect(callsOf('mobile.compose.send')[0].from).toBe('hi@example.test');
+    });
+  }
+});
+
 describe('templates', () => {
   it('inserts a template at the top of the body', async () => {
     useMobileStore.setState({ prefs: { ...PREF_DEFAULTS, templates: [{ name: 'Thanks', body: 'Thank you!' }, { name: 'Later', body: 'Talk later.' }] } });

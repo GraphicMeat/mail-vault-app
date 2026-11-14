@@ -319,15 +319,25 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── From: the account's addresses ────────────────────────────────────────
+  const fromDefault = useRef('');
   useEffect(() => {
     settings.current.then((s) => {
       if (!live.current || !s) return;
       const list = identitiesOf(fromEmail, s);
+      fromDefault.current = defaultFrom(list, s);
       setIdentities(list);
       // A reopened draft's own From wins over the default.
-      setFrom((cur) => cur || defaultFrom(list, s));
+      setFrom((cur) => cur || fromDefault.current);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A reopened draft's From the account no longer sends from (an alias removed since): the
+  // default again, whichever of the draft and the addresses came in first. Spelled as listed.
+  useEffect(() => {
+    if (!identities.length || !from) return;
+    const listed = identities.find((i) => i.address.toLowerCase() === from.trim().toLowerCase());
+    if (!listed) setFrom(fromDefault.current);
+    else if (listed.address !== from) setFrom(listed.address);
+  }, [identities, from]);
 
   // ── A new message starts with the signature ──────────────────────────────
   useEffect(() => {
