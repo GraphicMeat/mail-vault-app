@@ -16,8 +16,8 @@
 .mv-wrap { max-width:1200px; margin-inline:auto; padding-inline:36px; }
 .mv-header { position:sticky; top:0; z-index:20; background:var(--mv-bg); border-bottom:1px solid var(--mv-line); }
 .mv-nav { position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:80px; }
-.mv-brand { display:inline-flex; align-items:center; gap:10px; font-size:1.2rem; font-weight:700; letter-spacing:-.035em; flex-shrink:0; }
-.mv-brand img { border-radius:8px; }
+.mv-brand { display:inline-flex; align-items:center; font-size:1.2rem; font-weight:700; letter-spacing:-.035em; flex-shrink:0; }
+.mv-brand img { border-radius:8px; margin-right:10px; }
 .mv-brand-mail { color:var(--mv-accent); }
 .mv-navlinks,.mv-navtools { display:flex; align-items:center; gap:28px; }
 .mv-navlinks { font-size:.9rem; }
