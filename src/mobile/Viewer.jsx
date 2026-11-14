@@ -244,9 +244,10 @@ function LinkSheet({ alerts, onClose }) {
   );
 }
 
-/** The engine writes link-safety reasons from these templates, in the UI language. */
-function linkTexts(t) {
-  return Object.fromEntries(LINK_REASONS.map((k) => [`linkSafety.reason.${k}`, t(`linkSafety.reason.${k}`)]));
+/** The engine writes link-safety reasons from these templates, in the UI language. `translate` is
+ *  the viewer's own `useT()` (a helper holds no hook), so the texts follow a language change. */
+function linkTexts(translate) {
+  return Object.fromEntries(LINK_REASONS.map((k) => [`linkSafety.reason.${k}`, translate(`linkSafety.reason.${k}`)]));
 }
 
 export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, onCompose = noop, initialPicking = false }) {
