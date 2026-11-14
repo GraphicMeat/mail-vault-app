@@ -4491,7 +4491,6 @@
   "mobile.offline.downloadNow": "Télécharger maintenant",
   "mobile.offline.hint": "Le courrier de la période choisie reste sur ce téléphone. Les pièces jointes jusqu'à 10 Mo se téléchargent en Wi-Fi.",
   "mobile.offline.downloading": "Téléchargement pendant que l'app est ouverte.",
-  "mobile.settings.about": "À propos",
   "mobile.settings.version": "Version {{version}}",
   "mobile.settings.source": "Le code source est en ligne sur GitHub",
   "mobile.settings.loadFailed": "Impossible de charger les réglages.",

@@ -4491,7 +4491,6 @@
   "mobile.offline.downloadNow": "Jetzt laden",
   "mobile.offline.hint": "Mails im gewählten Zeitraum bleiben auf diesem Telefon. Anhänge bis 10 MB werden im WLAN geladen.",
   "mobile.offline.downloading": "Wird geladen, solange die App offen ist.",
-  "mobile.settings.about": "Über",
   "mobile.settings.version": "Version {{version}}",
   "mobile.settings.source": "Der Quellcode ist auf GitHub",
   "mobile.settings.loadFailed": "Die Einstellungen konnten nicht geladen werden.",

@@ -4491,7 +4491,6 @@
   "mobile.offline.downloadNow": "Download now",
   "mobile.offline.hint": "Mail inside the chosen period stays on this phone. Attachments up to 10 MB download on Wi-Fi.",
   "mobile.offline.downloading": "Downloading while the app is open.",
-  "mobile.settings.about": "About",
   "mobile.settings.version": "Version {{version}}",
   "mobile.settings.source": "Source is live on GitHub",
   "mobile.settings.loadFailed": "Couldn't load the settings.",

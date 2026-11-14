@@ -4491,7 +4491,6 @@
   "mobile.offline.downloadNow": "立即下载",
   "mobile.offline.hint": "所选时间段内的邮件会保留在此手机上。10 MB 以内的附件在 Wi-Fi 下下载。",
   "mobile.offline.downloading": "应用打开时正在下载。",
-  "mobile.settings.about": "关于",
   "mobile.settings.version": "版本 {{version}}",
   "mobile.settings.source": "源代码已在 GitHub 公开",
   "mobile.settings.loadFailed": "无法加载设置。",

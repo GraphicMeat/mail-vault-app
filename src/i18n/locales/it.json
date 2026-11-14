@@ -4491,7 +4491,6 @@
   "mobile.offline.downloadNow": "Scarica ora",
   "mobile.offline.hint": "La posta del periodo scelto resta su questo telefono. Gli allegati fino a 10 MB si scaricano con il Wi-Fi.",
   "mobile.offline.downloading": "Download in corso mentre l'app è aperta.",
-  "mobile.settings.about": "Informazioni",
   "mobile.settings.version": "Versione {{version}}",
   "mobile.settings.source": "Il codice sorgente è su GitHub",
   "mobile.settings.loadFailed": "Impossibile caricare le impostazioni.",

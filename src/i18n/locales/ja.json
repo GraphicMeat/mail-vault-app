@@ -4491,7 +4491,6 @@
   "mobile.offline.downloadNow": "今すぐダウンロード",
   "mobile.offline.hint": "選んだ期間のメールはこの端末に保存されます。10 MB までの添付ファイルは Wi-Fi でダウンロードします。",
   "mobile.offline.downloading": "アプリを開いている間にダウンロードしています。",
-  "mobile.settings.about": "情報",
   "mobile.settings.version": "バージョン {{version}}",
   "mobile.settings.source": "ソースコードは GitHub で公開中",
   "mobile.settings.loadFailed": "設定を読み込めませんでした。",
