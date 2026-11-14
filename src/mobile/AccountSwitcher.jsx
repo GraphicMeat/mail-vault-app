@@ -117,8 +117,8 @@ export default function AccountSwitcher({ accounts, activeAccountId, unread, onS
 export function ReauthBanner({ account, state, onReauth }) {
   const t = useT();
   if (!account?.needsAuth) return null;
-  // A password account whose saved password was lost (the keychain move failed twice): only
-  // adding it again helps.
+  // A password account whose saved password was lost (the keychain move failed twice): it is
+  // entered again on the account's Mail Server page in Settings (`mobile.accounts.update`).
   if (account.oauth === false) {
     return (
       <div className="mv-reauth">

@@ -942,7 +942,8 @@ describe('Signature and undo send (desktop settings)', () => {
     await waitFor(() => expect(body().value).toBe('Draft body'));
     await flush();
     expect(body().value).toBe('Draft body');
-    expect(callsOf('mobile.accountSettings.get')).toHaveLength(2);
+    // Each screen reads the account's settings once; a reopened draft only for its From choices.
+    expect(callsOf('mobile.accountSettings.get')).toHaveLength(3);
   });
 
   it('sendDelay holds the message and Undo brings it back as a draft', async () => {
