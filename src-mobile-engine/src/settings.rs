@@ -52,7 +52,9 @@ pub(crate) enum Kind {
 pub(crate) const SWIPES: &[&str] = &["toggleRead", "delete", "flag", "move", "none"];
 
 /// The phone's preferences: key, kind, and the default (as JSON) that is the phone's behaviour
-/// without the setting. Shown and applied: theme .. emailViewerTheme. Stored for later waves: the rest.
+/// without the setting. Shown and applied: theme .. emailViewerTheme, `attachmentReminder` (compose asks
+/// before such a send) and `templates` (`[{name, body}]`, compose inserts them). Stored for later
+/// waves: the rest.
 pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("theme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
     ("palette", Kind::OneOf(&["indigo", "graphite", "teal"]), "\"indigo\""),

@@ -116,6 +116,11 @@ pub(crate) struct Fields {
     /// [`crate::followup::remind_check`]; a draft never carries one).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) remind_after_days: Option<i64>,
+    /// The address the message goes out from, as compose picked it: the login, the account's
+    /// `sendAs` or one of its aliases (checked by `send`). Empty is the account's default
+    /// (`account_settings::identity`). A draft keeps it as typed.
+    #[serde(deserialize_with = "nullable", skip_serializing_if = "String::is_empty")]
+    pub(crate) from: String,
 }
 
 impl Fields {
@@ -231,19 +236,27 @@ struct SendParams {
     fields: Fields,
 }
 
-/// `mobile.compose.send {accountId, draftId?, to, cc, bcc, subject, text, inReplyTo?, references?,
+/// `mobile.compose.send {accountId, draftId?, from?, to, cc, bcc, subject, text, inReplyTo?, references?,
 /// attachments: [{handle}], sendAtMs?, remindAfterDays?}` -> `{id, state: "queued", scheduledMs}` (`scheduledMs`:
 /// the send time when held back, else null). `INVALID` (no To, an address that does not read, an
 /// unknown account), `ATTACHMENT_MISSING`, `TOO_LARGE`, `PREMIUM_REQUIRED` (`sendAtMs` more than
 /// 5 minutes ahead without Premium, or `remindAfterDays` without Premium), `SCHEDULE_TOO_FAR`
 /// (more than a day ahead), `INVALID` for `remindAfterDays` other than 1, 3, 7 or on a Graph
-/// account, all before any write.
+/// account, `INVALID` for a `from` the account does not send from (`account_settings::may_send_from`),
+/// all before any write.
 pub(crate) fn send(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: SendParams = parse(params)?;
     let shared = engine.shared();
     let acct = account(shared, &p.account_id)?;
     let mut fields = p.fields;
     check_recipients(&fields).map_err(RpcError::Invalid)?;
+    fields.from = fields.from.trim().to_string();
+    if !fields.from.is_empty() {
+        let allowed = shared.read(|c| crate::account_settings::may_send_from(c, &p.account_id, &acct.email, &fields.from)).map_err(internal)?;
+        if !allowed {
+            return Err(RpcError::Invalid("the account does not send from that address".into()));
+        }
+    }
     let mut attachments = Vec::with_capacity(fields.attachments.len());
     for a in &fields.attachments {
         let Some(ok) = checked(engine.cache_dir(), a) else {

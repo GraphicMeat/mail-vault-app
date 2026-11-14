@@ -718,9 +718,12 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
         return true;
     };
     let fields = Fields::read(&json);
-    if !matches!(crate::accounts::load_account(shared, account), Ok(Some(_))) {
+    let Ok(Some(acct)) = crate::accounts::load_account(shared, account) else {
         return true;
-    }
+    };
+    // Who it goes out as, and where its Sent copy goes: the account's settings at send time.
+    let from = crate::account_settings::identity(shared, account, &acct.email, &acct.display_name, &fields.from);
+    let sent_folder = shared.read(|c| crate::account_settings::sent_folder_in(c, account)).ok().flatten();
     if let Err(why) = compose::check_recipients(&fields) {
         shared.log(&format!("[outbox] {account} {id}: INVALID {why}"));
         // Never tried: no attempt is counted.
@@ -740,7 +743,7 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
     };
     let remind = fields.remind_after_days.zip(message_id.clone());
     let email = fields.outgoing(message_id, attachments);
-    match backend.send(&email) {
+    match backend.send(&email, &from) {
         Ok(sent) => {
             drop(email);
             // The files go before the page hears `sent`.
@@ -753,7 +756,7 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
                 }
                 emit_result(shared, id, account, OutboxState::Sent.as_str(), None);
             }
-            if let Err(Fail::Code(code, why)) = backend.file_sent(&sent) {
+            if let Err(Fail::Code(code, why)) = backend.file_sent(&sent, sent_folder.as_deref()) {
                 shared.log(&format!("[outbox] {account} {id}: filing in Sent: {} {why}", code.as_str()));
             }
             true

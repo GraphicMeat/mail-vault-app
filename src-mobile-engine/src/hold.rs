@@ -185,6 +185,18 @@ pub(crate) fn retry(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     Ok(json!({ "queued": true }))
 }
 
+/// The account's password or servers were just changed and signed in with
+/// (`mobile.accounts.update`), its hold already dropped in that write: an INBOX pass with them,
+/// and the outbox and replay look at the account again at once.
+pub(crate) fn changed(engine: &Engine, account: &str) {
+    let shared = engine.shared();
+    if let Err(e) = engine.sync_worker().enqueue_inbox_waited(shared, account) {
+        shared.log(&format!("[auth] {account}: queueing a pass after the change: {e}"));
+    }
+    engine.outbox().wake(shared, Some(account));
+    engine.replay().wake(shared, Some(account));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

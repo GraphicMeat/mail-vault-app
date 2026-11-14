@@ -22,7 +22,8 @@
 //! `notify` takes effect only while notifications are on (`notifications`): an import never turns
 //! them on, since that needs the system's permission.
 
-use crate::db::Engine;
+use crate::backend::Identity;
+use crate::db::{Engine, Shared};
 use crate::rpc::{parse, RpcError};
 use crate::settings::{get_in, put_in};
 use mailvault_core::transfer::phone::PhoneAccountSettings;
@@ -288,6 +289,50 @@ pub(crate) fn notify_on(shared: &crate::db::Shared, account_id: &str) -> bool {
         .flatten()
         .as_deref()
         != Some("false")
+}
+
+/// The account's `sendAs` and `aliases` (address, name), read once.
+fn sending(c: &Connection, account_id: &str) -> rusqlite::Result<(String, Vec<(String, String)>)> {
+    let send_as = decode("sendAs", get_in(c, &key(account_id, "sendAs"))?).as_str().unwrap_or("").trim().to_string();
+    let aliases = decode("aliases", get_in(c, &key(account_id, "aliases"))?)
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| Some((a["address"].as_str()?.trim().to_string(), a["name"].as_str().unwrap_or("").trim().to_string())))
+        .collect();
+    Ok((send_as, aliases))
+}
+
+/// Whether account `account_id` (signing in as `login`) may send from `from`: the login, its
+/// `sendAs` or one of its aliases, in any case. Checked when a message is queued, with no network.
+pub(crate) fn may_send_from(c: &Connection, account_id: &str, login: &str, from: &str) -> rusqlite::Result<bool> {
+    let from = from.trim();
+    if from.eq_ignore_ascii_case(login.trim()) {
+        return Ok(true);
+    }
+    let (send_as, aliases) = sending(c, account_id)?;
+    Ok(send_as.eq_ignore_ascii_case(from) || aliases.iter().any(|(a, _)| a.eq_ignore_ascii_case(from)))
+}
+
+/// Who a message of account `account_id` goes out as. `from` is the address compose picked
+/// (checked by [`may_send_from`] when it was queued); empty is the account's default, its `sendAs`
+/// or else the login. The name is the alias's own when it has one, else the account's name
+/// (`display_name`). An alias removed while its message waited still sends from the address it
+/// was written from, under the account's name. A read failure counts as no `sendAs` and no aliases.
+pub(crate) fn identity(shared: &Shared, account_id: &str, login: &str, display_name: &str, from: &str) -> Identity {
+    let (send_as, aliases) = shared.read(|c| sending(c, account_id)).unwrap_or_default();
+    let address = match from.trim() {
+        "" if !send_as.is_empty() => send_as,
+        "" => login.trim().to_string(),
+        picked => picked.to_string(),
+    };
+    let own = aliases.iter().find(|(a, n)| a.eq_ignore_ascii_case(&address) && !n.is_empty()).map(|(_, n)| n.clone());
+    Identity { name: own.unwrap_or_else(|| display_name.trim().to_string()), address }
+}
+
+/// The folder the user picked for the account's Sent copies (`sentFolder`), if any.
+pub(crate) fn sent_folder_in(c: &Connection, account_id: &str) -> rusqlite::Result<Option<String>> {
+    Ok(decode("sentFolder", get_in(c, &key(account_id, "sentFolder"))?).as_str().map(str::to_string))
 }
 
 impl Engine {

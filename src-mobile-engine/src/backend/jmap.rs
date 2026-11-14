@@ -35,7 +35,7 @@
 //! server's `Retry-After` (capped) a few times as a transient condition. One session per account
 //! is kept in [`Sessions`] so a message open does not fetch the session again.
 
-use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
 use crate::accounts::{self, failure, load_account, map_error, AccountRow, Code, InsertError};
 use crate::actions::Kind;
 use crate::db::{lock, Engine, Shared};
@@ -1092,9 +1092,12 @@ impl Backend for JmapBackend<'_> {
         Ok(ReplyOutcome::SentCopyGone)
     }
 
-    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {
+    /// From an alias: core picks the server identity of that address (`E_JMAP_NO_IDENTITY`, a final
+    /// refusal, when the server lists none).
+    fn send(&mut self, email: &OutgoingEmail, from: &Identity) -> Result<SendOutcome, SendFail> {
         let not_sent = SendFail::unsent;
         let config = crate::net::core_config(&self.row, &self.cred).map_err(|e| not_sent(Fail::Code(Code::Invalid, e), true))?;
+        let config = super::sending_as(config, from);
         let built = smtp::build_mime(&config, email).map_err(|e| not_sent(Fail::Code(Code::Invalid, self.scrub(e)), true))?;
         // Core's JMAP send: identity for the From address, upload, import into Drafts, submit,
         // and `onSuccessUpdateEmail` files it in Sent.
@@ -1113,7 +1116,7 @@ impl Backend for JmapBackend<'_> {
         }
     }
 
-    fn file_sent(&mut self, _sent: &SendOutcome) -> Result<(), Fail> {
+    fn file_sent(&mut self, _sent: &SendOutcome, _folder: Option<&str>) -> Result<(), Fail> {
         // The submission's `onSuccessUpdateEmail` filed it in Sent.
         Ok(())
     }

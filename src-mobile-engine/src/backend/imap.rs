@@ -1,7 +1,7 @@
 //! [`Backend`] over IMAP, through mailvault-core. One signed-in session per backend; every method
 //! runs core's futures on the calling thread through [`crate::net::block_on`].
 
-use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -517,8 +517,8 @@ impl Backend for ImapBackend {
         self.step(async |session| apply_in(session, &caps, folder, kind, uids, target, before_wire).await)
     }
 
-    fn send(&mut self, email: &OutgoingEmail) -> Result<SendOutcome, SendFail> {
-        let config = &self.config;
+    fn send(&mut self, email: &OutgoingEmail, from: &Identity) -> Result<SendOutcome, SendFail> {
+        let config = &super::sending_as(self.config.clone(), from);
         let built = smtp::build_mime(config, email)
             .map_err(|e| SendFail::unsent(scrub(&self.secrets, Fail::Code(Code::Invalid, e)), true))?;
         // Phased: core says whether a failure came before or after the point of no return, which
@@ -533,11 +533,18 @@ impl Backend for ImapBackend {
         }
     }
 
-    fn file_sent(&mut self, sent: &SendOutcome) -> Result<(), Fail> {
+    fn file_sent(&mut self, sent: &SendOutcome, folder: Option<&str>) -> Result<(), Fail> {
         if sent.server_saved_sent {
             return Ok(());
         }
         self.step(async |session| {
+            // The folder the user picked; one renamed or gone since (`[TRYCREATE]`) is no reason to
+            // lose the copy: the server's Sent takes it.
+            if let Some(folder) = folder.filter(|f| !f.is_empty()) {
+                if imap::append_email(session, folder, &sent.raw, "\\Seen", None).await.is_ok() {
+                    return Ok(());
+                }
+            }
             let sent_box = imap::ensure_sent_mailbox(session).await?;
             imap::append_email(session, &sent_box, &sent.raw, "\\Seen", None).await?;
             Ok(())
