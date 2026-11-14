@@ -20,6 +20,16 @@
 // serialized again. Whatever the mail has (its own <html>, <head>, a comment first, or none), the
 // parser gives it exactly one head, and ours comes first in it.
 //
+// Link safety: the engine marks each disguised link it listed (`data-link-alert`, core's link scan)
+// and the frame wears desktop's warning marks on them. The frame runs no script and the page cannot
+// see a tap inside it, so with click confirmation (`markLinks`) a flagged link becomes an in-page
+// anchor to a sheet of our own at the end of the body, shown by CSS `:target` alone: the warning,
+// the link's text and its real URL, Cancel (an anchor that names nothing, so the sheet closes) and
+// Open anyway, the only element that carries the URL (web links only). The flagged link itself no
+// longer holds the URL, so a long press cannot open it either. Each prepare names its sheets
+// afresh and the mail's own `data-mv-link-*` attributes are dropped, so a mail cannot aim at them;
+// a mail whose CSS hides a sheet leaves a tap that opens nothing, never the URL.
+//
 // Theme: a text body follows the app theme. An html body is always drawn on a light canvas:
 // without scripts there is no Dark Reader, and mail written for white paper (dark text, no
 // background) would be unreadable on dark. The mail's own `prefers-color-scheme: dark` rules
@@ -81,6 +91,32 @@ export function linkifyTextHtml(text) {
   return out + escapeHtml(text.slice(last));
 }
 
+/** Desktop's marks on a flagged link (bodyScan.js LINK_ALERT_STYLE) and our link sheet. */
+const LINK_CSS = [
+  'a[data-link-alert]::before{display:inline!important;margin-right:3px!important;font-size:.9em!important}',
+  'a[data-link-alert="red"]::before{content:"\\26A0"!important;color:#ef4444!important}',
+  'a[data-link-alert="yellow"]::before{content:"\\26A0"!important;color:#f59e0b!important}',
+  'a[data-link-alert="red"]{outline:2px solid rgba(239,68,68,.3)!important;outline-offset:2px!important;border-radius:2px!important}',
+  'a[data-link-alert="yellow"]{outline:2px solid rgba(245,158,11,.3)!important;outline-offset:2px!important;border-radius:2px!important}',
+  '[data-mv-link-sheet] { display: none !important }',
+  '[data-mv-link-sheet]:target { display: block !important; position: fixed !important; inset: auto 0 0 0 !important;'
+    + ' z-index: 2147483647 !important; max-height: 85vh !important; overflow: auto !important; margin: 0 !important;'
+    + ' padding: 16px 16px 24px !important; background: #fff !important; color: #1a1a2e !important;'
+    + ' border: 0 !important; border-top: 4px solid #ef4444 !important; border-radius: 14px 14px 0 0 !important;'
+    + ' box-shadow: 0 -8px 32px rgba(0,0,0,.35) !important; font: 15px/1.45 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif !important;'
+    + ' text-align: start !important; visibility: visible !important; opacity: 1 !important; transform: none !important }',
+  '[data-mv-link-sheet="yellow"]:target { border-top-color: #f59e0b !important }',
+  '[data-mv-link-title]{display:block!important;margin:0 0 6px!important;font-weight:700!important;font-size:17px!important;color:#b91c1c!important}',
+  '[data-mv-link-sheet="yellow"] [data-mv-link-title]{color:#b45309!important}',
+  '[data-mv-link-reason]{display:block!important;margin:0 0 4px!important}',
+  '[data-mv-link-label]{display:block!important;margin:10px 0 2px!important;font-size:12px!important;color:#5b5b70!important}',
+  '[data-mv-link-value]{display:block!important;font:13px/1.4 ui-monospace,Menlo,monospace!important;word-break:break-all!important;color:#1a1a2e!important}',
+  '[data-mv-link-actions]{display:flex!important;gap:12px!important;margin-top:16px!important}',
+  '[data-mv-link-actions] a{flex:1!important;display:flex!important;align-items:center!important;justify-content:center!important;min-height:44px!important;border-radius:10px!important;font-weight:600!important;text-decoration:none!important}',
+  '[data-mv-link-actions] a[data-mv-link-cancel]{background:#4338ca!important;color:#fff!important}',
+  '[data-mv-link-actions] a[data-mv-link-open]{background:#fee2e2!important;color:#b91c1c!important;border:1px solid rgba(185,28,28,.3)!important}',
+];
+
 function frameCss({ colors, trackerLabel }) {
   return [
     `:root{color-scheme:${colors.scheme};background:${colors.bg};color:${colors.fg}}`,
@@ -91,6 +127,7 @@ function frameCss({ colors, trackerLabel }) {
     'pre.mv-text{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit}',
     // The engine's marker for a removed tracking pixel carries no text: it is labelled here.
     `[data-mv-tracker-blocked]::after { content: ${cssString(trackerLabel)} }`,
+    ...LINK_CSS,
   ].join('\n');
 }
 
@@ -183,6 +220,88 @@ function cleanMail(doc) {
 
 const parseHtml = (source) => new DOMParser().parseFromString(source, 'text/html');
 const serialize = (doc) => `<!doctype html>${doc.documentElement.outerHTML}`;
+
+/** Our sheet's attributes: a mail's own are dropped before ours go in. */
+const LINK_ATTRS = ['data-mv-link-sheet', 'data-mv-link-open', 'data-mv-link-cancel', 'data-mv-link-title', 'data-mv-link-reason', 'data-mv-link-label', 'data-mv-link-value', 'data-mv-link-actions'];
+const LEVELS = new Set(['red', 'yellow']);
+/** The URLs an Open anyway button may carry: web links (a flagged `javascript:` or `data:` gets none). */
+const WEB_HREF = /^\s*https?:/i;
+
+/** A fresh, unguessable id prefix for one prepare's sheets. */
+function sheetPrefix() {
+  const bytes = new Uint8Array(9);
+  try {
+    globalThis.crypto.getRandomValues(bytes);
+  } catch {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return `mv${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Whether `markLinks` has anything to do: a string check, so a clean mail is parsed no more. */
+const hasLinkMarks = (html) => /data-link-alert|data-mv-link/i.test(html);
+
+function sheetFor(doc, alert, ids, labels, text) {
+  const part = (tag, attr, content) => {
+    const el = doc.createElement(tag);
+    el.setAttribute(attr, '');
+    if (content != null) el.textContent = String(content);
+    return el;
+  };
+  const value = (content) => {
+    const el = part('div', 'data-mv-link-value', content);
+    el.setAttribute('dir', 'auto');
+    return el;
+  };
+  const sheet = doc.createElement('div');
+  sheet.id = ids.sheet;
+  sheet.setAttribute('data-mv-link-sheet', alert.level);
+  sheet.setAttribute('role', 'alertdialog');
+  sheet.append(part('div', 'data-mv-link-title', alert.level === 'red' ? labels.red : labels.yellow));
+  if (alert.reason) sheet.append(part('div', 'data-mv-link-reason', alert.reason));
+  sheet.append(part('div', 'data-mv-link-label', labels.textSays), value(text), part('div', 'data-mv-link-label', labels.goesTo), value(alert.actualUrl));
+  const actions = part('div', 'data-mv-link-actions');
+  const cancel = part('a', 'data-mv-link-cancel', labels.cancel);
+  cancel.setAttribute('href', `#${ids.cancel}`);
+  actions.append(cancel);
+  if (WEB_HREF.test(alert.actualUrl)) {
+    const open = part('a', 'data-mv-link-open', labels.openAnyway);
+    open.setAttribute('href', alert.actualUrl);
+    actions.append(open);
+  }
+  sheet.append(actions);
+  return sheet;
+}
+
+/**
+ * The mail with link safety applied, before it is cleaned (so our markup is cleaned and checked
+ * like the mail's): a `data-link-alert` stays only on a link whose URL and level the engine listed
+ * in `alerts`; with `confirm`, each such link goes to its sheet instead of its URL. `labels`:
+ * `{red, yellow, textSays, goesTo, openAnyway, cancel}` in the UI language.
+ */
+function markLinks(html, { alerts, confirm = false, labels = {} }, parse) {
+  const doc = parse(html);
+  for (const name of LINK_ATTRS) for (const el of doc.querySelectorAll(`[${name}]`)) el.removeAttribute(name);
+  const listed = new Map();
+  for (const a of Array.isArray(alerts) ? alerts : []) {
+    if (a && typeof a.actualUrl === 'string' && LEVELS.has(a.level) && !listed.has(a.actualUrl)) listed.set(a.actualUrl, a);
+  }
+  const prefix = sheetPrefix();
+  let n = 0;
+  for (const link of doc.querySelectorAll('[data-link-alert]')) {
+    const alert = link.localName === 'a' ? listed.get(link.getAttribute('href')) : undefined;
+    if (!alert || alert.level !== link.getAttribute('data-link-alert')) {
+      link.removeAttribute('data-link-alert');
+      continue;
+    }
+    if (!confirm) continue;
+    const ids = { sheet: `${prefix}-${n++}`, cancel: `${prefix}-none` };
+    link.setAttribute('href', `#${ids.sheet}`);
+    link.removeAttribute('title');
+    doc.body.append(sheetFor(doc, alert, ids, labels, alert.textContent ?? link.textContent));
+  }
+  return serialize(doc);
+}
 const MAX_PASSES = 4;
 
 /**
@@ -251,11 +370,13 @@ function assembledClean(doc) {
  * The expensive half, once per message body (Viewer.jsx memoizes it on the body): the cleaned
  * html, checked once more as the frame will parse the assembled document, or the text part (or,
  * for an html body the cleaner cannot settle, what that html says) escaped into a `<pre>`.
- * Assembling with other options changes only our own constant head strings.
+ * Assembling with other options changes only our own constant head strings. `links`:
+ * `{alerts, confirm, labels}` for link safety (`markLinks`), or null.
  */
-export function prepareMailBody({ html, text }, parse = parseHtml) {
+export function prepareMailBody({ html, text }, parse = parseHtml, links = null) {
   if (typeof html === 'string' && html.trim() !== '') {
-    const cleaned = cleanToFixpoint(html, parse);
+    const source = links && hasLinkMarks(html) ? markLinks(html, links, parse) : html;
+    const cleaned = cleanToFixpoint(source, parse);
     if (cleaned != null && PREFIX.test(cleaned)) {
       const prepared = { kind: 'html', markup: cleaned };
       if (assembledClean(parse(assembleMailFrame(prepared)))) return prepared;
@@ -270,6 +391,6 @@ export function prepareMailBody({ html, text }, parse = parseHtml) {
  * into a `<pre>`. `allowRemote` adds https: to the image sources; `theme` ('light' | 'dark') is
  * the app's. `trackerLabel` names the engine's tracker marker in the UI language.
  */
-export function buildMailFrame({ html, text, allowRemote = false, theme = 'light', trackerLabel = '', parse = parseHtml }) {
-  return assembleMailFrame(prepareMailBody({ html, text }, parse), { allowRemote, theme, trackerLabel });
+export function buildMailFrame({ html, text, allowRemote = false, theme = 'light', trackerLabel = '', links = null, parse = parseHtml }) {
+  return assembleMailFrame(prepareMailBody({ html, text }, parse, links), { allowRemote, theme, trackerLabel });
 }

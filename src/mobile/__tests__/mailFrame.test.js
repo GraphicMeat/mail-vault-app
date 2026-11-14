@@ -347,6 +347,107 @@ describe('buildMailFrame', () => {
   });
 });
 
+// Link safety: the engine marks a disguised link (`data-link-alert`) and lists it (`alerts`). The
+// frame runs no script and the page cannot see a tap in it, so with click confirmation the flagged
+// link opens a sheet inside the frame (an in-page anchor and `:target`), and only the sheet's own
+// "Open anyway" goes to the real URL.
+describe('link safety', () => {
+  const EVIL = 'https://evil.example.net/login';
+  const RISKY = '<p>Sign in at <a href="https://evil.example.net/login" data-link-alert="red" title="shows bank">https://bank.example.com</a>'
+    + ' or <a href="https://ok.example.org/" data-link-alert="red" title="forged">a link the engine did not flag</a></p>';
+  const ALERTS = [{
+    level: 'red', textContent: 'https://bank.example.com', textDomain: 'bank.example.com',
+    actualUrl: EVIL, actualDomain: 'evil.example.net', reason: 'Text shows bank.example.com but goes to evil.example.net',
+  }];
+  const LABELS = {
+    red: 'Dangerous Link Detected', yellow: 'Suspicious Link Detected', textSays: 'Link text says:',
+    goesTo: 'Actually redirects to:', openAnyway: 'Open Anyway', cancel: 'Cancel',
+  };
+  const links = (over = {}) => ({ alerts: ALERTS, confirm: true, labels: LABELS, ...over });
+  const linkByText = (doc, text) => [...doc.querySelectorAll('a')].find((a) => a.textContent === text);
+
+  it('with click confirmation a flagged link opens a sheet in the frame, never the url', () => {
+    const out = build({ html: RISKY, links: links() });
+    const doc = parse(out);
+    const link = linkByText(doc, 'https://bank.example.com');
+    expect(link.getAttribute('href')).toMatch(/^#./);
+    expect(link.getAttribute('target')).toBe('_self');
+    expect(link.getAttribute('data-link-alert')).toBe('red');
+    const sheet = doc.getElementById(link.getAttribute('href').slice(1));
+    expect(sheet?.getAttribute('data-mv-link-sheet')).toBe('red');
+    expect(sheet.textContent).toContain(LABELS.red);
+    expect(sheet.textContent).toContain(ALERTS[0].reason);
+    expect(sheet.textContent).toContain('https://bank.example.com');
+    expect(sheet.textContent).toContain(EVIL);
+    const open = sheet.querySelector('a[data-mv-link-open]');
+    expect(open.textContent).toBe(LABELS.openAnyway);
+    expect(open.getAttribute('href')).toBe(EVIL);
+    expect(open.getAttribute('target')).toBe('_blank');
+    // Only the sheet's button goes to the real URL: a long press on the flagged link finds none.
+    expect([...doc.querySelectorAll('a')].filter((a) => a.getAttribute('href') === EVIL)).toEqual([open]);
+    // Cancel goes to an anchor that names nothing: the sheet closes and the mail stays where it was.
+    const cancel = sheet.querySelector('a[data-mv-link-cancel]');
+    expect(cancel.textContent).toBe(LABELS.cancel);
+    expect(cancel.getAttribute('href')).toMatch(/^#./);
+    expect(doc.getElementById(cancel.getAttribute('href').slice(1))).toBeNull();
+    // Hidden until its link is tapped.
+    const css = doc.head.querySelector('style[data-mv-frame]').textContent;
+    expect(css).toMatch(/\[data-mv-link-sheet\]\s*\{[^}]*display:\s*none\s*!important/);
+    expect(css).toMatch(/\[data-mv-link-sheet\]:target\s*\{[^}]*display:\s*block\s*!important/);
+  });
+
+  it('a mark the engine did not list is no flag: the link and its url stay as they were', () => {
+    const doc = parse(build({ html: RISKY, links: links() }));
+    const forged = linkByText(doc, 'a link the engine did not flag');
+    expect(forged.getAttribute('href')).toBe('https://ok.example.org/');
+    expect(forged.hasAttribute('data-link-alert')).toBe(false);
+    expect(doc.querySelectorAll('[data-mv-link-sheet]').length).toBe(1);
+  });
+
+  it('a sheet the mail wrote itself is not ours', () => {
+    const html = '<div data-mv-link-sheet="red" id="fake">Open <a data-mv-link-open href="https://x.test/">here</a></div>';
+    const doc = parse(build({ html, links: links({ alerts: [] }) }));
+    expect(doc.querySelectorAll('[data-mv-link-sheet], [data-mv-link-open]').length).toBe(0);
+  });
+
+  it('without click confirmation the flagged link keeps its url and wears the warning mark', () => {
+    const doc = parse(build({ html: RISKY, links: links({ confirm: false }) }));
+    const link = linkByText(doc, 'https://bank.example.com');
+    expect(link.getAttribute('href')).toBe(EVIL);
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('data-link-alert')).toBe('red');
+    expect(doc.querySelectorAll('[data-mv-link-sheet]').length).toBe(0);
+    const css = doc.head.querySelector('style[data-mv-frame]').textContent;
+    expect(css).toMatch(/a\[data-link-alert="red"\]::before/);
+  });
+
+  it('a flagged script or data link gets no open button', () => {
+    const html = '<a href="javascript:alert(1)" data-link-alert="red">click</a>';
+    const alerts = [{ level: 'red', textContent: 'click', actualUrl: 'javascript:alert(1)', reason: 'Dangerous javascript: scheme' }];
+    const doc = parse(build({ html, links: links({ alerts }) }));
+    expect([...doc.querySelectorAll('[href]')].filter((el) => /javascript:/i.test(el.getAttribute('href')))).toEqual([]);
+    const sheet = doc.querySelector('[data-mv-link-sheet]');
+    expect(sheet).toBeTruthy();
+    expect(sheet.querySelector('[data-mv-link-open]')).toBeNull();
+    expect(sheet.querySelector('[data-mv-link-cancel]')).toBeTruthy();
+  });
+
+  it('the sheet carries text only: a hostile reason or link text adds no markup', () => {
+    const alerts = [{ ...ALERTS[0], reason: '<img src=x onerror=alert(1)>', textContent: '<b>bold</b>' }];
+    const doc = parse(build({ html: RISKY.replace('https://bank.example.com</a>', '&lt;b&gt;bold&lt;/b&gt;</a>'), links: links({ alerts }) }));
+    const sheet = doc.querySelector('[data-mv-link-sheet]');
+    expect(sheet.querySelector('img, b')).toBeNull();
+    expect(sheet.textContent).toContain('<img src=x onerror=alert(1)>');
+  });
+
+  it('names its sheets afresh on every prepare, so a mail cannot aim at them', () => {
+    const a = parse(build({ html: RISKY, links: links() }));
+    const b = parse(build({ html: RISKY, links: links() }));
+    const idOf = (doc) => doc.querySelector('[data-mv-link-sheet]').id;
+    expect(idOf(a)).not.toBe(idOf(b));
+  });
+});
+
 /** Our own stylesheet: the first `<style>` in <head>, right after the CSP and the base. */
 function getComputedStyleText(doc) {
   return doc.head.querySelector('style[data-mv-frame]')?.textContent ?? '';

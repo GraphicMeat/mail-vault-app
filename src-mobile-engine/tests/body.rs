@@ -359,3 +359,75 @@ fn a_row_cached_without_the_tracker_list_is_fetched_once_more() {
     assert!(fetches(&server).len() > before, "an old row was trusted");
     assert_eq!(again["trackerList"].as_array().unwrap().len(), 1, "{again}");
 }
+
+// ── Link safety (`linkSafetyEnabled`, Settings > Privacy & security) ──────────────────────────
+
+/// A link whose text shows one site and goes to another, beside an honest one.
+const PHISH_HTML: &str = "<p>Sign in at <a href=\"https://evil.example.net/login\">https://bank.example.com</a> \
+    or read <a href=\"https://bank.example.com/help\">the help</a></p>";
+
+/// The page sends the UI language's reason templates; the engine has no catalogs.
+fn link_texts() -> Value {
+    json!({ "linkSafety.reason.textMismatch": "shows {{textDomain}}, goes to {{actualDomain}}" })
+}
+
+fn body_with_texts(f: &Fixture, uid: u32) -> Value {
+    f.engine
+        .rpc("mobile.message.body", json!({ "accountId": f.account, "folder": "INBOX", "uid": uid, "texts": link_texts() }))
+        .unwrap()
+}
+
+fn stored_html(f: &Fixture, uid: i64) -> String {
+    f.db().query_row("SELECT html FROM bodies WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+}
+
+/// On (the default): core's link scan runs on the body the viewer frames. The disguised link is
+/// marked and listed with its reason in the UI language; the honest one is not. The cache keeps
+/// the html as it came, and a second open answers the same.
+#[test]
+fn link_safety_marks_a_disguised_link_and_lists_it() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, PHISH_HTML))));
+    let f = setup(&server);
+
+    let body = body_with_texts(&f, 1);
+    assert_eq!(body["maxAlertLevel"], "red", "{body}");
+    let alerts = body["alerts"].as_array().expect("alerts listed");
+    assert_eq!(alerts.len(), 1, "{body}");
+    assert_eq!(alerts[0]["level"], "red");
+    assert_eq!(alerts[0]["actualUrl"], "https://evil.example.net/login");
+    assert_eq!(alerts[0]["textContent"], "https://bank.example.com");
+    assert_eq!(alerts[0]["reason"], "shows bank.example.com, goes to evil.example.net");
+    let html = body["html"].as_str().unwrap();
+    assert!(html.contains("data-link-alert=\"red\""), "{html}");
+    assert_eq!(html.matches("data-link-alert").count(), 1, "only the disguised link is marked: {html}");
+
+    assert!(!stored_html(&f, 1).contains("data-link-alert"), "the cache keeps the html as it came");
+    assert_eq!(body_with_texts(&f, 1), body, "a cached open answers the same");
+}
+
+/// Off: the body is the html as it came, byte for byte, and nothing is listed.
+#[test]
+fn link_safety_off_leaves_the_html_as_it_came() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, PHISH_HTML))));
+    let f = setup(&server);
+    f.engine.rpc("mobile.prefs.set", json!({ "linkSafetyEnabled": false })).unwrap();
+
+    let body = body_with_texts(&f, 1);
+    assert_eq!(body["alerts"], json!([]), "{body}");
+    assert_eq!(body["maxAlertLevel"], Value::Null, "{body}");
+    assert_eq!(body["html"].as_str().unwrap(), stored_html(&f, 1));
+}
+
+/// A mail with nothing to flag keeps exactly the html it renders today (the scan's rewrite is used
+/// only when a link is flagged).
+#[test]
+fn a_mail_without_a_flagged_link_keeps_its_html() {
+    let html = "<p>Read <a href=\"https://bank.example.com/help\">the help</a> &amp; reply.</p>";
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, html))));
+    let f = setup(&server);
+
+    let body = body_with_texts(&f, 1);
+    assert_eq!(body["alerts"], json!([]), "{body}");
+    assert_eq!(body["maxAlertLevel"], Value::Null);
+    assert_eq!(body["html"].as_str().unwrap(), stored_html(&f, 1));
+}

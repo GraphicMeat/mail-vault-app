@@ -18,13 +18,15 @@
 // Preferences (`prefs`): the engine's `mobile.prefs.*` over prefs.js defaults (the phone as it
 // was), read on start and after an import that applied the desktop's settings; `setPrefs` writes
 // and keeps the engine's answer. The theme and palette land on the root element at once.
+// `threadMode`: the list asks the engine for conversations (`threads: true`) unless it is flat; a
+// change between the two opens the list afresh.
 import { create } from 'zustand';
 import { daemonCall, listen } from './transport.js';
 import { createPageCache, PAGE_SIZE } from './messagePages.js';
 import { ALL_INBOXES } from './folders.js';
 import { errorCodeOf, errorKey } from './errors.js';
 import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
-import { PREF_DEFAULTS, readPrefs, applyLook } from './prefs.js';
+import { PREF_DEFAULTS, readPrefs, applyLook, threadedList } from './prefs.js';
 import { loadMobileLocale } from './i18n.js';
 
 // The import's own refusals (`mobile.transfer.import`), shown by ImportFromDesktop.
@@ -94,13 +96,19 @@ export { ALL_INBOXES };
 
 const isInboxPath = (path) => typeof path === 'string' && path.toUpperCase() === INBOX;
 
-function listFor(accountId, folder) {
+/** The list of `folder`: one row per conversation when `threads` (engine `threads.rs`). */
+function listFor(accountId, folder, threads = false) {
+  const extra = threads ? { threads: true } : {};
+  let list;
   if (folder === ALL_INBOXES) {
-    return createPageCache((cursor, limit) =>
-      daemonCall('mobile.messages.page', { scope: 'allInboxes', cursor, limit }), PAGE_SIZE, { spansAccounts: true });
+    list = createPageCache((cursor, limit) =>
+      daemonCall('mobile.messages.page', { scope: 'allInboxes', cursor, limit, ...extra }), PAGE_SIZE, { spansAccounts: true });
+  } else {
+    list = createPageCache((cursor, limit) =>
+      daemonCall('mobile.messages.page', { accountId, folder, cursor, limit, ...extra }), PAGE_SIZE);
   }
-  return createPageCache((cursor, limit) =>
-    daemonCall('mobile.messages.page', { accountId, folder, cursor, limit }), PAGE_SIZE);
+  list.threads = threads;
+  return list;
 }
 
 /** The keys `list` names the rows `uids` of `accountId` by. */
@@ -259,13 +267,19 @@ export function createMobileStore() {
     /** Opens `folder` of `accountId`: a fresh list, remembered for the next launch. */
     function open(accountId, folder) {
       flush();
-      const list = listFor(accountId, folder);
+      const list = listFor(accountId, folder, threadedList(get().prefs));
       set({ activeAccountId: accountId, activeFolder: folder, list, listGen: null });
       writeStorage(STORAGE_ACCOUNT, accountId);
       writeStorage(STORAGE_FOLDER, JSON.stringify({ accountId, path: folder }));
       // Into or out of All Inboxes the chip counts other accounts.
       loadPending();
       return list;
+    }
+
+    /** The preferences changed: a list of the other kind (conversations or messages) opens afresh. */
+    function followPrefs(prefs) {
+      const { list, activeAccountId, activeFolder } = get();
+      if (list && activeAccountId && activeFolder && list.threads !== threadedList(prefs)) open(activeAccountId, activeFolder);
     }
 
     async function activate(accountId, folder) {
@@ -412,6 +426,7 @@ export function createMobileStore() {
           const prefs = readPrefs(await daemonCall('mobile.prefs.get'));
           set({ prefs });
           applyLook(prefs);
+          followPrefs(prefs);
           return prefs;
         } catch {
           return get().prefs;
@@ -424,6 +439,7 @@ export function createMobileStore() {
           const prefs = readPrefs(await daemonCall('mobile.prefs.set', patch));
           set({ prefs });
           applyLook(prefs);
+          followPrefs(prefs);
           return true;
         } catch {
           return false;
@@ -682,7 +698,8 @@ export function createMobileStore() {
           }
           set({ accounts });
           loadOutbox();
-          get().loadPrefs();
+          // Before the first list: it asks for conversations or messages as the preference says.
+          await get().loadPrefs();
           if (!accounts.length) {
             set({ status: 'noAccount', list: null });
             return;

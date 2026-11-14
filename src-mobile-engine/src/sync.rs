@@ -1345,7 +1345,8 @@ pub(crate) fn store_found(shared: &Shared, account: &str, folder: &str, headers:
 }
 
 /// What a reply needs beyond the list row (`messages.thread_json`): `{cc, replyTo: [{name,
-/// address}], references: [id], date}`, so preparing a reply needs no server.
+/// address}], references: [id], inReplyTo, date}`, so preparing a reply needs no server, and
+/// the threaded list (`threads.rs`) joins a reply to its conversation.
 fn thread_json(h: &Header) -> String {
     let list = |l: &[mailvault_core::imap::EmailAddress]| -> Vec<Value> {
         l.iter().map(|a| json!({ "name": a.name, "address": a.address })).collect()
@@ -1354,6 +1355,7 @@ fn thread_json(h: &Header) -> String {
         "cc": list(&h.cc),
         "replyTo": h.reply_to.iter().map(|a| json!({ "name": a.name, "address": a.address })).collect::<Vec<_>>(),
         "references": h.references.clone().unwrap_or_default(),
+        "inReplyTo": h.in_reply_to.clone(),
         "date": h.date.clone().or_else(|| h.message_date.clone()),
     })
     .to_string()

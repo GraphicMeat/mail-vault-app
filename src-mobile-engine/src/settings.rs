@@ -52,7 +52,9 @@ pub(crate) enum Kind {
 pub(crate) const SWIPES: &[&str] = &["toggleRead", "delete", "flag", "move", "none"];
 
 /// The phone's preferences: key, kind, and the default (as JSON) that is the phone's behaviour
-/// without the setting. Shown and applied: theme .. emailViewerTheme. Stored for later waves: the rest.
+/// without the setting. Shown and applied: theme .. emailViewerTheme, the conversation list
+/// (threadMode, threadSortOrder: the page asks for `threads`, `threads.rs`) and link safety.
+/// Stored for later waves: the rest.
 pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("theme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
     ("palette", Kind::OneOf(&["indigo", "graphite", "teal"]), "\"indigo\""),
@@ -78,11 +80,13 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("timeFormat", Kind::OneOf(&["auto", "12h", "24h"]), "\"auto\""),
     // The message's own theme (Settings > Appearance); "system" follows the app's.
     ("emailViewerTheme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
-    // Stored only.
+    // The list groups conversations unless flat (the page passes `threads`; `threads.rs`).
     ("threadMode", Kind::OneOf(&["grouped", "expandable", "flat"]), "\"expandable\""),
     ("threadSortOrder", Kind::OneOf(&["oldest-first", "newest-first"]), "\"oldest-first\""),
     ("autoSaveDrafts", Kind::Bool, "true"),
     ("attachmentReminder", Kind::Bool, "true"),
+    // The body reply carries core's link scan (body.rs); the viewer marks flagged links and, with
+    // click confirmation, asks before opening one.
     ("linkSafetyEnabled", Kind::Bool, "true"),
     ("linkSafetyClickConfirm", Kind::Bool, "true"),
     ("importantSenders", Kind::List(64 * 1024), "[]"),
@@ -147,6 +151,12 @@ pub(crate) fn get_in(c: &Connection, key: &str) -> rusqlite::Result<Option<Strin
 /// while it is on.
 pub(crate) fn tracker_blocking_on(c: &Connection) -> rusqlite::Result<bool> {
     Ok(get_in(c, "trackerBlockingEnabled")?.as_deref() != Some("false"))
+}
+
+/// Link safety scanning (`linkSafetyEnabled`, on unless turned off): the body reply carries core's
+/// link scan (`body.rs`).
+pub(crate) fn link_safety_on(c: &Connection) -> rusqlite::Result<bool> {
+    Ok(get_in(c, "linkSafetyEnabled")?.as_deref() != Some("false"))
 }
 
 pub(crate) fn put_in(c: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {

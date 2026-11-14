@@ -4,6 +4,9 @@
 // leading side (`swipeRightAction`, toggle read by default), swiping left the trailing side
 // (`swipeLeftAction`, delete by default); `none` leaves that side still. `onSwipe(kind, row)` gets
 // `seen`, `unseen`, `flag`, `unflag`, `delete` or `move`.
+// A conversation's row (`threadCount` over 1, engine `threads.rs`) is its newest message's, with
+// the number of messages beside the sender; it reads unread while any message is, and a swipe on
+// it acts on every message (App.jsx, prefs.js `rowUids`).
 // Deliberately not built on src/components/EmailRow: that pulls in the desktop stores.
 import React, { memo } from 'react';
 import { displayText } from '../utils/bidiText.js';
@@ -33,23 +36,27 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
   if (!row) {
     return <div className="mv-row-slot mv-row--placeholder" data-index={index} data-loaded="0" style={style} aria-hidden="true" />;
   }
-  const unread = !row.seen;
+  // A conversation reads as its messages do: unread while any is, flagged while any is.
+  const shown = row.threadCount > 1
+    ? { ...row, seen: row.seen && !(row.threadUnread > 0), flagged: row.flagged || row.threadFlagged === true }
+    : row;
+  const unread = !shown.seen;
   const onAction = (side) => {
-    const kind = swipeKind(side === 'leading' ? leadingAction : trailingAction, row);
-    if (onSwipe && kind) onSwipe(kind, row);
+    const kind = swipeKind(side === 'leading' ? leadingAction : trailingAction, shown);
+    if (onSwipe && kind) onSwipe(kind, shown);
   };
   const spec = (action) => {
     switch (action) {
       case 'toggleRead':
         return {
-          label: row.seen ? t('mobile.actions.markUnread') : t('mobile.actions.markRead'),
+          label: shown.seen ? t('mobile.actions.markUnread') : t('mobile.actions.markRead'),
           className: 'mv-swipe__act--read',
-          icon: <EnvelopeIcon open={!row.seen} />,
+          icon: <EnvelopeIcon open={!shown.seen} />,
         };
       case 'delete':
         return { label: t('common.delete'), className: 'mv-swipe__act--delete', icon: <TrashIcon /> };
       case 'flag':
-        return { label: row.flagged ? t('mobile.actions.unflag') : t('mobile.actions.flag'), className: 'mv-swipe__act--flag', icon: <FlagIcon filled={!row.flagged} /> };
+        return { label: shown.flagged ? t('mobile.actions.unflag') : t('mobile.actions.flag'), className: 'mv-swipe__act--flag', icon: <FlagIcon filled={!shown.flagged} /> };
       case 'move':
         return { label: t('mobile.actions.move'), className: 'mv-swipe__act--move', icon: <MoveIcon /> };
       default:
@@ -71,7 +78,12 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
               <span className="mv-row__acct" role="img" aria-label={account.email} style={{ backgroundColor: accountColor(account) }} />
             )}
             <span className="mv-row__sender" dir="auto">{senderOf(row, t)}</span>
-            {row.flagged && <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flagged')} />}
+            {row.threadCount > 1 && (
+              <span className="mv-row__count" data-mv-thread-count={row.threadCount} role="img" aria-label={t('email.thread.messagesInThread', { count: row.threadCount })}>
+                {row.threadCount}
+              </span>
+            )}
+            {shown.flagged && <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flagged')} />}
             <span className="mv-row__date">{formatEmailDate(row.dateMs, undefined, dates)}</span>
           </span>
           <span className="mv-row__subject" dir="auto">{displayText(row.subject, t('common.noSubject'))}</span>

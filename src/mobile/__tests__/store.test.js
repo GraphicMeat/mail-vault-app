@@ -10,12 +10,19 @@ const engine = vi.hoisted(() => ({
   listGen: {},
   handlers: new Map(), // event name -> Set of handlers
   calls: [],
+  prefs: null, // the stored preferences; null: the engine does not answer them
 }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
     engine.calls.push([method, params]);
     switch (method) {
+      case 'mobile.prefs.get':
+        if (!engine.prefs) throw Object.assign(new Error(method), { code: 'UNSUPPORTED' });
+        return { ...engine.prefs };
+      case 'mobile.prefs.set':
+        engine.prefs = { ...(engine.prefs || {}), ...params };
+        return { ...engine.prefs };
       case 'mobile.accounts.list':
         return { accounts: engine.accounts.map((a) => ({ ...a })) };
       case 'mobile.folders.list':
@@ -84,6 +91,7 @@ beforeEach(() => {
   engine.listGen = {};
   engine.handlers = new Map();
   engine.calls = [];
+  engine.prefs = null;
   localStorage.clear();
 });
 
@@ -103,7 +111,8 @@ describe('mobile store', () => {
     expect(localStorage.getItem(STORAGE_ACCOUNT)).toBe('a1');
     await s.list.ensure(0);
     expect(s.list.rowAt(0).uid).toBe(250);
-    expect(callsOf('mobile.messages.page')[0]).toEqual({ accountId: 'a1', folder: 'INBOX', cursor: null, limit: 100 });
+    // Conversations by default (desktop's `threadMode`).
+    expect(callsOf('mobile.messages.page')[0]).toEqual({ accountId: 'a1', folder: 'INBOX', cursor: null, limit: 100, threads: true });
   });
 
   it('init restores the saved account and folder, and falls back when they are gone', async () => {
@@ -212,6 +221,27 @@ describe('mobile store', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_FOLDER))).toEqual({ accountId: 'a1', path: 'Work' });
     await s.list.ensure(0);
     expect(s.list.total).toBe(20);
+  });
+
+  it('conversations follow threadMode: read before the first list, and a change opens the list afresh', async () => {
+    engine.prefs = { threadMode: 'flat' };
+    const store = createMobileStore();
+    await store.getState().init();
+    const flat = store.getState().list;
+    await flat.ensure(0);
+    expect(callsOf('mobile.messages.page')).toEqual([{ accountId: 'a1', folder: 'INBOX', cursor: null, limit: 100 }]);
+    expect(await store.getState().setPrefs({ threadSortOrder: 'newest-first' })).toBe(true);
+    expect(store.getState().list).toBe(flat);
+    expect(await store.getState().setPrefs({ threadMode: 'grouped' })).toBe(true);
+    const threaded = store.getState().list;
+    expect(threaded).not.toBe(flat);
+    expect(threaded.threads).toBe(true);
+    await threaded.ensure(0);
+    expect(callsOf('mobile.messages.page').at(-1)).toEqual({ accountId: 'a1', folder: 'INBOX', cursor: null, limit: 100, threads: true });
+    expect(store.getState().activeFolder).toBe('INBOX');
+    // Between the two threaded modes the list stays.
+    await store.getState().setPrefs({ threadMode: 'expandable' });
+    expect(store.getState().list).toBe(threaded);
   });
 
   it('selectAccount switches to that account inbox', async () => {

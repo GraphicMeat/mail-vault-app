@@ -182,6 +182,41 @@ describe('Settings preference rows', () => {
     await waitFor(() => expect(pick('markAsReadDelay')).toBeTruthy());
   });
 
+  it('link safety rows: scanning and click confirmation, the second only while scanning is on', async () => {
+    expect(PREF_DEFAULTS.linkSafetyEnabled).toBe(true);
+    expect(PREF_DEFAULTS.linkSafetyClickConfirm).toBe(true);
+    expect(readPrefs({ linkSafetyClickConfirm: false }).linkSafetyClickConfirm).toBe(false);
+    render(<Settings onClose={() => {}} page="privacy" />);
+    expect(pick('linkSafetyEnabled').textContent).toContain(t('settings.security.linkSafetyScanning'));
+    expect(pick('linkSafetyClickConfirm').textContent).toContain(t('settings.security.clickConfirmation'));
+    await act(async () => { fireEvent.click(pick('linkSafetyClickConfirm')); });
+    await waitFor(() => expect(useMobileStore.getState().prefs.linkSafetyClickConfirm).toBe(false));
+    expect(engine.calls).toContainEqual(['mobile.prefs.set', { linkSafetyClickConfirm: false }]);
+    await act(async () => { fireEvent.click(pick('linkSafetyEnabled')); });
+    await waitFor(() => expect(useMobileStore.getState().prefs.linkSafetyEnabled).toBe(false));
+    expect(pick('linkSafetyClickConfirm')).toBe(null);
+  });
+
+  it('conversation rows: the mode, and the order while the list is threaded', async () => {
+    expect(PREF_DEFAULTS.threadMode).toBe('expandable');
+    expect(PREF_DEFAULTS.threadSortOrder).toBe('oldest-first');
+    expect(readPrefs({ threadMode: 'flat' }).threadMode).toBe('flat');
+    render(<Settings onClose={() => {}} page="appearance" />);
+    const mode = pick('threadMode');
+    expect([...mode.options].map((o) => [o.value, o.textContent])).toEqual([
+      ['grouped', t('settings.appearance.threadModeGrouped')],
+      ['expandable', t('settings.appearance.threadModeExpandable')],
+      ['flat', t('settings.appearance.threadModeFlat')],
+    ]);
+    expect([...pick('threadSortOrder').options].map((o) => o.textContent)).toEqual([t('settings.appearance.oldestFirst'), t('settings.appearance.newestFirst')]);
+    await act(async () => { fireEvent.change(pick('threadSortOrder'), { target: { value: 'newest-first' } }); });
+    expect(engine.calls).toContainEqual(['mobile.prefs.set', { threadSortOrder: 'newest-first' }]);
+    await act(async () => { fireEvent.change(mode, { target: { value: 'flat' } }); });
+    await waitFor(() => expect(useMobileStore.getState().prefs.threadMode).toBe('flat'));
+    expect(engine.calls).toContainEqual(['mobile.prefs.set', { threadMode: 'flat' }]);
+    expect(pick('threadSortOrder')).toBe(null);
+  });
+
   it('the language row stores the language', async () => {
     render(<Settings onClose={() => {}} page="appearance" />);
     await act(async () => { fireEvent.change(pick('language'), { target: { value: 'de' } }); });

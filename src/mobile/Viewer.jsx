@@ -11,6 +11,11 @@
 // Each attachment is a chip (AttachmentChip.jsx): tap downloads, opens or retries, a long press
 // shares. A link tapped in the mail leaves the frame for the system browser: the shell's
 // navigation hook (src-tauri-mobile/native) cancels it in the webview and hands the URL out.
+// Link safety (Settings > Privacy & security): the engine scans the links while
+// `linkSafetyEnabled` is on and sends the flagged ones (`alerts`, reasons written from the
+// `linkSafety.reason.*` templates sent with the request); the frame marks them, and with
+// `linkSafetyClickConfirm` a flagged link opens a warning sheet inside the frame first
+// (mailFrame.js `markLinks`), whose Open anyway is the only way to its URL.
 // The toolbar at the bottom acts on the message: read or unread, flag, move (MovePicker.jsx over
 // the account's folders) and delete; App.jsx sends the actions (store `act`). Its More button opens
 // a sheet with Reply, Reply all and Forward (`onCompose(mode)`: App.jsx opens Compose.jsx).
@@ -21,7 +26,7 @@ import { assembleMailFrame, prepareMailBody } from './mailFrame.js';
 import { formatFullDate } from './format.js';
 import { ERROR_KEYS, errorKey } from './errors.js';
 import { afterNextPaint, bodyLoaded, notePrepare, viewerPainted } from './perf.js';
-import { useT } from './i18n.js';
+import { getMobileLocale, useT } from './i18n.js';
 import MovePicker from './MovePicker.jsx';
 import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
@@ -200,6 +205,13 @@ function TrackerShield({ count, stripped, onOpen }) {
 
 const noop = () => {};
 
+const LINK_REASONS = ['dangerousScheme', 'textMismatch', 'redirect', 'ipAddress'];
+
+/** The engine writes link-safety reasons from these templates, in the UI language. */
+function linkTexts(t) {
+  return Object.fromEntries(LINK_REASONS.map((k) => [`linkSafety.reason.${k}`, t(`linkSafety.reason.${k}`)]));
+}
+
 export default function Viewer({ accountId, folder, row, onClose, folders = [], onAction = noop, onMove = noop, onDelete = noop, onCompose = noop, initialPicking = false }) {
   const t = useT();
   const [seen, setSeen] = useState(row.seen !== false);
@@ -249,7 +261,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   useEffect(() => {
     let live = true;
     setState({ phase: 'loading' });
-    daemonCall('mobile.message.body', { accountId, folder, uid: row.uid }).then(
+    daemonCall('mobile.message.body', { accountId, folder, uid: row.uid, texts: linkTexts(t) }).then(
       (body) => {
         if (live) setState(body?.gone ? { phase: 'gone' } : { phase: 'ready', body });
       },
@@ -258,7 +270,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       },
     );
     return () => { live = false; };
-  }, [accountId, folder, row.uid, attempt]);
+  }, [accountId, folder, row.uid, attempt, t]);
 
   const body = state.phase === 'ready' ? state.body : null;
   const hasContent = Boolean(body && ((body.html && body.html.trim()) || (body.text && body.text.trim())));
@@ -271,13 +283,25 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   // Inline `cid:` images, from the parts on the phone as `data:` URLs (inlineImages.js).
   const images = useInlineImages({ accountId, folder, uid: row.uid, html: rawHtml, attachments: body?.attachments });
   const html = useMemo(() => withInlineImages(rawHtml, images), [rawHtml, images]);
+  const linkSafety = useMobileStore((s) => s.prefs.linkSafetyEnabled !== false);
+  const confirmLinks = useMobileStore((s) => s.prefs.linkSafetyEnabled !== false && s.prefs.linkSafetyClickConfirm !== false);
+  const locale = getMobileLocale();
+  const linkLabels = useMemo(() => ({
+    red: t('linkSafety.dangerousLinkDetected'),
+    yellow: t('linkSafety.suspiciousLinkDetected'),
+    textSays: t('linkSafety.linkTextSays'),
+    goesTo: t('linkSafety.actuallyRedirects'),
+    openAnyway: t('linkSafety.openAnyway'),
+    cancel: t('common.cancel'),
+  }), [t, locale]); // eslint-disable-line react-hooks/exhaustive-deps
+  const alerts = linkSafety ? body?.alerts : null;
   const prepared = useMemo(() => {
     if (!hasContent) return null;
     const t0 = performance.now();
-    const out = prepareMailBody({ html, text });
+    const out = prepareMailBody({ html, text }, undefined, { alerts, confirm: confirmLinks, labels: linkLabels });
     notePrepare(performance.now() - t0, (html || text || '').length);
     return out;
-  }, [html, text, hasContent]);
+  }, [html, text, hasContent, alerts, confirmLinks, linkLabels]);
   const autoImages = useMobileStore((s) => s.prefs.holdExternalContent === false);
   const remoteOn = allowRemote || Boolean(autoImages && body && !((body.trackers || 0) > 0 && !body.trackersStripped));
   const srcDoc = useMemo(

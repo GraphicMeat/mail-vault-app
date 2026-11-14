@@ -57,7 +57,45 @@ describe('Viewer', () => {
     expect(f.getAttribute('title')).toBe(t('mobile.viewer.frameTitle'));
     expect(f.hasAttribute('src')).toBe(false);
     expect(f.getAttribute('srcdoc')).toContain('<meta http-equiv="Content-Security-Policy"');
-    expect(engine.calls).toEqual([['mobile.message.body', { accountId: 'a1', folder: 'INBOX', uid: 7 }]]);
+    expect(engine.calls).toEqual([['mobile.message.body', { accountId: 'a1', folder: 'INBOX', uid: 7, texts: expect.any(Object) }]]);
+  });
+
+  it('sends the link-safety reason templates in the UI language', async () => {
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const { texts } = engine.calls[0][1];
+    for (const key of ['dangerousScheme', 'textMismatch', 'redirect', 'ipAddress']) {
+      expect(texts[`linkSafety.reason.${key}`]).toBe(t(`linkSafety.reason.${key}`));
+      expect(texts[`linkSafety.reason.${key}`]).not.toBe(`linkSafety.reason.${key}`);
+    }
+  });
+
+  it('link safety: a flagged link asks first while click confirmation is on, and is only marked when off', async () => {
+    const evil = 'https://evil.example.net/login';
+    engine.reply = body({
+      html: `<p><a href="${evil}" data-link-alert="red" title="r">https://bank.example.com</a></p>`,
+      alerts: [{ level: 'red', textContent: 'https://bank.example.com', actualUrl: evil, reason: 'goes elsewhere' }],
+      maxAlertLevel: 'red',
+    });
+    const prefs = useMobileStore.getState().prefs;
+    expect(prefs.linkSafetyEnabled).toBe(true);
+    expect(prefs.linkSafetyClickConfirm).toBe(true);
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const asking = new DOMParser().parseFromString(frame().getAttribute('srcdoc'), 'text/html');
+    const sheet = asking.querySelector('[data-mv-link-sheet]');
+    expect(sheet.textContent).toContain(t('linkSafety.dangerousLinkDetected'));
+    expect(sheet.textContent).toContain('goes elsewhere');
+    expect(sheet.querySelector('[data-mv-link-open]').textContent).toBe(t('linkSafety.openAnyway'));
+    expect(sheet.querySelector('[data-mv-link-open]').getAttribute('href')).toBe(evil);
+    expect([...asking.querySelectorAll('a')].filter((a) => a.getAttribute('href') === evil)).toHaveLength(1);
+
+    act(() => useMobileStore.setState({ prefs: { ...prefs, linkSafetyClickConfirm: false } }));
+    const marked = new DOMParser().parseFromString(frame().getAttribute('srcdoc'), 'text/html');
+    expect(marked.querySelector('[data-mv-link-sheet]')).toBeNull();
+    const link = marked.querySelector('a[data-link-alert="red"]');
+    expect(link.getAttribute('href')).toBe(evil);
+    act(() => useMobileStore.setState({ prefs }));
   });
 
   it('shows the header from the row before the body arrives', async () => {

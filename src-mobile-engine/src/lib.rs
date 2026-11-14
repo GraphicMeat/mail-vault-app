@@ -28,6 +28,7 @@ mod search;
 pub mod secrets;
 mod settings;
 mod sync;
+mod threads;
 mod transfer;
 #[cfg(feature = "perf-gate")]
 pub mod seed;
