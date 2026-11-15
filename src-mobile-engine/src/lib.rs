@@ -10,6 +10,7 @@ mod backend;
 mod background;
 mod billing_client;
 mod body;
+mod chat;
 mod compose;
 mod db;
 mod followup;

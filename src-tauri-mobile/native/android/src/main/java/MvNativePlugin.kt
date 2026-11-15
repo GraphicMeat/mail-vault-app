@@ -18,7 +18,9 @@ import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -57,6 +59,11 @@ class FileArgs {
 @InvokeArg
 class UrlArgs {
     lateinit var url: String
+}
+
+@InvokeArg
+class IconArgs {
+    lateinit var icon: String
 }
 
 @InvokeArg
@@ -143,6 +150,46 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
     // MainActivity is singleTask: a tap while it exists arrives here.
     override fun onNewIntent(intent: Intent) {
         Notifier.takeTap(activity, intent)
+    }
+
+    // `setAppIcon {icon}`: the launcher entry is one of two activity-aliases of MainActivity
+    // (gen/android AndroidManifest.xml: IconPurple, enabled by default, and IconTeal). Enables the
+    // chosen one, then disables the other, without killing the app; a no-op (no write) when
+    // already set.
+    @Command
+    fun setAppIcon(invoke: Invoke) {
+        val args = invoke.parseArgs(IconArgs::class.java)
+        try {
+            val pm = activity.packageManager
+            val base = activity.javaClass.name.substringBeforeLast('.')
+            val icons = listOf("purple" to "$base.IconPurple", "teal" to "$base.IconTeal")
+            val wanted = if (args.icon == "teal") "teal" else "purple"
+            val on = icons.first { it.first == wanted }.second
+            val enabled = PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            val disabled = PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            // DEFAULT is the manifest's value: IconPurple on, IconTeal off. Every launch calls
+            // this, and a component write is a real package change (the launcher reshuffles,
+            // some builds restart the app), so nothing is written when the icon is already set.
+            fun isOn(key: String, name: String): Boolean =
+                when (pm.getComponentEnabledSetting(ComponentName(activity.packageName, name))) {
+                    enabled -> true
+                    PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> key == "purple"
+                    else -> false
+                }
+            if (icons.all { (key, name) -> isOn(key, name) == (key == wanted) }) {
+                invoke.resolve()
+                return
+            }
+            pm.setComponentEnabledSetting(ComponentName(activity.packageName, on), enabled, PackageManager.DONT_KILL_APP)
+            for ((_, name) in icons) {
+                if (name != on) {
+                    pm.setComponentEnabledSetting(ComponentName(activity.packageName, name), disabled, PackageManager.DONT_KILL_APP)
+                }
+            }
+            invoke.resolve()
+        } catch (e: Exception) {
+            invoke.reject(e.message ?: e.javaClass.simpleName, "INTERNAL")
+        }
     }
 
     @Command

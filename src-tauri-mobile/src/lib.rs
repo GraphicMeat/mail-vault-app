@@ -112,6 +112,22 @@ async fn mobile_notifications_permission(app: tauri::AppHandle, prompt: Option<b
     .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
 }
 
+/// Settings > Appearance > App icon (`appIcon`): switches the home screen icon to `icon`
+/// (`purple` | `teal`); a no-op when it already is. The page calls it when the preference changes
+/// and at launch, so an imported choice applies too. Rejects with `{code, message}`: `INVALID`,
+/// `INTERNAL`.
+#[tauri::command]
+async fn mobile_app_icon(app: tauri::AppHandle, icon: String) -> Result<(), NativeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let native = app
+            .try_state::<MvNative<tauri::Wry>>()
+            .ok_or_else(|| NativeError::new("INTERNAL", "the native plugin is not loaded"))?;
+        native.set_app_icon(&icon)
+    })
+    .await
+    .map_err(|e| NativeError::new("INTERNAL", e.to_string()))?
+}
+
 /// How long Android keeps a staged copy: its viewer or share target reads the file after
 /// `startActivity` returns and nothing says when it is done, so copies go in a later sweep.
 const STAGE_TTL: Duration = Duration::from_secs(60 * 60);
@@ -575,6 +591,7 @@ pub fn run() {
             mobile_auth_close,
             mobile_notification_take,
             mobile_notifications_permission,
+            mobile_app_icon,
             store::mobile_store_products,
             store::mobile_store_purchase,
             store::mobile_store_restore

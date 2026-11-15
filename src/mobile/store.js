@@ -27,6 +27,7 @@ import { ALL_INBOXES } from './folders.js';
 import { errorCodeOf, errorKey } from './errors.js';
 import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
 import { PREF_DEFAULTS, readPrefs, applyLook, threadedList } from './prefs.js';
+import { followAppIcon } from './appIcon.js';
 import { loadMobileLocale } from './i18n.js';
 
 // The import's own refusals (`mobile.transfer.import`), shown by ImportFromDesktop.
@@ -429,6 +430,7 @@ export function createMobileStore() {
           set({ prefs });
           applyLook(prefs);
           followPrefs(prefs);
+          followAppIcon(prefs);
           return prefs;
         } catch {
           return get().prefs;
@@ -442,6 +444,7 @@ export function createMobileStore() {
           set({ prefs });
           applyLook(prefs);
           followPrefs(prefs);
+          followAppIcon(prefs);
           return true;
         } catch {
           return false;

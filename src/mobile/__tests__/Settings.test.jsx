@@ -273,7 +273,7 @@ describe('Settings pages, as desktop lays them out', () => {
       r.unmount();
       return prefs;
     };
-    expect(on('appearance')).toEqual(['theme', 'palette', 'language', 'emailViewerTheme', 'threadMode', 'threadSortOrder', 'dateFormat', 'timeFormat', 'textScale', 'appFont', 'listDensity', 'listPreviewLines', 'signatureDisplay', 'actionButtonDisplay']);
+    expect(on('appearance')).toEqual(['theme', 'palette', 'language', 'emailViewerTheme', 'appIcon', 'viewStyle', 'threadMode', 'threadSortOrder', 'dateFormat', 'timeFormat', 'textScale', 'appFont', 'listDensity', 'listPreviewLines', 'signatureDisplay', 'actionButtonDisplay']);
     expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'afterDeleteSameAccount', 'trackpadSwipeEnabled', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled', 'attachmentReminder', 'refreshOnLaunch', 'autoDownloadAttachments']);
     // Remote content is a privacy choice on desktop (Privacy & security > Security).
     expect(on('privacy')).toEqual(['holdExternalContent', 'trackerBlockingEnabled', 'linkSafetyEnabled', 'linkSafetyClickConfirm']);

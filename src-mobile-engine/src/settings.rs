@@ -92,6 +92,10 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     // The list groups conversations unless flat (the page passes `threads`; `threads.rs`).
     ("threadMode", Kind::OneOf(&["grouped", "expandable", "flat"]), "\"expandable\""),
     ("threadSortOrder", Kind::OneOf(&["oldest-first", "newest-first"]), "\"oldest-first\""),
+    // Mail view: the list, or chat (the folder by person, `chat.rs`; ChatView.jsx).
+    ("viewStyle", Kind::OneOf(&["list", "chat"]), "\"list\""),
+    // The home screen icon (the shell sets the OS alternate icon: `mobile_app_icon`).
+    ("appIcon", Kind::OneOf(&["purple", "teal"]), "\"purple\""),
     ("autoSaveDrafts", Kind::Bool, "true"),
     ("attachmentReminder", Kind::Bool, "true"),
     // The body reply carries core's link scan (body.rs); the viewer marks flagged links and, with

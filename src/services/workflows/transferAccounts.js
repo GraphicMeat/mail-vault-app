@@ -77,7 +77,7 @@ export async function phoneQr({ password }) {
 // refreshInterval, daemon*, onboarding, layout or other UI memory. The sound goes as its name (the
 // phone plays the system's sound unless it is `none`).
 const PHONE_GLOBAL_KEYS = [
-  'language', 'emailViewerTheme', 'dateFormat', 'customDateFormat', 'timeFormat', 'threadMode', 'threadSortOrder',
+  'language', 'emailViewerTheme', 'dateFormat', 'customDateFormat', 'timeFormat', 'threadMode', 'threadSortOrder', 'viewStyle', 'appIcon',
   'markAsReadMode', 'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction',
   'sendDelay', 'autoSaveDrafts', 'attachmentReminder', 'defaultSignatureEnabled', 'holdExternalContent',
   'linkSafetyEnabled', 'linkSafetyClickConfirm', 'trackerBlockingEnabled',

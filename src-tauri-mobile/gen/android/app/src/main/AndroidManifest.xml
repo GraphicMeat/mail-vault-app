@@ -20,11 +20,35 @@
             android:label="@string/main_activity_title"
             android:name=".MainActivity"
             android:exported="true">
+        </activity>
+        <!-- The launcher entry: one alias per home screen icon (Settings > Appearance > App icon),
+             exactly one enabled. The native plugin's setAppIcon switches them (MvNativePlugin.kt). -->
+        <activity-alias
+            android:name=".IconPurple"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="@string/main_activity_title"
+            android:enabled="true"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconTeal"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_teal"
+            android:roundIcon="@mipmap/ic_launcher_teal_round"
+            android:label="@string/main_activity_title"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
           android:name="androidx.core.content.FileProvider"

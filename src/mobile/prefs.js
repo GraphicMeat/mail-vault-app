@@ -27,6 +27,10 @@ export const PREF_DEFAULTS = Object.freeze({
   // message. The phone opens a conversation on a screen of its own in either threaded mode.
   threadMode: 'expandable',
   threadSortOrder: 'oldest-first',
+  // Mail view: the message list, or chat (people, then their conversations: ChatView.jsx).
+  viewStyle: 'list',
+  // The home screen icon (appIcon.js; the shell switches the OS icon).
+  appIcon: 'purple',
   // Compose asks before sending a message that mentions an attachment and carries none.
   attachmentReminder: true,
   // Compose's "Templates": `[{name, body}]` (Settings > Mail preferences).

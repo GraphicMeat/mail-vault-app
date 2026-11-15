@@ -14,6 +14,7 @@ import { daemonCall } from './transport.js';
 import { LOCALES } from '../i18n/languages.js';
 import { THEMES, PALETTES, SWIPE_ACTIONS, SEND_DELAYS, MARK_READ_DELAYS, THREAD_MODES, THREAD_ORDERS } from './prefs.js';
 import TemplatesSettings from './TemplatesSettings.jsx';
+import AppIconSetting from './AppIconSetting.jsx';
 
 const DATE_FORMATS = ['auto', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd', 'dd MMM yyyy', 'custom'];
 
@@ -128,10 +129,18 @@ export default function SettingsPrefs({ section }) {
               options={THEMES.map((v) => [v, v === 'system' ? t('settings.section.system') : t(`settings.colors.${v}`)])}
               onChange={(emailViewerTheme) => set({ emailViewerTheme })}
             />
+            <AppIconSetting />
           </div>
 
           <h2 className="mv-settings__heading">{t('settings.appearance.section.reading')}</h2>
           <div className="mv-settings__list" data-mv-settings-threads>
+            <Choice
+              name="viewStyle"
+              label={t('workspace.mailExperience')}
+              value={prefs.viewStyle}
+              options={[['list', t('workspace.emailView')], ['chat', t('workspace.chatView')]]}
+              onChange={(viewStyle) => set({ viewStyle })}
+            />
             <Choice
               name="threadMode"
               label={t('settings.appearance.threadMode')}
