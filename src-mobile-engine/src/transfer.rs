@@ -244,6 +244,21 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     if let Some(list) = &s.important_senders {
         values.push(("importantSenders", json!(list.iter().map(|e| json!({ "match": e.matches, "throughQuietHours": e.through_quiet_hours })).collect::<Vec<_>>())));
     }
+    // AI on an endpoint; a loopback URL is the desktop's own computer, not the phone.
+    if let Some(ai) = &s.ai_endpoint {
+        let url = ai.endpoint_url.as_deref().map(str::trim).unwrap_or("");
+        if !url.is_empty() && !mailvault_core::ai::endpoint_is_on_device(url) {
+            values.push(("aiEndpointUrl", json!(url)));
+            if let Some(m) = &ai.endpoint_model {
+                values.push(("aiEndpointModel", json!(m.trim())));
+            }
+            for (key, v) in [("aiEnabled", ai.enabled), ("aiSkipPreview", ai.skip_preview)] {
+                if let Some(v) = v {
+                    values.push((key, json!(v)));
+                }
+            }
+        }
+    }
     if let Some(list) = &s.templates {
         values.push(("templates", json!(list.iter().map(|t| json!({ "name": t.name, "body": t.body })).collect::<Vec<_>>())));
     }

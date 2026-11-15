@@ -75,6 +75,16 @@ it('sends the phone-relevant global settings and nothing machine-bound', async (
   }
 });
 
+it('sends an endpoint AI setup without its key or consent, and nothing for an on-device provider', async () => {
+  useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'endpoint', endpointUrl: ' https://ai.example.test/v1 ', endpointModel: 'llama3', endpointConsented: true, skipPreview: true } });
+  await phoneQr({ password: 'correct horse battery' });
+  expect(sent().settings.aiEndpoint).toEqual({ enabled: true, endpointUrl: 'https://ai.example.test/v1', endpointModel: 'llama3', skipPreview: true });
+  mockDaemonCall.mockClear();
+  useSettingsStore.setState({ aiSettings: { enabled: true, provider: 'appleFm', endpointUrl: 'https://ai.example.test/v1', endpointModel: '' } });
+  await phoneQr({ password: 'correct horse battery' });
+  expect(sent().settings).not.toHaveProperty('aiEndpoint');
+});
+
 it('sends each account its own settings and its offline window inputs', async () => {
   h.accounts = [{ id: 'a', email: 'a@x.test', password: 'pw', sentFolderOverride: 'Sent Items' }, { id: 'b', email: 'b@x.test', password: 'pw' }];
   useSettingsStore.setState({

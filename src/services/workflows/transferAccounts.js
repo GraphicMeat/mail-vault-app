@@ -73,7 +73,7 @@ export async function phoneQr({ password }) {
 }
 
 // The desktop settings the phone takes (the phone applies them on its first import that carries
-// them). Never: backup*, snapshot*, cleanupRules, transferLimits, billing, AI keys, PGP, sound,
+// them). AI goes as `aiEndpoint` (below). Never: backup*, snapshot*, cleanupRules, transferLimits, billing, AI keys, PGP, sound,
 // badge, refreshInterval, daemon*, onboarding, layout or other UI memory.
 const PHONE_GLOBAL_KEYS = [
   'language', 'emailViewerTheme', 'dateFormat', 'customDateFormat', 'timeFormat', 'threadMode', 'threadSortOrder',
@@ -92,6 +92,18 @@ function phoneGlobalSettings(s, theme) {
     out.importantSenders = n.importantSenders
       .filter(e => e && typeof e.match === 'string')
       .map(e => ({ match: e.match, throughQuietHours: !!e.throughQuietHours }));
+  }
+  // AI with an endpoint, the phone's one provider: the switch, URL, model and review choice. Never
+  // the key, nor the desktop's consent (the phone reviews its first send itself). The phone leaves
+  // out a loopback URL: that server runs on this computer, not on the phone.
+  const ai = s.aiSettings;
+  if (ai?.provider === 'endpoint' && typeof ai.endpointUrl === 'string' && ai.endpointUrl.trim()) {
+    out.aiEndpoint = {
+      enabled: !!ai.enabled,
+      endpointUrl: ai.endpointUrl.trim(),
+      endpointModel: typeof ai.endpointModel === 'string' ? ai.endpointModel.trim() : '',
+      skipPreview: !!ai.skipPreview,
+    };
   }
   if (Array.isArray(s.emailTemplates) && s.emailTemplates.length) {
     out.templates = s.emailTemplates

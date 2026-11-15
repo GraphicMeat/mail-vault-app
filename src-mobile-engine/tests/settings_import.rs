@@ -5,7 +5,7 @@
 
 use mailvault_core::transfer::crypto::{Params, MIN_M_KIB};
 use mailvault_core::transfer::phone::{
-    frames, seal_with, PhoneAccount, PhoneAccountNotifications, PhoneAccountSettings, PhoneAlias, PhoneAuth, PhoneBundle, PhoneKind,
+    frames, seal_with, PhoneAccount, PhoneAccountNotifications, PhoneAccountSettings, PhoneAiEndpoint, PhoneAlias, PhoneAuth, PhoneBundle, PhoneKind,
     PhoneQuietHours, PhoneSettings, PhoneSignature, PhoneTemplate, MAX_FRAME_CHARS,
 };
 use mailvault_mobile_engine::{Engine, MemorySecrets};
@@ -356,4 +356,35 @@ fn removing_an_account_forgets_its_settings() {
         .query_row("SELECT COUNT(*) FROM settings WHERE key LIKE 'acct.%'", [], |r| r.get(0))
         .unwrap();
     assert_eq!(left, 0);
+}
+
+/// Desktop's AI on an endpoint arrives as the phone's AI settings; never a key or a review (the
+/// bundle has neither), and a loopback URL (the desktop's own computer) not at all.
+#[test]
+fn an_endpoint_ai_setup_arrives_and_a_loopback_one_does_not() {
+    let ai = |url: &str| PhoneAiEndpoint {
+        enabled: Some(true),
+        endpoint_url: Some(url.into()),
+        endpoint_model: Some("llama3".into()),
+        skip_preview: Some(true),
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let mut s = desk_settings();
+    s.ai_endpoint = Some(ai(" https://ai.example.test/v1 "));
+    import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(
+        (p["aiEnabled"].clone(), p["aiEndpointUrl"].clone(), p["aiEndpointModel"].clone(), p["aiSkipPreview"].clone()),
+        (json!(true), json!("https://ai.example.test/v1"), json!("llama3"), json!(true))
+    );
+    assert_eq!(e.rpc("mobile.ai.status", json!({})).unwrap(), json!({ "hasKey": false, "reviewed": false }));
+
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let mut s = desk_settings();
+    s.ai_endpoint = Some(ai("http://localhost:11434/v1"));
+    import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!((p["aiEnabled"].clone(), p["aiEndpointUrl"].clone()), (json!(false), json!("")));
 }
