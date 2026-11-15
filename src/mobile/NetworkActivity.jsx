@@ -65,8 +65,12 @@ export default function NetworkActivity() {
   // The latest load wins: an older answer that lands later is dropped.
   const seq = useRef(0);
 
+  // A load on its way (its seq), so the refresh never supersedes a slow list before it lands.
+  const inFlight = useRef(0);
+
   const load = useCallback(async () => {
     const mine = ++seq.current;
+    inFlight.current = mine;
     try {
       const reply = await daemonCall('mobile.netActivity.list', {
         sinceMs: Date.now() - RANGES[query.range],
@@ -79,12 +83,15 @@ export default function NetworkActivity() {
       }
     } catch {
       if (mounted.current && mine === seq.current) setFailed(true);
+    } finally {
+      if (inFlight.current === mine) inFlight.current = 0;
     }
   }, [query]);
 
   useEffect(() => {
     load();
-    const timer = setInterval(load, REFRESH_MS);
+    // A tick while a load is on its way is skipped; a changed filter still loads at once.
+    const timer = setInterval(() => { if (!inFlight.current) load(); }, REFRESH_MS);
     return () => clearInterval(timer);
   }, [load]);
 

@@ -4,10 +4,11 @@
 // threaded list's: a tap opens the conversation screen (ThreadView) or the message, a swipe acts on
 // it. Both read again whenever the folder's list reloads (`list.version` moves: new mail, a delete,
 // a move), and a row waiting out its undo toast is left out, as in the list.
-import React, { useEffect, useReducer, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { displayText } from '../utils/bidiText.js';
-import MessageRow, { ROW_HEIGHT } from './MessageRow.jsx';
+import MessageRow from './MessageRow.jsx';
+import { rowHeight } from './prefs.js';
 import { daemonCall } from './transport.js';
 import { formatEmailDate } from './format.js';
 import { useT } from './i18n.js';
@@ -21,17 +22,29 @@ function useListVersion(list) {
   return list ? list.version : 0;
 }
 
-/** The people, virtualized like the message list (one fixed row height, nothing measured). */
+/**
+ * The people, virtualized like the message list: one row height from the preferences (text size,
+ * density, preview lines; MessageList.jsx), nothing measured. A person row always has its address
+ * line, so it is never shorter than one preview line.
+ */
 function People({ people, onPick }) {
   const t = useT();
   const dates = useMobileStore((s) => s.prefs);
+  const height = useMobileStore((s) => rowHeight({ ...s.prefs, listPreviewLines: Math.max(1, s.prefs.listPreviewLines ?? 1) }));
   const scrollRef = useRef(null);
   const virtualizer = useVirtualizer({
     count: people.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => height,
     overscan: 8,
   });
+  // A preference changed the height: every position is recomputed from the new estimate.
+  const measured = useRef(height);
+  useLayoutEffect(() => {
+    if (measured.current === height) return;
+    measured.current = height;
+    virtualizer.measure();
+  }, [height, virtualizer]);
   if (!people.length) return <div className="mv-list"><p className="mv-list__empty">{t('mobile.list.empty')}</p></div>;
   return (
     <div ref={scrollRef} className="mv-list">
@@ -43,7 +56,7 @@ function People({ people, onPick }) {
               key={p.email}
               className="mv-row-slot"
               data-mv-chat-person={p.email}
-              style={{ height: `${ROW_HEIGHT}px`, transform: `translateY(${start}px)` }}
+              style={{ height: `${height}px`, transform: `translateY(${start}px)` }}
             >
               <button type="button" className={p.unread > 0 ? 'mv-row mv-row--unread' : 'mv-row'} onClick={() => onPick(p)}>
                 <span className="mv-row__top">
@@ -72,6 +85,7 @@ export default function ChatView({ accountId, folder, list, onOpen, onSwipe }) {
   const [people, setPeople] = useState(null);
   const [person, setPerson] = useState(null);
   const [topics, setTopics] = useState(null);
+  const height = useMobileStore((s) => rowHeight(s.prefs));
 
   useEffect(() => {
     let live = true;
@@ -116,9 +130,9 @@ export default function ChatView({ accountId, folder, list, onOpen, onSwipe }) {
         </header>
         <div className="mv-list">
           {shown && (
-            <div className="mv-list__inner" style={{ height: `${shown.length * ROW_HEIGHT}px` }}>
+            <div className="mv-list__inner" style={{ height: `${shown.length * height}px` }}>
               {shown.map((r, i) => (
-                <MessageRow key={r.uid} index={i} start={i * ROW_HEIGHT} row={r} onOpen={onOpen} onSwipe={onSwipe} />
+                <MessageRow key={r.uid} index={i} start={i * height} row={r} onOpen={onOpen} onSwipe={onSwipe} />
               ))}
             </div>
           )}

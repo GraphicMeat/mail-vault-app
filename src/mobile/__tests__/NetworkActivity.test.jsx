@@ -4,10 +4,10 @@
 // narrowing the rows on screen, and how long the history is kept.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { t } from '../i18n.js';
 
-const engine = vi.hoisted(() => ({ calls: [], retention: 'week' }));
+const engine = vi.hoisted(() => ({ calls: [], retention: 'week', hold: null }));
 
 const EVENTS = [
   { atMs: Date.now() - 1000, direction: 'out', protocol: 'imap', host: 'imap.example.test', port: 993, purpose: 'sync', account: 'ada@example.test', bytesUp: 100, bytesDown: 2048, durationMs: 120, result: 'ok', country: 'US' },
@@ -19,6 +19,7 @@ vi.mock('../transport.js', () => ({
     engine.calls.push([method, params]);
     switch (method) {
       case 'mobile.netActivity.list':
+        if (engine.hold) await engine.hold;
         return {
           events: EVENTS.filter((e) => (!params.country || e.country === params.country) && (!params.account || e.account === params.account)),
           countries: [{ country: 'US', connections: 1, bytesUp: 100, bytesDown: 2048, hosts: ['imap.example.test'] }, { country: 'DE', connections: 1, bytesUp: 10, bytesDown: 20, hosts: ['mailvaultapp.com'] }],
@@ -40,6 +41,7 @@ const { default: NetworkActivity } = await import('../NetworkActivity.jsx');
 beforeEach(() => {
   engine.calls = [];
   engine.retention = 'week';
+  engine.hold = null;
 });
 afterEach(cleanup);
 
@@ -99,5 +101,23 @@ describe('Settings > Network Activity', () => {
     fireEvent.change(picker(t('netActivity.retention')), { target: { value: 'month' } });
     await waitFor(() => expect(engine.calls.some(([m, p]) => m === 'mobile.netActivity.setRetention' && p.retention === 'month')).toBe(true));
     await waitFor(() => expect([...picker(t('netActivity.range')).options].map((o) => o.value)).toEqual(['hour', 'day', 'week', 'twoWeeks', 'month']));
+  });
+
+  it('a slow list still lands: the refresh waits while one is on its way', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      let release;
+      engine.hold = new Promise((r) => { release = r; });
+      render(<NetworkActivity />);
+      await act(async () => { vi.advanceTimersByTime(15_000); });
+      expect(lists()).toHaveLength(1);
+      engine.hold = null;
+      await act(async () => { release(); });
+      await waitFor(() => expect(rows()).toEqual(['imap.example.test', 'mailvaultapp.com']));
+      await act(async () => { vi.advanceTimersByTime(5_000); });
+      expect(lists()).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

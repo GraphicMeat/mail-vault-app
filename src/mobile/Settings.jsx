@@ -165,8 +165,19 @@ function Chevron() {
 export default function Settings({ onClose, onReplayTour, version = APP_VERSION, page: startPage = 'root' }) {
   const t = useT();
   const [page, setPage] = useState(startPage);
+  // A list page opened from another page (Storage's Offline row): Back returns to that page.
+  // `{ page, to }`, cleared by the next Back.
+  const returnTo = useRef(null);
+  const openFrom = useCallback((from, to) => {
+    returnTo.current = { page: to, to: from };
+    setPage(to);
+  }, []);
   // System Back on a page goes to the list first, as the header's Back does.
-  const toList = useCallback(() => setPage((p) => SUB_PAGES[p] || 'root'), []);
+  const toList = useCallback(() => {
+    const r = returnTo.current;
+    returnTo.current = null;
+    setPage((p) => (r && r.page === p ? r.to : SUB_PAGES[p] || 'root'));
+  }, []);
   useBackLayer(page !== 'root', toList);
   const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
@@ -346,7 +357,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         {page === 'quickActions' && <QuickActionsSettings />}
         {page === 'billing' && <Billing />}
         {page === 'encryption' && <EncryptionSettings />}
-        {page === 'storage' && <StorageSettings onOpenOffline={() => setPage('offline')} />}
+        {page === 'storage' && <StorageSettings onOpenOffline={() => openFrom('storage', 'offline')} />}
         {page === 'dataUsage' && <DataUsage />}
         {page === 'pending' && <PendingActions />}
         {page === 'logs' && <LogsSettings />}

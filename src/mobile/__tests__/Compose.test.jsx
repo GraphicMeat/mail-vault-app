@@ -1070,4 +1070,30 @@ describe('Compose with AI (Settings > AI)', () => {
     expect(body().value).toBe(`AI summarize\n\nAI tone\n\n${QUOTE}`);
     useMobileStore.setState((st) => ({ prefs: { ...st.prefs, aiEnabled: false } }));
   });
+
+  it('a rewrite or a drafted reply keeps the signature: AI sees only what the user wrote', async () => {
+    engine.accountSettings = { accountId: 'a1', signature: { html: '', text: 'Ann', enabled: true } };
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, aiEnabled: true } }));
+    renderCompose(reply());
+    await waitFor(() => expect(body().value).toBe(`\n\n-- \nAnn\n\n${QUOTE}`));
+    typeInto(body(), `hey send it\n\n-- \nAnn\n\n${QUOTE}`);
+    await pick('tone:formal');
+    expect(callsOf('mobile.ai.run')[0]).toEqual({ action: 'tone', tone: 'formal', accountId: 'a1', text: 'hey send it', confirmed: true });
+    expect(body().value).toBe(`AI tone\n\n-- \nAnn\n\n${QUOTE}`);
+    await pick('draftReply');
+    expect(body().value).toBe(`AI draftReply\n\n-- \nAnn\n\n${QUOTE}`);
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, aiEnabled: false } }));
+  });
+
+  it('Shorten on a new message keeps the signature under the result', async () => {
+    engine.accountSettings = { accountId: 'a1', signature: { html: '', text: 'Ann', enabled: true } };
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, aiEnabled: true } }));
+    renderCompose();
+    await waitFor(() => expect(body().value).toBe('\n\n-- \nAnn'));
+    typeInto(body(), 'a long note\n\n-- \nAnn');
+    await pick('shorten');
+    expect(callsOf('mobile.ai.run')[0]).toEqual({ action: 'shorten', accountId: 'a1', text: 'a long note', confirmed: true });
+    expect(body().value).toBe('AI shorten\n\n-- \nAnn');
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, aiEnabled: false } }));
+  });
 });

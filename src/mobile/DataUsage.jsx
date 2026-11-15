@@ -21,7 +21,8 @@ const PERIODS = [
   ['year', 'settings.dataUsage.period.year'],
 ];
 
-const mbOf = (bytes) => (bytes == null ? '' : String(Math.round(bytes / MB)));
+// MB as the field shows it: up to two decimals, so a limit under a whole MB reads as typed.
+const mbOf = (bytes) => (bytes == null ? '' : String(Number((bytes / MB).toFixed(2))));
 
 function Toggle({ label, hint, checked, disabled, onChange, name }) {
   const id = useId();
@@ -58,12 +59,16 @@ function LimitField({ label, typed, placeholder, onCommit, name }) {
         className="mv-setting__select mv-usage__limit"
         data-mv-usage-limit={name}
         type="number"
-        inputMode="numeric"
+        inputMode="decimal"
         min="0"
+        step="any"
         defaultValue={mbOf(typed)}
         placeholder={placeholder}
         onBlur={(e) => {
           const raw = e.target.value.trim();
+          // Unchanged from what the field showed: nothing to write (a shown value is rounded).
+          const shown = mbOf(typed);
+          if (raw === '' ? shown === '' : shown !== '' && Number(raw) === Number(shown)) return;
           const mb = raw === '' ? null : Number(raw);
           if (mb !== null && !(Number.isFinite(mb) && mb >= 0)) return;
           const bytes = mb === null ? null : Math.round(mb * MB);

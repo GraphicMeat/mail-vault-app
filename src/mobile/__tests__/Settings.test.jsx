@@ -293,6 +293,21 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('settings.tab.privacySecurity'));
   });
 
+  it('Offline opened from Storage goes back to Storage, then to the list', async () => {
+    render(<Settings onClose={() => {}} page="storage" />);
+    await waitFor(() => expect(document.querySelector('[data-mv-storage-offline]')).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-mv-storage-offline]'));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.offline'));
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('settings.tab.storage'));
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
+    // Offline from the list goes back to the list.
+    fireEvent.click(document.querySelector('[data-mv-settings-page="offline"]'));
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
+  });
+
   it('the accounts page lists the accounts; the help page has the version and the source', () => {
     const r = render(<Settings onClose={() => {}} page="accounts" />);
     expect(screen.getByText(A1.email)).toBeTruthy();

@@ -1636,3 +1636,11 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   overflow-wrap: anywhere;
 }
 .mv-ai__buttons { padding: 0 16px 12px; }
+/* Network Activity and Unsubscribe rows (NetworkActivity.jsx, UnsubscribeSettings.jsx): a host:port
+   or a sender's address has no break point, so it wraps anywhere rather than run off the screen. */
+.mv-net__row { overflow-wrap: anywhere; }
+.mv-net__host { overflow-wrap: anywhere; }
+.mv-net__failed { color: var(--mv-danger); font-weight: 600; }
+.mv-net__stat { justify-content: space-between; gap: 12px; }
+.mv-unsub__row { overflow-wrap: anywhere; }
+.mv-unsub__confirm { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px; }

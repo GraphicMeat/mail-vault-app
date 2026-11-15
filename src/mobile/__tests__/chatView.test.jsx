@@ -131,6 +131,43 @@ describe('mail view chat', () => {
     expect(document.querySelector('[data-mv-chat="people"]')).toBeTruthy();
   });
 
+  it('people and conversations are as tall as a list row at the text size, and follow a change', async () => {
+    engine.prefs = { viewStyle: 'chat', textScale: 1.5 };
+    const App = await fresh();
+    const { useMobileStore } = await import('../store.js');
+    const { rowHeight, PREF_DEFAULTS } = await import('../prefs.js');
+    const big = rowHeight({ ...PREF_DEFAULTS, textScale: 1.5 });
+    const slot = (email) => document.querySelector(`[data-mv-chat-person="${email}"]`);
+    render(<App />);
+    await waitFor(() => expect(person('bob@example.test')).toBeTruthy());
+    expect(slot('ann@example.test').style.height).toBe(`${big}px`);
+    expect(slot('bob@example.test').style.transform).toBe(`translateY(${big}px)`);
+
+    // Back to the default size: every position moves with it.
+    const normal = rowHeight(PREF_DEFAULTS);
+    await act(async () => { useMobileStore.setState((s) => ({ prefs: { ...s.prefs, textScale: 1 } })); });
+    await waitFor(() => expect(slot('bob@example.test').style.transform).toBe(`translateY(${normal}px)`));
+    expect(slot('ann@example.test').style.height).toBe(`${normal}px`);
+
+    // A person's conversations stack at the same height.
+    await act(async () => { useMobileStore.setState((s) => ({ prefs: { ...s.prefs, textScale: 1.5 } })); });
+    await act(async () => { fireEvent.click(person('ann@example.test')); });
+    await waitFor(() => expect(document.querySelectorAll('[data-mv-chat="topics"] [data-loaded="1"]')).toHaveLength(2));
+    const second = document.querySelector('[data-mv-chat="topics"] [data-index="1"]');
+    expect(second.style.transform).toBe(`translateY(${big}px)`);
+    expect(document.querySelector('[data-mv-chat="topics"] .mv-list__inner').style.height).toBe(`${2 * big}px`);
+  });
+
+  it('a person row keeps room for its address with no preview lines', async () => {
+    engine.prefs = { viewStyle: 'chat', listPreviewLines: 0 };
+    const App = await fresh();
+    const { rowHeight, PREF_DEFAULTS } = await import('../prefs.js');
+    render(<App />);
+    await waitFor(() => expect(person('ann@example.test')).toBeTruthy());
+    const slot = document.querySelector('[data-mv-chat-person="ann@example.test"]');
+    expect(slot.style.height).toBe(`${rowHeight({ ...PREF_DEFAULTS, listPreviewLines: 1 })}px`);
+  });
+
   it('a person with nothing left goes back to the people', async () => {
     engine.prefs = { viewStyle: 'chat' };
     const App = await fresh();
