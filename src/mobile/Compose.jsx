@@ -172,6 +172,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const templates = useMobileStore((s) => s.prefs.templates) || [];
   const caret = useRef(null); // where a template goes: the body's caret, once it had one
   const quote = useRef(''); // the quote prepare put under the body: not the user's words
+  const sigBlock = useRef(''); // the signature put above the quote ("\n\n-- \n..."): not theirs either
   const premium = usePremium();
   const remindOffered = useMobileStore((s) => s.accounts.find((a) => a.id === accountId)?.kind !== 'graph');
   const [edits, setEdits] = useState(0);
@@ -351,7 +352,8 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     if (mode !== 'new' || openDraft) return;
     signature.current.then((sig) => {
       if (!sig || !live.current || touched.current.has('text')) return;
-      setText((cur) => (cur ? cur : withSignature('', sig)));
+      sigBlock.current = withSignature('', sig);
+      setText((cur) => (cur ? cur : sigBlock.current));
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -393,6 +395,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       // Room to write, the signature, then the quote.
       const sig = await signature.current;
       if (!live.current) return;
+      if (sig) sigBlock.current = withSignature('', sig);
       fill('text', `${starter}${sig ? `${withSignature('', sig)}${p.quoteText ? `\n\n${p.quoteText}` : ''}` : initialText(p.quoteText || '')}`, setText);
       setAttachments((list) => [...list, ...forwardsOf(p.attachments)]);
       const pending = Array.isArray(p.pending) ? p.pending : [];
@@ -545,10 +548,14 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       ai.clearError();
     }
   }, [ai.error]); // eslint-disable-line react-hooks/exhaustive-deps
-  // What the user wrote and the quote under it, which a rewrite keeps.
+  // What the user wrote, and the signature and quote under it, which a rewrite keeps: AI is
+  // given only the user's words.
   const splitQuote = (cur) => {
-    const tail = quote.current ? `\n\n${quote.current}` : '';
-    return tail && cur.endsWith(tail) ? [cur.slice(0, -tail.length), tail] : [cur, ''];
+    const quoted = quote.current ? `\n\n${quote.current}` : '';
+    let [own, tail] = quoted && cur.endsWith(quoted) ? [cur.slice(0, -quoted.length), quoted] : [cur, ''];
+    const sig = sigBlock.current;
+    if (sig && own.endsWith(sig)) [own, tail] = [own.slice(0, -sig.length), `${sig}${tail}`];
+    return [own, tail];
   };
   const runAi = (action, tone) => {
     setAiPicking(false);

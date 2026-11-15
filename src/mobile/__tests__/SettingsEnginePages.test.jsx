@@ -220,6 +220,23 @@ describe('Settings > Data usage', () => {
     ]);
   });
 
+  it('a limit under a whole MB shows as typed, and a blur with no change writes nothing', async () => {
+    engine.usage = { accounts: [usageEntry('a1', { typed: { dailyDownLimitBytes: 0.5 * MB, dailyUpLimitBytes: 1.234567 * MB } })] };
+    render(<DataUsage />);
+    await waitFor(() => expect(document.querySelector('[data-mv-usage-account="a1"]')).toBeTruthy());
+    const down = document.querySelector('[data-mv-usage-limit="down"]');
+    const up = document.querySelector('[data-mv-usage-limit="up"]');
+    expect(down.value).toBe('0.5');
+    expect(up.value).toBe('1.23');
+    fireEvent.blur(down);
+    fireEvent.blur(up);
+    await act(async () => {});
+    expect(calls('mobile.dataUsage.set')).toEqual([]);
+    fireEvent.change(down, { target: { value: '0.25' } });
+    fireEvent.blur(down);
+    await waitFor(() => expect(calls('mobile.dataUsage.set')).toEqual([{ accountId: 'a1', dailyDownLimitBytes: Math.round(0.25 * MB) }]));
+  });
+
   it('a paused account says so', async () => {
     engine.usage = { accounts: [usageEntry('a1', { paused: true })] };
     render(<DataUsage />);
