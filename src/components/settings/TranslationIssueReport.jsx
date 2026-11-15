@@ -3,11 +3,7 @@ import { Button } from '../ui/Button';
 import { openInBrowser } from '../../services/billingApi';
 import { LOCALES, getLocale, useT } from '../../i18n/index.js';
 import { version } from '../../../package.json';
-
-const NEW_DISCUSSION = 'https://github.com/GraphicMeat/mail-vault-app/discussions/new';
-// No `translations` category exists yet. When one does, this is the only line
-// that changes.
-const CATEGORY = 'bug-reports';
+import { translationReportReady, translationReportUrl } from '../../utils/translationReport.js';
 
 /**
  * A public thread beats an email: it is searchable by the next person who trips
@@ -21,27 +17,10 @@ export function TranslationIssueReport() {
   const [fix, setFix] = useState('');
   const [where, setWhere] = useState('');
 
-  const ready = wrong.trim() !== '' && fix.trim() !== '';
+  const ready = translationReportReady({ wrong, fix });
 
   const submit = () => {
-    const body = [
-      `**Language:** ${lang}`,
-      `**App version:** ${version}`,
-      '',
-      '**Current text**',
-      '```', wrong.trim(), '```',
-      '',
-      '**Suggested correction**',
-      '```', fix.trim(), '```',
-      ...(where.trim() ? ['', `**Where:** ${where.trim()}`] : []),
-    ].join('\n');
-
-    const url = new URL(NEW_DISCUSSION);
-    url.searchParams.set('category', CATEGORY);
-    url.searchParams.set('title', `[i18n ${lang}] ${wrong.trim().slice(0, 60)}`);
-    url.searchParams.set('body', body);
-
-    openInBrowser(url.toString()).catch(() => {});
+    openInBrowser(translationReportUrl({ lang, version, wrong, fix, where })).catch(() => {});
     setWrong(''); setFix(''); setWhere('');
   };
 

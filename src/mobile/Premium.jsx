@@ -17,15 +17,11 @@ import { useMobileStore } from './store.js';
 import KeyboardLayer from './KeyboardLayer.jsx';
 import { useT, getMobileLocale } from './i18n.js';
 import { errorKey } from './errors.js';
-import { PREMIUM_FEATURES, storeOf, premiumSummary, introText } from './premium.js';
+import { PREMIUM_FEATURES, MANAGE_URL, storeOf, premiumSummary, introText } from './premium.js';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 const TERMS_URL = 'https://mailvaultapp.com/terms.html';
 const PRIVACY_URL = 'https://mailvaultapp.com/privacy.html';
-const MANAGE_URL = {
-  apple: 'https://apps.apple.com/account/subscriptions',
-  google: 'https://play.google.com/store/account/subscriptions',
-};
 
 /** What Premium adds on the phone; the onboarding's Premium step shows the same list. */
 export function Features({ highlight }) {
