@@ -154,7 +154,8 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
 
     // `setAppIcon {icon}`: the launcher entry is one of two activity-aliases of MainActivity
     // (gen/android AndroidManifest.xml: IconPurple, enabled by default, and IconTeal). Enables the
-    // chosen one, then disables the other, without killing the app; a no-op when already set.
+    // chosen one, then disables the other, without killing the app; a no-op (no write) when
+    // already set.
     @Command
     fun setAppIcon(invoke: Invoke) {
         val args = invoke.parseArgs(IconArgs::class.java)
@@ -166,6 +167,19 @@ class MvNativePlugin(private val activity: Activity) : Plugin(activity) {
             val on = icons.first { it.first == wanted }.second
             val enabled = PackageManager.COMPONENT_ENABLED_STATE_ENABLED
             val disabled = PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            // DEFAULT is the manifest's value: IconPurple on, IconTeal off. Every launch calls
+            // this, and a component write is a real package change (the launcher reshuffles,
+            // some builds restart the app), so nothing is written when the icon is already set.
+            fun isOn(key: String, name: String): Boolean =
+                when (pm.getComponentEnabledSetting(ComponentName(activity.packageName, name))) {
+                    enabled -> true
+                    PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> key == "purple"
+                    else -> false
+                }
+            if (icons.all { (key, name) -> isOn(key, name) == (key == wanted) }) {
+                invoke.resolve()
+                return
+            }
             pm.setComponentEnabledSetting(ComponentName(activity.packageName, on), enabled, PackageManager.DONT_KILL_APP)
             for ((_, name) in icons) {
                 if (name != on) {
