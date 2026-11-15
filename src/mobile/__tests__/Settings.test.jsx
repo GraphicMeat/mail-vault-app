@@ -279,6 +279,15 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(on('privacy')).toEqual(['holdExternalContent', 'trackerBlockingEnabled', 'linkSafetyEnabled', 'linkSafetyClickConfirm']);
   });
 
+  it('Encryption opens from Privacy & security, as on desktop, and Back returns there', () => {
+    render(<Settings onClose={() => {}} page="privacy" />);
+    fireEvent.click(document.querySelector('[data-mv-settings-page="encryption"]'));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('pgp.tab'));
+    expect(screen.getByText(t('pgp.decryptOnly'))).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('settings.tab.privacySecurity'));
+  });
+
   it('the accounts page lists the accounts; the help page has the version and the source', () => {
     const r = render(<Settings onClose={() => {}} page="accounts" />);
     expect(screen.getByText(A1.email)).toBeTruthy();

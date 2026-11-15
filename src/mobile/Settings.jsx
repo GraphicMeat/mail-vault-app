@@ -45,6 +45,7 @@ import OfflineSettings from './OfflineSettings.jsx';
 import Billing from './Billing.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
 import QuickActionsSettings from './QuickActionsSettings.jsx';
+import EncryptionSettings from './EncryptionSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
 import { AppearanceMore, MailMore, NotifyMore } from './SettingsDisplay.jsx';
@@ -128,9 +129,10 @@ export const SETTINGS_PAGES = [
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
 // Billing opens from the Premium section, not from a group.
-const PAGE_TITLES = { ...Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages)), billing: 'settings.tab.billing' };
+const PAGE_TITLES = { ...Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages)), billing: 'settings.tab.billing', encryption: 'pgp.tab' };
 /** Pages opened from another page, not the list (`page: parent`): Back goes to the parent. */
-const SUB_PAGES = { quickActions: 'appearance' };
+// Encryption opens from Privacy & security, as desktop nests it there.
+const SUB_PAGES = { quickActions: 'appearance', encryption: 'privacy' };
 PAGE_TITLES.quickActions = 'quickActions.title';
 
 function Chevron() {
@@ -312,9 +314,20 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
             </div>
           </>
         )}
+        {page === 'privacy' && (
+          <>
+            <SettingsPrefs section="privacy" />
+            <div className="mv-settings__list">
+              <button type="button" className="mv-setting" data-mv-settings-page="encryption" onClick={() => setPage('encryption')}>
+                <span className="mv-setting__text"><span className="mv-setting__label">{t('pgp.tab')}</span></span>
+                <Chevron />
+              </button>
+            </div>
+          </>
+        )}
         {page === 'quickActions' && <QuickActionsSettings />}
-        {page === 'privacy' && <SettingsPrefs section="privacy" />}
         {page === 'billing' && <Billing />}
+        {page === 'encryption' && <EncryptionSettings />}
 
         {page === 'accounts' && (
           <>

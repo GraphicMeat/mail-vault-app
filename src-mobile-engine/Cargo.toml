@@ -38,6 +38,10 @@ zeroize = "1"
 tempfile = "3"
 mock-imap = { path = "../src-mock-imap" }
 mock-jmap = { path = "../src-mock-jmap" }
+# Test keys and encrypted fixtures for the OpenPGP tests (the same pgp core builds; rand 0.8 is
+# what pgp 0.20 takes).
+pgp = "0.20"
+rand08 = { package = "rand", version = "0.8" }
 
 [target.'cfg(unix)'.dev-dependencies]
 # Peak RSS for the attachment streaming test's report line.

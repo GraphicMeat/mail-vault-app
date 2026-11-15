@@ -98,6 +98,10 @@ struct Stored {
     /// The pixels the scan found, named (vendor and host, never the URL: it can carry the
     /// recipient's address). A required field.
     tracker_list: Vec<TrackerRef>,
+    /// OpenPGP (`pgp.rs`): `decrypted` (the html and text are the plaintext) or `locked` (no key
+    /// opened it: a cache hit asks again). Absent for a message that is not encrypted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pgp: Option<String>,
 }
 
 /// A body as the reply carries it.
@@ -157,7 +161,7 @@ impl Body {
         json!({
             "html": html, "text": self.text, "attachments": attachments,
             "remoteImages": remote_images, "trackers": self.stored.trackers, "trackerList": self.stored.tracker_list, "trackersStripped": policy.strips(), "gone": false,
-            "attachmentsUnknown": self.attachments_unknown, "truncated": self.truncated,
+            "attachmentsUnknown": self.attachments_unknown, "truncated": self.truncated, "pgp": self.stored.pgp,
         })
     }
 }
@@ -338,9 +342,18 @@ fn cached(shared: &Shared, p: &BodyParams) -> Result<Option<Body>, EngineError> 
         })
         .optional()
     })?;
-    // A row whose parts no longer read is refetched (and replaced) rather than trusted.
+    // A row whose parts no longer read is refetched (and replaced) rather than trusted. So is an
+    // encrypted body no key opened (`locked`, or cached before the phone decrypted) once a key
+    // is in; with none, a `locked` row answers (offline too) without a fetch.
     Ok(row.and_then(|(html, text, parts)| {
         let stored: Stored = serde_json::from_str(parts.as_deref()?).ok()?;
+        let encrypted = match stored.pgp.as_deref() {
+            Some(s) => s != crate::pgp::DECRYPTED && crate::pgp::has_keys(shared),
+            None => crate::pgp::looks_encrypted(stored.parts.iter().map(|p| p.mime.as_str()), text.as_deref()),
+        };
+        if encrypted {
+            return None;
+        }
         Some(Body { html, text, stored, attachments_unknown: false, truncated: false })
     }))
 }
@@ -349,13 +362,20 @@ fn cached(shared: &Shared, p: &BodyParams) -> Result<Option<Body>, EngineError> 
 /// names a different message (the folder's UIDVALIDITY moved; the next sync wipes the folder).
 fn fetch(shared: &Shared, p: &BodyParams, stored_validity: Option<i64>) -> Result<Option<(Body, String)>, Fail> {
     let mut backend = backend::open(shared, &p.account_id)?;
-    let out = backend.body(&FolderRow::new(&p.folder, stored_validity), p.uid);
+    let folder = FolderRow::new(&p.folder, stored_validity);
+    let out = backend.body(&folder, p.uid).map(|raw| {
+        raw.map(|mut raw| {
+            let pgp = crate::pgp::open_body(shared, backend.as_mut(), &folder, p.uid, &mut raw);
+            (raw, pgp)
+        })
+    });
     // Signs out.
     drop(backend);
-    Ok(out?.map(|RawBody { parts, html, text, attachments_unknown, truncated }| {
+    Ok(out?.map(|(RawBody { parts, html, text, attachments_unknown, truncated }, pgp)| {
         let (mut body, snippet) = scanned(html, text, parts.into_iter().map(Part::from).collect());
         body.attachments_unknown = attachments_unknown;
         body.truncated = truncated;
+        body.stored.pgp = pgp.map(String::from);
         (body, snippet)
     }))
 }
@@ -411,7 +431,8 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, acco
             let failed = |shared: &Shared| -> Result<(), Fail> {
                 crate::sync::write_for(shared, account, |c| crate::offline::body_failed(c, account, &folder, uid, now_ms()))
             };
-            let got = match backend.body(&FolderRow::new(&folder, validity), uid) {
+            let row = FolderRow::new(&folder, validity);
+            let got = match backend.body(&row, uid) {
                 Ok(got) => got,
                 // This message alone (the server refused its parts): the others go on.
                 Err(Fail::Code(crate::accounts::Code::Invalid, why)) => {
@@ -421,14 +442,18 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn backend::Backend, acco
                 }
                 Err(f) => return Err(f),
             };
-            let Some(RawBody { parts, html, text, attachments_unknown, truncated }) = got else {
+            let Some(mut raw) = got else {
                 // Gone, or another generation: the next pass sorts the row out.
                 failed(shared)?;
                 continue;
             };
+            // Stored `locked` when no key opens it: an import drops such rows for the next pass.
+            let pgp = crate::pgp::open_body(shared, backend, &row, uid, &mut raw);
+            let RawBody { parts, html, text, attachments_unknown, truncated } = raw;
             let (mut body, snippet) = scanned(html, text, parts.into_iter().map(Part::from).collect());
             body.attachments_unknown = attachments_unknown;
             body.truncated = truncated;
+            body.stored.pgp = pgp.map(String::from);
             if attachments_unknown || truncated {
                 if truncated {
                     store_attachments(shared, &p, &body)?;
@@ -461,7 +486,7 @@ fn scanned(html: Option<String>, text: Option<String>, parts: Vec<Part>) -> (Bod
         trackers = scan.trackers.len() as u32;
         tracker_list = scan.trackers.iter().map(|t| TrackerRef { vendor: t.vendor.clone(), domain: t.domain.clone() }).collect();
     }
-    let stored = Stored { parts, remote_images, remote_without_trackers, trackers, tracker_list };
+    let stored = Stored { parts, remote_images, remote_without_trackers, trackers, tracker_list, pgp: None };
     (Body { html, text, stored, attachments_unknown: false, truncated: false }, snippet)
 }
 
@@ -595,6 +620,10 @@ fn message_exists(c: &Connection, p: &BodyParams) -> rusqlite::Result<bool> {
 /// Writes the attachment rows (at most [`BATCH`] per transaction), then the body row and the
 /// snippet in one last transaction, so a body row means its attachment rows are in place.
 fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str, opened: bool) -> Result<(), EngineError> {
+    // A decrypted body replaces what the ciphertext listed (`encrypted.asc` and its kind).
+    if body.stored.pgp.as_deref() == Some(crate::pgp::DECRYPTED) {
+        shared.write(|c| c.execute(&format!("DELETE FROM attachments WHERE {KEY}"), (&p.account_id, &p.folder, p.uid as i64)))?;
+    }
     if !store_attachments(shared, p, body)? {
         return Ok(());
     }

@@ -386,7 +386,8 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   }, [accountId, folder, row.uid, attempt, t]);
 
   const body = state.phase === 'ready' ? state.body : null;
-  const hasContent = Boolean(body && ((body.html && body.html.trim()) || (body.text && body.text.trim())));
+  const locked = body?.pgp === 'locked';
+  const hasContent = Boolean(body && !locked && ((body.html && body.html.trim()) || (body.text && body.text.trim())));
   const trackerLabel = t('mobile.viewer.trackerBlocked');
   // The expensive part (parse, clean, re-parse to a fixpoint, check) once per body; Load images
   // and a theme change only re-assemble our head around it (string work).
@@ -492,7 +493,20 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
           <button type="button" style={{ minHeight: '44px' }} onClick={retry}>{t('common.retry')}</button>
         </div>
       )}
-      {state.phase === 'ready' && !hasContent && <p className="mv-viewer__notice">{t('mobile.viewer.empty')}</p>}
+      {/* OpenPGP (`pgp` from the engine): a body no imported key opens shows the notice instead
+          of its ciphertext, as desktop's reader does; a decrypted one says so above the mail. */}
+      {locked && (
+        <div className="mv-viewer__notice" role="status" data-mv-pgp-locked>
+          <p><strong>{t('pgp.lockedTitle')}</strong></p>
+          <p>{t('pgp.lockedHint')}</p>
+        </div>
+      )}
+      {body?.pgp === 'decrypted' && (
+        <div className="mv-viewer__images" data-mv-pgp-decrypted role="status">
+          <span>{t('pgp.decryptedBadge')}</span>
+        </div>
+      )}
+      {state.phase === 'ready' && !hasContent && !locked && <p className="mv-viewer__notice">{t('mobile.viewer.empty')}</p>}
       {/* A fresh frame per change, never a changed srcdoc: iOS WKWebView drops a second srcdoc
           change made while the first loads, which kept the broken cid: version once the inline
           images arrived. */}
