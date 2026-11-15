@@ -124,13 +124,15 @@ impl<E: TextExtractor + 'static> TextExtractor for BoundedExtractor<E> {
     }
 }
 
-fn is_text_like(mime: &str, filename: &str) -> bool {
+/// A part `extract` reads as text with no platform extractor (text, csv, html, ...).
+pub fn is_text_like(mime: &str, filename: &str) -> bool {
     let mime = mime.to_lowercase();
     let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
     mime.starts_with("text/") || matches!(ext.as_str(), "csv" | "ics" | "md" | "markdown" | "html" | "htm" | "txt")
 }
 
-fn is_office(mime: &str, filename: &str) -> bool {
+/// A docx, xlsx or pptx part, which `extract` reads with no platform extractor.
+pub fn is_office(mime: &str, filename: &str) -> bool {
     let mime = mime.to_lowercase();
     let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
     mime.contains("officedocument") || matches!(ext.as_str(), "docx" | "xlsx" | "pptx")

@@ -25,6 +25,7 @@ mod premium;
 mod remote_ids;
 mod rpc;
 mod search;
+mod search_attach;
 pub mod secrets;
 mod settings;
 mod sync;

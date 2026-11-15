@@ -90,6 +90,10 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     // click confirmation, asks before opening one.
     ("linkSafetyEnabled", Kind::Bool, "true"),
     ("linkSafetyClickConfirm", Kind::Bool, "true"),
+    // Settings > Search index (search.rs, search_attach.rs): body words in the index, and the
+    // text of downloaded attachments (Premium).
+    ("searchIndexBodies", Kind::Bool, "true"),
+    ("searchIndexAttachments", Kind::Bool, "true"),
     ("importantSenders", Kind::List(64 * 1024), "[]"),
     ("templates", Kind::List(512 * 1024), "[]"),
 ];
@@ -293,6 +297,10 @@ pub(crate) fn prefs_set(engine: &Engine, params: Value) -> Result<Value, RpcErro
             Ok(())
         })
         .map_err(|e| RpcError::Internal(e.to_string()))?;
+    if writes.iter().any(|(key, _)| key.starts_with("searchIndex")) {
+        // The index worker compares the settings it holds against these, after its current unit.
+        crate::search::wake(engine.shared());
+    }
     prefs_get(engine, Value::Null)
 }
 

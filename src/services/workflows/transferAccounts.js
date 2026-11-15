@@ -80,6 +80,7 @@ const PHONE_GLOBAL_KEYS = [
   'markAsReadMode', 'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction',
   'sendDelay', 'autoSaveDrafts', 'attachmentReminder', 'defaultSignatureEnabled', 'holdExternalContent',
   'linkSafetyEnabled', 'linkSafetyClickConfirm', 'trackerBlockingEnabled',
+  'searchIndexBodies', 'searchIndexAttachments',
 ];
 
 function phoneGlobalSettings(s, theme) {

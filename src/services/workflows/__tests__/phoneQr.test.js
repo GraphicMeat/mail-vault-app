@@ -58,7 +58,7 @@ it('sends the phone-relevant global settings and nothing machine-bound', async (
   useSettingsStore.setState({
     language: 'de', markAsReadMode: 'manual', markAsReadDelay: 4, confirmBeforeDelete: false, afterDeleteSelect: 'previous',
     swipeLeftAction: 'delete', swipeRightAction: 'star', sendDelay: 10, holdExternalContent: true, dateFormat: 'custom',
-    customDateFormat: 'dd.MM.yy', timeFormat: '24h', threadMode: 'flat', emailTemplates: [{ id: 't', name: 'Hi', body: 'Hello', createdAt: 'x' }],
+    customDateFormat: 'dd.MM.yy', timeFormat: '24h', threadMode: 'flat', searchIndexBodies: false, searchIndexAttachments: true, emailTemplates: [{ id: 't', name: 'Hi', body: 'Hello', createdAt: 'x' }],
     notificationSettings: { ...pristine.notificationSettings, showPreview: false, importantSenders: [{ match: 'boss@x.test', throughQuietHours: true }] },
   });
   useThemeStore.setState({ theme: 'light', palette: 'teal' });
@@ -69,6 +69,7 @@ it('sends the phone-relevant global settings and nothing machine-bound', async (
     afterDeleteSelect: 'previous', swipeLeftAction: 'delete', swipeRightAction: 'star', sendDelay: 10, holdExternalContent: true,
     dateFormat: 'custom', customDateFormat: 'dd.MM.yy', timeFormat: '24h', threadMode: 'flat', notificationPreview: false,
     importantSenders: [{ match: 'boss@x.test', throughQuietHours: true }], templates: [{ name: 'Hi', body: 'Hello' }],
+    searchIndexBodies: false, searchIndexAttachments: true,
   });
   for (const never of ['backupEnabled', 'cleanupRules', 'transferLimits', 'aiSettings', 'refreshInterval', 'badgeEnabled', 'daemonMode', 'layoutMode', 'keyboardShortcuts']) {
     expect(s, never).not.toHaveProperty(never);

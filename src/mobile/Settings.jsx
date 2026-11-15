@@ -20,6 +20,8 @@
 // - Offline: "Download in the background" (`backgroundDownload`, on by default): background runs
 //   keep the offline window up to date, so mail opens without a connection; then, per account,
 //   the window, the room it takes, the progress and "Download now" (OfflineSettings.jsx).
+// - Search index: body words and attachment text in the index, its size and Rebuild
+//   (SearchIndexSettings.jsx).
 // - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
 //   screen; a phone whose place another device took says so, with Sign in again.
 // - Replay tour (`onReplayTour`): the first-run tour again, without its account step (App.jsx).
@@ -40,6 +42,7 @@ import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
+import SearchIndexSettings from './SearchIndexSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
 
@@ -118,7 +121,7 @@ function AccountRow({ account, reauthBusy }) {
 export const SETTINGS_PAGES = [
   ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
   ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts']]],
-  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity']]],
+  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['search', 'settings.searchIndex.title'], ['privacy', 'settings.tab.privacySecurity']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
 const PAGE_TITLES = Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages));
@@ -282,6 +285,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         {page === 'appearance' && <SettingsPrefs section="appearance" />}
         {page === 'mail' && <SettingsPrefs section="mail" />}
         {page === 'privacy' && <SettingsPrefs section="privacy" />}
+        {page === 'search' && <SearchIndexSettings />}
 
         {page === 'accounts' && (
           <>
