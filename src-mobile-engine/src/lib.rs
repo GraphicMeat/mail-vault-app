@@ -5,6 +5,7 @@
 mod account_settings;
 mod accounts;
 mod actions;
+mod ai;
 mod attachments;
 mod backend;
 mod background;

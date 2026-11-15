@@ -92,6 +92,13 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("linkSafetyClickConfirm", Kind::Bool, "true"),
     ("importantSenders", Kind::List(64 * 1024), "[]"),
     ("templates", Kind::List(512 * 1024), "[]"),
+    // Settings > AI (`ai.rs`): desktop's `aiSettings` with the phone's one provider, an
+    // OpenAI-compatible endpoint. Off: no AI call is made, and quick replies stay deterministic.
+    ("aiEnabled", Kind::Bool, "false"),
+    ("aiEndpointUrl", Kind::Text(512), "\"\""),
+    ("aiEndpointModel", Kind::Text(200), "\"\""),
+    // An explicit AI action runs without its review once this endpoint was reviewed.
+    ("aiSkipPreview", Kind::Bool, "false"),
 ];
 
 pub(crate) fn pref(key: &str) -> Option<(Kind, &'static str)> {
@@ -137,9 +144,10 @@ pub(crate) const PREMIUM_CLOCK_HIGH: &str = "premium.clockHigh";
 /// Set while this install's web registration (`register=1`) has not had its answer.
 pub(crate) const PREMIUM_WEB_REGISTER: &str = "premium.webRegister";
 
-/// A key the engine keeps for itself: [`Engine::set_setting`] refuses it.
+/// A key the engine keeps for itself (`premium.*`, and `ai.*`: the endpoint the user reviewed a
+/// send to, the dismissed quick replies): [`Engine::set_setting`] refuses it.
 pub(crate) fn is_internal(key: &str) -> bool {
-    key.starts_with("premium.")
+    key.starts_with("premium.") || key.starts_with("ai.")
 }
 
 pub(crate) fn get_in(c: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
