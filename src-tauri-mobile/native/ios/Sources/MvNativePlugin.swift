@@ -465,20 +465,27 @@ extension MvNativePlugin {
 
   /// `requestNotifications {prompt?}`: the system's permission prompt (alerts, sounds and the app
   /// icon's badge, which Settings > Notifications may turn on) the first time, the stored answer
-  /// after; answers `{granted}`. With
+  /// after; answers `{granted, badge}`. With
   /// `prompt: false` only the current answer (the user may have turned them off in Settings).
+  /// `badge`: iOS lets the app set the icon's count. iOS prompts only while the answer is not
+  /// decided (or only provisional), so a user who allowed alerts and sounds before the badge was
+  /// asked for keeps it off until they turn Badges on in Settings > Notifications > MailVault;
+  /// the page can say so.
   @objc public func requestNotifications(_ invoke: Invoke) throws {
     let prompt = (try? invoke.parseArgs(PermissionArgs.self))?.prompt ?? true
     let center = UNUserNotificationCenter.current()
-    guard prompt else {
+    let answer = { (granted: Bool?) in
       center.getNotificationSettings { settings in
         let on = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
-        invoke.resolve(["granted": on])
+        invoke.resolve(["granted": granted ?? on, "badge": settings.badgeSetting == .enabled])
       }
+    }
+    guard prompt else {
+      answer(nil)
       return
     }
     center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-      invoke.resolve(["granted": granted])
+      answer(granted)
     }
   }
 

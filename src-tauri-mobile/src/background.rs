@@ -423,6 +423,8 @@ pub(crate) fn run_json(data: &Path, cache: &Path, budget: Duration, started: Ins
             }
             Err(e) => {
                 crate::log_line(&format!("MV_MOBILE {}", json!({ "backgroundError": e.to_string() })));
+                // A run that failed still brings the icon up to date (a read, a badge turned off).
+                badge = engine.badge_count().ok().map(|n| n.unwrap_or(0));
                 Vec::new()
             }
         },
@@ -553,6 +555,24 @@ pub extern "C" fn mv_background_continue(budget_ms: u32) -> *mut std::ffi::c_cha
         }
     });
     mv_background_fetch(budget_ms)
+}
+
+/// The app icon's count for `engine` (`badgeEnabled` / `badgeMode`): 0 while the badge is off,
+/// -1 when there is no engine or it could not answer (the badge stays as it is).
+pub(crate) fn badge_of(engine: Option<&Engine>) -> i64 {
+    match engine.map(Engine::badge_count) {
+        Some(Ok(n)) => n.map_or(0, |n| i64::try_from(n).unwrap_or(i64::MAX)),
+        _ => -1,
+    }
+}
+
+/// iOS, the app just left the front: the icon's count now, so reading mail or turning the badge
+/// off shows on the icon at once, not only after the next background run (which needs background
+/// refresh on). The process's engine only, never one opened for this; -1: leave the badge be.
+/// Reads the database: call it off the main thread.
+#[no_mangle]
+pub extern "C" fn mv_badge_count() -> i64 {
+    guarded(-1, || badge_of(opened()))
 }
 
 /// Numbers the shell's own `mobile.app.state` calls (the OS's suspend and resume, and
@@ -892,6 +912,18 @@ mod tests {
         // The phone's defaults: the system's sound, and no badge (0 clears it).
         assert_eq!(out["sound"], true);
         assert_eq!(out["badge"], 0);
+    }
+
+    /// What leaving the front sets the icon to: nothing without an engine, 0 while the badge is
+    /// off, the count once it is on.
+    #[test]
+    fn the_badge_on_leaving_the_front_follows_the_engine() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::open(dir.path(), &dir.path().join("cache"), Arc::new(MemorySecrets::default())).unwrap();
+        assert_eq!(badge_of(None), -1);
+        assert_eq!(badge_of(Some(&engine)), 0);
+        engine.rpc("mobile.prefs.set", json!({ "badgeEnabled": true, "badgeMode": "total" })).unwrap();
+        assert_eq!(badge_of(Some(&engine)), 0, "no mail, no count");
     }
 
     #[test]
