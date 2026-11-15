@@ -24,13 +24,13 @@ function Chevron() {
 }
 
 /** "just now", "5m ago", "3h ago", "2d ago": desktop's device list wording. */
-export function seenAgo(tr, ms, now = Date.now()) {
+export function seenAgo(translate, ms, now = Date.now()) {
   const mins = Math.floor((now - ms) / 60000);
-  if (mins < 1) return tr('settings.billing.justNow');
-  if (mins < 60) return tr('settings.billing.mAgo', { mins });
+  if (mins < 1) return translate('settings.billing.justNow');
+  if (mins < 60) return translate('settings.billing.mAgo', { mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return tr('settings.billing.hAgo', { hrs });
-  return tr('settings.billing.dAgo', { Math: Math.floor(hrs / 24) });
+  if (hrs < 24) return translate('settings.billing.hAgo', { hrs });
+  return translate('settings.billing.dAgo', { Math: Math.floor(hrs / 24) });
 }
 
 export default function Billing() {
