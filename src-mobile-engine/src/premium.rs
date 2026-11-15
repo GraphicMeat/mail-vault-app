@@ -225,6 +225,8 @@ fn record(shared: &Shared, new: Cached, answered: Option<i64>) -> Result<(), Rpc
     let after = status_json(shared);
     if after != before {
         shared.emit(events::PREMIUM_CHANGED, after);
+        // Attachment text in search is Premium: the index worker sweeps again.
+        crate::search::wake(shared);
     }
     Ok(())
 }

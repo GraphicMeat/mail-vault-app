@@ -8,9 +8,9 @@
 //! scoped to `[folder]` finds what `index_doc(.., folder, ..)` wrote.
 //! `SearchHit.vault_dir` comes back in that sanitized form.
 
-use super::reconcile::{delete_fts, write_row, IndexDoc, RowPlace, BODY_INDEXED, BODY_PENDING, UPSERT};
+use super::reconcile::{delete_fts, insert_fts, write_row, IndexDoc, RowPlace, BODY_INDEXED, BODY_PENDING, UPSERT};
 use super::text::vault_dir_name;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 /// Add or replace one message. Replaces every column and every search term,
 /// body included: a doc with an empty `body_text` leaves the row with no body
@@ -36,8 +36,75 @@ pub fn index_doc(conn: &Connection, account_id: &str, folder_key: &str, uid: u32
     doc.body_text = super::text::cap_chars(doc.body_text, super::reconcile::MAX_BODY_CHARS);
     in_savepoint(conn, |conn| {
         let mut upsert = conn.prepare_cached(UPSERT)?;
-        write_row(conn, &mut upsert, &place, &doc, date_utc, body_state, snippet).map(|_| ())
+        let id = write_row(conn, &mut upsert, &place, &doc, date_utc, body_state, snippet)?;
+        // The row keeps its id on a rewrite, so its recorded attachments stay: their text goes
+        // back into the terms (`record_attachment`).
+        let attach: String = conn
+            .prepare_cached("SELECT group_concat(text, char(10)) FROM attachments WHERE message_row = ?1 AND state = 'ok'")?
+            .query_row([id], |r| r.get::<_, Option<String>>(0))?
+            .unwrap_or_default();
+        if !attach.is_empty() {
+            let addrs = doc.addrs.join("\n");
+            delete_fts(conn, id)?;
+            insert_fts(conn, id, &doc.subject, &addrs, &doc.body_text, &attach)?;
+        }
+        Ok(())
     })
+}
+
+/// The recorded state of one attachment part of a message (`ok`, `unsupported`, `too_large`,
+/// ...), `None` when nothing is recorded or the index does not hold the message.
+pub fn attachment_state(conn: &Connection, account_id: &str, folder_key: &str, uid: u32, part_index: u32) -> Result<Option<String>, String> {
+    conn.prepare_cached(
+        "SELECT a.state FROM attachments a JOIN messages m ON m.id = a.message_row
+         WHERE m.account_id = ?1 AND m.vault_dir = ?2 AND m.uid = ?3 AND a.part_index = ?4",
+    )
+    .and_then(|mut st| st.query_row(params![account_id, vault_dir_name(folder_key), uid, part_index], |r| r.get(0)).optional())
+    .map_err(|e| e.to_string())
+}
+
+/// Records what extracting one attachment part gave (`state` as `attachments::extract` names
+/// it, `text` when `ok`). The text becomes searchable with the next `index_doc` of the message,
+/// which the caller runs (the index keeps no body to rewrite the terms with). `false` when the
+/// index does not hold the message: nothing is recorded.
+#[allow(clippy::too_many_arguments)]
+pub fn record_attachment(
+    conn: &Connection,
+    account_id: &str,
+    folder_key: &str,
+    uid: u32,
+    part_index: u32,
+    filename: &str,
+    mime: &str,
+    size: u64,
+    state: &str,
+    text: Option<&str>,
+) -> Result<bool, String> {
+    let id: Option<i64> = conn
+        .prepare_cached("SELECT id FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3")
+        .and_then(|mut st| st.query_row(params![account_id, vault_dir_name(folder_key), uid], |r| r.get(0)).optional())
+        .map_err(|e| e.to_string())?;
+    let Some(id) = id else { return Ok(false) };
+    conn.prepare_cached(
+        "INSERT INTO attachments (message_row, part_index, filename, mime, size, state, text) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(message_row, part_index) DO UPDATE SET filename = excluded.filename, mime = excluded.mime,
+           size = excluded.size, state = excluded.state, text = excluded.text",
+    )
+    .and_then(|mut st| st.execute(params![id, part_index, filename, mime, size as i64, state, text]))
+    .map(|_| true)
+    .map_err(|e| e.to_string())
+}
+
+/// Forgets every recorded attachment. Their terms leave each message with its next `index_doc`.
+pub fn forget_attachments(conn: &Connection) -> Result<(), String> {
+    conn.execute("DELETE FROM attachments", []).map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// How many attachment parts have searchable text.
+pub fn attachment_counts(conn: &Connection) -> Result<u64, String> {
+    conn.query_row("SELECT count(*) FROM attachments WHERE state = 'ok'", [], |r| r.get::<_, i64>(0))
+        .map(|n| n.max(0) as u64)
+        .map_err(|e| e.to_string())
 }
 
 /// Replace one message's flags, keeping its row and search terms. A uid the
@@ -241,6 +308,32 @@ mod tests {
         assert_eq!(fts_rows(&conn), (0, 0), "trigram and CJK terms of the folder are gone");
         assert_eq!(uids(&conn, SearchRequest { account_id: "other".into(), ..q("café") }), vec![5], "another account's INBOX stays");
         assert_eq!(uids(&conn, q("invoice")), vec![3]);
+    }
+
+    #[test]
+    fn recorded_attachment_text_is_searchable_and_survives_a_reindex() {
+        let (_tmp, conn) = seed();
+        let none: &[String] = &[];
+        // A message the index does not hold records nothing.
+        assert!(!record_attachment(&conn, "acc", "INBOX", 99, 0, "a.txt", "text/plain", 3, "ok", Some("x")).unwrap());
+        assert_eq!(attachment_state(&conn, "acc", "INBOX", 4, 0).unwrap(), None);
+        assert!(record_attachment(&conn, "acc", "INBOX", 4, 0, "plan.txt", "text/plain", 20, "ok", Some("kumquat harvest")).unwrap());
+        assert!(record_attachment(&conn, "acc", "INBOX", 4, 1, "scan.pdf", "application/pdf", 20, "unsupported", None).unwrap());
+        assert_eq!(attachment_state(&conn, "acc", "INBOX", 4, 0).unwrap().as_deref(), Some("ok"));
+        assert_eq!(attachment_state(&conn, "acc", "INBOX", 4, 1).unwrap().as_deref(), Some("unsupported"));
+        // The caller writes the message again to make the text searchable; so does any later write.
+        index_doc(&conn, "acc", "INBOX", 4, &doc("Project plan", "bob@x.test", "Draft budget attached"), none).unwrap();
+        assert_eq!(uids(&conn, q("kumquat")), vec![4]);
+        assert_eq!(uids(&conn, q("budget")), vec![4]);
+        index_doc(&conn, "acc", "INBOX", 4, &doc("Project plan", "bob@x.test", ""), none).unwrap();
+        assert_eq!(uids(&conn, q("kumquat")), vec![4], "a header-only write keeps the attachment terms");
+        assert_eq!(uids(&conn, q("budget")), Vec::<u32>::new());
+        assert_eq!(attachment_counts(&conn).unwrap(), 1);
+        // Forgetting every attachment takes their terms with the next write.
+        forget_attachments(&conn).unwrap();
+        assert_eq!(attachment_counts(&conn).unwrap(), 0);
+        index_doc(&conn, "acc", "INBOX", 4, &doc("Project plan", "bob@x.test", ""), none).unwrap();
+        assert_eq!(uids(&conn, q("kumquat")), Vec::<u32>::new());
     }
 
     #[test]

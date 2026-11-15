@@ -33,6 +33,9 @@ export const PREF_DEFAULTS = Object.freeze({
   appIcon: 'purple',
   // Compose asks before sending a message that mentions an attachment and carries none.
   attachmentReminder: true,
+  // Settings > Search index (SearchIndexSettings.jsx): body words, and attachment text (Premium).
+  searchIndexBodies: true,
+  searchIndexAttachments: true,
   // Compose's "Templates": `[{name, body}]` (Settings > Mail preferences).
   templates: Object.freeze([]),
   // Appearance: the page's text size and font (applyLook), list rows (rowHeight, MessageRow.jsx),

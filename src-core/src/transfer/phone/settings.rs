@@ -106,6 +106,12 @@ pub struct PhoneSettings {
     pub link_safety_click_confirm: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub tracker_blocking_enabled: Option<bool>,
+    /// Search index: body words.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub search_index_bodies: Option<bool>,
+    /// Search index: attachment text (Premium on both).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub search_index_attachments: Option<bool>,
     /// `notificationSettings.showPreview`.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub notification_preview: Option<bool>,

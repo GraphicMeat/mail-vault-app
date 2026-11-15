@@ -594,7 +594,7 @@ pub(crate) fn delete_fts(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
-fn insert_fts(conn: &Connection, id: i64, subject: &str, addrs: &str, body: &str, attach: &str) -> rusqlite::Result<()> {
+pub(crate) fn insert_fts(conn: &Connection, id: i64, subject: &str, addrs: &str, body: &str, attach: &str) -> rusqlite::Result<()> {
     conn.prepare_cached("INSERT INTO msg_fts(rowid, subject, addrs, body, attach) VALUES (?1, ?2, ?3, ?4, ?5)")?
         .execute(params![id, subject, addrs, body, attach])?;
     let (s, a, b, x) = (cjk_units(subject), cjk_units(addrs), cjk_units(body), cjk_units(attach));

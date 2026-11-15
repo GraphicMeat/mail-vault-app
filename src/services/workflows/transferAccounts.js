@@ -85,6 +85,7 @@ const PHONE_GLOBAL_KEYS = [
   'textScale', 'appFont', 'listDensity', 'listPreviewLines', 'signatureDisplay', 'actionButtonDisplay',
   'trackpadSwipeEnabled', 'refreshOnLaunch', 'autoDownloadAttachments', 'afterDeleteSameAccount',
   'badgeEnabled', 'badgeMode',
+  'searchIndexBodies', 'searchIndexAttachments',
 ];
 
 function phoneGlobalSettings(s, theme) {

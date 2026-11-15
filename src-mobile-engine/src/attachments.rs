@@ -64,7 +64,7 @@ pub(crate) const LEASE_TTL: Duration = Duration::from_secs(10 * 60);
 pub(crate) const STALE_PART: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 /// Downloads that run at once; more wait in the queue.
 const WORKERS: usize = 2;
-const DIR: &str = "att";
+pub(crate) const DIR: &str = "att";
 const PART: &str = ".part";
 const META: &str = ".part.meta";
 const TMP: &str = ".tmp";
@@ -299,6 +299,9 @@ fn worker(state: Arc<State>, shared: Arc<Shared>) {
             let mut t = lock(&state.table);
             t.jobs.remove(&id);
             t.by_key.remove(&key);
+        }
+        if matches!(end, End::Done(_)) {
+            crate::search::attachment_ready(&shared, &key.account_id, &key.folder, key.uid, &key.section);
         }
         match end {
             End::Done(path) => shared.emit(ATTACHMENT_DONE, json!({ "jobId": id, "path": path.to_string_lossy() })),
@@ -765,6 +768,13 @@ pub(crate) fn cached_part(engine: &Engine, account_id: &str, folder: &str, uid: 
     touch(&path).ok().map(|()| path)
 }
 
+/// The file name a part is downloaded under (in the cache or among the offline files), `None`
+/// when it cannot have one (a link, a folder never selected). For the search index.
+pub(crate) fn part_name(shared: &Shared, account_id: &str, folder: &str, uid: u32, section: &str) -> Option<String> {
+    let key = PartKey { account_id: account_id.into(), folder: folder.into(), uid, section: section.into() };
+    name_of(shared, &key).ok()?.map(|(name, _)| name)
+}
+
 /// The finished offline file `name` of `account`, if the download pass has it.
 fn offline_file(shared: &Shared, account: &str, name: &str) -> Option<PathBuf> {
     let p = crate::offline::attachments_dir(shared, account)?.join(name);
@@ -816,7 +826,10 @@ pub(crate) fn prefetch(shared: &Shared, backend: &mut dyn Backend, account: &str
             return Err(Fail::Gone);
         }
         match got {
-            Ok(()) => done += 1,
+            Ok(()) => {
+                done += 1;
+                crate::search::attachment_ready(shared, account, &key.folder, key.uid, &key.section);
+            }
             Err(Stop::Fail(Fail::Closing)) => return Err(Fail::Closing),
             Err(Stop::Fail(Fail::Gone)) => return Err(Fail::Gone),
             // Cut by `stop`: the `.part` stays for the next pass.

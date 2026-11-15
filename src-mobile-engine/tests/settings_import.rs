@@ -64,6 +64,7 @@ fn desk_settings() -> PhoneSettings {
         view_style: Some("chat".into()),
         app_icon: Some("teal".into()),
         notification_preview: Some(false),
+        search_index_bodies: Some(false),
         templates: Some(vec![PhoneTemplate { name: "Thanks".into(), body: "Thank you!".into() }]),
         ..PhoneSettings::default()
     }
@@ -170,6 +171,7 @@ fn the_first_import_applies_the_desktop_settings_and_a_later_one_does_not() {
     assert_eq!((p["dateFormat"].clone(), p["timeFormat"].clone(), p["threadMode"].clone()), (json!("yyyy-MM-dd"), json!("24h"), json!("flat")));
     assert_eq!(p["templates"], json!([{ "name": "Thanks", "body": "Thank you!" }]));
     assert_eq!((p["viewStyle"].clone(), p["appIcon"].clone()), (json!("chat"), json!("teal")));
+    assert_eq!((p["searchIndexBodies"].clone(), p["searchIndexAttachments"].clone()), (json!(false), json!(true)));
     assert!(p["desktopSettingsAppliedAt"].as_i64().unwrap() > 0);
     let s = e.rpc("mobile.settings.get", json!({})).unwrap();
     assert_eq!((s["language"].clone(), s["notificationPreview"].clone()), (json!("de"), json!(false)));

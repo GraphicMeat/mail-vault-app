@@ -15,6 +15,13 @@
 //! the UI, a body opened) never writes the index at all: its work goes to the index worker ahead of
 //! anything queued, and the worker re-reads the rows when it runs. A search.db commit is a file
 //! write; on Windows one took 40 to 70 ms beside the downloader's ingest, the whole of a slow tap.
+//!
+//! Settings > Search index (`searchIndexBodies`, `searchIndexAttachments`, rebuild, status): the
+//! index records the settings it was built for (`meta` [`CONFIG`]). When they change (the worker
+//! compares on every wake), a replace pass writes every row again in [`CHUNK`]-row units with the
+//! body words or without them; [`REINDEX`] marks it unfinished across restarts. Attachment text
+//! (Premium; downloaded parts only) is `search_attach.rs`. A rebuild deletes `search.db` and
+//! builds it again; every one of these runs on the index worker, never on the caller's thread.
 
 use crate::db::{lock, Engine, EngineError, Shared};
 use crate::rpc::{parse, RpcError};
@@ -35,6 +42,12 @@ const PAGE: usize = 50;
 /// `search.db` `meta` key prefix of a folder's backfill mark: the highest uid of the folder the
 /// backfill has looked at, `<prefix><account>\n<folder>` -> uid.
 const MARK: &str = "mobile.backfill:";
+/// The replace pass's marks, as [`MARK`].
+const REINDEX_MARK: &str = "mobile.reindex:";
+/// `search.db` `meta`: the settings the index holds (`b1a1`: bodies on, attachments on).
+const CONFIG: &str = "mobile.config";
+/// `search.db` `meta`: `"1"` while a replace pass has rows left to write.
+const REINDEX: &str = "mobile.reindex";
 
 /// What the backfill worker has done since the engine opened. Tests read it
 /// ([`Engine::search_backfill`]); nothing else does.
@@ -59,6 +72,8 @@ enum Job {
     Index { account: String, folder: String, uids: Vec<u32> },
     /// Copy these rows' effective flags into the index.
     Reflag { account: String, folder: String, uids: Vec<u32> },
+    /// A part finished downloading: index its text (`search_attach.rs`).
+    Extract { account: String, folder: String, uid: u32, section: String },
 }
 
 #[derive(Default)]
@@ -68,6 +83,10 @@ struct Work {
     jobs: VecDeque<Job>,
     /// A job is running on the worker.
     busy: bool,
+    /// `mobile.search.rebuild` asked for a new index.
+    rebuild: bool,
+    /// Settings or Premium changed: compare the settings again and sweep attachments again.
+    wake: bool,
 }
 
 /// The search half of [`Shared`].
@@ -75,12 +94,16 @@ struct Work {
 pub(crate) struct Search {
     /// `None` when `search.db` could not be opened (search answers `SEARCH_UNAVAILABLE`) and after
     /// the engine is dropped.
-    conn: SharedConn,
+    pub(crate) conn: SharedConn,
     work: Mutex<Work>,
     cv: Condvar,
     stats: Mutex<BackfillStats>,
     /// The index worker, joined when the engine is dropped.
     handle: Mutex<Option<std::thread::JoinHandle<()>>>,
+    /// `<data_dir>/search.db`, for a rebuild and the status' size.
+    path: std::sync::OnceLock<std::path::PathBuf>,
+    /// `<cache_dir>/att`: downloaded attachments (`attachments.rs`).
+    pub(crate) att_dir: std::sync::OnceLock<std::path::PathBuf>,
 }
 
 fn log_err(shared: &Shared, what: &str, e: impl std::fmt::Display) {
@@ -92,14 +115,20 @@ fn log_err(shared: &Shared, what: &str, e: impl std::fmt::Display) {
 /// Opens `<data_dir>/search.db` into the shared slot. A file core calls rebuildable (corrupt, a
 /// newer index schema) is deleted and created again; the backfill then fills it. Any other failure
 /// leaves the slot empty: search is unavailable, the rest of the engine runs.
-pub(crate) fn open(shared: &Shared, data_dir: &Path) {
+pub(crate) fn open(shared: &Shared, data_dir: &Path, cache_dir: &Path) {
     let path = data_dir.join(DB_FILE);
-    let conn = match sdb::open_at(&path) {
+    let _ = shared.search.path.set(path.clone());
+    let _ = shared.search.att_dir.set(cache_dir.join(crate::attachments::DIR));
+    *search_index::lock(&shared.search.conn) = open_file(shared, &path);
+}
+
+fn open_file(shared: &Shared, path: &Path) -> Option<Connection> {
+    match sdb::open_at(path) {
         Ok(c) => Some(c),
         Err(sdb::OpenError::Rebuildable(why)) => {
             log_err(shared, "rebuilding search.db", why);
-            match crate::db::remove_db_files(&path) {
-                Ok(()) => sdb::open_at(&path).map_err(|e| log_err(shared, "search.db after a rebuild", e)).ok(),
+            match crate::db::remove_db_files(path) {
+                Ok(()) => sdb::open_at(path).map_err(|e| log_err(shared, "search.db after a rebuild", e)).ok(),
                 Err(e) => {
                     log_err(shared, "removing search.db", e);
                     None
@@ -110,8 +139,7 @@ pub(crate) fn open(shared: &Shared, data_dir: &Path) {
             log_err(shared, "opening search.db", e);
             None
         }
-    };
-    *search_index::lock(&shared.search.conn) = conn;
+    }
 }
 
 /// Starts the index worker (once): it runs queued jobs, then backfills, then sleeps until woken.
@@ -150,44 +178,164 @@ pub(crate) fn close(shared: &Shared) {
     *search_index::lock(&shared.search.conn) = None;
 }
 
+/// The worker's background work, one unit per step: compare the settings, then the backfill (or
+/// a replace pass), then the attachment sweep.
+#[derive(Default)]
+struct Background {
+    checked: bool,
+    backfill: Backfill,
+    sweep: crate::search_attach::Sweep,
+    done: bool,
+}
+
+impl Background {
+    fn step(&mut self, shared: &Shared) {
+        if !self.checked {
+            self.checked = true;
+            match check_config(shared) {
+                Ok(replace) => self.backfill = Backfill { replace, ..Backfill::default() },
+                Err(e) => log_err(shared, "comparing the settings", e),
+            }
+        } else if !self.backfill.done {
+            if let Err(e) = self.backfill.chunk(shared) {
+                log_err(shared, "backfill", e);
+                self.backfill.done = true;
+            }
+        } else if !self.sweep.done {
+            if let Err(e) = self.sweep.step(shared) {
+                log_err(shared, "attachment sweep", e);
+                self.sweep.done = true;
+            }
+        } else {
+            self.done = true;
+        }
+    }
+}
+
 fn run(shared: &Arc<Shared>) {
     crate::sync::background_qos();
     lock(&shared.search.stats).thread = Some(std::thread::current().id());
-    let mut backfill = Backfill::default();
+    let mut bg = Background::default();
     loop {
-        let job = {
+        let (job, rebuild) = {
             let mut w = lock(&shared.search.work);
             w.busy = false;
             if w.stop || shared.is_closing() {
                 return;
             }
-            let next = w.jobs.pop_front();
-            match next {
-                Some(j) => {
-                    w.busy = true;
-                    Some(j)
-                }
-                None if backfill.done => {
-                    let _w = shared.search.cv.wait(w).unwrap_or_else(|p| p.into_inner());
-                    continue;
-                }
-                None => None,
+            if w.rebuild {
+                w.rebuild = false;
+                w.wake = false;
+                w.busy = true;
+                (None, true)
+            } else if let Some(j) = w.jobs.pop_front() {
+                w.busy = true;
+                (Some(j), false)
+            } else if w.wake {
+                w.wake = false;
+                bg = Background::default();
+                (None, false)
+            } else if bg.done {
+                // Under the work lock, so a wake or a rebuild asked now is never marked done.
+                lock(&shared.search.stats).done = true;
+                let _w = shared.search.cv.wait(w).unwrap_or_else(|p| p.into_inner());
+                continue;
+            } else {
+                (None, false)
             }
         };
+        if rebuild {
+            rebuild_now(shared);
+            bg = Background::default();
+            continue;
+        }
         match job {
             Some(Job::Index { account, folder, uids }) => index_uids(shared, &account, &folder, &uids),
             Some(Job::Reflag { account, folder, uids }) => reflag(shared, &account, &folder, &uids),
-            None => {
-                if let Err(e) = backfill.chunk(shared) {
-                    log_err(shared, "backfill", e);
-                    backfill.done = true;
-                }
-                if backfill.done {
-                    lock(&shared.search.stats).done = true;
-                }
-            }
+            Some(Job::Extract { account, folder, uid, section }) => crate::search_attach::extract_one(shared, &account, &folder, uid, &section),
+            None => bg.step(shared),
         }
     }
+}
+
+/// Settings or Premium changed: the worker compares the settings again and sweeps attachments
+/// again, after the unit it is on.
+pub(crate) fn wake(shared: &Shared) {
+    let mut w = lock(&shared.search.work);
+    w.wake = true;
+    lock(&shared.search.stats).done = false;
+    drop(w);
+    shared.search.cv.notify_all();
+}
+
+/// A part finished downloading (`attachments.rs`): the worker indexes its text when attachment
+/// text is on and Premium is.
+pub(crate) fn attachment_ready(shared: &Shared, account: &str, folder: &str, uid: u32, section: &str) {
+    enqueue(shared, Job::Extract { account: account.into(), folder: folder.into(), uid, section: section.into() });
+}
+
+/// The settings as [`CONFIG`] spells them, from `mobile.db`.
+fn config_now(shared: &Shared) -> Result<String, String> {
+    let (b, a) = shared
+        .read(|c| Ok((crate::settings::get_in(c, "searchIndexBodies")?, crate::settings::get_in(c, "searchIndexAttachments")?)))
+        .map_err(|e| e.to_string())?;
+    let on = |v: Option<String>| if v.as_deref() == Some("false") { '0' } else { '1' };
+    Ok(format!("b{}a{}", on(b), on(a)))
+}
+
+/// Body words are indexed (`searchIndexBodies`, on unless turned off).
+fn bodies_on(c: &Connection) -> rusqlite::Result<bool> {
+    Ok(crate::settings::get_in(c, "searchIndexBodies")?.as_deref() != Some("false"))
+}
+
+/// One unit: the settings the index holds against the user's. Bodies switched, or attachment
+/// text switched off (its records go now), starts a replace pass. Returns whether one is due (also
+/// one a restart cut short). A fresh index takes the settings as they are: the backfill builds
+/// it so. An index from before the settings existed was built with bodies.
+fn check_config(shared: &Shared) -> Result<bool, String> {
+    let want = config_now(shared)?;
+    let guard = search_index::lock(&shared.search.conn);
+    let Some(c) = guard.as_ref() else { return Ok(false) };
+    let pending = sdb::meta_get_checked(c, REINDEX)?.as_deref() == Some("1");
+    let held = match sdb::meta_get_checked(c, CONFIG)? {
+        Some(v) => v,
+        None => {
+            let rows: i64 = c.query_row("SELECT count(*) FROM messages", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+            if rows == 0 {
+                sdb::meta_set(c, CONFIG, &want)?;
+                return Ok(pending);
+            }
+            "b1a1".to_string()
+        }
+    };
+    if held == want {
+        return Ok(pending);
+    }
+    let bodies_changed = held.get(..2) != want.get(..2);
+    let attachments_off = held.ends_with("a1") && want.ends_with("a0");
+    let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
+    if attachments_off {
+        writer::forget_attachments(&tx)?;
+    }
+    if bodies_changed || attachments_off {
+        tx.execute("DELETE FROM meta WHERE substr(key, 1, length(?1)) = ?1", [REINDEX_MARK]).map_err(|e| e.to_string())?;
+        sdb::meta_set(&tx, REINDEX, "1")?;
+    }
+    sdb::meta_set(&tx, CONFIG, &want)?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(pending || bodies_changed || attachments_off)
+}
+
+/// `mobile.search.rebuild`'s work, on the worker: `search.db` deleted and made again (one unit
+/// under the search lock: a new file is empty), then the backfill fills it.
+fn rebuild_now(shared: &Shared) {
+    let Some(path) = shared.search.path.get() else { return };
+    let mut guard = search_index::lock(&shared.search.conn);
+    *guard = None;
+    if let Err(e) = crate::db::remove_db_files(path) {
+        log_err(shared, "removing search.db", e);
+    }
+    *guard = open_file(shared, path);
 }
 
 fn enqueue(shared: &Shared, job: Job) {
@@ -238,7 +386,8 @@ fn addr_list(v: Option<&Value>) -> Vec<String> {
 
 /// The index doc of one row: subject, sender, recipients (`to_json` plus `thread_json.cc`), the
 /// body text when one is cached (else empty: header terms only). `row_json` is `"{}"` (results
-/// are read back from `mobile.db`) and no attachment candidates (the phone does not extract).
+/// are read back from `mobile.db`) and no attachment candidates: the phone records attachment
+/// text itself, part by part, once a part is downloaded (`search_attach.rs`).
 pub(crate) fn doc_of(row: &MessageRow, thread: &Value, body_text: &str) -> IndexDoc {
     let to: Value = serde_json::from_str(&row.to_json).unwrap_or(Value::Null);
     let mut to_addrs = addr_list(Some(&to));
@@ -283,18 +432,20 @@ fn body_text(html: Option<&str>, text_part: Option<&str>) -> String {
     }
 }
 
-struct Doc {
+pub(crate) struct Doc {
     uid: u32,
     doc: IndexDoc,
     flags: Vec<String>,
 }
 
-/// The docs of `uids` (rows that exist), read fresh from `mobile.db` with their cached body.
-fn read_docs(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Result<Vec<Doc>, EngineError> {
+/// The docs of `uids` (rows that exist), read fresh from `mobile.db` with their cached body
+/// (none with `searchIndexBodies` off).
+pub(crate) fn read_docs(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Result<Vec<Doc>, EngineError> {
     let mut out = Vec::with_capacity(uids.len());
     for chunk in uids.chunks(CHUNK) {
         let list = crate::sync::uid_list(chunk);
-        let rows = shared.read(|c| {
+        let (bodies, rows) = shared.read(|c| {
+            let bodies = bodies_on(c)?;
             let mut st = c.prepare(&format!(
                 "SELECT m.uid, m.subject, m.from_name, m.from_address, m.date_ms, m.message_id, m.to_json, m.thread_json,
                         m.has_attachments, COALESCE(m.local_seen, m.seen), COALESCE(m.local_flagged, m.flagged), b.html, b.text
@@ -322,11 +473,11 @@ fn read_docs(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Resu
                     ))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
+            Ok((bodies, rows))
         })?;
         for (row, thread, html, text_part) in rows {
             let thread: Value = serde_json::from_str(&thread).unwrap_or(Value::Null);
-            let body = body_text(html.as_deref(), text_part.as_deref());
+            let body = if bodies { body_text(html.as_deref(), text_part.as_deref()) } else { String::new() };
             out.push(Doc { uid: row.uid, flags: flag_letters(row.seen, row.flagged), doc: doc_of(&row, &thread, &body) });
         }
     }
@@ -337,7 +488,7 @@ fn read_docs(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Resu
 /// already holds is left as it is (the backfill never replaces a fuller doc). `mark` is a `meta`
 /// key and value written in the last transaction (the backfill's progress). Returns how many rows
 /// were written.
-fn write_docs(c: &Connection, account: &str, folder: &str, docs: &[Doc], only_missing: bool, mark: Option<(&str, &str)>) -> Result<usize, String> {
+pub(crate) fn write_docs(c: &Connection, account: &str, folder: &str, docs: &[Doc], only_missing: bool, mark: Option<(&str, &str)>) -> Result<usize, String> {
     let vault_dir = text::vault_dir_name(folder);
     let mut n = 0;
     let chunks: Vec<&[Doc]> = if docs.is_empty() { vec![docs] } else { docs.chunks(CHUNK).collect() };
@@ -508,7 +659,9 @@ fn mark_key(account: &str, folder: &str) -> String {
 pub(crate) fn forget_folder(shared: &Shared, account: &str, folder: &str) {
     if let Some(c) = search_index::lock(&shared.search.conn).as_ref() {
         let out = writer::forget_folder(c, account, folder).and_then(|()| {
-            c.execute("DELETE FROM meta WHERE key = ?1", [mark_key(account, folder)]).map(|_| ()).map_err(|e| e.to_string())
+            c.execute("DELETE FROM meta WHERE key IN (?1, ?2)", [mark_key(account, folder), format!("{REINDEX_MARK}{account}\n{folder}")])
+                .map(|_| ())
+                .map_err(|e| e.to_string())
         });
         if let Err(e) = out {
             log_err(shared, "forgetting a folder", e);
@@ -531,9 +684,10 @@ pub(crate) fn forget_account(shared: &Shared, account: &str) {
                 // `vault_dir_name` of a sanitized name is the name itself.
                 writer::forget_folder(c, account, &dir)?;
             }
-            c.execute("DELETE FROM meta WHERE substr(key, 1, length(?1)) = ?1", [format!("{MARK}{account}\n")])
-                .map(|_| ())
-                .map_err(|e| e.to_string())
+            for prefix in [MARK, REINDEX_MARK] {
+                c.execute("DELETE FROM meta WHERE substr(key, 1, length(?1)) = ?1", [format!("{prefix}{account}\n")]).map_err(|e| e.to_string())?;
+            }
+            Ok(())
         })();
         if let Err(e) = out {
             log_err(shared, "forgetting an account", e);
@@ -545,12 +699,15 @@ pub(crate) fn forget_account(shared: &Shared, account: &str) {
 
 /// Indexes rows `mobile.db` holds and the index does not (rows synced before `search.db` existed,
 /// or before a rebuild), folder by folder in uid order, [`CHUNK`] rows at a time. Each folder's
-/// progress is a mark in `search.db` `meta`, so a run cut short resumes where it stopped.
+/// progress is a mark in `search.db` `meta`, so a run cut short resumes where it stopped. A
+/// replace pass (`replace`: the settings changed) writes every row again the same way, with its
+/// own marks, and clears [`REINDEX`] at its end.
 #[derive(Default)]
 struct Backfill {
     /// Folders still to look at; `None` until the first chunk lists them.
     folders: Option<VecDeque<(String, String)>>,
     done: bool,
+    replace: bool,
 }
 
 impl Backfill {
@@ -568,9 +725,18 @@ impl Backfill {
         }
         let Some((account, folder)) = self.folders.as_ref().and_then(|f| f.front().cloned()) else {
             self.done = true;
+            if self.replace {
+                let guard = search_index::lock(&shared.search.conn);
+                if let Some(c) = guard.as_ref() {
+                    let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
+                    tx.execute("DELETE FROM meta WHERE substr(key, 1, length(?1)) = ?1", [REINDEX_MARK]).map_err(|e| e.to_string())?;
+                    sdb::meta_set(&tx, REINDEX, "0")?;
+                    tx.commit().map_err(|e| e.to_string())?;
+                }
+            }
             return Ok(());
         };
-        let key = mark_key(&account, &folder);
+        let key = if self.replace { format!("{REINDEX_MARK}{account}\n{folder}") } else { mark_key(&account, &folder) };
         let mark: Option<i64> = {
             let guard = search_index::lock(&shared.search.conn);
             let Some(c) = guard.as_ref() else {
@@ -605,7 +771,7 @@ impl Backfill {
                 self.done = true;
                 return Ok(());
             };
-            write_docs(c, &account, &folder, &docs, true, Some((&key, &top.to_string())))?
+            write_docs(c, &account, &folder, &docs, !self.replace, Some((&key, &top.to_string())))?
         };
         if written > 0 {
             let mut st = lock(&shared.search.stats);
@@ -785,6 +951,62 @@ pub(crate) fn server(engine: &Engine, params: Value) -> Result<Value, RpcError> 
         })
         .map_err(internal)?;
     Ok(json!({ "rows": rows }))
+}
+
+/// `mobile.search.status {}` -> `{available, state: "indexing"|"idle", indexed, total,
+/// attachments, sizeBytes}`: messages the index holds, messages on the phone, attachment parts
+/// with searchable text, and the size of `search.db` with its WAL. `available` false (and zero
+/// counts) when `search.db` could not be opened. Waits for the search lock: at most one unit.
+pub(crate) fn status(engine: &Engine, _params: Value) -> Result<Value, RpcError> {
+    let shared = engine.shared();
+    let total: i64 = engine.read(|c| c.query_row("SELECT count(*) FROM messages", [], |r| r.get(0))).map_err(internal)?;
+    let counts = {
+        let guard = search_index::lock(&shared.search.conn);
+        match guard.as_ref() {
+            Some(c) => {
+                let indexed: i64 = c.query_row("SELECT count(*) FROM messages", [], |r| r.get(0)).map_err(internal)?;
+                Some((indexed, writer::attachment_counts(c).map_err(internal)?))
+            }
+            None => None,
+        }
+    };
+    let size: u64 = shared
+        .search
+        .path
+        .get()
+        .map(|p| {
+            ["", "-wal"].iter().filter_map(|s| std::fs::metadata(format!("{}{s}", p.to_string_lossy())).ok()).map(|m| m.len()).sum()
+        })
+        .unwrap_or(0);
+    let busy = {
+        let w = lock(&shared.search.work);
+        w.busy || w.rebuild || w.wake || !w.jobs.is_empty() || !lock(&shared.search.stats).done
+    };
+    let (available, indexed, attachments) = match counts {
+        Some((i, a)) => (true, i, a),
+        None => (false, 0, 0),
+    };
+    Ok(json!({
+        "available": available,
+        "state": if available && busy { "indexing" } else { "idle" },
+        "indexed": indexed,
+        "total": total,
+        "attachments": attachments,
+        "sizeBytes": size,
+    }))
+}
+
+/// `mobile.search.rebuild {}` -> `{ok: true}` at once: the index worker deletes `search.db`,
+/// makes it again and indexes every row from `mobile.db` (bodies and attachment text as the
+/// settings say), after the unit it is on. Search answers from what is indexed meanwhile.
+pub(crate) fn rebuild(engine: &Engine, _params: Value) -> Result<Value, RpcError> {
+    let shared = engine.shared();
+    let mut w = lock(&shared.search.work);
+    w.rebuild = true;
+    lock(&shared.search.stats).done = false;
+    drop(w);
+    shared.search.cv.notify_all();
+    Ok(json!({ "ok": true }))
 }
 
 /// Whether an index hit's Message-ID and a row's can name the same message (a side with none

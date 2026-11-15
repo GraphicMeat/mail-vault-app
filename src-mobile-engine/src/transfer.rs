@@ -152,6 +152,10 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
         place(engine, placed)?;
     }
     let settings_applied = apply_settings(engine, &added, bundle.settings.as_ref())?;
+    if settings_applied {
+        // The search index settings may have come with them.
+        crate::search::wake(engine.shared());
+    }
     Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped, "settingsApplied": settings_applied }))
 }
 
@@ -285,6 +289,8 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
         ("autoDownloadAttachments", s.auto_download_attachments),
         ("afterDeleteSameAccount", s.after_delete_same_account),
         ("badgeEnabled", s.badge_enabled),
+        ("searchIndexBodies", s.search_index_bodies),
+        ("searchIndexAttachments", s.search_index_attachments),
     ] {
         if let Some(v) = v {
             values.push((key, json!(v)));

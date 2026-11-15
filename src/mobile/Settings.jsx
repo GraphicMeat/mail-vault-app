@@ -24,6 +24,8 @@
 // - Offline: "Download in the background" (`backgroundDownload`, on by default): background runs
 //   keep the offline window up to date, so mail opens without a connection; then, per account,
 //   the window, the room it takes, the progress and "Download now" (OfflineSettings.jsx).
+// - Search index: body words and attachment text in the index, its size and Rebuild
+//   (SearchIndexSettings.jsx).
 // - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
 //   screen; a phone whose place another device took says so, with Sign in again. While Premium is
 //   on, Billing below it (Billing.jsx: manage the store subscription, the website account's devices).
@@ -48,6 +50,7 @@ import Billing from './Billing.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
 import QuickActionsSettings from './QuickActionsSettings.jsx';
 import EncryptionSettings from './EncryptionSettings.jsx';
+import SearchIndexSettings from './SearchIndexSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
 import { AppearanceMore, MailMore, NotifyMore } from './SettingsDisplay.jsx';
@@ -131,7 +134,7 @@ function AccountRow({ account, reauthBusy }) {
 export const SETTINGS_PAGES = [
   ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
   ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts']]],
-  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['storage', 'settings.tab.storage'], ['dataUsage', 'settings.tab.dataUsage'], ['privacy', 'settings.tab.privacySecurity']]],
+  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['storage', 'settings.tab.storage'], ['dataUsage', 'settings.tab.dataUsage'], ['search', 'settings.searchIndex.title'], ['privacy', 'settings.tab.privacySecurity']]],
   ['settings.tab.diagnostics', [['pending', 'settings.pendingActions.title'], ['logs', 'settings.tab.logs']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
@@ -339,6 +342,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         {page === 'dataUsage' && <DataUsage />}
         {page === 'pending' && <PendingActions />}
         {page === 'logs' && <LogsSettings />}
+        {page === 'search' && <SearchIndexSettings />}
 
         {page === 'accounts' && (
           <>

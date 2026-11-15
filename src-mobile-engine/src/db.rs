@@ -828,7 +828,7 @@ impl Engine {
         }
         // The index: opened here, filled by its own worker thread (rows it has not seen are
         // backfilled there, never on this path).
-        crate::search::open(&engine.shared, data_dir);
+        crate::search::open(&engine.shared, data_dir, cache_dir);
         crate::search::start(&engine.shared);
         // Asleep until the first reminder's time (none: an hour at a time).
         crate::followup::start(&engine.shared);
