@@ -5416,6 +5416,8 @@ dependencies = [
  "mailvault-core",
  "mock-imap",
  "mock-jmap",
+ "pgp",
+ "rand 0.8.7",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",

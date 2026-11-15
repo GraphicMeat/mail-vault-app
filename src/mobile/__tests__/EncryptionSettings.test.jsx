@@ -80,6 +80,15 @@ describe('Settings > Encryption', () => {
     expect(imports()).toEqual([{ handle: 'out/ab/key.asc', passphrase: 'pw' }]);
   });
 
+  it('every picked file goes to the engine, so no copy is left behind', async () => {
+    engine.picks = [{ handle: 'out/ab/a.asc', name: 'a.asc' }, { name: 'b.asc', error: 'UNREADABLE' }, { handle: 'out/cd/c.asc', name: 'c.asc' }];
+    render(<EncryptionSettings />);
+    await waitFor(() => expect(document.querySelector('[data-mv-pgp-none]')).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-mv-pgp-file]'));
+    await waitFor(() => expect(imports()).toHaveLength(2));
+    expect(imports()).toEqual([{ handle: 'out/ab/a.asc', passphrase: '' }, { handle: 'out/cd/c.asc', passphrase: '' }]);
+  });
+
   it('a cancelled pick imports nothing', async () => {
     render(<EncryptionSettings />);
     await waitFor(() => expect(document.querySelector('[data-mv-pgp-none]')).toBeTruthy());

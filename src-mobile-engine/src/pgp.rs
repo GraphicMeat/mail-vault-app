@@ -53,6 +53,11 @@ fn read_keys(shared: &Shared) -> Result<Vec<StoredKey>, String> {
     }
 }
 
+/// Whether any key is imported (a store that cannot be read counts as yes: ask the server again).
+pub(crate) fn has_keys(shared: &Shared) -> bool {
+    read_keys(shared).map_or(true, |k| !k.is_empty())
+}
+
 fn write_keys(shared: &Shared, keys: &[StoredKey]) -> Result<(), String> {
     if keys.is_empty() {
         return shared.secrets().delete(ENTRY);
@@ -471,6 +476,20 @@ pub(crate) mod tests {
         assert!(hit["html"].as_str().unwrap().contains("4242"));
         assert_eq!(server.commands().iter().filter(|c| c.to_uppercase().contains("FETCH")).count(), fetches, "a decrypted body was fetched again");
         drop(tmp);
+    }
+
+    /// With no key on the phone a locked body is answered from the cache (offline too), not
+    /// fetched again on every open.
+    #[test]
+    fn a_locked_body_with_no_key_is_answered_from_the_cache() {
+        let key = keypair(None);
+        let (server, _tmp, e, _secrets, account) = engine_with(vec![pgp_mime(1, &key)]);
+        assert_eq!(body(&e, &account, 1)["pgp"], json!(LOCKED));
+        let fetches = || server.commands().iter().filter(|c| c.to_uppercase().contains("FETCH")).count();
+        let before = fetches();
+        let again = body(&e, &account, 1);
+        assert_eq!(again["pgp"], json!(LOCKED), "{again}");
+        assert_eq!(fetches(), before, "a locked body was fetched again with no key to open it");
     }
 
     /// A download pass that ran before the key was imported cached the message encrypted; the

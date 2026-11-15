@@ -56,9 +56,15 @@ export default function EncryptionSettings() {
       setError(t('pgp.failed', { err: e?.message || String(e) }));
       return;
     }
-    const file = picked.find((f) => f.handle);
-    if (!file) return;
-    if (await run(() => daemonCall('mobile.pgp.importKey', { handle: file.handle, passphrase })) && mounted.current) setPassphrase('');
+    // Every picked file goes to the engine, which deletes each copy: none is left in the cache.
+    const handles = picked.filter((f) => f.handle).map((f) => f.handle);
+    if (handles.length === 0) return;
+    let ok = true;
+    for (const handle of handles) {
+      // eslint-disable-next-line no-await-in-loop -- one import at a time, each replying with the list
+      ok = (await run(() => daemonCall('mobile.pgp.importKey', { handle, passphrase }))) && ok;
+    }
+    if (ok && mounted.current) setPassphrase('');
   };
 
   return (
