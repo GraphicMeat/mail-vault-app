@@ -7,8 +7,10 @@
 // listeners, no `preventDefault`), never scroll events, so scrolling stays on the fast path.
 import React, { memo, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import MessageRow, { ROW_HEIGHT } from './MessageRow.jsx';
+import MessageRow from './MessageRow.jsx';
 import { useT } from './i18n.js';
+import { useMobileStore } from './store.js';
+import { rowHeight } from './prefs.js';
 
 const OVERSCAN = 8;
 /** How far (px, after damping) a pull has to travel before letting go refreshes. */
@@ -103,23 +105,32 @@ function MessageList({ cache, onOpen, onSwipe, onRefresh, refreshing = false, de
 
   const total = cache.total ?? 0;
   const version = cache.version;
+  // One height for every row, from the preferences (text size, density, preview lines).
+  const height = useMobileStore((s) => rowHeight(s.prefs));
   const virtualizer = useVirtualizer({
     count: total,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => height,
     overscan: OVERSCAN,
   });
+  // A preference changed the height: every position is recomputed from the new estimate.
+  const measured = useRef(height);
+  useLayoutEffect(() => {
+    if (measured.current === height) return;
+    measured.current = height;
+    virtualizer.measure();
+  }, [height, virtualizer]);
   const items = virtualizer.getVirtualItems();
   const first = items.length ? items[0].index : 0;
   const last = items.length ? items[items.length - 1].index : 0;
-  cache.topIndex = Math.max(0, Math.floor((virtualizer.scrollOffset || 0) / ROW_HEIGHT));
+  cache.topIndex = Math.max(0, Math.floor((virtualizer.scrollOffset || 0) / height));
 
   // The anchor row was found again after a reload: move by however many rows landed above it.
   const anchor = cache.anchor;
   useLayoutEffect(() => {
     if (!anchor || anchor.to == null) return;
     const el = scrollRef.current;
-    if (el && anchor.to !== anchor.from) el.scrollTop += (anchor.to - anchor.from) * ROW_HEIGHT;
+    if (el && anchor.to !== anchor.from) el.scrollTop += (anchor.to - anchor.from) * height;
     cache.clearAnchor();
   });
 

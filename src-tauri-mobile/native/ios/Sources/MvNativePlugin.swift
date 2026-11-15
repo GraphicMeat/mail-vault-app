@@ -457,8 +457,9 @@ extension MvNativePlugin {
     invoke.resolve()
   }
 
-  /// `requestNotifications {prompt?}`: the system's permission prompt (alerts and sounds; no
-  /// badge, the app sets none) the first time, the stored answer after; answers `{granted}`. With
+  /// `requestNotifications {prompt?}`: the system's permission prompt (alerts, sounds and the app
+  /// icon's badge, which Settings > Notifications may turn on) the first time, the stored answer
+  /// after; answers `{granted}`. With
   /// `prompt: false` only the current answer (the user may have turned them off in Settings).
   @objc public func requestNotifications(_ invoke: Invoke) throws {
     let prompt = (try? invoke.parseArgs(PermissionArgs.self))?.prompt ?? true
@@ -470,7 +471,7 @@ extension MvNativePlugin {
       }
       return
     }
-    center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+    center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
       invoke.resolve(["granted": granted])
     }
   }

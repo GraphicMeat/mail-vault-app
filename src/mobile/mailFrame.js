@@ -33,6 +33,11 @@
 // on, a link core's scan cannot read (it reads `a` with a plain `href`) loses its URL: an SVG
 // `xlink:href` link and an image map's `<area href>` would otherwise stay live and unchecked.
 //
+// Signatures (`signatureDisplay`, `foldSignatures`): desktop's folds without a script. The
+// signatures desktop's reader finds (utils/foldDetection.js) go under a native `<details>` whose
+// summary says "Show signature" (smart, collapsed), go entirely (always-hide), or stay
+// (always-show). Done before cleaning, so the fold is cleaned and checked like the rest.
+//
 // Theme: a text body follows the app theme. An html body is always drawn on a light canvas:
 // without scripts there is no Dark Reader, and mail written for white paper (dark text, no
 // background) would be unreadable on dark. The mail's own `prefers-color-scheme: dark` rules
@@ -41,6 +46,7 @@
 
 import { suppressDarkScheme } from '../shared/darkScheme.js';
 import { hasAddressBody, isUrlStart, trimUrl } from '../shared/linkUrls.js';
+import { signatureFoldTargets, SIGNATURE_TOGGLE_CSS } from '../utils/foldDetection.js';
 
 const CSP_BASE = "default-src 'none'; style-src 'unsafe-inline'; img-src data: cid:";
 const CSP_TAIL = "; font-src data:; form-action 'none'";
@@ -273,6 +279,39 @@ function markLinks(html, { alerts, confirm = false }, parse) {
   }
   return { source: serialize(doc), alerts: [...shown.values()], tap: prefix };
 }
+/** Whether `foldSignatures` has anything to look at: a string check, so most mail is not parsed. */
+const mayHaveSignature = (html) => /signature/i.test(html);
+
+/**
+ * The mail with its signatures shown as `signatureDisplay` says (`{mode, label}`; `label` is the
+ * summary's "Show signature"): folded under a `<details>` (smart, collapsed, anything unknown, as
+ * desktop folds them), removed (always-hide), or as they are (always-show, or none found). A
+ * signature inside one already folded is folded with it, never twice.
+ */
+export function foldSignatures(html, { mode = 'always-show', label = '' } = {}, parse = parseHtml) {
+  if (mode === 'always-show' || !mayHaveSignature(html)) return html;
+  const doc = parse(html);
+  const done = [];
+  for (const el of signatureFoldTargets(doc)) {
+    if (done.some((d) => d === el || d.contains(el))) continue;
+    done.push(el);
+    el.dataset.sigFolded = 'true';
+    if (mode === 'always-hide') {
+      el.remove();
+      continue;
+    }
+    const fold = doc.createElement('details');
+    fold.setAttribute('data-mv-signature', '');
+    const summary = doc.createElement('summary');
+    summary.setAttribute('style', SIGNATURE_TOGGLE_CSS);
+    summary.textContent = label;
+    fold.appendChild(summary);
+    el.parentNode.insertBefore(fold, el);
+    fold.appendChild(el);
+  }
+  return done.length ? serialize(doc) : html;
+}
+
 const MAX_PASSES = 4;
 
 /**
@@ -346,9 +385,10 @@ function assembledClean(doc, rules) {
  * the engine's scan cannot see stays live), or null; `linkAlerts` then lists what a tap on a
  * guarded link asks about.
  */
-export function prepareMailBody({ html, text }, parse = parseHtml, links = null) {
+export function prepareMailBody({ html, text }, parse = parseHtml, links = null, signatures = null) {
   if (typeof html === 'string' && html.trim() !== '') {
-    const marked = links && hasLinkMarks(html) ? markLinks(html, links, parse) : { source: html, alerts: [], tap: null };
+    const folded = signatures ? foldSignatures(html, signatures, parse) : html;
+    const marked = links && hasLinkMarks(folded) ? markLinks(folded, links, parse) : { source: folded, alerts: [], tap: null };
     const rules = { tap: marked.tap, safety: Boolean(links?.safety) };
     const cleaned = cleanToFixpoint(marked.source, parse, rules);
     if (cleaned != null && PREFIX.test(cleaned)) {

@@ -282,7 +282,8 @@ export function createMobileStore() {
       if (list && activeAccountId && activeFolder && list.threads !== threadedList(prefs)) open(activeAccountId, activeFolder);
     }
 
-    async function activate(accountId, folder) {
+    /** `launch`: the app's first open; it syncs only under `refreshOnLaunch`. */
+    async function activate(accountId, folder, launch = false) {
       flush();
       set({ activeAccountId: accountId, folders: [], pending: 0, drafts: [], followUps: [] });
       loadPending();
@@ -302,6 +303,7 @@ export function createMobileStore() {
       if (!get().autoSync) return;
       // New mail live on the account now in front (the engine stops the previous one's listener).
       get().appState();
+      if (launch && get().prefs.refreshOnLaunch === false) return;
       await get().refresh();
     }
 
@@ -708,7 +710,7 @@ export function createMobileStore() {
           // A hidden account opens only when it was the one open last (it is still an account).
           const active = accounts.find((a) => a.id === saved) || accounts.find((a) => !a.hidden) || accounts[0];
           for (const a of accounts) if (a.id !== active.id) loadFoldersQuietly(a.id);
-          await activate(active.id, savedFolder(active.id));
+          await activate(active.id, savedFolder(active.id), true);
         })();
         return initRun;
       },

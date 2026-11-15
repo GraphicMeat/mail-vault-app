@@ -17,7 +17,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
 import { ALL_INBOXES } from './folders.js';
-import MessageRow, { ROW_HEIGHT } from './MessageRow.jsx';
+import MessageRow from './MessageRow.jsx';
+import { rowHeight } from './prefs.js';
 import { errorKey } from './errors.js';
 import { useT } from './i18n.js';
 import { useKeyboardViewport } from './keyboardViewport.js';
@@ -48,6 +49,7 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
   // All Inboxes is no one folder: search opens on All accounts there, without "This folder".
   const folder = useMobileStore((s) => (s.activeFolder === ALL_INBOXES ? null : s.activeFolder));
   const recent = useMobileStore((s) => s.recentSearches);
+  const height = useMobileStore((s) => rowHeight(s.prefs));
 
   const [query, setQuery] = useState(initialQuery);
   const [scope, setScope] = useState(folder ? 'folder' : 'all'); // 'folder' | 'all'
@@ -202,7 +204,7 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
   const busy = local.state === 'loading';
 
   const rowsView = shown.map((row, i) => (
-    <div key={keyOf(row)} className="mv-search__item" style={{ height: `${ROW_HEIGHT}px` }}>
+    <div key={keyOf(row)} className="mv-search__item" style={{ height: `${height}px` }}>
       <MessageRow row={row} index={i} onOpen={open} onSwipe={onSwipe} />
     </div>
   ));

@@ -42,6 +42,7 @@ import OfflineSettings from './OfflineSettings.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
+import { AppearanceMore, MailMore, NotifyMore } from './SettingsDisplay.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -279,8 +280,8 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
           </>
         )}
 
-        {page === 'appearance' && <SettingsPrefs section="appearance" />}
-        {page === 'mail' && <SettingsPrefs section="mail" />}
+        {page === 'appearance' && <><SettingsPrefs section="appearance" /><AppearanceMore /></>}
+        {page === 'mail' && <><SettingsPrefs section="mail" /><MailMore /></>}
         {page === 'privacy' && <SettingsPrefs section="privacy" />}
 
         {page === 'accounts' && (
@@ -314,6 +315,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
               />
               {accounts.map((a) => <AccountNotifications key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
             </div>
+            <NotifyMore enabled={ready && values.notifications === 'on'} />
             {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
             {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
             <PrioritySenders />

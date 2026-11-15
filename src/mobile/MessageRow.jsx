@@ -7,6 +7,10 @@
 // A conversation's row (`threadCount` over 1, engine `threads.rs`) is its newest message's, with
 // the number of messages beside the sender; it reads unread while any message is, and a swipe on
 // it acts on every message (App.jsx, prefs.js `rowUids`).
+// The row's look follows the preferences: `listPreviewLines` lines of the message's text under
+// the subject (none at 0), `listDensity`'s padding, and its height (prefs.js `rowHeight`, which
+// also scales with the text size). With `trackpadSwipeEnabled` off (desktop's swipe switch) the
+// row does not swipe.
 // Deliberately not built on src/components/EmailRow: that pulls in the desktop stores.
 import React, { memo } from 'react';
 import { displayText } from '../utils/bidiText.js';
@@ -17,11 +21,12 @@ import SwipeRow from './SwipeRow.jsx';
 import { accountColor } from './accountColor.js';
 import { EnvelopeIcon, TrashIcon, FlagIcon, MoveIcon } from './icons.jsx';
 import { useMobileStore } from './store.js';
-import { swipeKind } from './prefs.js';
+import { swipeKind, rowHeight, PREF_DEFAULTS } from './prefs.js';
 import { accountRowKey } from './messagePages.js';
 
-/** Row height in px: three lines of text plus padding; well over the 44px tap minimum. */
-export const ROW_HEIGHT = 76;
+/** Row height in px at the default preferences: three lines of text plus padding; well over the
+ *  44px tap minimum. The row's own height is `rowHeight(prefs)`. */
+export const ROW_HEIGHT = rowHeight(PREF_DEFAULTS);
 
 function senderOf(row, t = translate) {
   return displayText(row.fromName, '') || displayText(row.fromAddress, '') || t('explorer.unknownSender');
@@ -30,10 +35,13 @@ function senderOf(row, t = translate) {
 /** `account`: set in All Inboxes, where the row starts with a dot in that account's colour. */
 function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = null, account = null }) {
   const t = useT();
-  const leadingAction = useMobileStore((s) => s.prefs.swipeRightAction);
-  const trailingAction = useMobileStore((s) => s.prefs.swipeLeftAction);
-  const dates = useMobileStore((s) => s.prefs);
-  const style = { height: `${ROW_HEIGHT}px`, transform: `translateY(${start}px)` };
+  const swipes = useMobileStore((s) => s.prefs.trackpadSwipeEnabled !== false);
+  const leadingAction = useMobileStore((s) => (swipes ? s.prefs.swipeRightAction : 'none'));
+  const trailingAction = useMobileStore((s) => (swipes ? s.prefs.swipeLeftAction : 'none'));
+  const prefs = useMobileStore((s) => s.prefs);
+  const dates = prefs;
+  const previewLines = [0, 1, 2, 3].includes(prefs.listPreviewLines) ? prefs.listPreviewLines : 1;
+  const style = { height: `${rowHeight(prefs)}px`, transform: `translateY(${start}px)` };
   if (!row) {
     return <div className="mv-row-slot mv-row--placeholder" data-index={index} data-loaded="0" style={style} aria-hidden="true" />;
   }
@@ -73,7 +81,10 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
         leading={spec(leadingAction)}
         trailing={spec(trailingAction)}
       >
-        <button type="button" className={unread ? 'mv-row mv-row--unread' : 'mv-row'}>
+        <button
+          type="button"
+          className={`mv-row${unread ? ' mv-row--unread' : ''}${prefs.listDensity === 'compact' ? ' mv-row--compact' : ''}`}
+        >
           <span className="mv-row__top">
             {account && (
               <span className="mv-row__acct" role="img" aria-label={account.email} style={{ backgroundColor: accountColor(account) }} />
@@ -88,7 +99,16 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
             <span className="mv-row__date">{formatEmailDate(row.dateMs, undefined, dates)}</span>
           </span>
           <span className="mv-row__subject" dir="auto">{displayText(row.subject, t('common.noSubject'))}</span>
-          <span className="mv-row__snippet" dir="auto">{cleanPreviewText(row.snippet)}</span>
+          {previewLines > 0 && (
+            <span
+              className={previewLines > 1 ? 'mv-row__snippet mv-row__snippet--lines' : 'mv-row__snippet'}
+              data-mv-preview-lines={previewLines}
+              style={previewLines > 1 ? { WebkitLineClamp: previewLines } : undefined}
+              dir="auto"
+            >
+              {cleanPreviewText(row.snippet)}
+            </span>
+          )}
         </button>
       </SwipeRow>
     </div>

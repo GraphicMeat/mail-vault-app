@@ -73,13 +73,17 @@ export async function phoneQr({ password }) {
 }
 
 // The desktop settings the phone takes (the phone applies them on its first import that carries
-// them). Never: backup*, snapshot*, cleanupRules, transferLimits, billing, AI keys, PGP, sound,
-// badge, refreshInterval, daemon*, onboarding, layout or other UI memory.
+// them). Never: backup*, snapshot*, cleanupRules, transferLimits, billing, AI keys, PGP,
+// refreshInterval, daemon*, onboarding, layout or other UI memory. The sound goes as its name (the
+// phone plays the system's sound unless it is `none`).
 const PHONE_GLOBAL_KEYS = [
   'language', 'emailViewerTheme', 'dateFormat', 'customDateFormat', 'timeFormat', 'threadMode', 'threadSortOrder',
   'markAsReadMode', 'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction',
   'sendDelay', 'autoSaveDrafts', 'attachmentReminder', 'defaultSignatureEnabled', 'holdExternalContent',
   'linkSafetyEnabled', 'linkSafetyClickConfirm', 'trackerBlockingEnabled',
+  'textScale', 'appFont', 'listDensity', 'listPreviewLines', 'signatureDisplay', 'actionButtonDisplay',
+  'trackpadSwipeEnabled', 'refreshOnLaunch', 'autoDownloadAttachments', 'afterDeleteSameAccount',
+  'badgeEnabled', 'badgeMode',
 ];
 
 function phoneGlobalSettings(s, theme) {
@@ -88,6 +92,7 @@ function phoneGlobalSettings(s, theme) {
   if (theme?.palette) out.palette = theme.palette;
   const n = s.notificationSettings || {};
   if (typeof n.showPreview === 'boolean') out.notificationPreview = n.showPreview;
+  if (typeof n.sound === 'string') out.notificationSound = n.sound;
   if (Array.isArray(n.importantSenders)) {
     out.importantSenders = n.importantSenders
       .filter(e => e && typeof e.match === 'string')

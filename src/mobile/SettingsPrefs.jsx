@@ -46,7 +46,7 @@ export function Choice({ label, value, options, onChange, disabled, name }) {
   );
 }
 
-function Toggle({ label, hint, checked, onChange, name }) {
+export function Toggle({ label, hint, checked, onChange, name }) {
   const id = useId();
   return (
     <button
@@ -239,12 +239,32 @@ export default function SettingsPrefs({ section }) {
               ]}
               onChange={(afterDeleteSelect) => set({ afterDeleteSelect })}
             />
+            {prefs.afterDeleteSelect !== 'none' && (
+              <Toggle
+                name="afterDeleteSameAccount"
+                label={t('settings.behavior.afterDeleteSameAccount')}
+                hint={t('settings.behavior.afterDeleteSameAccountDesc')}
+                checked={prefs.afterDeleteSameAccount}
+                onChange={(afterDeleteSameAccount) => set({ afterDeleteSameAccount })}
+              />
+            )}
           </div>
 
           <h2 className="mv-settings__heading">{t('settings.behavior.swipe.title')}</h2>
           <div className="mv-settings__list">
-            <Choice name="swipeLeftAction" label={t('settings.behavior.swipe.left')} value={prefs.swipeLeftAction} options={swipeOptions} onChange={(swipeLeftAction) => set({ swipeLeftAction })} />
-            <Choice name="swipeRightAction" label={t('settings.behavior.swipe.right')} value={prefs.swipeRightAction} options={swipeOptions} onChange={(swipeRightAction) => set({ swipeRightAction })} />
+            <Toggle
+              name="trackpadSwipeEnabled"
+              label={t('mobile.prefs.swipeRows')}
+              hint={t('mobile.prefs.swipeRowsHint')}
+              checked={prefs.trackpadSwipeEnabled}
+              onChange={(trackpadSwipeEnabled) => set({ trackpadSwipeEnabled })}
+            />
+            {prefs.trackpadSwipeEnabled && (
+              <>
+                <Choice name="swipeLeftAction" label={t('settings.behavior.swipe.left')} value={prefs.swipeLeftAction} options={swipeOptions} onChange={(swipeLeftAction) => set({ swipeLeftAction })} />
+                <Choice name="swipeRightAction" label={t('settings.behavior.swipe.right')} value={prefs.swipeRightAction} options={swipeOptions} onChange={(swipeRightAction) => set({ swipeRightAction })} />
+              </>
+            )}
           </div>
 
           <h2 className="mv-settings__heading">{t('settings.behavior.sending')}</h2>

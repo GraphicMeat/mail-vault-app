@@ -5,6 +5,8 @@
 //   failed       the reason, translated; tap tries again
 // A cloud link (`kind: "link"`, a Microsoft account's reference attachment) has no bytes to fetch:
 // it shows as a disabled chip that says to open it in Outlook.
+// `autoFetch` (`autoDownloadAttachments`): a chip whose file is not on the phone yet starts its
+// download as the message opens, as a tap would.
 // The file never crosses the bridge: the shell is handed the path `mobile.attachment.local`
 // answers right before each open or share (a file evicted meanwhile answers null: fetch again),
 // checks it is a file of the attachment cache, and gives the previewer a named copy.
@@ -111,7 +113,7 @@ function LinkChip({ attachment }) {
   );
 }
 
-function FileChip({ accountId, folder, uid, attachment }) {
+function FileChip({ accountId, folder, uid, attachment, autoFetch = false }) {
   const t = useT();
   const { section, filename, mime, size } = attachment;
   const key = useMemo(() => ({ accountId, folder, uid, section }), [accountId, folder, uid, section]);
@@ -133,9 +135,14 @@ function FileChip({ accountId, folder, uid, attachment }) {
   useEffect(() => {
     live.current = true;
     ensureAttachmentEvents();
-    // A file fetched earlier (or whose `done` this page missed) starts ready.
+    // A file fetched earlier (or whose `done` this page missed) starts ready; one not here is
+    // fetched now under `autoFetch`.
     daemonCall('mobile.attachment.local', key).then(
-      (r) => { if (live.current && r?.path) setState((s) => (s.phase === 'idle' ? { phase: 'ready' } : s)); },
+      (r) => {
+        if (!live.current) return;
+        if (r?.path) setState((s) => (s.phase === 'idle' ? { phase: 'ready' } : s));
+        else if (autoFetchRef.current && !job.current) startRef.current?.();
+      },
       () => {},
     );
     return () => {
@@ -184,6 +191,12 @@ function FileChip({ accountId, folder, uid, attachment }) {
     mine.stop = watchJob(id, onEvent);
     if (ended) mine.stop();
   }, [key, size, endJob]);
+
+  // Read by the mount effect, which must not re-run (and re-fetch) when they change.
+  const startRef = useRef(null);
+  startRef.current = start;
+  const autoFetchRef = useRef(autoFetch);
+  autoFetchRef.current = autoFetch;
 
   const cancel = useCallback(() => {
     const j = job.current;

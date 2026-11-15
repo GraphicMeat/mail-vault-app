@@ -29,7 +29,8 @@ object Notifier {
     /** The intent extra that carries a tap's payload JSON. */
     const val EXTRA = "com.mailvault.notification"
 
-    /** Posts every note of a run's reply `{channel, notes: [{id, title, body, accountId, folder, uid?}]}`. */
+    /** Posts every note of a run's reply `{channel, notes: [{id, title, body, accountId, folder, uid?}], sound?}`.
+     *  The reply's `badge` is iOS's: an Android launcher badges from the notifications themselves. */
     fun post(context: Context, json: String) {
         val reply = try { JSONObject(json) } catch (e: Exception) { return }
         val notes = reply.optJSONArray("notes") ?: return
@@ -69,6 +70,8 @@ object Notifier {
                 .setCategory(NotificationCompat.CATEGORY_EMAIL)
                 .setAutoCancel(true)
                 .setContentIntent(tap)
+                // `sound: false` (`notificationSound` off): shown without the channel's sound.
+                .setSilent(!reply.optBoolean("sound", true))
                 .build()
             try {
                 manager.notify(id, 0, notification)

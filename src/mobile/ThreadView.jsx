@@ -8,7 +8,8 @@
 // is left out here too, and comes back with an undo.
 import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
-import MessageRow, { ROW_HEIGHT } from './MessageRow.jsx';
+import MessageRow from './MessageRow.jsx';
+import { rowHeight } from './prefs.js';
 import { daemonCall } from './transport.js';
 import { useT } from './i18n.js';
 import { useMobileStore } from './store.js';
@@ -63,6 +64,7 @@ export default function ThreadView({ accountId, folder, row, list = null, accoun
   }, [rows, onClose]);
 
   const shown = rows && list?.isHidden ? rows.filter((r) => !list.isHidden(list.keyFor(r.accountId ?? accountId, r.uid))) : rows;
+  const ROW_HEIGHT = useMobileStore((s) => rowHeight(s.prefs));
   const subject = displayText(row.subject, t('common.noSubject'));
   return (
     <section className="mv-thread" role="dialog" aria-modal="true" aria-label={subject} data-mv-thread>

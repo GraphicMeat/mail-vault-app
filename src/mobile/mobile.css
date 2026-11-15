@@ -84,7 +84,8 @@ body {
   background: var(--mail-bg);
   color: var(--mail-text);
   font-family: var(--mv-font);
-  font-size: 14px;
+  /* rem, as every size here: the text size preference scales the root (prefs.js applyLook). */
+  font-size: 0.875rem;
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
@@ -310,10 +311,14 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.mv-row__sender { flex: 1; font-weight: 500; line-height: 20px; }
+/* Line heights in rem: a row's height scales with the text size (prefs.js rowHeight). */
+.mv-row__sender { flex: 1; font-weight: 500; line-height: 1.25rem; }
 .mv-row__date { flex: none; font-size: 0.75rem; font-weight: 500; color: var(--mail-text-muted); }
-.mv-row__subject { line-height: 20px; }
-.mv-row__snippet { font-size: 0.75rem; line-height: 18px; color: var(--mail-text-muted); }
+.mv-row__subject { line-height: 1.25rem; }
+.mv-row__snippet { font-size: 0.75rem; line-height: 1.125rem; color: var(--mail-text-muted); }
+/* Two or three preview lines (listPreviewLines): wrapped, then cut at the row's line count. */
+.mv-row__snippet--lines { display: -webkit-box; -webkit-box-orient: vertical; white-space: normal; }
+.mv-row--compact { padding-top: 4px; padding-bottom: 4px; }
 .mv-row--unread .mv-row__sender, .mv-row--unread .mv-row__subject { font-weight: 600; }
 .mv-row--unread { box-shadow: inset 2px 0 0 var(--mail-accent); }
 
@@ -507,6 +512,10 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-tool:active { background: var(--mail-surface-hover); }
 .mv-tool[aria-pressed="true"] { color: var(--mv-flag); }
 .mv-tool--danger { color: var(--mv-danger); }
+/* actionButtonDisplay "icon-label" / "text-only": the label under the icon, or alone. Five share
+   the bar, so each takes a fifth at most and cuts a long label. */
+.mv-tool--labelled { flex: 1 1 0; min-width: 0; max-width: 96px; flex-direction: column; gap: 2px; padding: 4px 2px; }
+.mv-tool__label { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.6875rem; font-weight: 500; line-height: 1.2; }
 
 /* Toasts sit above the viewer and the sheets, over the bottom safe area. */
 .mv-toasts {
@@ -1522,6 +1531,12 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-acct-edit { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 0; }
 .mv-acct-edit__field { display: flex; flex-direction: column; gap: 4px; padding: 0 16px; }
 .mv-acct-edit__sig { min-height: 96px; resize: vertical; }
+/* The account's colour: desktop's palette and automatic, as round swatches that wrap. */
+.mv-acct-edit__colors { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0 16px; border: 0; min-width: 0; }
+.mv-acct-edit__colors > legend { padding: 0 0 4px; }
+.mv-acct-edit__swatch { flex: none; width: 40px; height: 40px; padding: 0; border: 2px solid transparent; border-radius: 50%; background-clip: padding-box; }
+.mv-acct-edit__swatch[aria-checked="true"] { border-color: var(--mail-text); }
+.mv-acct-edit__swatch--auto { background-image: linear-gradient(135deg, transparent 45%, rgba(255, 255, 255, 0.7) 45%, rgba(255, 255, 255, 0.7) 55%, transparent 55%); }
 .mv-acct-edit__title { margin: 0; padding: 0 16px; font-weight: 600; overflow-wrap: anywhere; }
 .mv-acct-edit__danger { margin-top: 8px; padding: 12px 16px 0; border-top: 1px solid var(--mail-border); }
 /* Aliases, Sent folder and mail server (AccountIdentities, SentFolderPicker, AccountServer). */

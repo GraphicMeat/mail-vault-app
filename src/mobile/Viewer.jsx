@@ -105,35 +105,57 @@ function Header({ row }) {
 
 function Attachments({ accountId, folder, uid, items }) {
   const t = useT();
+  // `autoDownloadAttachments`: each chip fetches its file as the message opens.
+  const autoFetch = useMobileStore((s) => s.prefs.autoDownloadAttachments === true);
   if (items.length === 0) return null;
   return (
     <ul className="mv-viewer__chips" aria-label={t('common.attachmentCount', { count: items.length })}>
       {items.map((a) => (
-        <AttachmentChip key={a.section} accountId={accountId} folder={folder} uid={uid} attachment={a} />
+        <AttachmentChip key={a.section} accountId={accountId} folder={folder} uid={uid} attachment={a} autoFetch={autoFetch} />
       ))}
     </ul>
   );
 }
 
+/** One toolbar button, as `actionButtonDisplay` shows it: its icon, its icon over its label, or its
+ *  label alone. The label is always its accessible name. */
+function Tool({ name, label, display, className = 'mv-tool', pressed, onClick, children }) {
+  return (
+    <button
+      type="button"
+      className={display === 'icon-only' ? className : `${className} mv-tool--labelled`}
+      data-mv-tool={name}
+      aria-pressed={pressed}
+      aria-label={label}
+      onClick={onClick}
+    >
+      {display !== 'text-only' && children}
+      {display !== 'icon-only' && <span className="mv-tool__label" aria-hidden="true">{label}</span>}
+    </button>
+  );
+}
+
 function Toolbar({ seen, flagged, onSeen, onFlag, onMove, onDelete, onMore }) {
   const t = useT();
+  const pref = useMobileStore((s) => s.prefs.actionButtonDisplay);
+  const display = ['icon-label', 'text-only'].includes(pref) ? pref : 'icon-only';
   return (
-    <div className="mv-viewer__toolbar" role="toolbar" aria-label={t('mobile.actions.toolbar')}>
-      <button type="button" className="mv-tool" data-mv-tool="seen" aria-label={seen ? t('mobile.actions.markUnread') : t('mobile.actions.markRead')} onClick={onSeen}>
+    <div className="mv-viewer__toolbar" role="toolbar" aria-label={t('mobile.actions.toolbar')} data-mv-buttons={display}>
+      <Tool name="seen" display={display} label={seen ? t('mobile.actions.markUnread') : t('mobile.actions.markRead')} onClick={onSeen}>
         <EnvelopeIcon open={seen} />
-      </button>
-      <button type="button" className="mv-tool" data-mv-tool="flag" aria-pressed={flagged ? 'true' : 'false'} aria-label={flagged ? t('mobile.actions.unflag') : t('mobile.actions.flag')} onClick={onFlag}>
+      </Tool>
+      <Tool name="flag" display={display} pressed={flagged ? 'true' : 'false'} label={flagged ? t('mobile.actions.unflag') : t('mobile.actions.flag')} onClick={onFlag}>
         <FlagIcon filled={flagged} />
-      </button>
-      <button type="button" className="mv-tool" data-mv-tool="move" aria-label={t('mobile.actions.move')} onClick={onMove}>
+      </Tool>
+      <Tool name="move" display={display} label={t('mobile.actions.move')} onClick={onMove}>
         <MoveIcon />
-      </button>
-      <button type="button" className="mv-tool mv-tool--danger" data-mv-tool="delete" aria-label={t('common.delete')} onClick={onDelete}>
+      </Tool>
+      <Tool name="delete" display={display} className="mv-tool mv-tool--danger" label={t('common.delete')} onClick={onDelete}>
         <TrashIcon />
-      </button>
-      <button type="button" className="mv-tool" data-mv-tool="more" aria-label={t('mobile.viewer.more')} onClick={onMore}>
+      </Tool>
+      <Tool name="more" display={display} label={t('mobile.viewer.more')} onClick={onMore}>
         <MoreIcon />
-      </button>
+      </Tool>
     </div>
   );
 }
@@ -326,13 +348,16 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const linkSafety = useMobileStore((s) => s.prefs.linkSafetyEnabled !== false);
   const confirmLinks = useMobileStore((s) => s.prefs.linkSafetyEnabled !== false && s.prefs.linkSafetyClickConfirm !== false);
   const alerts = linkSafety ? body?.alerts : null;
+  // `signatureDisplay`: a signature folded under "Show signature", hidden, or shown (mailFrame.js).
+  const signatureDisplay = useMobileStore((s) => s.prefs.signatureDisplay);
+  const sigShow = t('util.iframeQuoteFolding.showSignature');
   const prepared = useMemo(() => {
     if (!hasContent) return null;
     const t0 = performance.now();
-    const out = prepareMailBody({ html, text }, undefined, { alerts, confirm: confirmLinks, safety: linkSafety });
+    const out = prepareMailBody({ html, text }, undefined, { alerts, confirm: confirmLinks, safety: linkSafety }, { mode: signatureDisplay, label: sigShow });
     notePrepare(performance.now() - t0, (html || text || '').length);
     return out;
-  }, [html, text, hasContent, alerts, confirmLinks, linkSafety]);
+  }, [html, text, hasContent, alerts, confirmLinks, linkSafety, signatureDisplay, sigShow]);
   const preparedRef = useRef(prepared);
   preparedRef.current = prepared;
   // A guarded link's tap reloads the frame: every load after its first is one. The mail is put

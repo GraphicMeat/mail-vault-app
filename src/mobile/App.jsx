@@ -64,7 +64,7 @@ import { startPremiumSync } from './premium.js';
 import MovePicker from './MovePicker.jsx';
 import Sheet from './Sheet.jsx';
 import { rowUids } from './prefs.js';
-import { visibleAccounts, markReadPlan, afterDeleteRow } from './prefs.js';
+import { visibleAccounts, markReadPlan, afterDeletePick } from './prefs.js';
 
 function logLine(payload) {
   const line = `MV_MOBILE ${JSON.stringify(payload)}`;
@@ -391,15 +391,16 @@ function App() {
     })();
   }, [status]);
 
-  // Back in the foreground: sync the open folder. Either way the engine hears it: it listens for
-  // new mail only while the app is in front.
+  // Back in the foreground: sync the open folder (unless `refreshOnLaunch` is off: then only a
+  // pull syncs). Either way the engine hears it: it listens for new mail only while the app is in
+  // front.
   useEffect(() => {
     if (PERF) return undefined;
     const onVisible = () => {
       const store = useMobileStore.getState();
       const visible = document.visibilityState === 'visible';
       store.appState(visible, visible);
-      if (visible) store.refresh();
+      if (visible && store.prefs.refreshOnLaunch !== false) store.refresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
@@ -569,7 +570,8 @@ function App() {
     setOpen(null);
   }, [open]);
   // Delete closes the message and opens the row `afterDeleteSelect` names (the one below, the one
-  // above, or none: back to the list). The delete keeps its own undo toast either way; undo puts
+  // above, or none: back to the list); in All Inboxes with `afterDeleteSameAccount`, the nearest
+  // that way of the deleted one's account. The delete keeps its own undo toast either way; undo puts
   // the row back in the list (the viewer stays where it is). Moving on with another delete or move
   // sends this one first.
   const deleteOpen = useCallback(() => {
@@ -580,15 +582,15 @@ function App() {
     // Where the message is now: the list may have moved since it was opened (new mail, an undo).
     const key = list ? list.keyFor(accountId, open.row.uid) : null;
     const index = list ? list.indexOf(key) : -1;
-    const next = list
-      ? afterDeleteRow(s.prefs.afterDeleteSelect, index, (i) => list.rowAt(i), (r) => list.keyFor(r.accountId, r.uid) === key)
+    const sameAccount = s.prefs.afterDeleteSameAccount === true && s.activeFolder === ALL_INBOXES ? accountId : null;
+    const pick = list
+      ? afterDeletePick(s.prefs.afterDeleteSelect, index, (i) => list.rowAt(i), (r) => list.keyFor(r.accountId, r.uid) === key, sameAccount)
       : undefined;
     s.act('delete', { accountId, folder, uids: [open.row.uid] });
-    if (next) {
-      // In All Inboxes the next row can be another account's. The row below takes the deleted
-      // one's place in the list, so its index is the deleted one's.
-      const above = index > 0 && list.rowAt(index - 1) === next;
-      show(next, above ? index - 1 : index, s.placeOf(next));
+    if (pick) {
+      // In All Inboxes the next row can be another account's. A row below moves up into the
+      // deleted one's place, so its index is one less once it is gone.
+      show(pick.row, pick.index > index ? pick.index - 1 : pick.index, s.placeOf(pick.row));
     } else {
       setOpen(null);
     }

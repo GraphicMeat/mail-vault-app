@@ -5,6 +5,8 @@
 // an IMAP account, the folder its Sent copies go to (SentFolderPicker.jsx). Save writes them in one
 // call (only what changed, so nothing a desktop import set is rewritten) and re-reads the
 // accounts. The account's own notification switch is on Settings > Notifications.
+// Its colour (desktop's avatar colour): one of desktop's palette, or automatic (the one hashed
+// from its address, accountColor.js); the switcher's avatar and All Inboxes' dot wear it.
 //
 // A password account also has its password and mail servers here (AccountServer.jsx), saved on
 // their own: the engine signs in with them before it keeps them.
@@ -19,6 +21,7 @@ import { htmlToText } from './prefs.js';
 import AccountServer, { hasServerSettings } from './AccountServer.jsx';
 import AccountIdentities from './AccountIdentities.jsx';
 import SentFolderPicker, { picksSentFolder } from './SentFolderPicker.jsx';
+import { ACCOUNT_COLORS, accountColor } from './accountColor.js';
 
 const sameAliases = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -32,6 +35,7 @@ export default function AccountEditor({ account, onDone }) {
   const [hidden, setHidden] = useState(false);
   const [sending, setSending] = useState({ aliases: [], sendAs: '' });
   const [sentFolder, setSentFolder] = useState('');
+  const [color, setColor] = useState(null); // '#rrggbb', or null: automatic
   const [state, setState] = useState('loading'); // loading | ready | saving | failed
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -50,6 +54,7 @@ export default function AccountEditor({ account, onDone }) {
         setHidden(Boolean(s.hidden));
         setSending({ aliases: Array.isArray(s.aliases) ? s.aliases : [], sendAs: s.sendAs || '' });
         setSentFolder(s.sentFolder || '');
+        setColor(typeof s.color === 'string' ? s.color : null);
         setState('ready');
       },
       () => { if (live) setState('failed'); },
@@ -73,6 +78,7 @@ export default function AccountEditor({ account, onDone }) {
     if (!sameAliases(aliases, Array.isArray(loaded.aliases) ? loaded.aliases : [])) values.aliases = aliases;
     if (sending.sendAs !== (loaded.sendAs || '')) values.sendAs = sending.sendAs;
     if (sentFolder !== (loaded.sentFolder || '')) values.sentFolder = sentFolder || null;
+    if (color !== (loaded.color ?? null)) values.color = color;
     try {
       await daemonCall('mobile.accountSettings.set', { accountId: account.id, values });
       await useMobileStore.getState().reloadAccounts();
@@ -109,6 +115,31 @@ export default function AccountEditor({ account, onDone }) {
         <span className="mv-setting__text"><span className="mv-setting__label">{t('settings.accounts.automaticallyAddOutgoingEmails')}</span></span>
         <span className="mv-switch" aria-hidden="true"><span className="mv-switch__knob" /></span>
       </button>
+      <fieldset className="mv-acct-edit__colors" data-mv-acct="color">
+        <legend className="mv-setting__label">{t('settings.accounts.avatarColor')}</legend>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={color === null}
+          aria-label={t('settings.appearance.default')}
+          className="mv-acct-edit__swatch mv-acct-edit__swatch--auto"
+          style={{ backgroundColor: accountColor({ email: account.email, id: account.id }) }}
+          onClick={() => setColor(null)}
+        />
+        {ACCOUNT_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            role="radio"
+            aria-checked={color === c}
+            aria-label={c}
+            data-mv-color={c}
+            className="mv-acct-edit__swatch"
+            style={{ backgroundColor: c }}
+            onClick={() => setColor(c)}
+          />
+        ))}
+      </fieldset>
       <button type="button" role="switch" aria-checked={hidden} className="mv-setting" data-mv-acct="hidden" onClick={() => setHidden(!hidden)}>
         <span className="mv-setting__text">
           <span className="mv-setting__label">{t('mobile.accounts.hide')}</span>

@@ -70,9 +70,24 @@ it('sends the phone-relevant global settings and nothing machine-bound', async (
     dateFormat: 'custom', customDateFormat: 'dd.MM.yy', timeFormat: '24h', threadMode: 'flat', notificationPreview: false,
     importantSenders: [{ match: 'boss@x.test', throughQuietHours: true }], templates: [{ name: 'Hi', body: 'Hello' }],
   });
-  for (const never of ['backupEnabled', 'cleanupRules', 'transferLimits', 'aiSettings', 'refreshInterval', 'badgeEnabled', 'daemonMode', 'layoutMode', 'keyboardShortcuts']) {
+  for (const never of ['backupEnabled', 'cleanupRules', 'transferLimits', 'aiSettings', 'refreshInterval', 'daemonMode', 'layoutMode', 'keyboardShortcuts', 'emailListStyle', 'searchHistoryLimit']) {
     expect(s, never).not.toHaveProperty(never);
   }
+});
+
+it('sends the display, mail and notification settings the phone applies', async () => {
+  useSettingsStore.setState({
+    textScale: 1.25, appFont: 'atkinson', listDensity: 'compact', listPreviewLines: 2, signatureDisplay: 'collapsed',
+    actionButtonDisplay: 'text-only', trackpadSwipeEnabled: false, refreshOnLaunch: false, autoDownloadAttachments: true,
+    afterDeleteSameAccount: true, badgeEnabled: true, badgeMode: 'total',
+    notificationSettings: { ...pristine.notificationSettings, sound: 'none' },
+  });
+  await phoneQr({ password: 'correct horse battery' });
+  expect(sent().settings).toMatchObject({
+    textScale: 1.25, appFont: 'atkinson', listDensity: 'compact', listPreviewLines: 2, signatureDisplay: 'collapsed',
+    actionButtonDisplay: 'text-only', trackpadSwipeEnabled: false, refreshOnLaunch: false, autoDownloadAttachments: true,
+    afterDeleteSameAccount: true, badgeEnabled: true, badgeMode: 'total', notificationSound: 'none',
+  });
 });
 
 it('sends each account its own settings and its offline window inputs', async () => {

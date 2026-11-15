@@ -194,6 +194,10 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
     let mut failures = 1u32;
     // The last connect failed with a sign-in refusal: its catch-up pass would fail the same way.
     let mut refused = false;
+    // The first connect's catch-up is the app's sync on opening: off with `refreshOnLaunch` off
+    // (the page skips its own then too). A reconnect always catches up: mail may have come while
+    // the connection was down.
+    let mut catch_up = shared.read(|c| crate::settings::get_in(c, "refreshOnLaunch")).ok().flatten().as_deref() != Some("false");
     let inbox = FolderRow::new("INBOX", None);
     loop {
         if watch.stopped() || parked(shared, account) {
@@ -205,9 +209,10 @@ fn run(shared: &Arc<Shared>, sync: &Worker, account: &str, watch: &Watch, timing
                 if watch.stopped() {
                     return;
                 }
-                if !refused {
+                if !refused && catch_up {
                     let _ = sync.enqueue_inbox(shared, account);
                 }
+                catch_up = true;
                 let failure = loop {
                     let change = backend.wait_for_change(&inbox, watch);
                     // Parked by another worker while this connection still works: stop at the

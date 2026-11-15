@@ -13,7 +13,9 @@
 //! | `notifyFolders` | JSON `[path]`                 | `["INBOX"]`                           |
 //! | `quietHours`    | JSON `{enabled, start, end}`  | none                                  |
 //!
-//! `displayName` is the account row's own column, read and written here too.
+//! `displayName` and `color` (`#rrggbb`, the avatar's and the All Inboxes dot's colour, desktop's
+//! `accountColors`; `null`: the one hashed from the address) are the account row's own columns,
+//! read and written here too.
 //! `offlineWindow` (`acct.<id>.offlineWindow`) shares the table but belongs to the offline
 //! settings (`mobile.offline.*`); this module never writes it from the page.
 //!
@@ -28,7 +30,7 @@ use crate::backend::Identity;
 use crate::db::{Engine, Shared};
 use crate::rpc::{parse, RpcError};
 use crate::settings::{get_in, put_in};
-use mailvault_core::transfer::phone::PhoneAccountSettings;
+use mailvault_core::transfer::phone::{hex_color, PhoneAccountSettings};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -148,16 +150,17 @@ fn decode(name: &str, stored: Option<String>) -> Value {
     }
 }
 
-fn account_name(c: &Connection, account_id: &str) -> rusqlite::Result<Option<String>> {
-    c.query_row("SELECT display_name FROM accounts WHERE id = ?1", [account_id], |r| r.get(0)).optional()
+fn account_name(c: &Connection, account_id: &str) -> rusqlite::Result<Option<(String, Option<String>)>> {
+    c.query_row("SELECT display_name, color FROM accounts WHERE id = ?1", [account_id], |r| Ok((r.get(0)?, r.get(1)?))).optional()
 }
 
 /// The account's settings, every name of [`NAMES`] and `displayName`; `None` when no such account.
 pub(crate) fn read_in(c: &Connection, account_id: &str) -> rusqlite::Result<Option<Value>> {
-    let Some(name) = account_name(c, account_id)? else { return Ok(None) };
+    let Some((name, color)) = account_name(c, account_id)? else { return Ok(None) };
     let mut out = Map::new();
     out.insert("accountId".into(), json!(account_id));
     out.insert("displayName".into(), json!(name));
+    out.insert("color".into(), json!(color));
     for n in NAMES {
         out.insert((*n).into(), decode(n, get_in(c, &key(account_id, n))?));
     }
@@ -170,7 +173,7 @@ struct GetParams {
     account_id: String,
 }
 
-/// `mobile.accountSettings.get {accountId}` -> `{accountId, displayName, hidden, signature,
+/// `mobile.accountSettings.get {accountId}` -> `{accountId, displayName, color, hidden, signature,
 /// sendAs, aliases, sentFolder, notify, notifyFolders, quietHours}`. `INVALID` for an account the
 /// phone does not have.
 pub(crate) fn get(engine: &Engine, params: Value) -> Result<Value, RpcError> {
@@ -185,14 +188,24 @@ struct SetParams {
     values: Map<String, Value>,
 }
 
-/// `mobile.accountSettings.set {accountId, values: {displayName?, <name of NAMES>?}}` -> the
+/// `mobile.accountSettings.set {accountId, values: {displayName?, color?, <name of NAMES>?}}` -> the
 /// account's settings after the write. `null` clears a name (back to its default). A name not
 /// listed, or a value it does not take, is `INVALID` and changes nothing.
 pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: SetParams = parse(params)?;
     let mut writes: Vec<(String, Option<String>)> = Vec::new();
     let mut display_name = None;
+    // `Some(None)`: back to the colour hashed from the address.
+    let mut color: Option<Option<String>> = None;
     for (name, value) in &p.values {
+        if name == "color" {
+            color = Some(if value.is_null() {
+                None
+            } else {
+                Some(value.as_str().and_then(hex_color).ok_or_else(|| RpcError::Invalid("color must be #rrggbb".into()))?)
+            });
+            continue;
+        }
         if name == "displayName" {
             let s = value.as_str().map(str::trim).filter(|s| one_line(s, MAX_NAME)).ok_or_else(|| RpcError::Invalid("displayName must be one line of text".into()))?;
             display_name = Some(s.to_string());
@@ -217,6 +230,9 @@ pub(crate) fn set(engine: &Engine, params: Value) -> Result<Value, RpcError> {
                 // Blank is the address, as on add.
                 let n = if n.is_empty() { email.as_str() } else { n.as_str() };
                 c.execute("UPDATE accounts SET display_name = ?1 WHERE id = ?2", (n, &p.account_id))?;
+            }
+            if let Some(v) = &color {
+                c.execute("UPDATE accounts SET color = ?1 WHERE id = ?2", (v, &p.account_id))?;
             }
             let old_folders = notify_folders_in(c, &p.account_id)?;
             for (k, v) in &writes {

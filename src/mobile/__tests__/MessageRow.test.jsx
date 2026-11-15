@@ -108,7 +108,7 @@ describe('MessageRow', () => {
   it('the list sizes rows by estimate only: no measured elements', () => {
     const src = readFileSync(resolve(process.cwd(), 'src/mobile/MessageList.jsx'), 'utf8');
     expect(src).toContain('useVirtualizer');
-    expect(src).toMatch(/estimateSize:\s*\(\)\s*=>\s*ROW_HEIGHT/);
+    expect(src).toMatch(/estimateSize:\s*\(\)\s*=>\s*height/);
     expect(src).not.toMatch(/measureElement/);
   });
 });

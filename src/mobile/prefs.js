@@ -31,6 +31,25 @@ export const PREF_DEFAULTS = Object.freeze({
   attachmentReminder: true,
   // Compose's "Templates": `[{name, body}]` (Settings > Mail preferences).
   templates: Object.freeze([]),
+  // Appearance: the page's text size and font (applyLook), list rows (rowHeight, MessageRow.jsx),
+  // signatures in a message (mailFrame.js `foldSignatures`), the viewer toolbar (Viewer.jsx).
+  textScale: 1,
+  appFont: 'instrument-sans',
+  listDensity: 'comfortable',
+  listPreviewLines: 1,
+  signatureDisplay: 'always-show',
+  actionButtonDisplay: 'icon-only',
+  // Mail: rows swipe (MessageRow.jsx); a sync on launch and on coming back to the front (store.js
+  // `init`, App.jsx); attachments fetched as a message opens (AttachmentChip.jsx); the row after a
+  // delete in All Inboxes (afterDeletePick).
+  trackpadSwipeEnabled: true,
+  refreshOnLaunch: true,
+  autoDownloadAttachments: false,
+  afterDeleteSameAccount: false,
+  // Notifications (engine: the background run's `sound` and `badge`, posted by the shell).
+  notificationSound: true,
+  badgeEnabled: false,
+  badgeMode: 'unread',
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];
@@ -48,6 +67,49 @@ export const THEMES = ['system', 'light', 'dark'];
 export const PALETTES = ['indigo', 'graphite', 'teal'];
 export const SEND_DELAYS = [0, 5, 10, 20, 30];
 export const MARK_READ_DELAYS = [1, 3, 5, 10];
+/** Desktop's `TEXT_SCALES` (src/utils/appFont.js; a test keeps them equal). */
+export const TEXT_SCALES = [0.9, 1, 1.1, 1.25, 1.5];
+/**
+ * Desktop's bundled `APP_FONTS` (src/utils/appFont.js, copied: that module loads Google fonts
+ * through the desktop daemon). Every family ships in styles/fonts.css; the phone fetches none.
+ */
+export const APP_FONTS = Object.freeze([
+  { id: 'system' },
+  { id: 'instrument-sans', family: 'Instrument Sans' },
+  { id: 'inter', family: 'Inter' },
+  { id: 'atkinson', family: 'Atkinson Hyperlegible Next' },
+  { id: 'ibm-plex-sans', family: 'IBM Plex Sans' },
+  { id: 'source-sans', family: 'Source Sans 3' },
+  { id: 'jetbrains-mono', family: 'JetBrains Mono', mono: true },
+  { id: 'fira-code', family: 'Fira Code', mono: true },
+  { id: 'ibm-plex-mono', family: 'IBM Plex Mono', mono: true },
+]);
+export const LIST_DENSITIES = ['comfortable', 'compact'];
+export const PREVIEW_LINES = [0, 1, 2, 3];
+export const SIGNATURE_DISPLAYS = ['smart', 'collapsed', 'always-show', 'always-hide'];
+export const ACTION_BUTTON_DISPLAYS = ['icon-only', 'icon-label', 'text-only'];
+export const BADGE_MODES = ['unread', 'total'];
+
+const SYSTEM_STACK = "system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif";
+
+/** The CSS font stack of an `APP_FONTS` id, as desktop's `fontStack` builds it. */
+export function fontStack(id) {
+  const font = APP_FONTS.find((f) => f.id === id) || APP_FONTS.find((f) => f.id === PREF_DEFAULTS.appFont);
+  if (!font.family) return SYSTEM_STACK;
+  return `'${font.family}', ${font.mono ? 'ui-monospace, monospace' : 'system-ui, sans-serif'}`;
+}
+
+/**
+ * A list row's height in px (every row the same, so the virtualizer never measures): the sender
+ * and subject lines, `listPreviewLines` lines of the message's text, all scaled by `textScale`,
+ * and the padding `listDensity` gives. The defaults are the phone's row as it was (76).
+ */
+export function rowHeight(prefs) {
+  const p = prefs || PREF_DEFAULTS;
+  const lines = PREVIEW_LINES.includes(p.listPreviewLines) ? p.listPreviewLines : 1;
+  const text = (40 + 18 * lines) * (TEXT_SCALES.includes(p.textScale) ? p.textScale : 1);
+  return Math.ceil(text) + (p.listDensity === 'compact' ? 10 : 18);
+}
 
 /**
  * The theme a message is shown in, as desktop decides it: the email viewer's own choice, else the
@@ -94,11 +156,41 @@ export function markReadPlan(prefs) {
  * `rowAt(i)` reads the list; `same(row)` is true for the deleted row itself.
  */
 export function afterDeleteRow(mode, index, rowAt, same) {
+  return afterDeletePick(mode, index, rowAt, same)?.row;
+}
+
+/** How far a same-account pick looks past the deleted row, each way. */
+const SAME_ACCOUNT_REACH = 200;
+
+/**
+ * `afterDeleteRow` with where the row is: `{ row, index }` (`index` in the list as it was, the
+ * deleted row still in it), or undefined. With `accountId` (`afterDeleteSameAccount` in a list
+ * that spans accounts) the nearest row of that account on the preferred side, else on the other,
+ * as desktop prefers it; the list's other rows only when that account has no other row loaded.
+ */
+export function afterDeletePick(mode, index, rowAt, same, accountId = null) {
   if (mode === 'none' || index < 0) return undefined;
   const ok = (r) => (r && !same(r) ? r : undefined);
-  const below = ok(rowAt(index + 1));
-  const above = index > 0 ? ok(rowAt(index - 1)) : undefined;
-  return mode === 'previous' ? above || below : below || above;
+  const near = (step, match) => {
+    for (let i = index + step, n = 0; i >= 0 && n < SAME_ACCOUNT_REACH; i += step, n++) {
+      const r = rowAt(i);
+      if (!r) return undefined; // the end of the list, or of what is loaded
+      if (ok(r) && match(r)) return { row: r, index: i };
+    }
+    return undefined;
+  };
+  const order = mode === 'previous' ? [-1, 1] : [1, -1];
+  if (accountId) {
+    const mine = (r) => r.accountId === accountId;
+    const hit = near(order[0], mine) || near(order[1], mine);
+    if (hit) return hit;
+  }
+  const adjacent = (step) => {
+    const i = index + step;
+    const r = i >= 0 ? ok(rowAt(i)) : undefined;
+    return r ? { row: r, index: i } : undefined;
+  };
+  return adjacent(order[0]) || adjacent(order[1]);
 }
 
 /** A swipe action as the row runs it: `{ kind }` for the store's act, `move`, or null for none. */
@@ -153,4 +245,12 @@ export function applyLook(prefs, root = typeof document !== 'undefined' ? docume
   if (p.theme === 'light' || p.theme === 'dark') root.setAttribute('data-theme', p.theme);
   else root.removeAttribute('data-theme');
   root.setAttribute('data-palette', PALETTES.includes(p.palette) ? p.palette : 'indigo');
+  // Text size: the CSS sizes text in rem, so the root's font size scales it all (rows grow with
+  // it, rowHeight). Font: the stack mobile.css's --mv-font reads.
+  const scale = TEXT_SCALES.includes(p.textScale) ? p.textScale : 1;
+  if (root.style) {
+    if (scale === 1) root.style.removeProperty('font-size');
+    else root.style.setProperty('font-size', `${16 * scale}px`);
+    root.style.setProperty('--app-font', fontStack(p.appFont));
+  }
 }

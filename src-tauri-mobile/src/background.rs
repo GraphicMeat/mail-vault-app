@@ -380,7 +380,9 @@ fn notify_locale(stored: Option<&str>, languages: &[String]) -> &'static str {
 }
 
 /// One background run on the process's engine; the JSON the native side posts from:
-/// `{channel, notes: [Note], commit?}` (`channel`: the Android channel's name). Once the notes are
+/// `{channel, notes: [Note], commit?, sound?, badge?}` (`channel`: the Android channel's name;
+/// `sound`: the notes play the system's sound, `notificationSound`; `badge`: the app icon's count,
+/// 0 while the badge is off, absent when the engine could not answer). Once the notes are
 /// posted the native side hands `commit` back ([`commit`]); a run whose commit never comes (the
 /// OS ended the task first) returns the same mail next time. `budget` counts from the call, so
 /// opening the engine (a cold background launch) is inside it. A failure is logged and answers
@@ -391,12 +393,16 @@ pub(crate) fn run_json(data: &Path, cache: &Path, budget: Duration, started: Ins
     let system_languages = LANGUAGES.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let mut locale = notify_locale(None, &system_languages);
     let mut token = None;
+    let mut sound = true;
+    let mut badge = None;
     let notes = match engine_for_background(data, cache) {
         Ok(engine) => match engine.background_fetch(budget.saturating_sub(started.elapsed())) {
             Ok(run) => {
                 let stored = engine.setting("language").ok().flatten();
                 locale = notify_locale(stored.as_deref(), &system_languages);
                 token = run.commit;
+                sound = engine.notification_sound();
+                badge = engine.badge_count().ok().map(|n| n.unwrap_or(0));
                 let mail = run.mail;
                 let preview = engine.notification_preview();
                 let mut notes = render(&mail, preview, locale);
@@ -425,9 +431,12 @@ pub(crate) fn run_json(data: &Path, cache: &Path, budget: Duration, started: Ins
             Vec::new()
         }
     };
-    let mut reply = json!({ "channel": text(locale, "mobile.notify.channel"), "notes": notes });
+    let mut reply = json!({ "channel": text(locale, "mobile.notify.channel"), "notes": notes, "sound": sound });
     if let Some(t) = token {
         reply["commit"] = json!(t);
+    }
+    if let Some(n) = badge {
+        reply["badge"] = json!(n);
     }
     reply.to_string()
 }
@@ -880,6 +889,9 @@ mod tests {
         let out: Value = serde_json::from_str(&run_json(other_dir.path(), other_dir.path(), Duration::from_secs(1), Instant::now())).unwrap();
         assert_eq!(out["notes"], json!([]));
         assert_eq!(out["channel"], "New mail");
+        // The phone's defaults: the system's sound, and no badge (0 clears it).
+        assert_eq!(out["sound"], true);
+        assert_eq!(out["badge"], 0);
     }
 
     #[test]

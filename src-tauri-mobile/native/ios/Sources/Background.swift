@@ -58,6 +58,11 @@ struct BackgroundReply: Decodable {
   let notes: [BackgroundNote]
   /// Handed back once the notes are posted.
   let commit: String?
+  /// The notes play the system's sound (`notificationSound`); absent from an older shell: on.
+  let sound: Bool?
+  /// The app icon's count (`badgeEnabled` / `badgeMode`), 0 while the badge is off; absent when
+  /// the engine could not answer (the badge stays as it is).
+  let badge: Int?
 }
 
 enum MvBackground {
@@ -157,7 +162,7 @@ enum MvBackground {
         done.finish(false)
         return
       }
-      post(reply.notes) {
+      post(reply) {
         // Counted as notified only once posted, and only while the task is still ours.
         if let token = reply.commit { done.commitIfRunning(token) }
         // Asked again with what the run left: offline work still to do comes back soon.
@@ -197,7 +202,7 @@ enum MvBackground {
         end()
         return
       }
-      post(reply.notes) {
+      post(reply) {
         ended.lock()
         let still = !over
         ended.unlock()
@@ -236,8 +241,23 @@ enum MvBackground {
     }
   }
 
-  /// Posts `notes` (a repeat id replaces, never doubles), then calls `finished`.
-  static func post(_ notes: [BackgroundNote], finished: @escaping () -> Void) {
+  /// Sets the app icon's badge to the reply's count (0 clears it), when it has one.
+  static func applyBadge(_ count: Int?) {
+    guard let count = count else { return }
+    let center = UNUserNotificationCenter.current()
+    if #available(iOS 16.0, *) {
+      center.setBadgeCount(max(0, count)) { _ in }
+    } else {
+      DispatchQueue.main.async { UIApplication.shared.applicationIconBadgeNumber = max(0, count) }
+    }
+  }
+
+  /// Posts the reply's notes (a repeat id replaces, never doubles), with the system's sound unless
+  /// the reply turned it off, sets the badge, then calls `finished`.
+  static func post(_ reply: BackgroundReply, finished: @escaping () -> Void) {
+    applyBadge(reply.badge)
+    let notes = reply.notes
+    let sound = reply.sound ?? true
     guard !notes.isEmpty else {
       finished()
       return
@@ -251,7 +271,7 @@ enum MvBackground {
       let content = UNMutableNotificationContent()
       content.title = note.title
       content.body = note.body
-      content.sound = .default
+      content.sound = sound ? UNNotificationSound.default : nil
       content.threadIdentifier = note.accountId
       var payload: [String: Any] = ["accountId": note.accountId, "folder": note.folder]
       if let uid = note.uid { payload["uid"] = uid }
@@ -327,7 +347,7 @@ final class TapDelegate: NSObject, UNUserNotificationCenterDelegate {
 private let mvDeviceCheckRun: @convention(c) () -> Void = {
   DispatchQueue.global(qos: .utility).async {
     guard let reply = MvBackground.fetch() else { return }
-    MvBackground.post(reply.notes) {
+    MvBackground.post(reply) {
       if let token = reply.commit { token.withCString { mv_background_commit($0) } }
     }
   }

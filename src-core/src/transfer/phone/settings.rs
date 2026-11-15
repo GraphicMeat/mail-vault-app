@@ -109,6 +109,41 @@ pub struct PhoneSettings {
     /// `emailTemplates`, at most [`MAX_TEMPLATES`].
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub templates: Option<Vec<PhoneTemplate>>,
+    /// One of desktop's `TEXT_SCALES`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub text_scale: Option<f64>,
+    /// An `APP_FONTS` id, or `google:<Family>` (which the phone does not take).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub app_font: Option<String>,
+    /// `comfortable` | `compact`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub list_density: Option<String>,
+    /// 0 to 3 lines of the message's text under each row.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub list_preview_lines: Option<u32>,
+    /// `smart` | `always-show` | `always-hide` | `collapsed`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub signature_display: Option<String>,
+    /// `icon-only` | `icon-label` | `text-only`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub action_button_display: Option<String>,
+    /// Desktop's trackpad swipes; the phone's touch swipes.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub trackpad_swipe_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub refresh_on_launch: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub auto_download_attachments: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub after_delete_same_account: Option<bool>,
+    /// `notificationSettings.sound`: a Mac sound's name, or `none` (silent).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub notification_sound: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub badge_enabled: Option<bool>,
+    /// `unread` | `total`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub badge_mode: Option<String>,
 }
 
 /// An account's signature: the desktop's html and text, and whether it is on.

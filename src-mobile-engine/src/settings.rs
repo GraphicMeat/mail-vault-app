@@ -46,10 +46,18 @@ pub(crate) enum Kind {
     Text(usize),
     /// A JSON list of at most this many bytes.
     List(usize),
+    /// One of these numbers (desktop's `textScale`).
+    Num(&'static [f64]),
 }
 
 /// What a swipe may do on the phone.
 pub(crate) const SWIPES: &[&str] = &["toggleRead", "delete", "flag", "move", "none"];
+/// Desktop's `TEXT_SCALES` (`src/utils/appFont.js`).
+pub(crate) const TEXT_SCALES: &[f64] = &[0.9, 1.0, 1.1, 1.25, 1.5];
+/// Desktop's bundled `APP_FONTS` ids (`src/utils/appFont.js`): every one ships with the app. A
+/// downloaded Google font (`google:<Family>`) is not one: the phone fetches no fonts.
+pub(crate) const APP_FONTS: &[&str] =
+    &["system", "instrument-sans", "inter", "atkinson", "ibm-plex-sans", "source-sans", "jetbrains-mono", "fira-code", "ibm-plex-mono"];
 
 /// The phone's preferences: key, kind, and the default (as JSON) that is the phone's behaviour
 /// without the setting. Shown and applied: theme .. emailViewerTheme, the conversation list
@@ -92,6 +100,30 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("linkSafetyClickConfirm", Kind::Bool, "true"),
     ("importantSenders", Kind::List(64 * 1024), "[]"),
     ("templates", Kind::List(512 * 1024), "[]"),
+    // Appearance: the page's text size and font (applyLook), list rows (MessageRow.jsx), the
+    // signature fold (mailFrame.js) and the viewer toolbar's labels (Viewer.jsx).
+    ("textScale", Kind::Num(TEXT_SCALES), "1"),
+    ("appFont", Kind::OneOf(APP_FONTS), "\"instrument-sans\""),
+    ("listDensity", Kind::OneOf(&["comfortable", "compact"]), "\"comfortable\""),
+    // The phone's rows always had one line of the message's text.
+    ("listPreviewLines", Kind::Int(0, 3), "1"),
+    // The phone showed every signature.
+    ("signatureDisplay", Kind::OneOf(&["smart", "always-show", "always-hide", "collapsed"]), "\"always-show\""),
+    // The phone's toolbar had icons only.
+    ("actionButtonDisplay", Kind::OneOf(&["icon-only", "icon-label", "text-only"]), "\"icon-only\""),
+    // Mail: list rows swipe (MessageRow.jsx), the launch and foreground sync (store.js, App.jsx),
+    // attachments fetched as a message opens (AttachmentChip.jsx), and the row after a delete in
+    // All Inboxes (prefs.js `afterDeletePick`).
+    ("trackpadSwipeEnabled", Kind::Bool, "true"),
+    ("refreshOnLaunch", Kind::Bool, "true"),
+    ("autoDownloadAttachments", Kind::Bool, "false"),
+    ("afterDeleteSameAccount", Kind::Bool, "false"),
+    // Notifications: the system's sound on a new-mail notification, and the app icon's badge
+    // (background.rs `badge_count`; posted by the shell's background run).
+    ("notificationSound", Kind::Bool, "true"),
+    // The phone set no badge.
+    ("badgeEnabled", Kind::Bool, "false"),
+    ("badgeMode", Kind::OneOf(&["unread", "total"]), "\"unread\""),
 ];
 
 pub(crate) fn pref(key: &str) -> Option<(Kind, &'static str)> {
@@ -106,6 +138,7 @@ pub(crate) fn encode(kind: Kind, value: &Value) -> Option<String> {
         Kind::Int(lo, hi) => value.as_i64().filter(|n| (lo..=hi).contains(n)).map(|n| n.to_string()),
         Kind::Text(max) => value.as_str().filter(|s| s.chars().count() <= max && !s.contains(['\n', '\r'])).map(str::to_string),
         Kind::List(max) => value.is_array().then(|| value.to_string()).filter(|s| s.len() <= max),
+        Kind::Num(allowed) => value.as_f64().filter(|n| allowed.contains(n)).map(|n| json!(n).to_string()),
     }
 }
 
@@ -122,6 +155,7 @@ pub(crate) fn decode(kind: Kind, stored: Option<String>, default: &str) -> Value
         Kind::OneOf(_) | Kind::Text(_) => Some(json!(s)),
         Kind::Int(..) => s.parse::<i64>().ok().map(|n| json!(n)),
         Kind::List(_) => serde_json::from_str::<Value>(&s).ok(),
+        Kind::Num(_) => s.parse::<f64>().ok().map(|n| json!(n)),
     };
     v.filter(|v| encode(kind, v).is_some()).unwrap_or_else(fallback)
 }
@@ -194,6 +228,32 @@ impl Engine {
             Ok(v) => preview(v),
             Err(_) => false,
         }
+    }
+
+    /// A new-mail notification plays the system's sound (`notificationSound`, on unless set to
+    /// `false`).
+    pub fn notification_sound(&self) -> bool {
+        preview(self.setting("notificationSound").ok().flatten())
+    }
+
+    /// The app icon's badge (`badgeEnabled`, `badgeMode`): the unread messages, or every message,
+    /// in the inboxes of the accounts not hidden, as the phone has them (its own reads and deletes
+    /// count at once). `None` while the badge is off: the shell then clears it.
+    pub fn badge_count(&self) -> Result<Option<u64>, EngineError> {
+        self.read(|c| {
+            if get_in(c, "badgeEnabled")?.as_deref() != Some("true") {
+                return Ok(None);
+            }
+            let unread_only = get_in(c, "badgeMode")?.as_deref() != Some("total");
+            let hidden = crate::account_settings::HIDDEN_SQL.replace("{account}", "m.account_id");
+            let sql = format!(
+                "SELECT COUNT(*) FROM messages m WHERE m.folder = 'INBOX' COLLATE NOCASE AND COALESCE(m.local_deleted, 0) = 0 \
+                 AND m.out_of_window_ms IS NULL AND (?1 = 0 OR COALESCE(m.local_seen, m.seen) = 0) AND NOT {hidden} \
+                 AND EXISTS (SELECT 1 FROM accounts a WHERE a.id = m.account_id)"
+            );
+            let n: i64 = c.query_row(&sql, [unread_only as i64], |r| r.get(0))?;
+            Ok(Some(n.max(0) as u64))
+        })
     }
 
     fn settings_json(&self) -> Result<Value, EngineError> {

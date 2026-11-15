@@ -213,6 +213,22 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     text("emailViewerTheme", &s.email_viewer_theme);
     text("threadMode", &s.thread_mode);
     text("threadSortOrder", &s.thread_sort_order);
+    // A Google font (`google:<Family>`) is no phone font: the check leaves it out.
+    text("appFont", &s.app_font);
+    text("listDensity", &s.list_density);
+    text("signatureDisplay", &s.signature_display);
+    text("actionButtonDisplay", &s.action_button_display);
+    text("badgeMode", &s.badge_mode);
+    if let Some(v) = s.text_scale {
+        values.push(("textScale", json!(v)));
+    }
+    if let Some(v) = s.list_preview_lines {
+        values.push(("listPreviewLines", json!(v)));
+    }
+    // The phone plays the system's sound or none: any desktop sound is a sound.
+    if let Some(v) = &s.notification_sound {
+        values.push(("notificationSound", json!(v != "none")));
+    }
     if let Some(v) = &s.after_delete_select {
         values.push(("afterDeleteSelect", json!(phone_after_delete(v))));
     }
@@ -236,6 +252,11 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
         ("linkSafetyEnabled", s.link_safety_enabled),
         ("linkSafetyClickConfirm", s.link_safety_click_confirm),
         ("trackerBlockingEnabled", s.tracker_blocking_enabled),
+        ("trackpadSwipeEnabled", s.trackpad_swipe_enabled),
+        ("refreshOnLaunch", s.refresh_on_launch),
+        ("autoDownloadAttachments", s.auto_download_attachments),
+        ("afterDeleteSameAccount", s.after_delete_same_account),
+        ("badgeEnabled", s.badge_enabled),
     ] {
         if let Some(v) = v {
             values.push((key, json!(v)));
