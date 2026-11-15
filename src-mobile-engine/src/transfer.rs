@@ -270,8 +270,9 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     if let Some(list) = &s.important_senders {
         values.push(("importantSenders", json!(list.iter().map(|e| json!({ "match": e.matches, "throughQuietHours": e.through_quiet_hours })).collect::<Vec<_>>())));
     }
-    if let Some(list) = &s.quick_actions_reader {
-        values.push(("quickActionsReader", json!(phone_reader_actions(list))));
+    // A desktop bar of only actions the phone lacks leaves the phone's own bar, not an empty one.
+    if let Some(bar) = s.quick_actions_reader.as_deref().map(phone_reader_actions).filter(|b| !b.is_empty()) {
+        values.push(("quickActionsReader", json!(bar)));
     }
     if let Some(list) = &s.templates {
         values.push(("templates", json!(list.iter().map(|t| json!({ "name": t.name, "body": t.body })).collect::<Vec<_>>())));

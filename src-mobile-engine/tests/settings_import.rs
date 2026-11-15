@@ -388,4 +388,13 @@ fn the_viewer_quick_actions_default_to_the_old_toolbar_and_import_in_the_phone_v
     import(&e, &code(vec![imap("ann@example.test")], Some(s)));
     let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
     assert_eq!(p["quickActionsReader"], json!(["flag", "toggleRead", "delete"]));
+
+    // Nothing the phone has: its own bar stays.
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let mut s = desk_settings();
+    s.quick_actions_reader = Some(["archive", "export", "source"].map(String::from).to_vec());
+    import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(p["quickActionsReader"], json!(["toggleRead", "flag", "move", "delete"]));
 }
