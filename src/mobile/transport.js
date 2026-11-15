@@ -162,6 +162,17 @@ export async function notificationPermission() {
   }
 }
 
+// The home screen icon (Settings > Appearance > App icon, `appIcon`): `purple` or `teal`. A
+// no-op when it already is. Rejects with the shell's code: `INVALID`, `INTERNAL`.
+export async function setAppIcon(icon) {
+  const invoke = requireInvoke();
+  try {
+    await invoke('mobile_app_icon', { icon });
+  } catch (error) {
+    throw shellError(error);
+  }
+}
+
 // App Store / Google Play subscriptions. The purchase runs in native code and goes to the engine
 // there (`mobile.premium.verify`), so the page never calls verify for a purchase and never sees a
 // receipt: it gets the outcome and the engine's verdict, and Premium also arrives as

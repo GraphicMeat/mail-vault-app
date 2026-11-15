@@ -25,6 +25,9 @@
 //!   calls answer the outcome and the engine's verdict, never a receipt. The native side also
 //!   listens for transactions from the moment the plugin loads (renewals, approvals, purchases a
 //!   killed app never verified).
+//! - `set_app_icon`: the home screen icon (Settings > Appearance > App icon): the alternate icon
+//!   set `AppIcon-Teal` on iOS (`setAlternateIconName`; the build lists it under
+//!   `CFBundleAlternateIcons`), the enabled launcher `activity-alias` on Android.
 //! - A navigation hook: every navigation of the webview goes through [`links::decide`]. Web and
 //!   mail links are cancelled and handed to `open_url`; anything but the app page and the mail
 //!   frame's own document is cancelled. A popup never becomes a Tauri webview: iOS opens none
@@ -135,6 +138,14 @@ struct PurchaseArgs<'a> {
 
 #[derive(Serialize)]
 struct NoArgs {}
+
+#[derive(Serialize)]
+struct IconArgs<'a> {
+    icon: &'a str,
+}
+
+/// The home screen icons the app ships: `purple` (the primary) and `teal` (the alternate).
+pub const APP_ICONS: &[&str] = &["purple", "teal"];
 
 #[derive(Serialize)]
 struct CloseArgs<'a> {
@@ -265,6 +276,15 @@ impl<R: Runtime> MvNative<R> {
     /// [`store::restore_reply`].
     pub fn store_restore(&self) -> Result<serde_json::Value, NativeError> {
         self.call_for("storeRestore", NoArgs {})
+    }
+
+    /// Switches the home screen icon to `icon`, one of [`APP_ICONS`]; a no-op when it already is.
+    /// iOS shows its own notice of the change. Refuses (`INVALID`) any other name.
+    pub fn set_app_icon(&self, icon: &str) -> Result<(), NativeError> {
+        if !APP_ICONS.contains(&icon) {
+            return Err(NativeError::new("INVALID", "not an app icon"));
+        }
+        self.call("setAppIcon", IconArgs { icon })
     }
 
     fn file_call(&self, method: &str, path: &Path, mime: &str) -> Result<(), NativeError> {

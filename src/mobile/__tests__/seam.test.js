@@ -10,7 +10,7 @@ const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const ENTRY = here('../main.jsx');
 const METHODS = JSON.parse(readFileSync(here('../../../src-mobile-engine/methods.json'), 'utf8'));
 const EVENTS = JSON.parse(readFileSync(here('../../../src-mobile-engine/events.json'), 'utf8'));
-const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_auth_close', 'mobile_auth_open', 'mobile_log', 'mobile_notification_take', 'mobile_notifications_permission', 'mobile_open_file', 'mobile_pick_files', 'mobile_share_file', 'mobile_store_products', 'mobile_store_purchase', 'mobile_store_restore'];
+const ALLOWED_INVOKES = ['daemon_rpc', 'mobile_app_icon', 'mobile_auth_close', 'mobile_auth_open', 'mobile_log', 'mobile_notification_take', 'mobile_notifications_permission', 'mobile_open_file', 'mobile_pick_files', 'mobile_share_file', 'mobile_store_products', 'mobile_store_purchase', 'mobile_store_restore'];
 // The camera: the official barcode scanner plugin's own commands (scanner.js), and nothing else of it.
 const SCANNER_INVOKES = ['plugin:barcode-scanner|cancel', 'plugin:barcode-scanner|check_permissions', 'plugin:barcode-scanner|open_app_settings', 'plugin:barcode-scanner|request_permissions', 'plugin:barcode-scanner|scan'];
 // A plugin command other than the scanner's.
@@ -61,7 +61,7 @@ describe('mobile seam', () => {
   it('the_store_is_reached_through_the_three_shell_commands_only', async () => {
     const { invokes } = await analyzeSeam(ENTRY);
     expect(invokes.filter((c) => /store/.test(c))).toEqual(['mobile_store_products', 'mobile_store_purchase', 'mobile_store_restore']);
-    expect(ALLOWED_INVOKES).toHaveLength(12);
+    expect(ALLOWED_INVOKES).toHaveLength(13);
     expect(invokes.filter(otherPlugin)).toEqual([]);
   });
 

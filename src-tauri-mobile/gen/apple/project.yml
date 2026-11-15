@@ -67,6 +67,9 @@ targets:
     settings:
       base:
         ENABLE_BITCODE: false
+        # Settings > Appearance > App icon: actool lists this set under CFBundleAlternateIcons
+        # (MvNativePlugin.swift `setAppIcon`).
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIcon-Teal
         TARGETED_DEVICE_FAMILY: 1
         ARCHS: [arm64]
         VALID_ARCHS: arm64 

@@ -8,7 +8,9 @@
 // `setBackgroundRefresh` turns the periodic background run on or off (Background.swift) and
 // `requestNotifications` asks for the notification permission (or, `prompt: false`, reads it).
 // `storeProducts`, `storePurchase` and `storeRestore` are the App Store (Store.swift), whose
-// transaction listeners start when the plugin loads.
+// transaction listeners start when the plugin loads. `setAppIcon` switches the home screen icon
+// to the alternate set `AppIcon-Teal` (listed by the build: ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES
+// in project.yml) or back to the primary.
 
 import AuthenticationServices
 import PhotosUI
@@ -26,6 +28,10 @@ struct FileArgs: Decodable {
 
 struct UrlArgs: Decodable {
   let url: String
+}
+
+struct IconArgs: Decodable {
+  let icon: String
 }
 
 struct RefreshArgs: Decodable {
@@ -472,6 +478,31 @@ extension MvNativePlugin {
     }
     center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
       invoke.resolve(["granted": granted])
+    }
+  }
+
+  /// `setAppIcon {icon}`: `teal` is the alternate set `AppIcon-Teal`, anything else the primary
+  /// icon. Answers when iOS has switched (it shows its own notice); a no-op when already set.
+  @objc public func setAppIcon(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(IconArgs.self)
+    let name: String? = args.icon == "teal" ? "AppIcon-Teal" : nil
+    DispatchQueue.main.async {
+      let app = UIApplication.shared
+      guard app.supportsAlternateIcons else {
+        invoke.reject("this device does not change app icons", code: "INTERNAL")
+        return
+      }
+      if app.alternateIconName == name {
+        invoke.resolve()
+        return
+      }
+      app.setAlternateIconName(name) { error in
+        if let error = error {
+          invoke.reject(error.localizedDescription, code: "INTERNAL")
+        } else {
+          invoke.resolve()
+        }
+      }
     }
   }
 
