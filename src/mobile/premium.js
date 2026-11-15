@@ -72,6 +72,12 @@ export function startPremiumSync() {
   };
 }
 
+/** Each store's own page for managing or cancelling a subscription (Premium.jsx, Billing.jsx). */
+export const MANAGE_URL = Object.freeze({
+  apple: 'https://apps.apple.com/account/subscriptions',
+  google: 'https://play.google.com/store/account/subscriptions',
+});
+
 /** Which store this phone buys from: the active subscription's, else by the system. */
 export function storeOf(source) {
   if (source === 'apple' || source === 'google') return source;

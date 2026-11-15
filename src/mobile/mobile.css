@@ -1443,6 +1443,14 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-premium__field { display: flex; flex-direction: column; gap: 4px; font-size: 0.875rem; }
 .mv-premium__field input { min-height: 44px; padding: 0 12px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); color: inherit; font: inherit; font-size: 1rem; }
 
+/* Report a translation issue (TranslationReport.jsx), under Appearance's language row. */
+.mv-trreport { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 12px; }
+.mv-trreport .mv-settings__heading { margin-inline: 0; }
+.mv-trreport > .mv-setting__hint { margin: 0; }
+.mv-trreport input, .mv-trreport select, .mv-trreport textarea { box-sizing: border-box; width: 100%; min-width: 0; }
+.mv-trreport select, .mv-trreport textarea { min-height: 44px; padding: 8px 12px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); color: inherit; font: inherit; font-size: 1rem; }
+.mv-trreport a.mv-premium__primary { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+
 /* Send later (SendLater.jsx) and the outbox's Scheduled section. */
 .mv-schedule__choice { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; padding-block: 8px; }
 .mv-schedule__label { display: flex; align-items: center; gap: 8px; }

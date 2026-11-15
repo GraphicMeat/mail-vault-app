@@ -23,7 +23,8 @@
 //   keep the offline window up to date, so mail opens without a connection; then, per account,
 //   the window, the room it takes, the progress and "Download now" (OfflineSettings.jsx).
 // - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
-//   screen; a phone whose place another device took says so, with Sign in again.
+//   screen; a phone whose place another device took says so, with Sign in again. While Premium is
+//   on, Billing below it (Billing.jsx: manage the store subscription, the website account's devices).
 // - Replay tour (`onReplayTour`): the first-run tour again, without its account step (App.jsx).
 // - About: the version (a build constant) and the source link, a plain https anchor. The shell's
 //   navigation guard cancels it in the webview and hands it to the system browser, the one path
@@ -41,6 +42,7 @@ import { Avatar } from './AccountSwitcher.jsx';
 import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
+import Billing from './Billing.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
 import QuickActionsSettings from './QuickActionsSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
@@ -125,7 +127,8 @@ export const SETTINGS_PAGES = [
   ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
-const PAGE_TITLES = Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages));
+// Billing opens from the Premium section, not from a group.
+const PAGE_TITLES = { ...Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages)), billing: 'settings.tab.billing' };
 /** Pages opened from another page, not the list (`page: parent`): Back goes to the parent. */
 const SUB_PAGES = { quickActions: 'appearance' };
 PAGE_TITLES.quickActions = 'quickActions.title';
@@ -259,6 +262,14 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
                 </span>
                 <Chevron />
               </button>
+              {premium.premium && (
+                <button type="button" className="mv-setting" data-mv-settings-page="billing" onClick={() => setPage('billing')}>
+                  <span className="mv-setting__text">
+                    <span className="mv-setting__label">{t('settings.tab.billing')}</span>
+                  </span>
+                  <Chevron />
+                </button>
+              )}
             </div>
             {premiumLost === 'DEVICE_REPLACED' && !premium.premium && (
               <div className="mv-settings__note mv-settings__note--error" role="alert" data-mv-premium-lost>
@@ -303,6 +314,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         )}
         {page === 'quickActions' && <QuickActionsSettings />}
         {page === 'privacy' && <SettingsPrefs section="privacy" />}
+        {page === 'billing' && <Billing />}
 
         {page === 'accounts' && (
           <>

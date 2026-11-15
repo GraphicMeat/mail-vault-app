@@ -15,6 +15,7 @@ import { LOCALES } from '../i18n/languages.js';
 import { THEMES, PALETTES, SWIPE_ACTIONS, SEND_DELAYS, MARK_READ_DELAYS, THREAD_MODES, THREAD_ORDERS } from './prefs.js';
 import TemplatesSettings from './TemplatesSettings.jsx';
 import AppIconSetting from './AppIconSetting.jsx';
+import TranslationReport from './TranslationReport.jsx';
 
 const DATE_FORMATS = ['auto', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd', 'dd MMM yyyy', 'custom'];
 
@@ -131,6 +132,7 @@ export default function SettingsPrefs({ section }) {
             />
             <AppIconSetting />
           </div>
+          <TranslationReport />
 
           <h2 className="mv-settings__heading">{t('settings.appearance.section.reading')}</h2>
           <div className="mv-settings__list" data-mv-settings-threads>
