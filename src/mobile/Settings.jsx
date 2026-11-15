@@ -22,6 +22,8 @@
 //   the window, the room it takes, the progress and "Download now" (OfflineSettings.jsx).
 // - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
 //   screen; a phone whose place another device took says so, with Sign in again.
+// - Move to another computer (TransferSettings.jsx), Unsubscribe (UnsubscribeSettings.jsx) and
+//   Network Activity (NetworkActivity.jsx): desktop's pages of those names, each in its own file.
 // - Replay tour (`onReplayTour`): the first-run tour again, without its account step (App.jsx).
 // - About: the version (a build constant) and the source link, a plain https anchor. The shell's
 //   navigation guard cancels it in the webview and hands it to the system browser, the one path
@@ -42,6 +44,9 @@ import OfflineSettings from './OfflineSettings.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
+import NetworkActivity from './NetworkActivity.jsx';
+import UnsubscribeSettings from './UnsubscribeSettings.jsx';
+import TransferSettings from './TransferSettings.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -117,8 +122,9 @@ function AccountRow({ account, reauthBusy }) {
  */
 export const SETTINGS_PAGES = [
   ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
-  ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts']]],
-  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity']]],
+  ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts'], ['transfer', 'settings.transfer.title']]],
+  ['settings.navigation.organize', [['unsubscribe', 'unsubscribe.tabLabel']]],
+  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity'], ['networkActivity', 'settings.tab.networkActivity']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
 const PAGE_TITLES = Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages));
@@ -282,6 +288,9 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         {page === 'appearance' && <SettingsPrefs section="appearance" />}
         {page === 'mail' && <SettingsPrefs section="mail" />}
         {page === 'privacy' && <SettingsPrefs section="privacy" />}
+        {page === 'networkActivity' && <NetworkActivity />}
+        {page === 'unsubscribe' && <UnsubscribeSettings />}
+        {page === 'transfer' && <TransferSettings />}
 
         {page === 'accounts' && (
           <>
