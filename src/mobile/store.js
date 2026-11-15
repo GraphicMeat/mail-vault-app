@@ -45,6 +45,11 @@ export const UNDO_MS = 5000;
 export const MAX_APPLY = 199;
 const HIDES = new Set(['move', 'delete']);
 const DROP_REASONS = new Set(['GONE', 'FOLDER_GONE', 'REFUSED']);
+/** Data usage near a daily limit (`mobile.usage.warning`), by direction. Literal keys. */
+const USAGE_WARNINGS = Object.freeze({
+  download: 'transferLimit.usedOfDailyDownload',
+  upload: 'transferLimit.usedOfDailyUpload',
+});
 /** Send outcomes that are news: each to its toast. Literal keys for the catalog tests. */
 const SEND_TOASTS = Object.freeze({
   failed: 'mobile.outbox.toast.failed',
@@ -124,7 +129,7 @@ export function createMobileStore() {
   const toasted = new Set();
 
   return create((set, get) => {
-    const notice = (key) => set({ notice: { id: ++serial, key } });
+    const notice = (key, params) => set({ notice: { id: ++serial, key, ...(params ? { params } : {}) } });
 
     function sendToast(id, outcome) {
       if (!id || !Object.hasOwn(SEND_TOASTS, outcome) || toasted.has(`${id}:${outcome}`)) return;
@@ -349,6 +354,12 @@ export function createMobileStore() {
         ['mobile.action.result', () => listen('mobile.action.result', onActionResult)],
         ['mobile.send.result', () => listen('mobile.send.result', onSendResult)],
         ['mobile.followup.due', () => listen('mobile.followup.due', () => loadFollowUps())],
+        // Settings > Data usage, "Warn when nearing daily limit": once a day per account.
+        ['mobile.usage.warning', () => listen('mobile.usage.warning', (p) => {
+          if (!p || !Object.hasOwn(USAGE_WARNINGS, p.direction)) return;
+          const email = get().accounts.find((a) => a.id === p.accountId)?.email || '';
+          notice(USAGE_WARNINGS[p.direction], { email, pct: p.percent });
+        })],
       ];
       for (const [name, subscribeOne] of on) {
         try {

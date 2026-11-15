@@ -466,7 +466,10 @@ impl Engine {
     /// the OS for runs as often as it allows while this holds.
     pub fn offline_pending(&self) -> bool {
         let now = crate::compose::now_ms();
-        accounts(self.shared()).unwrap_or_default().iter().any(|a| left(self.shared(), a, now).is_ok_and(|l| l.total() > 0))
+        accounts(self.shared())
+            .unwrap_or_default()
+            .iter()
+            .any(|a| !crate::usage::background_capped(self.shared(), a) && left(self.shared(), a, now).is_ok_and(|l| l.total() > 0))
     }
 }
 
@@ -543,6 +546,10 @@ fn front_round(shared: &Arc<Shared>, worker: &Worker) -> Round {
         if !in_front(shared) || !downloads_allowed(shared) {
             return Round::Done;
         }
+        // Paused at its daily limit: nothing until midnight UTC or a higher limit (which wakes us).
+        if crate::usage::background_capped(shared, &account) {
+            continue;
+        }
         let now = crate::compose::now_ms();
         let before = left(shared, &account, now).unwrap_or_default();
         // Nothing to list or download: no sign-in (a pass would still sweep every folder).
@@ -573,12 +580,13 @@ fn front_round(shared: &Arc<Shared>, worker: &Worker) -> Round {
     }
 }
 
-/// Whether a download pass stops now. A background run's stops at its deadline, when the app
-/// comes to the front or the platform ends the task; the foreground downloader's when the app
-/// leaves the front, at its slice's end, or as soon as a page pass waits behind it. Both stop on a
-/// constrained network and when the engine closes.
-pub(crate) fn stop_download(shared: &Shared, deadline: Option<Instant>, front: bool) -> bool {
-    if !downloads_allowed(shared) {
+/// Whether a download pass of `account` stops now. A background run's stops at its deadline, when
+/// the app comes to the front or the platform ends the task; the foreground downloader's when the
+/// app leaves the front, at its slice's end, or as soon as a page pass waits behind it. Both stop
+/// on a constrained network, when the engine closes, and once the account's daily download limit
+/// is reached with "Pause background downloads" on (`usage.rs`).
+pub(crate) fn stop_download(shared: &Shared, account: &str, deadline: Option<Instant>, front: bool) -> bool {
+    if !downloads_allowed(shared) || crate::usage::background_capped(shared, account) {
         return true;
     }
     if front {

@@ -131,6 +131,8 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     // The viewer's bar, in order (Settings > Appearance > Quick actions; the page keeps the
     // phone's actions only, at most four: src/mobile/quickActions.js). The rest are under More.
     ("quickActionsReader", Kind::List(1024), "[\"toggleRead\",\"flag\",\"move\",\"delete\"]"),
+    // Settings > Logs: Standard masks addresses in the log file, Verbose keeps them (`logs.rs`).
+    ("logVerbosity", Kind::OneOf(&["standard", "verbose"]), "\"standard\""),
 ];
 
 pub(crate) fn pref(key: &str) -> Option<(Kind, &'static str)> {
@@ -360,6 +362,9 @@ pub(crate) fn prefs_set(engine: &Engine, params: Value) -> Result<Value, RpcErro
             Ok(())
         })
         .map_err(|e| RpcError::Internal(e.to_string()))?;
+    if let Some((_, v)) = writes.iter().find(|(k, _)| *k == crate::logs::VERBOSITY) {
+        engine.shared().logs.set_verbose(crate::logs::is_verbose(Some(v.as_str())));
+    }
     prefs_get(engine, Value::Null)
 }
 

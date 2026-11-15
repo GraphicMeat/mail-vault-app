@@ -306,6 +306,10 @@ pub(crate) fn app_state(engine: &Engine, params: Value) -> Result<Value, RpcErro
     // A background download stops (and none starts) while the app is in front: the page's own
     // passes never wait behind one on the sync worker.
     crate::background::set_in_front(engine.shared(), p.foreground);
+    // Leaving the front: the day's counted bytes are kept before the OS may end the process.
+    if !p.foreground {
+        crate::usage::flush(engine.shared());
+    }
     // In front: the offline window downloads beside the page (`offline.rs`), giving way to it.
     if p.foreground {
         engine.offline_wake();

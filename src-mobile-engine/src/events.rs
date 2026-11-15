@@ -11,9 +11,9 @@ pub const FOLDERS_CHANGED: &str = "mobile.folders.changed";
 /// `{accountId, state: "idle"|"syncing"|"error", code?}`; `code` is an accounts error code.
 pub const SYNC_STATE: &str = "mobile.sync.state";
 
-/// `{seq, accountId, outcome: "done"|"dropped"|"retrying", reason?}`: one replay attempt at a
-/// journaled action ended. `reason` is `GONE` or `FOLDER_GONE` for `dropped`, an accounts error
-/// code for `retrying`.
+/// `{seq, accountId, outcome: "done"|"dropped"|"retrying"|"discarded", reason?}`: one replay
+/// attempt at a journaled action ended, or the user gave it up (`discarded`, no reason). `reason`
+/// is `GONE`, `FOLDER_GONE` or `REFUSED` for `dropped`, an accounts error code for `retrying`.
 pub const ACTION_RESULT: &str = "mobile.action.result";
 
 /// `{jobId, received, total}`: an attachment download moved on. Both counts are transfer-encoded
@@ -46,6 +46,11 @@ pub const PREMIUM_CHANGED: &str = "mobile.premium.changed";
 /// listed in "Follow up" (`mobile.followup.list`) until dismissed.
 pub const FOLLOWUP_DUE: &str = "mobile.followup.due";
 
+/// `{accountId, direction: "download"|"upload", percent}`: the account's transfer today reached
+/// the warning share of its daily limit (Settings > Data usage, "Warn when nearing daily limit");
+/// at most once per account and UTC day (`usage.rs`).
+pub const USAGE_WARNING: &str = "mobile.usage.warning";
+
 /// Every event name the engine emits: the one list `events.json` must match (a test checks it) and
 /// the page's `listen('…')` names are checked against.
 pub const EVENTS: &[&str] = &[
@@ -60,6 +65,7 @@ pub const EVENTS: &[&str] = &[
     PREMIUM_CHANGED,
     SEND_RESULT,
     SYNC_STATE,
+    USAGE_WARNING,
 ];
 
 pub(crate) type EventSink = Box<dyn Fn(&str, Value) + Send + Sync>;

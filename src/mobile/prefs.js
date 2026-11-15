@@ -56,6 +56,8 @@ export const PREF_DEFAULTS = Object.freeze({
   badgeMode: 'unread',
   // The viewer's bar, in order (quickActions.js; Settings > Appearance > Quick actions).
   quickActionsReader: Object.freeze(['toggleRead', 'flag', 'move', 'delete']),
+  // Settings > Logs: Standard masks addresses in the engine's log file, Verbose keeps them.
+  logVerbosity: 'standard',
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];

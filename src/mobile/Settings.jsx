@@ -19,6 +19,8 @@
 //   Both live in the engine (`mobile.settings.*`): the background run has no page, and reads the
 //   same rows. Then each account's switch, folders and quiet hours, and the priority senders
 //   (NotifySettings.jsx).
+// - Storage (StorageSettings.jsx), Data usage (DataUsage.jsx), Unfinished server actions
+//   (PendingActions.jsx) and Logs (LogsSettings.jsx): each its own page, logic in the engine.
 // - Offline: "Download in the background" (`backgroundDownload`, on by default): background runs
 //   keep the offline window up to date, so mail opens without a connection; then, per account,
 //   the window, the room it takes, the progress and "Download now" (OfflineSettings.jsx).
@@ -49,6 +51,10 @@ import EncryptionSettings from './EncryptionSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
 import { AppearanceMore, MailMore, NotifyMore } from './SettingsDisplay.jsx';
+import PendingActions from './PendingActions.jsx';
+import StorageSettings from './StorageSettings.jsx';
+import LogsSettings from './LogsSettings.jsx';
+import DataUsage from './DataUsage.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -125,7 +131,8 @@ function AccountRow({ account, reauthBusy }) {
 export const SETTINGS_PAGES = [
   ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
   ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts']]],
-  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity']]],
+  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['storage', 'settings.tab.storage'], ['dataUsage', 'settings.tab.dataUsage'], ['privacy', 'settings.tab.privacySecurity']]],
+  ['settings.tab.diagnostics', [['pending', 'settings.pendingActions.title'], ['logs', 'settings.tab.logs']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
 // Billing opens from the Premium section, not from a group.
@@ -328,6 +335,10 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         {page === 'quickActions' && <QuickActionsSettings />}
         {page === 'billing' && <Billing />}
         {page === 'encryption' && <EncryptionSettings />}
+        {page === 'storage' && <StorageSettings onOpenOffline={() => setPage('offline')} />}
+        {page === 'dataUsage' && <DataUsage />}
+        {page === 'pending' && <PendingActions />}
+        {page === 'logs' && <LogsSettings />}
 
         {page === 'accounts' && (
           <>

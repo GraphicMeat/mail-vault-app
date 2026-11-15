@@ -136,6 +136,9 @@ pub(crate) enum Reason {
     FolderGone,
     /// The server refused it [`MAX_REFUSALS`] times.
     Refused,
+    /// The user gave up on it (Settings > Unfinished server actions, `mobile.actions.discard`).
+    /// Reported as the outcome `discarded`, not as a drop: it is no failure to tell anyone about.
+    Discarded,
 }
 
 impl Reason {
@@ -144,6 +147,7 @@ impl Reason {
             Reason::Gone => "GONE",
             Reason::FolderGone => "FOLDER_GONE",
             Reason::Refused => "REFUSED",
+            Reason::Discarded => "DISCARDED",
         }
     }
 }
@@ -300,13 +304,14 @@ struct PendingParams {
 }
 
 /// `mobile.actions.pending {accountId?}` -> `{pending: [{seq, accountId, folder, kind, uids, state,
-/// lastError}]}` in `seq` order. `lastError` is an accounts error code, never core's text.
+/// lastError, attempts, createdMs}]}` in `seq` order. `lastError` is an accounts error code, never
+/// core's text; `attempts` counts the failed tries, `createdMs` is when it was queued.
 pub(crate) fn pending(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: PendingParams = parse(params)?;
     let rows = engine
         .read(|c| {
             let mut st = c.prepare_cached(
-                "SELECT seq, account_id, folder, kind, uids_json, state, last_error FROM pending_actions
+                "SELECT seq, account_id, folder, kind, uids_json, state, last_error, attempts, created_ms FROM pending_actions
                  WHERE ?1 IS NULL OR account_id = ?1 ORDER BY seq",
             )?;
             let rows = st
@@ -320,6 +325,8 @@ pub(crate) fn pending(engine: &Engine, params: Value) -> Result<Value, RpcError>
                         "uids": uids,
                         "state": r.get::<_, String>(5)?,
                         "lastError": r.get::<_, Option<String>>(6)?,
+                        "attempts": r.get::<_, i64>(7)?,
+                        "createdMs": r.get::<_, i64>(8)?,
                     }))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -327,6 +334,80 @@ pub(crate) fn pending(engine: &Engine, params: Value) -> Result<Value, RpcError>
         })
         .map_err(internal)?;
     Ok(json!({ "pending": rows }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RetryParams {
+    #[serde(default)]
+    account_id: Option<String>,
+}
+
+/// `mobile.actions.retry {accountId?}` -> `{queued: true}`: the replay worker tries the journal of
+/// the account (of every account with one, without `accountId`) now, its wait after a failure
+/// forgiven. An account parked for a new sign-in, or whose password the server refused, still
+/// waits for that (`mobile.oauth.reauth`, `mobile.accounts.retrySignIn`).
+pub(crate) fn retry(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: RetryParams = parse(params)?;
+    let shared = engine.shared();
+    let accounts: Vec<String> = match p.account_id {
+        Some(a) => vec![a],
+        None => engine
+            .read(|c| {
+                let mut st = c.prepare_cached("SELECT DISTINCT account_id FROM pending_actions")?;
+                let rows = st.query_map([], |r| r.get(0))?.collect();
+                rows
+            })
+            .map_err(internal)?,
+    };
+    for a in &accounts {
+        engine.replay().wake(shared, Some(a));
+    }
+    Ok(json!({ "queued": true }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DiscardParams {
+    seq: i64,
+}
+
+/// `mobile.actions.discard {seq}` -> `{discarded: bool}`: gives up on one journaled action, as
+/// desktop's Cancel in Settings > Unfinished server actions does. The row goes from the journal
+/// and the action's override is withdrawn where no other pending action holds one, so a message
+/// it hid shows again (the server still has it); `mobile.action.result` reports `discarded`.
+/// `false`: the action was no longer there (it settled or was dropped meanwhile). One already on
+/// the wire may still land; the next sync then shows what the server did.
+pub(crate) fn discard(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: DiscardParams = parse(params)?;
+    let shared = engine.shared();
+    let row = engine
+        .read(|c| {
+            c.query_row(
+                "SELECT account_id, folder, uids_json, kind, arg FROM pending_actions WHERE seq = ?1",
+                [p.seq],
+                |r| {
+                    let mut uids: Vec<u32> = serde_json::from_str(&r.get::<_, String>(2)?).unwrap_or_default();
+                    uids.sort_unstable();
+                    uids.dedup();
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        Journaled { seq: p.seq, folder: r.get(1)?, uids, kind: Kind::parse(&r.get::<_, String>(3)?), arg: Arg::read(r.get(4)?) },
+                    ))
+                },
+            )
+            .optional()
+        })
+        .map_err(internal)?;
+    let Some((account, action)) = row else {
+        return Ok(json!({ "discarded": false }));
+    };
+    match record(shared, &account, &action, Outcome::Dropped { reason: Reason::Discarded, uids_gone: false }) {
+        Ok(()) | Err(Fail::Gone) => {}
+        Err(Fail::Closing) => return Err(internal("the engine is closing")),
+        Err(Fail::Code(code, why)) => return Err(internal(format!("{} {why}", code.as_str()))),
+    }
+    Ok(json!({ "discarded": true }))
 }
 
 /// Whether the journal holds anything (for any account when `account` is `None`).
@@ -907,7 +988,11 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
                 }
                 Ok(())
             };
-            emit_result(shared, account, a.seq, "dropped", Some(reason.as_str()));
+            if reason == Reason::Discarded {
+                emit_result(shared, account, a.seq, "discarded", None);
+            } else {
+                emit_result(shared, account, a.seq, "dropped", Some(reason.as_str()));
+            }
             out
         }
     }
