@@ -18,9 +18,12 @@
 // tap on it only reloads the frame, and the frame's next `load` opens LinkSheet, the app's own
 // warning with the real URLs, whose Open anyway is the only way to one. The mail is drawn again
 // at once.
-// The toolbar at the bottom acts on the message: read or unread, flag, move (MovePicker.jsx over
-// the account's folders) and delete; App.jsx sends the actions (store `act`). Its More button opens
-// a sheet with Reply, Reply all and Forward (`onCompose(mode)`: App.jsx opens Compose.jsx).
+// The toolbar at the bottom acts on the message: the actions `quickActionsReader` puts on it
+// (Settings > Appearance > Quick actions, quickActions.js; by default read or unread, flag, move
+// over MovePicker.jsx and delete); App.jsx sends the actions (store `act`). Its More button opens a
+// sheet with every other action the phone has, Reply, Reply all and Forward among them
+// (`onCompose(mode)`: App.jsx opens Compose.jsx). Spam moves the message to the account's Junk
+// folder and is offered only where there is one.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
@@ -33,7 +36,8 @@ import MovePicker from './MovePicker.jsx';
 import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
-import { EnvelopeIcon, FlagIcon, MoreIcon, MoveIcon, ShieldIcon, TrashIcon } from './icons.jsx';
+import { EnvelopeIcon, FlagIcon, ForwardIcon, MoreIcon, MoveIcon, ReplyAllIcon, ReplyIcon, ShieldIcon, SpamIcon, TrashIcon } from './icons.jsx';
+import { junkFolder, splitReader } from './quickActions.js';
 import { openPaywall } from './premium.js';
 import { useInlineImages, withInlineImages } from './inlineImages.js';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs.js';
@@ -135,46 +139,84 @@ function Tool({ name, label, display, className = 'mv-tool', pressed, onClick, c
   );
 }
 
-function Toolbar({ seen, flagged, onSeen, onFlag, onMove, onDelete, onMore }) {
+const COMPOSE_MODES = new Set(['reply', 'replyAll', 'forward']);
+/** The bar's `data-mv-tool` for an action (the read toggle has always been `seen`). */
+const TOOL_ID = { toggleRead: 'seen' };
+const DANGER = new Set(['delete', 'spam']);
+
+/** The catalog key of an action's label for this message (the toggles name what a tap does). */
+function actionLabelKey(action, seen, flagged) {
+  switch (action) {
+    case 'toggleRead': return seen ? 'mobile.actions.markUnread' : 'mobile.actions.markRead';
+    case 'flag': return flagged ? 'mobile.actions.unflag' : 'mobile.actions.flag';
+    case 'move': return 'mobile.actions.move';
+    case 'delete': return 'common.delete';
+    case 'spam': return 'quickActions.action.spam';
+    case 'reply': return 'emailActionBar.reply';
+    case 'replyAll': return 'emailActionBar.replyAll';
+    default: return 'emailActionBar.forward';
+  }
+}
+
+function ActionIcon({ action, seen, flagged }) {
+  switch (action) {
+    case 'toggleRead': return <EnvelopeIcon open={seen} />;
+    case 'flag': return <FlagIcon filled={flagged} />;
+    case 'move': return <MoveIcon />;
+    case 'delete': return <TrashIcon />;
+    case 'spam': return <SpamIcon />;
+    case 'reply': return <ReplyIcon />;
+    case 'replyAll': return <ReplyAllIcon />;
+    default: return <ForwardIcon />;
+  }
+}
+
+/** The bar: the actions of `quickActionsReader` (quickActions.js), then More for the rest. */
+function Toolbar({ bar, more, seen, flagged, onRun, onMore }) {
   const t = useT();
   const pref = useMobileStore((s) => s.prefs.actionButtonDisplay);
   const display = ['icon-label', 'text-only'].includes(pref) ? pref : 'icon-only';
   return (
     <div className="mv-viewer__toolbar" role="toolbar" aria-label={t('mobile.actions.toolbar')} data-mv-buttons={display}>
-      <Tool name="seen" display={display} label={seen ? t('mobile.actions.markUnread') : t('mobile.actions.markRead')} onClick={onSeen}>
-        <EnvelopeIcon open={seen} />
-      </Tool>
-      <Tool name="flag" display={display} pressed={flagged ? 'true' : 'false'} label={flagged ? t('mobile.actions.unflag') : t('mobile.actions.flag')} onClick={onFlag}>
-        <FlagIcon filled={flagged} />
-      </Tool>
-      <Tool name="move" display={display} label={t('mobile.actions.move')} onClick={onMove}>
-        <MoveIcon />
-      </Tool>
-      <Tool name="delete" display={display} className="mv-tool mv-tool--danger" label={t('common.delete')} onClick={onDelete}>
-        <TrashIcon />
-      </Tool>
-      <Tool name="more" display={display} label={t('mobile.viewer.more')} onClick={onMore}>
-        <MoreIcon />
-      </Tool>
+      {bar.map((action) => (
+        <Tool
+          key={action}
+          name={TOOL_ID[action] || action}
+          display={display}
+          className={`mv-tool${DANGER.has(action) ? ' mv-tool--danger' : ''}`}
+          pressed={action === 'flag' ? (flagged ? 'true' : 'false') : undefined}
+          label={t(actionLabelKey(action, seen, flagged))}
+          onClick={() => onRun(action)}
+        >
+          <ActionIcon action={action} seen={seen} flagged={flagged} />
+        </Tool>
+      ))}
+      {more.length > 0 && (
+        <Tool name="more" display={display} label={t('mobile.viewer.more')} onClick={onMore}>
+          <MoreIcon />
+        </Tool>
+      )}
     </div>
   );
 }
 
-const COMPOSE_MODES = Object.freeze([
-  ['reply', 'emailActionBar.reply'],
-  ['replyAll', 'emailActionBar.replyAll'],
-  ['forward', 'emailActionBar.forward'],
-]);
-
-function MoreSheet({ onPick, onClose }) {
+/** More: every action the bar does not show. Reply, Reply all and Forward keep `data-mv-compose-mode`. */
+function MoreSheet({ actions, seen, flagged, onPick, onClose }) {
   const t = useT();
   return (
     <Sheet kind="sheet" label={t('mobile.viewer.more')} onClose={onClose}>
       <div className="mv-sheet__grip" aria-hidden="true" />
       <div className="mv-sheet__actions">
-        {COMPOSE_MODES.map(([mode, key]) => (
-          <button key={mode} type="button" className="mv-sheet__action" data-mv-compose-mode={mode} onClick={() => onPick(mode)}>
-            {t(key)}
+        {actions.map((action) => (
+          <button
+            key={action}
+            type="button"
+            className={`mv-sheet__action${DANGER.has(action) ? ' mv-sheet__action--danger' : ''}`}
+            data-mv-compose-mode={COMPOSE_MODES.has(action) ? action : undefined}
+            data-mv-more-action={action}
+            onClick={() => onPick(action)}
+          >
+            {t(actionLabelKey(action, seen, flagged))}
           </button>
         ))}
       </div>
@@ -290,10 +332,9 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const [more, setMore] = useState(false);
   const closeMore = useCallback(() => setMore(false), []);
   useBackLayer(more, closeMore);
-  const startCompose = (mode) => {
-    setMore(false);
-    onCompose(mode);
-  };
+  const prefs = useMobileStore((s) => s.prefs);
+  const junk = junkFolder(folders);
+  const { bar, more: moreActions } = splitReader(prefs.quickActionsReader, (a) => a !== 'spam' || Boolean(junk && junk.path !== folder));
   // Optimistic: the button flips at once and flips back if the engine refused the apply.
   const toggle = (value, setValue, on, off) => {
     const next = !value;
@@ -308,6 +349,16 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const pick = (target) => {
     setPicking(false);
     onMove(target);
+  };
+  // One action from the bar or More. Spam is the desktop's: a move to the account's Junk folder.
+  const run = (action) => {
+    setMore(false);
+    if (COMPOSE_MODES.has(action)) onCompose(action);
+    else if (action === 'toggleRead') toggleSeen();
+    else if (action === 'flag') toggleFlag();
+    else if (action === 'move') setPicking(true);
+    else if (action === 'delete') onDelete();
+    else if (action === 'spam' && junk) onMove(junk.path);
   };
   const theme = useAppTheme();
   const [state, setState] = useState({ phase: 'loading' }); // loading | ready | gone | failed
@@ -458,10 +509,10 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
         />
       )}
       {!srcDoc && <div className="mv-viewer__fill" />}
-      <Toolbar seen={seen} flagged={flagged} onSeen={toggleSeen} onFlag={toggleFlag} onMove={() => setPicking(true)} onDelete={onDelete} onMore={() => setMore(true)} />
+      <Toolbar bar={bar} more={moreActions} seen={seen} flagged={flagged} onRun={run} onMore={() => setMore(true)} />
       {picking && <MovePicker folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
       {trackerList && <TrackerSheet count={trackerCount} list={body?.trackerList || []} onClose={closeTrackers} />}
-      {more && <MoreSheet onPick={startCompose} onClose={closeMore} />}
+      {more && <MoreSheet actions={moreActions} seen={seen} flagged={flagged} onPick={run} onClose={closeMore} />}
       {linkSheet && prepared?.linkAlerts?.length > 0 && <LinkSheet alerts={prepared.linkAlerts} onClose={closeLinkSheet} />}
     </section>
   );

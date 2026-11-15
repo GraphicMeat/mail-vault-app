@@ -4495,6 +4495,7 @@
   "mobile.settings.source": "소스 코드는 GitHub에 공개되어 있습니다",
   "mobile.settings.loadFailed": "설정을 불러오지 못했습니다.",
   "mobile.settings.saveFailed": "설정을 저장하지 못했습니다. 다시 시도하세요.",
+  "mobile.settings.quickActionsHint": "열린 메시지 아래 막대에는 이 순서대로 최대 네 개의 작업이 표시됩니다. 나머지 작업은 더 보기에 있습니다. 스팸으로 이동은 계정에 스팸 폴더가 있을 때만 표시됩니다.",
   "mobile.prefs.loadImages": "원격 이미지 자동으로 불러오기",
   "mobile.prefs.loadImagesHint": "메시지를 열 때 이미지를 불러옵니다. 추적 픽셀이 남아 있는 메일에는 이미지 불러오기 버튼이 그대로 표시됩니다.",
   "mobile.prefs.trackersPremiumHint": "Premium에서는 메시지를 표시하기 전에 추적 픽셀을 제거합니다.",

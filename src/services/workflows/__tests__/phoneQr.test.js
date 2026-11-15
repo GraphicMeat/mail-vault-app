@@ -90,6 +90,23 @@ it('sends the display, mail and notification settings the phone applies', async 
   });
 });
 
+it('sends the reader quick actions as their action ids only, not the whole quickActions object', async () => {
+  const qa = useSettingsStore.getState().quickActions;
+  useSettingsStore.setState({
+    quickActions: { ...qa, defaults: { ...qa.defaults, reader: { ...qa.defaults.reader, entries: [{ id: 'spam', action: 'spam' }, { id: 'reply', action: 'reply' }, { id: 'star', action: 'star' }] } } },
+  });
+  await phoneQr({ password: 'correct horse battery' });
+  const s = sent().settings;
+  expect(s.quickActionsReader).toEqual(['spam', 'reply', 'star']);
+  expect(s).not.toHaveProperty('quickActions');
+});
+
+it('leaves the reader quick actions out while they are the desktop default, so the phone keeps its own', async () => {
+  useSettingsStore.setState({ quickActions: pristine.quickActions });
+  await phoneQr({ password: 'correct horse battery' });
+  expect(sent().settings).not.toHaveProperty('quickActionsReader');
+});
+
 it('sends each account its own settings and its offline window inputs', async () => {
   h.accounts = [{ id: 'a', email: 'a@x.test', password: 'pw', sentFolderOverride: 'Sent Items' }, { id: 'b', email: 'b@x.test', password: 'pw' }];
   useSettingsStore.setState({

@@ -4495,6 +4495,7 @@
   "mobile.settings.source": "Le code source est en ligne sur GitHub",
   "mobile.settings.loadFailed": "Impossible de charger les réglages.",
   "mobile.settings.saveFailed": "Impossible d’enregistrer le réglage. Réessayez.",
+  "mobile.settings.quickActionsHint": "Jusqu’à quatre actions figurent dans la barre sous un message ouvert, dans cet ordre. Les autres sont sous Plus. Déplacer vers les indésirables n’apparaît que si le compte a un dossier Indésirables.",
   "mobile.prefs.loadImages": "Charger automatiquement les images distantes",
   "mobile.prefs.loadImagesHint": "Les images se chargent à l'ouverture d'un message. Un e-mail qui contient encore des pixels de suivi garde le bouton Charger les images.",
   "mobile.prefs.trackersPremiumHint": "Avec Premium, les pixels de suivi sont retirés avant l’affichage d’un message.",

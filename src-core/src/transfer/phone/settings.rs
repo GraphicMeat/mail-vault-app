@@ -150,6 +150,10 @@ pub struct PhoneSettings {
     /// `unread` | `total`.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub badge_mode: Option<String>,
+    /// The action ids of `quickActions.defaults.reader` (the desktop's reader toolbar), in order,
+    /// in the desktop's vocabulary: the phone maps them onto its viewer bar.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub quick_actions_reader: Option<Vec<String>>,
 }
 
 /// An account's signature: the desktop's html and text, and whether it is on.

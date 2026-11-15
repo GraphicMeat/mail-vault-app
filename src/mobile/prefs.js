@@ -54,6 +54,8 @@ export const PREF_DEFAULTS = Object.freeze({
   notificationSound: true,
   badgeEnabled: false,
   badgeMode: 'unread',
+  // The viewer's bar, in order (quickActions.js; Settings > Appearance > Quick actions).
+  quickActionsReader: Object.freeze(['toggleRead', 'flag', 'move', 'delete']),
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];

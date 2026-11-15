@@ -9,6 +9,8 @@
 //   desktop keeps it on the account's own page; no remove button sits next to an account). A hidden account is
 //   listed here, marked, so it can be shown again.
 // - Preferences (SettingsPrefs.jsx): look, date and time, reading, deleting, swipes, sending.
+//   Appearance links to Quick actions (QuickActionsSettings.jsx, the viewer's bar), whose Back
+//   returns to Appearance (`SUB_PAGES`).
 // - Notifications: the switch asks the system's permission before it turns on, and stays off with
 //   a pointer to the system settings when the answer is no. Each time the screen shows (and when
 //   the app comes back to the front) it reads the system's current answer without asking: turned
@@ -40,6 +42,7 @@ import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
+import QuickActionsSettings from './QuickActionsSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
 import { AppearanceMore, MailMore, NotifyMore } from './SettingsDisplay.jsx';
@@ -123,6 +126,9 @@ export const SETTINGS_PAGES = [
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
 const PAGE_TITLES = Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages));
+/** Pages opened from another page, not the list (`page: parent`): Back goes to the parent. */
+const SUB_PAGES = { quickActions: 'appearance' };
+PAGE_TITLES.quickActions = 'quickActions.title';
 
 function Chevron() {
   return (
@@ -137,7 +143,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
   const t = useT();
   const [page, setPage] = useState(startPage);
   // System Back on a page goes to the list first, as the header's Back does.
-  const toList = useCallback(() => setPage('root'), []);
+  const toList = useCallback(() => setPage((p) => SUB_PAGES[p] || 'root'), []);
   useBackLayer(page !== 'root', toList);
   const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
@@ -282,6 +288,20 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
 
         {page === 'appearance' && <><SettingsPrefs section="appearance" /><AppearanceMore /></>}
         {page === 'mail' && <><SettingsPrefs section="mail" /><MailMore /></>}
+        {page === 'appearance' && (
+          <>
+            <h2 className="mv-settings__heading">{t('quickActions.title')}</h2>
+            <div className="mv-settings__list">
+              <button type="button" className="mv-setting" data-mv-settings-page="quickActions" onClick={() => setPage('quickActions')}>
+                <span className="mv-setting__text">
+                  <span className="mv-setting__label">{t('quickActions.surface.reader')}</span>
+                </span>
+                <Chevron />
+              </button>
+            </div>
+          </>
+        )}
+        {page === 'quickActions' && <QuickActionsSettings />}
         {page === 'privacy' && <SettingsPrefs section="privacy" />}
 
         {page === 'accounts' && (
