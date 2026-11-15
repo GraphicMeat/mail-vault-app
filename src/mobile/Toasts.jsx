@@ -36,7 +36,7 @@ export default function Toasts() {
     <div className="mv-toasts">
       {notice && (
         <div className="mv-toast" role="alert">
-          <span className="mv-toast__text">{t(notice.key)}</span>
+          <span className="mv-toast__text" dir="auto">{t(notice.key, notice.params)}</span>
           <button type="button" className="mv-toast__btn" onClick={() => useMobileStore.getState().dismissNotice(notice.id)}>
             {t('mobile.actions.dismiss')}
           </button>

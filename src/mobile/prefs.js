@@ -31,6 +31,8 @@ export const PREF_DEFAULTS = Object.freeze({
   attachmentReminder: true,
   // Compose's "Templates": `[{name, body}]` (Settings > Mail preferences).
   templates: Object.freeze([]),
+  // Settings > Logs: Standard masks addresses in the engine's log file, Verbose keeps them.
+  logVerbosity: 'standard',
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];
