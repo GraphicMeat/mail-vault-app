@@ -1454,7 +1454,8 @@ pub(crate) fn store_found(shared: &Shared, account: &str, folder: &str, headers:
 /// address}], references: [id], inReplyTo, date, automated}`, so preparing a reply needs no
 /// server, and the threaded list (`threads.rs`) joins a reply to its conversation. `automated`:
 /// the message carries a mailing-list, `Precedence` or auto-reply header (quick replies stay off
-/// for it, `ai.rs`); a row synced before it has no such key.
+/// for it, `ai.rs`); no key when that is not known (a row synced before it, or a Graph or JMAP
+/// header without a list header).
 fn thread_json(h: &Header) -> String {
     let list = |l: &[mailvault_core::imap::EmailAddress]| -> Vec<Value> {
         l.iter().map(|a| json!({ "name": a.name, "address": a.address })).collect()
@@ -1462,15 +1463,20 @@ fn thread_json(h: &Header) -> String {
     let automated = [&h.list_unsubscribe, &h.list_id, &h.precedence, &h.auto_reply]
         .iter()
         .any(|v| v.as_deref().is_some_and(|s| !s.trim().is_empty()));
-    json!({
+    // IMAP's header fetch always asks for those headers, so their absence is an answer. A Graph or
+    // JMAP header may simply not carry them: there only a list header found is known.
+    let known = automated || !matches!(h.source.as_deref(), Some("graph" | "jmap"));
+    let mut v = json!({
         "cc": list(&h.cc),
         "replyTo": h.reply_to.iter().map(|a| json!({ "name": a.name, "address": a.address })).collect::<Vec<_>>(),
         "references": h.references.clone().unwrap_or_default(),
         "inReplyTo": h.in_reply_to.clone(),
         "date": h.date.clone().or_else(|| h.message_date.clone()),
-        "automated": automated,
-    })
-    .to_string()
+    });
+    if known {
+        v["automated"] = json!(automated);
+    }
+    v.to_string()
 }
 
 /// When the message arrived (INTERNALDATE, which the window is judged by too), else its `Date:`.

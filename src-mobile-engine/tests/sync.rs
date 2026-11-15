@@ -534,3 +534,43 @@ fn list_without_inbox_removes_no_folder() {
     assert_eq!(f.page(Value::Null, 50)["total"], 2);
     assert_eq!(work_total(&f), 1);
 }
+
+/// Sync records whether a message is list or automated mail (`thread_json.automated`), which keeps
+/// quick replies off it (`ai.rs`): IMAP always fetches those headers, so a plain message is known
+/// to be a person's.
+#[test]
+fn sync_records_list_and_automated_mail() {
+    let at = now_ms() - DAY;
+    let list = Message::new(
+        2,
+        "From: News <news@example.com>\n\
+         To: user@example.com\n\
+         Subject: Weekly\n\
+         Date: Thu, 01 Jan 2026 12:00:00 +0000\n\
+         Message-ID: <list-2@example.com>\n\
+         List-Id: <weekly.example.com>\n\
+         Content-Type: text/plain; charset=UTF-8\n\
+         \n\
+         News.\n"
+            .to_string(),
+    )
+    .with_internal_ms(at);
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg_at(1, "plain", at), list])));
+    let f = setup(&server);
+    f.sync(None);
+    let c = rusqlite::Connection::open(f._tmp.path().join("mobile.db")).unwrap();
+    let automated = |uid: i64| -> Value {
+        let s: String = c
+            .query_row("SELECT thread_json FROM messages WHERE folder = 'INBOX' AND uid = ?1", [uid], |r| r.get(0))
+            .unwrap();
+        serde_json::from_str::<Value>(&s).unwrap()["automated"].clone()
+    };
+    assert_eq!((automated(1), automated(2)), (json!(false), json!(true)));
+    let show = |uid: i64| {
+        f.engine
+            .rpc("mobile.ai.quickReplies", json!({ "accountId": f.account, "folder": "INBOX", "uid": uid }))
+            .unwrap()["show"]
+            .clone()
+    };
+    assert_eq!((show(1), show(2)), (json!(true), json!(false)));
+}
