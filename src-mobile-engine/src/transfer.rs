@@ -245,6 +245,8 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     text("signatureDisplay", &s.signature_display);
     text("actionButtonDisplay", &s.action_button_display);
     text("badgeMode", &s.badge_mode);
+    text("viewStyle", &s.view_style);
+    text("appIcon", &s.app_icon);
     if let Some(v) = s.text_scale {
         values.push(("textScale", json!(v)));
     }
@@ -255,8 +257,6 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     if let Some(v) = &s.notification_sound {
         values.push(("notificationSound", json!(v != "none")));
     }
-    text("viewStyle", &s.view_style);
-    text("appIcon", &s.app_icon);
     if let Some(v) = &s.after_delete_select {
         values.push(("afterDeleteSelect", json!(phone_after_delete(v))));
     }
