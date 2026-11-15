@@ -110,26 +110,22 @@ struct Reply {
 }
 
 /// The one HTTP client (its TLS roots and connection pool), made on first use. The engine's
-/// tokio runtime is process-wide, so its pooled connections outlive a call.
-fn client() -> Result<&'static reqwest::Client, Fail> {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    if let Some(c) = CLIENT.get() {
-        return Ok(c);
-    }
-    let c = reqwest::Client::builder()
-        .timeout(TIMEOUT)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|_| Fail::Network)?;
-    Ok(CLIENT.get_or_init(|| c))
+/// tokio runtime is process-wide, so its pooled connections outlive a call. A core `Tracked`
+/// client, so each request is on Network Activity (`billing`: host and port only, never the path
+/// or query, which carry the install id).
+fn client() -> &'static mailvault_core::net_activity::Tracked {
+    static CLIENT: OnceLock<mailvault_core::net_activity::Tracked> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        mailvault_core::net_activity::http_client_with("billing", reqwest::Client::builder().timeout(TIMEOUT).redirect(reqwest::redirect::Policy::none()))
+    })
 }
 
 /// Sends one request. Every transport failure is [`Fail::Network`]; the error itself is dropped
 /// unread, since its text names the URL.
 fn call(build: impl FnOnce(&reqwest::Client) -> reqwest::RequestBuilder) -> Result<Reply, Fail> {
     block_on(async move {
-        let client = client()?;
-        let resp = build(client).header("Accept", "application/json").send().await.map_err(|_| Fail::Network)?;
+        let client = client();
+        let resp = client.send(build(client).header("Accept", "application/json")).await.map_err(|_| Fail::Network)?;
         let status = resp.status().as_u16();
         let server_ms = resp
             .headers()

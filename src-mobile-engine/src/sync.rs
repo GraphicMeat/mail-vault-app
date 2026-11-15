@@ -1375,14 +1375,14 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
     let mut st = c.prepare_cached(
         "INSERT INTO messages
            (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged,
-            has_attachments, message_id, to_json, size, list_gen, thread_json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '', ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            has_attachments, message_id, to_json, size, list_gen, thread_json, unsub_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '', ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
          ON CONFLICT (account_id, folder, uid) DO UPDATE SET
            subject = excluded.subject, from_name = excluded.from_name, from_address = excluded.from_address,
            date_ms = excluded.date_ms, seen = excluded.seen, flagged = excluded.flagged,
            has_attachments = excluded.has_attachments, message_id = excluded.message_id,
            to_json = excluded.to_json, size = excluded.size, list_gen = excluded.list_gen,
-           thread_json = excluded.thread_json",
+           thread_json = excluded.thread_json, unsub_json = excluded.unsub_json",
     )?;
     let mut n = 0;
     for h in headers {
@@ -1404,6 +1404,7 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
             h.size.unwrap_or(0) as i64,
             gen,
             thread,
+            crate::unsubscribe::unsub_json(h),
         ))?;
     }
     Ok(n)

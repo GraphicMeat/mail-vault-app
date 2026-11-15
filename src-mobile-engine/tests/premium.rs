@@ -634,7 +634,9 @@ fn web_sign_in_needs_the_code_and_stores_customer_only_in_secrets() {
     let mut files = Vec::new();
     files_under(fx.tmp.path(), &mut files);
     for f in files {
-        let bytes = std::fs::read(&f).unwrap();
+        // Network Activity's store (`core/app.db`) closes on its own thread: its WAL can go between
+        // the listing and the read, its rows checkpointed into the file read here.
+        let Ok(bytes) = std::fs::read(&f) else { continue };
         assert!(!contains_bytes(&bytes, CUSTOMER), "{} holds the customer id", f.display());
         assert!(!contains_bytes(&bytes, &install), "{} holds the install id", f.display());
     }
@@ -782,7 +784,9 @@ fn no_secret_in_db_logs_or_replies() {
     let mut files = Vec::new();
     files_under(fx.tmp.path(), &mut files);
     for f in files {
-        let bytes = std::fs::read(&f).unwrap();
+        // Network Activity's store (`core/app.db`) closes on its own thread: its WAL can go between
+        // the listing and the read, its rows checkpointed into the file read here.
+        let Ok(bytes) = std::fs::read(&f) else { continue };
         for s in secrets {
             assert!(!contains_bytes(&bytes, s), "{} holds a secret", f.display());
         }

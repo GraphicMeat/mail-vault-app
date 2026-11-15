@@ -15,6 +15,7 @@ mod db;
 mod followup;
 mod hold;
 mod live;
+mod net_activity;
 pub mod events;
 pub mod net;
 mod oauth;
@@ -30,6 +31,8 @@ mod settings;
 mod sync;
 mod threads;
 mod transfer;
+mod transfer_export;
+mod unsubscribe;
 #[cfg(feature = "perf-gate")]
 pub mod seed;
 

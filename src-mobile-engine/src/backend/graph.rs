@@ -63,8 +63,9 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 /// so a half-open socket after a network switch never holds a worker or the RPC thread.
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
-fn client(token: &str) -> GraphClient {
-    GraphClient::with_stall_limits(token, "sync", CONNECT_TIMEOUT, READ_TIMEOUT)
+/// Its requests are shown on Network Activity as `email`'s.
+fn client(token: &str, email: &str) -> GraphClient {
+    GraphClient::with_stall_limits(token, "sync", CONNECT_TIMEOUT, READ_TIMEOUT).for_account(email)
 }
 /// The `encoding` of a Graph cloud-link attachment: listed, never fetched (it has no bytes).
 pub(crate) const LINK: &str = "link";
@@ -216,6 +217,8 @@ struct Streaming {
 pub(crate) struct GraphBackend<'a> {
     shared: &'a Shared,
     account: String,
+    /// The account's address, for Network Activity.
+    email: String,
     client: GraphClient,
     token: String,
     /// The account's secrets, scrubbed out of every failure text.
@@ -296,14 +299,15 @@ impl<'a> GraphBackend<'a> {
     /// The account's backend with its current token (refreshed when about to expire). No request:
     /// the first call proves the token.
     pub(crate) fn open(shared: &'a Shared, account: &str) -> Result<GraphBackend<'a>, Fail> {
-        if load_account(shared, account)?.is_none() {
+        let Some(row) = load_account(shared, account)? else {
             return Err(Fail::Gone);
-        }
+        };
         let token = crate::oauth::access_token(shared, account)?;
         let mut backend = GraphBackend {
             shared,
             account: account.to_string(),
-            client: client(&token),
+            client: client(&token, &row.email),
+            email: row.email,
             token: String::new(),
             secrets: Vec::new(),
             selected: None,
@@ -319,7 +323,7 @@ impl<'a> GraphBackend<'a> {
     }
 
     fn set_token(&mut self, token: String) {
-        self.client = client(&token);
+        self.client = client(&token, &self.email);
         let mut secrets: Vec<String> = match self.shared.secrets().get(&self.account) {
             Ok(Some(s)) => Credential::parse(&s).secrets().into_iter().map(String::from).collect(),
             _ => Vec::new(),
