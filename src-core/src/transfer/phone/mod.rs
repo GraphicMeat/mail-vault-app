@@ -11,12 +11,14 @@
 //! in a [`Skipped`] list instead.
 //!
 //! Never log or put in an error: the password, a bundle, a frame or a secret.
+pub mod desktop;
 pub mod frames;
 pub mod qr;
 pub mod settings;
 #[cfg(test)]
 mod tests;
 
+pub use desktop::{desktop_account, desktop_bundle};
 pub use frames::{frames, parse_frame, Assembler, FrameError, FrameHeader, Progress, MAX_FRAMES, MAX_FRAME_CHARS};
 pub use qr::qr_svg;
 pub use settings::{

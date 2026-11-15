@@ -228,6 +228,11 @@ impl State {
 
 impl Attachments {
     /// `<cache_dir>/att`, created if missing, with partial files that can no longer resume removed.
+    /// `<cache>/att`: where a file the share sheet may take is written (`transfer_export.rs`).
+    pub(crate) fn dir(&self) -> &Path {
+        &self.state.dir
+    }
+
     pub(crate) fn open(cache_dir: &Path) -> Attachments {
         let dir = cache_dir.join(DIR);
         let _ = fs::create_dir_all(&dir);

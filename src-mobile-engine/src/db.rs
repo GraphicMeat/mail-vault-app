@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 const READERS: usize = 2;
 
 /// Schema 2, frozen: a new file is built as schema 2 plus every forward step, so it cannot drift
@@ -227,6 +227,13 @@ CREATE TABLE body_retry (
   next_ms    INTEGER NOT NULL,
   PRIMARY KEY (account_id, folder, uid)
 ) WITHOUT ROWID;
+";
+
+/// Schema 8 to 9, unsubscribe (`unsubscribe.rs`): a message's `List-Unsubscribe`,
+/// `List-Unsubscribe-Post` and `Authentication-Results` as one JSON object, NULL when it has no
+/// List-Unsubscribe (and for every row synced before this step).
+const V8_TO_V9: &str = "
+ALTER TABLE messages ADD COLUMN unsub_json TEXT;
 ";
 
 /// Every table any schema version created; a rebuild drops them all (their indexes go with them).
@@ -580,6 +587,9 @@ pub(crate) struct Shared {
     settles: Mutex<HashMap<(String, String), Settles>>,
     /// OAuth sign-in flows, the loopback listener and token refreshes (`oauth.rs`).
     pub(crate) oauth: crate::oauth::OAuth,
+    /// Network Activity's store (`net_activity.rs`): core's `net_log` in `<data_dir>/core/app.db`,
+    /// shared by every live engine of this data dir. The unsubscribe history lives there too.
+    pub(crate) net_log: Arc<mailvault_core::net_log::NetLog>,
     /// JMAP sessions, one per account (`backend::jmap`).
     pub(crate) jmap: crate::backend::jmap::Sessions,
     /// Bumped each time an account is parked (`needs_auth = 1`): a live listener reads it on
@@ -708,6 +718,9 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         if found < 8 {
             tx.execute_batch(V7_TO_V8)?;
         }
+        if found < 9 {
+            tx.execute_batch(V8_TO_V9)?;
+        }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;
     } else {
@@ -792,6 +805,7 @@ impl Engine {
                 closing: AtomicBool::new(false),
                 settles: Mutex::new(HashMap::new()),
                 oauth: crate::oauth::OAuth::default(),
+                net_log: crate::net_activity::open(data_dir),
                 jmap: crate::backend::jmap::Sessions::default(),
                 parks: std::sync::atomic::AtomicU64::new(0),
                 background: crate::background::Pending::default(),
@@ -821,6 +835,7 @@ impl Engine {
         engine.shared.logs.open(data_dir, verbose);
         engine.shared.offline.set_data_dir(data_dir);
         crate::offline::sweep_orphans(&engine.shared);
+        crate::transfer_export::sweep(&engine);
         crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
         crate::premium::load(&engine.shared);
         if let Err(e) = crate::body::drop_stale_graph_bodies(&engine.shared) {

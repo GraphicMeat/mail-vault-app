@@ -62,9 +62,9 @@ fn open_creates_schema_v7_in_wal() {
     let mode: String = c.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
     assert_eq!(mode, "wal");
-    assert_eq!(ver, 8);
+    assert_eq!(ver, 9);
     let pong = _e.rpc("mobile.ping", json!({})).unwrap();
-    assert_eq!(pong["schema"], 8);
+    assert_eq!(pong["schema"], 9);
     assert_eq!(pong["engine"], env!("CARGO_PKG_VERSION"));
     // The page enables its test hooks (`?ui=viewer`, the network probe) only on a perf-gate build.
     assert_eq!(pong["perfGate"], cfg!(feature = "perf-gate"));
@@ -289,7 +289,7 @@ fn a_v2_file_migrates_to_v3_and_keeps_its_accounts() {
     let e = open(tmp.path()).unwrap();
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 8);
+    assert_eq!(ver, 9);
     let row: (String, String, String, String, i64, Option<String>, Option<String>) = c
         .query_row(
             "SELECT id, email, kind, auth, needs_auth, provider, smtp_host FROM accounts",
@@ -382,7 +382,7 @@ fn a_v1_file_is_still_dropped_and_rebuilt() {
     let e = open(tmp.path()).unwrap();
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 8);
+    assert_eq!(ver, 9);
     assert_eq!(e.rpc("mobile.messages.page", json!({ "accountId": "a", "folder": "INBOX", "cursor": null, "limit": 10 })).unwrap()["total"], 0);
     for t in V3_TABLES {
         let n: i64 = c.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get(0)).unwrap();
@@ -399,11 +399,11 @@ fn a_newer_file_is_refused_untouched() {
     }
     {
         let c = Connection::open(&path).unwrap();
-        c.execute_batch("PRAGMA user_version = 9;").unwrap();
+        c.execute_batch("PRAGMA user_version = 10;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
     let err = open(tmp.path()).err().expect("must refuse");
-    assert_eq!(err, EngineError::NewerSchema { found: 9, supported: 8 });
+    assert_eq!(err, EngineError::NewerSchema { found: 10, supported: 9 });
     assert_eq!(std::fs::read(&path).unwrap(), before, "a newer file must not be touched");
 }
 
@@ -416,7 +416,7 @@ fn newer_schema_in_rollback_mode_is_not_switched_to_wal() {
         c.execute_batch("PRAGMA journal_mode = DELETE; PRAGMA user_version = 10;").unwrap();
     }
     let before = std::fs::read(&path).unwrap();
-    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 10, supported: 8 }));
+    assert_eq!(open(tmp.path()).err(), Some(EngineError::NewerSchema { found: 10, supported: 9 }));
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
 
@@ -549,6 +549,7 @@ fn a_v3_file_migrates_forward_and_keeps_its_rows() {
                VALUES ('acc_0123456789abcdef','u@example.test','U','imap.example.test',993,'ssl',1);
              INSERT INTO notify_state VALUES ('acc_0123456789abcdef', 'INBOX', 41);
              INSERT INTO settings VALUES ('notifications', 'on');
+             ALTER TABLE messages DROP COLUMN unsub_json;
              PRAGMA user_version = 3;",
         )
         .unwrap();
@@ -557,7 +558,7 @@ fn a_v3_file_migrates_forward_and_keeps_its_rows() {
     assert!(e.notifications_on());
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 8);
+    assert_eq!(ver, 9);
     let mark: (i64, Option<i64>) =
         c.query_row("SELECT last_uid, uid_validity FROM notify_state WHERE account_id = 'acc_0123456789abcdef'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
     assert_eq!(mark, (41, None));
@@ -590,6 +591,7 @@ fn a_v4_file_migrates_to_v5_and_keeps_its_outbox() {
                VALUES ('acc_0123456789abcdef','u@example.test','U','imap.example.test',993,'ssl',1);
              INSERT INTO outbox (id, account_id, message_id, draft_json, state, attempts, last_error, created_ms, updated_ms)
                VALUES ('o1', 'acc_0123456789abcdef', '<m@x>', '{}', 'failed', 2, 'REFUSED', 1, 1);
+             ALTER TABLE messages DROP COLUMN unsub_json;
              PRAGMA user_version = 4;",
         )
         .unwrap();
@@ -597,7 +599,7 @@ fn a_v4_file_migrates_to_v5_and_keeps_its_outbox() {
     let _e = open(tmp.path()).unwrap();
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 8);
+    assert_eq!(ver, 9);
     let row: (String, i64, i64) =
         c.query_row("SELECT state, attempts, not_before_ms FROM outbox WHERE id = 'o1'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
     assert_eq!(row, ("failed".to_string(), 2, 0));
@@ -621,6 +623,7 @@ fn a_v6_file_migrates_to_v7_and_keeps_its_accounts() {
              DROP TABLE body_retry;
              INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, created_ms)
                VALUES ('acc_0123456789abcdef','u@example.test','U','imap.example.test',993,'ssl',1);
+             ALTER TABLE messages DROP COLUMN unsub_json;
              PRAGMA user_version = 6;",
         )
         .unwrap();
@@ -628,7 +631,7 @@ fn a_v6_file_migrates_to_v7_and_keeps_its_accounts() {
     let e = open(tmp.path()).unwrap();
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 8);
+    assert_eq!(ver, 9);
     let list = e.rpc("mobile.accounts.list", json!({})).unwrap();
     assert_eq!(list["accounts"][0]["email"], "u@example.test");
     assert_eq!(list["accounts"][0]["color"], Value::Null);
@@ -648,6 +651,7 @@ fn a_v7_file_migrates_to_v8_and_keeps_its_folders() {
             "ALTER TABLE folders DROP COLUMN full_from_ms;
              DROP TABLE body_retry;
              INSERT INTO folders (account_id, path, name, synced_ms) VALUES ('a', 'INBOX', 'INBOX', 5);
+             ALTER TABLE messages DROP COLUMN unsub_json;
              PRAGMA user_version = 7;",
         )
         .unwrap();
@@ -655,7 +659,7 @@ fn a_v7_file_migrates_to_v8_and_keeps_its_folders() {
     let _e = open(tmp.path()).unwrap();
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 8);
+    assert_eq!(ver, 9);
     let (synced, full): (Option<i64>, Option<i64>) =
         c.query_row("SELECT synced_ms, full_from_ms FROM folders WHERE account_id = 'a'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
     assert_eq!((synced, full), (Some(5), None));

@@ -238,12 +238,13 @@ describe('Settings pages, as desktop lays them out', () => {
 
   it('the first screen lists the pages in desktop order, under desktop\'s groups, with no settings of its own', () => {
     render(<Settings onClose={() => {}} />);
-    expect(pageRows()).toEqual(['appearance', 'mail', 'notifications', 'accounts', 'offline', 'storage', 'dataUsage', 'search', 'privacy', 'pending', 'logs', 'help']);
+    expect(pageRows()).toEqual(['appearance', 'mail', 'notifications', 'accounts', 'transfer', 'unsubscribe', 'offline', 'storage', 'dataUsage', 'search', 'privacy', 'networkActivity', 'pending', 'logs', 'help']);
     const headings = [...document.querySelectorAll('.mv-settings__heading')].map((h) => h.textContent);
     expect(headings).toEqual([
       t('common.premium'),
       t('settings.navigation.general'),
       t('settings.navigation.accountsImport'),
+      t('settings.navigation.organize'),
       t('settings.navigation.vaultPrivacy'),
       t('settings.tab.diagnostics'),
       t('settings.tab.help'),
@@ -260,7 +261,7 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.notifications'));
     await waitFor(() => expect(toggle()).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(pageRows()).toHaveLength(12);
+    expect(pageRows()).toHaveLength(15);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.title'));
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));

@@ -468,6 +468,7 @@ fn a_v5_file_migrates_to_v6_and_keeps_its_rows() {
              DROP TABLE follow_ups;
              ALTER TABLE folders DROP COLUMN full_from_ms;
              DROP TABLE body_retry;
+             ALTER TABLE messages DROP COLUMN unsub_json;
              INSERT INTO outbox (id, account_id, message_id, draft_json, state, attempts, created_ms, updated_ms, not_before_ms)
                VALUES ('o1', 'acc_a', '<m@x>', '{}', 'failed', 0, 1, 1, 99);
              PRAGMA user_version = 5;",
@@ -477,7 +478,7 @@ fn a_v5_file_migrates_to_v6_and_keeps_its_rows() {
     let e = open(tmp.path());
     let c = Connection::open(&path).unwrap();
     let ver: u32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-    assert_eq!(ver, 8);
+    assert_eq!(ver, 9);
     let kept: (i64, Option<i64>) = c
         .query_row("SELECT count(*), max(out_of_window_ms) FROM messages WHERE account_id = 'acc_a'", [], |r| Ok((r.get(0)?, r.get(1)?)))
         .unwrap();

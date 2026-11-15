@@ -29,6 +29,8 @@
 // - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
 //   screen; a phone whose place another device took says so, with Sign in again. While Premium is
 //   on, Billing below it (Billing.jsx: manage the store subscription, the website account's devices).
+// - Move to another computer (TransferSettings.jsx), Unsubscribe (UnsubscribeSettings.jsx) and
+//   Network Activity (NetworkActivity.jsx): desktop's pages of those names, each in its own file.
 // - Replay tour (`onReplayTour`): the first-run tour again, without its account step (App.jsx).
 // - About: the version (a build constant) and the source link, a plain https anchor. The shell's
 //   navigation guard cancels it in the webview and hands it to the system browser, the one path
@@ -58,6 +60,9 @@ import PendingActions from './PendingActions.jsx';
 import StorageSettings from './StorageSettings.jsx';
 import LogsSettings from './LogsSettings.jsx';
 import DataUsage from './DataUsage.jsx';
+import NetworkActivity from './NetworkActivity.jsx';
+import UnsubscribeSettings from './UnsubscribeSettings.jsx';
+import TransferSettings from './TransferSettings.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -133,8 +138,9 @@ function AccountRow({ account, reauthBusy }) {
  */
 export const SETTINGS_PAGES = [
   ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
-  ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts']]],
-  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['storage', 'settings.tab.storage'], ['dataUsage', 'settings.tab.dataUsage'], ['search', 'settings.searchIndex.title'], ['privacy', 'settings.tab.privacySecurity']]],
+  ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts'], ['transfer', 'settings.transfer.title']]],
+  ['settings.navigation.organize', [['unsubscribe', 'unsubscribe.tabLabel']]],
+  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['storage', 'settings.tab.storage'], ['dataUsage', 'settings.tab.dataUsage'], ['search', 'settings.searchIndex.title'], ['privacy', 'settings.tab.privacySecurity'], ['networkActivity', 'settings.tab.networkActivity']]],
   ['settings.tab.diagnostics', [['pending', 'settings.pendingActions.title'], ['logs', 'settings.tab.logs']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
@@ -343,6 +349,9 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         {page === 'pending' && <PendingActions />}
         {page === 'logs' && <LogsSettings />}
         {page === 'search' && <SearchIndexSettings />}
+        {page === 'networkActivity' && <NetworkActivity />}
+        {page === 'unsubscribe' && <UnsubscribeSettings />}
+        {page === 'transfer' && <TransferSettings />}
 
         {page === 'accounts' && (
           <>

@@ -148,6 +148,8 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.message.inlineImages", crate::attachments::inline_images),
     ("mobile.messages.page", messages_page),
     ("mobile.messages.thread", messages_thread),
+    ("mobile.netActivity.list", crate::net_activity::list),
+    ("mobile.netActivity.setRetention", crate::net_activity::set_retention),
     ("mobile.network.state", crate::offline::network),
     ("mobile.oauth.begin", crate::oauth::begin),
     ("mobile.oauth.cancel", crate::oauth::cancel),
@@ -185,7 +187,11 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.settings.set", crate::settings::set),
     ("mobile.storage.get", crate::storage::get),
     ("mobile.sync.refresh", crate::sync::refresh),
+    ("mobile.transfer.discard", crate::transfer_export::discard),
+    ("mobile.transfer.export", crate::transfer_export::export),
     ("mobile.transfer.import", crate::transfer::import),
+    ("mobile.unsubscribe.list", crate::unsubscribe::list),
+    ("mobile.unsubscribe.run", crate::unsubscribe::run),
 ];
 #[cfg(not(feature = "perf-gate"))]
 const TABLE: &[(&str, Handler)] = &[
@@ -227,6 +233,8 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.message.inlineImages", crate::attachments::inline_images),
     ("mobile.messages.page", messages_page),
     ("mobile.messages.thread", messages_thread),
+    ("mobile.netActivity.list", crate::net_activity::list),
+    ("mobile.netActivity.setRetention", crate::net_activity::set_retention),
     ("mobile.network.state", crate::offline::network),
     ("mobile.oauth.begin", crate::oauth::begin),
     ("mobile.oauth.cancel", crate::oauth::cancel),
@@ -263,7 +271,11 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.settings.set", crate::settings::set),
     ("mobile.storage.get", crate::storage::get),
     ("mobile.sync.refresh", crate::sync::refresh),
+    ("mobile.transfer.discard", crate::transfer_export::discard),
+    ("mobile.transfer.export", crate::transfer_export::export),
     ("mobile.transfer.import", crate::transfer::import),
+    ("mobile.unsubscribe.list", crate::unsubscribe::list),
+    ("mobile.unsubscribe.run", crate::unsubscribe::run),
 ];
 
 /// Largest perf record accepted, serialized. The real one is a few hundred bytes.

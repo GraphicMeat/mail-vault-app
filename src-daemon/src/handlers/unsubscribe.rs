@@ -48,22 +48,8 @@ async fn one_click_post(url: &str) -> Result<(), String> {
     }
 }
 
-/// How this message would be unsubscribed from: one-click only with a DKIM
-/// pass claim (RFC 8058 needs the headers DKIM-covered; the app cannot
-/// re-verify the signature itself), else the web page, else email.
-fn plan(list_unsubscribe: &str, post: Option<&str>, auth: Option<&str>) -> (Option<&'static str>, parse::UnsubscribeTargets) {
-    let targets = parse::parse(list_unsubscribe, post);
-    let method = if targets.one_click_url.is_some() && auth.is_some_and(parse::dkim_pass) {
-        Some("one-click")
-    } else if targets.http_url.is_some() {
-        Some("browser")
-    } else if targets.mailto.is_some() {
-        Some("mailto")
-    } else {
-        None
-    };
-    (method, targets)
-}
+// How a message would be unsubscribed from: core's, which the phone uses too.
+use mailvault_core::unsubscribe::plan;
 
 async fn unsubscribe(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     let account_id = opt_str_arg(params, "accountId").unwrap_or_default();
