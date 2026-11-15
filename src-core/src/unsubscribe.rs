@@ -47,6 +47,24 @@ pub fn parse(list_unsubscribe: &str, post: Option<&str>) -> UnsubscribeTargets {
     out
 }
 
+/// How a message would be unsubscribed from: `one-click` only with a DKIM pass claim (RFC 8058
+/// needs the headers DKIM-covered; the app cannot re-verify the signature itself), else
+/// `browser` (the web page), else `mailto`; `None` when it offers none of them. Desktop's
+/// Settings > Unsubscribe and the phone's pick the same way.
+pub fn plan(list_unsubscribe: &str, post: Option<&str>, auth: Option<&str>) -> (Option<&'static str>, UnsubscribeTargets) {
+    let targets = parse(list_unsubscribe, post);
+    let method = if targets.one_click_url.is_some() && auth.is_some_and(dkim_pass) {
+        Some("one-click")
+    } else if targets.http_url.is_some() {
+        Some("browser")
+    } else if targets.mailto.is_some() {
+        Some("mailto")
+    } else {
+        None
+    };
+    (method, targets)
+}
+
 /// One `;`-separated result per method in an Authentication-Results value
 /// (`mx.example; dkim=pass header.d=a.test; dmarc=pass header.from=a.test`).
 fn results<'a>(auth: &'a str, method: &'a str) -> impl Iterator<Item = &'a str> + 'a {
