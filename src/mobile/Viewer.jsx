@@ -20,7 +20,10 @@
 // at once.
 // The toolbar at the bottom acts on the message: read or unread, flag, move (MovePicker.jsx over
 // the account's folders) and delete; App.jsx sends the actions (store `act`). Its More button opens
-// a sheet with Reply, Reply all and Forward (`onCompose(mode)`: App.jsx opens Compose.jsx).
+// a sheet with Reply, Reply all and Forward (`onCompose(mode)`: App.jsx opens Compose.jsx), and
+// with AI on (Settings > AI) Summarize, desktop's viewer action: reviewed (AiActions.jsx), its
+// result in a sheet with "Use in reply". Quick replies (QuickReplies.jsx) sit above the toolbar
+// once the body is in: a tap opens a reply with that starter (`onCompose('reply', text)`).
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
@@ -39,6 +42,8 @@ import { useInlineImages, withInlineImages } from './inlineImages.js';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs.js';
 import { useMobileStore } from './store.js';
 import { viewerTheme } from './prefs.js';
+import QuickReplies from './QuickReplies.jsx';
+import { AiResult, useAiAction } from './AiActions.jsx';
 
 /** Exactly this, never more: no `allow-same-origin`, no `allow-scripts`. */
 export const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
@@ -144,7 +149,7 @@ const COMPOSE_MODES = Object.freeze([
   ['forward', 'emailActionBar.forward'],
 ]);
 
-function MoreSheet({ onPick, onClose }) {
+function MoreSheet({ onPick, onClose, onSummarize }) {
   const t = useT();
   return (
     <Sheet kind="sheet" label={t('mobile.viewer.more')} onClose={onClose}>
@@ -155,6 +160,11 @@ function MoreSheet({ onPick, onClose }) {
             {t(key)}
           </button>
         ))}
+        {onSummarize && (
+          <button type="button" className="mv-sheet__action" data-mv-ai-action="summarize" onClick={onSummarize}>
+            {t('ai.actions.summarize')}
+          </button>
+        )}
       </div>
     </Sheet>
   );
@@ -268,9 +278,26 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const [more, setMore] = useState(false);
   const closeMore = useCallback(() => setMore(false), []);
   useBackLayer(more, closeMore);
-  const startCompose = (mode) => {
+  const startCompose = (mode, starter) => {
     setMore(false);
-    onCompose(mode);
+    if (starter) onCompose(mode, starter);
+    else onCompose(mode);
+  };
+  // Summarize (Settings > AI on): reviewed, then read in a sheet.
+  const aiEnabled = useMobileStore((s) => s.prefs.aiEnabled === true);
+  const ai = useAiAction();
+  const [summary, setSummary] = useState(null);
+  const closeSummary = useCallback(() => setSummary(null), []);
+  useBackLayer(summary != null, closeSummary);
+  useEffect(() => {
+    if (ai.error) {
+      useMobileStore.setState({ notice: { id: Date.now(), key: ai.error } });
+      ai.clearError();
+    }
+  }, [ai.error]); // eslint-disable-line react-hooks/exhaustive-deps
+  const summarize = () => {
+    setMore(false);
+    ai.start({ action: 'summarize', accountId, folder, uid: row.uid }, setSummary);
   };
   // Optimistic: the button flips at once and flips back if the engine refused the apply.
   const toggle = (value, setValue, on, off) => {
@@ -433,10 +460,17 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
         />
       )}
       {!srcDoc && <div className="mv-viewer__fill" />}
+      {state.phase === 'ready' && hasContent && (
+        <QuickReplies accountId={accountId} folder={folder} uid={row.uid} onReply={(text) => startCompose('reply', text)} />
+      )}
       <Toolbar seen={seen} flagged={flagged} onSeen={toggleSeen} onFlag={toggleFlag} onMove={() => setPicking(true)} onDelete={onDelete} onMore={() => setMore(true)} />
       {picking && <MovePicker folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
       {trackerList && <TrackerSheet count={trackerCount} list={body?.trackerList || []} onClose={closeTrackers} />}
-      {more && <MoreSheet onPick={startCompose} onClose={closeMore} />}
+      {more && <MoreSheet onPick={(mode) => startCompose(mode)} onClose={closeMore} onSummarize={aiEnabled && hasContent ? summarize : null} />}
+      {ai.sheet}
+      {summary != null && (
+        <AiResult title={t('ai.actions.summarize')} text={summary} onClose={closeSummary} onUse={() => { setSummary(null); startCompose('reply', summary); }} />
+      )}
       {linkSheet && prepared?.linkAlerts?.length > 0 && <LinkSheet alerts={prepared.linkAlerts} onClose={closeLinkSheet} />}
     </section>
   );

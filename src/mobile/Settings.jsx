@@ -9,6 +9,7 @@
 //   desktop keeps it on the account's own page; no remove button sits next to an account). A hidden account is
 //   listed here, marked, so it can be shown again.
 // - Preferences (SettingsPrefs.jsx): look, date and time, reading, deleting, swipes, sending.
+// - AI (AiSettings.jsx, under desktop's Organize): the endpoint, its key and the review rule.
 // - Notifications: the switch asks the system's permission before it turns on, and stays off with
 //   a pointer to the system settings when the answer is no. Each time the screen shows (and when
 //   the app comes back to the front) it reads the system's current answer without asking: turned
@@ -42,6 +43,7 @@ import OfflineSettings from './OfflineSettings.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
+import AiSettings from './AiSettings.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -118,6 +120,7 @@ function AccountRow({ account, reauthBusy }) {
 export const SETTINGS_PAGES = [
   ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
   ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts']]],
+  ['settings.navigation.organize', [['ai', 'settings.tab.aiProviders']]],
   ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
@@ -282,6 +285,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         {page === 'appearance' && <SettingsPrefs section="appearance" />}
         {page === 'mail' && <SettingsPrefs section="mail" />}
         {page === 'privacy' && <SettingsPrefs section="privacy" />}
+        {page === 'ai' && <AiSettings />}
 
         {page === 'accounts' && (
           <>

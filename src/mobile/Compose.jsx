@@ -36,6 +36,12 @@
 // Templates (Settings > Mail preferences, pref `templates`): "Templates" under the subject lists
 // them; one picked goes in where the caret last was, else at the top of the body.
 //
+// AI (Settings > AI on): "AI" under the subject offers desktop's compose actions: Shorten and Tone
+// over what the user wrote (the body above the quote), and, answering a message, Draft reply,
+// Action items and Summarize over it. Each is reviewed first (AiActions.jsx). A rewrite or a
+// drafted reply takes the place of what the user wrote; action items and a summary go on top.
+// `starter` (a quick reply or summary from the viewer) opens the body.
+//
 // Attachment reminder (pref `attachmentReminder`, on unless turned off): Send and Send later first
 // ask when what the user wrote (the subject of a new message, the body above the quote) mentions
 // an attachment and none is attached or downloading (desktop's word list, utils/missingAttachment.js):
@@ -59,6 +65,7 @@ import { formatFullDate, formatSize } from './format.js';
 import { useBackLayer } from './backStack.js';
 import { useMobileStore } from './store.js';
 import { useT } from './i18n.js';
+import { useAiAction } from './AiActions.jsx';
 
 /** Quiet time after the last edit before the draft is saved. */
 export const AUTOSAVE_MS = 1500;
@@ -141,7 +148,7 @@ function fetchPart(accountId, folder, uid, section, cancels) {
   );
 }
 
-export default function Compose({ accountId, fromEmail, mode = 'new', original = null, draftId: openDraft = null, onClose }) {
+export default function Compose({ accountId, fromEmail, mode = 'new', original = null, draftId: openDraft = null, starter = '', onClose }) {
   const t = useT();
   const [to, setTo] = useState({ entries: [], text: '' });
   const [cc, setCc] = useState({ entries: [], text: '' });
@@ -386,7 +393,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
       // Room to write, the signature, then the quote.
       const sig = await signature.current;
       if (!live.current) return;
-      fill('text', sig ? `${withSignature('', sig)}${p.quoteText ? `\n\n${p.quoteText}` : ''}` : initialText(p.quoteText || ''), setText);
+      fill('text', `${starter}${sig ? `${withSignature('', sig)}${p.quoteText ? `\n\n${p.quoteText}` : ''}` : initialText(p.quoteText || '')}`, setText);
       setAttachments((list) => [...list, ...forwardsOf(p.attachments)]);
       const pending = Array.isArray(p.pending) ? p.pending : [];
       if (!pending.length) return;
@@ -527,6 +534,47 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
     else send();
   };
 
+  // ── AI ────────────────────────────────────────────────────────────────────
+  const aiEnabled = useMobileStore((s) => s.prefs.aiEnabled === true);
+  const ai = useAiAction();
+  const [aiPicking, setAiPicking] = useState(false);
+  const closeAiPicking = useCallback(() => setAiPicking(false), []);
+  useEffect(() => {
+    if (ai.error) {
+      useMobileStore.setState({ notice: { id: Date.now(), key: ai.error } });
+      ai.clearError();
+    }
+  }, [ai.error]); // eslint-disable-line react-hooks/exhaustive-deps
+  // What the user wrote and the quote under it, which a rewrite keeps.
+  const splitQuote = (cur) => {
+    const tail = quote.current ? `\n\n${quote.current}` : '';
+    return tail && cur.endsWith(tail) ? [cur.slice(0, -tail.length), tail] : [cur, ''];
+  };
+  const runAi = (action, tone) => {
+    setAiPicking(false);
+    if (locked.current) return;
+    const [own] = splitQuote(latest.current.text);
+    const params = ['shorten', 'tone'].includes(action)
+      ? { action, accountId, text: own, ...(tone ? { tone } : {}) }
+      : { action, accountId, folder: original.folder, uid: original.uid };
+    ai.start(params, (result) => {
+      if (!live.current || locked.current) return;
+      setText((cur) => {
+        const [mine, tail] = splitQuote(cur);
+        return ['actionItems', 'summarize'].includes(action) ? `${result}\n\n${mine}${tail}` : `${result}${tail}`;
+      });
+      edit('text');
+    });
+  };
+  const aiActions = [
+    ...(original ? [['draftReply', null, 'ai.actions.draftReply']] : []),
+    ['shorten', null, 'ai.actions.shorten'],
+    ['tone', 'casual', 'ai.actions.tone.casual'],
+    ['tone', 'formal', 'ai.actions.tone.formal'],
+    ['tone', 'friendly', 'ai.actions.tone.friendly'],
+    ...(original ? [['actionItems', null, 'ai.actions.actionItems'], ['summarize', null, 'ai.actions.summarize']] : []),
+  ];
+
   const applyTemplate = (tpl) => {
     setPicking(false);
     if (locked.current) return;
@@ -575,8 +623,9 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   const closePicking = useCallback(() => setPicking(false), []);
   const closeReminding = useCallback(() => setReminding(null), []);
 
-  useBackLayer(!confirming && !attaching && !later && !picking && !reminding, requestLeave);
+  useBackLayer(!confirming && !attaching && !later && !picking && !reminding && !aiPicking, requestLeave);
   useBackLayer(picking, closePicking);
+  useBackLayer(aiPicking, closeAiPicking);
   useBackLayer(Boolean(reminding), closeReminding);
   useBackLayer(confirming, keepEditing);
   useBackLayer(attaching, closeAttach);
@@ -660,6 +709,11 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
         {templates.length > 0 && (
           <button type="button" className="mv-compose__more" data-mv-templates-open disabled={loading || locked.current} onClick={() => setPicking(true)}>
             {t('compose.templates')}
+          </button>
+        )}
+        {aiEnabled && (
+          <button type="button" className="mv-compose__more" data-mv-ai-open disabled={loading || locked.current || ai.busy} onClick={() => setAiPicking(true)}>
+            {t('settings.tab.aiProviders')}
           </button>
         )}
         {remindOffered && (
@@ -756,6 +810,23 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
           </div>
         </Sheet>
       )}
+      {aiPicking && (
+        <Sheet kind="sheet" label={t('settings.tab.aiProviders')} onClose={closeAiPicking}>
+          <div className="mv-sheet__grip" aria-hidden="true" />
+          <h2 className="mv-sheet__title">{t('settings.tab.aiProviders')}</h2>
+          <div className="mv-sheet__actions">
+            {aiActions.filter(([, tone]) => !tone).map(([action, , key]) => (
+              <button key={action} type="button" className="mv-sheet__action" data-mv-ai-action={action} onClick={() => runAi(action)}>{t(key)}</button>
+            ))}
+            <h3 className="mv-sheet__title">{t('ai.actions.tone')}</h3>
+            {aiActions.filter(([, tone]) => tone).map(([action, tone, key]) => (
+              <button key={tone} type="button" className="mv-sheet__action" data-mv-ai-action={`${action}:${tone}`} onClick={() => runAi(action, tone)}>{t(key)}</button>
+            ))}
+            <button type="button" className="mv-sheet__action" onClick={closeAiPicking}>{t('common.cancel')}</button>
+          </div>
+        </Sheet>
+      )}
+      {ai.sheet}
       {reminding && (
         <Sheet kind="sheet" label={t('compose.attachmentReminder.title')} onClose={closeReminding}>
           <div className="mv-sheet__grip" aria-hidden="true" />

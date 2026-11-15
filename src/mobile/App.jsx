@@ -598,13 +598,15 @@ function App() {
     const { activeAccountId: accountId } = useMobileStore.getState();
     if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new' });
   }, []);
-  const onViewerCompose = useCallback((mode) => {
+  // `starter`: a quick reply or an AI summary the body opens with (Viewer.jsx).
+  const onViewerCompose = useCallback((mode, starter) => {
     if (!open) return;
     setCompose({
       key: Date.now(),
       accountId: open.accountId,
       mode,
       original: { folder: open.folder, uid: open.row.uid, dateMs: open.row.dateMs },
+      ...(typeof starter === 'string' && starter ? { starter } : {}),
     });
   }, [open]);
   const closeCompose = useCallback(() => {
@@ -952,6 +954,7 @@ function App() {
           mode={compose.mode}
           original={compose.original || null}
           draftId={compose.draftId || null}
+          starter={compose.starter || ''}
           onClose={closeCompose}
         />
       )}

@@ -31,6 +31,11 @@ export const PREF_DEFAULTS = Object.freeze({
   attachmentReminder: true,
   // Compose's "Templates": `[{name, body}]` (Settings > Mail preferences).
   templates: Object.freeze([]),
+  // Settings > AI (AiSettings.jsx; the engine's `ai.rs` reads them): off, no endpoint.
+  aiEnabled: false,
+  aiEndpointUrl: '',
+  aiEndpointModel: '',
+  aiSkipPreview: false,
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];
