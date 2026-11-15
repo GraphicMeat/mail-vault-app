@@ -12,6 +12,7 @@ import * as keychainSession from '../keychainSession';
 import { collectSettings, applySettings } from '../transfer/settingsTransfer';
 import { useSettingsStore, getAccountColor } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { normalizeQuickActions } from '../../utils/quickActions';
 
 async function appVersion() {
   try {
@@ -93,6 +94,10 @@ function phoneGlobalSettings(s, theme) {
       .filter(e => e && typeof e.match === 'string')
       .map(e => ({ match: e.match, throughQuietHours: !!e.throughQuietHours }));
   }
+  // The reader toolbar of All views, as action ids only: the phone maps them onto its viewer bar
+  // (no scopes, layouts or colors, which the phone has no use for and the code has no room for).
+  const reader = normalizeQuickActions(s.quickActions).defaults.reader;
+  if (Array.isArray(reader?.entries)) out.quickActionsReader = reader.entries.map(e => e.action);
   if (Array.isArray(s.emailTemplates) && s.emailTemplates.length) {
     out.templates = s.emailTemplates
       .filter(tpl => tpl && typeof tpl.body === 'string')

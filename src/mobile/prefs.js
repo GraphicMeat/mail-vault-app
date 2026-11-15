@@ -31,6 +31,8 @@ export const PREF_DEFAULTS = Object.freeze({
   attachmentReminder: true,
   // Compose's "Templates": `[{name, body}]` (Settings > Mail preferences).
   templates: Object.freeze([]),
+  // The viewer's bar, in order (quickActions.js; Settings > Appearance > Quick actions).
+  quickActionsReader: Object.freeze(['toggleRead', 'flag', 'move', 'delete']),
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];

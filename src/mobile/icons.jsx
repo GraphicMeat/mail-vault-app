@@ -37,6 +37,23 @@ export function ShieldIcon({ state = 'blocked' }) {
   </>);
 }
 
+export function ReplyIcon() {
+  return svg(<><path d="M9 7 4 12l5 5" /><path d="M4 12h10a6 6 0 0 1 6 6v1" /></>);
+}
+
+export function ReplyAllIcon() {
+  return svg(<><path d="M8 7 3 12l5 5" /><path d="M12 7l-5 5 5 5" /><path d="M7 12h8a6 6 0 0 1 6 6v1" /></>);
+}
+
+export function ForwardIcon() {
+  return svg(<><path d="m15 7 5 5-5 5" /><path d="M20 12H10a6 6 0 0 0-6 6v1" /></>);
+}
+
+/** A stop sign with an exclamation mark: move to Junk. */
+export function SpamIcon() {
+  return svg(<><path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z" /><path d="M12 8v5" /><path d="M12 16.5v.01" /></>);
+}
+
 export function MoreIcon() {
   return svg(<><circle cx="5" cy="12" r="1.2" fill="currentColor" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /><circle cx="19" cy="12" r="1.2" fill="currentColor" /></>);
 }

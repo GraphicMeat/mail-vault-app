@@ -698,3 +698,20 @@ fn then_the_signatures() {
     assert_eq!(b.settings.as_ref().unwrap().theme.as_deref(), Some("light"));
     assert_accounts_intact(&accounts, &s);
 }
+
+#[test]
+fn the_reader_quick_actions_are_carried_in_the_desktop_vocabulary() {
+    let mut s = desktop_settings();
+    s["quickActionsReader"] = json!(["archive", "spam", "reply", "star"]);
+    let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+    assert_eq!(
+        b.settings.unwrap().quick_actions_reader,
+        Some(vec!["archive".to_string(), "spam".into(), "reply".into(), "star".into()])
+    );
+    // Another shape loses only that setting.
+    s["quickActionsReader"] = json!({ "defaults": {} });
+    let (b, _) = phone_bundle_with_settings(&json!([gmail_oauth()]), Some(&s));
+    let got = b.settings.unwrap();
+    assert_eq!(got.quick_actions_reader, None);
+    assert_eq!(got.language.as_deref(), Some("de"));
+}

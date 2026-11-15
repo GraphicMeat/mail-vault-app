@@ -55,7 +55,7 @@ pub(crate) const SWIPES: &[&str] = &["toggleRead", "delete", "flag", "move", "no
 /// without the setting. Shown and applied: theme .. emailViewerTheme, the conversation list
 /// (threadMode, threadSortOrder: the page asks for `threads`, `threads.rs`), link safety,
 /// `attachmentReminder` (compose asks before such a send) and `templates` (`[{name, body}]`,
-/// compose inserts them). Stored for later waves: the rest.
+/// compose inserts them), `quickActionsReader` (the viewer's bar). Stored for later waves: the rest.
 pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("theme", Kind::OneOf(&["system", "light", "dark"]), "\"system\""),
     ("palette", Kind::OneOf(&["indigo", "graphite", "teal"]), "\"indigo\""),
@@ -92,6 +92,9 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("linkSafetyClickConfirm", Kind::Bool, "true"),
     ("importantSenders", Kind::List(64 * 1024), "[]"),
     ("templates", Kind::List(512 * 1024), "[]"),
+    // The viewer's bar, in order (Settings > Appearance > Quick actions; the page keeps the
+    // phone's actions only, at most four: src/mobile/quickActions.js). The rest are under More.
+    ("quickActionsReader", Kind::List(1024), "[\"toggleRead\",\"flag\",\"move\",\"delete\"]"),
 ];
 
 pub(crate) fn pref(key: &str) -> Option<(Kind, &'static str)> {

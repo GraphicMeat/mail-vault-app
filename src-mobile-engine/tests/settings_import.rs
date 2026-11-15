@@ -357,3 +357,35 @@ fn removing_an_account_forgets_its_settings() {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+#[test]
+fn the_viewer_quick_actions_default_to_the_old_toolbar_and_import_in_the_phone_vocabulary() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(p["quickActionsReader"], json!(["toggleRead", "flag", "move", "delete"]));
+    let after = e.rpc("mobile.prefs.set", json!({ "quickActionsReader": ["reply", "delete"] })).unwrap();
+    assert_eq!(after["quickActionsReader"], json!(["reply", "delete"]));
+    assert_eq!(e.rpc("mobile.prefs.set", json!({ "quickActionsReader": "reply" })).unwrap_err().code(), "INVALID");
+
+    // Gmail's reader set: archive and snooze have no phone action, the bar keeps the first four.
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let mut s = desk_settings();
+    s.quick_actions_reader = Some(
+        ["archive", "spam", "delete", "toggleRead", "move", "snooze", "reply", "replyAll", "forward"].map(String::from).to_vec(),
+    );
+    import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(p["quickActionsReader"], json!(["spam", "delete", "toggleRead", "move"]));
+
+    // Star and unstar are the flag, the read pair is its toggle, every delete is delete: once each.
+    let tmp = tempfile::tempdir().unwrap();
+    let e = open(tmp.path());
+    let mut s = desk_settings();
+    s.quick_actions_reader =
+        Some(["star", "unstar", "markRead", "markUnread", "deleteServer", "export", "deleteEverywhere"].map(String::from).to_vec());
+    import(&e, &code(vec![imap("ann@example.test")], Some(s)));
+    let p = e.rpc("mobile.prefs.get", json!({})).unwrap();
+    assert_eq!(p["quickActionsReader"], json!(["flag", "toggleRead", "delete"]));
+}

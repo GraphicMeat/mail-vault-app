@@ -75,6 +75,17 @@ it('sends the phone-relevant global settings and nothing machine-bound', async (
   }
 });
 
+it('sends the reader quick actions as their action ids only, not the whole quickActions object', async () => {
+  const qa = useSettingsStore.getState().quickActions;
+  useSettingsStore.setState({
+    quickActions: { ...qa, defaults: { ...qa.defaults, reader: { ...qa.defaults.reader, entries: [{ id: 'spam', action: 'spam' }, { id: 'reply', action: 'reply' }, { id: 'star', action: 'star' }] } } },
+  });
+  await phoneQr({ password: 'correct horse battery' });
+  const s = sent().settings;
+  expect(s.quickActionsReader).toEqual(['spam', 'reply', 'star']);
+  expect(s).not.toHaveProperty('quickActions');
+});
+
 it('sends each account its own settings and its offline window inputs', async () => {
   h.accounts = [{ id: 'a', email: 'a@x.test', password: 'pw', sentFolderOverride: 'Sent Items' }, { id: 'b', email: 'b@x.test', password: 'pw' }];
   useSettingsStore.setState({

@@ -187,6 +187,32 @@ pub(crate) fn phone_swipe(desktop: &str) -> &'static str {
     }
 }
 
+/// The viewer bar the phone takes from the desktop's reader quick actions: each desktop action as
+/// the phone has it (star is flag, the read pair its toggle, every delete delete), once, in the
+/// desktop's order, at most the four the bar holds. The page's `fromDesktop` (quickActions.js)
+/// maps the desktop presets the same way.
+pub(crate) fn phone_reader_actions(desktop: &[String]) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for a in desktop {
+        let phone = match a.as_str() {
+            "toggleRead" | "markRead" | "markUnread" => "toggleRead",
+            "star" | "unstar" => "flag",
+            "move" => "move",
+            "delete" | "deleteServer" | "deleteEverywhere" => "delete",
+            "spam" => "spam",
+            "reply" => "reply",
+            "replyAll" => "replyAll",
+            "forward" => "forward",
+            _ => continue,
+        };
+        if !out.contains(&phone) {
+            out.push(phone);
+        }
+    }
+    out.truncate(4);
+    out
+}
+
 /// The desktop's "after delete" as the phone has it: the unread variants are plain next/previous.
 fn phone_after_delete(desktop: &str) -> &'static str {
     match desktop {
@@ -243,6 +269,9 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     }
     if let Some(list) = &s.important_senders {
         values.push(("importantSenders", json!(list.iter().map(|e| json!({ "match": e.matches, "throughQuietHours": e.through_quiet_hours })).collect::<Vec<_>>())));
+    }
+    if let Some(list) = &s.quick_actions_reader {
+        values.push(("quickActionsReader", json!(phone_reader_actions(list))));
     }
     if let Some(list) = &s.templates {
         values.push(("templates", json!(list.iter().map(|t| json!({ "name": t.name, "body": t.body })).collect::<Vec<_>>())));

@@ -4495,6 +4495,7 @@
   "mobile.settings.source": "Il codice sorgente è su GitHub",
   "mobile.settings.loadFailed": "Impossibile caricare le impostazioni.",
   "mobile.settings.saveFailed": "Impossibile salvare l’impostazione. Riprova.",
+  "mobile.settings.quickActionsHint": "Fino a quattro azioni compaiono nella barra sotto un messaggio aperto, in questo ordine. Le altre sono in Altro. Sposta in Spam compare solo se l’account ha una cartella Spam.",
   "mobile.prefs.loadImages": "Carica automaticamente le immagini remote",
   "mobile.prefs.loadImagesHint": "Le immagini si caricano all'apertura del messaggio. La posta che contiene ancora pixel di tracciamento mantiene il pulsante Carica immagini.",
   "mobile.prefs.trackersPremiumHint": "Con Premium, i pixel di tracciamento vengono rimossi prima che un messaggio venga mostrato.",
