@@ -120,6 +120,7 @@ enum MvBackground {
       forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
     ) { _ in
       schedule()
+      refreshBadge()
       continueInBackground()
     }
   }
@@ -249,6 +250,15 @@ enum MvBackground {
       center.setBadgeCount(max(0, count)) { _ in }
     } else {
       DispatchQueue.main.async { UIApplication.shared.applicationIconBadgeNumber = max(0, count) }
+    }
+  }
+
+  /// The app left the front: the icon shows the engine's count now (mail read, the badge turned
+  /// off), with background refresh on or off; a background run sets it again with what it found.
+  static func refreshBadge() {
+    DispatchQueue.global(qos: .utility).async {
+      let count = mv_badge_count()
+      if count >= 0 { applyBadge(Int(clamping: count)) }
     }
   }
 

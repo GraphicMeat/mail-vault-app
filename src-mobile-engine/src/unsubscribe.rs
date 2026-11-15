@@ -131,6 +131,7 @@ pub(crate) fn run(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             c.query_row(
                 "SELECT m.unsub_json, a.email FROM messages m JOIN accounts a ON a.id = m.account_id
                  WHERE m.account_id = ?1 AND lower(m.from_address) = ?2 AND m.unsub_json IS NOT NULL
+                   AND m.local_deleted IS NOT 1
                  ORDER BY m.date_ms DESC LIMIT 1",
                 [&p.account_id, &address],
                 |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),

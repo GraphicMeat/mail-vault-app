@@ -28,6 +28,7 @@ use crate::net::block_on;
 use crate::rpc::{parse, RpcError};
 use crate::settings::{get_in, put_in};
 use mailvault_core::ai::{chat_request_body, endpoint_is_on_device, parse_chat_response, provider_allowed_for_google_mail};
+use mailvault_core::net_activity;
 use mailvault_core::provider::Provider;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -323,7 +324,11 @@ pub(crate) fn run(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     } else if !(cfg.skip_preview && cfg.consented()) {
         return Ok(refused("REVIEW_REQUIRED"));
     }
-    Ok(match generate(engine, &cfg, &req.prompt, None, req.max_tokens, RUN_TIMEOUT) {
+    let account = match req.accounts.as_slice() {
+        [one] => Some(one.as_str()),
+        _ => None,
+    };
+    Ok(match generate(engine, &cfg, &req.prompt, None, req.max_tokens, RUN_TIMEOUT, account) {
         Ok(text) => json!({ "ok": true, "text": text.trim() }),
         Err(fail) => fail.reply(),
     })
@@ -352,22 +357,20 @@ impl Fail {
 
 /// One `/chat/completions` request to the configured endpoint, with the stored key as a bearer
 /// token when there is one. Every error is dropped unread: reqwest's names the URL, and the
-/// server's body could quote the request.
-fn generate(engine: &Engine, cfg: &Config, prompt: &str, system: Option<&str>, max_tokens: usize, timeout: Duration) -> Result<String, Fail> {
+/// server's body could quote the request. The request is a Network Activity row ("AI model", as
+/// desktop's), shown as `account`'s (an id) when it carries that one account's mail.
+fn generate(engine: &Engine, cfg: &Config, prompt: &str, system: Option<&str>, max_tokens: usize, timeout: Duration, account: Option<&str>) -> Result<String, Fail> {
     let key = engine.secrets().get(KEY_ID).ok().flatten().filter(|k| !k.is_empty());
     let body = serde_json::to_vec(&chat_request_body(&cfg.model, prompt, system, max_tokens)).map_err(|_| Fail::BadReply)?;
     let endpoint = format!("{}/chat/completions", cfg.url.trim_end_matches('/'));
-    block_on(async move {
-        let client = reqwest::Client::builder()
-            .timeout(timeout)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|_| Fail::Network)?;
+    let email = account.and_then(|id| load_account(engine.shared(), id).ok().flatten()).map(|a| a.email);
+    let call = async move {
+        let client = net_activity::http_client_with("AI model", reqwest::Client::builder().timeout(timeout).redirect(reqwest::redirect::Policy::none()));
         let mut req = client.post(&endpoint).header(reqwest::header::CONTENT_TYPE, "application/json").body(body);
         if let Some(key) = key {
             req = req.bearer_auth(key);
         }
-        let resp = req.send().await.map_err(|_| Fail::Network)?;
+        let resp = client.send(req).await.map_err(|_| Fail::Network)?;
         let status = resp.status().as_u16();
         if !(200..300).contains(&status) {
             return Err(Fail::Status(status));
@@ -375,6 +378,12 @@ fn generate(engine: &Engine, cfg: &Config, prompt: &str, system: Option<&str>, m
         let bytes = resp.bytes().await.map_err(|_| Fail::Network)?;
         let json: Value = serde_json::from_slice(&bytes).map_err(|_| Fail::BadReply)?;
         parse_chat_response(&json).map_err(|_| Fail::BadReply)
+    };
+    block_on(async move {
+        match email {
+            Some(email) => net_activity::with_account(email, call).await,
+            None => call.await,
+        }
     })
 }
 
@@ -567,7 +576,7 @@ pub(crate) fn quick_replies(engine: &Engine, params: Value) -> Result<Value, Rpc
                 if m.from_address.is_empty() { "unknown" } else { m.from_address.as_str() },
                 clip(m.text.trim(), QUICK_REPLY_CHARS),
             );
-            if let Ok(text) = generate(engine, &cfg, &prompt, None, 120, QUICK_REPLY_TIMEOUT) {
+            if let Ok(text) = generate(engine, &cfg, &prompt, None, 120, QUICK_REPLY_TIMEOUT, Some(&p.account_id)) {
                 let list = parse_starters(&text);
                 if !list.is_empty() {
                     starters = json!(list);

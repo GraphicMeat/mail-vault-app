@@ -159,6 +159,20 @@ fn a_one_click_url_on_this_network_is_refused_and_its_web_page_offered() {
     assert!(methods.contains(&("browser".into(), "opened".into())), "{methods:?}");
 }
 
+/// A sender whose only list mail was deleted on the phone is not listed, and is not run either.
+#[test]
+fn a_sender_whose_mail_was_deleted_here_is_refused() {
+    let server = server();
+    let (tmp, e, account) = synced(&server);
+    rusqlite::Connection::open(tmp.path().join("mobile.db"))
+        .unwrap()
+        .execute("UPDATE messages SET local_deleted = 1 WHERE lower(from_address) = 'letters@letters.test'", [])
+        .unwrap();
+    assert!(sender(&e.rpc("mobile.unsubscribe.list", json!({})).unwrap(), "letters@letters.test").is_none());
+    let r = e.rpc("mobile.unsubscribe.run", json!({ "accountId": account, "address": "letters@letters.test" }));
+    assert_eq!(r.map_err(|e| e.code().to_string()).unwrap_err(), "INVALID");
+}
+
 #[test]
 fn an_unknown_sender_is_refused() {
     let server = server();

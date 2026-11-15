@@ -5,8 +5,8 @@
 //! ...) and Office documents (docx, xlsx, pptx) in pure Rust; a PDF or an image needs a platform
 //! extractor the phone does not have, so those parts are not read at all.
 //!
-//! What a part gave is recorded in `search.db` (`writer::record_attachment`, by the part's place
-//! among the message's parts in section order), and the message is written again so its text is
+//! What a part gave is recorded in `search.db` (`writer::record_attachment`, keyed by the part's
+//! section, [`part_key`]), and the message is written again so its text is
 //! searchable; every later write of the message keeps it. A part already recorded is never read
 //! again. Runs on the index worker only: a part that finished downloading is a job
 //! ([`crate::search::attachment_ready`]), and a sweep over every downloaded part runs after the
@@ -56,22 +56,27 @@ fn file_of(shared: &Shared, p: &Part) -> Option<PathBuf> {
     shared.search.att_dir.get().map(|d| d.join(&name)).filter(|f| f.is_file())
 }
 
+/// The `part_index` a part's record is kept under in `search.db`: its section, so the record
+/// follows the part whatever rows the message gains or loses. A section of up to four numbers
+/// (the first under 128, the rest under 256, as every real one is) is packed a byte each, in
+/// section order; any other spelling is a hash with the top bit set, so the two never meet.
+pub(crate) fn part_key(section: &str) -> u32 {
+    let nums: Option<Vec<u32>> = section.split('.').map(|n| n.parse::<u32>().ok()).collect();
+    if let Some(nums) = nums.filter(|n| (1..=4).contains(&n.len()) && n[0] < 128 && n.iter().all(|&x| x < 256)) {
+        return nums.iter().enumerate().fold(0u32, |k, (i, &x)| k | (x << (24 - 8 * i)));
+    }
+    use sha2::{Digest, Sha256};
+    let h = Sha256::digest(section.as_bytes());
+    u32::from_be_bytes([h[0], h[1], h[2], h[3]]) | 0x8000_0000
+}
+
 /// Indexes one part's text if it is readable, downloaded and not recorded yet. Returns whether it
 /// read a file.
 fn index_part(shared: &Shared, p: &Part) -> Result<bool, String> {
     if !readable(&p.mime, &p.filename) {
         return Ok(false);
     }
-    let index: i64 = shared
-        .read(|c| {
-            c.query_row(
-                "SELECT count(*) FROM attachments WHERE account_id = ?1 AND folder = ?2 AND uid = ?3 AND section < ?4",
-                (&p.account, &p.folder, p.uid as i64, &p.section),
-                |r| r.get(0),
-            )
-        })
-        .map_err(|e| e.to_string())?;
-    let index = index as u32;
+    let index = part_key(&p.section);
     {
         let guard = search_index::lock(&shared.search.conn);
         let Some(c) = guard.as_ref() else { return Ok(false) };
@@ -266,7 +271,7 @@ mod tests {
         idle(&e);
         let recorded = |e: &Engine| {
             let g = search_index::lock(&e.shared().search.conn);
-            writer::attachment_state(g.as_ref().unwrap(), "acc", "INBOX", 1, 1).unwrap()
+            writer::attachment_state(g.as_ref().unwrap(), "acc", "INBOX", 1, part_key("3")).unwrap()
         };
         assert!(recorded(&e).is_some_and(|s| s != "ok"), "a broken docx is recorded, not retried");
 
@@ -279,5 +284,41 @@ mod tests {
         e.rpc("mobile.prefs.set", json!({ "searchIndexAttachments": true })).unwrap();
         idle(&e);
         assert_eq!(found(&e, "kumquat"), vec![1]);
+    }
+
+    /// A part's record follows its section, not its place among the rows: when a message's parts
+    /// are listed again (one gone, a new one with a section that sorts before the rest as text),
+    /// the new part is still read.
+    #[test]
+    fn a_new_part_is_read_when_the_rows_around_it_change() {
+        let tmp = tempfile::tempdir().unwrap();
+        let e = engine(&tmp);
+        crate::premium::set_active_for_test(e.shared(), true);
+        put_file(&e, 1, "2", b"the kumquat orchard ledger");
+        crate::search::wake(e.shared());
+        idle(&e);
+        assert_eq!(found(&e, "kumquat"), vec![1]);
+
+        e.write(|c| {
+            c.execute("DELETE FROM attachments WHERE account_id = 'acc' AND uid = 1 AND section = '2'", [])?;
+            c.execute(
+                "INSERT INTO attachments (account_id, folder, uid, section, filename, mime, size, encoding)
+                 VALUES ('acc', 'INBOX', 1, '15', 'grove.txt', 'text/plain', 30, 'base64')",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        put_file(&e, 1, "15", b"a mango grove survey");
+        crate::search::attachment_ready(e.shared(), "acc", "INBOX", 1, "15");
+        idle(&e);
+        assert_eq!(found(&e, "mango"), vec![1], "the new part was taken for one already recorded");
+    }
+
+    #[test]
+    fn part_keys_are_stable_and_distinct() {
+        assert_eq!(part_key("2"), part_key("2"));
+        let keys: std::collections::HashSet<u32> = ["1", "2", "10", "15", "2.1", "2.10", "1.2.3", "TEXT"].iter().map(|s| part_key(s)).collect();
+        assert_eq!(keys.len(), 8);
     }
 }

@@ -11,6 +11,9 @@
 char *mv_background_fetch(uint32_t budget_ms);
 // The app just left the front: marks the engine as away, then one run as mv_background_fetch.
 char *mv_background_continue(uint32_t budget_ms);
+// The app icon's count now (0 while the badge is off); -1 when no engine is open or it could not
+// answer (leave the badge as it is). Reads the database: call it off the main thread.
+int64_t mv_badge_count(void);
 // The run that answered `token` had its notes posted: its mail counts as notified.
 void mv_background_commit(const char *token);
 // The OS is ending the background task: the download in flight stops. Returns at once.
