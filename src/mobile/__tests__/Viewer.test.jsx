@@ -235,6 +235,25 @@ describe('Viewer', () => {
     expect(screen.getByRole('heading', { name: 'Weekly digest' })).toBeTruthy();
   });
 
+  it('an OpenPGP message no key opens shows the locked notice instead of its ciphertext', async () => {
+    engine.reply = body({ html: null, text: '-----BEGIN PGP MESSAGE-----\nhQEMA...', pgp: 'locked' });
+    renderViewer();
+    await waitFor(() => expect(document.querySelector('[data-mv-pgp-locked]')).toBeTruthy());
+    expect(screen.getByText(t('pgp.lockedTitle'))).toBeTruthy();
+    expect(screen.getByText(t('pgp.lockedHint'))).toBeTruthy();
+    expect(frame()).toBeNull();
+    expect(screen.queryByText(t('mobile.viewer.empty'))).toBeNull();
+  });
+
+  it('a decrypted OpenPGP message says so and shows the plaintext', async () => {
+    engine.reply = body({ html: '<p>The code is 4242</p>', pgp: 'decrypted' });
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    expect(screen.getByText(t('pgp.decryptedBadge'))).toBeTruthy();
+    expect(frame().getAttribute('srcdoc')).toContain('4242');
+    expect(document.querySelector('[data-mv-pgp-locked]')).toBeNull();
+  });
+
   it('load_images_rebuilds_with_remote', async () => {
     engine.reply = body({ remoteImages: 3 });
     renderViewer();

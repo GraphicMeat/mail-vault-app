@@ -21,6 +21,7 @@ mod oauth;
 mod offline;
 pub mod outgoing;
 mod outbox;
+mod pgp;
 mod premium;
 mod remote_ids;
 mod rpc;

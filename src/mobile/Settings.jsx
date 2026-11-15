@@ -40,6 +40,7 @@ import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
+import EncryptionSettings from './EncryptionSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
 
@@ -121,7 +122,8 @@ export const SETTINGS_PAGES = [
   ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['privacy', 'settings.tab.privacySecurity']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
 ];
-const PAGE_TITLES = Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages));
+// Encryption opens from Privacy & security, as desktop nests it there; Back returns to that page.
+const PAGE_TITLES = { ...Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages)), encryption: 'pgp.tab' };
 
 function Chevron() {
   return (
@@ -136,7 +138,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
   const t = useT();
   const [page, setPage] = useState(startPage);
   // System Back on a page goes to the list first, as the header's Back does.
-  const toList = useCallback(() => setPage('root'), []);
+  const toList = useCallback(() => setPage((p) => (p === 'encryption' ? 'privacy' : 'root')), []);
   useBackLayer(page !== 'root', toList);
   const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
@@ -281,7 +283,18 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
 
         {page === 'appearance' && <SettingsPrefs section="appearance" />}
         {page === 'mail' && <SettingsPrefs section="mail" />}
-        {page === 'privacy' && <SettingsPrefs section="privacy" />}
+        {page === 'privacy' && (
+          <>
+            <SettingsPrefs section="privacy" />
+            <div className="mv-settings__list">
+              <button type="button" className="mv-setting" data-mv-settings-page="encryption" onClick={() => setPage('encryption')}>
+                <span className="mv-setting__text"><span className="mv-setting__label">{t('pgp.tab')}</span></span>
+                <Chevron />
+              </button>
+            </div>
+          </>
+        )}
+        {page === 'encryption' && <EncryptionSettings />}
 
         {page === 'accounts' && (
           <>
