@@ -18,6 +18,7 @@ const GOOGLE: &str = "/api/billing/store/google/verify";
 const STATUS: &str = "/api/billing/subscription-status";
 const SIGNIN_START: &str = "/api/billing/signin/start";
 const SIGNIN_VERIFY: &str = "/api/billing/signin/verify";
+const UNREGISTER: &str = "/api/billing/unregister-client";
 
 const HOUR: i64 = 3_600_000;
 const JWS: &str = "jws-SECRET-receipt-0123456789";
@@ -918,4 +919,126 @@ fn a_registration_finished_by_refresh_names_the_phone_as_the_sign_in_did() {
     for part in ["appVersion=2.23.0", "osVersion=18.1", "clientName=Rita%27s+phone"] {
         assert!(last.contains(part), "{part} missing from {last}");
     }
+}
+
+// ── Devices (Billing page) ──────────────────────────────────────────────────
+
+const OTHER: &str = "someone-elses-install";
+
+/// The status answer with this phone and a Mac among the account's devices.
+fn status_with_devices(install: &str, now: i64) -> Answer {
+    let Answer::Json(code, mut v) = web_status(true, true, now + 30 * 24 * HOUR, None) else { unreachable!() };
+    v["activeClientCount"] = json!(2);
+    v["activeClients"] = json!([
+        { "clientId": install, "clientName": "MailVault for iPhone", "platform": "ios", "appVersion": "2.23.0", "lastSeenAt": iso(now) },
+        { "clientId": OTHER, "clientName": "Mac", "platform": "macos", "appVersion": "2.22.1", "lastSeenAt": iso(now - 2 * HOUR) },
+    ]);
+    Answer::Json(code, v)
+}
+
+fn signed_in(fx: &Fx, now: i64) -> String {
+    stub().route(SIGNIN_VERIFY, Answer::Json(200, json!({ "customerId": CUSTOMER })));
+    stub().route(STATUS, web_status(true, true, now + 30 * 24 * HOUR, None));
+    fx.sign_in().unwrap();
+    fx.secret("premium.installId").unwrap()
+}
+
+#[test]
+fn devices_are_listed_without_any_client_id() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    // No website account: nothing to list, and no call.
+    assert_eq!(fx.rpc("mobile.premium.devices", json!({})), json!({ "available": false }));
+    assert!(stub().all_requests().is_empty());
+
+    let install = signed_in(&fx, now);
+    stub().route(STATUS, status_with_devices(&install, now));
+    let calls = stub().requests(STATUS).len();
+    let reply = fx.rpc("mobile.premium.devices", json!({}));
+    assert_eq!(reply["available"], true, "{reply}");
+    assert_eq!(reply["limit"], 5);
+    let list = reply["devices"].as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0]["current"], true);
+    assert_eq!(list[0]["name"], "MailVault for iPhone");
+    assert_eq!(list[1]["current"], false);
+    assert_eq!(list[1]["name"], "Mac");
+    assert_eq!(list[1]["platform"], "macos");
+    assert_eq!(list[1]["appVersion"], "2.22.1");
+    assert_eq!(list[1]["lastSeenMs"], now - 2 * HOUR);
+    assert!(list[0]["key"].as_str().is_some_and(|k| !k.is_empty()));
+    assert_ne!(list[0]["key"], list[1]["key"]);
+    let text = reply.to_string();
+    for secret in [OTHER, install.as_str(), CUSTOMER] {
+        assert!(!text.contains(secret), "{secret} leaked into {text}");
+    }
+    // A plain status read: by customer id, never by email, never registering.
+    let status = stub().requests(STATUS);
+    assert_eq!(status.len(), calls + 1);
+    let q = &status.last().unwrap().query;
+    assert!(q.contains(&format!("customerId={CUSTOMER}")), "{q}");
+    assert!(!q.contains("register"), "{q}");
+    assert!(!q.contains("email"), "{q}");
+
+    stub().route(STATUS, Answer::Json(429, json!({ "error": "rate_limited" })));
+    assert_eq!(fx.err("mobile.premium.devices", json!({})).code(), "RATE_LIMITED");
+    stub().route(STATUS, Answer::Drop);
+    assert_eq!(fx.err("mobile.premium.devices", json!({})).code(), "NETWORK");
+}
+
+#[test]
+fn removing_a_device_frees_its_place_by_customer_id() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    let install = signed_in(&fx, now);
+    stub().route(STATUS, status_with_devices(&install, now));
+    let listed = fx.rpc("mobile.premium.devices", json!({}));
+    let this_key = listed["devices"][0]["key"].clone();
+    let mac_key = listed["devices"][1]["key"].clone();
+
+    // This phone is not removed here (that is signing out), and a key it cannot place is refused.
+    assert_eq!(fx.err("mobile.premium.removeDevice", json!({ "key": this_key })).code(), "INVALID");
+    assert_eq!(fx.err("mobile.premium.removeDevice", json!({ "key": "not-a-device" })).code(), "INVALID");
+    assert!(stub().requests(UNREGISTER).is_empty());
+
+    stub().route(UNREGISTER, Answer::Json(200, json!({
+        "customerId": CUSTOMER, "customerEmail": EMAIL, "clientLimit": 5, "activeClientCount": 1,
+        "activeClients": [{ "clientId": install, "clientName": "MailVault for iPhone", "platform": "ios", "lastSeenAt": iso(now) }],
+    })));
+    let reply = fx.rpc("mobile.premium.removeDevice", json!({ "key": mac_key }));
+    assert_eq!(reply["available"], true, "{reply}");
+    assert_eq!(reply["devices"].as_array().unwrap().len(), 1, "the list after the removal, from the server's answer");
+    assert_eq!(reply["devices"][0]["current"], true);
+    assert!(!reply.to_string().contains(&install));
+    assert!(!reply.to_string().contains(EMAIL));
+    let sent = stub().requests(UNREGISTER);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].method, "POST");
+    assert_eq!(serde_json::from_str::<Value>(&sent[0].body).unwrap(), json!({ "customerId": CUSTOMER, "clientId": OTHER }));
+    assert!(!fx.logs.lock().unwrap().iter().any(|l| l.contains(OTHER)));
+
+    stub().route(UNREGISTER, Answer::Json(429, json!({ "error": "rate_limited" })));
+    assert_eq!(fx.err("mobile.premium.removeDevice", json!({ "key": mac_key })).code(), "RATE_LIMITED");
+    stub().route(UNREGISTER, Answer::Drop);
+    assert_eq!(fx.err("mobile.premium.removeDevice", json!({ "key": mac_key })).code(), "NETWORK");
+    // Removing a device never touches this phone's Premium.
+    assert!(fx.premium());
+}
+
+#[test]
+fn signing_out_releases_this_phones_place() {
+    let (_g, fx) = setup();
+    let now = now_ms();
+    let install = signed_in(&fx, now);
+    stub().route(UNREGISTER, Answer::Json(200, json!({ "clientLimit": 5, "activeClientCount": 0, "activeClients": [] })));
+    assert_eq!(fx.rpc("mobile.premium.webSignOut", json!({}))["premium"], false);
+    let sent = stub().requests(UNREGISTER);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(serde_json::from_str::<Value>(&sent[0].body).unwrap(), json!({ "customerId": CUSTOMER, "clientId": install }));
+
+    // A release that fails still signs out.
+    signed_in(&fx, now);
+    stub().route(UNREGISTER, Answer::Drop);
+    assert_eq!(fx.rpc("mobile.premium.webSignOut", json!({}))["premium"], false);
+    assert_eq!(fx.secret("premium.customer"), None);
 }

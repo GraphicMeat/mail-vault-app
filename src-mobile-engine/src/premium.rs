@@ -737,11 +737,89 @@ pub(crate) fn sign_in_verify(engine: &Engine, params: Value) -> Result<Value, Rp
     Ok(reply)
 }
 
-/// `mobile.premium.webSignOut {}` -> status: forgets the customer id; a web entitlement ends, a
-/// store one stays.
+/// The page's handle for a device: a one-way hash of this install and the device's client id, so
+/// no client id (another install's proof of its place) reaches the page, and the engine maps a
+/// handle back only through a fresh device list.
+fn device_key(install: &str, client_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(format!("mailvault/deviceKey/v1:{install}:{client_id}").as_bytes());
+    digest[..16].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn devices_json(install: &str, list: &bc::Devices) -> Value {
+    let devices: Vec<Value> = list
+        .devices
+        .iter()
+        .map(|d| {
+            json!({
+                "key": device_key(install, &d.client_id),
+                "name": d.name,
+                "platform": d.platform,
+                "appVersion": d.app_version,
+                "lastSeenMs": d.last_seen_ms,
+                "current": d.client_id == install,
+            })
+        })
+        .collect();
+    json!({ "available": true, "limit": list.limit, "devices": devices })
+}
+
+/// `mobile.premium.devices {}` -> `{available: false}` with no website account (no call), else
+/// `{available: true, limit, devices: [{key, name, platform, appVersion, lastSeenMs, current}]}`:
+/// the account's devices, as desktop's Billing page lists them. A plain status read by customer id
+/// (never registering, never by email) that leaves the Premium cache alone. `NETWORK`,
+/// `RATE_LIMITED`.
+pub(crate) fn devices(engine: &Engine, _params: Value) -> Result<Value, RpcError> {
+    let shared = engine.shared();
+    let Some(customer) = secret_get(shared, CUSTOMER)?.filter(|c| !c.is_empty()) else {
+        return Ok(json!({ "available": false }));
+    };
+    let install = install_id(shared)?;
+    let list = bc::web_devices(&customer, &install).map_err(fail)?;
+    Ok(devices_json(&install, &list))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RemoveParams {
+    key: String,
+}
+
+/// `mobile.premium.removeDevice {key}` -> the device list after the removal (the server's own
+/// answer: a status read right after could still be its cached one). Frees another device's place
+/// among the account's devices; this phone's own is freed by signing out, so its key is `INVALID`,
+/// as is a key no listed device has. `NETWORK`, `RATE_LIMITED`, `REFUSED`.
+pub(crate) fn remove_device(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: RemoveParams = parse(params)?;
+    let shared = engine.shared();
+    let Some(customer) = secret_get(shared, CUSTOMER)?.filter(|c| !c.is_empty()) else {
+        return Err(RpcError::Invalid("no website account on this phone".into()));
+    };
+    let install = install_id(shared)?;
+    if p.key == device_key(&install, &install) {
+        return Err(RpcError::Invalid("this phone leaves the list by signing out".into()));
+    }
+    let list = bc::web_devices(&customer, &install).map_err(fail)?;
+    let Some(device) = list.devices.iter().find(|d| d.client_id != install && device_key(&install, &d.client_id) == p.key) else {
+        return Err(RpcError::Invalid("no such device".into()));
+    };
+    let after = bc::unregister_client(&customer, &device.client_id).map_err(fail)?;
+    Ok(devices_json(&install, &after))
+}
+
+/// `mobile.premium.webSignOut {}` -> status: frees this phone's place among the account's devices
+/// (best effort, as desktop's sign-out does: a failure leaves the place to lapse on the server),
+/// then forgets the customer id; a web entitlement ends, a store one stays.
 pub(crate) fn sign_out(engine: &Engine, _params: Value) -> Result<Value, RpcError> {
     let shared = engine.shared();
     let _one = lock(&shared.premium.checks);
+    if let Some(customer) = secret_get(shared, CUSTOMER)?.filter(|c| !c.is_empty()) {
+        if let Ok(install) = install_id(shared) {
+            if let Err(f) = bc::unregister_client(&customer, &install) {
+                shared.log(&format!("[premium] releasing this device's place failed: {:?}", f));
+            }
+        }
+    }
     secret_delete(shared, CUSTOMER)?;
     shared
         .write(|c| c.execute("DELETE FROM settings WHERE key = ?1", [PREMIUM_WEB_REGISTER]).map(|_| ()))

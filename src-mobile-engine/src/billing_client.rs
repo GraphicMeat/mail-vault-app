@@ -1,5 +1,6 @@
 //! The engine's calls to the MailVault billing service (`website/api`): store receipt checks, the
-//! web subscription status and the verified web sign-in. JSON over HTTPS with a 15 s limit, run
+//! web subscription status and its device list (and freeing a device's place), and the verified
+//! web sign-in. JSON over HTTPS with a 15 s limit, run
 //! through [`net::block_on`](crate::net::block_on).
 //!
 //! The install id, the web customer id and receipts travel in these requests and nowhere else: a
@@ -211,11 +212,65 @@ fn text(v: &Value) -> Option<String> {
     v.as_str().filter(|s| !s.is_empty()).map(str::to_string)
 }
 
-/// `GET /api/billing/subscription-status?customerId&clientId[&register=1&platform&appVersion&osVersion&clientName]`.
-/// `client_id` is this install's id. `register` only on the first status call after a verified
-/// sign-in code: the server's register path takes a revoked client back with no limit check.
-/// Never by email (anyone can type one).
-pub(crate) fn web_status(customer_id: &str, client_id: &str, register: Option<&ClientInfo>) -> Result<WebAnswer, Fail> {
+/// One of the account's active devices (`activeClients`). `client_id` stays in the engine: the
+/// page gets an opaque key for it (`premium::devices`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Device {
+    pub client_id: String,
+    pub name: Option<String>,
+    pub platform: Option<String>,
+    pub app_version: Option<String>,
+    pub last_seen_ms: Option<i64>,
+}
+
+/// The account's device list and how many it may hold (`clientLimit`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Devices {
+    pub limit: Option<i64>,
+    pub devices: Vec<Device>,
+}
+
+fn devices_of(b: &Value) -> Devices {
+    let devices = b["activeClients"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|c| {
+                    Some(Device {
+                        client_id: text(&c["clientId"])?,
+                        name: text(&c["clientName"]),
+                        platform: text(&c["platform"]),
+                        app_version: text(&c["appVersion"]),
+                        last_seen_ms: date_ms(&c["lastSeenAt"]),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Devices { limit: b["clientLimit"].as_i64(), devices }
+}
+
+/// The status endpoint read for its device list only: no registration, by customer id.
+pub(crate) fn web_devices(customer_id: &str, client_id: &str) -> Result<Devices, Fail> {
+    let r = status_call(customer_id, client_id, None)?;
+    Ok(devices_of(&r.body))
+}
+
+/// `POST /api/billing/unregister-client {customerId, clientId}` -> the device list after it.
+/// Never by email.
+pub(crate) fn unregister_client(customer_id: &str, client_id: &str) -> Result<Devices, Fail> {
+    let url = format!("{}/api/billing/unregister-client", base());
+    let body = json!({ "customerId": customer_id, "clientId": client_id });
+    let r = call(|c| c.post(url).json(&body))?;
+    classify(&r)?;
+    if !r.body.is_object() {
+        return Err(Fail::Network);
+    }
+    Ok(devices_of(&r.body))
+}
+
+/// The status call itself; a reply whose body is not an object is no answer.
+fn status_call(customer_id: &str, client_id: &str, register: Option<&ClientInfo>) -> Result<Reply, Fail> {
     let mut url = url::Url::parse(&format!("{}/api/billing/subscription-status", base())).map_err(|_| Fail::Network)?;
     {
         let mut q = url.query_pairs_mut();
@@ -237,10 +292,19 @@ pub(crate) fn web_status(customer_id: &str, client_id: &str, register: Option<&C
         // status is no answer.
         _ => return Err(Fail::Network),
     }
-    let b = &r.body;
-    if !b.is_object() {
+    if !r.body.is_object() {
         return Err(Fail::Network);
     }
+    Ok(r)
+}
+
+/// `GET /api/billing/subscription-status?customerId&clientId[&register=1&platform&appVersion&osVersion&clientName]`.
+/// `client_id` is this install's id. `register` only on the first status call after a verified
+/// sign-in code: the server's register path takes a revoked client back with no limit check.
+/// Never by email (anyone can type one).
+pub(crate) fn web_status(customer_id: &str, client_id: &str, register: Option<&ClientInfo>) -> Result<WebAnswer, Fail> {
+    let r = status_call(customer_id, client_id, register)?;
+    let b = &r.body;
     let replaced = b.get("replacedClient").filter(|v| v.is_object()).map(|v| Replaced {
         client_name: text(&v["clientName"]),
         platform: text(&v["platform"]),
