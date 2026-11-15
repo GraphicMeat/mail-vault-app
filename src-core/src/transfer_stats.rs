@@ -281,6 +281,19 @@ impl TransferStats {
         )
     }
 
+    /// `email`'s bytes counted since the last [`TransferStats::take_for`], marking them taken: for
+    /// a process that keeps its own totals (the mobile engine). Zero for an address never seen.
+    pub fn take_for(&self, email: &str) -> DayBucket {
+        let counters = self.accounts.lock().unwrap().get(&email.to_ascii_lowercase()).cloned();
+        counters.map(|c| c.take_pending()).unwrap_or_default()
+    }
+
+    /// `email`'s bytes not taken yet, leaving them pending.
+    pub fn peek_for(&self, email: &str) -> DayBucket {
+        let counters = self.accounts.lock().unwrap().get(&email.to_ascii_lowercase()).cloned();
+        counters.map(|c| c.pending()).unwrap_or_default()
+    }
+
     /// Bytes counted but not yet written, keyed by account id.
     fn pending_by_id(&self, ids: &HashMap<String, String>) -> HashMap<String, DayBucket> {
         let map = self.accounts.lock().unwrap();
@@ -475,6 +488,18 @@ mod tests {
         assert_eq!(counters.pending(), DayBucket { down: 11, up: 9 });
         assert_eq!(counters.take_pending(), DayBucket { down: 11, up: 9 });
         assert_eq!(counters.pending(), DayBucket::default(), "flushed bytes must not be counted twice");
+    }
+
+    #[test]
+    fn take_for_hands_out_an_address_bytes_once() {
+        let stats = TransferStats::default();
+        let c = stats.counters("Take.For@Example.test");
+        c.down.fetch_add(70, Ordering::Relaxed);
+        c.up.fetch_add(5, Ordering::Relaxed);
+        assert_eq!(stats.peek_for("take.for@example.test"), DayBucket { down: 70, up: 5 });
+        assert_eq!(stats.take_for("TAKE.FOR@example.test"), DayBucket { down: 70, up: 5 });
+        assert_eq!(stats.take_for("take.for@example.test"), DayBucket::default());
+        assert_eq!(stats.peek_for("nobody@example.test"), DayBucket::default());
     }
 
     // ── The command deadline, against a real loopback socket ───────────────

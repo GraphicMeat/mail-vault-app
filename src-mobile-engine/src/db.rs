@@ -598,6 +598,10 @@ pub(crate) struct Shared {
     pub(crate) offline: crate::offline::State,
     /// Each folder's conversations, for the threaded list (`threads.rs`).
     pub(crate) threads: crate::threads::Cache,
+    /// The log file Settings > Logs reads (`logs.rs`).
+    pub(crate) logs: crate::logs::Logs,
+    /// Data usage: when the byte counters were last kept (`usage.rs`).
+    pub(crate) usage: crate::usage::State,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -796,6 +800,8 @@ impl Engine {
                 followup: crate::followup::Worker::default(),
                 offline: crate::offline::State::default(),
                 threads: crate::threads::Cache::default(),
+                logs: crate::logs::Logs::default(),
+                usage: crate::usage::State::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -811,6 +817,8 @@ impl Engine {
             startup_replay: AtomicBool::new(journal || queued),
         };
         Checkpointer::start(&engine.shared);
+        let verbose = crate::logs::is_verbose(engine.setting(crate::logs::VERBOSITY).ok().flatten().as_deref());
+        engine.shared.logs.open(data_dir, verbose);
         engine.shared.offline.set_data_dir(data_dir);
         crate::offline::sweep_orphans(&engine.shared);
         crate::outbox::sweep(&engine.shared, cache_dir, crate::outbox::ORPHAN_AGE);
@@ -1080,6 +1088,11 @@ impl Shared {
         }
     }
 
+    /// The directory `mobile.db` lives in (the data dir the shell passed).
+    pub(crate) fn data_dir(&self) -> Option<&Path> {
+        self.path.parent()
+    }
+
     /// Writes one line to the installed sink, or to stderr when none is set, with every Premium
     /// secret the engine holds (install id, customer id, receipt) scrubbed out.
     pub(crate) fn log(&self, line: &str) {
@@ -1088,6 +1101,7 @@ impl Shared {
             Some(sink) => sink(&line),
             None => eprintln!("{line}"),
         }
+        self.logs.write(&line);
     }
 
     /// Hands one event to the installed sink; dropped when none is set. Call with no engine lock

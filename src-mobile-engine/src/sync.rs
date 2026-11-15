@@ -392,7 +392,7 @@ fn run_job(shared: &Shared, job: &Job, inbox_done: &dyn Fn()) -> (Ended, bool) {
     }
     // A background download whose turn came with the app in front (or the task ended), or a
     // foreground one with a page pass waiting: no sign-in, so the passes behind it start at once.
-    if job.download && crate::offline::stop_download(shared, job.deadline, job.front) {
+    if job.download && crate::offline::stop_download(shared, &job.account, job.deadline, job.front) {
         return (Ended::Done, false);
     }
     // A parked account never shows a pass starting: only that it needs a new sign-in.
@@ -426,6 +426,8 @@ fn run_job(shared: &Shared, job: &Job, inbox_done: &dyn Fn()) -> (Ended, bool) {
         }
     };
     shared.emit(SYNC_STATE, end);
+    // Data usage: the pass's bytes kept, a limit near warned of (at most every 30 s).
+    crate::usage::tick_soon(shared);
     (ended, gave_way.get())
 }
 
@@ -657,7 +659,7 @@ fn quick_mark(shared: &Shared, account: &str, folder: &str, validity: i64) -> Re
 /// bodies from the first one not cached, on the next pass.
 fn download_pass(shared: &Shared, backend: &mut dyn Backend, account: &str, deadline: Option<Instant>, front: bool) -> Result<(), Fail> {
     backend.set_deadline(deadline);
-    let stop = || crate::offline::stop_download(shared, deadline, front);
+    let stop = || crate::offline::stop_download(shared, account, deadline, front);
     let out = (|| -> Result<(), Fail> {
         if stop() {
             return Ok(());

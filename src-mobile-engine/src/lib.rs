@@ -15,6 +15,7 @@ mod db;
 mod followup;
 mod hold;
 mod live;
+mod logs;
 pub mod events;
 pub mod net;
 mod oauth;
@@ -27,9 +28,11 @@ mod rpc;
 mod search;
 pub mod secrets;
 mod settings;
+mod storage;
 mod sync;
 mod threads;
 mod transfer;
+mod usage;
 #[cfg(feature = "perf-gate")]
 pub mod seed;
 

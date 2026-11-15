@@ -92,6 +92,8 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("linkSafetyClickConfirm", Kind::Bool, "true"),
     ("importantSenders", Kind::List(64 * 1024), "[]"),
     ("templates", Kind::List(512 * 1024), "[]"),
+    // Settings > Logs: Standard masks addresses in the log file, Verbose keeps them (`logs.rs`).
+    ("logVerbosity", Kind::OneOf(&["standard", "verbose"]), "\"standard\""),
 ];
 
 pub(crate) fn pref(key: &str) -> Option<(Kind, &'static str)> {
@@ -293,6 +295,9 @@ pub(crate) fn prefs_set(engine: &Engine, params: Value) -> Result<Value, RpcErro
             Ok(())
         })
         .map_err(|e| RpcError::Internal(e.to_string()))?;
+    if let Some((_, v)) = writes.iter().find(|(k, _)| *k == crate::logs::VERBOSITY) {
+        engine.shared().logs.set_verbose(crate::logs::is_verbose(Some(v.as_str())));
+    }
     prefs_get(engine, Value::Null)
 }
 

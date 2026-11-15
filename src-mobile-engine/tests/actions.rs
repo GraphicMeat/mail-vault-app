@@ -1078,3 +1078,62 @@ fn a_refusal_keeps_the_sent_mark() {
     assert_eq!(arg["sent"], true, "{arg}");
     assert_eq!(arg["refused"], 1, "{arg}");
 }
+
+/// Settings > Unfinished server actions, Cancel: a delete the server cannot take now is given up.
+/// The journal row goes, the message shows again (the server still has it), the result says
+/// `discarded` (no drop notice), and nothing is sent once the server is back.
+#[test]
+fn discard_gives_up_an_action_and_shows_the_row_again() {
+    let server = MockImap::start(scenario(&[1, 2]));
+    let f = setup(&server);
+    f.sync(None);
+    server.reset_scenario(scenario(&[1, 2]).fault(Trigger::OnConnect, Action::DropConnection));
+    let from = f.events.len();
+    let seq = f.apply("delete", "INBOX", &[1], None);
+    assert_eq!(f.events.result(from, seq)["outcome"], "retrying");
+    assert!(f.row(1).is_none(), "hidden while pending");
+    let pending = f.pending();
+    assert_eq!(pending[0]["attempts"], 1, "{pending:?}");
+    assert!(pending[0]["createdMs"].as_i64().unwrap() > 0, "{pending:?}");
+
+    let from = f.events.len();
+    assert_eq!(f.engine.rpc("mobile.actions.discard", json!({ "seq": seq })).unwrap(), json!({ "discarded": true }));
+    assert!(f.pending().is_empty());
+    assert!(f.row(1).is_some(), "the message did not show again");
+    assert_eq!(f.overrides(1), Some((None, None, None)));
+    let r = f.events.wait(from, "discarded", |n, v| n == "mobile.action.result" && v["seq"] == seq && v["outcome"] == "discarded");
+    assert!(r.get("reason").is_none(), "{r}");
+    assert!(!f.events.all()[from..].iter().any(|(n, v)| n == "mobile.action.result" && v["outcome"] == "dropped"));
+    // Gone already: said so, nothing changes.
+    assert_eq!(f.engine.rpc("mobile.actions.discard", json!({ "seq": seq })).unwrap(), json!({ "discarded": false }));
+    assert!(f.engine.rpc("mobile.actions.discard", json!({})).is_err());
+
+    // The server back: nothing was owed, so uid 1 stays on it.
+    server.reset_scenario(scenario(&[1, 2]));
+    f.engine.rpc("mobile.actions.retry", json!({})).unwrap();
+    f.sync(Some("INBOX"));
+    let mut uids = f.uids("INBOX");
+    uids.sort();
+    assert_eq!(uids, [1, 2]);
+    assert!(server.state().find("INBOX").unwrap().by_uid(1).is_some());
+}
+
+/// Retry now: an action waiting out its backoff after a failure is tried at once.
+#[test]
+fn retry_tries_a_waiting_action_at_once() {
+    let server = MockImap::start(scenario(&[1, 2]));
+    let f = setup(&server);
+    f.sync(None);
+    server.reset_scenario(scenario(&[1, 2]).fault(Trigger::OnConnect, Action::DropConnection));
+    let from = f.events.len();
+    let seq = f.apply("seen", "INBOX", &[1], None);
+    assert_eq!(f.events.result(from, seq)["outcome"], "retrying");
+    // The first wait after a failure is 5 s; the retry must not sit it out.
+    server.reset_scenario(scenario(&[1, 2]));
+    let t0 = Instant::now();
+    assert_eq!(f.engine.rpc("mobile.actions.retry", json!({ "accountId": f.account })).unwrap(), json!({ "queued": true }));
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let took = t0.elapsed();
+    assert!(took < Duration::from_secs(4), "retry waited {took:?}");
+    assert!(has(&server_flags(&server, "INBOX", 1), "\\Seen"));
+}
