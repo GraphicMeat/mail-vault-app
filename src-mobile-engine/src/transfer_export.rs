@@ -8,7 +8,8 @@
 //! The file is written as `<cache>/att/<64 hex>`, the one place the shell's share sheet takes a
 //! file from (`mobile_share_file`, which leases it while it makes its named copy). It holds every
 //! secret it carries, so the page discards it as soon as the share sheet answers; an export the
-//! page never discarded goes with the next export, or with the attachment cache's eviction.
+//! page never discarded (the app killed while the sheet was up) is deleted by the next export or
+//! at the next engine open, whichever is first (its path is kept in `settings`).
 //!
 //! `{password, accountIds?}` (every account when absent) answers `{ok: true, path, name, count,
 //! skipped: [{email, reason: "no-secret"}]}` or `{ok: false, code}`: `PASSWORD_SHORT` (under 12
@@ -27,15 +28,12 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use rusqlite::OptionalExtension;
 use zeroize::Zeroizing;
 
-/// The files this process exported and has not discarded yet.
-static EXPORTED: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
-
-fn exported() -> std::sync::MutexGuard<'static, Vec<PathBuf>> {
-    EXPORTED.lock().unwrap_or_else(|p| p.into_inner())
-}
+/// The `settings` key holding the path of the export not discarded yet: it outlives a restart, so
+/// a file left by an app killed while the share sheet was up is deleted at the next open.
+const PENDING_KEY: &str = "transfer.pendingExport";
 
 fn refused(code: &str, message: &str) -> Value {
     json!({ "ok": false, "code": code, "message": message })
@@ -154,11 +152,41 @@ fn write_file(dir: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
     Ok(path)
 }
 
-/// Deletes every earlier export: one file with secrets at a time, at most.
-fn drop_earlier() {
-    for p in exported().drain(..) {
+/// The export not discarded yet, if any (`settings` [`PENDING_KEY`]).
+fn pending(engine: &Engine) -> Option<PathBuf> {
+    engine
+        .read(|c| c.query_row("SELECT value FROM settings WHERE key = ?1", [PENDING_KEY], |r| r.get::<_, String>(0)).optional())
+        .ok()
+        .flatten()
+        .map(PathBuf::from)
+}
+
+fn set_pending(engine: &Engine, path: Option<&Path>) -> Result<(), RpcError> {
+    engine
+        .write(|c| match path {
+            Some(p) => c.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (PENDING_KEY, p.to_string_lossy().into_owned()),
+            ),
+            None => c.execute("DELETE FROM settings WHERE key = ?1", [PENDING_KEY]),
+        })
+        .map(|_| ())
+        .map_err(|e| RpcError::Internal(e.to_string()))
+}
+
+/// Deletes the export not discarded yet (one file with secrets at a time, at most).
+fn drop_pending(engine: &Engine) -> Result<(), RpcError> {
+    if let Some(p) = pending(engine) {
         let _ = std::fs::remove_file(p);
+        set_pending(engine, None)?;
     }
+    Ok(())
+}
+
+/// At engine open: an export the page never discarded (the app was killed while the share sheet
+/// was up) is deleted.
+pub(crate) fn sweep(engine: &Engine) {
+    let _ = drop_pending(engine);
 }
 
 pub(crate) fn export(engine: &Engine, mut params: Value) -> Result<Value, RpcError> {
@@ -192,9 +220,12 @@ pub(crate) fn export(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
     drop(bundle);
     let sealed = crypto::encrypt(&password, &plain).map_err(|e| RpcError::Internal(e.to_string()))?;
     drop(plain);
-    drop_earlier();
+    drop_pending(engine)?;
     let path = write_file(engine.attachments().dir(), &sealed).map_err(|e| RpcError::Internal(e.to_string()))?;
-    exported().push(path.clone());
+    if let Err(e) = set_pending(engine, Some(&path)) {
+        let _ = std::fs::remove_file(&path);
+        return Err(e);
+    }
     let date = utc_date(now);
     Ok(json!({
         "ok": true,
@@ -207,17 +238,14 @@ pub(crate) fn export(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
 
 pub(crate) fn discard(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let path = params.get("path").and_then(Value::as_str).ok_or_else(|| RpcError::Invalid("path must be a string".into()))?;
-    let path = PathBuf::from(path);
-    let mut list = exported();
-    let Some(i) = list.iter().position(|p| *p == path) else {
+    if pending(engine).as_deref() != Some(Path::new(path)) {
         return Err(RpcError::Invalid("not an export of this app".into()));
-    };
-    let p = list.remove(i);
-    drop(list);
-    let _ = engine;
-    match std::fs::remove_file(&p) {
-        Ok(()) => Ok(json!({ "ok": true })),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({ "ok": true })),
-        Err(e) => Err(RpcError::Internal(e.to_string())),
     }
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(RpcError::Internal(e.to_string())),
+    }
+    set_pending(engine, None)?;
+    Ok(json!({ "ok": true }))
 }

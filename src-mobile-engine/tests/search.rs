@@ -468,6 +468,7 @@ fn a_v5_file_migrates_to_v6_and_keeps_its_rows() {
              DROP TABLE follow_ups;
              ALTER TABLE folders DROP COLUMN full_from_ms;
              DROP TABLE body_retry;
+             ALTER TABLE messages DROP COLUMN unsub_json;
              INSERT INTO outbox (id, account_id, message_id, draft_json, state, attempts, created_ms, updated_ms, not_before_ms)
                VALUES ('o1', 'acc_a', '<m@x>', '{}', 'failed', 0, 1, 1, 99);
              PRAGMA user_version = 5;",

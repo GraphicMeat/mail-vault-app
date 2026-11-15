@@ -197,3 +197,19 @@ fn discard_deletes_the_export_and_nothing_else() {
     e.rpc("mobile.transfer.discard", json!({ "path": path })).unwrap();
     assert!(!std::path::Path::new(&path).exists());
 }
+
+#[test]
+fn an_export_never_discarded_is_deleted_at_the_next_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let e = engine(dir.path());
+    with_accounts(&e, vec![imap("pat@example.com")]);
+    let first = export(&e, json!({ "password": "export-password-1" }))["path"].as_str().unwrap().to_string();
+    // A second export takes the first one's place.
+    let second = export(&e, json!({ "password": "export-password-1" }))["path"].as_str().unwrap().to_string();
+    assert!(!std::path::Path::new(&first).exists());
+    assert!(std::path::Path::new(&second).is_file());
+    // The app is killed while the share sheet is up: the next open deletes it.
+    drop(e);
+    let _e = engine(dir.path());
+    assert!(!std::path::Path::new(&second).exists());
+}
