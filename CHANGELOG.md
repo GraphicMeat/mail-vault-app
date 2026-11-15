@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Mobile: the chat view, as on desktop. Settings > Appearance > Mail view switches the message list to Chat: the folder's mail by person (your own replies count under the person you wrote to), newest first, then tap a person to see your conversations with them. A conversation opens as it does in the list. All Inboxes stays a list.
+- Mobile: pick the app icon, purple or teal, in Settings > Appearance > App icon. The home screen icon changes at once, and a choice made on the computer comes along with the QR code set-up.
 - Mobile: quiet hours per account, as on desktop. On the phone's Notifications settings page, under an account's Configure folders, turn on Quiet hours and pick when they start and end: the phone still checks mail then, but posts no notification for that account, and nothing piles up for when they end. Quiet hours set on desktop come along with the QR code import.
 - Mobile: choose which folders notify, per account (Inbox by default), from the account's own folders under Configure folders on the phone's Notifications settings page. New mail in a chosen folder now notifies, not only new mail in the Inbox. A chosen folder the phone never opened starts notifying with the mail that arrives after it was chosen, and never delays the Inbox's notifications.
 - Mobile: priority senders, as on desktop. Add an address or a whole domain on the phone's Notifications settings page: their mail to the Inbox notifies even when the account is muted or the Inbox is not a chosen folder, and through quiet hours unless you untick Notify during quiet hours.

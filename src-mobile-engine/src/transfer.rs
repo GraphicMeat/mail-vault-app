@@ -213,6 +213,8 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     text("emailViewerTheme", &s.email_viewer_theme);
     text("threadMode", &s.thread_mode);
     text("threadSortOrder", &s.thread_sort_order);
+    text("viewStyle", &s.view_style);
+    text("appIcon", &s.app_icon);
     if let Some(v) = &s.after_delete_select {
         values.push(("afterDeleteSelect", json!(phone_after_delete(v))));
     }

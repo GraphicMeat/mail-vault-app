@@ -238,7 +238,7 @@ pub(crate) fn row_of(c: &Connection, account: &str, folder: &str, uid: i64) -> r
     st.query_row((account, folder, uid), crate::rpc::row_json).optional()
 }
 
-fn decorate(row: &mut Value, t: &Thread) {
+pub(crate) fn decorate(row: &mut Value, t: &Thread) {
     let n = t.members.len();
     if n < 2 {
         return;

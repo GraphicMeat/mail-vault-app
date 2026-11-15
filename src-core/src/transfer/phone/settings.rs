@@ -71,6 +71,12 @@ pub struct PhoneSettings {
     pub thread_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub thread_sort_order: Option<String>,
+    /// Mail view: `list` | `chat`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub view_style: Option<String>,
+    /// `purple` | `teal`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub app_icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub mark_as_read_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]

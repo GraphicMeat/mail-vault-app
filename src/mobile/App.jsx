@@ -40,6 +40,7 @@ import { useMobileStore, ALL_INBOXES } from './store.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
 import ThreadView from './ThreadView.jsx';
+import ChatView from './ChatView.jsx';
 import AddAccount from './AddAccount.jsx';
 import AccountSwitcher, { Avatar, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
@@ -670,6 +671,8 @@ function App() {
   }, []);
   // All Inboxes marks each row with its account (desktop's account dot).
   const allInboxes = activeFolder === ALL_INBOXES;
+  // Mail view chat (`viewStyle`): the folder by person (ChatView.jsx). All Inboxes stays a list.
+  const chatView = useMobileStore((s) => s.prefs.viewStyle) === 'chat' && !allInboxes;
   const accountOf = useMemo(() => {
     if (!allInboxes) return null;
     const byId = new Map(accounts.map((a) => [a.id, a]));
@@ -830,7 +833,10 @@ function App() {
       <ReauthBanner account={account} state={reauthState} onReauth={onReauth} />
       <RefusedBanner account={account} onRetry={onRetrySignIn} />
       <OutboxRow initialOpen={DEMO_OUTBOX} />
-      {listState === 'ready' && list && (
+      {listState === 'ready' && list && chatView && (
+        <ChatView key={listKey} accountId={activeAccountId} folder={activeFolder} list={list} onOpen={onOpen} onSwipe={onSwipe} />
+      )}
+      {listState === 'ready' && list && !chatView && (
         <MessageList
           key={listKey}
           cache={list}

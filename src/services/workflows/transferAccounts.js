@@ -76,7 +76,7 @@ export async function phoneQr({ password }) {
 // them). Never: backup*, snapshot*, cleanupRules, transferLimits, billing, AI keys, PGP, sound,
 // badge, refreshInterval, daemon*, onboarding, layout or other UI memory.
 const PHONE_GLOBAL_KEYS = [
-  'language', 'emailViewerTheme', 'dateFormat', 'customDateFormat', 'timeFormat', 'threadMode', 'threadSortOrder',
+  'language', 'emailViewerTheme', 'dateFormat', 'customDateFormat', 'timeFormat', 'threadMode', 'threadSortOrder', 'viewStyle', 'appIcon',
   'markAsReadMode', 'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction',
   'sendDelay', 'autoSaveDrafts', 'attachmentReminder', 'defaultSignatureEnabled', 'holdExternalContent',
   'linkSafetyEnabled', 'linkSafetyClickConfirm', 'trackerBlockingEnabled',
