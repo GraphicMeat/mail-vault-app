@@ -612,3 +612,31 @@ fn graph_polls_with_one_cheap_request_per_interval() {
     engine.rpc("mobile.app.state", json!({ "foreground": false })).unwrap();
     wait_until(Duration::from_secs(2), "the poller stopped", || !engine.live_running());
 }
+
+/// `refreshOnLaunch` off skips the catch-up of the first connect after launch only: a later
+/// foreground (a resume, a switch back) still syncs the INBOX it missed while away.
+#[test]
+fn refresh_on_launch_off_skips_only_the_launch_catch_up() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "first")])));
+    let f = imap_engine();
+    let account = f.add_imap(&server);
+    f.sync(&account);
+    f.engine.rpc("mobile.prefs.set", json!({ "refreshOnLaunch": false })).unwrap();
+    let passes = |from: usize| {
+        f.events.list.lock().unwrap()[from..].iter().filter(|(n, v)| n == "mobile.sync.state" && v["accountId"] == account.as_str()).count()
+    };
+
+    let from = f.events.len();
+    f.app_state(true, Some(&account));
+    wait_until(QUICK, "the live thread idles on INBOX", || server.count_commands("IDLE") >= 1);
+    std::thread::sleep(Duration::from_millis(400));
+    assert_eq!(passes(from), 0, "the launch caught up with refreshOnLaunch off");
+
+    f.app_state(false, None);
+    wait_until(Duration::from_secs(2), "the live thread exited", || !f.engine.live_running());
+    let from = f.events.len();
+    f.app_state(true, Some(&account));
+    // Not the launch any more: the INBOX catches up on connecting.
+    f.events.wait_idle(from, &account);
+    f.app_state(false, None);
+}

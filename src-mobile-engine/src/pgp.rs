@@ -53,11 +53,6 @@ fn read_keys(shared: &Shared) -> Result<Vec<StoredKey>, String> {
     }
 }
 
-/// Whether any key is imported (a store that cannot be read counts as yes: ask the server again).
-pub(crate) fn has_keys(shared: &Shared) -> bool {
-    read_keys(shared).map_or(true, |k| !k.is_empty())
-}
-
 fn write_keys(shared: &Shared, keys: &[StoredKey]) -> Result<(), String> {
     if keys.is_empty() {
         return shared.secrets().delete(ENTRY);
@@ -125,10 +120,14 @@ pub(crate) fn import_key(engine: &Engine, params: Value) -> Result<Value, RpcErr
     let stored = StoredKey { armored: armored.trim().to_string(), passphrase: p.passphrase.unwrap_or_default() };
     let info = core_pgp::validate(&stored).map_err(RpcError::Invalid)?;
     let shared = engine.shared();
-    let mut keys = read_keys(shared).map_err(internal)?;
-    keys.retain(|k| core_pgp::key_info(&k.armored).map_or(true, |i| i.fingerprint != info.fingerprint));
-    keys.push(stored);
-    write_keys(shared, &keys).map_err(internal)?;
+    let keys = {
+        let _one = crate::db::lock(&shared.pgp_keys);
+        let mut keys = read_keys(shared).map_err(internal)?;
+        keys.retain(|k| core_pgp::key_info(&k.armored).map_or(true, |i| i.fingerprint != info.fingerprint));
+        keys.push(stored);
+        write_keys(shared, &keys).map_err(internal)?;
+        keys
+    };
     if let Err(e) = forget_locked(shared) {
         shared.log(&format!("[pgp] locked bodies not dropped: {e}"));
     }
@@ -146,6 +145,7 @@ struct RemoveParams {
 pub(crate) fn remove_key(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: RemoveParams = parse(params)?;
     let shared = engine.shared();
+    let _one = crate::db::lock(&shared.pgp_keys);
     let mut keys = read_keys(shared).map_err(internal)?;
     keys.retain(|k| core_pgp::key_info(&k.armored).map_or(true, |i| i.fingerprint != p.fingerprint));
     write_keys(shared, &keys).map_err(internal)?;
@@ -490,6 +490,56 @@ pub(crate) mod tests {
         let again = body(&e, &account, 1);
         assert_eq!(again["pgp"], json!(LOCKED), "{again}");
         assert_eq!(fetches(), before, "a locked body was fetched again with no key to open it");
+    }
+
+    /// A key that does not open the message changes nothing: the locked body is still answered
+    /// from the cache, not fetched (up to the payload's 64 MB) on every open.
+    #[test]
+    fn a_locked_body_stays_cached_while_only_other_keys_are_in() {
+        let (theirs, mine) = (keypair(None), keypair(None));
+        let (server, _tmp, e, _secrets, account) = engine_with(vec![pgp_mime(1, &theirs)]);
+        e.rpc("mobile.pgp.importKey", json!({ "armored": armored(&mine) })).unwrap();
+        assert_eq!(body(&e, &account, 1)["pgp"], json!(LOCKED));
+        let fetches = || server.commands().iter().filter(|c| c.to_uppercase().contains("FETCH")).count();
+        let before = fetches();
+        assert_eq!(body(&e, &account, 1)["pgp"], json!(LOCKED));
+        assert_eq!(fetches(), before, "a locked body was fetched again for a key the phone lacks");
+    }
+
+    /// Imports and removes that overlap never lose a key: each read-modify-write of the one
+    /// secret store entry runs alone.
+    #[test]
+    fn concurrent_imports_keep_every_key() {
+        struct Slow(crate::MemorySecrets);
+        impl crate::SecretStore for Slow {
+            fn get(&self, id: &str) -> Result<Option<String>, String> {
+                let v = self.0.get(id);
+                if id == ENTRY {
+                    std::thread::sleep(std::time::Duration::from_millis(40));
+                }
+                v
+            }
+            fn set(&self, id: &str, secret: &str) -> Result<(), String> {
+                self.0.set(id, secret)
+            }
+            fn delete(&self, id: &str) -> Result<(), String> {
+                self.0.delete(id)
+            }
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let e = Arc::new(Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(Slow(crate::MemorySecrets::default()))).unwrap());
+        let keys: Vec<String> = (0..4).map(|_| armored(&keypair(None))).collect();
+        let threads: Vec<_> = keys
+            .into_iter()
+            .map(|k| {
+                let e = Arc::clone(&e);
+                std::thread::spawn(move || e.rpc("mobile.pgp.importKey", json!({ "armored": k })).unwrap())
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        assert_eq!(e.rpc("mobile.pgp.listKeys", json!({})).unwrap()["keys"].as_array().unwrap().len(), 4, "an import lost another's key");
     }
 
     /// A download pass that ran before the key was imported cached the message encrypted; the

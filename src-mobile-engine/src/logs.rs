@@ -8,7 +8,8 @@
 //!   (`mailvault_core::log_redact`, the same `<provider#xxxx>` tokens, with a per-install salt in
 //!   `<data_dir>/logs/log_salt`); Verbose keeps them, for a support session. The choice is held in
 //!   memory (read at open, updated by `mobile.prefs.set`), so writing a line never reads the
-//!   database.
+//!   database. Every live engine of one data dir shares one [`Logs`] ([`shared`]), so a change
+//!   made through setup's engine holds for a background run's too.
 //! - Size: past [`MAX_BYTES`] the file moves to `engine.log.1` (one older file kept) and a new one
 //!   starts, so the log never takes more than twice that.
 //! - `mobile.logs.get {lines?}` -> `{text, bytes}`: the newest `lines` (default 500, at most 5000)
@@ -23,7 +24,7 @@ use serde_json::{json, Value};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 /// The preference key, as desktop names it.
 pub(crate) const VERBOSITY: &str = "logVerbosity";
@@ -43,6 +44,23 @@ pub(crate) struct Logs {
     write: Mutex<()>,
     /// Tests: a smaller roll-over size.
     cap: OnceLock<u64>,
+}
+
+/// The live logs, by their data dir: the engine can be open twice in one process (setup's and a
+/// background run's), and both must write one file at one detail.
+static LIVE: Mutex<Vec<(PathBuf, Weak<Logs>)>> = Mutex::new(Vec::new());
+
+/// The log of `data_dir`: the one a live engine of that dir already holds, else a new one (not
+/// writing until [`Logs::open`]).
+pub(crate) fn shared(data_dir: &Path) -> Arc<Logs> {
+    let mut live = lock(&LIVE);
+    live.retain(|(_, w)| w.strong_count() > 0);
+    if let Some(logs) = live.iter().find(|(d, _)| d == data_dir).and_then(|(_, w)| w.upgrade()) {
+        return logs;
+    }
+    let logs = Arc::new(Logs::default());
+    live.push((data_dir.to_path_buf(), Arc::downgrade(&logs)));
+    logs
 }
 
 impl Logs {
@@ -205,6 +223,21 @@ mod tests {
         let e = open();
         e.shared().log("kept@example.org");
         assert!(text(&e).contains("kept@example.org"));
+    }
+
+    /// Two engines on one data dir (setup's and a background run's) write one log at one detail:
+    /// the detail chosen through either holds for both.
+    #[test]
+    fn two_engines_on_one_dir_share_the_detail() {
+        let tmp = tempfile::tempdir().unwrap();
+        let open = || Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(crate::MemorySecrets::default())).unwrap();
+        let (a, b) = (open(), open());
+        a.rpc("mobile.prefs.set", json!({ VERBOSITY: "verbose" })).unwrap();
+        b.shared().log("[bg] kept@example.org");
+        assert!(text(&a).contains("kept@example.org"), "{}", text(&a));
+        a.rpc("mobile.prefs.set", json!({ VERBOSITY: "standard" })).unwrap();
+        b.shared().log("[bg] masked@example.org");
+        assert!(!text(&b).contains("masked@example.org"), "{}", text(&b));
     }
 
     /// Lines carry a UTC time stamp, `lines` takes the newest, clear empties the log.

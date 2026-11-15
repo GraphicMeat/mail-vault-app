@@ -608,8 +608,15 @@ pub(crate) struct Shared {
     pub(crate) offline: crate::offline::State,
     /// Each folder's conversations, for the threaded list (`threads.rs`).
     pub(crate) threads: crate::threads::Cache,
-    /// The log file Settings > Logs reads (`logs.rs`).
-    pub(crate) logs: crate::logs::Logs,
+    /// The log file Settings > Logs reads (`logs.rs`), shared by every live engine of this data
+    /// dir so they write one file at one detail.
+    pub(crate) logs: Arc<crate::logs::Logs>,
+    /// The accounts whose live listener has connected since the engine opened: the first connect
+    /// is the launch, whose INBOX catch-up `refreshOnLaunch` off skips (`live.rs`).
+    pub(crate) launched: Mutex<std::collections::HashSet<String>>,
+    /// Held from reading the OpenPGP keys' secret store entry through writing it back
+    /// (`pgp.rs`), so overlapping imports and removals never lose a key.
+    pub(crate) pgp_keys: Mutex<()>,
     /// Data usage: when the byte counters were last kept (`usage.rs`).
     pub(crate) usage: crate::usage::State,
     /// Unit tests: the most rows any one write transaction changed.
@@ -814,7 +821,9 @@ impl Engine {
                 followup: crate::followup::Worker::default(),
                 offline: crate::offline::State::default(),
                 threads: crate::threads::Cache::default(),
-                logs: crate::logs::Logs::default(),
+                logs: crate::logs::shared(data_dir),
+                launched: Mutex::new(std::collections::HashSet::new()),
+                pgp_keys: Mutex::new(()),
                 usage: crate::usage::State::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),

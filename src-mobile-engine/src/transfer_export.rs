@@ -145,10 +145,14 @@ fn write_file(dir: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
     let tmp = dir.join(format!("{name}.export"));
     let path = dir.join(&name);
     let mut f = std::fs::File::create(&tmp)?;
-    f.write_all(bytes)?;
-    f.sync_all()?;
+    // Whatever fails after the file exists, the sealed bytes do not stay behind.
+    let written = f.write_all(bytes).and_then(|()| f.sync_all());
+    // Closed first: Windows removes no file that is still open.
     drop(f);
-    std::fs::rename(&tmp, &path)?;
+    if let Err(e) = written.and_then(|()| std::fs::rename(&tmp, &path)) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
     Ok(path)
 }
 
@@ -248,4 +252,22 @@ pub(crate) fn discard(engine: &Engine, params: Value) -> Result<Value, RpcError>
     }
     set_pending(engine, None)?;
     Ok(json!({ "ok": true }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A write that fails after the temporary file was made leaves no sealed bytes behind.
+    #[test]
+    fn a_failed_write_leaves_no_temporary_file() {
+        use sha2::{Digest, Sha256};
+        let tmp = tempfile::tempdir().unwrap();
+        let bytes = b"sealed export bytes";
+        let name: String = Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
+        // A non-empty directory where the file goes: the rename fails.
+        std::fs::create_dir_all(tmp.path().join(&name).join("in-the-way")).unwrap();
+        assert!(write_file(tmp.path(), bytes).is_err());
+        assert!(!tmp.path().join(format!("{name}.export")).exists(), "the temporary file was left behind");
+    }
 }

@@ -343,12 +343,13 @@ fn cached(shared: &Shared, p: &BodyParams) -> Result<Option<Body>, EngineError> 
         .optional()
     })?;
     // A row whose parts no longer read is refetched (and replaced) rather than trusted. So is an
-    // encrypted body no key opened (`locked`, or cached before the phone decrypted) once a key
-    // is in; with none, a `locked` row answers (offline too) without a fetch.
+    // encrypted body cached before the phone decrypted (no `pgp` mark). A `locked` row answers
+    // (offline too) without a fetch, whatever keys are in: no key the phone held opened it, and
+    // importing one (`pgp::import_key`) drops every `locked` row so the next open decrypts.
     Ok(row.and_then(|(html, text, parts)| {
         let stored: Stored = serde_json::from_str(parts.as_deref()?).ok()?;
         let encrypted = match stored.pgp.as_deref() {
-            Some(s) => s != crate::pgp::DECRYPTED && crate::pgp::has_keys(shared),
+            Some(_) => false,
             None => crate::pgp::looks_encrypted(stored.parts.iter().map(|p| p.mime.as_str()), text.as_deref()),
         };
         if encrypted {

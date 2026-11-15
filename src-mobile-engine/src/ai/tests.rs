@@ -161,6 +161,27 @@ fn the_preview_is_exactly_what_is_sent() {
     assert_eq!(e.rpc("mobile.ai.prompt", read_action(99, "plain", "summarize")).unwrap()["code"], "NOT_FOUND");
 }
 
+/// Every endpoint call is a Network Activity row ("AI model"), shown as the account's when it
+/// carries one account's mail; a test call names no account.
+#[test]
+fn ai_calls_are_recorded_in_network_activity() {
+    let (_tmp, e) = engine();
+    let server = fake(200, |_| chat("Short summary."));
+    let port: u16 = server.url.rsplit(':').next().unwrap().trim_end_matches("/v1").parse().unwrap();
+    on(&e, &server.url);
+    message(&e, "plain", 8, "ann@example.test", "Lunch", "Can we meet on Friday at noon?", Some(false));
+    let mut run = read_action(8, "plain", "summarize");
+    run["confirmed"] = json!(true);
+    assert_eq!(e.rpc("mobile.ai.run", run).unwrap()["ok"], true);
+    assert_eq!(e.rpc("mobile.ai.run", json!({ "action": "test", "confirmed": true })).unwrap()["ok"], true);
+    let ours: Vec<_> = mailvault_core::net_activity::snapshot().into_iter().filter(|ev| ev.port == port).collect();
+    assert_eq!(ours.len(), 2, "{ours:?}");
+    assert!(ours.iter().all(|ev| ev.purpose == "AI model"), "{ours:?}");
+    // Newest first: the test call, then the summary.
+    assert_eq!(ours[0].account, None, "{ours:?}");
+    assert_eq!(ours[1].account.as_deref(), Some("me@example.test"), "{ours:?}");
+}
+
 // ── Gmail ─────────────────────────────────────────────────────────────────────
 
 #[test]
