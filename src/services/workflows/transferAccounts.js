@@ -74,9 +74,9 @@ export async function phoneQr({ password }) {
 }
 
 // The desktop settings the phone takes (the phone applies them on its first import that carries
-// them). Never: backup*, snapshot*, cleanupRules, transferLimits, billing, AI keys, PGP,
-// refreshInterval, daemon*, onboarding, layout or other UI memory. The sound goes as its name (the
-// phone plays the system's sound unless it is `none`).
+// them). AI goes as `aiEndpoint` (below). Never: backup*, snapshot*, cleanupRules, transferLimits,
+// billing, AI keys, PGP, refreshInterval, daemon*, onboarding, layout or other UI memory. The sound
+// goes as its name (the phone plays the system's sound unless it is `none`).
 const PHONE_GLOBAL_KEYS = [
   'language', 'emailViewerTheme', 'dateFormat', 'customDateFormat', 'timeFormat', 'threadMode', 'threadSortOrder', 'viewStyle', 'appIcon',
   'markAsReadMode', 'markAsReadDelay', 'confirmBeforeDelete', 'afterDeleteSelect', 'swipeLeftAction', 'swipeRightAction',
@@ -107,6 +107,18 @@ function phoneGlobalSettings(s, theme) {
   const reader = normalizeQuickActions(s.quickActions).defaults.reader.entries.map(e => e.action);
   const stock = DEFAULT_QUICK_ACTIONS.defaults.reader.entries.map(e => e.action);
   if (reader.join() !== stock.join()) out.quickActionsReader = reader;
+  // AI with an endpoint, the phone's one provider: the switch, URL, model and review choice. Never
+  // the key, nor the desktop's consent (the phone reviews its first send itself). The phone leaves
+  // out a loopback URL: that server runs on this computer, not on the phone.
+  const ai = s.aiSettings;
+  if (ai?.provider === 'endpoint' && typeof ai.endpointUrl === 'string' && ai.endpointUrl.trim()) {
+    out.aiEndpoint = {
+      enabled: !!ai.enabled,
+      endpointUrl: ai.endpointUrl.trim(),
+      endpointModel: typeof ai.endpointModel === 'string' ? ai.endpointModel.trim() : '',
+      skipPreview: !!ai.skipPreview,
+    };
+  }
   if (Array.isArray(s.emailTemplates) && s.emailTemplates.length) {
     out.templates = s.emailTemplates
       .filter(tpl => tpl && typeof tpl.body === 'string')

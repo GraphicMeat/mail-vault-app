@@ -22,7 +22,7 @@ pub use desktop::{desktop_account, desktop_bundle};
 pub use frames::{frames, parse_frame, Assembler, FrameError, FrameHeader, Progress, MAX_FRAMES, MAX_FRAME_CHARS};
 pub use qr::qr_svg;
 pub use settings::{
-    offline_window, Degrade, PhoneAccountNotifications, PhoneAccountSettings, PhoneAlias, PhoneImportantSender, PhoneQuietHours, PhoneSettings,
+    offline_window, Degrade, PhoneAccountNotifications, PhoneAccountSettings, PhoneAiEndpoint, PhoneAlias, PhoneImportantSender, PhoneQuietHours, PhoneSettings,
     PhoneSignature, PhoneTemplate,
 };
 

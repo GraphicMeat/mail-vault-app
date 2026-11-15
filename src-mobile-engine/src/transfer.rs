@@ -303,6 +303,21 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
     if let Some(bar) = s.quick_actions_reader.as_deref().map(phone_reader_actions).filter(|b| !b.is_empty()) {
         values.push(("quickActionsReader", json!(bar)));
     }
+    // AI on an endpoint; a loopback URL is the desktop's own computer, not the phone.
+    if let Some(ai) = &s.ai_endpoint {
+        let url = ai.endpoint_url.as_deref().map(str::trim).unwrap_or("");
+        if !url.is_empty() && !mailvault_core::ai::endpoint_is_on_device(url) {
+            values.push(("aiEndpointUrl", json!(url)));
+            if let Some(m) = &ai.endpoint_model {
+                values.push(("aiEndpointModel", json!(m.trim())));
+            }
+            for (key, v) in [("aiEnabled", ai.enabled), ("aiSkipPreview", ai.skip_preview)] {
+                if let Some(v) = v {
+                    values.push((key, json!(v)));
+                }
+            }
+        }
+    }
     if let Some(list) = &s.templates {
         values.push(("templates", json!(list.iter().map(|t| json!({ "name": t.name, "body": t.body })).collect::<Vec<_>>())));
     }

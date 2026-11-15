@@ -61,6 +61,11 @@ export const PREF_DEFAULTS = Object.freeze({
   quickActionsReader: Object.freeze(['toggleRead', 'flag', 'move', 'delete']),
   // Settings > Logs: Standard masks addresses in the engine's log file, Verbose keeps them.
   logVerbosity: 'standard',
+  // Settings > AI (AiSettings.jsx; the engine's `ai.rs` reads them): off, no endpoint.
+  aiEnabled: false,
+  aiEndpointUrl: '',
+  aiEndpointModel: '',
+  aiSkipPreview: false,
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];

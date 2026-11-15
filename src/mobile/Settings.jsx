@@ -11,6 +11,7 @@
 // - Preferences (SettingsPrefs.jsx): look, date and time, reading, deleting, swipes, sending.
 //   Appearance links to Quick actions (QuickActionsSettings.jsx, the viewer's bar), whose Back
 //   returns to Appearance (`SUB_PAGES`).
+// - AI (AiSettings.jsx, under desktop's Organize): the endpoint, its key and the review rule.
 // - Notifications: the switch asks the system's permission before it turns on, and stays off with
 //   a pointer to the system settings when the answer is no. Each time the screen shows (and when
 //   the app comes back to the front) it reads the system's current answer without asking: turned
@@ -63,6 +64,7 @@ import DataUsage from './DataUsage.jsx';
 import NetworkActivity from './NetworkActivity.jsx';
 import UnsubscribeSettings from './UnsubscribeSettings.jsx';
 import TransferSettings from './TransferSettings.jsx';
+import AiSettings from './AiSettings.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -139,7 +141,7 @@ function AccountRow({ account, reauthBusy }) {
 export const SETTINGS_PAGES = [
   ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
   ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts'], ['transfer', 'settings.transfer.title']]],
-  ['settings.navigation.organize', [['unsubscribe', 'unsubscribe.tabLabel']]],
+  ['settings.navigation.organize', [['ai', 'settings.tab.aiProviders'], ['unsubscribe', 'unsubscribe.tabLabel']]],
   ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['storage', 'settings.tab.storage'], ['dataUsage', 'settings.tab.dataUsage'], ['search', 'settings.searchIndex.title'], ['privacy', 'settings.tab.privacySecurity'], ['networkActivity', 'settings.tab.networkActivity']]],
   ['settings.tab.diagnostics', [['pending', 'settings.pendingActions.title'], ['logs', 'settings.tab.logs']]],
   ['settings.tab.help', [['help', 'settings.tab.help']]],
@@ -352,6 +354,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
         {page === 'networkActivity' && <NetworkActivity />}
         {page === 'unsubscribe' && <UnsubscribeSettings />}
         {page === 'transfer' && <TransferSettings />}
+        {page === 'ai' && <AiSettings />}
 
         {page === 'accounts' && (
           <>

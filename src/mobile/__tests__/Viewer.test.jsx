@@ -6,13 +6,15 @@ import React from 'react';
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
 import { t } from '../i18n.js';
 
-const engine = vi.hoisted(() => ({ calls: [], reply: null, inline: null }));
+const engine = vi.hoisted(() => ({ calls: [], reply: null, inline: null, quick: null, ai: {} }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
     engine.calls.push([method, params]);
     if (method === 'mobile.message.inlineImages' && engine.inline) return engine.inline;
     if (method === 'mobile.attachment.fetch' && engine.inline) return { jobId: 1 };
+    if (method === 'mobile.ai.quickReplies' && engine.quick) return engine.quick;
+    if (method in engine.ai) return engine.ai[method];
     if (method !== 'mobile.message.body') throw Object.assign(new Error(method), { code: 'UNSUPPORTED' });
     const r = typeof engine.reply === 'function' ? engine.reply(params) : engine.reply;
     if (r instanceof Error) throw r;
@@ -39,6 +41,9 @@ const body = (over = {}) => ({
   remoteImages: 0, trackers: 0, gone: false, ...over,
 });
 
+// The calls the body makes; quick replies ask mobile.db on their own (QuickReplies.jsx).
+const bodyCalls = () => engine.calls.filter(([m]) => m !== 'mobile.ai.quickReplies');
+
 const renderViewer = (props = {}) =>
   render(<Viewer accountId="a1" folder="INBOX" row={row} onClose={() => {}} {...props} />);
 
@@ -57,7 +62,7 @@ function tapGuardedLink() {
   return n;
 }
 
-beforeEach(() => { engine.calls = []; engine.reply = body(); engine.inline = null; });
+beforeEach(() => { engine.calls = []; engine.reply = body(); engine.inline = null; engine.quick = null; engine.ai = {}; });
 afterEach(cleanup);
 
 describe('Viewer', () => {
@@ -70,7 +75,47 @@ describe('Viewer', () => {
     expect(f.getAttribute('title')).toBe(t('mobile.viewer.frameTitle'));
     expect(f.hasAttribute('src')).toBe(false);
     expect(f.getAttribute('srcdoc')).toContain('<meta http-equiv="Content-Security-Policy"');
-    expect(engine.calls).toEqual([['mobile.message.body', { accountId: 'a1', folder: 'INBOX', uid: 7, texts: expect.any(Object) }]]);
+    // Besides the body, only the quick replies' question (answered from mobile.db, no network).
+    expect(engine.calls.filter(([m]) => m !== 'mobile.ai.quickReplies')).toEqual([['mobile.message.body', { accountId: 'a1', folder: 'INBOX', uid: 7, texts: expect.any(Object) }]]);
+  });
+
+  it('quick replies sit under the body; a tap opens a reply with that starter', async () => {
+    engine.quick = { show: true, shape: 'proposedTime', starters: null };
+    const onCompose = vi.fn();
+    renderViewer({ onCompose });
+    await waitFor(() => expect(document.querySelector('[data-mv-quick-reply]')).toBeTruthy());
+    expect(engine.calls.find(([m]) => m === 'mobile.ai.quickReplies')[1]).toEqual({ accountId: 'a1', folder: 'INBOX', uid: 7, generate: false });
+    fireEvent.click(document.querySelector('[data-mv-quick-reply]'));
+    expect(onCompose).toHaveBeenCalledWith('reply', t('ai.quickReply.time.accept'));
+  });
+
+  it('with AI on, More offers Summarize: reviewed, then read, then usable in a reply', async () => {
+    useMobileStore.setState((s) => ({ prefs: { ...s.prefs, aiEnabled: true } }));
+    engine.ai = {
+      'mobile.ai.prompt': { ok: true, prompt: 'Summarize this', destination: 'https://ai.example.test/v1', leavesDevice: true },
+      'mobile.ai.run': { ok: true, text: 'Short summary.' },
+    };
+    const onCompose = vi.fn();
+    renderViewer({ onCompose });
+    await waitFor(() => expect(frame()).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-mv-tool="more"]'));
+    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-action="summarize"]')); });
+    await waitFor(() => expect(document.querySelector('[data-mv-ai-prompt]')).toBeTruthy());
+    expect(engine.calls.find(([m]) => m === 'mobile.ai.prompt')[1]).toEqual({ action: 'summarize', accountId: 'a1', folder: 'INBOX', uid: 7 });
+    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-send]')); });
+    await waitFor(() => expect(document.querySelector('[data-mv-ai-result]')).toBeTruthy());
+    expect(engine.calls.find(([m]) => m === 'mobile.ai.run')[1]).toEqual({ action: 'summarize', accountId: 'a1', folder: 'INBOX', uid: 7, confirmed: true });
+    expect(document.querySelector('[data-mv-ai-result]').textContent).toBe('Short summary.');
+    fireEvent.click(document.querySelector('[data-mv-ai-use]'));
+    expect(onCompose).toHaveBeenCalledWith('reply', 'Short summary.');
+    useMobileStore.setState((s) => ({ prefs: { ...s.prefs, aiEnabled: false } }));
+  });
+
+  it('with AI off, More has no AI action', async () => {
+    renderViewer();
+    await waitFor(() => expect(frame()).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-mv-tool="more"]'));
+    expect(document.querySelector('[data-mv-ai-action]')).toBeNull();
   });
 
   it('sends the link-safety reason templates in the UI language', async () => {
@@ -271,7 +316,7 @@ describe('Viewer', () => {
     expect(after).not.toBe(before);
     expect(after.getAttribute('sandbox')).toBe(SANDBOX);
     expect(screen.queryByRole('button', { name: t('mobile.viewer.loadImages', { count: 3 }) })).toBeNull();
-    expect(engine.calls).toHaveLength(1);
+    expect(bodyCalls()).toHaveLength(1);
   });
 
   // Review Focus 5 / owner decision 3: a free user's body keeps its tracking pixel (stripping is
@@ -299,7 +344,7 @@ describe('Viewer', () => {
     expect(screen.getByText(t('mobile.viewer.imagesTrack'))).toBeTruthy();
     expect(screen.queryByText(t('mobile.viewer.imagesBlocked'))).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(engine.calls.map(([m]) => m)).toEqual(['mobile.message.body']);
+    expect(bodyCalls().map(([m]) => m)).toEqual(['mobile.message.body']);
 
     fireEvent.click(screen.getByRole('button', { name: t('mobile.viewer.loadImages', { count: 3 }) }));
     const after = frame().getAttribute('srcdoc').match(/http-equiv="Content-Security-Policy" content="([^"]*)"/)[1];
@@ -481,7 +526,7 @@ describe('Viewer', () => {
     engine.reply = body();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.retry') })); });
     await waitFor(() => expect(frame()).toBeTruthy());
-    expect(engine.calls).toHaveLength(2);
+    expect(bodyCalls()).toHaveLength(2);
   });
 
   it('ignores a reply that lands after the viewer closed', async () => {

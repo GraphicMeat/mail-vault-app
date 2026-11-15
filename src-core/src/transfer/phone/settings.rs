@@ -160,6 +160,25 @@ pub struct PhoneSettings {
     /// in the desktop's vocabulary: the phone maps them onto its viewer bar.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub quick_actions_reader: Option<Vec<String>>,
+    /// `aiSettings` when its provider is an endpoint ([`PhoneAiEndpoint`]).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient_object")]
+    pub ai_endpoint: Option<PhoneAiEndpoint>,
+}
+
+/// The desktop's AI setup when its provider is an OpenAI-compatible endpoint (`aiSettings`), the
+/// phone's one provider: the switch, URL, model and whether a reviewed endpoint skips the review.
+/// Never the key or the desktop's consent; the phone leaves out a loopback URL.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneAiEndpoint {
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub endpoint_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub endpoint_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub skip_preview: Option<bool>,
 }
 
 /// An account's signature: the desktop's html and text, and whether it is on.

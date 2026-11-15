@@ -73,6 +73,10 @@ vi.mock('../transport.js', () => ({
         if (engine.undoState !== 'queued') return { undone: false, state: engine.undoState };
         engine.outbox = engine.outbox.filter((r) => r.id !== params.id);
         return { undone: true, state: 'queued' };
+      case 'mobile.ai.prompt':
+        return { ok: true, prompt: `prompt for ${params.action}`, destination: 'https://ai.example.test/v1', leavesDevice: true };
+      case 'mobile.ai.run':
+        return { ok: true, text: `AI ${params.action}` };
       default:
         throw Object.assign(new Error(method), { code: 'UNSUPPORTED' });
     }
@@ -1026,5 +1030,44 @@ describe('Signature and undo send (desktop settings)', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(callsOf('mobile.compose.send')[0].sendAtMs).toBeUndefined();
     expect(useMobileStore.getState().undoSend).toBe(null);
+  });
+});
+
+describe('Compose with AI (Settings > AI)', () => {
+  const reply = () => {
+    engine.prepare = { ...EMPTY, to: 'ada@example.test', subject: 'Re: Weekly', quoteText: QUOTE };
+    return { mode: 'reply', original: { folder: 'INBOX', uid: 7, dateMs: DATE_MS } };
+  };
+  const pick = async (action) => {
+    fireEvent.click(document.querySelector('[data-mv-ai-open]'));
+    await act(async () => { fireEvent.click(document.querySelector(`[data-mv-ai-action="${action}"]`)); });
+    await flush();
+    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-send]')); });
+    await flush();
+  };
+
+  it('a reply opened with a starter has it at the top of the body', async () => {
+    renderCompose({ ...reply(), starter: 'Sounds good' });
+    await waitFor(() => expect(body().value).toBe(`Sounds good\n\n${QUOTE}`));
+  });
+
+  it('offers nothing while AI is off', async () => {
+    renderCompose(reply());
+    await waitFor(() => expect(body().value).toBe(`\n\n${QUOTE}`));
+    expect(document.querySelector('[data-mv-ai-open]')).toBeNull();
+  });
+
+  it('a rewrite replaces what the user wrote and keeps the quote; a summary goes on top', async () => {
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, aiEnabled: true } }));
+    renderCompose(reply());
+    await waitFor(() => expect(body().value).toBe(`\n\n${QUOTE}`));
+    typeInto(body(), `hey send it\n\n${QUOTE}`);
+    await pick('tone:formal');
+    expect(callsOf('mobile.ai.run')[0]).toEqual({ action: 'tone', tone: 'formal', accountId: 'a1', text: 'hey send it', confirmed: true });
+    expect(body().value).toBe(`AI tone\n\n${QUOTE}`);
+    await pick('summarize');
+    expect(callsOf('mobile.ai.run')[1]).toEqual({ action: 'summarize', accountId: 'a1', folder: 'INBOX', uid: 7, confirmed: true });
+    expect(body().value).toBe(`AI summarize\n\nAI tone\n\n${QUOTE}`);
+    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, aiEnabled: false } }));
   });
 });

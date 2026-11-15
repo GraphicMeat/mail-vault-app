@@ -238,7 +238,7 @@ describe('Settings pages, as desktop lays them out', () => {
 
   it('the first screen lists the pages in desktop order, under desktop\'s groups, with no settings of its own', () => {
     render(<Settings onClose={() => {}} />);
-    expect(pageRows()).toEqual(['appearance', 'mail', 'notifications', 'accounts', 'transfer', 'unsubscribe', 'offline', 'storage', 'dataUsage', 'search', 'privacy', 'networkActivity', 'pending', 'logs', 'help']);
+    expect(pageRows()).toEqual(['appearance', 'mail', 'notifications', 'accounts', 'transfer', 'ai', 'unsubscribe', 'offline', 'storage', 'dataUsage', 'search', 'privacy', 'networkActivity', 'pending', 'logs', 'help']);
     const headings = [...document.querySelectorAll('.mv-settings__heading')].map((h) => h.textContent);
     expect(headings).toEqual([
       t('common.premium'),
@@ -261,7 +261,7 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.notifications'));
     await waitFor(() => expect(toggle()).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(pageRows()).toHaveLength(15);
+    expect(pageRows()).toHaveLength(16);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.title'));
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
@@ -279,6 +279,8 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'afterDeleteSameAccount', 'trackpadSwipeEnabled', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled', 'attachmentReminder', 'refreshOnLaunch', 'autoDownloadAttachments']);
     // Remote content is a privacy choice on desktop (Privacy & security > Security).
     expect(on('privacy')).toEqual(['holdExternalContent', 'trackerBlockingEnabled', 'linkSafetyEnabled', 'linkSafetyClickConfirm']);
+    // AI is off by default: only its switch until it is on (AiSettings.test.jsx).
+    expect(on('ai')).toEqual(['aiEnabled']);
     expect(on('search')).toEqual(['searchIndexBodies', 'searchIndexAttachments']);
   });
 
