@@ -8,7 +8,7 @@ import { useMailStore } from '../stores/mailStore';
 import { resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
 import { RecipientField } from './RecipientField';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
@@ -20,7 +20,6 @@ import { withoutSnippet } from '../utils/withoutSnippet';
 import { composeIdentities, composeSenderName, composeSignature, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { deleteLocalDraft, newDraftId } from '../services/localDrafts';
 import { t, useT, getLocale } from '../i18n/index.js';
-import { Private } from './privacy/Private';
 import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
@@ -43,38 +42,7 @@ import { useScheduleZoneSuggestion } from './compose/useScheduleZoneSuggestion';
 import { useDraftState } from './compose/useDraftState';
 import { useDraftAutosave } from './compose/useDraftAutosave';
 import { useComposeSend } from './compose/useComposeSend';
-
-const sizeLabel = (t, bytes) => {
-  if (bytes < 1024) return t('settings.backup.account.b', { bytes });
-  if (bytes < 1024 * 1024) return t('settings.backup.account.kb', { bytes: (bytes / 1024).toFixed(1) });
-  return t('settings.backup.account.mb', { bytes: (bytes / (1024 * 1024)).toFixed(1) });
-};
-
-function AttachmentPreview({ attachment, onRemove }) {
-  const t = useT();
-  const pa = usePrivateAttr();
-  const formatSize = bytes => sizeLabel(t, bytes);
-  
-  return (
-    <div
-      data-testid="compose-attachment"
-      data-filename={pa(attachment.filename, 'filename')}
-      // A wrapped flex item is as wide as its content: without the cap a long
-      // file name pushes the chip past the window's edge.
-      className="flex items-center gap-2 px-3 py-2 bg-mail-surface-hover rounded-lg max-w-full min-w-0"
-    >
-      <FileText size={16} className="text-mail-accent-text shrink-0" />
-      <span className="text-sm text-mail-text truncate flex-1 min-w-0"><Private kind="filename">{attachment.filename}</Private></span>
-      <span className="text-xs text-mail-text-muted shrink-0">{formatSize(attachment.size)}</span>
-      <Button variant="ghost" icon size="xs" className="hover:bg-mail-border shrink-0"
-        onClick={onRemove}
-        title={t('compose.removeAttachment')}
-      >
-        <X size={14} className="text-mail-text-muted" />
-      </Button>
-    </div>
-  );
-}
+import { AttachmentChip, sizeLabel } from './compose/AttachmentChip';
 
 // The message a reply answers shows beside it as the reading pane would show
 // it (ThreadView, read-only). The detached compose window and the pop-out get
@@ -1294,7 +1262,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               </div>
               <div className="flex flex-wrap gap-2">
                 {attachments.map((att, index) => (
-                  <AttachmentPreview
+                  <AttachmentChip
                     key={index}
                     attachment={att}
                     onRemove={() => removeAttachment(index)}
