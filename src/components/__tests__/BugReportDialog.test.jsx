@@ -122,7 +122,7 @@ describe('BugReportDialog', () => {
     render(<BugReportDialog open onClose={onClose} onEmail={() => {}} />);
 
     fireEvent.click(screen.getByTestId('bug-join-discord'));
-    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/gECE37RpD');
+    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/3GB62ethD8');
 
     fireEvent.click(screen.getByTestId('bug-follow-x'));
     expect(openInBrowser).toHaveBeenCalledWith('https://x.com/GraphicMeat');

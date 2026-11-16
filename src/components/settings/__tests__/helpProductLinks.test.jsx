@@ -45,9 +45,9 @@ describe('Help & Support product links', () => {
   it('puts a Join Discord button beside Report a Bug', () => {
     render(<HelpSettings onClose={() => {}} onReportBug={() => {}} />);
     const button = screen.getByTestId('settings-link-discord').querySelector('button');
-    expect(button.dataset.url).toBe('https://discord.gg/gECE37RpD');
+    expect(button.dataset.url).toBe('https://discord.gg/3GB62ethD8');
     fireEvent.click(button);
-    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/gECE37RpD');
+    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/3GB62ethD8');
   });
 
   // Google OAuth verification requires the privacy policy to be reachable

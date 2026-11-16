@@ -236,7 +236,7 @@ describe('Sidebar layouts', () => {
     useSettingsStore.setState({ sidebarCollapsed: collapsed });
     render(<Sidebar />);
     fireEvent.click(screen.getByRole('button', { name: t('bugReport.joinDiscord') }));
-    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/gECE37RpD');
+    expect(openInBrowser).toHaveBeenCalledWith('https://discord.gg/3GB62ethD8');
     fireEvent.click(screen.getByRole('button', { name: t('bugReport.followX') }));
     expect(openInBrowser).toHaveBeenCalledWith('https://x.com/GraphicMeat');
   });
