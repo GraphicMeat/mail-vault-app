@@ -1,0 +1,11 @@
+{
+  "9431d7915ca5": "Hotmail 收件箱已满或 Outlook 收件箱已满？如何把邮件归档到本地来释放空间？",
+  "f5b0517632c1": "当 Hotmail 或 Outlook.com 提示收件箱已满时，在腾出空间之前你将收不到新邮件。清空“已删除邮件”只能管一阵子。长久的办法是把旧邮件移到你自己的电脑上，再从 Outlook.com 删除：每封邮件都保留下来，空间也回来了。",
+  "70790ba76cf6": "先看空间用在了哪里：在 Outlook.com 中打开<strong>设置 &rarr; 帐户 &rarr; 存储</strong>。如果大部分被 OneDrive 占用，清理邮件帮不上忙。如果是邮件，原因通常是带大附件的旧邮件。",
+  "f4c4bf110756": "<strong>归档并删除</strong>是 Premium 功能，一次运行就能完成这次转移：它把每封邮件作为 .eml 文件复制到你的保管库，检查副本，之后才删除 Outlook.com 里的原件。截图使用的是 MailVault 的虚构演示邮箱，Hotmail 或 Outlook.com 账户的步骤相同。",
+  "2adb6de3ed66": "把旧的 Hotmail 或 Outlook.com 邮件归档到你的电脑",
+  "c6cef6a8168d": "用<strong>使用 Microsoft 账户登录</strong>添加你的 Hotmail 或 Outlook.com 账户。请先在 Outlook.com 中开启 IMAP：<a href=\"/faq/providers.html#add-outlook-hotmail-imap\" class=\"text-blue-600 dark:text-blue-400 hover:underline\">查看方法</a>。",
+  "bca0e1adcf13": "从最早的年份开始，再对后面的年份重复，直到 Outlook.com 重新有空间。没有通过副本检查的邮件会留在 Outlook.com，所以复制失败不会让你丢任何一封邮件。在你清空“已删除邮件”文件夹之前，Outlook.com 仍把其中的邮件计入你的存储空间，Microsoft 表示新的总量最长可能要 24 小时才会显示。",
+  "be2343ffc739": "如果想清理整个邮箱而不是选中的几个年份，请使用<a href=\"#archive-delete-settings\" class=\"text-blue-600 dark:text-blue-400 hover:underline\">设置 &rarr; 备份与恢复 &rarr; 归档并删除</a>。两种方式的每一步点击都在<a href=\"#archive-delete-tutorial\" class=\"text-blue-600 dark:text-blue-400 hover:underline\">分步教程</a>里，存储上限则在<a href=\"/guides/outlook-hotmail-mailbox-full.html\" class=\"text-blue-600 dark:text-blue-400 hover:underline\">Outlook.com 和 Hotmail 邮箱已满指南</a>中说明。",
+  "55615a89b4e9": "先在 Outlook.com 中开启 IMAP，再在 MailVault 中用“使用 Microsoft 账户登录”添加你的 Hotmail 或 Outlook.com 账户。打开该账户的服务器视图，选择“选择邮件…”，选中最早的年份，点“下一步”，选择 Premium 功能“归档并删除”，然后确认。MailVault 把每封邮件作为 .eml 文件复制到你的保管库，检查副本，之后才删除 Outlook.com 里的原件，所以每封邮件都保留下来，收件箱的空间也回来了。没有通过检查的邮件会留在 Outlook.com。在你清空“已删除邮件”文件夹之前，Outlook.com 仍把其中的邮件计入你的存储空间。"
+}

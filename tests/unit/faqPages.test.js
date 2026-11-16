@@ -30,10 +30,10 @@ describe('FAQ hub and topic pages', () => {
   it('keeps every one of the 23 original answers, each on exactly one topic page', () => {
     const all = ORIGINAL_TOPICS.flatMap(t => questionsIn(topic(t)));
     // 23 from the original single-page FAQ, plus later answers including
-    // iCloud, adding an Outlook.com account over IMAP and the phone set-up, across the six original
-    // topics; new topics have separate coverage below.
-    expect(all.length).toBe(42);
-    expect(new Set(all).size).toBe(42);
+    // iCloud, adding an Outlook.com account over IMAP, the phone set-up and the Hotmail / Outlook
+    // inbox-full answer, across the six original topics; new topics have separate coverage below.
+    expect(all.length).toBe(43);
+    expect(new Set(all).size).toBe(43);
   });
 
   it('parses every FAQ JSON-LD block in every locale', () => {
@@ -64,6 +64,29 @@ describe('FAQ hub and topic pages', () => {
         expect(answer, `${loc.dir}: ${key}`).toBe(dict[key]);
         expect(answer, `${loc.dir}: ${key}`).not.toBe(english[PROVIDER_ANSWER_INDEXES[position]].acceptedAnswer.text);
       }
+    }
+  });
+
+  // Search landing: "hotmail inbox full" / "outlook inbox full" -> archive locally, with screenshots, in every language.
+  it('answers Hotmail / Outlook inbox full with localized screenshots in every locale', () => {
+    const id = 'hotmail-outlook-inbox-full';
+    const question = 'Hotmail inbox full or Outlook inbox full? How do I archive emails locally to free up space?';
+    expect(hub()).toContain(`href="faq/backup-and-restore.html#${id}"`);
+    expect(questionsIn(topic('backup-and-restore'))).toContain(question);
+    for (const loc of [{ dir: '' }, ...LOCALES]) {
+      const prefix = loc.dir ? `${loc.dir}/` : '';
+      const html = readFileSync(`website/${prefix}faq/backup-and-restore.html`, 'utf8');
+      const article = new JSDOM(html).window.document.getElementById(id);
+      expect(article, `${loc.dir || 'en'} article`).toBeTruthy();
+      const shots = [...article.querySelectorAll('img')];
+      expect(shots.length, `${loc.dir || 'en'} screenshots`).toBeGreaterThanOrEqual(6);
+      for (const img of shots) {
+        expect(img.getAttribute('src'), `${loc.dir || 'en'} shot`).toContain(`/assets/help-media/${loc.dir || 'en'}/`);
+        expect(existsSync(`website${img.getAttribute('src')}`), img.getAttribute('src')).toBe(true);
+        expect(img.getAttribute('alt').length).toBeGreaterThan(20);
+      }
+      expect(article.querySelector('a[href$="faq/providers.html#add-outlook-hotmail-imap"]'), `${loc.dir || 'en'} IMAP link`).toBeTruthy();
+      if (loc.dir) expect(questionsIn(html)).not.toContain(question);
     }
   });
 

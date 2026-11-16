@@ -1,0 +1,11 @@
+{
+  "9431d7915ca5": "Hotmail の受信トレイがいっぱい、Outlook の受信トレイがいっぱい？ メールをローカルにアーカイブして容量を空けるには",
+  "f5b0517632c1": "Hotmail や Outlook.com で受信トレイがいっぱいと表示されると、容量が空くまで新しいメールを受信できなくなります。削除済みアイテムを空にすれば一時的には楽になります。根本的な解決は、古いメールを自分のコンピューターに移してから Outlook.com から削除することです。メールはすべて手元に残り、容量も戻ります。",
+  "70790ba76cf6": "まず容量の行き先を確認します。Outlook.com で <strong>設定 &rarr; アカウント &rarr; ストレージ</strong>を開きます。OneDrive が大半を占めているなら、メールを片付けても効果はありません。メールが大半なら、大きな添付ファイル付きの古いメールが原因であることがほとんどです。",
+  "f4c4bf110756": "<strong>アーカイブして削除</strong>は Premium の機能で、この移動を 1 回の実行で行います。各メールを .eml ファイルとして保管庫にコピーし、コピーを確認してから、はじめて Outlook.com の元のメールを削除します。スクリーンショットは MailVault の架空のデモ用メールボックスですが、手順は Hotmail や Outlook.com のアカウントでも同じです。",
+  "2adb6de3ed66": "古い Hotmail / Outlook.com のメールをコンピューターにアーカイブする",
+  "c6cef6a8168d": "<strong>Microsoft でサインイン</strong>で Hotmail または Outlook.com のアカウントを追加します。先に Outlook.com で IMAP を有効にしてください。<a href=\"/faq/providers.html#add-outlook-hotmail-imap\" class=\"text-blue-600 dark:text-blue-400 hover:underline\">手順はこちら</a>。",
+  "bca0e1adcf13": "いちばん古い年から始め、Outlook.com に空きができるまで次の年も同じように繰り返します。コピーの確認に通らなかったメールは Outlook.com に残るので、コピーに失敗してもメールを失うことはありません。Outlook.com では、削除済みアイテムのフォルダを空にするまで、その中のメールも容量に数えられます。新しい合計が表示されるまで最大 24 時間かかることがあると Microsoft は案内しています。",
+  "be2343ffc739": "選んだ年ではなくメールボックス全体を片付けたい場合は、<a href=\"#archive-delete-settings\" class=\"text-blue-600 dark:text-blue-400 hover:underline\">設定 &rarr; バックアップと復元 &rarr; アーカイブして削除</a>を使います。2 つの方法のすべての操作は<a href=\"#archive-delete-tutorial\" class=\"text-blue-600 dark:text-blue-400 hover:underline\">手順を追ったチュートリアル</a>にあり、容量の上限については<a href=\"/guides/outlook-hotmail-mailbox-full.html\" class=\"text-blue-600 dark:text-blue-400 hover:underline\">Outlook.com と Hotmail のメールボックスがいっぱいになったときのガイド</a>で説明しています。",
+  "55615a89b4e9": "Outlook.com で IMAP を有効にしたあと、MailVault で「Microsoft でサインイン」を選んで Hotmail または Outlook.com のアカウントを追加します。アカウントの「サーバー」ビューを開き、「メッセージを選択…」を選んで、いちばん古い年を指定し、「次へ」を押して、Premium の機能「アーカイブして削除」を選び、確定します。MailVault は各メールを .eml ファイルとして保管庫にコピーし、コピーを確認してから Outlook.com の元のメールを削除するため、メールはすべて残り、受信トレイの容量が戻ります。確認に通らなかったメールは Outlook.com に残ります。Outlook.com では、削除済みアイテムのフォルダを空にするまで、その中のメールも容量に数えられます。"
+}
