@@ -38,7 +38,7 @@ function useDevicePixelRatio() {
 // surfaces keep their doc for reuse on unmount, and the bubble draws on no
 // canvas: surfaceWorkerTheme); `style` joins the sizing box.
 // `allowRemote` is off unless the surface says so: one that forgets loses images, not privacy.
-const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenImage, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface, allowRemote = false }, ref) {
+const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenImage, imageFile, onFailure, onFoldToggled, sizing = 'content', privacy = false, style, surface, allowRemote = false }, ref) {
   const t = useT();
   const boxRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -78,6 +78,9 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
   const onOpenImageRef = useRef(onOpenImage);
   onLinkRef.current = onLink;
   onOpenImageRef.current = onOpenImage;
+  // id -> the inline picture as a file, or null: the body menu's Open / Save As. Read at right-click time.
+  const imageFileRef = useRef(imageFile);
+  imageFileRef.current = imageFile;
   onFailureRef.current = onFailure;
   onFoldToggledRef.current = onFoldToggled; // called with (id, open) when a fold toggle is clicked
 
@@ -188,15 +191,15 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
 
   // The reply carries both: a toggle inside a link hits the link and the fold.
   const hitAt = useCallback(async (clientX, clientY, target) => {
-    if (!doc) return { link: null, fold: null };
+    if (!doc) return { link: null, fold: null, image: null };
     const docId = doc.docId;
     const rect = target.getBoundingClientRect();
     try {
       const r = await hitRender(docId, clientX - rect.left, clientY - rect.top);
       // The doc was closed or replaced while the worker answered.
-      if (docIdRef.current !== docId) return { link: null, fold: null };
-      return { link: r?.link ?? null, fold: r?.fold ?? null, docId };
-    } catch { return { link: null, fold: null }; }
+      if (docIdRef.current !== docId) return { link: null, fold: null, image: null };
+      return { link: r?.link ?? null, fold: r?.fold ?? null, image: r?.image ?? null, docId };
+    } catch { return { link: null, fold: null, image: null }; }
   }, [doc]);
 
   // The new layout comes back as render-updated (the worker's `updated` frame), the same
@@ -262,20 +265,26 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
     let opened = false;
     // A toggle is not a link: nothing to copy there, as the click does not open it.
     const linkOf = (hit) => (hit.fold ? null : hit.link);
+    // The picture under the point, as a file (Open / Save As), or null: a remote one has no bytes here.
+    const imageOf = (hit) => {
+      if (hit.image == null) return null;
+      try { return imageFileRef.current?.(hit.image) ?? null; } catch { return null; }
+    };
     // A worker that is slow to answer must not hold the menu back: it opens after 300 ms without
-    // Copy Link, and the hit adds the item in place when it lands. An answer for a newer
-    // right-click, a doc change or a closed menu is dropped.
+    // Copy Link or the picture items, and the hit adds them in place when it lands. An answer for a
+    // newer right-click, a doc change or a closed menu is dropped.
     const timer = setTimeout(() => {
       if (opened || seq !== menuSeq.current) return;
       opened = true;
-      setMenu({ at, link: null, seq });
+      setMenu({ at, link: null, image: null, seq });
     }, 300);
     void hitAt(e.clientX, e.clientY, e.currentTarget).then((hit) => {
       clearTimeout(timer);
       if (seq !== menuSeq.current) return;
       const link = linkOf(hit);
-      if (!opened) { opened = true; setMenu({ at, link, seq }); return; }
-      if (link) setMenu(m => (m && m.seq === seq && !m.link ? { ...m, link } : m));
+      const image = imageOf(hit);
+      if (!opened) { opened = true; setMenu({ at, link, image, seq }); return; }
+      if (link || image) setMenu(m => (m && m.seq === seq && !m.link && !m.image ? { ...m, link, image } : m));
     });
   }, [hitAt]);
 
@@ -414,6 +423,7 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
             <BodyContextMenu
               at={menu.at}
               link={menu.link}
+              image={menu.image}
               colors={menuColorsFor(theme, null)} // light in every theme: no dark swatch probe yet (theme/darkSwatch.js)
               clampTo={clampTo}
               inBody={inBody}

@@ -358,3 +358,24 @@ fn a_settle_only_image_op_refreshes_a_dirty_doc_and_replies_with_its_new_meta() 
     assert_eq!(out.iter().find(|f| f["req"] == 4).unwrap()["kind"], "reply");
     assert_eq!(out.iter().find(|f| f["req"] == 5).unwrap(), &json!({"kind":"error","req":5,"code":"render_unknown_doc"}));
 }
+
+#[test]
+fn hit_names_the_stamped_picture_under_the_point() {
+    // The body menu offers Open / Save As for the picture under a right-click, by the pre-pass stamp.
+    let px = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    let html = format!(
+        r#"<body style="margin:0"><img data-mv-img="0" src="{px}" style="display:block;width:40px;height:40px"><a href="https://x.test/"><img data-mv-img="1" src="{px}" style="display:block;width:40px;height:40px"></a><p style="margin:0;height:40px">text</p><p style="margin:0"><img data-mv-img="2" src="{px}" style="width:40px;height:40px">inline</p></body>"#
+    );
+    let out = run(&[
+        json!({"op":"open","req":1,"doc":5,"html":html,"cssWidth":300,"scale":1.0,"allowRemote":false}),
+        json!({"op":"hit","req":2,"doc":5,"x":5.0,"y":5.0}),
+        json!({"op":"hit","req":3,"doc":5,"x":5.0,"y":45.0}),
+        json!({"op":"hit","req":4,"doc":5,"x":5.0,"y":85.0}),
+        json!({"op":"hit","req":5,"doc":5,"x":20.0,"y":140.0}),
+    ]);
+    assert_eq!(out[1]["ok"]["image"], "0");
+    assert_eq!(out[2]["ok"]["image"], "1");
+    assert_eq!(out[2]["ok"]["link"]["href"], "https://x.test/");
+    assert_eq!(out[3]["ok"]["image"], Value::Null);
+    assert_eq!(out[4]["ok"]["image"], "2", "a picture inline in a paragraph");
+}

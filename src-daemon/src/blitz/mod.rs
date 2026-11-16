@@ -565,10 +565,10 @@ impl RenderHost {
     }
 
     /// A slow hit (queued behind tiles) is "no link" and no fold, never an
-    /// error. A reply is passed on whole: `{link, fold}`.
+    /// error. A reply is passed on whole: `{link, fold, image}`.
     pub async fn hit(&self, doc: u64, x: f32, y: f32) -> Result<Value, String> {
         match self.doc_call(doc, json!({"op": "hit", "doc": doc, "x": x, "y": y}), HIT_TIMEOUT).await {
-            Err(e) if e == UNAVAILABLE => Ok(json!({"link": null, "fold": null})),
+            Err(e) if e == UNAVAILABLE => Ok(json!({"link": null, "fold": null, "image": null})),
             other => other,
         }
     }

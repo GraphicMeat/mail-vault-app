@@ -122,6 +122,14 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
     if (file) openImageFromMail(file);
   };
   const onOpenImage = useCallback((id) => openImageRef.current?.(id), []);
+  // The body menu's Open / Save As: an inline picture's own bytes as a file. A remote one is null,
+  // like the iframe's menu (fetching it again would go around the tracker blocking).
+  const imageFileRef = useRef(null);
+  imageFileRef.current = (id) => {
+    const src = imageSrcAt(prepassed?.key === key ? prepassed.html : null, id);
+    return src && !/^https?:/i.test(src) ? imageFileFromSrc(src, message?.attachments) : null;
+  };
+  const imageFile = useCallback((id) => imageFileRef.current?.(id) ?? null, []);
   // Derived in render, so no frame is ever painted from HTML built for another
   // privacy state: HTML pre-passed unmasked is never served once masking is on
   // (privacy turned on, a peek released, a capture mask), and masked HTML is
@@ -199,7 +207,7 @@ const BlitzBody = forwardRef(function BlitzBody(props, ref) {
       {/* Keyed on the privacy state: a flip unmounts the old tiles at once (closing their doc),
           so nothing built for the other state stays on screen while the new doc opens.
           A dictionary update while masking stays on does not change the key. */}
-      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onOpenImage={onOpenImage} onFailure={onFailure} sizing={sizing} style={style} surface={surface} privacy={priv.active} onFoldToggled={onFoldToggled} allowRemote={allowRemote} />
+      <BlitzTiles ref={tilesRef} key={priv.active ? 'masked' : 'plain'} html={html} theme={theme} onLink={onLink} onOpenImage={onOpenImage} imageFile={imageFile} onFailure={onFailure} sizing={sizing} style={style} surface={surface} privacy={priv.active} onFoldToggled={onFoldToggled} allowRemote={allowRemote} />
     </div>
   );
 });

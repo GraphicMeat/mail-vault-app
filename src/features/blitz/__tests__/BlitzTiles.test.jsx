@@ -10,6 +10,12 @@ vi.mock('../service', () => ({
   serializeRender: vi.fn(async () => ({ html: '', text: '' })),
   foldRender: vi.fn(async () => ({ rev: 1, meta: {} })),
 }));
+const imgs = vi.hoisted(() => ({ open: vi.fn(), save: vi.fn() }));
+vi.mock('../../../utils/emailImages', () => ({
+  canOpenImage: f => !!f && !f.name.endsWith('.svg'),
+  openImageFromMail: imgs.open,
+  saveImageFromMail: imgs.save,
+}));
 import { lightSelectionColor } from '../text/selectionColors';
 import { openRender, hitRender, closeRender, onRenderUpdated, textRunsRender, serializeRender, foldRender } from '../service';
 import BlitzTiles from '../BlitzTiles';
@@ -1001,6 +1007,69 @@ describe('body context menu', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(301); });
       expect(screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent)).toEqual(['Copy', 'Select All']);
     } finally { vi.useRealTimers(); }
+  });
+
+  describe('over an inline picture', () => {
+    const png = { name: 'IMG_1.png', base64: 'AAAA' };
+    const labels = () => screen.getAllByTestId('blitz-ctx-item').map(i => i.textContent);
+    const open = expect.stringMatching(/^Open (Image|in Preview)$/);
+
+    it('offers Open and Save As ahead of Copy, like the iframe menu', async () => {
+      const imageFile = vi.fn(() => png);
+      await rightClick({ link: null, fold: null, image: '3' }, { imageFile });
+      await screen.findByTestId('blitz-context-menu');
+      expect(imageFile).toHaveBeenCalledWith('3');
+      expect(labels()).toEqual([open, 'Save As...', 'Copy', 'Select All']);
+    });
+
+    it('Save As hands the picture to the save panel and closes the menu', async () => {
+      await rightClick({ link: null, fold: null, image: '3' }, { imageFile: () => png });
+      await screen.findByTestId('blitz-context-menu');
+      fireEvent.click(screen.getByText('Save As...'));
+      expect(imgs.save).toHaveBeenCalledWith(png);
+      expect(screen.queryByTestId('blitz-context-menu')).toBeNull();
+    });
+
+    it('Open hands it to the system viewer', async () => {
+      await rightClick({ link: null, fold: null, image: '3' }, { imageFile: () => png });
+      await screen.findByTestId('blitz-context-menu');
+      fireEvent.click(screen.getAllByTestId('blitz-ctx-item')[0]);
+      expect(imgs.open).toHaveBeenCalledWith(png);
+    });
+
+    it('a picture the viewer should not get (svg) is Save As only; a linked one keeps Copy Link', async () => {
+      await rightClick({ link: { href: 'https://x.test/' }, fold: null, image: '3' }, { imageFile: () => ({ name: 'a.svg', base64: 'AAAA' }) });
+      await screen.findByTestId('blitz-context-menu');
+      expect(labels()).toEqual(['Save As...', 'Copy', 'Copy Link', 'Select All']);
+    });
+
+    it('no file for the picture (remote, or no resolver) adds nothing', async () => {
+      await rightClick({ link: null, fold: null, image: '3' }, { imageFile: () => null });
+      await screen.findByTestId('blitz-context-menu', {}, { timeout: 5000 });
+      expect(labels()).toEqual(['Copy', 'Select All']);
+      cleanup();
+      await rightClick({ link: null, fold: null, image: '3' });
+      await screen.findByTestId('blitz-context-menu', {}, { timeout: 5000 });
+      expect(labels()).toEqual(['Copy', 'Select All']);
+    });
+
+    it('a late hit adds the picture items in place, and a highlight stays on its item', async () => {
+      vi.useFakeTimers();
+      try {
+        openRender.mockResolvedValue({ docId: 2, rev: 1, meta: foldMeta() });
+        const pending = [];
+        hitRender.mockImplementation(() => new Promise(r => { pending.push(r); }));
+        render(tiles({ imageFile: () => png }));
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        fireEvent.contextMenu(screen.getAllByTestId('blitz-tile')[0], { clientX: 40, clientY: 50 });
+        await act(async () => { await vi.advanceTimersByTimeAsync(301); });
+        expect(labels()).toEqual(['Copy', 'Select All']);
+        fireEvent.keyDown(document, { key: 'ArrowUp' }); // Select All
+        await act(async () => { pending[0]({ link: null, fold: null, image: '3' }); await vi.advanceTimersByTimeAsync(0); });
+        expect(labels()).toEqual([open, 'Save As...', 'Copy', 'Select All']);
+        expect(screen.getByText('Select All').style.background).not.toBe('none');
+      } finally { vi.useRealTimers(); }
+    });
   });
 
   describe('a hit that answers after the menu opened', () => {

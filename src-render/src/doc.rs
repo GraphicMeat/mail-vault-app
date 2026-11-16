@@ -411,13 +411,23 @@ impl RenderDoc {
         changed
     }
 
-    /// Link and fold under document point (x, y) in CSS px.
-    pub fn hit(&self, x: f32, y: f32) -> (Option<LinkInfo>, Option<String>) {
+    /// Link, fold and pre-pass picture stamp (`data-mv-img`) under document point (x, y) in CSS px.
+    pub fn hit(&self, x: f32, y: f32) -> (Option<LinkInfo>, Option<String>, Option<String>) {
         // blitz-dom 0.3.0-beta.2 `hit` takes document coordinates (node layout
         // offsets only; the viewport scroll is not consulted and nothing is clipped
         // to the viewport), so no scroll shuffling is needed for far-down points.
-        let Some(hit) = self.doc.hit(x, y) else { return (None, None) };
-        (self.link_from(hit.node_id), crate::fold::fold_at(&self.doc, hit.node_id))
+        let Some(hit) = self.doc.hit(x, y) else { return (None, None, None) };
+        (self.link_from(hit.node_id), crate::fold::fold_at(&self.doc, hit.node_id), self.image_at(hit.node_id))
+    }
+
+    /// The stamp of the `<img>` at `id`. The hit lands on the img itself (a replaced
+    /// element has no children), so no walk up: text beside a picture is not the picture.
+    fn image_at(&self, id: NodeId) -> Option<String> {
+        let node = self.doc.get_node(id)?;
+        if !node.data.is_element_with_tag_name(&local_name!("img")) {
+            return None;
+        }
+        node.attr(blitz_dom::LocalName::from("data-mv-img")).map(str::to_string)
     }
 
     /// The `<a href>` under document point (x, y) in CSS px, if any.

@@ -1,6 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../../../i18n/index.js';
+import { canOpenImage, openImageFromMail, saveImageFromMail } from '../../../utils/emailImages';
+
+const isMac = () => navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac');
 
 // The iframe's right-click menu (EmailViewer.jsx handleContextMenu), as an
 // app element: same items, labels, order, look and behaviour. It is fixed at
@@ -8,9 +11,10 @@ import { useT } from '../../../i18n/index.js';
 // scrolls and clips, and a one-line message is shorter than the menu. Above the
 // tiles and below the app's modals (z-40 and up). A scroll or a window resize closes it.
 // `clampTo(menuEl, at) -> { dx, dy }` keeps it inside the window.
+// `image` is the inline picture under the pointer as a file (`{ name, base64 }`), or null.
 // `inBody(target)` is true for a press in the body: that press is left to the
 // body's click handler, which closes the menu and swallows the click.
-export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll, onClose, clampTo, inBody }) {
+export default function BodyContextMenu({ at, link, image, colors, onCopy, onSelectAll, onClose, clampTo, inBody }) {
   const t = useT();
   const ref = useRef(null);
   const [active, setActive] = useState(-1); // the keyboard / hover highlight
@@ -24,19 +28,14 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
     const { dx, dy } = clampTo(el, at);
     el.style.left = `${at.x + dx}px`;
     el.style.top = `${at.y + dy}px`;
-  }, [at.x, at.y, clampTo, link]);
+  }, [at.x, at.y, clampTo, link, image]);
   // A second right-click reuses this menu: the highlight starts over.
   useEffect(() => { setActive(-1); }, [at.x, at.y]);
-  // Copy Link can arrive after the menu opened (the worker answered late): it slots in
-  // before Select All, and a highlight on Select All follows it.
-  const hadLink = useRef(!!link);
-  useLayoutEffect(() => {
-    if (!!link === hadLink.current) return;
-    hadLink.current = !!link;
-    setActive(a => (a < 1 ? a : a + (link ? 1 : -1)));
-  }, [link]);
-
   const items = [
+    ...(image && canOpenImage(image) ? [
+      { label: isMac() ? t('viewer.openImageInPreview') : t('viewer.openImage'), action: () => openImageFromMail(image) },
+    ] : []),
+    ...(image ? [{ label: t('email.attachments.save'), action: () => saveImageFromMail(image) }] : []),
     { label: t('viewer.copy'), action: onCopy },
     ...(link ? [{
       label: t('viewer.copyLink'),
@@ -49,6 +48,17 @@ export default function BodyContextMenu({ at, link, colors, onCopy, onSelectAll,
     }] : []),
     { label: t('settings.migration.selectAll'), action: onSelectAll },
   ];
+
+  // Copy Link and the picture items can arrive after the menu opened (the worker answered
+  // late): they slot in, and a highlight stays on the item it was on.
+  const labels = items.map(i => i.label).join('\n');
+  const prevLabels = useRef(labels);
+  useLayoutEffect(() => {
+    if (labels === prevLabels.current) return;
+    const was = prevLabels.current.split('\n');
+    prevLabels.current = labels;
+    setActive(a => (a < 0 ? a : labels.split('\n').indexOf(was[a])));
+  }, [labels]);
 
   // The document-level listeners read the latest of these.
   const latest = useRef({});

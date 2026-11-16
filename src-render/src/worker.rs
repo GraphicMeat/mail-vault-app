@@ -289,7 +289,7 @@ fn handle(msg: In, docs: &mut HashMap<u64, Open>, dirty: &mut BTreeSet<u64>, out
         }
         In::Hit { req, doc, x, y } => match docs.get(&doc) {
             Some(o) => match guarded(tainted, || o.doc.hit(x, y)) {
-                Some((link, fold)) => line(out, json!({"kind":"reply","req":req,"ok":{"link":link,"fold":fold}})),
+                Some((link, fold, image)) => line(out, json!({"kind":"reply","req":req,"ok":{"link":link,"fold":fold,"image":image}})),
                 None => {
                     discard(docs, doc, tainted);
                     unavailable(out, req)

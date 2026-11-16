@@ -204,6 +204,17 @@ describe('opening a picture too large to draw', () => {
     expect(images.open).not.toHaveBeenCalled();
   });
 
+  it('the body menu gets an inline picture as a file, and nothing for a remote or unknown one', async () => {
+    const message = { attachments: [{ filename: 'IMG_1.png', content: 'AAAA' }] };
+    render(<BlitzBody {...props({ messageKey: 'k-big-5', bodyHtml: body, message })} />);
+    await screen.findByTestId('tiles-stub');
+    expect(tilesProps.last.imageFile('1')).toEqual({ name: 'image.png', base64: 'AAAA' });
+    expect(images.fileFor).toHaveBeenCalledWith('data:image/png;base64,AAAA', message.attachments);
+    expect(tilesProps.last.imageFile('0')).toBeNull();
+    expect(tilesProps.last.imageFile('9')).toBeNull();
+    expect(images.open).not.toHaveBeenCalled();
+  });
+
   it('an id the document does not have opens nothing', async () => {
     const onLink = vi.fn();
     render(<BlitzBody {...props({ messageKey: 'k-big-4', bodyHtml: body, onLink })} />);

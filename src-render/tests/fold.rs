@@ -41,7 +41,7 @@ fn meta_lists_signatures_and_skips_a_region_without_a_toggle() {
 #[test]
 fn hit_on_toggle_returns_fold_id() {
     let d = open(PAGE);
-    let (link, fold) = d.hit(10.0, 50.0);
+    let (link, fold, _) = d.hit(10.0, 50.0);
     assert!(link.is_none());
     assert_eq!(fold.as_deref(), Some("q0"));
     assert_eq!(d.hit(10.0, 10.0).1, None);
@@ -170,7 +170,7 @@ fn worker_fold_bumps_rev_and_hit_reports_fold() {
         json!({"op":"fold","req":3,"doc":1,"id":"q0","open":true}),
         json!({"op":"fold","req":4,"doc":1,"id":"zz","open":true}),
     ]);
-    assert_eq!(out[1]["ok"], json!({"link": null, "fold": "q0"}));
+    assert_eq!(out[1]["ok"], json!({"link": null, "fold": "q0", "image": null}));
     assert_eq!(out[2]["ok"]["rev"], 2);
     assert_eq!(out[2]["ok"]["meta"]["folds"][0]["open"], true);
     assert_eq!(out[3]["kind"], "updated", "a fold is announced like any relayout");
