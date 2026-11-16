@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.24.0] - 2026-11-16
+
 - Added: preview an attachment before you send it. A picture or PDF attached in compose has an eye button before its remove button that opens it in the same preview as the reading pane, including a file carried over from a forwarded message.
 - Changed: the Discord community invite link in Help and the website now points to the new server invite.
 - Fixed: right-clicking a picture in a message showed only Copy and Select All, so it could not be saved. The menu now has Save As..., which saves the picture anywhere you choose, and Open in Preview (Open Image on Windows and Linux), as it did before the new message renderer. Pictures loaded from the web are not offered, as before.
