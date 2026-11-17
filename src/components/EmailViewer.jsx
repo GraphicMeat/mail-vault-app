@@ -26,6 +26,7 @@ import { useSearchHighlight } from '../hooks/useSearchHighlight';
 import { useBodyPrivacy, usePrivacyFrameGate } from '../hooks/useBodyPrivacy';
 import { useFrameEffect } from '../hooks/useFrameEffect';
 import { refuseWindowUnderPrivacy } from '../utils/privacy/windowBlocked';
+import { registerReaderWindow } from '../services/workflows/readerWindow';
 import { usePrivacySourceBlocked } from '../hooks/usePrivacy';
 import { Private } from './privacy/Private';
 import { SourceBlocked } from './privacy/SourceBlocked';
@@ -655,6 +656,14 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     });
     invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
   };
+  // A list row (double click, right-click) opens this message in a window
+  // through the same function. The latest closure, under a stable entry.
+  const openInWindowRef = useRef(openInWindow);
+  openInWindowRef.current = openInWindow;
+  const windowReady = !!(selectedEmail?.html || selectedEmail?.text);
+  useEffect(() => (scopeKey && windowReady
+    ? registerReaderWindow({ key: scopeKey, open: () => openInWindowRef.current() })
+    : undefined), [scopeKey, windowReady]);
 
   // Thread view — show all emails in the thread
   if (selectedThread) {

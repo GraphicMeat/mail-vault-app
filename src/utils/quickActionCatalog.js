@@ -57,6 +57,7 @@ export const QUICK_ACTION_LABELS = {
     replyTemplate: templateLabel, export: 'common.export',
     newMessage: facts => t('rowMenu.newMessageTo', { name: facts.senderName }),
     snooze: 'snooze.action', unsubscribe: 'unsubscribe.action', goToMailbox: 'rowMenu.goToMailbox',
+    open: 'chat.bubble.openNewWindow',
   },
   selection: {
     archive: 'common.archive', unarchive: 'selection.unarchive', delete: 'common.delete', deleteServer: deleteServerLabel,

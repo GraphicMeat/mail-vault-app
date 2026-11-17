@@ -56,6 +56,7 @@ vi.mock('../../stores/unsubscribeStore', async importOriginal => ({
   useUnsubscribeStore: { getState: () => ({ request: target => mocks.note('unsubscribe.request', [target]) }) },
 }));
 vi.mock('../../services/workflows/goToMessage', () => ({ goToMessage: email => mocks.note('goToMessage', [email]) }));
+vi.mock('../../services/workflows/readerWindow', () => ({ openEmailInWindow: email => mocks.note('openEmailInWindow', [email]) }));
 vi.mock('../email/MessageStateIcon', () => ({ useBackupScan: () => null, isBackedUp: email => email?._backedUp === true }));
 vi.mock('../../services/cacheManager', () => ({ getAccountCacheMailboxes: accountId => mocks.foldersByAccount[accountId] }));
 vi.mock('../../services/workflows/messageMutations', () => ({

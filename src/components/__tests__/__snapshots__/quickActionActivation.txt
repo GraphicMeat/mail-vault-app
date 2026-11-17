@@ -48,6 +48,9 @@ row | single:unread | export
 row | single:unread | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:unread | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:INBOX:1"]
 row | single:unread | snooze
   picker:move [[1],"acct-a","INBOX"]
   picker:snooze [[1]]
@@ -184,6 +187,9 @@ row | single:flagged | export
 row | single:flagged | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:flagged | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:INBOX:3"]
 row | single:flagged | snooze
   picker:move [[3],"acct-a","INBOX"]
   picker:snooze [[3]]
@@ -327,6 +333,9 @@ row | single:archived | export
 row | single:archived | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:archived | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:INBOX:5"]
 row | single:archived | snooze
   picker:move [[5],"acct-a","INBOX"]
   picker:snooze [[5]]
@@ -465,6 +474,9 @@ row | single:localOnly | export
 row | single:localOnly | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:localOnly | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:INBOX:7"]
 row | single:localOnly | tag:existing
   tag.applyTagToRows [[{"email":"email:acct-a:INBOX:7","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
   row.onClose []
@@ -554,6 +566,9 @@ row | single:localFolder | export
 row | single:localFolder | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:localFolder | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:Imported:8"]
 row | single:localFolder | tag:existing
   tag.applyTagToRows [[{"email":"email:acct-a:Imported:8","location":{"accountId":"acct-a","mailbox":"Imported"}}],"tag-1"]
   row.onClose []
@@ -654,6 +669,9 @@ row | single:unsubscribe | export
 row | single:unsubscribe | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | single:unsubscribe | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:INBOX:17"]
 row | single:unsubscribe | snooze
   picker:move [[17],"acct-a","INBOX"]
   picker:snooze [[17]]
@@ -811,6 +829,9 @@ row | thread:unread+read | export
 row | thread:unread+read | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | thread:unread+read | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:INBOX:2"]
 row | thread:unread+read | snooze
   picker:move [[1,2],"acct-a","INBOX"]
   picker:snooze [[1,2]]
@@ -928,6 +949,9 @@ row | thread:archived+unarchived | export
 row | thread:archived+unarchived | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | thread:archived+unarchived | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:INBOX:5"]
 row | thread:archived+unarchived | snooze
   picker:move [[5,2],"acct-a","INBOX"]
   picker:snooze [[5,2]]
@@ -1029,6 +1053,9 @@ row | thread:server+localOnly | export
 row | thread:server+localOnly | newMessage
   row.onClose []
   openCompose [{"initialData":{"to":"sender@x.test","_prefill":true,"_accountId":"acct-a"}}]
+row | thread:server+localOnly | open
+  row.onClose []
+  openEmailInWindow ["email:acct-a:INBOX:7"]
 row | thread:server+localOnly | tag:existing
   tag.applyTagToRows [[{"email":"email:acct-a:INBOX:2","location":{"accountId":"acct-a","mailbox":"INBOX"}},{"email":"email:acct-a:INBOX:7","location":{"accountId":"acct-a","mailbox":"INBOX"}}],"tag-1"]
   row.onClose []

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchStore } from '../stores/searchStore';
 import { goToMessage } from '../services/workflows/goToMessage';
+import { openEmailInWindow } from '../services/workflows/readerWindow';
 import { useUnsubscribeStore, unsubscribeTarget } from '../stores/unsubscribeStore';
 import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from '../stores/mailStore';
@@ -180,6 +181,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     export: () => useExportStore.getState().openExport({ messages: exportEmails }),
     unsubscribe: () => useUnsubscribeStore.getState().request(unsubscribe),
     goToMailbox: () => goToMessage(facts.goTo.email),
+    openInWindow: () => openEmailInWindow(newest),
   };
   // One entry's descriptor. Also what a trackpad swipe runs an action through
   // (utils/rowActionRegistry.js), whether or not the row's menu lists it.
@@ -195,7 +197,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       { ...entry, id: `${entry.id}:markUnread`, action: 'markUnread', thread: true },
     ]) }
     : config;
-  const descriptors = menuConfig.entries.filter(entry => !['open', 'source', 'theme'].includes(entry.action)).map(describe);
+  const descriptors = menuConfig.entries.filter(entry => !['source', 'theme'].includes(entry.action)).map(describe);
   describeRef.current = describe;
 
   return <>

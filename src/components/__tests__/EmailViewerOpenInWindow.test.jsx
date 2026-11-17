@@ -12,6 +12,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { usePrivacyStore } from '../../stores/privacyStore';
 import { EmailViewer } from '../EmailViewer';
 import { t } from '../../i18n';
+import { openEmailInWindow } from '../../services/workflows/readerWindow';
 import '../../services/workflows/bindStoreActions';
 
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
@@ -60,6 +61,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.__TAURI__; usePrivacyStore.setState({ enabled: false, peek: false }); });
 
 describe('EmailViewer open in new window', () => {
+  it('opens its message when a list row asks for it, with no button pressed', async () => {
+    const { rerender } = renderViewer({ text: 'Boil water.' });
+    window.__TAURI__ = { core: { invoke } };
+    const email = useMailStore.getState().selectedEmail;
+    expect(await openEmailInWindow(email, vi.fn(), 200)).toBe(true);
+    expect(windowCalls()).toHaveLength(1);
+    expect(windowCalls()[0][1].title).toBe('Pasta <recipe>');
+    rerender(<div />);
+    expect(await openEmailInWindow(email, vi.fn(), 20)).toBe(false);
+  });
+
   it('is not offered unless the reader asks for it', () => {
     renderViewer({ text: 'Boil water.' });
     expect(screen.queryByTestId('open-in-window')).toBeNull();

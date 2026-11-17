@@ -47,7 +47,7 @@ export const MESSAGE_ACTIONS = Object.freeze({
   export: { op: 'export' },
   unsubscribe: { op: 'unsubscribe', closesFirst: true },
   goToMailbox: { op: 'goToMailbox', closesFirst: true },
-  open: { op: 'openInWindow' },
+  open: { op: 'openInWindow', closesFirst: true },
   source: { op: 'viewSource' },
   theme: { op: 'toggleTheme' },
 });

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Added: double-click an email in the list to open it in its own window. Right-click actions also have Open in new window, off by default; add it in Settings > Quick actions.
+- Fixed: double-clicking an email reloaded the email it had just opened. The second click now does nothing.
+
 ## [2.24.0] - 2026-11-16
 
 - Added: preview an attachment before you send it. A picture or PDF attached in compose has an eye button before its remove button that opens it in the same preview as the reading pane, including a file carried over from a forwarded message.

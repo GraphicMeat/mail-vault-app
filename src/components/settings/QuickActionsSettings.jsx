@@ -49,7 +49,7 @@ const LABELS = {
   replyTemplate: "quickActions.action.replyTemplate",
   export: "common.export",
   newMessage: "quickActions.action.newMessage",
-  open: "common.open",
+  open: "chat.bubble.openNewWindow",
   source: "emailActionBar.source",
   theme: "emailActionBar.dark",
   snooze: "snooze.action",

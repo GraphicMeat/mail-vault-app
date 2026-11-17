@@ -17,6 +17,7 @@ import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { RowQuickActions } from './RowQuickActions';
 import { useMenuAtPointer } from '../hooks/useMenuAtPointer';
+import { openEmailInWindow } from '../services/workflows/readerWindow';
 import { TagChips } from './TagChips';
 import { formatEmailDate, intlLocale, hour12For } from '../utils/dateFormat';
 import { useSnoozeStore, wakeAtFor } from '../stores/snoozeStore';
@@ -208,6 +209,20 @@ function openRow(email, onSelect) {
   onSelect(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox, email);
 }
 
+// The second click of a double click opens nothing: the first already did,
+// and again would reload the message on screen. The window comes from the
+// double click itself.
+function openRowClick(event, email, onSelect) {
+  if (event.detail > 1) return;
+  openRow(email, onSelect);
+}
+
+// A double click opens the message in a window of its own, selecting it
+// through the list's own select if the reader does not show it yet.
+function openRowInWindow(email, onSelect) {
+  void openEmailInWindow(email, () => openRow(email, onSelect));
+}
+
 // `pinActions` shows the quick actions without a hover; `preview` and
 // `configOverride` pass through to them (Settings' sample rows).
 export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, threadSlot = false, pinActions = false, preview = false, configOverride }) {
@@ -268,7 +283,8 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       className={`virtual-row group relative flex ${stacked ? 'row-top' : 'items-center'}${dense ? ' row-dense' : ''} gap-3 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
-      onClick={() => openRow(email, onSelect)}
+      onClick={(e) => openRowClick(e, email, onSelect)}
+      onDoubleClick={() => openRowInWindow(email, onSelect)}
       {...pointerMenuHandlers}
       {...accountHover}
     >
@@ -383,7 +399,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       className={`virtual-row row-compact row-top${dense ? ' row-dense' : ''} group relative flex gap-2 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
-      onClick={() => openRow(email, onSelect)}
+      onClick={(e) => openRowClick(e, email, onSelect)}
+      onDoubleClick={() => openRowInWindow(email, onSelect)}
       {...pointerMenuHandlers}
       {...accountHover}
     >

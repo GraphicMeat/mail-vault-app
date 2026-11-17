@@ -44,6 +44,13 @@ describe('quickActionAvailability', () => {
     expect(check('row', { action: 'goToMailbox' }, { goTo: null }).hidden).toBe(true);
   });
 
+  it('Open in new window is a row and reader action, optional, never on the selection bar', () => {
+    expect(QUICK_ACTION_SURFACE_ACTIONS.row).toContain('open');
+    expect(QUICK_ACTION_SURFACE_ACTIONS.reader).toContain('open');
+    expect(QUICK_ACTION_SURFACE_ACTIONS.selection).not.toContain('open');
+    expect(check('row', { action: 'open' }).hidden).toBe(false);
+  });
+
   it('never hides on the selection bar; the row hides and the bar disables the side that does not apply', () => {
     expect(check('selection', { action: 'markUnread' })).toEqual({ hidden: undefined, disabled: true });
     expect(check('row', { action: 'markUnread' })).toEqual({ hidden: true, disabled: false });

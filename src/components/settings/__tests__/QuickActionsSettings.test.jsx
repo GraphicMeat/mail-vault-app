@@ -353,8 +353,8 @@ describe('QuickActionsSettings', () => {
     expect(within(groups[0]).getAllByRole('listitem', { hidden: true }).map(item => item.textContent)).toEqual(
       ['Reply', 'Reply All', 'Forward', 'Reply with template', 'New message to sender'],
     );
-    // Rows offer neither Open nor View source: the reference follows the surface.
-    expect(within(groups[4]).getAllByRole('listitem', { hidden: true }).map(item => item.dataset.action)).toEqual(['export', 'goToMailbox']);
+    // Rows offer Open in new window but not View source: the reference follows the surface.
+    expect(within(groups[4]).getAllByRole('listitem', { hidden: true }).map(item => item.dataset.action)).toEqual(['open', 'export', 'goToMailbox']);
   });
 
   it('removes an action with its red trash button', () => {

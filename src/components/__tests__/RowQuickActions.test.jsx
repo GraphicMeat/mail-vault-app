@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   setDeleteUndo: vi.fn(),
   foldersByAccount: {},
   goToMessage: vi.fn(),
+  openEmailInWindow: vi.fn(),
 }));
 
 vi.mock('lucide-react', () => {
@@ -47,6 +48,7 @@ vi.mock('../MoveToFolderDropdown', () => ({
 }));
 vi.mock('../email/MessageStateIcon', () => ({ useBackupScan: () => null, isBackedUp: () => false }));
 vi.mock('../../i18n/index.js', () => ({ t: key => key, useT: () => key => key, getLocale: () => 'en' }));
+vi.mock('../../services/workflows/readerWindow', () => ({ openEmailInWindow: (...args) => mocks.openEmailInWindow(...args) }));
 vi.mock('../../services/workflows/goToMessage', () => ({ goToMessage: (...args) => mocks.goToMessage(...args) }));
 vi.mock('../../utils/composeOpener', () => ({ openCompose: (...args) => mocks.openCompose(...args) }));
 vi.mock('../../utils/replyTarget', () => ({ replyTarget: (...args) => mocks.replyTarget(...args) }));
@@ -170,6 +172,7 @@ beforeEach(() => {
   mocks.setDeleteUndo.mockReset();
   mocks.foldersByAccount = {};
   mocks.goToMessage.mockReset().mockResolvedValue(true);
+  mocks.openEmailInWindow.mockReset().mockResolvedValue(true);
 });
 
 afterEach(cleanup);
@@ -597,6 +600,41 @@ describe('RowQuickActions go to mailbox', () => {
     renderActions({ emails: [email()], preview: true });
     fireEvent.click(button());
     expect(mocks.goToMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('RowQuickActions open in new window', () => {
+  const button = () => screen.queryByTestId('quick-action-open');
+
+  it('is labelled as the new window it opens', () => {
+    setActions(action('open'));
+    renderActions({ emails: [email()] });
+    expect(button().textContent).toBe('chat.bubble.openNewWindow');
+  });
+
+  it('opens the row\'s message in a window', () => {
+    setActions(action('open'));
+    const row = email({ uid: 11 });
+    renderActions({ emails: [row] });
+    fireEvent.click(button());
+    expect(mocks.openEmailInWindow).toHaveBeenCalledTimes(1);
+    expect(mocks.openEmailInWindow.mock.calls[0][0]).toBe(row);
+  });
+
+  it('opens a thread row\'s newest message', () => {
+    setActions(action('open'));
+    const older = email({ uid: 3, date: '2026-08-01T10:00:00Z' });
+    const newest = email({ uid: 9, date: '2026-09-02T10:00:00Z' });
+    renderActions({ emails: [older, newest] });
+    fireEvent.click(button());
+    expect(mocks.openEmailInWindow.mock.calls[0][0]).toBe(newest);
+  });
+
+  it('does nothing in a preview', () => {
+    setActions(action('open'));
+    renderActions({ emails: [email()], preview: true });
+    fireEvent.click(button());
+    expect(mocks.openEmailInWindow).not.toHaveBeenCalled();
   });
 });
 

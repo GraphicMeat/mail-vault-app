@@ -19,7 +19,8 @@ export const QUICK_ACTION_TYPES = [
 // The actions each surface can offer: a row has no reader tools, the reader
 // no New message, and the selection bar only what acts on many at once.
 export const QUICK_ACTION_SURFACE_ACTIONS = {
-  row: QUICK_ACTION_TYPES.filter(action => !['open', 'source', 'theme'].includes(action)),
+  // `open` is Open in new window on a row (opt-in, never a default).
+  row: QUICK_ACTION_TYPES.filter(action => !['source', 'theme'].includes(action)),
   selection: [
     'archive', 'unarchive', 'delete', 'deleteServer', 'deleteEverywhere', 'toggleRead', 'markRead',
     'markUnread', 'star', 'unstar', 'tag', 'move', 'spam', 'export', 'snooze',
