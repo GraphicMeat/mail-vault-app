@@ -12,7 +12,8 @@
     "Search is prepared with a local archive and cut between query entry and results. Backup destination is a write-tested temporary folder, not a physical external drive; setup is off camera, and longer waits may be cut.",
     "Images and posters are decoded from these new raw recordings at a representative moment; the manifest records the source time and crop. Search stills retain the query panel alongside the results. MP4s use the feature-card crops and trims from those same recordings. A version/locale footer is added below the UI.",
     "The Mac mini display was temporarily switched to its existing 2x mode before recording; the adjustment log is retained with the evidence.",
-    "How-to recordings (bulk-* and settings-* archive and delete): ScreenCaptureKit takes of the real app on the Mac mini at 2x, one app launch per locale (UI language and demo mailbox from the locale catalog); stills are decoded at recorded step moments; a long progress wait is cut from the videos and captioned as shortened."
+    "How-to recordings (bulk-* and settings-* archive and delete): ScreenCaptureKit takes of the real app on the Mac mini at 2x, one app launch per locale (UI language and demo mailbox from the locale catalog); stills are decoded at recorded step moments; a long progress wait is cut from the videos and captioned as shortened.",
+    "After-delete recordings (after-delete-*): ScreenCaptureKit takes of the real app on the Mac mini at 2x, one app launch per locale (UI language and demo mailbox from the locale catalog). Each take re-seeds read flags off camera and fails unless the reader opens the email the option promises. The camera zoom is cut from the same 2x frames, aimed at rectangles the take recorded; pointer, click ripple and version footer are the only added pixels."
   ],
   "locales": {
     "en": {
@@ -1067,6 +1068,441 @@
             "mp4": "55d09e13ed3fd58a7e8cae289bd9797682df7b1920abb9b8b36221303244a71b",
             "jpg": "5da2f3cea495b44bb2f9181a80370a0e49c2bd153611d85cf80d186d10243307",
             "vtt": "f706aeee164964457679e84aa9480149ce2d552706a104b09f1edde70c5eb90f"
+          }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/en/after-delete-none-option.webp",
+          "imageAlt": "Mail preferences, Deleting, with Select nothing chosen and its example · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.911999999999999,
+          "sourceSHA256": "b39b3ed4ae07ab74074f8918f346f81bf1149b33854e75413be44d84b6d04705",
+          "sha256": {
+            "webp": "b7021ce9637284bd9ff48210b8d47dca2f24c87fdca7e131a355ba3def1090a2"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/en/after-delete-none-open.webp",
+          "imageAlt": "Inbox with one email open in the reading pane, before it is deleted · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.256,
+          "sourceSHA256": "b39b3ed4ae07ab74074f8918f346f81bf1149b33854e75413be44d84b6d04705",
+          "sha256": {
+            "webp": "f16bd6fd24a0875c37df21f33f0c3740d0dfd83dbd0ddb78bbfe18e7f8dbbd14"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/en/after-delete-none-after.webp",
+          "imageAlt": "Reading pane after the delete: no email is selected · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.561,
+          "sourceSHA256": "b39b3ed4ae07ab74074f8918f346f81bf1149b33854e75413be44d84b6d04705",
+          "sha256": {
+            "webp": "2a2337456bbbc074fa8176a12c6fd4e14a23f22b20f920c9382398aed5dac9e4"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/en/after-delete-none.mp4",
+          "videoLabel": "After deleting an email: select nothing · MailVault version 2.24.0 en",
+          "poster": "/assets/help-media/en/after-delete-none.jpg",
+          "posterAlt": "After deleting an email: select nothing · MailVault version 2.24.0 en",
+          "captions": "/assets/help-media/en/after-delete-none.vtt",
+          "transcript": [
+            "The Inbox, two unread emails among read ones.",
+            "Mail preferences, Deleting: the option that decides what opens after a delete.",
+            "Pick the option. The example under it shows what a delete leaves open.",
+            "Open an email.",
+            "Delete it from the reader.",
+            "Nothing is selected: the reader asks you to pick an email."
+          ],
+          "duration": 17.766667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 198,
+          "sourceSeconds": 17.75,
+          "sourceSHA256": "b39b3ed4ae07ab74074f8918f346f81bf1149b33854e75413be44d84b6d04705",
+          "sha256": {
+            "mp4": "76721e06968430572887ea0500a9712f322ed939be03624575fe55efee47c089",
+            "jpg": "5cfb6ec372c9fa7855b99d668d111920dff982604f24c67c8dc702d346e4d5fa",
+            "vtt": "59de90a116e2cf176f13786a029ff0e5046a1fe5df861fd88612e82a0ad4aa2a"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/en/after-delete-next-option.webp",
+          "imageAlt": "Mail preferences, Deleting, with Select the next email chosen and its example · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.988,
+          "sourceSHA256": "f9f2a2e5386888ddcdd84593c42815c34a16535596d0a03c734b1d15236e0b1a",
+          "sha256": {
+            "webp": "0e68671580c1c10979ad8486191c20eeddaa264d876ea5faf417d27d3316b66f"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/en/after-delete-next-open.webp",
+          "imageAlt": "Inbox with one email open in the reading pane, before it is deleted · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.393,
+          "sourceSHA256": "f9f2a2e5386888ddcdd84593c42815c34a16535596d0a03c734b1d15236e0b1a",
+          "sha256": {
+            "webp": "8bcc5604e3b10b527c10577c37f404846177199bbff44d04e0a767fce4f856f0"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/en/after-delete-next-after.webp",
+          "imageAlt": "Reading pane after the delete: the email below the deleted one is open · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.792,
+          "sourceSHA256": "f9f2a2e5386888ddcdd84593c42815c34a16535596d0a03c734b1d15236e0b1a",
+          "sha256": {
+            "webp": "bfa3d6a12210829f2c2e75205638829a76b0f8b7c65f00080d75774cf3fd371f"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/en/after-delete-next.mp4",
+          "videoLabel": "After deleting an email: select the next email · MailVault version 2.24.0 en",
+          "poster": "/assets/help-media/en/after-delete-next.jpg",
+          "posterAlt": "After deleting an email: select the next email · MailVault version 2.24.0 en",
+          "captions": "/assets/help-media/en/after-delete-next.vtt",
+          "transcript": [
+            "The Inbox, two unread emails among read ones.",
+            "Mail preferences, Deleting: the option that decides what opens after a delete.",
+            "Pick the option. The example under it shows what a delete leaves open.",
+            "Open an email.",
+            "Delete it from the reader.",
+            "The reader already shows the email the option picked."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 163,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "f9f2a2e5386888ddcdd84593c42815c34a16535596d0a03c734b1d15236e0b1a",
+          "sha256": {
+            "mp4": "472172fc57d1b20cc4452089ed29ccd53ce0a62cbc42246d9416528ea666871d",
+            "jpg": "81c591135a3c3a7b81c94955e2fe53b855212a4be6132a6f2dbab5a66ad54077",
+            "vtt": "35f8652926c66e7c4b196f911148d67912b3c10e7d1f94a3d8d6ea6c240c9ff4"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/en/after-delete-previous-option.webp",
+          "imageAlt": "Mail preferences, Deleting, with Select the previous email chosen and its example · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.985999999999999,
+          "sourceSHA256": "8fa5368305effc5d0d85cf13b5f2215b72579387b6560f4dd6f0f54eb1ec8414",
+          "sha256": {
+            "webp": "c47f8e290e3e7c81f07ba923ae6b7deeddf0190cc229a3d841cdaeab350fa861"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/en/after-delete-previous-open.webp",
+          "imageAlt": "Inbox with one email open in the reading pane, before it is deleted · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.393,
+          "sourceSHA256": "8fa5368305effc5d0d85cf13b5f2215b72579387b6560f4dd6f0f54eb1ec8414",
+          "sha256": {
+            "webp": "8bcc5604e3b10b527c10577c37f404846177199bbff44d04e0a767fce4f856f0"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/en/after-delete-previous-after.webp",
+          "imageAlt": "Reading pane after the delete: the email above the deleted one is open · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.788,
+          "sourceSHA256": "8fa5368305effc5d0d85cf13b5f2215b72579387b6560f4dd6f0f54eb1ec8414",
+          "sha256": {
+            "webp": "74c6af3ede01bd4fc668af1717a858f401f0c5bfe435f968c621263f19758d59"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/en/after-delete-previous.mp4",
+          "videoLabel": "After deleting an email: select the previous email · MailVault version 2.24.0 en",
+          "poster": "/assets/help-media/en/after-delete-previous.jpg",
+          "posterAlt": "After deleting an email: select the previous email · MailVault version 2.24.0 en",
+          "captions": "/assets/help-media/en/after-delete-previous.vtt",
+          "transcript": [
+            "The Inbox, two unread emails among read ones.",
+            "Mail preferences, Deleting: the option that decides what opens after a delete.",
+            "Pick the option. The example under it shows what a delete leaves open.",
+            "Open an email.",
+            "Delete it from the reader.",
+            "The reader already shows the email the option picked."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 162,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "8fa5368305effc5d0d85cf13b5f2215b72579387b6560f4dd6f0f54eb1ec8414",
+          "sha256": {
+            "mp4": "b443123310316f77bd04da8fb7337cd3a7bd91a0c68c0a4b0575f7ca0235f64d",
+            "jpg": "f1611ada4d22dcf3ff417d0e0a99debc636342867a5e2529900fb297ac9fb370",
+            "vtt": "71901042efd96b7b10d8c8f25d9d14ad90a8e108a77cb2bb1380ba744327f274"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/en/after-delete-next-unread-option.webp",
+          "imageAlt": "Mail preferences, Deleting, with Select the next unread email chosen and its example · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.948,
+          "sourceSHA256": "0e5767f41d24cf50bc26c52a74c7733c16acd5228271bdafb0ac6f3d49931b98",
+          "sha256": {
+            "webp": "cee20d919b22b8ec104a695ad397b32ac017cad711d1d27df7e62fcfe0f77d13"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/en/after-delete-next-unread-open.webp",
+          "imageAlt": "Inbox with one email open in the reading pane, before it is deleted · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.315,
+          "sourceSHA256": "0e5767f41d24cf50bc26c52a74c7733c16acd5228271bdafb0ac6f3d49931b98",
+          "sha256": {
+            "webp": "edd7e9f494f15c33a98c0059a87303728f92a9f4911fa2a8d17942caff28a8a2"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/en/after-delete-next-unread-after.webp",
+          "imageAlt": "Reading pane after the delete: the next unread email below is open · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.672,
+          "sourceSHA256": "0e5767f41d24cf50bc26c52a74c7733c16acd5228271bdafb0ac6f3d49931b98",
+          "sha256": {
+            "webp": "ee72af8eb99603215ffb33b1000bc06bb944389aa0f8c07f6ea796b2b41be797"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/en/after-delete-next-unread.mp4",
+          "videoLabel": "After deleting an email: select the next unread email · MailVault version 2.24.0 en",
+          "poster": "/assets/help-media/en/after-delete-next-unread.jpg",
+          "posterAlt": "After deleting an email: select the next unread email · MailVault version 2.24.0 en",
+          "captions": "/assets/help-media/en/after-delete-next-unread.vtt",
+          "transcript": [
+            "The Inbox, two unread emails among read ones.",
+            "Mail preferences, Deleting: the option that decides what opens after a delete.",
+            "Pick the option. The example under it shows what a delete leaves open.",
+            "Open an email.",
+            "Delete it from the reader.",
+            "The reader already shows the email the option picked."
+          ],
+          "duration": 17.866667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 323,
+          "sourceSeconds": 17.866667,
+          "sourceSHA256": "0e5767f41d24cf50bc26c52a74c7733c16acd5228271bdafb0ac6f3d49931b98",
+          "sha256": {
+            "mp4": "0fa3f6539badd9400bef241bb3ed016ef3e581411193bf4f44ae1b99418c0b23",
+            "jpg": "de9d29c6b04ac796a062138781a7f8346d4a8c4b7f01d0c0a6784428797b4f6e",
+            "vtt": "cb3147e460e23cc8c5a3365942c9c73f629f487f91a6088b7290b150eb81557d"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/en/after-delete-previous-unread-option.webp",
+          "imageAlt": "Mail preferences, Deleting, with Select the previous unread email chosen and its example · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.943999999999999,
+          "sourceSHA256": "34d51d369ac7093c5f02486594d4fced0fac31f368f6244e1954fd6dc5b5cfbf",
+          "sha256": {
+            "webp": "47e9a223c5a367bd5fd3ac6a3eadd117c9b0c71ce1fc4dbf8388421626143e58"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/en/after-delete-previous-unread-open.webp",
+          "imageAlt": "Inbox with one email open in the reading pane, before it is deleted · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.35,
+          "sourceSHA256": "34d51d369ac7093c5f02486594d4fced0fac31f368f6244e1954fd6dc5b5cfbf",
+          "sha256": {
+            "webp": "52d9442a0a23d2c65621b9f103e132fd9f902c67e7d298945a64a237505b5c38"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/en/after-delete-previous-unread-after.webp",
+          "imageAlt": "Reading pane after the delete: the previous unread email above is open · MailVault version 2.24.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.745,
+          "sourceSHA256": "34d51d369ac7093c5f02486594d4fced0fac31f368f6244e1954fd6dc5b5cfbf",
+          "sha256": {
+            "webp": "0146fe3dfbf6bdb76a511c916d43adbd0a3a03e99da80aac80e9df543ba76ecb"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/en/after-delete-previous-unread.mp4",
+          "videoLabel": "After deleting an email: select the previous unread email · MailVault version 2.24.0 en",
+          "poster": "/assets/help-media/en/after-delete-previous-unread.jpg",
+          "posterAlt": "After deleting an email: select the previous unread email · MailVault version 2.24.0 en",
+          "captions": "/assets/help-media/en/after-delete-previous-unread.vtt",
+          "transcript": [
+            "The Inbox, two unread emails among read ones.",
+            "Mail preferences, Deleting: the option that decides what opens after a delete.",
+            "Pick the option. The example under it shows what a delete leaves open.",
+            "Open an email.",
+            "Delete it from the reader.",
+            "The reader already shows the email the option picked."
+          ],
+          "duration": 17.933333,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 en",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 495,
+          "sourceSeconds": 17.933333,
+          "sourceSHA256": "34d51d369ac7093c5f02486594d4fced0fac31f368f6244e1954fd6dc5b5cfbf",
+          "sha256": {
+            "mp4": "28baca9632ad49a85c9b29d1b61505f3460e6f60eaa03ed1ffad61fbcdefcb1e",
+            "jpg": "aaf713ec7c7ba8de28aa935f0e6ff4de4de35cd6e9cb4a0cdbabe058c8b328eb",
+            "vtt": "4cb2c626681134ce592473ccc7fa7b17b965bd473f11cbe3774249667ed61529"
           }
         }
       }
@@ -2124,6 +2560,441 @@
             "jpg": "9762fef9e16561503a9e6dd634139847b6682651a0dc7050e4d762bcd8cb5070",
             "vtt": "269f4e1922ecb7951c338a0348b3071d66456e5244cdf0b6d48ac8a7fcb20ac4"
           }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/de/after-delete-none-option.webp",
+          "imageAlt": "E-Mail-Einstellungen, Löschen, mit gewählter Option Nichts auswählen und ihrem Beispiel · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 9.092,
+          "sourceSHA256": "ea074798a6d1387ccac2e010a373071ec26fbf59e11f3fa5e4c8750e801fe6d0",
+          "sha256": {
+            "webp": "46553a340e5f945fb8d7890fb47dd0c69d776b3c0f05b461d8409030beb72a7b"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/de/after-delete-none-open.webp",
+          "imageAlt": "Posteingang mit einer im Lesebereich geöffneten E-Mail, vor dem Löschen · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.498,
+          "sourceSHA256": "ea074798a6d1387ccac2e010a373071ec26fbf59e11f3fa5e4c8750e801fe6d0",
+          "sha256": {
+            "webp": "a2cac9e1225a78f8d5e0afb3f5843af2faf9e0f099891f453d8ef4bfe3f72c3c"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/de/after-delete-none-after.webp",
+          "imageAlt": "Lesebereich nach dem Löschen: keine E-Mail ist ausgewählt · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.86,
+          "sourceSHA256": "ea074798a6d1387ccac2e010a373071ec26fbf59e11f3fa5e4c8750e801fe6d0",
+          "sha256": {
+            "webp": "ca30c123b9b02b72bbf50c53633f182500bc1836ca026dc3ef0fa96fbb5082f0"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/de/after-delete-none.mp4",
+          "videoLabel": "Nach dem Löschen einer E-Mail: nichts auswählen · MailVault version 2.24.0 de",
+          "poster": "/assets/help-media/de/after-delete-none.jpg",
+          "posterAlt": "Nach dem Löschen einer E-Mail: nichts auswählen · MailVault version 2.24.0 de",
+          "captions": "/assets/help-media/de/after-delete-none.vtt",
+          "transcript": [
+            "Der Posteingang, zwei ungelesene E-Mails zwischen gelesenen.",
+            "E-Mail-Einstellungen, Löschen: die Option, die bestimmt, was nach dem Löschen geöffnet wird.",
+            "Wähle die Option. Das Beispiel darunter zeigt, was nach dem Löschen geöffnet bleibt.",
+            "Öffne eine E-Mail.",
+            "Lösche sie im Lesebereich.",
+            "Nichts ist ausgewählt: Der Lesebereich bittet dich, eine E-Mail zu wählen."
+          ],
+          "duration": 18.066667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "recordingFrames": 156,
+          "sourceSeconds": 18.05,
+          "sourceSHA256": "ea074798a6d1387ccac2e010a373071ec26fbf59e11f3fa5e4c8750e801fe6d0",
+          "sha256": {
+            "mp4": "c6f21fc6f27e2cfdd1329d508e4d29cda958d6f3eb852befbcdaf62564ac686c",
+            "jpg": "28aa79048c37cbb236e48f8c942152fbe3d6d131d11800c230c0b986ee5d71c7",
+            "vtt": "78aa56a8035f4437db4a475404d4451b2f683f4a0fd83b1ad13f0aed88e7c016"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/de/after-delete-next-option.webp",
+          "imageAlt": "E-Mail-Einstellungen, Löschen, mit gewählter Option Nächste E-Mail auswählen und ihrem Beispiel · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.99,
+          "sourceSHA256": "a0e0c6100b6ca51cdcf5dace0c85550b1635236359538b73fe91b6f00bb98b4d",
+          "sha256": {
+            "webp": "b93e69052f975475912066e5deace120d10d87b22d128b7b4fbe7a45673a8a20"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/de/after-delete-next-open.webp",
+          "imageAlt": "Posteingang mit einer im Lesebereich geöffneten E-Mail, vor dem Löschen · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.389,
+          "sourceSHA256": "a0e0c6100b6ca51cdcf5dace0c85550b1635236359538b73fe91b6f00bb98b4d",
+          "sha256": {
+            "webp": "0ccab8f5c5f2746b12bcc58859a5b2555bb20787fdeae27c27d14ee9b92a78d9"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/de/after-delete-next-after.webp",
+          "imageAlt": "Lesebereich nach dem Löschen: die E-Mail unter der gelöschten ist geöffnet · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.793,
+          "sourceSHA256": "a0e0c6100b6ca51cdcf5dace0c85550b1635236359538b73fe91b6f00bb98b4d",
+          "sha256": {
+            "webp": "4892246baa29f2b1a0b109dec69611fdaf75b3045b1fead1d4d8784608d15582"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/de/after-delete-next.mp4",
+          "videoLabel": "Nach dem Löschen einer E-Mail: nächste E-Mail auswählen · MailVault version 2.24.0 de",
+          "poster": "/assets/help-media/de/after-delete-next.jpg",
+          "posterAlt": "Nach dem Löschen einer E-Mail: nächste E-Mail auswählen · MailVault version 2.24.0 de",
+          "captions": "/assets/help-media/de/after-delete-next.vtt",
+          "transcript": [
+            "Der Posteingang, zwei ungelesene E-Mails zwischen gelesenen.",
+            "E-Mail-Einstellungen, Löschen: die Option, die bestimmt, was nach dem Löschen geöffnet wird.",
+            "Wähle die Option. Das Beispiel darunter zeigt, was nach dem Löschen geöffnet bleibt.",
+            "Öffne eine E-Mail.",
+            "Lösche sie im Lesebereich.",
+            "Der Lesebereich zeigt bereits die E-Mail, die die Option gewählt hat."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "recordingFrames": 165,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "a0e0c6100b6ca51cdcf5dace0c85550b1635236359538b73fe91b6f00bb98b4d",
+          "sha256": {
+            "mp4": "b207d02b9cb433fedb55c9cbcc6685de2978deb552bddd583fd9b0c541bdaed8",
+            "jpg": "b58899418be460aafcfc0d31a3ace195ecbb225f960e51f8d90159778b840955",
+            "vtt": "9b6f8fb05f79af114022296b1d40e7eda1ef68d5cb4fc9c243ede748f05bca03"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/de/after-delete-previous-option.webp",
+          "imageAlt": "E-Mail-Einstellungen, Löschen, mit gewählter Option Vorherige E-Mail auswählen und ihrem Beispiel · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.987,
+          "sourceSHA256": "7fc250b76184db9fc2cf1076be99527fda5ffdb8b1f75a8b5bf9c53839d24e3a",
+          "sha256": {
+            "webp": "cc8da4c9a578f2c8c37ebd7142180e544ac15875b54821dc66012742e8406b42"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/de/after-delete-previous-open.webp",
+          "imageAlt": "Posteingang mit einer im Lesebereich geöffneten E-Mail, vor dem Löschen · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.393,
+          "sourceSHA256": "7fc250b76184db9fc2cf1076be99527fda5ffdb8b1f75a8b5bf9c53839d24e3a",
+          "sha256": {
+            "webp": "0ccab8f5c5f2746b12bcc58859a5b2555bb20787fdeae27c27d14ee9b92a78d9"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/de/after-delete-previous-after.webp",
+          "imageAlt": "Lesebereich nach dem Löschen: die E-Mail über der gelöschten ist geöffnet · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.781,
+          "sourceSHA256": "7fc250b76184db9fc2cf1076be99527fda5ffdb8b1f75a8b5bf9c53839d24e3a",
+          "sha256": {
+            "webp": "8ad0fde4a0776f12ca2b48fea65f203818afe282ea3176f8985816d2571b6dab"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/de/after-delete-previous.mp4",
+          "videoLabel": "Nach dem Löschen einer E-Mail: vorherige E-Mail auswählen · MailVault version 2.24.0 de",
+          "poster": "/assets/help-media/de/after-delete-previous.jpg",
+          "posterAlt": "Nach dem Löschen einer E-Mail: vorherige E-Mail auswählen · MailVault version 2.24.0 de",
+          "captions": "/assets/help-media/de/after-delete-previous.vtt",
+          "transcript": [
+            "Der Posteingang, zwei ungelesene E-Mails zwischen gelesenen.",
+            "E-Mail-Einstellungen, Löschen: die Option, die bestimmt, was nach dem Löschen geöffnet wird.",
+            "Wähle die Option. Das Beispiel darunter zeigt, was nach dem Löschen geöffnet bleibt.",
+            "Öffne eine E-Mail.",
+            "Lösche sie im Lesebereich.",
+            "Der Lesebereich zeigt bereits die E-Mail, die die Option gewählt hat."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "recordingFrames": 160,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "7fc250b76184db9fc2cf1076be99527fda5ffdb8b1f75a8b5bf9c53839d24e3a",
+          "sha256": {
+            "mp4": "28e271a29783555424dca6f48e0df693955a06a0ab4f42d1cb227d1b965718a9",
+            "jpg": "f1689b8c3c254add1b57f087df077e69df8daa7dffe83f588aefc50d5ae88e28",
+            "vtt": "27d0a46eb93c39ef41d31722ba4f2f2165878859c712b8740cc3fe85008c50b1"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/de/after-delete-next-unread-option.webp",
+          "imageAlt": "E-Mail-Einstellungen, Löschen, mit gewählter Option Nächste ungelesene E-Mail auswählen und ihrem Beispiel · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.988999999999999,
+          "sourceSHA256": "78e373bf8a5384c7f7a3a5c32ce3c3d4b8810b524b97393006879318af174c18",
+          "sha256": {
+            "webp": "8a5c8a931cbbb15b0d3ea2615908591bbd3336032558a993e8d424b35fb40afc"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/de/after-delete-next-unread-open.webp",
+          "imageAlt": "Posteingang mit einer im Lesebereich geöffneten E-Mail, vor dem Löschen · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.403,
+          "sourceSHA256": "78e373bf8a5384c7f7a3a5c32ce3c3d4b8810b524b97393006879318af174c18",
+          "sha256": {
+            "webp": "73b100a2aa3e080ec100b48b15b301d98fac1022ea05c246224b3dcacc9d9b10"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/de/after-delete-next-unread-after.webp",
+          "imageAlt": "Lesebereich nach dem Löschen: die nächste ungelesene E-Mail darunter ist geöffnet · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.78,
+          "sourceSHA256": "78e373bf8a5384c7f7a3a5c32ce3c3d4b8810b524b97393006879318af174c18",
+          "sha256": {
+            "webp": "e5377ee98c7819bfa4dac3eb1ec64eee6d07214ad4e5961c2c6c10234e38b645"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/de/after-delete-next-unread.mp4",
+          "videoLabel": "Nach dem Löschen einer E-Mail: nächste ungelesene E-Mail auswählen · MailVault version 2.24.0 de",
+          "poster": "/assets/help-media/de/after-delete-next-unread.jpg",
+          "posterAlt": "Nach dem Löschen einer E-Mail: nächste ungelesene E-Mail auswählen · MailVault version 2.24.0 de",
+          "captions": "/assets/help-media/de/after-delete-next-unread.vtt",
+          "transcript": [
+            "Der Posteingang, zwei ungelesene E-Mails zwischen gelesenen.",
+            "E-Mail-Einstellungen, Löschen: die Option, die bestimmt, was nach dem Löschen geöffnet wird.",
+            "Wähle die Option. Das Beispiel darunter zeigt, was nach dem Löschen geöffnet bleibt.",
+            "Öffne eine E-Mail.",
+            "Lösche sie im Lesebereich.",
+            "Der Lesebereich zeigt bereits die E-Mail, die die Option gewählt hat."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "recordingFrames": 321,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "78e373bf8a5384c7f7a3a5c32ce3c3d4b8810b524b97393006879318af174c18",
+          "sha256": {
+            "mp4": "f32ec1957734f4af8713f8e51f8bc6f6db170823504ac67648db45c6dc6a7260",
+            "jpg": "a3a6809b36b201eb7f855da4ae7b59128555fb435702ee99d8b82164017aa25f",
+            "vtt": "f84bacc2c26c8a2e3aabb28defbd8c25f7f60851c7ef45e04aaa3c6ec9012971"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/de/after-delete-previous-unread-option.webp",
+          "imageAlt": "E-Mail-Einstellungen, Löschen, mit gewählter Option Vorherige ungelesene E-Mail auswählen und ihrem Beispiel · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.987,
+          "sourceSHA256": "3f9f09c9cb959be372cc5b135beaca36c4b4b70ad075041ec032fc7e61b1f559",
+          "sha256": {
+            "webp": "48a41aca58a25340886a29c83802154bc1dff10c1c7478979879fb5fd3791487"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/de/after-delete-previous-unread-open.webp",
+          "imageAlt": "Posteingang mit einer im Lesebereich geöffneten E-Mail, vor dem Löschen · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.379,
+          "sourceSHA256": "3f9f09c9cb959be372cc5b135beaca36c4b4b70ad075041ec032fc7e61b1f559",
+          "sha256": {
+            "webp": "6ed8111e2b5150ec9ab045a50575de33fe77e1a2f9194497ef6481a0ac74feda"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/de/after-delete-previous-unread-after.webp",
+          "imageAlt": "Lesebereich nach dem Löschen: die vorherige ungelesene E-Mail darüber ist geöffnet · MailVault version 2.24.0 de",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.769,
+          "sourceSHA256": "3f9f09c9cb959be372cc5b135beaca36c4b4b70ad075041ec032fc7e61b1f559",
+          "sha256": {
+            "webp": "e80ea8547c56e2df71729d7c2d5e8a289040b2900af82fcabd3e5b41fdb8c1b6"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/de/after-delete-previous-unread.mp4",
+          "videoLabel": "Nach dem Löschen einer E-Mail: vorherige ungelesene E-Mail auswählen · MailVault version 2.24.0 de",
+          "poster": "/assets/help-media/de/after-delete-previous-unread.jpg",
+          "posterAlt": "Nach dem Löschen einer E-Mail: vorherige ungelesene E-Mail auswählen · MailVault version 2.24.0 de",
+          "captions": "/assets/help-media/de/after-delete-previous-unread.vtt",
+          "transcript": [
+            "Der Posteingang, zwei ungelesene E-Mails zwischen gelesenen.",
+            "E-Mail-Einstellungen, Löschen: die Option, die bestimmt, was nach dem Löschen geöffnet wird.",
+            "Wähle die Option. Das Beispiel darunter zeigt, was nach dem Löschen geöffnet bleibt.",
+            "Öffne eine E-Mail.",
+            "Lösche sie im Lesebereich.",
+            "Der Lesebereich zeigt bereits die E-Mail, die die Option gewählt hat."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 de",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "recordingFrames": 323,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "3f9f09c9cb959be372cc5b135beaca36c4b4b70ad075041ec032fc7e61b1f559",
+          "sha256": {
+            "mp4": "57f7e51a8f08d5b776a786efbda6678f658e849252266a924c62828f604754ef",
+            "jpg": "3cbff466da69edaeaf95d6fe5dba18022d1f8d5d060a9ebd94820044655e9141",
+            "vtt": "ad35f27eadc20b0deb7adf87d363824ae069aa0358d0025fb52c573656973485"
+          }
         }
       }
     },
@@ -3179,6 +4050,441 @@
             "mp4": "5b01229ca9420dcc955fe5a886ca21a476e89e6625c8c75d7eaf531450daa6b0",
             "jpg": "c5d3943979b9d57e1108e471aaff3218139fa313851522698daedf1e1296de99",
             "vtt": "fcd9b22c3946519b164410c7a3439cd585f386815463e639a4e0493b06b3065c"
+          }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/fr/after-delete-none-option.webp",
+          "imageAlt": "Préférences de messagerie, Suppression, avec « Ne rien sélectionner » choisi et son exemple · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 9.099,
+          "sourceSHA256": "4e32c1d47c6c8f9078a16245c67cf9c91b8fff0ef06de96e93bcc15777d096da",
+          "sha256": {
+            "webp": "a4986e2f4855a70244cca654156a4067f170f83689168ea65813a4ba053a1420"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/fr/after-delete-none-open.webp",
+          "imageAlt": "Boîte de réception avec un e-mail ouvert dans le volet de lecture, avant sa suppression · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.514,
+          "sourceSHA256": "4e32c1d47c6c8f9078a16245c67cf9c91b8fff0ef06de96e93bcc15777d096da",
+          "sha256": {
+            "webp": "ba0830d93e06d331e7e24e39d99d224b6267b5845646d309d8e2336c352dedcd"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/fr/after-delete-none-after.webp",
+          "imageAlt": "Volet de lecture après la suppression : aucun e-mail n’est sélectionné · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.872,
+          "sourceSHA256": "4e32c1d47c6c8f9078a16245c67cf9c91b8fff0ef06de96e93bcc15777d096da",
+          "sha256": {
+            "webp": "4a5a8fdf8248bf731af33c9d1dd2092dd14868491b98850162c4221a5a782bd2"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/fr/after-delete-none.mp4",
+          "videoLabel": "Après la suppression d’un e-mail : ne rien sélectionner · MailVault version 2.24.0 fr",
+          "poster": "/assets/help-media/fr/after-delete-none.jpg",
+          "posterAlt": "Après la suppression d’un e-mail : ne rien sélectionner · MailVault version 2.24.0 fr",
+          "captions": "/assets/help-media/fr/after-delete-none.vtt",
+          "transcript": [
+            "La boîte de réception, avec deux e-mails non lus parmi des e-mails lus.",
+            "Préférences de messagerie, Suppression : l’option qui décide de ce qui s’ouvre après une suppression.",
+            "Choisissez l’option. L’exemple en dessous montre ce qu’une suppression laisse ouvert.",
+            "Ouvrez un e-mail.",
+            "Supprimez-le depuis le lecteur.",
+            "Rien n’est sélectionné : le lecteur vous demande de choisir un e-mail."
+          ],
+          "duration": 18.066667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "recordingFrames": 156,
+          "sourceSeconds": 18.066667,
+          "sourceSHA256": "4e32c1d47c6c8f9078a16245c67cf9c91b8fff0ef06de96e93bcc15777d096da",
+          "sha256": {
+            "mp4": "0ee04f0a8fa99737c4fb15f16bf6bfba20f67ebb47578f856c598ee55e1411ab",
+            "jpg": "634bd9e94c46f570950f30f90d4e3689d607f71a4865ebfcf34d1253286cf2cb",
+            "vtt": "6aa57cf6b5f4fab218f1b5f85968fc4b615e2b3c3232fdf1503828c969850a31"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/fr/after-delete-next-option.webp",
+          "imageAlt": "Préférences de messagerie, Suppression, avec « Sélectionner l'e-mail suivant » choisi et son exemple · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.991999999999999,
+          "sourceSHA256": "06b2c5342384b32efb60692787f74320aac83d93349dfa418e31dfe32ac69295",
+          "sha256": {
+            "webp": "c2da56d064a4b5832d2ef77d454f0393f6e173b2ca518139215b3c9f6bb172d8"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/fr/after-delete-next-open.webp",
+          "imageAlt": "Boîte de réception avec un e-mail ouvert dans le volet de lecture, avant sa suppression · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.396,
+          "sourceSHA256": "06b2c5342384b32efb60692787f74320aac83d93349dfa418e31dfe32ac69295",
+          "sha256": {
+            "webp": "f558e201235a3de72f7dfc776aa73b9db8b12ef69292e342ed85ccf2062c4ef2"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/fr/after-delete-next-after.webp",
+          "imageAlt": "Volet de lecture après la suppression : l’e-mail situé sous celui qui a été supprimé est ouvert · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.788,
+          "sourceSHA256": "06b2c5342384b32efb60692787f74320aac83d93349dfa418e31dfe32ac69295",
+          "sha256": {
+            "webp": "4fc60dd3f0b336a62b2a603edf5bac34e965dc7aa77f53f49ce177326638601b"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/fr/after-delete-next.mp4",
+          "videoLabel": "Après la suppression d’un e-mail : sélectionner l’e-mail suivant · MailVault version 2.24.0 fr",
+          "poster": "/assets/help-media/fr/after-delete-next.jpg",
+          "posterAlt": "Après la suppression d’un e-mail : sélectionner l’e-mail suivant · MailVault version 2.24.0 fr",
+          "captions": "/assets/help-media/fr/after-delete-next.vtt",
+          "transcript": [
+            "La boîte de réception, avec deux e-mails non lus parmi des e-mails lus.",
+            "Préférences de messagerie, Suppression : l’option qui décide de ce qui s’ouvre après une suppression.",
+            "Choisissez l’option. L’exemple en dessous montre ce qu’une suppression laisse ouvert.",
+            "Ouvrez un e-mail.",
+            "Supprimez-le depuis le lecteur.",
+            "Le lecteur affiche déjà l’e-mail choisi par l’option."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "recordingFrames": 163,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "06b2c5342384b32efb60692787f74320aac83d93349dfa418e31dfe32ac69295",
+          "sha256": {
+            "mp4": "8ae780a98eef2dd518fc37122beebded3cea680cc00871cc0a8d6d90c5fc041e",
+            "jpg": "f4e8d79f3efce6bf8206c8292d728ce8df66dd1d1f73a95a238be610481efeb0",
+            "vtt": "248dff377e0a2689f68f81f5ab353ae531b0a35e6607789617c6953a13f98e83"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/fr/after-delete-previous-option.webp",
+          "imageAlt": "Préférences de messagerie, Suppression, avec « Sélectionner l'e-mail précédent » choisi et son exemple · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.991,
+          "sourceSHA256": "09160602f80b2533adf41194118dae69bf6612d7a6b902537f2e624bb81d69bd",
+          "sha256": {
+            "webp": "b715048ee9b15a7bf6dbe92148d1807d4776052037e871352f8919b3517bf540"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/fr/after-delete-previous-open.webp",
+          "imageAlt": "Boîte de réception avec un e-mail ouvert dans le volet de lecture, avant sa suppression · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.398,
+          "sourceSHA256": "09160602f80b2533adf41194118dae69bf6612d7a6b902537f2e624bb81d69bd",
+          "sha256": {
+            "webp": "f558e201235a3de72f7dfc776aa73b9db8b12ef69292e342ed85ccf2062c4ef2"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/fr/after-delete-previous-after.webp",
+          "imageAlt": "Volet de lecture après la suppression : l’e-mail situé au-dessus de celui qui a été supprimé est ouvert · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.796,
+          "sourceSHA256": "09160602f80b2533adf41194118dae69bf6612d7a6b902537f2e624bb81d69bd",
+          "sha256": {
+            "webp": "9dcea8a96b2da156239a3de88869fd4f5669130a1eeaf0b4c1ce86977ee043be"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/fr/after-delete-previous.mp4",
+          "videoLabel": "Après la suppression d’un e-mail : sélectionner l’e-mail précédent · MailVault version 2.24.0 fr",
+          "poster": "/assets/help-media/fr/after-delete-previous.jpg",
+          "posterAlt": "Après la suppression d’un e-mail : sélectionner l’e-mail précédent · MailVault version 2.24.0 fr",
+          "captions": "/assets/help-media/fr/after-delete-previous.vtt",
+          "transcript": [
+            "La boîte de réception, avec deux e-mails non lus parmi des e-mails lus.",
+            "Préférences de messagerie, Suppression : l’option qui décide de ce qui s’ouvre après une suppression.",
+            "Choisissez l’option. L’exemple en dessous montre ce qu’une suppression laisse ouvert.",
+            "Ouvrez un e-mail.",
+            "Supprimez-le depuis le lecteur.",
+            "Le lecteur affiche déjà l’e-mail choisi par l’option."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "recordingFrames": 162,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "09160602f80b2533adf41194118dae69bf6612d7a6b902537f2e624bb81d69bd",
+          "sha256": {
+            "mp4": "efde293265a6851c0bc18e1ea1c2e6d8d751cfc8ba46ca91868cbdb13824796e",
+            "jpg": "0698ca05d7d85590b4ddbdf559027dae304be9204268121d45b4e603b8b18707",
+            "vtt": "754af36677294d9489d591e10104d43e5c97d1f694b7bf0ce19a1011086ad18f"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/fr/after-delete-next-unread-option.webp",
+          "imageAlt": "Préférences de messagerie, Suppression, avec « Sélectionner l'e-mail non lu suivant » choisi et son exemple · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.993,
+          "sourceSHA256": "1d6871143957b324ef56bb0764c4876520879e57d53dd3ca4e8979a132296641",
+          "sha256": {
+            "webp": "d28b778e95855153357ef6723fece195feb414fb1f0088d34222f8ca50e2d0b6"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/fr/after-delete-next-unread-open.webp",
+          "imageAlt": "Boîte de réception avec un e-mail ouvert dans le volet de lecture, avant sa suppression · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.396,
+          "sourceSHA256": "1d6871143957b324ef56bb0764c4876520879e57d53dd3ca4e8979a132296641",
+          "sha256": {
+            "webp": "f558e201235a3de72f7dfc776aa73b9db8b12ef69292e342ed85ccf2062c4ef2"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/fr/after-delete-next-unread-after.webp",
+          "imageAlt": "Volet de lecture après la suppression : l’e-mail non lu suivant, situé en dessous, est ouvert · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.778,
+          "sourceSHA256": "1d6871143957b324ef56bb0764c4876520879e57d53dd3ca4e8979a132296641",
+          "sha256": {
+            "webp": "845612a5ee374162df17cee599ed69d5c80bfbe4da3ae3ebe5cb24414b5058d0"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/fr/after-delete-next-unread.mp4",
+          "videoLabel": "Après la suppression d’un e-mail : sélectionner l’e-mail non lu suivant · MailVault version 2.24.0 fr",
+          "poster": "/assets/help-media/fr/after-delete-next-unread.jpg",
+          "posterAlt": "Après la suppression d’un e-mail : sélectionner l’e-mail non lu suivant · MailVault version 2.24.0 fr",
+          "captions": "/assets/help-media/fr/after-delete-next-unread.vtt",
+          "transcript": [
+            "La boîte de réception, avec deux e-mails non lus parmi des e-mails lus.",
+            "Préférences de messagerie, Suppression : l’option qui décide de ce qui s’ouvre après une suppression.",
+            "Choisissez l’option. L’exemple en dessous montre ce qu’une suppression laisse ouvert.",
+            "Ouvrez un e-mail.",
+            "Supprimez-le depuis le lecteur.",
+            "Le lecteur affiche déjà l’e-mail choisi par l’option."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "recordingFrames": 322,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "1d6871143957b324ef56bb0764c4876520879e57d53dd3ca4e8979a132296641",
+          "sha256": {
+            "mp4": "3a28079fe90d8868c6d96ac601bff40a75e780c65041055dd7f6b70ef00c736d",
+            "jpg": "fe18fec0e95ee09024bedc95a81cbd355344c2f593d6e966fef856162ce9dc6d",
+            "vtt": "d2752465a074d5e606d066173dfa7696e573603c9cffb188da6ee3e59047a5e5"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/fr/after-delete-previous-unread-option.webp",
+          "imageAlt": "Préférences de messagerie, Suppression, avec « Sélectionner l'e-mail non lu précédent » choisi et son exemple · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.972,
+          "sourceSHA256": "2de95b73f2fa8b38f88f973000c0a1c1acdec15db947a3ab87820e4f0ebee90c",
+          "sha256": {
+            "webp": "d8b13f203a4ef705ce19323ac8c0ec07759234e56ff2b4f640f42b391f8536eb"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/fr/after-delete-previous-unread-open.webp",
+          "imageAlt": "Boîte de réception avec un e-mail ouvert dans le volet de lecture, avant sa suppression · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.375,
+          "sourceSHA256": "2de95b73f2fa8b38f88f973000c0a1c1acdec15db947a3ab87820e4f0ebee90c",
+          "sha256": {
+            "webp": "faa78a4a0cb278aa9e2927b91d864a81b9162daf0e1096432697a6610782057d"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/fr/after-delete-previous-unread-after.webp",
+          "imageAlt": "Volet de lecture après la suppression : l’e-mail non lu précédent, situé au-dessus, est ouvert · MailVault version 2.24.0 fr",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.779,
+          "sourceSHA256": "2de95b73f2fa8b38f88f973000c0a1c1acdec15db947a3ab87820e4f0ebee90c",
+          "sha256": {
+            "webp": "843e643d39261193b3504fa4e66c5e26a4d6142ac2ef5d773c89e6e7c24cb2e3"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/fr/after-delete-previous-unread.mp4",
+          "videoLabel": "Après la suppression d’un e-mail : sélectionner l’e-mail non lu précédent · MailVault version 2.24.0 fr",
+          "poster": "/assets/help-media/fr/after-delete-previous-unread.jpg",
+          "posterAlt": "Après la suppression d’un e-mail : sélectionner l’e-mail non lu précédent · MailVault version 2.24.0 fr",
+          "captions": "/assets/help-media/fr/after-delete-previous-unread.vtt",
+          "transcript": [
+            "La boîte de réception, avec deux e-mails non lus parmi des e-mails lus.",
+            "Préférences de messagerie, Suppression : l’option qui décide de ce qui s’ouvre après une suppression.",
+            "Choisissez l’option. L’exemple en dessous montre ce qu’une suppression laisse ouvert.",
+            "Ouvrez un e-mail.",
+            "Supprimez-le depuis le lecteur.",
+            "Le lecteur affiche déjà l’e-mail choisi par l’option."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 fr",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "recordingFrames": 320,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "2de95b73f2fa8b38f88f973000c0a1c1acdec15db947a3ab87820e4f0ebee90c",
+          "sha256": {
+            "mp4": "724db4c54a446aa9d84fc82e27f929bcd48d0c058923666490b2bf29b42f52cf",
+            "jpg": "d50e2ba7925d25859b96f1326ee4a0e6f10ba969833bb28e0a50e37d0af37358",
+            "vtt": "73e99598b18e079737098164632d42424136c78ae979ca04137dbde6bd55d287"
           }
         }
       }
@@ -4236,6 +5542,441 @@
             "jpg": "826edd36c2b8a4a5a05c00fb822bed978011d22558a12830e46853e5e8ae4a06",
             "vtt": "e77b3f459da575fa4d7c01a331090b44edfd41f76791e76a25daad8595e7bb41"
           }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/es/after-delete-none-option.webp",
+          "imageAlt": "Preferencias de correo, Eliminar, con «No seleccionar nada» elegido y su ejemplo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 9.094,
+          "sourceSHA256": "766c5c1e267bbf5efd369cab0f67da7969c8247c53755eb02a6f96eca3934862",
+          "sha256": {
+            "webp": "6eb5e9e72405392d225083bc81ddb09bc7e90764e9568c825b2354b331a41974"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/es/after-delete-none-open.webp",
+          "imageAlt": "Bandeja de entrada con un correo abierto en el panel de lectura, antes de eliminarlo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.506,
+          "sourceSHA256": "766c5c1e267bbf5efd369cab0f67da7969c8247c53755eb02a6f96eca3934862",
+          "sha256": {
+            "webp": "46879eb72b21aeeefbba082afc7517f36d7bce3641a77a5f8de67da6dd747aff"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/es/after-delete-none-after.webp",
+          "imageAlt": "Panel de lectura tras eliminar: no hay ningún correo seleccionado · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.865,
+          "sourceSHA256": "766c5c1e267bbf5efd369cab0f67da7969c8247c53755eb02a6f96eca3934862",
+          "sha256": {
+            "webp": "737474ac63223bb72000cbfbf70bfdc2acf90028eaa23d7f585440c9e1e63866"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/es/after-delete-none.mp4",
+          "videoLabel": "Tras eliminar un correo: no seleccionar nada · MailVault version 2.24.0 es",
+          "poster": "/assets/help-media/es/after-delete-none.jpg",
+          "posterAlt": "Tras eliminar un correo: no seleccionar nada · MailVault version 2.24.0 es",
+          "captions": "/assets/help-media/es/after-delete-none.vtt",
+          "transcript": [
+            "La bandeja de entrada, con dos correos sin leer entre otros ya leídos.",
+            "Preferencias de correo, Eliminar: la opción que decide qué se abre después de eliminar.",
+            "Elige la opción. El ejemplo de debajo muestra qué queda abierto tras eliminar.",
+            "Abre un correo.",
+            "Elimínalo desde el lector.",
+            "No hay nada seleccionado: el lector te pide que elijas un correo."
+          ],
+          "duration": 18.066667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "recordingFrames": 159,
+          "sourceSeconds": 18.05,
+          "sourceSHA256": "766c5c1e267bbf5efd369cab0f67da7969c8247c53755eb02a6f96eca3934862",
+          "sha256": {
+            "mp4": "7bf95287f4067c0befcd1ee8df13af28e5fac5f373baccbde30195aaa5400b3c",
+            "jpg": "18af178488af1cc10f37cae85445ffc6647595a4a065b3a093d701e2e4db15ef",
+            "vtt": "b3145b5f89faec3dbbe1b8e896ceddb4ac46aca1117e70990000ea08731c5ae4"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/es/after-delete-next-option.webp",
+          "imageAlt": "Preferencias de correo, Eliminar, con «Seleccionar el siguiente correo» elegido y su ejemplo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.974,
+          "sourceSHA256": "d33eb41c6011a131067ca830ca07e6cd151590ab89611a632990489db55d100d",
+          "sha256": {
+            "webp": "ddfa6d7b21c52f856e8aeb0a4b907fcbb47b4360602e930f36e927b388d1b3f5"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/es/after-delete-next-open.webp",
+          "imageAlt": "Bandeja de entrada con un correo abierto en el panel de lectura, antes de eliminarlo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.374,
+          "sourceSHA256": "d33eb41c6011a131067ca830ca07e6cd151590ab89611a632990489db55d100d",
+          "sha256": {
+            "webp": "09d98a8f128fba266f32662592c13d20ed2b2ae02b1b477db764213c97e0c6ef"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/es/after-delete-next-after.webp",
+          "imageAlt": "Panel de lectura tras eliminar: el correo de debajo del eliminado está abierto · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.76,
+          "sourceSHA256": "d33eb41c6011a131067ca830ca07e6cd151590ab89611a632990489db55d100d",
+          "sha256": {
+            "webp": "9b52e905692830ecf5f5c5d0398981d1f96a7c00226bcbc13301369b7c604c04"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/es/after-delete-next.mp4",
+          "videoLabel": "Tras eliminar un correo: seleccionar el siguiente correo · MailVault version 2.24.0 es",
+          "poster": "/assets/help-media/es/after-delete-next.jpg",
+          "posterAlt": "Tras eliminar un correo: seleccionar el siguiente correo · MailVault version 2.24.0 es",
+          "captions": "/assets/help-media/es/after-delete-next.vtt",
+          "transcript": [
+            "La bandeja de entrada, con dos correos sin leer entre otros ya leídos.",
+            "Preferencias de correo, Eliminar: la opción que decide qué se abre después de eliminar.",
+            "Elige la opción. El ejemplo de debajo muestra qué queda abierto tras eliminar.",
+            "Abre un correo.",
+            "Elimínalo desde el lector.",
+            "El lector ya muestra el correo que eligió la opción."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "recordingFrames": 164,
+          "sourceSeconds": 17.95,
+          "sourceSHA256": "d33eb41c6011a131067ca830ca07e6cd151590ab89611a632990489db55d100d",
+          "sha256": {
+            "mp4": "3ecfc08da55f170b8f9bb3b3d53c8348a3d6f7213321c9816f6d51fb482a738d",
+            "jpg": "9deaab29cf60629ced792275e0acf947c839025f5c639e1f788fa69168df0c23",
+            "vtt": "9da70c292e919f6afddfbe977838f4592dc3a6b6382f96da6f493d846bef14d3"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/es/after-delete-previous-option.webp",
+          "imageAlt": "Preferencias de correo, Eliminar, con «Seleccionar el correo anterior» elegido y su ejemplo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.996,
+          "sourceSHA256": "90328e669b82e0cf510b8df22f29fe08da03e304fdc46b0c58761d6334792721",
+          "sha256": {
+            "webp": "894c92698d4306ec646add47841daf65a02b741006860deb068e91497196c47b"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/es/after-delete-previous-open.webp",
+          "imageAlt": "Bandeja de entrada con un correo abierto en el panel de lectura, antes de eliminarlo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.397,
+          "sourceSHA256": "90328e669b82e0cf510b8df22f29fe08da03e304fdc46b0c58761d6334792721",
+          "sha256": {
+            "webp": "13043b04e20b022d9e69de74d1439272776e043f6cbb1e4a3110a4750f840268"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/es/after-delete-previous-after.webp",
+          "imageAlt": "Panel de lectura tras eliminar: el correo de arriba del eliminado está abierto · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.791,
+          "sourceSHA256": "90328e669b82e0cf510b8df22f29fe08da03e304fdc46b0c58761d6334792721",
+          "sha256": {
+            "webp": "7444a0c08091571776a241324e4aa067def839a2f6d36e751d5def0cfbaffa8c"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/es/after-delete-previous.mp4",
+          "videoLabel": "Tras eliminar un correo: seleccionar el correo anterior · MailVault version 2.24.0 es",
+          "poster": "/assets/help-media/es/after-delete-previous.jpg",
+          "posterAlt": "Tras eliminar un correo: seleccionar el correo anterior · MailVault version 2.24.0 es",
+          "captions": "/assets/help-media/es/after-delete-previous.vtt",
+          "transcript": [
+            "La bandeja de entrada, con dos correos sin leer entre otros ya leídos.",
+            "Preferencias de correo, Eliminar: la opción que decide qué se abre después de eliminar.",
+            "Elige la opción. El ejemplo de debajo muestra qué queda abierto tras eliminar.",
+            "Abre un correo.",
+            "Elimínalo desde el lector.",
+            "El lector ya muestra el correo que eligió la opción."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "recordingFrames": 164,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "90328e669b82e0cf510b8df22f29fe08da03e304fdc46b0c58761d6334792721",
+          "sha256": {
+            "mp4": "a2252edde9331d2cfc1d685fdea414589611a85b88fa408beb2310b4d13a774c",
+            "jpg": "bdc10ba0aac5465089fa0b59eb012b101ac8d347e060824224ffab3ad325ed92",
+            "vtt": "0f9f421dab6be8df000f8df7990d1ba27aa6ffe26be2f35bf6f5e83c359de622"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/es/after-delete-next-unread-option.webp",
+          "imageAlt": "Preferencias de correo, Eliminar, con «Seleccionar el siguiente correo no leído» elegido y su ejemplo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.991999999999999,
+          "sourceSHA256": "029bfab38a6ecdcef13ce68dac8cb6ae46b9cf17a2ac489cf600d006d10becc9",
+          "sha256": {
+            "webp": "a058d158bc0aa3f333b9f23451c0cdbbdb2ea0aae18ec989f61f4344f3d39f17"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/es/after-delete-next-unread-open.webp",
+          "imageAlt": "Bandeja de entrada con un correo abierto en el panel de lectura, antes de eliminarlo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.375,
+          "sourceSHA256": "029bfab38a6ecdcef13ce68dac8cb6ae46b9cf17a2ac489cf600d006d10becc9",
+          "sha256": {
+            "webp": "191030e04e476c8e4172c3f5d8026ccf6aae30207ab6f85fd5b254ea6ac1dc0a"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/es/after-delete-next-unread-after.webp",
+          "imageAlt": "Panel de lectura tras eliminar: el siguiente correo sin leer de debajo está abierto · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.753,
+          "sourceSHA256": "029bfab38a6ecdcef13ce68dac8cb6ae46b9cf17a2ac489cf600d006d10becc9",
+          "sha256": {
+            "webp": "602e072e4aedb16dec0e4199eba225023949875eb0e969681c0de3657c7c9bcd"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/es/after-delete-next-unread.mp4",
+          "videoLabel": "Tras eliminar un correo: seleccionar el siguiente correo no leído · MailVault version 2.24.0 es",
+          "poster": "/assets/help-media/es/after-delete-next-unread.jpg",
+          "posterAlt": "Tras eliminar un correo: seleccionar el siguiente correo no leído · MailVault version 2.24.0 es",
+          "captions": "/assets/help-media/es/after-delete-next-unread.vtt",
+          "transcript": [
+            "La bandeja de entrada, con dos correos sin leer entre otros ya leídos.",
+            "Preferencias de correo, Eliminar: la opción que decide qué se abre después de eliminar.",
+            "Elige la opción. El ejemplo de debajo muestra qué queda abierto tras eliminar.",
+            "Abre un correo.",
+            "Elimínalo desde el lector.",
+            "El lector ya muestra el correo que eligió la opción."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "recordingFrames": 322,
+          "sourceSeconds": 17.95,
+          "sourceSHA256": "029bfab38a6ecdcef13ce68dac8cb6ae46b9cf17a2ac489cf600d006d10becc9",
+          "sha256": {
+            "mp4": "ff396a586b4d8aef5e6c5cffb73824e00a62bca6458c19dca69729ca16815a82",
+            "jpg": "f7a98e16da0fbafea1ac422c875aa503fc5aaff7422881e96008488d69a92d7a",
+            "vtt": "646fc1431d21e661bdea77ec9d68fbb37558586f3d096172777d5424fa28eb44"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/es/after-delete-previous-unread-option.webp",
+          "imageAlt": "Preferencias de correo, Eliminar, con «Seleccionar el correo no leído anterior» elegido y su ejemplo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.966,
+          "sourceSHA256": "d3ffea17e1b6e2baafbd511111c4b019b2d68009bff3a618984121cda1fec796",
+          "sha256": {
+            "webp": "1693cdac83b15a549b4d0b96c324889f53b462c3bf85f3843b65fa1a3d60c43e"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/es/after-delete-previous-unread-open.webp",
+          "imageAlt": "Bandeja de entrada con un correo abierto en el panel de lectura, antes de eliminarlo · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.369,
+          "sourceSHA256": "d3ffea17e1b6e2baafbd511111c4b019b2d68009bff3a618984121cda1fec796",
+          "sha256": {
+            "webp": "191030e04e476c8e4172c3f5d8026ccf6aae30207ab6f85fd5b254ea6ac1dc0a"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/es/after-delete-previous-unread-after.webp",
+          "imageAlt": "Panel de lectura tras eliminar: el correo sin leer anterior de arriba está abierto · MailVault version 2.24.0 es",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.764,
+          "sourceSHA256": "d3ffea17e1b6e2baafbd511111c4b019b2d68009bff3a618984121cda1fec796",
+          "sha256": {
+            "webp": "d00a30b2574fd412bf82a8c75a01a265b01dfe818597df2536e83604e1da04f6"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/es/after-delete-previous-unread.mp4",
+          "videoLabel": "Tras eliminar un correo: seleccionar el correo no leído anterior · MailVault version 2.24.0 es",
+          "poster": "/assets/help-media/es/after-delete-previous-unread.jpg",
+          "posterAlt": "Tras eliminar un correo: seleccionar el correo no leído anterior · MailVault version 2.24.0 es",
+          "captions": "/assets/help-media/es/after-delete-previous-unread.vtt",
+          "transcript": [
+            "La bandeja de entrada, con dos correos sin leer entre otros ya leídos.",
+            "Preferencias de correo, Eliminar: la opción que decide qué se abre después de eliminar.",
+            "Elige la opción. El ejemplo de debajo muestra qué queda abierto tras eliminar.",
+            "Abre un correo.",
+            "Elimínalo desde el lector.",
+            "El lector ya muestra el correo que eligió la opción."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 es",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "recordingFrames": 323,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "d3ffea17e1b6e2baafbd511111c4b019b2d68009bff3a618984121cda1fec796",
+          "sha256": {
+            "mp4": "e8082e86b5a292cdcf75e1e40599cd4e65a4f946469b9f9b8334995909d40844",
+            "jpg": "86f4ae6e7c1a79f099cfede010e805fde70cb45f344936d494524e225cf89c1d",
+            "vtt": "2b981aeb490864415bd4d66dc243c755576bf79983cd39794f13c15abc68ed22"
+          }
         }
       }
     },
@@ -5291,6 +7032,441 @@
             "mp4": "3eb6e523f283af1bd46a5b23d07fa6c3f0fd8665d3b6791c3ffdf90771a503a9",
             "jpg": "6b116d2e0c4d685d4e18ea3c9fc0c6d5272e6e61a56fa79ff9a4dd9d0a85e023",
             "vtt": "e0824576384cb0bf37d8dd03d6787eccc49ff31edaf9cc03cee8108f3a061249"
+          }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/it/after-delete-none-option.webp",
+          "imageAlt": "Preferenze di posta, Eliminazione, con l’opzione Non selezionare nulla selezionata, con il suo esempio · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.894,
+          "sourceSHA256": "efe604f3677c55ca57df3d4ab349e68c596cc4f043aa15aa4ab5bb9ad488c418",
+          "sha256": {
+            "webp": "2357cc45f2d04cf4dac53768e6416850602c43230b9b2c5f9567ff4deded43bf"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/it/after-delete-none-open.webp",
+          "imageAlt": "Posta in arrivo con un’email aperta nel riquadro di lettura, prima dell’eliminazione · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.236,
+          "sourceSHA256": "efe604f3677c55ca57df3d4ab349e68c596cc4f043aa15aa4ab5bb9ad488c418",
+          "sha256": {
+            "webp": "fda85fb96cd0a1452e5027e5dc4ce516f712a57638e27761029ef6401c55ab3a"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/it/after-delete-none-after.webp",
+          "imageAlt": "Riquadro di lettura dopo l’eliminazione: nessuna email è selezionata · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.543,
+          "sourceSHA256": "efe604f3677c55ca57df3d4ab349e68c596cc4f043aa15aa4ab5bb9ad488c418",
+          "sha256": {
+            "webp": "63327f44112271327da81a0865bb0304b62b982f902f22888759e9a54fec20a5"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/it/after-delete-none.mp4",
+          "videoLabel": "Dopo aver eliminato un’email: Non selezionare nulla · MailVault version 2.24.0 it",
+          "poster": "/assets/help-media/it/after-delete-none.jpg",
+          "posterAlt": "Dopo aver eliminato un’email: Non selezionare nulla · MailVault version 2.24.0 it",
+          "captions": "/assets/help-media/it/after-delete-none.vtt",
+          "transcript": [
+            "La Posta in arrivo, con due email non lette tra quelle già lette.",
+            "Preferenze di posta, Eliminazione: l’opzione che decide che cosa si apre dopo un’eliminazione.",
+            "Scegli l’opzione. L’esempio sotto mostra che cosa resta aperto dopo un’eliminazione.",
+            "Apri un’email.",
+            "Eliminala dal riquadro di lettura.",
+            "Non è selezionato nulla: il riquadro chiede di scegliere un’email."
+          ],
+          "duration": 17.733333,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "recordingFrames": 153,
+          "sourceSeconds": 17.733333,
+          "sourceSHA256": "efe604f3677c55ca57df3d4ab349e68c596cc4f043aa15aa4ab5bb9ad488c418",
+          "sha256": {
+            "mp4": "116fce7a181eda20bc18ffbd9a4d649b65110a04b873f536f7cf4ff00b75fee4",
+            "jpg": "aff9cf54822584f7d0739ebf9042c3fbc0fb4bc7361b09a0258f418b06993e78",
+            "vtt": "2fa54088329f9da3cc60f99ba851e4c4869a685a8f1c753b693fcf3477409785"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/it/after-delete-next-option.webp",
+          "imageAlt": "Preferenze di posta, Eliminazione, con l’opzione Seleziona l'email successiva selezionata, con il suo esempio · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.972,
+          "sourceSHA256": "fbf94754f1c1feb64a648b4b03515eee42420fbbf4f1f1f13e61ba4181c2afe4",
+          "sha256": {
+            "webp": "ec68c454c2dd49230ef57ab39e7a4174a46d2a871437df423106f113f00053e0"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/it/after-delete-next-open.webp",
+          "imageAlt": "Posta in arrivo con un’email aperta nel riquadro di lettura, prima dell’eliminazione · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.374,
+          "sourceSHA256": "fbf94754f1c1feb64a648b4b03515eee42420fbbf4f1f1f13e61ba4181c2afe4",
+          "sha256": {
+            "webp": "4bbb0db48dbcdc7734fc7c855f809d3d8225592bc135a1f9d3c68b50fd07e71d"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/it/after-delete-next-after.webp",
+          "imageAlt": "Riquadro di lettura dopo l’eliminazione: è aperta l’email sotto quella eliminata · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.762,
+          "sourceSHA256": "fbf94754f1c1feb64a648b4b03515eee42420fbbf4f1f1f13e61ba4181c2afe4",
+          "sha256": {
+            "webp": "f6e01eac804a4e3ec75999d86f4cc42954cb653af02b30a9e2a00dad1dc39006"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/it/after-delete-next.mp4",
+          "videoLabel": "Dopo aver eliminato un’email: Seleziona l'email successiva · MailVault version 2.24.0 it",
+          "poster": "/assets/help-media/it/after-delete-next.jpg",
+          "posterAlt": "Dopo aver eliminato un’email: Seleziona l'email successiva · MailVault version 2.24.0 it",
+          "captions": "/assets/help-media/it/after-delete-next.vtt",
+          "transcript": [
+            "La Posta in arrivo, con due email non lette tra quelle già lette.",
+            "Preferenze di posta, Eliminazione: l’opzione che decide che cosa si apre dopo un’eliminazione.",
+            "Scegli l’opzione. L’esempio sotto mostra che cosa resta aperto dopo un’eliminazione.",
+            "Apri un’email.",
+            "Eliminala dal riquadro di lettura.",
+            "Il riquadro mostra già l’email scelta dall’opzione."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "recordingFrames": 161,
+          "sourceSeconds": 17.95,
+          "sourceSHA256": "fbf94754f1c1feb64a648b4b03515eee42420fbbf4f1f1f13e61ba4181c2afe4",
+          "sha256": {
+            "mp4": "ad5b927527c7c1565747c586b68079d9ac66492bd9d0454d9a6de0ac198575da",
+            "jpg": "602eb4b00c0021829e2ce12575ef27c696ccc936276ebd5d43cd044ec42570a5",
+            "vtt": "a75575a6c13652a4cb6be5079858630d5f1e0f633d2afabe97b647b905966b23"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/it/after-delete-previous-option.webp",
+          "imageAlt": "Preferenze di posta, Eliminazione, con l’opzione Seleziona l'email precedente selezionata, con il suo esempio · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.968,
+          "sourceSHA256": "6155a13e1b51d0f05b5d76e892b356fe454c9213939a9ebe76ab7f6607de3205",
+          "sha256": {
+            "webp": "99463bb33bccc883a9b8a48d32c8567bc99a55838f4d2f6cfa03f3b2fe7adba3"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/it/after-delete-previous-open.webp",
+          "imageAlt": "Posta in arrivo con un’email aperta nel riquadro di lettura, prima dell’eliminazione · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.371,
+          "sourceSHA256": "6155a13e1b51d0f05b5d76e892b356fe454c9213939a9ebe76ab7f6607de3205",
+          "sha256": {
+            "webp": "4bbb0db48dbcdc7734fc7c855f809d3d8225592bc135a1f9d3c68b50fd07e71d"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/it/after-delete-previous-after.webp",
+          "imageAlt": "Riquadro di lettura dopo l’eliminazione: è aperta l’email sopra quella eliminata · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.761,
+          "sourceSHA256": "6155a13e1b51d0f05b5d76e892b356fe454c9213939a9ebe76ab7f6607de3205",
+          "sha256": {
+            "webp": "f620f7e1dca30b35656c9354086882bd2cce5a4628a3fba5ebf5849393d62fa6"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/it/after-delete-previous.mp4",
+          "videoLabel": "Dopo aver eliminato un’email: Seleziona l'email precedente · MailVault version 2.24.0 it",
+          "poster": "/assets/help-media/it/after-delete-previous.jpg",
+          "posterAlt": "Dopo aver eliminato un’email: Seleziona l'email precedente · MailVault version 2.24.0 it",
+          "captions": "/assets/help-media/it/after-delete-previous.vtt",
+          "transcript": [
+            "La Posta in arrivo, con due email non lette tra quelle già lette.",
+            "Preferenze di posta, Eliminazione: l’opzione che decide che cosa si apre dopo un’eliminazione.",
+            "Scegli l’opzione. L’esempio sotto mostra che cosa resta aperto dopo un’eliminazione.",
+            "Apri un’email.",
+            "Eliminala dal riquadro di lettura.",
+            "Il riquadro mostra già l’email scelta dall’opzione."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "recordingFrames": 160,
+          "sourceSeconds": 17.95,
+          "sourceSHA256": "6155a13e1b51d0f05b5d76e892b356fe454c9213939a9ebe76ab7f6607de3205",
+          "sha256": {
+            "mp4": "614fefcf44fcb25a88526977253de2bda139458f3a0f8b6ef3ab53eac9b17332",
+            "jpg": "6dc8c70eccaa95b2270b942cf0f33e4ea25915c3e478541ab85094b24ea5522e",
+            "vtt": "867188d37e6f39d400145264245c793022cb3a24e4b0469a3817ff545ad9420d"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/it/after-delete-next-unread-option.webp",
+          "imageAlt": "Preferenze di posta, Eliminazione, con l’opzione Seleziona l'email non letta successiva selezionata, con il suo esempio · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.991999999999999,
+          "sourceSHA256": "11a13ccfecc4cb27b61ba21de85a03633b0a4c01fccb99954127ae166efa31b8",
+          "sha256": {
+            "webp": "f5e1cc1bbd61a256874d727c65c4314beda296789100431e96a1c03dc6e694e2"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/it/after-delete-next-unread-open.webp",
+          "imageAlt": "Posta in arrivo con un’email aperta nel riquadro di lettura, prima dell’eliminazione · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.399,
+          "sourceSHA256": "11a13ccfecc4cb27b61ba21de85a03633b0a4c01fccb99954127ae166efa31b8",
+          "sha256": {
+            "webp": "2183513207166a3bb6f7af306953f2b02e5a0ea9be8c562913d0706e2d23dafd"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/it/after-delete-next-unread-after.webp",
+          "imageAlt": "Riquadro di lettura dopo l’eliminazione: è aperta l’email non letta successiva, più in basso · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.79,
+          "sourceSHA256": "11a13ccfecc4cb27b61ba21de85a03633b0a4c01fccb99954127ae166efa31b8",
+          "sha256": {
+            "webp": "87b352f00dc123bd69963eedb64dd30749c878c9caceb3c0b6e87f65cea1fb53"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/it/after-delete-next-unread.mp4",
+          "videoLabel": "Dopo aver eliminato un’email: Seleziona l'email non letta successiva · MailVault version 2.24.0 it",
+          "poster": "/assets/help-media/it/after-delete-next-unread.jpg",
+          "posterAlt": "Dopo aver eliminato un’email: Seleziona l'email non letta successiva · MailVault version 2.24.0 it",
+          "captions": "/assets/help-media/it/after-delete-next-unread.vtt",
+          "transcript": [
+            "La Posta in arrivo, con due email non lette tra quelle già lette.",
+            "Preferenze di posta, Eliminazione: l’opzione che decide che cosa si apre dopo un’eliminazione.",
+            "Scegli l’opzione. L’esempio sotto mostra che cosa resta aperto dopo un’eliminazione.",
+            "Apri un’email.",
+            "Eliminala dal riquadro di lettura.",
+            "Il riquadro mostra già l’email scelta dall’opzione."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "recordingFrames": 319,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "11a13ccfecc4cb27b61ba21de85a03633b0a4c01fccb99954127ae166efa31b8",
+          "sha256": {
+            "mp4": "6c138d41e92082c7eacf0058cdd3f08aab25c59d984c4f8a808121a3c1a9ac2e",
+            "jpg": "1d072fdeabca7b93316b4773eddd2e33b1b060d3d4ed9ce8ded80b67e7249dd1",
+            "vtt": "232720489ea4097a6fe99d69eca74939238e6e7e30ee436459ec5b632e40d522"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/it/after-delete-previous-unread-option.webp",
+          "imageAlt": "Preferenze di posta, Eliminazione, con l’opzione Seleziona l'email non letta precedente selezionata, con il suo esempio · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.99,
+          "sourceSHA256": "118546a3e3b92ddd3b97a1f6f6eb207ed0b238caa802eddd47cad655cf38d2b3",
+          "sha256": {
+            "webp": "6f129877fe348774ac031d6e29613d63b851d4c9cabb96dd83052c796a5345e0"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/it/after-delete-previous-unread-open.webp",
+          "imageAlt": "Posta in arrivo con un’email aperta nel riquadro di lettura, prima dell’eliminazione · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.403,
+          "sourceSHA256": "118546a3e3b92ddd3b97a1f6f6eb207ed0b238caa802eddd47cad655cf38d2b3",
+          "sha256": {
+            "webp": "c8352f5e584155570ddc3e1a0f34c1c229e0535caf4644491f4d2421e8843b4f"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/it/after-delete-previous-unread-after.webp",
+          "imageAlt": "Riquadro di lettura dopo l’eliminazione: è aperta l’email non letta precedente, più in alto · MailVault version 2.24.0 it",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.79,
+          "sourceSHA256": "118546a3e3b92ddd3b97a1f6f6eb207ed0b238caa802eddd47cad655cf38d2b3",
+          "sha256": {
+            "webp": "9b0f0df1f2ae399595be855b93af221dad701c5d50d4aea6402500f9fabbd9bf"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/it/after-delete-previous-unread.mp4",
+          "videoLabel": "Dopo aver eliminato un’email: Seleziona l'email non letta precedente · MailVault version 2.24.0 it",
+          "poster": "/assets/help-media/it/after-delete-previous-unread.jpg",
+          "posterAlt": "Dopo aver eliminato un’email: Seleziona l'email non letta precedente · MailVault version 2.24.0 it",
+          "captions": "/assets/help-media/it/after-delete-previous-unread.vtt",
+          "transcript": [
+            "La Posta in arrivo, con due email non lette tra quelle già lette.",
+            "Preferenze di posta, Eliminazione: l’opzione che decide che cosa si apre dopo un’eliminazione.",
+            "Scegli l’opzione. L’esempio sotto mostra che cosa resta aperto dopo un’eliminazione.",
+            "Apri un’email.",
+            "Eliminala dal riquadro di lettura.",
+            "Il riquadro mostra già l’email scelta dall’opzione."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 it",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "recordingFrames": 323,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "118546a3e3b92ddd3b97a1f6f6eb207ed0b238caa802eddd47cad655cf38d2b3",
+          "sha256": {
+            "mp4": "174154019d6dc6979fe6d07009c68f9be41413ae58df0f366fa5e2e3268d25c5",
+            "jpg": "2cdffcfa1b60ffc407c3ac54780892d43437392d81219a482d706e9f03881fb2",
+            "vtt": "37adfbdd52b421c1aadf7cbb27aa68ad6d292a4a1ba2ca917ff011fe07bcab92"
           }
         }
       }
@@ -6348,6 +8524,441 @@
             "jpg": "b1b959649fbdd1e6b1ce515a12cdbc87c46c652a8c5560bc1460596ba11d0c23",
             "vtt": "769a8c655be4d2e084831e8503b0c2d46a42baba2d8c49c71621c17f20d24f5a"
           }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/ja/after-delete-none-option.webp",
+          "imageAlt": "メールの設定、削除。「何も選ばない」を選択し、表示例を表示 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 9.104,
+          "sourceSHA256": "fe5e86a261e1c6ed58354e406e1276a0929cf61d3f2a172dc1e19b3e03f1dbd8",
+          "sha256": {
+            "webp": "91ae4c854fd049f81b0251bb5ddfe7a413c0c48e2c21b08bcb06a29777bd84b0"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/ja/after-delete-none-open.webp",
+          "imageAlt": "受信トレイ。削除前の、閲覧ペインに 1 通のメールが開いている状態 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.513,
+          "sourceSHA256": "fe5e86a261e1c6ed58354e406e1276a0929cf61d3f2a172dc1e19b3e03f1dbd8",
+          "sha256": {
+            "webp": "bce3a34b218169e84c15df7a1a7c1dcb6363f0c636727fa1829f66885262f648"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/ja/after-delete-none-after.webp",
+          "imageAlt": "削除後の閲覧ペイン：どのメールも選択されていません · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.876,
+          "sourceSHA256": "fe5e86a261e1c6ed58354e406e1276a0929cf61d3f2a172dc1e19b3e03f1dbd8",
+          "sha256": {
+            "webp": "2dbba7cdacb7ece45fb14ea599d4e0553913d5af801b0d96aaaa20af3c2b79c3"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/ja/after-delete-none.mp4",
+          "videoLabel": "メール削除後：何も選ばない · MailVault version 2.24.0 ja",
+          "poster": "/assets/help-media/ja/after-delete-none.jpg",
+          "posterAlt": "メール削除後：何も選ばない · MailVault version 2.24.0 ja",
+          "captions": "/assets/help-media/ja/after-delete-none.vtt",
+          "transcript": [
+            "受信トレイ。既読メールの中に未読メールが 2 通あります。",
+            "メールの設定、削除：削除後に何が開くかを決める選択肢。",
+            "選択肢を選びます。その下の表示例に、削除後に何が開いた状態になるかが表示されます。",
+            "メールを開きます。",
+            "閲覧ペインから削除します。",
+            "何も選択されていません。「読むメールを選択してください」と表示されます。"
+          ],
+          "duration": 18.066667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "recordingFrames": 155,
+          "sourceSeconds": 18.066667,
+          "sourceSHA256": "fe5e86a261e1c6ed58354e406e1276a0929cf61d3f2a172dc1e19b3e03f1dbd8",
+          "sha256": {
+            "mp4": "d48ce43eee6fd22471bcf5284593a91b5d820860d12fbbf04bdd929502f334fc",
+            "jpg": "3d2db85b891db807612d9699f2315756380a5e3069fe1979395086d4aab31a6e",
+            "vtt": "fbcb8903324777c950e84c0fe1edbc4296c7c5b37d7dce5041fcbc341eeec414"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/ja/after-delete-next-option.webp",
+          "imageAlt": "メールの設定、削除。「次のメールを選ぶ」を選択し、表示例を表示 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.972,
+          "sourceSHA256": "eaee8d3ba046bed1a497834f291e228ac14c879c75be8c63ad0bc0e7297df7d3",
+          "sha256": {
+            "webp": "170c78cdda7fe813c2082171f89b38dd964701b432465109a5806cbed1a4d938"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/ja/after-delete-next-open.webp",
+          "imageAlt": "受信トレイ。削除前の、閲覧ペインに 1 通のメールが開いている状態 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.378,
+          "sourceSHA256": "eaee8d3ba046bed1a497834f291e228ac14c879c75be8c63ad0bc0e7297df7d3",
+          "sha256": {
+            "webp": "ae883d5cfac5b8ce466580325e51b9e59f6e015f10126ad5bc451b846d863790"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/ja/after-delete-next-after.webp",
+          "imageAlt": "削除後の閲覧ペイン：削除したメールの下のメールが開いています · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.793,
+          "sourceSHA256": "eaee8d3ba046bed1a497834f291e228ac14c879c75be8c63ad0bc0e7297df7d3",
+          "sha256": {
+            "webp": "b74cfa77fe064678e12c402b1e1a87f6ae8a2509daf81425ebd3a29017058a3b"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/ja/after-delete-next.mp4",
+          "videoLabel": "メール削除後：次のメールを選ぶ · MailVault version 2.24.0 ja",
+          "poster": "/assets/help-media/ja/after-delete-next.jpg",
+          "posterAlt": "メール削除後：次のメールを選ぶ · MailVault version 2.24.0 ja",
+          "captions": "/assets/help-media/ja/after-delete-next.vtt",
+          "transcript": [
+            "受信トレイ。既読メールの中に未読メールが 2 通あります。",
+            "メールの設定、削除：削除後に何が開くかを決める選択肢。",
+            "選択肢を選びます。その下の表示例に、削除後に何が開いた状態になるかが表示されます。",
+            "メールを開きます。",
+            "閲覧ペインから削除します。",
+            "選択肢で選んだメールが、すでに表示されています。"
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "recordingFrames": 166,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "eaee8d3ba046bed1a497834f291e228ac14c879c75be8c63ad0bc0e7297df7d3",
+          "sha256": {
+            "mp4": "b3e8bf0e1f26f1473eafb204818e9a53b444d2142861f84d8e36819ffa427c89",
+            "jpg": "46345629a3efe2f312aa531e8e0cc99485453c59c2793e9df47a69e84c68e57a",
+            "vtt": "e102576eb7d81403bec476023c6fbf02107a45024a44b53bcc40231d6835ef61"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/ja/after-delete-previous-option.webp",
+          "imageAlt": "メールの設定、削除。「前のメールを選ぶ」を選択し、表示例を表示 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.984,
+          "sourceSHA256": "8bfc50222d14d35bd087609561a47047d640c827c00c6911a66d6a217b88ae6a",
+          "sha256": {
+            "webp": "72d186867d3c8f14c84de316c56bcef10ccc8213439615febe4ec62e7544bec3"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/ja/after-delete-previous-open.webp",
+          "imageAlt": "受信トレイ。削除前の、閲覧ペインに 1 通のメールが開いている状態 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.409,
+          "sourceSHA256": "8bfc50222d14d35bd087609561a47047d640c827c00c6911a66d6a217b88ae6a",
+          "sha256": {
+            "webp": "18abf9e70dfbd0c865f2bb2d16d495f2c7546b8261ea26ac2829321be8d6792c"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/ja/after-delete-previous-after.webp",
+          "imageAlt": "削除後の閲覧ペイン：削除したメールの上のメールが開いています · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.787,
+          "sourceSHA256": "8bfc50222d14d35bd087609561a47047d640c827c00c6911a66d6a217b88ae6a",
+          "sha256": {
+            "webp": "9ec6e60463a840a02d84cdbdf83eb227726089425d8ef7394ec707b12a5910ef"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/ja/after-delete-previous.mp4",
+          "videoLabel": "メール削除後：前のメールを選ぶ · MailVault version 2.24.0 ja",
+          "poster": "/assets/help-media/ja/after-delete-previous.jpg",
+          "posterAlt": "メール削除後：前のメールを選ぶ · MailVault version 2.24.0 ja",
+          "captions": "/assets/help-media/ja/after-delete-previous.vtt",
+          "transcript": [
+            "受信トレイ。既読メールの中に未読メールが 2 通あります。",
+            "メールの設定、削除：削除後に何が開くかを決める選択肢。",
+            "選択肢を選びます。その下の表示例に、削除後に何が開いた状態になるかが表示されます。",
+            "メールを開きます。",
+            "閲覧ペインから削除します。",
+            "選択肢で選んだメールが、すでに表示されています。"
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "recordingFrames": 166,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "8bfc50222d14d35bd087609561a47047d640c827c00c6911a66d6a217b88ae6a",
+          "sha256": {
+            "mp4": "92b82715e326c7c09d06efed7ff61644899a07b2eebc808b12134d1084dfbafb",
+            "jpg": "8daf8a460ec38bf434818d8d0204991c8be9eeb88ff69c03bd250767be51c372",
+            "vtt": "636691ca20878094f64c87758cb6c082952fb47fe296fe965ba87d793473501a"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/ja/after-delete-next-unread-option.webp",
+          "imageAlt": "メールの設定、削除。「次の未読メールを選ぶ」を選択し、表示例を表示 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.988999999999999,
+          "sourceSHA256": "11a4f1a707d0c1d2166d6b07bd947a6ecd4868a22d24aa67f35e043359a339c7",
+          "sha256": {
+            "webp": "f79f59522dd998974d46cf97d15b192a946621f0b68b951a301c6f148eb74d4a"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/ja/after-delete-next-unread-open.webp",
+          "imageAlt": "受信トレイ。削除前の、閲覧ペインに 1 通のメールが開いている状態 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.399,
+          "sourceSHA256": "11a4f1a707d0c1d2166d6b07bd947a6ecd4868a22d24aa67f35e043359a339c7",
+          "sha256": {
+            "webp": "6c901ea829114c73cad2b6970d51b2f44990003a69f24f0da8d238d445d1fe99"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/ja/after-delete-next-unread-after.webp",
+          "imageAlt": "削除後の閲覧ペイン：下にある次の未読メールが開いています · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.777,
+          "sourceSHA256": "11a4f1a707d0c1d2166d6b07bd947a6ecd4868a22d24aa67f35e043359a339c7",
+          "sha256": {
+            "webp": "930dd4a8dd16cac4ec0f9c5766b6b69171475bae5731b8f5dcc992ed6fd69007"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/ja/after-delete-next-unread.mp4",
+          "videoLabel": "メール削除後：次の未読メールを選ぶ · MailVault version 2.24.0 ja",
+          "poster": "/assets/help-media/ja/after-delete-next-unread.jpg",
+          "posterAlt": "メール削除後：次の未読メールを選ぶ · MailVault version 2.24.0 ja",
+          "captions": "/assets/help-media/ja/after-delete-next-unread.vtt",
+          "transcript": [
+            "受信トレイ。既読メールの中に未読メールが 2 通あります。",
+            "メールの設定、削除：削除後に何が開くかを決める選択肢。",
+            "選択肢を選びます。その下の表示例に、削除後に何が開いた状態になるかが表示されます。",
+            "メールを開きます。",
+            "閲覧ペインから削除します。",
+            "選択肢で選んだメールが、すでに表示されています。"
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "recordingFrames": 318,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "11a4f1a707d0c1d2166d6b07bd947a6ecd4868a22d24aa67f35e043359a339c7",
+          "sha256": {
+            "mp4": "18cf83568ba1054b4cea25adb6aa687a54239f8bc35b7dd5037d6505c119ea7e",
+            "jpg": "5694cdfd487524326f1aff20c7c6d3626bd9e1a97e1b74175c38d352d3481e65",
+            "vtt": "4258c10b7fb82aa0b4bb405618c8eef2dacc189d25dd422a82ec9bb3080309d8"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/ja/after-delete-previous-unread-option.webp",
+          "imageAlt": "メールの設定、削除。「前の未読メールを選ぶ」を選択し、表示例を表示 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.984,
+          "sourceSHA256": "c999528b0eed0db5d5d9765c61bfb26b97734226410d5252632339b7573ffac5",
+          "sha256": {
+            "webp": "8418512f587d56c2644531d0d60e03dc5c83343ce32bcb90e47e8ce42ffa5652"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/ja/after-delete-previous-unread-open.webp",
+          "imageAlt": "受信トレイ。削除前の、閲覧ペインに 1 通のメールが開いている状態 · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.391,
+          "sourceSHA256": "c999528b0eed0db5d5d9765c61bfb26b97734226410d5252632339b7573ffac5",
+          "sha256": {
+            "webp": "6c901ea829114c73cad2b6970d51b2f44990003a69f24f0da8d238d445d1fe99"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/ja/after-delete-previous-unread-after.webp",
+          "imageAlt": "削除後の閲覧ペイン：上にある前の未読メールが開いています · MailVault version 2.24.0 ja",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.779,
+          "sourceSHA256": "c999528b0eed0db5d5d9765c61bfb26b97734226410d5252632339b7573ffac5",
+          "sha256": {
+            "webp": "4d08b53663965845cd154856621d3ea16885e42b5a7293efecdb404031655178"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/ja/after-delete-previous-unread.mp4",
+          "videoLabel": "メール削除後：前の未読メールを選ぶ · MailVault version 2.24.0 ja",
+          "poster": "/assets/help-media/ja/after-delete-previous-unread.jpg",
+          "posterAlt": "メール削除後：前の未読メールを選ぶ · MailVault version 2.24.0 ja",
+          "captions": "/assets/help-media/ja/after-delete-previous-unread.vtt",
+          "transcript": [
+            "受信トレイ。既読メールの中に未読メールが 2 通あります。",
+            "メールの設定、削除：削除後に何が開くかを決める選択肢。",
+            "選択肢を選びます。その下の表示例に、削除後に何が開いた状態になるかが表示されます。",
+            "メールを開きます。",
+            "閲覧ペインから削除します。",
+            "選択肢で選んだメールが、すでに表示されています。"
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ja",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "recordingFrames": 324,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "c999528b0eed0db5d5d9765c61bfb26b97734226410d5252632339b7573ffac5",
+          "sha256": {
+            "mp4": "4fd2babc9e727385d37ff9a8552a2451ac9d2649377e0d0dfe582c2eaa5de5e4",
+            "jpg": "9abd67b95f4693305525096066296a67789864121197cc0b13d557072474fa1a",
+            "vtt": "bde0e0d5139805cbd553aff5c3bcf2aee7bf147374e86d8237b7fb489104fe84"
+          }
         }
       }
     },
@@ -7403,6 +10014,441 @@
             "mp4": "078eabceed37394219dc96ae5491e3e71acdefebf2791e0071a0a69f5b834021",
             "jpg": "baa76e6780ac1b3edbd38ac91ac6e509192db9f01e4e3d13aa8c7dc0a8b68cc2",
             "vtt": "ecaf6dbbc1d1c69712cc1b1657b2a123409dbb56a8f0121beb8ce6c046ecb4b2"
+          }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/ko/after-delete-none-option.webp",
+          "imageAlt": "메일 환경설정, 삭제, 아무것도 선택하지 않음을 고른 상태와 그 예시 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.911,
+          "sourceSHA256": "85852d58bb1bddc3d00c3bbab574a1fccd00ba3f6656d3d22fad74ce063535cc",
+          "sha256": {
+            "webp": "d84d9e18d280cf10e7ffea1ddc6c3c21190cc881a88e842668d44820183a71fa"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/ko/after-delete-none-open.webp",
+          "imageAlt": "삭제하기 전, 읽기 창에 메일 한 통이 열려 있는 받은편지함 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.259,
+          "sourceSHA256": "85852d58bb1bddc3d00c3bbab574a1fccd00ba3f6656d3d22fad74ce063535cc",
+          "sha256": {
+            "webp": "90e6ba12ddccc6f53c552bad9489464d94b27d42a07a4a105123a24a4fc6137e"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/ko/after-delete-none-after.webp",
+          "imageAlt": "삭제 후의 읽기 창: 선택된 메일이 없음 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.566,
+          "sourceSHA256": "85852d58bb1bddc3d00c3bbab574a1fccd00ba3f6656d3d22fad74ce063535cc",
+          "sha256": {
+            "webp": "f1cecf2a65053aa22bca43fe37e2d286aa56e8debb685d76d10e49d354cc703d"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/ko/after-delete-none.mp4",
+          "videoLabel": "메일 삭제 후: 아무것도 선택하지 않음 · MailVault version 2.24.0 ko",
+          "poster": "/assets/help-media/ko/after-delete-none.jpg",
+          "posterAlt": "메일 삭제 후: 아무것도 선택하지 않음 · MailVault version 2.24.0 ko",
+          "captions": "/assets/help-media/ko/after-delete-none.vtt",
+          "transcript": [
+            "받은편지함, 읽은 메일 사이에 읽지 않은 메일 두 통.",
+            "메일 환경설정, 삭제: 삭제한 뒤 무엇이 열릴지 정하는 옵션.",
+            "옵션을 고르세요. 그 아래의 예시에 삭제한 뒤 열려 있게 될 메일이 표시됩니다.",
+            "메일을 엽니다.",
+            "읽기 창에서 삭제합니다.",
+            "선택된 메일이 없습니다. 읽기 창에서 메일을 고르라는 안내가 나타납니다."
+          ],
+          "duration": 17.766667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "recordingFrames": 155,
+          "sourceSeconds": 17.766667,
+          "sourceSHA256": "85852d58bb1bddc3d00c3bbab574a1fccd00ba3f6656d3d22fad74ce063535cc",
+          "sha256": {
+            "mp4": "41ce25ca861b1148d48a93d8a93fa259d08d38df9ca3abb27a4350d523619287",
+            "jpg": "d224430654b13ab7585325460ad275792661e47a3f625b23ba47198f8199b6b6",
+            "vtt": "a81bc3df02e85b9af8fe666e7b8548e02f11135dd9ff89bc50fd2a35e20646c6"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/ko/after-delete-next-option.webp",
+          "imageAlt": "메일 환경설정, 삭제, 다음 메일 선택을 고른 상태와 그 예시 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.988,
+          "sourceSHA256": "a5d96f5fdb4f390911ee72699ed5d4ad9238559fbb4e1d247d56ccb3d9b5f859",
+          "sha256": {
+            "webp": "45dd10db74b6fccfc36157573d1e1a1568c6500e7e5723c8258e0282edd060a2"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/ko/after-delete-next-open.webp",
+          "imageAlt": "삭제하기 전, 읽기 창에 메일 한 통이 열려 있는 받은편지함 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.394,
+          "sourceSHA256": "a5d96f5fdb4f390911ee72699ed5d4ad9238559fbb4e1d247d56ccb3d9b5f859",
+          "sha256": {
+            "webp": "f4fa474c64bf4a3ecf6358c3471e65ab3c0d21a12c1299bfcefc59dfc19c83e9"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/ko/after-delete-next-after.webp",
+          "imageAlt": "삭제 후의 읽기 창: 삭제한 메일 아래에 있는 메일이 열려 있음 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.779,
+          "sourceSHA256": "a5d96f5fdb4f390911ee72699ed5d4ad9238559fbb4e1d247d56ccb3d9b5f859",
+          "sha256": {
+            "webp": "eecb125374a7d50398371d7299c6bf930ff13081589f519abe3336f94414124c"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/ko/after-delete-next.mp4",
+          "videoLabel": "메일 삭제 후: 다음 메일 선택 · MailVault version 2.24.0 ko",
+          "poster": "/assets/help-media/ko/after-delete-next.jpg",
+          "posterAlt": "메일 삭제 후: 다음 메일 선택 · MailVault version 2.24.0 ko",
+          "captions": "/assets/help-media/ko/after-delete-next.vtt",
+          "transcript": [
+            "받은편지함, 읽은 메일 사이에 읽지 않은 메일 두 통.",
+            "메일 환경설정, 삭제: 삭제한 뒤 무엇이 열릴지 정하는 옵션.",
+            "옵션을 고르세요. 그 아래의 예시에 삭제한 뒤 열려 있게 될 메일이 표시됩니다.",
+            "메일을 엽니다.",
+            "읽기 창에서 삭제합니다.",
+            "읽기 창에 옵션이 고른 메일이 이미 열려 있습니다."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "recordingFrames": 157,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "a5d96f5fdb4f390911ee72699ed5d4ad9238559fbb4e1d247d56ccb3d9b5f859",
+          "sha256": {
+            "mp4": "52d6de62c537874a7e5974152f72919acd67ac9b34e025e4e0fab81acc0eb8c2",
+            "jpg": "970739c791f77fd4c00e62759c5607c5d69ab39d42dce72b39bb1251983b4fba",
+            "vtt": "308dcffe01fa9bd0af4953e28d90264356f7423bd8ab3fda77e8323fb02befca"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/ko/after-delete-previous-option.webp",
+          "imageAlt": "메일 환경설정, 삭제, 이전 메일 선택을 고른 상태와 그 예시 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.99,
+          "sourceSHA256": "81fa964c09ff32287a46a33567563115bb173586701d18bf03671c36efd131bc",
+          "sha256": {
+            "webp": "3cd5c483aca197e53c1106e12290069e6e4b4aaf40b4e9a93ae1f91d577faed5"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/ko/after-delete-previous-open.webp",
+          "imageAlt": "삭제하기 전, 읽기 창에 메일 한 통이 열려 있는 받은편지함 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.394,
+          "sourceSHA256": "81fa964c09ff32287a46a33567563115bb173586701d18bf03671c36efd131bc",
+          "sha256": {
+            "webp": "f4fa474c64bf4a3ecf6358c3471e65ab3c0d21a12c1299bfcefc59dfc19c83e9"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/ko/after-delete-previous-after.webp",
+          "imageAlt": "삭제 후의 읽기 창: 삭제한 메일 위에 있는 메일이 열려 있음 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.78,
+          "sourceSHA256": "81fa964c09ff32287a46a33567563115bb173586701d18bf03671c36efd131bc",
+          "sha256": {
+            "webp": "037b0139f40a979de02e2951d396e51726445385c81bbe4e8b743a5faee9a2c9"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/ko/after-delete-previous.mp4",
+          "videoLabel": "메일 삭제 후: 이전 메일 선택 · MailVault version 2.24.0 ko",
+          "poster": "/assets/help-media/ko/after-delete-previous.jpg",
+          "posterAlt": "메일 삭제 후: 이전 메일 선택 · MailVault version 2.24.0 ko",
+          "captions": "/assets/help-media/ko/after-delete-previous.vtt",
+          "transcript": [
+            "받은편지함, 읽은 메일 사이에 읽지 않은 메일 두 통.",
+            "메일 환경설정, 삭제: 삭제한 뒤 무엇이 열릴지 정하는 옵션.",
+            "옵션을 고르세요. 그 아래의 예시에 삭제한 뒤 열려 있게 될 메일이 표시됩니다.",
+            "메일을 엽니다.",
+            "읽기 창에서 삭제합니다.",
+            "읽기 창에 옵션이 고른 메일이 이미 열려 있습니다."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "recordingFrames": 163,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "81fa964c09ff32287a46a33567563115bb173586701d18bf03671c36efd131bc",
+          "sha256": {
+            "mp4": "ab1979745edc9dd3663a4cc5f1714cf83c015924c4038588df2ab4087592de73",
+            "jpg": "6da84ca7f553fff3237258d53fd91cb7d21c96217a5b0236f7a49100e2266473",
+            "vtt": "e24c212fb5961d57f03623e30aa27d9f1350cd104e21399d76285fc8c7ccd758"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/ko/after-delete-next-unread-option.webp",
+          "imageAlt": "메일 환경설정, 삭제, 다음 읽지 않은 메일 선택을 고른 상태와 그 예시 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.98,
+          "sourceSHA256": "1f09cbc9bb44eb763809b93bbe6aa605c28e132b826c47f4d7d5a5c48ea30c05",
+          "sha256": {
+            "webp": "32b8dd76e1e4e359b26cc749910404e63cfde138fcbfec1733aaa411a464f019"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/ko/after-delete-next-unread-open.webp",
+          "imageAlt": "삭제하기 전, 읽기 창에 메일 한 통이 열려 있는 받은편지함 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.389,
+          "sourceSHA256": "1f09cbc9bb44eb763809b93bbe6aa605c28e132b826c47f4d7d5a5c48ea30c05",
+          "sha256": {
+            "webp": "f4fa474c64bf4a3ecf6358c3471e65ab3c0d21a12c1299bfcefc59dfc19c83e9"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/ko/after-delete-next-unread-after.webp",
+          "imageAlt": "삭제 후의 읽기 창: 아래쪽의 다음 읽지 않은 메일이 열려 있음 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.78,
+          "sourceSHA256": "1f09cbc9bb44eb763809b93bbe6aa605c28e132b826c47f4d7d5a5c48ea30c05",
+          "sha256": {
+            "webp": "1f12abf49d2c59ac0f12f41354bcd4eae3dbfa8e47895a4f1eba323241dd25cd"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/ko/after-delete-next-unread.mp4",
+          "videoLabel": "메일 삭제 후: 다음 읽지 않은 메일 선택 · MailVault version 2.24.0 ko",
+          "poster": "/assets/help-media/ko/after-delete-next-unread.jpg",
+          "posterAlt": "메일 삭제 후: 다음 읽지 않은 메일 선택 · MailVault version 2.24.0 ko",
+          "captions": "/assets/help-media/ko/after-delete-next-unread.vtt",
+          "transcript": [
+            "받은편지함, 읽은 메일 사이에 읽지 않은 메일 두 통.",
+            "메일 환경설정, 삭제: 삭제한 뒤 무엇이 열릴지 정하는 옵션.",
+            "옵션을 고르세요. 그 아래의 예시에 삭제한 뒤 열려 있게 될 메일이 표시됩니다.",
+            "메일을 엽니다.",
+            "읽기 창에서 삭제합니다.",
+            "읽기 창에 옵션이 고른 메일이 이미 열려 있습니다."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "recordingFrames": 323,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "1f09cbc9bb44eb763809b93bbe6aa605c28e132b826c47f4d7d5a5c48ea30c05",
+          "sha256": {
+            "mp4": "36bb6b508ba7e33ce02d9e3f5c0d8be0df5c48d6b413ff036174ce9d89779272",
+            "jpg": "0ef6a05284fbc4646ce63c390bf2c04e9a171ea154c07983807cf8056b52c70e",
+            "vtt": "a8f05229175b0f6fb49422cb42d3f4c6ba84d49bcb2fa29c160650c3ab5e77a8"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/ko/after-delete-previous-unread-option.webp",
+          "imageAlt": "메일 환경설정, 삭제, 이전 읽지 않은 메일 선택을 고른 상태와 그 예시 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.985,
+          "sourceSHA256": "ca54553f5d789c6a21ad71b2f2cad92c5a82ca7299b15b7edad65f99ccd8f199",
+          "sha256": {
+            "webp": "019637deb0306c654577ed59285464ed34214c812065ea424784d3b25941592c"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/ko/after-delete-previous-unread-open.webp",
+          "imageAlt": "삭제하기 전, 읽기 창에 메일 한 통이 열려 있는 받은편지함 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.383,
+          "sourceSHA256": "ca54553f5d789c6a21ad71b2f2cad92c5a82ca7299b15b7edad65f99ccd8f199",
+          "sha256": {
+            "webp": "01af9714fe30c9d3a52a11f2b76eee0eba9c4b59b0feaf4a3102e09d4970b5ce"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/ko/after-delete-previous-unread-after.webp",
+          "imageAlt": "삭제 후의 읽기 창: 위쪽의 이전 읽지 않은 메일이 열려 있음 · MailVault version 2.24.0 ko",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.778,
+          "sourceSHA256": "ca54553f5d789c6a21ad71b2f2cad92c5a82ca7299b15b7edad65f99ccd8f199",
+          "sha256": {
+            "webp": "0e5075c4c007d0929b23d1b911fc35142f73b40c7292774ffdcf11885624fe5a"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/ko/after-delete-previous-unread.mp4",
+          "videoLabel": "메일 삭제 후: 이전 읽지 않은 메일 선택 · MailVault version 2.24.0 ko",
+          "poster": "/assets/help-media/ko/after-delete-previous-unread.jpg",
+          "posterAlt": "메일 삭제 후: 이전 읽지 않은 메일 선택 · MailVault version 2.24.0 ko",
+          "captions": "/assets/help-media/ko/after-delete-previous-unread.vtt",
+          "transcript": [
+            "받은편지함, 읽은 메일 사이에 읽지 않은 메일 두 통.",
+            "메일 환경설정, 삭제: 삭제한 뒤 무엇이 열릴지 정하는 옵션.",
+            "옵션을 고르세요. 그 아래의 예시에 삭제한 뒤 열려 있게 될 메일이 표시됩니다.",
+            "메일을 엽니다.",
+            "읽기 창에서 삭제합니다.",
+            "읽기 창에 옵션이 고른 메일이 이미 열려 있습니다."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 ko",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "recordingFrames": 318,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "ca54553f5d789c6a21ad71b2f2cad92c5a82ca7299b15b7edad65f99ccd8f199",
+          "sha256": {
+            "mp4": "920f3fec206b983d70d1457e1c4b3537cc1b04ff30d90b04b1a0ae31b8b3ec42",
+            "jpg": "a8753bb2f765c682f352c9578b0f1689b08b0d5496b2c58accc2128b62414c1a",
+            "vtt": "84a26a897ecaaa7619a2384c5241c81e1106acbf1d737f26a5099a1a76468139"
           }
         }
       }
@@ -8460,6 +11506,441 @@
             "jpg": "cec993b720fb93474dc5f13f5d05127fa63ef077baff655dd775d870b998de05",
             "vtt": "e852c10eb611a5cf33f597363e41a510551cd98196ae7de66a519f32005e3101"
           }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/zh/after-delete-none-option.webp",
+          "imageAlt": "邮件偏好设置，删除，已选择“不选中任何邮件”及其示例 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 9.109,
+          "sourceSHA256": "481eaf2d845f3c3c2f6180b1712df47cd248c72d7eb1bdeca66a3be98375b41e",
+          "sha256": {
+            "webp": "c8db2788c80b0a352650817dc86fac517dc185ff7dbf8f5df02c5772d90e567e"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/zh/after-delete-none-open.webp",
+          "imageAlt": "收件箱，阅读窗格中打开着一封邮件，尚未删除 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.525,
+          "sourceSHA256": "481eaf2d845f3c3c2f6180b1712df47cd248c72d7eb1bdeca66a3be98375b41e",
+          "sha256": {
+            "webp": "62a086ee2003a0f53865c59de126259149bebb9f7bd57fe84e7460b6fdb93214"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/zh/after-delete-none-after.webp",
+          "imageAlt": "删除后的阅读窗格：没有选中任何邮件 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.883,
+          "sourceSHA256": "481eaf2d845f3c3c2f6180b1712df47cd248c72d7eb1bdeca66a3be98375b41e",
+          "sha256": {
+            "webp": "1adcb3b75f825aefaacbebed1f5987b986d215fc24d9efdb74c49a9a6d7dbb29"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/zh/after-delete-none.mp4",
+          "videoLabel": "删除邮件后：不选中任何邮件 · MailVault version 2.24.0 zh",
+          "poster": "/assets/help-media/zh/after-delete-none.jpg",
+          "posterAlt": "删除邮件后：不选中任何邮件 · MailVault version 2.24.0 zh",
+          "captions": "/assets/help-media/zh/after-delete-none.vtt",
+          "transcript": [
+            "收件箱，已读邮件中有两封未读邮件。",
+            "邮件偏好设置，删除：决定删除后打开什么的选项。",
+            "选择该选项。它下方的示例会显示删除后打开的内容。",
+            "打开一封邮件。",
+            "在阅读窗格中删除它。",
+            "没有选中任何邮件：阅读窗格提示你选择一封邮件。"
+          ],
+          "duration": 18.066667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "recordingFrames": 155,
+          "sourceSeconds": 18.083333,
+          "sourceSHA256": "481eaf2d845f3c3c2f6180b1712df47cd248c72d7eb1bdeca66a3be98375b41e",
+          "sha256": {
+            "mp4": "34105588bd6b39c606d5a0d5f8046fdbe3dce8278cdf7845a319b30d778d84e7",
+            "jpg": "b89959bc098a0ae992d0308a8ff18ebc5ef9ac0b25b60620be3bcc678c11e0dc",
+            "vtt": "eed8b5e62360835e300733bed44de80c9100a0cbf6d166277a878b5ef2c90b64"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/zh/after-delete-next-option.webp",
+          "imageAlt": "邮件偏好设置，删除，已选择“选中下一封邮件”及其示例 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.993,
+          "sourceSHA256": "2ac0b0e4a363d5ae2b051db5040525e4542f223a3481e3867abefe59f4656ae7",
+          "sha256": {
+            "webp": "6b9b4d8626099b22f5272dc333f4869cf5ba6562f0a6beb7e9a26adeeb09592d"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/zh/after-delete-next-open.webp",
+          "imageAlt": "收件箱，阅读窗格中打开着一封邮件，尚未删除 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.393,
+          "sourceSHA256": "2ac0b0e4a363d5ae2b051db5040525e4542f223a3481e3867abefe59f4656ae7",
+          "sha256": {
+            "webp": "ff545e340730cc3455e07fda080b8dc19390cf0e40bfa6f99d99571b4558bf70"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/zh/after-delete-next-after.webp",
+          "imageAlt": "删除后的阅读窗格：已删除邮件下方的邮件已打开 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.788,
+          "sourceSHA256": "2ac0b0e4a363d5ae2b051db5040525e4542f223a3481e3867abefe59f4656ae7",
+          "sha256": {
+            "webp": "e65bb47858b6158a8dbd8ae0d3192c0bcfe57edda791c3638e41e9599d72a222"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/zh/after-delete-next.mp4",
+          "videoLabel": "删除邮件后：选中下一封邮件 · MailVault version 2.24.0 zh",
+          "poster": "/assets/help-media/zh/after-delete-next.jpg",
+          "posterAlt": "删除邮件后：选中下一封邮件 · MailVault version 2.24.0 zh",
+          "captions": "/assets/help-media/zh/after-delete-next.vtt",
+          "transcript": [
+            "收件箱，已读邮件中有两封未读邮件。",
+            "邮件偏好设置，删除：决定删除后打开什么的选项。",
+            "选择该选项。它下方的示例会显示删除后打开的内容。",
+            "打开一封邮件。",
+            "在阅读窗格中删除它。",
+            "阅读窗格已显示该选项所选的邮件。"
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "recordingFrames": 166,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "2ac0b0e4a363d5ae2b051db5040525e4542f223a3481e3867abefe59f4656ae7",
+          "sha256": {
+            "mp4": "8731b59982bf75bc7cc0cff4174aee158a78b7bcc9c127f9eaa86ba52156b6d4",
+            "jpg": "ff1c235657af1d7597356dee8279c69f59d3f8bff9c8a106c268cb985ca1244e",
+            "vtt": "7c642c0cf3ec8f4573a9c78a01d4e699a1be357af15f197c869af7cfc8d3128f"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/zh/after-delete-previous-option.webp",
+          "imageAlt": "邮件偏好设置，删除，已选择“选中上一封邮件”及其示例 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.988,
+          "sourceSHA256": "667dfc55b4fbe307f41137389d1fe4c2a125285a1c828c83fc9a43c4b6c850e2",
+          "sha256": {
+            "webp": "253b5783360568a5ee24c8dcaaa701ffa67944128c1580e04dc03468fa140353"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/zh/after-delete-previous-open.webp",
+          "imageAlt": "收件箱，阅读窗格中打开着一封邮件，尚未删除 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.391,
+          "sourceSHA256": "667dfc55b4fbe307f41137389d1fe4c2a125285a1c828c83fc9a43c4b6c850e2",
+          "sha256": {
+            "webp": "bbbe94b6f3f6e543e1756e4c5b81bdee4e6584140a43616afab3595f4379a510"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/zh/after-delete-previous-after.webp",
+          "imageAlt": "删除后的阅读窗格：已删除邮件上方的邮件已打开 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.778,
+          "sourceSHA256": "667dfc55b4fbe307f41137389d1fe4c2a125285a1c828c83fc9a43c4b6c850e2",
+          "sha256": {
+            "webp": "e1548ca7209e43166a46e69a35bbfb13f19c3112a7a683cdb3a6341f87098e15"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/zh/after-delete-previous.mp4",
+          "videoLabel": "删除邮件后：选中上一封邮件 · MailVault version 2.24.0 zh",
+          "poster": "/assets/help-media/zh/after-delete-previous.jpg",
+          "posterAlt": "删除邮件后：选中上一封邮件 · MailVault version 2.24.0 zh",
+          "captions": "/assets/help-media/zh/after-delete-previous.vtt",
+          "transcript": [
+            "收件箱，已读邮件中有两封未读邮件。",
+            "邮件偏好设置，删除：决定删除后打开什么的选项。",
+            "选择该选项。它下方的示例会显示删除后打开的内容。",
+            "打开一封邮件。",
+            "在阅读窗格中删除它。",
+            "阅读窗格已显示该选项所选的邮件。"
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "recordingFrames": 166,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "667dfc55b4fbe307f41137389d1fe4c2a125285a1c828c83fc9a43c4b6c850e2",
+          "sha256": {
+            "mp4": "bcc77b374f1b2d827810b0a085f8c6bc46bdbf9c8583ad89edafb7e2f8bc7968",
+            "jpg": "8748cff7959eae97e0204a7a97d5e7290a37dbf93551a8d8413a0d46054e563c",
+            "vtt": "592ba6abae3a4dccbd6a76b080ea519fb7595d047c6cb5f601a746e0457d422e"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/zh/after-delete-next-unread-option.webp",
+          "imageAlt": "邮件偏好设置，删除，已选择“选中下一封未读邮件”及其示例 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.988999999999999,
+          "sourceSHA256": "494cb556d129364a143fc69ce461f6cde71fbce4d4d0937c792f5f5fc3418c1d",
+          "sha256": {
+            "webp": "fca2876385c6203523455980aaec1a60487959fe9d76ab6dac73d34aea788b7e"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/zh/after-delete-next-unread-open.webp",
+          "imageAlt": "收件箱，阅读窗格中打开着一封邮件，尚未删除 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.397,
+          "sourceSHA256": "494cb556d129364a143fc69ce461f6cde71fbce4d4d0937c792f5f5fc3418c1d",
+          "sha256": {
+            "webp": "ff545e340730cc3455e07fda080b8dc19390cf0e40bfa6f99d99571b4558bf70"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/zh/after-delete-next-unread-after.webp",
+          "imageAlt": "删除后的阅读窗格：下方的下一封未读邮件已打开 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.78,
+          "sourceSHA256": "494cb556d129364a143fc69ce461f6cde71fbce4d4d0937c792f5f5fc3418c1d",
+          "sha256": {
+            "webp": "b72cb143fd422b989e178791ed9bff1ed83c1d31b90e0ede5f802305f552af50"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/zh/after-delete-next-unread.mp4",
+          "videoLabel": "删除邮件后：选中下一封未读邮件 · MailVault version 2.24.0 zh",
+          "poster": "/assets/help-media/zh/after-delete-next-unread.jpg",
+          "posterAlt": "删除邮件后：选中下一封未读邮件 · MailVault version 2.24.0 zh",
+          "captions": "/assets/help-media/zh/after-delete-next-unread.vtt",
+          "transcript": [
+            "收件箱，已读邮件中有两封未读邮件。",
+            "邮件偏好设置，删除：决定删除后打开什么的选项。",
+            "选择该选项。它下方的示例会显示删除后打开的内容。",
+            "打开一封邮件。",
+            "在阅读窗格中删除它。",
+            "阅读窗格已显示该选项所选的邮件。"
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "recordingFrames": 323,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "494cb556d129364a143fc69ce461f6cde71fbce4d4d0937c792f5f5fc3418c1d",
+          "sha256": {
+            "mp4": "e288fe7ac7f6392431933e71627f3f75ce47e23e04c093c1c352d7e112f8bc0b",
+            "jpg": "2d03a80bf6d57cf9d888bb2e5665dd011f46389f8f54f70097c632bcde51b5f9",
+            "vtt": "290a58e32c628ee0b9b9257af25edc0bf1a3ea8394291b5a9a7730477d7568fe"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/zh/after-delete-previous-unread-option.webp",
+          "imageAlt": "邮件偏好设置，删除，已选择“选中上一封未读邮件”及其示例 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.997,
+          "sourceSHA256": "0947fd5b3a5b0fc5e1f0c345601c30caaaf4881d5a723071b73ac2d0ccc1375b",
+          "sha256": {
+            "webp": "d29923e244bae78cda658e4209837144dd37733be2d4ae9ca7bf7f4fa8c7322d"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/zh/after-delete-previous-unread-open.webp",
+          "imageAlt": "收件箱，阅读窗格中打开着一封邮件，尚未删除 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.409,
+          "sourceSHA256": "0947fd5b3a5b0fc5e1f0c345601c30caaaf4881d5a723071b73ac2d0ccc1375b",
+          "sha256": {
+            "webp": "973d70fe3a6f61e70dfb07c4e0a5a73d784381d0b13ba73a63d464ca29b535e0"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/zh/after-delete-previous-unread-after.webp",
+          "imageAlt": "删除后的阅读窗格：上方的上一封未读邮件已打开 · MailVault version 2.24.0 zh",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.793,
+          "sourceSHA256": "0947fd5b3a5b0fc5e1f0c345601c30caaaf4881d5a723071b73ac2d0ccc1375b",
+          "sha256": {
+            "webp": "578d8cb23e18128828eb735b9fe193dacc142bfbcea2e64415c42c66cef0ec71"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/zh/after-delete-previous-unread.mp4",
+          "videoLabel": "删除邮件后：选中上一封未读邮件 · MailVault version 2.24.0 zh",
+          "poster": "/assets/help-media/zh/after-delete-previous-unread.jpg",
+          "posterAlt": "删除邮件后：选中上一封未读邮件 · MailVault version 2.24.0 zh",
+          "captions": "/assets/help-media/zh/after-delete-previous-unread.vtt",
+          "transcript": [
+            "收件箱，已读邮件中有两封未读邮件。",
+            "邮件偏好设置，删除：决定删除后打开什么的选项。",
+            "选择该选项。它下方的示例会显示删除后打开的内容。",
+            "打开一封邮件。",
+            "在阅读窗格中删除它。",
+            "阅读窗格已显示该选项所选的邮件。"
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 zh",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "zh",
+          "recordingVerified": true,
+          "recordingFrames": 323,
+          "sourceSeconds": 17.983333,
+          "sourceSHA256": "0947fd5b3a5b0fc5e1f0c345601c30caaaf4881d5a723071b73ac2d0ccc1375b",
+          "sha256": {
+            "mp4": "18b502d96d45ea4da238adfc48ba8980db7b8be879326e43afb05f53b3946887",
+            "jpg": "f19702ffd98f3cf1724ee3ca715d8c90aca3c6965215672253ea382207a28081",
+            "vtt": "3b158ce09e4425e5f48d88487f0c265577f48ac3f46be13a54a910baedfd4ce5"
+          }
         }
       }
     },
@@ -9515,6 +12996,441 @@
             "mp4": "9c1eaafac791d6e2bd55eaa381ccb15384fa3e3b1e547777c4748bb5f966fddb",
             "jpg": "9e101210cd66634b8c00bc4b87683f766f513a216bdb9c7da21356ae8e3695cc",
             "vtt": "3460adfbf3b950c403da01626843279add2bb4813053b3e508292a9dd0337733"
+          }
+        },
+        "after-delete-none-option": {
+          "image": "/assets/help-media/pt-br/after-delete-none-option.webp",
+          "imageAlt": "Preferências de e-mail, Exclusão, com Não selecionar nada escolhido e o exemplo · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 9.001,
+          "sourceSHA256": "9af462231119524dff81105727f426bbd961824844083e1afdfe096743a84ef7",
+          "sha256": {
+            "webp": "29efeed0bbf5506a77d281abfe0cec874dfddb437b005c9800abaa43f78f1a2e"
+          }
+        },
+        "after-delete-none-open": {
+          "image": "/assets/help-media/pt-br/after-delete-none-open.webp",
+          "imageAlt": "Caixa de entrada com um e-mail aberto no painel de leitura, antes de ser excluído · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.342,
+          "sourceSHA256": "9af462231119524dff81105727f426bbd961824844083e1afdfe096743a84ef7",
+          "sha256": {
+            "webp": "1b7272a5e3bfac88328f5ea6b50885521c61ff41d8f3ca98212a92a90bed6178"
+          }
+        },
+        "after-delete-none-after": {
+          "image": "/assets/help-media/pt-br/after-delete-none-after.webp",
+          "imageAlt": "Painel de leitura depois da exclusão: nenhum e-mail selecionado · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.654,
+          "sourceSHA256": "9af462231119524dff81105727f426bbd961824844083e1afdfe096743a84ef7",
+          "sha256": {
+            "webp": "847b83035e761a9c45bc2f3d400ea68f37c8c6e145570cc322b08687f177b443"
+          }
+        },
+        "after-delete-none": {
+          "video": "/assets/help-media/pt-br/after-delete-none.mp4",
+          "videoLabel": "Depois de excluir um e-mail: não selecionar nada · MailVault version 2.24.0 pt-br",
+          "poster": "/assets/help-media/pt-br/after-delete-none.jpg",
+          "posterAlt": "Depois de excluir um e-mail: não selecionar nada · MailVault version 2.24.0 pt-br",
+          "captions": "/assets/help-media/pt-br/after-delete-none.vtt",
+          "transcript": [
+            "A Caixa de entrada, com dois e-mails não lidos entre e-mails lidos.",
+            "Preferências de e-mail, Exclusão: a opção que decide o que abre depois de uma exclusão.",
+            "Escolha a opção. O exemplo abaixo dela mostra o que fica aberto depois de uma exclusão.",
+            "Abra um e-mail.",
+            "Exclua-o no painel de leitura.",
+            "Nada está selecionado: o painel de leitura pede que você escolha um e-mail."
+          ],
+          "duration": 17.866667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "recordingFrames": 157,
+          "sourceSeconds": 17.85,
+          "sourceSHA256": "9af462231119524dff81105727f426bbd961824844083e1afdfe096743a84ef7",
+          "sha256": {
+            "mp4": "6cdc7acdce0d1bd7dd169c5d5b9ac9cb76a2e6feb04dabcd4afac36d82a95fb7",
+            "jpg": "00d067370b7a1bf3214d13516271e25dcd52943aae7aba862f750c5f9d0ec1c8",
+            "vtt": "3e0dd7bceeeeae60bc7d8cf77a0f88653a3ba3ef8c442166f62a5d0f4cea8c68"
+          }
+        },
+        "after-delete-next-option": {
+          "image": "/assets/help-media/pt-br/after-delete-next-option.webp",
+          "imageAlt": "Preferências de e-mail, Exclusão, com Selecionar o próximo e-mail escolhido e o exemplo · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.991,
+          "sourceSHA256": "835c8ae31fb19181038e3b7ce31786d1c2e8c6e0ccf23b3ad56dbb0868c2acd4",
+          "sha256": {
+            "webp": "cd7147fea98536cdacff251538b3359409a8de7d691558c664f22a24e86fca04"
+          }
+        },
+        "after-delete-next-open": {
+          "image": "/assets/help-media/pt-br/after-delete-next-open.webp",
+          "imageAlt": "Caixa de entrada com um e-mail aberto no painel de leitura, antes de ser excluído · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.397,
+          "sourceSHA256": "835c8ae31fb19181038e3b7ce31786d1c2e8c6e0ccf23b3ad56dbb0868c2acd4",
+          "sha256": {
+            "webp": "b48cff74beb9ada1b955e6f3b3f0899c872153a11498e27101db6bfe6f21a3b2"
+          }
+        },
+        "after-delete-next-after": {
+          "image": "/assets/help-media/pt-br/after-delete-next-after.webp",
+          "imageAlt": "Painel de leitura depois da exclusão: o e-mail abaixo do excluído está aberto · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.799,
+          "sourceSHA256": "835c8ae31fb19181038e3b7ce31786d1c2e8c6e0ccf23b3ad56dbb0868c2acd4",
+          "sha256": {
+            "webp": "15765e991ed9125b6f234c59c0b29d63b85edb29f13cc6d335173a4546af0480"
+          }
+        },
+        "after-delete-next": {
+          "video": "/assets/help-media/pt-br/after-delete-next.mp4",
+          "videoLabel": "Depois de excluir um e-mail: selecionar o próximo e-mail · MailVault version 2.24.0 pt-br",
+          "poster": "/assets/help-media/pt-br/after-delete-next.jpg",
+          "posterAlt": "Depois de excluir um e-mail: selecionar o próximo e-mail · MailVault version 2.24.0 pt-br",
+          "captions": "/assets/help-media/pt-br/after-delete-next.vtt",
+          "transcript": [
+            "A Caixa de entrada, com dois e-mails não lidos entre e-mails lidos.",
+            "Preferências de e-mail, Exclusão: a opção que decide o que abre depois de uma exclusão.",
+            "Escolha a opção. O exemplo abaixo dela mostra o que fica aberto depois de uma exclusão.",
+            "Abra um e-mail.",
+            "Exclua-o no painel de leitura.",
+            "O painel de leitura já mostra o e-mail que a opção escolheu."
+          ],
+          "duration": 18.0,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "recordingFrames": 164,
+          "sourceSeconds": 18.0,
+          "sourceSHA256": "835c8ae31fb19181038e3b7ce31786d1c2e8c6e0ccf23b3ad56dbb0868c2acd4",
+          "sha256": {
+            "mp4": "eab3a2a816a2e526e9d8feb96a85df29335f288c94570a20cf36c08a68011ba4",
+            "jpg": "0ae41f0ab3105cdd883a82f30e0c3ceaf449deb9c5c5603df1e87988eb9ce64e",
+            "vtt": "fc4c20b4c34c526f62e9ef5c18439338c1f11b563d9025f92850b18d92bb0960"
+          }
+        },
+        "after-delete-previous-option": {
+          "image": "/assets/help-media/pt-br/after-delete-previous-option.webp",
+          "imageAlt": "Preferências de e-mail, Exclusão, com Selecionar o e-mail anterior escolhido e o exemplo · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.969999999999999,
+          "sourceSHA256": "6600ef7db1c89f7ab1ceb6bec1676ec4b861b52a0506cb7156a3007e6dd90c01",
+          "sha256": {
+            "webp": "48bc496f79061dae4b8eb5482a4f854be5f914638b495c4d3cea5a83913a155d"
+          }
+        },
+        "after-delete-previous-open": {
+          "image": "/assets/help-media/pt-br/after-delete-previous-open.webp",
+          "imageAlt": "Caixa de entrada com um e-mail aberto no painel de leitura, antes de ser excluído · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.384,
+          "sourceSHA256": "6600ef7db1c89f7ab1ceb6bec1676ec4b861b52a0506cb7156a3007e6dd90c01",
+          "sha256": {
+            "webp": "d7dbc04ab0d9b01919edc72976f01658ac9b32165a98f6a5690fb26a67e2c85a"
+          }
+        },
+        "after-delete-previous-after": {
+          "image": "/assets/help-media/pt-br/after-delete-previous-after.webp",
+          "imageAlt": "Painel de leitura depois da exclusão: o e-mail acima do excluído está aberto · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.771,
+          "sourceSHA256": "6600ef7db1c89f7ab1ceb6bec1676ec4b861b52a0506cb7156a3007e6dd90c01",
+          "sha256": {
+            "webp": "f52a774510c356ef586f688a7cdf98012c33a02c4aba455753c30f69847f61df"
+          }
+        },
+        "after-delete-previous": {
+          "video": "/assets/help-media/pt-br/after-delete-previous.mp4",
+          "videoLabel": "Depois de excluir um e-mail: selecionar o e-mail anterior · MailVault version 2.24.0 pt-br",
+          "poster": "/assets/help-media/pt-br/after-delete-previous.jpg",
+          "posterAlt": "Depois de excluir um e-mail: selecionar o e-mail anterior · MailVault version 2.24.0 pt-br",
+          "captions": "/assets/help-media/pt-br/after-delete-previous.vtt",
+          "transcript": [
+            "A Caixa de entrada, com dois e-mails não lidos entre e-mails lidos.",
+            "Preferências de e-mail, Exclusão: a opção que decide o que abre depois de uma exclusão.",
+            "Escolha a opção. O exemplo abaixo dela mostra o que fica aberto depois de uma exclusão.",
+            "Abra um e-mail.",
+            "Exclua-o no painel de leitura.",
+            "O painel de leitura já mostra o e-mail que a opção escolheu."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "recordingFrames": 160,
+          "sourceSeconds": 17.966667,
+          "sourceSHA256": "6600ef7db1c89f7ab1ceb6bec1676ec4b861b52a0506cb7156a3007e6dd90c01",
+          "sha256": {
+            "mp4": "2577ac6c5f7ae79e11fb2c01717ce53c7f30a5bb993fb0a11191e7c05f708d31",
+            "jpg": "212de74f6e7e8dfd993b3c6cde636a8cde829e2cc93f3fa692acde890b4345ec",
+            "vtt": "443e5be79d2c658f34d63342e3a8d81e433479f944a2a215f5be07b8f1fbd530"
+          }
+        },
+        "after-delete-next-unread-option": {
+          "image": "/assets/help-media/pt-br/after-delete-next-unread-option.webp",
+          "imageAlt": "Preferências de e-mail, Exclusão, com Selecionar o próximo e-mail não lido escolhido e o exemplo · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.994,
+          "sourceSHA256": "8dfcb134f3eb5cd14636e6c0debca706ef49bccf1d0c0bb92d4c1b5cda92b000",
+          "sha256": {
+            "webp": "6b5960b75bff241e10b8c03a31d467fb641e4d5be5ceb9ed24cea914d34571c2"
+          }
+        },
+        "after-delete-next-unread-open": {
+          "image": "/assets/help-media/pt-br/after-delete-next-unread-open.webp",
+          "imageAlt": "Caixa de entrada com um e-mail aberto no painel de leitura, antes de ser excluído · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.398,
+          "sourceSHA256": "8dfcb134f3eb5cd14636e6c0debca706ef49bccf1d0c0bb92d4c1b5cda92b000",
+          "sha256": {
+            "webp": "b48cff74beb9ada1b955e6f3b3f0899c872153a11498e27101db6bfe6f21a3b2"
+          }
+        },
+        "after-delete-next-unread-after": {
+          "image": "/assets/help-media/pt-br/after-delete-next-unread-after.webp",
+          "imageAlt": "Painel de leitura depois da exclusão: o próximo e-mail não lido abaixo está aberto · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.804,
+          "sourceSHA256": "8dfcb134f3eb5cd14636e6c0debca706ef49bccf1d0c0bb92d4c1b5cda92b000",
+          "sha256": {
+            "webp": "070cbad4647322290edef3b30f5878b7cc5ff08657c4f251467be7a49bcb230d"
+          }
+        },
+        "after-delete-next-unread": {
+          "video": "/assets/help-media/pt-br/after-delete-next-unread.mp4",
+          "videoLabel": "Depois de excluir um e-mail: selecionar o próximo e-mail não lido · MailVault version 2.24.0 pt-br",
+          "poster": "/assets/help-media/pt-br/after-delete-next-unread.jpg",
+          "posterAlt": "Depois de excluir um e-mail: selecionar o próximo e-mail não lido · MailVault version 2.24.0 pt-br",
+          "captions": "/assets/help-media/pt-br/after-delete-next-unread.vtt",
+          "transcript": [
+            "A Caixa de entrada, com dois e-mails não lidos entre e-mails lidos.",
+            "Preferências de e-mail, Exclusão: a opção que decide o que abre depois de uma exclusão.",
+            "Escolha a opção. O exemplo abaixo dela mostra o que fica aberto depois de uma exclusão.",
+            "Abra um e-mail.",
+            "Exclua-o no painel de leitura.",
+            "O painel de leitura já mostra o e-mail que a opção escolheu."
+          ],
+          "duration": 18.0,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "recordingFrames": 317,
+          "sourceSeconds": 18.0,
+          "sourceSHA256": "8dfcb134f3eb5cd14636e6c0debca706ef49bccf1d0c0bb92d4c1b5cda92b000",
+          "sha256": {
+            "mp4": "eec4b4e1a4d6ae30ee021bb076436ccdd28fa5de046f2c52b7a0f73b69a84172",
+            "jpg": "e6f356f1402e864957a3aa1a3b3dcbb1915d1dce6f6bcf831a67fcb4eca46299",
+            "vtt": "58c959bdb816f2163a8935bdea2f85a010939681a0304f9ce878ec1ff878203d"
+          }
+        },
+        "after-delete-previous-unread-option": {
+          "image": "/assets/help-media/pt-br/after-delete-previous-unread-option.webp",
+          "imageAlt": "Preferências de e-mail, Exclusão, com Selecionar o e-mail não lido anterior escolhido e o exemplo · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 8.966,
+          "sourceSHA256": "347f3d3986375e92f6e110cdfbe492390eb628205cb95cef5fef9ff2a4b7b80d",
+          "sha256": {
+            "webp": "bf446b4de2e213cbf6e61115f37d0aec38c3a4393fab0f61c37b7b5b0d558fb0"
+          }
+        },
+        "after-delete-previous-unread-open": {
+          "image": "/assets/help-media/pt-br/after-delete-previous-unread-open.webp",
+          "imageAlt": "Caixa de entrada com um e-mail aberto no painel de leitura, antes de ser excluído · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.374,
+          "sourceSHA256": "347f3d3986375e92f6e110cdfbe492390eb628205cb95cef5fef9ff2a4b7b80d",
+          "sha256": {
+            "webp": "aa5940cc41d37d2ddfb1e1381200539a3fdc97ae118896247949b42fd301ebfc"
+          }
+        },
+        "after-delete-previous-unread-after": {
+          "image": "/assets/help-media/pt-br/after-delete-previous-unread-after.webp",
+          "imageAlt": "Painel de leitura depois da exclusão: o e-mail não lido anterior acima está aberto · MailVault version 2.24.0 pt-br",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.763,
+          "sourceSHA256": "347f3d3986375e92f6e110cdfbe492390eb628205cb95cef5fef9ff2a4b7b80d",
+          "sha256": {
+            "webp": "c179401772a919fc6cb09c178b0ad8b2c76e5c23436cc6dd133b7b8338b6cb6a"
+          }
+        },
+        "after-delete-previous-unread": {
+          "video": "/assets/help-media/pt-br/after-delete-previous-unread.mp4",
+          "videoLabel": "Depois de excluir um e-mail: selecionar o e-mail não lido anterior · MailVault version 2.24.0 pt-br",
+          "poster": "/assets/help-media/pt-br/after-delete-previous-unread.jpg",
+          "posterAlt": "Depois de excluir um e-mail: selecionar o e-mail não lido anterior · MailVault version 2.24.0 pt-br",
+          "captions": "/assets/help-media/pt-br/after-delete-previous-unread.vtt",
+          "transcript": [
+            "A Caixa de entrada, com dois e-mails não lidos entre e-mails lidos.",
+            "Preferências de e-mail, Exclusão: a opção que decide o que abre depois de uma exclusão.",
+            "Escolha a opção. O exemplo abaixo dela mostra o que fica aberto depois de uma exclusão.",
+            "Abra um e-mail.",
+            "Exclua-o no painel de leitura.",
+            "O painel de leitura já mostra o e-mail que a opção escolheu."
+          ],
+          "duration": 17.966667,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.24.0 pt-br",
+          "captureVersion": "2.24.0",
+          "captureCommit": "f05559630084ea2586995a016b11570e1ab52a27",
+          "captureLocale": "pt-br",
+          "recordingVerified": true,
+          "recordingFrames": 316,
+          "sourceSeconds": 17.95,
+          "sourceSHA256": "347f3d3986375e92f6e110cdfbe492390eb628205cb95cef5fef9ff2a4b7b80d",
+          "sha256": {
+            "mp4": "6d5d05e06b13d6211cc2430edd0d628426ecb905a370862481669a84501637be",
+            "jpg": "696aa6331231d717724fe6bed9ad8a0d286a790bed58a2960596b11a6823c2c3",
+            "vtt": "26ff59577130468fcb960308f58ce856f75ce5a4110f3b125e0c563fdf11eed4"
           }
         }
       }

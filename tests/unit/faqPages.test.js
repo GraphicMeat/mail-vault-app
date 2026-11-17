@@ -31,9 +31,9 @@ describe('FAQ hub and topic pages', () => {
     const all = ORIGINAL_TOPICS.flatMap(t => questionsIn(topic(t)));
     // 23 from the original single-page FAQ, plus later answers including
     // iCloud, adding an Outlook.com account over IMAP, the phone set-up and the Hotmail / Outlook
-    // inbox-full answer, across the six original topics; new topics have separate coverage below.
-    expect(all.length).toBe(43);
-    expect(new Set(all).size).toBe(43);
+    // inbox-full and what-opens-after-delete answers, across the six original topics; new topics have separate coverage below.
+    expect(all.length).toBe(44);
+    expect(new Set(all).size).toBe(44);
   });
 
   it('parses every FAQ JSON-LD block in every locale', () => {
@@ -86,6 +86,38 @@ describe('FAQ hub and topic pages', () => {
         expect(img.getAttribute('alt').length).toBeGreaterThan(20);
       }
       expect(article.querySelector('a[href$="faq/providers.html#add-outlook-hotmail-imap"]'), `${loc.dir || 'en'} IMAP link`).toBeTruthy();
+      if (loc.dir) expect(questionsIn(html)).not.toContain(question);
+    }
+  });
+
+  // "what happens after I delete an email" / "select next email": five options, each with a video and screenshots, in every language.
+  it('answers what opens after a delete with five localized videos and screenshots in every locale', () => {
+    const id = 'after-delete-selection';
+    const question = 'What opens after I delete an email? Can I choose the next email to select?';
+    expect(questionsIn(topic('getting-started'))).toContain(question);
+    const clips = ['none', 'next', 'previous', 'next-unread', 'previous-unread'].map(c => `after-delete-${c}`);
+    for (const loc of [{ dir: '' }, ...LOCALES]) {
+      const lang = loc.dir || 'en';
+      const html = readFileSync(`website/${loc.dir ? `${loc.dir}/` : ''}faq/getting-started.html`, 'utf8');
+      const article = new JSDOM(html).window.document.getElementById(id);
+      expect(article, `${lang} article`).toBeTruthy();
+      const shots = [...article.querySelectorAll('img')];
+      expect(shots.length, `${lang} screenshots`).toBe(10);
+      for (const img of shots) {
+        expect(img.getAttribute('src'), `${lang} shot`).toContain(`/assets/help-media/${lang}/`);
+        expect(existsSync(`website${img.getAttribute('src')}`), img.getAttribute('src')).toBe(true);
+        expect(img.getAttribute('alt').length).toBeGreaterThan(20);
+      }
+      const videos = [...article.querySelectorAll('video')];
+      expect(videos.length, `${lang} videos`).toBe(5);
+      for (const [i, video] of videos.entries()) {
+        for (const ext of ['mp4', 'jpg', 'vtt']) expect(existsSync(`website/assets/help-media/${lang}/${clips[i]}.${ext}`), `${lang} ${clips[i]}.${ext}`).toBe(true);
+        expect(video.querySelector('source').getAttribute('src')).toBe(`/assets/help-media/${lang}/${clips[i]}.mp4`);
+        expect(video.querySelector('track').getAttribute('srclang')).toBe(loc.htmlLang || 'en');
+        expect(video.getAttribute('aria-label').length).toBeGreaterThan(20);
+      }
+      // A section per option, plus the same-account switch and the notes.
+      expect(article.querySelectorAll('h3').length, `${lang} sections`).toBe(7);
       if (loc.dir) expect(questionsIn(html)).not.toContain(question);
     }
   });
