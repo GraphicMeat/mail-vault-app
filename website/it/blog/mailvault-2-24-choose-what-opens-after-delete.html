@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MailVault 2.24: Choose What Opens After You Delete - MailVault Blog</title>
-  <meta name="description" content="MailVault 2.24 lets you choose what opens after you delete an email: the next or previous email, the next or previous unread one, or nothing. It started as a feature request on our Discord.">
+  <title>MailVault 2.24: scegli cosa si apre dopo l’eliminazione - Blog di MailVault</title>
+  <meta name="description" content="MailVault 2.24 ti lascia scegliere cosa si apre dopo aver eliminato un’email: la successiva o la precedente, la successiva o la precedente non letta, oppure niente. È nato da una richiesta di funzione sul nostro Discord.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/it/blog/mailvault-2-24-choose-what-opens-after-delete.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/it/blog/mailvault-2-24-choose-what-opens-after-delete.html">
-  <meta property="og:title" content="MailVault 2.24: Choose What Opens After You Delete - MailVault Blog">
-  <meta property="og:description" content="MailVault 2.24 lets you choose what opens after you delete an email: the next or previous email, the next or previous unread one, or nothing. It started as a feature request on our Discord.">
+  <meta property="og:title" content="MailVault 2.24: scegli cosa si apre dopo l’eliminazione - Blog di MailVault">
+  <meta property="og:description" content="MailVault 2.24 ti lascia scegliere cosa si apre dopo aver eliminato un’email: la successiva o la precedente, la successiva o la precedente non letta, oppure niente. È nato da una richiesta di funzione sul nostro Discord.">
   <meta property="og:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare. Gratis per macOS, Windows e Linux, con un&#39;anteprima dell&#39;app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="MailVault 2.24: Choose What Opens After You Delete - MailVault Blog">
-  <meta name="twitter:description" content="MailVault 2.24 lets you choose what opens after you delete an email: the next or previous email, the next or previous unread one, or nothing. It started as a feature request on our Discord.">
+  <meta name="twitter:title" content="MailVault 2.24: scegli cosa si apre dopo l’eliminazione - Blog di MailVault">
+  <meta name="twitter:description" content="MailVault 2.24 ti lascia scegliere cosa si apre dopo aver eliminato un’email: la successiva o la precedente, la successiva o la precedente non letta, oppure niente. È nato da una richiesta di funzione sul nostro Discord.">
   <meta name="twitter:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare. Gratis per macOS, Windows e Linux, con un&#39;anteprima dell&#39;app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -143,8 +143,8 @@
 
       <article>
         <header class="mb-8">
-          <time datetime="2026-11-16" class="text-sm text-primary-500 font-medium">November 16, 2026</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 2.24: Choose What Opens After You Delete</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
+          <time datetime="2026-11-16" class="text-sm text-primary-500 font-medium">16 novembre 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 2.24: scegli cosa si apre dopo l’eliminazione</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>4 min di lettura</span>
           </div>
@@ -153,59 +153,59 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            MailVault 2.24 is out. The headline for keyboard users: you now choose what opens when you delete the email you are reading. It came straight from a feature request on our Discord, and it is the part of this release we want to explain properly.
+            MailVault 2.24 è disponibile. La novità principale per chi lavora da tastiera: ora scegli cosa si apre quando elimini l’email che stai leggendo. Viene direttamente da una richiesta di funzione sul nostro Discord, ed è la parte di questa versione che vogliamo spiegare per bene.
           </p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The request</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">La richiesta</h3>
           <p>
-            A user of the Mac app posted in our <strong>#requests</strong> channel with a problem. Deleting an email left a blank reading pane saying "Select a message to read", and no email was selected in the list. Pressing <code>j</code> or <code>k</code> selected the top email in the inbox, not the one next to the email just deleted.
+            Un utente dell’app per Mac ha scritto nel nostro canale <strong>#requests</strong> segnalando un problema. Eliminare un’email lasciava il riquadro di lettura vuoto con il messaggio «Seleziona un’email da leggere», senza alcuna email selezionata nell’elenco. Premendo <code>j</code> o <code>k</code> veniva selezionata la prima email della posta in arrivo, non quella accanto all’email appena eliminata.
           </p>
           <p>
-            For someone who works through a mailbox with the keyboard, that is a stop at every delete: reach for the mouse, or start again from the top. The request was to open another email automatically, and, better, to let you choose which one. There are several sensible answers: the next or the previous email, the next or the previous unread email, or an email from the same account as the one you deleted, which matters when you read All Inboxes and the neighbour in the list belongs to another account.
+            Per chi scorre la posta da tastiera, è una pausa a ogni eliminazione: cercare il mouse o ripartire dall’alto. La richiesta era aprire automaticamente un’altra email e, meglio ancora, lasciare scegliere quale. Ci sono diverse risposte sensate: l’email successiva o la precedente, la successiva o la precedente non letta, oppure un’email dello stesso account di quella eliminata, cosa che conta quando leggi Tutte le caselle e la vicina nell’elenco appartiene a un altro account.
           </p>
           <p>
-            MailVault already had a setting for what happens after a delete, but it only covered part of this. The suggestion was a better design, so we built it.
+            MailVault aveva già un’impostazione per ciò che accade dopo l’eliminazione, ma ne copriva solo una parte. Il suggerimento era un progetto migliore, quindi l’abbiamo realizzato.
           </p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">What you can choose now</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Cosa puoi scegliere ora</h3>
           <p>
-            Open <strong>Settings &rarr; Mail preferences &rarr; Behavior &rarr; Deleting</strong> and look at <strong>When an email is deleted</strong>:
+            Apri <strong>Impostazioni &rarr; Preferenze di posta &rarr; Comportamento &rarr; Eliminazione</strong> e guarda <strong>Quando un’email viene eliminata</strong>:
           </p>
           <ul class="list-disc list-inside space-y-2">
-            <li><strong>Select nothing</strong> (the default) closes the reading pane, as before.</li>
-            <li><strong>Select the next email</strong> opens the email below the deleted one.</li>
-            <li><strong>Select the previous email</strong> opens the one above it.</li>
-            <li><strong>Select the next unread email</strong> and <strong>Select the previous unread email</strong> open the nearest unread email below or above.</li>
+            <li><strong>Non selezionare nulla</strong> (predefinito) chiude il riquadro di lettura, come prima.</li>
+            <li><strong>Seleziona l’email successiva</strong> apre l’email sotto quella eliminata.</li>
+            <li><strong>Seleziona l’email precedente</strong> apre quella sopra.</li>
+            <li><strong>Seleziona l’email non letta successiva</strong> e <strong>Seleziona l’email non letta precedente</strong> aprono l’email non letta più vicina, sotto o sopra.</li>
           </ul>
           <p>
-            Once you pick an option that opens an email, a <strong>Stay in the same account</strong> switch appears. In a list that spans several accounts, such as All Inboxes, it prefers an email from the account of the one you deleted. MailVault gives up "unread" before it gives up "same account". With no unread email left, or none left in that account, the nearest email opens instead of an empty pane.
+            Appena scegli un’opzione che apre un’email, compare l’interruttore <strong>Resta nello stesso account</strong>. In un elenco che comprende più account, come Tutte le caselle, preferisce un’email dell’account di quella eliminata. MailVault rinuncia a «non letta» prima di rinunciare a «stesso account». Se non resta nessuna email non letta, o nessuna in quell’account, si apre l’email più vicina invece di un riquadro vuoto.
           </p>
           <p>
-            Two details we fixed on the way. With Select nothing, pressing <code>j</code> or <code>k</code> now continues from where the deleted email was, rather than starting again at the top. And deleting in All Inboxes no longer ends with "Delete failed: Native refresh failed" when the delete worked and only one account could not be refreshed afterwards: the list repaints with what did arrive, and Undo is still offered.
+            Due dettagli corretti lungo la strada. Con «Non selezionare nulla», <code>j</code> e <code>k</code> ora proseguono da dove si trovava l’email eliminata, invece di ripartire dall’alto. Ed eliminare in Tutte le caselle non finisce più con «Eliminazione non riuscita: Native refresh failed» quando l’eliminazione è riuscita e solo un account non ha potuto essere aggiornato dopo: l’elenco si ridisegna con quanto è arrivato e Annulla resta disponibile.
           </p>
           <p>
-            The requester tried it on our nightly update track the day after and came back happy, with the same-account switch as the favourite part. If you want to try early changes yourself, nightly builds are a choice in Settings &rarr; Software updates.
+            Chi ha fatto la richiesta l’ha provata il giorno dopo sul nostro canale di aggiornamenti nightly ed è tornato soddisfatto, con l’interruttore dello stesso account come parte preferita. Se vuoi provare in anticipo le novità, le versioni nightly si scelgono in Impostazioni &rarr; Aggiornamenti software.
           </p>
           <p>
-            The full walkthrough, with a short video for each option, is in the help center: <a href="/it/faq/getting-started.html#after-delete-selection" class="text-primary-500 hover:underline">What opens after I delete an email? Can I choose the next email to select?</a>
+            La guida completa, con un breve video per ogni opzione, è nel centro assistenza: <a href="/it/faq/getting-started.html#after-delete-selection" class="text-primary-500 hover:underline">Che cosa si apre dopo che elimino un’email? Posso scegliere quale email selezionare dopo?</a>
           </p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">More in 2.24</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Altro nella 2.24</h3>
           <ul class="list-disc list-inside space-y-2">
-            <li><strong>Preview an attachment before you send it.</strong> A picture or PDF attached in compose has an eye button that opens it in the same preview as the reading pane.</li>
-            <li><strong>Save a picture from a message.</strong> Right-click a picture and choose Save As, or Open in Preview, as before the new message renderer.</li>
-            <li><strong>Delete all ticked emails.</strong> With several emails ticked, the delete key now deletes all of them, even with another email open in the reading pane.</li>
-            <li><strong>A false Reply-To warning is gone.</strong> Receipts from some senders showed a "Reply-To domain mismatch" with a long garbled address, because MailVault read part of the sender's DKIM signature as the reply address.</li>
-            <li><strong>Contacts has an All senders tab.</strong> Everyone who has emailed you, saved or not, searchable, with their emails one click away.</li>
-            <li><strong>The phone app caught up.</strong> Offline mail you size per account, All Inboxes, grouped conversations, aliases, templates, the chat view, link safety, quiet hours, and more of the desktop settings, all brought over with the QR code setup.</li>
+            <li><strong>Anteprima di un allegato prima dell’invio.</strong> Un’immagine o un PDF allegati in scrittura hanno un pulsante a forma di occhio che li apre nella stessa anteprima del riquadro di lettura.</li>
+            <li><strong>Salvare un’immagine da un messaggio.</strong> Fai clic destro su un’immagine e scegli «Salva con nome…» o «Apri in Anteprima», come prima del nuovo motore di visualizzazione dei messaggi.</li>
+            <li><strong>Eliminare tutte le email selezionate.</strong> Con più email selezionate, il tasto elimina ora le elimina tutte, anche se nel riquadro di lettura è aperta un’altra email.</li>
+            <li><strong>Un falso avviso Reply-To è sparito.</strong> Le ricevute di alcuni mittenti mostravano «Dominio Reply-To non corrispondente» con un lungo indirizzo illeggibile, perché MailVault leggeva una parte della firma DKIM del mittente come indirizzo di risposta.</li>
+            <li><strong>Contatti ha una scheda Tutti i mittenti.</strong> Tutti quelli che ti hanno scritto, salvati o no, con ricerca e le loro email a un clic.</li>
+            <li><strong>L’app per telefono si è messa al passo.</strong> Posta offline di cui scegli la quantità per account, Tutte le caselle, conversazioni raggruppate, alias, modelli, vista chat, sicurezza dei link, ore silenziose e più impostazioni del desktop, tutto portato con la configurazione tramite codice QR.</li>
           </ul>
           <p>
-            Every change is listed in the <a href="/changelog.html" class="text-primary-500 hover:underline">changelog</a>.
+            Ogni modifica è elencata nel <a href="/changelog.html" class="text-primary-500 hover:underline">registro delle modifiche</a>.
           </p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Tell us what is in your way</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Dicci cosa ti intralcia</h3>
           <p>
-            The best requests describe a moment that annoys you, as this one did: what happened, what you wanted instead, and why it matters for the way you work. Post yours in <strong>#requests</strong> on our <a href="https://discord.gg/3GB62ethD8" class="text-primary-500 hover:underline" target="_blank" rel="noopener">Discord</a>. Bugs go to <strong>#support</strong>.
+            Le richieste migliori descrivono un momento fastidioso, come questa: cosa è successo, cosa volevi invece e perché conta per il tuo modo di lavorare. Scrivi la tua in <strong>#requests</strong> sul nostro <a href="https://discord.gg/3GB62ethD8" class="text-primary-500 hover:underline" target="_blank" rel="noopener">Discord</a>. I bug vanno in <strong>#support</strong>.
           </p>
 
         </div>
