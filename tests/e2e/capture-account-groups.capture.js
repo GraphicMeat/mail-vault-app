@@ -60,12 +60,21 @@ describe('Account groups capture', function () {
       await captureScreen(`settings-account-group-${theme}`, capture);
       await closeSettings();
       await browser.execute(() => window.__SETTINGS_STORE__.setState({ sidebarCollapsed: true }));
-      await wait(() => browser.execute(() => {
+      await wait(() => browser.execute(emails => {
         const rail = document.querySelector('.sidebar-collapsed-accounts');
-        const rows = [...(rail?.querySelectorAll('button[aria-label*="@"]') || [])];
-        return !!rail?.querySelector('.sidebar-collapsed-divider') && rows.length === 3
-          && rows.every(row => row.getBoundingClientRect().bottom <= rail.getBoundingClientRect().bottom);
-      }), 'All three collapsed avatars and divider must be visible');
+        const divider = rail?.querySelector('.sidebar-collapsed-divider');
+        const rows = emails.map(email => [...(rail?.querySelectorAll('button[aria-label]') || [])]
+          .find(button => button.getAttribute('aria-label').includes(email)));
+        if (!divider || rows.some(row => !row)) return false;
+        const visible = element => {
+          element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+          const item = element.getBoundingClientRect();
+          const pane = rail.getBoundingClientRect();
+          return item.top >= pane.top && item.bottom <= pane.bottom;
+        };
+        const allVisibleInTurn = rows.every(visible);
+        return allVisibleInTurn && visible(divider);
+      }, browser.mockAccounts.slice(0, 3).map(account => account.email)), 'Collapsed avatars and divider must each be reachable');
       await captureScreen(`sidebar-collapsed-groups-${theme}`, capture);
       await browser.execute(() => window.__SETTINGS_STORE__.setState({ sidebarCollapsed: false }));
       await wait(() => browser.execute(() => !!document.querySelector('.sidebar-account-list [role="group"][aria-label="Work"]')),
