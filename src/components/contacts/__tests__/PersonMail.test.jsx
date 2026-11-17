@@ -9,6 +9,7 @@ vi.mock('../../../utils/dateFormat', () => ({
   formatMonthYear: (y, m) => `M${y}-${m}`,
 }));
 vi.mock('../../../utils/notificationOpen', () => ({ openNotificationTarget: vi.fn() }));
+vi.mock('../../../services/workflows/readerWindow', () => ({ openEmailInWindow: vi.fn(async () => true) }));
 vi.mock('../../../stores/mailStore', () => ({
   useMailStore: Object.assign((sel) => sel({ accounts: [{ id: 'a1', email: 'me@x.io' }] }), { getState: () => ({}) }),
 }));
@@ -21,6 +22,7 @@ vi.mock('../../../stores/peopleStore', async () => {
 });
 import { PersonMail } from '../PersonMail';
 import { openNotificationTarget } from '../../../utils/notificationOpen';
+import { openEmailInWindow } from '../../../services/workflows/readerWindow';
 import { useMailStore } from '../../../stores/mailStore';
 
 const row = (over) => ({ accountId: 'a1', mailboxPath: 'INBOX', uid: 1, sortMs: new Date(2026, 2, 15, 12).getTime(), subject: 'Hello', direction: 'received', ...over });
@@ -28,6 +30,7 @@ const row = (over) => ({ accountId: 'a1', mailboxPath: 'INBOX', uid: 1, sortMs: 
 beforeEach(() => {
   h.s.setState(h.fresh(), true);
   openNotificationTarget.mockReset();
+  openEmailInWindow.mockClear();
 });
 afterEach(() => {
   cleanup();
@@ -84,7 +87,7 @@ describe('PersonMail', () => {
     expect(h.s.getState().loadMoreMail).toHaveBeenCalledTimes(1);
   });
 
-  it('clicking a row leaves the contacts view and opens that message', () => {
+  it('clicking a row leaves the contacts view, selects that message and opens it in a window', async () => {
     const onOpenMail = vi.fn();
     h.s.setState({ mail: [row({ uid: 7, mailboxPath: 'Work' })] });
     render(<PersonMail onOpenMail={onOpenMail} />);
@@ -92,6 +95,38 @@ describe('PersonMail', () => {
     expect(onOpenMail).toHaveBeenCalledTimes(1);
     expect(openNotificationTarget).toHaveBeenCalledWith({ accountId: 'a1', mailbox: 'Work', uid: 7 }, useMailStore.getState);
     expect(onOpenMail.mock.invocationCallOrder[0]).toBeLessThan(openNotificationTarget.mock.invocationCallOrder[0]);
+    await vi.waitFor(() => expect(openEmailInWindow).toHaveBeenCalledTimes(1));
+    expect(openEmailInWindow.mock.calls[0][0]).toMatchObject({ uid: 7, _accountId: 'a1', _mailbox: 'Work' });
+    expect(openNotificationTarget.mock.invocationCallOrder[0]).toBeLessThan(openEmailInWindow.mock.invocationCallOrder[0]);
+  });
+
+  it('the second click of a double click opens nothing more', () => {
+    h.s.setState({ mail: [row({ uid: 7 })] });
+    render(<PersonMail />);
+    fireEvent.click(screen.getByTestId('mail-row-a1-7'), { detail: 1 });
+    fireEvent.click(screen.getByTestId('mail-row-a1-7'), { detail: 2 });
+    expect(openNotificationTarget).toHaveBeenCalledTimes(1);
+  });
+
+  it('alternate rows carry the stripe ground, across month headers', () => {
+    h.s.setState({
+      mail: [
+        row({ uid: 3 }), row({ uid: 2 }),
+        row({ uid: 1, sortMs: new Date(2026, 0, 10, 12).getTime() }),
+      ],
+    });
+    render(<PersonMail />);
+    const grounds = [3, 2, 1].map((u) => screen.getByTestId(`mail-row-a1-${u}`).closest('li').className.includes('bg-mail-surface'));
+    expect(grounds).toEqual([false, true, false]);
+  });
+
+  it('every row is one table row: badge, subject and date in fixed columns', () => {
+    h.s.setState({ mail: [row({ uid: 1, direction: 'sent' }), row({ uid: 2, direction: 'received' })] });
+    render(<PersonMail />);
+    const cols = [1, 2].map((u) => screen.getByTestId(`mail-row-a1-${u}`).className.match(/grid-cols-\[[^\]]+\]/)?.[0]);
+    expect(cols[0]).toBeTruthy();
+    expect(cols[0]).toBe(cols[1]);
+    for (const b of screen.getAllByTestId('mail-direction-badge')) expect(b.className).toContain('text-center');
   });
 
   it('reloads mail when the selected sender changes', () => {

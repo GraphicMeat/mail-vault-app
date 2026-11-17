@@ -3,6 +3,7 @@ import { useT } from '../../i18n';
 import { usePeopleStore } from '../../stores/peopleStore';
 import { useMailStore } from '../../stores/mailStore';
 import { openNotificationTarget } from '../../utils/notificationOpen';
+import { openEmailInWindow } from '../../services/workflows/readerWindow';
 import { formatDateOnly, formatMonthYear } from '../../utils/dateFormat';
 import { mailboxLabel } from '../../utils/imapUtf7';
 
@@ -31,10 +32,14 @@ export function PersonMail({ onOpenMail }) {
     loadMail({ ...(direction !== 'all' && { direction }), ...(query && { text: query }) });
   }, [selectedId, senderAddress, direction, query, loadMail]);
 
-  // Leave the Contacts view first (it drops the mail selection), then open the message.
-  const open = async (row) => {
+  // Leave the Contacts view first (it drops the mail selection), select the
+  // message, then show it in a window of its own. The second click of a double
+  // click opens nothing more.
+  const open = async (event, row) => {
+    if (event.detail > 1) return;
     onOpenMail?.();
     await openNotificationTarget({ accountId: row.accountId, mailbox: row.mailboxPath, uid: row.uid }, useMailStore.getState);
+    await openEmailInWindow({ uid: row.uid, _accountId: row.accountId, _mailbox: row.mailboxPath }, () => {});
   };
 
   let lastMonth = '';
@@ -50,24 +55,26 @@ export function PersonMail({ onOpenMail }) {
         <p className="text-sm text-mail-text-secondary" data-testid="mail-empty">{t('contacts.mail.empty')}</p>
       ) : (
         <ul>
-          {mail.map((row) => {
+          {mail.map((row, index) => {
             const when = new Date(row.sortMs);
             const month = `${when.getFullYear()}-${when.getMonth() + 1}`;
             const header = month !== lastMonth;
             lastMonth = month;
             const account = accounts?.find((a) => a.id === row.accountId);
             return (
-              <li key={`${row.accountId}:${row.mailboxPath}:${row.uid}`}>
-                {header && <h3 className="mt-3 mb-1 text-xs font-semibold uppercase text-mail-text-secondary" data-testid="mail-month">{formatMonthYear(when.getFullYear(), when.getMonth() + 1)}</h3>}
-                <button type="button" data-testid={`mail-row-${row.accountId}-${row.uid}`} onClick={() => open(row)} className="w-full flex items-center gap-3 py-2 text-left">
-                  <span className="text-xs rounded px-1.5 py-0.5 bg-mail-surface-hover" data-testid="mail-direction-badge">{t(`contacts.mail.dir.${row.direction}`)}</span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block truncate">{row.subject || t('contacts.mail.noSubject')}</span>
-                    <span className="block truncate text-xs text-mail-text-secondary">{[account?.email, mailboxLabel(row.mailboxPath)].filter(Boolean).join(' · ')}</span>
-                  </span>
-                  <span className="text-xs text-mail-text-secondary tabular-nums">{formatDateOnly(row.sortMs, { alwaysShowYear: true })}</span>
-                </button>
-              </li>
+              <React.Fragment key={`${row.accountId}:${row.mailboxPath}:${row.uid}`}>
+                {header && <li role="presentation"><h3 className="mt-3 mb-1 px-2 text-xs font-semibold uppercase text-mail-text-secondary" data-testid="mail-month">{formatMonthYear(when.getFullYear(), when.getMonth() + 1)}</h3></li>}
+                <li className={`rounded ${index % 2 === 1 ? 'bg-mail-surface' : ''}`}>
+                  <button type="button" data-testid={`mail-row-${row.accountId}-${row.uid}`} onClick={(e) => open(e, row)} className="w-full grid grid-cols-[5.5rem_minmax(0,1fr)_7rem] items-center gap-3 px-2 py-2 text-left rounded hover:bg-mail-surface-hover">
+                    <span className="text-xs rounded px-1.5 py-0.5 bg-mail-surface-hover text-center" data-testid="mail-direction-badge">{t(`contacts.mail.dir.${row.direction}`)}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate">{row.subject || t('contacts.mail.noSubject')}</span>
+                      <span className="block truncate text-xs text-mail-text-secondary">{[account?.email, mailboxLabel(row.mailboxPath)].filter(Boolean).join(' · ')}</span>
+                    </span>
+                    <span className="text-xs text-mail-text-secondary tabular-nums text-right">{formatDateOnly(row.sortMs, { alwaysShowYear: true })}</span>
+                  </button>
+                </li>
+              </React.Fragment>
             );
           })}
         </ul>

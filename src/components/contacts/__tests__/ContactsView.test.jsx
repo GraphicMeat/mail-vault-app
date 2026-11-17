@@ -32,6 +32,7 @@ vi.mock('../ReviewQueue', () => ({ ReviewQueue: () => <div data-testid="review-q
 vi.mock('../ExportButton', () => ({ ExportButton: () => null }));
 
 import { ContactsView } from '../ContactsView';
+import { Button } from '../../ui/Button';
 import { useContactsViewStore } from '../../../stores/contactsViewStore';
 
 afterEach(cleanup);
@@ -51,6 +52,14 @@ describe('ContactsView', () => {
     expect(screen.getByTestId('contacts-view')).toBeTruthy();
     expect(screen.getByText('contacts.empty')).toBeTruthy();
     expect(screen.getByTestId('contacts-import')).toBeTruthy();
+  });
+
+  it('Import vCard is the same button as Export vCard', () => {
+    const ref = render(<Button size="sm" data-testid="ref" />);
+    const refClass = ref.getByTestId('ref').className;
+    ref.unmount();
+    render(<ContactsView onClose={() => {}} />);
+    expect(screen.getByTestId('contacts-import').className).toBe(refClass);
   });
 
   it('loads the duplicate proposals on mount', () => {

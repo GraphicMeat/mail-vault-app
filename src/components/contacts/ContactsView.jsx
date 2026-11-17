@@ -13,6 +13,7 @@ import { ReviewQueue } from './ReviewQueue';
 import { SenderCard } from './SenderCard';
 import { SendersList } from './SendersList';
 import { ExportButton } from './ExportButton';
+import { Button } from '../ui/Button';
 
 export function ContactsView({ onClose, onOpenMail }) {
   const t = useT();
@@ -60,7 +61,7 @@ export function ContactsView({ onClose, onOpenMail }) {
         <h1 className="text-base font-semibold">{t('contacts.title')}</h1>
         <span className="text-sm text-mail-text-secondary">{t('contacts.count', { count: total })}</span>
         <div className="flex-1" />
-        <button type="button" data-testid="contacts-import" onClick={() => fileRef.current?.click()}><Upload size={16} /> {t('contacts.import')}</button>
+        <Button size="sm" data-testid="contacts-import" onClick={() => fileRef.current?.click()}><Upload size={16} /> {t('contacts.import')}</Button>
         <input ref={fileRef} type="file" accept=".vcf,text/vcard,text/x-vcard" hidden onChange={onFile} data-testid="contacts-import-input" />
         <ExportButton />
       </header>
