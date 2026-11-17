@@ -4,15 +4,17 @@ import { Popover } from '../ui/Popover';
 import { Button } from '../ui/Button';
 import { useDialogA11y } from '../../hooks/useDialogA11y';
 import { useT } from '../../i18n/index.js';
+import { AccountSections } from './AccountSections';
 
 /** Searchable account selection stays anchored to the current account. */
-export function AccountChooser({ position, onClose, accounts, renderAccount, unifiedRow, onAddAccount }) {
+export function AccountChooser({ position, onClose, sections, displayNames, renderAccount, unifiedRow, onAddAccount }) {
   const t = useT();
   const [query, setQuery] = useState('');
   const panelRef = useDialogA11y(true, onClose);
   const normalized = query.trim().toLocaleLowerCase();
-  const matches = accounts.filter(({ label, account }) =>
-    `${label} ${account.email}`.toLocaleLowerCase().includes(normalized));
+  const matches = sections.map(section => ({ ...section, accounts: section.accounts.filter(account =>
+    `${displayNames[account.id] || account.name || account.email} ${account.email}`.toLocaleLowerCase().includes(normalized)) }))
+    .filter(section => section.accounts.length);
   const showUnified = !!unifiedRow && (!normalized || t('sidebar.allInboxes').toLocaleLowerCase().includes(normalized));
 
   const moveFocus = (event) => {
@@ -43,7 +45,7 @@ export function AccountChooser({ position, onClose, accounts, renderAccount, uni
     </label>
     <div className="sidebar-chooser-list">
       {showUnified && unifiedRow}
-      {matches.map(({ account }) => renderAccount(account, true))}
+      <AccountSections sections={matches} renderAccount={account => renderAccount(account, true)} />
       {matches.length === 0 && !showUnified && <p className="sidebar-no-results" role="status">{t('sidebar.noAccountsFound')}</p>}
     </div>
     <div className="sidebar-chooser-footer">

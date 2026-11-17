@@ -30,6 +30,20 @@ case ",${HARNESS_SHOTS:-}," in
       }
     done
     exit 0 ;;
+  *,sidebar-account-groups,*|*,settings-account-group,*|*,sidebar-collapsed-groups,*)
+    cd "$(dirname "$0")/.."
+    out=${HARNESS_SHOTS_OUT:-${1:-$PWD/.artifacts}}
+    case "$out" in /*) ;; *) echo 'Shot output must be an absolute directory' >&2; exit 1 ;; esac
+    export HARNESS_SHOTS_OUT="$out"
+    mkdir -p "$out"
+    trap 'bash scripts/screenshots/prepare-build.sh --revert' EXIT
+    bash scripts/screenshots/prepare-build.sh
+    npm run build:e2e
+    npx wdio run wdio.conf.js --spec tests/e2e/capture-account-groups.capture.js
+    for shot in sidebar-account-groups settings-account-group sidebar-collapsed-groups; do
+      for theme in light dark; do test -s "$out/$shot-$theme.png"; done
+    done
+    exit 0 ;;
   *,notes-board-after-delete,*)
     out=${HARNESS_SHOTS_OUT:-${1:-}}
     test -n "$out" || { echo 'HARNESS_SHOTS_OUT or $1 must be an absolute directory' >&2; exit 1; }

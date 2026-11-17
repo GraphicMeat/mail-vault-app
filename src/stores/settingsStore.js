@@ -12,6 +12,7 @@ import {
 import { applyQuickActionPreset } from '../utils/quickActionPresets';
 import { clampComposeSize } from '../utils/composeSize';
 import { ownAddresses } from '../utils/ownAddresses';
+import { resolveGroupName } from '../services/accountGroups';
 import { folderColorKey, normalizeFolderIconStyle, normalizeFolderIconColors } from '../utils/folderIconColor';
 import { MACOS_WINDOW_RADIUS, EMAIL_WIDTH, normalizeEmailWidth } from '../services/export/social/socialLayout';
 
@@ -498,6 +499,7 @@ export const useSettingsStore = create(
       // { [accountId]: string[] }: lowercased aliases the user removed; discovery never adds them back.
       dismissedAliases: {},
       lastComposeIdentity: null, // { accountId, address } — identity of the last sent message; a new compose keeps the address when it is reading that same account
+      accountGroups: {},
       accountColors: {}, // { [accountId]: string (hex color) } — user overrides for avatar color
       
       // Default settings
@@ -1145,6 +1147,14 @@ export const useSettingsStore = create(
       setCloseToTray: (enabled) => set({ closeToTray: Boolean(enabled) }),
       setComposeOpenMode: (mode) => set({ composeOpenMode: mode === 'window' ? 'window' : 'app' }),
 
+      setAccountGroup: (accountId, rawName) => set(state => {
+        const name = resolveGroupName(rawName, Object.values(state.accountGroups).filter(Boolean));
+        const accountGroups = { ...state.accountGroups };
+        if (name) accountGroups[accountId] = name;
+        else delete accountGroups[accountId];
+        return { accountGroups };
+      }),
+
       // Account color management
       setAccountColor: (accountId, color) => {
         set(state => ({
@@ -1604,6 +1614,7 @@ export const useSettingsStore = create(
           aliases: {},
           dismissedAliases: {},
           lastComposeIdentity: null,
+          accountGroups: {},
           accountColors: {},
           defaultSignatureEnabled: true,
           undoSendEnabled: false,

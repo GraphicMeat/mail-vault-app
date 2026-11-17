@@ -183,3 +183,8 @@
   0%, 100% { opacity: 0; }
   50% { opacity: 0.35; }
 }
+
+.sidebar-group-label { color: var(--mail-text-muted); font-size: 11px; padding-left: 8px; margin: 8px 0 2px; }
+[data-sidebar-density="compact"] .sidebar-group-label { margin-top: 4px; }
+.sidebar-collapsed-divider { width: 24px; height: 1px; background: var(--mail-border); margin: 4px auto; flex: none; }
+.sidebar-collapsed-accounts:has(.sidebar-collapsed-divider) { flex: 0 0 auto; max-height: 35%; }

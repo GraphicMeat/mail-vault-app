@@ -23,6 +23,8 @@ import { lastDaysSeries } from '../utils/transferSeries';
 import { t as tr, useT } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
 import { AccountChooser } from './sidebar/AccountChooser';
+import { AccountSections } from './sidebar/AccountSections';
+import { groupAccounts } from '../services/accountGroups';
 import { BackupStatusIcon, CollapsedAccountButton, ExpandedAccountRow } from './sidebar/AccountRows';
 import { SidebarViews } from './SidebarViews';
 import { useViewStore } from '../stores/viewStore';
@@ -447,6 +449,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const displayNames = useSettingsStore(s => s.displayNames);
   const accountColors = useSettingsStore(s => s.accountColors);
+  const accountGroups = useSettingsStore(s => s.accountGroups);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
   const toggleSidebarCollapsed = useSettingsStore(s => s.toggleSidebarCollapsed);
@@ -596,6 +599,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     () => getOrderedAccounts(accounts).filter(a => !hiddenAccounts[a.id]),
     [accounts, hiddenAccounts, getOrderedAccounts, accountOrder]
   );
+  const sections = useMemo(() => groupAccounts(orderedAccounts, accountGroups), [orderedAccounts, accountGroups]);
   const collapsed = sidebarCollapsed;
   const showUnifiedInbox = orderedAccounts.length >= 2;
   const tagCloud = sidebarStyle === 'tagcloud';
@@ -857,7 +861,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {/* Account icons */}
         <SidebarViews collapsed onOpenSettings={onOpenSettings} onOpenNotes={onOpenNotes} onOpenContacts={onOpenContacts} onOpenMail={onOpenMail} notesOpen={notesOpen} contactsOpen={contactsOpen} mailHidden={mailHidden} />
         <div className="sidebar-collapsed-accounts w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
-          {orderedAccounts.map(account => (
+          <AccountSections compact sections={sections} renderAccount={account => (
             <div
               key={account.id}
               ref={el => { hoverRowRefs.current[account.id] = el; }}
@@ -882,7 +886,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 insightsOpen={mailHidden}
               />
             </div>
-          ))}
+          )} />
           {orderedAccounts.length === 0 && (
             <button
               data-testid="add-account-btn"
@@ -1151,10 +1155,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <div className="sidebar-account-list" data-testid="sidebar-account-list">
               {renderUnifiedRow()}
               {insightsEntry}
-              {orderedAccounts.map(account => <React.Fragment key={account.id}>
+              <AccountSections sections={sections} renderAccount={account => <React.Fragment key={account.id}>
                 {renderAccount(account)}
                 {account.id === activeAccountId && renderAccountNotice(account)}
-              </React.Fragment>)}
+              </React.Fragment>} />
               {orderedAccounts.length === 0 && <Button variant="ghost" fullWidth className="justify-start" size="sm" onClick={onAddAccount} data-testid="add-account-btn"><Plus size={16} />{t('sidebar.addAccount')}</Button>}
               <BackupIndicator onOpenBackup={onOpenBackup} />
             </div>
@@ -1194,7 +1198,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </section>
       </div>
       {chooserPosition && useSwitcher && <AccountChooser position={chooserPosition} onClose={closeChooser}
-        accounts={orderedAccounts.map(account => ({ account, label: displayNames[account.id] || account.name || account.email }))}
+        sections={sections} displayNames={displayNames}
         renderAccount={renderAccount} unifiedRow={renderUnifiedRow(true)} onAddAccount={onAddAccount} />}
 
       <div className="sidebar-footer">

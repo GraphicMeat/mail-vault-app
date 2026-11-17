@@ -36,6 +36,7 @@ beforeEach(() => {
     displayNames: { A: 'Alice', B: 'Bob' },
     sendAsAddresses: {},
     accountColors: { B: '#fff' },
+    accountGroups: { A: 'Personal', B: 'Work' },
     hiddenAccounts: {},
     accountOrder: ['B', 'A'],
     notificationSettings: { enabled: true, sound: 'chime', accounts: { A: { enabled: false }, B: { enabled: true } }, mutedViewIds: [] },
@@ -61,7 +62,15 @@ describe('collectSettings', () => {
   });
 });
 
+it('exports groups only for selected accounts', () => {
+  expect(collectSettings(['A']).accountSettings.accountGroups).toEqual({ A: 'Personal' });
+});
+
 describe('applySettings', () => {
+  it('remaps group account ids', async () => {
+    await applySettings({ accountSettings: { accountGroups: { X: 'Study', D: 'Work' } } }, { X: 'X2' });
+    expect(h.settings.accountGroups).toEqual({ A: 'Personal', B: 'Work', X2: 'Study' });
+  });
   // A file from a build before settings v15 holds a view's quick actions as
   // whole copies of All views; they arrive as what the view changes.
   it('imports per-view quick actions as what each view sets differently', async () => {

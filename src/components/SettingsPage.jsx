@@ -226,6 +226,7 @@ export const settingSearchGroups = [
   ] },
   { id: 'accounts', section: 'profile', sectionKey: 'settings.accounts.sectionProfile', settings: [
     ['settings.accounts.displayName', 'name sender from identity'],
+    ['settings.accounts.group', 'personal work study sidebar section'],
     ['settings.accounts.emailSignature', 'signature email sign off footer'],
     ['settings.accounts.enableSignature', 'signature enable toggle on off'],
   ] },

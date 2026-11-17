@@ -22,6 +22,7 @@ import { Send } from 'lucide-react';
 import { SettingsTabs } from '../ui/SettingsTabs';
 import { AccountReorderList } from './AccountReorderList';
 import { AccountTransfer } from './AccountTransfer';
+import { AccountGroupField } from './AccountGroupField';
 import { DownloadModeControl } from './DownloadModeControl';
 import '../../styles/account-settings-navigation.css';
 import { textToHtml, htmlToText } from '../RichTextEditor';
@@ -91,6 +92,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
     getOrderedAccounts,
     setAccountOrder,
     accountColors,
+    accountGroups,
     setAccountColor,
     clearAccountColor,
     hiddenAccounts,
@@ -527,6 +529,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
                     <div className="text-xs text-mail-text-muted truncate">
                       <Private kind="email">{account.email}</Private>
                     </div>
+                    {accountGroups[account.id] && <div className="text-xs text-mail-text-muted truncate">{accountGroups[account.id]}</div>}
                   </div>
                   </button>
               )}
@@ -626,6 +629,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
                               focus:border-mail-accent transition-all`}
                   />
                 </div>
+                <AccountGroupField accountId={selectedAccountId} />
               </div>
             </div>
 
