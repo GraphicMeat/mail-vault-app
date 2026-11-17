@@ -77,8 +77,11 @@ export async function applySettings(snapshot, idMap, { applyGlobal, existingIds 
   const acct = snapshot.accountSettings || {};
 
   const patch = {};
-  for (const key of PER_ACCOUNT_MAPS) patch[key] = { ...s[key], ...remap(acct[key]) };
-  const groupNames = Object.values(s.accountGroups || {}).filter(Boolean);
+  for (const key of PER_ACCOUNT_MAPS) {
+    if (key !== 'accountGroups') patch[key] = { ...s[key], ...remap(acct[key]) };
+  }
+  patch.accountGroups = Object.fromEntries(Object.entries(s.accountGroups || {}).filter(([, name]) => typeof name === 'string'));
+  const groupNames = Object.values(patch.accountGroups).filter(Boolean);
   for (const [id, rawName] of Object.entries(remap(acct.accountGroups))) {
     if (typeof rawName !== 'string') continue;
     const name = resolveGroupName(rawName, groupNames);

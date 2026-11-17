@@ -14,7 +14,7 @@ import { useMessageListStore } from '../stores/messageListStore';
 import { useSyncStore } from '../stores/syncStore';
 import { useUiStore } from '../stores/uiStore';
 import { useThemeStore, selectTheme } from '../stores/themeStore';
-import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../stores/settingsStore';
+import { useSettingsStore, getAccountInitial, getAccountColor } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
 import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';

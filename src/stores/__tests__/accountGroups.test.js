@@ -6,7 +6,7 @@ vi.mock('../safeStorage', () => ({ safeStorage: {
   setItem: (key, value) => storage.set(key, value),
   removeItem: key => storage.delete(key),
 } }));
-const { useSettingsStore, _mergePersistedSettings } = await import('../settingsStore');
+const { useSettingsStore } = await import('../settingsStore');
 
 beforeEach(() => useSettingsStore.getState().resetSettings());
 

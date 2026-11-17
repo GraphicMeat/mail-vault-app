@@ -75,6 +75,10 @@ describe('applySettings', () => {
     await applySettings({ accountSettings: { accountGroups: { X: 'work' } } }, { X: 'X2' });
     expect(h.settings.accountGroups.X2).toBe('Work');
   });
+  it('ignores malformed imported group names', async () => {
+    await applySettings({ accountSettings: { accountGroups: { X: { label: 'Bad' }, Y: 42, Z: 'Study' } } }, { X: 'X2', Y: 'Y2', Z: 'Z2' });
+    expect(h.settings.accountGroups).toEqual({ A: 'Personal', B: 'Work', Z2: 'Study' });
+  });
   // A file from a build before settings v15 holds a view's quick actions as
   // whole copies of All views; they arrive as what the view changes.
   it('imports per-view quick actions as what each view sets differently', async () => {
