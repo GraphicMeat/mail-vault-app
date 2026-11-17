@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { Sidebar } from '../Sidebar';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { usePrivacyStore } from '../../stores/privacyStore';
 import { openFolder } from '../../services/workflows/loadSubtree';
 import { t } from '../../i18n';
 import '../../services/workflows/bindStoreActions';
@@ -30,7 +31,7 @@ beforeEach(() => {
     connectionErrorType: null, suspectEmptyServerData: null, loading: false, loadingMore: false,
     totalEmails: 0, viewMode: 'all', folderStatus: {} });
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); usePrivacyStore.setState({ enabled: false }); vi.restoreAllMocks(); });
 
 describe('sidebar account groups', () => {
   it('renders named groups and keeps account order', () => {
@@ -91,5 +92,20 @@ describe('sidebar account groups', () => {
     expect(rail.querySelectorAll('.sidebar-collapsed-divider')).toHaveLength(1);
     expect([...rail.querySelectorAll('button[aria-label*="@"]')].map(row => row.getAttribute('aria-label')))
       .toEqual(['Alice, alice@example.com', 'Bob, bob@example.com', 'Carol, carol@example.com']);
+  });
+  it('masks group labels, accessible names, and divider titles in privacy mode', () => {
+    vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+    usePrivacyStore.setState({ enabled: true });
+    const { rerender } = render(<Sidebar />);
+    const list = screen.getByTestId('sidebar-account-list');
+    expect(list.textContent).not.toContain('Personal');
+    expect(list.textContent).not.toContain('Work');
+    expect(list.querySelector('[role="group"][aria-label="Personal"]')).toBeNull();
+    expect(list.querySelector('[role="group"][aria-label="Work"]')).toBeNull();
+    useSettingsStore.setState({ sidebarCollapsed: true });
+    rerender(<Sidebar />);
+    const divider = document.querySelector('.sidebar-collapsed-divider');
+    expect(divider).toBeTruthy();
+    expect(divider.title).not.toBe('Work');
   });
 });

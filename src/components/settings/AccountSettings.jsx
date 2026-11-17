@@ -529,7 +529,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
                     <div className="text-xs text-mail-text-muted truncate">
                       <Private kind="email">{account.email}</Private>
                     </div>
-                    {accountGroups[account.id] && <div className="text-xs text-mail-text-muted truncate">{accountGroups[account.id]}</div>}
+                    {accountGroups[account.id] && <div className="text-xs text-mail-text-muted truncate"><Private kind="name">{accountGroups[account.id]}</Private></div>}
                   </div>
                   </button>
               )}

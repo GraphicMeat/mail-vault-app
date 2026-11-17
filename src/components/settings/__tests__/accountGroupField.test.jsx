@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { AccountSettings } from '../AccountSettings';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { usePrivacyStore } from '../../../stores/privacyStore';
 import '../../../services/workflows/bindStoreActions';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
@@ -17,7 +18,7 @@ beforeEach(() => {
     displayNames: {}, signatures: {}, accountOrder: [], hiddenAccounts: {} });
   useMailStore.setState({ accounts, activeAccountId: 'a', activeMailbox: 'INBOX', mailboxes: [], connectionStatus: 'connected' });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); usePrivacyStore.setState({ enabled: false }); vi.restoreAllMocks(); });
 
 it('shows group in Profile and below account email', () => {
   render(<AccountSettings accounts={accounts} />);
@@ -43,4 +44,16 @@ it('suggests existing group names', () => {
   const input = screen.getByRole('combobox', { name: 'Group' });
   expect(input.getAttribute('list')).toBeTruthy();
   expect(document.querySelector(`datalist[id="${input.getAttribute('list')}"] option[value="Work"]`)).toBeTruthy();
+});
+it('hides group names in the list and suggestions while privacy mode is on', () => {
+  vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+  usePrivacyStore.setState({ enabled: true });
+  render(<AccountSettings accounts={accounts} />);
+  const input = screen.getByRole('textbox', { name: 'Group' });
+  expect(input.classList.contains('mv-private-input')).toBe(true);
+  expect(input.hasAttribute('list')).toBe(false);
+  expect(document.querySelector('datalist')).toBeNull();
+  const list = document.querySelector('.account-settings-list');
+  expect(list.textContent).not.toContain('Personal');
+  expect(list.textContent).not.toContain('Work');
 });

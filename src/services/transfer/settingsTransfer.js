@@ -4,6 +4,7 @@ import { useSettingsStore, hasPremiumAccess, FETCH_MODES } from '../../stores/se
 import { useThemeStore } from '../../stores/themeStore';
 import { flushSafeStorage } from '../../stores/safeStorage';
 import { quickActionOverridesAsDiffs } from '../../utils/quickActions';
+import { resolveGroupName } from '../accountGroups';
 
 // Deliberately NOT transferred:
 // - cleanupRules: destructive automation must never silently arm on a new machine.
@@ -77,6 +78,15 @@ export async function applySettings(snapshot, idMap, { applyGlobal, existingIds 
 
   const patch = {};
   for (const key of PER_ACCOUNT_MAPS) patch[key] = { ...s[key], ...remap(acct[key]) };
+  const groupNames = Object.values(s.accountGroups || {}).filter(Boolean);
+  for (const [id, rawName] of Object.entries(remap(acct.accountGroups))) {
+    if (typeof rawName !== 'string') continue;
+    const name = resolveGroupName(rawName, groupNames);
+    if (name) {
+      patch.accountGroups[id] = name;
+      groupNames.push(name);
+    } else delete patch.accountGroups[id];
+  }
   let notificationSettings = {
     ...s.notificationSettings,
     accounts: { ...s.notificationSettings?.accounts, ...remap(acct.notificationSettings?.accounts) },
