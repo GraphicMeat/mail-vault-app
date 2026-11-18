@@ -60,7 +60,9 @@ export function ExplorerView({
   const setDateDepth = useSettingsStore(s => s.setExplorerDateDepth);
   const setPath = useSettingsStore(s => s.setExplorerPath);
   const scope = JSON.stringify([context.activeAccountId, context.activeMailbox, context.viewMode,
-    context.unifiedInbox, context.mailboxScope?.paths, grouping, dateDepth, searchActive]);
+    context.unifiedInbox, context.mailboxScope?.paths, grouping, dateDepth, searchActive,
+    // An account group is its own list: appended only when set, so paths remembered before groups keep their key.
+    ...(context.unifiedGroup ? [context.unifiedGroup] : [])]);
   const rememberedPath = useSettingsStore(s => s.explorerPaths[scope] || EMPTY_PATH);
   const locale = getLocale();
   const tree = useMemo(() => buildExplorerTree(emails, { grouping, dateDepth, locale, context, conversationEmails, includeThreads: hasOpenThread, fieldGroup }),

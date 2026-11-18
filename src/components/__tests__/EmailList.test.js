@@ -2011,6 +2011,28 @@ describe('Explorer search conversation scope', () => {
       mail.getChatEmails.mockImplementation(previousChat);
     }
   });
+
+  it('scopes the Explorer drill path to the open account group', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const settings = useSettingsStore.getState();
+    const previousMail = { ...mail };
+    const previousSettings = { ...settings };
+    const setExplorerPath = vi.fn();
+    try {
+      Object.assign(settings, { emailListView: 'explorer', explorerGrouping: 'date', explorerPaths: {}, setExplorerPath });
+      Object.assign(mail, { sortedEmails: makeEmails(2), selectedEmailIds: new Set(), activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedGroup: 'Work', unreadOnly: false });
+      render(React.createElement(EmailList));
+      fireEvent.click(screen.getAllByRole('button', { name: /^Open group / })[0]);
+      expect(JSON.parse(setExplorerPath.mock.lastCall[0])).toContain('Work');
+    } finally {
+      cleanup();
+      Object.assign(mail, previousMail);
+      Object.assign(settings, previousSettings);
+    }
+  });
 });
 
 

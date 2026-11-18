@@ -321,8 +321,8 @@ function EmailListComponent({ stacked = false }) {
       },
     };
   }, [savedGrouping, fieldSchemas, fieldValues, activeAccountId, t]);
-  const explorerContext = useMemo(() => ({ activeAccountId, activeMailbox, viewMode, unifiedInbox, mailboxScope }),
-    [activeAccountId, activeMailbox, viewMode, unifiedInbox, mailboxScope]);
+  const explorerContext = useMemo(() => ({ activeAccountId, activeMailbox, viewMode, unifiedInbox, unifiedGroup, mailboxScope }),
+    [activeAccountId, activeMailbox, viewMode, unifiedInbox, unifiedGroup, mailboxScope]);
   const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
   const threadMode = useSettingsStore(s => s.threadMode);
   const emailRowHighlight = useSettingsStore(s => s.emailRowHighlight);

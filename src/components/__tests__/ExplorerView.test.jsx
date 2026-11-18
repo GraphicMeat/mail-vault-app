@@ -85,6 +85,21 @@ describe('Explorer browsing', () => {
     expect(screen.getByRole('button', { name: 'Open group 2026' })).toBeTruthy();
   });
 
+  it('keeps a separate drill path for each account group and for All Inboxes', () => {
+    const work = { ...context, unifiedGroup: 'Work' };
+    const first = mount({ context: work }); enter('2026'); enter('September'); first.unmount();
+    const personal = mount({ context: { ...context, unifiedGroup: 'Personal' } });
+    expect(screen.getByRole('button', { name: 'Open group 2026' })).toBeTruthy();
+    enter('2025');
+    personal.unmount();
+    const all = mount();
+    expect(screen.getByRole('button', { name: 'Open group 2026' })).toBeTruthy();
+    all.unmount();
+    mount({ context: work });
+    expect(screen.getByText('Invoice September')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open group 2026' })).toBeNull();
+  });
+
   it('searches only the current group and narrows group selection', () => {
     const selected = [];
     mount({ onSetSelection: members => selected.push(...members) }); enter('2026');
