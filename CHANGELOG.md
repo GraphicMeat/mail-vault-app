@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added: click an account group in the sidebar to read its accounts' mail in one list, and fold or unfold the group.
+
 - Added: group accounts (Personal, Work, Study or any name you pick) in Settings > Accounts > Profile. The sidebar lists each group under its own label, the account picker groups them too, the collapsed sidebar separates them with a divider, and groups travel in account transfer files.
 
 - Added: double-click an email in the list to open it in its own window. Right-click actions also have Open in new window, off by default; add it in Settings > Quick actions.
