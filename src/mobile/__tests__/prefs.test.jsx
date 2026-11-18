@@ -115,8 +115,10 @@ describe('prefs.js', () => {
     const root = document.createElement('html');
     applyLook({ theme: 'light', palette: 'teal' }, root);
     expect([root.getAttribute('data-theme'), root.getAttribute('data-palette')]).toEqual(['light', 'teal']);
+    // `system` is resolved to what the system shows (the shared tokens need an explicit theme):
+    // dark where the system says nothing.
     applyLook({ theme: 'system', palette: 'nope' }, root);
-    expect([root.getAttribute('data-theme'), root.getAttribute('data-palette')]).toEqual([null, 'indigo']);
+    expect([root.getAttribute('data-theme'), root.getAttribute('data-palette')]).toEqual([window.matchMedia?.('(prefers-color-scheme: light)')?.matches ? 'light' : 'dark', 'indigo']);
   });
 });
 
@@ -149,19 +151,55 @@ describe('row swipes follow the preferences', () => {
   });
 });
 
+describe('the system theme', () => {
+  it('system resolves to what the system shows, and follows it live', async () => {
+    const { watchSystemTheme } = await import('../prefs.js');
+    let light = true;
+    const listeners = new Set();
+    const had = window.matchMedia;
+    window.matchMedia = (query) => ({
+      get matches() { return query.includes('light') ? light : false; },
+      media: query,
+      addEventListener: (_, fn) => listeners.add(fn),
+      removeEventListener: (_, fn) => listeners.delete(fn),
+    });
+    const root = document.documentElement;
+    try {
+      applyLook({ ...PREF_DEFAULTS, theme: 'system' }, root);
+      expect(root.getAttribute('data-theme')).toBe('light');
+      const stop = watchSystemTheme(() => ({ ...PREF_DEFAULTS, theme: 'system' }));
+      light = false;
+      listeners.forEach((fn) => fn());
+      expect(root.getAttribute('data-theme')).toBe('dark');
+      // A picked theme wins over the system.
+      applyLook({ ...PREF_DEFAULTS, theme: 'light' }, root);
+      expect(root.getAttribute('data-theme')).toBe('light');
+      stop();
+      expect(listeners.size).toBe(0);
+    } finally {
+      window.matchMedia = had;
+    }
+  });
+});
+
 describe('Settings preference rows', () => {
   const pick = (name) => document.querySelector(`[data-mv-pref="${name}"]`);
 
+  // The first screen's entries are desktop's nav ids (settingsManifest.js).
+  const NAV = { mail: 'mail-preferences' };
   const go = (page) => {
     const back = document.querySelector('[data-mv-settings-on]:not([data-mv-settings-on="root"])');
     if (back) fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    fireEvent.click(document.querySelector(`[data-mv-settings-page="${page}"]`));
+    fireEvent.click(document.querySelector(`[data-mv-settings-page="${NAV[page] || page}"]`));
   };
+  // Appearance is desktop's view: its rows are found by their labels, not phone hooks.
+  const tab = (key) => fireEvent.click(screen.getByRole('tab', { name: t(key) }));
+  const select = (key) => screen.queryByRole('combobox', { name: t(key) });
 
   it('changing a row writes the preference and the page follows', async () => {
     render(<Settings onClose={() => {}} />);
     go('appearance');
-    await act(async () => { fireEvent.change(pick('theme'), { target: { value: 'dark' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('settings.colors.dark') })); });
     await waitFor(() => expect(useMobileStore.getState().prefs.theme).toBe('dark'));
     expect(engine.calls).toContainEqual(['mobile.prefs.set', { theme: 'dark' }]);
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
@@ -202,26 +240,29 @@ describe('Settings preference rows', () => {
     expect(PREF_DEFAULTS.threadSortOrder).toBe('oldest-first');
     expect(readPrefs({ threadMode: 'flat' }).threadMode).toBe('flat');
     render(<Settings onClose={() => {}} page="appearance" />);
-    const mode = pick('threadMode');
+    tab('settings.appearance.section.reading');
+    const mode = select('settings.appearance.threadMode');
     expect([...mode.options].map((o) => [o.value, o.textContent])).toEqual([
       ['grouped', t('settings.appearance.threadModeGrouped')],
       ['expandable', t('settings.appearance.threadModeExpandable')],
       ['flat', t('settings.appearance.threadModeFlat')],
     ]);
-    expect([...pick('threadSortOrder').options].map((o) => o.textContent)).toEqual([t('settings.appearance.oldestFirst'), t('settings.appearance.newestFirst')]);
-    await act(async () => { fireEvent.change(pick('threadSortOrder'), { target: { value: 'newest-first' } }); });
+    expect([...select('settings.appearance.threadSortOrder').options].map((o) => o.textContent)).toEqual([t('settings.appearance.oldestFirst'), t('settings.appearance.newestFirst')]);
+    await act(async () => { fireEvent.change(select('settings.appearance.threadSortOrder'), { target: { value: 'newest-first' } }); });
     expect(engine.calls).toContainEqual(['mobile.prefs.set', { threadSortOrder: 'newest-first' }]);
     await act(async () => { fireEvent.change(mode, { target: { value: 'flat' } }); });
     await waitFor(() => expect(useMobileStore.getState().prefs.threadMode).toBe('flat'));
     expect(engine.calls).toContainEqual(['mobile.prefs.set', { threadMode: 'flat' }]);
-    expect(pick('threadSortOrder')).toBe(null);
+    // Desktop's Reading section keeps the order row in every mode; so does the phone now.
+    expect(select('settings.appearance.threadSortOrder')).toBeTruthy();
   });
 
   it('the language row stores the language', async () => {
     render(<Settings onClose={() => {}} page="appearance" />);
-    await act(async () => { fireEvent.change(pick('language'), { target: { value: 'de' } }); });
+    tab('settings.tab.language');
+    await act(async () => { fireEvent.click(screen.getByTestId('language-row-de')); });
     expect(engine.calls).toContainEqual(['mobile.settings.set', { language: 'de' }]);
-    await act(async () => { fireEvent.change(pick('language'), { target: { value: 'en' } }); });
+    await act(async () => { fireEvent.click(screen.getByTestId('language-row-en')); });
   });
 
   it('the account editor saves the name, the signature and hidden', async () => {
@@ -263,7 +304,7 @@ describe('email viewer theme', () => {
     expect(readPrefs({ emailViewerTheme: 'dark' }).emailViewerTheme).toBe('dark');
     expect(readPrefs({}).emailViewerTheme).toBe('system');
     render(<Settings onClose={() => {}} page="appearance" />);
-    await act(async () => { fireEvent.change(document.querySelector('[data-mv-pref="emailViewerTheme"]'), { target: { value: 'light' } }); });
+    await act(async () => { fireEvent.change(screen.getByRole('combobox', { name: t('settings.appearance.emailViewerTheme') }), { target: { value: 'light' } }); });
     expect(engine.calls).toContainEqual(['mobile.prefs.set', { emailViewerTheme: 'light' }]);
   });
 });

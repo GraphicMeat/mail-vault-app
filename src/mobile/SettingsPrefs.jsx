@@ -1,23 +1,14 @@
-// Settings' preference pages (W1a): what a desktop import carries over and the user can change
-// here, split the way desktop's pages split them (`section`): 'appearance' (look, language, email
-// viewer theme, conversations, date and time), 'mail' (Mail preferences: reading, deleting, swipes,
-// sending with its attachment reminder, and the templates compose inserts, TemplatesSettings.jsx)
-// and 'privacy' (Privacy & security: remote content, tracking pixels, which Premium strips while
-// the switch is on, and link safety: scanning, and click confirmation while it scans). Each row writes one preference (`mobile.prefs.set`, through the store's setPrefs) and the
-// page follows at once: theme and palette on the root element, the rest read where they act
-// (viewer, list rows, compose). The language row stores `language` (`mobile.settings.set`) and
-// loads that catalog, as the tour's first step does. Labels reuse the desktop's catalog keys.
+// Settings' preference pages not yet on the shared desktop views (Appearance is:
+// settings/Appearance.jsx), split the way desktop's pages split them (`section`): 'mail' (Mail
+// preferences: reading, deleting, swipes, sending with its attachment reminder), 'security'
+// (remote content, and link safety: scanning, and click confirmation while it scans) and
+// 'tracking' (tracking pixels, which Premium strips while the switch is on). Each row writes one
+// preference (`mobile.prefs.set`, through the store's setPrefs), read where it acts (viewer, list
+// rows, compose). Labels reuse the desktop's catalog keys.
 import React, { useId, useState } from 'react';
 import { useMobileStore } from './store.js';
-import { useT, getMobileLocale, loadMobileLocale } from './i18n.js';
-import { daemonCall } from './transport.js';
-import { LOCALES } from '../i18n/languages.js';
-import { THEMES, PALETTES, SWIPE_ACTIONS, SEND_DELAYS, MARK_READ_DELAYS, THREAD_MODES, THREAD_ORDERS } from './prefs.js';
-import TemplatesSettings from './TemplatesSettings.jsx';
-import AppIconSetting from './AppIconSetting.jsx';
-import TranslationReport from './TranslationReport.jsx';
-
-const DATE_FORMATS = ['auto', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd', 'dd MMM yyyy', 'custom'];
+import { useT, getMobileLocale } from './i18n.js';
+import { SWIPE_ACTIONS, SEND_DELAYS, MARK_READ_DELAYS } from './prefs.js';
 
 function seconds(n) {
   return new Intl.NumberFormat(getMobileLocale(), { style: 'unit', unit: 'second', unitDisplay: 'short' }).format(n);
@@ -74,16 +65,9 @@ export default function SettingsPrefs({ section }) {
   const t = useT();
   const prefs = useMobileStore((s) => s.prefs);
   const [failed, setFailed] = useState(false);
-  const [language, setLanguage] = useState(getMobileLocale());
   const set = async (patch) => {
     const ok = await useMobileStore.getState().setPrefs(patch);
     setFailed(!ok);
-  };
-  const pickLanguage = (code) => {
-    setLanguage(code);
-    // A failed write still switches this run; the next launch then follows the system.
-    daemonCall('mobile.settings.set', { language: code }).catch(() => {});
-    loadMobileLocale([code], code);
   };
   const swipeLabels = {
     toggleRead: t('settings.behavior.swipe.toggleRead'),
@@ -98,113 +82,6 @@ export default function SettingsPrefs({ section }) {
 
   return (
     <>
-      {section === 'appearance' && (
-        <>
-          <h2 className="mv-settings__heading">{t('settings.appearance.section.colors')}</h2>
-          <div className="mv-settings__list" data-mv-settings-look>
-            <Choice
-              name="theme"
-              label={t('settings.appearance.theme')}
-              value={prefs.theme}
-              options={THEMES.map((v) => [v, v === 'system' ? t('settings.section.system') : t(`settings.colors.${v}`)])}
-              onChange={(theme) => set({ theme })}
-            />
-            <Choice
-              name="palette"
-              label={t('settings.colors.palette')}
-              value={prefs.palette}
-              options={PALETTES.map((v) => [v, t(`settings.colors.${v}`)])}
-              onChange={(palette) => set({ palette })}
-            />
-            <Choice
-              name="language"
-              label={t('settings.language.tab')}
-              value={language}
-              options={LOCALES.map((l) => [l.code, l.native])}
-              onChange={pickLanguage}
-            />
-            <Choice
-              name="emailViewerTheme"
-              label={t('settings.appearance.emailViewerTheme')}
-              value={prefs.emailViewerTheme}
-              options={THEMES.map((v) => [v, v === 'system' ? t('settings.section.system') : t(`settings.colors.${v}`)])}
-              onChange={(emailViewerTheme) => set({ emailViewerTheme })}
-            />
-            <AppIconSetting />
-          </div>
-          <TranslationReport />
-
-          <h2 className="mv-settings__heading">{t('settings.appearance.section.reading')}</h2>
-          <div className="mv-settings__list" data-mv-settings-threads>
-            <Choice
-              name="viewStyle"
-              label={t('workspace.mailExperience')}
-              value={prefs.viewStyle}
-              options={[['list', t('workspace.emailView')], ['chat', t('workspace.chatView')]]}
-              onChange={(viewStyle) => set({ viewStyle })}
-            />
-            <Choice
-              name="threadMode"
-              label={t('settings.appearance.threadMode')}
-              value={prefs.threadMode}
-              options={THREAD_MODES.map((v) => [v, t({
-                grouped: 'settings.appearance.threadModeGrouped',
-                expandable: 'settings.appearance.threadModeExpandable',
-                flat: 'settings.appearance.threadModeFlat',
-              }[v])])}
-              onChange={(threadMode) => set({ threadMode })}
-            />
-            {prefs.threadMode !== 'flat' && (
-              <Choice
-                name="threadSortOrder"
-                label={t('settings.appearance.threadSortOrder')}
-                value={prefs.threadSortOrder}
-                options={THREAD_ORDERS.map((v) => [v, t(v === 'newest-first' ? 'settings.appearance.newestFirst' : 'settings.appearance.oldestFirst')])}
-                onChange={(threadSortOrder) => set({ threadSortOrder })}
-              />
-            )}
-          </div>
-
-          <h2 className="mv-settings__heading">{t('settings.appearance.section.dateTime')}</h2>
-          <div className="mv-settings__list">
-            <Choice
-              name="dateFormat"
-              label={t('settings.appearance.dateFormat')}
-              value={prefs.dateFormat}
-              options={DATE_FORMATS.map((v) => [v, {
-                auto: t('settings.appearance.default'),
-                'MM/dd/yyyy': t('settings.appearance.mmDdYyyyUs'),
-                'dd/MM/yyyy': t('settings.appearance.ddMmYyyyEurope'),
-                'yyyy-MM-dd': t('settings.appearance.yyyyMmDdIso'),
-                'dd MMM yyyy': t('settings.appearance.ddMmmYyyyExample'),
-                custom: t('settings.appearance.custom'),
-              }[v]])}
-              onChange={(dateFormat) => set({ dateFormat })}
-            />
-            {prefs.dateFormat === 'custom' && (
-              <label className="mv-setting mv-setting--choice">
-                <input
-                  className="mv-setting__input"
-                  data-mv-pref="customDateFormat"
-                  defaultValue={prefs.customDateFormat}
-                  placeholder={t('settings.appearance.eGDdMmYyyy')}
-                  aria-label={t('settings.appearance.custom')}
-                  maxLength={64}
-                  onBlur={(e) => { if (e.target.value !== prefs.customDateFormat) set({ customDateFormat: e.target.value }); }}
-                />
-              </label>
-            )}
-            <Choice
-              name="timeFormat"
-              label={t('settings.appearance.timeFormat')}
-              value={prefs.timeFormat}
-              options={[['auto', t('settings.appearance.default')], ['12h', t('settings.appearance.twelveHour')], ['24h', t('settings.appearance.twentyFourHour')]]}
-              onChange={(timeFormat) => set({ timeFormat })}
-            />
-          </div>
-
-        </>
-      )}
       {section === 'mail' && (
         <>
           <h2 className="mv-settings__heading">{t('settings.appearance.section.reading')}</h2>
@@ -301,45 +178,45 @@ export default function SettingsPrefs({ section }) {
               onChange={(attachmentReminder) => set({ attachmentReminder })}
             />
           </div>
-          <TemplatesSettings onFailed={setFailed} />
         </>
       )}
-      {section === 'privacy' && (
-        <>
-          <h2 className="mv-settings__heading">{t('settings.tab.security')}</h2>
-          <div className="mv-settings__list">
+      {section === 'security' && (
+        <div className="mv-settings__list">
+          <Toggle
+            name="holdExternalContent"
+            label={t('mobile.prefs.loadImages')}
+            hint={t('mobile.prefs.loadImagesHint')}
+            checked={!prefs.holdExternalContent}
+            onChange={(on) => set({ holdExternalContent: !on })}
+          />
+          <Toggle
+            name="linkSafetyEnabled"
+            label={t('settings.security.linkSafetyScanning')}
+            hint={t('settings.security.detectSuspiciousLinksEmailsDon')}
+            checked={prefs.linkSafetyEnabled}
+            onChange={(linkSafetyEnabled) => set({ linkSafetyEnabled })}
+          />
+          {prefs.linkSafetyEnabled && (
             <Toggle
-              name="holdExternalContent"
-              label={t('mobile.prefs.loadImages')}
-              hint={t('mobile.prefs.loadImagesHint')}
-              checked={!prefs.holdExternalContent}
-              onChange={(on) => set({ holdExternalContent: !on })}
+              name="linkSafetyClickConfirm"
+              label={t('settings.security.clickConfirmation')}
+              hint={t('settings.security.showWarningModalBeforeOpening')}
+              checked={prefs.linkSafetyClickConfirm}
+              onChange={(linkSafetyClickConfirm) => set({ linkSafetyClickConfirm })}
             />
-            <Toggle
-              name="trackerBlockingEnabled"
-              label={t('settings.tracking.blockTrackingPixels')}
-              hint={t('mobile.prefs.trackersPremiumHint')}
-              checked={prefs.trackerBlockingEnabled}
-              onChange={(trackerBlockingEnabled) => set({ trackerBlockingEnabled })}
-            />
-            <Toggle
-              name="linkSafetyEnabled"
-              label={t('settings.security.linkSafetyScanning')}
-              hint={t('settings.security.detectSuspiciousLinksEmailsDon')}
-              checked={prefs.linkSafetyEnabled}
-              onChange={(linkSafetyEnabled) => set({ linkSafetyEnabled })}
-            />
-            {prefs.linkSafetyEnabled && (
-              <Toggle
-                name="linkSafetyClickConfirm"
-                label={t('settings.security.clickConfirmation')}
-                hint={t('settings.security.showWarningModalBeforeOpening')}
-                checked={prefs.linkSafetyClickConfirm}
-                onChange={(linkSafetyClickConfirm) => set({ linkSafetyClickConfirm })}
-              />
-            )}
-          </div>
-        </>
+          )}
+        </div>
+      )}
+      {section === 'tracking' && (
+        <div className="mv-settings__list">
+          <Toggle
+            name="trackerBlockingEnabled"
+            label={t('settings.tracking.blockTrackingPixels')}
+            hint={t('mobile.prefs.trackersPremiumHint')}
+            checked={prefs.trackerBlockingEnabled}
+            onChange={(trackerBlockingEnabled) => set({ trackerBlockingEnabled })}
+          />
+        </div>
       )}
       {failed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
     </>

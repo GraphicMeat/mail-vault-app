@@ -1,42 +1,47 @@
-// The settings screen: a full-screen layer opened from the folder drawer's footer. Laid out as
-// desktop's Settings is: a first screen listing the pages under desktop's groups (General:
-// Appearance, Mail preferences, Notifications; Accounts & import: Accounts; Vault & privacy:
-// Offline, Privacy & security; Help: About), Premium above them, and each page on its own screen
-// with Back to the list (`SETTINGS_PAGES`). What each page holds:
+// The settings screen: a full-screen layer opened from the folder drawer's footer, laid out as
+// desktop's Settings is and drawn with desktop's components (src/components/settings): its
+// navigation comes from the shared manifest (settingsManifest.js), less the pages a phone has no
+// use for or whose feature the phone engine lacks (MOBILE_PAGES says which and why).
 //
-// - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one reauth),
-//   and Edit (AccountEditor.jsx: name, signature, hidden, and Remove after an inline confirm, as
-//   desktop keeps it on the account's own page; no remove button sits next to an account). A hidden account is
-//   listed here, marked, so it can be shown again.
-// - Preferences (SettingsPrefs.jsx): look, date and time, reading, deleting, swipes, sending.
-//   Appearance links to Quick actions (QuickActionsSettings.jsx, the viewer's bar), whose Back
-//   returns to Appearance (`SUB_PAGES`).
-// - AI (AiSettings.jsx, under desktop's Organize): the endpoint, its key and the review rule.
-// - Notifications: the switch asks the system's permission before it turns on, and stays off with
-//   a pointer to the system settings when the answer is no. Each time the screen shows (and when
-//   the app comes back to the front) it reads the system's current answer without asking: turned
-//   off there, notifications show off here too, with the same pointer. "Show preview" decides
-//   whether a notification names sender and subject, so it can only change while they are on.
-//   Both live in the engine (`mobile.settings.*`): the background run has no page, and reads the
-//   same rows. Then each account's switch, folders and quiet hours, and the priority senders
-//   (NotifySettings.jsx).
-// - Storage (StorageSettings.jsx), Data usage (DataUsage.jsx), Unfinished server actions
-//   (PendingActions.jsx) and Logs (LogsSettings.jsx): each its own page, logic in the engine.
-// - Offline: "Download in the background" (`backgroundDownload`, on by default): background runs
-//   keep the offline window up to date, so mail opens without a connection; then, per account,
-//   the window, the room it takes, the progress and "Download now" (OfflineSettings.jsx).
-// - Search index: body words and attachment text in the index, its size and Rebuild
-//   (SearchIndexSettings.jsx).
-// - Premium (first): "Premium: active until <date> (App Store)" or "Free", opening the Premium
-//   screen; a phone whose place another device took says so, with Sign in again. While Premium is
-//   on, Billing below it (Billing.jsx: manage the store subscription, the website account's devices).
-// - Move to another computer (TransferSettings.jsx), Unsubscribe (UnsubscribeSettings.jsx) and
-//   Network Activity (NetworkActivity.jsx): desktop's pages of those names, each in its own file.
-// - Replay tour (`onReplayTour`): the first-run tour again, without its account step (App.jsx).
-// - About: the version (a build constant) and the source link, a plain https anchor. The shell's
-//   navigation guard cancels it in the webview and hands it to the system browser, the one path
-//   every link takes; the page never opens a window itself.
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+// - The first screen is desktop's sidebar: the setting search, the section headings and their
+//   pages, Billing (while Premium is on), Diagnostics and Help pinned under them. Premium sits
+//   above them: "Premium: active until <date> (App Store)" or "Free", opening the Premium screen;
+//   a phone whose place another device took says so, with Sign in again.
+// - A page opens under desktop's page header (title, description) with Back. A host (Storage,
+//   Privacy & security, Diagnostics) shows its pages as desktop's tabs; Appearance and Mail
+//   preferences show their sections the same way.
+// - Search finds the pages and settings the phone has and lands on the setting, as on desktop.
+// - Appearance is desktop's views over the phone's preferences (settings/Appearance.jsx). The
+//   other pages are still the phone's own (each in its file; `.mv-legacy` keeps them out of the
+//   desktop reset) until they move onto the shared views too:
+//   - Mail preferences: Behavior (SettingsPrefs.jsx, SettingsDisplay.jsx) and Notifications: the
+//     switch asks the system's permission before it turns on, and stays off with a pointer to the
+//     system settings when the answer is no. Each time the screen shows (and when the app comes
+//     back to the front) it reads the system's current answer without asking: turned off there,
+//     notifications show off here too, with the same pointer. "Show preview" decides whether a
+//     notification names sender and subject, so it can only change while they are on. Both live
+//     in the engine (`mobile.settings.*`): the background run has no page, and reads the same
+//     rows. Then each account's switch, folders and quiet hours, and the priority senders.
+//   - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one
+//     reauth), and Edit (AccountEditor.jsx: name, signature, hidden, and Remove after an inline
+//     confirm). A hidden account is listed, marked, so it can be shown again. Then "Move to
+//     another computer" (TransferSettings.jsx).
+//   - Templates, AI (AiSettings.jsx), Unsubscribe.
+//   - Storage: Storage (with its Offline page: "Download in the background", then per account the
+//     window, its room, progress and Download now) and the search index; Data usage.
+//   - Privacy & security: Security, Tracking, Encryption, Network Activity.
+//   - Diagnostics: unfinished server actions (PendingActions.jsx) and Logs.
+//   - Help: desktop's Help & Support links as plain https anchors (the shell's navigation guard
+//     hands each to the system browser), Replay tour (`onReplayTour`), the version and the source.
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronLeft, Search, X } from 'lucide-react';
+import {
+  settingsSections, footerTabs, settingsHosts, hostOf, tabsById, navEntryOnPhone, mobileSearchPages, searchSettings,
+  settingText, landOnSetting,
+} from '../components/settings/settingsManifest';
+import { SettingsTabs } from '../components/ui/SettingsTabs';
+import { Button } from '../components/ui/Button';
+import { SettingsViewProvider } from '../components/settings/views/viewContext';
 import { daemonCall, notificationPermission, requestNotificationPermission } from './transport.js';
 import { useMobileStore } from './store.js';
 import KeyboardLayer from './KeyboardLayer.jsx';
@@ -51,12 +56,12 @@ import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
 import Billing from './Billing.jsx';
 import SettingsPrefs from './SettingsPrefs.jsx';
-import QuickActionsSettings from './QuickActionsSettings.jsx';
+import TemplatesSettings from './TemplatesSettings.jsx';
 import EncryptionSettings from './EncryptionSettings.jsx';
 import SearchIndexSettings from './SearchIndexSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
-import { AppearanceMore, MailMore, NotifyMore } from './SettingsDisplay.jsx';
+import { MailMore, NotifyMore } from './SettingsDisplay.jsx';
 import PendingActions from './PendingActions.jsx';
 import StorageSettings from './StorageSettings.jsx';
 import LogsSettings from './LogsSettings.jsx';
@@ -65,32 +70,47 @@ import NetworkActivity from './NetworkActivity.jsx';
 import UnsubscribeSettings from './UnsubscribeSettings.jsx';
 import TransferSettings from './TransferSettings.jsx';
 import AiSettings from './AiSettings.jsx';
+import Appearance from './settings/Appearance.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 
-function Switch({ checked, busy, disabled, label, hint, onChange }) {
-  const id = useId();
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-labelledby={`${id}-l`}
-      aria-describedby={hint ? `${id}-h` : undefined}
-      aria-busy={busy || undefined}
-      className="mv-setting"
-      disabled={disabled || busy}
-      onClick={() => onChange(!checked)}
-    >
-      <span className="mv-setting__text">
-        <span className="mv-setting__label" id={`${id}-l`}>{label}</span>
-        {hint && <span className="mv-setting__hint" id={`${id}-h`}>{hint}</span>}
-      </span>
-      <span className="mv-switch" aria-hidden="true"><span className="mv-switch__knob" /></span>
-    </button>
-  );
+/** Mail preferences' sections on the phone (desktop's behavior and notifications). */
+const MAIL_SECTIONS = [['behavior', 'generalSettings.behavior'], ['notifications', 'settings.notifications.notifications']];
+
+/**
+ * Pages opened from another page, not the navigation: `{ parent, titleKey }`. Back returns to the
+ * parent (Offline from Storage's row, Move to another computer from Accounts).
+ */
+const SUB_PAGES = {
+  offline: { parent: { nav: 'storage', tab: 'storage' }, titleKey: 'mobile.settings.offline' },
+  transfer: { parent: { nav: 'accounts' }, titleKey: 'settings.transfer.title' },
+};
+
+/**
+ * Where a page id leads: a manifest page or nav id, or one of the phone's earlier page ids (a
+ * caller's `page`, the tour's links). `{ nav, tab, section, sub }`.
+ */
+export function placeOf(page) {
+  const OLD = {
+    mail: { nav: 'mail-preferences', section: 'behavior' },
+    notifications: { nav: 'mail-preferences', section: 'notifications' },
+    transfer: { nav: 'accounts', sub: 'transfer' },
+    ai: { nav: 'ai-providers' },
+    offline: { nav: 'storage', tab: 'storage', sub: 'offline' },
+    search: { nav: 'storage', tab: 'storage' },
+    dataUsage: { nav: 'storage', tab: 'data-usage' },
+    privacy: { nav: 'privacy', tab: 'security' },
+    networkActivity: { nav: 'privacy', tab: 'network-activity' },
+    pending: { nav: 'diagnostics', tab: 'daemon' },
+    quickActions: { nav: 'appearance', section: 'quick-actions' },
+  };
+  if (!page || page === 'root') return { nav: 'root' };
+  if (OLD[page]) return OLD[page];
+  if (settingsHosts[page]) return { nav: page, tab: settingsHosts[page].pages[0] };
+  if (hostOf[page]) return { nav: hostOf[page].id, tab: page };
+  return { nav: page };
 }
 
 function AccountRow({ account, reauthBusy }) {
@@ -134,24 +154,40 @@ function AccountRow({ account, reauthBusy }) {
   );
 }
 
-/**
- * The first screen's pages in desktop's order and groups (SettingsPage.jsx's navigation), less
- * what a phone has no use for (vault, backup, daemon, shortcuts, ...). `[group, [page, title]]`.
- */
-export const SETTINGS_PAGES = [
-  ['settings.navigation.general', [['appearance', 'settings.appearance.appearance'], ['mail', 'settings.navigation.mailPreferences'], ['notifications', 'mobile.settings.notifications']]],
-  ['settings.navigation.accountsImport', [['accounts', 'settings.tab.accounts'], ['transfer', 'settings.transfer.title']]],
-  ['settings.navigation.organize', [['ai', 'settings.tab.aiProviders'], ['unsubscribe', 'unsubscribe.tabLabel']]],
-  ['settings.navigation.vaultPrivacy', [['offline', 'mobile.settings.offline'], ['storage', 'settings.tab.storage'], ['dataUsage', 'settings.tab.dataUsage'], ['search', 'settings.searchIndex.title'], ['privacy', 'settings.tab.privacySecurity'], ['networkActivity', 'settings.tab.networkActivity']]],
-  ['settings.tab.diagnostics', [['pending', 'settings.pendingActions.title'], ['logs', 'settings.tab.logs']]],
-  ['settings.tab.help', [['help', 'settings.tab.help']]],
-];
-// Billing opens from the Premium section, not from a group.
-const PAGE_TITLES = { ...Object.fromEntries(SETTINGS_PAGES.flatMap(([, pages]) => pages)), billing: 'settings.tab.billing', encryption: 'pgp.tab' };
-/** Pages opened from another page, not the list (`page: parent`): Back goes to the parent. */
-// Encryption opens from Privacy & security, as desktop nests it there.
-const SUB_PAGES = { quickActions: 'appearance', encryption: 'privacy' };
-PAGE_TITLES.quickActions = 'quickActions.title';
+function Switch({ checked, busy, disabled, label, hint, onChange }) {
+  const id = React.useId();
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-labelledby={`${id}-l`}
+      aria-describedby={hint ? `${id}-h` : undefined}
+      aria-busy={busy || undefined}
+      className="mv-setting"
+      disabled={disabled || busy}
+      onClick={() => onChange(!checked)}
+    >
+      <span className="mv-setting__text">
+        <span className="mv-setting__label" id={`${id}-l`}>{label}</span>
+        {hint && <span className="mv-setting__hint" id={`${id}-h`}>{hint}</span>}
+      </span>
+      <span className="mv-switch" aria-hidden="true"><span className="mv-switch__knob" /></span>
+    </button>
+  );
+}
+
+/** Templates (compose's "Templates"), with the note a refused write leaves. */
+function TemplatesPage() {
+  const t = useT();
+  const [failed, setFailed] = useState(false);
+  return (
+    <>
+      <TemplatesSettings onFailed={setFailed} />
+      {failed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+    </>
+  );
+}
 
 function Chevron() {
   return (
@@ -161,27 +197,28 @@ function Chevron() {
   );
 }
 
-/** `page`: the page to open on (the first screen, `'root'`, by default). */
+/** `page`: the page to open on (the first screen, `'root'`, by default): see `placeOf`. */
 export default function Settings({ onClose, onReplayTour, version = APP_VERSION, page: startPage = 'root' }) {
   const t = useT();
-  const [page, setPage] = useState(startPage);
-  // A list page opened from another page (Storage's Offline row): Back returns to that page.
-  // `{ page, to }`, cleared by the next Back.
-  const returnTo = useRef(null);
-  const openFrom = useCallback((from, to) => {
-    returnTo.current = { page: to, to: from };
-    setPage(to);
+  const [place, setPlace] = useState(() => placeOf(startPage));
+  const [query, setQuery] = useState('');
+  const contentRef = useRef(null);
+  const searchTarget = useRef(null);
+  const [searchNavigation, setSearchNavigation] = useState(0);
+
+  const go = useCallback((next) => setPlace(next), []);
+  // System Back on a page goes up one step, as the header's Back does: a page opened from another
+  // page to that page, a page to the first screen.
+  const back = useCallback(() => {
+    setPlace((p) => (p.sub ? SUB_PAGES[p.sub].parent : { nav: 'root' }));
   }, []);
-  // System Back on a page goes to the list first, as the header's Back does.
-  const toList = useCallback(() => {
-    const r = returnTo.current;
-    returnTo.current = null;
-    setPage((p) => (r && r.page === p ? r.to : SUB_PAGES[p] || 'root'));
-  }, []);
-  useBackLayer(page !== 'root', toList);
+  useBackLayer(place.nav !== 'root', back);
+
   const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
-  const [values, setValues] = useState(null); // { notifications: 'on'|'off', notificationPreview: bool }
+  const premium = useMobileStore((s) => s.premium);
+  const premiumLost = useMobileStore((s) => s.premiumLost);
+  const [values, setValues] = useState(null); // { notifications: 'on'|'off', notificationPreview: bool, backgroundDownload }
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(null); // the key being saved
   const [problem, setProblem] = useState(null); // 'denied' | 'failed'
@@ -264,198 +301,261 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
     return save('notifications', { notifications: 'on' });
   }, [save]);
 
-  const premium = useMobileStore((s) => s.premium);
-  const premiumLost = useMobileStore((s) => s.premiumLost);
+  // A search result lands on its setting once its page is open, as desktop's does.
+  useEffect(() => {
+    if (!searchNavigation) return undefined;
+    const root = contentRef.current;
+    const labelKey = searchTarget.current;
+    if (!root || !labelKey) return undefined;
+    return landOnSetting(root, settingText(t(labelKey)));
+    // `t` follows the language; a language change is not a new search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchNavigation]);
+
   const ready = Boolean(values);
   const reauthBusy = Boolean(reauthState?.busy);
   const reauthCode = reauthState && !reauthState.busy ? reauthState.code : null;
+  const nav = place.nav;
+  const host = settingsHosts[nav] ? { id: nav, ...settingsHosts[nav] } : null;
+  const entry = host || tabsById[nav];
+  const visible = (e) => navEntryOnPhone(e) && (e.id !== 'billing' || premium.premium);
 
-  const title = page === 'root' ? t('mobile.settings.title') : t(PAGE_TITLES[page]);
-  return (
-    <KeyboardLayer as="section" className="mv-settings" scroll=".mv-settings__body" role="dialog" aria-modal="true" aria-label={t('mobile.settings.title')}>
-      <header className="mv-compose__bar">
-        <button type="button" className="mv-compose__back" onClick={page === 'root' ? onClose : toList}>{t('common.back')}</button>
-        <h1 className="mv-compose__title">{title}</h1>
-      </header>
-      <div className="mv-settings__body" key={page} data-mv-settings-on={page}>
-        {page === 'root' && (
-          <>
-            <h2 className="mv-settings__heading">{t('common.premium')}</h2>
-            <div className="mv-settings__list">
-              <button
-                type="button"
-                className="mv-setting"
-                data-mv-premium-row
-                onClick={() => useMobileStore.getState().openPaywall(null)}
-              >
-                <span className="mv-setting__text">
-                  <span className="mv-setting__label">{premiumSummary(premium)}</span>
-                </span>
-                <Chevron />
-              </button>
-              {premium.premium && (
-                <button type="button" className="mv-setting" data-mv-settings-page="billing" onClick={() => setPage('billing')}>
-                  <span className="mv-setting__text">
-                    <span className="mv-setting__label">{t('settings.tab.billing')}</span>
-                  </span>
-                  <Chevron />
-                </button>
-              )}
-            </div>
-            {premiumLost === 'DEVICE_REPLACED' && !premium.premium && (
-              <div className="mv-settings__note mv-settings__note--error" role="alert" data-mv-premium-lost>
-                {t('mobile.premium.deviceReplaced')}{' '}
-                <button type="button" className="mv-textbtn" onClick={() => useMobileStore.getState().openPaywall(null, { signIn: true })}>
-                  {t('mobile.premium.signInAgain')}
-                </button>
-              </div>
-            )}
-            {SETTINGS_PAGES.map(([group, pages]) => (
-              <React.Fragment key={group}>
-                <h2 className="mv-settings__heading">{t(group)}</h2>
-                <div className="mv-settings__list">
-                  {pages.map(([key, label]) => (
-                    <button key={key} type="button" className="mv-setting" data-mv-settings-page={key} onClick={() => setPage(key)}>
-                      <span className="mv-setting__text">
-                        <span className="mv-setting__label">{t(label)}</span>
-                      </span>
-                      <Chevron />
-                    </button>
-                  ))}
-                </div>
-              </React.Fragment>
-            ))}
-          </>
-        )}
+  const openResult = (page) => {
+    const to = placeOf(page.id);
+    if (page.section && (page.id === 'appearance' || page.id === 'mail-preferences')) to.section = page.section;
+    searchTarget.current = page.keywords ? page.labelKey : null;
+    setQuery('');
+    setPlace(to);
+    setSearchNavigation((n) => n + 1);
+  };
+  const results = query.trim() ? searchSettings(t, query, mobileSearchPages) : [];
 
-        {page === 'appearance' && <><SettingsPrefs section="appearance" /><AppearanceMore /></>}
-        {page === 'mail' && <><SettingsPrefs section="mail" /><MailMore /></>}
-        {page === 'appearance' && (
-          <>
-            <h2 className="mv-settings__heading">{t('quickActions.title')}</h2>
-            <div className="mv-settings__list">
-              <button type="button" className="mv-setting" data-mv-settings-page="quickActions" onClick={() => setPage('quickActions')}>
-                <span className="mv-setting__text">
-                  <span className="mv-setting__label">{t('quickActions.surface.reader')}</span>
-                </span>
-                <Chevron />
-              </button>
-            </div>
-          </>
-        )}
-        {page === 'privacy' && (
-          <>
-            <SettingsPrefs section="privacy" />
-            <div className="mv-settings__list">
-              <button type="button" className="mv-setting" data-mv-settings-page="encryption" onClick={() => setPage('encryption')}>
-                <span className="mv-setting__text"><span className="mv-setting__label">{t('pgp.tab')}</span></span>
-                <Chevron />
-              </button>
-            </div>
-          </>
-        )}
-        {page === 'quickActions' && <QuickActionsSettings />}
-        {page === 'billing' && <Billing />}
-        {page === 'encryption' && <EncryptionSettings />}
-        {page === 'storage' && <StorageSettings onOpenOffline={() => openFrom('storage', 'offline')} />}
-        {page === 'dataUsage' && <DataUsage />}
-        {page === 'pending' && <PendingActions />}
-        {page === 'logs' && <LogsSettings />}
-        {page === 'search' && <SearchIndexSettings />}
-        {page === 'networkActivity' && <NetworkActivity />}
-        {page === 'unsubscribe' && <UnsubscribeSettings />}
-        {page === 'transfer' && <TransferSettings />}
-        {page === 'ai' && <AiSettings />}
+  const navItem = (tab) => (
+    <button key={tab.id} type="button" className="settings-nav-item" data-mv-settings-page={tab.id} onClick={() => go(placeOf(tab.id))}>
+      <tab.icon size={17} aria-hidden="true" />
+      <span className="text-sm font-medium">{t(tab.labelKey)}</span>
+    </button>
+  );
 
-        {page === 'accounts' && (
-          <>
-            {reauthCode && <p className="mv-settings__note mv-settings__note--error" role="alert">{t(errorKey(reauthCode))}</p>}
-            <ul className="mv-settings__list">
-              {accounts.map((a) => <AccountRow key={a.id} account={a} reauthBusy={reauthBusy} />)}
-            </ul>
-          </>
-        )}
+  const title = place.sub ? t(SUB_PAGES[place.sub].titleKey) : nav === 'root' ? t('mobile.settings.title') : entry ? t(entry.labelKey) : '';
+  const description = !place.sub && !host && entry?.descriptionKey ? t(entry.descriptionKey) : null;
 
-        {page === 'notifications' && (
-          <>
-            {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
-            <div className="mv-settings__list">
-              <Switch
-                checked={values?.notifications === 'on'}
-                busy={busy === 'notifications'}
-                disabled={!ready}
-                label={t('mobile.settings.notifyToggle')}
-                hint={t('mobile.settings.notifyHint')}
-                onChange={onNotifications}
-              />
-              <Switch
-                checked={values ? values.notificationPreview !== false : true}
-                busy={busy === 'notificationPreview'}
-                disabled={!ready || values.notifications !== 'on'}
-                label={t('mobile.settings.preview')}
-                hint={t('mobile.settings.previewHint')}
-                onChange={(v) => save('notificationPreview', { notificationPreview: v })}
-              />
-              {accounts.map((a) => <AccountNotifications key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
-            </div>
-            <NotifyMore enabled={ready && values.notifications === 'on'} />
-            {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
-            {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
-            <PrioritySenders />
-          </>
-        )}
-
-        {page === 'offline' && (
-          <>
-            {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
-            <div className="mv-settings__list">
-              <Switch
-                checked={values ? values.backgroundDownload !== false : true}
-                busy={busy === 'backgroundDownload'}
-                disabled={!ready}
-                label={t('mobile.settings.downloadToggle')}
-                hint={t('mobile.settings.downloadHint')}
-                onChange={(v) => save('backgroundDownload', { backgroundDownload: v })}
-              />
-            </div>
-            {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
-            <OfflineSettings />
-          </>
-        )}
-
-        {page === 'help' && (
-          <div className="mv-settings__list" data-mv-help>
-            {/* Desktop's Help & Support links, as plain https anchors: the shell's navigation guard
-                hands each to the system browser. */}
-            {[
-              ['faq', t('settings.help.faq'), t('settings.help.faqSubtitle'), faqUrl(getMobileLocale(), 'mobile_help')],
-              ['bug', t('settings.help.reportBug'), t('settings.help.reportGithubEmailDeveloper'), `${SOURCE_URL}/issues`],
-              ['discord', t('bugReport.joinDiscord'), null, DISCORD_INVITE],
-              ['website', t('settings.help.mailvaultWebsite'), t('settings.help.docsFaqLatestRelease'), appLink(SITE, 'mobile_help')],
-              ['privacy', t('settings.help.privacyPolicy'), t('settings.help.privacyPolicySubtitle'), `${SITE}privacy.html`],
-            ].map(([key, label, hint, href]) => (
-              <a key={key} className="mv-setting mv-settings__link" data-mv-help-link={key} href={href} target="_blank" rel="noopener noreferrer">
-                <span className="mv-setting__text">
-                  <span className="mv-setting__label">{label}</span>
-                  {hint && <span className="mv-setting__hint">{hint}</span>}
-                </span>
-                <Chevron />
-              </a>
-            ))}
-            {onReplayTour && (
-              <button type="button" className="mv-setting" data-mv-replay-tour onClick={onReplayTour}>
-                <span className="mv-setting__text">
-                  <span className="mv-setting__label">{t('mobile.settings.replayTour')}</span>
-                </span>
-              </button>
-            )}
-            {version && <p className="mv-settings__row">{t('mobile.settings.version', { version })}</p>}
-            <a className="mv-settings__row mv-settings__link" href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
-              {t('mobile.settings.source')}
-            </a>
-          </div>
-        )}
+  const notificationsPage = (
+    <>
+      {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
+      <div className="mv-settings__list">
+        <Switch
+          checked={values?.notifications === 'on'}
+          busy={busy === 'notifications'}
+          disabled={!ready}
+          label={t('mobile.settings.notifyToggle')}
+          hint={t('mobile.settings.notifyHint')}
+          onChange={onNotifications}
+        />
+        <Switch
+          checked={values ? values.notificationPreview !== false : true}
+          busy={busy === 'notificationPreview'}
+          disabled={!ready || values.notifications !== 'on'}
+          label={t('mobile.settings.preview')}
+          hint={t('mobile.settings.previewHint')}
+          onChange={(v) => save('notificationPreview', { notificationPreview: v })}
+        />
+        {accounts.map((a) => <AccountNotifications key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
       </div>
+      <NotifyMore enabled={ready && values.notifications === 'on'} />
+      {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
+      {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+      <PrioritySenders />
+    </>
+  );
+
+  const offlinePage = (
+    <>
+      {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
+      <div className="mv-settings__list">
+        <Switch
+          checked={values ? values.backgroundDownload !== false : true}
+          busy={busy === 'backgroundDownload'}
+          disabled={!ready}
+          label={t('mobile.settings.downloadToggle')}
+          hint={t('mobile.settings.downloadHint')}
+          onChange={(v) => save('backgroundDownload', { backgroundDownload: v })}
+        />
+      </div>
+      {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+      <OfflineSettings />
+    </>
+  );
+
+  /** A host page's or a section's content: the phone's own pages, not moved onto views yet. */
+  const pageContent = (id) => {
+    switch (id) {
+      case 'behavior': return <><SettingsPrefs section="mail" /><MailMore /></>;
+      case 'notifications': return notificationsPage;
+      case 'storage': return <><StorageSettings onOpenOffline={() => go({ nav: 'storage', tab: 'storage', sub: 'offline' })} /><SearchIndexSettings /></>;
+      case 'data-usage': return <DataUsage />;
+      case 'security': return <SettingsPrefs section="security" />;
+      case 'tracking': return <SettingsPrefs section="tracking" />;
+      case 'encryption': return <EncryptionSettings />;
+      case 'network-activity': return <NetworkActivity />;
+      case 'daemon': return <PendingActions />;
+      case 'logs': return <LogsSettings />;
+      default: return null;
+    }
+  };
+
+  const tabbed = (tabs, value, onChange, label) => (
+    <SettingsTabs tabs={tabs} value={value} onChange={onChange} label={label}>
+      <div className="mv-legacy">{pageContent(value)}</div>
+    </SettingsTabs>
+  );
+
+  let body = null;
+  if (place.sub === 'offline') body = <div className="mv-legacy">{offlinePage}</div>;
+  else if (place.sub === 'transfer') body = <div className="mv-legacy"><TransferSettings /></div>;
+  else if (host) {
+    const pages = host.pages.filter((id) => navEntryOnPhone({ id }));
+    const tab = pages.includes(place.tab) ? place.tab : pages[0];
+    body = tabbed(pages.map((id) => ({ id, label: t(tabsById[id].labelKey) })), tab, (id) => go({ nav, tab: id }), t(host.labelKey));
+  } else if (nav === 'appearance') {
+    body = <Appearance section={place.section} onSectionChange={(section) => setPlace((p) => ({ ...p, section }))} version={version} />;
+  } else if (nav === 'mail-preferences') {
+    const section = MAIL_SECTIONS.some(([id]) => id === place.section) ? place.section : 'behavior';
+    body = tabbed(MAIL_SECTIONS.map(([id, key]) => ({ id, label: t(key) })), section, (id) => go({ nav, section: id }), t('settings.navigation.mailPreferences'));
+  } else if (nav === 'accounts') {
+    body = (
+      <div className="mv-legacy">
+        {reauthCode && <p className="mv-settings__note mv-settings__note--error" role="alert">{t(errorKey(reauthCode))}</p>}
+        <ul className="mv-settings__list">
+          {accounts.map((a) => <AccountRow key={a.id} account={a} reauthBusy={reauthBusy} />)}
+        </ul>
+        <div className="mv-settings__list">
+          <button type="button" className="mv-setting" data-mv-settings-page="transfer" onClick={() => go({ nav: 'accounts', sub: 'transfer' })}>
+            <span className="mv-setting__text"><span className="mv-setting__label">{t('settings.transfer.title')}</span></span>
+            <Chevron />
+          </button>
+        </div>
+      </div>
+    );
+  } else if (nav === 'templates') {
+    body = <div className="mv-legacy"><TemplatesPage /></div>;
+  } else if (nav === 'ai-providers') {
+    body = <div className="mv-legacy"><AiSettings /></div>;
+  } else if (nav === 'unsubscribe') {
+    body = <div className="mv-legacy"><UnsubscribeSettings /></div>;
+  } else if (nav === 'billing') {
+    body = <div className="mv-legacy"><Billing /></div>;
+  } else if (nav === 'help') {
+    body = (
+      <div className="mv-legacy mv-settings__list" data-mv-help>
+        {/* Desktop's Help & Support links, as plain https anchors: the shell's navigation guard
+            hands each to the system browser. */}
+        {[
+          ['faq', t('settings.help.faq'), t('settings.help.faqSubtitle'), faqUrl(getMobileLocale(), 'mobile_help')],
+          ['bug', t('settings.help.reportBug'), t('settings.help.reportGithubEmailDeveloper'), `${SOURCE_URL}/issues`],
+          ['discord', t('bugReport.joinDiscord'), null, DISCORD_INVITE],
+          ['website', t('settings.help.mailvaultWebsite'), t('settings.help.docsFaqLatestRelease'), appLink(SITE, 'mobile_help')],
+          ['privacy', t('settings.help.privacyPolicy'), t('settings.help.privacyPolicySubtitle'), `${SITE}privacy.html`],
+        ].map(([key, label, hint, href]) => (
+          <a key={key} className="mv-setting mv-settings__link" data-mv-help-link={key} href={href} target="_blank" rel="noopener noreferrer">
+            <span className="mv-setting__text">
+              <span className="mv-setting__label">{label}</span>
+              {hint && <span className="mv-setting__hint">{hint}</span>}
+            </span>
+            <Chevron />
+          </a>
+        ))}
+        {onReplayTour && (
+          <button type="button" className="mv-setting" data-mv-replay-tour onClick={onReplayTour}>
+            <span className="mv-setting__text">
+              <span className="mv-setting__label">{t('mobile.settings.replayTour')}</span>
+            </span>
+          </button>
+        )}
+        {version && <p className="mv-settings__row">{t('mobile.settings.version', { version })}</p>}
+        <a className="mv-settings__row mv-settings__link" href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
+          {t('mobile.settings.source')}
+        </a>
+      </div>
+    );
+  }
+
+  const onKey = place.sub || nav;
+  return (
+    <KeyboardLayer as="section" className="mv-settings mv-shared-ui" scroll=".mv-settings__body" role="dialog" aria-modal="true" aria-label={t('mobile.settings.title')}>
+      <SettingsViewProvider t={t} locale={getMobileLocale()}>
+        <header className="settings-header mv-settings__header">
+          <div className="settings-header-context flex items-center gap-3 min-w-0">
+            <Button variant="ghost" icon size="md" aria-label={t('common.back')} onClick={nav === 'root' ? onClose : back}>
+              <ChevronLeft size={20} className="text-mail-text-muted" aria-hidden="true" />
+            </Button>
+            <div className="settings-header-title min-w-0">
+              <h1 className="text-lg font-semibold text-mail-text truncate">{title}</h1>
+              {description && <p className="settings-page-description">{description}</p>}
+            </div>
+          </div>
+        </header>
+        <div className="mv-settings__body settings-content" ref={contentRef} key={onKey} data-mv-settings-on={onKey} data-page={place.tab || nav}>
+          {nav === 'root' ? (
+            <div className="settings-sidebar mv-settings__nav">
+              <nav className="settings-navigation" aria-label={t('mobile.settings.title')}>
+                <div className="settings-search">
+                  <Search size={15} aria-hidden="true" />
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} type="search"
+                    aria-label={t('settings.navigation.searchSetting')} placeholder={t('settings.navigation.searchSetting')} />
+                  {query && <Button variant="ghost" icon size="xs" onClick={() => setQuery('')} aria-label={t('common.clear')}><X size={14} /></Button>}
+                </div>
+                <div className="settings-nav-pages">
+                  {query.trim() ? (
+                    <>
+                      <p className="settings-nav-heading" role="status">{t('settings.navigation.results', { count: results.length })}</p>
+                      {results.map((page) => (
+                        <button key={`${page.id}-${page.section || ''}-${page.labelKey}`} type="button" className="settings-nav-item settings-search-result"
+                          onClick={() => openResult(page)}>
+                          <page.icon size={17} aria-hidden="true" />
+                          <span className="settings-search-result-copy"><span>{t(page.labelKey)}</span>
+                            {page.section && <small>{t(tabsById[page.id].labelKey)}{page.sectionKey && ` · ${t(page.sectionKey)}`}</small>}
+                          </span>
+                        </button>
+                      ))}
+                      {results.length === 0 && <p className="px-3 py-2 text-sm text-mail-text-muted">{t('settings.navigation.searchHint')}</p>}
+                    </>
+                  ) : (
+                    <>
+                      <p className="settings-nav-heading">{t('common.premium')}</p>
+                      <div className="mv-legacy">
+                        <button type="button" className="mv-setting mv-settings__premium" data-mv-premium-row
+                          onClick={() => useMobileStore.getState().openPaywall(null)}>
+                          <span className="mv-setting__text"><span className="mv-setting__label">{premiumSummary(premium)}</span></span>
+                          <Chevron />
+                        </button>
+                        {premiumLost === 'DEVICE_REPLACED' && !premium.premium && (
+                          <div className="mv-settings__note mv-settings__note--error" role="alert" data-mv-premium-lost>
+                            {t('mobile.premium.deviceReplaced')}{' '}
+                            <button type="button" className="mv-textbtn" onClick={() => useMobileStore.getState().openPaywall(null, { signIn: true })}>
+                              {t('mobile.premium.signInAgain')}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {settingsSections.map((section) => {
+                        const tabs = section.tabs.filter(visible);
+                        return tabs.length ? (
+                          <React.Fragment key={section.labelKey}>
+                            <p className="settings-nav-heading">{t(section.labelKey)}</p>
+                            {tabs.map(navItem)}
+                          </React.Fragment>
+                        ) : null;
+                      })}
+                    </>
+                  )}
+                </div>
+                {!query.trim() && <div className="settings-nav-footer">{footerTabs.filter(visible).map(navItem)}</div>}
+              </nav>
+            </div>
+          ) : body}
+        </div>
+      </SettingsViewProvider>
     </KeyboardLayer>
   );
 }

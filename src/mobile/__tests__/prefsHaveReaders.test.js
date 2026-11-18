@@ -11,6 +11,8 @@ import { PREF_DEFAULTS } from '../prefs.js';
 const ROOT = resolve(process.cwd(), 'src/mobile');
 // Where a key is set or merely listed, not acted on.
 const NOT_READERS = new Set(['prefs.js', 'SettingsPrefs.jsx', 'Settings.jsx', 'SettingsDisplay.jsx']);
+// The settings containers (src/mobile/settings/) set the preferences too.
+const NOT_READER_DIRS = ['settings/'];
 
 // Acted on by the engine or the shell, not by the page:
 const ENGINE_READ = {
@@ -35,7 +37,7 @@ const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|
 const reads = (src, key) => new RegExp(`(\\.|['"\`])${key}\\b`).test(src);
 
 const readers = files(ROOT)
-  .filter((p) => !NOT_READERS.has(relative(ROOT, p)))
+  .filter((p) => !NOT_READERS.has(relative(ROOT, p)) && !NOT_READER_DIRS.some((d) => relative(ROOT, p).startsWith(d)))
   .map((p) => ({ path: relative(ROOT, p), src: stripComments(readFileSync(p, 'utf8')) }));
 
 /** prefs.js's exported functions (`function` or arrow), each with its body. */

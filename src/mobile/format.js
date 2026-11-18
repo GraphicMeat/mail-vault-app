@@ -1,7 +1,7 @@
 // The list's date column on mobile: the shared core (`src/utils/emailDateCore.js`) with the
 // phone's date preferences (`dateFormat`, `customDateFormat`, `timeFormat`; desktop's defaults,
 // 'auto' date and time, until set) and the mobile language picked at launch.
-import { formatEmailDateWith } from '../utils/emailDateCore.js';
+import { formatEmailDateWith, formatDateOnlyWith, formatTimeOf } from '../utils/emailDateCore.js';
 import { t, getMobileLocale } from './i18n.js';
 
 export const MOBILE_DATE_SETTINGS = Object.freeze({ dateFormat: 'auto', customDateFormat: '', timeFormat: 'auto' });
@@ -19,6 +19,21 @@ export function dateSettingsOf(prefs) {
 export function formatEmailDate(dateMs, now = new Date(), prefs = null) {
   if (dateMs == null) return '';
   return formatEmailDateWith(dateMs, { ...dateSettingsOf(prefs), appLocale: getMobileLocale(), translate: t, now });
+}
+
+/** Time of day per `timeFormat`, as desktop's formatTime (Settings' samples). */
+export function formatTime(date, prefs = null) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  return formatTimeOf(d, { timeFormat: dateSettingsOf(prefs).timeFormat, appLocale: getMobileLocale() });
+}
+
+/** A date without its time per `dateFormat`, as desktop's formatDateOnly (Settings' samples). */
+export function formatDateOnly(date, prefs = null, { alwaysShowYear = false } = {}) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const { dateFormat, customDateFormat } = dateSettingsOf(prefs);
+  return formatDateOnlyWith(d, { dateFormat, customDateFormat, appLocale: getMobileLocale(), alwaysShowYear });
 }
 
 /** The viewer header's date: day and time in full, in the mobile language (`timeFormat` 12h/24h). */

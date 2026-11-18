@@ -4,7 +4,7 @@
 // the stored one (so a desktop import applies it), calling the shell only when it changes.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, cleanup, act, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, within, cleanup, act, waitFor, fireEvent } from '@testing-library/react';
 
 const shell = vi.hoisted(() => ({ prefs: {}, icons: [], fail: false }));
 
@@ -54,19 +54,22 @@ describe('app icon', () => {
   });
 
   it('the picker switches the icon and stores it; a refusal says so and keeps the old one', async () => {
-    const { default: AppIconSetting } = await import('../AppIconSetting.jsx');
+    const { default: Appearance } = await import('../settings/Appearance.jsx');
     const { useMobileStore } = await import('../store.js');
-    render(<AppIconSetting />);
-    expect(document.querySelector('[data-mv-app-icon="purple"]').getAttribute('aria-pressed')).toBe('true');
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-app-icon="teal"]')); });
+    const { t } = await import('../i18n.js');
+    // Desktop's App icon row, in Appearance > Colors.
+    const icon = (name) => within(screen.getByRole('group', { name: t('settings.icons.title') })).getByRole('button', { name: t(`settings.icons.${name}`) });
+    render(<Appearance />);
+    expect(icon('purple').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => { fireEvent.click(icon('teal')); });
     await waitFor(() => expect(shell.prefs.appIcon).toBe('teal'));
     expect(shell.icons[0]).toBe('teal');
     expect(useMobileStore.getState().prefs.appIcon).toBe('teal');
-    expect(document.querySelector('[data-mv-app-icon="teal"]').getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(icon('teal').getAttribute('aria-pressed')).toBe('true'));
 
     shell.fail = true;
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-app-icon="purple"]')); });
-    await waitFor(() => expect(document.querySelector('[role="alert"]')).toBeTruthy());
+    await act(async () => { fireEvent.click(icon('purple')); });
+    await waitFor(() => expect(screen.getByText(t('settings.icons.error'))).toBeTruthy());
     expect(shell.prefs.appIcon).toBe('teal');
   });
 });

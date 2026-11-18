@@ -22,6 +22,8 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
+// Templates have desktop's own page now (Settings > Templates), no longer under Mail preferences.
+const { default: TemplatesSettings } = await import('../TemplatesSettings.jsx');
 const { default: SettingsPrefs } = await import('../SettingsPrefs.jsx');
 const { useMobileStore } = await import('../store.js');
 const { PREF_DEFAULTS, readPrefs } = await import('../prefs.js');
@@ -62,7 +64,7 @@ describe('attachment reminder', () => {
 
 describe('templates', () => {
   it('adds one with a name and a body', async () => {
-    render(<SettingsPrefs section="mail" />);
+    render(<TemplatesSettings />);
     expect(screen.getByText(t('settings.templates.noTemplatesYetCreateOne'))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: t('settings.templates.addTemplate') }));
     fireEvent.change(screen.getByLabelText(t('settings.templates.templateName')), { target: { value: 'Thanks' } });
@@ -74,7 +76,7 @@ describe('templates', () => {
   });
 
   it('will not save one without a name or a body', async () => {
-    render(<SettingsPrefs section="mail" />);
+    render(<TemplatesSettings />);
     fireEvent.click(screen.getByRole('button', { name: t('settings.templates.addTemplate') }));
     fireEvent.change(screen.getByLabelText(t('settings.templates.templateName')), { target: { value: 'Only a name' } });
     expect(screen.getByRole('button', { name: t('common.save') }).disabled).toBe(true);
@@ -84,7 +86,7 @@ describe('templates', () => {
     const list = [{ id: 'x', name: 'Thanks', body: 'Thank you!' }, { name: 'Later', body: 'Talk later.' }];
     engine.prefs.templates = list;
     useMobileStore.setState({ prefs: { ...PREF_DEFAULTS, templates: list } });
-    render(<SettingsPrefs section="mail" />);
+    render(<TemplatesSettings />);
     fireEvent.click(screen.getByRole('button', { name: `${t('settings.templates.editTemplate')}: Thanks` }));
     fireEvent.change(screen.getByLabelText(t('settings.templates.templateBody')), { target: { value: 'Many thanks!' } });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.save') })); });

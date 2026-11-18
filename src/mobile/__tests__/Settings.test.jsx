@@ -235,34 +235,48 @@ describe('Settings', () => {
 
 describe('Settings pages, as desktop lays them out', () => {
   const pageRows = () => [...document.querySelectorAll('[data-mv-settings-page]')].map((b) => b.getAttribute('data-mv-settings-page'));
+  const heading = () => screen.getByRole('heading', { level: 1 }).textContent;
 
-  it('the first screen lists the pages in desktop order, under desktop\'s groups, with no settings of its own', () => {
+  it('the first screen is desktop\'s sidebar: its groups and pages less what a phone lacks, with no settings of its own', () => {
     render(<Settings onClose={() => {}} />);
-    expect(pageRows()).toEqual(['appearance', 'mail', 'notifications', 'accounts', 'transfer', 'ai', 'unsubscribe', 'offline', 'storage', 'dataUsage', 'search', 'privacy', 'networkActivity', 'pending', 'logs', 'help']);
-    const headings = [...document.querySelectorAll('.mv-settings__heading')].map((h) => h.textContent);
+    // Desktop's order (settingsManifest.js); Migration, Views, Auto-tags, Cleanup, Backup,
+    // Portable and Time Capsule are not on the phone. Billing joins the footer while Premium is on.
+    expect(pageRows()).toEqual(['appearance', 'mail-preferences', 'accounts', 'templates', 'ai-providers', 'unsubscribe', 'storage', 'privacy', 'diagnostics', 'help']);
+    expect([...document.querySelectorAll('.settings-nav-item')]).toHaveLength(10);
+    const headings = [...document.querySelectorAll('.settings-nav-heading')].map((h) => h.textContent);
     expect(headings).toEqual([
       t('common.premium'),
       t('settings.navigation.general'),
       t('settings.navigation.accountsImport'),
       t('settings.navigation.organize'),
       t('settings.navigation.vaultPrivacy'),
-      t('settings.tab.diagnostics'),
-      t('settings.tab.help'),
     ]);
+    expect(screen.getByRole('searchbox', { name: t('settings.navigation.searchSetting') })).toBeTruthy();
     expect(screen.queryAllByRole('switch')).toHaveLength(0);
     expect(document.querySelector('[data-mv-pref]')).toBeNull();
     expect(document.querySelector('[data-mv-premium-row]')).toBeTruthy();
   });
 
+  it('Billing is in the footer while Premium is on', () => {
+    useMobileStore.setState({ premium: { ...useMobileStore.getState().premium, premium: true } });
+    try {
+      render(<Settings onClose={() => {}} />);
+      expect(pageRows().slice(-3)).toEqual(['billing', 'diagnostics', 'help']);
+    } finally {
+      useMobileStore.setState({ premium: { ...useMobileStore.getState().premium, premium: false } });
+    }
+  });
+
   it('a page opens under its own title; Back returns to the list, and Back there closes Settings', async () => {
     const onClose = vi.fn();
     render(<Settings onClose={onClose} />);
-    fireEvent.click(document.querySelector('[data-mv-settings-page="notifications"]'));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.notifications'));
+    fireEvent.click(document.querySelector('[data-mv-settings-page="mail-preferences"]'));
+    expect(heading()).toBe(t('settings.navigation.mailPreferences'));
+    fireEvent.click(screen.getByRole('tab', { name: t('settings.notifications.notifications') }));
     await waitFor(() => expect(toggle()).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(pageRows()).toHaveLength(16);
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.title'));
+    expect(pageRows()).toHaveLength(10);
+    expect(heading()).toBe(t('mobile.settings.title'));
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -275,37 +289,74 @@ describe('Settings pages, as desktop lays them out', () => {
       r.unmount();
       return prefs;
     };
-    expect(on('appearance')).toEqual(['theme', 'palette', 'language', 'emailViewerTheme', 'appIcon', 'viewStyle', 'threadMode', 'threadSortOrder', 'dateFormat', 'timeFormat', 'textScale', 'appFont', 'listDensity', 'listPreviewLines', 'signatureDisplay', 'actionButtonDisplay']);
     expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'afterDeleteSameAccount', 'trackpadSwipeEnabled', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled', 'attachmentReminder', 'refreshOnLaunch', 'autoDownloadAttachments']);
-    // Remote content is a privacy choice on desktop (Privacy & security > Security).
-    expect(on('privacy')).toEqual(['holdExternalContent', 'trackerBlockingEnabled', 'linkSafetyEnabled', 'linkSafetyClickConfirm']);
+    // Remote content is a privacy choice on desktop (Privacy & security > Security); tracking
+    // pixels have desktop's Tracking tab.
+    expect(on('privacy')).toEqual(['holdExternalContent', 'linkSafetyEnabled', 'linkSafetyClickConfirm']);
+    expect(on('tracking')).toEqual(['trackerBlockingEnabled']);
     // AI is off by default: only its switch until it is on (AiSettings.test.jsx).
     expect(on('ai')).toEqual(['aiEnabled']);
-    expect(on('search')).toEqual(['searchIndexBodies', 'searchIndexAttachments']);
+    // The search index sits on the Storage page, as on desktop.
+    expect(on('search')).toEqual(expect.arrayContaining(['searchIndexBodies', 'searchIndexAttachments']));
   });
 
-  it('Encryption opens from Privacy & security, as on desktop, and Back returns there', () => {
+  it('Appearance is desktop\'s Appearance: its sections as tabs, the Colors section first', () => {
+    render(<Settings onClose={() => {}} page="appearance" />);
+    expect(heading()).toBe(t('settings.appearance.appearance'));
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      t('settings.appearance.section.colors'), t('settings.appearance.section.text'), t('settings.appearance.section.layout'),
+      t('settings.appearance.section.reading'), t('settings.appearance.section.dateTime'), t('quickActions.title'), t('settings.tab.language'),
+    ]);
+    expect(screen.getByRole('button', { name: t('settings.section.system') }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: t('settings.colors.indigo') }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('combobox', { name: t('settings.appearance.emailViewerTheme') })).toBeTruthy();
+    expect(screen.getByRole('group', { name: t('settings.icons.title') })).toBeTruthy();
+  });
+
+  it('Encryption is a tab of Privacy & security, as on desktop, and Back returns to the list', () => {
     render(<Settings onClose={() => {}} page="privacy" />);
-    fireEvent.click(document.querySelector('[data-mv-settings-page="encryption"]'));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('pgp.tab'));
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      t('settings.tab.security'), t('settings.tab.tracking'), t('pgp.tab'), t('settings.tab.networkActivity'),
+    ]);
+    fireEvent.click(screen.getByRole('tab', { name: t('pgp.tab') }));
+    expect(heading()).toBe(t('settings.tab.privacySecurity'));
     expect(screen.getByText(t('pgp.decryptOnly'))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('settings.tab.privacySecurity'));
+    expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
   });
 
   it('Offline opened from Storage goes back to Storage, then to the list', async () => {
     render(<Settings onClose={() => {}} page="storage" />);
     await waitFor(() => expect(document.querySelector('[data-mv-storage-offline]')).toBeTruthy());
     fireEvent.click(document.querySelector('[data-mv-storage-offline]'));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('mobile.settings.offline'));
+    expect(heading()).toBe(t('mobile.settings.offline'));
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('settings.tab.storage'));
-    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
-    // Offline from the list goes back to the list.
-    fireEvent.click(document.querySelector('[data-mv-settings-page="offline"]'));
+    expect(heading()).toBe(t('settings.tab.storage'));
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
     expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
+  });
+
+  it('Move to another computer opens from Accounts and goes back there', () => {
+    render(<Settings onClose={() => {}} page="accounts" />);
+    fireEvent.click(document.querySelector('[data-mv-settings-page="transfer"]'));
+    expect(heading()).toBe(t('settings.transfer.title'));
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(heading()).toBe(t('settings.tab.accounts'));
+  });
+
+  it('search finds a setting the phone has and opens its page; one it lacks is not offered', async () => {
+    render(<Settings onClose={() => {}} />);
+    const box = screen.getByRole('searchbox', { name: t('settings.navigation.searchSetting') });
+    fireEvent.change(box, { target: { value: t('settings.text.size') } });
+    const hit = screen.getByRole('button', { name: new RegExp(t('settings.text.size')) });
+    fireEvent.change(box, { target: { value: t('settings.behavior.closeToTray') } });
+    expect(screen.queryByRole('button', { name: new RegExp(t('settings.behavior.closeToTray')) })).toBeNull();
+    fireEvent.change(box, { target: { value: t('settings.text.size') } });
+    expect(hit).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(t('settings.text.size')) }));
+    expect(heading()).toBe(t('settings.appearance.appearance'));
+    expect(screen.getByRole('tab', { name: t('settings.appearance.section.text') }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('radiogroup', { name: t('settings.text.size') })).toBeTruthy();
   });
 
   it('the accounts page lists the accounts; the help page has the version and the source', () => {

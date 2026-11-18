@@ -39,7 +39,8 @@ vi.mock('../transport.js', () => ({
   shareFile: vi.fn(async () => {}),
 }));
 
-const { AppearanceMore, MailMore, NotifyMore } = await import('../SettingsDisplay.jsx');
+const { MailMore, NotifyMore } = await import('../SettingsDisplay.jsx');
+const { default: Appearance } = await import('../settings/Appearance.jsx');
 const { default: SettingsPrefs } = await import('../SettingsPrefs.jsx');
 const { default: Viewer } = await import('../Viewer.jsx');
 const { default: AccountEditor } = await import('../AccountEditor.jsx');
@@ -62,22 +63,28 @@ afterEach(cleanup);
 
 describe('the preference rows', () => {
   it('appearance: text size, font, density, preview lines, signatures, toolbar', async () => {
-    render(<AppearanceMore />);
-    await pick('textScale', 1.25);
-    await pick('appFont', 'ibm-plex-sans');
-    await pick('listDensity', 'compact');
-    await pick('listPreviewLines', 0);
-    await pick('signatureDisplay', 'collapsed');
-    await pick('actionButtonDisplay', 'icon-label');
+    // Desktop's Appearance views: each row found by its desktop label.
+    render(<Appearance />);
+    const tab = (key) => fireEvent.click(screen.getByRole('tab', { name: t(key) }));
+    const percent = new Intl.NumberFormat('en', { style: 'percent' }).format(1.25);
+    tab('settings.appearance.section.text');
+    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: percent })); });
+    await act(async () => { fireEvent.click(screen.getByTestId('font-ibm-plex-sans')); });
+    // The font row offers desktop's bundled fonts, and no download.
+    expect(screen.getByTestId('font-system')).toBeTruthy();
+    expect(document.querySelector('[data-testid^="font-google"]')).toBe(null);
+    expect(screen.queryByRole('button', { name: new RegExp(t('settings.text.moreFonts')) })).toBe(null);
+    tab('settings.appearance.section.layout');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('workspace.sidebarDensityCompact') })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('listPreview.off') })); });
+    tab('settings.appearance.section.reading');
+    await act(async () => { fireEvent.change(screen.getByRole('combobox', { name: t('settings.appearance.signatureDisplay') }), { target: { value: 'collapsed' } }); });
+    await act(async () => { fireEvent.change(screen.getByRole('combobox', { name: t('settings.appearance.actionButtonStyle') }), { target: { value: 'icon-label' } }); });
     expect(callsOf('mobile.prefs.set')).toEqual([
       { textScale: 1.25 }, { appFont: 'ibm-plex-sans' }, { listDensity: 'compact' }, { listPreviewLines: 0 },
       { signatureDisplay: 'collapsed' }, { actionButtonDisplay: 'icon-label' },
     ]);
     expect(useMobileStore.getState().prefs).toMatchObject({ textScale: 1.25, listPreviewLines: 0 });
-    // The font row offers desktop's bundled fonts, and no download.
-    const fonts = [...document.querySelectorAll('select[data-mv-pref="appFont"] option')].map((o) => o.value);
-    expect(fonts).toContain('system');
-    expect(fonts.some((f) => f.startsWith('google:'))).toBe(false);
   });
 
   it('mail: refresh on launch, attachments; swipes and same account with their sections', async () => {

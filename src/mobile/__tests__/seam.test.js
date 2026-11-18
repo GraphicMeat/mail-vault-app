@@ -16,7 +16,9 @@ const SCANNER_INVOKES = ['plugin:barcode-scanner|cancel', 'plugin:barcode-scanne
 // A plugin command other than the scanner's.
 const otherPlugin = (c) => c.startsWith('plugin:') && !SCANNER_INVOKES.includes(c);
 // Desktop stores (and `plugin-fs`) would bring the desktop RPC graph with them.
-const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|sparkle|features\/blitz|e2eMotion|src\/stores\//i;
+// `sparkle` is the desktop updater; lucide's Sparkles icon files (the settings manifest's Cleanup
+// icon, shared with the phone) are not it.
+const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|(?<!lucide-react\/dist\/esm\/icons\/[\w-]*)sparkle|features\/blitz|e2eMotion|src\/stores\//i;
 
 describe('mobile seam', () => {
   it('every_rpc_method_is_implemented', async () => {

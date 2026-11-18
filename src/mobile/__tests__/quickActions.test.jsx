@@ -145,16 +145,18 @@ describe('viewer bar', () => {
 describe('Settings > Appearance > Quick actions', () => {
   const open = () => {
     render(<Settings onClose={() => {}} page="appearance" />);
-    fireEvent.click(document.querySelector('[data-mv-settings-page="quickActions"]'));
+    // Desktop's Appearance tab of that name.
+    fireEvent.click(screen.getByRole('tab', { name: t('quickActions.title') }));
   };
   const barRows = () => [...document.querySelectorAll('[data-mv-qa-bar] [data-mv-qa-action]')].map((r) => r.getAttribute('data-mv-qa-action'));
 
-  it('opens from Appearance and goes back there', () => {
+  it('is a tab of Appearance, as on desktop; Back goes to the list', () => {
     open();
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('quickActions.title'));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(t('settings.appearance.appearance'));
+    expect(screen.getByRole('tab', { name: t('quickActions.title') }).getAttribute('aria-selected')).toBe('true');
     expect(barRows()).toEqual(['toggleRead', 'flag', 'move', 'delete']);
-    fireEvent.click(screen.getByText(t('common.back')));
-    expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('appearance');
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
   });
 
   it('applies a preset', async () => {

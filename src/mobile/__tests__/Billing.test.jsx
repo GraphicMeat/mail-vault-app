@@ -32,7 +32,6 @@ vi.mock('../transport.js', () => ({
 }));
 
 const { default: Settings } = await import('../Settings.jsx');
-const { default: SettingsPrefs } = await import('../SettingsPrefs.jsx');
 const { useMobileStore } = await import('../store.js');
 const { seenAgo } = await import('../Billing.jsx');
 
@@ -136,21 +135,32 @@ describe('Billing', () => {
 });
 
 describe('translation report', () => {
-  it('opens under the language row and links a prefilled discussion once both texts are given', async () => {
-    render(<SettingsPrefs section="appearance" />);
-    fireEvent.click(document.querySelector('[data-mv-tr-open]'));
-    const submit = () => document.querySelector('[data-mv-tr-submit]');
-    expect(submit().tagName).toBe('BUTTON');
+  it('sits under the language list and opens a prefilled discussion once both texts are given', async () => {
+    // Desktop's report (TranslationIssueReportView), in Appearance > Language; the link goes out as
+    // a plain https anchor, which the shell hands to the system browser.
+    const opened = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function record() {
+      opened.push({ href: this.href, target: this.target });
+    });
+    render(<Settings onClose={() => {}} page="appearance" />);
+    fireEvent.click(screen.getByRole('tab', { name: t('settings.tab.language') }));
+    const submit = () => screen.getByTestId('tr-submit');
     expect(submit().disabled).toBe(true);
-    fireEvent.change(document.querySelector('[data-mv-tr="lang"]'), { target: { value: 'de' } });
-    fireEvent.change(document.querySelector('[data-mv-tr="wrong"]'), { target: { value: 'Alle Posteingang' } });
+    fireEvent.change(screen.getByTestId('tr-lang'), { target: { value: 'de' } });
+    fireEvent.change(screen.getByTestId('tr-wrong'), { target: { value: 'Alle Posteingang' } });
     expect(submit().disabled).toBe(true);
-    fireEvent.change(document.querySelector('[data-mv-tr="fix"]'), { target: { value: 'Alle Posteingänge' } });
-    expect(submit().tagName).toBe('A');
-    const url = new URL(submit().getAttribute('href'));
+    fireEvent.change(screen.getByTestId('tr-fix'), { target: { value: 'Alle Posteingänge' } });
+    expect(submit().disabled).toBe(false);
+    fireEvent.click(submit());
+    click.mockRestore();
+    expect(opened).toHaveLength(1);
+    expect(opened[0].target).toBe('_blank');
+    const url = new URL(opened[0].href);
     expect(url.origin + url.pathname).toBe('https://github.com/GraphicMeat/mail-vault-app/discussions/new');
     expect(url.searchParams.get('category')).toBe('bug-reports');
     expect(url.searchParams.get('title')).toBe('[i18n de] Alle Posteingang');
     expect(url.searchParams.get('body')).toContain('Alle Posteingänge');
+    // Sent: the texts clear.
+    expect(screen.getByTestId('tr-wrong').value).toBe('');
   });
 });
