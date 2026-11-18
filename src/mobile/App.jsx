@@ -407,6 +407,17 @@ function App() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
+  // Desktop's automatic refresh (`refreshInterval`, minutes; 0 never): the open folder syncs this
+  // often while the app is in front. In the background the system schedules the runs.
+  const refreshInterval = useMobileStore((s) => s.prefs.refreshInterval);
+  useEffect(() => {
+    if (PERF || !(refreshInterval > 0)) return undefined;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') useMobileStore.getState().refresh();
+    }, refreshInterval * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [refreshInterval]);
+
   // The pull spinner ends when the engine reports the pass done (or failed), or after a timeout.
   useEffect(() => {
     if (!pulled) return undefined;

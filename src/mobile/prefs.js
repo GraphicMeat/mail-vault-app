@@ -51,6 +51,9 @@ export const PREF_DEFAULTS = Object.freeze({
   // delete in All Inboxes (afterDeletePick).
   trackpadSwipeEnabled: true,
   refreshOnLaunch: true,
+  // Desktop's automatic refresh, minutes (0: never): App.jsx syncs the open folder this often while
+  // the app is in front.
+  refreshInterval: 0,
   autoDownloadAttachments: false,
   afterDeleteSameAccount: false,
   // Notifications (engine: the background run's `sound` and `badge`, posted by the shell).

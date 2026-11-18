@@ -124,6 +124,9 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     // All Inboxes (prefs.js `afterDeletePick`).
     ("trackpadSwipeEnabled", Kind::Bool, "true"),
     ("refreshOnLaunch", Kind::Bool, "true"),
+    // Desktop's automatic refresh, in minutes (0: never): the page syncs the open folder this often
+    // while the app is in front (App.jsx). Background runs keep the system's own schedule.
+    ("refreshInterval", Kind::Int(0, 1440), "0"),
     ("autoDownloadAttachments", Kind::Bool, "false"),
     ("afterDeleteSameAccount", Kind::Bool, "false"),
     // Notifications: the system's sound on a new-mail notification, and the app icon's badge

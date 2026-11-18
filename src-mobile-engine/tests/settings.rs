@@ -75,3 +75,17 @@ fn an_unknown_setting_is_invalid() {
     }
     assert_eq!(e.rpc("mobile.settings.get", json!({})).unwrap(), before, "a refused set changes nothing");
 }
+
+/// Desktop's automatic refresh interval (Settings > Mail preferences): minutes, 0 by default (the
+/// phone synced only on opening and coming to the front), up to a day.
+#[test]
+fn the_refresh_interval_is_a_pref_in_minutes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = engine(&tmp);
+    assert_eq!(e.rpc("mobile.prefs.get", json!({})).unwrap()["refreshInterval"], 0);
+    assert_eq!(e.rpc("mobile.prefs.set", json!({ "refreshInterval": 15 })).unwrap()["refreshInterval"], 15);
+    for bad in [json!({ "refreshInterval": -1 }), json!({ "refreshInterval": 1441 }), json!({ "refreshInterval": "5" })] {
+        assert_eq!(e.rpc("mobile.prefs.set", bad.clone()).unwrap_err().code(), "INVALID", "{bad}");
+    }
+    assert_eq!(engine(&tmp).rpc("mobile.prefs.get", json!({})).unwrap()["refreshInterval"], 15, "it survives a reopen");
+}
