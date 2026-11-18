@@ -590,6 +590,10 @@ fn run(queue: Arc<Queue>, shared: Arc<Shared>) {
                 return;
             }
             let ok = send_account(&shared, &queue.cache_dir, account, &policy);
+            // A reply journaled its original's answered flag (`actions::journal_answered`).
+            if crate::actions::has_pending(&shared, Some(account)) {
+                shared.replay.wake(&shared, None);
+            }
             let mut st = lock(&queue.state);
             if ok {
                 st.retry.remove(account);
@@ -753,6 +757,11 @@ fn send_one(shared: &Shared, cache_dir: &Path, backend: &mut dyn Backend, accoun
                 // The reminder the send asked for, keyed on the Message-ID it went out under.
                 if let Some((days, message_id)) = &remind {
                     crate::followup::record_sent(shared, account, message_id, &fields, *days);
+                }
+                // A reply: the message it answers is answered now, here and on the server (the
+                // worker loop wakes the replay).
+                if let Err(Fail::Code(code, why)) = crate::actions::journal_answered(shared, account, &fields.in_reply_to) {
+                    shared.log(&format!("[outbox] {account} {id}: marking the original answered: {} {why}", code.as_str()));
                 }
                 emit_result(shared, id, account, OutboxState::Sent.as_str(), None);
             }

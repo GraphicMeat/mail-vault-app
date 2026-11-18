@@ -315,7 +315,6 @@ pub struct Engine {
     /// Rebuildable files (message bodies, attachments) live here, never in `mobile.db`.
     cache_dir: PathBuf,
     sync: crate::sync::Worker,
-    replay: crate::actions::Replay,
     /// Sends the outbox (`outbox.rs`).
     outbox: crate::outbox::Outbox,
     /// Attachment downloads into `<cache_dir>/att`.
@@ -632,6 +631,9 @@ pub(crate) struct Shared {
     pub(crate) usage: crate::usage::State,
     /// The core `app.db` the tags live in (`tags.rs`), on a connection of its own.
     pub(crate) app_db: crate::tags::AppDb,
+    /// The journal's replay worker (`actions.rs`); here so a worker that journals an action of its
+    /// own (the outbox, after a reply went out) can wake it.
+    pub(crate) replay: crate::actions::Replay,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -842,6 +844,7 @@ impl Engine {
                 pgp_keys: Mutex::new(()),
                 usage: crate::usage::State::default(),
                 app_db: crate::tags::AppDb::new(data_dir),
+                replay: crate::actions::Replay::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]
@@ -850,7 +853,6 @@ impl Engine {
             attachments: crate::attachments::Attachments::open(cache_dir),
             cache_dir: cache_dir.to_path_buf(),
             sync: crate::sync::Worker::default(),
-            replay: crate::actions::Replay::default(),
             outbox: crate::outbox::Outbox::new(cache_dir),
             live: crate::live::Live::default(),
             downloader: crate::offline::Downloader::default(),
@@ -879,7 +881,7 @@ impl Engine {
     /// Starts the replay and the outbox `open` held back, once.
     pub(crate) fn start_startup_replay(&self) {
         if self.startup_replay.swap(false, Ordering::SeqCst) {
-            self.replay.wake(&self.shared, None);
+            self.shared.replay.wake(&self.shared, None);
             self.outbox.wake(&self.shared, None);
         }
     }
@@ -893,7 +895,7 @@ impl Engine {
     }
 
     pub(crate) fn replay(&self) -> &crate::actions::Replay {
-        &self.replay
+        &self.shared.replay
     }
 
     pub(crate) fn outbox(&self) -> &crate::outbox::Outbox {
@@ -948,7 +950,7 @@ impl Engine {
     /// after a failed attempt; each further failure doubles it up to `cap`.
     #[doc(hidden)]
     pub fn set_action_backoff(&self, base: std::time::Duration, cap: std::time::Duration) {
-        self.replay.set_backoff(base, cap);
+        self.shared.replay.set_backoff(base, cap);
     }
 
     /// Tests: the outbox's per-account backoff, in place of 5 s doubling to 5 min.
@@ -1039,7 +1041,7 @@ impl Drop for Engine {
         self.shared.closing.store(true, Ordering::SeqCst);
         self.shared.ckpt.stop_and_join();
         self.sync.stop();
-        self.replay.stop();
+        self.shared.replay.stop();
         self.outbox.stop();
         self.shared.followup.stop();
         self.attachments.stop();

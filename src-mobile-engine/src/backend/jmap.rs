@@ -947,9 +947,13 @@ impl Backend for JmapBackend<'_> {
         }
         let asked = present.len();
         match kind {
-            Kind::Seen | Kind::Unseen | Kind::Flag | Kind::Unflag => {
+            Kind::Seen | Kind::Unseen | Kind::Flag | Kind::Unflag | Kind::Answered => {
                 let on = kind.value() == 1;
-                let keyword = if matches!(kind, Kind::Seen | Kind::Unseen) { "$seen" } else { "$flagged" };
+                let keyword = match kind {
+                    Kind::Seen | Kind::Unseen => "$seen",
+                    Kind::Answered => "$answered",
+                    _ => "$flagged",
+                };
                 let patches: Vec<(String, Vec<(String, bool)>)> = present.iter().map(|(_, id)| (id.clone(), vec![(keyword.to_string(), on)])).collect();
                 let out = match self.call(async |c| c.set_keywords(&patches).await) {
                     Ok(o) => o,

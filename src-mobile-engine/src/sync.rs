@@ -1332,7 +1332,9 @@ struct Held {
 /// agrees with it. One the server disagrees with clears only on the second consecutive pass that
 /// started after the folder's last settled action, with none settling during it
 /// (`Shared::may_clear_disagreeing`): a server whose replicas lag may report the old flags for a
-/// pass or so after it accepted the change. The answered flag has no override: it is the server's.
+/// pass or so after it accepted the change. The answered flag has no override: it is the server's,
+/// except that a row an `answered` action still names (a reply the phone sent, `actions::
+/// journal_answered`) stays answered until the server has it too.
 /// Returns how many rows now list differently.
 fn write_flags(
     shared: &Shared,
@@ -1345,6 +1347,11 @@ fn write_flags(
 ) -> rusqlite::Result<usize> {
     let pending: HashSet<u32> = {
         let mut st = c.prepare_cached(crate::actions::PENDING_UIDS)?;
+        let rows = st.query_map((account, folder), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter().map(|u| u as u32).collect()
+    };
+    let answering: HashSet<u32> = {
+        let mut st = c.prepare_cached(&format!("{} AND p.kind = 'answered'", crate::actions::PENDING_UIDS))?;
         let rows = st.query_map((account, folder), |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
         rows.into_iter().map(|u| u as u32).collect()
     };
@@ -1368,7 +1375,8 @@ fn write_flags(
                 .optional()
         };
         let Some(before) = read(&mut listed)? else { continue };
-        update.execute((account, folder, *uid as i64, *seen as i64, *flagged as i64, gen, pending.contains(uid), settled, fl.answered as i64))?;
+        let answered = fl.answered || answering.contains(uid);
+        update.execute((account, folder, *uid as i64, *seen as i64, *flagged as i64, gen, pending.contains(uid), settled, answered as i64))?;
         if read(&mut listed)? != Some(before) {
             n += 1;
         }
@@ -1384,7 +1392,10 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '', ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
          ON CONFLICT (account_id, folder, uid) DO UPDATE SET
            subject = excluded.subject, from_name = excluded.from_name, from_address = excluded.from_address,
-           date_ms = excluded.date_ms, seen = excluded.seen, flagged = excluded.flagged, answered = excluded.answered,
+           date_ms = excluded.date_ms, seen = excluded.seen, flagged = excluded.flagged,
+           answered = CASE WHEN messages.uid IN (SELECT j.value FROM pending_actions p, json_each(p.uids_json) j
+                                                  WHERE p.account_id = ?1 AND p.folder = ?2 AND p.kind = 'answered')
+                           THEN max(messages.answered, excluded.answered) ELSE excluded.answered END,
            has_attachments = excluded.has_attachments, message_id = excluded.message_id,
            to_json = excluded.to_json, size = excluded.size, list_gen = excluded.list_gen,
            thread_json = excluded.thread_json, unsub_json = excluded.unsub_json",

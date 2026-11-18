@@ -51,6 +51,9 @@ pub(crate) enum Kind {
     Unflag,
     Move,
     Delete,
+    /// The engine's own: `\Answered` (JMAP `$answered`) on the message a sent reply answers
+    /// ([`journal_answered`]). Never taken from `mobile.actions.apply`. Graph has no such flag.
+    Answered,
 }
 
 impl Kind {
@@ -62,6 +65,7 @@ impl Kind {
             "unflag" => Kind::Unflag,
             "move" => Kind::Move,
             "delete" => Kind::Delete,
+            "answered" => Kind::Answered,
             _ => return None,
         })
     }
@@ -74,6 +78,7 @@ impl Kind {
             Kind::Unflag => "unflag",
             Kind::Move => "move",
             Kind::Delete => "delete",
+            Kind::Answered => "answered",
         }
     }
 
@@ -83,6 +88,9 @@ impl Kind {
             Kind::Seen | Kind::Unseen => "local_seen",
             Kind::Flag | Kind::Unflag => "local_flagged",
             Kind::Move | Kind::Delete => "local_deleted",
+            // No override: the column is the server's, which sync keeps at 1 while this is
+            // journaled (`sync::write_flags`).
+            Kind::Answered => "answered",
         }
     }
 
@@ -96,6 +104,11 @@ impl Kind {
     /// The row leaves the folder (it is hidden locally, and removed once the server agrees).
     fn hides(self) -> bool {
         matches!(self, Kind::Move | Kind::Delete)
+    }
+
+    /// The action sets a `local_*` override that a drop or a partial result withdraws.
+    fn has_override(self) -> bool {
+        self != Kind::Answered
     }
 }
 
@@ -200,7 +213,9 @@ type Applied = (Option<i64>, usize, Vec<u32>);
 /// `mobile.folder.changed`, wakes replay.
 pub(crate) fn apply(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: ApplyParams = parse(params)?;
-    let kind = Kind::parse(&p.kind).ok_or_else(|| RpcError::Invalid(format!("unknown action kind {}", p.kind)))?;
+    let kind = Kind::parse(&p.kind)
+        .filter(|k| *k != Kind::Answered)
+        .ok_or_else(|| RpcError::Invalid(format!("unknown action kind {}", p.kind)))?;
     let mut uids = p.uids;
     uids.sort_unstable();
     uids.dedup();
@@ -415,6 +430,61 @@ pub(crate) fn has_pending(shared: &Shared, account: Option<&str>) -> bool {
     shared
         .read(|c| c.query_row("SELECT EXISTS(SELECT 1 FROM pending_actions WHERE ?1 IS NULL OR account_id = ?1)", [account], |r| r.get(0)))
         .unwrap_or(false)
+}
+
+/// After a reply went out: marks the messages of `account` whose Message-ID is `in_reply_to` (in
+/// any folder the phone holds) answered, locally at once (row and index) and on the server
+/// through the journal, one `answered` action per folder. Desktop's "Needs reply" view then
+/// stops listing them. A row already answered is left alone. `true` when something was journaled
+/// (the caller wakes the replay worker).
+pub(crate) fn journal_answered(shared: &Shared, account: &str, in_reply_to: &str) -> Result<bool, Fail> {
+    let id = in_reply_to.trim();
+    if id.is_empty() {
+        return Ok(false);
+    }
+    // Stored as the header had it; a reply's In-Reply-To may differ in its angle brackets only.
+    let bare = id.trim_start_matches('<').trim_end_matches('>');
+    let bracketed = format!("<{bare}>");
+    let rows: Vec<(String, u32)> = shared.read(|c| {
+        let mut st = c.prepare_cached(
+            "SELECT folder, uid FROM messages WHERE account_id = ?1 AND message_id IN (?2, ?3) AND answered = 0
+               AND COALESCE(local_deleted, 0) = 0 ORDER BY folder, uid",
+        )?;
+        let rows = st.query_map((account, bare, &bracketed), |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as u32)))?.collect();
+        rows
+    })?;
+    let mut by_folder: HashMap<String, Vec<u32>> = HashMap::new();
+    for (folder, uid) in rows {
+        by_folder.entry(folder).or_default().push(uid);
+    }
+    let mut journaled = false;
+    for (folder, mut uids) in by_folder {
+        uids.truncate(MAX_UIDS);
+        let gen = shared.list_gen(account, &folder)? + 1;
+        let list = sync::uid_list(&uids);
+        let changed = sync::write_for(shared, account, |c| {
+            let validity: Option<i64> = c
+                .query_row("SELECT uid_validity FROM folders WHERE account_id = ?1 AND path = ?2", (account, &folder), |r| r.get(0))
+                .optional()?
+                .flatten();
+            let arg = serde_json::to_string(&Arg { uid_validity: validity, ..Arg::default() }).unwrap_or_default();
+            c.execute(
+                "INSERT INTO pending_actions (account_id, folder, uids_json, kind, arg, state, attempts, created_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'queued', 0, ?6)",
+                (account, &folder, serde_json::to_string(&uids).unwrap_or_default(), Kind::Answered.as_str(), &arg, now_ms()),
+            )?;
+            c.execute(
+                &format!("UPDATE messages SET answered = 1, list_gen = ?3 WHERE account_id = ?1 AND folder = ?2 AND uid IN ({list}) AND answered = 0"),
+                (account, &folder, gen),
+            )
+        })?;
+        journaled = true;
+        if changed > 0 {
+            emit_folder_changed(shared, account, &folder, gen, 0, changed);
+            crate::search::reflag_soon(shared, account, &folder, &uids);
+        }
+    }
+    Ok(journaled)
 }
 
 // ── Sync's side: dropping a folder's actions ────────────────────────────────
@@ -919,7 +989,7 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
                 // The uids the action was not done for show again: their override is withdrawn
                 // where no other pending action holds one.
                 let mut shown = 0;
-                if let (false, Some(kind)) = (kept.is_empty(), kind) {
+                if let (false, Some(kind)) = (kept.is_empty(), kind.filter(|k| k.has_override())) {
                     let col = kind.column();
                     let list = sync::uid_list(&kept);
                     shown = c.execute(
@@ -959,7 +1029,7 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
                 }
                 shared.bump_settle(account, &a.folder);
                 let mut n = 0;
-                if let (false, Some(kind)) = (uids_gone, kind) {
+                if let (false, Some(kind)) = (uids_gone, kind.filter(|k| k.has_override())) {
                     // Withdraw this action's override where no other pending action holds one.
                     let col = kind.column();
                     n = c.execute(
@@ -1037,7 +1107,7 @@ mod tests {
 
     #[test]
     fn kinds_round_trip() {
-        for k in [Kind::Seen, Kind::Unseen, Kind::Flag, Kind::Unflag, Kind::Move, Kind::Delete] {
+        for k in [Kind::Seen, Kind::Unseen, Kind::Flag, Kind::Unflag, Kind::Move, Kind::Delete, Kind::Answered] {
             assert_eq!(Kind::parse(k.as_str()), Some(k));
         }
         assert_eq!(Kind::parse("archive"), None);

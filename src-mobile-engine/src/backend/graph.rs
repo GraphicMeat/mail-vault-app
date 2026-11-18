@@ -744,6 +744,8 @@ impl Backend for GraphBackend<'_> {
                 }
                 Ok(ApplyOutcome::Done { gone, moved: None, kept: Vec::new() })
             }
+            // Graph has no answered flag (desktop sets none either): nothing to send.
+            Kind::Answered => Ok(ApplyOutcome::Done { gone, moved: None, kept: Vec::new() }),
             Kind::Delete => {
                 // Core's delete rule (`actions::policy`): Deleted Items is known by the `\Trash`
                 // its well-known name stored, so no folder merely named like it qualifies.

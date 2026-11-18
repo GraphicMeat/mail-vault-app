@@ -543,6 +543,65 @@ fn reply_prepare_quotes_and_threads() {
     assert_eq!((new["to"].clone(), new["subject"].clone(), new["quote"].clone()), (json!(""), json!(""), json!("")));
 }
 
+/// A reply sent from the phone marks the message it answers: `\Answered` on the server (through
+/// the journal) and on the row at once, so desktop's "Needs reply" view stops listing it, and a
+/// sync pass that runs before the server has the flag does not take it back.
+#[test]
+fn a_sent_reply_marks_the_original_answered() {
+    let server = MockImap::start(scenario());
+    let f = setup(&server);
+    f.sync();
+    let answered = |uid: u32| -> i64 {
+        f.db()
+            .query_row("SELECT answered FROM messages WHERE account_id = ?1 AND folder = 'INBOX' AND uid = ?2", (&f.account, uid), |r| r.get(0))
+            .unwrap()
+    };
+    assert_eq!((answered(1), answered(2)), (0, 0));
+
+    // The flag's STORE is held at the server: the row is answered before the server is.
+    let mut store = server.pause_command("STORE");
+    let prepared = f.prepare("reply", 1);
+    let from = f.events.len();
+    let id = f
+        .send(json!({ "to": "alice@example.com", "subject": "Re: Plans", "text": "Sounds good", "inReplyTo": prepared["inReplyTo"], "references": prepared["references"] }))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    f.events.send_result(from, &id, "sent");
+    let deadline = Instant::now() + WAIT;
+    while answered(1) != 1 {
+        assert!(Instant::now() < deadline, "the original never read answered");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(answered(2), 0, "only the message replied to");
+    assert!(store.entered(WAIT), "no STORE reached the server");
+    // A pass while the flag is still on its way keeps the row answered.
+    f.sync();
+    assert_eq!(answered(1), 1, "a sync pass took the answered flag back");
+    store.release();
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let flags = server.state().find("INBOX").unwrap().by_uid(1).unwrap().flags.clone();
+        if flags.iter().any(|x| x.eq_ignore_ascii_case("\\Answered")) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "\\Answered never reached the server: {flags:?}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let deadline = Instant::now() + WAIT;
+    while !f.engine.rpc("mobile.actions.pending", json!({})).unwrap()["pending"].as_array().unwrap().is_empty() {
+        assert!(Instant::now() < deadline, "the answered action never settled");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    f.sync();
+    assert_eq!(answered(1), 1, "the server's flag keeps it answered");
+    assert!(!server.state().find("INBOX").unwrap().by_uid(2).unwrap().flags.iter().any(|x| x.eq_ignore_ascii_case("\\Answered")));
+    // Never something the page can ask for itself.
+    let r = f.engine.rpc("mobile.actions.apply", json!({ "accountId": f.account, "folder": "INBOX", "uids": [2], "kind": "answered" }));
+    assert_eq!(code(r), "INVALID");
+}
+
 #[test]
 fn a_terminal_smtp_refusal_fails_without_retrying() {
     let server = MockImap::start(scenario().smtp_refuse("reject"));

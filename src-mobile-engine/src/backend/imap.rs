@@ -252,8 +252,12 @@ async fn apply_in(
     }
     let mut moved = None;
     match kind {
-        Kind::Seen | Kind::Unseen | Kind::Flag | Kind::Unflag => {
-            let flag = if matches!(kind, Kind::Seen | Kind::Unseen) { "\\Seen" } else { "\\Flagged" };
+        Kind::Seen | Kind::Unseen | Kind::Flag | Kind::Unflag | Kind::Answered => {
+            let flag = match kind {
+                Kind::Seen | Kind::Unseen => "\\Seen",
+                Kind::Answered => "\\Answered",
+                _ => "\\Flagged",
+            };
             let op = if kind.value() == 1 { "add" } else { "remove" };
             for uid in &present {
                 if let Err(e) = imap::set_flags(session, path, *uid, &[flag.to_string()], op).await {
