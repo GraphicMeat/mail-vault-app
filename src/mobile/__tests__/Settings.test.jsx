@@ -359,6 +359,20 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(screen.getByRole('radiogroup', { name: t('settings.text.size') })).toBeTruthy();
   });
 
+  it('every page search can open renders a page on the phone', async () => {
+    const { mobileSearchPages } = await import('../../components/settings/settingsManifest');
+    const { placeOf } = await import('../Settings.jsx');
+    const ids = [...new Set(mobileSearchPages.map((p) => p.id))];
+    expect(ids.length).toBeGreaterThan(10);
+    for (const id of ids) {
+      const r = render(<Settings onClose={() => {}} page={id} />);
+      const body = document.querySelector('[data-mv-settings-on]');
+      expect(body.getAttribute('data-mv-settings-on'), id).toBe(placeOf(id).sub || placeOf(id).nav);
+      expect(body.children.length, `${id} opens an empty page`).toBeGreaterThan(0);
+      r.unmount();
+    }
+  });
+
   it('the accounts page lists the accounts; the help page has the version and the source', () => {
     const r = render(<Settings onClose={() => {}} page="accounts" />);
     expect(screen.getByText(A1.email)).toBeTruthy();

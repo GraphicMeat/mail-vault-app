@@ -105,6 +105,9 @@ export function placeOf(page) {
     networkActivity: { nav: 'privacy', tab: 'network-activity' },
     pending: { nav: 'diagnostics', tab: 'daemon' },
     quickActions: { nav: 'appearance', section: 'quick-actions' },
+    // Desktop's old ids for Appearance and its Language section (SettingsPage normalizeTab).
+    general: { nav: 'appearance' },
+    language: { nav: 'appearance', section: 'language' },
   };
   if (!page || page === 'root') return { nav: 'root' };
   if (OLD[page]) return OLD[page];

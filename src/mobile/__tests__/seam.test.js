@@ -82,6 +82,12 @@ describe('mobile seam', () => {
     expect(shared.filter((m) => DESKTOP_ONLY.test(m))).toEqual([]);
   });
 
+  it('the Sparkle pattern exempts only lucide icon files', () => {
+    expect(DESKTOP_ONLY.test('node_modules/lucide-react/dist/esm/icons/sparkles.js')).toBe(false);
+    expect(DESKTOP_ONLY.test('src/utils/sparkleUpdater.js')).toBe(true);
+    expect(DESKTOP_ONLY.test('node_modules/@tauri-apps/plugin-sparkle/index.js')).toBe(true);
+  });
+
   it('detector_really_detects', async () => {
     const r = await analyzeSeam(here('./fixtures/desktopLeak.js'));
     expect(r.modules.filter((m) => DESKTOP_ONLY.test(m)).length).toBeGreaterThan(0);
