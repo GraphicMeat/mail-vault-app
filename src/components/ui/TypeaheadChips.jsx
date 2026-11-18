@@ -78,7 +78,8 @@ export function TypeaheadChips({
       {chip.color && <span className="typeahead-dot" style={{ background: chip.color }} aria-hidden="true" />}
       {chip.label}
       <button type="button" className="view-query-key-remove" data-testid={chip.testId}
-        aria-label={`${t('common.remove')} ${chip.label}`} onClick={() => onRemove?.(chip)}>
+        aria-label={`${t('common.remove')} ${chip.label}`}
+        onMouseDown={event => event.preventDefault()} onClick={() => onRemove?.(chip)}>
         <X size={12} aria-hidden="true" />
       </button>
     </span>)}
@@ -90,7 +91,7 @@ export function TypeaheadChips({
         onChange={event => { onChange(event.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        onBlur={() => { close(); onBlur?.(); }} />
+        onBlur={event => { close(); onBlur?.(event); }} />
       {listed && <ul id={listId} role="listbox" aria-label={label} className="typeahead-list"
         onScroll={event => {
           const list = event.currentTarget;

@@ -1156,9 +1156,10 @@ export const useSettingsStore = create(
       setCloseToTray: (enabled) => set({ closeToTray: Boolean(enabled) }),
       setComposeOpenMode: (mode) => set({ composeOpenMode: mode === 'window' ? 'window' : 'app' }),
 
-      setAccountGroup: (accountId, rawName) => set(state => {
-        const name = resolveGroupName(rawName, Object.values(state.accountGroups).filter(Boolean));
-        const accountGroups = { ...state.accountGroups };
+      setAccountGroup: (accountId, rawName, liveAccountIds) => set(state => {
+        const accountGroups = Object.fromEntries(Object.entries(state.accountGroups)
+          .filter(([id]) => !liveAccountIds || liveAccountIds.includes(id)));
+        const name = resolveGroupName(rawName, Object.values(accountGroups).filter(Boolean));
         if (name) accountGroups[accountId] = name;
         else delete accountGroups[accountId];
         return { accountGroups };

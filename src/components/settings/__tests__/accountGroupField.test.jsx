@@ -36,6 +36,30 @@ it('chip x clears the group', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Remove Personal' }));
   expect(useSettingsStore.getState().accountGroups.a).toBeUndefined();
 });
+it('chip x clears with a draft after the browser mouse down sequence', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.focus(input());
+  fireEvent.change(input(), { target: { value: 'Study' } });
+  const remove = screen.getByRole('button', { name: 'Remove Personal' });
+  if (fireEvent.mouseDown(remove)) fireEvent.blur(input(), { relatedTarget: remove });
+  fireEvent.click(remove);
+  expect(useSettingsStore.getState().accountGroups.a).toBeUndefined();
+});
+it('chip x clears with a draft when reached by keyboard', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.focus(input());
+  fireEvent.change(input(), { target: { value: 'Study' } });
+  const remove = screen.getByRole('button', { name: 'Remove Personal' });
+  fireEvent.blur(input(), { relatedTarget: remove });
+  fireEvent.click(remove);
+  expect(useSettingsStore.getState().accountGroups.a).toBeUndefined();
+});
+it('assigns visible casing without reviving removed accounts', () => {
+  useSettingsStore.setState({ accountGroups: { removed: 'work', a: 'Work' } });
+  render(<AccountGroupField accountId="b" />);
+  fireEvent.click(within(group()).getByRole('button', { name: 'Work 1' }));
+  expect(useSettingsStore.getState().accountGroups).toEqual({ a: 'Work', b: 'Work' });
+});
 it('Enter assigns a new name and empties input', () => {
   render(<AccountGroupField accountId="a" />);
   fireEvent.change(input(), { target: { value: 'Study' } });

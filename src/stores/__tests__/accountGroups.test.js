@@ -34,6 +34,11 @@ describe('account group settings', () => {
     store.setAccountGroup('b', 'work team');
     expect(useSettingsStore.getState().accountGroups).toEqual({ a: 'Work Team', b: 'Work Team' });
   });
+  it('ignores and removes stale groups when assigning a live account', () => {
+    useSettingsStore.setState({ accountGroups: { removed: 'work', a: 'Work' } });
+    useSettingsStore.getState().setAccountGroup('b', 'Work', ['a', 'b']);
+    expect(useSettingsStore.getState().accountGroups).toEqual({ a: 'Work', b: 'Work' });
+  });
   it('removes a group when cleared', () => {
     useSettingsStore.getState().setAccountGroup('a', 'Work');
     useSettingsStore.getState().setAccountGroup('a', ' ');

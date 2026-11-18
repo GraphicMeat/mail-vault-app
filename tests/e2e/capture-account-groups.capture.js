@@ -96,6 +96,11 @@ describe('Account groups capture', function () {
       await setGroupDraft('Wo');
       await $('.typeahead-list [role="option"]:first-child').click();
       await assignedGroup(workOne.id, 'Work');
+      await setGroupDraft('Draft');
+      await $('.account-group-field [data-testid="account-group-chip"]').click();
+      await assignedGroup(workOne.id, undefined);
+      await $('.account-group-cloud button:last-child').click();
+      await assignedGroup(workOne.id, 'Work');
       await $('.account-group-cloud button').click();
       await assignedGroup(workOne.id, 'Personal');
       assert.equal(await browser.execute(() => document.querySelector('.account-group-cloud button')?.getAttribute('aria-pressed')), 'true');
