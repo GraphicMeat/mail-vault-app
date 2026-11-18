@@ -70,7 +70,7 @@ export function collectSettings(accountIds) {
  * next. Never throws for a failed write (accounts are already saved by then);
  * returns `{ settingsError: true }` so the UI can warn instead.
  */
-export async function applySettings(snapshot, idMap, { applyGlobal, existingIds = [] } = {}) {
+export async function applySettings(snapshot, idMap, { applyGlobal, existingIds } = {}) {
   const s = useSettingsStore.getState();
   const remap = map => Object.fromEntries(
     Object.entries(map || {}).filter(([id]) => Object.hasOwn(idMap, id)).map(([id, value]) => [idMap[id], value]));
@@ -80,7 +80,11 @@ export async function applySettings(snapshot, idMap, { applyGlobal, existingIds 
   for (const key of PER_ACCOUNT_MAPS) {
     if (key !== 'accountGroups') patch[key] = { ...s[key], ...remap(acct[key]) };
   }
-  patch.accountGroups = Object.fromEntries(Object.entries(s.accountGroups || {}).filter(([, name]) => typeof name === 'string'));
+  // Same rule as the store's setAccountGroup: when the caller names the accounts that exist, a group
+  // entry left by a removed account is dropped and never lends its casing to an imported name.
+  const live = existingIds && new Set([...existingIds, ...Object.values(idMap)]);
+  patch.accountGroups = Object.fromEntries(Object.entries(s.accountGroups || {})
+    .filter(([id, name]) => typeof name === 'string' && (!live || live.has(id))));
   const groupNames = Object.values(patch.accountGroups).filter(Boolean);
   for (const [id, rawName] of Object.entries(remap(acct.accountGroups))) {
     if (typeof rawName !== 'string') continue;
@@ -132,7 +136,7 @@ export async function applySettings(snapshot, idMap, { applyGlobal, existingIds 
   const rank = id => (fileOrder.includes(id) ? fileOrder.indexOf(id) : fileOrder.length);
   const added = Object.keys(idMap).sort((a, b) => rank(a) - rank(b)).map(id => idMap[id]);
   if (added.length) {
-    const base = s.accountOrder?.length ? s.accountOrder : existingIds;
+    const base = s.accountOrder?.length ? s.accountOrder : (existingIds || []);
     patch.accountOrder = [...base, ...added.filter(id => !base.includes(id))];
   }
 

@@ -81,6 +81,11 @@ describe('applySettings', () => {
     await applySettings({ accountSettings: { accountGroups: { X: 'work' } } }, { X: 'X2' });
     expect(h.settings.accountGroups.X2).toBe('Work');
   });
+  it('never takes group casing from a removed account on import', async () => {
+    h.settings.accountGroups = { removed: 'work', A: 'Work' };
+    await applySettings({ accountSettings: { accountGroups: { X: 'Work' } } }, { X: 'X2' }, { existingIds: ['A'] });
+    expect(h.settings.accountGroups).toEqual({ A: 'Work', X2: 'Work' });
+  });
   it('ignores malformed imported group names', async () => {
     await applySettings({ accountSettings: { accountGroups: { X: { label: 'Bad' }, Y: 42, Z: 'Study' } } }, { X: 'X2', Y: 'Y2', Z: 'Z2' });
     expect(h.settings.accountGroups).toEqual({ A: 'Personal', B: 'Work', Z2: 'Study' });

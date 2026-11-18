@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { TypeaheadChips } from '../TypeaheadChips';
 
 afterEach(cleanup);
@@ -16,4 +16,17 @@ it('adds the host input class', () => {
 it('leaves the input class unset by default', () => {
   render(<TypeaheadChips {...props} />);
   expect(screen.getByRole('combobox').hasAttribute('class')).toBe(false);
+});
+
+it('closes the list when a chip is removed and reopens it on an input click', () => {
+  render(<TypeaheadChips {...props} options={[{ value: 'x', label: 'X' }]} chips={[{ key: 'c', label: 'C' }]} onRemove={() => {}} />);
+  const input = screen.getByRole('combobox');
+  fireEvent.focus(input);
+  expect(screen.getByRole('listbox')).toBeTruthy();
+  const remove = screen.getByRole('button', { name: 'Remove C' });
+  fireEvent.mouseDown(remove);
+  fireEvent.click(remove);
+  expect(screen.queryByRole('listbox')).toBeNull();
+  fireEvent.click(input);
+  expect(screen.getByRole('listbox')).toBeTruthy();
 });

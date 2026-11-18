@@ -45,6 +45,17 @@ it('chip x clears with a draft after the browser mouse down sequence', () => {
   fireEvent.click(remove);
   expect(useSettingsStore.getState().accountGroups.a).toBeUndefined();
 });
+it('chip x closes the suggestion list so a cloud pill takes one click', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.focus(input());
+  expect(screen.getByRole('listbox')).toBeTruthy();
+  const remove = screen.getByRole('button', { name: 'Remove Personal' });
+  fireEvent.mouseDown(remove);
+  fireEvent.click(remove);
+  expect(screen.queryByRole('listbox')).toBeNull();
+  fireEvent.click(within(group()).getByRole('button', { name: /Work/ }));
+  expect(useSettingsStore.getState().accountGroups.a).toBe('Work');
+});
 it('chip x clears with a draft when reached by keyboard', () => {
   render(<AccountGroupField accountId="a" />);
   fireEvent.focus(input());

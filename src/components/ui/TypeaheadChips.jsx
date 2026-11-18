@@ -79,7 +79,9 @@ export function TypeaheadChips({
       {chip.label}
       <button type="button" className="view-query-key-remove" data-testid={chip.testId}
         aria-label={`${t('common.remove')} ${chip.label}`}
-        onMouseDown={event => event.preventDefault()} onClick={() => onRemove?.(chip)}>
+        onMouseDown={event => event.preventDefault()}
+        // The input keeps focus, so the list would stay open over whatever sits below the field.
+        onClick={() => { onRemove?.(chip); close(); }}>
         <X size={12} aria-hidden="true" />
       </button>
     </span>)}
@@ -90,6 +92,7 @@ export function TypeaheadChips({
         aria-activedescendant={current >= 0 ? `${listId}-${current}` : undefined}
         onChange={event => { onChange(event.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onKeyDown={onKeyDown}
         onBlur={event => { close(); onBlur?.(event); }} />
       {listed && <ul id={listId} role="listbox" aria-label={label} className="typeahead-list"
