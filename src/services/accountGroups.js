@@ -1,5 +1,3 @@
-import { compareNames } from '../utils/collation.js';
-
 export function normalizeGroupName(raw) {
   return String(raw ?? '').trim().replace(/\s+/g, ' ').slice(0, 40).trim() || null;
 }
@@ -18,7 +16,7 @@ export function groupNames(accountGroups) {
     if (names.has(key)) names.get(key).count++;
     else names.set(key, { name: value, count: 1 });
   }
-  return [...names.values()].sort((a, b) => compareNames(a.name, b.name));
+  return [...names.values()];
 }
 
 export function matchGroups(groups, draft) {

@@ -11,8 +11,9 @@ vi.mock('../../syncService', () => ({ unwatchAccount: vi.fn() }));
 vi.mock('../../cacheManager', () => ({ invalidateRestoreDescriptors: vi.fn(), clearGraphIdMap: vi.fn() }));
 vi.mock('../../../stores/unreadCounts', () => ({ forgetAccount: vi.fn() }));
 vi.mock('../../../stores/settingsStore', () => ({
-  useSettingsStore: { getState: () => ({ hiddenAccounts: {}, getLastMailbox: () => 'INBOX', notificationSettings: {} }) },
+  useSettingsStore: { getState: () => ({ hiddenAccounts: {}, getLastMailbox: () => 'INBOX', notificationSettings: {}, setAccountGroup: clearGroup }) },
 }));
+const clearGroup = vi.fn();
 
 const state = {
   accounts: [{ id: 'gone', email: 'gone@x.co' }, { id: 'kept', email: 'kept@x.co' }],
@@ -49,6 +50,7 @@ describe('removing an account', () => {
     await removeAccount('gone');
     expect(mockDaemonCall).not.toHaveBeenCalled();
     expect(useFollowUpStore.getState().rows.map(r => r.id)).toEqual(['c']);
+    expect(clearGroup).toHaveBeenCalledWith('gone', '');
   });
 
   it('leaves native session retirement alone after complete removal and switches accounts', async () => {
@@ -75,5 +77,6 @@ describe('removing an account', () => {
     if (!rejected || remaining.length !== 2 || pending.length !== 3 || disconnected || unwatched) {
       throw new Error(`S24_WORKFLOW_REFUSAL_ACTUAL: outcome=${outcome}, rejected=${rejected}, remaining=${remaining}, pending=${pending}, disconnected=${disconnected}, unwatched=${unwatched}`);
     }
+    expect(clearGroup).not.toHaveBeenCalled();
   });
 });

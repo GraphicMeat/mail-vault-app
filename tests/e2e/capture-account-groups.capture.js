@@ -61,6 +61,9 @@ describe('Account groups capture', function () {
       displayNames: { [a]: 'Personal mail', [b]: 'Work mail', [c]: 'Team mail' },
       unreadPerAccount: { [a]: 3, [b]: 7 },
     }), personal.id, workOne.id, workTwo.id);
+    await browser.executeAsync(done => window.__TAURI_INTERNALS__.invoke('daemon_rpc', {
+      method: 'tags.ensure', params: { name: 'Capture tag', color: '' },
+    }).then(() => done(null), error => done(String(error)))).then(error => assert.equal(error, null));
     await wait(() => browser.execute(() => !!document.querySelector('.sidebar-account-list [role="group"][aria-label="Work"]')),
       'Grouped sidebar did not render');
     const out = resolve(process.env.HARNESS_SHOTS_OUT || '.artifacts');
@@ -134,6 +137,28 @@ describe('Account groups capture', function () {
       await browser.execute(() => window.__SETTINGS_STORE__.setState({ sidebarCollapsed: false }));
       await wait(() => browser.execute(() => !!document.querySelector('.sidebar-account-list [role="group"][aria-label="Work"]')),
         'Expanded sidebar did not return');
+      await openSettings();
+      assert.equal(await clickSettingsNav('Views'), true);
+      await wait(() => browser.execute(() => !!document.querySelector('[data-testid="views-row-builtin-starred"]')),
+        'Starter view did not load');
+      await $('[data-testid="views-row-builtin-starred"]').click();
+      await wait(() => browser.execute(() => !!document.querySelector('#view-tags')),
+        'View tag picker did not render');
+      await browser.execute(() => {
+        const input = document.querySelector('#view-tags');
+        input.scrollIntoView({ block: 'center' });
+        input.focus();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'Capture');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await wait(() => browser.execute(() => !!document.querySelector('.view-editor .typeahead-list [role="option"]')),
+        'View tag option did not render');
+      await $('.view-editor .typeahead-list [role="option"]').click();
+      await wait(() => browser.execute(() => !!document.querySelector('.view-editor .typeahead-chip button[aria-label="Remove Capture tag"]')),
+        'View tag chip did not render');
+      await captureScreen(`settings-view-tags-${theme}`, '.view-editor .typeahead-chip button', capture, activateAppWindow);
+      await $('.view-editor .typeahead-chip button').click();
+      await closeSettings();
     }
   });
 });

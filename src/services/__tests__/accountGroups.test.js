@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeGroupName, resolveGroupName, groupAccounts, accountsInScope, groupUnread, groupNames, matchGroups } from '../accountGroups';
+import { readFileSync } from 'node:fs';
 
 const accounts = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
 
@@ -10,6 +11,10 @@ describe('account groups', () => {
     expect(accountsInScope(accounts, { ...settings, group: 'Work' })).toEqual([accounts[0]]);
     expect(accountsInScope(accounts, { ...settings, group: 'Missing' })).toEqual([]);
     expect(groupUnread(accounts, 'Work', { ...settings, unreadPerAccount: { a: 2, c: 5 } })).toBe(2);
+  });
+  it('keeps group naming independent of UI locale and settings modules', () => {
+    const source = readFileSync(new URL('../accountGroups.js', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/import .*from ['"](?:\.\.\/utils\/collation|\.\.\/i18n|\.\.\/stores\/settingsStore)/);
   });
   it('normalizes names and limits them to 40 characters', () => {
     expect(normalizeGroupName('  My   Work  ')).toBe('My Work');
@@ -33,7 +38,7 @@ describe('account groups', () => {
   });
   it('merges group names case-insensitively and counts accounts', () => {
     expect(groupNames({ a: 'Work', b: 'work', c: 'Home' })).toEqual([
-      { name: 'Home', count: 1 }, { name: 'Work', count: 2 },
+      { name: 'Work', count: 2 }, { name: 'Home', count: 1 },
     ]);
   });
   it('ignores empty and non-string group names', () => {

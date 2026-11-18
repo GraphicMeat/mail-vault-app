@@ -22,6 +22,7 @@ export async function removeAccount(accountId) {
     error.result = removal;
     throw error;
   }
+  useSettingsStore.getState().setAccountGroup(accountId, '');
 
   // Native removal owns session retirement. Presentation cleanup starts only
   // after its final complete result.

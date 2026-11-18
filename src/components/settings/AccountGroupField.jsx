@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useMailStore } from '../../stores/mailStore';
+import { compareNames } from '../../utils/collation';
 import { useT } from '../../i18n/index.js';
 import { usePrivacyActive, usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
 import { groupNames, matchGroups } from '../../services/accountGroups';
@@ -12,11 +14,13 @@ export function AccountGroupField({ accountId }) {
   const privateInput = usePrivateInputClass();
   const privateAttr = usePrivateAttr();
   const accountGroups = useSettingsStore(state => state.accountGroups);
+  const accounts = useMailStore(state => state.accounts);
   const setAccountGroup = useSettingsStore(state => state.setAccountGroup);
   const [draft, setDraft] = useState('');
   useEffect(() => setDraft(''), [accountId]);
   const current = accountGroups[accountId];
-  const groups = groupNames(accountGroups);
+  const groups = groupNames(Object.fromEntries(accounts.map(account => [account.id, accountGroups[account.id]])))
+    .sort((a, b) => compareNames(a.name, b.name));
   const { matches, canCreate } = matchGroups(groups, draft);
   const assign = name => { setAccountGroup(accountId, name); setDraft(''); };
   const clear = () => assign('');

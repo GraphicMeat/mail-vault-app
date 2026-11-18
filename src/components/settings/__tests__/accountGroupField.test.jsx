@@ -73,10 +73,16 @@ it('does not offer Create for an exact case-insensitive match', () => {
   expect(screen.queryByRole('option', { name: /Create/ })).toBeNull();
 });
 it('cloud lists each group once with account count', () => {
-  useSettingsStore.setState({ accountGroups: { a: 'Work', b: 'work', c: 'Personal' } });
+  useSettingsStore.setState({ accountGroups: { a: 'Work', b: 'work', removed: 'Personal' } });
   render(<AccountGroupField accountId="a" />);
-  expect(within(group()).getAllByRole('button')).toHaveLength(2);
+  expect(within(group()).getAllByRole('button')).toHaveLength(1);
   expect(within(group()).getByRole('button', { name: 'Work 2' })).toBeTruthy();
+  expect(group().textContent).not.toContain('Personal');
+});
+it('sorts the live group names in the picker', () => {
+  useSettingsStore.setState({ accountGroups: { a: 'Work', b: 'Home', removed: 'Zebra' } });
+  render(<AccountGroupField accountId="a" />);
+  expect(within(group()).getAllByRole('button').map(button => button.textContent)).toEqual(['Home 1', 'Work 1']);
 });
 it('cloud picks a group and marks it pressed; pressed pill clears', () => {
   render(<AccountGroupField accountId="a" />);

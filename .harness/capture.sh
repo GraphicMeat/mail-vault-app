@@ -61,7 +61,7 @@ PY
       }
     done
     exit 0 ;;
-  *,sidebar-account-groups,*|*,settings-account-group,*|*,settings-account-group-create,*|*,sidebar-collapsed-groups,*)
+  *,sidebar-account-groups,*|*,settings-account-group,*|*,settings-account-group-create,*|*,sidebar-collapsed-groups,*|*,settings-view-tags,*)
     cd "$(dirname "$0")/.."
     out=${HARNESS_SHOTS_OUT:-${1:-$PWD/.artifacts}}
     case "$out" in /*) ;; *) echo 'Shot output must be an absolute directory' >&2; exit 1 ;; esac
@@ -69,12 +69,12 @@ PY
     mkdir -p "$out"
     trap 'bash scripts/screenshots/prepare-build.sh --revert' EXIT
     bash scripts/screenshots/prepare-build.sh --narrow
-    for shot in sidebar-account-groups settings-account-group settings-account-group-create settings-account-group-mobile sidebar-collapsed-groups; do
+    for shot in sidebar-account-groups settings-account-group settings-account-group-create settings-account-group-mobile sidebar-collapsed-groups settings-view-tags; do
       rm -f "$out/$shot.reached" "$out/$shot-light.png" "$out/$shot-dark.png"
     done
     npm run build:e2e
     npx wdio run wdio.conf.js --spec tests/e2e/capture-account-groups.capture.js
-    for shot in sidebar-account-groups settings-account-group settings-account-group-create settings-account-group-mobile sidebar-collapsed-groups; do
+    for shot in sidebar-account-groups settings-account-group settings-account-group-create settings-account-group-mobile sidebar-collapsed-groups settings-view-tags; do
       test -s "$out/$shot.reached" || { echo "capture.sh: missing $shot.reached" >&2; exit 1; }
       for theme in light dark; do test -s "$out/$shot-$theme.png"; done
     done
