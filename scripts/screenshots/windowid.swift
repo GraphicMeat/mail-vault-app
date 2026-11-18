@@ -72,7 +72,7 @@ if arg == "--info" {
 // A real app window is on screen and taller than any toolbar or panel; among
 // those, the biggest one is the document window.
 let best = candidates
-    .filter { $0.onScreen && $0.height > 300 && $0.width > minWidth }
+    .filter { $0.onScreen && $0.height > 300 && $0.width > min(minWidth, 300) }
     .max(by: { $0.width * $0.height < $1.width * $1.height })
 
 if let best {
