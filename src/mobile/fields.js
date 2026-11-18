@@ -3,9 +3,9 @@
 // and the values of the rows asked about, keyed `account|folder|uid`. The key a value is stored
 // under is the engine's and never computed here.
 //
-// An account's fields load once (`requestFields`, the viewer's strip and the settings page), and
-// again after every change. A row's values load when the viewer opens it, and only when its
-// account has a field. A value change shows at once and goes back if the engine refuses it.
+// Every account's fields load once at launch (App.jsx `requestFields` per account; the settings
+// page loads its own), and again after every change, so opening a message asks for nothing more
+// unless its account has a field: then its values load when the viewer opens it. A value change shows at once and goes back if the engine refuses it.
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { daemonCall } from './transport.js';
@@ -121,15 +121,17 @@ export function requestFields(accountId) {
   useFieldStore.getState().loadFields(accountId).catch(() => {}).finally(() => asked.delete(accountId));
 }
 
-/** After an import brought fields: every list and value asked for again. */
+/** After an import brought fields: every list known so far asked for again, every value dropped. */
 export function refreshFields() {
+  const known = Object.keys(useFieldStore.getState().fields);
   useFieldStore.setState({ fields: {}, byRow: {} });
   asked.clear();
+  for (const id of known) requestFields(id);
 }
 
 /**
- * An open message's fields (`schema`, its account's) and its `values`. Asks for the account's
- * fields, and for the row's values once the account has a field.
+ * An open message's fields (`schema`, its account's, as loaded at launch) and its `values`, asked
+ * for once the account has a field.
  */
 export function useRowFields(accountId, folder, uid) {
   const key = rowKey(accountId, folder, uid);
@@ -137,7 +139,6 @@ export function useRowFields(accountId, folder, uid) {
   const values = useFieldStore((s) => s.byRow[key] || EMPTY);
   const cached = useFieldStore((s) => key in s.byRow);
   const has = schema.length > 0;
-  useEffect(() => { requestFields(accountId); }, [accountId]);
   useEffect(() => {
     if (has && !cached && accountId && folder && uid != null) {
       useFieldStore.getState().loadRows([{ accountId, folder, uid }]).catch(() => {});

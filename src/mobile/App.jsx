@@ -40,6 +40,7 @@ import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, take
 import { useMobileStore, ALL_INBOXES } from './store.js';
 import { ensureTags } from './tags.js';
 import { ensureViews, useViewStore } from './views.js';
+import { requestFields } from './fields.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
 import ThreadView from './ThreadView.jsx';
@@ -654,6 +655,9 @@ function App() {
   }, []);
   const closeView = useCallback(() => setOpenView(null), []);
   const savedViews = useViewStore((s) => s.views);
+  // Each account's custom fields, once (fields.js): the viewer's strip only reads them.
+  const fieldAccounts = useMobileStore((s) => s.accounts);
+  useEffect(() => { for (const a of fieldAccounts) requestFields(a.id); }, [fieldAccounts]);
   const viewCounts = useViewStore((s) => s.counts);
   // A reminder opens its Sent copy the way a notification tap opens a message.
   const onOpenFollowUp = useCallback((f) => {

@@ -54,7 +54,7 @@ const { default: Viewer } = await import('../Viewer.jsx');
 const { default: Settings } = await import('../Settings.jsx');
 const { useMobileStore } = await import('../store.js');
 const { PREF_DEFAULTS } = await import('../prefs.js');
-const { resetFieldsForTests } = await import('../fields.js');
+const { resetFieldsForTests, requestFields } = await import('../fields.js');
 
 const PRIORITY = { id: 'f1', scope: 'a1', name: 'Priority', kind: 'select', position: 0,
   options: [{ id: 'hi', label: 'High', color: '#ff0000' }, { id: 'lo', label: 'Low', color: '' }] };
@@ -77,7 +77,10 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/** What App.jsx does at launch (each account's fields), then the viewer. */
 const openViewer = async () => {
+  requestFields('a1');
+  await flush();
   render(<Viewer accountId="a1" folder="INBOX" row={row} onClose={() => {}} folders={[{ path: 'INBOX', name: 'INBOX', depth: 0 }]} />);
   await flush();
 };
@@ -85,7 +88,7 @@ const openViewer = async () => {
 describe('custom fields on the phone', () => {
   it('the viewer shows no strip and asks for no values when the account has no field', async () => {
     await openViewer();
-    expect(calls('mobile.fields.list')).toEqual([{ accountId: 'a1' }]);
+    expect(calls('mobile.fields.list')).toEqual([{ accountId: 'a1' }], 'the launch load only');
     expect(calls('mobile.fields.values')).toEqual([]);
     expect(document.querySelector('.field-strip')).toBeNull();
   });
