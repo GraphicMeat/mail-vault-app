@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Check } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { useT } from '../../i18n/index.js';
-import { Private } from '../privacy/Private';
+import { DesktopViewEnv } from '../settings/DesktopViewEnv';
+import { TransferExportView } from '../settings/views/TransferExportView';
 import { exportTransfer } from '../../services/workflows/transferAccounts';
 import { transferErrorKey, TRANSFER_PASSWORD_MIN } from '../../services/transfer/transferErrors';
-import { TRANSFER_INPUT } from './transferStyles';
 
 /**
  * Export accounts to an encrypted transfer file. Rendered by App.jsx in the
@@ -24,7 +23,6 @@ export function ExportModal({ accounts, onClose }) {
   const [error, setError] = useState(null);
   const [exported, setExported] = useState(null);
 
-  const mismatch = confirm !== '' && password !== confirm;
   const ready = selected.size > 0 && [...password].length >= TRANSFER_PASSWORD_MIN && password === confirm;
   const toggle = id => setSelected(prev => {
     const next = new Set(prev);
@@ -64,44 +62,15 @@ export function ExportModal({ accounts, onClose }) {
           {busy ? t('settings.transfer.encrypting') : t('settings.transfer.exportTitle')}
         </Button>
       </div>}>
-      <fieldset>
-        <legend className="text-xs font-medium text-mail-text-muted mb-2">{t('settings.transfer.accounts')}</legend>
-        <div className="space-y-1 max-h-48 overflow-y-auto">
-          {accounts.map(a => (
-            <label key={a.id} className="flex items-center gap-2 text-sm text-mail-text">
-              <input type="checkbox" className="accent-mail-accent" checked={selected.has(a.id)} onChange={() => toggle(a.id)} />
-              <span className="truncate"><Private kind="email">{a.email}</Private></span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <label className="flex items-center gap-2 text-sm text-mail-text">
-        <input type="checkbox" className="accent-mail-accent" checked={includeAppSettings} onChange={e => setIncludeAppSettings(e.target.checked)} />
-        {t('settings.transfer.includeAppSettings')}
-      </label>
-      <div>
-        <label htmlFor="transfer-export-password" className="block text-xs text-mail-text-muted mb-1">{t('settings.transfer.password')}</label>
-        <input id="transfer-export-password" type="password" autoComplete="new-password" data-autofocus className={TRANSFER_INPUT}
-          value={password} onChange={e => setPassword(e.target.value)} aria-describedby="transfer-export-hint" />
-        <p id="transfer-export-hint" className="text-xs text-mail-text-muted mt-1">{t('settings.transfer.passwordHint', { count: TRANSFER_PASSWORD_MIN })}</p>
-      </div>
-      <div>
-        <label htmlFor="transfer-export-confirm" className="block text-xs text-mail-text-muted mb-1">{t('settings.transfer.confirmPassword')}</label>
-        <input id="transfer-export-confirm" type="password" autoComplete="new-password" className={TRANSFER_INPUT}
-          value={confirm} onChange={e => setConfirm(e.target.value)} aria-invalid={mismatch || undefined} />
-        {mismatch && <p className="text-xs text-mail-danger mt-1">{t('settings.transfer.passwordMismatch')}</p>}
-      </div>
-      <p className="flex items-start gap-2 text-xs text-mail-text-muted">
-        <AlertTriangle size={14} aria-hidden="true" className="text-mail-warning flex-shrink-0 mt-0.5" />
-        {t('settings.transfer.warning')}
-      </p>
-      {error && <p role="alert" className="text-sm text-mail-danger">{t(error.key, error.values)}</p>}
-      {exported !== null && (
-        <p role="status" className="flex items-center gap-2 text-sm text-mail-text">
-          <Check size={14} aria-hidden="true" className="text-mail-success" />
-          {t('settings.transfer.exported', { count: exported })}
-        </p>
-      )}
+      <DesktopViewEnv>
+        <TransferExportView accounts={accounts} selected={selected} onToggle={toggle} minPassword={TRANSFER_PASSWORD_MIN}
+          password={password} onPassword={setPassword} confirm={confirm} onConfirm={setConfirm}
+          error={error ? t(error.key, error.values) : null} exported={exported}
+          options={<label className="flex items-center gap-2 text-sm text-mail-text">
+            <input type="checkbox" className="accent-mail-accent" checked={includeAppSettings} onChange={e => setIncludeAppSettings(e.target.checked)} />
+            {t('settings.transfer.includeAppSettings')}
+          </label>} />
+      </DesktopViewEnv>
     </Dialog>
   );
 }

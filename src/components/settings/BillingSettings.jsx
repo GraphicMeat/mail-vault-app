@@ -33,13 +33,14 @@ import {
   Trash2,
   ImageDown,
   Monitor,
-  X,
   LogOut,
 } from 'lucide-react';
 import { t as tr, t, useT   } from '../../i18n/index.js';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { Private } from '../privacy/Private';
 import { SettingsPageLayout } from '../ui/SettingsForm';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { BillingPlanView, BillingDevicesView, ManageSubscriptionButton } from './views/BillingViews';
 
 // Cooldown constants
 const AUTO_REFRESH_COOLDOWN = 60_000;  // 60s for focus/mount
@@ -465,6 +466,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   };
 
   return (
+    <DesktopViewEnv>
     <SettingsPageLayout ref={rootRef}>
       {/* Transient warning banners — cleared immediately on next successful refresh */}
       {rateLimitMsg && (
@@ -480,13 +482,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
       )}
 
       {/* Current Plan */}
-      <div className="settings-section">
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPremium ? 'bg-mail-accent-tint' : 'bg-mail-accent/10'}`}>
-            {isPremium ? <CheckCircle2 size={20} className="text-mail-accent-text" /> : <CreditCard size={20} className="text-mail-accent-text" />}
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-mail-text">{statusLabel}</h3>
+      <BillingPlanView isPremium={isPremium} statusLabel={statusLabel} lines={<>
             {billingProfile?.status === 'trialing' && billingProfile?.currentPeriodEnd && (
               <p className="text-xs text-mail-accent-text">
                 {t('settings.billing.freeTrialEndsYearlyBilling', { date: formatDate(billingProfile.currentPeriodEnd) })}
@@ -502,9 +498,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
             {billingProfile?.status === 'past_due' && (
               <p className="text-xs text-mail-warning">{t('settings.billing.paymentPastDuePleaseUpdate')}</p>
             )}
-          </div>
-        </div>
-
+      </>}>
         {isSignedIn ? (
           /* Signed in: locked email + refresh + sign out */
           <div>
@@ -564,7 +558,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
         )}
         {syncError && <p className="text-xs text-mail-danger mt-2">{syncError}</p>}
         {billingLastChecked && isSignedIn && <p className="text-xs text-mail-text-muted mt-1">{t('settings.billing.lastSynced', { time: formatTime(billingLastChecked) })}</p>}
-      </div>
+      </BillingPlanView>
 
       <PremiumFeatureList isPremium={isPremium} onNavigate={onNavigate} />
 
@@ -675,61 +669,19 @@ export function BillingSettings({ onNavigate, onReportBug }) {
       {/* Manage Billing — the Stripe portal can change or restart a plan, which
           makes it a purchase mechanism App Review will not accept in-app. */}
       {!IS_APPSTORE_BUILD && billingProfile?.hasSubscription && customerId && (
-        <button onClick={() => setShowIssues(true)}
-          className="w-full py-2.5 text-sm font-medium bg-mail-surface border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors flex items-center justify-center gap-2 text-mail-text">
-          <ExternalLink size={14} />
-          {t('settings.billing.manageSubscription')}
-        </button>
+        <ManageSubscriptionButton onClick={() => setShowIssues(true)} />
       )}
 
       {/* Active Devices */}
       {isPremium && activeClients.length > 0 && (
-        <div className="settings-section">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-mail-text flex items-center gap-2">
-              <Monitor size={16} /> {t('settings.billing.devices')}
-            </h4>
-            <span className="text-xs text-mail-text-muted">{activeClientCount} / {clientLimit}</span>
-          </div>
-
-          <div className="w-full h-1.5 bg-mail-border rounded-full mb-3">
-            <div className={`h-full rounded-full transition-all ${activeClientCount >= clientLimit ? 'bg-mail-warning' : 'bg-mail-accent'}`}
-              style={{ width: `${Math.min(100, (activeClientCount / clientLimit) * 100)}%` }} />
-          </div>
-
-          {replacedNotice && <p className="text-xs text-mail-warning mb-3">{replacedNotice}</p>}
-
-          <div className="space-y-2">
-            {activeClients.map(client => {
-              const isCurrent = client.clientId === currentClientId;
-              return (
-                <div key={client.clientId} className={`flex items-center justify-between px-3 py-2 rounded-lg ${isCurrent ? 'bg-mail-accent/5 border border-mail-accent/20' : 'bg-mail-bg'}`}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Monitor size={14} className={isCurrent ? 'text-mail-accent-text flex-shrink-0' : 'text-mail-text-muted flex-shrink-0'} />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-mail-text truncate">
-                        {client.clientName || client.platform || t('settings.billing.unknownDevice')}
-                        {isCurrent && <span className="ml-1.5 text-xs text-mail-accent-text font-semibold">{t('settings.billing.thisDeviceParen')}</span>}
-                      </p>
-                      <p className="text-xs text-mail-text-muted">
-                        {[client.platform, client.appVersion && `v${client.appVersion}`].filter(Boolean).join(' · ')}
-                        {client.lastSeenAt && ` · ${timeAgo(client.lastSeenAt)}`}
-                      </p>
-                    </div>
-                  </div>
-                  {!isCurrent && (
-                    <button onClick={() => handleRemoveClient(client.clientId)}
-                      disabled={removingClientId === client.clientId}
-                      className="p-1 text-mail-text-muted hover:text-mail-danger rounded transition-colors flex-shrink-0"
-                      title={t('settings.billing.removeDevice')}>
-                      {removingClientId === client.clientId ? <Loader size={12} className="animate-spin" /> : <X size={12} />}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <BillingDevicesView count={activeClientCount} limit={clientLimit} notice={replacedNotice}
+          removingKey={removingClientId} onRemove={handleRemoveClient}
+          devices={activeClients.map(client => ({
+            key: client.clientId,
+            current: client.clientId === currentClientId,
+            name: client.clientName || client.platform || t('settings.billing.unknownDevice'),
+            detail: `${[client.platform, client.appVersion && `v${client.appVersion}`].filter(Boolean).join(' · ')}${client.lastSeenAt ? ` · ${timeAgo(client.lastSeenAt)}` : ''}`,
+          }))} />
       )}
 
       {/* The notes MailVault writes into the inbox about Premium. Not in the App
@@ -808,5 +760,6 @@ export function BillingSettings({ onNavigate, onReportBug }) {
         />
       )}
     </SettingsPageLayout>
+    </DesktopViewEnv>
   );
 }

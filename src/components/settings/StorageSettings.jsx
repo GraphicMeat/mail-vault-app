@@ -13,10 +13,8 @@ import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { send } from '../../services/transport';
 import {
   FolderOpen,
-  HardDrive,
   Shield,
   Trash2,
-  Database,
   Loader,
   Clock,
   Plus,
@@ -30,7 +28,8 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { t, tErr, useT } from '../../i18n/index.js';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { formatCount } from '../../utils/formatCount';
-import { SettingsPageLayout } from '../ui/SettingsForm';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { StorageView } from './views/StorageView';
 
 /**
  * The folders the rule picker offers: roles, resolved per account by the
@@ -213,58 +212,25 @@ export function StorageSettings({ accounts, onUpgrade }) {
     }
   };
 
+  const usageText = localStorageUsage ? (
+    <>
+      {(localStorageUsage.totalMB || 0) >= 1024
+        ? t('settings.storage.gb', { localStorageUsage: ((localStorageUsage.totalMB || 0) / 1024).toFixed(2) })
+        : (localStorageUsage.totalMB || 0) >= 1
+        ? t('settings.storage.mb', { localStorageUsage: (localStorageUsage.totalMB || 0).toFixed(2) })
+        : t('settings.storage.kb', { localStorageUsage: ((localStorageUsage.totalMB || 0) * 1024).toFixed(0) })}
+      {' '}{t('settings.storage.emailsSavedParen', { count: formatCount(localStorageUsage.emailCount || 0) })}
+    </>
+  ) : (
+    usageError ? t('settings.storage.usageUnavailable') : t('settings.storage.calculating')
+  );
+
   return (
-    <SettingsPageLayout>
-      {/* Current Storage Status */}
-      <div className="settings-section">
-        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Database size={18} className="text-mail-accent-text" />
-          {t('settings.storage.storageStatus')}
-        </h4>
-
-        <div className="flex items-center gap-3 p-3 bg-mail-local-tint border border-mail-local/20 rounded-lg mb-4">
-          <div className="w-3 h-3 bg-mail-success rounded-full" />
-          <span className="text-sm text-mail-text">
-            {t('settings.storage.emailsStoredSecurelyLocalStorage')}
-          </span>
-        </div>
-
-        <p className="text-sm text-mail-text-muted">
-          {t('settings.storage.ordinaryFilesNothingUploaded')}
-        </p>
-      </div>
-
-      {/* Download mode: how much mail stays on this computer */}
-      <div className="settings-section">
-        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <HardDrive size={18} className="text-mail-accent-text" />
-          {t('settings.storage.downloadMode')}
-        </h4>
-
-        <div className="space-y-4">
-          <DownloadModeControl onUpgrade={onUpgrade} />
-
-          {/* Local storage usage */}
-          <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
-            <div>
-              <div className="text-sm text-mail-text">{t('settings.storage.localStorageUsage')}</div>
-              <div className="text-xs text-mail-local">
-                {localStorageUsage ? (
-                  <>
-                    {(localStorageUsage.totalMB || 0) >= 1024
-                      ? t('settings.storage.gb', { localStorageUsage: ((localStorageUsage.totalMB || 0) / 1024).toFixed(2) })
-                      : (localStorageUsage.totalMB || 0) >= 1
-                      ? t('settings.storage.mb', { localStorageUsage: (localStorageUsage.totalMB || 0).toFixed(2) })
-                      : t('settings.storage.kb', { localStorageUsage: ((localStorageUsage.totalMB || 0) * 1024).toFixed(0) })}
-                    {' '}{t('settings.storage.emailsSavedParen', { count: formatCount(localStorageUsage.emailCount || 0) })}
-                  </>
-                ) : (
-                  usageError ? t('settings.storage.usageUnavailable') : t('settings.storage.calculating')
-                )}
-              </div>
-            </div>
-          </div>
-
+    <DesktopViewEnv>
+    <StorageView download={<DownloadModeControl onUpgrade={onUpgrade} />} usage={usageText}
+      beforeSearchIndex={<StorageFormatSettings usage={localStorageUsage} />}
+      searchIndex={<SearchIndexSettings onUpgrade={onUpgrade} />}
+      usageExtras={<>
           {/* Messages from a previous server generation.
               A UID reissue (change of mail host, or one the server did itself)
               re-numbers a mailbox, so the vault's copies get re-bound to their
@@ -412,13 +378,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
               {t('settings.storage.resyncStarted')}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Message format: Maildir or JMAP, and converting between them. */}
-      <StorageFormatSettings usage={localStorageUsage} />
-
-      <SearchIndexSettings onUpgrade={onUpgrade} />
+      </>}>
 
       {/* Auto-Cleanup Rules */}
       <div data-testid="settings-auto-cleanup" className="settings-section relative overflow-hidden">
@@ -849,6 +809,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
         }}
       />
 
-    </SettingsPageLayout>
+    </StorageView>
+    </DesktopViewEnv>
   );
 }

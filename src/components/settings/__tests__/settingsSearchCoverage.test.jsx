@@ -79,6 +79,8 @@ const ALLOWLIST = new Set([
   'autoTag.newTagPlaceholder', 'autoTag.resultHeading',
   'fields.moveUp', 'fields.moveDown', 'fields.newOption', 'fields.optionColor',
   'settings.searchIndex.indexing', // progress status text, not a setting
+  'settings.storage.localStorageUsage', // a usage readout (StorageUsageRow's label), not a setting
+  'settings.transfer.password', // the export file's password field, found as settings.transfer.title
   // the Google Fonts picker's own search box and category tabs, and the signature editor's Rendered/Code switch: controls inside a setting already indexed, not settings
   'fonts.picker.search', 'fonts.picker.categories',
   'settings.accounts.signatureSourceLabel', 'settings.accounts.signatureView',

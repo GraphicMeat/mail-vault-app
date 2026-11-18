@@ -3,20 +3,15 @@ import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { openInBrowser } from '../../services/billingApi';
-import {
-  Mail,
-  RotateCcw,
-  ExternalLink,
-  Sparkles,
-  HelpCircle,
-} from 'lucide-react';
+import { RotateCcw, Sparkles, HelpCircle } from 'lucide-react';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { Dialog } from '../ui/Dialog';
 import { Z } from '../ui/layers';
 import { PremiumGallery } from '../onboarding/PremiumGallery';
 import { faqUrl } from '../../services/faqUrl';
 import { appLink } from '../../services/appLink.js';
-import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { HelpView, OpenLinkButton } from './views/HelpView';
 import { DiscordLogo } from '../ui/BrandGlyphs';
 import { DISCORD_INVITE } from '../../utils/communityLinks';
 
@@ -59,109 +54,72 @@ export function HelpSettings({ onClose, onReportBug }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const galleryTitleId = useId();
 
+  const open = url => openInBrowser(url).catch(() => {});
+  const rows = [
+    {
+      id: 'report',
+      title: t('settings.help.reportBug'),
+      subtitle: t('settings.help.reportGithubEmailDeveloper'),
+      action: (
+        <div className="flex items-center gap-2">
+          <span data-testid="settings-link-discord">
+            <Button variant="subtle"
+              onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})}
+              data-url={DISCORD_INVITE}
+            >
+              <DiscordLogo size={16} />
+              {t('bugReport.joinDiscord')}
+            </Button>
+          </span>
+          <Button variant="primary"
+            onClick={() => { onReportBug?.(); onClose(); }}
+          >
+            {t('settings.help.reportBug2')}
+          </Button>
+        </div>
+      ),
+    },
+    ...LINKS().map(link => ({
+      id: link.testid, testid: link.testid, title: link.title, subtitle: link.subtitle,
+      action: <OpenLinkButton url={link.url} onOpen={open} />,
+    })),
+    {
+      id: 'faq', testid: 'settings-link-faq', title: t('settings.help.faq'), subtitle: t('settings.help.faqSubtitle'),
+      action: <OpenLinkButton url={faqUrl(language, 'help_settings')} onOpen={open} icon={HelpCircle} />,
+    },
+    {
+      id: 'premium', title: t('settings.help.whatsInPremium'), subtitle: t('settings.help.whatsInPremiumSubtitle'),
+      action: (
+        <Button variant="subtle" onClick={() => setGalleryOpen(true)} data-testid="settings-open-premium-gallery">
+          <Sparkles size={16} />
+          {t('common.open')}
+        </Button>
+      ),
+    },
+    {
+      id: 'reset', testid: 'settings-reset-onboarding', title: t('settings.help.resetOnboarding'), subtitle: t('settings.help.showWelcomeScreenAgainNext'),
+      action: (
+        <Button variant="subtle"
+          onClick={() => {
+            // No reload: `safeStorage` debounces the disk write 500ms, so a
+            // reload here throws it away and the reset silently does nothing.
+            // App.jsx already re-renders into <Onboarding/> on this flag.
+            setOnboardingComplete(false);
+            onClose();
+          }}
+        >
+          <RotateCcw size={16} />
+          {t('common.reset')}
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <>
-    <SettingsPageLayout>
-      <SettingsCard icon={Mail} headingClassName="mb-4" title={t('settings.tab.help')}>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <div className="font-medium text-mail-text">{t('settings.help.reportBug')}</div>
-              <div className="text-sm text-mail-text-muted">
-                {t('settings.help.reportGithubEmailDeveloper')}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span data-testid="settings-link-discord">
-                <Button variant="subtle"
-                  onClick={() => openInBrowser(DISCORD_INVITE).catch(() => {})}
-                  data-url={DISCORD_INVITE}
-                >
-                  <DiscordLogo size={16} />
-                  {t('bugReport.joinDiscord')}
-                </Button>
-              </span>
-              <Button variant="primary"
-                onClick={() => { onReportBug?.(); onClose(); }}
-              >
-                {t('settings.help.reportBug2')}
-              </Button>
-            </div>
-          </div>
-
-          {LINKS().map((link) => (
-            <React.Fragment key={link.testid}>
-              <div className="border-t border-mail-border" />
-              <div className="flex items-center justify-between py-2" data-testid={link.testid}>
-                <div>
-                  <div className="font-medium text-mail-text">{link.title}</div>
-                  <div className="text-sm text-mail-text-muted">{link.subtitle}</div>
-                </div>
-                <Button variant="subtle"
-                  onClick={() => openInBrowser(link.url).catch(() => {})}
-                  data-url={link.url}
-                >
-                  <ExternalLink size={16} />
-                  {t('common.open')}
-                </Button>
-              </div>
-            </React.Fragment>
-          ))}
-
-          <div className="border-t border-mail-border" />
-
-          <div className="flex items-center justify-between py-2" data-testid="settings-link-faq">
-            <div>
-              <div className="font-medium text-mail-text">{t('settings.help.faq')}</div>
-              <div className="text-sm text-mail-text-muted">{t('settings.help.faqSubtitle')}</div>
-            </div>
-            <Button variant="subtle"
-              onClick={() => openInBrowser(faqUrl(language, 'help_settings')).catch(() => {})}
-              data-url={faqUrl(language, 'help_settings')}
-            >
-              <HelpCircle size={16} />
-              {t('common.open')}
-            </Button>
-          </div>
-
-          <div className="border-t border-mail-border" />
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <div className="font-medium text-mail-text">{t('settings.help.whatsInPremium')}</div>
-              <div className="text-sm text-mail-text-muted">{t('settings.help.whatsInPremiumSubtitle')}</div>
-            </div>
-            <Button variant="subtle" onClick={() => setGalleryOpen(true)} data-testid="settings-open-premium-gallery">
-              <Sparkles size={16} />
-              {t('common.open')}
-            </Button>
-          </div>
-
-          <div className="border-t border-mail-border" />
-
-          <div className="flex items-center justify-between py-2" data-testid="settings-reset-onboarding">
-            <div>
-              <div className="font-medium text-mail-text">{t('settings.help.resetOnboarding')}</div>
-              <div className="text-sm text-mail-text-muted">
-                {t('settings.help.showWelcomeScreenAgainNext')}
-              </div>
-            </div>
-            <Button variant="subtle"
-              onClick={() => {
-                // No reload: `safeStorage` debounces the disk write 500ms, so a
-                // reload here throws it away and the reset silently does nothing.
-                // App.jsx already re-renders into <Onboarding/> on this flag.
-                setOnboardingComplete(false);
-                onClose();
-              }}
-            >
-              <RotateCcw size={16} />
-              {t('common.reset')}
-            </Button>
-          </div>
-        </div>
-      </SettingsCard>
-    </SettingsPageLayout>
+    <DesktopViewEnv>
+      <HelpView rows={rows} />
+    </DesktopViewEnv>
 
     <Dialog open={galleryOpen} onClose={() => setGalleryOpen(false)} z={Z.alert} portal size="lg"
             aria-labelledby={galleryTitleId}

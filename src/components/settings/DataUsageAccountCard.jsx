@@ -1,20 +1,12 @@
-import React, { forwardRef, useState } from 'react';
+import React, { forwardRef } from 'react';
 import { useSettingsStore, getAccountColor, getAccountInitial } from '../../stores/settingsStore';
-import { ToggleSwitch } from '../ui/ToggleSwitch';
-import { formatBytes } from '../../utils/formatBytes';
 import { useAccountPolicy } from '../../services/accountPolicy';
-import { ArrowDown, ArrowUp, Loader } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
-import { Private } from '../privacy/Private';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { DataUsageAccountCardView } from './views/DataUsageView';
 
-const PERIODS = [
-  { id: 'day', labelKey: 'settings.dataUsage.period.day' },
-  { id: 'week', labelKey: 'settings.dataUsage.period.week' },
-  { id: 'month', labelKey: 'settings.dataUsage.period.month' },
-  { id: 'year', labelKey: 'settings.dataUsage.period.year' },
-];
-
-const inputClass = 'w-full px-3 py-1.5 text-xs bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
+// How a limit that is the provider's default is marked (English, as it always was here).
+const PROVIDER_DEFAULT = ' (provider default)';
 
 function bytesToMbInput(bytes) {
   return bytes == null ? '' : String(Math.round(bytes / (1024 * 1024)));
@@ -27,7 +19,6 @@ function limitPlaceholder(defaultBytes) {
 
 const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account, stats, loading, unavailable, highlighted }, ref) {
   const t = useT();
-  const [period, setPeriod] = useState('day');
   const accountColors = useSettingsStore(s => s.accountColors);
   const transferLimits = useSettingsStore(s => s.transferLimits);
   const setTransferLimit = useSettingsStore(s => s.setTransferLimit);
@@ -39,10 +30,6 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
   // nothing is shown for a limit until it answers.
   const shown = useAccountPolicy(account)?.transfer;
   const gmail = shown?.gmail === true;
-
-  const periodKey = period === 'day' ? 'today' : period;
-  const periodStats = stats?.[periodKey] || { down: 0, up: 0 };
-  const todayStats = stats?.today || { down: 0, up: 0 };
 
   const NO_LIMIT = { limitBytes: null, isProviderDefault: false, defaultCapOn: null, defaultCapOff: null };
   const downLimit = shown?.down || NO_LIMIT;
@@ -64,142 +51,22 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
   };
 
   return (
-    <div
-      ref={ref}
-      className={`bg-mail-surface border rounded-xl p-5 transition-all duration-500 ${
-        highlighted ? 'border-mail-accent ring-2 ring-mail-accent/30' : 'border-mail-border'
-      }`}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-            style={{ backgroundColor: avatarColor }}
-          >
-            {avatarInitial}
-          </div>
-          <div className="min-w-0">
-            {account.name && <div className="text-sm font-medium text-mail-text truncate"><Private kind="name">{account.name}</Private></div>}
-            <div className={`truncate ${account.name ? 'text-xs text-mail-text-muted' : 'text-sm font-medium text-mail-text'}`}>
-              <Private kind="email">{account.email}</Private>
-            </div>
-          </div>
-        </div>
-        {loading && <Loader size={14} className="animate-spin text-mail-text-muted flex-shrink-0" />}
-      </div>
-
-      {/* Period switcher */}
-      <div className="flex gap-1 bg-mail-bg rounded-lg p-1 mb-3 w-fit">
-        {PERIODS.map(p => (
-          <button
-            key={p.id}
-            aria-pressed={period === p.id}
-            onClick={() => setPeriod(p.id)}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-              period === p.id ? 'bg-mail-accent-fill text-white' : 'text-mail-text-muted hover:text-mail-text'
-            }`}
-          >
-            {t(p.labelKey)}
-          </button>
-        ))}
-      </div>
-
-      {/* Totals for the selected period */}
-      {unavailable ? <p className="text-sm text-mail-text-muted py-3" role="status">{t('settings.dataUsage.unavailable')}</p> : <div className="grid grid-cols-2 gap-4 pt-3 border-t border-mail-border" aria-busy={loading}>
-        <div>
-          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowDown size={12} className="text-mail-accent" /> {t('settings.dataUsage.account.downloaded')}</div>
-          <div className="text-sm font-semibold text-mail-text">{loading && !stats ? '-' : formatBytes(periodStats.down)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowUp size={12} className="text-mail-text-muted" /> {t('settings.dataUsage.account.uploaded')}</div>
-          <div className="text-sm font-semibold text-mail-text">{loading && !stats ? '-' : formatBytes(periodStats.up)}</div>
-        </div>
-      </div>}
-
-      {/* Progress vs today's daily limit — always today, independent of the period switcher above */}
-      {!unavailable && !loading && (downLimit.limitBytes != null || upLimit.limitBytes != null) && (
-        <div className="space-y-2 pt-3 mt-3 border-t border-mail-border">
-          <div className="text-xs text-mail-text-muted">{t('settings.dataUsage.account.todayVsDailyLimit')}</div>
-          {downLimit.limitBytes != null && (
-            <div>
-              <div className="flex items-center justify-between text-[11px] text-mail-text-muted mb-0.5">
-                <span>{t('settings.dataUsage.account.download')}</span>
-                <span>
-                  {formatBytes(todayStats.down)} / {formatBytes(downLimit.limitBytes)}
-                  {downLimit.isProviderDefault ? ' (provider default)' : ''}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${todayStats.down / downLimit.limitBytes >= 0.8 ? 'bg-mail-warning' : 'bg-mail-accent'}`}
-                  style={{ width: `${Math.min(100, Math.round((todayStats.down / downLimit.limitBytes) * 100))}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {upLimit.limitBytes != null && (
-            <div>
-              <div className="flex items-center justify-between text-[11px] text-mail-text-muted mb-0.5">
-                <span>{t('settings.dataUsage.account.upload')}</span>
-                <span>
-                  {formatBytes(todayStats.up)} / {formatBytes(upLimit.limitBytes)}
-                  {upLimit.isProviderDefault ? ' (provider default)' : ''}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${todayStats.up / upLimit.limitBytes >= 0.8 ? 'bg-mail-warning' : 'bg-mail-accent'}`}
-                  style={{ width: `${Math.min(100, Math.round((todayStats.up / upLimit.limitBytes) * 100))}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Toggles + limit inputs */}
-      <div className="space-y-3 pt-3 mt-3 border-t border-mail-border">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-mail-text">{t('settings.dataUsage.account.warnWhenNearingDailyLimit')}</span>
-          <ToggleSwitch label={t('settings.dataUsage.account.warnWhenNearingDailyLimit')} active={warnEnabled} onClick={() => setTransferLimit(account.id, { warnEnabled: !warnEnabled })} />
-        </div>
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-mail-text">{t('settings.dataUsage.account.pauseBackgroundDownloads')}</span>
-            <ToggleSwitch label={t('settings.dataUsage.account.pauseBackgroundDownloads')} active={capEnabled} onClick={() => setTransferLimit(account.id, { capEnabled: !capEnabled })} />
-          </div>
-          <p className="text-[11px] text-mail-text-muted mt-1" data-testid="pause-background-hint">
-            {t('settings.dataUsage.account.pauseBackgroundDownloadsHint')}
-            {gmail && ` ${t('settings.dataUsage.account.pauseBackgroundDownloadsGmailHint')}`}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          <div>
-            <label className="text-[11px] text-mail-text-muted mb-1 block">{t('settings.dataUsage.account.dailyDownloadLimitMb')}</label>
-            <input aria-label={t('settings.dataUsage.account.dailyDownloadLimitMb')}
-              type="number"
-              min="0"
-              defaultValue={bytesToMbInput(config.dailyDownLimitBytes)}
-              onBlur={handleLimitBlur('dailyDownLimitBytes')}
-              placeholder={limitPlaceholder(placeholderBytes(downLimit))}
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] text-mail-text-muted mb-1 block">{t('settings.dataUsage.account.dailyUploadLimitMb')}</label>
-            <input aria-label={t('settings.dataUsage.account.dailyUploadLimitMb')}
-              type="number"
-              min="0"
-              defaultValue={bytesToMbInput(config.dailyUpLimitBytes)}
-              onBlur={handleLimitBlur('dailyUpLimitBytes')}
-              placeholder={limitPlaceholder(placeholderBytes(upLimit))}
-              className={inputClass}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
+    <DesktopViewEnv>
+    <DataUsageAccountCardView ref={ref} account={account} avatarColor={avatarColor} avatarInitial={avatarInitial}
+      stats={stats} loading={loading} unavailable={unavailable} highlighted={highlighted}
+      downLimit={downLimit} upLimit={upLimit} defaultSuffix={PROVIDER_DEFAULT}
+      warnEnabled={warnEnabled} capEnabled={capEnabled}
+      onWarn={next => setTransferLimit(account.id, { warnEnabled: next })}
+      onCap={next => setTransferLimit(account.id, { capEnabled: next })}
+      pauseHint={<>
+        {t('settings.dataUsage.account.pauseBackgroundDownloadsHint')}
+        {gmail && ` ${t('settings.dataUsage.account.pauseBackgroundDownloadsGmailHint')}`}
+      </>}
+      limits={{
+        down: { defaultValue: bytesToMbInput(config.dailyDownLimitBytes), onBlur: handleLimitBlur('dailyDownLimitBytes'), placeholder: limitPlaceholder(placeholderBytes(downLimit)) },
+        up: { defaultValue: bytesToMbInput(config.dailyUpLimitBytes), onBlur: handleLimitBlur('dailyUpLimitBytes'), placeholder: limitPlaceholder(placeholderBytes(upLimit)) },
+      }} />
+    </DesktopViewEnv>
   );
 });
 
