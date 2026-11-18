@@ -243,3 +243,13 @@
   .unsubscribe-table td:last-child:not(:first-child) { margin-left: auto; }
   .unsubscribe-table .unsubscribe-confirm td { flex: 1 1 100%; }
 }
+/* Settings > Storage > Deleted emails (views/DeletedEmailsView.jsx): the same on a narrow screen,
+   each row's account, dates and buttons wrapping under its subject. */
+@media (max-width: 600px) {
+  .deleted-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .deleted-table, .deleted-table tbody { display: block; }
+  .deleted-table tr { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; padding: 6px 0; }
+  .deleted-table td:first-child { flex: 1 1 100%; width: auto; max-width: 100%; }
+  .deleted-table td:nth-child(2) { max-width: 100%; }
+  .deleted-table td:last-child { flex: 1 1 100%; }
+}

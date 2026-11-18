@@ -1,27 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { daemonCall } from '../../services/daemonClient';
 import { recoverFromBin } from '../../services/workflows/messageMutations';
-import { formatDateTime } from '../../utils/dateFormat';
-import { Button } from '../ui/Button';
-import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
-import { Private } from '../privacy/Private';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { DeletedEmailsView, RETENTION_DAYS } from './views/DeletedEmailsView';
 
-/** How long the bin keeps a deleted email; the daemon clamps to 1..30. */
-export const RETENTION_DAYS = [1, 3, 7, 14, 30];
-const CELL = 'py-1.5 px-2 text-left align-middle';
-
-const senderOf = (row) => (typeof row?.from === 'string' ? row.from : row?.from?.name || row?.from?.address || '');
+export { RETENTION_DAYS };
 
 /**
  * Settings > Storage > Deleted emails: the daemon's deleted-mail bin
  * (`deleted.list`), newest first, and how long it keeps them. A row goes back
  * to the server (`deleted.recover`, target server), into the vault as a local
  * copy (target local), or away for good (`deleted.discard`). The daemon owns
- * the bin; this page renders it and asks.
+ * the bin; this page renders it (views/DeletedEmailsView.jsx) and asks.
  */
 export function DeletedEmailsSettings() {
   const t = useT();
@@ -58,47 +51,10 @@ export function DeletedEmailsSettings() {
   };
   const accountLabel = id => accounts.find(a => a.id === id)?.email || id;
 
-  return <SettingsPageLayout data-testid="deleted-emails-settings">
-    <SettingsCard title={t('deletedBin.title')} icon={Trash2}>
-      <p className="text-sm text-mail-text-muted mt-2 mb-4">{t('deletedBin.intro')}</p>
-      <label className="flex items-center gap-3 text-sm text-mail-text mb-4">
-        {t('deletedBin.retention')}
-        <select data-testid="deleted-retention" value={days} onChange={e => setDays(Number(e.target.value))}
-          className="px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent cursor-pointer">
-          {RETENTION_DAYS.map(n => <option key={n} value={n}>{t('deletedBin.days', { count: n })}</option>)}
-        </select>
-      </label>
-      {error && <p role="alert" className="text-sm text-mail-danger mb-3">{error}</p>}
-      {rows === null && <p className="text-sm text-mail-text-muted" aria-busy="true">{t('deletedBin.loading')}</p>}
-      {rows?.length === 0 && !error && <p className="text-sm text-mail-text-muted" data-testid="deleted-empty">{t('deletedBin.empty')}</p>}
-      {rows?.length > 0 && <table className="w-full text-sm" data-testid="deleted-list">
-        <thead><tr className="border-b border-mail-border text-mail-text-muted text-xs">
-          <th className={`${CELL} font-medium`}>{t('deletedBin.colMessage')}</th>
-          <th className={`${CELL} font-medium`}>{t('unsubscribe.colAccount')}</th>
-          <th className={`${CELL} font-medium`}>{t('unsubscribe.colDate')}</th>
-          <th className={`${CELL} font-medium`}>{t('deletedBin.colDeleted')}</th>
-          <th className={CELL}><span className="sr-only">{t('deletedBin.actions')}</span></th>
-        </tr></thead>
-        <tbody>{rows.map(d => <tr key={d.id} data-deleted-id={d.id} className="border-b border-mail-border last:border-0">
-          <td className={`${CELL} max-w-0 w-2/5`}>
-            <div className="font-medium text-mail-text truncate">{d.row?.subject ? <Private kind="text">{d.row.subject}</Private> : t('common.noSubject')}</div>
-            <div className="text-xs text-mail-text-muted truncate"><Private kind="name">{senderOf(d.row)}</Private></div>
-          </td>
-          <td className={`${CELL} text-xs text-mail-text-muted truncate max-w-0`}><Private kind="name">{accountLabel(d.accountId)}</Private></td>
-          <td className={`${CELL} text-xs text-mail-text-muted whitespace-nowrap`}>{d.row?.date ? formatDateTime(d.row.date) : ''}</td>
-          <td className={`${CELL} text-xs text-mail-text-muted whitespace-nowrap`}>{formatDateTime(d.deletedAt)}</td>
-          <td className={`${CELL} text-right`}>
-            <div className="flex flex-wrap justify-end gap-1">
-              <Button variant="secondary" size="sm" disabled={busy != null} data-action="recover-server"
-                onClick={() => act(d.id, () => recoverFromBin([d.id], 'server'))}>{t('deletedBin.recoverServer')}</Button>
-              <Button variant="ghost" size="sm" disabled={busy != null} data-action="recover-local"
-                onClick={() => act(d.id, () => recoverFromBin([d.id], 'local'))}>{t('deletedBin.recoverLocal')}</Button>
-              <Button variant="ghost" size="sm" disabled={busy != null} data-action="delete-now"
-                onClick={() => act(d.id, () => daemonCall('deleted.discard', { ids: [d.id] }), 'deletedBin.discardFailed')}>{t('deletedBin.deleteNow')}</Button>
-            </div>
-          </td>
-        </tr>)}</tbody>
-      </table>}
-    </SettingsCard>
-  </SettingsPageLayout>;
+  return <DesktopViewEnv>
+    <DeletedEmailsView rows={rows} days={days} onDays={setDays} error={error} busy={busy != null} accountLabel={accountLabel}
+      onRecover={id => act(id, () => recoverFromBin([id], 'server'))}
+      onRecoverLocal={id => act(id, () => recoverFromBin([id], 'local'))}
+      onDiscard={id => act(id, () => daemonCall('deleted.discard', { ids: [id] }), 'deletedBin.discardFailed')} />
+  </DesktopViewEnv>;
 }
