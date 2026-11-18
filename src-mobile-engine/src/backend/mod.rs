@@ -113,17 +113,20 @@ pub(crate) struct Window {
 /// A list row's headers, as core reads them.
 pub(crate) type Header = EmailHeader;
 
-/// The flags a list row shows.
+/// The flags a list row keeps: the two it shows, and whether the message was answered (a saved
+/// view's "answered" condition reads it; Graph reports none, so its rows are never answered, as
+/// on desktop).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Flags {
     pub(crate) seen: bool,
     pub(crate) flagged: bool,
+    pub(crate) answered: bool,
 }
 
 impl Flags {
-    /// From IMAP-style flag names (`\Seen`, `\Flagged`, any case).
+    /// From IMAP-style flag names (`\Seen`, `\Flagged`, `\Answered`, any case).
     pub(crate) fn of(flags: &[String]) -> Flags {
-        Flags { seen: has_flag(flags, "\\Seen"), flagged: has_flag(flags, "\\Flagged") }
+        Flags { seen: has_flag(flags, "\\Seen"), flagged: has_flag(flags, "\\Flagged"), answered: has_flag(flags, "\\Answered") }
     }
 }
 

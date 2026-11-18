@@ -1214,7 +1214,7 @@ fn sync_folder_pass(
     let existing: HashMap<u32, Held> = shared.read(|c| {
         let mut st = c.prepare_cached(
             "SELECT uid, seen, flagged, local_seen IS NOT NULL OR local_flagged IS NOT NULL OR local_deleted IS NOT NULL,
-                    out_of_window_ms, date_ms
+                    out_of_window_ms, date_ms, answered
              FROM messages WHERE account_id = ?1 AND folder = ?2",
         )?;
         let rows = st
@@ -1227,6 +1227,7 @@ fn sync_folder_pass(
                         overridden: r.get(3)?,
                         out_of_window_ms: r.get(4)?,
                         date_ms: r.get(5)?,
+                        answered: r.get::<_, i64>(6)? != 0,
                     },
                 ))
             })?
@@ -1238,19 +1239,18 @@ fn sync_folder_pass(
     // since `UID FETCH n:*` on an empty mailbox is an error on some servers. A row is written when
     // the server's flags changed or it carries a local override that may now clear.
     let held: Vec<u32> = window.iter().copied().filter(|u| existing.contains_key(u)).collect();
-    let changes: Vec<(u32, bool, bool)> = backend
+    let changes: Vec<(u32, backend::Flags)> = backend
         .flags(&here, &held)?
         .iter()
         .filter(|(uid, _)| in_window.contains(uid))
         .filter_map(|(uid, fl)| {
             let held = existing.get(uid)?;
-            let (seen, flagged) = (fl.seen, fl.flagged);
-            (seen != held.seen || flagged != held.flagged || held.overridden).then_some((*uid, seen, flagged))
+            (fl.seen != held.seen || fl.flagged != held.flagged || fl.answered != held.answered || held.overridden).then_some((*uid, *fl))
         })
         .collect();
     for chunk in changes.chunks(BATCH) {
         pass.updated += write_for(shared, account, |c| write_flags(shared, c, account, folder, chunk, pass.gen, at))?;
-        let uids: Vec<u32> = chunk.iter().map(|(uid, _, _)| *uid).collect();
+        let uids: Vec<u32> = chunk.iter().map(|(uid, _)| *uid).collect();
         crate::search::reflag(shared, account, folder, &uids);
     }
 
@@ -1320,6 +1320,7 @@ fn sync_folder_pass(
 struct Held {
     seen: bool,
     flagged: bool,
+    answered: bool,
     overridden: bool,
     /// When a server search stored the row or the user last opened it, for a row outside the window.
     out_of_window_ms: Option<i64>,
@@ -1331,13 +1332,14 @@ struct Held {
 /// agrees with it. One the server disagrees with clears only on the second consecutive pass that
 /// started after the folder's last settled action, with none settling during it
 /// (`Shared::may_clear_disagreeing`): a server whose replicas lag may report the old flags for a
-/// pass or so after it accepted the change. Returns how many rows now list differently.
+/// pass or so after it accepted the change. The answered flag has no override: it is the server's.
+/// Returns how many rows now list differently.
 fn write_flags(
     shared: &Shared,
     c: &Connection,
     account: &str,
     folder: &str,
-    chunk: &[(u32, bool, bool)],
+    chunk: &[(u32, backend::Flags)],
     gen: i64,
     at: crate::db::Settles,
 ) -> rusqlite::Result<usize> {
@@ -1352,20 +1354,21 @@ fn write_flags(
          FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
     )?;
     let mut update = c.prepare_cached(
-        "UPDATE messages SET seen = ?4, flagged = ?5, list_gen = ?6,
+        "UPDATE messages SET seen = ?4, flagged = ?5, list_gen = ?6, answered = ?9,
            local_seen = CASE WHEN ?7 THEN local_seen WHEN local_seen = ?4 OR ?8 THEN NULL ELSE local_seen END,
            local_flagged = CASE WHEN ?7 THEN local_flagged WHEN local_flagged = ?5 OR ?8 THEN NULL ELSE local_flagged END,
            local_deleted = CASE WHEN ?7 OR NOT ?8 THEN local_deleted ELSE NULL END
          WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
     )?;
     let mut n = 0;
-    for (uid, seen, flagged) in chunk {
+    for (uid, fl) in chunk {
+        let (seen, flagged) = (&fl.seen, &fl.flagged);
         let read = |st: &mut rusqlite::CachedStatement<'_>| {
             st.query_row((account, folder, *uid as i64), |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))
                 .optional()
         };
         let Some(before) = read(&mut listed)? else { continue };
-        update.execute((account, folder, *uid as i64, *seen as i64, *flagged as i64, gen, pending.contains(uid), settled))?;
+        update.execute((account, folder, *uid as i64, *seen as i64, *flagged as i64, gen, pending.contains(uid), settled, fl.answered as i64))?;
         if read(&mut listed)? != Some(before) {
             n += 1;
         }
@@ -1377,11 +1380,11 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
     let mut st = c.prepare_cached(
         "INSERT INTO messages
            (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged,
-            has_attachments, message_id, to_json, size, list_gen, thread_json, unsub_json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '', ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+            has_attachments, message_id, to_json, size, list_gen, thread_json, unsub_json, answered)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '', ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
          ON CONFLICT (account_id, folder, uid) DO UPDATE SET
            subject = excluded.subject, from_name = excluded.from_name, from_address = excluded.from_address,
-           date_ms = excluded.date_ms, seen = excluded.seen, flagged = excluded.flagged,
+           date_ms = excluded.date_ms, seen = excluded.seen, flagged = excluded.flagged, answered = excluded.answered,
            has_attachments = excluded.has_attachments, message_id = excluded.message_id,
            to_json = excluded.to_json, size = excluded.size, list_gen = excluded.list_gen,
            thread_json = excluded.thread_json, unsub_json = excluded.unsub_json",
@@ -1390,7 +1393,7 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
     for h in headers {
         let to: Vec<Value> = h.to.iter().map(|a| json!({ "name": a.name, "address": a.address })).collect();
         let thread = thread_json(h);
-        n += st.execute((
+        n += st.execute(rusqlite::params![
             account,
             folder,
             h.uid as i64,
@@ -1407,7 +1410,8 @@ fn insert_headers(c: &Connection, account: &str, folder: &str, headers: &[Header
             gen,
             thread,
             crate::unsubscribe::unsub_json(h),
-        ))?;
+            has_flag(&h.flags, "\\Answered") as i64,
+        ])?;
     }
     Ok(n)
 }

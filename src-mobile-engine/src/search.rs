@@ -365,6 +365,7 @@ pub(crate) struct MessageRow {
     pub(crate) has_attachments: bool,
     pub(crate) seen: bool,
     pub(crate) flagged: bool,
+    pub(crate) answered: bool,
 }
 
 /// An address as core's index spells it: `Name <addr>`, or the bare address.
@@ -412,14 +413,18 @@ pub(crate) fn doc_of(row: &MessageRow, thread: &Value, body_text: &str) -> Index
     }
 }
 
-/// Index flags from the effective read and starred state.
-pub(crate) fn flag_letters(seen: bool, flagged: bool) -> Vec<String> {
+/// Index flags from the effective read and starred state and the server's answered flag (`R`,
+/// which a saved view's `answered` condition reads).
+pub(crate) fn flag_letters(seen: bool, flagged: bool, answered: bool) -> Vec<String> {
     let mut out = Vec::new();
     if seen {
         out.push("S".to_string());
     }
     if flagged {
         out.push("F".to_string());
+    }
+    if answered {
+        out.push("R".to_string());
     }
     out
 }
@@ -448,7 +453,8 @@ pub(crate) fn read_docs(shared: &Shared, account: &str, folder: &str, uids: &[u3
             let bodies = bodies_on(c)?;
             let mut st = c.prepare(&format!(
                 "SELECT m.uid, m.subject, m.from_name, m.from_address, m.date_ms, m.message_id, m.to_json, m.thread_json,
-                        m.has_attachments, COALESCE(m.local_seen, m.seen), COALESCE(m.local_flagged, m.flagged), b.html, b.text
+                        m.has_attachments, COALESCE(m.local_seen, m.seen), COALESCE(m.local_flagged, m.flagged), b.html, b.text,
+                        m.answered
                  FROM messages m LEFT JOIN bodies b ON b.account_id = m.account_id AND b.folder = m.folder AND b.uid = m.uid
                  WHERE m.account_id = ?1 AND m.folder = ?2 AND m.uid IN ({list})"
             ))?;
@@ -466,6 +472,7 @@ pub(crate) fn read_docs(shared: &Shared, account: &str, folder: &str, uids: &[u3
                             has_attachments: r.get::<_, i64>(8)? != 0,
                             seen: r.get::<_, i64>(9)? != 0,
                             flagged: r.get::<_, i64>(10)? != 0,
+                            answered: r.get::<_, i64>(13)? != 0,
                         },
                         r.get::<_, String>(7)?,
                         r.get::<_, Option<String>>(11)?,
@@ -478,7 +485,7 @@ pub(crate) fn read_docs(shared: &Shared, account: &str, folder: &str, uids: &[u3
         for (row, thread, html, text_part) in rows {
             let thread: Value = serde_json::from_str(&thread).unwrap_or(Value::Null);
             let body = if bodies { body_text(html.as_deref(), text_part.as_deref()) } else { String::new() };
-            out.push(Doc { uid: row.uid, flags: flag_letters(row.seen, row.flagged), doc: doc_of(&row, &thread, &body) });
+            out.push(Doc { uid: row.uid, flags: flag_letters(row.seen, row.flagged, row.answered), doc: doc_of(&row, &thread, &body) });
         }
     }
     Ok(out)
@@ -575,15 +582,17 @@ fn read_flags(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Res
         let list = crate::sync::uid_list(chunk);
         let rows = shared.read(|c| {
             let mut st = c.prepare(&format!(
-                "SELECT uid, COALESCE(local_seen, seen), COALESCE(local_flagged, flagged)
+                "SELECT uid, COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), answered
                  FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid IN ({list})"
             ))?;
             let rows = st
-                .query_map((account, folder), |r| Ok((r.get::<_, i64>(0)? as u32, r.get::<_, i64>(1)? != 0, r.get::<_, i64>(2)? != 0)))?
+                .query_map((account, folder), |r| {
+                    Ok((r.get::<_, i64>(0)? as u32, r.get::<_, i64>(1)? != 0, r.get::<_, i64>(2)? != 0, r.get::<_, i64>(3)? != 0))
+                })?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         })?;
-        out.extend(rows.into_iter().map(|(uid, seen, flagged)| (uid, flag_letters(seen, flagged))));
+        out.extend(rows.into_iter().map(|(uid, seen, flagged, answered)| (uid, flag_letters(seen, flagged, answered))));
     }
     Ok(out)
 }
@@ -1154,6 +1163,7 @@ mod tests {
             has_attachments: true,
             seen: true,
             flagged: false,
+            answered: false,
         };
         let thread = json!({ "cc": [{ "name": "Cy", "address": "cy@example.test" }], "replyTo": [{ "name": "", "address": "r@example.test" }] });
         let d = doc_of(&row, &thread, "body words");
@@ -1164,8 +1174,9 @@ mod tests {
         assert_eq!(d.row_json, "{}");
         assert!(d.attachment_candidates.is_empty());
         assert_eq!(doc_of(&MessageRow::default(), &Value::Null, "").date_utc, None);
-        assert_eq!(flag_letters(true, true), vec!["S", "F"]);
-        assert!(flag_letters(false, false).is_empty());
+        assert_eq!(flag_letters(true, true, false), vec!["S", "F"]);
+        assert_eq!(flag_letters(false, false, true), vec!["R"]);
+        assert!(flag_letters(false, false, false).is_empty());
     }
 
     #[test]

@@ -220,6 +220,8 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.views.list", crate::views::list),
     ("mobile.views.reorder", crate::views::reorder),
     ("mobile.views.save", crate::views::save),
+    ("mobile.views.suggestSenders", crate::views::suggest_senders),
+    ("mobile.views.suggestTerms", crate::views::suggest_terms),
 ];
 #[cfg(not(feature = "perf-gate"))]
 const TABLE: &[(&str, Handler)] = &[
@@ -332,6 +334,8 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.views.list", crate::views::list),
     ("mobile.views.reorder", crate::views::reorder),
     ("mobile.views.save", crate::views::save),
+    ("mobile.views.suggestSenders", crate::views::suggest_senders),
+    ("mobile.views.suggestTerms", crate::views::suggest_terms),
 ];
 
 /// Largest perf record accepted, serialized. The real one is a few hundred bytes.

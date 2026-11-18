@@ -655,7 +655,7 @@ impl Backend for GraphBackend<'_> {
         let listed = self.listed(folder)?;
         Ok(uids
             .iter()
-            .filter_map(|uid| listed.get(uid).map(|r| (*uid, Flags { seen: r.message.is_read == Some(true), flagged: r.flagged })))
+            .filter_map(|uid| listed.get(uid).map(|r| (*uid, Flags { seen: r.message.is_read == Some(true), flagged: r.flagged, answered: false })))
             .collect())
     }
 

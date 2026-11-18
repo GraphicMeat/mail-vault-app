@@ -33,6 +33,11 @@ type Mail<'a> = (&'a str, &'a str, i64, &'a str, &'a str, i64, bool, bool, bool,
 /// A data dir holding `accounts` (`(id, kind)`, folders `(account, path, special_use)`) and
 /// `mail`, indexed by the backfill.
 fn seeded(accounts: &[(&str, &str)], folders: &[(&str, &str, Option<&str>)], mail: &[Mail]) -> (tempfile::TempDir, Engine) {
+    seeded_then(accounts, folders, mail, |_| {})
+}
+
+/// [`seeded`], with `more` run on `mobile.db` after the mail is in and before the index is built.
+fn seeded_then(accounts: &[(&str, &str)], folders: &[(&str, &str, Option<&str>)], mail: &[Mail], more: impl FnOnce(&Connection)) -> (tempfile::TempDir, Engine) {
     let tmp = tempfile::tempdir().unwrap();
     drop(open(tmp.path()));
     {
@@ -57,6 +62,7 @@ fn seeded(accounts: &[(&str, &str)], folders: &[(&str, &str, Option<&str>)], mai
             )
             .unwrap();
         }
+        more(&c);
     }
     let e = open(tmp.path());
     idle(&e);
@@ -220,4 +226,46 @@ fn tag_and_field_conditions_narrow_to_the_messages_carrying_them() {
     let counts = e.rpc("mobile.views.counts", json!({})).unwrap()["counts"].clone();
     assert_eq!(counts["builtin-attachments"], 0);
     assert_eq!(counts["builtin-starred"], 0);
+}
+
+/// The server's answered flag narrows a view as on desktop: "Needs reply" (unanswered, to me, not
+/// from me, the last 30 days, not the bin) leaves out the message already answered, and
+/// `answered: true` finds only that one.
+#[test]
+fn an_answered_condition_narrows_to_the_answered_flag() {
+    let (_tmp, e) = seeded_then(
+        &[("acc_a", "imap")],
+        &[("acc_a", "INBOX", None)],
+        &[
+            ("acc_a", "INBOX", 1, "replied to", "ann@friends.test", 1, true, false, false, "<one@x>"),
+            ("acc_a", "INBOX", 2, "waiting", "bob@friends.test", 2, true, false, false, "<two@x>"),
+        ],
+        |c| {
+            c.execute_batch(
+                "UPDATE messages SET to_json = '[{\"name\":\"\",\"address\":\"acc_a@example.test\"}]';
+                 UPDATE messages SET answered = 1 WHERE uid = 1;",
+            )
+            .unwrap();
+        },
+    );
+    assert_eq!(uids(&eval(&e, json!({ "viewId": "builtin-needs-reply" }))), vec![("acc_a".into(), 2)]);
+    assert_eq!(uids(&eval(&e, json!({ "def": { "answered": false } }))), vec![("acc_a".into(), 2)]);
+    assert_eq!(uids(&eval(&e, json!({ "def": { "answered": true } }))), vec![("acc_a".into(), 1)]);
+    assert_eq!(e.rpc("mobile.views.counts", json!({})).unwrap()["counts"]["builtin-needs-reply"], 1);
+}
+
+/// The editor's typeahead reads the phone's index: senders by address with their counts, and the
+/// words of subjects, each over the accounts named (none: every account).
+#[test]
+fn the_editor_suggests_senders_and_words_from_the_phones_index() {
+    let (_tmp, e) = sample();
+    let senders = e.rpc("mobile.views.suggestSenders", json!({ "prefix": "bill" })).unwrap()["senders"].clone();
+    assert_eq!(senders[0]["address"], "billing@acme.test");
+    assert_eq!(senders[0]["count"], 3);
+    let only_b = e.rpc("mobile.views.suggestSenders", json!({ "prefix": "bill", "accounts": ["acc_b"] })).unwrap()["senders"].clone();
+    assert_eq!(only_b[0]["count"], 1);
+    let terms = e.rpc("mobile.views.suggestTerms", json!({ "prefix": "inv", "offset": 0, "limit": 20 })).unwrap()["terms"].clone();
+    assert_eq!(terms[0]["term"], "invoice");
+    assert_eq!(terms[0]["count"], 3);
+    assert!(e.rpc("mobile.views.suggestTerms", json!({ "prefix": "i" })).unwrap()["terms"].as_array().unwrap().is_empty(), "two letters first");
 }

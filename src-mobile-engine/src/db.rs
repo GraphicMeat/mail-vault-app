@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const DB_FILE: &str = "mobile.db";
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: u32 = 10;
 const READERS: usize = 2;
 
 /// Schema 2, frozen: a new file is built as schema 2 plus every forward step, so it cannot drift
@@ -234,6 +234,17 @@ CREATE TABLE body_retry (
 /// List-Unsubscribe (and for every row synced before this step).
 const V8_TO_V9: &str = "
 ALTER TABLE messages ADD COLUMN unsub_json TEXT;
+";
+
+/// Schema 9 to 10, the server's answered flag (`\Answered`, JMAP `$answered`; Graph has none) on
+/// each row, so a saved view's "answered" condition (desktop's "Needs reply" starter) narrows on
+/// the phone as on desktop. Every row starts unanswered; the next pass reads every held row's
+/// flags and writes the ones that differ. IMAP's pass reads them all anyway; a JMAP folder's
+/// stored state would read only what changed since, so it is dropped (the send limits are kept)
+/// and that pass reads them all too.
+const V9_TO_V10: &str = "
+ALTER TABLE messages ADD COLUMN answered INTEGER NOT NULL DEFAULT 0;
+DELETE FROM sync_state WHERE folder <> '#limits' AND account_id IN (SELECT id FROM accounts WHERE kind = 'jmap');
 ";
 
 /// Every table any schema version created; a rebuild drops them all (their indexes go with them).
@@ -729,6 +740,9 @@ fn try_open(path: &Path) -> Result<Db, OpenFail> {
         }
         if found < 9 {
             tx.execute_batch(V8_TO_V9)?;
+        }
+        if found < 10 {
+            tx.execute_batch(V9_TO_V10)?;
         }
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         tx.commit()?;

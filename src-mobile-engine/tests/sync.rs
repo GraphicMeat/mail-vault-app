@@ -307,6 +307,33 @@ fn flag_change_is_updated() {
     assert_eq!(row["flagged"], true);
 }
 
+/// The server's `\Answered` reaches the row and the search index (a saved view's "answered"
+/// condition reads the index's `R`), on the first sync and when it changes later.
+#[test]
+fn answered_flag_reaches_the_row_and_the_index() {
+    let mut answered = msg(1, "a", 2);
+    answered.flags = vec!["\\Answered".into()];
+    let server = MockImap::start(Scenario::new().mailbox(inbox(vec![answered, msg(2, "b", 1)])));
+    let f = setup(&server);
+    f.sync(None);
+    let indexed = || {
+        let deadline = Instant::now() + WAIT;
+        while !f.engine.search_idle() {
+            assert!(Instant::now() < deadline, "the index never went idle");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        f.engine.search_index_rows(&f.account, "INBOX")
+    };
+    assert_eq!(indexed(), vec![(1, "R".to_string()), (2, String::new())]);
+    server.mutate(|s| {
+        let inbox = s.find_mut("INBOX").unwrap();
+        inbox.by_uid_mut(1).unwrap().flags = vec![];
+        inbox.by_uid_mut(2).unwrap().flags = vec!["\\Seen".into(), "\\Answered".into()];
+    });
+    f.sync(Some("INBOX"));
+    assert_eq!(indexed(), vec![(1, String::new()), (2, "SR".to_string())]);
+}
+
 #[test]
 fn vanished_uid_is_removed() {
     let server = MockImap::start(Scenario::new().mailbox(inbox(vec![msg(1, "a", 3), msg(2, "b", 2), msg(3, "c", 1)])));

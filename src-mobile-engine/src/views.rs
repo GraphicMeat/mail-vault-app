@@ -12,9 +12,12 @@
 //!   with no Message-ID as `r:<remote id>` (`tags.rs`); the index spells that message
 //!   `u:<folder>:<uid>` with the phone's uid, so such keys are translated through `remote_ids`
 //!   before the index sees them (`msg_keys` and `excludeMessages` alike).
-//! - The phone's index keeps the seen and flagged state only (no answered flag): `answered: false`
-//!   (the "Needs reply" starter) holds every message, `answered: true` none.
-//! - No attachment export, no keyword builder, no sender suggestions, no "hide view mail".
+//! - The answered flag is the server's (`mobile.db` `answered`, from `\Answered` or JMAP
+//!   `$answered`), indexed as desktop's `R`. Graph reports none, so a Graph message is never
+//!   answered, as on desktop.
+//! - The editor's suggestions read the phone's index, which keeps no display names: a sender is
+//!   offered by its address.
+//! - No attachment export, no keyword builder, no "hide view mail".
 //!
 //! # API
 //!
@@ -31,6 +34,11 @@
 //!   `cursor` is null at the end. `available: false` (with `reason: "unavailable"`, no rows) when
 //!   the phone has no search index this run.
 //! - `mobile.views.counts {}` -> `{counts: {viewId: total}}`; `{}` without an index.
+//! - `mobile.views.suggestSenders {prefix, accounts?, limit?}` -> `{senders: [{address, name,
+//!   count}]}` and `mobile.views.suggestTerms {prefix, accounts?, offset?, limit?}` -> `{terms:
+//!   [{term, count}]}`: the editor's typeahead (core `suggest_senders` / `suggest_terms`, as
+//!   desktop's `views.suggest_*`), over the accounts named (none: every account); empty without
+//!   an index.
 //!
 //! Threading: on the RPC thread. `app.db` is read first (the definition and the tag and field
 //! identities), then `mobile.db` (the accounts, the key translation), then the search lock once per
@@ -305,4 +313,32 @@ pub(crate) fn counts(engine: &Engine, _: Value) -> Result<Value, RpcError> {
         counts.insert(view.id.clone(), json!(total));
     }
     Ok(json!({ "counts": counts }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SuggestParams {
+    #[serde(default)]
+    prefix: String,
+    #[serde(default)]
+    accounts: Vec<String>,
+    #[serde(default)]
+    offset: usize,
+    limit: Option<usize>,
+}
+
+pub(crate) fn suggest_senders(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: SuggestParams = parse(params)?;
+    let guard = search_index::lock(&engine.shared().search.conn);
+    let Some(c) = guard.as_ref() else { return Ok(json!({ "senders": [] })) };
+    let found = query::suggest_senders(c, &p.accounts, &p.prefix, p.limit.unwrap_or(8).min(50)).map_err(internal)?;
+    Ok(json!({ "senders": found }))
+}
+
+pub(crate) fn suggest_terms(engine: &Engine, params: Value) -> Result<Value, RpcError> {
+    let p: SuggestParams = parse(params)?;
+    let guard = search_index::lock(&engine.shared().search.conn);
+    let Some(c) = guard.as_ref() else { return Ok(json!({ "terms": [] })) };
+    let found = query::suggest_terms(c, &p.accounts, &p.prefix, p.offset, p.limit.unwrap_or(20).min(50)).map_err(internal)?;
+    Ok(json!({ "terms": found }))
 }
