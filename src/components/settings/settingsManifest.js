@@ -399,7 +399,8 @@ export const MOBILE_PAGES = {
   'time-capsule': 'desktopNotice',
   migration: 'desktopNotice',
   backup: 'desktopNotice',
-  'auto-tags': 'engine: auto-tag rules',
+  // The phone's rules run on its AI endpoint, over the mail it keeps.
+  'auto-tags': true,
 };
 
 /** A page the phone shows as "<Feature> is available in MailVault on desktop". */
@@ -455,7 +456,7 @@ const ENGINE_GAPS = {
   'engine: switching a Microsoft account between Graph and IMAP (the phone keeps the transport it was added or imported with; a switch signs in again and re-files the mail)': ['account.msTransport'],
   'engine: AI provider choice (the phone has one endpoint)': ['ai.settings.provider'],
   'engine: lifecycle messages': ['lifecycle.setting.label'],
-  'engine: auto-tag rules': ['autoTag.name', 'autoTag.instruction', 'autoTag.tag', 'autoTag.inboxAction', 'autoTag.hasAttachments', 'autoTag.listIdPresent', 'autoTag.fromAddress', 'autoTag.fromDomain', 'autoTag.minConfidence', 'autoTag.allowRemote', 'autoTag.enabledLabel'],
+  'engine: hiding auto-tagged mail from the Inbox (the phone list does not hide tagged mail; a rule keeps its Inbox action for desktop)': ['autoTag.inboxAction'],
 };
 const ON_PHONE = [
   'settings.appearance.theme', 'settings.colors.palette', 'settings.icons.title', 'settings.appearance.emailViewerTheme',
@@ -473,6 +474,8 @@ const ON_PHONE = [
   'notifyPolicy.quietHours.title', 'notifyPolicy.allowlist.title',
   'fields.section', 'fields.newName', 'fields.newKind', 'fields.copyFrom',
   'views.section', 'views.new', 'views.showTimeline',
+  'autoTag.name', 'autoTag.instruction', 'autoTag.tag', 'autoTag.hasAttachments', 'autoTag.listIdPresent', 'autoTag.fromAddress', 'autoTag.fromDomain',
+  'autoTag.minConfidence', 'autoTag.allowRemote', 'autoTag.enabledLabel',
   'settings.accounts.displayName', 'settings.accounts.emailSignature', 'settings.accounts.enableSignature',
   'settings.accounts.aliases.listTitle', 'settings.accounts.aliases.addAddress', 'settings.accounts.aliases.defaultAddress', 'settings.accounts.aliases.nameLabel',
   'settings.accounts.password', 'settings.accounts.mailServer', 'settings.accounts.sentFolder',

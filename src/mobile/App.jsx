@@ -38,7 +38,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, takeNotificationTap } from './transport.js';
 import { useMobileStore, ALL_INBOXES } from './store.js';
-import { ensureTags } from './tags.js';
+import { ensureTags, followAssignments } from './tags.js';
 import { ensureViews, useViewStore } from './views.js';
 import { requestFields } from './fields.js';
 import MessageList from './MessageList.jsx';
@@ -263,6 +263,9 @@ function App() {
 
   // Premium: read at launch, re-checked on return to the app, live on `mobile.premium.changed`.
   useEffect(() => (PERF ? undefined : startPremiumSync()), []);
+
+  // Tags an auto-tag rule assigns show on the rows on screen (tags.js).
+  useEffect(() => (PERF ? undefined : followAssignments()), []);
 
   // Notification taps: the shell's held one on mount, then each one it announces. Taking it is
   // what opens it, so a tap announced and also taken on mount opens once.

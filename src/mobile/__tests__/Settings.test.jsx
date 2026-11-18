@@ -260,13 +260,13 @@ describe('Settings pages, as desktop lays them out', () => {
 
   it('the first screen is desktop\'s sidebar: its groups and pages less what a phone lacks, with no settings of its own', () => {
     render(<Settings onClose={() => {}} />);
-    // Desktop's order (settingsManifest.js); Auto-tags and Portable are not on the phone;
+    // Desktop's order (settingsManifest.js); Portable is not on the phone;
     // Migration, Cleanup, Backup and Time Capsule are, as their desktop notices. Billing joins the
     // footer while Premium is on.
-    expect(pageRows()).toEqual(['appearance', 'mail-preferences', 'accounts', 'templates', 'migration', 'views', 'ai-providers', 'unsubscribe', 'cleanup',
+    expect(pageRows()).toEqual(['appearance', 'mail-preferences', 'accounts', 'templates', 'migration', 'views', 'auto-tags', 'ai-providers', 'unsubscribe', 'cleanup',
       'storage', 'backup', 'time-capsule', 'privacy', 'diagnostics', 'help']);
     // The pages and the Premium row.
-    expect([...document.querySelectorAll('.settings-nav-item')]).toHaveLength(16);
+    expect([...document.querySelectorAll('.settings-nav-item')]).toHaveLength(17);
     const headings = [...document.querySelectorAll('.settings-nav-heading')].map((h) => h.textContent);
     expect(headings).toEqual([
       t('common.premium'),
@@ -299,7 +299,7 @@ describe('Settings pages, as desktop lays them out', () => {
     fireEvent.click(screen.getByRole('tab', { name: t('settings.notifications.notifications') }));
     await waitFor(() => expect(toggle()).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(pageRows()).toHaveLength(15);
+    expect(pageRows()).toHaveLength(16);
     expect(heading()).toBe(t('mobile.settings.title'));
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));

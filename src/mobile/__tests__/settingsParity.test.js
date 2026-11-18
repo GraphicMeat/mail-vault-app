@@ -71,10 +71,14 @@ describe('settings parity', () => {
     // Visible in every run: the phone features waiting for the engine.
     console.info(`[settings parity] engine gaps:\n${Object.entries(engineGaps).map(([reason, items]) => `  ${reason}: ${items.join(', ')}`).join('\n')}`);
     expect(Object.keys(engineGaps).every((reason) => reason.startsWith('engine:'))).toBe(true);
-    // Saved views are on the phone now (Settings > Views, the editor), and the deleted-emails bin
-    // (Settings > Storage); auto-tag rules are not yet.
+    // Saved views are on the phone now (Settings > Views, the editor), the deleted-emails bin
+    // (Settings > Storage) and auto-tag rules (Settings > Auto Tags), less hiding tagged mail
+    // from the Inbox, which the phone list does not do.
     expect(engineGaps['engine: saved views']).toBeUndefined();
     expect(engineGaps['engine: deleted-emails bin']).toBeUndefined();
-    expect(engineGaps['engine: auto-tag rules']).toContain('page auto-tags');
+    expect(engineGaps['engine: auto-tag rules']).toBeUndefined();
+    expect(Object.values(engineGaps).flat()).not.toContain('page auto-tags');
+    const hide = Object.entries(engineGaps).find(([reason]) => reason.startsWith('engine: hiding auto-tagged mail'));
+    expect(hide?.[1]).toEqual(['autoTag.inboxAction']);
   });
 });

@@ -13,7 +13,7 @@
 // - Search finds the pages and settings the phone has and lands on the setting, as on desktop.
 // - Every page is desktop's view over the phone's preferences and engine (settings/*.jsx):
 //   Appearance, Mail preferences (Behavior, Notifications, Fields), Accounts, Templates, Views,
-//   AI providers, Unsubscribe, Storage (Storage with the offline window and the search index; Data usage),
+//   Auto Tags, AI providers, Unsubscribe, Storage (Storage with the offline window and the search index; Data usage),
 //   Privacy & security (Security, Tracking, Encryption, Network Activity), Billing, Diagnostics
 //   (unfinished server actions, Logs) and Help. Accounts' "Move to another computer" Export opens
 //   the phone's export page (settings/Transfer.jsx), and its Add account hands over to the phone's
@@ -54,6 +54,7 @@ import Unsubscribe from './settings/Unsubscribe.jsx';
 import AiProviders from './settings/AiProviders.jsx';
 import Accounts from './settings/Accounts.jsx';
 import Views from './settings/Views.jsx';
+import AutoTags from './settings/AutoTags.jsx';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 
@@ -211,6 +212,8 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
     body = <Templates />;
   } else if (nav === 'views') {
     body = <Views startNew={pendingNewView} onStarted={() => setPendingNewView(false)} onLeaveGuard={setLeaveGuard} />;
+  } else if (nav === 'auto-tags') {
+    body = <AutoTags />;
   } else if (nav === 'ai-providers') {
     body = <AiProviders />;
   } else if (nav === 'unsubscribe') {

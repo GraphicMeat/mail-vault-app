@@ -6,10 +6,11 @@
 // Rows ask for their tags in one batched `mobile.tags.forMessages` per tick (`requestRowTags`),
 // and only once the phone has a tag at all: with none, no row asks. The list loads once at launch
 // (`ensureTags`, also on opening the label sheet or Quick actions), and again after every change.
-// A tag change shows at once and goes back if the engine refuses it.
+// A tag change shows at once and goes back if the engine refuses it. A tag the engine assigns on
+// its own (an auto-tag rule, `mobile.tags.assigned`) joins the rows on screen (`followAssignments`).
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { daemonCall } from './transport.js';
+import { daemonCall, listen } from './transport.js';
 
 /** One row's place in the render cache. */
 export function rowKey(accountId, folder, uid) {
@@ -167,6 +168,30 @@ export function useRowTags(accountId, folder, uid) {
   }, [hasTags, cached, accountId, folder, uid]);
   if (!ids.length || !hasTags) return EMPTY;
   return tags.filter((tag) => ids.includes(tag.id));
+}
+
+/**
+ * `mobile.tags.assigned` (`{tagId, items: [{accountId, folder, uid}]}`): the engine tagged rows on
+ * its own (an auto-tag rule). A row the cache holds shows the chip at once; the counts reload.
+ */
+export function applyAssigned(payload) {
+  const tagId = payload?.tagId;
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  if (!tagId || !items.length) return;
+  useTagStore.setState((state) => {
+    const keys = items.map((r) => rowKey(r.accountId, r.folder, r.uid)).filter((key) => key in state.byRow);
+    return keys.length ? { byRow: withTag(state.byRow, keys, tagId) } : state;
+  });
+  useTagStore.getState().loadTags().catch(() => {});
+}
+
+/** Follows the engine's own assignments; returns the stop. Without the shell's bridge, none. */
+export function followAssignments() {
+  try {
+    return listen('mobile.tags.assigned', applyAssigned);
+  } catch {
+    return () => {};
+  }
 }
 
 /** Tests: back to a phone that has asked for nothing. */
