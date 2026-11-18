@@ -1,0 +1,127 @@
+/* Compose window, the virtual list's rows and their gutter. Part of index.css, in its order. */
+
+/* Embedded compose is deliberately a native CSS resize surface: it needs no
+   drag bookkeeping and works with every desktop webview. The keyboard divider
+   beside its reading context covers users who cannot use the resize corner.
+   These maxima are how far a resize may go; the opening width is capped in
+   ComposeModal, since this max-width overrides a Tailwind max-w-* there. */
+.compose-window {
+  container-type: inline-size;
+  container-name: compose;
+  resize: both;
+  min-width: 200px;
+  min-height: 200px;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 2rem);
+}
+
+.compose-context-aside {
+  min-width: 200px;
+  max-width: min(760px, 70vw);
+}
+
+.compose-window-detached { resize: none; max-width: none; max-height: none; }
+
+.compose-window-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  color: var(--mail-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: nwse-resize;
+  opacity: .75;
+  pointer-events: none;
+}
+.compose-window-resize:hover,
+.compose-window-resize:focus-visible { color: var(--mail-accent-text); opacity: 1; outline: 1px solid var(--mail-accent); outline-offset: 1px; }
+
+/* Virtual scroll row positioning */
+.virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  contain: content;
+}
+
+/* A reply unfolded under its thread row (expandable thread mode) sits one
+   step in. The row is absolutely anchored to its wrapper's edges, so padding
+   on the wrapper is ignored — the offset has to move the anchor itself. */
+.thread-member > .virtual-row {
+  left: 1.5rem;
+}
+
+/* A row that joined the list since the last paint (EmailList freshRowKeys):
+   All Inboxes filling batch by batch, new mail. The row inside moves, never
+   the virtualizer's positioned wrapper, whose inline transform places it. */
+.row-appear > .virtual-row {
+  animation: row-appear 240ms var(--mv-ease) backwards;
+}
+
+@keyframes row-appear {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* A month's first row carries the date scrubber's header band above it
+   (MONTH_HEADER_H in email/DateScrubber.jsx); same anchor rule as above. */
+.has-month-header > .virtual-row {
+  top: 26px;
+}
+
+/* The list's preview line (Settings > Workspace > Preview lines). Its line
+   height is SNIPPET_LINE_PX in EmailRow.jsx: a row is its layout's height plus
+   N of these, so the two must change together. */
+.row-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--mail-text-muted);
+}
+
+/* The row gutter (RowGutter in EmailRow.jsx): checkbox, custody chip and the
+   thread disclosure in one column whose width never depends on the row, so
+   sender, subject and preview start at one x down the list. A single-line row
+   keeps the chip beside the checkbox; a row of two or more lines stacks it
+   under the checkbox and pins both to the first text line. */
+.row-gutter { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+.row-gutter-cell { display: flex; align-items: center; gap: 12px; }
+.row-gutter-check { display: flex; align-items: center; justify-content: center; }
+.row-gutter-slot { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 20px; height: 20px; }
+.row-gutter-stacked { align-items: flex-start; padding-top: var(--row-gutter-top, 0px); }
+.row-gutter-stacked .row-gutter-cell { flex-direction: column; gap: 4px; }
+.row-gutter-stacked .row-gutter-check,
+.row-gutter-stacked > .row-gutter-slot { height: var(--row-first-line, 20px); }
+
+/* A row of several lines hangs from its top edge, with its first line where
+   a single-line row centres it: a row whose preview is shorter than the
+   setting, or absent, keeps its sender and subject level with its
+   neighbours'. The row height is still listRowHeight(). */
+.virtual-row.row-top { align-items: flex-start; padding-top: var(--row-top, 18px); }
+/* The two-line layout: its text block carries py-1.5 of its own, and its
+   first line is the 17px sender line. */
+.row-compact { --row-top: 2px; --row-gutter-top: 6px; --row-first-line: 17px; }
+/* The two-line layout's sender and subject end above the preview, and so does
+   the gutter once its chip slot is 15px (checkbox 17 + gap 4 + chip 15 = 36):
+   the preview hangs out under the checkbox instead of leaving that column
+   empty. 28px = the 20px gutter cell + the row's gap-2 (8px). The default
+   layout keeps its gutter beside the preview: its chip runs past the first
+   preview line. */
+.row-compact .row-gutter-cell .row-gutter-slot { height: 15px; }
+.row-compact .row-snippet { margin-left: -28px; }
+/* Message list density compact (listRowHeight's dense bases in EmailRow.jsx):
+   the same lines and targets with less air. A single-line row is 40px, so a
+   first line that hangs from the top sits 10px down, where a centred one
+   would. The two-line layout is 44px: its text block trims py-1.5 to py-0.5,
+   and the gutter rises with it. */
+.row-dense { --row-top: 10px; }
+.row-compact.row-dense { --row-top: 2px; --row-gutter-top: 2px; }

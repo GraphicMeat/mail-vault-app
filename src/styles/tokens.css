@@ -1,0 +1,108 @@
+/* The colour tokens both apps read (index.css on desktop, src/mobile/main.jsx on the phone).
+   Palettes: palettes.css. */
+
+/* Theme CSS Variables — see DIRECTION CONTRACT above.
+   Every value below is contrast-checked against the surface it lands on:
+   text and muted text >= 4.5:1, glyphs and control borders >= 3:1. Tints are
+   precomputed solids, not alpha over an unknown ground, so a banner's text
+   contrast is a fixed number rather than whatever happens to sit behind it.
+
+   Tints are also checked against `surface-hover`, which is the bar that
+   matters for a custody chip sitting in a list row: at their first values they
+   measured 1.06-1.17:1 against the row surface while plain hover measured
+   1.10:1, so a claim about where your mail lives was indistinguishable from
+   "the mouse is here". Every tint now clears hover by a visible margin. */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Ink — the desk, three steps and two hairlines */
+  --mail-bg: #0a0a12;
+  --mail-surface: #15151f;
+  --mail-surface-hover: #1e1e2c;
+  --mail-border: #2e2e45;          /* structural hairline between panes */
+  --mail-border-strong: #5f5f8a;   /* control boundary, 3.01:1 on surface */
+  --mail-input-bg: #0a0a12;
+
+  /* Text */
+  --mail-text: #e8e8ef;            /* 14.86:1 on surface */
+  --mail-text-muted: #a0a0b6;      /* 7.07:1 on surface; also passes on selected rows */
+
+  /* Desk Lamp Indigo — the live thing */
+  --mail-accent: #6366f1;          /* identity: rings, borders, tints, edges */
+  --mail-accent-hover: #5d53dc;
+  --mail-accent-text: #a5b4fc;     /* indigo as text/icon, 9.09:1 */
+  --mail-accent-fill: #4f46e5;     /* filled control under white, 6.29:1 */
+  --mail-accent-tint: #262759;
+
+  /* Row marking — the second highlighting mode (`emailRowHighlight:
+     'selection'`), where hover goes quiet and the open row is what is lit.
+     Neutral on purpose: the accent tint means "this is the live thing", a
+     grey ground means "this is where you are". Dark inverts the direction —
+     "darker" here is *raised*, or the row sinks into the desk. */
+  --mail-row-selected: #33334a;    /* 1.48:1 on surface — visible without hover */
+  --mail-row-related: #24242f;     /* 1.25:1 under selected, muted text 4.62:1 */
+
+  /* Custody — a closed vocabulary. Emerald/blue/gold mean vault/server/
+     only-copy and are never spent on decoration or generic status. */
+  --mail-local: #10b981;           /* Vault Emerald — on your disk */
+  --mail-local-tint: #0c3f33;
+  --mail-server: #3b82f6;          /* Server Blue — on the server */
+  --mail-server-tint: #1b3360;
+  --mail-only-copy: #fbbf24;       /* Only-Copy Gold — the server dropped it */
+  --mail-only-copy-tint: #4d3d17;
+  /* Secondary text on ANY tint. Grey muted falls to 3.17:1 on the raised
+     tints, and grey on a coloured surface is wrong regardless. Solid, not
+     alpha — stacked alpha is what the tint tokens exist to avoid. */
+  --mail-text-on-tint: #c9c9d8;
+
+  /* Status — never custody */
+  --mail-success: #22c55e;
+  --mail-success-tint: #113e27;
+  --mail-warning: #fb923c;         /* caution: degraded, limited, unverified */
+  --mail-warning-tint: #4d301e;
+  --mail-danger: #f87171;          /* destructive as text/icon, 6.55:1 */
+  --mail-danger-fill: #dc2626;     /* destructive fill under white, 4.83:1 */
+  --mail-danger-hover: #b91c1c;
+  --mail-danger-tint: #4d272d;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --mail-danger-hover: #b91c1c;
+
+  --mail-bg: #f6f7fb;
+  --mail-surface: #ffffff;
+  --mail-surface-hover: #eceef6;
+  --mail-border: #dfe3ee;
+  --mail-border-strong: #7f88a6;   /* 3.51:1 on white */
+  --mail-input-bg: #ffffff;
+
+  --mail-text: #1a1a2e;
+  --mail-text-muted: #5c5c73;      /* 6.49:1 on white */
+
+  --mail-accent: #4f46e5;
+  --mail-accent-hover: #4338ca;
+  --mail-accent-text: #4338ca;     /* 7.90:1 on white */
+  --mail-accent-fill: #4f46e5;
+  --mail-accent-tint: #d5d3f9;
+
+  --mail-row-selected: #d3d7e2;    /* muted text 4.51:1, clears white by 1.44:1 */
+  --mail-row-related: #e6e8f0;     /* muted text 5.31:1 */
+
+  --mail-local: #065f46;           /* 7.68:1 on white, 5.58:1 on its own tint */
+  --mail-local-tint: #c8e1da;
+  --mail-server: #1d4ed8;          /* 6.70:1 on white */
+  --mail-server-tint: #cdd8f6;
+  --mail-only-copy: #854d0e;       /* 6.51:1 on white */
+  --mail-only-copy-tint: #e4d8ca;
+  --mail-text-on-tint: #4a4a63;   /* 4.81:1 worst case — the only-copy tint */
+
+  --mail-success: #166534;
+  --mail-success-tint: #ccddd2;
+  --mail-warning: #9a3412;   /* 5.27:1 on its own tint */
+  --mail-warning-tint: #f2d5ca;
+  --mail-danger: #991b1b;    /* 5.67:1 on its own tint */
+  --mail-danger-fill: #dc2626;
+  --mail-danger-tint: #f0cdcd;
+}

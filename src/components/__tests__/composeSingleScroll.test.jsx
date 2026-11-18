@@ -16,8 +16,8 @@
 // cut off instead of scrolling.
 
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
+import { readStyleSheet } from '../../styles/__tests__/readStyleSheet.js';
 import React from 'react';
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 
@@ -92,7 +92,7 @@ const CLIP_CLASS = /(^|\s)(overflow-hidden|min-h-0)(\s|$)/;
 
 beforeAll(() => {
   // Only the `.compose-*` rules: they are where the window's own scroller lives.
-  const css = readFileSync(resolve(process.cwd(), 'src/styles/index.css'), 'utf8');
+  const css = readStyleSheet(resolve(process.cwd(), 'src/styles/index.css'));
   const rules = css.split('\n').filter((line) => /^\.compose-[\w-]+\s*\{.*\}\s*$/.test(line));
   const style = document.createElement('style');
   style.textContent = rules.join('\n');

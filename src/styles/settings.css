@@ -1,0 +1,225 @@
+/* The settings window, its navigation, pages, rows, choices and previews, shared by both apps
+   (desktop SettingsPage, the phone's Settings shell). */
+
+.settings-window {
+  width: 100%; max-width: 1240px; height: min(940px, 92dvh);
+  display: flex; min-height: 0; overflow: hidden; border-radius: 16px;
+}
+.settings-sidebar {
+  width: 232px; flex-shrink: 0; min-height: 0; display: flex; flex-direction: column;
+  background: var(--mail-surface); border-right: 1px solid var(--mail-border);
+}
+.settings-sidebar-heading { min-height: 72px; display: flex; align-items: center; padding: 0 24px; }
+.settings-sidebar-heading h2 { font-size: 20px; letter-spacing: -.02em; }
+.settings-search {
+  display: flex; align-items: center; gap: 8px; margin: 0 16px 8px; padding: 4px 8px;
+  min-height: 36px; border: 1px solid var(--mail-border-strong); border-radius: 8px;
+  color: var(--mail-text-muted); background: var(--mail-input-bg);
+}
+.settings-search:focus-within { outline: 2px solid var(--mail-accent); outline-offset: 2px; }
+.settings-search input { width: 100%; min-width: 0; background: transparent; font-size: 13px; color: var(--mail-text); }
+.settings-search input:focus-visible { outline: none; }
+.settings-search > svg { flex-shrink: 0; }
+.settings-navigation { flex: 1; overflow-y: auto; min-height: 0; padding: 0 12px 20px; }
+.settings-nav-heading { font-size: 12px; font-weight: 600; color: var(--mail-text-muted); padding: 20px 12px 8px; }
+.settings-nav-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  min-height: 38px; padding: 8px 12px; border-radius: 8px; font-size: 14px;
+  color: var(--mail-text-muted); margin-bottom: 2px; transition: background-color 150ms, color 150ms;
+}
+.settings-nav-item svg { flex-shrink: 0; }
+.settings-nav-item:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
+.settings-nav-item[aria-current="page"] { color: var(--mail-accent-text); background: var(--mail-accent-tint); }
+.settings-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 72px; padding: 12px 28px; border-bottom: 1px solid var(--mail-border); flex-shrink: 0;
+}
+.settings-header h3 { font-size: 20px; letter-spacing: -.02em; }
+.settings-content { scrollbar-gutter: stable; container-type: inline-size; scroll-behavior: auto; }
+.settings-form { width: 100%; max-width: 920px; margin: 0 auto; padding: 28px; }
+/* A page folded under a host nav entry already sits in the host's padded tabpanel. */
+.settings-form .settings-form { max-width: none; padding: 0; }
+/* Logs fills the pane under the Diagnostics tab row, its log scrolling inside. */
+.settings-content[data-page="logs"] > .settings-tabbed-page { display: flex; flex-direction: column; height: 100%; }
+.settings-content[data-page="logs"] > .settings-tabbed-page > [role="tabpanel"] { flex: 1; min-height: 0; }
+.settings-section { background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 12px; padding: 20px; }
+.settings-section > h4 { font-size: 18px; }
+.settings-section :where(input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), select, textarea) { min-width: 0; }
+.settings-section :where(.flex.items-center.justify-between) { gap: 16px; }
+.settings-section .toggle-switch { flex-shrink: 0; }
+.settings-tabs {
+  position: sticky; top: 0; z-index: 1; display: flex; gap: 20px; overflow-x: auto;
+  padding: 0 28px; background: var(--mail-bg); border-bottom: 1px solid var(--mail-border);
+}
+/* A settings choice group (SegmentedChoice, SegmentedControl) wears the tab
+   row's look, so every one-of-a-few choice in Settings and onboarding reads
+   like the tabs above it. */
+.segmented-choice {
+  display: inline-flex; flex-wrap: wrap; column-gap: 20px; max-width: 100%;
+  border-bottom: 1px solid var(--mail-border);
+}
+.settings-tabs > button,
+.segmented-choice > button {
+  flex-shrink: 0; min-height: 48px; padding: 12px 0; font-size: 13px; font-weight: 500;
+  color: var(--mail-text-muted); border-bottom: 2px solid transparent;
+}
+.settings-tabs > button:hover,
+.segmented-choice > button:hover:not(:disabled) { color: var(--mail-text); }
+.settings-tabs > button[aria-selected="true"],
+.segmented-choice > button[aria-checked="true"],
+.segmented-choice > button[aria-pressed="true"] { color: var(--mail-accent-text); border-color: var(--mail-accent); }
+.settings-tabs > button:focus-visible,
+.segmented-choice > button:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.segmented-choice > button:disabled { opacity: .48; cursor: not-allowed; }
+/* In a narrow field the group wraps onto more rows and a long label wraps
+   inside its own button, instead of running past the field. */
+.segmented-choice > button { max-width: 100%; text-align: start; }
+.settings-mobile-navigation { display: none; }
+.settings-account-filter { display: flex; align-items: center; gap: 8px; padding: 12px 28px; border-bottom: 1px solid var(--mail-border); flex-shrink: 0; overflow-x: auto; }
+/* Everyday preferences use one quiet label/control rhythm, without nested cards. */
+.appearance-settings { max-width: 800px; margin: 0 auto; }
+.appearance-preview-intro { margin-bottom: 24px; color: var(--mail-text-muted); font-size: 13px; line-height: 1.6; }
+.appearance-settings .setting-row { grid-template-columns: minmax(0, 1fr) minmax(280px, 60%); align-items: start; }
+.appearance-settings .setting-row-copy { padding-top: 8px; }
+.settings-preference-group + .settings-preference-group { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--mail-border); }
+.settings-preference-group > h4 { margin-bottom: 8px; font-size: 18px; font-weight: 600; color: var(--mail-text); letter-spacing: -.01em; }
+.setting-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 46%); gap: 24px; align-items: center; padding: 12px 0; }
+.setting-row-copy, .setting-row-control { min-width: 0; }
+.setting-row-preview { margin-top: 10px; }
+.setting-row-control > :is(select, input) { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--mail-border-strong); border-radius: 8px; background: var(--mail-surface); color: var(--mail-text); font-size: 13px; }
+.settings-segments { display: flex; padding: 3px; gap: 3px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-surface); }
+.settings-segments > button { display: flex; flex: 1; align-items: center; justify-content: center; gap: 6px; min-height: 32px; min-width: 0; padding: 6px 8px; border-radius: 4px; color: var(--mail-text-muted); font-size: 13px; line-height: 1.35; }
+.settings-segments > button svg { flex-shrink: 0; }
+.settings-segments > button:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--mail-surface-hover); color: var(--mail-text); }
+.settings-segments > button[aria-pressed="true"] { background: var(--mail-accent-tint); color: var(--mail-accent-text); font-weight: 500; }
+.settings-segments > button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Small, local examples keep each preference's effect next to its control. */
+.settings-visual-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.settings-visual-options > button { min-width: 0; padding: 4px; border: 1px solid var(--mail-border-strong); border-radius: 8px; background: var(--mail-surface); text-align: left; color: var(--mail-text); }
+.settings-visual-options > button:hover { border-color: var(--mail-text-muted); background: var(--mail-surface-hover); }
+.settings-visual-options > button[aria-pressed="true"] { border-color: var(--mail-accent-text); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+/* ui/ChoiceCards.jsx: a picture over each option's label, the picked one
+   outlined and ticked. The label's button covers its card (::after). */
+.choice-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.choice-card { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--mail-border-strong); border-radius: 10px; background: var(--mail-surface); }
+.choice-card:hover { border-color: var(--mail-text-muted); }
+.choice-card[data-selected] { border-color: var(--mail-accent); box-shadow: 0 0 0 1px var(--mail-accent); background: var(--mail-accent-tint); }
+.choice-card-button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 36px; padding: 8px 10px; color: var(--mail-text); font-size: 13px; font-weight: 500; line-height: 1.35; text-align: start; }
+.choice-card-button::after { position: absolute; inset: 0; border-radius: 9px; content: ""; }
+.choice-card-button > svg { flex-shrink: 0; visibility: hidden; }
+.choice-card[data-selected] .choice-card-button { color: var(--mail-accent-text); }
+.choice-card[data-selected] .choice-card-button > svg { visibility: visible; }
+.choice-cards .choice-card-button:focus-visible { outline: none; }
+.choice-card-button:focus-visible::after { outline: 2px solid var(--mail-accent); outline-offset: -2px; }
+.choice-card-button:disabled { cursor: not-allowed; opacity: .45; }
+@container (max-width: 420px) {
+  .choice-cards { grid-template-columns: minmax(0, 1fr); }
+}
+.font-options { display: grid; gap: 12px; min-width: 0; }
+.font-options-heading { margin-bottom: 6px; color: var(--mail-text-muted); font-size: 12px; font-weight: 500; }
+.settings-visual-option-label { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px; font-size: 13px; font-weight: 500; }
+.settings-visual-option-label > svg { flex-shrink: 0; }
+.settings-visual-option-label > svg:last-child:not(:first-child) { margin-left: auto; }
+.color-option-preview { display: flex; height: 82px; overflow: hidden; border-radius: 4px; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; line-height: 1.5; }
+.color-preview-rail { display: flex; flex-direction: column; gap: 13px; flex-shrink: 0; width: 30px; padding: 11px 7px; border-right: 1px solid var(--mail-border); background: var(--mail-surface); color: var(--mail-text-muted); }
+.color-preview-rail > svg:first-child { color: var(--mail-accent-text); }
+.color-preview-mail { display: flex; flex-direction: column; min-width: 0; flex: 1; padding-top: 6px; }
+.color-preview-mail > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline: 8px; }
+.color-preview-title { padding-top: 4px; background: var(--mail-accent-tint); color: var(--mail-accent-text); font-weight: 600; }
+.color-preview-subject { padding-bottom: 4px; background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.color-preview-second { margin-top: 6px; color: var(--mail-text-muted); }
+.preference-preview { margin: 0; min-width: 0; font-size: 12px; line-height: 1.5; }
+.preference-preview figcaption { margin-bottom: 5px; color: var(--mail-text-muted); font-size: 11px; }
+.preference-preview-content { overflow: hidden; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: var(--mail-text); }
+.preference-preview strong { font-weight: 600; }
+.preference-preview svg { flex-shrink: 0; }
+.preview-email-header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px; background: var(--mail-surface); border-bottom: 1px solid var(--mail-border); }
+.preview-email-header > span { color: var(--mail-text-muted); }
+.preview-email-body { padding: 12px; }
+.preview-email-body p { margin-top: 5px; }
+.preview-message-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; --row-first-line: 18px; }
+.preview-message-rows:not(.preview-single-line) .preview-message-row { align-items: flex-start; }
+/* Message list density: compact takes the same air out as the list's rows. */
+.preview-message-rows[data-list-density="compact"] .preview-message-row { padding-block: 3px; }
+.preview-checkbox { display: block; width: 16px; height: 16px; border-width: 1.5px; cursor: default; }
+.preview-message-row + .preview-message-row { border-top: 1px solid var(--mail-border); }
+.preview-message-copy { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.preview-message-copy > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-message-copy > span { color: var(--mail-text-muted); }
+.preview-time { flex-shrink: 0; color: var(--mail-text-muted); font-variant-numeric: tabular-nums; }
+.preview-message-copy > .preview-message-snippet { display: -webkit-box; -webkit-box-orient: vertical; white-space: normal; font-size: 12px; line-height: 16px; }
+.preview-single-line .preview-message-copy { flex-direction: row; gap: 10px; }
+.preview-single-line .preview-message-copy > strong { flex: 0 1 38%; }
+.preview-single-line .preview-message-copy > span { flex: 1; }
+.preview-mail-layout { display: flex; min-height: 132px; }
+.preview-mail-list { width: 46%; min-width: 0; flex-shrink: 0; border-right: 1px solid var(--mail-border); }
+.preview-mail-list .preview-time, .preview-mail-list .row-gutter { display: none; }
+.preview-mail-list .preview-message-row { padding: 6px 10px; }
+.preview-mail-list .preview-message-row:first-child { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.preview-mail-list .preview-message-row:first-child .preview-message-copy > span { color: var(--mail-accent-text); }
+.preview-pane-label { display: block; padding: 7px 10px; color: var(--mail-text-muted); font-size: 11px; }
+.preview-mail-reader { flex: 1; min-width: 0; padding: 0 10px 10px; }
+.preview-mail-reader .preview-pane-label { padding-inline: 0; }
+.preview-mail-reader p { margin-top: 8px; }
+.preview-mail-below { flex-direction: column; }
+.preview-mail-below .preview-mail-list { width: auto; border-right: 0; border-bottom: 1px solid var(--mail-border); }
+.preview-mail-below .preview-mail-list .preview-message-row:nth-child(2) { display: none; }
+.preview-mail-below .preview-mail-reader p { margin-top: 4px; }
+.preview-navigation { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 6px; background: var(--mail-surface); }
+.preview-navigation .preview-pane-label { padding: 3px 5px 7px; }
+.preview-nav-item { display: flex; align-items: center; gap: 6px; padding: 4px 5px; min-width: 0; overflow-wrap: anywhere; }
+.preview-nav-active { background: var(--mail-accent-tint); color: var(--mail-accent-text); border-radius: 4px; }
+.preview-account-initial { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--mail-accent-tint); color: var(--mail-accent-text); font-size: 11px; }
+.preview-navigation-bubbles > .preview-folder-navigation { display: flex; flex-wrap: wrap; align-content: start; gap: 4px; }
+.preview-navigation-bubbles .preview-pane-label { width: 100%; }
+.preview-navigation-bubbles .preview-folder-navigation .preview-nav-item { border: 1px solid var(--mail-border-strong); border-radius: 9999px; padding: 2px 6px; }
+.preview-thread-summary, .preview-thread-message { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--mail-border); }
+.preview-thread-message:last-child { border-bottom: 0; }
+.preview-thread-summary { background: var(--mail-surface); }
+.preview-thread-summary strong, .preview-thread-message strong { flex-shrink: 0; }
+.preview-thread-summary > span:not(.preview-count), .preview-thread-message > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mail-text-muted); }
+.preview-count { margin-left: auto; padding: 0 5px; border-radius: 4px; background: var(--mail-surface-hover); }
+.preview-thread-members { margin-left: 20px; }
+.preview-reply { padding: 9px 12px; }
+.preview-reply + .preview-reply { border-top: 1px solid var(--mail-border); }
+.preview-reply > div:first-child { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+.preview-reply > div:first-child > span { color: var(--mail-text-muted); font-variant-numeric: tabular-nums; }
+.preview-reply p { margin-top: 4px; }
+.preview-signature { margin-top: 8px; color: var(--mail-text-muted); font-size: 11px; }
+.preview-signature-toggle { display: block; margin-top: 8px; color: var(--mail-text-muted); font-size: 11px; }
+.preview-highlight-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; padding: 9px 10px; }
+.preview-highlight-row > span { display: flex; align-items: center; gap: 5px; color: var(--mail-text-muted); }
+.preview-highlight-row.bg-mail-accent-tint > span { color: var(--mail-accent-text); }
+.preview-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px; background: var(--mail-surface); }
+.preview-actions .email-action-button { cursor: default; pointer-events: none; }
+.preview-date { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 10px 12px; }
+.preview-date > span { color: var(--mail-text-muted); }
+.preview-date > strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+@container (max-width: 620px) {
+  .setting-row, .appearance-settings .setting-row { grid-template-columns: 1fr; gap: 8px; }
+  .appearance-settings .setting-row-copy { padding-top: 0; }
+  .settings-preference-group + .settings-preference-group { margin-top: 20px; padding-top: 20px; }
+}
+.account-settings-layout { display: flex; height: 100%; min-width: 0; min-height: 0; }
+.account-settings-list { width: 260px; flex-shrink: 0; border-right: 1px solid var(--mail-border); overflow-y: auto; }
+.account-settings-detail { flex: 1; min-width: 0; overflow-y: auto; }
+@container (max-width: 820px) {
+  .account-settings-layout { flex-direction: column; }
+  .account-settings-list { width: 100%; max-height: 200px; border-right: 0; border-bottom: 1px solid var(--mail-border); }
+}
+@container (max-width: 520px) {
+  .settings-form { padding: 20px 16px; }
+  .settings-section { padding: 16px; }
+  .settings-tabs { gap: 16px; padding: 0 16px; }
+  .settings-section .grid-cols-3 { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .settings-sidebar { display: none; }
+  .settings-window { height: calc(100dvh - 32px); }
+  .settings-header { min-height: 64px; padding: 12px 16px; }
+  .settings-mobile-navigation { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--mail-border); font-size: 13px; }
+  .settings-mobile-navigation label { color: var(--mail-text-muted); }
+  .settings-mobile-navigation select { flex: 1; min-width: 0; padding: 8px; border: 1px solid var(--mail-border-strong); border-radius: 8px; background: var(--mail-surface); }
+  .settings-account-filter { padding: 12px 16px; }
+}

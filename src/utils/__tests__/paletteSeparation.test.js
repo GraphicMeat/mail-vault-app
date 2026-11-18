@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readStyleSheet } from '../../styles/__tests__/readStyleSheet.js';
 import { deltaE, hue, tokens } from './colorMath';
 
-const css = readFileSync(new URL('../../styles/index.css', import.meta.url), 'utf8');
+const css = readStyleSheet(new URL('../../styles/index.css', import.meta.url));
 const charts = readFileSync(new URL('../../styles/insights-charts.css', import.meta.url), 'utf8');
 
 // The Four Roles Rule: the live-thing accent must never read as a custody

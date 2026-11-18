@@ -1,0 +1,576 @@
+/* Selection and focus, motion, the mail workspace. Part of index.css, in its order. */
+
+/* Selection styles */
+::selection {
+  background-color: var(--mail-accent);
+  color: white;
+}
+
+/* Focus styles */
+input:focus,
+textarea:focus,
+button:focus {
+  outline: none;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--mail-accent);
+  outline-offset: 2px;
+}
+
+/* Transitions */
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Animation keyframes */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes slide-in {
+  0% { transform: translateX(-10px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* Settings page specific */
+.settings-section {
+  background-color: var(--mail-surface);
+  border: 1px solid var(--mail-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.settings-label {
+  color: var(--mail-text);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.settings-description {
+  color: var(--mail-text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.settings-input {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background-color: var(--mail-input-bg);
+  border: 1px solid var(--mail-border);
+  border-radius: 0.5rem;
+  color: var(--mail-text);
+  transition: border-color 0.15s ease;
+}
+
+.settings-input:focus {
+  border-color: var(--mail-accent);
+  outline: none;
+}
+
+.settings-input::placeholder {
+  color: var(--mail-text-muted);
+}
+
+/* Range Slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: var(--mail-border);
+  height: 6px;
+  border-radius: 3px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  background-color: var(--mail-accent);
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+input[type="range"]::-moz-range-track {
+  background: var(--mail-border);
+  height: 6px;
+  border-radius: 3px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  background-color: var(--mail-accent);
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  border: none;
+  transition: transform 0.15s ease;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.1);
+}
+
+/* TipTap Rich Text Editor */
+.tiptap {
+  outline: none;
+  min-height: 100%;
+  padding: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.625;
+  color: var(--mail-text);
+}
+
+.tiptap p {
+  margin: 0 0 0.25em 0;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--mail-text-muted);
+  pointer-events: none;
+  height: 0;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid var(--mail-border);
+  padding-left: 0.75rem;
+  margin: 0.5em 0;
+  color: var(--mail-text-muted);
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.5rem;
+  margin: 0.5em 0;
+}
+
+.tiptap ul { list-style-type: disc; }
+.tiptap ol { list-style-type: decimal; }
+
+.tiptap li { margin: 0.15em 0; }
+
+.tiptap pre {
+  background-color: var(--mail-surface-hover);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5em 0;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.8125rem;
+  overflow-x: auto;
+}
+
+.tiptap code {
+  background-color: var(--mail-surface-hover);
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.8125rem;
+}
+
+.tiptap a {
+  color: var(--mail-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tiptap hr {
+  border: none;
+  border-top: 1px solid var(--mail-border);
+  margin: 0.75em 0;
+}
+
+/* An HTML signature (utils/htmlSignature.js) is drawn the way a mail client
+   draws it: the browser's own defaults under its inline styles, on white,
+   with none of the editor's rules above. View only; the sent HTML has none. */
+.tiptap [data-mv-signature-html] {
+  background: #fff;
+  color: #000;
+  padding: 0.5rem;
+  margin: 0.25em 0;
+  border-radius: 0.375rem;
+}
+.tiptap [data-mv-signature-html] * { all: revert; }
+.tiptap [data-mv-signature-html].ProseMirror-selectednode { outline: 2px solid var(--mail-accent); }
+
+/* Picture resize (signature editors). TipTap draws the four corner handles as
+   bare divs it positions at the corners; the look is ours. Shown on the
+   selected picture only. */
+.tiptap [data-resize-handle] {
+  display: none;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid var(--mail-accent);
+  border-radius: 3px;
+  background: var(--mail-bg);
+  z-index: 1;
+}
+.tiptap .ProseMirror-selectednode[data-resize-container] [data-resize-handle] { display: block; }
+.tiptap .ProseMirror-selectednode[data-resize-container] img { outline: 2px solid var(--mail-accent); }
+.tiptap [data-resize-handle="top-left"] { transform: translate(-50%, -50%); cursor: nwse-resize; }
+.tiptap [data-resize-handle="top-right"] { transform: translate(50%, -50%); cursor: nesw-resize; }
+.tiptap [data-resize-handle="bottom-left"] { transform: translate(-50%, 50%); cursor: nesw-resize; }
+.tiptap [data-resize-handle="bottom-right"] { transform: translate(50%, 50%); cursor: nwse-resize; }
+
+.tiptap strong { font-weight: 600; }
+.tiptap em { font-style: italic; }
+.tiptap u { text-decoration: underline; }
+.tiptap s { text-decoration: line-through; }
+
+/* ============================================================================
+   MOTION CONTRACT — "The Handoff"
+
+   THESIS: Colour says where your mail lives. Motion says WHEN it moved, and
+   proves it landed. Every animation in this client is a custody handoff, a
+   continuity cue, or the acknowledgment of a press. Nothing here is
+   decoration: a decorative frame in a virtualized list is a dropped one.
+
+   FOCAL MOMENT: a message becoming yours. The custody chip's tint crossfades
+   Server Blue -> Vault Emerald, the new glyph lands from 0.55 scale, and one
+   emerald light sweeps the row left to right. 620ms, once per message, and
+   never on a row the virtualizer merely recycled underneath a new message.
+
+   BUDGET: transform, opacity and background-color only. No layout property is
+   ever animated — a virtualized row's height is a constant the list knows
+   (The Fixed Row Rule), and `contain: content` on the row clips the sweep to
+   its own bounds. The sweep is a pseudo-element, so a landing row costs one
+   composited layer and the render window caps how many can exist at once: a
+   3,000-message bulk archive animates the twenty rows you can see, not 3,000.
+   ========================================================================= */
+
+:root {
+  /* Duration ladder. Distance and consequence pick the rung, not habit. */
+  --mv-press: 90ms;         /* the control moves under the finger */
+  --mv-feedback: 140ms;     /* something acknowledged you */
+  --mv-state: 220ms;        /* a value changed in place */
+  --mv-transition: 320ms;   /* something travelled or resized */
+  --mv-handoff: 620ms;      /* the one authored moment */
+
+  /* Confident arrival — fast out of the gate, long settle — for anything that
+     covered distance. The flatter curve is for tints and fills, which have no
+     distance to express and read as sluggish on an exponential ease. */
+  --mv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --mv-ease-state: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Row ground. Hover only, at a duration short enough that hover still feels
+   like hover — custody lives in the glyph, not in the row's background. */
+.virtual-row {
+  transition: background-color var(--mv-feedback) var(--mv-ease-state);
+}
+
+/* --- The Handoff -------------------------------------------------------- */
+
+/* `data-landed` holds the new tone for one --mv-handoff. useCustodyLanding
+   sets it only when the SAME message changed custody: a recycled row showing
+   a different message has not handed anything over, and animating that would
+   turn a scroll into a light show. */
+.custody-glyph {
+  display: inline-flex;
+  position: relative;
+}
+
+[data-landed] .custody-glyph {
+  animation: custody-glyph-land var(--mv-state) var(--mv-ease) both;
+}
+
+@keyframes custody-glyph-land {
+  0%   { transform: scale(0.55); opacity: 0; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+/* The light. One band of the landing colour crossing the surface, once. */
+.virtual-row[data-landed]::after,
+.custody-band[data-landed]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    var(--mv-landed) 38%,
+    var(--mv-landed) 52%,
+    transparent 88%
+  );
+  animation: custody-sweep var(--mv-handoff) var(--mv-ease) both;
+}
+
+/* The sweep is a LIGHT, not a surface, and it needed two corrections that only
+   the running app could give:
+   1. Built from `--mail-*-tint` it was invisible. #0c3f33 over the #0a0a12
+      ground is about 1.15:1 — a tint is sized to sit still under a glyph and
+      clear hover, not to be seen crossing a row in half a second.
+   2. Built from the theme's own custody ink it went grey in light theme.
+      `--mail-local` there is #065f46 and `--mail-only-copy` is #854d0e: dark
+      inks chosen to carry text on white. Any alpha of a dark ink over a near
+      white ground is a shadow, and raising the alpha only made it a darker
+      shadow. A light needs chroma, not darkness.
+   So the custody LIGHT is its own value and, unlike every custody ink in this
+   system, it does NOT flip with the theme — the same luminous emerald reads as
+   emerald on ink and as mint on paper. Only its strength changes: a light
+   ground needs more of it to register. */
+:root,
+[data-theme="dark"] {
+  --mv-lit-local: #10b981;
+  --mv-lit-server: #3b82f6;
+  --mv-lit-only-copy: #fbbf24;
+  --mv-landed-strength: 26%;
+}
+
+[data-theme="light"] {
+  --mv-lit-local: #10b981;
+  --mv-lit-server: #3b82f6;
+  --mv-lit-only-copy: #fbbf24;
+  --mv-landed-strength: 40%;
+}
+
+[data-landed="local"]     { --mv-landed: color-mix(in srgb, var(--mv-lit-local) var(--mv-landed-strength), transparent); }
+[data-landed="only-copy"] { --mv-landed: color-mix(in srgb, var(--mv-lit-only-copy) var(--mv-landed-strength), transparent); }
+[data-landed="server"]    { --mv-landed: color-mix(in srgb, var(--mv-lit-server) var(--mv-landed-strength), transparent); }
+
+@keyframes custody-sweep {
+  0%   { opacity: 0; transform: translateX(-45%); }
+  18%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(100%); }
+}
+
+/* Same handoff at reading-pane scale: the band above the message you are
+   reading changes its claim while you read it. */
+.custody-band {
+  position: relative;
+  overflow: hidden;
+  transition: background-color var(--mv-state) var(--mv-ease-state);
+}
+
+/* --- Continuity --------------------------------------------------------- */
+
+/* The reading pane changes message thousands of times in a session. A hard cut
+   makes two different messages look like one that re-rendered. 140ms of fade
+   and 3px of rise says "different message" without anyone waiting for it —
+   the pane is interactive on the first frame. */
+.viewer-swap {
+  animation: viewer-swap var(--mv-feedback) var(--mv-ease) both;
+}
+
+@keyframes viewer-swap {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- Feedback ----------------------------------------------------------- */
+
+/* A press lands under the finger, not after it. Reserved for the controls that
+   actually move mail. */
+.press {
+  transition: transform var(--mv-press) var(--mv-ease-state);
+}
+.press:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+/* A bulk run's last frame is the product's promise being kept: these messages
+   are on your disk and the server can be emptied now. It gets one beat. */
+.op-landed {
+  animation: op-landed 420ms var(--mv-ease) both;
+}
+
+@keyframes op-landed {
+  0%   { transform: scale(0.4);  opacity: 0; }
+  55%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+.email-viewer-spinner {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: email-viewer-spinner 1s linear infinite;
+}
+
+@keyframes email-viewer-spinner {
+  to { transform: rotate(360deg); }
+}
+
+/* Lines standing in for release notes that are still loading. */
+.release-notes-skeleton {
+  background: linear-gradient(90deg, var(--mail-border) 25%, var(--mail-surface-hover) 50%, var(--mail-border) 75%);
+  background-size: 200% 100%;
+  animation: release-notes-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes release-notes-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+.read-delay-progress {
+  flex: 0 0 3px;
+  height: 3px;
+  overflow: hidden;
+  background: var(--mail-accent-tint);
+}
+
+.read-delay-progress > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--mail-accent-fill);
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: read-delay-progress var(--read-delay-duration) linear forwards;
+}
+
+@keyframes read-delay-progress {
+  to { transform: scaleX(1); }
+}
+
+/* Reduce motion.
+ *
+ * framer-motion is covered by <MotionConfig reducedMotion="user"> in main.jsx;
+ * this covers the CSS side — the `pulse-soft` ambient animation, the spinners,
+ * and every `transition-*` utility. Spinners keep turning, slowly: a frozen
+ * spinner reads as a hung operation, which is worse than a slow one. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-spin,
+  .email-viewer-spinner,
+  .animate-pulse,
+  .animate-pulse-soft {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  /* Still lines: the shimmer is decoration, the lines say it is loading. */
+  .release-notes-skeleton {
+    animation: none !important;
+  }
+
+  .read-delay-progress > span {
+    animation-duration: var(--read-delay-duration) !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  /* The custody sweep is a light crossing a surface. Collapsed to 0.01ms it is
+     a single-frame flash, which is worse than no sweep at all — so it is
+     removed outright and the tint crossfade carries the handoff alone. Every
+     other animation here uses `both` fill, so at 0.01ms each one lands on its
+     final frame, which is the correct resting state. */
+  .virtual-row[data-landed]::after,
+  .custody-band[data-landed]::after {
+    display: none;
+  }
+}
+
+/* Follow the reader pane width, including when the mailbox list is resized. */
+.thread-reader { container-type: inline-size; }
+.thread-reader-split { display: grid; grid-template-rows: minmax(112px, 30%) minmax(0, 1fr); }
+.thread-reader-detail { border-top-width: 1px; }
+@container (min-width: 640px) {
+  .thread-reader-split { grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .thread-reader-split > :first-child { grid-column: 1; grid-row: 1; }
+  .thread-reader-split > .thread-reader-detail { grid-column: 2; grid-row: 1; border-top-width: 0; border-left-width: 1px; }
+}
+
+/* Mail workspace: stable reading hierarchy shared by both pane layouts. */
+.mail-list { container-type: inline-size; container-name: mail-list; }
+.mail-list-header { padding: 16px 16px 12px; background: var(--mail-surface); }
+.mail-list-summary { display: flex; flex-wrap: nowrap; min-height: 16px; column-gap: 8px; margin-top: 2px; overflow: clip; }
+.mail-list-summary > span { flex: 0 1 auto; min-width: 0; }
+.mail-list-custody-status { display: flex; align-items: center; gap: 8px; min-height: 16px; min-width: 0; margin-top: 8px; }
+.mail-list-date-range { display: none; }
+.mail-list-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-block: 1px solid var(--mail-border); background: var(--mail-surface); }
+.mail-toolbar-button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 5px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--mail-text-muted); transition: background-color 150ms, color 150ms; }
+.mail-toolbar-button svg { flex-shrink: 0; }
+.mail-toolbar-button:hover:not(:disabled) { background: var(--mail-surface-hover); color: var(--mail-text); }
+.mail-toolbar-button:disabled { opacity: .4; cursor: default; }
+.mail-toolbar-button.is-active { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+/* Two halves read as one control: a hairline around both, the chevron half narrow. */
+.mail-split-button { display: inline-flex; align-items: stretch; border: 1px solid var(--mail-border); border-radius: 6px; padding: 1px; gap: 1px; }
+.mail-split-button .mail-toolbar-button { min-height: 28px; border-radius: 5px; }
+.mail-split-button .mail-toolbar-button + .mail-toolbar-button { min-width: 0; padding-inline: 3px; }
+.mail-thread-select { flex: 1; min-width: 80px; max-width: 160px; padding: 5px 4px; min-height: 30px; border: 0; border-radius: 6px; background: var(--mail-surface); color: var(--mail-text-muted); font-size: 12px; cursor: pointer; }
+.mail-thread-select:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
+.mail-list .custom-checkbox { width: 16px; height: 16px; border-width: 1.5px; flex-shrink: 0; vertical-align: middle; }
+.mail-list .custom-checkbox:checked::after { left: 4px; top: 1px; }
+.mail-list .virtual-row > div:first-child { flex-shrink: 0; }
+.mail-list .virtual-row { border-bottom-color: color-mix(in srgb, var(--mail-border) 65%, transparent); }
+.sidebar-unread-count { min-width: 22px; padding: 2px 6px; border-radius: 6px; background: var(--mail-surface-hover); color: var(--mail-text); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: center; }
+.reader-key { min-width: 22px; padding: 2px 5px; border: 1px solid var(--mail-border); border-radius: 4px; background: var(--mail-surface); font: inherit; }
+[role="button"]:focus-visible, [role="separator"]:focus-visible, select:focus-visible { outline: 2px solid var(--mail-accent); outline-offset: 2px; }
+@container mail-list (min-width: 480px) { .mail-list-date-range { display: inline; } }
+/* One row at every width: the labelled controls (and the icon-only Hide view
+   mail toggle) need ~600px, so below that
+   the words go (the buttons keep their names and tooltips) rather than a
+   second row appearing. */
+@container mail-list (max-width: 640px) {
+  .mail-toolbar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .mail-toolbar-button { min-width: 30px; }
+}
+/* Icon-only, the row needs ~398px (~342px plus the always icon-only, split
+   Hide view mail button) and the pane can be dragged to 300px: the select
+   takes a row of its own for that whole range instead of the switch wrapping
+   a few pixels at a time. */
+@container mail-list (max-width: 400px) {
+  .mail-thread-select { order: 1; max-width: none; width: 100%; margin: 0 4px; }
+}
+@container mail-list (max-width: 300px) {
+  .mail-list-header { padding-inline: 12px; }
+  .mail-list-toolbar { gap: 2px; padding-inline: 6px; }
+  .mail-toolbar-button { gap: 4px; padding-inline: 6px; }
+  .mail-state-legend { column-gap: 12px; padding-inline: 12px; }
+}
+
+.chat-content-column { width: 100%; max-width: 960px; margin-inline: auto; }
+.mail-pane-divider { position: relative; background: var(--mail-bg); }
+.mail-pane-divider::after { content: ''; position: absolute; background: var(--mail-border); pointer-events: none; }
+.mail-pane-divider[aria-orientation="vertical"]::after { width: 1px; top: 0; bottom: 0; left: 1px; }
+.mail-pane-divider[aria-orientation="horizontal"]::after { height: 1px; left: 0; right: 0; top: 1px; }
+.mail-list-header .custody-meter { width: 64px; flex: 0 0 64px; }
+@container mail-list (min-width: 480px) {
+  .mail-list[data-stacked] .mail-list-header { padding-block: 8px; }
+  .mail-list[data-stacked] .mail-list-header > div:first-child > div:first-child { display: flex; align-items: baseline; min-width: 0; }
+  .mail-list[data-stacked] .mail-list-header h2 { display: block; flex: 0 1 auto; min-width: 0; vertical-align: baseline; }
+  .mail-list[data-stacked] .mail-list-summary { display: flex; flex: 1 1 0; min-width: 0; margin-left: 10px; }
+  .mail-list[data-stacked] .mail-list-header > div:nth-child(2) { margin-top: 4px; }
+}

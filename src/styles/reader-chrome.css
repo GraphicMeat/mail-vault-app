@@ -1,0 +1,24 @@
+/* Reader chrome stays secondary to the sender, subject, and message. */
+.email-reader { container-type: inline-size; }
+.email-reader [data-testid="sender-header"] { padding: 16px 20px 12px; }
+.email-action-bar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 2px; padding: 8px 0; border-bottom: 1px solid var(--mail-border); }
+.email-action-chat { margin-top: 4px; border-bottom: 0; padding: 0; }
+.email-action-group { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+.email-action-main { display: contents; }
+.email-action-tools { margin-left: auto; }
+.email-action-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 9px; border-radius: 6px; font-size: 12px; line-height: 1.4; color: var(--quick-action-color, var(--mail-text-muted)); white-space: nowrap; }
+.email-action-button svg { flex-shrink: 0; }
+.email-action-button:hover:not(:disabled), .email-action-button[aria-expanded="true"] { background: var(--mail-surface-hover); color: var(--quick-action-color, var(--mail-text)); }
+.email-action-button:disabled { opacity: .5; }
+.email-action-primary { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.email-action-danger:hover:not(:disabled) { color: var(--mail-danger); }
+.email-plain-body { padding: 24px; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.email-plain-body > :first-child { max-width: 80ch; }
+@container (max-width: 480px) {
+  .email-reader [data-testid="sender-header"] { padding: 12px; }
+  .email-plain-body { padding: 16px; }
+}
+@container (max-width: 620px) {
+  .email-sender-main { flex-wrap: wrap; row-gap: 4px; }
+  .email-sender-main > div:first-child { flex-basis: 100%; }
+}

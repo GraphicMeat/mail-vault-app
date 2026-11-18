@@ -1,0 +1,346 @@
+/* Compose layout, samples, onboarding, snapshots. Part of index.css, in its order. */
+
+.compose-scroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+.compose-addresses { flex-shrink: 0; }
+.compose-addresses > div { min-height: 36px; }
+.compose-addresses input:not([data-recipient-input]) { min-width: 0; width: 100%; }
+.compose-addresses input, .compose-addresses select { min-height: 32px; border-radius: 4px; }
+.compose-addresses > div > div { min-width: 0; }
+.compose-editor { min-height: 200px; background: var(--mail-bg); }
+.compose-footer { flex-wrap: wrap; padding-bottom: 26px; }
+.compose-footer > div { flex-shrink: 0; min-width: 0; }
+.compose-footer > div:last-child { margin-left: auto; flex-wrap: nowrap; justify-content: flex-end; }
+@container compose (max-width: 564px) {
+  .compose-context-aside { resize: none; }
+  .compose-footer { padding: 10px 12px; gap: 8px; }
+  .compose-footer > div:last-child { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; margin-left: 0; }
+  .compose-footer > div:last-child > button { padding-left: 8px; padding-right: 8px; }
+}
+/* Shared sample content follows the selected Chat topic, which fills one pane. */
+.sample-chat { min-width: 0; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; line-height: 1.5; }
+.sample-chat-heading { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--mail-border); }
+.sample-chat-heading > svg { flex-shrink: 0; color: var(--mail-text-muted); }
+.sample-chat-heading strong, .sample-chat-heading span { display: block; overflow-wrap: anywhere; }
+.sample-chat-heading span { margin-top: 2px; color: var(--mail-text-muted); }
+.sample-chat-messages { display: flex; flex-direction: column; gap: 12px; padding: 16px 12px; }
+.sample-chat-message { align-self: flex-start; max-width: 85%; padding: 10px 12px; border-radius: 12px; background: var(--mail-surface-hover); overflow-wrap: anywhere; }
+.sample-chat-message > span { display: block; margin-top: 6px; text-align: right; font-size: 11px; color: var(--mail-text-muted); }
+.sample-chat-sent { align-self: flex-end; background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.sample-chat-sent > span { color: inherit; }
+/* First-run configuration stays short; each tab presents only its key decisions. */
+.onboarding-appearance { width: 100%; max-width: 1180px; }
+.onboarding-appearance-heading { margin-bottom: 16px; }
+.onboarding-appearance-heading h2 { font-size: 24px; line-height: 1.3; font-weight: 600; color: var(--mail-text); }
+.onboarding-appearance-heading p { margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--mail-text-muted); }
+.onboarding-appearance > .settings-tabbed-page > .settings-tabs { position: static; padding: 0; gap: 28px; }
+.onboarding-appearance > .settings-tabbed-page > .settings-form { max-width: none; padding: 20px 0 0; }
+.onboarding-appearance-grid { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: start; gap: 24px; }
+.onboarding-quick-actions-grid { grid-template-columns: minmax(430px, 480px) minmax(0, 1fr); }
+.onboarding-appearance-controls { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.onboarding-appearance-controls fieldset { min-width: 0; }
+.onboarding-appearance-controls legend { margin-bottom: 8px; font-size: 13px; font-weight: 600; color: var(--mail-text); }
+.onboarding-section-hint { font-size: 13px; line-height: 1.5; color: var(--mail-text-muted); }
+.onboarding-choice-hint { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--mail-text-muted); }
+/* A choice never shrinks below its longest word ("Expandab|le", "展開|可能"):
+ * one that does not fit moves to the next row instead. max-width caps that
+ * minimum, so only a word wider than the whole column still breaks. */
+.onboarding-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.onboarding-choices button { display: flex; align-items: center; justify-content: center; flex: 1; gap: 6px; max-width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: break-word; word-break: keep-all; }
+.onboarding-choices button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.onboarding-choices button:hover:not(:disabled) { border-color: var(--mail-accent); }
+.onboarding-choices button:disabled { opacity: 0.5; cursor: default; }
+.onboarding-choices button svg { flex-shrink: 0; }
+.onboarding-sound-choices button { flex: 1 0 28%; }
+.onboarding-appearance-example { min-width: 0; }
+.onboarding-appearance-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--mail-border); }
+.onboarding-appearance-footer > button:last-child { flex-shrink: 0; }
+.onboarding-appearance-footer svg { flex-shrink: 0; }
+.onboarding-appearance-note { margin-top: 12px; font-size: 12px; color: var(--mail-text-muted); }
+.onboarding-appearance .onboarding-sample-app { height: 360px; }
+.onboarding-mail-sample { min-width: 0; overflow: hidden; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; line-height: 1.5; }
+.onboarding-sample-app { display: flex; height: 500px; }
+.onboarding-sample-sidebar { width: 136px; flex-shrink: 0; overflow-y: auto; padding: 12px 8px; border-right: 1px solid var(--mail-border); background: var(--mail-surface); }
+.onboarding-sample-brand { display: block; margin: 0 4px 12px; font-size: 14px; }
+.onboarding-sample-compose { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 4px; margin-bottom: 16px; border-radius: 8px; background: var(--mail-accent-fill); color: white; overflow-wrap: anywhere; }
+.onboarding-sample-compose svg { flex-shrink: 0; }
+.onboarding-sample-nav { display: flex; flex-direction: column; gap: 4px; }
+.onboarding-sample-nav-item { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 6px; border-radius: 6px; color: var(--mail-text-muted); }
+.onboarding-sample-nav-item > span { min-width: 0; overflow-wrap: anywhere; }
+.onboarding-sample-nav-item > i { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 18px; height: 18px; font-size: 11px; font-style: normal; border-radius: 50%; background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.onboarding-sample-nav-item > svg { flex-shrink: 0; }
+.onboarding-sample-nav-active { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.onboarding-sample-nav-heading { display: block; margin: 20px 6px 8px; color: var(--mail-text-muted); }
+.onboarding-sample-bubbles .onboarding-sample-folder-nav { flex-direction: row; flex-wrap: wrap; }
+.onboarding-sample-bubbles .onboarding-sample-folder-nav .onboarding-sample-nav-item { max-width: 100%; padding: 4px 6px; border: 1px solid var(--mail-border); border-radius: 9999px; }
+.onboarding-sample-panes { flex: 1; min-width: 0; min-height: 0; }
+.onboarding-sample-list { width: 40%; min-width: 0; overflow-y: auto; border-right: 1px solid var(--mail-border); }
+.onboarding-sample-list-heading { display: block; padding: 12px 8px; border-bottom: 1px solid var(--mail-border); }
+.onboarding-sample-row { display: flex; align-items: center; gap: 5px; min-height: 52px; padding: 7px 6px; border-bottom: 1px solid var(--mail-border); }
+.onboarding-sample-row > svg { flex-shrink: 0; }
+.onboarding-sample-row-copy { flex: 1; min-width: 0; }
+.onboarding-sample-row-copy strong, .onboarding-sample-row-copy > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onboarding-sample-row-copy strong { font-weight: 500; }
+.onboarding-sample-count { margin-left: 4px; padding: 0 4px; border-radius: 9999px; background: var(--mail-surface-hover); font-size: 11px; }
+.onboarding-sample-time { align-self: flex-start; color: var(--mail-text-muted); font-size: 11px; white-space: nowrap; }
+.onboarding-sample-single { min-height: 34px; }
+.onboarding-sample-single .onboarding-sample-row-copy { display: flex; gap: 6px; }
+.onboarding-sample-single .onboarding-sample-row-copy strong { flex: 0 1 40%; }
+.onboarding-sample-single .onboarding-sample-row-copy > span { flex: 1; }
+.onboarding-sample-nested { padding-left: 20px; }
+.onboarding-sample-reader { flex: 1; min-width: 0; min-height: 0; padding: 12px; overflow-y: auto; }
+.onboarding-sample-reader h3 { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.onboarding-sample-sender { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; margin-top: 12px; }
+.onboarding-sample-sender > span { color: var(--mail-text-muted); font-size: 11px; }
+.onboarding-sample-actions { margin-top: 8px; }
+.onboarding-sample-actions .email-action-button { max-width: 100%; padding: 5px 6px; min-height: 30px; gap: 4px; white-space: normal; overflow-wrap: anywhere; }
+.onboarding-sample-actions .email-action-button > span { min-width: 0; }
+.onboarding-sample-actions .email-action-tools { max-width: 100%; }
+.onboarding-sample-body { margin-top: 12px; padding: 16px 12px; border-radius: 6px; font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.onboarding-sample-panes[data-layout="two-column"] .onboarding-sample-list { width: auto; height: 40%; flex-shrink: 0; border-right: 0; border-bottom: 1px solid var(--mail-border); }
+.onboarding-sample-chat { flex: 1; min-height: 0; overflow-y: auto; }
+.onboarding-sample-chat .sample-chat-messages { padding: 24px 16px; }
+.onboarding-mail-sample > figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 12px; border-top: 1px solid var(--mail-border); color: var(--mail-text-muted); font-size: 11px; }
+.onboarding-mail-sample > figcaption > span { display: inline-flex; align-items: center; gap: 4px; }
+.onboarding-mail-sample > figcaption > span:first-child { margin-right: auto; }
+.onboarding-after-delete-sample { margin-top: 8px; padding: 10px 12px; background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 8px; font-size: 12px; }
+.onboarding-after-delete-sample > figcaption { color: var(--mail-text-muted); font-size: 11px; }
+.onboarding-after-delete-sample p { margin-top: 6px; min-height: 36px; color: var(--mail-text); }
+.onboarding-after-delete-sample p > svg { display: inline; margin-right: 6px; vertical-align: middle; color: var(--mail-text-muted); }
+@media (max-width: 1000px) {
+  .onboarding-appearance-grid { grid-template-columns: 220px minmax(0, 1fr); gap: 16px; }
+  .onboarding-quick-actions-grid { grid-template-columns: minmax(360px, 420px) minmax(0, 1fr); }
+  .onboarding-sample-sidebar { width: 112px; }
+}
+@media (max-width: 920px) and (min-width: 768px) {
+  .onboarding-quick-actions-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 767px) {
+  .onboarding-appearance-grid { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-quick-actions-grid { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-appearance-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .onboarding-appearance-controls > p { grid-column: 1 / -1; }
+  .onboarding-appearance-controls > .onboarding-section-hint { grid-column: 1 / -1; }
+  .onboarding-appearance-footer { position: sticky; bottom: 0; background: var(--mail-bg); padding-bottom: 12px; z-index: 1; }
+}
+@media (max-width: 440px) {
+  .onboarding-appearance-controls { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-sample-sidebar { width: 84px; padding-inline: 4px; }
+  .onboarding-sample-reader { padding: 8px; }
+  .onboarding-sample-time { display: none; }
+}
+
+/* The gutter is reserved so a tab tall enough to scroll does not shift every
+ * other tab sideways, and steps start at the top so a tab or a choice that
+ * changes the height grows downward instead of moving the title. */
+.onboarding-page { height: 100dvh; overflow-y: auto; scrollbar-gutter: stable; background: var(--mail-bg); }
+.onboarding-content { min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: 24px 24px 40px; }
+/* The thank-you hearts fly past the window edges: clipped here, not scrolled. */
+.onboarding-content:has(> .onboarding-step-cta) { overflow: clip; }
+.onboarding-header { width: 100%; display: flex; align-items: center; justify-content: space-between; min-height: 36px; margin-bottom: 24px; color: var(--mail-text-muted); font-size: 12px; }
+.onboarding-step { width: 100%; flex: 1; display: flex; justify-content: center; align-items: flex-start; }
+.onboarding-step-splash, .onboarding-step-cta { align-items: center; }
+.onboarding-thankyou-art { position: relative; width: min(35vh, 300px); min-width: 150px; }
+.onboarding-thankyou-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform-origin: 50% 70%;
+  animation: onboarding-thankyou-pop 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.onboarding-flying-heart {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  color: #e9272a;
+  pointer-events: none;
+  opacity: 0;
+  animation: onboarding-heart-flight var(--heart-duration) cubic-bezier(0.2, 0.7, 0.25, 1) var(--heart-delay) both;
+}
+.onboarding-flying-heart:nth-of-type(3n) { color: #ff8b19; }
+.onboarding-flying-heart:nth-of-type(5n) { color: #b90d1e; }
+
+/* One authored arrival after setup or a newly connected account. The mail
+ * drawer is the same illustration used at the end of onboarding. */
+.mail-arrival {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: grid;
+  align-items: safe center;
+  justify-items: center;
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+  padding: 36px 24px;
+  background: var(--mail-bg);
+  color: var(--mail-text);
+  animation: mail-arrival-curtain 240ms ease-out both;
+}
+.mail-arrival-content {
+  width: min(100%, 720px);
+  /* The full window, not a capped band: envelopes start off-screen and are
+   * clipped here so their flight never adds scroll height (the page jumped
+   * while they landed). A short window still scrolls to Continue. */
+  min-height: calc(100dvh - 72px);
+  overflow-y: clip;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.mail-arrival-close {
+  position: absolute;
+  top: max(20px, env(safe-area-inset-top));
+  right: max(20px, env(safe-area-inset-right));
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--mail-border);
+  border-radius: 50%;
+  color: var(--mail-text-muted);
+  background: var(--mail-surface);
+}
+.mail-arrival-close:hover { color: var(--mail-text); background: var(--mail-surface-hover); }
+.mail-arrival-stage {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: min(100%, 540px);
+  height: min(52dvh, 430px);
+  min-height: 240px;
+}
+.mail-arrival-ground {
+  position: absolute;
+  z-index: -1;
+  left: 8%;
+  right: 8%;
+  bottom: 7%;
+  border-top: 1px solid var(--mail-border-strong);
+  transform: scaleX(0);
+  animation: mail-arrival-ground 650ms cubic-bezier(0.16, 1, 0.3, 1) 340ms both;
+}
+.mail-arrival-drawer {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: min(82%, 390px);
+  height: min(40dvh, 340px);
+  object-fit: contain;
+  animation: mail-arrival-land 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.mail-arrival-drawer-account { width: min(100%, 500px); }
+.mail-arrival-envelope {
+  position: absolute;
+  left: 50%;
+  top: 49%;
+  z-index: 0;
+  display: block;
+  width: 76px;
+  height: 56px;
+  opacity: 0;
+  animation: mail-arrival-fly 1050ms cubic-bezier(0.22, 0.65, 0.26, 1) calc(460ms + var(--delay)) both;
+}
+.mail-arrival-envelope img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.mail-arrival-envelope-outside {
+  animation-name: mail-arrival-stay-outside;
+  animation-duration: 1200ms;
+}
+.mail-arrival-copy { position: relative; z-index: 2; margin-top: 14px; text-align: center; animation: mail-arrival-copy 450ms ease-out 900ms both; }
+.mail-arrival-copy h2 {
+  max-width: 16ch;
+  margin: 0 auto;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+.mail-arrival-copy p { margin: 15px 0 28px; color: var(--mail-text-muted); font-size: 14px; }
+.mail-arrival-continue {
+  min-height: 46px;
+  padding: 10px 22px;
+  border-radius: 8px;
+  background: var(--mail-accent-fill);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 150ms ease;
+}
+.mail-arrival-continue:hover { background: var(--mail-accent-hover); }
+.mail-arrival button:focus-visible { outline: 2px solid var(--mail-accent-text); outline-offset: 2px; }
+@keyframes mail-arrival-curtain { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mail-arrival-ground { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes mail-arrival-land {
+  0% { opacity: 0; transform: translateY(-62vh) rotate(-11deg) scale(0.7); }
+  58% { opacity: 1; transform: translateY(20px) rotate(2deg) scale(1.03); }
+  77% { transform: translateY(-8px) rotate(-1deg) scale(0.99); }
+  100% { transform: translateY(0) rotate(0) scale(1); }
+}
+@keyframes mail-arrival-fly {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--from-x)), calc(-50% + var(--from-y))) rotate(var(--rotation)) scale(1); }
+  12% { opacity: 1; }
+  76% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(0) scale(0.2); }
+}
+@keyframes mail-arrival-stay-outside {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--from-x)), calc(-50% + var(--from-y))) rotate(var(--rotation)) scale(1); }
+  20% { opacity: 1; }
+  100% { opacity: 1; transform: translate(calc(-50% + var(--stay-x)), calc(-50% + var(--stay-y))) rotate(var(--rotation)) scale(0.7); }
+}
+@keyframes mail-arrival-copy { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 600px) {
+  .mail-arrival { padding: 48px 20px 28px; }
+  .mail-arrival-content { min-height: min(600px, calc(100dvh - 76px)); }
+  .mail-arrival-stage { height: min(47dvh, 350px); }
+  .mail-arrival-copy p { margin-bottom: 22px; }
+}
+@media (max-height: 500px) and (min-width: 500px) {
+  .mail-arrival { padding: 16px 24px; }
+  .mail-arrival-content { min-height: 0; flex-direction: row; gap: 24px; }
+  .mail-arrival-stage { width: 43%; height: min(75dvh, 250px); min-height: 0; flex: none; }
+  .mail-arrival-drawer { width: 100%; }
+  .mail-arrival-copy { flex: 1; margin-top: 0; text-align: left; }
+  .mail-arrival-copy h2 { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mail-arrival-envelope { display: none; }
+  .mail-arrival-ground { transform: scaleX(1); }
+}
+
+@keyframes onboarding-thankyou-pop {
+  0% { opacity: 0.4; transform: scale(0.72) rotate(-5deg); }
+  64% { opacity: 1; transform: scale(1.07) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes onboarding-heart-flight {
+  0% { opacity: 0; transform: translate(-50%, -50%) translate3d(0, 0, 0) scale(0.25) rotate(0); }
+  12% { opacity: 1; }
+  82% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(-50%, -50%) translate3d(var(--heart-x), var(--heart-y), 0) scale(0.8) rotate(var(--heart-rotation)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-thankyou-image { animation: none; }
+  .onboarding-flying-heart { display: none; }
+}
+@media (max-width: 600px) {
+  .compose-window { min-height: 0; height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); }
+  .compose-footer { padding: 12px 12px 26px; }
+  .compose-footer > div:last-child { gap: 4px; }
+  .compose-footer > div:last-child > button:first-child { padding: 8px; }
+  .account-setup-window .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-content { padding: 16px 20px 28px; }
+}
+
+.settings-feature-gate { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 32px 24px; text-align: center; border: 1px solid var(--mail-border); border-radius: 12px; background: var(--mail-surface); }
+
+input[type="checkbox"], input[type="radio"] { accent-color: var(--mail-accent-fill); }
+
+@container (max-width: 620px) {
+  .snapshot-browser { flex-direction: column; }
+  .snapshot-folders { width: 100%; border-right: 0; border-bottom: 1px solid var(--mail-border); }
+  .snapshot-folders > div { display: none; }
+  .snapshot-folders nav { display: flex; gap: 4px; }
+  .snapshot-folders nav button { width: auto; flex-shrink: 0; }
+}

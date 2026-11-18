@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterAll } from 'vitest';
+import { readStyleSheet } from '../../src/styles/__tests__/readStyleSheet.js';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,7 +71,7 @@ describe('list chrome is localized', () => {
   });
 
   it('uses one-line summary and reserved custody status CSS contracts', () => {
-    const css = readFileSync(resolve(SRC, 'styles/index.css'), 'utf-8');
+    const css = readStyleSheet(resolve(SRC, 'styles/index.css'));
     expect(css).toMatch(/\.mail-list-summary\s*\{[^}]*flex-wrap:\s*nowrap[^}]*min-height:/s);
     expect(css).toMatch(/\.mail-list-custody-status\s*\{[^}]*min-height:/s);
   });

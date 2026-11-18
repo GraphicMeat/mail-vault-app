@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readStyleSheet } from '../../../styles/__tests__/readStyleSheet.js';
 
-const css = readFileSync(new URL('../../../styles/index.css', import.meta.url), 'utf8');
+const css = readStyleSheet(new URL('../../../styles/index.css', import.meta.url));
 const tokens = selector => Object.fromEntries([...css.slice(css.indexOf(selector)).split('}')[0]
   .matchAll(/--mail-([\w-]+):\s*(#[\da-f]+)/g)].map(match => [match[1], match[2]]));
 function luminance(hex) {

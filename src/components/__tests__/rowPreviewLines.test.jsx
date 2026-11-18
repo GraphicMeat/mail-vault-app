@@ -5,6 +5,7 @@
 // offline search index; the list's virtualizer places rows by arithmetic, so
 // a row's height is its layout's plus N fixed-height lines, snippet or not.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { readStyleSheet } from '../../styles/__tests__/readStyleSheet.js';
 import React from 'react';
 import { render, cleanup, act } from '@testing-library/react';
 
@@ -163,10 +164,9 @@ describe('list density', () => {
   // The two-line layout's text block carries its own padding: compact trims it
   // to fit 44px, and its gutter rises with it.
   it('trims the two-line layout\'s text block, and the gutter follows it', async () => {
-    const { readFileSync } = await import('node:fs');
     const { dirname, join } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../styles/index.css'), 'utf8');
+    const css = readStyleSheet(join(dirname(fileURLToPath(import.meta.url)), '../../styles/index.css'));
     for (const renderRow of [rows.CompactEmailRow, rows.CompactThreadRow]) {
       act(() => useSettingsStore.setState({ listDensity: 'comfortable' }));
       expect(render(renderRow(email())).container.querySelector('.py-1\\.5 [data-testid="row-subject"]')).not.toBeNull();
@@ -195,10 +195,9 @@ describe('the preview in a row', () => {
   // The two-line layout hangs the preview out under the checkbox. The pull is
   // the gutter cell (20px) plus the row's gap: change either and it must move.
   it('hangs out over the two-line layout gutter by exactly the gutter cell and the row gap', async () => {
-    const { readFileSync } = await import('node:fs');
     const { dirname, join } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../styles/index.css'), 'utf8');
+    const css = readStyleSheet(join(dirname(fileURLToPath(import.meta.url)), '../../styles/index.css'));
     act(() => useSettingsStore.setState({ listPreviewLines: 2 }));
     for (const renderRow of [rows.CompactEmailRow, rows.CompactThreadRow]) {
       const row = render(renderRow(email())).container.querySelector('[data-testid="email-row"]');

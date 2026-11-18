@@ -8,10 +8,10 @@
  * back explicitly, or every `flex-1 truncate` in the app grows with its text.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readStyleSheet } from '../../src/styles/__tests__/readStyleSheet.js';
 import postcss from 'postcss';
 
-const css = readFileSync(new URL('../../src/styles/index.css', import.meta.url), 'utf8');
+const css = readStyleSheet(new URL('../../src/styles/index.css', import.meta.url));
 
 /** Every declaration on a bare `.truncate` rule in the app stylesheet. */
 function truncateDecls() {

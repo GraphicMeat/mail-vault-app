@@ -1,0 +1,255 @@
+/* Scrollbars, the document, colour utilities, email content, chat and custody. Part of
+   index.css, in its order. */
+
+/* Non-macOS: thin styled scrollbars */
+html:not(.platform-mac) * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mail-border) transparent;
+}
+
+html:not(.platform-mac) *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html:not(.platform-mac) *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html:not(.platform-mac) *::-webkit-scrollbar-thumb {
+  background-color: var(--mail-border);
+  border-radius: 3px;
+}
+
+html:not(.platform-mac) *::-webkit-scrollbar-thumb:hover {
+  background-color: var(--mail-text-muted);
+}
+
+/* macOS: native overlay scrollbars (auto-hide when idle) */
+html.platform-mac .overflow-auto,
+html.platform-mac .overflow-scroll {
+  overflow: overlay;
+}
+
+html.platform-mac .overflow-y-auto,
+html.platform-mac .overflow-y-scroll {
+  overflow-y: overlay;
+}
+
+html.platform-mac .overflow-x-auto,
+html.platform-mac .overflow-x-scroll {
+  overflow-x: overlay;
+}
+
+/* Truncated text must clip, never scroll.
+   Tailwind's `truncate` is `overflow: hidden`, which still makes the element a
+   scroll container: WebKit scrolls one sideways to bring a text selection or a
+   caret into view, and because there is no scrollbar the offset is permanent —
+   a row's subject slides out of its own box and the row renders blank.
+   `overflow: clip` clips identically (ellipsis included) and cannot scroll.
+   But `clip` is not a scroll container, so a flex item loses the automatic
+   `min-width: 0` that `hidden` gave it, and a long path in Backup Settings
+   widened the whole pane instead of truncating; hand the minimum back. */
+.truncate {
+  overflow: clip;
+  min-width: 0;
+}
+
+/* The document itself must never move. The app root is exactly 100vh, so there
+   is nothing to scroll to — but the webview rubber-bands the document anyway,
+   and one hard two-finger flick drags the whole three-pane UI off the bottom of
+   the window, with no scrollbar to put it back. `overscroll-behavior: none`
+   removes the bounce; a non-visible root overflow means the document can never
+   become a real scroll container either. The `.truncate` warning above does not
+   apply here — the root has zero overflow to scroll, so `hidden` has nothing to
+   slide out of view; it is only the pre-16 fallback for `clip`. */
+html,
+body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+html {
+  /* `hidden` first: the app ships down to macOS 11, whose WebKit drops both
+     `clip` and `overscroll-behavior`, and a non-visible root overflow is what
+     stops the document bounce there. `clip` wins wherever it parses. */
+  overflow: hidden;
+  overflow: clip;
+}
+
+body {
+  /* --app-font: Settings > Appearance > Text (utils/appFont.js). */
+  font-family: var(--app-font, 'Instrument Sans', system-ui, sans-serif);
+  background-color: var(--mail-bg);
+  color: var(--mail-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Utility classes using CSS variables */
+.bg-mail-bg { background-color: var(--mail-bg); }
+.bg-mail-surface { background-color: var(--mail-surface); }
+.bg-mail-surface-hover { background-color: var(--mail-surface-hover); }
+.bg-mail-border { background-color: var(--mail-border); }
+.bg-mail-accent { background-color: var(--mail-accent); }
+.bg-mail-accent-hover { background-color: var(--mail-accent-hover); }
+.bg-mail-success { background-color: var(--mail-success); }
+.bg-mail-warning { background-color: var(--mail-warning); }
+.bg-mail-danger { background-color: var(--mail-danger); }
+.bg-mail-local { background-color: var(--mail-local); }
+.bg-mail-server { background-color: var(--mail-server); }
+.bg-mail-input { background-color: var(--mail-input-bg); }
+.bg-mail-accent-fill { background-color: var(--mail-accent-fill); }
+.bg-mail-danger-fill { background-color: var(--mail-danger-fill); }
+.bg-mail-only-copy { background-color: var(--mail-only-copy); }
+
+/* Tint surfaces — solid, so text contrast on them is a fixed number. */
+.bg-mail-accent-tint { background-color: var(--mail-accent-tint); }
+.bg-mail-row-selected { background-color: var(--mail-row-selected); }
+.bg-mail-row-related { background-color: var(--mail-row-related); }
+/* `--mail-row-selected` has to sit high enough over the row surface to read as
+   "you are here" without hover's help, and at that luminance grey muted text
+   falls to 3.69:1 in the dark theme. Same reason the tints carry
+   `--mail-text-on-tint`: secondary text on a raised ground gets the raised
+   ground's own ink. */
+.bg-mail-row-selected .text-mail-text-muted { color: var(--mail-text-on-tint); }
+.bg-mail-local-tint { background-color: var(--mail-local-tint); }
+.bg-mail-server-tint { background-color: var(--mail-server-tint); }
+.bg-mail-only-copy-tint { background-color: var(--mail-only-copy-tint); }
+.text-mail-text-on-tint { color: var(--mail-text-on-tint); }
+
+.bg-mail-success-tint { background-color: var(--mail-success-tint); }
+.bg-mail-warning-tint { background-color: var(--mail-warning-tint); }
+.bg-mail-danger-tint { background-color: var(--mail-danger-tint); }
+
+.text-mail-text { color: var(--mail-text); }
+.text-mail-text-muted { color: var(--mail-text-muted); }
+.text-mail-accent { color: var(--mail-accent); }
+.text-mail-accent-hover { color: var(--mail-accent-hover); }
+.text-mail-success { color: var(--mail-success); }
+.text-mail-warning { color: var(--mail-warning); }
+.text-mail-danger { color: var(--mail-danger); }
+.text-mail-local { color: var(--mail-local); }
+.text-mail-server { color: var(--mail-server); }
+.text-mail-only-copy { color: var(--mail-only-copy); }
+.text-mail-accent-text { color: var(--mail-accent-text); }
+
+.border-mail-border { border-color: var(--mail-border); }
+.border-mail-accent { border-color: var(--mail-accent); }
+.border-mail-success { border-color: var(--mail-success); }
+.border-mail-danger { border-color: var(--mail-danger); }
+.border-mail-strong { border-color: var(--mail-border-strong); }
+.border-mail-local { border-color: var(--mail-local); }
+.border-mail-server { border-color: var(--mail-server); }
+.border-mail-only-copy { border-color: var(--mail-only-copy); }
+.border-mail-warning { border-color: var(--mail-warning); }
+.divide-mail-border > * + * { border-color: var(--mail-border); }
+
+/* Hover states */
+.hover\:bg-mail-surface-hover:hover { background-color: var(--mail-surface-hover); }
+.hover\:bg-mail-accent-hover:hover { background-color: var(--mail-accent-hover); }
+.hover\:bg-mail-border:hover { background-color: var(--mail-border); }
+.hover\:text-mail-text:hover { color: var(--mail-text); }
+.hover\:text-mail-accent:hover { color: var(--mail-accent); }
+.hover\:text-mail-accent-text:hover { color: var(--mail-accent-text); }
+.hover\:bg-mail-accent-hover\:hover { background-color: var(--mail-accent-hover); }
+.hover\:border-mail-accent:hover { border-color: var(--mail-accent); }
+
+/* Focus states */
+.focus\:border-mail-accent:focus { border-color: var(--mail-accent); }
+.focus\:ring-mail-accent:focus { --tw-ring-color: var(--mail-accent); }
+
+/* Email content styling */
+.email-content {
+  font-family: var(--app-font, 'Instrument Sans', system-ui, sans-serif);
+  line-height: 1.6;
+}
+
+.email-content a {
+  color: var(--mail-accent-text);
+  text-decoration: underline;
+}
+
+.email-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+.email-content blockquote {
+  border-left: 3px solid var(--mail-border);
+  padding-left: 1rem;
+  margin-left: 0;
+  color: var(--mail-text-muted);
+}
+
+/* Chat bubble styles */
+:root,
+[data-theme="dark"] {
+  --chat-sent-bg: #4338ca;
+  --chat-sent-text: #ffffff;
+  --chat-received-bg: #1e1e2c;
+  --chat-received-text: #e8e8ef;
+  --chat-received-border: #2e2e45;
+}
+
+[data-theme="light"] {
+  --chat-sent-bg: #4338ca;
+  --chat-sent-text: #ffffff;
+  --chat-received-bg: #ffffff;
+  --chat-received-text: #1a1a2e;
+  --chat-received-border: #dfe3ee;
+}
+
+.chat-bubble-sent {
+  background-color: var(--chat-sent-bg);
+  color: var(--chat-sent-text);
+}
+
+.chat-bubble-received {
+  background-color: var(--chat-received-bg);
+  color: var(--chat-received-text);
+  border: 1px solid var(--chat-received-border);
+}
+
+/* Custody chip — the tinted field a message-state glyph sits in. Fixed 20px
+   box so a state change can never alter a virtualized row's height. */
+.custody-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: background-color var(--mv-state) var(--mv-ease-state);
+}
+.custody-chip[data-tone="local"] { background-color: var(--mail-local-tint); }
+.custody-chip[data-tone="server"] { background-color: var(--mail-server-tint); }
+.custody-chip[data-tone="only-copy"] { background-color: var(--mail-only-copy-tint); }
+
+/* Custody meter — the proportion of a folder that is already in the vault.
+   Two solid fields, no gradient, no label of its own; the folder row's count
+   is the text cue that keeps this from being colour-only information. */
+.custody-meter {
+  display: block;
+  height: 3px;
+  width: 100%;
+  border-radius: 9999px;
+  overflow: hidden;
+  /* The track is the server side of the claim, so it has to be *visible* —
+     at `--mail-server-tint` it disappeared into the ground and the emerald
+     fill read as a floating line rather than a proportion. */
+  background-color: color-mix(in srgb, var(--mail-server) 45%, var(--mail-surface));
+}
+.custody-meter > span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background-color: var(--mail-local);
+  /* scaleX, not width. This bar grows while a bulk archive runs, next to a
+     virtualized list that cannot give up a frame to layout — and the fill is a
+     solid colour, so a scaled paint is indistinguishable from a resized one. */
+  transition: transform var(--mv-transition) var(--mv-ease);
+}

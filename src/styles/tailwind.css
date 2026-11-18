@@ -1,0 +1,4 @@
+/* Tailwind's layers. Its own file: nothing but @import may precede an @import (index.css). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

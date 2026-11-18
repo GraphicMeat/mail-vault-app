@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readStyleSheet } from '../../styles/__tests__/readStyleSheet.js';
 import { getEmailColors, getChatLinkColors } from '../mailChrome';
 import { getDarkReaderInlineScripts } from '../darkReaderInject';
 
-const css = readFileSync(new URL('../../styles/index.css', import.meta.url), 'utf8');
+const css = readStyleSheet(new URL('../../styles/index.css', import.meta.url));
 function injectedOptions(palette) {
   const script = getDarkReaderInlineScripts({ palette });
   return JSON.parse(script.match(/window\.DarkReader\.enable\((\{.*?\})\);/)[1]);

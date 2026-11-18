@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readStyleSheet } from '../../styles/__tests__/readStyleSheet.js';
 import { getChatLinkColors } from '../mailChrome';
 import { contrast, tokens } from './colorMath';
 
-const css = readFileSync(new URL('../../styles/index.css', import.meta.url), 'utf8');
+const css = readStyleSheet(new URL('../../styles/index.css', import.meta.url));
 const chat = (mode, palette) => tokens(css, `[data-theme="${mode}"][data-palette="${palette}"] {`, 'chat');
 
 describe('chat bubbles on the teal palette', () => {
