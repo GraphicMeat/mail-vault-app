@@ -91,6 +91,10 @@ const UNIT_PAUSE: Duration = Duration::from_millis(50);
 const WAKE_SETTLE: Duration = Duration::from_secs(2);
 /// A sweep runs at least this often.
 const IDLE_WAIT: Duration = Duration::from_secs(10 * 60);
+/// Decisions read per `app.db` lock.
+const DECISION_UNIT: usize = 200;
+/// The first sweep after launch waits this long: the launch's own work goes first.
+const FIRST_SWEEP: Duration = Duration::from_secs(30);
 /// A backfill reports every this many messages, and on its last.
 const PROGRESS_EVERY: usize = 10;
 /// Why a rule waits for the user (see the module, 2.).
@@ -353,8 +357,8 @@ pub(crate) fn sweep(shared: &Shared) -> (usize, Swept) {
                 continue;
             }
             let targets: Vec<Target> = list.iter().map(|h| h.target.clone()).collect();
-            let open: HashSet<String> = match shared.app_db.with(|c| store::undecided(c, &rule.id, &targets)) {
-                Ok(v) => v.into_iter().map(|t| t.msg_key).collect(),
+            let open: HashSet<String> = match undecided(shared, &rule.id, &targets) {
+                Ok(v) => v,
                 Err(e) => {
                     shared.log(&format!("[auto-tag] could not read decisions for rule {}: {e}", rule.id));
                     continue;
@@ -389,6 +393,16 @@ pub(crate) fn sweep(shared: &Shared) -> (usize, Swept) {
         shared.log(&format!("[auto-tag] {} account(s) left out: {}", skipped.len(), ai::GOOGLE_REFUSED));
     }
     (judged, Swept::Done)
+}
+
+/// The keys of `targets` with no decision for `rule_id`, read [`DECISION_UNIT`] at a time so the
+/// tags store is never held for long (a row's chips read it in front).
+fn undecided(shared: &Shared, rule_id: &str, targets: &[Target]) -> Result<HashSet<String>, String> {
+    let mut open = HashSet::new();
+    for chunk in targets.chunks(DECISION_UNIT) {
+        open.extend(shared.app_db.with(|c| store::undecided(c, rule_id, chunk))?.into_iter().map(|t| t.msg_key));
+    }
+    Ok(open)
 }
 
 /// A verdict on record (and the tag, on a match), then the chip on screen.
@@ -532,7 +546,7 @@ pub(crate) fn start(shared: &Arc<Shared>) {
         crate::sync::background_qos();
         let mut seen = 0u64;
         // The first sweep after launch: whatever arrived while the app was closed.
-        let mut next = WAKE_SETTLE;
+        let mut next = FIRST_SWEEP;
         loop {
             match wait(&weak, &mut seen, next) {
                 None => return,
@@ -547,8 +561,10 @@ pub(crate) fn start(shared: &Arc<Shared>) {
             let Some(shared) = weak.upgrade().filter(|s| !s.is_closing()) else { return };
             run_jobs(&shared);
             sweep(&shared);
-            // A rule backing off is looked at again when its wait is over.
-            let soonest = lock(&shared.auto_tags.backoff).values().map(|(_, until)| until.saturating_duration_since(Instant::now())).min();
+            // A rule backing off is looked at again when its wait is over (a wait already over was
+            // looked at by this sweep).
+            let now = Instant::now();
+            let soonest = lock(&shared.auto_tags.backoff).values().filter(|(_, until)| *until > now).map(|(_, until)| *until - now).min();
             next = soonest.map_or(IDLE_WAIT, |d| d.clamp(Duration::from_secs(1), IDLE_WAIT));
         }
     });
