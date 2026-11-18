@@ -30,7 +30,8 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
-const { default: EncryptionSettings } = await import('../EncryptionSettings.jsx');
+// Desktop's Encryption view over the engine (settings/Privacy.jsx).
+const { Encryption: EncryptionSettings } = await import('../settings/Privacy.jsx');
 
 beforeEach(() => { engine.calls = []; engine.keys = []; engine.picks = []; });
 afterEach(cleanup);
@@ -40,9 +41,9 @@ const imports = () => engine.calls.filter(([m]) => m === 'mobile.pgp.importKey')
 describe('Settings > Encryption', () => {
   it('imports a pasted key with its passphrase, lists it, and clears the fields', async () => {
     render(<EncryptionSettings />);
-    await waitFor(() => expect(document.querySelector('[data-mv-pgp-none]')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByTestId('pgp-no-keys')).toBeTruthy());
     expect(screen.getByText(t('pgp.decryptOnly'))).toBeTruthy();
-    const importBtn = document.querySelector('[data-mv-pgp-import]');
+    const importBtn = screen.getByRole('button', { name: t('pgp.import') });
     expect(importBtn.disabled).toBe(true);
 
     const pass = screen.getByLabelText(t('pgp.passphraseLabel'));
@@ -51,7 +52,7 @@ describe('Settings > Encryption', () => {
     fireEvent.change(key, { target: { value: '-----BEGIN PGP PRIVATE KEY BLOCK-----' } });
     fireEvent.click(importBtn);
 
-    await waitFor(() => expect(document.querySelector('[data-mv-pgp-key]')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByTestId('pgp-key-row')).toBeTruthy());
     expect(imports()).toEqual([{ armored: '-----BEGIN PGP PRIVATE KEY BLOCK-----', passphrase: 'pw' }]);
     expect(screen.getByText('Bob <bob@x.test>')).toBeTruthy();
     expect(screen.getByText('ABCD 1234 EF56 7890 ABCD 1234 EF56 7890 ABCD 1234')).toBeTruthy();
@@ -61,10 +62,10 @@ describe('Settings > Encryption', () => {
 
   it('shows the engine\'s reason when the passphrase is wrong, and keeps the fields', async () => {
     render(<EncryptionSettings />);
-    await waitFor(() => expect(document.querySelector('[data-mv-pgp-none]')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByTestId('pgp-no-keys')).toBeTruthy());
     fireEvent.change(screen.getByLabelText(t('pgp.passphraseLabel')), { target: { value: 'wrong' } });
     fireEvent.change(screen.getByLabelText(t('pgp.keyLabel')), { target: { value: 'key' } });
-    fireEvent.click(document.querySelector('[data-mv-pgp-import]'));
+    fireEvent.click(screen.getByRole('button', { name: t('pgp.import') }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe(t('pgp.failed', { err: 'The passphrase does not unlock this key' }));
     expect(screen.getByLabelText(t('pgp.keyLabel')).value).toBe('key');
@@ -73,26 +74,26 @@ describe('Settings > Encryption', () => {
   it('hands a picked key file to the engine by its handle only', async () => {
     engine.picks = [{ handle: 'out/ab/key.asc', name: 'key.asc', size: 900, mime: 'application/pgp-keys' }];
     render(<EncryptionSettings />);
-    await waitFor(() => expect(document.querySelector('[data-mv-pgp-none]')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByTestId('pgp-no-keys')).toBeTruthy());
     fireEvent.change(screen.getByLabelText(t('pgp.passphraseLabel')), { target: { value: 'pw' } });
-    fireEvent.click(document.querySelector('[data-mv-pgp-file]'));
-    await waitFor(() => expect(document.querySelector('[data-mv-pgp-key]')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('pgp.chooseFile') }));
+    await waitFor(() => expect(screen.queryByTestId('pgp-key-row')).toBeTruthy());
     expect(imports()).toEqual([{ handle: 'out/ab/key.asc', passphrase: 'pw' }]);
   });
 
   it('every picked file goes to the engine, so no copy is left behind', async () => {
     engine.picks = [{ handle: 'out/ab/a.asc', name: 'a.asc' }, { name: 'b.asc', error: 'UNREADABLE' }, { handle: 'out/cd/c.asc', name: 'c.asc' }];
     render(<EncryptionSettings />);
-    await waitFor(() => expect(document.querySelector('[data-mv-pgp-none]')).toBeTruthy());
-    fireEvent.click(document.querySelector('[data-mv-pgp-file]'));
+    await waitFor(() => expect(screen.queryByTestId('pgp-no-keys')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('pgp.chooseFile') }));
     await waitFor(() => expect(imports()).toHaveLength(2));
     expect(imports()).toEqual([{ handle: 'out/ab/a.asc', passphrase: '' }, { handle: 'out/cd/c.asc', passphrase: '' }]);
   });
 
   it('a cancelled pick imports nothing', async () => {
     render(<EncryptionSettings />);
-    await waitFor(() => expect(document.querySelector('[data-mv-pgp-none]')).toBeTruthy());
-    fireEvent.click(document.querySelector('[data-mv-pgp-file]'));
+    await waitFor(() => expect(screen.queryByTestId('pgp-no-keys')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('pgp.chooseFile') }));
     await new Promise((r) => setTimeout(r, 20));
     expect(imports()).toEqual([]);
   });
@@ -100,9 +101,9 @@ describe('Settings > Encryption', () => {
   it('removes a key', async () => {
     engine.keys = [KEY];
     render(<EncryptionSettings />);
-    const remove = await screen.findByRole('button', { name: `${t('pgp.removeKey')}: ABCD 1234 EF56 7890 ABCD 1234 EF56 7890 ABCD 1234` });
+    const remove = await screen.findByRole('button', { name: t('pgp.removeKey') });
     fireEvent.click(remove);
-    await waitFor(() => expect(document.querySelector('[data-mv-pgp-none]')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByTestId('pgp-no-keys')).toBeTruthy());
     expect(engine.calls.at(-1)).toEqual(['mobile.pgp.removeKey', { fingerprint: KEY.fingerprint }]);
   });
 });

@@ -84,8 +84,6 @@ export const rowUids = (row) => (Array.isArray(row?.threadUids) && row.threadUid
 export const SWIPE_ACTIONS = ['toggleRead', 'delete', 'flag', 'move', 'none'];
 export const THEMES = ['system', 'light', 'dark'];
 export const PALETTES = ['indigo', 'graphite', 'teal'];
-export const SEND_DELAYS = [0, 5, 10, 20, 30];
-export const MARK_READ_DELAYS = [1, 3, 5, 10];
 /** Desktop's `TEXT_SCALES` (src/utils/appFont.js; a test keeps them equal). */
 export const TEXT_SCALES = [0.9, 1, 1.1, 1.25, 1.5];
 /**
@@ -107,7 +105,6 @@ export const LIST_DENSITIES = ['comfortable', 'compact'];
 export const PREVIEW_LINES = [0, 1, 2, 3];
 export const SIGNATURE_DISPLAYS = ['smart', 'collapsed', 'always-show', 'always-hide'];
 export const ACTION_BUTTON_DISPLAYS = ['icon-only', 'icon-label', 'text-only'];
-export const BADGE_MODES = ['unread', 'total'];
 
 const SYSTEM_STACK = "system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif";
 

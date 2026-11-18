@@ -36,7 +36,8 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
-const { default: NetworkActivity } = await import('../NetworkActivity.jsx');
+// Desktop's Network Activity view over the engine (settings/NetworkActivity.jsx).
+const { default: NetworkActivity } = await import('../settings/NetworkActivity.jsx');
 
 beforeEach(() => {
   engine.calls = [];
@@ -46,16 +47,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const lists = () => engine.calls.filter(([m]) => m === 'mobile.netActivity.list').map(([, p]) => p);
-const rows = () => [...document.querySelectorAll('[data-mv-net-row]')].map((r) => r.getAttribute('data-mv-net-row'));
-// The pickers by their row: a <label> row's text also holds its options' text.
-const PICKERS = {
-  [t('netActivity.retention')]: 'netRetention',
-  [t('netActivity.range')]: 'netRange',
-  [t('netActivity.account')]: 'netAccount',
-  [t('netActivity.protocol')]: 'netProtocol',
-  [t('netActivity.purpose')]: 'netPurpose',
-};
-const picker = (label) => document.querySelector(`[data-mv-pref="${PICKERS[label]}"]`);
+const rows = () => screen.queryAllByTestId('net-row').map((r) => r.getAttribute('data-host'));
+// Desktop's pickers by their names; the retention picker sits in its <label>, whose text also
+// holds its options' text.
+const picker = (label) => (label === t('netActivity.retention')
+  ? document.querySelector('[data-testid="network-activity"] label > select')
+  : screen.getByRole('combobox', { name: label }));
 
 describe('Settings > Network Activity', () => {
   it('lists the stored connections with their totals, the last day by default', async () => {
@@ -66,7 +63,7 @@ describe('Settings > Network Activity', () => {
     expect(Date.now() - since).toBeLessThan(25 * 3600 * 1000);
     expect(screen.getByText(t('netActivity.hostsContacted'))).toBeTruthy();
     // A failed request shows its result; a billing call is named as such.
-    const billing = document.querySelector('[data-mv-net-row="mailvaultapp.com"]');
+    const billing = document.querySelector('[data-testid="net-row"][data-host="mailvaultapp.com"]');
     expect(within(billing).getByText('HTTP 500')).toBeTruthy();
     expect(within(billing).getByText(t('mobile.netActivity.purposeBilling'), { exact: false })).toBeTruthy();
   });
@@ -86,7 +83,7 @@ describe('Settings > Network Activity', () => {
   it('filters by a country from the list, and Show all clears it', async () => {
     render(<NetworkActivity />);
     await waitFor(() => expect(rows()).toHaveLength(2));
-    fireEvent.click(document.querySelector('[data-mv-net-country="DE"]'));
+    fireEvent.click(document.querySelector('[data-testid="net-map-country"][data-country="DE"]'));
     await waitFor(() => expect(rows()).toEqual(['mailvaultapp.com']));
     expect(lists().at(-1).country).toBe('DE');
     fireEvent.click(screen.getByRole('button', { name: t('netActivity.map.clear') }));

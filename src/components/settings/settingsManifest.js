@@ -404,7 +404,6 @@ const NOT_ON_PHONE = {
   'sidebar layout: the phone has a drawer, not a sidebar': ['workspace.sidebarLayout', 'workspace.backupStatusLocation', 'workspace.navigation'],
   'menu bar (Linux desktop window)': ['workspace.menuBar'],
   'keyboard shortcuts': ['shortcuts.keyboardShortcuts', 'settings.shortcuts.enableKeyboardShortcuts'],
-  'dock badge: the phone badges from its own notification settings': ['settings.notifications.badge'],
   'update track: the phone updates through its app store': ['settings.behavior.updateTrackTitle', 'settings.behavior.updateTrackLabel', 'settings.behavior.updateTrackCheckNow'],
   'daemon always on: the phone has no background daemon to keep running': ['settings.daemon.alwaysOn.label'],
   'custom storage folder: the phone keeps mail in its app container': ['settings.storage.advancedCustomStorageFolder'],
@@ -416,11 +415,10 @@ const NOT_ON_PHONE = {
 };
 const ENGINE_GAPS = {
   'engine: custom fields': ['fields.section', 'fields.newName', 'fields.newKind', 'fields.copyFrom'],
-  'engine: search history and popular filters': ['settings.behavior.search', 'settings.behavior.searchHistoryLimit', 'settings.behavior.popularFiltersPeriod', 'settings.behavior.numberPopularFiltersShow'],
-  'engine: automatic refresh interval (the phone syncs on open and in background runs)': ['settings.behavior.autoRefreshInterval'],
+  'engine: search history and popular filters (the phone search keeps no history)': ['settings.behavior.search', 'settings.behavior.searchHistoryLimit', 'settings.behavior.popularFiltersPeriod', 'settings.behavior.numberPopularFiltersShow'],
   'engine: backup notifications': ['settings.notifications.backupNotifications', 'settings.notifications.notifyWhenBackupCompletes', 'settings.notifications.notifyWhenBackupFails'],
-  'engine: notification decision log': ['notifyPolicy.log.title'],
-  'engine: playing the new-mail sound on demand': ['settings.notifications.previewSound'],
+  'engine: notification decision log (the background run decides and records nothing)': ['notifyPolicy.log.title'],
+  'engine: playing the new-mail sound on demand (no shell call plays it)': ['settings.notifications.previewSound'],
   'engine: account groups': ['settings.accounts.group'],
   'engine: aliases': ['settings.accounts.aliases.listTitle', 'settings.accounts.aliases.addAddress', 'settings.accounts.aliases.defaultAddress', 'settings.accounts.aliases.nameLabel'],
   'engine: Google sign-in client choice and Microsoft transport switch': ['googleClient.settingsLabel', 'account.msTransport'],
@@ -456,12 +454,12 @@ const ON_PHONE = [
   'settings.appearance.threadMode', 'settings.appearance.threadSortOrder', 'settings.appearance.signatureDisplay', 'settings.appearance.actionButtonStyle',
   'settings.appearance.dateFormat', 'settings.appearance.timeFormat',
   'quickActions.presets', 'quickActions.surface.reader',
-  'settings.behavior.refreshAppLaunch', 'settings.behavior.autoDownloadAttachments', 'settings.behavior.attachmentReminder',
+  'settings.behavior.refreshAppLaunch', 'settings.behavior.autoRefreshInterval', 'settings.behavior.autoDownloadAttachments', 'settings.behavior.attachmentReminder',
   'settings.behavior.sendDelay', 'settings.behavior.markEmailsRead', 'settings.behavior.delayBeforeMarkingRead',
   'settings.behavior.whenAnEmailIsDeleted', 'settings.behavior.afterDeleteSameAccount', 'settings.behavior.confirmBeforeDelete',
   'settings.behavior.swipe.title', 'settings.behavior.swipe.enabled', 'settings.behavior.swipe.left', 'settings.behavior.swipe.right',
   'settings.notifications.enableDesktopNotifications', 'settings.notifications.showEmailPreview', 'settings.notifications.newEmailSound',
-  'settings.notifications.perAccountSettings', 'settings.notifications.showBadgeCount', 'settings.notifications.badgeShows',
+  'settings.notifications.perAccountSettings', 'settings.notifications.badge', 'settings.notifications.showBadgeCount', 'settings.notifications.badgeShows',
   'notifyPolicy.quietHours.title', 'notifyPolicy.allowlist.title',
   'settings.accounts.displayName', 'settings.accounts.emailSignature', 'settings.accounts.enableSignature',
   'settings.accounts.password', 'settings.accounts.mailServer', 'settings.accounts.sentFolder',
@@ -497,6 +495,15 @@ export const MOBILE_SETTINGS_DUPLICATES = (() => {
   return all.filter((key, i) => all.indexOf(key) !== i);
 })();
 
+/**
+ * A setting the phone labels in its own words, where desktop's label names the desktop or a
+ * trackpad (`desktop key: phone key`): the phone's search shows and lands on the phone's label.
+ */
+export const MOBILE_LABELS = Object.freeze({
+  'settings.notifications.enableDesktopNotifications': 'mobile.settings.notifyToggle',
+  'settings.behavior.swipe.enabled': 'mobile.prefs.swipeRows',
+});
+
 export const onPhone = decision => decision === true;
 /** A nav entry is on the phone when any of its pages is. */
 export const navEntryOnPhone = entry => (entry.pages || [entry.id]).some(id => onPhone(MOBILE_PAGES[id]));
@@ -530,9 +537,14 @@ export function searchSettings(t, query, pages = searchPages) {
   });
 }
 
-/** The destinations the phone has: its page is on the phone, and so is the setting. */
+/**
+ * The destinations the phone has: its page is on the phone, and so is the setting, under the
+ * phone's label (`MOBILE_LABELS`; `settingKey` then keeps desktop's key, the decision's).
+ */
 export const mobileSearchPages = searchPages.filter(page => onPhone(MOBILE_PAGES[page.id])
-  && (!page.keywords || onPhone(MOBILE_SETTINGS[page.labelKey])));
+  && (!page.keywords || onPhone(MOBILE_SETTINGS[page.labelKey])))
+  .map(page => (page.keywords && MOBILE_LABELS[page.labelKey]
+    ? { ...page, settingKey: page.labelKey, labelKey: MOBILE_LABELS[page.labelKey] } : page));
 
 const CONTROL = 'input, select, textarea, button, [tabindex]';
 export const FOCUSABLE = 'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex="0"]';

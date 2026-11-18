@@ -8,10 +8,12 @@
 //   email viewer's theme.
 // - Text: text size and font (prefs.js applyLook). Every font ships with the app; the phone
 //   downloads none, so desktop's "More fonts" is not here.
-// - Layout: mail view, list density and preview lines (rowHeight, MessageRow.jsx).
+// - Layout: mail view (with desktop's sample conversation for the chat view), list density and
+//   preview lines (rowHeight, MessageRow.jsx).
 // - Reading: conversations, their order, signatures and the viewer toolbar's buttons.
 // - Date & time: date and time formats; a custom pattern is written as typing pauses.
-// - Quick actions: the viewer's bar (QuickActionsSettings.jsx, still the phone's own page).
+// - Quick actions: desktop's presets, action list and add row for the viewer's bar
+//   (QuickActions.jsx).
 // - Language: the nine languages (`mobile.settings.set` `language`, loaded at once) and the
 //   translation issue report, opened in the system browser.
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -22,6 +24,7 @@ import { ColorSchemeView } from '../../components/settings/views/ColorSchemeView
 import { AppIconView } from '../../components/settings/views/AppIconView';
 import { TextSettingsView } from '../../components/settings/views/TextSettingsView';
 import { WorkspaceView } from '../../components/settings/views/WorkspaceView';
+import { SampleConversationView } from '../../components/settings/views/PreviewViews';
 import { DateTimeView, ReadingView } from '../../components/settings/views/ReadingDateViews';
 import { LanguageView, TranslationIssueReportView } from '../../components/settings/views/LanguageView';
 import { getEmailColors } from '../../utils/mailChrome';
@@ -31,7 +34,7 @@ import { getMobileLocale, loadMobileLocale } from '../i18n.js';
 import { daemonCall, setAppIcon } from '../transport.js';
 import { normalizeAppIcon } from '../appIcon.js';
 import { APP_FONTS, PALETTES, TEXT_SCALES, THEMES, fontStack, viewerTheme } from '../prefs.js';
-import QuickActionsSettings from '../QuickActionsSettings.jsx';
+import QuickActions from './QuickActions.jsx';
 import { MobileViewEnv, SaveFailed, useSavePrefs } from './MobileViewEnv.jsx';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
@@ -99,7 +102,8 @@ const LAYOUT_ROWS = ['viewStyle', 'listDensity', 'listPreviewLines'];
 
 function Layout({ save }) {
   const prefs = useMobileStore((s) => s.prefs);
-  return <WorkspaceView values={prefs} rows={LAYOUT_ROWS} onChange={(key, value) => save({ [key]: value })} />;
+  return <WorkspaceView values={prefs} rows={LAYOUT_ROWS} onChange={(key, value) => save({ [key]: value })}
+    preview={{ chatSample: <SampleConversationView compact /> }} />;
 }
 
 /** Reading less the row highlight, which follows a pointer the phone has not got. */
@@ -167,7 +171,7 @@ export default function Appearance({ section: wanted = 'colors', onSectionChange
         {section === 'layout' && <Layout save={save} />}
         {section === 'reading' && <Reading save={save} />}
         {section === 'date-time' && <DateTime save={save} />}
-        {section === 'quick-actions' && <div className="mv-legacy"><QuickActionsSettings /></div>}
+        {section === 'quick-actions' && <QuickActions />}
         {section === 'language' && <Language version={version} />}
         <SaveFailed failed={failed} />
       </AppearanceView>

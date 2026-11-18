@@ -11,17 +11,11 @@
 //   Privacy & security, Diagnostics) shows its pages as desktop's tabs; Appearance and Mail
 //   preferences show their sections the same way.
 // - Search finds the pages and settings the phone has and lands on the setting, as on desktop.
-// - Appearance is desktop's views over the phone's preferences (settings/Appearance.jsx). The
+// - Appearance, Mail preferences (Behavior, Notifications) and Privacy & security (Security,
+//   Tracking, Encryption, Network Activity) are desktop's views over the phone's preferences and
+//   engine (settings/Appearance.jsx, MailPreferences.jsx, Privacy.jsx, NetworkActivity.jsx). The
 //   other pages are still the phone's own (each in its file; `.mv-legacy` keeps them out of the
 //   desktop reset) until they move onto the shared views too:
-//   - Mail preferences: Behavior (SettingsPrefs.jsx, SettingsDisplay.jsx) and Notifications: the
-//     switch asks the system's permission before it turns on, and stays off with a pointer to the
-//     system settings when the answer is no. Each time the screen shows (and when the app comes
-//     back to the front) it reads the system's current answer without asking: turned off there,
-//     notifications show off here too, with the same pointer. "Show preview" decides whether a
-//     notification names sender and subject, so it can only change while they are on. Both live
-//     in the engine (`mobile.settings.*`): the background run has no page, and reads the same
-//     rows. Then each account's switch, folders and quiet hours, and the priority senders.
 //   - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one
 //     reauth), and Edit (AccountEditor.jsx: name, signature, hidden, and Remove after an inline
 //     confirm). A hidden account is listed, marked, so it can be shown again. Then "Move to
@@ -29,7 +23,6 @@
 //   - Templates, AI (AiSettings.jsx), Unsubscribe.
 //   - Storage: Storage (with its Offline page: "Download in the background", then per account the
 //     window, its room, progress and Download now) and the search index; Data usage.
-//   - Privacy & security: Security, Tracking, Encryption, Network Activity.
 //   - Diagnostics: unfinished server actions (PendingActions.jsx) and Logs.
 //   - Help: desktop's Help & Support links as plain https anchors (the shell's navigation guard
 //     hands each to the system browser), Replay tour (`onReplayTour`), the version and the source.
@@ -42,7 +35,7 @@ import {
 import { SettingsTabs } from '../components/ui/SettingsTabs';
 import { Button } from '../components/ui/Button';
 import { SettingsViewProvider } from '../components/settings/views/viewContext';
-import { daemonCall, notificationPermission, requestNotificationPermission } from './transport.js';
+import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
 import KeyboardLayer from './KeyboardLayer.jsx';
 import { useBackLayer } from './backStack.js';
@@ -55,22 +48,20 @@ import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
 import Billing from './Billing.jsx';
-import SettingsPrefs from './SettingsPrefs.jsx';
 import TemplatesSettings from './TemplatesSettings.jsx';
-import EncryptionSettings from './EncryptionSettings.jsx';
 import SearchIndexSettings from './SearchIndexSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
-import { AccountNotifications, PrioritySenders } from './NotifySettings.jsx';
-import { MailMore, NotifyMore } from './SettingsDisplay.jsx';
 import PendingActions from './PendingActions.jsx';
 import StorageSettings from './StorageSettings.jsx';
 import LogsSettings from './LogsSettings.jsx';
 import DataUsage from './DataUsage.jsx';
-import NetworkActivity from './NetworkActivity.jsx';
+import NetworkActivity from './settings/NetworkActivity.jsx';
 import UnsubscribeSettings from './UnsubscribeSettings.jsx';
 import TransferSettings from './TransferSettings.jsx';
 import AiSettings from './AiSettings.jsx';
 import Appearance from './settings/Appearance.jsx';
+import { Behavior, Notifications } from './settings/MailPreferences.jsx';
+import { Encryption, Security, Tracking } from './settings/Privacy.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -221,10 +212,10 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
   const reauthState = useMobileStore((s) => s.reauthState);
   const premium = useMobileStore((s) => s.premium);
   const premiumLost = useMobileStore((s) => s.premiumLost);
-  const [values, setValues] = useState(null); // { notifications: 'on'|'off', notificationPreview: bool, backgroundDownload }
+  const [values, setValues] = useState(null); // Offline's `backgroundDownload` (`mobile.settings.*`)
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(null); // the key being saved
-  const [problem, setProblem] = useState(null); // 'denied' | 'failed'
+  const [problem, setProblem] = useState(null); // 'failed'
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
@@ -251,58 +242,6 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
       if (mounted.current) setBusy(null);
     }
   }, []);
-
-  // The system's answer against the stored "on": turned off in the system settings, they are off.
-  const valuesRef = useRef(values);
-  valuesRef.current = values;
-  const reconcile = useCallback(async () => {
-    if (valuesRef.current?.notifications !== 'on') return;
-    let granted = true;
-    try {
-      ({ granted } = await notificationPermission());
-    } catch {
-      return; // No answer: leave it as it is.
-    }
-    if (granted || !mounted.current || valuesRef.current?.notifications !== 'on') return;
-    setProblem('denied');
-    try {
-      const next = await daemonCall('mobile.settings.set', { notifications: 'off' });
-      if (mounted.current) setValues(next);
-    } catch {
-      if (mounted.current) setValues((v) => (v ? { ...v, notifications: 'off' } : v));
-    }
-  }, []);
-  const checkedOnce = useRef(false);
-  useEffect(() => {
-    if (!values || checkedOnce.current) return;
-    checkedOnce.current = true;
-    reconcile();
-  }, [values, reconcile]);
-  useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
-    const onVisible = () => { if (document.visibilityState !== 'hidden') reconcile(); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [reconcile]);
-
-  const onNotifications = useCallback(async (on) => {
-    if (!on) return save('notifications', { notifications: 'off' });
-    setBusy('notifications');
-    let granted = false;
-    try {
-      ({ granted } = await requestNotificationPermission());
-    } catch {
-      if (mounted.current) { setProblem('failed'); setBusy(null); }
-      return undefined;
-    }
-    if (!mounted.current) return undefined;
-    if (!granted) {
-      setProblem('denied');
-      setBusy(null);
-      return undefined;
-    }
-    return save('notifications', { notifications: 'on' });
-  }, [save]);
 
   // A search result lands on its setting once its page is open, as desktop's does.
   useEffect(() => {
@@ -343,35 +282,6 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
   const title = place.sub ? t(SUB_PAGES[place.sub].titleKey) : nav === 'root' ? t('mobile.settings.title') : entry ? t(entry.labelKey) : '';
   const description = !place.sub && !host && entry?.descriptionKey ? t(entry.descriptionKey) : null;
 
-  const notificationsPage = (
-    <>
-      {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
-      <div className="mv-settings__list">
-        <Switch
-          checked={values?.notifications === 'on'}
-          busy={busy === 'notifications'}
-          disabled={!ready}
-          label={t('mobile.settings.notifyToggle')}
-          hint={t('mobile.settings.notifyHint')}
-          onChange={onNotifications}
-        />
-        <Switch
-          checked={values ? values.notificationPreview !== false : true}
-          busy={busy === 'notificationPreview'}
-          disabled={!ready || values.notifications !== 'on'}
-          label={t('mobile.settings.preview')}
-          hint={t('mobile.settings.previewHint')}
-          onChange={(v) => save('notificationPreview', { notificationPreview: v })}
-        />
-        {accounts.map((a) => <AccountNotifications key={a.id} account={a} enabled={ready && values.notifications === 'on'} />)}
-      </div>
-      <NotifyMore enabled={ready && values.notifications === 'on'} />
-      {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
-      {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
-      <PrioritySenders />
-    </>
-  );
-
   const offlinePage = (
     <>
       {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
@@ -390,26 +300,30 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
     </>
   );
 
-  /** A host page's or a section's content: the phone's own pages, not moved onto views yet. */
+  /**
+   * A host page's or a section's content: desktop's views (settings/), or the phone's own pages not
+   * moved onto views yet, inside `.mv-legacy`.
+   */
   const pageContent = (id) => {
+    const legacy = (page) => <div className="mv-legacy">{page}</div>;
     switch (id) {
-      case 'behavior': return <><SettingsPrefs section="mail" /><MailMore /></>;
-      case 'notifications': return notificationsPage;
-      case 'storage': return <><StorageSettings onOpenOffline={() => go({ nav: 'storage', tab: 'storage', sub: 'offline' })} /><SearchIndexSettings /></>;
-      case 'data-usage': return <DataUsage />;
-      case 'security': return <SettingsPrefs section="security" />;
-      case 'tracking': return <SettingsPrefs section="tracking" />;
-      case 'encryption': return <EncryptionSettings />;
+      case 'behavior': return <Behavior />;
+      case 'notifications': return <Notifications />;
+      case 'storage': return legacy(<><StorageSettings onOpenOffline={() => go({ nav: 'storage', tab: 'storage', sub: 'offline' })} /><SearchIndexSettings /></>);
+      case 'data-usage': return legacy(<DataUsage />);
+      case 'security': return <Security />;
+      case 'tracking': return <Tracking />;
+      case 'encryption': return <Encryption />;
       case 'network-activity': return <NetworkActivity />;
-      case 'daemon': return <PendingActions />;
-      case 'logs': return <LogsSettings />;
+      case 'daemon': return legacy(<PendingActions />);
+      case 'logs': return legacy(<LogsSettings />);
       default: return null;
     }
   };
 
   const tabbed = (tabs, value, onChange, label) => (
     <SettingsTabs tabs={tabs} value={value} onChange={onChange} label={label}>
-      <div className="mv-legacy">{pageContent(value)}</div>
+      {pageContent(value)}
     </SettingsTabs>
   );
 

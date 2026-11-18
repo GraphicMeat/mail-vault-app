@@ -148,7 +148,9 @@ describe('Settings > Appearance > Quick actions', () => {
     // Desktop's Appearance tab of that name.
     fireEvent.click(screen.getByRole('tab', { name: t('quickActions.title') }));
   };
-  const barRows = () => [...document.querySelectorAll('[data-mv-qa-bar] [data-mv-qa-action]')].map((r) => r.getAttribute('data-mv-qa-action'));
+  // Desktop's quick action views: the action list by its rows, the presets as cards.
+  const barRows = () => [...document.querySelectorAll('.quick-actions-entry-list li')].map((r) => r.getAttribute('data-account-id'));
+  const preset = (id) => screen.getByRole('button', { name: t(qa.READER_PRESETS.find((p) => p.id === id).labelKey) });
 
   it('is a tab of Appearance, as on desktop; Back goes to the list', () => {
     open();
@@ -161,26 +163,32 @@ describe('Settings > Appearance > Quick actions', () => {
 
   it('applies a preset', async () => {
     open();
-    const select = document.querySelector('[data-mv-pref="quickActionsPreset"]');
-    expect(select.value).toBe('mailvault');
-    await act(async () => { fireEvent.change(select, { target: { value: 'outlook' } }); });
+    expect(preset('mailvault').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => { fireEvent.click(preset('outlook')); });
     await flush();
     expect(sets()).toEqual([{ quickActionsReader: ['reply', 'replyAll', 'forward', 'delete'] }]);
     expect(barRows()).toEqual(['reply', 'replyAll', 'forward', 'delete']);
-    expect(document.querySelector('[data-mv-pref="quickActionsPreset"]').value).toBe('outlook');
+    expect(preset('outlook').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('removes, reorders and adds, never past four', async () => {
     open();
-    const rowOf = (a) => document.querySelector(`[data-mv-qa-action="${a}"]`);
-    await act(async () => { fireEvent.click(rowOf('flag').querySelector('[data-mv-qa-up]')); });
+    const handle = (a) => screen.getByRole('button', { name: t('quickActions.reorder', { name: t(a === 'flag' ? 'mobile.actions.flag' : 'common.delete') }) });
+    const add = () => screen.getByRole('button', { name: t('quickActions.addAction') });
+    const pickAdd = (a) => fireEvent.change(screen.getByRole('combobox', { name: t('quickActions.action') }), { target: { value: a } });
+    // Desktop's reorder handle: the arrow keys move a row.
+    await act(async () => { fireEvent.keyDown(handle('flag'), { key: 'ArrowUp' }); });
     await flush();
     expect(barRows()).toEqual(['flag', 'toggleRead', 'move', 'delete']);
-    expect(document.querySelector('[data-mv-pref="quickActionsPreset"]').value).toBe('custom');
-    expect(rowOf('reply').querySelector('[data-mv-qa-add]').disabled).toBe(true);
-    await act(async () => { fireEvent.click(rowOf('move').querySelector('[data-mv-qa-remove]')); });
+    expect(screen.getByTestId('quick-actions-preset-custom')).toBeTruthy();
+    // Four on the bar: nothing more can be added.
+    pickAdd('reply');
+    expect(add().disabled).toBe(true);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: `${t('quickActions.removeAction')} ${t('mobile.actions.move')}` })); });
     await flush();
-    await act(async () => { fireEvent.click(rowOf('reply').querySelector('[data-mv-qa-add]')); });
+    pickAdd('reply');
+    expect(add().disabled).toBe(false);
+    await act(async () => { fireEvent.click(add()); });
     await flush();
     expect(barRows()).toEqual(['flag', 'toggleRead', 'delete', 'reply']);
     expect(sets().at(-1)).toEqual({ quickActionsReader: ['flag', 'toggleRead', 'delete', 'reply'] });

@@ -183,8 +183,6 @@ describe('the system theme', () => {
 });
 
 describe('Settings preference rows', () => {
-  const pick = (name) => document.querySelector(`[data-mv-pref="${name}"]`);
-
   // The first screen's entries are desktop's nav ids (settingsManifest.js).
   const NAV = { mail: 'mail-preferences' };
   const go = (page) => {
@@ -195,6 +193,7 @@ describe('Settings preference rows', () => {
   // Appearance is desktop's view: its rows are found by their labels, not phone hooks.
   const tab = (key) => fireEvent.click(screen.getByRole('tab', { name: t(key) }));
   const select = (key) => screen.queryByRole('combobox', { name: t(key) });
+  const toggle = (key) => screen.queryByRole('switch', { name: t(key) });
 
   it('changing a row writes the preference and the page follows', async () => {
     render(<Settings onClose={() => {}} />);
@@ -203,36 +202,40 @@ describe('Settings preference rows', () => {
     await waitFor(() => expect(useMobileStore.getState().prefs.theme).toBe('dark'));
     expect(engine.calls).toContainEqual(['mobile.prefs.set', { theme: 'dark' }]);
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    // Mail preferences and Privacy are desktop's views: their rows found by their desktop labels.
     go('mail');
-    await act(async () => { fireEvent.change(pick('swipeLeftAction'), { target: { value: 'flag' } }); });
+    await act(async () => { fireEvent.change(select('settings.behavior.swipe.left'), { target: { value: 'flag' } }); });
     await waitFor(() => expect(useMobileStore.getState().prefs.swipeLeftAction).toBe('flag'));
-    await act(async () => { fireEvent.click(pick('confirmBeforeDelete')); });
+    await act(async () => { fireEvent.change(select('settings.behavior.confirmBeforeDelete'), { target: { value: 'ask' } }); });
     await waitFor(() => expect(useMobileStore.getState().prefs.confirmBeforeDelete).toBe(true));
     go('privacy');
-    await act(async () => { fireEvent.click(pick('holdExternalContent')); });
+    await act(async () => { fireEvent.click(toggle('settings.security.askBeforeExternalContent')); });
     await waitFor(() => expect(useMobileStore.getState().prefs.holdExternalContent).toBe(false));
     go('mail');
-    await act(async () => { fireEvent.change(pick('sendDelay'), { target: { value: '10' } }); });
-    await waitFor(() => expect(useMobileStore.getState().prefs.sendDelay).toBe(10));
+    await act(async () => { fireEvent.change(select('settings.behavior.sendDelay'), { target: { value: '30' } }); });
+    await waitFor(() => expect(useMobileStore.getState().prefs.sendDelay).toBe(30));
     // the delay row shows only for the delay mode
-    expect(pick('markAsReadDelay')).toBe(null);
-    await act(async () => { fireEvent.change(pick('markAsReadMode'), { target: { value: 'delay' } }); });
-    await waitFor(() => expect(pick('markAsReadDelay')).toBeTruthy());
+    const delay = () => screen.queryByRole('slider', { name: t('settings.behavior.delayBeforeMarkingRead') });
+    expect(delay()).toBe(null);
+    await act(async () => { fireEvent.change(select('settings.behavior.markEmailsRead'), { target: { value: 'delay' } }); });
+    await waitFor(() => expect(delay()).toBeTruthy());
   });
 
-  it('link safety rows: scanning and click confirmation, the second only while scanning is on', async () => {
+  it('link safety rows: scanning and click confirmation, each its own switch as on desktop', async () => {
     expect(PREF_DEFAULTS.linkSafetyEnabled).toBe(true);
     expect(PREF_DEFAULTS.linkSafetyClickConfirm).toBe(true);
     expect(readPrefs({ linkSafetyClickConfirm: false }).linkSafetyClickConfirm).toBe(false);
     render(<Settings onClose={() => {}} page="privacy" />);
-    expect(pick('linkSafetyEnabled').textContent).toContain(t('settings.security.linkSafetyScanning'));
-    expect(pick('linkSafetyClickConfirm').textContent).toContain(t('settings.security.clickConfirmation'));
-    await act(async () => { fireEvent.click(pick('linkSafetyClickConfirm')); });
+    expect(toggle('settings.security.linkSafetyScanning').getAttribute('aria-checked')).toBe('true');
+    expect(toggle('settings.security.clickConfirmation').getAttribute('aria-checked')).toBe('true');
+    await act(async () => { fireEvent.click(toggle('settings.security.clickConfirmation')); });
     await waitFor(() => expect(useMobileStore.getState().prefs.linkSafetyClickConfirm).toBe(false));
     expect(engine.calls).toContainEqual(['mobile.prefs.set', { linkSafetyClickConfirm: false }]);
-    await act(async () => { fireEvent.click(pick('linkSafetyEnabled')); });
+    await act(async () => { fireEvent.click(toggle('settings.security.linkSafetyScanning')); });
     await waitFor(() => expect(useMobileStore.getState().prefs.linkSafetyEnabled).toBe(false));
-    expect(pick('linkSafetyClickConfirm')).toBe(null);
+    // Desktop keeps the confirmation row while scanning is off (the viewer asks only for a
+    // scanned link, so it has no effect then).
+    expect(toggle('settings.security.clickConfirmation')).toBeTruthy();
   });
 
   it('conversation rows: the mode, and the order while the list is threaded', async () => {

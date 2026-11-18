@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   allTabs, settingSearchGroups, settingsSections, footerIds, settingsHosts,
-  MOBILE_PAGES, MOBILE_SETTINGS, MOBILE_SETTINGS_DUPLICATES, mobileSearchPages, onPhone,
+  MOBILE_PAGES, MOBILE_SETTINGS, MOBILE_SETTINGS_DUPLICATES, MOBILE_LABELS, mobileSearchPages, onPhone,
 } from '../settingsManifest';
 
 const decided = (value) => value === true || (typeof value === 'string' && value.trim().length > 0);
@@ -40,6 +40,14 @@ describe('settings manifest', () => {
   it('phone search offers only what the phone has', () => {
     expect(mobileSearchPages.length).toBeGreaterThan(10);
     expect(mobileSearchPages.filter((p) => !onPhone(MOBILE_PAGES[p.id]))).toEqual([]);
-    expect(mobileSearchPages.filter((p) => p.keywords && !onPhone(MOBILE_SETTINGS[p.labelKey]))).toEqual([]);
+    expect(mobileSearchPages.filter((p) => p.keywords && !onPhone(MOBILE_SETTINGS[p.settingKey || p.labelKey]))).toEqual([]);
+  });
+
+  it('a setting the phone words its own way is found under the phone\'s label', () => {
+    for (const [desktopKey, phoneKey] of Object.entries(MOBILE_LABELS)) {
+      expect(onPhone(MOBILE_SETTINGS[desktopKey]), desktopKey).toBe(true);
+      expect(mobileSearchPages.filter((p) => p.settingKey === desktopKey).map((p) => p.labelKey)).toEqual([phoneKey]);
+      expect(mobileSearchPages.some((p) => p.keywords && p.labelKey === desktopKey)).toBe(false);
+    }
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// Settings > Notifications, desktop's per-account folders and quiet hours and its priority
-// senders (NotifySettings.jsx): each saved in the engine, which the background run reads.
+// Settings > Notifications, desktop's view (views/NotificationsView.jsx) over the phone's engine
+// (settings/MailPreferences.jsx): per-account folders and quiet hours and the priority senders,
+// each saved in the engine, which the background run reads.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
@@ -57,15 +58,18 @@ afterEach(cleanup);
 const accountSets = () => engine.calls.filter(([m]) => m === 'mobile.accountSettings.set').map(([, p]) => p.values);
 const prefSets = () => engine.calls.filter(([m]) => m === 'mobile.prefs.set').map(([, p]) => p);
 
-/** Opens the account's folders and quiet hours. */
+const configure = () => screen.queryByRole('button', { name: t('settings.notifications.configureFolders') });
+const accountSwitch = () => screen.getByRole('switch', { name: `${t('settings.notifications.notifications')}: ${A1.displayName}` });
+
+/** Opens the account's folders and quiet hours (desktop's chevron, under the account's row). */
 async function openAccount() {
   const more = await waitFor(() => {
-    const b = screen.getByRole('button', { name: `${t('settings.notifications.configureFolders')}: ${A1.email}` });
-    expect(b.disabled).toBe(false);
+    const b = configure();
+    expect(b).toBeTruthy();
     return b;
   });
   fireEvent.click(more);
-  return screen.getByRole('group', { name: `${t('settings.notifications.configureFolders')}: ${A1.email}` });
+  return more.closest('.rounded-lg');
 }
 
 describe('Notification settings', () => {
@@ -128,19 +132,19 @@ describe('Notification settings', () => {
     engine.accounts.a1 = { notify: false };
     render(<Settings page="notifications" onClose={() => {}} />);
     const perAccount = await waitFor(() => {
-      const s = screen.getByRole('switch', { name: t('mobile.settings.notifyAccount', { account: A1.email }) });
+      const s = accountSwitch();
       expect(s.getAttribute('aria-checked')).toBe('false');
       return s;
     });
-    expect(screen.queryByRole('button', { name: `${t('settings.notifications.configureFolders')}: ${A1.email}` })).toBeNull();
+    expect(configure()).toBeNull();
     fireEvent.click(perAccount);
-    await waitFor(() => expect(screen.getByRole('button', { name: `${t('settings.notifications.configureFolders')}: ${A1.email}` })).toBeTruthy());
+    await waitFor(() => expect(configure()).toBeTruthy());
   });
 
   it('priority senders: listed, added trimmed and once, through quiet hours by default, toggled and removed', async () => {
     engine.prefs = { importantSenders: [{ match: 'boss@corp.example', throughQuietHours: true }] };
     render(<Settings page="notifications" onClose={() => {}} />);
-    const section = await waitFor(() => screen.getByRole('region', { name: t('notifyPolicy.allowlist.title') }));
+    const section = await waitFor(() => screen.getByTestId('settings-notification-allowlist'));
     await waitFor(() => expect(within(section).getByText('boss@corp.example')).toBeTruthy());
 
     const input = within(section).getByRole('textbox', { name: t('notifyPolicy.allowlist.placeholder') });
@@ -172,7 +176,7 @@ describe('Notification settings', () => {
 
   it('priority senders: an empty list says so', async () => {
     render(<Settings page="notifications" onClose={() => {}} />);
-    const section = await waitFor(() => screen.getByRole('region', { name: t('notifyPolicy.allowlist.title') }));
+    const section = await waitFor(() => screen.getByTestId('settings-notification-allowlist'));
     await waitFor(() => expect(within(section).getByText(t('notifyPolicy.allowlist.empty'))).toBeTruthy());
   });
 });

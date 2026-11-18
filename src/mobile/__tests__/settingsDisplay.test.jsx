@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// The new preference rows over a fake engine, and the readers that act on them in the viewer: each
+// The new preference rows over a fake engine (Mail preferences: desktop's views over the phone's
+// preferences, settings/MailPreferences.jsx), and the readers that act on them in the viewer: each
 // row writes its one preference; the toolbar shows its labels, a signature folds, attachments
 // download as a message opens, notification sound and badge rows (badge on iOS only), and an
 // account's colour in the account editor.
@@ -14,9 +15,13 @@ vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
     engine.calls.push([method, params]);
     switch (method) {
+      case 'mobile.prefs.get':
+        return { ...engine.prefs };
       case 'mobile.prefs.set':
         engine.prefs = { ...engine.prefs, ...params };
         return { ...engine.prefs };
+      case 'mobile.settings.get':
+        return { ...engine.settings };
       case 'mobile.accountSettings.get':
         return { ...engine.settings };
       case 'mobile.accountSettings.set':
@@ -35,13 +40,14 @@ vi.mock('../transport.js', () => ({
     }
   }),
   listen: vi.fn(() => () => {}),
+  notificationPermission: vi.fn(async () => ({ granted: true })),
+  requestNotificationPermission: vi.fn(async () => ({ granted: true })),
   openFile: vi.fn(async () => {}),
   shareFile: vi.fn(async () => {}),
 }));
 
-const { MailMore, NotifyMore } = await import('../SettingsDisplay.jsx');
+const { Behavior, Notifications } = await import('../settings/MailPreferences.jsx');
 const { default: Appearance } = await import('../settings/Appearance.jsx');
-const { default: SettingsPrefs } = await import('../SettingsPrefs.jsx');
 const { default: Viewer } = await import('../Viewer.jsx');
 const { default: AccountEditor } = await import('../AccountEditor.jsx');
 const { useMobileStore } = await import('../store.js');
@@ -49,10 +55,11 @@ const { PREF_DEFAULTS } = await import('../prefs.js');
 
 const callsOf = (method) => engine.calls.filter(([m]) => m === method).map(([, p]) => p);
 const flush = () => act(async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); });
-const pick = (name, value) => act(async () => {
-  fireEvent.change(document.querySelector(`select[data-mv-pref="${name}"]`), { target: { value: String(value) } });
+// Desktop's views: each row by its desktop label (or the phone's own words for it).
+const pick = (label, value) => act(async () => {
+  fireEvent.change(screen.getByRole('combobox', { name: label }), { target: { value: String(value) } });
 });
-const flip = (name) => act(async () => { fireEvent.click(document.querySelector(`button[data-mv-pref="${name}"]`)); });
+const flip = (label) => act(async () => { fireEvent.click(screen.getByRole('switch', { name: label })); });
 
 beforeEach(() => {
   engine.calls = [];
@@ -87,35 +94,53 @@ describe('the preference rows', () => {
     expect(useMobileStore.getState().prefs).toMatchObject({ textScale: 1.25, listPreviewLines: 0 });
   });
 
-  it('mail: refresh on launch, attachments; swipes and same account with their sections', async () => {
-    render(<><SettingsPrefs section="mail" /><MailMore /></>);
-    await flip('refreshOnLaunch');
-    await flip('autoDownloadAttachments');
-    await flip('afterDeleteSameAccount');
-    await flip('trackpadSwipeEnabled');
+  it('mail: refresh on launch, its interval, attachments; swipes and same account with their sections', async () => {
+    render(<Behavior />);
+    await flip(t('settings.behavior.refreshAppLaunch'));
+    await pick(t('settings.behavior.autoRefreshInterval'), 15);
+    await flip(t('settings.behavior.autoDownloadAttachments'));
+    await flip(t('settings.behavior.afterDeleteSameAccount'));
+    await flip(t('mobile.prefs.swipeRows'));
     expect(callsOf('mobile.prefs.set')).toEqual([
-      { refreshOnLaunch: false }, { autoDownloadAttachments: true }, { afterDeleteSameAccount: true }, { trackpadSwipeEnabled: false },
+      { refreshOnLaunch: false }, { refreshInterval: 15 }, { autoDownloadAttachments: true }, { afterDeleteSameAccount: true },
+      { trackpadSwipeEnabled: false },
     ]);
     // Swipes off: which way does what is not asked.
-    expect(document.querySelector('select[data-mv-pref="swipeLeftAction"]')).toBe(null);
+    expect(screen.queryByRole('combobox', { name: t('settings.behavior.swipe.left') })).toBe(null);
+    // Only what the phone can do: its swipes, and no unread-only pick after a delete.
+    cleanup();
+    useMobileStore.setState({ prefs: { ...PREF_DEFAULTS } });
+    render(<Behavior />);
+    expect([...screen.getByRole('combobox', { name: t('settings.behavior.swipe.left') }).options].map((o) => o.value))
+      .toEqual(['toggleRead', 'delete', 'flag', 'move', 'none']);
+    expect([...screen.getByRole('combobox', { name: t('settings.behavior.whenAnEmailIsDeleted') }).options].map((o) => o.value))
+      .toEqual(['none', 'next', 'previous']);
   });
 
-  it('notifications: sound, and the badge with what it counts; nothing while notifications are off', async () => {
-    const { rerender } = render(<NotifyMore enabled={false} />);
-    expect(document.querySelector('[data-mv-settings-notify-more]')).toBe(null);
-    rerender(<NotifyMore enabled />);
-    await flip('notificationSound');
-    expect(document.querySelector('select[data-mv-pref="badgeMode"]')).toBe(null);
-    await flip('badgeEnabled');
-    await pick('badgeMode', 'total');
-    expect(callsOf('mobile.prefs.set')).toEqual([{ notificationSound: false }, { badgeEnabled: true }, { badgeMode: 'total' }]);
+  it('notifications: sound, and the badge with what it counts; the sound only while notifications are on', async () => {
+    engine.settings = { notifications: 'off', notificationPreview: true };
+    const { unmount } = render(<Notifications />);
+    await flush();
+    expect(screen.queryByRole('switch', { name: t('settings.notifications.newEmailSound') })).toBe(null);
+    unmount();
+    engine.settings = { notifications: 'on', notificationPreview: true };
+    render(<Notifications />);
+    await flush();
+    await flip(t('settings.notifications.newEmailSound'));
+    expect(screen.queryByRole('combobox', { name: t('settings.notifications.badgeShows') })).toBe(null);
+    await flip(t('settings.notifications.showBadgeCount'));
+    await pick(t('settings.notifications.badgeShows'), 'total');
+    expect(callsOf('mobile.prefs.set').filter((p) => !('importantSenders' in p)))
+      .toEqual([{ notificationSound: false }, { badgeEnabled: true }, { badgeMode: 'total' }]);
   });
 
-  it('notifications on Android: no badge rows (the launcher badges from the notifications)', () => {
+  it('notifications on Android: no badge rows (the launcher badges from the notifications)', async () => {
+    engine.settings = { notifications: 'on', notificationPreview: true };
     const ua = vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Linux; Android 14) AppleWebKit');
-    render(<NotifyMore enabled />);
-    expect(document.querySelector('button[data-mv-pref="notificationSound"]')).toBeTruthy();
-    expect(document.querySelector('button[data-mv-pref="badgeEnabled"]')).toBe(null);
+    render(<Notifications />);
+    await flush();
+    expect(screen.getByRole('switch', { name: t('settings.notifications.newEmailSound') })).toBeTruthy();
+    expect(screen.queryByRole('switch', { name: t('settings.notifications.showBadgeCount') })).toBe(null);
     ua.mockRestore();
   });
 });

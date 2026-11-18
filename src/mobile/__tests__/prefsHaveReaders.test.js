@@ -10,7 +10,7 @@ import { PREF_DEFAULTS } from '../prefs.js';
 
 const ROOT = resolve(process.cwd(), 'src/mobile');
 // Where a key is set or merely listed, not acted on.
-const NOT_READERS = new Set(['prefs.js', 'SettingsPrefs.jsx', 'Settings.jsx', 'SettingsDisplay.jsx']);
+const NOT_READERS = new Set(['prefs.js', 'SettingsPrefs.jsx', 'Settings.jsx']);
 // The settings containers (src/mobile/settings/) set the preferences too.
 const NOT_READER_DIRS = ['settings/'];
 

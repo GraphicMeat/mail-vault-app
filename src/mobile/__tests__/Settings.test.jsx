@@ -100,7 +100,7 @@ describe('Settings', () => {
     engine.settings = { notifications: 'on', notificationPreview: true };
     render(<Settings page="notifications" onClose={() => {}} />);
     await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('true'));
-    const preview = screen.getByRole('switch', { name: t('mobile.settings.preview') });
+    const preview = screen.getByRole('switch', { name: t('settings.notifications.showEmailPreview') });
     expect(preview.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(preview);
     await waitFor(() => expect(preview.getAttribute('aria-checked')).toBe('false'));
@@ -179,14 +179,14 @@ describe('Settings', () => {
   });
 
   it('Show preview cannot be changed while notifications are off', async () => {
+    // Desktop's page: the preview row shows only while notifications are on.
     render(<Settings page="notifications" onClose={() => {}} />);
     await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('false'));
-    const preview = screen.getByRole('switch', { name: t('mobile.settings.preview') });
-    expect(preview.disabled).toBe(true);
+    expect(screen.queryByRole('switch', { name: t('settings.notifications.showEmailPreview') })).toBeNull();
     engine.granted = true;
     fireEvent.click(toggle());
     await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('true'));
-    await waitFor(() => expect(screen.getByRole('switch', { name: t('mobile.settings.preview') }).disabled).toBe(false));
+    await waitFor(() => expect(screen.getByRole('switch', { name: t('settings.notifications.showEmailPreview') }).disabled).toBe(false));
   });
 
   it('notifications turned off in the system settings show as off, with the pointer there', async () => {
@@ -211,14 +211,16 @@ describe('Settings', () => {
 
   it('each account has its own notifications switch, usable while notifications are on', async () => {
     engine.notify = { a2: false };
-    const perAccount = (email) => screen.getByRole('switch', { name: t('mobile.settings.notifyAccount', { account: email }) });
+    const name = (email) => `${t('settings.notifications.notifications')}: ${useMobileStore.getState().accounts.find((a) => a.email === email).displayName || email}`;
+    const perAccount = (email) => screen.getByRole('switch', { name: name(email) });
     render(<Settings page="notifications" onClose={() => {}} />);
+    // Notifications off: the per-account choice waits for them (desktop's page shows it only then).
+    await waitFor(() => expect(toggle().getAttribute('aria-checked')).toBe('false'));
+    expect(screen.queryByRole('switch', { name: name('ada@example.test') })).toBeNull();
+    fireEvent.click(toggle());
     await waitFor(() => expect(perAccount('grace@example.test').getAttribute('aria-checked')).toBe('false'));
     expect(perAccount('ada@example.test').getAttribute('aria-checked')).toBe('true');
-    // Notifications off: the per-account choice waits for them.
-    expect(perAccount('ada@example.test').disabled).toBe(true);
-    fireEvent.click(toggle());
-    await waitFor(() => expect(perAccount('ada@example.test').disabled).toBe(false));
+    expect(perAccount('ada@example.test').disabled).toBe(false);
     fireEvent.click(perAccount('ada@example.test'));
     await waitFor(() => expect(perAccount('ada@example.test').getAttribute('aria-checked')).toBe('false'));
     expect(engine.calls.filter(([m]) => m === 'mobile.accountSettings.set').map(([, p]) => p))
@@ -283,21 +285,55 @@ describe('Settings pages, as desktop lays them out', () => {
   });
 
   it('each page holds its desktop page\'s settings', () => {
+    // Desktop's views: each control named by its desktop label (the phone's own words where
+    // desktop's name a desktop part: settingsManifest.js MOBILE_LABELS).
+    const controls = (page) => {
+      const r = render(<Settings onClose={() => {}} page={page} />);
+      const names = [...document.querySelectorAll('[role="switch"], select, input[type="range"]')]
+        .map((e) => e.getAttribute('aria-label') || document.getElementById(e.getAttribute('aria-labelledby'))?.textContent);
+      r.unmount();
+      return names;
+    };
+    expect(controls('mail')).toEqual([
+      t('settings.behavior.refreshAppLaunch'), t('settings.behavior.autoRefreshInterval'),
+      t('settings.behavior.autoDownloadAttachments'), t('settings.behavior.attachmentReminder'),
+      t('settings.behavior.sendDelay'), t('settings.accounts.automaticallyAddOutgoingEmails'),
+      t('settings.behavior.markEmailsRead'),
+      t('mobile.prefs.swipeRows'), t('settings.behavior.swipe.left'), t('settings.behavior.swipe.right'),
+      t('settings.behavior.confirmBeforeDelete'), t('settings.behavior.whenAnEmailIsDeleted'), t('settings.behavior.afterDeleteSameAccount'),
+    ]);
+    // Remote content is a privacy choice on desktop (Privacy & security > Security); tracking
+    // pixels have desktop's Tracking tab (a switch with Premium, the upsell without).
+    expect(controls('privacy')).toEqual([
+      t('settings.security.linkSafetyScanning'), t('settings.security.clickConfirmation'), t('settings.security.askBeforeExternalContent'),
+    ]);
+    render(<Settings onClose={() => {}} page="tracking" />);
+    expect(screen.getByTestId('tracker-upsell')).toBeTruthy();
+    cleanup();
     const on = (page) => {
       const r = render(<Settings onClose={() => {}} page={page} />);
       const prefs = [...document.querySelectorAll('[data-mv-pref]')].map((e) => e.getAttribute('data-mv-pref'));
       r.unmount();
       return prefs;
     };
-    expect(on('mail')).toEqual(['markAsReadMode', 'confirmBeforeDelete', 'afterDeleteSelect', 'afterDeleteSameAccount', 'trackpadSwipeEnabled', 'swipeLeftAction', 'swipeRightAction', 'sendDelay', 'defaultSignatureEnabled', 'attachmentReminder', 'refreshOnLaunch', 'autoDownloadAttachments']);
-    // Remote content is a privacy choice on desktop (Privacy & security > Security); tracking
-    // pixels have desktop's Tracking tab.
-    expect(on('privacy')).toEqual(['holdExternalContent', 'linkSafetyEnabled', 'linkSafetyClickConfirm']);
-    expect(on('tracking')).toEqual(['trackerBlockingEnabled']);
     // AI is off by default: only its switch until it is on (AiSettings.test.jsx).
     expect(on('ai')).toEqual(['aiEnabled']);
     // The search index sits on the Storage page, as on desktop.
     expect(on('search')).toEqual(expect.arrayContaining(['searchIndexBodies', 'searchIndexAttachments']));
+  });
+
+  it('a setting the phone words its own way is found and landed on under that name', async () => {
+    render(<Settings onClose={() => {}} />);
+    const box = screen.getByRole('searchbox', { name: t('settings.navigation.searchSetting') });
+    fireEvent.change(box, { target: { value: t('mobile.prefs.swipeRows') } });
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(t('mobile.prefs.swipeRows')) }));
+    expect(heading()).toBe(t('settings.navigation.mailPreferences'));
+    const row = await waitFor(() => {
+      const hit = document.querySelector('.settings-search-target');
+      expect(hit).toBeTruthy();
+      return hit;
+    });
+    expect(row.textContent).toContain(t('mobile.prefs.swipeRows'));
   });
 
   it('Appearance is desktop\'s Appearance: its sections as tabs, the Colors section first', () => {

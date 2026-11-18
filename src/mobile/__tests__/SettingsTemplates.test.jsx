@@ -24,7 +24,8 @@ vi.mock('../transport.js', () => ({
 
 // Templates have desktop's own page now (Settings > Templates), no longer under Mail preferences.
 const { default: TemplatesSettings } = await import('../TemplatesSettings.jsx');
-const { default: SettingsPrefs } = await import('../SettingsPrefs.jsx');
+// Mail preferences' Behavior: desktop's view over the phone's preferences.
+const { Behavior } = await import('../settings/MailPreferences.jsx');
 const { useMobileStore } = await import('../store.js');
 const { PREF_DEFAULTS, readPrefs } = await import('../prefs.js');
 
@@ -52,7 +53,7 @@ describe('prefs', () => {
 
 describe('attachment reminder', () => {
   it('turns off and on', async () => {
-    render(<SettingsPrefs section="mail" />);
+    render(<Behavior />);
     const sw = screen.getByRole('switch', { name: t('settings.behavior.attachmentReminder') });
     expect(sw.getAttribute('aria-checked')).toBe('true');
     await act(async () => { fireEvent.click(sw); });
