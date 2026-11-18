@@ -278,6 +278,10 @@ pub(crate) fn body_for(shared: &Shared, params: Value) -> Result<Value, RpcError
         // earlier eviction candidate.
         let _ = shared.try_write(|c| {
             c.execute(&format!("UPDATE bodies SET last_access_ms = {STAMP} WHERE {KEY}"), key(&p))?;
+            // Opened now (a downloaded body is counted on its first open; skipped with the stamp,
+            // it is counted on the next).
+            let vendors = hit.stored.tracker_list.iter().map(|t| t.vendor.as_str());
+            crate::tracking::record(c, &p.account_id, &p.folder, p.uid as i64, vendors, hit.stored.trackers)?;
             refresh_out_of_window(c, &p)
         });
         return Ok(hit.reply(tracker_policy(strips(shared))));
@@ -646,9 +650,12 @@ fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str, opened: bo
             (account, folder, uid, now, &body.html, &body.text, &parts_json, bytes as i64),
         )?;
         c.execute(&format!("UPDATE messages SET snippet = ?4 WHERE {KEY}"), (account, folder, uid, snippet))?;
-        // What was found stays counted after the body leaves the cache (`tracking.rs`).
-        let vendors = body.stored.tracker_list.iter().map(|t| t.vendor.as_str());
-        crate::tracking::record(c, account, folder, uid, vendors, body.stored.trackers)?;
+        // An opened message's pixels stay counted after the body leaves the cache (`tracking.rs`);
+        // a downloaded one counts once it is opened.
+        if opened {
+            let vendors = body.stored.tracker_list.iter().map(|t| t.vendor.as_str());
+            crate::tracking::record(c, account, folder, uid, vendors, body.stored.trackers)?;
+        }
         Ok(())
     })?;
     // The body's words join the index (a tap: the index worker does it next).

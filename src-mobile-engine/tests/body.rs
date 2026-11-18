@@ -472,18 +472,29 @@ fn tracking_stats_count_each_message_with_a_pixel_once() {
     assert_eq!(gone["messages"], 0, "{gone}");
 }
 
-/// A body cached before the tally existed is counted once, from its stored scan.
+/// An opened body cached before the tally existed is counted once, from its stored scan; a body a
+/// download fetched and nobody opened (no access stamp) is not counted until it is opened.
 #[test]
-fn tracking_stats_count_bodies_cached_before_the_tally() {
-    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, PIXEL_HTML))));
+fn tracking_stats_count_opened_bodies_cached_before_the_tally() {
+    let server = MockImap::start(
+        Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, PIXEL_HTML)).push_msg(html_only(2, PIXEL_HTML))),
+    );
     let f = setup(&server);
     assert_eq!(f.body(1)["trackers"], 1);
-    // As an older build left it: the body, no verdict, no mark.
+    assert_eq!(f.body(2)["trackers"], 1);
+    // As an older build left them: the bodies, no verdict, no mark; uid 2 as a download left it.
     f.db()
-        .execute_batch("DELETE FROM settings WHERE key LIKE 'acct.%.trackers.%' OR key = 'engine.trackerTallyBackfilled.v1';")
+        .execute_batch(
+            "DELETE FROM settings WHERE key LIKE 'acct.%.trackers.%' OR key = 'engine.trackerTallyBackfilled.v1';
+             UPDATE bodies SET last_access_ms = 0 WHERE uid = 2;",
+        )
         .unwrap();
     let stats = f.engine.rpc("mobile.tracking.stats", json!({})).unwrap();
     assert_eq!((stats["messages"].clone(), stats["pixels"].clone()), (json!(1), json!(1)), "{stats}");
     let again = f.engine.rpc("mobile.tracking.stats", json!({})).unwrap();
     assert_eq!(again, stats);
+    // Opened (from the cache): now it counts.
+    assert_eq!(f.body(2)["trackers"], 1);
+    let opened = f.engine.rpc("mobile.tracking.stats", json!({})).unwrap();
+    assert_eq!(opened["messages"], 2, "{opened}");
 }

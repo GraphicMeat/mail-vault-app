@@ -2,16 +2,17 @@
 //! half of the "what this install found" section of desktop's Settings > Privacy > Tracking
 //! (desktop counts its `trackerAlerts`, one entry per message whose body it scanned).
 //!
-//! Every body the engine stores (`body.rs` `store`: one the user opened, or one a download
-//! fetched) is scanned for pixels with core's `body_scan`; a body with at least one leaves its
-//! verdict here, in the same write as the body row: `acct.<accountId>.trackers.<folder>\n<uid>` =
+//! Every body the engine stores is scanned for pixels with core's `body_scan`. A message the user
+//! opens (fetched then, or a download's body opened later) with at least one pixel leaves its
+//! verdict here, in the write that stores or stamps its body: `acct.<accountId>.trackers.<folder>\n<uid>` =
 //! `{"n": pixels, "v": [vendor, ...]}` in `settings` (no table of its own, like `usage.rs`; every
 //! row goes with the account). Keyed by message, so a body fetched again (evicted, refreshed)
 //! counts once, as desktop's per-message entries do. The verdict outlives the cached body: what
 //! was found stays found, as on desktop. Counts describe what was FOUND, never what was blocked
-//! (a free user's pixels are found and kept).
+//! (a free user's pixels are found and kept), and only in messages opened, as the page's sentence
+//! says: a body the offline download fetched and nobody opened is not counted.
 //!
-//! Bodies cached before this tally existed are counted once from their stored scan
+//! Opened bodies cached before this tally existed are counted once from their stored scan
 //! ([`backfill`], on the first `stats` call; marked by [`BACKFILLED`]).
 //!
 //! `mobile.tracking.stats {}` -> `{messages, pixels, top: [[vendor, n]], patterns}`: messages with
@@ -45,8 +46,8 @@ pub(crate) fn record<'a>(c: &Connection, account: &str, folder: &str, uid: i64, 
     crate::settings::put_in(c, &key(account, folder, uid), &value)
 }
 
-/// Counts the bodies cached before the tally, once (from `parts_json`'s `trackers` and
-/// `trackerList`), at most [`BATCH`] rows per write. A verdict already there is left alone.
+/// Counts the opened bodies (`last_access_ms` stamped) cached before the tally, once (from
+/// `parts_json`'s `trackers` and `trackerList`), at most [`BATCH`] rows per write. A verdict already there is left alone.
 fn backfill(shared: &Shared) -> Result<(), String> {
     let done = shared.read(|c| crate::settings::get_in(c, BACKFILLED)).map_err(|e| e.to_string())?;
     if done.is_some() {
@@ -54,7 +55,7 @@ fn backfill(shared: &Shared) -> Result<(), String> {
     }
     let found: Vec<(String, String, i64, u32, Vec<String>)> = shared
         .read(|c| {
-            let mut st = c.prepare("SELECT account_id, folder, uid, parts_json FROM bodies WHERE parts_json IS NOT NULL")?;
+            let mut st = c.prepare("SELECT account_id, folder, uid, parts_json FROM bodies WHERE parts_json IS NOT NULL AND last_access_ms > 0")?;
             let rows = st
                 .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?, r.get::<_, String>(3)?)))?
                 .collect::<Result<Vec<_>, _>>()?;
