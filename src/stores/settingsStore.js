@@ -1165,9 +1165,8 @@ export const useSettingsStore = create(
       }),
       toggleAccountGroupCollapsed: (name) => set(state => {
         if (typeof name !== 'string' || !name || name.length > 40) return {};
-        const collapsedAccountGroups = { ...state.collapsedAccountGroups };
-        if (collapsedAccountGroups[name]) delete collapsedAccountGroups[name];
-        else collapsedAccountGroups[name] = true;
+        const collapsedAccountGroups = { ...state.collapsedAccountGroups, [name]: true };
+        if (Object.hasOwn(state.collapsedAccountGroups, name)) delete collapsedAccountGroups[name];
         return { collapsedAccountGroups: normalizeCollapsedGroups(collapsedAccountGroups) };
       }),
 

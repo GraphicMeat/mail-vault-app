@@ -31,7 +31,7 @@ path = sys.argv[1]
 with open(path) as source:
     config = json.load(source)
 window = config['app']['windows'][0]
-window.update(width=1280, height=1000, center=True)
+window.update(width=1280, height=1000, minWidth=375, center=True)
 with open(path, 'w') as target:
     json.dump(config, target, indent=2)
 PY

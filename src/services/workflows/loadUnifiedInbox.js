@@ -66,12 +66,12 @@ function settleLoading(get, useMailStore) {
 
 // ── setUnifiedInbox workflow ──
 
-export async function setUnifiedInbox(enabled, group = null) {
+export async function setUnifiedInbox(enabled, group = null, membershipChanged = false) {
   const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   if (enabled) {
-    if (get().unifiedGroup !== group) clearUnifiedFolders();
+    if (get().unifiedGroup !== group || membershipChanged) clearUnifiedFolders();
     const { activeAccountId, activeMailbox, emails: currentEmails } = get();
     const preUnifiedSnapshot = (activeMailbox === 'INBOX') ? { activeAccountId, emails: currentEmails } : null;
 

@@ -13,10 +13,10 @@ export function AccountSections({ sections, renderAccount, compact = false, coll
   return sections.map(section => section.name === null
     ? <React.Fragment key="ungrouped">{section.accounts.map(renderAccount)}</React.Fragment>
     : <div key={`group-${section.name}`} role="group" aria-label={pa(section.name, 'name')}>
-      {onOpenGroup ? <AccountGroupHeader name={section.name} collapsed={!!collapsed?.[section.name]}
+      {onOpenGroup ? <AccountGroupHeader name={section.name} collapsed={!!(collapsed && Object.hasOwn(collapsed, section.name) && collapsed[section.name])}
         selected={selectedGroup === section.name} unread={unreadOf?.(section.name) || 0}
         onOpen={onOpenGroup} onToggle={onToggleGroup} />
         : <div className="sidebar-group-label"><Private kind="name">{section.name}</Private></div>}
-      {(!onOpenGroup || !collapsed?.[section.name]) && section.accounts.map(renderAccount)}
+      {(!onOpenGroup || !collapsed || !Object.hasOwn(collapsed, section.name) || !collapsed[section.name]) && section.accounts.map(renderAccount)}
     </div>);
 }

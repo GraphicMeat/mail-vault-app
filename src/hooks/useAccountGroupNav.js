@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useViewStore } from '../stores/viewStore';
@@ -14,12 +14,19 @@ export function useAccountGroupNav(sections, accounts, mailHidden, onOpenMail) {
   const unifiedGroup = useAccountStore(state => state.unifiedGroup);
   const setUnifiedInbox = useAccountStore(state => state.setUnifiedInbox);
   const activeViewId = useViewStore(state => state.activeViewId);
+  const previousScope = useRef(null);
+  const groupAccounts = sections.find(section => section.name === unifiedGroup)?.accounts;
+  const membership = groupAccounts ? JSON.stringify(groupAccounts.map(account => account.id).sort()) : null;
 
   useEffect(() => {
-    if (unifiedInbox && unifiedGroup && !sections.some(section => section.name === unifiedGroup)) {
-      setUnifiedInbox(true);
+    const previous = previousScope.current;
+    previousScope.current = { group: unifiedGroup, membership };
+    if (!unifiedInbox || !unifiedGroup) return;
+    if (membership === null) setUnifiedInbox(true);
+    else if (previous?.group === unifiedGroup && previous.membership !== membership) {
+      setUnifiedInbox(true, unifiedGroup, true);
     }
-  }, [sections, unifiedInbox, unifiedGroup, setUnifiedInbox]);
+  }, [membership, unifiedInbox, unifiedGroup, setUnifiedInbox]);
 
   return {
     collapsed,

@@ -65,4 +65,12 @@ describe('account group settings', () => {
     useSettingsStore.getState().resetSettings();
     expect(useSettingsStore.getState().collapsedAccountGroups).toEqual({});
   });
+  it('toggles Object.prototype group names', () => {
+    for (const name of ['constructor', 'toString', '__proto__']) {
+      useSettingsStore.getState().toggleAccountGroupCollapsed(name);
+      expect(Object.hasOwn(useSettingsStore.getState().collapsedAccountGroups, name)).toBe(true);
+      useSettingsStore.getState().toggleAccountGroupCollapsed(name);
+      expect(useSettingsStore.getState().collapsedAccountGroups).toEqual({});
+    }
+  });
 });

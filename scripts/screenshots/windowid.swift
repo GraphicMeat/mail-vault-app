@@ -40,6 +40,7 @@ struct Candidate {
 }
 
 let owner = arg == "--info" ? "mailvault" : arg
+let minWidth = ProcessInfo.processInfo.environment["MAILVAULT_MIN_WINDOW_WIDTH"].flatMap { Double($0) } ?? 400
 
 // A MailVault the user already has open matches the owner name just as well as
 // the one this run launched, and the rule below takes the LARGEST match — which
@@ -71,7 +72,7 @@ if arg == "--info" {
 // A real app window is on screen and taller than any toolbar or panel; among
 // those, the biggest one is the document window.
 let best = candidates
-    .filter { $0.onScreen && $0.height > 300 && $0.width > 400 }
+    .filter { $0.onScreen && $0.height > 300 && $0.width > minWidth }
     .max(by: { $0.width * $0.height < $1.width * $1.height })
 
 if let best {

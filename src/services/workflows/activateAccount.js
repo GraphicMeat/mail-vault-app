@@ -1537,7 +1537,7 @@ export async function init() {
 
       const hasCredentials = firstVisible.password || (firstVisible.authType === 'oauth2' && firstVisible.oauth2AccessToken);
 
-      if (!hasCredentials) {
+      if (!get().unifiedInbox && !hasCredentials) {
         console.log('[init] Credentials not available for', firstVisible.email);
         useMailStore.setState({
           loading: false,
@@ -1548,7 +1548,7 @@ export async function init() {
         if (cachedMailboxEntry?.mailboxes) {
           useMailStore.setState({ mailboxes: cachedMailboxEntry.mailboxes, mailboxesFetchedAt: cachedMailboxEntry.fetchedAt });
         }
-      } else if (currentActiveId === firstVisible.id) {
+      } else if (!get().unifiedInbox && currentActiveId === firstVisible.id) {
         const { emails: currentEmails, loading: currentLoading, sortedEmails: currentSorted } = get();
         console.log('[init] Account already active: emails=%d, sortedEmails=%d, loading=%s', currentEmails.length, currentSorted.length, currentLoading);
         if (currentEmails.length === 0) {
@@ -1562,7 +1562,7 @@ export async function init() {
           useMailStore.setState({ loading: false });
           if (currentSorted.length === 0) get().updateSortedEmails();
         }
-      } else {
+      } else if (!get().unifiedInbox) {
         const lastMailbox = useSettingsStore.getState().getLastMailbox(firstVisible.id);
         await openFolder(firstVisible.id, lastMailbox || 'INBOX');
       }

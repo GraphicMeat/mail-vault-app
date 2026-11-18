@@ -13,6 +13,7 @@ const harness = vi.hoisted(() => ({
   ensureFreshToken: vi.fn(async account => account),
   hasValidCredentials: vi.fn(account => !!(account?.password || account?.oauth2AccessToken)),
   getAccountCacheMailboxes: vi.fn(accountId => harness.cachedMailboxes[accountId] || null),
+  fetchSearchSuggestions: vi.fn(async () => []),
 }));
 
 vi.mock('lucide-react', () => {
@@ -53,6 +54,9 @@ vi.mock('../../services/authUtils.js', () => ({
 }));
 vi.mock('../../services/cacheManager.js', () => ({
   getAccountCacheMailboxes: (...args) => harness.getAccountCacheMailboxes(...args),
+}));
+vi.mock('../../services/searchSuggestions', () => ({
+  fetchSearchSuggestions: (...args) => harness.fetchSearchSuggestions(...args),
 }));
 
 const { SearchBar } = await import('../SearchBar.jsx');
@@ -103,6 +107,7 @@ beforeEach(() => {
     return { unlisten: run.unlisten };
   });
   harness.cancelMailSearch.mockReset().mockResolvedValue(undefined);
+  harness.fetchSearchSuggestions.mockReset().mockResolvedValue([]);
   harness.ensureFreshToken.mockReset().mockImplementation(async account => account);
   harness.hasValidCredentials.mockReset().mockImplementation(account => !!(account?.password || account?.oauth2AccessToken));
   useSearchStore.setState({
@@ -140,6 +145,44 @@ describe('SearchBar search lifecycle', () => {
     ]);
     emit(harness.runs[0], 2, [row(2, 'late unified row', 'a', 'INBOX')]);
     expect(useSearchStore.getState().searchResults).toEqual([]);
+  });
+  it('restarts and cancels a search when its unified group changes', async () => {
+    harness.settingsState = { ...harness.settingsState, accountGroups: { a: 'Personal', b: 'Work' } };
+    const view = render(<SearchBar />);
+    await act(async () => { await startCurrent(); });
+    expect(harness.runs[0].request.targets.map(target => target.accountId)).toEqual(['a', 'b']);
+    emit(harness.runs[0], 1, [row(1, 'outside Work', 'a', 'INBOX')]);
+    const oldId = harness.runs[0].request.searchId;
+
+    harness.mailState = { ...harness.mailState, unifiedGroup: 'Work' };
+    view.rerender(<SearchBar />);
+    await waitFor(() => expect(harness.runs).toHaveLength(2));
+    expect(harness.cancelMailSearch).toHaveBeenCalledWith(oldId);
+    expect(harness.runs[1].request.targets.map(target => target.accountId)).toEqual(['b']);
+    expect(useSearchStore.getState().searchResults).toEqual([]);
+    emit(harness.runs[0], 2, [row(2, 'late outside Work', 'a', 'INBOX')]);
+    expect(useSearchStore.getState().searchResults).toEqual([]);
+
+    harness.settingsState = { ...harness.settingsState, accountGroups: { a: 'Work', b: 'Work' } };
+    view.rerender(<SearchBar />);
+    await waitFor(() => expect(harness.runs).toHaveLength(3));
+    expect(harness.runs[2].request.targets.map(target => target.accountId)).toEqual(['a', 'b']);
+  });
+  it('suggests senders only from the open group', async () => {
+    harness.mailState = { ...harness.mailState, unifiedGroup: 'Work' };
+    harness.settingsState = { ...harness.settingsState, accountGroups: { a: 'Personal', b: 'Work' } };
+    render(<SearchBar />);
+    fireEvent.change(document.querySelector('[data-testid="mail-search-input"]'), { target: { value: 'alice' } });
+    await waitFor(() => expect(harness.fetchSearchSuggestions).toHaveBeenCalled());
+    expect(harness.fetchSearchSuggestions.mock.lastCall[0].accounts).toEqual(['b']);
+  });
+  it('does not suggest senders when the group has no accounts', async () => {
+    harness.mailState = { ...harness.mailState, unifiedGroup: 'Missing' };
+    harness.settingsState = { ...harness.settingsState, accountGroups: { a: 'Personal', b: 'Work' } };
+    render(<SearchBar />);
+    fireEvent.change(document.querySelector('[data-testid="mail-search-input"]'), { target: { value: 'alice' } });
+    await new Promise(resolve => setTimeout(resolve, 160));
+    expect(harness.fetchSearchSuggestions).not.toHaveBeenCalled();
   });
 
   it('restarts with the effective entitlement limit and preserves the saved Premium value', async () => {

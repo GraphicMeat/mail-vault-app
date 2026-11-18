@@ -78,7 +78,7 @@ describe('Group inbox capture', function () {
       return state.unifiedGroup === null && state.activeMailbox === 'UNIFIED' && state.emails.length >= 6
         && document.querySelector('[data-testid="mailbox-title"]')?.textContent.trim() === 'All Inboxes';
     }), 'All Inboxes did not open');
-    await browser.execute(() => window.__SETTINGS_STORE__.setState({ collapsedAccountGroups: { Work: true } }));
+    await browser.$('.sidebar-account-list [role="group"][aria-label="Work"] .sidebar-group-toggle').click();
     await wait(() => browser.execute(() => {
       const work = document.querySelector('.sidebar-account-list [role="group"][aria-label="Work"]');
       const personal = document.querySelector('.sidebar-account-list [role="group"][aria-label="Personal"]');
@@ -94,5 +94,17 @@ describe('Group inbox capture', function () {
       await browser.pause(300);
       capture(`group-folded-${theme}`);
     }
+    await browser.setWindowSize(375, 800);
+    await wait(() => browser.execute(() => window.innerWidth <= 375
+      && window.__SETTINGS_STORE__.getState().collapsedAccountGroups.Work === true
+      && !!document.querySelector('.sidebar-collapsed-accounts .sidebar-collapsed-group[aria-label="Work inbox"]')
+      && document.querySelectorAll('.sidebar-collapsed-accounts button[aria-label*="@mock.test"]').length === 3),
+    '375 px group rail did not render');
+    await browser.$('.sidebar-collapsed-accounts .sidebar-collapsed-group[aria-label="Work inbox"]').click();
+    await wait(() => browser.execute(() => window.__MAIL_STORE__.getState().unifiedGroup === 'Work'
+      && document.querySelector('[data-testid="mailbox-title"]')?.textContent.trim() === 'Work'),
+    '375 px group inbox did not open');
+    process.env.MAILVAULT_MIN_WINDOW_WIDTH = '300';
+    capture('group-inbox-375');
   });
 });

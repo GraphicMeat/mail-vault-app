@@ -7,6 +7,7 @@ import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { usePrivacyStore } from '../../stores/privacyStore';
 import { openFolder } from '../../services/workflows/loadSubtree';
+import { getUnifiedFolder, putUnifiedFolder } from '../../services/workflows/unifiedFolderCache';
 import { t } from '../../i18n';
 import '../../services/workflows/bindStoreActions';
 
@@ -68,6 +69,30 @@ describe('sidebar account groups', () => {
     act(() => useSettingsStore.setState({ accountGroups: { a: 'Personal' } }));
     await vi.waitFor(() => expect(useMailStore.getState().unifiedGroup).toBeNull());
     useMailStore.setState({ loadUnifiedInbox: load });
+  });
+  it('reloads an open group when an account moves out', async () => {
+    const load = useMailStore.getState().loadUnifiedInbox;
+    const reload = vi.fn().mockResolvedValue();
+    useMailStore.setState({ unifiedInbox: true, unifiedGroup: 'Work', activeMailbox: 'UNIFIED',
+      emails: [{ uid: 1, _accountId: 'c', _mailbox: 'INBOX', subject: 'Moved account' }], loadUnifiedInbox: reload });
+    putUnifiedFolder('INBOX', [{ uid: 1, _accountId: 'c', _mailbox: 'INBOX' }]);
+    render(<Sidebar />);
+    act(() => useSettingsStore.setState({ accountGroups: { a: 'Personal', b: 'Work', c: 'Personal' } }));
+    await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+    expect(getUnifiedFolder('INBOX')).toBeUndefined();
+    expect(useMailStore.getState().emails.some(email => email._accountId === 'c')).toBe(false);
+    expect(useMailStore.getState().unifiedGroup).toBe('Work');
+    useMailStore.setState({ loadUnifiedInbox: load });
+  });
+  it('keeps a group named toString expanded and toggleable', () => {
+    useSettingsStore.setState({ accountGroups: { a: 'toString', b: 'Work', c: 'Work' } });
+    render(<Sidebar />);
+    const group = () => screen.getByRole('group', { name: 'toString' });
+    expect(within(group()).getByRole('button', { name: /Alice/ })).toBeTruthy();
+    fireEvent.click(within(group()).getByRole('button', { name: 'Collapse toString' }));
+    expect(within(group()).queryByRole('button', { name: /Alice/ })).toBeNull();
+    fireEvent.click(within(group()).getByRole('button', { name: 'Expand toString' }));
+    expect(within(group()).getByRole('button', { name: /Alice/ })).toBeTruthy();
   });
   it('opens a folded group from the chooser and exposes matches during search', async () => {
     useSettingsStore.setState({ sidebarLayout: 'switcher', collapsedAccountGroups: { Work: true } });

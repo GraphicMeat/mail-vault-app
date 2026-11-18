@@ -16,6 +16,7 @@ import { SearchTagInput } from './SearchTagInput';
 import { formatCount } from '../utils/formatCount';
 import { useSearchSuggestions } from '../hooks/useSearchSuggestions';
 import { suggestionMailboxes } from '../services/searchTargets';
+import { accountsInScope } from '../services/accountGroups';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -104,7 +105,10 @@ export function SearchBar({ autoFocus = false }) {
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
+  const unifiedGroup = useAccountStore(s => s.unifiedGroup);
   const unifiedFolder = useAccountStore(s => s.unifiedFolder);
+  const accountGroups = useSettingsStore(s => s.accountGroups);
+  const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const effectiveSearchConcurrency = useSettingsStore(state => effectiveSearchMailboxConcurrency(state));
   const isPremium = hasPremiumAccess(billingProfile);
@@ -139,17 +143,17 @@ export function SearchBar({ autoFocus = false }) {
     setTags(tokenizeQuery(searchQuery));
     setDraft('');
   }, [searchQuery]);
-  // Suggestions come from the accounts the search reads: every account in
-  // the unified view, else the one on screen.
+  // Suggestions come from the accounts the search reads: the unified scope,
+  // else the one on screen.
   const suggestAccountKey = useAccountStore(s => (s.unifiedInbox
-    ? (s.accounts || []).map(account => account.id).join('\n')
+    ? accountsInScope(s.accounts, { accountGroups, hiddenAccounts, group: s.unifiedGroup }).map(account => account.id).join('\n')
     : (s.activeAccountId || '')));
   const suggestAccounts = useMemo(() => (suggestAccountKey ? suggestAccountKey.split('\n') : []), [suggestAccountKey]);
   // ...and from the folders it reads: a sender seen only on Sent mail is no
   // pick for an inbox search.
   const suggestScopeKey = useAccountStore(s => suggestionMailboxes(s, searchFilters.folder).join('\n'));
   const suggestMailboxes = useMemo(() => (suggestScopeKey ? suggestScopeKey.split('\n') : []), [suggestScopeKey]);
-  const suggestions = useSearchSuggestions(draft, suggestAccounts, suggestMailboxes);
+  const suggestions = useSearchSuggestions(suggestAccounts.length ? draft : '', suggestAccounts, suggestMailboxes);
   // Where the operator help opens: under its button, right-aligned to it.
   const [helpAnchor, setHelpAnchor] = useState(null);
   const [hintVisible, setHintVisible] = useState(false);
@@ -162,13 +166,14 @@ export function SearchBar({ autoFocus = false }) {
   const popularFilters = useMemo(() => getPopularFilters(), [getPopularFilters]);
 
   useEffect(() => {
-    const current = { activeAccountId, activeMailbox, unifiedInbox, unifiedFolder, concurrency: effectiveSearchConcurrency, isPremium };
+    const current = { activeAccountId, activeMailbox, unifiedInbox, unifiedGroup, unifiedFolder, suggestAccountKey, concurrency: effectiveSearchConcurrency, isPremium };
     const previous = searchContextRef.current;
     searchContextRef.current = current;
     if (!previous) return;
 
     const accountOrModeChanged = previous.activeAccountId !== activeAccountId
-      || previous.unifiedInbox !== unifiedInbox;
+      || previous.unifiedInbox !== unifiedInbox || previous.unifiedGroup !== unifiedGroup
+      || previous.suggestAccountKey !== suggestAccountKey;
     const currentFolderChanged = searchFilters.folder === 'current'
       && (previous.activeMailbox !== activeMailbox || previous.unifiedFolder !== unifiedFolder);
     const entitlementChanged = previous.isPremium !== isPremium
@@ -177,7 +182,7 @@ export function SearchBar({ autoFocus = false }) {
     // is not a search this can restart: doing so runs an empty query and wipes
     // the rows out from under a sidebar entry that still says it is open.
     if (searchActive && !activeViewId && (accountOrModeChanged || currentFolderChanged || entitlementChanged)) restartSearch();
-  }, [activeAccountId, activeMailbox, unifiedInbox, unifiedFolder, effectiveSearchConcurrency,
+  }, [activeAccountId, activeMailbox, unifiedInbox, unifiedGroup, unifiedFolder, suggestAccountKey, effectiveSearchConcurrency,
     isPremium, searchFilters.folder, searchActive, restartSearch]);
 
   // Close dropdowns when clicking outside

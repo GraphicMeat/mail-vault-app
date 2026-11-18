@@ -333,6 +333,14 @@ describe('every account\'s local folders, from the start', () => {
     db.ensureAccountsInFile.mockResolvedValue(undefined);
   });
 
+  it('keeps an opening group inbox when full init finds no rows yet', async () => {
+    prime({ accounts: [ACCOUNT, B], activeMailbox: 'UNIFIED', unifiedInbox: true,
+      unifiedGroup: 'Work', emails: [] });
+    await useMailStore.getState().init();
+    expect(useMailStore.getState().unifiedGroup).toBe('Work');
+    expect(useMailStore.getState().activeMailbox).toBe('UNIFIED');
+  });
+
   it('knows a hit from an account never opened as local once the app has started', async () => {
     api.listLocalFolders.mockImplementation(async (accountId) => (accountId === B.id ? [FOLDER_B] : []));
     prime({ accounts: [ACCOUNT, B] });
