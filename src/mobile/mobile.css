@@ -1428,6 +1428,10 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 
 /* Saved views in the folder drawer (desktop's sidebar Views) and a view's mail. */
 .mv-drawer__heading { margin: 0; padding: 12px 16px 4px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mail-text-muted); }
+/* The Views heading with desktop's Edit and New beside it (FolderDrawer.jsx). */
+.mv-drawer__heading-row { display: flex; align-items: center; padding-inline-end: 8px; }
+.mv-drawer__heading-row .mv-drawer__heading { flex: 1; }
+.mv-drawer__heading-action { color: var(--mail-text-muted); }
 .mv-folder__icon { display: inline-flex; color: var(--mail-text-muted); }
 .mv-view__note { margin: 8px 16px 0; font-size: 0.75rem; }
 /* Under the viewer (z 10), as search is, so a row opens over it. */

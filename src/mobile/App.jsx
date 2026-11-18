@@ -669,8 +669,21 @@ function App() {
     const { activeAccountId: accountId } = useMobileStore.getState();
     if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new', draftId: id });
   }, []);
+  /// Where Settings opens: its first screen, or (the drawer's Views Edit and New) Settings > Views.
+  const [settingsAt, setSettingsAt] = useState({ page: 'root', newView: false });
   const onSettings = useCallback(() => {
     setPanel(null);
+    setSettingsAt({ page: 'root', newView: false });
+    setSettingsOpen(true);
+  }, []);
+  const onEditViews = useCallback(() => {
+    setPanel(null);
+    setSettingsAt({ page: 'views', newView: false });
+    setSettingsOpen(true);
+  }, []);
+  const onNewView = useCallback(() => {
+    setPanel(null);
+    setSettingsAt({ page: 'views', newView: true });
     setSettingsOpen(true);
   }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -920,6 +933,8 @@ function App() {
           views={savedViews}
           viewCounts={viewCounts}
           onView={onView}
+          onEditViews={onEditViews}
+          onNewView={onNewView}
         />
       )}
       {panel === 'switcher' && (
@@ -994,7 +1009,7 @@ function App() {
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
       {openView && <ViewResults view={openView} onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeView} />}
-      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} />}
+      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} page={settingsAt.page} newView={settingsAt.newView} />}
       {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
       {compose && (
         <Compose

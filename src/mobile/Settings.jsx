@@ -12,12 +12,14 @@
 //   preferences show their sections the same way.
 // - Search finds the pages and settings the phone has and lands on the setting, as on desktop.
 // - Every page is desktop's view over the phone's preferences and engine (settings/*.jsx):
-//   Appearance, Mail preferences (Behavior, Notifications, Fields), Accounts, Templates, AI providers,
-//   Unsubscribe, Storage (Storage with the offline window and the search index; Data usage),
+//   Appearance, Mail preferences (Behavior, Notifications, Fields), Accounts, Templates, Views,
+//   AI providers, Unsubscribe, Storage (Storage with the offline window and the search index; Data usage),
 //   Privacy & security (Security, Tracking, Encryption, Network Activity), Billing, Diagnostics
 //   (unfinished server actions, Logs) and Help. Accounts' "Move to another computer" Export opens
 //   the phone's export page (settings/Transfer.jsx), and its Add account hands over to the phone's
-//   own sign-in flow (`onAddAccount`).
+//   own sign-in flow (`onAddAccount`). Views (settings/Views.jsx) opens on a new view when the
+//   drawer's + asked (`newView`), and its editor's unsaved edits are asked about before the
+//   header's Back leaves the page.
 // - Cleanup, Backup, Time Capsule and Migration sit in desktop's place with desktop's icon and
 //   name, and open one notice: the feature is in MailVault on desktop (DesktopNoticeView).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -51,6 +53,7 @@ import Templates from './settings/Templates.jsx';
 import Unsubscribe from './settings/Unsubscribe.jsx';
 import AiProviders from './settings/AiProviders.jsx';
 import Accounts from './settings/Accounts.jsx';
+import Views from './settings/Views.jsx';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 
@@ -94,8 +97,11 @@ export function placeOf(page) {
   return { nav: page };
 }
 
-/** `page`: the page to open on (the first screen, `'root'`, by default): see `placeOf`. */
-export default function Settings({ onClose, onReplayTour, onAddAccount, version = APP_VERSION, page: startPage = 'root' }) {
+/**
+ * `page`: the page to open on (the first screen, `'root'`, by default): see `placeOf`. `newView`:
+ * Views opens on a new view (once).
+ */
+export default function Settings({ onClose, onReplayTour, onAddAccount, version = APP_VERSION, page: startPage = 'root', newView = false }) {
   const t = useT();
   const [place, setPlace] = useState(() => placeOf(startPage));
   const [query, setQuery] = useState('');
@@ -110,6 +116,11 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
     setPlace((p) => (p.sub ? SUB_PAGES[p.sub].parent : { nav: 'root' }));
   }, []);
   useBackLayer(place.nav !== 'root', back);
+  // A page that holds unsaved edits (Views' editor) asks before the header's Back leaves it.
+  const leaveGuard = useRef(null);
+  const setLeaveGuard = useCallback((check) => { leaveGuard.current = check; }, []);
+  const headerBack = useCallback(() => (leaveGuard.current ? leaveGuard.current(back) : back()), [back]);
+  const [pendingNewView, setPendingNewView] = useState(newView);
 
   const reauthState = useMobileStore((s) => s.reauthState);
   const premium = useMobileStore((s) => s.premium);
@@ -198,6 +209,8 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
     );
   } else if (nav === 'templates') {
     body = <Templates />;
+  } else if (nav === 'views') {
+    body = <Views startNew={pendingNewView} onStarted={() => setPendingNewView(false)} onLeaveGuard={setLeaveGuard} />;
   } else if (nav === 'ai-providers') {
     body = <AiProviders />;
   } else if (nav === 'unsubscribe') {
@@ -214,7 +227,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
       <SettingsViewProvider t={t} locale={getMobileLocale()}>
         <header className="settings-header mv-settings__header">
           <div className="settings-header-context flex items-center gap-3 min-w-0">
-            <Button variant="ghost" icon size="md" aria-label={t('common.back')} onClick={nav === 'root' ? onClose : back}>
+            <Button variant="ghost" icon size="md" aria-label={t('common.back')} onClick={nav === 'root' ? onClose : headerBack}>
               <ChevronLeft size={20} className="text-mail-text-muted" aria-hidden="true" />
             </Button>
             <div className="settings-header-title min-w-0">

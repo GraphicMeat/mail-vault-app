@@ -379,6 +379,8 @@ export const MOBILE_PAGES = {
   templates: true,
   'ai-providers': true,
   unsubscribe: true,
+  // The phone's views run over its own index: they find the mail it keeps offline.
+  views: true,
   storage: true,
   'data-usage': true,
   security: true,
@@ -397,9 +399,6 @@ export const MOBILE_PAGES = {
   'time-capsule': 'desktopNotice',
   migration: 'desktopNotice',
   backup: 'desktopNotice',
-  // The phone lists and opens views from its folder drawer; the Views page and the editor are
-  // still to build.
-  views: 'engine: saved views',
   'auto-tags': 'engine: auto-tag rules',
 };
 
@@ -454,7 +453,6 @@ const ENGINE_GAPS = {
   'engine: account groups (the phone keeps no group per account, and its switcher and drawer have no group sections)': ['settings.accounts.group'],
   'engine: choosing the Google sign-in app (the phone keeps the client an account was signed in or imported with, and has no switch between them)': ['googleClient.settingsLabel'],
   'engine: switching a Microsoft account between Graph and IMAP (the phone keeps the transport it was added or imported with; a switch signs in again and re-files the mail)': ['account.msTransport'],
-  'engine: saved views': ['views.section', 'views.new', 'views.showTimeline'],
   'engine: deleted-emails bin': ['deletedBin.title', 'deletedBin.retention'],
   'engine: AI provider choice (the phone has one endpoint)': ['ai.settings.provider'],
   'engine: lifecycle messages': ['lifecycle.setting.label'],
@@ -475,6 +473,7 @@ const ON_PHONE = [
   'settings.notifications.perAccountSettings', 'settings.notifications.badge', 'settings.notifications.showBadgeCount', 'settings.notifications.badgeShows',
   'notifyPolicy.quietHours.title', 'notifyPolicy.allowlist.title',
   'fields.section', 'fields.newName', 'fields.newKind', 'fields.copyFrom',
+  'views.section', 'views.new', 'views.showTimeline',
   'settings.accounts.displayName', 'settings.accounts.emailSignature', 'settings.accounts.enableSignature',
   'settings.accounts.aliases.listTitle', 'settings.accounts.aliases.addAddress', 'settings.accounts.aliases.defaultAddress', 'settings.accounts.aliases.nameLabel',
   'settings.accounts.password', 'settings.accounts.mailServer', 'settings.accounts.sentFolder',

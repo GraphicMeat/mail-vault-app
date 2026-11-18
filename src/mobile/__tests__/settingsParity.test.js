@@ -71,6 +71,8 @@ describe('settings parity', () => {
     // Visible in every run: the phone features waiting for the engine.
     console.info(`[settings parity] engine gaps:\n${Object.entries(engineGaps).map(([reason, items]) => `  ${reason}: ${items.join(', ')}`).join('\n')}`);
     expect(Object.keys(engineGaps).every((reason) => reason.startsWith('engine:'))).toBe(true);
-    expect(engineGaps['engine: saved views']).toContain('page views');
+    // Saved views are on the phone now (Settings > Views, the editor); auto-tag rules are not yet.
+    expect(engineGaps['engine: saved views']).toBeUndefined();
+    expect(engineGaps['engine: auto-tag rules']).toContain('page auto-tags');
   });
 });

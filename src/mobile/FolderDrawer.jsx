@@ -6,15 +6,17 @@
 // reminders list; the footer's Settings opens the settings screen.
 // Desktop's saved views (`views`, with their counts) follow the folders, under desktop's Views
 // heading and each with desktop's icon, as on desktop's sidebar: a tap opens the view's mail
-// (ViewResults.jsx).
+// (ViewResults.jsx). The heading carries desktop's Edit and New (`onEditViews`, `onNewView`: Settings
+// > Views, the second on a new view), shown with no view as on desktop.
 import React from 'react';
+import { Pencil, Plus } from 'lucide-react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
 import { folderLabel } from './folders.js';
 import { ViewIcon } from '../components/ViewIcon.jsx';
 import { viewLabel } from '../utils/viewLabel.js';
 
-export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView }) {
+export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView, onEditViews, onNewView }) {
   const t = useT();
   return (
     <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
@@ -53,9 +55,21 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
           })}
         </ul>
       )}
-      {onView && views.length > 0 && (
+      {onView && (views.length > 0 || onEditViews || onNewView) && (
         <div className="mv-drawer__local mv-drawer__views" data-mv-views>
-          <h3 className="mv-drawer__heading">{t('views.section')}</h3>
+          <div className="mv-drawer__heading-row">
+            <h3 className="mv-drawer__heading">{t('views.section')}</h3>
+            {onEditViews && (
+              <button type="button" className="mv-iconbtn mv-drawer__heading-action" data-mv-views-edit aria-label={t('views.edit')} title={t('views.edit')} onClick={onEditViews}>
+                <Pencil size={16} aria-hidden="true" />
+              </button>
+            )}
+            {onNewView && (
+              <button type="button" className="mv-iconbtn mv-drawer__heading-action" data-mv-views-new aria-label={t('views.new')} title={t('views.new')} onClick={onNewView}>
+                <Plus size={16} aria-hidden="true" />
+              </button>
+            )}
+          </div>
           {views.map((v) => (
             <button key={v.id} type="button" className="mv-folder" data-mv-view-open={v.id} onClick={() => onView(v)}>
               <span className="mv-folder__icon"><ViewIcon icon={v.icon} size={16} /></span>
