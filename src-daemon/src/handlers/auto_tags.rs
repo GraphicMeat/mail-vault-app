@@ -18,7 +18,7 @@ use crate::state::DaemonState;
 use mailvault_core::app_db::{self, auto_tags, tags::Target};
 use mailvault_core::custody::cache;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -110,12 +110,11 @@ pub(crate) async fn evaluate(
     rule: &auto_tags::Rule,
     candidate: &auto_tags::Candidate,
 ) -> Result<auto_tags::Verdict, String> {
-    if matches!(provider, Provider::Endpoint { .. }) && !rule.allow_remote {
-        return Err("this rule does not allow a remote provider (allow_remote is false)".to_string());
-    }
+    // Core's evaluation sequence (`auto_tags` "Evaluation"), the phone engine's too.
+    auto_tags::remote_gate(rule, matches!(provider, Provider::Endpoint { .. }))?;
     crate::ai_gate::check(app_dir, provider, Some(&[account_id.to_string()])).await?;
     let prompt = auto_tags::verdict_prompt(&rule.instruction, candidate);
-    let text = llm::generate(provider, inference, &prompt, Some(auto_tags::VERDICT_SYSTEM_PROMPT), 32).await?;
+    let text = llm::generate(provider, inference, &prompt, Some(auto_tags::VERDICT_SYSTEM_PROMPT), auto_tags::VERDICT_MAX_TOKENS).await?;
     auto_tags::parse_verdict(&text)
 }
 
@@ -168,7 +167,7 @@ pub(crate) fn provider_from_rule(rule: &auto_tags::Rule) -> Option<Provider> {
 /// plain `NoMatch` or a `Match` below the rule's own threshold: only a clean
 /// `Ok(Match(c >= min_confidence))` ever assigns.
 pub(crate) fn should_assign(verdict: &Result<auto_tags::Verdict, String>, min_confidence: f64) -> bool {
-    matches!(verdict, Ok(v) if auto_tags::meets_threshold(*v, min_confidence))
+    auto_tags::should_assign(verdict, min_confidence)
 }
 
 /// One cached header, paired with the identity a tag assignment needs.
@@ -236,22 +235,7 @@ async fn rule_for_eval(state: &Arc<DaemonState>, params: &Value) -> Result<auto_
         let found = blocking(move || app_db::with(&app_dir, |conn| auto_tags::get(conn, &rid))).await.and_then(|r| r)?;
         return found.ok_or_else(|| format!("no such auto-tag rule: {rule_id}"));
     }
-    let draft = draft_of(params)?;
-    Ok(auto_tags::Rule {
-        id: String::new(),
-        name: draft.name,
-        instruction: draft.instruction,
-        constraints: draft.constraints,
-        tag_id: draft.tag_id,
-        inbox_action: draft.inbox_action,
-        min_confidence: draft.min_confidence,
-        allow_remote: draft.allow_remote,
-        provider: draft.provider,
-        enabled: draft.enabled,
-        enabled_at: None,
-        created_at: 0,
-        updated_at: 0,
-    })
+    Ok(auto_tags::rule_from_draft(draft_of(params)?))
 }
 
 /// Run a rule over the last N cached headers WITHOUT writing anything —
@@ -376,22 +360,9 @@ async fn run_backfill(state: &Arc<DaemonState>, params: &Value) -> Result<Value,
     Ok(json!({ "batchId": batch_id, "processed": processed, "total": total, "matched": matched, "assigned": assigned }))
 }
 
-/// `targets` minus whichever of them already carry `tag_id` — so a backfill's
-/// own undo can never remove a tag the message carried before it ran.
+/// `targets` minus whichever of them already carry `tag_id` (core's rule).
 fn exclude_already_tagged(conn: &app_db::Connection, tag_id: &str, targets: Vec<Target>) -> Result<Vec<Target>, String> {
-    let mut per_account: HashMap<String, Vec<String>> = HashMap::new();
-    for t in &targets {
-        per_account.entry(t.account_id.clone()).or_default().push(t.msg_key.clone());
-    }
-    let mut already: HashSet<(String, String)> = HashSet::new();
-    for (account_id, keys) in per_account {
-        for (msg_key, tag_ids) in mailvault_core::app_db::tags::for_messages(conn, &account_id, &keys)? {
-            if tag_ids.iter().any(|t| t == tag_id) {
-                already.insert((account_id.clone(), msg_key));
-            }
-        }
-    }
-    Ok(targets.into_iter().filter(|t| !already.contains(&(t.account_id.clone(), t.msg_key.clone()))).collect())
+    auto_tags::exclude_already_tagged(conn, tag_id, targets)
 }
 
 #[cfg(test)]

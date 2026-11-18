@@ -4,7 +4,9 @@
 //! in Rust before any candidate is ever handed to a model: cost control and
 //! the correctness story in one. The instruction itself is evaluated by the
 //! daemon (`src-daemon/src/handlers/auto_tags.rs`, which owns `llm::generate`)
-//! against the strict verdict format `parse_verdict` below understands.
+//! and by the phone engine (`src-mobile-engine/src/auto_tags.rs`, over its one
+//! endpoint), both through the sequence under "Evaluation" below, against the
+//! strict verdict format `parse_verdict` understands.
 //!
 //! This module never touches a mailbox, the vault or a server: `inbox_action`
 //! is a stored fact the app's views layer reads to hide a row locally.
@@ -520,6 +522,80 @@ pub fn meets_threshold(verdict: Verdict, min_confidence: f64) -> bool {
     matches!(verdict, Verdict::Match(c) if c >= min_confidence)
 }
 
+// ── Evaluation, shared by the daemon and the phone engine ───────────────
+//
+// One evaluation is, in this order: [`remote_gate`] (before anything is
+// built), the caller's own account gate (the Google mail rule), then
+// [`verdict_prompt`] with [`VERDICT_SYSTEM_PROMPT`] and [`VERDICT_MAX_TOKENS`]
+// sent to the model, and [`parse_verdict`] on its reply. [`should_assign`]
+// decides from the outcome. The daemon (`handlers/auto_tags.rs` `evaluate`,
+// async over its providers) and the phone engine (`auto_tags.rs`, its one
+// endpoint) both run exactly this sequence.
+
+/// The most tokens a verdict reply may take: the two short lines the system
+/// prompt asks for.
+pub const VERDICT_MAX_TOKENS: usize = 32;
+
+/// The refusal for a rule asked to run on a remote provider without its
+/// "Allow a remote AI provider" opt-in.
+pub const REMOTE_NOT_ALLOWED: &str = "this rule does not allow a remote provider (allow_remote is false)";
+
+/// The privacy opt-in, checked before any request is built: a remote provider
+/// (`remote`: an OpenAI-compatible endpoint, wherever it is) may run only a
+/// rule that allows one.
+pub fn remote_gate(rule: &Rule, remote: bool) -> Result<(), String> {
+    if remote && !rule.allow_remote {
+        return Err(REMOTE_NOT_ALLOWED.to_string());
+    }
+    Ok(())
+}
+
+/// Whether a verdict, or the refusal produced instead of one, assigns the
+/// tag. A refusal (unparseable text, a provider not allowed, a network error)
+/// is never a match, exactly like a plain `NoMatch` or a `Match` below the
+/// rule's own threshold: only a clean `Ok(Match(c >= min_confidence))` assigns.
+pub fn should_assign(verdict: &Result<Verdict, String>, min_confidence: f64) -> bool {
+    matches!(verdict, Ok(v) if meets_threshold(*v, min_confidence))
+}
+
+/// The rule an unsaved draft would be, for a preview of it ("preview this
+/// before you've even saved it"): no id, never enabled at any time.
+pub fn rule_from_draft(draft: RuleDraft) -> Rule {
+    Rule {
+        id: String::new(),
+        name: draft.name,
+        instruction: draft.instruction,
+        constraints: draft.constraints,
+        tag_id: draft.tag_id,
+        inbox_action: draft.inbox_action,
+        min_confidence: draft.min_confidence,
+        allow_remote: draft.allow_remote,
+        provider: draft.provider,
+        enabled: draft.enabled,
+        enabled_at: None,
+        created_at: 0,
+        updated_at: 0,
+    }
+}
+
+/// `targets` minus whichever of them already carry `tag_id`, so a backfill's
+/// own undo can never remove a tag the message carried before it ran.
+pub fn exclude_already_tagged(conn: &Connection, tag_id: &str, targets: Vec<Target>) -> Result<Vec<Target>, String> {
+    let mut per_account: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    for t in &targets {
+        per_account.entry(t.account_id.clone()).or_default().push(t.msg_key.clone());
+    }
+    let mut already: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+    for (account_id, keys) in per_account {
+        for (msg_key, tag_ids) in super::tags::for_messages(conn, &account_id, &keys)? {
+            if tag_ids.iter().any(|t| t == tag_id) {
+                already.insert((account_id.clone(), msg_key));
+            }
+        }
+    }
+    Ok(targets.into_iter().filter(|t| !already.contains(&(t.account_id.clone(), t.msg_key.clone()))).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -956,5 +1032,46 @@ mod tests {
         assert!(meets_threshold(Verdict::Match(0.8), 0.7));
         assert!(!meets_threshold(Verdict::Match(0.5), 0.7));
         assert!(!meets_threshold(Verdict::NoMatch, 0.0));
+    }
+
+    // ── Shared evaluation pieces ─────────────────────────────────────
+
+    fn rule_of(allow_remote: bool) -> Rule {
+        Rule { allow_remote, ..rule_from_draft(draft("Receipts")) }
+    }
+
+    #[test]
+    fn a_remote_provider_needs_the_rules_opt_in_and_a_local_one_does_not() {
+        assert_eq!(remote_gate(&rule_of(false), true).unwrap_err(), REMOTE_NOT_ALLOWED);
+        assert!(REMOTE_NOT_ALLOWED.contains("allow_remote"), "the daemon's tests read this word");
+        assert!(remote_gate(&rule_of(true), true).is_ok());
+        assert!(remote_gate(&rule_of(false), false).is_ok());
+    }
+
+    #[test]
+    fn should_assign_takes_only_a_clean_match_at_or_above_the_threshold() {
+        assert!(should_assign(&Ok(Verdict::Match(0.9)), 0.7));
+        assert!(should_assign(&Ok(Verdict::Match(0.7)), 0.7));
+        assert!(!should_assign(&Ok(Verdict::Match(0.5)), 0.7));
+        assert!(!should_assign(&Ok(Verdict::NoMatch), 0.0));
+        assert!(!should_assign(&Err("refused".into()), 0.0));
+    }
+
+    #[test]
+    fn a_draft_previews_as_a_rule_that_was_never_saved_or_enabled() {
+        let rule = rule_from_draft(RuleDraft { enabled: true, ..draft("Receipts") });
+        assert_eq!(rule.id, "");
+        assert_eq!(rule.enabled_at, None);
+        assert_eq!(rule.instruction, "receipts and invoices");
+    }
+
+    #[test]
+    fn exclude_already_tagged_keeps_only_messages_without_the_tag() {
+        let c = conn();
+        let tag = super::super::tags::ensure(&c, "Receipts", "").unwrap();
+        let one = Target { account_id: "a".into(), msg_key: "one@example.com".into() };
+        let two = Target { account_id: "a".into(), msg_key: "two@example.com".into() };
+        super::super::tags::assign(&c, &tag.id, std::slice::from_ref(&one)).unwrap();
+        assert_eq!(exclude_already_tagged(&c, &tag.id, vec![one, two.clone()]).unwrap(), vec![two]);
     }
 }
