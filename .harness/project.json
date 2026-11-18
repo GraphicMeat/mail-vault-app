@@ -4,7 +4,7 @@
     "app": {
       "kind": "tauri",
       "setup": "npm run build:daemon",
-      "test": "~/.claude/bin/anyjob cargo test -p imap-proto -p mailvault-core -p mailvault-daemon -p mock-imap",
+      "test": "~/.claude/bin/anyjob bash -c 'cargo test -p imap-proto -p mailvault-core -p mailvault-daemon -p mock-imap && npm ci --ignore-scripts && node scripts/build-search-index.mjs website && npm test'",
       "screens": [{ "name": "Launch", "launchArg": "" }]
     },
     "web": {
