@@ -17,7 +17,7 @@ const CALL = (name) => new RegExp(String.raw`(?<![\w$])${name}\s*\(`, 'g');
 const LITERAL = new RegExp('^' + STRING_ARG);
 
 // Crude comment stripper: block comments, and `//` that does not follow `:` or a quote (URLs).
-function stripComments(src) {
+export function stripComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"\x60\w])\/\/.*$/gm, '$1');
 }
 

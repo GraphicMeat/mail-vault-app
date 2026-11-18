@@ -6,15 +6,15 @@ import { DateTimePreview, ReadingPreview } from './PreviewViews';
 import { useT } from './viewContext';
 
 const READING = [
-  { key: 'threadMode', label: 'threadMode',
+  { key: 'threadMode', labelKey: 'settings.appearance.threadMode',
     options: [['grouped', 'threadModeGrouped', 'threadModeGroupedHint'], ['expandable', 'threadModeExpandable', 'threadModeExpandableHint'], ['flat', 'threadModeFlat', 'threadModeFlatHint']] },
-  { key: 'threadSortOrder', label: 'threadSortOrder',
+  { key: 'threadSortOrder', labelKey: 'settings.appearance.threadSortOrder',
     options: [['oldest-first', 'oldestFirst', 'conversationFlowsTopBottom'], ['newest-first', 'newestFirst', 'latestReplyTop']] },
-  { key: 'signatureDisplay', label: 'signatureDisplay',
+  { key: 'signatureDisplay', labelKey: 'settings.appearance.signatureDisplay',
     options: [['smart', 'smart', 'showOncePerSenderCollapse'], ['always-show', 'alwaysShow', 'neverCollapseSignatures'], ['always-hide', 'alwaysHide', 'collapseAllSignatures'], ['collapsed', 'collapsed', 'collapsedToggleExpand']] },
-  { key: 'emailRowHighlight', label: 'rowHighlight',
+  { key: 'emailRowHighlight', labelKey: 'settings.appearance.rowHighlight',
     options: [['hover', 'rowHighlightHover', 'rowHighlightHoverHint'], ['selection', 'rowHighlightSelection', 'rowHighlightSelectionHint']] },
-  { key: 'actionButtonDisplay', label: 'actionButtonStyle',
+  { key: 'actionButtonDisplay', labelKey: 'settings.appearance.actionButtonStyle',
     options: [['icon-only', 'iconsOnly'], ['icon-label', 'iconsLabels'], ['text-only', 'labelsOnly']] },
 ];
 export const READING_ROWS = READING.map(row => row.key);
@@ -23,11 +23,11 @@ export function ReadingView({ values, onChange, rows = READING_ROWS }) {
   const t = useT();
   return <section className="settings-preference-group" aria-labelledby="reading-settings-title">
     <h4 id="reading-settings-title">{t('settings.appearance.readingAndConversations')}</h4>
-    {READING.filter(({ key }) => rows.includes(key)).map(({ key, label, options }) => {
+    {READING.filter(({ key }) => rows.includes(key)).map(({ key, labelKey, options }) => {
       const hint = options.find(([value]) => value === values[key])?.[2];
       return (
-        <SettingRow key={key} label={t(`settings.appearance.${label}`)} description={hint && t(`settings.appearance.${hint}`)}
-          preview={<ReadingPreview setting={key} value={values[key]} label={t(`settings.appearance.${label}`)} />}>
+        <SettingRow key={key} label={t(labelKey)} description={hint && t(`settings.appearance.${hint}`)}
+          preview={<ReadingPreview setting={key} value={values[key]} label={t(labelKey)} />}>
           <select value={values[key]} onChange={event => onChange(key, event.target.value)}>
             {options.map(([value, optionLabel]) => <option key={value} value={value}>{t(`settings.appearance.${optionLabel}`)}</option>)}
           </select>

@@ -11,23 +11,23 @@ import { useT } from './viewContext';
 const PREVIEW_LINE_CHOICES = [[0, 'listPreview.off'], [1, 'listPreview.one'], [2, 'listPreview.two'], [3, 'listPreview.three']];
 
 const GROUPS = [
-  { key: 'viewStyle', title: 'mailExperience',
+  { key: 'viewStyle', titleKey: 'workspace.mailExperience',
     options: [['list', 'emailView', 'emailViewHint'], ['chat', 'chatView', 'chatViewHint']] },
-  { key: 'layoutMode', title: 'readingPane', chatDisables: true,
+  { key: 'layoutMode', titleKey: 'workspace.readingPane', chatDisables: true,
     options: [['three-column', 'besideList', 'besideListHint', Columns], ['two-column', 'belowList', 'belowListHint', Rows]] },
-  { key: 'sidebarLayout', title: 'sidebarLayout' },
-  { key: 'sidebarDensity', title: 'sidebarDensity',
+  { key: 'sidebarLayout', titleKey: 'workspace.sidebarLayout' },
+  { key: 'sidebarDensity', titleKey: 'workspace.sidebarDensity',
     options: [['comfortable', 'sidebarDensityComfortable', 'sidebarDensityComfortableHint'], ['compact', 'sidebarDensityCompact', 'sidebarDensityCompactHint']] },
   // The message list's rows, the same two choices beside the sidebar's.
-  { key: 'listDensity', title: 'listDensity', chatDisables: true,
+  { key: 'listDensity', titleKey: 'workspace.listDensity', chatDisables: true,
     options: [['comfortable', 'sidebarDensityComfortable', 'listDensityComfortableHint'], ['compact', 'sidebarDensityCompact', 'listDensityCompactHint']] },
-  { key: 'folderIconStyle', title: 'folderIcons',
+  { key: 'folderIconStyle', titleKey: 'workspace.folderIcons',
     options: [['colorful', 'folderIconsColorful', 'folderIconsColorfulHint'], ['theme', 'folderIconsTheme', 'folderIconsThemeHint']] },
-  { key: 'sidebarBackupStatusLocation', title: 'backupStatusLocation',
+  { key: 'sidebarBackupStatusLocation', titleKey: 'workspace.backupStatusLocation',
     options: [['avatar', 'backupStatusAvatar', 'backupStatusAvatarHint'], ['row', 'backupStatusRow', 'backupStatusRowHint'], ['hidden', 'backupStatusHidden', 'backupStatusHiddenHint']] },
-  { key: 'sidebarStyle', title: 'navigation',
+  { key: 'sidebarStyle', titleKey: 'workspace.navigation',
     options: [['list', 'navigationList', 'navigationListHint'], ['tagcloud', 'navigationBubbles', 'navigationBubblesHint']] },
-  { key: 'emailListStyle', title: 'messageRows', chatDisables: true,
+  { key: 'emailListStyle', titleKey: 'workspace.messageRows', chatDisables: true,
     options: [['compact', 'twoLineRows', 'twoLineRowsHint'], ['default', 'singleLineRows', 'singleLineRowsHint']] },
 ];
 export const WORKSPACE_ROWS = [...GROUPS.map(group => group.key), 'listPreviewLines', 'showMenuBar'];
@@ -43,7 +43,7 @@ export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowI
   return (
     <section className="settings-preference-group" data-testid="appearance-layout-section" aria-labelledby="workspace-settings-title">
       <h4 id="workspace-settings-title">{t('workspace.title')}</h4>
-      {GROUPS.filter(({ key }) => shown.has(key)).map(({ key, title, options, chatDisables }) => {
+      {GROUPS.filter(({ key }) => shown.has(key)).map(({ key, titleKey, options, chatDisables }) => {
         const disabled = chatDisables && chat;
         return key === 'sidebarLayout' ? (
           <SettingRow key={key} label={t('workspace.sidebarLayout')} className="sidebar-layout-setting">
@@ -65,11 +65,11 @@ export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowI
             </div>
           </SettingRow>
         ) : (
-          <SettingRow key={key} label={t(`workspace.${title}`)} description={
+          <SettingRow key={key} label={t(titleKey)} description={
             key === 'layoutMode' && !chat && windowIsNarrow
               ? t('settings.appearance.windowTooNarrowForThreeColumns')
               : disabled ? undefined : t(`workspace.${options.find(([value]) => value === values[key])?.[2] || options[0][2]}`)
-          } preview={previewOf(key, values[key], t(`workspace.${title}`), disabled)}>
+          } preview={previewOf(key, values[key], t(titleKey), disabled)}>
             <div role="group" className="settings-segments">
               {options.map(([value, label, , Icon]) => (
                 <button type="button" key={value} aria-pressed={values[key] === value} disabled={disabled}
