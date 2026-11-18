@@ -898,8 +898,17 @@ impl Backend for GraphBackend<'_> {
 
     fn append(&mut self, folder: &str, raw: &[u8], flags: Flags) -> Result<bool, Fail> {
         // As desktop's migration uploads to Graph: a message made from the MIME (Graph files it
-        // in Drafts), moved to the folder, then marked.
-        let draft = self.call(async |c| c.create_message_from_mime(raw).await).map_err(Fail::from)?;
+        // in Drafts), moved to the folder, then marked. An earlier attempt whose move failed left
+        // its copy in Drafts: that copy is moved, never a second one made.
+        let imid = mailvault_core::maildir::message_id_key(raw);
+        let left = match &imid {
+            Some(imid) => self.call(async |c| c.find_by_internet_message_id("drafts", imid).await).map_err(Fail::from)?.into_iter().next(),
+            None => None,
+        };
+        let draft = match left {
+            Some(id) => id,
+            None => self.call(async |c| c.create_message_from_mime(raw).await).map_err(Fail::from)?,
+        };
         let dest = remote_folder(folder).to_string();
         let id = match self.call(async |c| c.move_message(&draft, &dest).await) {
             Ok(id) => id,

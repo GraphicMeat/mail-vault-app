@@ -1123,6 +1123,38 @@ impl Backend for JmapBackend<'_> {
         if flags.answered {
             keywords.push("$answered".to_string());
         }
+        // One email per account: a copy the server still holds anywhere (a delete in Trash of an
+        // email also in another mailbox only took its Trash label off) gets the folder's label
+        // instead of a second email. A server need not dedupe an import on its own.
+        if let Some(wanted) = mailvault_core::maildir::message_id_in(raw) {
+            let held = self
+                .call(async |c| {
+                    let hits = c.query_emails(json!({ "header": ["Message-ID", wanted] }), 50).await?;
+                    if hits.is_empty() {
+                        return Ok(None);
+                    }
+                    let got = c.get_emails(&hits, &["id", "messageId"]).await?;
+                    Ok(got
+                        .list
+                        .iter()
+                        .find(|e| {
+                            e["messageId"].as_array().is_some_and(|ids| {
+                                ids.iter().filter_map(Value::as_str).any(|m| mailvault_core::maildir::normalize_message_id(m) == wanted)
+                            })
+                        })
+                        .and_then(|e| e["id"].as_str())
+                        .map(str::to_string))
+                })
+                .map_err(Fail::from)?;
+            if let Some(existing) = held {
+                let patches = vec![(existing, vec![(dest.clone(), true)])];
+                let set = self.call(async |c| c.set_mailboxes(&patches).await).map_err(Fail::from)?;
+                return match set.failed.first() {
+                    None => Ok(true),
+                    Some((_, why)) => Err(Fail::Code(Code::Invalid, format!("Email/set refused {why}"))),
+                };
+            }
+        }
         let received = mailvault_core::jmap::client::received_at_of(raw);
         let out = self
             .call(async |c| {

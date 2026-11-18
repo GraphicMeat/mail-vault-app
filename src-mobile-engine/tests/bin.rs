@@ -168,13 +168,6 @@ impl Fixture {
     fn app_db(&self) -> rusqlite::Connection {
         rusqlite::Connection::open(self.tmp.path().join("core").join("app.db")).unwrap()
     }
-
-    fn restart(self) -> Fixture {
-        let Fixture { tmp, secrets, engine, events: _, account } = self;
-        drop(engine);
-        let (engine, events) = open(tmp.path(), &secrets);
-        Fixture { tmp, secrets, engine, events, account }
-    }
 }
 
 fn copies(server: &MockImap, folder: &str, uid: u32) -> usize {
@@ -307,9 +300,13 @@ fn a_crash_between_the_capture_and_the_delete_keeps_one_copy() {
     assert_eq!(refused["queued"], json!([]), "{refused}");
     assert_eq!(refused["failed"][0]["error"], "deletedBin.deleteStillQueued", "{refused}");
 
-    // The crash, then a healthy server.
+    // The crash, then a healthy server: the engine is gone before the server heals, so no attempt
+    // of the old one lands the delete.
+    let Fixture { tmp, secrets, engine, events: _, account } = f;
+    drop(engine);
     server.reset_scenario(scenario(&[], &[5]));
-    let f = f.restart();
+    let (engine, events) = open(tmp.path(), &secrets);
+    let f = Fixture { tmp, secrets, engine, events, account };
     f.engine.rpc("mobile.actions.retry", json!({})).unwrap();
     let r = f.events.final_result(seq);
     assert_eq!(r["outcome"], "done", "{r}");
@@ -331,7 +328,12 @@ fn a_cancelled_delete_leaves_nothing_in_the_bin() {
     f.events.retrying(seq);
     assert_eq!(f.bin().len(), 1, "captured before the wire");
     assert_eq!(f.engine.rpc("mobile.actions.discard", json!({ "seq": seq })).unwrap()["discarded"], true);
-    assert!(f.bin().is_empty(), "the capture goes with the delete");
+    // A replay attempt between its capture and its journal check takes its own capture out too.
+    let deadline = Instant::now() + WAIT;
+    while !f.bin().is_empty() {
+        assert!(Instant::now() < deadline, "the capture stayed: {:?}", f.bin());
+        std::thread::sleep(Duration::from_millis(20));
+    }
     assert_eq!(copies(&server, "INBOX", 1), 1);
 }
 

@@ -385,6 +385,9 @@ fn graph_deleted_bin_recovers_by_move_and_by_upload() {
     assert_eq!(kept.len(), 1, "{bin:?}");
     let id = kept[0]["id"].as_str().unwrap().to_string();
     assert_eq!(std::fs::read(f.tmp.path().join("deleted").join(format!("{id}.eml"))).unwrap(), source, "the MIME as Graph served it");
+    // The move after the upload fails once: the retry moves the copy it left in Drafts, and makes
+    // no second one.
+    f.g.fail_moves_after(0, 1);
     assert!(f.rpc("mobile.deleted.recover", json!({ "ids": [id] }))["queued"][0]["seq"].is_i64());
     f.wait_pending_empty();
     let back = f.g.messages_in("deleteditems");

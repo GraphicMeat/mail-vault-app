@@ -535,6 +535,35 @@ fn jmap_deleted_bin_recovers_by_label_and_by_import() {
     assert!(f.api_calls("Email/import").len() == 1, "one import");
 }
 
+/// A delete in Trash of an email also in another mailbox only takes the Trash label off (R5): the
+/// email stays on the server. Its recover puts the label back on that email, and never imports a
+/// second one (a server need not dedupe an import).
+#[test]
+fn a_jmap_recover_of_an_email_still_elsewhere_adds_its_label_back() {
+    let now = now_secs();
+    let mut s = scenario(vec![]);
+    let mut both = email("t", "Tango", now - 200);
+    both.also_in = vec!["mb-proj".into()];
+    s.accounts[0].mailboxes[3].emails.push(both);
+    let f = setup(s);
+    f.sync(None);
+    f.sync(Some("mb-trash"));
+    let uid = f.uids("mb-trash")["Tango"];
+    f.apply("delete", "mb-trash", &[uid], None);
+    f.wait_pending_empty();
+    assert_eq!(f.mailboxes_of("t"), vec!["mb-proj".to_string()], "only the Trash label went");
+    let bin = f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().clone();
+    assert_eq!(bin.len(), 1, "{bin:?}");
+    let id = bin[0]["id"].as_str().unwrap().to_string();
+    assert!(f.rpc("mobile.deleted.recover", json!({ "ids": [id] }))["queued"][0]["seq"].is_i64());
+    f.wait_pending_empty();
+    let mut boxes = f.mailboxes_of("t");
+    boxes.sort();
+    assert_eq!(boxes, vec!["mb-proj".to_string(), "mb-trash".to_string()], "the same email, labelled again");
+    assert!(f.api_calls("Email/import").is_empty(), "nothing imported");
+    assert!(f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().is_empty());
+}
+
 #[test]
 fn opening_a_jmap_message_fetches_no_attachment_and_a_tap_streams_one() {
     let now = now_secs();
