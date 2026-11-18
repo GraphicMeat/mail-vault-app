@@ -84,6 +84,15 @@ function appPid() {
   }
 }
 
+/** Bring this run's app to the front before a window capture. */
+export function activateAppWindow() {
+  const pid = appPid();
+  if (!pid) throw new Error(`no running app at ${process.env.SHOTS_APP_BINARY}`);
+  execFileSync(windowIdBinary(), ['--activate'], {
+    env: { ...process.env, MAILVAULT_WINDOW_PID: pid },
+  });
+}
+
 class MultipleAppsError extends Error {}
 
 /**

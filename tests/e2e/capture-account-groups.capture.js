@@ -15,6 +15,11 @@ async function setGroupDraft(value) {
   }, value);
 }
 
+async function assignedGroup(accountId, expected) {
+  await wait(() => browser.execute(id => window.__SETTINGS_STORE__.getState().accountGroups[id], accountId)
+    .then(name => expected == null ? name == null : name === expected), `Expected account group ${expected || '(none)'}`);
+}
+
 async function setMode(theme) {
   await browser.execute(value => {
     if (document.documentElement.getAttribute('data-theme') === value) return;
@@ -25,17 +30,17 @@ async function setMode(theme) {
   await wait(() => browser.execute(value => document.documentElement.getAttribute('data-theme') === value, theme), `Theme ${theme} did not apply`);
 }
 
-async function captureScreen(name, selector, capture) {
+async function captureScreen(name, selector, capture, activateAppWindow) {
   await wait(() => browser.execute(value => {
     const element = document.querySelector(value);
     return !!element && element.getBoundingClientRect().height > 0;
   }, selector), `${name}: ${selector} not reached`);
-  await browser.pause(300);
   await dismissOnboardingNotice();
   await browser.execute(() => {
     document.querySelectorAll('[data-capture-exclude][role="alert"] button[aria-label]').forEach(button => button.click());
   });
-  await browser.pause(250);
+  activateAppWindow();
+  await browser.pause(500);
   capture(name);
   writeFileSync(resolve(process.env.HARNESS_SHOTS_OUT || '.artifacts', `${name.slice(0, name.lastIndexOf('-'))}.reached`), `${selector}\n`);
 }
@@ -62,10 +67,10 @@ describe('Account groups capture', function () {
     mkdirSync(out, { recursive: true });
     process.env.SHOTS_APP_BINARY = resolve('target/debug/mailvault');
     process.env.SHOTS_OUT = out;
-    const { capture } = await import('../../scripts/screenshots/capture.js');
+    const { capture, activateAppWindow } = await import('../../scripts/screenshots/capture.js');
     for (const theme of ['light', 'dark']) {
       await setMode(theme);
-      await captureScreen(`sidebar-account-groups-${theme}`, '.sidebar-account-list [role="group"][aria-label="Work"]', capture);
+      await captureScreen(`sidebar-account-groups-${theme}`, '.sidebar-account-list [role="group"][aria-label="Work"]', capture, activateAppWindow);
       await openSettings();
       assert.equal(await clickSettingsNav('Accounts'), true);
       await wait(() => browser.execute(() => !!document.querySelector('.account-settings-list')
@@ -75,15 +80,28 @@ describe('Account groups capture', function () {
       await wait(() => browser.execute(() => document.querySelector('.account-group-field [data-testid="account-group-chip"]')?.getAttribute('aria-label') === 'Remove Work'
         && !!document.querySelector('.account-group-field [role="group"][aria-label="Existing groups"]')),
       'Work account group picker did not render');
-      await captureScreen(`settings-account-group-${theme}`, '.account-group-field [data-testid="account-group-chip"]', capture);
+      await captureScreen(`settings-account-group-${theme}`, '.account-group-field [data-testid="account-group-chip"]', capture, activateAppWindow);
       await setGroupDraft('Stu');
       await wait(() => browser.execute(() => [...document.querySelectorAll('.typeahead-list [role="option"]')]
         .some(option => option.textContent.includes('Create') && option.textContent.includes('Stu'))),
       'Create Stu option did not render');
-      await captureScreen(`settings-account-group-create-${theme}`, '.typeahead-list [role="option"]', capture);
-      await setGroupDraft('');
-      await browser.execute(() => document.querySelector('input[id^="account-group-"]').blur());
+      await captureScreen(`settings-account-group-create-${theme}`, '.typeahead-list [role="option"]', capture, activateAppWindow);
+      await $('.typeahead-list [role="option"]:last-child').click();
+      await assignedGroup(workOne.id, 'Stu');
+      await $('.account-group-field [data-testid="account-group-chip"]').click();
+      await assignedGroup(workOne.id, undefined);
+      await setGroupDraft('Wo');
+      await $('.typeahead-list [role="option"]:first-child').click();
+      await assignedGroup(workOne.id, 'Work');
+      await $('.account-group-cloud button').click();
+      await assignedGroup(workOne.id, 'Personal');
+      assert.equal(await browser.execute(() => document.querySelector('.account-group-cloud button')?.getAttribute('aria-pressed')), 'true');
+      await $('.account-group-cloud button').click();
+      await assignedGroup(workOne.id, undefined);
+      await $('.account-group-cloud button:last-child').click();
+      await assignedGroup(workOne.id, 'Work');
       await browser.setWindowRect(0, 0, 375, 800);
+      assert.equal(await browser.execute(() => innerWidth), 375, 'Narrow capture must have a 375px webview');
       await browser.pause(250);
       await browser.execute(() => {
         const cloud = document.querySelector('.account-group-cloud');
@@ -93,7 +111,7 @@ describe('Account groups capture', function () {
       await wait(() => browser.execute(() => document.querySelector('.account-group-cloud').getBoundingClientRect().bottom
         <= document.querySelector('.account-settings-detail [role="tabpanel"]').getBoundingClientRect().bottom),
         'Group cloud did not fit in the narrow window');
-      await captureScreen(`settings-account-group-mobile-${theme}`, '.account-group-field [role="group"]', capture);
+      await captureScreen(`settings-account-group-mobile-${theme}`, '.account-group-field [role="group"]', capture, activateAppWindow);
       await browser.setWindowRect(0, 0, 1280, 1000);
       await closeSettings();
       await browser.execute(() => window.__SETTINGS_STORE__.setState({ sidebarCollapsed: true }));
@@ -112,7 +130,7 @@ describe('Account groups capture', function () {
         const allVisibleInTurn = rows.every(visible);
         return allVisibleInTurn && visible(divider);
       }, browser.mockAccounts.slice(0, 3).map(account => account.email)), 'Collapsed avatars and divider must each be reachable');
-      await captureScreen(`sidebar-collapsed-groups-${theme}`, '.sidebar-collapsed-accounts .sidebar-collapsed-divider', capture);
+      await captureScreen(`sidebar-collapsed-groups-${theme}`, '.sidebar-collapsed-accounts .sidebar-collapsed-divider', capture, activateAppWindow);
       await browser.execute(() => window.__SETTINGS_STORE__.setState({ sidebarCollapsed: false }));
       await wait(() => browser.execute(() => !!document.querySelector('.sidebar-account-list [role="group"][aria-label="Work"]')),
         'Expanded sidebar did not return');

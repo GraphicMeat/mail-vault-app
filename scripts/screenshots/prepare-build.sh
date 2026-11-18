@@ -28,12 +28,14 @@ fi
 
 [ -f "$BACKUP" ] || cp "$CONF" "$BACKUP"
 
-python3 - "$CONF" <<'PY'
+python3 - "$CONF" "${1:-}" <<'PY'
 import json, sys
 path = sys.argv[1]
 conf = json.load(open(path))
 win = conf["app"]["windows"][0]
 win["width"], win["height"] = 1440, 900
+if sys.argv[2] == "--narrow":
+    win["minWidth"] = 375
 json.dump(conf, open(path, "w"), indent=2)
 print(f"window: {win['width']}x{win['height']}")
 PY

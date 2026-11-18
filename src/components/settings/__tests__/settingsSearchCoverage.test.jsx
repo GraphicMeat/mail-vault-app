@@ -53,6 +53,7 @@ const ALLOWLIST = new Set([
   'settings.security.howWorks', 'common.noAccountsConfigured', 'settings.storage.security',
   // section headings already covered by their child settings / sectionKey
   'settings.accounts.accountSettings', 'settings.accounts.authentication', 'settings.appearance.dateAndTime',
+  'settings.accounts.groupExisting', // options inside the indexed Group setting
   'settings.appearance.readingAndConversations', 'settings.colors.title', 'workspace.title',
   'settings.behavior.deleting', 'settings.behavior.emailSync', 'settings.behavior.markRead', 'settings.behavior.sending',
   'settings.timeCapsule.automaticSnapshots',

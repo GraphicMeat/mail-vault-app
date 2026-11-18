@@ -14,6 +14,7 @@
 //   windowid --info             → every candidate window, for debugging
 import CoreGraphics
 import Foundation
+import AppKit
 
 let arg = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "MailVault"
 
@@ -21,6 +22,16 @@ if arg == "--check-permission" {
     let granted = CGPreflightScreenCaptureAccess()
     print(granted ? "granted" : "denied")
     exit(granted ? 0 : 2)
+}
+
+if arg == "--activate" {
+    guard let raw = ProcessInfo.processInfo.environment["MAILVAULT_WINDOW_PID"],
+          let pid = Int32(raw),
+          let app = NSRunningApplication(processIdentifier: pid),
+          app.activate(options: [])
+    else { exit(1) }
+    print("ok")
+    exit(0)
 }
 
 func windows(_ options: CGWindowListOption) -> [[String: Any]] {

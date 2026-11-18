@@ -67,6 +67,11 @@ PY
     case "$out" in /*) ;; *) echo 'Shot output must be an absolute directory' >&2; exit 1 ;; esac
     export HARNESS_SHOTS_OUT="$out"
     mkdir -p "$out"
+    trap 'bash scripts/screenshots/prepare-build.sh --revert' EXIT
+    bash scripts/screenshots/prepare-build.sh --narrow
+    for shot in sidebar-account-groups settings-account-group settings-account-group-create settings-account-group-mobile sidebar-collapsed-groups; do
+      rm -f "$out/$shot.reached" "$out/$shot-light.png" "$out/$shot-dark.png"
+    done
     npm run build:e2e
     npx wdio run wdio.conf.js --spec tests/e2e/capture-account-groups.capture.js
     for shot in sidebar-account-groups settings-account-group settings-account-group-create settings-account-group-mobile sidebar-collapsed-groups; do
