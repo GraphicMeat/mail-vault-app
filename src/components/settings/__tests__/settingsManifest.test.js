@@ -1,0 +1,45 @@
+// @vitest-environment node
+// Every desktop settings page and every searchable setting carries a phone decision: on the
+// phone, or the reason it is not. A new page or setting without one turns this red.
+import { describe, it, expect } from 'vitest';
+import {
+  allTabs, settingSearchGroups, settingsSections, footerIds, settingsHosts,
+  MOBILE_PAGES, MOBILE_SETTINGS, MOBILE_SETTINGS_DUPLICATES, mobileSearchPages, onPhone,
+} from '../settingsManifest';
+
+const decided = (value) => value === true || (typeof value === 'string' && value.trim().length > 0);
+
+describe('settings manifest', () => {
+  it('every page has a phone decision', () => {
+    // Portable is left out of the App Store build, so the map may name it while allTabs does not.
+    expect(allTabs.filter((tab) => !decided(MOBILE_PAGES[tab.id])).map((tab) => tab.id)).toEqual([]);
+  });
+
+  it('every searchable setting has a phone decision, exactly once', () => {
+    const keys = settingSearchGroups.flatMap((group) => group.settings.map(([key]) => key));
+    expect(keys.filter((key) => !decided(MOBILE_SETTINGS[key]))).toEqual([]);
+    expect(MOBILE_SETTINGS_DUPLICATES).toEqual([]);
+    // No decision for a key search does not have: a rename leaves no stale entry behind.
+    const known = new Set(keys);
+    expect(Object.keys(MOBILE_SETTINGS).filter((key) => !known.has(key) && !key.startsWith('portable.') && key !== 'settings.transfer.confirmPassword')).toEqual([]);
+  });
+
+  it('a setting on a page the phone lacks is not on the phone either', () => {
+    const wrong = settingSearchGroups.filter((group) => !onPhone(MOBILE_PAGES[group.id]))
+      .flatMap((group) => group.settings.map(([key]) => key)).filter((key) => onPhone(MOBILE_SETTINGS[key]));
+    expect(wrong).toEqual([]);
+  });
+
+  it('every nav id is a page or a host', () => {
+    const ids = [...settingsSections.flatMap((s) => s.ids), ...footerIds];
+    const pages = new Set(allTabs.map((tab) => tab.id));
+    // Portable is absent from the App Store build only.
+    expect(ids.filter((id) => !pages.has(id) && !settingsHosts[id] && id !== 'portable')).toEqual([]);
+  });
+
+  it('phone search offers only what the phone has', () => {
+    expect(mobileSearchPages.length).toBeGreaterThan(10);
+    expect(mobileSearchPages.filter((p) => !onPhone(MOBILE_PAGES[p.id]))).toEqual([]);
+    expect(mobileSearchPages.filter((p) => p.keywords && !onPhone(MOBILE_SETTINGS[p.labelKey]))).toEqual([]);
+  });
+});

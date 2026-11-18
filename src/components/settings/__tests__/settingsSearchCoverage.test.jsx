@@ -109,7 +109,12 @@ const indexed = new Set([
   ...settingSearchGroups.flatMap(group => [group.sectionKey, ...group.settings.map(([labelKey]) => labelKey)]),
 ].filter(Boolean));
 
-const files = fs.readdirSync(settingsDir).filter(f => f.endsWith('.jsx'));
+// The views (settings/views/, shared with the phone) render the labels now; scan them too.
+const viewsDir = path.join(settingsDir, 'views');
+const files = [
+  ...fs.readdirSync(settingsDir).filter(f => f.endsWith('.jsx')),
+  ...(fs.existsSync(viewsDir) ? fs.readdirSync(viewsDir).filter(f => f.endsWith('.jsx')).map(f => `views/${f}`) : []),
+];
 
 describe('settings search coverage', () => {
   for (const file of files) {
