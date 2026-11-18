@@ -32,10 +32,6 @@
   ],
   "findings": [
     {
-      "file": "src/components/ui/SampleConversation.jsx",
-      "string": "Nell Okafor ·"
-    },
-    {
       "file": "src/components/settings/views/PreviewViews.jsx",
       "string": "Nell Okafor"
     },

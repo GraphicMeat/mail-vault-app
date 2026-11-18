@@ -11,6 +11,8 @@ import { getSenderName } from '../../utils/emailParser';
 import { displayText } from '../../utils/bidiText';
 import { useT } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { QuickActionPresetsView } from './views/QuickActionsView';
 
 // Quick actions are the one Appearance setting whose examples are the real
 // thing: the list row, the selection bar and the reader toolbar, over the
@@ -120,24 +122,14 @@ export function CardSample({ surface, config, rows }) {
  * scope shows exactly is marked, none when it has been changed since.
  */
 export function QuickActionPresets({ scope, rows }) {
-  const t = useT();
-  const id = useId();
   const quickActions = useSettingsStore(state => state.quickActions);
   const apply = useSettingsStore(state => state.applyQuickActionPreset);
   const active = activeQuickActionPreset(quickActions, scope);
-  return <section className="quick-actions-presets" aria-labelledby={id}>
-    <div className="quick-actions-presets-heading">
-      <h5 id={id}>{t('quickActions.presets')}</h5>
-      {!active && <span data-testid="quick-actions-preset-custom">{t('quickActions.preset.custom')}</span>}
-    </div>
-    <p className="text-xs text-mail-text-muted">{t('quickActions.presetHint')}</p>
-    <ChoiceCards pressed label={t('quickActions.presets')} value={active} onChange={presetId => apply(presetId, scope)}
-      options={QUICK_ACTION_PRESETS.map(preset => ({
-        value: preset.id,
-        label: t(preset.labelKey),
-        preview: <CardSample surface="row" config={preset.surfaces.row} rows={rows} />,
-      }))} />
-  </section>;
+  const byId = Object.fromEntries(QUICK_ACTION_PRESETS.map(preset => [preset.id, preset]));
+  return <DesktopViewEnv>
+    <QuickActionPresetsView presets={QUICK_ACTION_PRESETS} active={active} onApply={presetId => apply(presetId, scope)}
+      preview={presetId => <CardSample surface="row" config={byId[presetId].surfaces.row} rows={rows} />} />
+  </DesktopViewEnv>;
 }
 
 /** Layout as cards, each the surface in that layout. */

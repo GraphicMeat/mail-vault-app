@@ -2,10 +2,8 @@
 // stores and wrapped in the desktop context (DesktopViewEnv) so each export works where it is
 // used bare (onboarding, behavior settings).
 import React from 'react';
-import { FileText } from 'lucide-react';
-import { PREVIEW_ACCOUNTS, previewRows } from '../../data/previewMail';
+import { PREVIEW_ACCOUNTS } from '../../data/previewMail';
 import { SampleConversation } from '../ui/SampleConversation';
-import { useT } from '../../i18n';
 import { useThemeStore } from '../../stores/themeStore';
 import { getAccountColor, useSettingsStore } from '../../stores/settingsStore';
 import { getEmailColors } from '../../utils/mailChrome';
@@ -13,7 +11,7 @@ import { withDesktopEnv } from './DesktopViewEnv';
 import {
   PreviewFrame as PreviewFrameView, ColorOptionPreview as ColorOptionPreviewView, EmailThemePreviewView,
   WorkspacePreviewView, SidebarLayoutPreview as SidebarLayoutPreviewView, ReadingPreview as ReadingPreviewView,
-  DateTimePreview as DateTimePreviewView,
+  DateTimePreview as DateTimePreviewView, AfterDeletePreviewView,
 } from './views/PreviewViews';
 
 // Quick actions is the exception to "illustrative only": QuickActionSamples.jsx draws the real
@@ -40,11 +38,4 @@ export const WorkspacePreview = withDesktopEnv(function WorkspacePreview(props) 
     accounts={PREVIEW_ACCOUNTS} accountColor={account => getAccountColor({}, account)} chatSample={<SampleConversation compact />} />;
 });
 
-export function AfterDeletePreview({ value }) {
-  const t = useT();
-  const next = previewRows()[1];
-  return <figure className="onboarding-after-delete-sample" aria-label={t('settings.behavior.afterDeleting')}>
-    <figcaption>{t('settings.preview.example')}</figcaption>
-    {value && value !== 'none' ? <p><strong>{next.sender}</strong><br />{next.subject}</p> : <p><FileText size={15} aria-hidden="true" />{t('viewer.selectEmailRead')}</p>}
-  </figure>;
-}
+export const AfterDeletePreview = withDesktopEnv(AfterDeletePreviewView);

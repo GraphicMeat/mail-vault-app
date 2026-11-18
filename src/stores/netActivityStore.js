@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { listen } from '@tauri-apps/api/event';
 import { daemonCall } from '../services/daemonClient';
+import { RANGES, RETENTIONS, rangesFor } from '../utils/netActivity';
+
+// The pure helpers live in utils/netActivity.js (the phone's page uses them too).
+export { RANGES, RETENTIONS, rangesFor, PROTOCOL_LABELS, filterEvents, target, copyText } from '../utils/netActivity';
 
 // Settings > Privacy > Network Activity. The daemon keeps the events (in
 // app.db on this Mac, for the period the user chose); this only mirrors what
@@ -14,20 +18,10 @@ const MAX_ROWS = 2000;
 /** The map and the totals follow new rows at most this often. */
 const AGGREGATE_EVERY_MS = 5000;
 
-const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
-/** The time ranges the page offers, longest last. */
-export const RANGES = { hour: HOUR, day: DAY, week: 7 * DAY, twoWeeks: 14 * DAY, month: 30 * DAY };
-/** How long the daemon keeps events: its `net_log::Retention`. */
-export const RETENTIONS = ['day', 'week', 'twoWeeks', 'month'];
 const DEFAULT_RETENTION = 'week';
 
-/** The ranges a period of `retention` can answer. */
-export const rangesFor = retention => Object.keys(RANGES).filter(r => RANGES[r] <= RANGES[retention]);
 /** `range`, or the longest one `retention` still covers. */
 const clampRange = (range, retention) => (RANGES[range] <= RANGES[retention] ? range : rangesFor(retention).at(-1));
-
-export const PROTOCOL_LABELS = { imap: 'IMAP', smtp: 'SMTP', https: 'HTTPS', http: 'HTTP', dns: 'DNS', tcpProbe: 'TCP' };
 
 /** What the daemon filters on. `country` narrows the table only. */
 const params = ({ range, account, country }, withCountry) => ({
@@ -184,21 +178,6 @@ export const useNetActivityStore = create((set, get) => ({
 }));
 
 export const visibleEvents = s => s.frozen || s.events;
-
-export const filterEvents = (events, { protocol, purpose, account } = {}) => events.filter(e =>
-  (!protocol || e.protocol === protocol) && (!purpose || e.purpose === purpose) && (!account || e.account === account));
-
-/** Where a row went: `host:port`, or `name -> answer` for a lookup. */
-export const target = (e, arrow = '->') => (e.protocol === 'dns' ? `${e.host} ${arrow} ${e.ip || '?'}` : `${e.host}:${e.port}`);
-
-/**
- * Plain, untranslated text for a bug report or a support thread. `noAccount`
- * is what the page shows for a connection no account made.
- */
-export const copyText = (rows, noAccount = '-') => rows.map(e => [
-  new Date(e.atMs).toISOString(), e.direction, PROTOCOL_LABELS[e.protocol] || e.protocol, target(e), e.purpose,
-  e.account || noAccount, `up ${e.bytesUp} B`, `down ${e.bytesDown} B`, `${e.durationMs} ms`, e.result,
-].join('\t')).join('\n');
 
 // ponytail: one small entry per message rendered this session; cap it if a
 // session ever renders millions.

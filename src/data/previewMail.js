@@ -1,20 +1,16 @@
 import { t } from '../i18n/index.js';
 import { formatTime, formatWeekdayShort } from '../utils/dateFormat.js';
+import { sampleConversation } from './previewSamples.js';
+
+// The accounts and the conversation are pure (data/previewSamples.js), so the settings views the
+// phone renders too can draw them.
+export { PREVIEW_ACCOUNTS } from './previewSamples.js';
 
 /**
- * The same three accounts and the same cast as every marketing screenshot
- * (`scripts/screenshots/demoData.js`), so the app someone configures during
- * onboarding looks like the app they saw on the website.
- *
  * Cast, brands, addresses and filenames stay untranslated — that rule is
  * inherited from the screenshot work. Only the copy moves through the catalog.
  * These rows never reach `mailStore`; they exist to be drawn.
  */
-export const PREVIEW_ACCOUNTS = Object.freeze([
-  { id: 'preview-studio',   name: 'Prime Cut Studio', email: 'rowan@primecut.studio' },
-  { id: 'preview-personal', name: 'Rowan Marsh',      email: 'rowan.marsh@gmail.com' },
-  { id: 'preview-billing',  name: 'Studio Accounts',  email: 'accounts@primecut.studio' },
-]);
 
 // Row senders are fictional contacts/companies from the same cast as the
 // marketing screenshots (`scripts/screenshots/demoData.js` CAST) — never one
@@ -44,11 +40,5 @@ export function previewRows() {
 
 /** One coherent fictional thread, shared by the workspace and feature tour. */
 export function previewConversation() {
-  return ['question', 'answer', 'followup'].map((key, index) => ({
-    id: `preview-reply-${index}`,
-    sender: index === 1 ? 'Rowan' : 'Nell Okafor',
-    sent: index === 1,
-    text: t(`settings.preview.${key}`),
-    time: formatTime(new Date(2026, 1, 25, 13, 15 + index * 10)),
-  }));
+  return sampleConversation(t, formatTime);
 }

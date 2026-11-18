@@ -15,7 +15,7 @@ const ALLOWED = {
   },
   formatDuration: {
     'src/components/SearchBar.jsx': 'milliseconds to "294 ms" / "8.52 s", search.* catalog keys, 2-digit seconds',
-    'src/components/settings/NetworkActivity.jsx': 'milliseconds through Intl unit style, narrow, one decimal',
+    'src/components/settings/views/NetworkActivityView.jsx': 'milliseconds through Intl unit style, narrow, one decimal',
     'src/components/settings/BackupAccountCard.jsx': 'seconds to "12s" / "3m 5s", settings.backup.account.* keys',
     'src/components/settings/MigrationSettings.jsx': 'seconds to "< 1 min" / "2h 5m", settings.migration.* keys',
   },

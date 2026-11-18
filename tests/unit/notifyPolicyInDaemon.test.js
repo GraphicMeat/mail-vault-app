@@ -18,7 +18,8 @@ const handlersMod = readFileSync('src-daemon/src/handlers/mod.rs', 'utf8');
 const demo = readFileSync('src/demo/backend.js', 'utf8');
 const api = readFileSync('src/services/api.js', 'utf8');
 const focusStore = readFileSync('src/stores/focusStore.js', 'utf8');
-const settingsPanel = readFileSync('src/components/settings/NotificationSettings.jsx', 'utf8');
+// The decision log's reason labels sit in the page's view (rendered by desktop and phone).
+const settingsPanel = readFileSync('src/components/settings/views/NotificationsView.jsx', 'utf8');
 const en = JSON.parse(readFileSync('src/i18n/locales/en.json', 'utf8'));
 
 function sourceFiles(dir) {

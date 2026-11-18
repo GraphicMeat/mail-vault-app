@@ -1,73 +1,31 @@
 import React from 'react';
-import { Shield } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { ToggleSwitch } from '../ui/ToggleSwitch';
-import { useT, getLocale } from '../../i18n/index.js';
+import { getLocale } from '../../i18n/index.js';
 import { SafetyAlertLegend } from '../SafetyAlertLegend.jsx';
-import { SettingsPageLayout, SettingsCard } from '../ui/SettingsForm';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { SecurityView } from './views/SecurityView';
 
+const SETTERS = {
+  linkSafetyEnabled: 'setLinkSafetyEnabled',
+  linkSafetyClickConfirm: 'setLinkSafetyClickConfirm',
+  holdExternalContent: 'setHoldExternalContent',
+};
+
+/** Desktop's container: the settings store over SecurityView, with the legend's screenshots. */
 export function SecuritySettings() {
-  const t = useT();
   // Subscribe to the epoch so a language switch re-resolves the screenshots too
   // — the same reason PremiumGallery reads it.
   useSettingsStore(s => s.localeEpoch);
   const locale = getLocale();
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
-  const setLinkSafetyEnabled = useSettingsStore(s => s.setLinkSafetyEnabled);
-  const setLinkSafetyClickConfirm = useSettingsStore(s => s.setLinkSafetyClickConfirm);
   const holdExternalContent = useSettingsStore(s => s.holdExternalContent);
-  const setHoldExternalContent = useSettingsStore(s => s.setHoldExternalContent);
 
   return (
-    <SettingsPageLayout>
-      <SettingsCard icon={Shield} headingClassName="mb-5" title={t('settings.tab.security')}>
-      <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-mail-text">{t('settings.security.linkSafetyScanning')}</div>
-            <div className="text-xs text-mail-text-muted mt-0.5">
-              {t('settings.security.detectSuspiciousLinksEmailsDon')}
-            </div>
-          </div>
-          <ToggleSwitch label={t('settings.security.linkSafetyScanning')} active={linkSafetyEnabled} onClick={() => setLinkSafetyEnabled(!linkSafetyEnabled)} />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-mail-text">{t('settings.security.clickConfirmation')}</div>
-            <div className="text-xs text-mail-text-muted mt-0.5">
-              {t('settings.security.showWarningModalBeforeOpening')}
-            </div>
-          </div>
-          <ToggleSwitch label={t('settings.security.clickConfirmation')} active={linkSafetyClickConfirm} onClick={() => setLinkSafetyClickConfirm(!linkSafetyClickConfirm)} />
-        </div>
-
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-sm font-medium text-mail-text">{t('settings.security.askBeforeExternalContent')}</div>
-            <div className="text-xs text-mail-text-muted mt-0.5">
-              {t('settings.security.askBeforeExternalContentHint')}
-            </div>
-          </div>
-          <ToggleSwitch label={t('settings.security.askBeforeExternalContent')} active={!!holdExternalContent} onClick={() => setHoldExternalContent(!holdExternalContent)} testId="ask-before-external-content" />
-        </div>
-      </div>
-
-      </SettingsCard>
-
-      {/* Every mark the app can put on a message, with the screenshot of the
-          alert it opens. This used to be two lines covering only the LINK
-          levels, and their explanations were hardcoded English — so eight
-          locales read a half-translated paragraph, and nothing here mentioned
-          sender impersonation, Reply-To mismatch or the tracker glyphs at all. */}
-      <div className="pt-4 border-t border-mail-border">
-        <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.security.howWorks')}</h4>
-        <SafetyAlertLegend locale={locale} showShots />
-        <p className="mt-3 text-xs text-mail-text-muted">
-          {t('settings.security.allScanningPerformedLocallyDevice')}
-        </p>
-      </div>
-    </SettingsPageLayout>
+    <DesktopViewEnv>
+      <SecurityView values={{ linkSafetyEnabled, linkSafetyClickConfirm, holdExternalContent }}
+        onChange={(key, value) => useSettingsStore.getState()[SETTERS[key]](value)}
+        legend={<SafetyAlertLegend locale={locale} showShots />} />
+    </DesktopViewEnv>
   );
 }

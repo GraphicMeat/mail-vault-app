@@ -5,8 +5,9 @@
 // Draw only illustrative content. These examples never mount a real mail
 // component or put sample messages into the user's accounts or mail stores.
 import React from 'react';
-import { AlertCircle, Archive, CheckCircle2, ChevronDown, Cloud, FileText, Folder, Inbox, MousePointer2, Reply, Send } from 'lucide-react';
+import { AlertCircle, Archive, ArrowLeft, CheckCircle2, ChevronDown, Cloud, FileText, Folder, Inbox, MousePointer2, Reply, Send } from 'lucide-react';
 import { listRowGround } from '../../../utils/listRowGround';
+import { AFTER_DELETE_SAMPLE, CONVERSATION_CONTACT, sampleConversation } from '../../../data/previewSamples.js';
 import { useViewEnv, useT } from './viewContext';
 import '../../../styles/sidebar-layout-previews.css';
 import '../../../styles/sidebar-navigation.css';
@@ -206,4 +207,31 @@ export function DateTimePreview({ time = false, label }) {
   const { formatTime, formatDateOnly } = useViewEnv();
   const formatted = time ? formatTime(SAMPLE_DATE) : formatDateOnly(SAMPLE_DATE, { alwaysShowYear: true });
   return <PreviewFrame label={label}><div className="preview-date"><span>Nell Okafor</span><strong>{formatted}</strong></div></PreviewFrame>;
+}
+
+/** What opens after a delete (`value`, Behavior's choice): the next sample message, or nothing. */
+export function AfterDeletePreviewView({ value }) {
+  const t = useT();
+  return <figure className="onboarding-after-delete-sample" aria-label={t('settings.behavior.afterDeleting')}>
+    <figcaption>{t('settings.preview.example')}</figcaption>
+    {value && value !== 'none' ? <p><strong>{AFTER_DELETE_SAMPLE.sender}</strong><br />{t(AFTER_DELETE_SAMPLE.subjectKey)}</p> : <p><FileText size={15} aria-hidden="true" />{t('viewer.selectEmailRead')}</p>}
+  </figure>;
+}
+
+/** The selected Chat topic fills the pane; people/topics are earlier screens. */
+export function SampleConversationView({ compact = false }) {
+  const t = useT();
+  const { formatTime } = useViewEnv();
+  const messages = sampleConversation(t, formatTime).slice(0, compact ? 2 : 3);
+  return <div className="sample-chat">
+    <div className="sample-chat-heading">
+      <ArrowLeft size={15} aria-hidden="true" />
+      <div><strong>{t('settings.preview.subject')}</strong><span>{CONVERSATION_CONTACT} · {t('common.messageCount', { count: messages.length })}</span></div>
+    </div>
+    <div className="sample-chat-messages">
+      {messages.map(message => <div key={message.id} className={`sample-chat-message ${message.sent ? 'sample-chat-sent' : ''}`}>
+        <p>{message.text}</p><span>{message.time}</span>
+      </div>)}
+    </div>
+  </div>;
 }

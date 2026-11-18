@@ -10,6 +10,8 @@ vi.mock('lucide-react', () => {
 });
 vi.mock('../../../i18n/index.js', () => ({
   t: key => key,
+  // The reorder list renders in the desktop view context (DesktopViewEnv), which asks the language.
+  getLocale: () => 'en',
   useT: () => (key, vars) => (vars ? `${key}:${JSON.stringify(vars)}` : key),
 }));
 

@@ -1,6 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
-import { AccountReorderList } from "./AccountReorderList";
 import { CardSample, QuickActionLayoutCards, QuickActionPresets, QuickActionSample } from "./QuickActionSamples";
 import { SettingsTabs } from "../ui/SettingsTabs";
 import { SegmentedChoice } from "../ui/SegmentedChoice";
@@ -26,8 +24,8 @@ import {
 import { quickActionColorFor } from "../../utils/quickActionColors";
 import { QUICK_ACTION_ICONS as ICONS } from "../../utils/quickActionIcons";
 import { useT } from "../../i18n/index.js";
-import "../../styles/settings-usability.css";
-import "../../styles/account-settings-navigation.css";
+import { DesktopViewEnv } from "./DesktopViewEnv";
+import { QuickActionAddView, QuickActionEntryListView, QuickActionsView } from "./views/QuickActionsView";
 
 const LABELS = {
   archive: "common.archive",
@@ -216,11 +214,8 @@ export function QuickActionsSettings() {
     addNeedsTemplate && !templates.some((item) => item.id === templateId);
 
   return (
-    <div className="settings-preference-group quick-actions-settings">
-      <h4>{t("quickActions.title")}</h4>
-      <p className="text-sm text-mail-text-muted">
-        {t("quickActions.description")}
-      </p>
+    <DesktopViewEnv>
+    <QuickActionsView>
       <QuickActionPresets scope={isGlobal ? null : scope} rows={samples} />
       <div className="quick-actions-choice-field quick-actions-scope">
         <span>{t("quickActions.scope")}</span>
@@ -367,71 +362,22 @@ export function QuickActionsSettings() {
           {isGlobal && <button type="button" onClick={resetSurface}>{t("common.resetToDefault")}</button>}
         </div>
 
-        <div className="quick-actions-entry-list">
-          <AccountReorderList
-            accounts={config.entries.map((entry) => ({ ...entry, email: getLabel(entry) }))}
-            onReorder={reorderEntries}
-            labels={{
-              list: t("quickActions.actionList"),
-              instructions: t("quickActions.reorderInstructions"),
-              reorder: (name) => t("quickActions.reorder", { name }),
-            }}
-          >
-            {(entry) => {
-              const index = config.entries.findIndex((item) => item.id === entry.id);
-              const entryColor = quickActionColorFor(entry, config.palette);
-              return <div className="quick-actions-entry" data-colored={!!entryColor}
-                style={entryColor ? { "--quick-action-editor-color": entryColor } : undefined}>
-                <span className="quick-actions-entry-name">
-                  {entry.email}
-                </span>
-                <button
-                  type="button"
-                  className="quick-actions-remove"
-                  aria-label={`${t("quickActions.removeAction")} ${entry.email}`}
-                  title={t("quickActions.removeAction")}
-                  onClick={() => removeEntry(index)}
-                >
-                  <Trash2 size={15} aria-hidden="true" />
-                </button>
-                {config.palette === "custom" && (
-                  <label className="quick-actions-color-control">
-                    {t("quickActions.color")}
-                    <input
-                      type="color"
-                      aria-label={`${t("quickActions.color")} ${entry.email}`}
-                      value={entry.color || "#a0a0b6"}
-                      onChange={(event) => updateEntry(index, { color: event.target.value })}
-                    />
-                    {!entry.color && <span>{t("quickActions.colorDefault")}</span>}
-                    {entry.color && <button
-                      type="button"
-                      aria-label={`${t("quickActions.resetColor")} ${entry.email}`}
-                      onClick={() => updateEntry(index, { color: undefined })}
-                    >{t("quickActions.resetColor")}</button>}
-                  </label>
-                )}
-              </div>;
-            }}
-          </AccountReorderList>
-        </div>
+        <QuickActionEntryListView
+          entries={config.entries.map((entry) => ({ ...entry, label: getLabel(entry), editorColor: quickActionColorFor(entry, config.palette) }))}
+          onReorder={reorderEntries}
+          onRemove={removeEntry}
+          palette={config.palette}
+          onColor={(index, color) => updateEntry(index, { color })}
+        />
 
-        <div className="quick-actions-add-row" data-colored={!!quickActionColorFor(newEntry(addType), config.palette)}
-          style={quickActionColorFor(newEntry(addType), config.palette) ? { "--quick-action-editor-color": quickActionColorFor(newEntry(addType), config.palette) } : undefined}>
-          <label>
-            {t("quickActions.action")}
-            <select
-              aria-label={t("quickActions.action")}
-              value={addType}
-              onChange={(event) => setAddType(event.target.value)}
-            >
-              {SURFACE_ACTIONS[surface].map((action) => (
-                <option key={action} value={action}>
-                  {t(LABELS[action] || "quickActions.title")}
-                </option>
-              ))}
-            </select>
-          </label>
+        <QuickActionAddView
+          actions={SURFACE_ACTIONS[surface].map((action) => ({ value: action, labelKey: LABELS[action] || "quickActions.title" }))}
+          addType={addType}
+          onAddType={setAddType}
+          onAdd={addAction}
+          blocked={addBlocked}
+          editorColor={quickActionColorFor(newEntry(addType), config.palette)}
+        >
           {addNeedsTag && (
             <div className="quick-actions-parameter">
               <label>
@@ -496,15 +442,7 @@ export function QuickActionsSettings() {
               </select>
             </label>
           )}
-          <button
-            type="button"
-            aria-label={t("quickActions.addAction")}
-            disabled={!!addBlocked}
-            onClick={addAction}
-          >
-            {t("quickActions.addAction")}
-          </button>
-        </div>
+        </QuickActionAddView>
 
         <details className="quick-actions-default-order">
           <summary>{t("quickActions.defaultOrder")}</summary>
@@ -553,6 +491,7 @@ export function QuickActionsSettings() {
           ))}
         </section>
       </SettingsTabs>
-    </div>
+    </QuickActionsView>
+    </DesktopViewEnv>
   );
 }

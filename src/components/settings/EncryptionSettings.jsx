@@ -1,13 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyRound, Trash2 } from 'lucide-react';
-import { SettingRow } from '../ui/SettingRow';
-import { Button } from '../ui/Button';
-import { SettingsPageLayout } from '../ui/SettingsForm';
 import { pgpListKeys, pgpImportKey, pgpRemoveKey } from '../../services/api';
-import { useT, getLocale } from '../../i18n/index.js';
-
-// `ABCD1234...` in groups of four, the way every OpenPGP tool prints it.
-const grouped = fp => (fp || '').match(/.{1,4}/g)?.join(' ') || '';
+import { useT } from '../../i18n/index.js';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { EncryptionView } from './views/EncryptionView';
 
 /**
  * Settings > Encryption: the OpenPGP secret keys the daemon decrypts mail
@@ -55,70 +50,11 @@ export function EncryptionSettings() {
   };
 
   return (
-    <SettingsPageLayout>
-      <section className="settings-section space-y-5">
-        <h4 className="flex items-center gap-2 font-semibold text-mail-text">
-          <KeyRound size={18} className="text-mail-accent-text" />{t('pgp.tab')}
-        </h4>
-        <p className="text-xs text-mail-text-muted">{t('pgp.intro')}</p>
-
-        <div>
-          <div className="text-sm font-medium text-mail-text mb-2">{t('pgp.yourKeys')}</div>
-          {keys.length === 0 ? (
-            <p className="text-xs text-mail-text-muted" data-testid="pgp-no-keys">{t('pgp.noKeys')}</p>
-          ) : (
-            <ul className="space-y-2">
-              {keys.map(key => (
-                <li key={key.fingerprint} data-testid="pgp-key-row"
-                  className="flex items-start justify-between gap-3 rounded-lg border border-mail-border bg-mail-surface p-3">
-                  <div className="min-w-0">
-                    {key.userIds.map(id => <div key={id} className="text-sm text-mail-text break-words">{id}</div>)}
-                    <div className="font-mono text-xs text-mail-text-muted break-all">{grouped(key.fingerprint)}</div>
-                    <div className="text-xs text-mail-text-muted">
-                      {t('pgp.created', { date: new Date(key.created * 1000).toLocaleDateString(getLocale()) })}
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" icon aria-label={t('pgp.removeKey')} disabled={busy}
-                    onClick={() => run(() => pgpRemoveKey(key.fingerprint))}>
-                    <Trash2 size={16} />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <SettingRow label={t('pgp.keyLabel')}>
-          <textarea
-            value={armored}
-            onChange={e => setArmored(e.target.value)}
-            placeholder={t('pgp.keyPlaceholder')}
-            rows={5}
-            spellCheck={false}
-            className="settings-input font-mono text-xs"
-          />
-        </SettingRow>
-        <div>
-          <input ref={fileRef} type="file" accept=".asc,.gpg,.key,.pgp,.txt" className="hidden" onChange={pickFile} data-testid="pgp-file-input" />
-          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>{t('pgp.chooseFile')}</Button>
-        </div>
-        <SettingRow label={t('pgp.passphraseLabel')} description={t('pgp.passphraseHelp')}>
-          <input
-            type="password"
-            value={passphrase}
-            onChange={e => setPassphrase(e.target.value)}
-            autoComplete="off"
-            className="settings-input"
-          />
-        </SettingRow>
-        <div className="flex items-center gap-3">
-          <Button variant="primary" size="sm" onClick={importKey} disabled={busy || !armored.trim()} loading={busy}>
-            {t('pgp.import')}
-          </Button>
-        </div>
-        {error && <p className="text-xs text-mail-danger" role="alert">{error}</p>}
-        <p className="text-xs text-mail-text-muted">{t('pgp.decryptOnly')}</p>
-      </section>
-    </SettingsPageLayout>
+    <DesktopViewEnv>
+      <EncryptionView keys={keys} armored={armored} onArmored={setArmored} passphrase={passphrase} onPassphrase={setPassphrase}
+        busy={busy} error={error} onImport={importKey} onRemove={fingerprint => run(() => pgpRemoveKey(fingerprint))}
+        onChooseFile={() => fileRef.current?.click()}
+        fileInput={<input ref={fileRef} type="file" accept=".asc,.gpg,.key,.pgp,.txt" className="hidden" onChange={pickFile} data-testid="pgp-file-input" />} />
+    </DesktopViewEnv>
   );
 }
