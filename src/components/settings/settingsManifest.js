@@ -4,9 +4,12 @@
 // bundle can import it (src/mobile/__tests__/seam.test.js).
 //
 // Every page and every searchable setting carries a phone decision (`MOBILE_PAGES`,
-// `MOBILE_SETTINGS`): `true`, or the reason it is not on the phone. A reason starting with
-// `engine:` names a feature the phone engine does not have yet (the owner decides those); any
-// other reason means a phone cannot have it at all (window, tray, dock, keyboard, desktop folders).
+// `MOBILE_SETTINGS`): `true`, `'desktopNotice'` (a page: in the phone's navigation, opening a
+// notice that the feature is in MailVault on desktop), or the reason it is not on the phone. A
+// reason starting with `engine:` names a feature the phone engine does not have yet (to be built);
+// any other reason means the phone does not have it for good (window, tray, dock, keyboard,
+// desktop folders, desktop-only features). The parity guard
+// (src/mobile/__tests__/settingsParity.test.js) holds every `true` to a label the phone renders.
 import {
   User,
   Mail,
@@ -388,64 +391,73 @@ export const MOBILE_PAGES = {
   logs: true,
   help: true,
   portable: 'runs from a portable drive, which a phone cannot',
-  cleanup: 'engine: AI cleanup (classify and bulk-clean mail)',
-  'time-capsule': 'engine: time capsule snapshots',
-  migration: 'engine: mailbox migration between accounts',
-  backup: 'engine: backup to a folder or drive',
+  // Desktop features the phone will not have: in the phone's navigation in desktop's place, each
+  // opening one notice that the feature is in MailVault on desktop (DesktopNoticeView).
+  cleanup: 'desktopNotice',
+  'time-capsule': 'desktopNotice',
+  migration: 'desktopNotice',
+  backup: 'desktopNotice',
   views: 'engine: saved views',
   'auto-tags': 'engine: auto-tag rules',
 };
+
+/** A page the phone shows as "<Feature> is available in MailVault on desktop". */
+export const DESKTOP_NOTICE = 'desktopNotice';
+const DESKTOP_FEATURE = 'desktop feature';
 
 const NOT_ON_PHONE = {
   'window or tray: a phone app has no window to close to a tray': ['settings.behavior.closeToTray'],
   'the default mail app is chosen in the phone system settings': ['settings.behavior.defaultMail.title'],
   'compose opens in its own window, a phone has one screen': ['settings.behavior.composeOpen.title'],
   'reading pane position: a phone shows the list and the message one at a time': ['workspace.readingPane'],
-  'sidebar layout: the phone has a drawer, not a sidebar': ['workspace.sidebarLayout', 'workspace.backupStatusLocation', 'workspace.navigation'],
+  'sidebar layout: the phone has a drawer, not a sidebar': ['workspace.sidebarLayout', 'workspace.navigation'],
   'menu bar (Linux desktop window)': ['workspace.menuBar'],
   'keyboard shortcuts': ['shortcuts.keyboardShortcuts', 'settings.shortcuts.enableKeyboardShortcuts'],
   'update track: the phone updates through its app store': ['settings.behavior.updateTrackTitle', 'settings.behavior.updateTrackLabel', 'settings.behavior.updateTrackCheckNow'],
   'daemon always on: the phone has no background daemon to keep running': ['settings.daemon.alwaysOn.label'],
   'custom storage folder: the phone keeps mail in its app container': ['settings.storage.advancedCustomStorageFolder'],
-  'pointer hover highlight: a phone has no pointer': ['settings.appearance.rowHighlight'],
+  'pointer hover: a phone has no pointer': ['settings.appearance.rowHighlight', 'settings.dataUsage.showUsageHover'],
   'row layout: the phone list has one row layout': ['workspace.messageRows'],
   'quick actions on list rows, selections and the radial wheel: the phone has its reader bar and swipes': [
     'quickActions.layout', 'quickActions.surface.row', 'quickActions.surface.selection', 'quickActions.scope', 'quickActions.palette',
+  ],
+  'storage format: the phone keeps mail in SQLite, there is no on-disk format to choose': ['settings.storage.formatLabel'],
+  'empty vault: the phone keeps no vault to empty; removing an account removes its mail': ['settings.storage.dangerZone'],
+  'image text (OCR) runs on desktop only': ['settings.searchIndex.imageText'],
+  'mailbox concurrency: a desktop search speed setting; the phone searches its own index': ['settings.searchIndex.concurrency'],
+  'download modes: the phone keeps a window of recent mail per account (Keep mail from the last)': ['settings.storage.downloadMode'],
+  'runs from a portable drive, which a phone cannot': [
+    'portable.title', 'portable.copyConfig', 'portable.copyMail', 'portable.removeFromHost', 'portable.newPassword',
+    'settings.transfer.confirmPassword', 'portable.running.title', 'portable.currentPassword',
+  ],
+  // Cleanup, backup, time capsule and migration are desktop-only (their pages are notices on the
+  // phone); so are their settings that live on other pages.
+  [DESKTOP_FEATURE]: [
+    'workspace.backupStatusLocation',
+    'settings.notifications.backupNotifications', 'settings.notifications.notifyWhenBackupCompletes', 'settings.notifications.notifyWhenBackupFails',
+    'settings.storage.addCleanupRule', 'settings.ai.customCategories', 'settings.ai.learnedRules',
+    'settings.backup.importExport.zipHeading', 'settings.backup.restore.exportBackup', 'settings.backup.restore.importBackup',
+    'settings.backup.restore.exportMbox', 'settings.backup.restore.importMbox', 'settings.mailLocation.whereMailStored',
+    'settings.backup.config.scopeLabel', 'settings.backup.config.storageLabel', 'settings.backup.schedule.automaticBackup',
+    'settings.backup.schedule.backupFrequency', 'settings.backup.schedule.pickHours', 'settings.backup.schedule.mailboxConcurrency',
+    'settings.backup.abd.backupCard.title', 'settings.backup.abd.archiveCard.title',
+    'settings.timeCapsule.enableAutomaticSnapshots',
+    'settings.migration.selectSourceAccount', 'settings.migration.migrationHistory',
   ],
 };
 const ENGINE_GAPS = {
   'engine: custom fields': ['fields.section', 'fields.newName', 'fields.newKind', 'fields.copyFrom'],
   'engine: search history and popular filters (the phone search keeps no history)': ['settings.behavior.search', 'settings.behavior.searchHistoryLimit', 'settings.behavior.popularFiltersPeriod', 'settings.behavior.numberPopularFiltersShow'],
-  'engine: backup notifications': ['settings.notifications.backupNotifications', 'settings.notifications.notifyWhenBackupCompletes', 'settings.notifications.notifyWhenBackupFails'],
   'engine: notification decision log (the background run decides and records nothing)': ['notifyPolicy.log.title'],
   'engine: playing the new-mail sound on demand (no shell call plays it)': ['settings.notifications.previewSound'],
   'engine: account groups (the phone keeps no group per account, and its switcher and drawer have no group sections)': ['settings.accounts.group'],
   'engine: choosing the Google sign-in app (the phone keeps the client an account was signed in or imported with, and has no switch between them)': ['googleClient.settingsLabel'],
   'engine: switching a Microsoft account between Graph and IMAP (the phone keeps the transport it was added or imported with; a switch signs in again and re-files the mail)': ['account.msTransport'],
   'engine: saved views': ['views.section', 'views.new', 'views.showTimeline'],
-  'engine: search index image text (OCR) and concurrency': ['settings.searchIndex.imageText', 'settings.searchIndex.concurrency'],
-  'engine: cleanup rules': ['settings.storage.addCleanupRule'],
-  'engine: storage format': ['settings.storage.formatLabel'],
-  'engine: empty vault': ['settings.storage.dangerZone'],
   'engine: deleted-emails bin': ['deletedBin.title', 'deletedBin.retention'],
   'engine: AI provider choice (the phone has one endpoint)': ['ai.settings.provider'],
   'engine: lifecycle messages': ['lifecycle.setting.label'],
   'engine: auto-tag rules': ['autoTag.name', 'autoTag.instruction', 'autoTag.tag', 'autoTag.inboxAction', 'autoTag.hasAttachments', 'autoTag.listIdPresent', 'autoTag.fromAddress', 'autoTag.fromDomain', 'autoTag.minConfidence', 'autoTag.allowRemote', 'autoTag.enabledLabel'],
-  'engine: data usage hover': ['settings.dataUsage.showUsageHover'],
-  'engine: backup': [
-    'settings.backup.importExport.zipHeading', 'settings.backup.restore.exportBackup', 'settings.backup.restore.importBackup',
-    'settings.backup.restore.exportMbox', 'settings.backup.restore.importMbox', 'settings.mailLocation.whereMailStored',
-    'settings.backup.config.scopeLabel', 'settings.backup.config.storageLabel', 'settings.backup.schedule.automaticBackup',
-    'settings.backup.schedule.backupFrequency', 'settings.backup.schedule.pickHours', 'settings.backup.schedule.mailboxConcurrency',
-    'settings.backup.abd.backupCard.title', 'settings.backup.abd.archiveCard.title',
-  ],
-  'engine: AI cleanup': ['settings.ai.customCategories', 'settings.ai.learnedRules'],
-  'engine: time capsule snapshots': ['settings.timeCapsule.enableAutomaticSnapshots'],
-  'engine: mailbox migration between accounts': ['settings.migration.selectSourceAccount', 'settings.migration.migrationHistory'],
-  'runs from a portable drive, which a phone cannot': [
-    'portable.title', 'portable.copyConfig', 'portable.copyMail', 'portable.removeFromHost', 'portable.newPassword',
-    'settings.transfer.confirmPassword', 'portable.running.title', 'portable.currentPassword',
-  ],
 };
 const ON_PHONE = [
   'settings.appearance.theme', 'settings.colors.palette', 'settings.icons.title', 'settings.appearance.emailViewerTheme',
@@ -468,7 +480,7 @@ const ON_PHONE = [
   'settings.transfer.title',
   'settings.pendingActions.title',
   'settings.searchIndex.bodies', 'settings.searchIndex.attachments', 'settings.searchIndex.rebuild',
-  'settings.storage.downloadMode', 'settings.storage.keepWindow', 'settings.storage.storageStatus',
+  'settings.storage.keepWindow', 'settings.storage.storageStatus',
   'settings.security.linkSafetyScanning', 'settings.security.clickConfirmation', 'settings.security.askBeforeExternalContent',
   'pgp.keyLabel', 'pgp.passphraseLabel', 'pgp.removeKey',
   'settings.billing.manageSubscription', 'settings.billing.devices',
@@ -505,9 +517,22 @@ export const MOBILE_LABELS = Object.freeze({
   'settings.behavior.swipe.enabled': 'mobile.prefs.swipeRows',
 });
 
+/**
+ * A page the phone names in its own words (`page id: phone key`): Diagnostics' first page holds
+ * only the unfinished server actions on the phone (it has no daemon to show).
+ */
+export const MOBILE_PAGE_LABELS = Object.freeze({
+  daemon: 'settings.pendingActions.title',
+});
+
+/** The phone has this page or setting (a desktop-notice page is not a phone feature). */
 export const onPhone = decision => decision === true;
-/** A nav entry is on the phone when any of its pages is. */
-export const navEntryOnPhone = entry => (entry.pages || [entry.id]).some(id => onPhone(MOBILE_PAGES[id]));
+/** The page is a desktop-notice page on the phone. */
+export const onPhoneNotice = decision => decision === DESKTOP_NOTICE;
+/** The page is in the phone's navigation: on the phone, or its desktop notice. */
+export const inPhoneNav = decision => onPhone(decision) || onPhoneNotice(decision);
+/** A nav entry is in the phone's navigation when any of its pages is. */
+export const navEntryOnPhone = entry => (entry.pages || [entry.id]).some(id => inPhoneNav(MOBILE_PAGES[id]));
 
 // ---- Search ---------------------------------------------------------------------------------
 
@@ -540,12 +565,21 @@ export function searchSettings(t, query, pages = searchPages) {
 
 /**
  * The destinations the phone has: its page is on the phone, and so is the setting, under the
- * phone's label (`MOBILE_LABELS`; `settingKey` then keeps desktop's key, the decision's).
+ * phone's label (`MOBILE_LABELS`; `settingKey` then keeps desktop's key, the decision's). A
+ * desktop-notice page is found by its own name and opens its notice; its settings are not.
  */
-export const mobileSearchPages = searchPages.filter(page => onPhone(MOBILE_PAGES[page.id])
-  && (!page.keywords || onPhone(MOBILE_SETTINGS[page.labelKey])))
-  .map(page => (page.keywords && MOBILE_LABELS[page.labelKey]
-    ? { ...page, settingKey: page.labelKey, labelKey: MOBILE_LABELS[page.labelKey] } : page));
+export const mobileSearchPages = searchPages.filter(page => (page.keywords
+  ? onPhone(MOBILE_PAGES[page.id]) && onPhone(MOBILE_SETTINGS[page.labelKey])
+  : inPhoneNav(MOBILE_PAGES[page.id])))
+  .map(page => {
+    if (page.keywords) {
+      return MOBILE_LABELS[page.labelKey] ? { ...page, settingKey: page.labelKey, labelKey: MOBILE_LABELS[page.labelKey] } : page;
+    }
+    return MOBILE_PAGE_LABELS[page.id] && page.labelKey === tabsById[page.id]?.labelKey
+      ? { ...page, labelKey: MOBILE_PAGE_LABELS[page.id] } : page;
+  })
+  // A page renamed after its one setting is found once, as that setting.
+  .filter((page, _, all) => page.keywords || !all.some(other => other.keywords && other.id === page.id && other.labelKey === page.labelKey));
 
 const CONTROL = 'input, select, textarea, button, [tabindex]';
 export const FOCUSABLE = 'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex="0"]';

@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
-// Settings > Offline: the window per account, All mail behind Premium, the progress and the room
-// the offline mail takes, a lapsed Premium's note, Low Data Mode, and Download now.
+// Settings > Storage, its download card (the phone's offline window, settings/Storage.jsx): the
+// window per account as desktop's "Keep mail from the last" choice, All mail behind Premium, the
+// progress and the room the offline mail takes, a lapsed Premium's note, Low Data Mode, Download
+// now, and "Download in the background".
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 
-const engine = vi.hoisted(() => ({ calls: [], state: null }));
+const engine = vi.hoisted(() => ({ calls: [], state: null, settings: null }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
@@ -23,6 +25,15 @@ vi.mock('../transport.js', () => ({
       }
       case 'mobile.offline.downloadNow':
         return { queued: true };
+      case 'mobile.settings.get':
+        return { ...engine.settings };
+      case 'mobile.settings.set':
+        Object.assign(engine.settings, params);
+        return { ...engine.settings };
+      case 'mobile.storage.get':
+        return { accounts: [], databaseBytes: 0, searchBytes: 0, logsBytes: 0, cacheBytes: 0, totalBytes: 0 };
+      case 'mobile.search.status':
+        return { available: true, state: 'idle', indexed: 0, total: 0, sizeBytes: 0 };
       default:
         throw Object.assign(new Error(method), { code: 'UNSUPPORTED' });
     }
@@ -30,7 +41,7 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
-const { default: OfflineSettings } = await import('../OfflineSettings.jsx');
+const { default: OfflineSettings, WINDOWS } = await import('../settings/Storage.jsx');
 const { useMobileStore } = await import('../store.js');
 
 const entry = (id, over = {}) => ({
@@ -40,6 +51,7 @@ const entry = (id, over = {}) => ({
 let paywall;
 beforeEach(() => {
   engine.calls = [];
+  engine.settings = { backgroundDownload: true };
   engine.state = { premium: false, network: { constrained: false, expensive: true }, accounts: [entry('a1'), entry('a2', { window: '12m', effectiveWindow: '12m' })] };
   paywall = vi.fn();
   useMobileStore.setState({
@@ -50,10 +62,31 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const group = (name) => screen.getByRole('radiogroup', { name: t('mobile.offline.window', { account: name }) });
-const option = (name, w) => group(name).querySelector(`[data-mv-window="${w}"]`);
+const option = (name, w) => within(group(name)).getAllByRole('radio')[WINDOWS.indexOf(w)];
 const sets = () => engine.calls.filter(([m]) => m === 'mobile.offline.set').map(([, p]) => p);
 
-describe('Settings > Offline', () => {
+describe('Settings > Storage > the offline window', () => {
+  it('is desktop\'s keep-window choice, one per account', async () => {
+    render(<OfflineSettings />);
+    await waitFor(() => expect(option('Ada', '3m')).toBeTruthy());
+    expect(screen.getByText(t('settings.storage.keepWindow'))).toBeTruthy();
+    expect(within(group('Ada')).getAllByRole('radio').map((r) => r.textContent.replace(t('common.premium'), '')))
+      .toEqual(['settings.storage.mo1', 'settings.storage.mo3', 'settings.storage.mo6', 'settings.storage.year1', 'settings.storage.keepAllMail'].map((k) => t(k)));
+  });
+
+  it('turns background downloads off and on', async () => {
+    render(<OfflineSettings />);
+    const toggle = await waitFor(() => {
+      const el = screen.getByRole('switch', { name: t('mobile.settings.downloadToggle') });
+      expect(el.getAttribute('aria-checked')).toBe('true');
+      expect(el.disabled).toBe(false);
+      return el;
+    });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.getByRole('switch', { name: t('mobile.settings.downloadToggle') }).getAttribute('aria-checked')).toBe('false'));
+    expect(engine.calls.filter(([m]) => m === 'mobile.settings.set').map(([, p]) => p)).toEqual([{ backgroundDownload: false }]);
+  });
+
   it('shows each account\'s window, progress and room, and changes the window', async () => {
     render(<OfflineSettings />);
     await waitFor(() => expect(option('Ada', '3m').getAttribute('aria-checked')).toBe('true'));
@@ -106,7 +139,8 @@ describe('Settings > Offline', () => {
     engine.state.network.constrained = true;
     render(<OfflineSettings />);
     await waitFor(() => expect(screen.getByText(t('mobile.offline.lowData'))).toBeTruthy());
-    fireEvent.click(screen.getByText(t('mobile.offline.downloadNow')));
+    await waitFor(() => expect(screen.getByRole('button', { name: t('mobile.offline.downloadNow') })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.offline.downloadNow') }));
     await waitFor(() => expect(screen.getByText(t('mobile.offline.downloading'))).toBeTruthy());
     expect(engine.calls.some(([m]) => m === 'mobile.offline.downloadNow')).toBe(true);
   });

@@ -366,7 +366,7 @@ export default function Accounts({ section: sectionProp, onSectionChange, onAddA
             name: account.displayName || account.email, email: account.email, color: accountColor(account), initial: initialOf(account),
           } : null}
           saved={Boolean(savedAt)} status={status || { label: '', tone: 'idle' }} section={section} onSection={onSectionChange}>
-          {failed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+          {failed && <p className="text-xs text-mail-danger" role="alert">{t('mobile.settings.saveFailed')}</p>}
           {account && !settings && !failed && <div aria-busy="true" />}
           {props && section === 'profile' && <Profile key={account.id} {...props} />}
           {props && section === 'aliases' && <Aliases key={account.id} {...props} />}

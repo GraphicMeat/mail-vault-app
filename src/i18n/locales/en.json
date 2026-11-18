@@ -3034,6 +3034,7 @@
   "settings.tab.daemon": "Background Daemon",
   "settings.tab.dataUsage": "Data Usage",
   "settings.tab.diagnostics": "Diagnostics",
+  "settings.desktopNotice": "{{feature}} is available in MailVault on desktop",
   "settings.tab.general": "General",
   "settings.tab.help": "Help & Support",
   "settings.tab.language": "Language",

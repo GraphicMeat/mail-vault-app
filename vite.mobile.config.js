@@ -9,18 +9,16 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 
 // The desktop components the phone renders (src/components/settings/views, src/components/ui) are
 // drawn for Tailwind's preflight. The phone app's own CSS is not, so preflight (tailwind-base.css,
-// and only that file) is scoped to elements inside `.mv-shared-ui` (the settings shell) and not
-// inside `.mv-legacy` (a phone page not moved onto the shared views yet). `:where()` adds no
-// specificity, so each rule weighs what it did on desktop.
+// and only that file) is scoped to elements inside `.mv-shared-ui` (the settings shell).
+// `:where()` adds no specificity, so each rule weighs what it did on desktop.
 const SCOPE = '.mv-shared-ui';
-const OWN = ':where(:not(.mv-legacy, .mv-legacy *))';
 function scopeSelector(selector) {
   const s = selector.trim();
   if (s === 'html' || s === ':host' || s === 'body') return `:where(${SCOPE})`;
   const at = s.indexOf('::');
   const subject = (at < 0 ? s : s.slice(0, at)) || '*';
   const pseudo = at < 0 ? '' : s.slice(at);
-  return `:where(${SCOPE}) ${subject}${OWN}${pseudo}`;
+  return `:where(${SCOPE}) ${subject}${pseudo}`;
 }
 function scopePreflight() {
   return {

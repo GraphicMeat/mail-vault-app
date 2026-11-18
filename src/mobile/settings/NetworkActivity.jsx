@@ -12,19 +12,10 @@ import { NetworkActivityView } from '../../components/settings/views/NetworkActi
 import { RANGES, rangesFor } from '../../utils/netActivity';
 import { daemonCall } from '../transport.js';
 import { useT } from '../i18n.js';
-import { MobileViewEnv } from './MobileViewEnv.jsx';
+import { MobileViewEnv, openExternal } from './MobileViewEnv.jsx';
 
 const REFRESH_MS = 5000;
 const EMPTY_SUMMARY = { hosts: 0, sent: 0, received: 0, accounts: [] };
-
-/** Opens `url` the way every link leaves the app: a plain https anchor the shell hands to the system browser. */
-function openExternal(url) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  a.click();
-}
 
 export default function NetworkActivity() {
   const t = useT();

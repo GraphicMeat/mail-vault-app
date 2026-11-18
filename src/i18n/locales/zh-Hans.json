@@ -3030,6 +3030,7 @@
   "settings.tab.daemon": "后台守护进程",
   "settings.tab.dataUsage": "流量使用",
   "settings.tab.diagnostics": "诊断",
+  "settings.desktopNotice": "{{feature}} 可在桌面版 MailVault 中使用",
   "settings.tab.general": "常规",
   "settings.tab.help": "帮助与支持",
   "settings.tab.language": "语言",

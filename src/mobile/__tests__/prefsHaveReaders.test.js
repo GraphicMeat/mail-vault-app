@@ -10,7 +10,7 @@ import { PREF_DEFAULTS } from '../prefs.js';
 
 const ROOT = resolve(process.cwd(), 'src/mobile');
 // Where a key is set or merely listed, not acted on.
-const NOT_READERS = new Set(['prefs.js', 'SettingsPrefs.jsx', 'Settings.jsx']);
+const NOT_READERS = new Set(['prefs.js', 'Settings.jsx']);
 // The settings containers (src/mobile/settings/) set the preferences too.
 const NOT_READER_DIRS = ['settings/'];
 
@@ -26,6 +26,11 @@ const ENGINE_READ = {
   // The AI endpoint every action goes to (ai.rs `settings`); the page only sets it.
   aiEndpointUrl: true,
   aiEndpointModel: true,
+  // What the search index holds (search.rs `index_options`); the page only sets it.
+  searchIndexBodies: true,
+  searchIndexAttachments: true,
+  // The log's detail level (logs.rs `VERBOSITY`, applied to the next line written).
+  logVerbosity: true,
 };
 
 function files(dir) {

@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   allTabs, settingSearchGroups, settingsSections, footerIds, settingsHosts,
   MOBILE_PAGES, MOBILE_SETTINGS, MOBILE_SETTINGS_DUPLICATES, MOBILE_LABELS, mobileSearchPages, onPhone,
+  onPhoneNotice, navEntryOnPhone, DESKTOP_NOTICE,
 } from '../settingsManifest';
 
 const decided = (value) => value === true || (typeof value === 'string' && value.trim().length > 0);
@@ -37,10 +38,27 @@ describe('settings manifest', () => {
     expect(ids.filter((id) => !pages.has(id) && !settingsHosts[id] && id !== 'portable')).toEqual([]);
   });
 
-  it('phone search offers only what the phone has', () => {
+  it('phone search offers only what the phone has, and the desktop-notice pages by name', () => {
     expect(mobileSearchPages.length).toBeGreaterThan(10);
-    expect(mobileSearchPages.filter((p) => !onPhone(MOBILE_PAGES[p.id]))).toEqual([]);
+    expect(mobileSearchPages.filter((p) => !onPhone(MOBILE_PAGES[p.id]) && (p.keywords || !onPhoneNotice(MOBILE_PAGES[p.id])))).toEqual([]);
     expect(mobileSearchPages.filter((p) => p.keywords && !onPhone(MOBILE_SETTINGS[p.settingKey || p.labelKey]))).toEqual([]);
+    expect(mobileSearchPages.filter((p) => onPhoneNotice(MOBILE_PAGES[p.id])).map((p) => p.id).sort())
+      .toEqual(['backup', 'cleanup', 'migration', 'time-capsule']);
+  });
+
+  it('a desktop-notice page is in the phone navigation, not a phone feature, and its settings are desktop features', () => {
+    const notice = Object.keys(MOBILE_PAGES).filter((id) => MOBILE_PAGES[id] === DESKTOP_NOTICE).sort();
+    expect(notice).toEqual(['backup', 'cleanup', 'migration', 'time-capsule']);
+    for (const id of notice) {
+      expect(onPhone(MOBILE_PAGES[id]), id).toBe(false);
+      expect(navEntryOnPhone({ id }), id).toBe(true);
+    }
+    const settings = settingSearchGroups.filter((g) => notice.includes(g.id)).flatMap((g) => g.settings.map(([key]) => key));
+    expect(settings.length).toBeGreaterThan(5);
+    expect(settings.filter((key) => MOBILE_SETTINGS[key] !== 'desktop feature')).toEqual([]);
+    for (const key of ['settings.storage.addCleanupRule', 'settings.notifications.backupNotifications', 'workspace.backupStatusLocation']) {
+      expect(MOBILE_SETTINGS[key], key).toBe('desktop feature');
+    }
   });
 
   it('a setting the phone words its own way is found under the phone\'s label', () => {

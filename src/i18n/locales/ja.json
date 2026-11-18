@@ -3030,6 +3030,7 @@
   "settings.tab.daemon": "バックグラウンドデーモン",
   "settings.tab.dataUsage": "データ使用量",
   "settings.tab.diagnostics": "診断",
+  "settings.desktopNotice": "{{feature}} はデスクトップ版の MailVault で利用できます",
   "settings.tab.general": "一般",
   "settings.tab.help": "ヘルプとサポート",
   "settings.tab.language": "言語",

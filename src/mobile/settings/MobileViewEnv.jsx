@@ -36,5 +36,14 @@ export function useSavePrefs() {
 /** The note a refused write leaves under a page. */
 export function SaveFailed({ failed }) {
   const t = useT();
-  return failed ? <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p> : null;
+  return failed ? <p className="text-xs text-mail-danger" role="alert">{t('mobile.settings.saveFailed')}</p> : null;
+}
+
+/** Opens `url` the way every link leaves the app: a plain https anchor the shell hands to the system browser. */
+export function openExternal(url) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.click();
 }

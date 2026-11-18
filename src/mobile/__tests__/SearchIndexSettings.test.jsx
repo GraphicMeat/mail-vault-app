@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// Settings > Search index on the phone: the bodies and attachment-text switches (attachment text
-// behind Premium), the index's counts, size and progress, and Rebuild.
+// Settings > Storage > Search index on the phone (desktop's Search index view in settings/Storage.jsx):
+// the bodies and attachment-text switches (attachment text behind Premium), the index's counts,
+// size and progress, and Rebuild.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
@@ -20,6 +21,12 @@ vi.mock('../transport.js', () => ({
       case 'mobile.prefs.set':
         Object.assign(engine.prefs, params);
         return { ...engine.prefs };
+      case 'mobile.settings.get':
+        return { backgroundDownload: true };
+      case 'mobile.offline.get':
+        return { premium: false, network: {}, accounts: [] };
+      case 'mobile.storage.get':
+        return { accounts: [], databaseBytes: 0, searchBytes: 0, logsBytes: 0, cacheBytes: 0, totalBytes: 0 };
       default:
         throw Object.assign(new Error(method), { code: 'UNSUPPORTED' });
     }
@@ -27,7 +34,7 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
-const { default: SearchIndexSettings } = await import('../SearchIndexSettings.jsx');
+const { default: SearchIndexSettings } = await import('../settings/Storage.jsx');
 const { useMobileStore } = await import('../store.js');
 const { PREF_DEFAULTS } = await import('../prefs.js');
 
@@ -41,7 +48,10 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const row = (name) => document.querySelector(`[data-mv-pref="${name}"]`);
+const SWITCH = { searchIndexBodies: 'settings.searchIndex.bodies', searchIndexAttachments: 'settings.searchIndex.attachments' };
+const row = (name) => screen.getByRole('switch', { name: t(SWITCH[name]) });
+// The switch's row: its label and hint (where the Premium badge sits) beside it.
+const rowText = (name) => row(name).parentElement.textContent;
 const prefSets = () => engine.calls.filter(([m]) => m === 'mobile.prefs.set').map(([, p]) => p);
 
 describe('Settings > Search index', () => {
@@ -64,7 +74,7 @@ describe('Settings > Search index', () => {
 
   it('attachment text without Premium shows the badge and opens the Premium screen', async () => {
     render(<SearchIndexSettings />);
-    expect(row('searchIndexAttachments').textContent).toContain(t('common.premium'));
+    expect(rowText('searchIndexAttachments')).toContain(t('common.premium'));
     expect(row('searchIndexAttachments').getAttribute('aria-checked')).toBe('false');
     fireEvent.click(row('searchIndexAttachments'));
     expect(paywall).toHaveBeenCalledWith(null);
@@ -74,7 +84,7 @@ describe('Settings > Search index', () => {
   it('with Premium, attachment text switches like any preference', async () => {
     useMobileStore.setState({ premium: { premium: true, source: 'apple', expiresMs: null } });
     render(<SearchIndexSettings />);
-    expect(row('searchIndexAttachments').textContent).not.toContain(t('common.premium'));
+    expect(rowText('searchIndexAttachments')).not.toContain(t('common.premium'));
     expect(row('searchIndexAttachments').getAttribute('aria-checked')).toBe('true');
     fireEvent.click(row('searchIndexAttachments'));
     await waitFor(() => expect(prefSets()).toEqual([{ searchIndexAttachments: false }]));

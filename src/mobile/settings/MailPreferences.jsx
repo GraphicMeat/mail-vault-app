@@ -260,9 +260,9 @@ export function Notifications() {
         }}
         notice={(
           <>
-            {loadFailed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
-            {problem === 'denied' && <p className="mv-settings__note" role="status">{t('mobile.settings.notifyDenied')}</p>}
-            {problem === 'failed' && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
+            {loadFailed && <p className="text-xs text-mail-danger" role="alert">{t('mobile.settings.loadFailed')}</p>}
+            {problem === 'denied' && <p className="text-xs text-mail-text-muted" role="status">{t('mobile.settings.notifyDenied')}</p>}
+            {problem === 'failed' && <p className="text-xs text-mail-danger" role="alert">{t('mobile.settings.saveFailed')}</p>}
           </>
         )} />
       <SaveFailed failed={prefFailed || senders.failed} />

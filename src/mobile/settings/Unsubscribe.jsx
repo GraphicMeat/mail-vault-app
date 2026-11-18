@@ -72,11 +72,11 @@ export default function Unsubscribe() {
   const notice = (
     <>
       {outcome && (
-        <div className={`mv-settings__note${outcome.error || outcome.reply?.status === 'failed' ? ' mv-settings__note--error' : ''}`} role="status" data-mv-unsub-outcome>
+        <div className={`text-xs mb-2 ${outcome.error || outcome.reply?.status === 'failed' ? 'text-mail-danger' : 'text-mail-text-muted'}`} role="status" data-mv-unsub-outcome>
           {outcome.error && t('unsubscribe.failed', { sender: outcome.label })}
           {outcome.reply?.status === 'ok' && t('unsubscribe.done', { sender: outcome.label })}
           {outcome.reply?.status === 'opened' && outcome.reply.url && (
-            <a className="mv-settings__link" href={outcome.reply.url} target="_blank" rel="noopener noreferrer">
+            <a className="text-mail-accent-text underline" href={outcome.reply.url} target="_blank" rel="noopener noreferrer">
               {outcome.reply.method === 'mailto' ? t('mobile.unsubscribe.sendEmail') : t('mobile.unsubscribe.openPage')}
             </a>
           )}

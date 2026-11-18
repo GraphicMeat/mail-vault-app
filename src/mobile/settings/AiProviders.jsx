@@ -82,7 +82,7 @@ export default function AiProviders() {
         urlPlaceholder={URL_EXAMPLE} modelPlaceholder={MODEL_EXAMPLE}
         notice={(
           <>
-            {test.error && <p className="mv-settings__note mv-settings__note--error" role="alert">{t(test.error)}</p>}
+            {test.error && <p className="text-xs text-mail-danger" role="alert">{t(test.error)}</p>}
             <SaveFailed failed={failed} />
           </>
         )}

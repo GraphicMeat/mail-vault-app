@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Settings > Move to another computer: the chosen accounts sealed into a `.mvtransfer` file
+// Settings > Move to another computer (desktop's Export view): the chosen accounts sealed into a `.mvtransfer` file
 // (`mobile.transfer.export`), handed to the share sheet, then deleted (`mobile.transfer.discard`).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
@@ -27,7 +27,7 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
-const { default: TransferSettings } = await import('../TransferSettings.jsx');
+const { default: TransferSettings } = await import('../settings/Transfer.jsx');
 const { useMobileStore } = await import('../store.js');
 
 const PATH = `/cache/att/${'a'.repeat(64)}`;

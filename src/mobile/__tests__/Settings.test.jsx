@@ -173,12 +173,17 @@ describe('Settings', () => {
     expect(reauth).toHaveBeenCalledWith('a2');
   });
 
-  it('links the source as a plain https anchor for the shell navigation guard, with the version', async () => {
+  it('opens the source as a plain https anchor for the shell navigation guard, with the version', async () => {
     render(<Settings page="help" onClose={() => {}} version="9.8.7" />);
-    const link = screen.getByRole('link', { name: t('mobile.settings.source') });
-    expect(link.getAttribute('href')).toBe('https://github.com/GraphicMeat/mail-vault-app');
-    expect(link.getAttribute('target')).toBe('_blank');
-    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    const row = screen.getByTestId('mobile-source');
+    expect(row.textContent).toContain(t('mobile.settings.source'));
+    const opened = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function record() {
+      opened.push({ href: this.getAttribute('href'), target: this.target, rel: this.rel });
+    });
+    fireEvent.click(within(row).getByRole('button', { name: t('common.open') }));
+    click.mockRestore();
+    expect(opened).toEqual([{ href: 'https://github.com/GraphicMeat/mail-vault-app', target: '_blank', rel: 'noopener noreferrer' }]);
     expect(screen.getByText(t('mobile.settings.version', { version: '9.8.7' }))).toBeTruthy();
     expect(document.body.textContent.toLowerCase()).not.toContain('open source');
   });
@@ -253,10 +258,13 @@ describe('Settings pages, as desktop lays them out', () => {
 
   it('the first screen is desktop\'s sidebar: its groups and pages less what a phone lacks, with no settings of its own', () => {
     render(<Settings onClose={() => {}} />);
-    // Desktop's order (settingsManifest.js); Migration, Views, Auto-tags, Cleanup, Backup,
-    // Portable and Time Capsule are not on the phone. Billing joins the footer while Premium is on.
-    expect(pageRows()).toEqual(['appearance', 'mail-preferences', 'accounts', 'templates', 'ai-providers', 'unsubscribe', 'storage', 'privacy', 'diagnostics', 'help']);
-    expect([...document.querySelectorAll('.settings-nav-item')]).toHaveLength(10);
+    // Desktop's order (settingsManifest.js); Views, Auto-tags and Portable are not on the phone;
+    // Migration, Cleanup, Backup and Time Capsule are, as their desktop notices. Billing joins the
+    // footer while Premium is on.
+    expect(pageRows()).toEqual(['appearance', 'mail-preferences', 'accounts', 'templates', 'migration', 'ai-providers', 'unsubscribe', 'cleanup',
+      'storage', 'backup', 'time-capsule', 'privacy', 'diagnostics', 'help']);
+    // The pages and the Premium row.
+    expect([...document.querySelectorAll('.settings-nav-item')]).toHaveLength(15);
     const headings = [...document.querySelectorAll('.settings-nav-heading')].map((h) => h.textContent);
     expect(headings).toEqual([
       t('common.premium'),
@@ -289,7 +297,7 @@ describe('Settings pages, as desktop lays them out', () => {
     fireEvent.click(screen.getByRole('tab', { name: t('settings.notifications.notifications') }));
     await waitFor(() => expect(toggle()).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
-    expect(pageRows()).toHaveLength(10);
+    expect(pageRows()).toHaveLength(14);
     expect(heading()).toBe(t('mobile.settings.title'));
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
@@ -323,16 +331,10 @@ describe('Settings pages, as desktop lays them out', () => {
     render(<Settings onClose={() => {}} page="tracking" />);
     expect(screen.getByTestId('tracker-upsell')).toBeTruthy();
     cleanup();
-    const on = (page) => {
-      const r = render(<Settings onClose={() => {}} page={page} />);
-      const prefs = [...document.querySelectorAll('[data-mv-pref]')].map((e) => e.getAttribute('data-mv-pref'));
-      r.unmount();
-      return prefs;
-    };
     // AI is off by default: only its switch until it is on (AiSettings.test.jsx).
     expect(controls('ai')).toEqual([t('ai.settings.enable')]);
-    // The search index sits on the Storage page, as on desktop.
-    expect(on('search')).toEqual(expect.arrayContaining(['searchIndexBodies', 'searchIndexAttachments']));
+    // The search index sits on the Storage page, as on desktop, after the offline download switch.
+    expect(controls('search')).toEqual([t('mobile.settings.downloadToggle'), t('settings.searchIndex.bodies'), t('settings.searchIndex.attachments')]);
   });
 
   it('a setting the phone words its own way is found and landed on under that name', async () => {
@@ -374,15 +376,36 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
   });
 
-  it('Offline opened from Storage goes back to Storage, then to the list', async () => {
-    render(<Settings onClose={() => {}} page="storage" />);
-    await waitFor(() => expect(document.querySelector('[data-mv-storage-offline]')).toBeTruthy());
-    fireEvent.click(document.querySelector('[data-mv-storage-offline]'));
-    expect(heading()).toBe(t('mobile.settings.offline'));
-    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+  it('Offline is Storage\'s download card, where desktop has its download mode; Back returns to the list', async () => {
+    render(<Settings onClose={() => {}} page="offline" />);
     expect(heading()).toBe(t('settings.tab.storage'));
+    expect(screen.getByRole('tab', { name: t('settings.tab.storage') }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('heading', { level: 4, name: t('mobile.settings.offline') })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
     expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
+  });
+
+  it('a desktop-only page opens its notice, in desktop\'s place and under desktop\'s name; search finds it', () => {
+    render(<Settings onClose={() => {}} />);
+    fireEvent.click(document.querySelector('[data-mv-settings-page="backup"]'));
+    expect(heading()).toBe(t('settings.tab.backup'));
+    expect(screen.getByText(t('settings.desktopNotice', { feature: t('settings.tab.backup') }))).toBeTruthy();
+    expect(screen.queryAllByRole('switch')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    const box = screen.getByRole('searchbox', { name: t('settings.navigation.searchSetting') });
+    fireEvent.change(box, { target: { value: t('settings.tab.cleanup') } });
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(t('settings.tab.cleanup')) }));
+    expect(screen.getByText(t('settings.desktopNotice', { feature: t('settings.tab.cleanup') }))).toBeTruthy();
+    // Its settings are not offered: they are desktop's.
+    fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
+    fireEvent.change(screen.getByRole('searchbox', { name: t('settings.navigation.searchSetting') }), { target: { value: t('settings.storage.addCleanupRule') } });
+    expect(screen.queryByRole('button', { name: new RegExp(t('settings.storage.addCleanupRule')) })).toBeNull();
+  });
+
+  it('Diagnostics\' first tab is the unfinished server actions: the phone has no daemon', () => {
+    render(<Settings onClose={() => {}} page="diagnostics" />);
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([t('settings.pendingActions.title'), t('settings.tab.logs')]);
+    expect(screen.queryByText(t('settings.tab.daemon'))).toBeNull();
   });
 
   it('a search for an account setting opens its account section and lands on it, as on desktop', async () => {
@@ -447,12 +470,18 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(screen.getByText(t('mobile.settings.version', { version: '1.2.3' }))).toBeTruthy();
   });
 
-  it('Help has desktop\'s links: FAQ, report a bug, Discord, website and privacy policy, each a plain https anchor', () => {
+  it('Help has desktop\'s links: report a bug, Discord, website, blog, privacy policy, more apps and FAQ, each https', () => {
     render(<Settings onClose={() => {}} page="help" />);
-    const links = [...document.querySelectorAll('[data-mv-help-link]')];
-    expect(links.map((a) => a.getAttribute('data-mv-help-link'))).toEqual(['faq', 'bug', 'discord', 'website', 'privacy']);
-    for (const a of links) expect(a.getAttribute('href')).toMatch(/^https:\/\//);
-    expect(links[0].getAttribute('href')).toContain('mailvaultapp.com/faq.html');
-    expect(links[1].getAttribute('href')).toBe('https://github.com/GraphicMeat/mail-vault-app/issues');
+    const urls = [...document.querySelectorAll('[data-mv-help] [data-url]')].map((b) => b.getAttribute('data-url'));
+    expect(urls).toHaveLength(8);
+    for (const url of urls) expect(url).toMatch(/^https:\/\//);
+    expect(urls[0]).toContain('discord');
+    expect(urls[1]).toBe('https://github.com/GraphicMeat/mail-vault-app/issues');
+    expect(urls[2]).toContain('mailvaultapp.com/?');
+    expect(urls[3]).toContain('mailvaultapp.com/blog.html');
+    expect(urls[4]).toBe('https://mailvaultapp.com/privacy.html');
+    expect(urls[5]).toBe('https://graphicmeat.com');
+    expect(urls[6]).toContain('mailvaultapp.com/faq.html');
+    expect(urls[7]).toBe('https://github.com/GraphicMeat/mail-vault-app');
   });
 });

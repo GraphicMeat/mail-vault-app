@@ -3030,6 +3030,7 @@
   "settings.tab.daemon": "Proceso en segundo plano",
   "settings.tab.dataUsage": "Consumo de datos",
   "settings.tab.diagnostics": "Diagnóstico",
+  "settings.desktopNotice": "{{feature}} está disponible en MailVault para escritorio",
   "settings.tab.general": "General",
   "settings.tab.help": "Ayuda y soporte",
   "settings.tab.language": "Idioma",

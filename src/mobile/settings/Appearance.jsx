@@ -35,7 +35,7 @@ import { daemonCall, setAppIcon } from '../transport.js';
 import { normalizeAppIcon } from '../appIcon.js';
 import { APP_FONTS, PALETTES, TEXT_SCALES, THEMES, fontStack, viewerTheme } from '../prefs.js';
 import QuickActions from './QuickActions.jsx';
-import { MobileViewEnv, SaveFailed, useSavePrefs } from './MobileViewEnv.jsx';
+import { MobileViewEnv, SaveFailed, useSavePrefs, openExternal } from './MobileViewEnv.jsx';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 const ICONS = { purple, teal };
@@ -131,15 +131,6 @@ function DateTime({ save }) {
   };
   const values = draft === null ? prefs : { ...prefs, customDateFormat: draft };
   return <DateTimeView values={values} onChange={onChange} systemLanguage={typeof navigator !== 'undefined' ? navigator.language : ''} />;
-}
-
-/** Opens `url` the way every link leaves the app: a plain https anchor the shell hands to the system browser. */
-function openExternal(url) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  a.click();
 }
 
 function Language({ version }) {

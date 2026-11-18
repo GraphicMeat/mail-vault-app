@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-// Settings pages backed by the engine: Unfinished server actions (retry, cancel one), Storage (the
-// room per account and per file, a link to Offline), Logs (detail, view, copy, clear after a
-// confirm) and Data usage (totals by period, today against the limits, the switches and the
+// Settings pages backed by the engine, drawn with desktop's views: Unfinished server actions (retry,
+// cancel one), Storage (the room in all, per account and per file), Logs (detail, view, copy, clear
+// after a confirm) and Data usage (totals by period, today against the limits, the switches and the
 // limits, unmeasured accounts), plus the warning notice the store raises from the engine's event.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({ calls: [], pending: [], usage: null, logs: '', listeners: {} }));
@@ -35,6 +35,12 @@ vi.mock('../transport.js', () => ({
         return {};
       case 'mobile.prefs.set':
         return { ...params };
+      case 'mobile.settings.get':
+        return { backgroundDownload: true };
+      case 'mobile.offline.get':
+        return { premium: false, network: {}, accounts: [] };
+      case 'mobile.search.status':
+        return { available: true, state: 'idle', indexed: 0, total: 0, sizeBytes: 0 };
       case 'mobile.dataUsage.get':
         return structuredClone(engine.usage);
       case 'mobile.dataUsage.set': {
@@ -57,10 +63,9 @@ vi.mock('../transport.js', () => ({
   }),
 }));
 
-const { default: PendingActions } = await import('../PendingActions.jsx');
-const { default: StorageSettings } = await import('../StorageSettings.jsx');
-const { default: LogsSettings } = await import('../LogsSettings.jsx');
-const { default: DataUsage } = await import('../DataUsage.jsx');
+const { PendingActions, Logs: LogsSettings } = await import('../settings/Diagnostics.jsx');
+const { default: StorageSettings } = await import('../settings/Storage.jsx');
+const { default: DataUsage } = await import('../settings/DataUsage.jsx');
 const { useMobileStore } = await import('../store.js');
 const { PREF_DEFAULTS } = await import('../prefs.js');
 
@@ -98,17 +103,20 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+const items = () => screen.queryAllByRole('listitem');
+const cancelOf = (label) => screen.getByRole('button', { name: `${t('common.cancel')}: ${t(label)}` });
+
 describe('Settings > Unfinished server actions', () => {
   it('lists what the server still owes, with why and how often it was tried', async () => {
     render(<PendingActions />);
-    await waitFor(() => expect(document.querySelectorAll('[data-mv-pending-action]')).toHaveLength(2));
-    const first = document.querySelector('[data-mv-pending-action="7"]');
+    await waitFor(() => expect(items()).toHaveLength(2));
+    expect(screen.getByText(t('settings.pendingActions.title'))).toBeTruthy();
+    const [first, second] = items();
     expect(first.textContent).toContain(t('settings.pendingActions.opDelete'));
     expect(first.textContent).toContain('ada@example.test');
     expect(first.textContent).toContain(t('common.messageCount', { count: 2 }));
     expect(first.textContent).toContain(t('settings.pendingActions.attempts', { count: 2 }));
     expect(first.textContent).toContain(t('mobile.error.HOST_UNREACHABLE'));
-    const second = document.querySelector('[data-mv-pending-action="8"]');
     expect(second.textContent).toContain(t('settings.pendingActions.opFlag'));
     expect(second.textContent).toContain(t('settings.pendingActions.notTriedYet'));
     expect(calls('mobile.actions.pending')[0]).toEqual({});
@@ -116,32 +124,34 @@ describe('Settings > Unfinished server actions', () => {
 
   it('Cancel gives one up; Retry now asks for every account; an empty journal says so', async () => {
     render(<PendingActions />);
-    await waitFor(() => expect(document.querySelector('[data-mv-pending-action="7"]')).toBeTruthy());
-    fireEvent.click(document.querySelector('[data-mv-pending-action="7"] button'));
-    await waitFor(() => expect(document.querySelector('[data-mv-pending-action="7"]')).toBeNull());
+    await waitFor(() => expect(items()).toHaveLength(2));
+    fireEvent.click(cancelOf('settings.pendingActions.opDelete'));
+    await waitFor(() => expect(items()).toHaveLength(1));
     expect(calls('mobile.actions.discard')).toEqual([{ seq: 7 }]);
-    fireEvent.click(document.querySelector('[data-mv-pending-retry]'));
+    fireEvent.click(screen.getByRole('button', { name: t('settings.pendingActions.retryNow') }));
     await waitFor(() => expect(calls('mobile.actions.retry')).toEqual([{}]));
     engine.pending = [];
     act(() => engine.listeners['mobile.action.result'].forEach((h) => h({ seq: 8, outcome: 'done' })));
-    await waitFor(() => expect(document.querySelector('[data-mv-pending-empty]')).toBeTruthy());
-    expect(screen.getByText(t('settings.pendingActions.empty'))).toBeTruthy();
+    expect(await screen.findByText(t('settings.pendingActions.empty'))).toBeTruthy();
+    expect(items()).toHaveLength(0);
   });
 });
 
 describe('Settings > Storage', () => {
-  it('shows the total, each account and each file, and opens Offline', async () => {
-    const onOpenOffline = vi.fn();
-    render(<StorageSettings onOpenOffline={onOpenOffline} />);
-    await waitFor(() => expect(document.querySelector('[data-mv-storage="total"]')).toBeTruthy());
-    expect(document.querySelector('[data-mv-storage="total"]').textContent).toContain('15');
+  it('shows the total, each account and each file', async () => {
+    render(<StorageSettings />);
+    await waitFor(() => expect(document.querySelector('[data-mv-storage="account:a1"]')).toBeTruthy());
+    const total = screen.getByText(t('settings.storage.localStorageUsage')).parentElement;
+    expect(total.textContent).toContain('15');
+    expect(total.textContent).toContain(t('settings.storage.emailsSavedParen', { count: 12 }));
     const acct = document.querySelector('[data-mv-storage="account:a1"]');
     expect(acct.textContent).toContain('Ada');
     expect(acct.textContent).toContain(t('common.messageCount', { count: 12 }));
     expect(acct.textContent).toContain('4');
     for (const name of ['database', 'search', 'logs', 'cache']) expect(document.querySelector(`[data-mv-storage="${name}"]`)).toBeTruthy();
-    fireEvent.click(document.querySelector('[data-mv-storage-offline]'));
-    expect(onOpenOffline).toHaveBeenCalledTimes(1);
+    // Desktop's Storage Status card, without desktop's "ordinary files on this disk" line.
+    expect(screen.getByText(t('settings.storage.storageStatus'))).toBeTruthy();
+    expect(screen.queryByText(t('settings.storage.ordinaryFilesNothingUploaded'))).toBeNull();
   });
 });
 
@@ -150,65 +160,71 @@ describe('Settings > Logs', () => {
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     render(<LogsSettings />);
-    await waitFor(() => expect(document.querySelector('[data-mv-logs-text]').textContent).toContain('[sync] a2 done'));
+    await waitFor(() => expect(screen.getByText(/\[sync\] a2 done/)).toBeTruthy());
     expect(calls('mobile.logs.get')[0]).toEqual({ lines: 500 });
-    fireEvent.click(document.querySelector('[data-mv-logs-copy]'));
+    fireEvent.click(screen.getByRole('button', { name: t('viewer.copy') }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(engine.logs));
     expect(await screen.findByText(t('settings.logs.copied'))).toBeTruthy();
 
-    fireEvent.click(document.querySelector('[data-mv-logs-clear]'));
+    const clear = () => screen.getByRole('button', { name: t('settings.logs.clearLog2') });
+    fireEvent.click(clear());
     expect(calls('mobile.logs.clear')).toEqual([]);
     const confirm = document.querySelector('[data-mv-logs-confirm]');
     fireEvent.click(screen.getByRole('button', { name: t('settings.logs.keep') }));
     expect(document.querySelector('[data-mv-logs-confirm]')).toBeNull();
     expect(confirm).toBeTruthy();
-    fireEvent.click(document.querySelector('[data-mv-logs-clear]'));
-    fireEvent.click(document.querySelector('[data-mv-logs-confirm] .mv-textbtn--danger'));
+    fireEvent.click(clear());
+    fireEvent.click(within(document.querySelector('[data-mv-logs-confirm]')).getByRole('button', { name: t('settings.logs.clearLog2') }));
     await waitFor(() => expect(calls('mobile.logs.clear')).toEqual([{}]));
-    await waitFor(() => expect(document.querySelector('[data-mv-logs-text]').textContent).toBe(t('mobile.logs.empty')));
+    expect(await screen.findByText(t('mobile.logs.empty'))).toBeTruthy();
   });
 
   it('log detail is the logVerbosity preference', async () => {
     const setPrefs = vi.fn(async () => true);
     useMobileStore.setState({ setPrefs });
     render(<LogsSettings />);
-    const select = document.querySelector('[data-mv-pref="logVerbosity"]');
-    expect(select.value).toBe('standard');
-    fireEvent.change(select, { target: { value: 'verbose' } });
+    const group = screen.getByRole('radiogroup', { name: t('settings.logs.verbosityTitle') });
+    const [standard, verbose] = within(group).getAllByRole('radio');
+    expect(standard.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(verbose);
     await waitFor(() => expect(setPrefs).toHaveBeenCalledWith({ logVerbosity: 'verbose' }));
   });
 });
 
+const card = (id) => document.querySelector(`[data-mv-usage-account="${id}"]`);
+const field = (id, key) => within(card(id)).getByLabelText(t(key));
+const toggleOf = (id, key) => within(card(id)).getByRole('switch', { name: t(key) });
+
 describe('Settings > Data usage', () => {
   it('shows the period totals and today against the limit; an account not measured says so', async () => {
     render(<DataUsage />);
-    await waitFor(() => expect(document.querySelector('[data-mv-usage-account="a1"]')).toBeTruthy());
-    const a1 = document.querySelector('[data-mv-usage-account="a1"]');
-    expect(a1.querySelector('[data-mv-usage-totals]').textContent).toContain('90');
-    fireEvent.click(a1.querySelector('[data-mv-usage-period="month"]'));
-    expect(a1.querySelector('[data-mv-usage-totals]').textContent).toContain('900');
-    const bar = a1.querySelector('progress');
-    expect(Number(bar.getAttribute('value'))).toBeCloseTo(0.9);
-    expect(bar.className).toContain('mv-usage__meter--warn');
-    const a2 = document.querySelector('[data-mv-usage-account="a2"]');
-    expect(a2.querySelector('[data-mv-usage-unmeasured]').textContent).toBe(t('settings.dataUsage.unavailable'));
-    expect(a2.querySelector('[data-mv-usage-totals]')).toBeNull();
+    await waitFor(() => expect(card('a1')).toBeTruthy());
+    const a1 = card('a1');
+    expect(a1.textContent).toContain('90');
+    fireEvent.click(within(a1).getByRole('button', { name: t('settings.dataUsage.period.month') }));
+    expect(a1.textContent).toContain('900');
+    // Today's download against its 100 MB limit: 90%, past the 80% warning mark.
+    const bar = within(a1).getByText(t('settings.dataUsage.account.download')).parentElement.nextElementSibling.firstElementChild;
+    expect(bar.style.width).toBe('90%');
+    expect(bar.className).toContain('bg-mail-warning');
+    const a2 = card('a2');
+    expect(within(a2).getByText(t('settings.dataUsage.unavailable'))).toBeTruthy();
+    expect(within(a2).queryByText(t('settings.dataUsage.account.downloaded'))).toBeNull();
   });
 
   it('the switches and the limits write the engine, in bytes', async () => {
     render(<DataUsage />);
-    await waitFor(() => expect(document.querySelector('[data-mv-usage-account="a1"]')).toBeTruthy());
-    const a1 = () => document.querySelector('[data-mv-usage-account="a1"]');
-    const cap = a1().querySelector('[data-mv-usage-toggle="cap"]');
-    expect(cap.getAttribute('aria-checked')).toBe('false');
-    fireEvent.click(cap);
-    await waitFor(() => expect(a1().querySelector('[data-mv-usage-toggle="cap"]').getAttribute('aria-checked')).toBe('true'));
-    fireEvent.click(a1().querySelector('[data-mv-usage-toggle="warn"]'));
-    const down = a1().querySelector('[data-mv-usage-limit="down"]');
+    await waitFor(() => expect(card('a1')).toBeTruthy());
+    const cap = () => toggleOf('a1', 'settings.dataUsage.account.pauseBackgroundDownloads');
+    expect(cap().getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(cap());
+    await waitFor(() => expect(cap().getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(toggleOf('a1', 'settings.dataUsage.account.warnWhenNearingDailyLimit'));
+    const down = field('a1', 'settings.dataUsage.account.dailyDownloadLimitMb');
     expect(down.value).toBe('100');
     fireEvent.change(down, { target: { value: '250' } });
     fireEvent.blur(down);
-    const up = a1().querySelector('[data-mv-usage-limit="up"]');
+    const up = field('a1', 'settings.dataUsage.account.dailyUploadLimitMb');
     expect(up.placeholder).toBe(t('settings.dataUsage.account.unlimited'));
     fireEvent.change(up, { target: { value: '-3' } });
     fireEvent.blur(up);
@@ -223,9 +239,9 @@ describe('Settings > Data usage', () => {
   it('a limit under a whole MB shows as typed, and a blur with no change writes nothing', async () => {
     engine.usage = { accounts: [usageEntry('a1', { typed: { dailyDownLimitBytes: 0.5 * MB, dailyUpLimitBytes: 1.234567 * MB } })] };
     render(<DataUsage />);
-    await waitFor(() => expect(document.querySelector('[data-mv-usage-account="a1"]')).toBeTruthy());
-    const down = document.querySelector('[data-mv-usage-limit="down"]');
-    const up = document.querySelector('[data-mv-usage-limit="up"]');
+    await waitFor(() => expect(card('a1')).toBeTruthy());
+    const down = field('a1', 'settings.dataUsage.account.dailyDownloadLimitMb');
+    const up = field('a1', 'settings.dataUsage.account.dailyUploadLimitMb');
     expect(down.value).toBe('0.5');
     expect(up.value).toBe('1.23');
     fireEvent.blur(down);

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-// Settings > Billing: reached from the Premium section while Premium is on; the store's own
-// manage page for a store subscription (none for a website one); the website account's devices,
+// Settings > Billing (desktop's Billing views): reached from the Premium section while Premium is on;
+// the store's own manage page for a store subscription (none for a website one); the website account's devices,
 // this phone marked, the others removable by their opaque key; and the translation report under
 // Appearance's language row.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({ calls: [], devices: null, remove: null }));
@@ -33,7 +33,7 @@ vi.mock('../transport.js', () => ({
 
 const { default: Settings } = await import('../Settings.jsx');
 const { useMobileStore } = await import('../store.js');
-const { seenAgo } = await import('../Billing.jsx');
+const { seenAgo } = await import('../settings/Billing.jsx');
 
 const NOW = Date.now();
 const PHONE = { key: 'k-phone', name: 'MailVault for iPhone', platform: 'ios', appVersion: '2.23.0', lastSeenMs: NOW, current: true };
@@ -52,6 +52,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const billingRow = () => document.querySelector('[data-mv-settings-page="billing"]');
+/** Where clicking `el` sends the app: the link it hands to the system browser. */
+function opens(el) {
+  const opened = [];
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function record() { opened.push(this.href); });
+  fireEvent.click(el);
+  click.mockRestore();
+  return opened;
+}
+const devices = () => document.querySelector('[data-mv-devices]');
+// One detail line per device: its platform and version.
+const deviceRows = () => (devices() ? within(devices()).queryAllByText(/ · v\d/) : []);
+const removeButton = (name) => screen.queryByRole('button', { name: `${t('settings.billing.removeDevice')}: ${name}` });
 
 describe('Billing', () => {
   it('is offered under Premium only while Premium is on', async () => {
@@ -67,11 +79,12 @@ describe('Billing', () => {
     premiumOn('apple');
     render(<Settings page="billing" onClose={() => {}} />);
     await waitFor(() => expect(engine.calls.some(([m]) => m === 'mobile.premium.devices')).toBe(true));
-    expect(document.querySelector('[data-mv-manage]').getAttribute('href')).toBe('https://apps.apple.com/account/subscriptions');
+    expect(document.querySelector('[data-mv-manage]').textContent).toBe(t('settings.billing.manageSubscription'));
+    expect(opens(document.querySelector('[data-mv-manage]'))).toEqual(['https://apps.apple.com/account/subscriptions']);
     cleanup();
     premiumOn('google');
     render(<Settings page="billing" onClose={() => {}} />);
-    expect(document.querySelector('[data-mv-manage]').getAttribute('href')).toBe('https://play.google.com/store/account/subscriptions');
+    expect(opens(document.querySelector('[data-mv-manage]'))).toEqual(['https://play.google.com/store/account/subscriptions']);
   });
 
   it('offers no link for a website subscription', async () => {
@@ -87,19 +100,18 @@ describe('Billing', () => {
     engine.devices = { available: true, limit: 5, devices: [PHONE, MAC] };
     engine.remove = { available: true, limit: 5, devices: [PHONE] };
     render(<Settings page="billing" onClose={() => {}} />);
-    await waitFor(() => expect(document.querySelectorAll('[data-mv-device]').length).toBe(2));
-    expect(document.querySelector('[data-mv-device-count]').textContent).toContain('2 / 5');
-    const current = document.querySelector('[data-mv-device="current"]');
-    expect(current.textContent).toContain(t('settings.billing.thisDeviceParen'));
-    expect(current.querySelector('[data-mv-device-remove]')).toBeNull();
-    const other = document.querySelector('[data-mv-device="other"]');
-    expect(other.textContent).toContain('Mac');
+    await waitFor(() => expect(deviceRows()).toHaveLength(2));
+    expect(devices().textContent).toContain('2 / 5');
+    expect(screen.getByText(PHONE.name).textContent).toContain(t('settings.billing.thisDeviceParen'));
+    expect(removeButton(PHONE.name)).toBeNull();
+    const other = deviceRows()[1];
+    expect(other.parentElement.textContent).toContain('Mac');
     expect(other.textContent).toContain('v2.22.1');
     expect(other.textContent).toContain(t('settings.billing.hAgo', { hrs: 2 }));
 
-    await act(async () => { fireEvent.click(other.querySelector('[data-mv-device-remove]')); });
+    await act(async () => { fireEvent.click(removeButton('Mac')); });
     expect(engine.calls.filter(([m]) => m === 'mobile.premium.removeDevice')).toEqual([['mobile.premium.removeDevice', { key: 'k-mac' }]]);
-    await waitFor(() => expect(document.querySelectorAll('[data-mv-device]').length).toBe(1));
+    await waitFor(() => expect(deviceRows()).toHaveLength(1));
   });
 
   it('says why a removal failed and keeps the list', async () => {
@@ -107,10 +119,10 @@ describe('Billing', () => {
     engine.devices = { available: true, limit: 5, devices: [PHONE, MAC] };
     engine.remove = fail('NETWORK');
     render(<Settings page="billing" onClose={() => {}} />);
-    await waitFor(() => expect(document.querySelectorAll('[data-mv-device]').length).toBe(2));
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-device-remove]')); });
+    await waitFor(() => expect(deviceRows()).toHaveLength(2));
+    await act(async () => { fireEvent.click(removeButton('Mac')); });
     expect(screen.getByRole('alert').textContent).toBe(t('mobile.error.NETWORK'));
-    expect(document.querySelectorAll('[data-mv-device]').length).toBe(2);
+    expect(deviceRows()).toHaveLength(2);
   });
 
   it('shows no device list without a website account, and a retry when the list fails', async () => {
@@ -124,7 +136,7 @@ describe('Billing', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(t('mobile.error.RATE_LIMITED')));
     engine.devices = { available: true, limit: 5, devices: [PHONE] };
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.retry') })); });
-    await waitFor(() => expect(document.querySelectorAll('[data-mv-device]').length).toBe(1));
+    await waitFor(() => expect(deviceRows()).toHaveLength(1));
   });
 
   it('words the last-seen time as desktop does', () => {
