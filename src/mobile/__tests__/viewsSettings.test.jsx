@@ -82,7 +82,26 @@ const openPage = async (props = {}) => {
 
 describe('Settings > Views on the phone', () => {
   // System Back is `history.back()`: jsdom traverses the entries the back stack (backStack.js)
-  // pushed and fires popstate, as the Android shell does.
+  // pushed and fires popstate, as the Android shell does. The back stack is module state, so the
+  // tests that press Back come first, before other tests' history entries pile up.
+  it('a saved editor takes its Back with it: the next Back leaves the page', async () => {
+    await openPage();
+    fireEvent.click(screen.getByTestId('views-row-v1'));
+    await flush();
+    fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Receipts' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    await flush();
+    expect(screen.queryByTestId('view-editor-form')).toBeNull();
+    // jsdom traverses on its own timer: the editor's entry is gone first.
+    await act(async () => {
+      for (let i = 0; i < 100 && window.history.state?.mvLayer !== 1; i++) await new Promise((r) => setTimeout(r, 5));
+    });
+    expect(window.history.state?.mvLayer).toBe(1);
+    await act(async () => { window.history.back(); });
+    await flush();
+    expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
+  });
+
   it('Back with an edit asks first: Keep editing stays, Discard closes the editor', async () => {
     await openPage();
     fireEvent.click(screen.getByTestId('views-row-v1'));
