@@ -254,12 +254,28 @@ export function withSignature(body, signature) {
   return `${body || ''}\n\n${sep}${signature}`;
 }
 
-/** Puts the theme and palette on the root element; `system` leaves the light/dark to the OS. */
+const LIGHT_QUERY = '(prefers-color-scheme: light)';
+
+/** Whether the system shows light now (dark when it cannot tell, the app's default). */
+export function systemIsLight() {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(LIGHT_QUERY).matches;
+}
+
+/** The theme drawn: the one picked, or for `system` the one the system shows now. */
+export function resolvedTheme(theme) {
+  if (theme === 'light' || theme === 'dark') return theme;
+  return systemIsLight() ? 'light' : 'dark';
+}
+
+/**
+ * Puts the theme and palette on the root element. The shared tokens (src/styles/tokens.css,
+ * palettes.css) read an explicit `data-theme`, so `system` is resolved to the system's light or
+ * dark here, and `watchSystemTheme` keeps it following.
+ */
 export function applyLook(prefs, root = typeof document !== 'undefined' ? document.documentElement : null) {
   if (!root) return;
   const p = prefs || PREF_DEFAULTS;
-  if (p.theme === 'light' || p.theme === 'dark') root.setAttribute('data-theme', p.theme);
-  else root.removeAttribute('data-theme');
+  root.setAttribute('data-theme', resolvedTheme(p.theme));
   root.setAttribute('data-palette', PALETTES.includes(p.palette) ? p.palette : 'indigo');
   // Text size: the CSS sizes text in rem, so the root's font size scales it all (rows grow with
   // it, rowHeight). Font: the stack mobile.css's --mv-font reads.
@@ -269,4 +285,16 @@ export function applyLook(prefs, root = typeof document !== 'undefined' ? docume
     else root.style.setProperty('font-size', `${16 * scale}px`);
     root.style.setProperty('--app-font', fontStack(p.appFont));
   }
+}
+
+/**
+ * Re-applies the look (`getPrefs()`, the current preferences) whenever the system switches between
+ * light and dark, so `system` follows it live. Returns the unsubscribe.
+ */
+export function watchSystemTheme(getPrefs) {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};
+  const query = window.matchMedia(LIGHT_QUERY);
+  const onChange = () => applyLook(getPrefs());
+  query.addEventListener?.('change', onChange);
+  return () => query.removeEventListener?.('change', onChange);
 }

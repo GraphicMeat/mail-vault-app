@@ -1,0 +1,4 @@
+/* Tailwind's components and utilities without its base layer, for the phone (src/mobile/shared-ui.css),
+   whose preflight is scoped (src/mobile/tailwind-base.css). Desktop uses tailwind.css. */
+@tailwind components;
+@tailwind utilities;

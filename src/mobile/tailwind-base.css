@@ -1,0 +1,5 @@
+/* Tailwind's preflight for the shared settings components only. vite.mobile.config.js scopes every
+   rule of this file under `.mv-shared-ui` (zero specificity added), so the desktop components get
+   the reset they are drawn for, while the rest of the phone app keeps the browser defaults
+   mobile.css was written against. */
+@tailwind base;

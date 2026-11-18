@@ -1,0 +1,10 @@
+/* The desktop's design, for the components both apps render (src/components/settings/views,
+   src/components/ui): its tokens and palettes, then Tailwind's components and utilities, then the
+   shared rules in the order desktop's index.css has them. mobile.css comes after. */
+@import '../styles/tokens.css';
+@import '../styles/palettes.css';
+@import '../styles/tailwind-utilities.css';
+@import '../styles/workspace-rows.css';
+@import '../styles/controls.css';
+@import '../styles/settings.css';
+@import '../styles/reader-chrome.css';

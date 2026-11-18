@@ -34,7 +34,7 @@
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   min-height: 72px; padding: 12px 28px; border-bottom: 1px solid var(--mail-border); flex-shrink: 0;
 }
-.settings-header h3 { font-size: 20px; letter-spacing: -.02em; }
+.settings-header :is(h1, h3) { font-size: 20px; letter-spacing: -.02em; }
 .settings-content { scrollbar-gutter: stable; container-type: inline-size; scroll-behavior: auto; }
 .settings-form { width: 100%; max-width: 920px; margin: 0 auto; padding: 28px; }
 /* A page folded under a host nav entry already sits in the host's padded tabpanel. */
@@ -214,12 +214,21 @@
   .settings-tabs { gap: 16px; padding: 0 16px; }
   .settings-section .grid-cols-3 { grid-template-columns: 1fr; }
 }
+/* A narrow desktop window swaps the sidebar for a page picker. Scoped to the window: the phone's
+   Settings (src/mobile/Settings.jsx) shows the sidebar as its first screen at any width. */
 @media (max-width: 700px) {
-  .settings-sidebar { display: none; }
+  .settings-window .settings-sidebar { display: none; }
   .settings-window { height: calc(100dvh - 32px); }
-  .settings-header { min-height: 64px; padding: 12px 16px; }
+  .settings-window .settings-header { min-height: 64px; padding: 12px 16px; }
   .settings-mobile-navigation { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--mail-border); font-size: 13px; }
   .settings-mobile-navigation label { color: var(--mail-text-muted); }
   .settings-mobile-navigation select { flex: 1; min-width: 0; padding: 8px; border: 1px solid var(--mail-border-strong); border-radius: 8px; background: var(--mail-surface); }
   .settings-account-filter { padding: 12px 16px; }
+}
+
+/* Touch: every settings target at least 44px tall, on any device a finger drives it (the phone,
+   a touch-screen desktop). */
+@media (pointer: coarse) {
+  .settings-nav-item, .settings-tabs > button, .segmented-choice > button, .settings-segments > button,
+  .settings-visual-option-label, .choice-card-button, .setting-row-control > :is(select, input) { min-height: 44px; }
 }

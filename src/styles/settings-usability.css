@@ -28,15 +28,16 @@
 .settings-bubble-copy > span { font-size: 13px; font-weight: 600; color: var(--mail-text); }
 .settings-bubble-copy > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.4; color: var(--mail-text-muted); }
 
+/* Scoped to the desktop window, as settings.css's narrow rules: the phone shell keeps its title. */
 @media (max-width: 700px) {
   .settings-window .settings-header { min-height: 52px; padding: 8px 12px; gap: 8px; }
-  .settings-header-context { flex: 1; }
-  .settings-header-title { display: none; }
+  .settings-window .settings-header-context { flex: 1; }
+  .settings-window .settings-header-title { display: none; }
   .settings-header .settings-mobile-navigation { flex: 1; min-width: 0; padding: 0; border: 0; }
   .settings-header .settings-mobile-navigation select { width: 100%; min-height: 36px; padding: 7px 8px; }
   .settings-mobile-search { display: block; flex-shrink: 0; padding: 0 12px 8px; }
   .settings-mobile-search .settings-search { margin: 0; }
   .settings-mobile-search-results { max-height: min(320px, 40dvh); overflow-y: auto; margin-top: 8px; padding: 4px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-surface); }
   .settings-mobile-search-results .settings-nav-heading { padding: 8px; }
-  .settings-page-description { display: none; }
+  .settings-window .settings-page-description { display: none; }
 }
