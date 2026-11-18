@@ -121,7 +121,7 @@ fn jmap(email: &str, auth: PhoneAuth) -> PhoneAccount {
 
 /// The frame texts the desktop shows for `accounts`, sealed with `password`.
 fn code(password: &str, accounts: Vec<PhoneAccount>) -> Vec<String> {
-    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None };
+    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None, fields: None };
     let sealed = seal_with(password, &bundle, CHEAP).unwrap();
     frames(&sealed, MAX_FRAME_CHARS).unwrap()
 }
@@ -446,7 +446,7 @@ fn an_import_brings_the_desktop_tags_and_their_assignments() {
             PhoneTagged { email: "not-in-the-code@example.test".into(), tag: 0, keys: vec!["three@x".into()] },
         ],
     };
-    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: Some(tags) };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: Some(tags), fields: None };
     let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
     let r = import(&e, &frames, PW);
     assert_eq!(r["ok"], true, "{r}");
@@ -486,4 +486,77 @@ fn an_import_brings_the_desktop_tags_and_their_assignments() {
     let again = import(&e, &frames, PW);
     assert_eq!(again["tags"], json!({ "tags": 2, "assigned": 3 }));
     assert_eq!(e.rpc("mobile.tags.list", json!({})).unwrap()["tags"].as_array().unwrap().len(), 2);
+}
+
+/// The desktop's custom fields come with the code: the shared ones and those of an account of the
+/// code, under the desktop's ids, with each value that fits its field by the desktop's key. A
+/// field the phone already has by name in that scope is kept, the desktop's mapped onto it. An
+/// older code (no fields) imports as before, with `fields: null`; a malformed block loses only
+/// the fields.
+#[test]
+fn an_import_brings_the_desktop_fields_and_their_values() {
+    use mailvault_core::app_db::fields::FieldOption;
+    use mailvault_core::transfer::phone::{PhoneField, PhoneFieldValues, PhoneFields};
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    let plain = import(&e, &code(PW, vec![imap("old@example.test")]), PW);
+    assert_eq!(plain["fields"], Value::Null, "{plain}");
+
+    let option = |id: &str, color: &str| FieldOption { id: id.into(), label: id.to_uppercase(), color: color.into() };
+    let fields = PhoneFields {
+        list: vec![
+            PhoneField { id: "g1".into(), email: None, name: "Owner".into(), kind: "text".into(), options: vec![] },
+            PhoneField { id: "f1".into(), email: Some("Ann@Example.test".into()), name: "Priority".into(), kind: "select".into(),
+                options: vec![option("hi", "#AA0000"), option("lo", "url(x)")] },
+            PhoneField { id: "f2".into(), email: Some("not-in-the-code@example.test".into()), name: "Gone".into(), kind: "text".into(), options: vec![] },
+            PhoneField { id: "f3".into(), email: None, name: "Stars".into(), kind: "rating".into(), options: vec![] },
+        ],
+        values: vec![
+            PhoneFieldValues { email: "ann@example.test".into(), field: 1, values: vec![("one@x".into(), json!("hi")), ("two@x".into(), json!("nope")), ("u:INBOX:7".into(), json!("lo"))] },
+            PhoneFieldValues { email: "o@outlook.test".into(), field: 0, values: vec![("two@x".into(), json!("Bo")), ("u:INBOX:3".into(), json!("Cy"))] },
+            PhoneFieldValues { email: "o@outlook.test".into(), field: 1, values: vec![("two@x".into(), json!("hi"))] },
+        ],
+    };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: None, fields: Some(fields) };
+    let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
+    let r = import(&e, &frames, PW);
+    assert_eq!(r["ok"], true, "{r}");
+    // hi on one@x, lo on u:INBOX:7 (IMAP), Bo on two@x; not "nope" (no such choice), not the Graph
+    // account's uid key, not Ann's field on the Graph account.
+    assert_eq!(r["fields"], json!({ "fields": 2, "values": 3 }));
+
+    let ids = e.rpc("mobile.accounts.list", json!({})).unwrap()["accounts"].clone();
+    let id_of = |email: &str| ids.as_array().unwrap().iter().find(|a| a["email"] == email).unwrap()["id"].as_str().unwrap().to_string();
+    let (ann, o) = (id_of("ann@example.test"), id_of("o@outlook.test"));
+    let listed = e.rpc("mobile.fields.list", json!({ "accountId": ann })).unwrap()["fields"].clone();
+    assert_eq!(listed.as_array().unwrap().iter().map(|f| f["id"].as_str().unwrap()).collect::<Vec<_>>(), vec!["g1", "f1"]);
+    assert_eq!(listed[1]["scope"], ann.as_str(), "the account's own field is the phone account's");
+    assert_eq!(listed[1]["options"][0]["color"], "#aa0000");
+    assert_eq!(listed[1]["options"][1]["color"], "", "a color that is not #rrggbb is left out");
+
+    let c = Connection::open(tmp.path().join("mobile.db")).unwrap();
+    for (account, uid, mid) in [(&ann, 1, "<one@x>"), (&ann, 7, ""), (&o, 2, "<two@x>")] {
+        c.execute(
+            "INSERT INTO messages (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments, message_id)
+             VALUES (?1, 'INBOX', ?2, 's', 'S', 's@x', 1, '', 0, 0, 0, ?3)",
+            rusqlite::params![account, uid, mid],
+        )
+        .unwrap();
+    }
+    let item = |a: &str, uid: u32| json!({ "accountId": a, "folder": "INBOX", "uid": uid });
+    let got = e.rpc("mobile.fields.values", json!({ "items": [item(&ann, 1), item(&ann, 7), item(&o, 2)] })).unwrap();
+    assert_eq!(got["values"], json!([{ "f1": "hi" }, { "f1": "lo" }, { "g1": "Bo" }]));
+
+    // Again: nothing doubles. A phone field of the same name in that scope wins over the desktop's id.
+    let again = import(&e, &frames, PW);
+    assert_eq!(again["fields"], json!({ "fields": 2, "values": 3 }));
+    assert_eq!(e.rpc("mobile.fields.list", json!({ "accountId": ann })).unwrap()["fields"].as_array().unwrap().len(), 2);
+
+    // A block of another shape: the accounts still come, the fields do not.
+    let mut v = serde_json::to_value(PhoneBundle { v: 1, accounts: vec![imap("new@example.test")], settings: None, tags: None, fields: None }).unwrap();
+    v["fields"] = json!({ "list": "nope" });
+    let odd: PhoneBundle = serde_json::from_value(v).unwrap();
+    let r = import(&e, &mailvault_core::transfer::phone::frames(&seal_with(PW, &odd, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap(), PW);
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["fields"], Value::Null);
 }

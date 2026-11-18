@@ -14,6 +14,7 @@ mod body;
 mod chat;
 mod compose;
 mod db;
+mod fields;
 mod followup;
 mod hold;
 mod live;

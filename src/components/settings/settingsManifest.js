@@ -446,7 +446,6 @@ const NOT_ON_PHONE = {
   ],
 };
 const ENGINE_GAPS = {
-  'engine: custom fields': ['fields.section', 'fields.newName', 'fields.newKind', 'fields.copyFrom'],
   'engine: search history and popular filters (the phone search keeps no history)': ['settings.behavior.search', 'settings.behavior.searchHistoryLimit', 'settings.behavior.popularFiltersPeriod', 'settings.behavior.numberPopularFiltersShow'],
   'engine: notification decision log (the background run decides and records nothing)': ['notifyPolicy.log.title'],
   'engine: playing the new-mail sound on demand (no shell call plays it)': ['settings.notifications.previewSound'],
@@ -473,6 +472,7 @@ const ON_PHONE = [
   'settings.notifications.enableDesktopNotifications', 'settings.notifications.showEmailPreview', 'settings.notifications.newEmailSound',
   'settings.notifications.perAccountSettings', 'settings.notifications.badge', 'settings.notifications.showBadgeCount', 'settings.notifications.badgeShows',
   'notifyPolicy.quietHours.title', 'notifyPolicy.allowlist.title',
+  'fields.section', 'fields.newName', 'fields.newKind', 'fields.copyFrom',
   'settings.accounts.displayName', 'settings.accounts.emailSignature', 'settings.accounts.enableSignature',
   'settings.accounts.aliases.listTitle', 'settings.accounts.aliases.addAddress', 'settings.accounts.aliases.defaultAddress', 'settings.accounts.aliases.nameLabel',
   'settings.accounts.password', 'settings.accounts.mailServer', 'settings.accounts.sentFolder',

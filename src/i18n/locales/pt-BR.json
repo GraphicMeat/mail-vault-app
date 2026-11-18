@@ -1020,6 +1020,7 @@
   "fields.copyRun": "Copiar",
   "fields.deleteConfirm": "Excluir, com todos os valores",
   "fields.explainer": "Campos são suas próprias anotações sobre uma mensagem. Ficam neste Mac e nunca são gravados na mensagem nem enviados ao seu servidor de e-mail.",
+  "mobile.fields.explainer": "Campos são suas próprias anotações sobre uma mensagem. Ficam neste telefone e nunca são gravados na mensagem nem enviados ao seu servidor de e-mail.",
   "fields.kind.checkbox": "Caixa de seleção",
   "fields.kind.date": "Data",
   "fields.kind.multi_select": "Várias escolhas",

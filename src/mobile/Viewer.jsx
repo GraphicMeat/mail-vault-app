@@ -28,7 +28,8 @@
 // (AiActions.jsx), its result in a sheet with "Use in reply". Quick replies (QuickReplies.jsx) sit
 // above the toolbar once the body is in: a tap opens a reply with that starter.
 // The message's local labels (desktop's tags) show under its header, each removable; More's Apply
-// local label opens TagSheet.jsx to apply, make or remove them.
+// local label opens TagSheet.jsx to apply, make or remove them. Its custom fields (desktop's
+// property strip, FieldStrip.jsx) follow, each editable in place, when its account has any.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
@@ -40,6 +41,7 @@ import { useT } from './i18n.js';
 import MovePicker from './MovePicker.jsx';
 import TagChips from './TagChips.jsx';
 import TagSheet from './TagSheet.jsx';
+import FieldStrip from './FieldStrip.jsx';
 import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
@@ -505,6 +507,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
         </header>
         <Header row={row} />
         <TagChips accountId={accountId} folder={folder} uid={row.uid} removable className="mv-viewer__tags" />
+        <FieldStrip accountId={accountId} folder={folder} uid={row.uid} className="mv-viewer__fields" />
         <Attachments accountId={accountId} folder={folder} uid={row.uid} items={attachments} />
       </div>
       {body?.attachmentsUnknown && (

@@ -35,14 +35,15 @@ use crate::db::Engine;
 use crate::rpc::RpcError;
 use crate::secrets::Credential;
 use crate::settings::{self as prefs, put_in};
+use mailvault_core::app_db::fields::{self as field_store, Field, GLOBAL};
 use mailvault_core::app_db::tags::{self as tag_store, Target};
 use mailvault_core::transfer::phone::{
-    decode_phone_bundle, hex_color, tags as phone_tags, PhoneAccount, PhoneAuth, PhoneError, PhoneKind, PhoneSettings, PhoneTags, MAX_FRAMES, MAX_FRAME_CHARS,
+    decode_phone_bundle, hex_color, tags as phone_tags, PhoneAccount, PhoneAuth, PhoneError, PhoneFields, PhoneKind, PhoneSettings, PhoneTags, MAX_FRAMES, MAX_FRAME_CHARS,
     MIN_PASSWORD_CHARS,
 };
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use zeroize::Zeroizing;
 
 /// The camera reads every frame many times; the page sends each once, but a few repeats are fine.
@@ -164,7 +165,11 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
         crate::search::wake(engine.shared());
     }
     let tags = bundle.tags.as_ref().map(|t| apply_tags(engine, &here, t));
-    Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped, "settingsApplied": settings_applied, "tags": tags }))
+    let fields = bundle.fields.as_ref().map(|f| apply_fields(engine, &here, f).0);
+    Ok(json!({
+        "ok": true, "imported": imported, "existing": existing, "skipped": skipped, "settingsApplied": settings_applied,
+        "tags": tags, "fields": fields,
+    }))
 }
 
 /// The desktop's tags (`tags.rs`): every tag (one already here by name, case ignored, is kept
@@ -219,6 +224,109 @@ fn apply_tags(engine: &Engine, here: &HashSet<String>, block: &PhoneTags) -> Val
         shared.log(&format!("[transfer] tags not imported: {e}"));
         json!({ "tags": null, "assigned": null })
     })
+}
+
+/// The phone account (`id`, kind) of an address of this code that is on the phone now (`here`).
+fn phone_account(engine: &Engine, here: &HashSet<String>, email: &str) -> Option<(String, PhoneKind)> {
+    if !here.contains(&email.trim().to_lowercase()) {
+        return None;
+    }
+    let (id, kind) = engine
+        .read(|c| {
+            c.query_row("SELECT id, kind FROM accounts WHERE email = ?1 COLLATE NOCASE", [email.trim()], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })
+            .optional()
+        })
+        .ok()
+        .flatten()?;
+    let kind = match kind.as_str() {
+        "graph" => PhoneKind::Graph,
+        "jmap" => PhoneKind::Jmap,
+        _ => PhoneKind::Imap,
+    };
+    Some((id, kind))
+}
+
+/// The desktop's custom fields (`fields.rs`): every shared field and every field of an account of
+/// this code that is on the phone now, under the desktop's id (a saved view names it); a field
+/// the phone already has under that id is updated, one its scope already has by name is kept as
+/// it is (the desktop's is mapped onto it). Then each value that fits its field, by the desktop's
+/// key (a desktop uid key on IMAP accounts only). A field or value the phone would refuse is left
+/// out. Never fails the import: a store that cannot be written is logged and answers `null`
+/// counts. Answers `({fields, values}, desktop field id -> phone field id)`.
+fn apply_fields(engine: &Engine, here: &HashSet<String>, block: &PhoneFields) -> (Value, HashMap<String, String>) {
+    let shared = engine.shared();
+    let mut wanted: Vec<Option<Field>> = Vec::with_capacity(block.list.len());
+    let mut accounts: HashMap<String, Option<(String, PhoneKind)>> = HashMap::new();
+    let mut account_of = |email: &str| accounts.entry(email.trim().to_lowercase()).or_insert_with(|| phone_account(engine, here, email)).clone();
+    for f in &block.list {
+        let scope = match &f.email {
+            None => Some(GLOBAL.to_string()),
+            Some(email) => account_of(email).map(|(id, _)| id),
+        };
+        let field = scope.and_then(|scope| {
+            crate::fields::sanitized(Field { id: f.id.clone(), scope, name: f.name.clone(), kind: f.kind.clone(), options: f.options.clone(), position: 0 })
+        });
+        wanted.push(field);
+    }
+    let mut values: Vec<(usize, String, Vec<(String, Value)>)> = Vec::new();
+    for group in &block.values {
+        let Some((id, kind)) = account_of(&group.email) else { continue };
+        let keyed = group
+            .values
+            .iter()
+            .filter(|(k, _)| !k.trim().is_empty() && (kind == PhoneKind::Imap || !mailvault_core::app_db::identity::is_uid_fallback(k.trim())))
+            .map(|(k, v)| (k.trim().to_string(), v.clone()))
+            .collect();
+        values.push((group.field as usize, id, keyed));
+    }
+    let mut mapped: HashMap<String, String> = HashMap::new();
+    let applied = shared.app_db.with(|c| {
+        let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
+        // Index in the block -> the phone's field.
+        let mut placed: Vec<Option<Field>> = Vec::with_capacity(wanted.len());
+        for field in &wanted {
+            let Some(field) = field else {
+                placed.push(None);
+                continue;
+            };
+            let same_name = field_store::list_all(&tx)?
+                .into_iter()
+                .find(|f| f.scope == field.scope && f.name.to_lowercase() == field.name.to_lowercase() && f.id != field.id);
+            // The phone has a field of that name in that scope already: the desktop's maps onto it.
+            // Else the desktop's is made, or updated when the phone has it by id.
+            let kept = match same_name {
+                Some(existing) => Some(existing),
+                None => field_store::save(&tx, field).ok(),
+            };
+            if let Some(kept) = &kept {
+                mapped.insert(field.id.clone(), kept.id.clone());
+            }
+            placed.push(kept);
+        }
+        let mut count = 0;
+        for (index, account, list) in &values {
+            let Some(Some(field)) = placed.get(*index) else { continue };
+            if field.scope != GLOBAL && &field.scope != account {
+                continue;
+            }
+            for (key, value) in list {
+                if let Ok(Some(value)) = crate::fields::value_for(field, value) {
+                    field_store::set_value(&tx, account, key, &field.id, Some(&value))?;
+                    count += 1;
+                }
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(json!({ "fields": placed.iter().flatten().count(), "values": count }))
+    });
+    let reply = applied.unwrap_or_else(|e| {
+        shared.log(&format!("[transfer] fields not imported: {e}"));
+        mapped.clear();
+        json!({ "fields": null, "values": null })
+    });
+    (reply, mapped)
 }
 
 /// One write: each added account's own settings, and the desktop's global ones when no import

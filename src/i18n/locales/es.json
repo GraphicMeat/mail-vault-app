@@ -1020,6 +1020,7 @@
   "fields.copyRun": "Copiar",
   "fields.deleteConfirm": "Eliminar, con todos sus valores",
   "fields.explainer": "Los campos son tus propias notas sobre un mensaje. Se guardan en este Mac y nunca se escriben en el mensaje ni se envían a tu servidor de correo.",
+  "mobile.fields.explainer": "Los campos son tus propias notas sobre un mensaje. Se guardan en este teléfono y nunca se escriben en el mensaje ni se envían a tu servidor de correo.",
   "fields.kind.checkbox": "Casilla",
   "fields.kind.date": "Fecha",
   "fields.kind.multi_select": "Varias opciones",

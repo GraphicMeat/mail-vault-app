@@ -1020,6 +1020,7 @@
   "fields.copyRun": "Copy",
   "fields.deleteConfirm": "Delete, with every value",
   "fields.explainer": "Fields are your own notes about a message. They are stored on this Mac and never written to the message or sent to your mail server.",
+  "mobile.fields.explainer": "Fields are your own notes about a message. They are kept on this phone and never written to the message or sent to your mail server.",
   "fields.kind.checkbox": "Tick box",
   "fields.kind.date": "Date",
   "fields.kind.multi_select": "Several choices",

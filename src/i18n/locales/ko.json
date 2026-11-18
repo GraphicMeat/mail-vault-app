@@ -1020,6 +1020,7 @@
   "fields.copyRun": "복사",
   "fields.deleteConfirm": "값과 함께 삭제",
   "fields.explainer": "필드는 메시지에 대한 나만의 메모입니다. 이 Mac에 저장되며 메시지에 기록되거나 메일 서버로 전송되지 않습니다.",
+  "mobile.fields.explainer": "필드는 메시지에 대한 나만의 메모입니다. 이 휴대폰에 저장되며 메시지에 기록되거나 메일 서버로 전송되지 않습니다.",
   "fields.kind.checkbox": "체크박스",
   "fields.kind.date": "날짜",
   "fields.kind.multi_select": "다중 선택",

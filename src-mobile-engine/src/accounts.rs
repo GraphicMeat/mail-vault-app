@@ -603,6 +603,8 @@ pub(crate) fn remove(engine: &Engine, params: Value) -> Result<Value, RpcError> 
     crate::search::forget_account(engine.shared(), &p.account_id);
     // And its tags come off its mail (the tags themselves stay).
     crate::tags::forget_account(engine.shared(), &p.account_id);
+    // And its field values, and the fields only it could see.
+    crate::fields::forget_account(engine.shared(), &p.account_id);
     engine.shared().jmap.forget(&p.account_id);
     crate::oauth::forget(engine.shared(), &p.account_id);
     // Its offline attachments.

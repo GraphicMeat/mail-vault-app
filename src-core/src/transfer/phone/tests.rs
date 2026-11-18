@@ -347,7 +347,7 @@ fn nothing_to_send_is_no_frames() {
 
 #[test]
 fn open_refuses_another_version_and_garbage() {
-    let future = PhoneBundle { v: 2, accounts: vec![], settings: None, tags: None };
+    let future = PhoneBundle { v: 2, accounts: vec![], settings: None, tags: None, fields: None };
     let sealed = seal_with(PW, &future, cheap()).unwrap();
     assert!(matches!(open(PW, &sealed).unwrap_err(), PhoneError::Invalid(_)));
     // sealed but not deflate
@@ -376,7 +376,7 @@ fn errors_name_no_secret() {
 #[test]
 fn production_seal_uses_the_export_parameters() {
     // header bytes 7..19 carry m, t, p
-    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None };
     let sealed = seal(PW, &bundle).unwrap();
     let u32_at = |i: usize| u32::from_le_bytes([sealed[i], sealed[i + 1], sealed[i + 2], sealed[i + 3]]);
     assert_eq!(Params { m_kib: u32_at(7), t: u32_at(11), p: u32_at(15) }, crypto::EXPORT_PARAMS);
@@ -386,7 +386,7 @@ fn production_seal_uses_the_export_parameters() {
 fn open_refuses_key_derivation_above_the_export_parameters() {
     // A crafted code must not make the phone derive with more memory or time than the desktop
     // ever seals with (1 GiB at the crypto ceiling). Refused from the header, before argon2.
-    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None }, cheap()).unwrap();
+    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None }, cheap()).unwrap();
     let e = crypto::EXPORT_PARAMS;
     for (at, value) in [(7, e.m_kib + 1), (11, e.t + 1), (15, e.p + 1)] {
         let mut s = sealed.clone();
@@ -397,7 +397,7 @@ fn open_refuses_key_derivation_above_the_export_parameters() {
 
 #[test]
 fn open_accepts_exactly_the_export_parameters() {
-    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None };
     assert_eq!(open(PW, &seal(PW, &bundle).unwrap()).unwrap(), bundle);
 }
 
@@ -809,4 +809,111 @@ fn a_desktop_uid_key_is_kept_only_for_an_imap_account() {
     assert_eq!(tags::keys_for(PhoneKind::Imap, &tagged), vec!["a@example.com".to_string(), "u:INBOX:7".to_string()]);
     assert_eq!(tags::keys_for(PhoneKind::Graph, &tagged), vec!["a@example.com".to_string()]);
     assert_eq!(tags::keys_for(PhoneKind::Jmap, &tagged), vec!["a@example.com".to_string()]);
+}
+
+// ── fields ──────────────────────────────────────────────────────────────────
+
+fn field(id: &str, scope: &str, name: &str, kind: &str) -> crate::app_db::fields::Field {
+    crate::app_db::fields::Field {
+        id: id.into(),
+        scope: scope.into(),
+        name: name.into(),
+        kind: kind.into(),
+        options: vec![crate::app_db::fields::FieldOption { id: "hi".into(), label: "High".into(), color: "#ff0000".into() }],
+        position: 0,
+    }
+}
+
+#[test]
+fn fields_travel_with_their_ids_and_the_account_address() {
+    use crate::app_db::fields as store;
+    let c = tag_store();
+    store::save(&c, &field("g1", "*", "Owner", "text")).unwrap();
+    store::save(&c, &field("f1", "p", "Priority", "select")).unwrap();
+    store::save(&c, &field("f2", "gone-account", "Stale", "text")).unwrap();
+    store::set_value(&c, "p", "a@example.com", "f1", Some(&json!("hi"))).unwrap();
+    store::set_value(&c, "gone-account", "b@example.com", "g1", Some(&json!("Bo"))).unwrap();
+
+    let snap = fields::snapshot(&c, &sample()).unwrap().unwrap();
+    let ids: Vec<(&str, Option<&str>)> = snap.list.iter().map(|f| (f.id.as_str(), f.email.as_deref())).collect();
+    // A field of an account the desktop no longer has stays home.
+    assert_eq!(ids, vec![("g1", None), ("f1", Some("p@example.com"))]);
+    assert_eq!(snap.list[1].options[0].id, "hi");
+    assert_eq!(snap.values, vec![PhoneFieldValues { email: "p@example.com".into(), field: 1, values: vec![("a@example.com".into(), json!("hi"))] }]);
+    assert!(fields::snapshot(&tag_store(), &sample()).unwrap().is_none(), "no fields, no block");
+}
+
+#[test]
+fn fields_ride_the_code_and_a_skipped_accounts_go_with_it() {
+    let shared = PhoneField { id: "g1".into(), email: None, name: "Owner".into(), kind: "text".into(), options: vec![] };
+    let mine = PhoneField { id: "f1".into(), email: Some("p@example.com".into()), name: "Priority".into(), kind: "text".into(), options: vec![] };
+    let theirs = PhoneField { id: "f2".into(), email: Some("skipped@example.com".into()), name: "X".into(), kind: "text".into(), options: vec![] };
+    let sent = PhoneFields {
+        list: vec![shared.clone(), theirs, mine.clone()],
+        values: vec![
+            PhoneFieldValues { email: "p@example.com".into(), field: 2, values: vec![("a@example.com".into(), json!("v"))] },
+            PhoneFieldValues { email: "skipped@example.com".into(), field: 0, values: vec![("b@example.com".into(), json!("w"))] },
+        ],
+    };
+    let blocks = PhoneBlocks { fields: Some(sent), ..PhoneBlocks::default() };
+    let qr = encode_phone_qr_blocks_with(PW, &sample(), None, blocks, cheap()).unwrap();
+    let got = decode_phone_bundle(PW, &qr.frames).unwrap().fields.expect("fields");
+    assert_eq!(got.list, vec![shared, mine]);
+    assert_eq!(got.values, vec![PhoneFieldValues { email: "p@example.com".into(), field: 1, values: vec![("a@example.com".into(), json!("v"))] }]);
+}
+
+#[test]
+fn too_many_values_are_cut_never_the_fields_or_the_accounts() {
+    let list: Vec<PhoneField> =
+        (0..3).map(|i| PhoneField { id: format!("f{i}"), email: Some("p@example.com".into()), name: format!("F{i}"), kind: "text".into(), options: vec![] }).collect();
+    let values: Vec<PhoneFieldValues> = (0..3u32)
+        .map(|f| PhoneFieldValues {
+            email: "p@example.com".into(),
+            field: f,
+            values: (0..3000).map(|n| (format!("{}@mail.example.com", noise(u64::from(f) * 10_000 + n + 1, 24)), json!(noise(n + 7, 30)))).collect(),
+        })
+        .collect();
+    let blocks = PhoneBlocks { fields: Some(PhoneFields { list: list.clone(), values }), ..PhoneBlocks::default() };
+    let qr = encode_phone_qr_blocks_with(PW, &sample(), None, blocks, cheap()).unwrap();
+    assert!(qr.frames.len() <= MAX_FRAMES, "{} frames", qr.frames.len());
+    let got = decode_phone_bundle(PW, &qr.frames).unwrap();
+    assert_eq!(got.accounts.len(), 4);
+    let fields = got.fields.expect("the fields are kept");
+    assert_eq!(fields.list, list);
+    let kept = fields.value_count();
+    assert!(kept > 20 && kept < 9000, "{kept} values kept");
+    assert_eq!(fields.values.len(), 3, "each field got its turn");
+}
+
+#[test]
+fn a_code_without_fields_or_with_a_fields_block_of_another_shape_still_opens() {
+    for block in [None, Some(json!("x")), Some(json!({ "list": [{ "id": 1 }] }))] {
+        let mut v = serde_json::to_value(phone_bundle(&sample()).0).unwrap();
+        if let Some(b) = block {
+            v["fields"] = b;
+        }
+        let back: PhoneBundle = serde_json::from_value(v).unwrap();
+        assert_eq!(back.accounts.len(), 4);
+        assert_eq!(back.fields, None);
+    }
+}
+
+#[test]
+fn a_phone_from_before_fields_reads_a_code_that_has_them() {
+    // The bundle as the tags build had it: no `fields`.
+    #[derive(serde::Deserialize)]
+    struct TagsEraBundle {
+        v: u32,
+        accounts: Vec<PhoneAccount>,
+        #[serde(default)]
+        tags: Option<PhoneTags>,
+    }
+    let fields = PhoneFields { list: vec![PhoneField { id: "g1".into(), email: None, name: "Owner".into(), kind: "text".into(), options: vec![] }], values: vec![] };
+    let tags = PhoneTags { list: vec![PhoneTag { name: "Work".into(), color: String::new() }], assigned: vec![] };
+    let blocks = PhoneBlocks { tags: Some(tags.clone()), fields: Some(fields) };
+    let qr = encode_phone_qr_blocks_with(PW, &sample(), None, blocks, cheap()).unwrap();
+    let full = decode_phone_bundle(PW, &qr.frames).unwrap();
+    assert!(full.fields.is_some());
+    let old: TagsEraBundle = serde_json::from_value(serde_json::to_value(&full).unwrap()).unwrap();
+    assert_eq!((old.v, old.accounts.len(), old.tags), (1, 4, Some(tags)));
 }

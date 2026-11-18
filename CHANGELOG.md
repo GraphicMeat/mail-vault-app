@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Added: custom fields on the phone, as on the computer. An open message shows its account's fields under its header, each editable in place; Settings > Mail preferences > Fields adds, edits, shares, orders, copies and deletes them. Set up from the computer brings your fields and as many of their values as the QR code has room for.
 - Added: local labels on the phone, as on the computer. They show after the subject in the message list and under an open message; More > Apply local label applies, makes or removes them; search finds them with tag:Name; Settings > Appearance > Quick actions lists and deletes them. Set up from the computer brings your labels and as many of their messages as the QR code has room for.
 - Added: on the phone, Settings > Privacy & security > Tracking shows what the phone has found, as on the computer: how many tracking pixels in how many messages, the senders' tracking services found most, and the bundled list's size and sources.
 - Fixed: a sidebar account group is now one row, same height and width as an account, with a single hover highlight; its left chevron folds and unfolds, the rest opens the group inbox.

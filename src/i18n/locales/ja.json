@@ -1020,6 +1020,7 @@
   "fields.copyRun": "コピー",
   "fields.deleteConfirm": "値ごと削除",
   "fields.explainer": "フィールドはメッセージについてのあなた自身のメモです。この Mac に保存され、メッセージに書き込まれることも、メールサーバーに送信されることもありません。",
+  "mobile.fields.explainer": "フィールドはメッセージについてのあなた自身のメモです。この電話に保存され、メッセージに書き込まれることも、メールサーバーに送信されることもありません。",
   "fields.kind.checkbox": "チェックボックス",
   "fields.kind.date": "日付",
   "fields.kind.multi_select": "複数選択",

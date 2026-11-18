@@ -12,7 +12,7 @@
 //   preferences show their sections the same way.
 // - Search finds the pages and settings the phone has and lands on the setting, as on desktop.
 // - Every page is desktop's view over the phone's preferences and engine (settings/*.jsx):
-//   Appearance, Mail preferences (Behavior, Notifications), Accounts, Templates, AI providers,
+//   Appearance, Mail preferences (Behavior, Notifications, Fields), Accounts, Templates, AI providers,
 //   Unsubscribe, Storage (Storage with the offline window and the search index; Data usage),
 //   Privacy & security (Security, Tracking, Encryption, Network Activity), Billing, Diagnostics
 //   (unfinished server actions, Logs) and Help. Accounts' "Move to another computer" Export opens
@@ -45,6 +45,7 @@ import Transfer from './settings/Transfer.jsx';
 import NetworkActivity from './settings/NetworkActivity.jsx';
 import Appearance from './settings/Appearance.jsx';
 import { Behavior, Notifications } from './settings/MailPreferences.jsx';
+import Fields from './settings/Fields.jsx';
 import { Encryption, Security, Tracking } from './settings/Privacy.jsx';
 import Templates from './settings/Templates.jsx';
 import Unsubscribe from './settings/Unsubscribe.jsx';
@@ -53,8 +54,8 @@ import Accounts from './settings/Accounts.jsx';
 
 const APP_VERSION = import.meta.env?.MV_APP_VERSION || '';
 
-/** Mail preferences' sections on the phone (desktop's behavior and notifications). */
-const MAIL_SECTIONS = [['behavior', 'generalSettings.behavior'], ['notifications', 'settings.notifications.notifications']];
+/** Mail preferences' sections on the phone (desktop's behavior, notifications and fields). */
+const MAIL_SECTIONS = [['behavior', 'generalSettings.behavior'], ['notifications', 'settings.notifications.notifications'], ['fields', 'fields.section']];
 
 /**
  * Pages opened from another page, not the navigation: `{ parent, titleKey }`. Back returns to the
@@ -155,6 +156,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
     switch (id) {
       case 'behavior': return <Behavior />;
       case 'notifications': return <Notifications />;
+      case 'fields': return <Fields />;
       case 'storage': return <Storage />;
       case 'data-usage': return <DataUsage />;
       case 'security': return <Security />;

@@ -152,8 +152,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let app_dir = state.app_dir.clone();
             // argon2 and the QR rendering both stay off the async worker.
             let built = blocking(move || -> Result<(Vec<String>, Vec<phone::Skipped>), String> {
-                // The tags and the assignments that fit (app.db); a store that cannot be read
-                // leaves them out rather than failing the code.
+                // The tags, fields and what of them fits (app.db); a store that cannot be read
+                // leaves that block out rather than failing the code.
                 let tags = match app_db::with(&app_dir, |conn| phone::tags::snapshot(conn, &accounts)) {
                     Ok(t) => t,
                     Err(e) => {
@@ -161,7 +161,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         None
                     }
                 };
-                let qr = phone::encode_phone_qr_with_tags(&password, &accounts, settings.as_ref(), tags).map_err(|e| e.to_string())?;
+                let fields = match app_db::with(&app_dir, |conn| phone::fields::snapshot(conn, &accounts)) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        tracing::warn!("[transfer] phone code without fields: {e}");
+                        None
+                    }
+                };
+                let blocks = phone::PhoneBlocks { tags, fields };
+                let qr = phone::encode_phone_qr_with_blocks(&password, &accounts, settings.as_ref(), blocks).map_err(|e| e.to_string())?;
                 let svgs = qr.frames.iter().map(|f| phone::qr_svg(f)).collect::<Result<Vec<_>, _>>()?;
                 Ok((svgs, qr.skipped))
             })

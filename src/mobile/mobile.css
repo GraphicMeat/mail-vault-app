@@ -277,6 +277,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-row__line > .mv-row__subject { flex: 1 1 auto; }
 /* The message's tags under the viewer's header, and atop its label sheet: every chip, wrapped. */
 .local-mail-labels.mv-viewer__tags { display: flex; flex-wrap: wrap; max-width: none; margin: 4px 16px 0; }
+/* The viewer's custom fields (desktop's strip) under the header, wrapping at the phone's width. */
+.field-strip.mv-viewer__fields { flex-wrap: wrap; margin: 6px 16px 0; }
 /* The label sheet's new-label field and its Create. */
 .mv-tags__new { display: flex; gap: 8px; align-items: center; padding: 8px 8px 0; }
 .mv-tags__new .mv-input { flex: 1; }

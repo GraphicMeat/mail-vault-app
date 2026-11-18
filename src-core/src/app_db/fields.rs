@@ -334,7 +334,40 @@ fn messages_without(conn: &Connection, account_id: &str, field_id: &str) -> Resu
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
-fn get(conn: &Connection, id: &str) -> Result<Option<Field>, String> {
+/// Every value of every field, newest first: `(field_id, account_id, msg_key, value)`. For an
+/// account-transfer snapshot.
+pub fn all_values(conn: &Connection) -> Result<Vec<(String, String, String, serde_json::Value)>, String> {
+    let mut stmt = conn
+        .prepare("SELECT field_id, account_id, msg_key, value_json FROM field_values ORDER BY at DESC, msg_key")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?)))
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (field_id, account_id, msg_key, value_json) = row.map_err(|e| e.to_string())?;
+        let value: serde_json::Value = serde_json::from_str(&value_json).unwrap_or(serde_json::Value::Null);
+        if !value.is_null() {
+            out.push((field_id, account_id, msg_key, value));
+        }
+    }
+    Ok(out)
+}
+
+/// An account leaves: every value it gave, and the fields only it could see. The shared (`*`)
+/// fields stay. Returns how many values went.
+pub fn forget_account(conn: &Connection, account_id: &str) -> Result<usize, String> {
+    in_txn(conn, || {
+        let dropped = conn.execute("DELETE FROM field_values WHERE account_id = ?1", [account_id]).map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM field_values WHERE field_id IN (SELECT id FROM fields WHERE scope = ?1)", [account_id])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM fields WHERE scope = ?1", [account_id]).map_err(|e| e.to_string())?;
+        Ok(dropped)
+    })
+}
+
+/// One field by id.
+pub fn get(conn: &Connection, id: &str) -> Result<Option<Field>, String> {
     conn.query_row("SELECT id, scope, name, kind, options_json, position FROM fields WHERE id = ?1", [id], row_to_field)
         .optional()
         .map_err(|e| e.to_string())
@@ -583,6 +616,21 @@ mod tests {
         assert!(!reorder(&c, "g1", 1).unwrap(), "the last global cannot move down into the account's fields");
         assert!(!reorder(&c, "f1", -1).unwrap(), "the first of the account's cannot move up into the globals");
         assert_eq!(order(&c, "work"), vec!["Owner".to_string(), "Priority".to_string()]);
+    }
+
+    #[test]
+    fn forgetting_an_account_takes_its_values_and_own_fields_not_the_shared_ones() {
+        let c = conn();
+        save(&c, &field("f1", "work", "Priority", "select")).unwrap();
+        save(&c, &field("g1", GLOBAL, "Owner", "text")).unwrap();
+        save(&c, &field("f2", "home", "Chore", "checkbox")).unwrap();
+        set_value(&c, "work", "one@x", "f1", Some(&json!("hi"))).unwrap();
+        set_value(&c, "work", "one@x", "g1", Some(&json!("Ann"))).unwrap();
+        set_value(&c, "home", "two@x", "g1", Some(&json!("Bo"))).unwrap();
+        assert_eq!(forget_account(&c, "work").unwrap(), 2);
+        assert_eq!(list(&c, "work").unwrap().iter().map(|f| f.id.as_str()).collect::<Vec<_>>(), vec!["g1"]);
+        assert_eq!(list(&c, "home").unwrap().len(), 2, "another account's fields stay");
+        assert_eq!(values_for(&c, "home", &["two@x".into()]).unwrap()["two@x"]["g1"], json!("Bo"));
     }
 
     #[test]
