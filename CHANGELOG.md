@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Added: click an account group in the sidebar to read its accounts' mail in one list, and fold or unfold the group.
+- Fixed: switching account groups clears old bulk selections, discards stale mail reads, and refreshes backup indicators.
 
 - Added: group accounts (Personal, Work, Study or any name you pick) in Settings > Accounts > Profile. The sidebar lists each group under its own label, the account picker groups them too, the collapsed sidebar separates them with a divider, and groups travel in account transfer files.
 

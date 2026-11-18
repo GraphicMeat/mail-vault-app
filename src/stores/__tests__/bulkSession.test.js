@@ -117,6 +117,16 @@ describe('bulk session', () => {
     expect(s.bulkSession.viewMode).toBe('local');
   });
 
+  it('binds a unified bulk session to the group open at creation', () => {
+    useMailStore.setState({ activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedGroup: 'Work' });
+
+    useMailStore.getState().openBulkModal();
+
+    expect(useMailStore.getState().bulkSession.unifiedGroup).toBe('Work');
+    useMailStore.getState().endBulkSession();
+    useMailStore.setState({ unifiedInbox: false, unifiedGroup: null });
+  });
+
   // The bar and the bulk modal must agree: the modal selects against the whole
   // sidecar cache, so most of a range selection can sit outside the paginated
   // render window. Threading only sees the window — those rows used to count

@@ -66,20 +66,20 @@ export const createUiSlice = (set, get) => ({
   // Bulk operations modal + session.
   // The session outlives the modal: closing the modal minimizes to
   // BulkSelectionBubble, keeping the selection so it can be amended by hand.
-  // A session belongs to exactly one (account, mailbox, viewMode) — it's
+  // A session belongs to exactly one (account, mailbox, viewMode, unifiedGroup) — it's
   // bound at creation and EmailList ends it if the user navigates away from
-  // that triple, otherwise a minimized selection for Spam could silently
+  // that scope, otherwise a minimized selection for Spam could silently
   // pick up Sent's rows once the user looks elsewhere, or "All" from server
   // view could silently mean something else once view mode flips to local.
   bulkModalOpen: false,
-  bulkSession: null, // { active: true, step: 1|2, range, action, accountId, mailbox, viewMode }
+  bulkSession: null, // { active: true, step: 1|2, range, action, accountId, mailbox, viewMode, unifiedGroup }
 
   openBulkModal: () => {
     const existing = get().bulkSession;
-    const { activeAccountId, activeMailbox, viewMode } = get();
+    const { activeAccountId, activeMailbox, viewMode, unifiedGroup } = get();
     set({
       bulkModalOpen: true,
-      bulkSession: existing || { active: true, step: 1, range: null, action: null, accountId: activeAccountId, mailbox: activeMailbox, viewMode },
+      bulkSession: existing || { active: true, step: 1, range: null, action: null, accountId: activeAccountId, mailbox: activeMailbox, viewMode, unifiedGroup },
     });
   },
 
@@ -128,6 +128,7 @@ export const createUiSlice = (set, get) => ({
         const scopeSettings = useSettingsStore.getState();
         const allLocalEmails = [];
         const allSavedIds = new Set();
+        const archivedReads = [];
         // Pairs whose vault read came back unknown: they keep what the store
         // already holds for them instead of dropping out of the union.
         let savedUnknown = false;
@@ -156,7 +157,7 @@ export const createUiSlice = (set, get) => ({
               // I-5: a null (unknown) read keeps this group's own last-known
               // ids (setArchivedGroup skips a null write) instead of the
               // whole pass losing this account.
-              setArchivedGroup(account.id, localFolder, vault?.archived ?? null);
+              archivedReads.push([account.id, localFolder, vault?.archived ?? null]);
               if (!locals) { localsUnknown.push([account.id, localFolder]); return; }
               for (const e of locals) {
                 allLocalEmails.push({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: localFolder });
@@ -166,7 +167,10 @@ export const createUiSlice = (set, get) => ({
         ).then(() => {
           // The reads yielded: publish only onto the view they were made for.
           const live = get();
-          if (!live.unifiedInbox || (live.unifiedFolder || 'INBOX') !== targetFolder) return;
+          if (!live.unifiedInbox || live.unifiedGroup !== unifiedGroup || (live.unifiedFolder || 'INBOX') !== targetFolder) return;
+          const liveAccounts = accountsInScope(live.accounts, { ...useSettingsStore.getState(), group: live.unifiedGroup });
+          if (liveAccounts.length !== viewedAccounts.length || viewedAccounts.some((account, index) => account.id !== liveAccounts[index].id)) return;
+          for (const [accountId, mailbox, archived] of archivedReads) setArchivedGroup(accountId, mailbox, archived);
           const archivedEmailIds = deriveArchivedUnion(live.archivedEmailIds, viewPairs);
           const kept = (live.localEmails || []).filter(e => localsUnknown.some(([a, m]) => e._accountId === a && e._mailbox === m));
           set({

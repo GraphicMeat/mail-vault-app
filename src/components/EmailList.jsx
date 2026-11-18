@@ -349,7 +349,7 @@ function EmailListComponent({ stacked = false }) {
   const endBulkSession = useMailStore(s => s.endBulkSession);
   const { bulkOpProgress, setBulkOpProgress, handleBulkConfirm, handleBulkCancel } = useBulkActions({ formatArchiveBackupDeleteOutcome });
 
-  // A bulk session is bound to the (account, mailbox, viewMode) it was opened
+  // A bulk session is bound to the (account, mailbox, viewMode, unifiedGroup) it was opened
   // against. The modal never unmounts on minimize, so a session for Spam
   // would otherwise sit there picking up Sent's rows once the user navigates
   // away — activateAccount already clears selectedEmailIds on account/mailbox
@@ -358,21 +358,22 @@ function EmailListComponent({ stacked = false }) {
   // just cleared. viewMode is bound too: "All" means a different pool of
   // messages in local-only view than in server view, even for the same
   // mailbox, so toggling it invalidates a session just as surely as
-  // switching folders does.
+  // switching folders does. A different unified group invalidates it too.
   useEffect(() => {
     if (!bulkSession?.active) return;
-    if (bulkSession.accountId !== activeAccountId || bulkSession.mailbox !== activeMailbox || bulkSession.viewMode !== viewMode) {
+    if (bulkSession.accountId !== activeAccountId || bulkSession.mailbox !== activeMailbox || bulkSession.viewMode !== viewMode || (bulkSession.unifiedGroup ?? null) !== (unifiedGroup ?? null)) {
       endBulkSession();
     }
-  }, [bulkSession, activeAccountId, activeMailbox, viewMode, endBulkSession]);
+  }, [bulkSession, activeAccountId, activeMailbox, viewMode, unifiedGroup, endBulkSession]);
 
   // The mirror is scanned from exactly one place. Keying on archivedEmailIds is
-  // what makes that enough: all fourteen paths that load archived state end by
-  // replacing that Set, so account switch, folder switch, archive and unarchive
+  // what makes that enough for archive changes: all fourteen paths that load
+  // archived state replace that Set, so account switch, folder switch, archive and unarchive
   // all land here without threading a call through any of them.
+  // A group switch can change the scanned accounts without replacing the Set.
   useEffect(() => {
     refreshBackedUpUids();
-  }, [activeAccountId, activeMailbox, unifiedInbox, archivedEmailIds, refreshBackedUpUids]);
+  }, [activeAccountId, activeMailbox, unifiedInbox, unifiedGroup, archivedEmailIds, refreshBackedUpUids]);
 
   // Sender-grouped accordion state
   const [senderGroups, setSenderGroups] = useState(null);

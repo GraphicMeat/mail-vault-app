@@ -148,6 +148,7 @@ describe('BulkOperationsModal', () => {
       activeMailbox: 'INBOX',
       viewMode: 'all',
       unifiedInbox: false,
+      unifiedGroup: null,
       mailboxScope: null,
     });
     useSearchStoreMock.setState({ searchResults: [], searchActive: false });
@@ -633,6 +634,20 @@ describe('BulkOperationsModal', () => {
     expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(0);
 
     useMessageListStoreMock.setState({ activeMailbox: 'INBOX' });
+  });
+
+  it('the sync effect ignores a range from another unified group', async () => {
+    useMessageListStoreMock.setState({
+      activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedGroup: 'Personal',
+      bulkSession: { ...boundSession(), mailbox: 'UNIFIED', unifiedGroup: 'Work', range: { type: 'all' } },
+      sortedEmails: [{ uid: 5, date: '2026-03-01T10:00:00Z', _accountId: 'acct-1', _mailbox: 'INBOX' }],
+      selectedEmailIds: new Set(),
+    });
+
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(0);
   });
 
   // Task 9: storage legend + Delete Everywhere action and its own confirm.

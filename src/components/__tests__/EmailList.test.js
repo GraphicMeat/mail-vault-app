@@ -796,6 +796,41 @@ describe('EmailList virtualization', () => {
 
     useMailStore.setState({ bulkSession: null, selectedEmailIds: new Set() });
   });
+
+  it('ends a minimized bulk session when only the unified group changes', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    mail.endBulkSession.mockClear();
+    useMailStore.setState({
+      activeAccountId: 'acc1', activeMailbox: 'UNIFIED', viewMode: 'all',
+      unifiedInbox: true, unifiedGroup: 'Personal', bulkModalOpen: false,
+      bulkSession: { active: true, accountId: 'acc1', mailbox: 'UNIFIED', viewMode: 'all', unifiedGroup: 'Work' },
+      selectedEmailIds: new Set(['acc1:INBOX:1']),
+    });
+
+    render(React.createElement(EmailList));
+
+    expect(mail.endBulkSession).toHaveBeenCalled();
+    useMailStore.setState({ activeMailbox: 'INBOX', unifiedInbox: false, unifiedGroup: null, bulkSession: null, selectedEmailIds: new Set() });
+  });
+
+  it('rescans backup state when Work changes to All Inboxes with unchanged archived IDs', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const archivedEmailIds = new Set(['acc1:INBOX:1']);
+    mail.refreshBackedUpUids.mockClear();
+    useMailStore.setState({ activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedGroup: 'Work', archivedEmailIds });
+    const { rerender } = render(React.createElement(EmailList));
+    const initialCalls = mail.refreshBackedUpUids.mock.calls.length;
+
+    useMailStore.setState({ unifiedGroup: null });
+    rerender(React.createElement(EmailList, { stacked: true }));
+
+    expect(mail.refreshBackedUpUids).toHaveBeenCalledTimes(initialCalls + 1);
+    useMailStore.setState({ activeMailbox: 'INBOX', unifiedInbox: false, archivedEmailIds: new Set() });
+  });
 });
 
 // The open folder's archived uids name only its own messages. A ticked

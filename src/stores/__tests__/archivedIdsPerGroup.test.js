@@ -158,6 +158,7 @@ beforeEach(() => {
   mockGetArchivedEmailIds.mockResolvedValue(new Set());
   mockReadLocalEmailIndex.mockResolvedValue(null);
   mockGetLocalEmails.mockResolvedValue([]);
+  mockSettingsState.accountGroups = {};
 
   useMailStore.setState({
     accounts: [A, B],
@@ -170,11 +171,43 @@ beforeEach(() => {
     deleteTombstones: new Set(),
     viewMode: 'all',
     unifiedInbox: false,
+    unifiedGroup: null,
     unifiedFolder: 'INBOX',
     activeAccountId: null,
     activeMailbox: null,
     mailboxScope: null,
     _sortedEmailsFingerprint: '',
+  });
+});
+
+describe('setViewMode: pending unified reads', () => {
+  it.each([
+    ['group switch', () => useMailStore.setState({ unifiedGroup: 'Personal' })],
+    ['membership change', () => { mockSettingsState.accountGroups = { [A.id]: 'Personal', [B.id]: 'Work' }; }],
+  ])('does not publish stale local, saved, or archive state after a %s', async (_name, changeScope) => {
+    mockSettingsState.accountGroups = { [A.id]: 'Work', [B.id]: 'Personal' };
+    let release;
+    mockGetArchivedEmailIds.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    mockGetSavedEmailIds.mockResolvedValue(new Set([1]));
+    mockReadLocalEmailIndex.mockResolvedValue([{ uid: 1, subject: 'Work local' }]);
+    useMailStore.setState({ unifiedInbox: true, unifiedGroup: 'Work', unifiedFolder: 'INBOX' });
+
+    useMailStore.getState().setViewMode('all');
+    await flush();
+    expect(mockGetArchivedEmailIds).toHaveBeenCalledWith(A.id, 'INBOX');
+    changeScope();
+    const currentLocal = [{ uid: 9, subject: 'Current local' }];
+    const currentSaved = new Set(['current:INBOX:9']);
+    const currentArchived = new Set(['current:INBOX:9']);
+    useMailStore.setState({ localEmails: currentLocal, savedEmailIds: currentSaved, archivedEmailIds: currentArchived });
+
+    release(new Set([1]));
+    await flush();
+
+    const live = useMailStore.getState();
+    expect(live.localEmails).toBe(currentLocal);
+    expect(live.savedEmailIds).toBe(currentSaved);
+    expect(live.archivedEmailIds).toBe(currentArchived);
   });
 });
 

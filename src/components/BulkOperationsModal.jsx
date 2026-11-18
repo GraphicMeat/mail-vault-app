@@ -144,6 +144,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
   const activeMailbox = useMessageListStore(s => s.activeMailbox);
   const viewMode = useMessageListStore(s => s.viewMode);
   const unifiedInbox = useMessageListStore(s => s.unifiedInbox);
+  const unifiedGroup = useMessageListStore(s => s.unifiedGroup);
   const mailboxScope = useMessageListStore(s => s.mailboxScope);
   // The brief pointed at backupStore.js for this, but that store only holds
   // ephemeral progress — the actual configured location (or null) lives in
@@ -356,14 +357,14 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
   useEffect(() => {
     if (!selectedRange) { lastSyncedRangeRef.current = null; return; }
     // This modal is a child of EmailList, whose own effect ends a session
-    // bound to a different (account, mailbox, viewMode) than the live one.
+    // bound to a different (account, mailbox, viewMode, unifiedGroup) than the live one.
     // Without this check, correctness here would rest on an implicit
     // child-before-parent effect-ordering guarantee — this effect running
     // and writing a transiently-wrong selection before EmailList's sibling
     // effect ends the session, one commit later — rather than on an explicit
     // guard. Do NOT delete this as "redundant" with that teardown: it's what
     // makes the teardown a cleanup instead of a race it happens to win.
-    if (bulkSession.accountId !== activeAccountId || bulkSession.mailbox !== activeMailbox || bulkSession.viewMode !== viewMode) {
+    if (bulkSession.accountId !== activeAccountId || bulkSession.mailbox !== activeMailbox || bulkSession.viewMode !== viewMode || (bulkSession.unifiedGroup ?? null) !== (unifiedGroup ?? null)) {
       return;
     }
     const poolPart = cachedRows === null ? emailPool.length : 'settled';
@@ -384,7 +385,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
     // folder's list, not in All Inboxes or a subtree, nor for a merged Sent copy.
     const state = useMailStore.getState();
     setSelection(selectedEmails.map(e => selectionKey(e, state)), selectedEmails);
-  }, [selectedRange, bulkSession, activeAccountId, activeMailbox, viewMode, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
+  }, [selectedRange, bulkSession, activeAccountId, activeMailbox, viewMode, unifiedGroup, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
 
   // Live count, not the range's own result — hand edits made while the modal
   // was minimized must be reflected here and must be what Start acts on.
