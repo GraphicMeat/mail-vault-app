@@ -538,7 +538,12 @@ pub fn encode_phone_qr_full_with(password: &str, accounts: &Value, settings: Opt
     }
     // Settings first, measured without the tags; the tags get what room is left.
     settings::fit(&mut bundle);
-    bundle.tags = tags;
+    bundle.tags = tags.map(|mut t| {
+        // Only the accounts the code carries: a skipped one's keys would spend the room for nothing.
+        let carried: std::collections::HashSet<String> = bundle.accounts.iter().map(|a| a.email.trim().to_lowercase()).collect();
+        t.assigned.retain(|a| carried.contains(&a.email.trim().to_lowercase()));
+        t
+    });
     tags::fit(&mut bundle);
     let sealed = seal_with(password, &bundle, params)?;
     Ok(PhoneQr { frames: frames::frames(&sealed, MAX_FRAME_CHARS)?, skipped })

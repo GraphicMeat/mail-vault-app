@@ -108,9 +108,14 @@ export const useTagStore = create((set, get) => ({
 
 let loading = null;
 
-/** Loads the tag list once (a failure leaves the phone without tags until the next change). */
+/** Loads the tag list once; a failed load is asked again by the next call. */
 export function ensureTags() {
-  if (!loading) loading = useTagStore.getState().loadTags().catch(() => []);
+  if (!loading) {
+    loading = useTagStore.getState().loadTags().catch(() => {
+      loading = null;
+      return [];
+    });
+  }
   return loading;
 }
 

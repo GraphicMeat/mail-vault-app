@@ -755,7 +755,10 @@ fn tags_ride_the_code_and_come_back_out() {
         list: vec![PhoneTag { name: "Work".into(), color: "#112233".into() }],
         assigned: vec![PhoneTagged { email: "p@example.com".into(), tag: 0, keys: vec!["a@example.com".into()] }],
     };
-    let qr = encode_phone_qr_full_with(PW, &sample(), None, Some(block.clone()), cheap()).unwrap();
+    let mut sent = block.clone();
+    sent.assigned.push(PhoneTagged { email: "skipped@example.com".into(), tag: 0, keys: vec!["b@example.com".into()] });
+    let qr = encode_phone_qr_full_with(PW, &sample(), None, Some(sent), cheap()).unwrap();
+    // An account the code does not carry takes no room.
     assert_eq!(decode_phone_bundle(PW, &qr.frames).unwrap().tags, Some(block));
 }
 
