@@ -8,6 +8,17 @@ export function resolveGroupName(raw, existingNames) {
   return existingNames.find(existing => existing.toLocaleLowerCase() === name.toLocaleLowerCase()) || name;
 }
 
+export function groupNames(accountGroups) {
+  const names = new Map();
+  for (const value of Object.values(accountGroups)) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const key = value.toLocaleLowerCase();
+    if (names.has(key)) names.get(key).count++;
+    else names.set(key, { name: value, count: 1 });
+  }
+  return [...names.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function groupAccounts(orderedAccounts, groupOf) {
   const ungrouped = { name: null, accounts: [] };
   const named = new Map();

@@ -2,6 +2,7 @@ import React, { useEffect, useId, useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useT } from '../../i18n/index.js';
 import { usePrivacyActive, usePrivateInputClass } from '../../hooks/usePrivacy';
+import { groupNames } from '../../services/accountGroups';
 
 export function AccountGroupField({ accountId }) {
   const t = useT();
@@ -24,6 +25,6 @@ export function AccountGroupField({ accountId }) {
       onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }}
       placeholder={t('settings.accounts.groupPlaceholder')}
       className={`${privateInput} w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all`} />
-    {!privacyActive && <datalist id={listId}>{[...new Set(Object.values(accountGroups))].map(group => <option key={group} value={group} />)}</datalist>}
+    {!privacyActive && <datalist id={listId}>{groupNames(accountGroups).map(group => <option key={group.name} value={group.name} />)}</datalist>}
   </div>;
 }
