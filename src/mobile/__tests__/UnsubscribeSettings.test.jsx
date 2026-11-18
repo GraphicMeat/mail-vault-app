@@ -33,7 +33,8 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
-const { default: UnsubscribeSettings } = await import('../UnsubscribeSettings.jsx');
+// Desktop's Unsubscribe view over the phone's engine.
+const { default: UnsubscribeSettings } = await import('../settings/Unsubscribe.jsx');
 const { useMobileStore } = await import('../store.js');
 
 beforeEach(() => {
@@ -49,7 +50,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const sender = (address) => document.querySelector(`[data-mv-unsub-sender="${address}"]`);
+const sender = (address) => document.querySelector(`tr[data-sender="${address}"]`);
 const runs = () => engine.calls.filter(([m]) => m === 'mobile.unsubscribe.run').map(([, p]) => p);
 
 describe('Settings > Unsubscribe', () => {
@@ -74,7 +75,7 @@ describe('Settings > Unsubscribe', () => {
     fireEvent.click(screen.getByRole('button', { name: t('unsubscribe.confirmTitle', { sender: 'News' }) }));
     await waitFor(() => expect(runs()).toEqual([{ accountId: 'a1', address: 'news@news.test' }]));
     await waitFor(() => expect(screen.getByText(t('unsubscribe.done', { sender: 'News' }))).toBeTruthy());
-    await waitFor(() => expect(document.querySelector('[data-mv-unsub-history]')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByTestId('unsubscribe-history')).toBeTruthy());
   });
 
   it('hands over the list\'s own page when it offers no one-click', async () => {
@@ -90,7 +91,8 @@ describe('Settings > Unsubscribe', () => {
   it('narrows the list to one account', async () => {
     render(<UnsubscribeSettings />);
     await waitFor(() => expect(sender('news@news.test')).toBeTruthy());
-    fireEvent.change(document.querySelector('[data-mv-pref="unsubScope"]'), { target: { value: 'a2' } });
+    // Desktop's account pills.
+    fireEvent.click(screen.getByRole('radio', { name: /grace@example.test/ }));
     expect(sender('news@news.test')).toBeNull();
     expect(sender('letters@letters.test')).toBeTruthy();
   });

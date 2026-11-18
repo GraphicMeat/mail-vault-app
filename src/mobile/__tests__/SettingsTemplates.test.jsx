@@ -23,7 +23,8 @@ vi.mock('../transport.js', () => ({
 }));
 
 // Templates have desktop's own page now (Settings > Templates), no longer under Mail preferences.
-const { default: TemplatesSettings } = await import('../TemplatesSettings.jsx');
+// Desktop's Templates view over the phone's `templates` preference.
+const { default: TemplatesSettings } = await import('../settings/Templates.jsx');
 // Mail preferences' Behavior: desktop's view over the phone's preferences.
 const { Behavior } = await import('../settings/MailPreferences.jsx');
 const { useMobileStore } = await import('../store.js');
@@ -76,6 +77,19 @@ describe('templates', () => {
     expect(screen.getByText('Thanks')).toBeTruthy();
   });
 
+  it('a refused write keeps the form open and says so', async () => {
+    const { daemonCall } = await import('../transport.js');
+    daemonCall.mockImplementationOnce(async () => { throw Object.assign(new Error('no'), { code: 'INTERNAL' }); });
+    render(<TemplatesSettings />);
+    fireEvent.click(screen.getByRole('button', { name: t('settings.templates.addTemplate') }));
+    fireEvent.change(screen.getByLabelText(t('settings.templates.templateName')), { target: { value: 'Thanks' } });
+    fireEvent.change(screen.getByLabelText(t('settings.templates.templateBody')), { target: { value: 'Thank you!' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.save') })); });
+    await flush();
+    expect(screen.getByRole('alert').textContent).toBe(t('mobile.settings.saveFailed'));
+    expect(screen.getByLabelText(t('settings.templates.templateName')).value).toBe('Thanks');
+  });
+
   it('will not save one without a name or a body', async () => {
     render(<TemplatesSettings />);
     fireEvent.click(screen.getByRole('button', { name: t('settings.templates.addTemplate') }));
@@ -90,7 +104,8 @@ describe('templates', () => {
     render(<TemplatesSettings />);
     fireEvent.click(screen.getByRole('button', { name: `${t('settings.templates.editTemplate')}: Thanks` }));
     fireEvent.change(screen.getByLabelText(t('settings.templates.templateBody')), { target: { value: 'Many thanks!' } });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.save') })); });
+    // Desktop's form names its button Update when it edits one.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('settings.accounts.update') })); });
     await flush();
     expect(sets().at(-1)).toEqual({ templates: [{ id: 'x', name: 'Thanks', body: 'Many thanks!' }, { name: 'Later', body: 'Talk later.' }] });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: `${t('settings.templates.deleteTemplate')}: Later` })); });

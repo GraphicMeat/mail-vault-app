@@ -1,6 +1,4 @@
-// The phone's own picker and switch rows, still used by the pages not yet on the shared desktop
-// views (Logs, Unsubscribe). Mail preferences, Privacy and Appearance render desktop's views
-// (src/mobile/settings/).
+// The phone's own picker row, still used by Logs until it moves onto desktop's views too.
 import React, { useId } from 'react';
 
 /** One preference as a labelled native picker: `options` are `[value, label]`. */
@@ -25,27 +23,5 @@ export function Choice({ label, value, options, onChange, disabled, name }) {
         {options.map(([v, text]) => <option key={String(v)} value={String(v)}>{text}</option>)}
       </select>
     </label>
-  );
-}
-
-export function Toggle({ label, hint, checked, onChange, name }) {
-  const id = useId();
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-labelledby={`${id}-l`}
-      aria-describedby={hint ? `${id}-h` : undefined}
-      className="mv-setting"
-      data-mv-pref={name}
-      onClick={() => onChange(!checked)}
-    >
-      <span className="mv-setting__text">
-        <span className="mv-setting__label" id={`${id}-l`}>{label}</span>
-        {hint && <span className="mv-setting__hint" id={`${id}-h`}>{hint}</span>}
-      </span>
-      <span className="mv-switch" aria-hidden="true"><span className="mv-switch__knob" /></span>
-    </button>
   );
 }

@@ -23,6 +23,9 @@ const ENGINE_READ = {
   // The background run's `badge` (settings.rs `badge_count`).
   badgeEnabled: true,
   badgeMode: true,
+  // The AI endpoint every action goes to (ai.rs `settings`); the page only sets it.
+  aiEndpointUrl: true,
+  aiEndpointModel: true,
 };
 
 function files(dir) {

@@ -37,12 +37,19 @@ vi.mock('../transport.js', () => ({
   listen: vi.fn(() => () => {}),
 }));
 
-const { default: AiSettings } = await import('../AiSettings.jsx');
+// Desktop's AI providers view over the phone's preferences and engine.
+const { default: AiSettings } = await import('../settings/AiProviders.jsx');
 const { default: QuickReplies } = await import('../QuickReplies.jsx');
 const { useMobileStore } = await import('../store.js');
 const { PREF_DEFAULTS, readPrefs } = await import('../prefs.js');
 
 const called = (m) => engine.calls.filter(([name]) => name === m).map(([, p]) => p);
+// The page's controls, named as desktop names them.
+const controls = () => [...document.querySelectorAll('[role="switch"], input')].map((e) => e.getAttribute('aria-label'));
+const field = (key) => screen.getByRole('textbox', { name: t(key) });
+const keyField = () => document.querySelector(`input[type="password"][aria-label="${t('ai.settings.endpointKey')}"]`);
+const testButton = () => screen.getByRole('button', { name: t('ai.settings.sendTest') });
+const result = () => screen.getByRole('status');
 const flush = () => act(async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); });
 // The page's prefs and the engine's, alike.
 const setPrefs = (p) => {
@@ -73,23 +80,26 @@ describe('Settings > AI', () => {
   it('shows only the switch while off; turning it on writes aiEnabled', async () => {
     render(<AiSettings />);
     await flush();
-    expect([...document.querySelectorAll('[data-mv-pref]')].map((e) => e.getAttribute('data-mv-pref'))).toEqual(['aiEnabled']);
+    expect(controls()).toEqual([t('ai.settings.enable')]);
     await act(async () => { fireEvent.click(screen.getByRole('switch', { name: t('ai.settings.enable') })); });
     await flush();
     expect(called('mobile.prefs.set')).toEqual([{ aiEnabled: true }]);
-    expect([...document.querySelectorAll('[data-mv-pref]')].map((e) => e.getAttribute('data-mv-pref')))
-      .toEqual(['aiEnabled', 'aiEndpointUrl', 'aiEndpointModel', 'aiSkipPreview']);
-    expect(document.querySelector('[data-mv-ai-google]').textContent).toBe(t('mobile.ai.googleNote'));
+    // Desktop's order; no provider picker: the phone has the endpoint only.
+    expect(controls()).toEqual([
+      t('ai.settings.enable'), t('ai.settings.skipPreview'), t('ai.settings.endpointUrl'), t('ai.settings.endpointModel'), t('ai.settings.endpointKey'),
+    ]);
+    expect(document.querySelector('select')).toBeNull();
+    expect(screen.getByTestId('ai-settings-google-on-device').textContent).toBe(t('mobile.ai.googleNote'));
   });
 
   it('saves the URL and model when the field is left, trimmed', async () => {
     setPrefs({ aiEnabled: true });
     render(<AiSettings />);
     await flush();
-    const url = document.querySelector('[data-mv-pref="aiEndpointUrl"]');
+    const url = field('ai.settings.endpointUrl');
     fireEvent.change(url, { target: { value: ' https://ai.example.test/v1 ' } });
     await act(async () => { fireEvent.blur(url); });
-    const model = document.querySelector('[data-mv-pref="aiEndpointModel"]');
+    const model = field('ai.settings.endpointModel');
     fireEvent.change(model, { target: { value: 'llama3' } });
     await act(async () => { fireEvent.blur(model); });
     await flush();
@@ -100,20 +110,20 @@ describe('Settings > AI', () => {
     setPrefs({ aiEnabled: true });
     render(<AiSettings />);
     await flush();
-    const field = document.querySelector('[data-mv-ai-key]');
-    expect(field.getAttribute('type')).toBe('password');
-    fireEvent.change(field, { target: { value: 'sk-secret' } });
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-key-save]')); });
+    const secret = keyField();
+    expect(secret.getAttribute('type')).toBe('password');
+    fireEvent.change(secret, { target: { value: 'sk-secret' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.save') })); });
     await flush();
     expect(called('mobile.ai.setKey')).toEqual([{ key: 'sk-secret' }]);
-    expect(field.value).toBe('');
+    expect(keyField().value).toBe('');
     expect(document.body.textContent).not.toContain('sk-secret');
-    expect(screen.getByText(t('ai.settings.keySaved'))).toBeTruthy();
+    expect(screen.getAllByText(t('ai.settings.keySaved')).length).toBeGreaterThan(0);
     expect(called('mobile.prefs.set')).toEqual([], 'the key is never a preference');
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-key-remove]')); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.remove') })); });
     await flush();
     expect(called('mobile.ai.setKey')[1]).toEqual({ key: '' });
-    expect(document.querySelector('[data-mv-ai-key-remove]')).toBeNull();
+    expect(screen.queryByRole('button', { name: t('common.remove') })).toBeNull();
   });
 
   it('the test is reviewed first: the exact text and where it goes, then sent confirmed', async () => {
@@ -122,7 +132,7 @@ describe('Settings > AI', () => {
     engine.run = { ok: true, text: 'Received.' };
     render(<AiSettings />);
     await flush();
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-test]')); });
+    await act(async () => { fireEvent.click(testButton()); });
     await flush();
     expect(called('mobile.ai.run')).toEqual([], 'nothing is sent before the review');
     expect(document.querySelector('[data-mv-ai-prompt]').textContent).toBe('Reply with exactly one short sentence.');
@@ -132,7 +142,7 @@ describe('Settings > AI', () => {
     await flush();
     expect(called('mobile.ai.run')).toEqual([{ action: 'test', confirmed: true }]);
     expect(document.querySelector('[data-mv-ai-prompt]')).toBeNull();
-    expect(document.querySelector('[data-mv-ai-test-result]').textContent).toBe('Received.');
+    expect(result().textContent).toBe('Received.');
   });
 
   it('skipping the review asks the engine directly, and falls back to the review when it wants one', async () => {
@@ -141,17 +151,17 @@ describe('Settings > AI', () => {
     engine.prompt = { ok: true, prompt: 'P', destination: 'https://ai.example.test/v1', leavesDevice: true };
     render(<AiSettings />);
     await flush();
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-test]')); });
+    await act(async () => { fireEvent.click(testButton()); });
     await flush();
     expect(called('mobile.ai.run')).toEqual([{ action: 'test' }]);
     expect(document.querySelector('[data-mv-ai-prompt]').textContent).toBe('P');
     engine.calls = [];
     engine.run = { ok: true, text: 'direct' };
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('common.cancel') })); });
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-test]')); });
+    await act(async () => { fireEvent.click(testButton()); });
     await flush();
     expect(called('mobile.ai.prompt')).toEqual([], 'a reviewed endpoint runs without the sheet');
-    expect(document.querySelector('[data-mv-ai-test-result]').textContent).toBe('direct');
+    expect(result().textContent).toBe('direct');
   });
 
   it('a refusal reads as its catalog text', async () => {
@@ -159,7 +169,7 @@ describe('Settings > AI', () => {
     engine.prompt = { ok: false, code: 'AI_NOT_CONFIGURED' };
     render(<AiSettings />);
     await flush();
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-ai-test]')); });
+    await act(async () => { fireEvent.click(testButton()); });
     await flush();
     expect(screen.getByRole('alert').textContent).toBe(t('mobile.ai.notConfigured'));
   });

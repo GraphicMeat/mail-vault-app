@@ -317,7 +317,7 @@ describe('Settings pages, as desktop lays them out', () => {
       return prefs;
     };
     // AI is off by default: only its switch until it is on (AiSettings.test.jsx).
-    expect(on('ai')).toEqual(['aiEnabled']);
+    expect(controls('ai')).toEqual([t('ai.settings.enable')]);
     // The search index sits on the Storage page, as on desktop.
     expect(on('search')).toEqual(expect.arrayContaining(['searchIndexBodies', 'searchIndexAttachments']));
   });

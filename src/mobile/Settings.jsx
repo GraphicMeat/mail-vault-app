@@ -48,7 +48,6 @@ import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
 import Billing from './Billing.jsx';
-import TemplatesSettings from './TemplatesSettings.jsx';
 import SearchIndexSettings from './SearchIndexSettings.jsx';
 import AccountEditor from './AccountEditor.jsx';
 import PendingActions from './PendingActions.jsx';
@@ -56,12 +55,13 @@ import StorageSettings from './StorageSettings.jsx';
 import LogsSettings from './LogsSettings.jsx';
 import DataUsage from './DataUsage.jsx';
 import NetworkActivity from './settings/NetworkActivity.jsx';
-import UnsubscribeSettings from './UnsubscribeSettings.jsx';
 import TransferSettings from './TransferSettings.jsx';
-import AiSettings from './AiSettings.jsx';
 import Appearance from './settings/Appearance.jsx';
 import { Behavior, Notifications } from './settings/MailPreferences.jsx';
 import { Encryption, Security, Tracking } from './settings/Privacy.jsx';
+import Templates from './settings/Templates.jsx';
+import Unsubscribe from './settings/Unsubscribe.jsx';
+import AiProviders from './settings/AiProviders.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -168,18 +168,6 @@ function Switch({ checked, busy, disabled, label, hint, onChange }) {
       </span>
       <span className="mv-switch" aria-hidden="true"><span className="mv-switch__knob" /></span>
     </button>
-  );
-}
-
-/** Templates (compose's "Templates"), with the note a refused write leaves. */
-function TemplatesPage() {
-  const t = useT();
-  const [failed, setFailed] = useState(false);
-  return (
-    <>
-      <TemplatesSettings onFailed={setFailed} />
-      {failed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.saveFailed')}</p>}
-    </>
   );
 }
 
@@ -355,11 +343,11 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
       </div>
     );
   } else if (nav === 'templates') {
-    body = <div className="mv-legacy"><TemplatesPage /></div>;
+    body = <Templates />;
   } else if (nav === 'ai-providers') {
-    body = <div className="mv-legacy"><AiSettings /></div>;
+    body = <AiProviders />;
   } else if (nav === 'unsubscribe') {
-    body = <div className="mv-legacy"><UnsubscribeSettings /></div>;
+    body = <Unsubscribe />;
   } else if (nav === 'billing') {
     body = <div className="mv-legacy"><Billing /></div>;
   } else if (nav === 'help') {
