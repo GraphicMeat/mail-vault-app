@@ -2616,7 +2616,7 @@ mod tests {
     #[tokio::test]
     async fn a_quitting_daemon_holds_every_upload_at_a_checkpoint_within_its_limit() {
         let mut rig = setup(slow_appends(150), fast());
-        let messages: Vec<Vec<u8>> = (1..=5).map(|i| msg(&format!("z{i}@x"), &format!("z{i}"))).collect();
+        let messages: Vec<Vec<u8>> = (1..=20).map(|i| msg(&format!("z{i}@x"), &format!("z{i}"))).collect();
         let file = mbox(&rig, &messages);
         let job = start(&rig, &file, false).await;
         wait_until_uploaded(&rig, &job, 1).await;
@@ -2633,7 +2633,7 @@ mod tests {
 
         control(&rig, "mbox_upload_resume", &job).await;
         let last = until_done(&mut rig.rx).await.pop().unwrap();
-        assert_eq!(counts_of(&last), (json!(5), json!(0), json!(0)));
+        assert_eq!(counts_of(&last), (json!(20), json!(0), json!(0)));
     }
 
     /// I2: a quit never waits past its limit for an APPEND the server sits

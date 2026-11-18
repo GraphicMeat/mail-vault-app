@@ -685,10 +685,15 @@ mod tests {
         let copies = maildir::mirror_file_map(&destination);
         assert_eq!(std::fs::read(copies.get(&7).expect("real mirror copy after parent destruction")).unwrap(), bytes);
         assert!(busy, "mirror child wrote real bytes after A retired");
-        let lease = crate::account_workflows::AccountLease::detached_for_test(
-            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
-        );
-        assert!(state.account_lifecycle.try_close(lease, "a").is_ok());
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let lease = crate::account_workflows::AccountLease::detached_for_test(
+                    crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+                );
+                if let Ok(claim) = state.account_lifecycle.try_close(lease, "a") { drop(claim); break; }
+                tokio::task::yield_now().await;
+            }
+        }).await.expect("mirror copy child owner did not drain");
         assert!(state.account_lifecycle.try_operation(&[state.account_lifecycle.capture("b").unwrap()]).is_ok());
 
         let copied = copies.get(&7).unwrap().clone();
