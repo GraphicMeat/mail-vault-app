@@ -194,6 +194,77 @@ pub fn messages_with_every_tag(conn: &Connection, account_id: &str, tag_ids: &[S
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+/// Every assignment, newest first: `(tag_id, account_id, msg_key)`. What a transfer carries.
+pub fn assignments(conn: &Connection) -> Result<Vec<(String, String, String)>, String> {
+    let mut stmt = conn
+        .prepare("SELECT tag_id, account_id, msg_key FROM tag_assignments ORDER BY at DESC, rowid DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+/// Every assignment of one account (an account that leaves takes its tags off its mail; the tags
+/// themselves stay). Returns how many went.
+pub fn forget_account(conn: &Connection, account_id: &str) -> Result<usize, String> {
+    conn.execute("DELETE FROM tag_assignments WHERE account_id = ?1", [account_id]).map_err(|e| e.to_string())
+}
+
+/// The ids of the tags named `names`, in order, compared as desktop's search compares them
+/// (whole name, case ignored); `None` for a name no tag has.
+pub fn ids_by_names(conn: &Connection, names: &[String]) -> Result<Vec<Option<String>>, String> {
+    let tags = list(conn)?;
+    Ok(names
+        .iter()
+        .map(|name| {
+            let want = name.trim().to_lowercase();
+            tags.iter().find(|t| t.name.to_lowercase() == want).map(|t| t.id.clone())
+        })
+        .collect())
+}
+
+/// Lifts the `tag:` terms out of a search query as desktop's search box does
+/// (`src/utils/searchQuery.js` `TAG_TERM`: `tag:Name` or `tag:"Two words"`, at the start or after
+/// a space, any case): `(the rest of the query, the tag names)`. A term with no name stays text.
+pub fn lift_tag_terms(query: &str) -> (String, Vec<String>) {
+    let chars: Vec<char> = query.chars().collect();
+    let mut rest = String::new();
+    let mut names = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let at_start = i == 0 || chars[i - 1].is_whitespace();
+        let is_term = at_start
+            && chars.len() >= i + 4
+            && chars[i..i + 4].iter().collect::<String>().eq_ignore_ascii_case("tag:");
+        if is_term {
+            let start = i + 4;
+            let (name, end) = if chars.get(start) == Some(&'"') {
+                match chars[start + 1..].iter().position(|c| *c == '"') {
+                    Some(close) if close > 0 => (chars[start + 1..start + 1 + close].iter().collect::<String>(), start + close + 2),
+                    // No closing quote, or `""`: what follows is one word, as the JS reads `\S+`.
+                    _ => word(&chars, start),
+                }
+            } else {
+                word(&chars, start)
+            };
+            let name = name.trim().to_string();
+            if !name.is_empty() {
+                names.push(name);
+                i = end;
+                continue;
+            }
+        }
+        rest.push(chars[i]);
+        i += 1;
+    }
+    (rest.split_whitespace().collect::<Vec<_>>().join(" "), names)
+}
+
+/// The run of non-space characters from `start`, and where it ends.
+fn word(chars: &[char], start: usize) -> (String, usize) {
+    let end = chars[start..].iter().position(|c| c.is_whitespace()).map_or(chars.len(), |n| start + n);
+    (chars[start..end].iter().collect(), end)
+}
+
 fn get(conn: &Connection, id: &str) -> Result<Tag, String> {
     conn.query_row(
         "SELECT t.id, t.name, t.color, t.position, COUNT(a.tag_id)
@@ -360,6 +431,39 @@ mod tests {
         let a = ensure(&c, "A", "").unwrap();
         assign(&c, &a.id, &[t("acct", "one@x")]).unwrap();
         assert!(messages_with_every_tag(&c, "acct", &[]).unwrap().is_empty(), "callers must not ask");
+    }
+
+    #[test]
+    fn tag_terms_are_lifted_as_the_desktop_search_box_lifts_them() {
+        assert_eq!(lift_tag_terms("tag:Work invoice"), ("invoice".to_string(), vec!["Work".to_string()]));
+        assert_eq!(lift_tag_terms("from:ana TAG:\"Needs reply\" q3"), ("from:ana q3".to_string(), vec!["Needs reply".to_string()]));
+        assert_eq!(lift_tag_terms("tag:a tag:b"), (String::new(), vec!["a".to_string(), "b".to_string()]));
+        // Not a term: inside a word, or with no name.
+        assert_eq!(lift_tag_terms("hashtag:x"), ("hashtag:x".to_string(), vec![]));
+        assert_eq!(lift_tag_terms("tag: x"), ("tag: x".to_string(), vec![]));
+        assert_eq!(lift_tag_terms("tag:\"open"), (String::new(), vec!["\"open".to_string()]));
+    }
+
+    #[test]
+    fn names_resolve_whole_and_case_blind() {
+        let c = conn();
+        let work = ensure(&c, "Work", "").unwrap();
+        let got = ids_by_names(&c, &["work".into(), "Wor".into()]).unwrap();
+        assert_eq!(got, vec![Some(work.id), None]);
+    }
+
+    #[test]
+    fn assignments_come_newest_first_and_an_account_takes_only_its_own() {
+        let c = conn();
+        let tag = ensure(&c, "A", "").unwrap();
+        assign(&c, &tag.id, &[t("one", "old@x")]).unwrap();
+        c.execute("UPDATE tag_assignments SET at = 1", []).unwrap();
+        assign(&c, &tag.id, &[t("two", "new@x")]).unwrap();
+        let all = assignments(&c).unwrap();
+        assert_eq!(all.iter().map(|a| a.2.as_str()).collect::<Vec<_>>(), vec!["new@x", "old@x"]);
+        assert_eq!(forget_account(&c, "one").unwrap(), 1);
+        assert_eq!(assignments(&c).unwrap().len(), 1);
+        assert_eq!(list(&c).unwrap().len(), 1, "the tag stays");
     }
 
     #[test]

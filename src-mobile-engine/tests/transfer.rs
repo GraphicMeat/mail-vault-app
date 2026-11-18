@@ -121,7 +121,7 @@ fn jmap(email: &str, auth: PhoneAuth) -> PhoneAccount {
 
 /// The frame texts the desktop shows for `accounts`, sealed with `password`.
 fn code(password: &str, accounts: Vec<PhoneAccount>) -> Vec<String> {
-    let bundle = PhoneBundle { v: 1, accounts, settings: None };
+    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None };
     let sealed = seal_with(password, &bundle, CHEAP).unwrap();
     frames(&sealed, MAX_FRAME_CHARS).unwrap()
 }
@@ -423,4 +423,67 @@ fn a_repeat_whose_first_copy_was_skipped_is_not_existing() {
     assert_eq!(reply["existing"], json!([]));
     // cara got in from its second copy, so it is not reported skipped; dan is named once.
     assert_eq!(reply["skipped"], json!([{ "email": "dan@example.test", "reason": "invalid" }]));
+}
+
+/// The desktop's tags come with the code: every tag, and each assignment on an account of the code
+/// by the desktop's key, so the phone's own row of that message carries it. A desktop uid key goes
+/// to an IMAP account only. An older code (no tags) imports as before, with `tags: null`.
+#[test]
+fn an_import_brings_the_desktop_tags_and_their_assignments() {
+    use mailvault_core::transfer::phone::{PhoneTag, PhoneTagged, PhoneTags};
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    // An older desktop's code.
+    let plain = import(&e, &code(PW, vec![imap("old@example.test")]), PW);
+    assert_eq!(plain["ok"], true, "{plain}");
+    assert_eq!(plain["tags"], Value::Null);
+
+    let tags = PhoneTags {
+        list: vec![PhoneTag { name: "Work".into(), color: "#AABBCC".into() }, PhoneTag { name: "Bad color".into(), color: "url(x)".into() }],
+        assigned: vec![
+            PhoneTagged { email: "Ann@Example.test".into(), tag: 0, keys: vec!["one@x".into(), "u:INBOX:7".into()] },
+            PhoneTagged { email: "o@outlook.test".into(), tag: 1, keys: vec!["two@x".into(), "u:INBOX:3".into()] },
+            PhoneTagged { email: "not-in-the-code@example.test".into(), tag: 0, keys: vec!["three@x".into()] },
+        ],
+    };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: Some(tags) };
+    let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
+    let r = import(&e, &frames, PW);
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["tags"], json!({ "tags": 2, "assigned": 3 }), "the Graph account's uid key is dropped");
+
+    let listed = e.rpc("mobile.tags.list", json!({})).unwrap()["tags"].clone();
+    assert_eq!(listed[0]["name"], "Work");
+    assert_eq!(listed[0]["color"], "#aabbcc");
+    assert_eq!(listed[1]["color"], "", "a color that is not #rrggbb is left out");
+
+    // The phone's own rows of those messages carry the tags.
+    let ann = e.rpc("mobile.accounts.list", json!({})).unwrap()["accounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["email"] == "ann@example.test")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let c = Connection::open(tmp.path().join("mobile.db")).unwrap();
+    for (uid, mid) in [(1, "<one@x>"), (7, "")] {
+        c.execute(
+            "INSERT INTO messages (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments, message_id)
+             VALUES (?1, 'INBOX', ?2, 's', 'S', 's@x', 1, '', 0, 0, 0, ?3)",
+            rusqlite::params![ann, uid, mid],
+        )
+        .unwrap();
+    }
+    let got = e
+        .rpc("mobile.tags.forMessages", json!({ "items": [{ "accountId": ann, "folder": "INBOX", "uid": 1 }, { "accountId": ann, "folder": "INBOX", "uid": 7 }] }))
+        .unwrap();
+    let work = listed[0]["id"].clone();
+    assert_eq!(got["tags"], json!([[work.clone()], [work]]));
+
+    // The same code again changes nothing.
+    let again = import(&e, &frames, PW);
+    assert_eq!(again["tags"], json!({ "tags": 2, "assigned": 3 }));
+    assert_eq!(e.rpc("mobile.tags.list", json!({})).unwrap()["tags"].as_array().unwrap().len(), 2);
 }

@@ -35,6 +35,7 @@ pub mod secrets;
 mod settings;
 mod storage;
 mod sync;
+mod tags;
 mod threads;
 mod tracking;
 mod transfer;

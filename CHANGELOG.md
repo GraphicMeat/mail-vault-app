@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Added: local labels on the phone, as on the computer. They show after the subject in the message list and under an open message; More > Apply local label applies, makes or removes them; search finds them with tag:Name; Settings > Appearance > Quick actions lists and deletes them. Set up from the computer brings your labels and as many of their messages as the QR code has room for.
 - Added: on the phone, Settings > Privacy & security > Tracking shows what the phone has found, as on the computer: how many tracking pixels in how many messages, the senders' tracking services found most, and the bundled list's size and sources.
 - Fixed: a sidebar account group is now one row, same height and width as an account, with a single hover highlight; its left chevron folds and unfolds, the rest opens the group inbox.
 - Changed: Settings on the phone now look and work like Settings on the computer, page by page: Storage, Data usage, Search index, Billing, Diagnostics, Help and Move to another computer use the same controls, and Cleanup, Backup, Time Capsule and Migration show that they are in MailVault on desktop.

@@ -37,6 +37,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, takeNotificationTap } from './transport.js';
 import { useMobileStore, ALL_INBOXES } from './store.js';
+import { ensureTags } from './tags.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
 import ThreadView from './ThreadView.jsx';
@@ -250,6 +251,8 @@ function App() {
     );
     if (PROBE) probeRun(PROBE);
     start();
+    // The local labels, once: rows and the viewer only ask for their own (tags.js).
+    ensureTags();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Premium: read at launch, re-checked on return to the app, live on `mobile.premium.changed`.

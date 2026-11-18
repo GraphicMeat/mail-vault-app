@@ -7,8 +7,11 @@
 // More and can be added while the bar has room. Each change writes the whole list
 // (`mobile.prefs.set` through the store's setPrefs); the viewer reads it as it renders. Desktop's
 // scope, other surfaces, layouts, palettes and the samples drawn with its list rows are not the
-// phone's.
+// phone's. Under the bar, desktop's list of local labels (tags), each deleted with its button
+// (`mobile.tags.delete` through tags.js); labels are made and applied from a message's More.
 import React, { useEffect, useState } from 'react';
+import { TagListView } from '../../components/tags/TagViews';
+import { ensureTags, useTagStore } from '../tags.js';
 import {
   QuickActionAddView, QuickActionEntryListView, QuickActionPresetsView, QuickActionsView,
 } from '../../components/settings/views/QuickActionsView';
@@ -39,6 +42,8 @@ export default function QuickActions() {
   const [addType, setAddType] = useState(rest[0] || '');
   useEffect(() => { if (!rest.includes(addType)) setAddType(rest[0] || ''); }, [rest.join(), addType]); // eslint-disable-line react-hooks/exhaustive-deps
   const save = (next) => savePrefs({ quickActionsReader: next });
+  const labels = useTagStore((s) => s.tags);
+  useEffect(() => { ensureTags(); }, []);
 
   return (
     <>
@@ -55,6 +60,7 @@ export default function QuickActions() {
           addType={addType} onAddType={setAddType}
           onAdd={() => { if (rest.includes(addType)) save([...bar, addType]); }}
           blocked={bar.length >= BAR_LIMIT || !rest.includes(addType)} />
+        <TagListView tags={labels} onDelete={(id) => useTagStore.getState().deleteTag(id)} />
         </SettingsTabs>
       </QuickActionsView>
       <SaveFailed failed={failed} />

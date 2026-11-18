@@ -619,6 +619,8 @@ pub(crate) struct Shared {
     pub(crate) pgp_keys: Mutex<()>,
     /// Data usage: when the byte counters were last kept (`usage.rs`).
     pub(crate) usage: crate::usage::State,
+    /// The core `app.db` the tags live in (`tags.rs`), on a connection of its own.
+    pub(crate) app_db: crate::tags::AppDb,
     /// Unit tests: the most rows any one write transaction changed.
     #[cfg(test)]
     max_txn_rows: std::sync::atomic::AtomicU64,
@@ -825,6 +827,7 @@ impl Engine {
                 launched: Mutex::new(std::collections::HashSet::new()),
                 pgp_keys: Mutex::new(()),
                 usage: crate::usage::State::default(),
+                app_db: crate::tags::AppDb::new(data_dir),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
                 #[cfg(test)]

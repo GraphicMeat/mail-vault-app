@@ -15,12 +15,14 @@ pub mod desktop;
 pub mod frames;
 pub mod qr;
 pub mod settings;
+pub mod tags;
 #[cfg(test)]
 mod tests;
 
 pub use desktop::{desktop_account, desktop_bundle};
 pub use frames::{frames, parse_frame, Assembler, FrameError, FrameHeader, Progress, MAX_FRAMES, MAX_FRAME_CHARS};
 pub use qr::qr_svg;
+pub use tags::{PhoneTag, PhoneTagged, PhoneTags};
 pub use settings::{
     offline_window, Degrade, PhoneAccountNotifications, PhoneAccountSettings, PhoneAiEndpoint, PhoneAlias, PhoneImportantSender, PhoneQuietHours, PhoneSettings,
     PhoneSignature, PhoneTemplate,
@@ -183,6 +185,9 @@ pub struct PhoneBundle {
     /// The desktop's global settings; the phone applies them on its first import that has them.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "settings::lenient_object")]
     pub settings: Option<PhoneSettings>,
+    /// The desktop's tags and the newest of their assignments (`tags.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "settings::lenient_object")]
+    pub tags: Option<PhoneTags>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -275,7 +280,7 @@ pub fn phone_bundle_with_settings(accounts: &Value, settings: Option<&Value>) ->
             Err(reason) => skipped.push(Skipped { email: text(a, "email").unwrap_or("").to_string(), reason }),
         }
     }
-    (PhoneBundle { v: PHONE_BUNDLE_VERSION, accounts: out, settings: settings::global_settings(settings) }, skipped)
+    (PhoneBundle { v: PHONE_BUNDLE_VERSION, accounts: out, settings: settings::global_settings(settings), tags: None }, skipped)
 }
 
 /// A non-blank trimmed string field.
@@ -514,12 +519,27 @@ pub fn encode_phone_qr_with(password: &str, accounts: &Value, params: Params) ->
 /// cut to fit the code ([`settings::fit`]) before the one sealing.
 #[doc(hidden)]
 pub fn encode_phone_qr_settings_with(password: &str, accounts: &Value, settings: Option<&Value>, params: Params) -> Result<PhoneQr, PhoneError> {
+    encode_phone_qr_full_with(password, accounts, settings, None, params)
+}
+
+/// [`encode_phone_qr`] with the desktop's tags (`tags::snapshot`), cut to the room the code has
+/// left once the settings are in ([`tags::fit`]).
+pub fn encode_phone_qr_with_tags(password: &str, accounts: &Value, settings: Option<&Value>, tags: Option<PhoneTags>) -> Result<PhoneQr, PhoneError> {
+    encode_phone_qr_full_with(password, accounts, settings, tags, crypto::EXPORT_PARAMS)
+}
+
+/// [`encode_phone_qr_with_tags`] with chosen key derivation parameters. For tests only.
+#[doc(hidden)]
+pub fn encode_phone_qr_full_with(password: &str, accounts: &Value, settings: Option<&Value>, tags: Option<PhoneTags>, params: Params) -> Result<PhoneQr, PhoneError> {
     check_password(password)?;
     let (mut bundle, skipped) = phone_bundle_with_settings(accounts, settings);
     if bundle.accounts.is_empty() {
         return Ok(PhoneQr { frames: Vec::new(), skipped });
     }
+    // Settings first, measured without the tags; the tags get what room is left.
     settings::fit(&mut bundle);
+    bundle.tags = tags;
+    tags::fit(&mut bundle);
     let sealed = seal_with(password, &bundle, params)?;
     Ok(PhoneQr { frames: frames::frames(&sealed, MAX_FRAME_CHARS)?, skipped })
 }

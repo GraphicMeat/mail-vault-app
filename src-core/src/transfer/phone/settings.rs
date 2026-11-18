@@ -348,7 +348,7 @@ pub fn strip_data_images(html: &str) -> String {
 /// and the JSON's own length. The JSON (passwords and tokens in it) is streamed into the encoder
 /// and never held: a buffer that grows reallocates and leaves the old block, secrets and all,
 /// unwiped.
-fn deflated_len(bundle: &PhoneBundle) -> Option<(usize, usize)> {
+pub(super) fn deflated_len(bundle: &PhoneBundle) -> Option<(usize, usize)> {
     let mut counter = Counter(0);
     let json_len = {
         let enc = flate2::write::DeflateEncoder::new(&mut counter, flate2::Compression::best());

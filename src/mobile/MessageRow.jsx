@@ -11,6 +11,7 @@
 // the subject (none at 0), `listDensity`'s padding, and its height (prefs.js `rowHeight`, which
 // also scales with the text size). With `trackpadSwipeEnabled` off (desktop's swipe switch) the
 // row does not swipe.
+// The message's tags follow the subject on its line, as on desktop's row (TagChips.jsx).
 // Deliberately not built on src/components/EmailRow: that pulls in the desktop stores.
 import React, { memo } from 'react';
 import { displayText } from '../utils/bidiText.js';
@@ -23,6 +24,7 @@ import { EnvelopeIcon, TrashIcon, FlagIcon, MoveIcon } from './icons.jsx';
 import { useMobileStore } from './store.js';
 import { swipeKind, rowHeight, PREF_DEFAULTS } from './prefs.js';
 import { accountRowKey } from './messagePages.js';
+import TagChips from './TagChips.jsx';
 
 /** Row height in px at the default preferences: three lines of text plus padding; well over the
  *  44px tap minimum. The row's own height is `rowHeight(prefs)`. */
@@ -39,6 +41,9 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
   const leadingAction = useMobileStore((s) => (swipes ? s.prefs.swipeRightAction : 'none'));
   const trailingAction = useMobileStore((s) => (swipes ? s.prefs.swipeLeftAction : 'none'));
   const prefs = useMobileStore((s) => s.prefs);
+  // A folder's rows name neither; All Inboxes' and search's name both.
+  const accountId = useMobileStore((s) => s.activeAccountId);
+  const folder = useMobileStore((s) => s.activeFolder);
   const dates = prefs;
   const previewLines = [0, 1, 2, 3].includes(prefs.listPreviewLines) ? prefs.listPreviewLines : 1;
   const style = { height: `${rowHeight(prefs)}px`, transform: `translateY(${start}px)` };
@@ -98,7 +103,10 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
             {shown.flagged && <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flagged')} />}
             <span className="mv-row__date">{formatEmailDate(row.dateMs, undefined, dates)}</span>
           </span>
-          <span className="mv-row__subject" dir="auto">{displayText(row.subject, t('common.noSubject'))}</span>
+          <span className="mv-row__line">
+            <span className="mv-row__subject" dir="auto">{displayText(row.subject, t('common.noSubject'))}</span>
+            <TagChips accountId={row.accountId || accountId} folder={row.folder || folder} uid={row.uid} />
+          </span>
           {previewLines > 0 && (
             <span
               className={previewLines > 1 ? 'mv-row__snippet mv-row__snippet--lines' : 'mv-row__snippet'}

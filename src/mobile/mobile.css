@@ -271,6 +271,15 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-row__sender { flex: 1; font-weight: 500; line-height: 1.25rem; }
 .mv-row__date { flex: none; font-size: 0.75rem; font-weight: 500; color: var(--mail-text-muted); }
 .mv-row__subject { line-height: 1.25rem; }
+/* The subject and the message's tags on one line: the subject gives way, the chips stay whole
+   (up to desktop's cap on their share of the row). */
+.mv-row__line { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.mv-row__line > .mv-row__subject { flex: 1 1 auto; }
+/* The message's tags under the viewer's header, and atop its label sheet: every chip, wrapped. */
+.local-mail-labels.mv-viewer__tags { display: flex; flex-wrap: wrap; max-width: none; margin: 4px 16px 0; }
+/* The label sheet's new-label field and its Create. */
+.mv-tags__new { display: flex; gap: 8px; align-items: center; padding: 8px 8px 0; }
+.mv-tags__new .mv-input { flex: 1; }
 .mv-row__snippet { font-size: 0.75rem; line-height: 1.125rem; color: var(--mail-text-muted); }
 /* Two or three preview lines (listPreviewLines): wrapped, then cut at the row's line count. */
 .mv-row__snippet--lines { display: -webkit-box; -webkit-box-orient: vertical; white-space: normal; }

@@ -149,9 +149,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             };
             // The desktop's settings for the phone (optional: an older app sends none).
             let settings = params.get("settings").filter(|v| v.is_object()).cloned();
+            let app_dir = state.app_dir.clone();
             // argon2 and the QR rendering both stay off the async worker.
             let built = blocking(move || -> Result<(Vec<String>, Vec<phone::Skipped>), String> {
-                let qr = phone::encode_phone_qr(&password, &accounts, settings.as_ref()).map_err(|e| e.to_string())?;
+                // The tags and the assignments that fit (app.db); a store that cannot be read
+                // leaves them out rather than failing the code.
+                let tags = match app_db::with(&app_dir, |conn| phone::tags::snapshot(conn, &accounts)) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        tracing::warn!("[transfer] phone code without tags: {e}");
+                        None
+                    }
+                };
+                let qr = phone::encode_phone_qr_with_tags(&password, &accounts, settings.as_ref(), tags).map_err(|e| e.to_string())?;
                 let svgs = qr.frames.iter().map(|f| phone::qr_svg(f)).collect::<Result<Vec<_>, _>>()?;
                 Ok((svgs, qr.skipped))
             })

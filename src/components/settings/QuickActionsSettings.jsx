@@ -26,6 +26,7 @@ import { QUICK_ACTION_ICONS as ICONS } from "../../utils/quickActionIcons";
 import { useT } from "../../i18n/index.js";
 import { DesktopViewEnv } from "./DesktopViewEnv";
 import { QuickActionAddView, QuickActionEntryListView, QuickActionsView } from "./views/QuickActionsView";
+import { TagListView } from "../tags/TagViews";
 
 const LABELS = {
   archive: "common.archive",
@@ -467,29 +468,7 @@ export function QuickActionsSettings() {
           </ol>
         </details>
 
-        <section
-          className="quick-actions-label-list"
-          aria-labelledby="quick-actions-label-title"
-        >
-          <h5 id="quick-actions-label-title">
-            {t("quickActions.localLabels")}
-          </h5>
-          {labels.map((label) => (
-            <span key={label.id} className="local-mail-label">
-              {label.name}
-              <button
-                type="button"
-                aria-label={t("quickActions.removeLabel", {
-                  label: label.name,
-                })}
-                onClick={() =>
-                  deleteTag(label.id)}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </section>
+        <TagListView tags={labels} onDelete={deleteTag} />
       </SettingsTabs>
     </QuickActionsView>
     </DesktopViewEnv>

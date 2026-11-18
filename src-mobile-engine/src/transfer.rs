@@ -16,8 +16,13 @@
 //! (from a newer desktop, say) is left out, never a failed import. Notifications are never turned
 //! on: that needs the system's permission, asked on the phone.
 //!
+//! The desktop's tags come along too (`apply_tags`): every tag, and the assignments the code had
+//! room for (the newest of each tag and account in turn, core `transfer::phone::tags`), on the
+//! accounts of the code that are on the phone afterwards, keyed as desktop keys them (`tags.rs`).
+//!
 //! Reply: `{ok: true, imported: [email], existing: [email], skipped: [{email, reason}],
-//! settingsApplied: bool}` (`settingsApplied`: this import applied the desktop's global settings), or
+//! settingsApplied: bool, tags: null | {tags, assigned}}` (`settingsApplied`: this import applied
+//! the desktop's global settings; `tags`: null when the code carried none), or
 //! `{ok: false, code}` with `PASSWORD_SHORT` (under 12 characters, nothing tried), `BAD_PASSWORD`
 //! (wrong password or a modified code, indistinguishable) or `INVALID` (not a whole MailVault
 //! code, or bad params). A skip `reason` is `invalid` (settings the phone cannot use),
@@ -30,8 +35,10 @@ use crate::db::Engine;
 use crate::rpc::RpcError;
 use crate::secrets::Credential;
 use crate::settings::{self as prefs, put_in};
+use mailvault_core::app_db::tags::{self as tag_store, Target};
 use mailvault_core::transfer::phone::{
-    decode_phone_bundle, hex_color, PhoneAccount, PhoneAuth, PhoneError, PhoneKind, PhoneSettings, MAX_FRAMES, MAX_FRAME_CHARS, MIN_PASSWORD_CHARS,
+    decode_phone_bundle, hex_color, tags as phone_tags, PhoneAccount, PhoneAuth, PhoneError, PhoneKind, PhoneSettings, PhoneTags, MAX_FRAMES, MAX_FRAME_CHARS,
+    MIN_PASSWORD_CHARS,
 };
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
@@ -156,7 +163,62 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
         // The search index settings may have come with them.
         crate::search::wake(engine.shared());
     }
-    Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped, "settingsApplied": settings_applied }))
+    let tags = bundle.tags.as_ref().map(|t| apply_tags(engine, &here, t));
+    Ok(json!({ "ok": true, "imported": imported, "existing": existing, "skipped": skipped, "settingsApplied": settings_applied, "tags": tags }))
+}
+
+/// The desktop's tags (`tags.rs`): every tag (one already here by name, case ignored, is kept
+/// as it is), and each assignment of an account of this code that is on the phone now (`here`:
+/// lowercased addresses), by the desktop's key. A desktop uid key goes to IMAP accounts only.
+/// Never fails the import: a store that cannot be written is logged and answers `null` counts.
+/// Answers `{tags, assigned}`: tags in the code, assignments it applied (already there included).
+fn apply_tags(engine: &Engine, here: &HashSet<String>, block: &PhoneTags) -> Value {
+    let shared = engine.shared();
+    let mut targets: Vec<(u32, Vec<Target>)> = Vec::new();
+    for tagged in &block.assigned {
+        if !here.contains(&tagged.email.trim().to_lowercase()) {
+            continue;
+        }
+        let account = engine
+            .read(|c| {
+                c.query_row("SELECT id, kind FROM accounts WHERE email = ?1 COLLATE NOCASE", [tagged.email.trim()], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })
+                .optional()
+            })
+            .ok()
+            .flatten();
+        let Some((id, kind)) = account else { continue };
+        let kind = match kind.as_str() {
+            "graph" => PhoneKind::Graph,
+            "jmap" => PhoneKind::Jmap,
+            _ => PhoneKind::Imap,
+        };
+        let keys = phone_tags::keys_for(kind, tagged);
+        targets.push((tagged.tag, keys.into_iter().map(|msg_key| Target { account_id: id.clone(), msg_key }).collect()));
+    }
+    let applied = shared.app_db.with(|c| {
+        let mut ids = Vec::with_capacity(block.list.len());
+        for tag in &block.list {
+            let name: String = tag.name.trim().chars().take(crate::tags::MAX_NAME_CHARS).collect();
+            if name.is_empty() {
+                ids.push(None);
+                continue;
+            }
+            ids.push(Some(tag_store::ensure(c, &name, &hex_color(&tag.color).unwrap_or_default())?.id));
+        }
+        let mut assigned = 0;
+        for (index, list) in &targets {
+            if let Some(Some(tag_id)) = ids.get(*index as usize) {
+                assigned += tag_store::assign(c, tag_id, list)?;
+            }
+        }
+        Ok(json!({ "tags": ids.iter().flatten().count(), "assigned": assigned }))
+    });
+    applied.unwrap_or_else(|e| {
+        shared.log(&format!("[transfer] tags not imported: {e}"));
+        json!({ "tags": null, "assigned": null })
+    })
 }
 
 /// One write: each added account's own settings, and the desktop's global ones when no import

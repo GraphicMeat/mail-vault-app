@@ -12,7 +12,8 @@
 // server search per pause. The results load page by page while they scroll, up to AUTO_ROWS
 // rows; past that, each further page is a tap (Show more results), so the list stays bounded.
 // Recent searches (last 8) are page storage on this device (store.js), shown while the field is
-// empty.
+// empty. Desktop's `tag:Name` terms (local labels) narrow the device's results, and alone list
+// every message with those labels (engine `tags.rs`); the server is not offered for them.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { daemonCall } from './transport.js';
 import { useMobileStore } from './store.js';
@@ -22,6 +23,7 @@ import { rowHeight } from './prefs.js';
 import { errorKey } from './errors.js';
 import { useT } from './i18n.js';
 import { useKeyboardViewport } from './keyboardViewport.js';
+import { parseSearchQuery } from '../utils/searchQuery.js';
 
 /** Quiet time after the last keystroke before the search runs. */
 export const SEARCH_DEBOUNCE_MS = 250;
@@ -151,7 +153,9 @@ export default function Search({ onOpen, onSwipe: swipeAction, onClose, initialQ
     );
   }, [accountId, folder, text]);
 
-  const canServer = Boolean(accountId && folder) && scope === 'folder';
+  // A local label (`tag:Name`, desktop's term; the engine narrows by it) lives on this phone only:
+  // no server can search by it.
+  const canServer = Boolean(accountId && folder) && scope === 'folder' && parseSearchQuery(text).tags.length === 0;
   // Nothing on the device (or no index to ask): the server is asked without a tap, once the query
   // has settled. A new keystroke or scope clears the wait (and the reply would be dropped anyway).
   const localEmpty = (local.state === 'done' && local.rows.length === 0 && local.cursor == null)

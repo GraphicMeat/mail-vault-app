@@ -29,6 +29,7 @@ import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
 import { PREF_DEFAULTS, readPrefs, applyLook, threadedList } from './prefs.js';
 import { followAppIcon } from './appIcon.js';
 import { loadMobileLocale } from './i18n.js';
+import { refreshTags } from './tags.js';
 
 // The import's own refusals (`mobile.transfer.import`), shown by ImportFromDesktop.
 const IMPORT_CODES = ['BAD_PASSWORD', 'PASSWORD_SHORT', 'INVALID'];
@@ -790,6 +791,8 @@ export function createMobileStore() {
           skipped: Array.isArray(reply.skipped) ? reply.skipped.map((s) => ({ email: s?.email, reason: s?.reason })) : [],
           settingsApplied: reply.settingsApplied === true,
         };
+        // The desktop's tags came along: the labels and the rows' chips are asked for again.
+        if (reply.tags) refreshTags();
         // The desktop's settings took effect: the page follows them now, not at the next launch.
         if (result.settingsApplied) {
           await get().loadPrefs();

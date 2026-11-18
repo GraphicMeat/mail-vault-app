@@ -807,12 +807,26 @@ fn internal(e: impl ToString) -> RpcError {
 /// parser and index), newest first, across every account unless one is named. `cursor` is null
 /// at the end. A page reads [`PAGE`] index hits; a hit whose row is gone or deleted locally is
 /// dropped, so a page can hold fewer rows than that with more to come.
+///
+/// Desktop's `tag:Name` terms narrow the hits to messages carrying every named tag (`tags.rs`); a
+/// tag nobody has finds nothing, and a query of tag terms alone lists every message carrying them
+/// (from `mobile.db`, without the index), [`PAGE`] rows a page.
 pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
-    let p: LocalParams = parse(params)?;
+    let mut p: LocalParams = parse(params)?;
     let shared = engine.shared();
     let offset = p.cursor.unwrap_or(0) as usize;
     if p.query.trim().is_empty() {
         return Ok(json!({ "rows": [], "cursor": null }));
+    }
+    let (rest, tag_ids) = crate::tags::narrow(shared, &p.query)?;
+    let Some(tag_ids) = tag_ids else {
+        return Ok(json!({ "rows": [], "cursor": null }));
+    };
+    if !tag_ids.is_empty() {
+        p.query = rest;
+        if p.query.is_empty() {
+            return tagged_page(engine, &p, &tag_ids, offset);
+        }
     }
     // Every account's folder paths, to map an index folder name back to the folder.
     let folders: Vec<(String, String)> = engine
@@ -882,6 +896,7 @@ pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
             Ok(out)
         })
         .map_err(internal)?;
+    let rows = if tag_ids.is_empty() { rows } else { keep_tagged(engine, rows, &tag_ids)? };
     let next = offset + page.hits.len();
     let cursor = if page.hits.is_empty() || next as u64 >= page.total { Value::Null } else { json!(next) };
     Ok(json!({ "rows": rows, "cursor": cursor }))
@@ -1007,6 +1022,56 @@ pub(crate) fn rebuild(engine: &Engine, _params: Value) -> Result<Value, RpcError
     drop(w);
     shared.search.cv.notify_all();
     Ok(json!({ "ok": true }))
+}
+
+/// A query of tag terms alone: every row (in the account and folder, when named) carrying every
+/// tag, newest first, [`PAGE`] a page from `offset`.
+fn tagged_page(engine: &Engine, p: &LocalParams, tag_ids: &[String], offset: usize) -> Result<Value, RpcError> {
+    let shared = engine.shared();
+    let accounts: Vec<String> = match &p.account_id {
+        Some(a) => vec![a.clone()],
+        None => engine
+            .read(|c| {
+                let mut st = c.prepare_cached("SELECT id FROM accounts ORDER BY id")?;
+                let rows = st.query_map([], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>()?;
+                Ok(rows)
+            })
+            .map_err(internal)?,
+    };
+    let all = crate::tags::tagged_rows(shared, &accounts, p.folder.as_deref(), tag_ids)?;
+    let page: Vec<&crate::tags::Tagged> = all.iter().skip(offset).take(PAGE).collect();
+    let cols = crate::rpc::ROW_COLUMNS;
+    let rows: Vec<Value> = engine
+        .read(|c| {
+            let mut st = c.prepare_cached(&format!("SELECT {cols} FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3"))?;
+            let mut out = Vec::with_capacity(page.len());
+            for t in &page {
+                if let Some(mut row) = st.query_row((&t.account_id, &t.folder, t.uid as i64), crate::rpc::row_json).optional()? {
+                    row["accountId"] = json!(t.account_id);
+                    row["folder"] = json!(t.folder);
+                    out.push(row);
+                }
+            }
+            Ok(out)
+        })
+        .map_err(internal)?;
+    let next = offset + page.len();
+    let cursor = if next >= all.len() { Value::Null } else { json!(next) };
+    Ok(json!({ "rows": rows, "cursor": cursor }))
+}
+
+/// The search rows whose message carries every one of `tag_ids`.
+fn keep_tagged(engine: &Engine, rows: Vec<Value>, tag_ids: &[String]) -> Result<Vec<Value>, RpcError> {
+    let items: Vec<crate::tags::Item> = rows
+        .iter()
+        .map(|r| crate::tags::Item {
+            account_id: r["accountId"].as_str().unwrap_or_default().to_string(),
+            folder: r["folder"].as_str().unwrap_or_default().to_string(),
+            uid: r["uid"].as_u64().unwrap_or_default() as u32,
+        })
+        .collect();
+    let carried = crate::tags::for_items(engine.shared(), &items)?;
+    Ok(rows.into_iter().zip(carried).filter(|(_, ids)| tag_ids.iter().all(|t| ids.contains(t))).map(|(r, _)| r).collect())
 }
 
 /// Whether an index hit's Message-ID and a row's can name the same message (a side with none

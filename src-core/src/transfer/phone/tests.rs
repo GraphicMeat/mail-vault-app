@@ -347,7 +347,7 @@ fn nothing_to_send_is_no_frames() {
 
 #[test]
 fn open_refuses_another_version_and_garbage() {
-    let future = PhoneBundle { v: 2, accounts: vec![], settings: None };
+    let future = PhoneBundle { v: 2, accounts: vec![], settings: None, tags: None };
     let sealed = seal_with(PW, &future, cheap()).unwrap();
     assert!(matches!(open(PW, &sealed).unwrap_err(), PhoneError::Invalid(_)));
     // sealed but not deflate
@@ -376,7 +376,7 @@ fn errors_name_no_secret() {
 #[test]
 fn production_seal_uses_the_export_parameters() {
     // header bytes 7..19 carry m, t, p
-    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None };
     let sealed = seal(PW, &bundle).unwrap();
     let u32_at = |i: usize| u32::from_le_bytes([sealed[i], sealed[i + 1], sealed[i + 2], sealed[i + 3]]);
     assert_eq!(Params { m_kib: u32_at(7), t: u32_at(11), p: u32_at(15) }, crypto::EXPORT_PARAMS);
@@ -386,7 +386,7 @@ fn production_seal_uses_the_export_parameters() {
 fn open_refuses_key_derivation_above_the_export_parameters() {
     // A crafted code must not make the phone derive with more memory or time than the desktop
     // ever seals with (1 GiB at the crypto ceiling). Refused from the header, before argon2.
-    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None }, cheap()).unwrap();
+    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None }, cheap()).unwrap();
     let e = crypto::EXPORT_PARAMS;
     for (at, value) in [(7, e.m_kib + 1), (11, e.t + 1), (15, e.p + 1)] {
         let mut s = sealed.clone();
@@ -397,7 +397,7 @@ fn open_refuses_key_derivation_above_the_export_parameters() {
 
 #[test]
 fn open_accepts_exactly_the_export_parameters() {
-    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None };
     assert_eq!(open(PW, &seal(PW, &bundle).unwrap()).unwrap(), bundle);
 }
 
@@ -714,4 +714,96 @@ fn the_reader_quick_actions_are_carried_in_the_desktop_vocabulary() {
     let got = b.settings.unwrap();
     assert_eq!(got.quick_actions_reader, None);
     assert_eq!(got.language.as_deref(), Some("de"));
+}
+
+// ── tags ────────────────────────────────────────────────────────────────────
+
+fn tag_store() -> rusqlite::Connection {
+    let dir = std::env::temp_dir().join(format!("mv-phone-tags-{}", uuid::Uuid::new_v4()));
+    crate::app_db::db::open(&dir).expect("open")
+}
+
+fn target(account: &str, key: &str) -> crate::app_db::tags::Target {
+    crate::app_db::tags::Target { account_id: account.into(), msg_key: key.into() }
+}
+
+#[test]
+fn tags_travel_under_the_account_address_with_their_color() {
+    use crate::app_db::tags as store;
+    let c = tag_store();
+    let work = store::ensure(&c, "Work", "#AABBCC").unwrap();
+    let odd = store::ensure(&c, "Odd", "red; background:url(x)").unwrap();
+    store::assign(&c, &work.id, &[target("p", "a@example.com"), target("gone-account", "b@example.com")]).unwrap();
+    store::assign(&c, &odd.id, &[target("p", "u:INBOX:7")]).unwrap();
+
+    let snap = tags::snapshot(&c, &sample()).unwrap().unwrap();
+    assert_eq!(snap.list, vec![
+        PhoneTag { name: "Work".into(), color: "#aabbcc".into() },
+        PhoneTag { name: "Odd".into(), color: String::new() },
+    ]);
+    // The account the desktop no longer has is left out; the rest go by address.
+    assert_eq!(snap.assigned, vec![
+        PhoneTagged { email: "p@example.com".into(), tag: 1, keys: vec!["u:INBOX:7".into()] },
+        PhoneTagged { email: "p@example.com".into(), tag: 0, keys: vec!["a@example.com".into()] },
+    ]);
+    assert!(tags::snapshot(&tag_store(), &sample()).unwrap().is_none(), "no tags, no block");
+}
+
+#[test]
+fn tags_ride_the_code_and_come_back_out() {
+    let block = PhoneTags {
+        list: vec![PhoneTag { name: "Work".into(), color: "#112233".into() }],
+        assigned: vec![PhoneTagged { email: "p@example.com".into(), tag: 0, keys: vec!["a@example.com".into()] }],
+    };
+    let qr = encode_phone_qr_full_with(PW, &sample(), None, Some(block.clone()), cheap()).unwrap();
+    assert_eq!(decode_phone_bundle(PW, &qr.frames).unwrap().tags, Some(block));
+}
+
+/// Thousands of assignments do not fit a code: every account and every tag still go, with the
+/// assignments that fit, and the code stays within its frames.
+#[test]
+fn too_many_assignments_are_cut_never_the_accounts_or_the_tags() {
+    let list: Vec<PhoneTag> = (0..30).map(|i| PhoneTag { name: format!("Tag {i}"), color: "#123456".into() }).collect();
+    let assigned: Vec<PhoneTagged> = (0..3u32)
+        .map(|t| PhoneTagged {
+            email: "p@example.com".into(),
+            tag: t,
+            keys: (0..2000).map(|n| format!("{}@mail.example.com", noise(u64::from(t) * 10_000 + n + 1, 24))).collect(),
+        })
+        .collect();
+    let block = PhoneTags { list: list.clone(), assigned };
+    let qr = encode_phone_qr_full_with(PW, &sample(), None, Some(block), cheap()).unwrap();
+    assert!(qr.frames.len() <= MAX_FRAMES, "{} frames", qr.frames.len());
+    let got = decode_phone_bundle(PW, &qr.frames).unwrap();
+    assert_eq!(got.accounts.len(), 4);
+    let tags = got.tags.expect("the tags are kept");
+    assert_eq!(tags.list, list);
+    let kept = tags.assignment_count();
+    assert!(kept > 50 && kept < 6000, "{kept} assignments kept");
+    // Each tag got its turn: none crowded the others out.
+    assert_eq!(tags.assigned.len(), 3, "{:?}", tags.assigned.iter().map(|a| a.keys.len()).collect::<Vec<_>>());
+    // The newest of each tag went first.
+    assert_eq!(tags.assigned[0].keys[0], format!("{}@mail.example.com", noise(1, 24)));
+}
+
+#[test]
+fn a_code_without_tags_or_with_a_tags_block_of_another_shape_still_opens() {
+    // An older desktop: no `tags`. A newer one that changed its shape: the tags are lost, not the import.
+    for tags in [None, Some(json!([1, 2])), Some(json!({ "list": "nope" }))] {
+        let mut v = serde_json::to_value(phone_bundle(&sample()).0).unwrap();
+        if let Some(t) = tags {
+            v["tags"] = t;
+        }
+        let back: PhoneBundle = serde_json::from_value(v).unwrap();
+        assert_eq!(back.accounts.len(), 4);
+        assert_eq!(back.tags, None);
+    }
+}
+
+#[test]
+fn a_desktop_uid_key_is_kept_only_for_an_imap_account() {
+    let tagged = PhoneTagged { email: "x@example.com".into(), tag: 0, keys: vec!["a@example.com".into(), "u:INBOX:7".into(), " ".into()] };
+    assert_eq!(tags::keys_for(PhoneKind::Imap, &tagged), vec!["a@example.com".to_string(), "u:INBOX:7".to_string()]);
+    assert_eq!(tags::keys_for(PhoneKind::Graph, &tagged), vec!["a@example.com".to_string()]);
+    assert_eq!(tags::keys_for(PhoneKind::Jmap, &tagged), vec!["a@example.com".to_string()]);
 }

@@ -27,6 +27,8 @@
 // With AI on (Settings > AI) More also has Summarize, desktop's viewer action: reviewed
 // (AiActions.jsx), its result in a sheet with "Use in reply". Quick replies (QuickReplies.jsx) sit
 // above the toolbar once the body is in: a tap opens a reply with that starter.
+// The message's local labels (desktop's tags) show under its header, each removable; More's Apply
+// local label opens TagSheet.jsx to apply, make or remove them.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { daemonCall } from './transport.js';
@@ -36,6 +38,8 @@ import { ERROR_KEYS, errorKey } from './errors.js';
 import { afterNextPaint, bodyLoaded, notePrepare, viewerPainted } from './perf.js';
 import { useT } from './i18n.js';
 import MovePicker from './MovePicker.jsx';
+import TagChips from './TagChips.jsx';
+import TagSheet from './TagSheet.jsx';
 import Sheet from './Sheet.jsx';
 import AttachmentChip from './AttachmentChip.jsx';
 import { useBackLayer } from './backStack.js';
@@ -206,7 +210,7 @@ function Toolbar({ bar, more, seen, flagged, onRun, onMore }) {
 }
 
 /** More: every action the bar does not show. Reply, Reply all and Forward keep `data-mv-compose-mode`. */
-function MoreSheet({ actions, seen, flagged, onPick, onClose, onSummarize }) {
+function MoreSheet({ actions, seen, flagged, onPick, onClose, onSummarize, onTags }) {
   const t = useT();
   return (
     <Sheet kind="sheet" label={t('mobile.viewer.more')} onClose={onClose}>
@@ -227,6 +231,11 @@ function MoreSheet({ actions, seen, flagged, onPick, onClose, onSummarize }) {
         {onSummarize && (
           <button type="button" className="mv-sheet__action" data-mv-ai-action="summarize" onClick={onSummarize}>
             {t('ai.actions.summarize')}
+          </button>
+        )}
+        {onTags && (
+          <button type="button" className="mv-sheet__action" data-mv-tags-open onClick={onTags}>
+            {t('quickActions.action.tag')}
           </button>
         )}
       </div>
@@ -342,6 +351,9 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
   const [more, setMore] = useState(false);
   const closeMore = useCallback(() => setMore(false), []);
   useBackLayer(more, closeMore);
+  const [tagging, setTagging] = useState(false);
+  const closeTags = useCallback(() => setTagging(false), []);
+  useBackLayer(tagging, closeTags);
   const prefs = useMobileStore((s) => s.prefs);
   const junk = junkFolder(folders);
   const { bar, more: moreActions } = splitReader(prefs.quickActionsReader, (a) => a !== 'spam' || Boolean(junk && junk.path !== folder));
@@ -492,6 +504,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
           {trackerCount > 0 && <TrackerShield count={trackerCount} stripped={Boolean(body.trackersStripped)} onOpen={() => setTrackerList(true)} />}
         </header>
         <Header row={row} />
+        <TagChips accountId={accountId} folder={folder} uid={row.uid} removable className="mv-viewer__tags" />
         <Attachments accountId={accountId} folder={folder} uid={row.uid} items={attachments} />
       </div>
       {body?.attachmentsUnknown && (
@@ -560,7 +573,9 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
       <Toolbar bar={bar} more={moreActions} seen={seen} flagged={flagged} onRun={run} onMore={() => setMore(true)} />
       {picking && <MovePicker folders={folders} current={folder} onPick={pick} onClose={closePicker} />}
       {trackerList && <TrackerSheet count={trackerCount} list={body?.trackerList || []} onClose={closeTrackers} />}
-      {more && <MoreSheet actions={moreActions} seen={seen} flagged={flagged} onPick={run} onClose={closeMore} onSummarize={aiEnabled && hasContent ? summarize : null} />}
+      {more && <MoreSheet actions={moreActions} seen={seen} flagged={flagged} onPick={run} onClose={closeMore} onSummarize={aiEnabled && hasContent ? summarize : null}
+        onTags={() => { setMore(false); setTagging(true); }} />}
+      {tagging && <TagSheet accountId={accountId} folder={folder} uid={row.uid} onClose={closeTags} />}
       {ai.sheet}
       {summary != null && (
         <AiResult title={t('ai.actions.summarize')} text={summary} onClose={closeSummary} onUse={() => { setSummary(null); startCompose('reply', summary); }} />
