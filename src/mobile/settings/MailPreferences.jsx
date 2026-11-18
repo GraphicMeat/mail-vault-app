@@ -8,8 +8,8 @@
 // the outbox); marking read (App.jsx `markReadPlan`); row swipes (MessageRow.jsx); deleting (the
 // viewer's confirm, the row after a delete: prefs.js `afterDeletePick`). A swipe does what the
 // phone's rows can (the engine's SWIPES); after a delete the next, the previous or nothing opens
-// (the phone has no unread-only pick). Signatures on outgoing mail sit under Sending until the
-// account page moves (desktop keeps that switch with the accounts). Desktop's default mail app,
+// (the phone has no unread-only pick). Signatures on outgoing mail are switched per account, under
+// Accounts > Profile, as on desktop. Desktop's default mail app,
 // close to tray, compose window, update track and search history are not a phone's.
 //
 // Notifications: the switch asks the system's permission before it turns on, and stays off with a
@@ -26,8 +26,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BehaviorView } from '../../components/settings/views/BehaviorView';
 import { NotificationsView, DEFAULT_QUIET_HOURS } from '../../components/settings/views/NotificationsView';
-import { SettingRow } from '../../components/ui/SettingRow';
-import { ToggleSwitch } from '../../components/ui/ToggleSwitch';
 import { useMobileStore } from '../store.js';
 import { useT } from '../i18n.js';
 import { daemonCall, notificationPermission, requestNotificationPermission } from '../transport.js';
@@ -62,13 +60,7 @@ export function Behavior() {
       <BehaviorView values={prefs} onChange={(key, value) => save({ [key]: value })} rows={['refreshInterval']}
         swipeActions={SWIPES} afterDeleteModes={AFTER_DELETE} sameAccountApplies={prefs.afterDeleteSelect !== 'none'}
         sendDelayWarning={false}
-        copy={{ autoDownloadHint: t('mobile.prefs.autoDownloadHint'), swipeLabel: t('mobile.prefs.swipeRows'), swipeHint: t('mobile.prefs.swipeRowsHint') }}
-        sendingExtra={(
-          <SettingRow label={t('settings.accounts.automaticallyAddOutgoingEmails')}>
-            <ToggleSwitch label={t('settings.accounts.automaticallyAddOutgoingEmails')} active={prefs.defaultSignatureEnabled}
-              onClick={() => save({ defaultSignatureEnabled: !prefs.defaultSignatureEnabled })} />
-          </SettingRow>
-        )} />
+        copy={{ autoDownloadHint: t('mobile.prefs.autoDownloadHint'), swipeLabel: t('mobile.prefs.swipeRows'), swipeHint: t('mobile.prefs.swipeRowsHint') }} />
       <SaveFailed failed={failed} />
     </MobileViewEnv>
   );

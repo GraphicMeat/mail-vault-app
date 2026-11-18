@@ -11,16 +11,13 @@
 //   Privacy & security, Diagnostics) shows its pages as desktop's tabs; Appearance and Mail
 //   preferences show their sections the same way.
 // - Search finds the pages and settings the phone has and lands on the setting, as on desktop.
-// - Appearance, Mail preferences (Behavior, Notifications) and Privacy & security (Security,
-//   Tracking, Encryption, Network Activity) are desktop's views over the phone's preferences and
-//   engine (settings/Appearance.jsx, MailPreferences.jsx, Privacy.jsx, NetworkActivity.jsx). The
-//   other pages are still the phone's own (each in its file; `.mv-legacy` keeps them out of the
-//   desktop reset) until they move onto the shared views too:
-//   - Accounts: each with "Sign in again" when its provider sign-in lapsed (the store's one
-//     reauth), and Edit (AccountEditor.jsx: name, signature, hidden, and Remove after an inline
-//     confirm). A hidden account is listed, marked, so it can be shown again. Then "Move to
-//     another computer" (TransferSettings.jsx).
-//   - Templates, AI (AiSettings.jsx), Unsubscribe.
+// - Appearance, Mail preferences (Behavior, Notifications), Accounts, Templates, AI providers,
+//   Unsubscribe and Privacy & security (Security, Tracking, Encryption, Network Activity) are
+//   desktop's views over the phone's preferences and engine (settings/*.jsx). Accounts adds "Move
+//   to another computer" under its list (TransferSettings.jsx), and its Add account hands over to
+//   the phone's own sign-in flow (`onAddAccount`). The other pages are still the phone's own (each
+//   in its file; `.mv-legacy` keeps them out of the desktop reset) until they move onto the shared
+//   views too:
 //   - Storage: Storage (with its Offline page: "Download in the background", then per account the
 //     window, its room, progress and Download now) and the search index; Data usage.
 //   - Diagnostics: unfinished server actions (PendingActions.jsx) and Logs.
@@ -43,13 +40,11 @@ import { useT, getMobileLocale } from './i18n.js';
 import { faqUrl } from '../services/faqUrl.js';
 import { appLink } from '../services/appLink.js';
 import { DISCORD_INVITE } from '../utils/communityLinks.js';
-import { Avatar } from './AccountSwitcher.jsx';
 import { errorKey } from './errors.js';
 import { premiumSummary } from './premium.js';
 import OfflineSettings from './OfflineSettings.jsx';
 import Billing from './Billing.jsx';
 import SearchIndexSettings from './SearchIndexSettings.jsx';
-import AccountEditor from './AccountEditor.jsx';
 import PendingActions from './PendingActions.jsx';
 import StorageSettings from './StorageSettings.jsx';
 import LogsSettings from './LogsSettings.jsx';
@@ -62,6 +57,7 @@ import { Encryption, Security, Tracking } from './settings/Privacy.jsx';
 import Templates from './settings/Templates.jsx';
 import Unsubscribe from './settings/Unsubscribe.jsx';
 import AiProviders from './settings/AiProviders.jsx';
+import Accounts, { MoveToComputer } from './settings/Accounts.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -107,47 +103,6 @@ export function placeOf(page) {
   return { nav: page };
 }
 
-function AccountRow({ account, reauthBusy }) {
-  const t = useT();
-  const [editing, setEditing] = useState(false);
-  // System Back closes the account's page first, as its Cancel does.
-  const stopEditing = useCallback(() => setEditing(false), []);
-  useBackLayer(editing, stopEditing);
-  const name = account.displayName && account.displayName !== account.email ? account.displayName : null;
-
-  if (editing) {
-    return (
-      <li className="mv-setrow mv-acct--confirm">
-        <AccountEditor account={account} onDone={stopEditing} />
-      </li>
-    );
-  }
-
-  return (
-    <li className="mv-setrow" data-mv-hidden={account.hidden ? '' : undefined}>
-      <Avatar account={account} />
-      <span className="mv-acct__text">
-        {name && <span className="mv-acct__name" dir="auto">{name}</span>}
-        <span className={name ? 'mv-acct__email mv-acct__email--sub' : 'mv-acct__email'} dir="auto">{account.email}</span>
-        {account.hidden && <span className="mv-setting__hint">{t('mobile.accounts.hidden')}</span>}
-      </span>
-      <button type="button" className="mv-textbtn" data-mv-acct-edit onClick={() => setEditing(true)}>
-        {t('outbox.edit')}
-      </button>
-      {account.needsAuth && account.oauth !== false && (
-        <button
-          type="button"
-          className="mv-textbtn mv-acct__reauth"
-          disabled={reauthBusy}
-          onClick={() => useMobileStore.getState().reauth(account.id)}
-        >
-          {t('mobile.reauth.action')}
-        </button>
-      )}
-    </li>
-  );
-}
-
 function Switch({ checked, busy, disabled, label, hint, onChange }) {
   const id = React.useId();
   return (
@@ -180,7 +135,7 @@ function Chevron() {
 }
 
 /** `page`: the page to open on (the first screen, `'root'`, by default): see `placeOf`. */
-export default function Settings({ onClose, onReplayTour, version = APP_VERSION, page: startPage = 'root' }) {
+export default function Settings({ onClose, onReplayTour, onAddAccount, version = APP_VERSION, page: startPage = 'root' }) {
   const t = useT();
   const [place, setPlace] = useState(() => placeOf(startPage));
   const [query, setQuery] = useState('');
@@ -196,7 +151,6 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
   }, []);
   useBackLayer(place.nav !== 'root', back);
 
-  const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
   const premium = useMobileStore((s) => s.premium);
   const premiumLost = useMobileStore((s) => s.premiumLost);
@@ -243,7 +197,6 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
   }, [searchNavigation]);
 
   const ready = Boolean(values);
-  const reauthBusy = Boolean(reauthState?.busy);
   const reauthCode = reauthState && !reauthState.busy ? reauthState.code : null;
   const nav = place.nav;
   const host = settingsHosts[nav] ? { id: nav, ...settingsHosts[nav] } : null;
@@ -252,7 +205,7 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
 
   const openResult = (page) => {
     const to = placeOf(page.id);
-    if (page.section && (page.id === 'appearance' || page.id === 'mail-preferences')) to.section = page.section;
+    if (page.section && (page.id === 'appearance' || page.id === 'mail-preferences' || page.id === 'accounts')) to.section = page.section;
     searchTarget.current = page.keywords ? page.labelKey : null;
     setQuery('');
     setPlace(to);
@@ -329,18 +282,11 @@ export default function Settings({ onClose, onReplayTour, version = APP_VERSION,
     body = tabbed(MAIL_SECTIONS.map(([id, key]) => ({ id, label: t(key) })), section, (id) => go({ nav, section: id }), t('settings.navigation.mailPreferences'));
   } else if (nav === 'accounts') {
     body = (
-      <div className="mv-legacy">
+      <>
         {reauthCode && <p className="mv-settings__note mv-settings__note--error" role="alert">{t(errorKey(reauthCode))}</p>}
-        <ul className="mv-settings__list">
-          {accounts.map((a) => <AccountRow key={a.id} account={a} reauthBusy={reauthBusy} />)}
-        </ul>
-        <div className="mv-settings__list">
-          <button type="button" className="mv-setting" data-mv-settings-page="transfer" onClick={() => go({ nav: 'accounts', sub: 'transfer' })}>
-            <span className="mv-setting__text"><span className="mv-setting__label">{t('settings.transfer.title')}</span></span>
-            <Chevron />
-          </button>
-        </div>
-      </div>
+        <Accounts section={place.section} onSectionChange={(section) => setPlace((p) => ({ ...p, section }))} onAddAccount={onAddAccount}
+          footer={<MoveToComputer onOpen={() => go({ nav: 'accounts', sub: 'transfer' })} />} />
+      </>
     );
   } else if (nav === 'templates') {
     body = <Templates />;

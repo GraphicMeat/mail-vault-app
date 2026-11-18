@@ -3,7 +3,7 @@
 // Settings' preference rows and the account editor (W1a: what the desktop's settings set).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 import {
   PREF_DEFAULTS, readPrefs, visibleAccounts, markReadPlan, afterDeleteRow, swipeKind, htmlToText, signatureFor, withSignature, applyLook,
@@ -268,26 +268,29 @@ describe('Settings preference rows', () => {
     await act(async () => { fireEvent.click(screen.getByTestId('language-row-en')); });
   });
 
-  it('the account editor saves the name, the signature and hidden', async () => {
+  it('the account page saves the name, the signature and hidden, as desktop does', async () => {
     engine.account = { accountId: 'a1', displayName: 'Ada', hidden: false, signature: { html: '<p>Desk sig</p>', text: '', enabled: true }, notify: true };
     render(<Settings onClose={() => {}} page="accounts" />);
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-acct-edit]')); });
     const nameInput = await screen.findByLabelText(t('settings.accounts.displayName'));
     expect(nameInput.value).toBe('Ada');
-    const sig = screen.getByLabelText(t('settings.accounts.aliases.signatureLabel'));
+    const sig = screen.getByLabelText(t('settings.accounts.signatureContent'));
     expect(sig.value).toBe('Desk sig');
     fireEvent.change(nameInput, { target: { value: 'Ada L' } });
     fireEvent.change(sig, { target: { value: 'Ada, phone' } });
-    fireEvent.click(document.querySelector('[data-mv-acct="hidden"]'));
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-acct-save]')); });
-    const set = engine.calls.find(([m]) => m === 'mobile.accountSettings.set');
-    expect(set[1]).toEqual({
+    // Desktop's autosave: a moment after typing stops, in one write.
+    await act(() => new Promise((r) => { setTimeout(r, 450); }));
+    await waitFor(() => expect(engine.calls.filter(([m]) => m === 'mobile.accountSettings.set')).toHaveLength(1));
+    expect(engine.calls.find(([m]) => m === 'mobile.accountSettings.set')[1]).toEqual({
       accountId: 'a1',
-      values: { displayName: 'Ada L', hidden: true, signature: { html: '', text: 'Ada, phone', enabled: true } },
+      values: { displayName: 'Ada L', signature: { html: '', text: 'Ada, phone', enabled: true } },
     });
+    fireEvent.click(screen.getByRole('tab', { name: t('settings.accounts.sectionAdvanced') }));
+    const visibility = screen.getByRole('group', { name: t('settings.accounts.accountVisible') });
+    await act(async () => { fireEvent.click(within(visibility).getByRole('button', { name: t('settings.accounts.accountHidden') })); });
+    expect(engine.calls.filter(([m]) => m === 'mobile.accountSettings.set').at(-1)[1]).toEqual({ accountId: 'a1', values: { hidden: true } });
     await waitFor(() => expect(useMobileStore.getState().accounts[0]).toMatchObject({ displayName: 'Ada L', hidden: true }));
-    // Saved and closed: the row is back, marked hidden.
-    await waitFor(() => expect(screen.getByText(t('mobile.accounts.hidden'))).toBeTruthy());
+    // Still listed, marked hidden, so it can be shown again.
+    await waitFor(() => expect(document.querySelector('.account-settings-status').textContent).toContain(t('settings.accounts.accountHidden')));
   });
 });
 

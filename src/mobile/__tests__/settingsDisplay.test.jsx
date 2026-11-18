@@ -2,8 +2,8 @@
 // The new preference rows over a fake engine (Mail preferences: desktop's views over the phone's
 // preferences, settings/MailPreferences.jsx), and the readers that act on them in the viewer: each
 // row writes its one preference; the toolbar shows its labels, a signature folds, attachments
-// download as a message opens, notification sound and badge rows (badge on iOS only), and an
-// account's colour in the account editor.
+// download as a message opens, and notification sound and badge rows (badge on iOS only). An
+// account's colour is on Settings > Accounts > Advanced (Accounts.test.jsx).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
@@ -49,7 +49,6 @@ vi.mock('../transport.js', () => ({
 const { Behavior, Notifications } = await import('../settings/MailPreferences.jsx');
 const { default: Appearance } = await import('../settings/Appearance.jsx');
 const { default: Viewer } = await import('../Viewer.jsx');
-const { default: AccountEditor } = await import('../AccountEditor.jsx');
 const { useMobileStore } = await import('../store.js');
 const { PREF_DEFAULTS } = await import('../prefs.js');
 
@@ -200,36 +199,5 @@ describe('the viewer', () => {
     await show({ autoDownloadAttachments: true });
     await flush();
     expect(callsOf('mobile.attachment.fetch')).toHaveLength(0);
-  });
-});
-
-describe('the account editor', () => {
-  const account = { id: 'a1', email: 'ada@example.test', displayName: 'Ada', kind: 'imap', oauth: false };
-
-  it('picks a colour from desktop\'s palette, or automatic', async () => {
-    engine.settings = { accountId: 'a1', displayName: 'Ada', color: null, hidden: false, signature: null, aliases: [], sendAs: '' };
-    render(<AccountEditor account={account} onDone={() => {}} />);
-    await flush();
-    const auto = document.querySelector('.mv-acct-edit__swatch--auto');
-    expect(auto.getAttribute('aria-checked')).toBe('true');
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-color="#14b8a6"]')); });
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-acct-save]')); });
-    expect(callsOf('mobile.accountSettings.set').at(-1).values).toMatchObject({ color: '#14b8a6' });
-    cleanup();
-    engine.calls = [];
-    render(<AccountEditor account={account} onDone={() => {}} />);
-    await flush();
-    expect(document.querySelector('[data-mv-color="#14b8a6"]').getAttribute('aria-checked')).toBe('true');
-    await act(async () => { fireEvent.click(document.querySelector('.mv-acct-edit__swatch--auto')); });
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-acct-save]')); });
-    expect(callsOf('mobile.accountSettings.set').at(-1).values).toMatchObject({ color: null });
-  });
-
-  it('an unchanged colour is not written', async () => {
-    engine.settings = { accountId: 'a1', displayName: 'Ada', color: '#8b5cf6', hidden: false, signature: null, aliases: [], sendAs: '' };
-    render(<AccountEditor account={account} onDone={() => {}} />);
-    await flush();
-    await act(async () => { fireEvent.click(document.querySelector('[data-mv-acct-save]')); });
-    expect(callsOf('mobile.accountSettings.set').at(-1).values).not.toHaveProperty('color');
   });
 });

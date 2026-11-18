@@ -12,7 +12,7 @@
 // `attachmentReminderLocked`: the reminder is Premium here and this account has none.
 // Search history: `searchHistoryCount`, `filterUsageCount`, `onClearSearchHistory`,
 // `onClearFilterHistory`. Desktop-only blocks come in as nodes: `defaultMailApp`, `composeOpenMode`,
-// `updateTrack`; `sendingExtra` sits under the send delay. `copy`: a row's text in the app's own
+// `updateTrack`. `copy`: a row's text in the app's own
 // words where desktop's names a computer part (`refreshOnLaunchHint`, `autoDownloadHint`,
 // `swipeLabel`, `swipeHint`); `sendDelayWarning: false` drops the "stay awake" warning.
 import React from 'react';
@@ -38,7 +38,7 @@ export const BEHAVIOR_ROWS = ['closeToTray', 'refreshInterval', 'search'];
 export function BehaviorView({ values, onChange, rows = BEHAVIOR_ROWS, swipeActions, afterDeleteModes = AFTER_DELETE_MODES,
   sameAccountApplies, attachmentReminderLocked = false, searchHistoryCount = 0, filterUsageCount = 0,
   onClearSearchHistory, onClearFilterHistory, defaultMailApp = null, composeOpenMode = null, updateTrack = null,
-  sendingExtra = null, copy = {}, sendDelayWarning = true }) {
+  copy = {}, sendDelayWarning = true }) {
   const t = useT();
   const shown = new Set(rows);
   const {
@@ -215,7 +215,6 @@ export function BehaviorView({ values, onChange, rows = BEHAVIOR_ROWS, swipeActi
               {/* A delay stored elsewhere (an older phone choice) stays listed. */}
               {!SEND_DELAYS.includes(sendDelay ?? 0) && <option value={sendDelay}>{t('common.secondCount', { count: sendDelay })}</option>}
             </select>
-            {sendingExtra}
             {sendDelayWarning && (sendDelay ?? 0) > 0 && (
               <p className="mt-2 text-xs text-mail-warning flex items-center gap-1.5">
                 <span>⚠</span>

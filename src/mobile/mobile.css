@@ -1205,6 +1205,12 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   overflow-y: auto;
   padding: 0 calc(var(--mv-safe-right) + 0px) calc(var(--mv-safe-bottom) + 24px) var(--mv-safe-left);
 }
+/* Settings > Accounts (desktop's account views): the list over the selected account, both in the
+   page's one scroll, instead of desktop's two columns that scroll on their own. */
+.mv-settings .account-settings-layout { flex-direction: column; height: auto; }
+.mv-settings .account-settings-list { width: auto; max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid var(--mail-border); }
+.mv-settings .account-settings-layout .account-settings-detail { overflow: visible; }
+.mv-settings .account-settings-detail [role="tabpanel"] { overflow: visible; }
 .mv-settings__heading {
   margin: 24px 16px 8px;
   font-size: 0.75rem;

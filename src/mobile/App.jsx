@@ -653,6 +653,11 @@ function App() {
     setSettingsOpen(true);
   }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  // Settings > Accounts' Add account: the phone's own sign-in flow, in place of Settings.
+  const onSettingsAddAccount = useCallback(() => {
+    setSettingsOpen(false);
+    setPanel('add');
+  }, []);
   const closeSearch = useCallback(() => setSearchOpen(false), []);
   // A search result is opened from its own account and folder, which need not be the open list's.
   const onOpenResult = useCallback((row) => {
@@ -963,7 +968,7 @@ function App() {
       {searchOpen && <Search onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
-      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} />}
+      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} />}
       {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
       {compose && (
         <Compose

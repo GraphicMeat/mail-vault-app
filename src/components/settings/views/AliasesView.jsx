@@ -6,7 +6,7 @@
 //   `defaultFrom`; `onDefault(address)`, `onRemove(address)`, `onRename(address, name)` (saved a
 //   moment after typing stops, on leaving the field, and when the row goes with a change pending).
 // - `onAdd(address, name)` resolves to `{ ok }` or `{ ok: false, reason }` ('invalid', 'login',
-//   'duplicate', or an `errors.*` key).
+//   'duplicate', an `errors.*` key, or null: refused, said elsewhere; the field keeps the address).
 // - Desktop's extras, each left out when absent: `hint` (the line under the title), the provider
 //   lookup (`onRefresh`, `running`, `status`, `statusText`, `suggestions`, `onAddSuggestion`), the
 //   source badge (`showSource`: where each alias came from), `onVerify(alias)`, `renderSignature(alias)` (the

@@ -3,7 +3,7 @@
 // system's permission first; stays off when it is denied), and About.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({ calls: [], settings: null, granted: true, failRemove: false, permissionAsked: 0, osAllows: true, statusAsked: 0, notify: {} }));
@@ -22,6 +22,8 @@ vi.mock('../transport.js', () => ({
       case 'mobile.accountSettings.set':
         engine.notify[params.accountId] = params.values.notify;
         return { accountId: params.accountId, notify: engine.notify[params.accountId] ?? true };
+      case 'mobile.folders.list':
+        return { folders: [] };
       case 'mobile.accounts.remove':
         if (engine.failRemove) throw Object.assign(new Error('no'), { code: 'INTERNAL' });
         return { removed: true };
@@ -60,10 +62,16 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-/** Opens `account`'s own page in Settings > Accounts and taps its Remove. */
+/** Picks `account` in Settings > Accounts' list, as desktop's list does. */
+async function pick(account) {
+  const row = document.querySelector(`.account-settings-list [data-account-id="${account.id}"] button`);
+  await act(async () => { fireEvent.click(row); });
+}
+
+/** Opens `account`'s Advanced section in Settings > Accounts and taps its Remove. */
 async function openRemove(account) {
-  const row = screen.getByText(account.email).closest('li');
-  await act(async () => { fireEvent.click(row.querySelector('[data-mv-acct-edit]')); });
+  await pick(account);
+  fireEvent.click(screen.getByRole('tab', { name: t('settings.accounts.sectionAdvanced') }));
   const remove = await waitFor(() => screen.getByRole('button', { name: t('settings.accounts.removeAccount2') }));
   fireEvent.click(remove);
 }
@@ -129,11 +137,12 @@ describe('Settings', () => {
     render(<Settings page="accounts" onClose={() => {}} />);
     await openRemove(A1);
     expect(engine.calls.some(([m]) => m === 'mobile.accounts.remove')).toBe(false);
-    expect(screen.getByText(t('mobile.switcher.removeConfirm', { email: A1.email }))).toBeTruthy();
+    // Desktop's question.
+    expect(screen.getByText(t('settings.accounts.sureRemoveAccount', { email: A1.email }))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: t('common.remove') }));
     await waitFor(() => expect(engine.calls.filter(([m]) => m === 'mobile.accounts.remove')).toEqual([['mobile.accounts.remove', { accountId: 'a1' }]]));
     await waitFor(() => expect(screen.queryByText(A1.email)).toBeNull());
-    expect(screen.getByText(A2.email)).toBeTruthy();
+    expect(screen.getAllByText(A2.email).length).toBeGreaterThan(0);
   });
 
   it('keeps the account and its question when the removal fails', async () => {
@@ -143,21 +152,24 @@ describe('Settings', () => {
     fireEvent.click(screen.getByRole('button', { name: t('common.remove') }));
     await waitFor(() => expect(engine.calls.some(([m]) => m === 'mobile.accounts.remove')).toBe(true));
     await waitFor(() => expect(screen.getByRole('button', { name: t('common.remove') }).disabled).toBe(false));
-    expect(screen.getByText(t('mobile.switcher.removeConfirm', { email: A1.email }))).toBeTruthy();
-    // The question's own Cancel (the editor has one too).
-    fireEvent.click(document.querySelector('.mv-acct-edit__danger').querySelector('button'));
+    expect(screen.getByText(t('settings.accounts.sureRemoveAccount', { email: A1.email }))).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toBe(t('settings.accounts.removeFailed'));
+    // The question's own Cancel.
+    fireEvent.click(within(screen.getByTestId('account-remove-confirm')).getByRole('button', { name: t('common.cancel') }));
     expect(screen.getByRole('button', { name: t('settings.accounts.removeAccount2') })).toBeTruthy();
-    // The editor stays open: its title (and the default From's choices) name the account.
-    expect(screen.getAllByText(A1.email).length).toBeGreaterThan(0);
+    // The account stays open: its page names it.
+    expect(document.querySelector('.account-settings-identity').textContent).toContain(A1.email);
   });
 
-  it('offers Sign in again only on an account that needs it, through the store reauth', async () => {
+  it('offers Reconnect only on an account that needs it, through the store reauth', async () => {
     const reauth = vi.fn(async () => ({ ok: true }));
     useMobileStore.setState({ reauth });
     render(<Settings page="accounts" onClose={() => {}} />);
-    const buttons = screen.getAllByRole('button', { name: t('mobile.reauth.action') });
-    expect(buttons).toHaveLength(1);
-    fireEvent.click(buttons[0]);
+    // Desktop's status line under the account's name.
+    expect(screen.queryByRole('button', { name: t('settings.accounts.reconnect') })).toBeNull();
+    await pick(A2);
+    expect(document.querySelector('.account-settings-status').textContent).toContain(t('settings.accounts.reconnectRequired'));
+    fireEvent.click(screen.getByRole('button', { name: t('settings.accounts.reconnect') }));
     expect(reauth).toHaveBeenCalledWith('a2');
   });
 
@@ -297,7 +309,8 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(controls('mail')).toEqual([
       t('settings.behavior.refreshAppLaunch'), t('settings.behavior.autoRefreshInterval'),
       t('settings.behavior.autoDownloadAttachments'), t('settings.behavior.attachmentReminder'),
-      t('settings.behavior.sendDelay'), t('settings.accounts.automaticallyAddOutgoingEmails'),
+      // Signatures are switched per account, in Accounts > Profile, as on desktop.
+      t('settings.behavior.sendDelay'),
       t('settings.behavior.markEmailsRead'),
       t('mobile.prefs.swipeRows'), t('settings.behavior.swipe.left'), t('settings.behavior.swipe.right'),
       t('settings.behavior.confirmBeforeDelete'), t('settings.behavior.whenAnEmailIsDeleted'), t('settings.behavior.afterDeleteSameAccount'),
@@ -372,6 +385,21 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
   });
 
+  it('a search for an account setting opens its account section and lands on it, as on desktop', async () => {
+    render(<Settings onClose={() => {}} />);
+    const box = screen.getByRole('searchbox', { name: t('settings.navigation.searchSetting') });
+    fireEvent.change(box, { target: { value: t('settings.accounts.aliases.defaultAddress') } });
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(t('settings.accounts.aliases.defaultAddress')) }));
+    expect(heading()).toBe(t('settings.tab.accounts'));
+    expect(screen.getByRole('tab', { name: t('settings.accounts.sectionAliases') }).getAttribute('aria-selected')).toBe('true');
+    const row = await waitFor(() => {
+      const hit = document.querySelector('.settings-search-target');
+      expect(hit).toBeTruthy();
+      return hit;
+    });
+    expect(row.textContent).toContain(t('settings.accounts.aliases.defaultAddress'));
+  });
+
   it('Move to another computer opens from Accounts and goes back there', () => {
     render(<Settings onClose={() => {}} page="accounts" />);
     fireEvent.click(document.querySelector('[data-mv-settings-page="transfer"]'));
@@ -411,7 +439,8 @@ describe('Settings pages, as desktop lays them out', () => {
 
   it('the accounts page lists the accounts; the help page has the version and the source', () => {
     const r = render(<Settings onClose={() => {}} page="accounts" />);
-    expect(screen.getByText(A1.email)).toBeTruthy();
+    expect(document.querySelector('.account-settings-list').textContent).toContain(A1.email);
+    expect(document.querySelector('.account-settings-list').textContent).toContain(A2.email);
     r.unmount();
     render(<Settings onClose={() => {}} page="help" version="1.2.3" />);
     expect(screen.getByText(t('mobile.settings.version', { version: '1.2.3' }))).toBeTruthy();

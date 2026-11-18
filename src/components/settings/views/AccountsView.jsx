@@ -292,7 +292,7 @@ export function AccountProfileView({
 export function AccountConnectionView({
   errorDetails = null, auth, onReconnect, reconnecting = false, oauthExtra = null,
   editingPassword, onEditPassword, newPassword, onNewPassword, onSavePassword, replaceLabel, passwordBusy = false, passwordError = null,
-  server = null, onChangeServer, serverForm = null, sent = null,
+  server = null, onChangeServer, serverForm = null, serverNote = null, sent = null,
 }) {
   const t = useT();
   const { privateAttr: pa } = useViewEnv();
@@ -420,6 +420,7 @@ export function AccountConnectionView({
             {t('settings.accounts.changedHostingKeptSameAddress')}
           </p>
 
+          {serverNote}
           {serverForm || (
             <div className="flex items-center justify-between">
               {server.jmap ? (
