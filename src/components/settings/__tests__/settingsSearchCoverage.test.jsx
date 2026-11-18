@@ -94,6 +94,13 @@ const ALLOWLIST = new Set([
   // duplicate heading text for the shortcuts section, already covered by the
   // shortcuts.keyboardShortcuts sectionKey and the enableKeyboardShortcuts entry
   'settings.shortcuts.keyboardShortcuts',
+  // the view editor's fields and its preview heading (views/ViewEditorView.jsx,
+  // ViewPreviewView.jsx, shared with the phone since it moved out of
+  // components/ViewEditor.jsx): they describe one saved view, not the app; the
+  // Views page itself is indexed (views.section, views.new, views.showTimeline)
+  'views.name', 'views.icon', 'views.senderRules.clearKeptOut', 'views.filter.within', 'common.to',
+  'views.filter.accounts', 'views.filter.group', 'views.filter.sort', 'views.filter.direction', 'views.filter.op',
+  'views.filter.query', 'views.filter.sender', 'views.filter.tags', 'views.preview.title',
 ]);
 
 function labelKeysIn(file) {

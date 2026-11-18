@@ -45,86 +45,75 @@
 .settings-window .ts-dropdown .active.create { color: var(--mail-text); }
 @media (max-width: 680px) { .settings-editor-field { grid-template-columns: 1fr; gap: 6px; } .settings-editor-section { padding: 14px; } .settings-editor-split { grid-template-columns: 1fr; } }
 
-.settings-window .views-settings { gap: 0; padding: 28px; }
-.settings-window .views-settings .settings-editor-section { margin-bottom: 20px; }
-.settings-window .views-settings .views-list { margin-top: 16px; gap: 4px; }
-.settings-window .views-settings .views-row-button { min-height: 40px; padding: 8px 10px; border: 1px solid var(--mail-border); border-radius: 8px; }
-.settings-window .views-settings .views-row-button.is-editing { border-color: var(--mail-accent); }
-.settings-window .views-settings .account-settings-reorder-list { width: 100%; }
-.settings-window .views-settings .account-settings-account { border: 1px solid var(--mail-border); }
-.settings-window .views-settings .views-row-button { border: 0; }
-.settings-window .view-editor .view-query-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.settings-window .view-editor .view-query-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; min-width: 120px; padding: 5px 6px; border: 1px dashed var(--mail-border-strong); border-radius: 10px; }
-.settings-window .view-editor .view-query-group.is-over, .settings-window .view-editor .view-query-or-token.is-over { border-color: var(--mail-accent); background: var(--mail-accent-tint); }
-.settings-window :is(.view-editor, .account-group-field) .view-query-key { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 999px; background: var(--mail-accent-tint); color: var(--mail-accent-text); cursor: grab; touch-action: none; user-select: none; }
-.settings-window .view-editor .view-query-key.is-over { box-shadow: -3px 0 0 var(--mail-accent); }
-.settings-window .view-editor .view-query-key.is-dragging { opacity: .45; }
-.settings-window :is(.view-editor, .account-group-field) .view-query-key-remove { display: inline-flex; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; opacity: .7; }
-.settings-window :is(.view-editor, .account-group-field) .view-query-key-remove:hover { opacity: 1; }
-.settings-window .view-editor .view-query-and, .settings-window .view-editor .view-query-empty { color: var(--mail-text-muted); font-size: 11px; }
-.settings-window .view-editor .view-query-or { color: var(--mail-accent-text); font-size: 11px; font-weight: 700; }
-.settings-window .view-editor .view-query-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.settings-window .view-editor .view-query-entry input { flex: 0 1 240px; min-width: 0; }
-.settings-window .view-editor .view-query-or-token { padding: 5px 10px; border: 1px solid var(--mail-border-strong); border-radius: 999px; color: var(--mail-accent-text); font-weight: 700; cursor: grab; touch-action: none; user-select: none; }
-.settings-window .view-editor .view-query-hint { margin: 0; color: var(--mail-text-muted); font-size: 12px; max-width: 60ch; }
-.settings-window .view-editor { display: block; margin: 0; padding: 0; border: 0; background: transparent; font-size: 13px; }
-.settings-window .view-editor .settings-editor-section { margin-bottom: 16px; }
-.settings-window .view-editor .view-editor-row { gap: 10px; margin: 0 0 14px; align-items: center; font-size: 12px; }
-.settings-window .view-editor .view-editor-row:last-child { margin-bottom: 0; }
-.settings-window .view-editor .view-editor-row > label { display: grid; gap: 5px; color: var(--mail-text-muted); }
-.settings-window .view-editor .view-editor-row > label:has(input[type=checkbox]) { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; color: var(--mail-text); }
-.settings-window .view-editor .view-editor-row > span:first-child { flex-basis: 100%; font-weight: 600; color: var(--mail-text); }
-.settings-window .view-editor .view-editor-row > input:first-child { flex: 1 1 280px; }
-.settings-window .view-editor .view-editor-row > select { flex: 0 0 145px; }
-.settings-window .view-editor .view-editor-row > button { min-width: 32px; min-height: 32px; border: 1px solid var(--mail-border); border-radius: 8px; }
-.settings-window .view-editor input[type="text"], .settings-window .view-editor input[type="date"], .settings-window .view-editor input:not([type]), .settings-window .view-editor select { padding: 7px 10px; min-height: 36px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: var(--mail-text); font-size: 13px; }
-.settings-window .view-editor input[type=checkbox] { accent-color: var(--mail-accent); }
-.settings-window .view-editor .view-preview { border-top: 0; margin: 0; padding: 0; }
-.settings-window .view-editor .view-preview-heading h3 { display: none; }
-.settings-window .view-editor .view-preview-note, .settings-window .view-editor .view-preview-total { font-size: 12px; }
-.settings-window .view-editor .view-preview-rows li { min-height: 34px; padding: 8px 4px; border-bottom: 1px solid var(--mail-border); border-radius: 0; background: transparent; font-size: 12px; }
-.settings-window .view-editor .settings-editor-actions { margin-bottom: 16px; }
-.settings-window .view-editor .settings-editor-actions > button:not(.ui-button) { min-height: 32px; padding: 6px 10px; color: var(--mail-text-muted); }
-.settings-window .view-editor .view-choice-field { display: grid; gap: 8px; margin-bottom: 16px; }
-.settings-window .view-editor .view-choice-field > span { color: var(--mail-text-muted); font-size: 12px; font-weight: 600; }
-.settings-window .view-editor .view-choice-group { display: flex; flex-wrap: wrap; gap: 8px; }
-.settings-window .view-editor .view-choice-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; min-width: 76px; padding: 8px 14px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: var(--mail-text); font-size: 13px; text-align: center; }
-.settings-window .view-editor .view-choice-button:hover { background: var(--mail-surface-hover); }
-.settings-window .view-editor .view-choice-button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); font-weight: 650; }
-.settings-window .view-editor .view-filter-choices { align-items: start; gap: 18px; }
-.settings-window .view-editor .view-filter-choices > .view-choice-field { margin-bottom: 0; }
-.settings-window .view-editor .view-account-choices .view-choice-button { max-width: 100%; overflow-wrap: anywhere; }
-.settings-window .view-editor .view-emoji-input { width: 72px; min-height: 40px; text-align: center; font-size: 20px; }
-.settings-window .view-editor .view-emoji-input.is-selected { border-color: var(--mail-accent); background: var(--mail-accent-tint); }
-.settings-window .view-editor .view-emoji-input:focus::placeholder { color: transparent; }
-.settings-window .view-editor .view-emoji-field { position: relative; display: inline-flex; }
-.settings-window .view-editor .view-emoji-picker { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; display: grid; grid-template-columns: repeat(8, 32px); gap: 2px; padding: 6px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
-.settings-window .view-editor .view-emoji-picker button { width: 32px; height: 32px; border-radius: 6px; font-size: 18px; line-height: 1; }
-.settings-window .view-editor .view-emoji-picker button:hover, .settings-window .view-editor .view-emoji-picker button[aria-pressed="true"] { background: var(--mail-surface-hover); }
+:is(.settings-window, .mv-shared-ui) .views-settings { gap: 0; padding: 28px; }
+:is(.settings-window, .mv-shared-ui) .views-settings .settings-editor-section { margin-bottom: 20px; }
+:is(.settings-window, .mv-shared-ui) .views-settings .views-list { margin-top: 16px; gap: 4px; }
+:is(.settings-window, .mv-shared-ui) .views-settings .views-row-button { min-height: 40px; padding: 8px 10px; border: 1px solid var(--mail-border); border-radius: 8px; }
+:is(.settings-window, .mv-shared-ui) .views-settings .views-row-button.is-editing { border-color: var(--mail-accent); }
+:is(.settings-window, .mv-shared-ui) .views-settings .account-settings-reorder-list { width: 100%; }
+:is(.settings-window, .mv-shared-ui) .views-settings .account-settings-account { border: 1px solid var(--mail-border); }
+:is(.settings-window, .mv-shared-ui) .views-settings .views-row-button { border: 0; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; min-width: 120px; padding: 5px 6px; border: 1px dashed var(--mail-border-strong); border-radius: 10px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-group.is-over, :is(.settings-window, .mv-shared-ui) .view-editor .view-query-or-token.is-over { border-color: var(--mail-accent); background: var(--mail-accent-tint); }
+:is(.settings-window, .mv-shared-ui) :is(.view-editor, .account-group-field) .view-query-key { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 999px; background: var(--mail-accent-tint); color: var(--mail-accent-text); cursor: grab; touch-action: none; user-select: none; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-key.is-over { box-shadow: -3px 0 0 var(--mail-accent); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-key.is-dragging { opacity: .45; }
+:is(.settings-window, .mv-shared-ui) :is(.view-editor, .account-group-field) .view-query-key-remove { display: inline-flex; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; opacity: .7; }
+:is(.settings-window, .mv-shared-ui) :is(.view-editor, .account-group-field) .view-query-key-remove:hover { opacity: 1; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-and, :is(.settings-window, .mv-shared-ui) .view-editor .view-query-empty { color: var(--mail-text-muted); font-size: 11px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-or { color: var(--mail-accent-text); font-size: 11px; font-weight: 700; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-entry input { flex: 0 1 240px; min-width: 0; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-or-token { padding: 5px 10px; border: 1px solid var(--mail-border-strong); border-radius: 999px; color: var(--mail-accent-text); font-weight: 700; cursor: grab; touch-action: none; user-select: none; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-query-hint { margin: 0; color: var(--mail-text-muted); font-size: 12px; max-width: 60ch; }
+:is(.settings-window, .mv-shared-ui) .view-editor { display: block; margin: 0; padding: 0; border: 0; background: transparent; font-size: 13px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .settings-editor-section { margin-bottom: 16px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-editor-row { gap: 10px; margin: 0 0 14px; align-items: center; font-size: 12px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-editor-row:last-child { margin-bottom: 0; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-editor-row > label { display: grid; gap: 5px; color: var(--mail-text-muted); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-editor-row > label:has(input[type=checkbox]) { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; color: var(--mail-text); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-editor-row > span:first-child { flex-basis: 100%; font-weight: 600; color: var(--mail-text); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-editor-row > input:first-child { flex: 1 1 280px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-editor-row > select { flex: 0 0 145px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-editor-row > button { min-width: 32px; min-height: 32px; border: 1px solid var(--mail-border); border-radius: 8px; }
+:is(.settings-window, .mv-shared-ui) .view-editor input[type="text"], :is(.settings-window, .mv-shared-ui) .view-editor input[type="date"], :is(.settings-window, .mv-shared-ui) .view-editor input:not([type]), :is(.settings-window, .mv-shared-ui) .view-editor select { padding: 7px 10px; min-height: 36px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: var(--mail-text); font-size: 13px; }
+:is(.settings-window, .mv-shared-ui) .view-editor input[type=checkbox] { accent-color: var(--mail-accent); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-preview { border-top: 0; margin: 0; padding: 0; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-preview-heading h3 { display: none; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-preview-note, :is(.settings-window, .mv-shared-ui) .view-editor .view-preview-total { font-size: 12px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-preview-rows li { min-height: 34px; padding: 8px 4px; border-bottom: 1px solid var(--mail-border); border-radius: 0; background: transparent; font-size: 12px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .settings-editor-actions { margin-bottom: 16px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .settings-editor-actions > button:not(.ui-button) { min-height: 32px; padding: 6px 10px; color: var(--mail-text-muted); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-choice-field { display: grid; gap: 8px; margin-bottom: 16px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-choice-field > span { color: var(--mail-text-muted); font-size: 12px; font-weight: 600; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-choice-group { display: flex; flex-wrap: wrap; gap: 8px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-choice-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; min-width: 76px; padding: 8px 14px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-bg); color: var(--mail-text); font-size: 13px; text-align: center; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-choice-button:hover { background: var(--mail-surface-hover); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-choice-button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); font-weight: 650; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-filter-choices { align-items: start; gap: 18px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-filter-choices > .view-choice-field { margin-bottom: 0; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-account-choices .view-choice-button { max-width: 100%; overflow-wrap: anywhere; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-emoji-input { width: 72px; min-height: 40px; text-align: center; font-size: 20px; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-emoji-input.is-selected { border-color: var(--mail-accent); background: var(--mail-accent-tint); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-emoji-input:focus::placeholder { color: transparent; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-emoji-field { position: relative; display: inline-flex; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-emoji-picker { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; display: grid; grid-template-columns: repeat(8, 32px); gap: 2px; padding: 6px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-emoji-picker button { width: 32px; height: 32px; border-radius: 6px; font-size: 18px; line-height: 1; }
+:is(.settings-window, .mv-shared-ui) .view-editor .view-emoji-picker button:hover, :is(.settings-window, .mv-shared-ui) .view-editor .view-emoji-picker button[aria-pressed="true"] { background: var(--mail-surface-hover); }
 /* TypeaheadChips: chips, an input, and the matches under it. */
 .typeahead-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .view-query-entry .typeahead-chips { flex: 0 1 240px; }
 .typeahead-field { position: relative; display: inline-flex; flex: 1 1 160px; min-width: 0; }
 .typeahead-field input { width: 100%; min-width: 0; }
-.settings-window :is(.view-editor, .account-group-field) .typeahead-chip { cursor: default; }
+:is(.settings-window, .mv-shared-ui) .view-editor .typeahead-chip { cursor: default; }
 .typeahead-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; }
 .typeahead-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; width: max-content; min-width: 100%; max-width: min(360px, 90vw); max-height: 240px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
 .typeahead-list [role="option"] { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--mail-text); font-size: 13px; cursor: pointer; }
 .typeahead-list [role="option"][data-active="true"] { background: var(--mail-surface-hover); }
 .typeahead-label, .typeahead-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .typeahead-detail { color: var(--mail-text-muted); font-size: 12px; }
-.account-group-field .typeahead-chips { padding: 5px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); }
-.account-group-field .typeahead-field { flex-basis: 180px; }
-.account-group-field .typeahead-field input { min-height: 34px; padding: 6px 8px; border: 0; background: transparent; outline: none; }
-.account-group-field .typeahead-chips:focus-within { border-color: var(--mail-accent); }
-.account-group-cloud { margin-top: 12px; }
-.account-group-cloud-label { display: block; margin-bottom: 7px; color: var(--mail-text-muted); font-size: 12px; }
-.account-group-cloud-pills { display: flex; flex-wrap: wrap; gap: 7px; }
-.account-group-cloud-pills button { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 6px 10px; border: 1px solid var(--mail-border); border-radius: 999px; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; overflow-wrap: anywhere; }
-.account-group-cloud-pills button:hover { background: var(--mail-surface-hover); }
-.account-group-cloud-pills button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
-.account-group-cloud-pills button span { opacity: .65; font-variant-numeric: tabular-nums; }
-@media (max-width: 680px) { .settings-window .views-settings { padding: 16px; } }
+@media (max-width: 680px) { :is(.settings-window, .mv-shared-ui) .views-settings { padding: 16px; } }
 .mail-list-with-timeline { padding-left: 46px; }
 body[data-auxiliary-window="settings"] .fixed:has(.settings-window) { padding: 0; }
 body[data-auxiliary-window="settings"] .settings-window { max-width: none; width: 100vw; height: 100dvh; border: 0; border-radius: 0; }

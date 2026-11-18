@@ -1,22 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
-import { useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS } from '../../stores/viewStore';
+import { useViewStore, viewLimitReached, MAX_FREE_VIEWS } from '../../stores/viewStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useUnsavedStore } from '../../stores/unsavedStore';
 import { ViewEditor } from '../ViewEditor';
-import { Button } from '../ui/Button';
-import { SettingsSection, SettingsPageLayout } from '../ui/SettingsForm';
 import { useT } from '../../i18n/index.js';
-import { ViewIcon } from '../ViewIcon';
-import { AccountReorderList } from './AccountReorderList';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
+import { DesktopViewEnv } from './DesktopViewEnv';
+import { ViewsSettingsView } from './views/ViewsSettingsView';
 
-/// The views page: one list, one builder, and the builder previews what it
-/// would find while it is being typed.
-///
-/// This is the only place a view's filters can be changed. The sidebar opens
-/// views and nothing else — editing a filter from the mail screen meant
-/// rewriting the list under the person reading it.
+/// The views page (views/ViewsSettingsView.jsx) over the view and settings
+/// stores: one list, one builder, and the builder previews what it would find
+/// while it is being typed.
 export function ViewsSettings({ onUpgrade }) {
   const t = useT();
   const views = useViewStore(state => state.views);
@@ -108,63 +102,23 @@ export function ViewsSettings({ onUpgrade }) {
 
   const editing = views.find(view => view.id === editingId);
 
-  return <SettingsPageLayout as="section" spaced={false} className="views-settings" aria-label={t('views.section')}>
-    <SettingsSection>
-      <Button variant="secondary" size="sm" type="button" data-testid="views-new" disabled={full}
-        aria-label={t('views.new')} onClick={() => leave(startNew)}><Plus size={14} /> {t('views.new')}</Button>
-
-    {/* The cap is a fact about the plan, so it is stated before it bites, not
-        only when the + refuses. Body-size text and a real button, the shape of
-        every other upsell: a muted 12px line with a link at its end read as a
-        footnote nobody was meant to act on. */}
-    {!premium && <div className="views-upsell mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mail-border bg-mail-surface p-4"
-      data-testid="views-upsell">
-      <p className="views-limit text-sm font-medium text-mail-text" data-testid="views-limit">
-        {t('views.limit', { used: views.length, max: MAX_FREE_VIEWS })}
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" size="sm" data-testid="views-upgrade" onClick={() => onUpgrade?.()}>
-          {t('views.upgrade')}
-        </Button>
-        <PremiumFeaturesLink />
-      </div>
-    </div>}
-
-    {refused && <p className="views-refused text-xs" role="status" data-testid="views-refused">
-      {t('views.limitReached', { max: MAX_FREE_VIEWS })}
-    </p>}
-
-    {error && <p className="text-sm text-mail-danger" role="alert">{error}</p>}
-
-    <div className="views-list" data-testid="views-list">
-      <AccountReorderList accounts={views.map(view => ({ ...view, email: viewLabel(view, t) }))}
-        selectedAccountId={editingId} onReorder={ids => { void reorderViews(ids).catch(cause => setError(cause?.message || String(cause))); }}
-        labels={{ list: t('views.section'), instructions: t('views.reorderInstructions'),
-          reorder: name => t('views.reorder', { name }) }}>
-      {view => <button type="button" data-testid={`views-row-${view.id}`}
-            className={`views-row-button account-settings-account-button${editingId === view.id ? ' is-editing' : ''}`}
-            aria-expanded={editingId === view.id}
-            onClick={() => leave(() => selectView(view.id))}>
-            <ViewIcon icon={view.icon} size={14} />
-            <span className="views-row-name">{viewLabel(view, t)}</span>
-          </button>}
-      </AccountReorderList>
-      {views.length === 0 && <p className="views-empty" data-testid="views-empty">{t('views.none')}</p>}
-    </div>
-
-    </SettingsSection>
-
-    {editing && <ViewEditor key={editing.id} view={editing} isNew={editing.id === newlyCreatedId}
-      onSaved={() => setDraft(null)} onDiscard={discardUnsaved} onClose={async saved => {
-      if (switching.current) return;
-      switching.current = true;
-      try {
-        if (!saved) await discardUnsaved();
-        else setDraft(null);
-        setEditingId(null);
-      } catch (cause) {
-        setError(cause?.message || String(cause));
-      } finally { switching.current = false; }
-    }} />}
-  </SettingsPageLayout>;
+  return <DesktopViewEnv>
+    <ViewsSettingsView views={views} editingId={editingId} premium={premium} full={full} max={MAX_FREE_VIEWS}
+      refused={refused} error={error} upgradeLink={<PremiumFeaturesLink />} onUpgrade={onUpgrade}
+      onNew={() => leave(startNew)} onSelect={id => leave(() => selectView(id))}
+      onReorder={ids => { void reorderViews(ids).catch(cause => setError(cause?.message || String(cause))); }}>
+      {editing && <ViewEditor key={editing.id} view={editing} isNew={editing.id === newlyCreatedId}
+        onSaved={() => setDraft(null)} onDiscard={discardUnsaved} onClose={async saved => {
+        if (switching.current) return;
+        switching.current = true;
+        try {
+          if (!saved) await discardUnsaved();
+          else setDraft(null);
+          setEditingId(null);
+        } catch (cause) {
+          setError(cause?.message || String(cause));
+        } finally { switching.current = false; }
+      }} />}
+    </ViewsSettingsView>
+  </DesktopViewEnv>;
 }

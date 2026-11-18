@@ -57,17 +57,10 @@ export function currentListView() {
   return view ? effectiveViewConfig(view, settings).listView : settings.emailListView;
 }
 
-/// How many views a free account may keep. The starters count: they are
-/// ordinary rows a person can delete, so a free account that wants a view of
-/// its own makes room by dropping one it never opens.
-export const MAX_FREE_VIEWS = 3;
-
-/// Is there room for one more view? The only place the cap is decided — both
-/// doors that make a view (the + in Settings, "save this search") ask here,
-/// and hiding a button is never the guard.
-export function viewLimitReached(views, premium) {
-  return !premium && (views?.length || 0) >= MAX_FREE_VIEWS;
-}
+// How many views a free account may keep, and whether there is room for one more: shared with
+// the phone (utils/viewLimit.js).
+import { viewLimitReached } from '../utils/viewLimit.js';
+export { MAX_FREE_VIEWS, viewLimitReached } from '../utils/viewLimit.js';
 
 /// Does the view search for no words at all? Adding words to such a view
 /// narrows it from "everything its filters find" to those words, so the
