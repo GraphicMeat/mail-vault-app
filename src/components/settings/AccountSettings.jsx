@@ -600,7 +600,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onSetupPhon
   };
 
   const sectionContent = !selectedAccount ? null : section === 'profile' ? (
-    <AccountProfileView key={selectedAccountId}
+    <AccountProfileView
       emailLabel={isFastmailAccount(selectedAccount) ? t('account.loginAddress') : t('account.emailAddress')}
       email={selectedAccount.email} displayName={accountDisplayName} onDisplayName={setAccountDisplayName}
       groupField={<AccountGroupField accountId={selectedAccountId} />}
