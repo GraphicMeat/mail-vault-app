@@ -244,6 +244,21 @@ describe('profile', () => {
   });
 });
 
+describe('profile, typing then switching', () => {
+  it('a signature typed just before the switch is turned off is written with the switch off', async () => {
+    engine.settings.signature = { html: '', text: 'Ada', enabled: true };
+    await open(PASSWORD_ACCOUNT, 'profile');
+    fireEvent.change(screen.getByLabelText(t('settings.accounts.signatureContent')), { target: { value: 'Ada L.' } });
+    const group = screen.getByRole('group', { name: t('settings.accounts.enableSignature') });
+    await act(async () => { fireEvent.click(within(group).getByRole('button', { name: t('views.tristate.no') })); });
+    await flush();
+    await wait(450);
+    await flush();
+    expect(writes().at(-1)).toEqual({ signature: { html: '', text: 'Ada L.', enabled: false } });
+    expect(engine.settings.signature).toEqual({ html: '', text: 'Ada L.', enabled: false });
+  });
+});
+
 describe('advanced', () => {
   it('picks a colour from desktop\'s palette, then back to automatic', async () => {
     await open(PASSWORD_ACCOUNT, 'advanced');

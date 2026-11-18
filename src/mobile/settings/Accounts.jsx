@@ -26,7 +26,7 @@ import {
   AccountServerFormView, ACCOUNT_SECTIONS,
 } from '../../components/settings/views/AccountsView';
 import { AliasesView } from '../../components/settings/views/AliasesView';
-import { Button } from '../../components/ui/Button';
+import { AccountTransferView } from '../../components/settings/views/AccountTransferView';
 import { useMobileStore } from '../store.js';
 import { useT } from '../i18n.js';
 import { daemonCall } from '../transport.js';
@@ -106,6 +106,9 @@ function Profile({ account, settings, write }) {
   latest.current = { name, text };
   const saved = useRef({ name, text });
   const timer = useRef(null);
+  // The latest stored signature and writer: a flush late after a switch tap keeps the switch.
+  const current = useRef({ signature: settings.signature, write });
+  current.current = { signature: settings.signature, write };
 
   const flush = useCallback(() => {
     clearTimeout(timer.current);
@@ -115,17 +118,16 @@ function Profile({ account, settings, write }) {
     const values = {};
     if (now.name.trim() !== before.name.trim()) values.displayName = now.name.trim();
     if (now.text.trim() !== before.text.trim()) {
-      const sig = settings.signature;
-      // A changed text replaces the html: compose sends plain text. The first text on a signature
-      // never set turns it on, as desktop's does.
+      const sig = current.current.signature;
+      // A changed text replaces the html: compose sends plain text.
       values.signature = now.text.trim()
         ? { html: '', text: now.text.trim(), enabled: sig ? sig.enabled !== false : true }
         : (sig ? { html: '', text: '', enabled: sig.enabled !== false } : null);
     }
     if (!Object.keys(values).length) return;
     saved.current = now;
-    write(values);
-  }, [settings.signature, write]);
+    current.current.write(values);
+  }, []);
   const later = () => {
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_DELAY_MS);
@@ -302,9 +304,10 @@ function Advanced({ account, settings, write, onRemoved }) {
 
 /**
  * `section` / `onSectionChange`: the open section (the shell's, so a search result lands on it).
- * `onAddAccount`: the phone's own sign-in flow. `footer`: under the list (Move to another computer).
+ * `onAddAccount`: the phone's own sign-in flow. `onExport`: desktop's "Move to another computer"
+ * Export under the list, the phone's transfer page.
  */
-export default function Accounts({ section: sectionProp, onSectionChange, onAddAccount, footer = null }) {
+export default function Accounts({ section: sectionProp, onSectionChange, onAddAccount, onExport }) {
   const t = useT();
   const accounts = useMobileStore((s) => s.accounts);
   const reauthState = useMobileStore((s) => s.reauthState);
@@ -356,7 +359,8 @@ export default function Accounts({ section: sectionProp, onSectionChange, onAddA
             id: a.id, email: a.email, initial: initialOf(a), color: accountColor(a), hidden: Boolean(a.hidden), oauth: a.oauth !== false,
             name: a.displayName && a.displayName !== a.email ? a.displayName : a.email.split('@')[0],
           }))}
-          selectedId={selectedId} onSelect={setSelectedId} onAdd={onAddAccount} footer={footer} />
+          selectedId={selectedId} onSelect={setSelectedId} onAdd={onAddAccount}
+          footer={<AccountTransferView accounts={accounts} onExportAccounts={onExport} />} />
         <AccountDetailView
           identity={account ? {
             name: account.displayName || account.email, email: account.email, color: accountColor(account), initial: initialOf(account),
@@ -373,17 +377,5 @@ export default function Accounts({ section: sectionProp, onSectionChange, onAddA
         </AccountDetailView>
       </div>
     </MobileViewEnv>
-  );
-}
-
-/** Desktop's "Move to another computer" under the list: opens the phone's transfer page. */
-export function MoveToComputer({ onOpen }) {
-  const t = useT();
-  return (
-    <div className="mt-6 pt-4 border-t border-mail-border">
-      <div className="text-sm font-medium text-mail-text-muted mb-1">{t('settings.transfer.title')}</div>
-      <p className="text-xs text-mail-text-muted mb-3">{t('settings.transfer.description')}</p>
-      <Button size="sm" data-mv-settings-page="transfer" onClick={onOpen}>{t('settings.transfer.title')}</Button>
-    </div>
   );
 }

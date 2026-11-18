@@ -402,7 +402,8 @@ describe('Settings pages, as desktop lays them out', () => {
 
   it('Move to another computer opens from Accounts and goes back there', () => {
     render(<Settings onClose={() => {}} page="accounts" />);
-    fireEvent.click(document.querySelector('[data-mv-settings-page="transfer"]'));
+    // Desktop's "Move to another computer" under the list: its Export is the phone's.
+    fireEvent.click(screen.getByRole('button', { name: t('settings.transfer.export') }));
     expect(heading()).toBe(t('settings.transfer.title'));
     fireEvent.click(screen.getByRole('button', { name: t('common.back') }));
     expect(heading()).toBe(t('settings.tab.accounts'));

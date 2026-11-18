@@ -13,11 +13,11 @@
 // - Search finds the pages and settings the phone has and lands on the setting, as on desktop.
 // - Appearance, Mail preferences (Behavior, Notifications), Accounts, Templates, AI providers,
 //   Unsubscribe and Privacy & security (Security, Tracking, Encryption, Network Activity) are
-//   desktop's views over the phone's preferences and engine (settings/*.jsx). Accounts adds "Move
-//   to another computer" under its list (TransferSettings.jsx), and its Add account hands over to
-//   the phone's own sign-in flow (`onAddAccount`). The other pages are still the phone's own (each
-//   in its file; `.mv-legacy` keeps them out of the desktop reset) until they move onto the shared
-//   views too:
+//   desktop's views over the phone's preferences and engine (settings/*.jsx). Accounts' "Move to
+//   another computer" Export opens the phone's export (TransferSettings.jsx), and its Add account
+//   hands over to the phone's own sign-in flow (`onAddAccount`). The other pages are still the
+//   phone's own (each in its file; `.mv-legacy` keeps them out of the desktop reset) until they
+//   move onto the shared views too:
 //   - Storage: Storage (with its Offline page: "Download in the background", then per account the
 //     window, its room, progress and Download now) and the search index; Data usage.
 //   - Diagnostics: unfinished server actions (PendingActions.jsx) and Logs.
@@ -57,7 +57,7 @@ import { Encryption, Security, Tracking } from './settings/Privacy.jsx';
 import Templates from './settings/Templates.jsx';
 import Unsubscribe from './settings/Unsubscribe.jsx';
 import AiProviders from './settings/AiProviders.jsx';
-import Accounts, { MoveToComputer } from './settings/Accounts.jsx';
+import Accounts from './settings/Accounts.jsx';
 
 const SOURCE_URL = 'https://github.com/GraphicMeat/mail-vault-app';
 const SITE = 'https://mailvaultapp.com/';
@@ -285,7 +285,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
       <>
         {reauthCode && <p className="mv-settings__note mv-settings__note--error" role="alert">{t(errorKey(reauthCode))}</p>}
         <Accounts section={place.section} onSectionChange={(section) => setPlace((p) => ({ ...p, section }))} onAddAccount={onAddAccount}
-          footer={<MoveToComputer onOpen={() => go({ nav: 'accounts', sub: 'transfer' })} />} />
+          onExport={() => go({ nav: 'accounts', sub: 'transfer' })} />
       </>
     );
   } else if (nav === 'templates') {

@@ -71,7 +71,6 @@ export default function Unsubscribe() {
 
   const notice = (
     <>
-      {failed && <p className="mv-settings__note mv-settings__note--error" role="alert">{t('mobile.settings.loadFailed')}</p>}
       {outcome && (
         <div className={`mv-settings__note${outcome.error || outcome.reply?.status === 'failed' ? ' mv-settings__note--error' : ''}`} role="status" data-mv-unsub-outcome>
           {outcome.error && t('unsubscribe.failed', { sender: outcome.label })}
@@ -102,6 +101,7 @@ export default function Unsubscribe() {
   return (
     <MobileViewEnv>
       <UnsubscribeView scopes={scopes} scope={current} onScope={setScope} loading={!data && !failed}
+        failures={failed ? [{ id: 'list', text: t('mobile.settings.loadFailed') }] : []}
         senders={senders} history={history} showAccounts={!current && accounts.length > 1}
         accountOf={(id) => { const a = accountOf(id); return a && { email: a.email, color: accountColor(a) }; }}
         accountLabel={(id) => accountOf(id)?.email || id}
