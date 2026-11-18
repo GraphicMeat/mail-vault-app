@@ -24,7 +24,7 @@ import { registerPopoverLayer } from '../../hooks/useDialogA11y';
  */
 export function TypeaheadChips({
   id, testId, label, placeholder, describedBy, value, onChange, options, onPick,
-  chips = [], onRemove, onEnterText, onBackspaceEmpty, onBlur, onLoadMore,
+  chips = [], onRemove, onEnterText, onBackspaceEmpty, onBlur, onLoadMore, inputClassName = '',
 }) {
   const t = useT();
   const listId = useId();
@@ -83,7 +83,7 @@ export function TypeaheadChips({
       </button>
     </span>)}
     <span className="typeahead-field">
-      <input id={id} data-testid={testId} value={value} maxLength={200} autoComplete="off"
+      <input id={id} data-testid={testId} value={value} maxLength={200} autoComplete="off" className={inputClassName || undefined}
         role="combobox" aria-label={label} placeholder={placeholder} aria-describedby={describedBy}
         aria-autocomplete="list" aria-expanded={listed} aria-controls={listed ? listId : undefined}
         aria-activedescendant={current >= 0 ? `${listId}-${current}` : undefined}
