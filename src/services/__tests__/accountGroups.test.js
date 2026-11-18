@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeGroupName, resolveGroupName, groupAccounts, accountsInScope, groupUnread } from '../accountGroups';
+import { normalizeGroupName, resolveGroupName, groupAccounts, accountsInScope, groupUnread, groupNames, matchGroups } from '../accountGroups';
 
 const accounts = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
 
@@ -30,5 +30,23 @@ describe('account groups', () => {
   });
   it('keeps one ungrouped section when no account is grouped', () => {
     expect(groupAccounts(accounts, {})).toEqual([{ name: null, accounts }]);
+  });
+  it('merges group names case-insensitively and counts accounts', () => {
+    expect(groupNames({ a: 'Work', b: 'work', c: 'Home' })).toEqual([
+      { name: 'Home', count: 1 }, { name: 'Work', count: 2 },
+    ]);
+  });
+  it('ignores empty and non-string group names', () => {
+    expect(groupNames({ a: '', b: null, c: 3, d: '  ', e: 'Work' })).toEqual([{ name: 'Work', count: 1 }]);
+  });
+  it('matches contained text without case sensitivity', () => {
+    expect(matchGroups(groupNames({ a: 'Homework', b: 'Work' }), 'wOr').matches)
+      .toEqual([{ name: 'Homework', count: 1 }, { name: 'Work', count: 1 }]);
+  });
+  it('does not offer creation for an existing name or blank draft', () => {
+    const groups = groupNames({ a: 'Work' });
+    expect(matchGroups(groups, 'work').canCreate).toBe(false);
+    expect(matchGroups(groups, '  ').canCreate).toBe(false);
+    expect(matchGroups(groups, 'Study').canCreate).toBe(true);
   });
 });

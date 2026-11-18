@@ -3,6 +3,7 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { AccountSettings } from '../AccountSettings';
+import { AccountGroupField } from '../AccountGroupField';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { usePrivacyStore } from '../../../stores/privacyStore';
@@ -20,40 +21,84 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); usePrivacyStore.setState({ enabled: false }); vi.restoreAllMocks(); });
 
-it('shows group in Profile and below account email', () => {
+const input = () => screen.getByRole('combobox', { name: 'Group' });
+const group = () => screen.getByRole('group', { name: 'Existing groups' });
+
+it('shows assigned group as a chip with empty input and in account list', () => {
   render(<AccountSettings accounts={accounts} />);
-  expect(screen.getByRole('combobox', { name: 'Group' }).value).toBe('Personal');
-  const list = document.querySelector('.account-settings-list');
-  expect(within(list).getByText('Work')).toBeTruthy();
+  expect(input().value).toBe('');
+  expect(screen.getByRole('button', { name: 'Remove Personal' })).toBeTruthy();
+  expect(screen.getByText(/Remove the chip for no group/)).toBeTruthy();
+  expect(within(document.querySelector('.account-settings-list')).getByText('Work')).toBeTruthy();
 });
-it('saves on blur and Enter, and clears on empty input', () => {
-  render(<AccountSettings accounts={accounts} />);
-  const input = screen.getByRole('combobox', { name: 'Group' });
-  fireEvent.change(input, { target: { value: 'Study' } });
-  fireEvent.blur(input);
-  expect(useSettingsStore.getState().accountGroups.a).toBe('Study');
-  fireEvent.change(input, { target: { value: 'work' } });
-  fireEvent.keyDown(input, { key: 'Enter' });
-  expect(useSettingsStore.getState().accountGroups.a).toBe('Work');
-  fireEvent.change(input, { target: { value: '' } });
-  fireEvent.blur(input);
+it('chip x clears the group', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Personal' }));
   expect(useSettingsStore.getState().accountGroups.a).toBeUndefined();
 });
-it('suggests existing group names', () => {
-  render(<AccountSettings accounts={accounts} />);
-  const input = screen.getByRole('combobox', { name: 'Group' });
-  expect(input.getAttribute('list')).toBeTruthy();
-  expect(document.querySelector(`datalist[id="${input.getAttribute('list')}"] option[value="Work"]`)).toBeTruthy();
+it('Enter assigns a new name and empties input', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.change(input(), { target: { value: 'Study' } });
+  fireEvent.keyDown(input(), { key: 'Enter' });
+  expect(useSettingsStore.getState().accountGroups.a).toBe('Study');
+  expect(input().value).toBe('');
 });
-it('hides group names in the list and suggestions while privacy mode is on', () => {
+it('Enter reuses existing group casing', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.change(input(), { target: { value: 'work' } });
+  fireEvent.keyDown(input(), { key: 'Enter' });
+  expect(useSettingsStore.getState().accountGroups.a).toBe('Work');
+});
+it('blur commits typed text', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.change(input(), { target: { value: 'Study' } });
+  fireEvent.blur(input());
+  expect(useSettingsStore.getState().accountGroups.a).toBe('Study');
+});
+it('lists matching existing groups; clicking assigns one', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.change(input(), { target: { value: 'Wo' } });
+  fireEvent.click(screen.getByRole('option', { name: /Work/ }));
+  expect(useSettingsStore.getState().accountGroups.a).toBe('Work');
+});
+it('offers Create for a new name; picking it assigns', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.change(input(), { target: { value: 'Study' } });
+  fireEvent.click(screen.getByRole('option', { name: /Create.*Study/ }));
+  expect(useSettingsStore.getState().accountGroups.a).toBe('Study');
+});
+it('does not offer Create for an exact case-insensitive match', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.change(input(), { target: { value: 'work' } });
+  expect(screen.queryByRole('option', { name: /Create/ })).toBeNull();
+});
+it('cloud lists each group once with account count', () => {
+  useSettingsStore.setState({ accountGroups: { a: 'Work', b: 'work', c: 'Personal' } });
+  render(<AccountGroupField accountId="a" />);
+  expect(within(group()).getAllByRole('button')).toHaveLength(2);
+  expect(within(group()).getByRole('button', { name: 'Work 2' })).toBeTruthy();
+});
+it('cloud picks a group and marks it pressed; pressed pill clears', () => {
+  render(<AccountGroupField accountId="a" />);
+  fireEvent.click(within(group()).getByRole('button', { name: 'Work 1' }));
+  expect(useSettingsStore.getState().accountGroups.a).toBe('Work');
+  expect(within(group()).getByRole('button', { name: 'Work 2' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(within(group()).getByRole('button', { name: 'Work 2' }));
+  expect(useSettingsStore.getState().accountGroups.a).toBeUndefined();
+});
+it('switching accounts resets the draft', () => {
+  const { rerender } = render(<AccountGroupField accountId="a" />);
+  fireEvent.change(input(), { target: { value: 'Draft' } });
+  rerender(<AccountGroupField accountId="b" />);
+  expect(input().value).toBe('');
+});
+it('privacy mode masks chip, cloud, and suggestions', () => {
   vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
   usePrivacyStore.setState({ enabled: true });
-  render(<AccountSettings accounts={accounts} />);
-  const input = screen.getByRole('textbox', { name: 'Group' });
-  expect(input.classList.contains('mv-private-input')).toBe(true);
-  expect(input.hasAttribute('list')).toBe(false);
-  expect(document.querySelector('datalist')).toBeNull();
-  const list = document.querySelector('.account-settings-list');
-  expect(list.textContent).not.toContain('Personal');
-  expect(list.textContent).not.toContain('Work');
+  render(<AccountGroupField accountId="a" />);
+  expect(document.querySelector('.account-group-field').textContent).not.toContain('Personal');
+  expect(document.querySelector('.account-group-field').textContent).not.toContain('Work');
+  expect(input().classList.contains('mv-private-input')).toBe(true);
+  fireEvent.change(input(), { target: { value: 'Wo' } });
+  expect(screen.queryAllByRole('option')).toHaveLength(0);
 });

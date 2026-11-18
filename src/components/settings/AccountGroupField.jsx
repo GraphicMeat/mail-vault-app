@@ -1,30 +1,43 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useT } from '../../i18n/index.js';
-import { usePrivacyActive, usePrivateInputClass } from '../../hooks/usePrivacy';
-import { groupNames } from '../../services/accountGroups';
+import { usePrivacyActive, usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
+import { groupNames, matchGroups } from '../../services/accountGroups';
+import { TypeaheadChips } from '../ui/TypeaheadChips';
+import { GroupCloud } from './GroupCloud';
 
 export function AccountGroupField({ accountId }) {
   const t = useT();
   const privacyActive = usePrivacyActive();
   const privateInput = usePrivateInputClass();
-  const listId = useId();
+  const privateAttr = usePrivateAttr();
   const accountGroups = useSettingsStore(state => state.accountGroups);
   const setAccountGroup = useSettingsStore(state => state.setAccountGroup);
-  const [name, setName] = useState(accountGroups[accountId] || '');
-  useEffect(() => setName(accountGroups[accountId] || ''), [accountId, accountGroups]);
-  const commit = () => setAccountGroup(accountId, name);
+  const [draft, setDraft] = useState('');
+  useEffect(() => setDraft(''), [accountId]);
+  const current = accountGroups[accountId];
+  const groups = groupNames(accountGroups);
+  const { matches, canCreate } = matchGroups(groups, draft);
+  const assign = name => { setAccountGroup(accountId, name); setDraft(''); };
+  const clear = () => assign('');
+  const options = privacyActive ? [] : [
+    ...matches.map(group => ({ value: group.name, label: group.name, detail: String(group.count) })),
+    ...(canCreate ? [{ value: draft, label: t('settings.accounts.groupCreate', { name: draft }) }] : []),
+  ];
 
-  return <div>
+  return <div className="account-group-field">
     <label htmlFor={`account-group-${accountId}`} className="block text-sm font-medium text-mail-text mb-2">
       {t('settings.accounts.group')}
     </label>
-    <p className="text-sm text-mail-text-muted mb-2">{t('settings.accounts.groupHint')}</p>
-    <input id={`account-group-${accountId}`} type="text" list={privacyActive ? undefined : listId} maxLength={40}
-      value={name} onChange={event => setName(event.target.value)} onBlur={commit}
-      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }}
-      placeholder={t('settings.accounts.groupPlaceholder')}
-      className={`${privateInput} w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all`} />
-    {!privacyActive && <datalist id={listId}>{groupNames(accountGroups).map(group => <option key={group.name} value={group.name} />)}</datalist>}
+    {!privacyActive && <p className="text-sm text-mail-text-muted mb-2">{t('settings.accounts.groupHint')}</p>}
+    <TypeaheadChips id={`account-group-${accountId}`} label={t('settings.accounts.group')}
+      placeholder={t('settings.accounts.groupPlaceholder')} value={draft.slice(0, 40)}
+      onChange={value => setDraft(value.slice(0, 40))}
+      chips={current ? [{ key: current, label: privateAttr(current, 'name'), testId: 'account-group-chip' }] : []}
+      onRemove={clear} options={options} onPick={option => assign(option.value)}
+      onEnterText={assign} onBlur={() => { if (draft.trim()) assign(draft); }}
+      inputClassName={`${privateInput} w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all`} />
+    <GroupCloud groups={groups.map(group => ({ ...group, label: privateAttr(group.name, 'name') }))}
+      current={current} onPick={assign} onClear={clear} />
   </div>;
 }

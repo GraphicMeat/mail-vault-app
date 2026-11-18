@@ -113,6 +113,17 @@
 .typeahead-list [role="option"][data-active="true"] { background: var(--mail-surface-hover); }
 .typeahead-label, .typeahead-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .typeahead-detail { color: var(--mail-text-muted); font-size: 12px; }
+.account-group-field .typeahead-chips { padding: 5px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); }
+.account-group-field .typeahead-field { flex-basis: 180px; }
+.account-group-field .typeahead-field input { min-height: 34px; padding: 6px 8px; border: 0; background: transparent; outline: none; }
+.account-group-field .typeahead-chips:focus-within { border-color: var(--mail-accent); }
+.account-group-cloud { margin-top: 12px; }
+.account-group-cloud-label { display: block; margin-bottom: 7px; color: var(--mail-text-muted); font-size: 12px; }
+.account-group-cloud-pills { display: flex; flex-wrap: wrap; gap: 7px; }
+.account-group-cloud-pills button { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 6px 10px; border: 1px solid var(--mail-border); border-radius: 999px; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; overflow-wrap: anywhere; }
+.account-group-cloud-pills button:hover { background: var(--mail-surface-hover); }
+.account-group-cloud-pills button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.account-group-cloud-pills button span { opacity: .65; font-variant-numeric: tabular-nums; }
 @media (max-width: 680px) { .settings-window .views-settings { padding: 16px; } }
 .mail-list-with-timeline { padding-left: 46px; }
 body[data-auxiliary-window="settings"] .fixed:has(.settings-window) { padding: 0; }

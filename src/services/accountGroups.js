@@ -19,6 +19,15 @@ export function groupNames(accountGroups) {
   return [...names.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export function matchGroups(groups, draft) {
+  const name = normalizeGroupName(draft);
+  const query = name?.toLocaleLowerCase();
+  return {
+    matches: query ? groups.filter(group => group.name.toLocaleLowerCase().includes(query)) : groups,
+    canCreate: !!name && !groups.some(group => group.name.toLocaleLowerCase() === query),
+  };
+}
+
 export function groupAccounts(orderedAccounts, groupOf) {
   const ungrouped = { name: null, accounts: [] };
   const named = new Map();
