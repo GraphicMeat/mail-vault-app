@@ -23,7 +23,7 @@
 //!   which could quote the request.
 
 use crate::accounts::load_account;
-use crate::db::Engine;
+use crate::db::{Engine, Shared};
 use crate::net::block_on;
 use crate::rpc::{parse, RpcError};
 use crate::settings::{get_in, put_in};
@@ -67,9 +67,9 @@ fn refused(code: &str) -> Value {
 
 // ── Settings ────────────────────────────────────────────────────────────────
 
-struct Config {
+pub(crate) struct Config {
     enabled: bool,
-    url: String,
+    pub(crate) url: String,
     model: String,
     skip_preview: bool,
     consented_url: Option<String>,
@@ -77,7 +77,11 @@ struct Config {
 
 impl Config {
     fn read(engine: &Engine) -> Result<Config, RpcError> {
-        engine
+        Config::read_shared(engine.shared())
+    }
+
+    pub(crate) fn read_shared(shared: &Shared) -> Result<Config, RpcError> {
+        shared
             .read(|c| {
                 Ok(Config {
                     enabled: get_in(c, "aiEnabled")?.as_deref() == Some("true"),
@@ -91,7 +95,7 @@ impl Config {
     }
 
     /// An http(s) URL is set.
-    fn configured(&self) -> bool {
+    pub(crate) fn configured(&self) -> bool {
         url::Url::parse(&self.url).is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.host().is_some())
     }
 
@@ -123,7 +127,7 @@ fn is_google(row: &crate::accounts::AccountRow) -> bool {
 
 /// Whether mail of these accounts may go to the configured endpoint: always for an endpoint on
 /// this device; else only when every account is named, known, and not Google's.
-fn mail_allowed(engine: &Engine, cfg: &Config, account_ids: &[&str]) -> Result<bool, RpcError> {
+pub(crate) fn mail_allowed(shared: &Shared, cfg: &Config, account_ids: &[&str]) -> Result<bool, RpcError> {
     if provider_allowed_for_google_mail("endpoint", Some(&cfg.url)) {
         return Ok(true);
     }
@@ -131,7 +135,7 @@ fn mail_allowed(engine: &Engine, cfg: &Config, account_ids: &[&str]) -> Result<b
         return Ok(false);
     }
     for id in account_ids {
-        match load_account(engine.shared(), id).map_err(internal)? {
+        match load_account(shared, id).map_err(internal)? {
             Some(row) if !is_google(&row) => {}
             _ => return Ok(false),
         }
@@ -286,7 +290,7 @@ fn gated(engine: &Engine, cfg: &Config, p: &ActionParams) -> Result<Result<Reque
     }
     if !req.no_mail {
         let ids: Vec<&str> = req.accounts.iter().map(String::as_str).collect();
-        if !mail_allowed(engine, cfg, &ids)? {
+        if !mail_allowed(engine.shared(), cfg, &ids)? {
             return Ok(Err(GOOGLE_REFUSED));
         }
     }
@@ -328,7 +332,7 @@ pub(crate) fn run(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         [one] => Some(one.as_str()),
         _ => None,
     };
-    Ok(match generate(engine, &cfg, &req.prompt, None, req.max_tokens, RUN_TIMEOUT, account) {
+    Ok(match generate(engine.shared(), &cfg, &req.prompt, None, req.max_tokens, RUN_TIMEOUT, account) {
         Ok(text) => json!({ "ok": true, "text": text.trim() }),
         Err(fail) => fail.reply(),
     })
@@ -336,7 +340,7 @@ pub(crate) fn run(engine: &Engine, params: Value) -> Result<Value, RpcError> {
 
 // ── The endpoint ────────────────────────────────────────────────────────────
 
-enum Fail {
+pub(crate) enum Fail {
     /// No answer: the server could not be reached, or did not answer in time.
     Network,
     /// The server answered with this non-2xx status.
@@ -359,11 +363,11 @@ impl Fail {
 /// token when there is one. Every error is dropped unread: reqwest's names the URL, and the
 /// server's body could quote the request. The request is a Network Activity row ("AI model", as
 /// desktop's), shown as `account`'s (an id) when it carries that one account's mail.
-fn generate(engine: &Engine, cfg: &Config, prompt: &str, system: Option<&str>, max_tokens: usize, timeout: Duration, account: Option<&str>) -> Result<String, Fail> {
-    let key = engine.secrets().get(KEY_ID).ok().flatten().filter(|k| !k.is_empty());
+pub(crate) fn generate(shared: &Shared, cfg: &Config, prompt: &str, system: Option<&str>, max_tokens: usize, timeout: Duration, account: Option<&str>) -> Result<String, Fail> {
+    let key = shared.secrets().get(KEY_ID).ok().flatten().filter(|k| !k.is_empty());
     let body = serde_json::to_vec(&chat_request_body(&cfg.model, prompt, system, max_tokens)).map_err(|_| Fail::BadReply)?;
     let endpoint = format!("{}/chat/completions", cfg.url.trim_end_matches('/'));
-    let email = account.and_then(|id| load_account(engine.shared(), id).ok().flatten()).map(|a| a.email);
+    let email = account.and_then(|id| load_account(shared, id).ok().flatten()).map(|a| a.email);
     let call = async move {
         let client = net_activity::http_client_with("AI model", reqwest::Client::builder().timeout(timeout).redirect(reqwest::redirect::Policy::none()));
         let mut req = client.post(&endpoint).header(reqwest::header::CONTENT_TYPE, "application/json").body(body);
@@ -569,14 +573,14 @@ pub(crate) fn quick_replies(engine: &Engine, params: Value) -> Result<Value, Rpc
     let mut starters = Value::Null;
     if show && p.generate && auto == Some(false) {
         let cfg = Config::read(engine)?;
-        if cfg.blocked().is_none() && cfg.consented() && mail_allowed(engine, &cfg, &[p.account_id.as_str()])? {
+        if cfg.blocked().is_none() && cfg.consented() && mail_allowed(engine.shared(), &cfg, &[p.account_id.as_str()])? {
             let prompt = format!(
                 "Suggest exactly 3 very short email reply starters (a few words each), one per line, no numbering, for this email conversation:\n\nSubject: {}\n\nFrom: {}\n{}",
                 m.subject,
                 if m.from_address.is_empty() { "unknown" } else { m.from_address.as_str() },
                 clip(m.text.trim(), QUICK_REPLY_CHARS),
             );
-            if let Ok(text) = generate(engine, &cfg, &prompt, None, 120, QUICK_REPLY_TIMEOUT, Some(&p.account_id)) {
+            if let Ok(text) = generate(engine.shared(), &cfg, &prompt, None, 120, QUICK_REPLY_TIMEOUT, Some(&p.account_id)) {
                 let list = parse_starters(&text);
                 if !list.is_empty() {
                     starters = json!(list);

@@ -631,6 +631,8 @@ pub(crate) struct Shared {
     pub(crate) usage: crate::usage::State,
     /// The core `app.db` the tags live in (`tags.rs`), on a connection of its own.
     pub(crate) app_db: crate::tags::AppDb,
+    /// The auto-tag worker's wake-ups, queued backfills and back-offs (`auto_tags.rs`).
+    pub(crate) auto_tags: crate::auto_tags::State,
     /// The journal's replay worker (`actions.rs`); here so a worker that journals an action of its
     /// own (the outbox, after a reply went out) can wake it.
     pub(crate) replay: crate::actions::Replay,
@@ -844,6 +846,7 @@ impl Engine {
                 pgp_keys: Mutex::new(()),
                 usage: crate::usage::State::default(),
                 app_db: crate::tags::AppDb::new(data_dir),
+                auto_tags: crate::auto_tags::State::default(),
                 replay: crate::actions::Replay::default(),
                 #[cfg(test)]
                 max_txn_rows: std::sync::atomic::AtomicU64::new(0),
@@ -877,6 +880,8 @@ impl Engine {
         crate::followup::start(&engine.shared);
         // The deleted-mail bin's retention sweep (`bin.rs`).
         crate::bin::start(&engine.shared);
+        // The auto-tag rules' worker (`auto_tags.rs`).
+        crate::auto_tags::start(&engine.shared);
         Ok(engine)
     }
 

@@ -51,6 +51,16 @@ pub const FOLLOWUP_DUE: &str = "mobile.followup.due";
 /// at most once per account and UTC day (`usage.rs`).
 pub const USAGE_WARNING: &str = "mobile.usage.warning";
 
+/// `{batchId, ruleId, processed, total, matched, done, assigned?, code?}`: an auto-tag backfill
+/// moved on (`auto_tags.rs`); `done` with `assigned` (what it newly tagged) when it ended, `code`
+/// when it stopped early (`AI_NOT_CONFIGURED`, `AI_FAILED`, `NEEDS_REMOTE`,
+/// `E_GOOGLE_MAIL_ON_DEVICE_ONLY`, `INVALID`).
+pub const AUTO_TAGS_PROGRESS: &str = "mobile.autoTags.progress";
+
+/// `{tagId, items: [{accountId, folder, uid}]}`: the engine assigned a tag on its own (an
+/// auto-tag rule), so the rows on screen show it.
+pub const TAGS_ASSIGNED: &str = "mobile.tags.assigned";
+
 /// Every event name the engine emits: the one list `events.json` must match (a test checks it) and
 /// the page's `listen('…')` names are checked against.
 pub const EVENTS: &[&str] = &[
@@ -58,6 +68,7 @@ pub const EVENTS: &[&str] = &[
     ATTACHMENT_DONE,
     ATTACHMENT_FAILED,
     ATTACHMENT_PROGRESS,
+    AUTO_TAGS_PROGRESS,
     FOLDER_CHANGED,
     FOLDERS_CHANGED,
     FOLLOWUP_DUE,
@@ -65,6 +76,7 @@ pub const EVENTS: &[&str] = &[
     PREMIUM_CHANGED,
     SEND_RESULT,
     SYNC_STATE,
+    TAGS_ASSIGNED,
     USAGE_WARNING,
 ];
 

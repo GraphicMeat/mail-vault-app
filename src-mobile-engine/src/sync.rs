@@ -1469,7 +1469,7 @@ pub(crate) fn store_found(shared: &Shared, account: &str, folder: &str, headers:
 }
 
 /// What a reply needs beyond the list row (`messages.thread_json`): `{cc, replyTo: [{name,
-/// address}], references: [id], inReplyTo, date, automated}`, so preparing a reply needs no
+/// address}], references: [id], inReplyTo, date, automated, listId}`, so preparing a reply needs no
 /// server, and the threaded list (`threads.rs`) joins a reply to its conversation. `automated`:
 /// the message carries a mailing-list, `Precedence` or auto-reply header (quick replies stay off
 /// for it, `ai.rs`); no key when that is not known (a row synced before it, or a Graph or JMAP
@@ -1493,6 +1493,9 @@ fn thread_json(h: &Header) -> String {
     });
     if known {
         v["automated"] = json!(automated);
+        // An auto-tag rule's "Mailing-list header present" (`auto_tags.rs`): the List-ID, or
+        // `null` for none. No key when that is not known, as for `automated`.
+        v["listId"] = json!(h.list_id.as_deref().map(str::trim).filter(|s| !s.is_empty()));
     }
     v.to_string()
 }

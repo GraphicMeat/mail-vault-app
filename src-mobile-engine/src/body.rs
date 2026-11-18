@@ -660,6 +660,8 @@ fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str, opened: bo
     })?;
     // The body's words join the index (a tap: the index worker does it next).
     crate::search::index_uids_for_tap(shared, &p.account_id, &p.folder, &[p.uid]);
+    // A held body makes the message an auto-tag candidate (`auto_tags.rs`).
+    crate::auto_tags::wake(shared);
     Ok(())
 }
 
