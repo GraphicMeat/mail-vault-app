@@ -14,29 +14,9 @@ use std::sync::Arc;
 
 use app_db::views::{self, View, ViewDef};
 use mailvault_core::search_index::query::SearchRequest;
+// What a view asks the index, worked out in core so the phone engine asks the same.
+use mailvault_core::view_eval::{definition, filter_keys, own_addresses, request_for, ViewAccount as Account};
 use std::collections::HashMap;
-
-/// One account the view runs over, as the app already knows it.
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Account {
-    account_id: String,
-    /// The account's own address, for "addressed to me" / "not from me".
-    #[serde(default)]
-    address: String,
-    /// Its other own addresses (default From, aliases), which count for
-    /// "addressed to me" / "not from me" as the login does.
-    #[serde(default)]
-    aliases: Vec<String>,
-    /// Server paths, so a row can name the mailbox it came from rather than
-    /// the vault directory it is stored in.
-    #[serde(default)]
-    known_mailboxes: Vec<String>,
-    /// IMAP special-use attribute to server path, for this account. A folder
-    /// name is a per-mailbox word, so "not the bin" is only answerable here.
-    #[serde(default)]
-    special_use: HashMap<String, String>,
-}
 
 /// One message a search put on screen.
 #[derive(Debug, serde::Deserialize)]
@@ -549,102 +529,6 @@ fn keyword_detail(state: &DaemonState, params: &Value) -> Result<Value, String> 
     Ok(reply(true, page.total, sender_rows, subject_rows))
 }
 
-/// The definition to run: a saved view by id, or one handed over inline (which
-/// is how "save this search as a view" previews before it is saved).
-fn definition(conn: &app_db::Connection, params: &Value) -> Result<ViewDef, String> {
-    if let Some(id) = params.get("viewId").and_then(Value::as_str) {
-        return views::get(conn, id)?.map(|view| view.def).ok_or_else(|| format!("no such view: {id}"));
-    }
-    serde_json::from_value(params.get("def").cloned().unwrap_or(Value::Null)).map_err(|e| format!("def: {e}"))
-}
-
-/// Per account, the identities that satisfy every tag and every field
-/// condition the view names. Absent when the view narrows on neither — which
-/// is not the same as an empty list, and the difference is "show everything"
-/// against "show nothing".
-fn filter_keys(
-    conn: &app_db::Connection,
-    def: &ViewDef,
-    accounts: &[Account],
-) -> Result<HashMap<String, Vec<String>>, String> {
-    let mut keys = HashMap::new();
-    if !narrows_by_metadata(def) {
-        return Ok(keys);
-    }
-    for account in accounts {
-        let mut allowed: Option<std::collections::BTreeSet<String>> = None;
-        if !def.tags.is_empty() {
-            let carried = app_db::tags::messages_with_every_tag(conn, &account.account_id, &def.tags)?;
-            allowed = Some(carried.into_iter().collect());
-        }
-        for filter in &def.fields {
-            let matched: std::collections::BTreeSet<String> =
-                app_db::fields::messages_matching(conn, &account.account_id, filter)?.into_iter().collect();
-            allowed = Some(match allowed {
-                Some(existing) => existing.intersection(&matched).cloned().collect(),
-                None => matched,
-            });
-        }
-        keys.insert(account.account_id.clone(), allowed.unwrap_or_default().into_iter().collect());
-    }
-    Ok(keys)
-}
-
-/// Whether the view narrows on anything `app.db` holds rather than the index.
-fn narrows_by_metadata(def: &ViewDef) -> bool {
-    !def.tags.is_empty() || !def.fields.is_empty()
-}
-
-/// The login and every alias, lowercased, deduped, blanks dropped.
-fn own_addresses(account: &Account) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for raw in std::iter::once(&account.address).chain(account.aliases.iter()) {
-        let address = raw.trim().to_lowercase();
-        if !address.is_empty() && !out.contains(&address) {
-            out.push(address);
-        }
-    }
-    out
-}
-
-fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<String>>, now: i64) -> SearchRequest {
-    let own = own_addresses(account);
-    let (date_from, date_to) = views::date_window(def, now);
-    SearchRequest {
-        account_id: account.account_id.clone(),
-        account_ids: Vec::new(),
-        query: def.query.clone(),
-        mailboxes: (!def.mailboxes.is_empty()).then(|| def.mailboxes.clone()),
-        mailboxes_excluded: def
-            .mailboxes_excluded
-            .iter()
-            .cloned()
-            .chain(def.exclude_special.iter().filter_map(|use_| account.special_use.get(use_).cloned()))
-            .collect(),
-        sender: def.sender.clone(),
-        // "The last N days" and "last month" are resolved now, not when the
-        // view was saved.
-        date_from,
-        date_to,
-        has_attachments: def.has_attachments,
-        unread: def.unread,
-        starred: def.starred,
-        answered: def.answered,
-        to_any: if def.to_me { own.clone() } else { Vec::new() },
-        from_none: if def.not_from_me { own } else { Vec::new() },
-        from_any: def.senders.clone(),
-        from_not: def.exclude_senders.clone(),
-        exclude_keys: def.exclude_messages.clone(),
-        exclude_terms: Vec::new(),
-        // A tag or field filter with no identities behind it matches nothing,
-        // which is the correct answer for a tag nobody has used.
-        msg_keys: narrows_by_metadata(def).then(|| keys.get(&account.account_id).cloned().unwrap_or_default()),
-        limit: None,
-        offset: 0,
-    }
-}
-
-
 /// Every message a view finds as `(account, mailbox, uid)`, walked page by
 /// page past the index's per-query cap. The index lock is taken per page and
 /// released before any file is read.
@@ -829,26 +713,13 @@ fn evaluate(
     limit: usize,
 ) -> Result<Value, String> {
     let now = mailvault_core::clock::now_secs();
-    // Accounts the view filters alike are one statement. Every FTS probe runs
-    // over the whole index whatever account it is for, so one statement per
-    // account paid for the same match once per account: ~0.18s each on a
-    // 19-account vault, held on the index lock a click waits on. An account
-    // whose filters differ (its own address, its own bin, its own tags) gets
-    // its own. No account named is every account: a view made before a second
-    // account was added must not empty itself when one arrives.
-    let mut batches: Vec<(SearchRequest, Vec<&Account>)> = Vec::new();
-    for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {
-        let mut request = request_for(def, account, keys, now);
-        request.account_id.clear();
-        match batches.iter_mut().find(|(alike, _)| *alike == request) {
-            Some((_, group)) => group.push(account),
-            None => batches.push((request, vec![account])),
-        }
-    }
+    // Accounts the view filters alike are one statement (`view_eval::batches`).
+    // No account named is every account: a view made before a second account
+    // was added must not empty itself when one arrives.
+    let batches = mailvault_core::view_eval::batches(def, accounts, keys, now);
     let mut rows: Vec<Value> = Vec::new();
     let mut total = 0u64;
     for (mut request, group) in batches {
-        request.account_ids = group.iter().map(|account| account.account_id.clone()).collect();
         // `views.counts` wants the totals and nothing else: no page, no row
         // JSON per view per account only to throw it away.
         request.limit = Some(limit);
@@ -914,19 +785,10 @@ fn senders(
 ) -> Result<Value, String> {
     let now = mailvault_core::clock::now_secs();
     let open = ViewDef { senders: Vec::new(), exclude_senders: Vec::new(), ..def.clone() };
-    let mut batches: Vec<(SearchRequest, Vec<&Account>)> = Vec::new();
-    for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {
-        let mut request = request_for(&open, account, keys, now);
-        request.account_id.clear();
-        match batches.iter_mut().find(|(alike, _)| *alike == request) {
-            Some((_, group)) => group.push(account),
-            None => batches.push((request, vec![account])),
-        }
-    }
+    let batches = mailvault_core::view_eval::batches(&open, accounts, keys, now);
     let mut merged: std::collections::BTreeMap<String, (String, u64)> = std::collections::BTreeMap::new();
     let mut own: Vec<String> = Vec::new();
-    for (mut request, group) in batches {
-        request.account_ids = group.iter().map(|account| account.account_id.clone()).collect();
+    for (request, group) in batches {
         own.extend(group.iter().flat_map(|account| own_addresses(account)));
         let counted = match crate::search_index::sender_counts(&state.search_index, &request, limit)? {
             Err(reason) => return Ok(serde_json::json!({ "available": false, "reason": reason, "senders": [] })),

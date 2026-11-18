@@ -15,6 +15,7 @@ pub mod ai;
 pub mod aliases;
 pub mod arrival;
 pub mod app_db;
+pub mod view_eval;
 pub mod archive;
 pub mod autostart;
 pub mod cleanup_rules;
