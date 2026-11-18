@@ -885,8 +885,17 @@ impl Backend for GraphBackend<'_> {
         let imid = format!("<{bare}>");
         let remote = remote_folder(folder).to_string();
         match self.call(async |c| c.find_by_internet_message_id(&remote, &imid).await) {
-            Ok(ids) => Ok(ids.into_iter().next().map_or(Found::Absent, Found::Here)),
+            Ok(ids) if ids.is_empty() => Ok(Found::Absent),
+            Ok(ids) => Ok(Found::Here(ids)),
             Err(CallErr::Text(e)) if status_of(&e) == Some(404) => Ok(Found::FolderGone),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn found_header(&mut self, _folder: &str, handle: &str) -> Result<Option<Header>, Fail> {
+        match self.call(async |c| c.get_message(handle).await) {
+            Ok(m) => Ok(Some(m.to_email_header(0))),
+            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => Ok(None),
             Err(e) => Err(e.into()),
         }
     }
@@ -896,28 +905,37 @@ impl Backend for GraphBackend<'_> {
         self.call(async |c| c.move_message(handle, &dest).await).map(|_| ()).map_err(Fail::from)
     }
 
-    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags) -> Result<bool, Fail> {
+    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags, staged: Option<&str>, on_staged: &mut dyn FnMut(&str) -> Result<(), Fail>) -> Result<bool, Fail> {
         // As desktop's migration uploads to Graph: a message made from the MIME (Graph files it
-        // in Drafts), moved to the folder, then marked. An earlier attempt whose move failed left
-        // its copy in Drafts: that copy is moved, never a second one made.
-        let imid = mailvault_core::maildir::message_id_key(raw);
-        let left = match &imid {
-            Some(imid) => self.call(async |c| c.find_by_internet_message_id("drafts", imid).await).map_err(Fail::from)?.into_iter().next(),
-            None => None,
-        };
-        let draft = match left {
-            Some(id) => id,
-            None => self.call(async |c| c.create_message_from_mime(raw).await).map_err(Fail::from)?,
-        };
+        // in Drafts), moved to the folder, then marked. The made message's id is recorded before
+        // the move (`on_staged`), so a retry after a failed move moves that copy rather than
+        // making a second; nothing is ever found by its Message-ID here.
         let dest = remote_folder(folder).to_string();
-        let id = match self.call(async |c| c.move_message(&draft, &dest).await) {
-            Ok(id) => id,
-            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => {
-                // The folder is gone: the upload leaves no copy behind in Drafts.
-                let _ = self.call(async |c| c.permanent_delete(&draft).await);
-                return Ok(false);
+        let mut draft = match staged {
+            Some(id) => id.to_string(),
+            None => {
+                let id = self.call(async |c| c.create_message_from_mime(raw).await).map_err(Fail::from)?;
+                on_staged(&id)?;
+                id
             }
-            Err(e) => return Err(e.into()),
+        };
+        let mut made_now = staged.is_none();
+        let id = loop {
+            match self.call(async |c| c.move_message(&draft, &dest).await) {
+                Ok(id) => break id,
+                Err(CallErr::Text(e)) if status_of(&e) == Some(404) && !made_now => {
+                    // The staged copy is gone (deleted in Drafts by the user): make it again.
+                    draft = self.call(async |c| c.create_message_from_mime(raw).await).map_err(Fail::from)?;
+                    on_staged(&draft)?;
+                    made_now = true;
+                }
+                Err(CallErr::Text(e)) if status_of(&e) == Some(404) => {
+                    // The folder is gone: the copy made just now is ours to take back out.
+                    let _ = self.call(async |c| c.permanent_delete(&draft).await);
+                    return Ok(false);
+                }
+                Err(e) => return Err(e.into()),
+            }
         };
         if flags.seen {
             self.call(async |c| c.set_read_status(&id, true).await).map_err(Fail::from)?;

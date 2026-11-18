@@ -229,7 +229,8 @@ async fn delete_plan_in(session: &mut ImapSession, path: &str) -> Result<DeleteP
 /// that the folder is gone.
 async fn find_in(session: &mut ImapSession, path: &str, message_id: &str) -> Result<Found, Fail> {
     match abd_cmds::uids_by_message_id(session, path, message_id).await {
-        Ok(uids) => Ok(uids.into_iter().max().map_or(Found::Absent, |u| Found::Here(u.to_string()))),
+        Ok(uids) if uids.is_empty() => Ok(Found::Absent),
+        Ok(uids) => Ok(Found::Here(uids.into_iter().rev().map(|u| u.to_string()).collect())),
         Err(e) => {
             if confirm_folder_gone(session, path, &e).await? {
                 return Ok(Found::FolderGone);
@@ -584,6 +585,14 @@ impl Backend for ImapBackend {
         self.step(async |session| find_in(session, folder, message_id).await)
     }
 
+    fn found_header(&mut self, folder: &str, handle: &str) -> Result<Option<Header>, Fail> {
+        let uid: u32 = handle.parse().map_err(|_| Fail::Code(Code::Invalid, format!("not a uid: {handle}")))?;
+        self.step(async |session| {
+            let ((headers, _), _) = imap::fetch_headers_by_uids_bound(session, folder, &[uid]).await?;
+            Ok(headers.into_iter().find(|h| h.uid == uid))
+        })
+    }
+
     fn move_found(&mut self, from: &str, handle: &str, to: &str) -> Result<(), Fail> {
         let uid: u32 = handle.parse().map_err(|_| Fail::Code(Code::Invalid, format!("not a uid: {handle}")))?;
         let caps = match self.caps.clone() {
@@ -600,7 +609,7 @@ impl Backend for ImapBackend {
         })
     }
 
-    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags) -> Result<bool, Fail> {
+    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags, _staged: Option<&str>, _on_staged: &mut dyn FnMut(&str) -> Result<(), Fail>) -> Result<bool, Fail> {
         let flags = flag_list(flags);
         let date = imap::internal_date_from_raw(raw);
         self.step(async |session| match imap::append_email(session, folder, raw, &flags, date.as_deref()).await {

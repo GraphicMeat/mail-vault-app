@@ -1092,8 +1092,33 @@ impl Backend for JmapBackend<'_> {
         if !self.mailbox_listed(&mailbox)? {
             return Ok(Found::FolderGone);
         }
-        let hit = self.call(async |c| c.find_message_id(&mailbox, &wanted).await).map_err(Fail::from)?;
-        Ok(hit.map_or(Found::Absent, Found::Here))
+        // Every exact hit in this mailbox (the header filter matches a substring).
+        let hits = self
+            .call(async |c| {
+                let ids = c.query_emails(json!({ "inMailbox": mailbox, "header": ["Message-ID", wanted] }), 50).await?;
+                if ids.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let got = c.get_emails(&ids, &["id", "messageId"]).await?;
+                Ok(got
+                    .list
+                    .iter()
+                    .filter(|e| {
+                        e["messageId"].as_array().is_some_and(|ids| {
+                            ids.iter().filter_map(Value::as_str).any(|m| mailvault_core::maildir::normalize_message_id(m) == wanted)
+                        })
+                    })
+                    .filter_map(|e| e["id"].as_str().map(str::to_string))
+                    .collect::<Vec<_>>())
+            })
+            .map_err(Fail::from)?;
+        Ok(if hits.is_empty() { Found::Absent } else { Found::Here(hits) })
+    }
+
+    fn found_header(&mut self, _folder: &str, handle: &str) -> Result<Option<Header>, Fail> {
+        let ids = vec![handle.to_string()];
+        let got = self.call(async |c| c.get_emails(&ids, HEADER_PROPS).await).map_err(Fail::from)?;
+        Ok(got.list.iter().find(|e| e["id"].as_str() == Some(handle)).map(|e| to_header(e, 0)))
     }
 
     fn move_found(&mut self, from: &str, handle: &str, to: &str) -> Result<(), Fail> {
@@ -1108,7 +1133,7 @@ impl Backend for JmapBackend<'_> {
         }
     }
 
-    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags) -> Result<bool, Fail> {
+    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags, _staged: Option<&str>, _on_staged: &mut dyn FnMut(&str) -> Result<(), Fail>) -> Result<bool, Fail> {
         let dest = self.mailbox_id(folder)?;
         if !self.mailbox_listed(&dest)? {
             return Ok(false);
@@ -1123,38 +1148,6 @@ impl Backend for JmapBackend<'_> {
         if flags.answered {
             keywords.push("$answered".to_string());
         }
-        // One email per account: a copy the server still holds anywhere (a delete in Trash of an
-        // email also in another mailbox only took its Trash label off) gets the folder's label
-        // instead of a second email. A server need not dedupe an import on its own.
-        if let Some(wanted) = mailvault_core::maildir::message_id_in(raw) {
-            let held = self
-                .call(async |c| {
-                    let hits = c.query_emails(json!({ "header": ["Message-ID", wanted] }), 50).await?;
-                    if hits.is_empty() {
-                        return Ok(None);
-                    }
-                    let got = c.get_emails(&hits, &["id", "messageId"]).await?;
-                    Ok(got
-                        .list
-                        .iter()
-                        .find(|e| {
-                            e["messageId"].as_array().is_some_and(|ids| {
-                                ids.iter().filter_map(Value::as_str).any(|m| mailvault_core::maildir::normalize_message_id(m) == wanted)
-                            })
-                        })
-                        .and_then(|e| e["id"].as_str())
-                        .map(str::to_string))
-                })
-                .map_err(Fail::from)?;
-            if let Some(existing) = held {
-                let patches = vec![(existing, vec![(dest.clone(), true)])];
-                let set = self.call(async |c| c.set_mailboxes(&patches).await).map_err(Fail::from)?;
-                return match set.failed.first() {
-                    None => Ok(true),
-                    Some((_, why)) => Err(Fail::Code(Code::Invalid, format!("Email/set refused {why}"))),
-                };
-            }
-        }
         let received = mailvault_core::jmap::client::received_at_of(raw);
         let out = self
             .call(async |c| {
@@ -1163,7 +1156,8 @@ impl Backend for JmapBackend<'_> {
             })
             .map_err(Fail::from)?;
         if let ImportResult::AlreadyExists { existing_id } = out {
-            // The server keeps one copy per account: the folder gets that copy's label.
+            // The server's own verdict (`alreadyExists`, RFC 8621): it holds this message already
+            // and keeps one copy per account, so the folder gets that copy's label.
             let patches = vec![(existing_id, vec![(dest.clone(), true)])];
             let set = self.call(async |c| c.set_mailboxes(&patches).await).map_err(Fail::from)?;
             if let Some((_, why)) = set.failed.first() {

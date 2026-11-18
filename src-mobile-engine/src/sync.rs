@@ -1498,7 +1498,7 @@ fn thread_json(h: &Header) -> String {
 }
 
 /// When the message arrived (INTERNALDATE, which the window is judged by too), else its `Date:`.
-fn header_date_ms(h: &Header) -> i64 {
+pub(crate) fn header_date_ms(h: &Header) -> i64 {
     h.internal_date
         .as_deref()
         .and_then(rfc3339_ms)

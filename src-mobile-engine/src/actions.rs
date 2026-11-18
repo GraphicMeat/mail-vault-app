@@ -140,6 +140,9 @@ struct Arg {
     /// A `restore`: the bin row it puts back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     bin_id: Option<String>,
+    /// A `restore` uploading in two steps (Graph): what the first step made, before the second.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    staged: Option<String>,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -989,9 +992,12 @@ fn release_captures(shared: &Shared, arg: &Arg) {
 }
 
 /// One attempt at a `restore` (`bin.rs`): puts the bin row's message back in the folder it was
-/// deleted from, never as a second copy. With a Message-ID, a folder that holds it already is done.
-/// Then a byte-less row is moved back out of Trash (its recorded Trash, else the account's now);
-/// one Trash no longer holds is [`Reason::GoneFromTrash`]. A row with bytes is uploaded; without a
+/// deleted from, never as a second copy, and never by taking another message for it. A Message-ID
+/// only finds candidates (anyone can send one that names a known message): a candidate counts only
+/// when `bin::same_message` says its headers are the kept message's. Only the folder the message
+/// left and the Trash the bin recorded are looked in. With a Message-ID, a folder that holds the
+/// message already is done. Then a byte-less row is moved back out of Trash; with no candidate
+/// there that is the message, [`Reason::GoneFromTrash`]. A row with bytes is uploaded; without a
 /// Message-ID nothing can tell an upload that landed with its reply lost, so a second attempt
 /// after one went on the wire takes it as done rather than risk a duplicate.
 fn run_restore(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Journaled) -> Result<Outcome, Fail> {
@@ -999,21 +1005,45 @@ fn run_restore(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jo
     let Some(row) = a.arg.bin_id.as_deref().and_then(|id| crate::bin::get(shared, id)) else {
         return Ok(Outcome::Dropped { reason: Reason::Gone, uids_gone: false });
     };
+    let raw = if row.has_eml {
+        match crate::bin::read_bytes(shared, &row.id) {
+            Some(raw) => Some(raw),
+            None => return Ok(Outcome::Dropped { reason: Reason::Gone, uids_gone: false }),
+        }
+    } else {
+        None
+    };
     let mid = row.message_id.as_deref().map(str::trim).filter(|m| !m.is_empty());
     let refusal = |f: Fail| match f {
         // The server answered no (not the network, the sign-in or a timeout): counted.
         Fail::Code(Code::Invalid, why) => Ok(Outcome::Refused(why)),
         f => Err(f),
     };
+    // The first candidate in `folder` that is the kept message; `Err` with the outcome to answer.
+    let verified = |backend: &mut dyn Backend, folder: &str, mid: &str| -> Result<Result<Option<String>, Outcome>, Fail> {
+        let handles = match backend.find_message_id(folder, mid) {
+            Ok(Found::Here(h)) => h,
+            Ok(Found::Absent) => return Ok(Ok(None)),
+            Ok(Found::FolderGone) => return Ok(Err(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false })),
+            Err(f) => return refusal(f).map(Err),
+        };
+        for h in handles {
+            match backend.found_header(folder, &h) {
+                Ok(Some(header)) if crate::bin::same_message(&row, raw.as_deref(), &header) => return Ok(Ok(Some(h))),
+                Ok(_) => {}
+                Err(f) => return refusal(f).map(Err),
+            }
+        }
+        Ok(Ok(None))
+    };
     if let Some(mid) = mid {
-        match backend.find_message_id(&row.mailbox, mid) {
-            Ok(Found::Here(_)) => return Ok(done),
-            Ok(Found::FolderGone) => return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false }),
-            Ok(Found::Absent) => {}
-            Err(f) => return refusal(f),
+        match verified(backend, &row.mailbox, mid)? {
+            Ok(Some(_)) => return Ok(done),
+            Ok(None) => {}
+            Err(outcome) => return Ok(outcome),
         }
     }
-    if !row.has_eml {
+    let Some(raw) = raw else {
         let Some(mid) = mid else {
             return Ok(Outcome::Dropped { reason: Reason::GoneFromTrash, uids_gone: false });
         };
@@ -1027,25 +1057,37 @@ fn run_restore(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jo
         let Some(trash) = trash else {
             return Ok(Outcome::Dropped { reason: Reason::GoneFromTrash, uids_gone: false });
         };
-        let handle = match backend.find_message_id(&trash, mid) {
-            Ok(Found::Here(h)) => h,
-            Ok(_) => return Ok(Outcome::Dropped { reason: Reason::GoneFromTrash, uids_gone: false }),
-            Err(f) => return refusal(f),
+        let handle = match verified(backend, &trash, mid)? {
+            Ok(Some(h)) => h,
+            Ok(None) | Err(_) => return Ok(Outcome::Dropped { reason: Reason::GoneFromTrash, uids_gone: false }),
         };
         mark_sent(shared, account, a)?;
         return match backend.move_found(&trash, &handle, &row.mailbox) {
             Ok(()) => Ok(done),
             Err(f) => refusal(f),
         };
-    }
-    let Some(raw) = crate::bin::read_bytes(shared, &row.id) else {
-        return Ok(Outcome::Dropped { reason: Reason::Gone, uids_gone: false });
     };
     if mid.is_none() && a.arg.sent {
         return Ok(done);
     }
     mark_sent(shared, account, a)?;
-    match backend.append(&row.mailbox, &raw, crate::bin::flags_of(&row)) {
+    let mut on_staged = |id: &str| -> Result<(), Fail> {
+        sync::write_for(shared, account, |c| {
+            let Some(text) = c.query_row("SELECT arg FROM pending_actions WHERE seq = ?1", [a.seq], |r| r.get::<_, Option<String>>(0)).optional()? else {
+                return Ok(());
+            };
+            let mut arg = Arg::read(text);
+            arg.staged = Some(id.to_string());
+            c.execute("UPDATE pending_actions SET arg = ?2 WHERE seq = ?1", (a.seq, serde_json::to_string(&arg).unwrap_or_default()))?;
+            Ok(())
+        })
+    };
+    // The stored arg: a staged copy may have been recorded by an earlier attempt.
+    let staged: Option<String> = sync::write_for(shared, account, |c| {
+        let text = c.query_row("SELECT arg FROM pending_actions WHERE seq = ?1", [a.seq], |r| r.get::<_, Option<String>>(0)).optional()?;
+        Ok(text.and_then(|t| Arg::read(t).staged))
+    })?;
+    match backend.append(&row.mailbox, &raw, crate::bin::flags_of(&row), staged.as_deref(), &mut on_staged) {
         Ok(true) => Ok(done),
         Ok(false) => Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false }),
         Err(f) => refusal(f),

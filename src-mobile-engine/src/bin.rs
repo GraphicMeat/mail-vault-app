@@ -50,7 +50,7 @@
 //! [`SWEEP_UNIT`] rows at a time, a minute after launch and then hourly. Removing an account
 //! removes its rows and files ([`forget_account`]). Nothing is Premium, as on desktop.
 
-use crate::backend::{Backend, DeletePlan, Flags, FolderRow};
+use crate::backend::{Backend, DeletePlan, Flags, FolderRow, Header};
 use crate::db::{Engine, Shared};
 use crate::rpc::{parse, RpcError};
 use crate::sync::Fail;
@@ -108,7 +108,7 @@ fn local_rows(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Res
     Ok(shared.read(|c| {
         let mut st = c.prepare(&format!(
             "SELECT uid, subject, from_name, from_address, date_ms, message_id,
-                    COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), answered
+                    COALESCE(local_seen, seen), COALESCE(local_flagged, flagged), answered, size
              FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid IN ({list})"
         ))?;
         let rows = st
@@ -129,6 +129,7 @@ fn local_rows(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Res
                             "subject": r.get::<_, String>(1)?,
                             "from": { "name": r.get::<_, String>(2)?, "address": r.get::<_, String>(3)? },
                             "date": r.get::<_, i64>(4)?,
+                            "size": r.get::<_, i64>(9)?,
                         }),
                     },
                 ))
@@ -186,6 +187,31 @@ pub(crate) fn capture(
         ids.push(id);
     }
     Ok(ids)
+}
+
+/// Whether `found` (a message a Message-ID lookup turned up) is the message bin row `row` kept,
+/// and not another one carrying the same Message-ID: a Message-ID is the sender's to choose, so
+/// anyone can mail one that names a message they know of. The row's own list headers (as the
+/// same server listed them before the delete) must all agree: subject, sender address, size, and
+/// date (to the second). With the kept bytes, the size and date an upload of them would carry
+/// (`raw`'s length and its Date header) count too, so an upload whose reply was lost is found.
+/// A row captured without those headers matches nothing: the caller then uploads.
+pub(crate) fn same_message(row: &Deleted, raw: Option<&[u8]>, found: &Header) -> bool {
+    let r = &row.row;
+    let (Some(subject), Some(from), Some(date), Some(size)) =
+        (r["subject"].as_str(), r["from"]["address"].as_str(), r["date"].as_i64(), r["size"].as_i64())
+    else {
+        return false;
+    };
+    if found.subject != subject || !found.from.address.trim().eq_ignore_ascii_case(from.trim()) {
+        return false;
+    }
+    let found_secs = crate::sync::header_date_ms(found).div_euclid(1000);
+    let found_size = i64::from(found.size.unwrap_or(0));
+    let uploaded_secs = raw.and_then(|b| mailvault_core::import_rehome::head_of(b).date_secs);
+    let date_ok = found_secs == date.div_euclid(1000) || uploaded_secs == Some(found_secs);
+    let size_ok = found_size == size || raw.is_some_and(|b| found_size == b.len() as i64);
+    date_ok && size_ok
 }
 
 /// Takes bin rows (and their files) out: a delete that did not happen.

@@ -195,9 +195,11 @@ pub(crate) struct DeletePlan {
 /// A Message-ID looked up in one folder ([`Backend::find_message_id`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Found {
-    /// A message with exactly that Message-ID; the handle [`Backend::move_found`] takes (an IMAP
-    /// uid, a JMAP email id, a Graph message id).
-    Here(String),
+    /// The messages with exactly that Message-ID: the handles [`Backend::found_header`] and
+    /// [`Backend::move_found`] take (IMAP uids, JMAP email ids, Graph message ids). A Message-ID
+    /// is the sender's to choose, so a hit is only a candidate: the caller checks its headers
+    /// (`bin::same_message`) before taking it for the message.
+    Here(Vec<String>),
     Absent,
     /// The folder is proven gone.
     FolderGone,
@@ -382,6 +384,11 @@ pub(crate) trait Backend: Send {
     fn find_message_id(&mut self, _folder: &str, _message_id: &str) -> Result<Found, Fail> {
         Err(Fail::unsupported("a Message-ID lookup"))
     }
+    /// The headers of a message [`Backend::find_message_id`] found in `folder`; `None` when it is
+    /// gone. Its uid is meaningless.
+    fn found_header(&mut self, _folder: &str, _handle: &str) -> Result<Option<Header>, Fail> {
+        Err(Fail::unsupported("a found message's headers"))
+    }
     /// Moves the message [`Backend::find_message_id`] found in `from` to `to` (a stored path).
     fn move_found(&mut self, _from: &str, _handle: &str, _to: &str) -> Result<(), Fail> {
         Err(Fail::unsupported("a move back"))
@@ -389,8 +396,11 @@ pub(crate) trait Backend: Send {
     /// Uploads `raw` into `folder` (a stored path) with `flags` and the date its Date header
     /// gives: IMAP APPEND, JMAP `Email/import`, Graph a message made from the MIME and moved there
     /// (Graph keeps it as a draft, as desktop's migration does). The caller checked that the
-    /// folder does not hold it already. `Ok(false)`: the folder is proven gone.
-    fn append(&mut self, _folder: &str, _raw: &[u8], _flags: Flags) -> Result<bool, Fail> {
+    /// folder does not hold it already. `Ok(false)`: the folder is proven gone. A backend that
+    /// uploads in two steps (Graph: make, then move) names what the first made through `on_staged`
+    /// before the second, and a later attempt hands it back as `staged`, so a failed second step
+    /// never leaves a copy behind or makes another.
+    fn append(&mut self, _folder: &str, _raw: &[u8], _flags: Flags, _staged: Option<&str>, _on_staged: &mut dyn FnMut(&str) -> Result<(), Fail>) -> Result<bool, Fail> {
         Err(Fail::unsupported("an upload"))
     }
     /// Whether `folder` may hold mail the last pass did not list, asked before a background run's

@@ -33,8 +33,17 @@ fn raw(uid: u32, subject: &str) -> String {
     )
 }
 
+fn at(uid: u32) -> i64 {
+    (now_ms() / DAY - 2) * DAY + uid as i64 * 1000
+}
+
 fn msg(uid: u32, subject: &str) -> Message {
-    Message::new(uid, raw(uid, subject)).with_internal_ms((now_ms() / DAY - 2) * DAY + uid as i64 * 1000)
+    Message::new(uid, raw(uid, subject)).with_internal_ms(at(uid))
+}
+
+/// Another message that carries `uid`'s Message-ID: anyone can send one.
+fn decoy(uid: u32, n: u32) -> Message {
+    Message::new(n, raw(uid, "Totally the same message").replace("Sender", "Mallory")).with_internal_ms(at(uid))
 }
 
 fn mailbox(name: &str, attrs: &[&str], msgs: Vec<Message>) -> Mailbox {
@@ -245,9 +254,9 @@ fn a_recover_never_uploads_a_second_copy() {
     let seq = f.delete("Trash", &[5]);
     assert_eq!(f.events.final_result(seq)["outcome"], "done");
     let id = f.bin()[0]["id"].as_str().unwrap().to_string();
-    // Another client put the same message back meanwhile.
+    // Another client put the same message back meanwhile (the same bytes, the same date).
     server.mutate(|s| {
-        s.find_mut("Trash").unwrap().add(Message::new(9, raw(5, "t5")));
+        s.find_mut("Trash").unwrap().add(Message::new(9, raw(5, "t5")).with_internal_ms(at(5)));
     });
     let appends = server.count_commands("APPEND");
     let seq = f.recover_seq(&id);
@@ -372,4 +381,64 @@ fn retention_account_removal_and_discard_empty_the_bin() {
     f.engine.rpc("mobile.accounts.remove", json!({ "accountId": f.account })).unwrap();
     assert!(f.bin().is_empty(), "the account's rows go with it");
     assert!(!f.eml(&ids[2]).exists());
+}
+
+/// A Message-ID proves nothing: a message that only carries the kept one's Message-ID (anyone can
+/// mail one) is neither taken for it nor relabelled. The kept bytes are uploaded beside it.
+#[test]
+fn a_decoy_with_the_same_message_id_is_not_the_recovered_message() {
+    let server = MockImap::start(scenario(&[], &[5]));
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    let seq = f.delete("Trash", &[5]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let id = f.bin()[0]["id"].as_str().unwrap().to_string();
+    server.mutate(|s| {
+        s.find_mut("Trash").unwrap().add(decoy(5, 20));
+    });
+    let appends = server.count_commands("APPEND");
+    let seq = f.recover_seq(&id);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert_eq!(server.count_commands("APPEND"), appends + 1, "the kept message was uploaded");
+    let trash = server.state().find("Trash").unwrap().messages.clone();
+    assert_eq!(trash.len(), 2, "the decoy and the recovered message");
+    assert!(trash.iter().any(|m| m.raw == raw(5, "t5").into_bytes()), "the kept bytes are back");
+    assert!(f.bin().is_empty());
+}
+
+/// A move back out of Trash takes only the message the bin recorded: a decoy in Trash with its
+/// Message-ID stays where it is, and one in Junk is never even looked at.
+#[test]
+fn a_move_back_never_takes_a_decoy_from_trash_or_junk() {
+    let server = MockImap::start(scenario(&[1], &[]).mailbox(mailbox("Junk", &["\\HasNoChildren", "\\Junk"], vec![])));
+    let f = setup(&server);
+    f.sync(None);
+    let seq = f.delete("INBOX", &[1]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let id = f.bin()[0]["id"].as_str().unwrap().to_string();
+    // The real one leaves Trash; a decoy lands there, and another in Junk.
+    server.mutate(|s| {
+        let t = s.find_mut("Trash").unwrap();
+        let uids: Vec<u32> = t.messages.iter().map(|m| m.uid).collect();
+        t.expunge(&uids, false);
+        t.add(decoy(1, 30));
+        s.find_mut("Junk").unwrap().add(decoy(1, 31));
+    });
+    let seq = f.recover_seq(&id);
+    let r = f.events.final_result(seq);
+    assert_eq!((r["outcome"].clone(), r["reason"].clone()), (json!("dropped"), json!("GONE_FROM_TRASH")), "{r}");
+    assert_eq!(server.state().find("Trash").unwrap().messages.len(), 1, "the decoy stays in Trash");
+    assert_eq!(server.state().find("Junk").unwrap().messages.len(), 1, "and in Junk");
+    assert!(server.state().find("INBOX").unwrap().messages.is_empty(), "nothing moved into the Inbox");
+    assert_eq!(f.bin().len(), 1, "the row stays");
+
+    // With the real one back in Trash beside the decoy, the real one comes back.
+    server.mutate(|s| {
+        s.find_mut("Trash").unwrap().add(Message::new(40, raw(1, "m1")).with_internal_ms(at(1)));
+    });
+    let seq = f.recover_seq(&id);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let inbox = server.state().find("INBOX").unwrap().messages.clone();
+    assert_eq!(inbox.len(), 1);
+    assert_eq!(inbox[0].raw, raw(1, "m1").into_bytes(), "the real one, not the decoy");
 }

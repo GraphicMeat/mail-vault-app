@@ -536,8 +536,8 @@ fn jmap_deleted_bin_recovers_by_label_and_by_import() {
 }
 
 /// A delete in Trash of an email also in another mailbox only takes the Trash label off (R5): the
-/// email stays on the server. Its recover puts the label back on that email, and never imports a
-/// second one (a server need not dedupe an import).
+/// email stays on the server. Its recover imports the kept bytes; the server's own dedupe
+/// (`alreadyExists`) names the email it holds, which gets the label back: one email, not two.
 #[test]
 fn a_jmap_recover_of_an_email_still_elsewhere_adds_its_label_back() {
     let now = now_secs();
@@ -545,6 +545,8 @@ fn a_jmap_recover_of_an_email_still_elsewhere_adds_its_label_back() {
     let mut both = email("t", "Tango", now - 200);
     both.also_in = vec!["mb-proj".into()];
     s.accounts[0].mailboxes[3].emails.push(both);
+    // A server that keeps one email per Message-ID: its `alreadyExists` is the server's verdict.
+    s.faults.push(Fault::ImportAlreadyExists);
     let f = setup(s);
     f.sync(None);
     f.sync(Some("mb-trash"));
@@ -560,8 +562,34 @@ fn a_jmap_recover_of_an_email_still_elsewhere_adds_its_label_back() {
     let mut boxes = f.mailboxes_of("t");
     boxes.sort();
     assert_eq!(boxes, vec!["mb-proj".to_string(), "mb-trash".to_string()], "the same email, labelled again");
-    assert!(f.api_calls("Email/import").is_empty(), "nothing imported");
+    assert_eq!(f.m.read(|s| s.emails_in(ACC, "mb-trash")).len(), 1, "one email in Trash");
+    assert_eq!(f.api_calls("Email/import").len(), 1, "the kept bytes went up; the server named its copy");
     assert!(f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().is_empty());
+}
+
+/// A move back out of Trash takes only the email the bin recorded: a decoy carrying its
+/// Message-ID is left in Trash and the recover says the email is gone from Trash.
+#[test]
+fn a_jmap_move_back_never_takes_a_decoy() {
+    let now = now_secs();
+    let f = setup(scenario(vec![email("c", "Charlie", now - 200)]));
+    f.sync(None);
+    let uid = f.uids("INBOX")["Charlie"];
+    f.apply("delete", "INBOX", &[uid], None);
+    f.wait_pending_empty();
+    let id = f.rpc("mobile.deleted.list", json!({}))["rows"][0]["id"].as_str().unwrap().to_string();
+    // The real email is destroyed; a decoy with its Message-ID lands in Trash.
+    f.m.mutate(|s| {
+        s.account_mut(ACC).remove_email("c");
+        let mut d = email("decoy", "Charlie", now - 200);
+        d.raw = raw("Charlie", "Not the same.").replace("Subject: Charlie", "Subject: Charlie (copy)");
+        s.add_email(ACC, "mb-trash", d);
+    });
+    let r = f.rpc("mobile.deleted.recover", json!({ "ids": [id] }));
+    let seq = r["queued"][0]["seq"].as_i64().unwrap();
+    let (_, result) = f.events.wait(0, "restore result", |n, v| n == "mobile.action.result" && v["seq"] == seq && v["outcome"] != "retrying");
+    assert_eq!((result["outcome"].clone(), result["reason"].clone()), (json!("dropped"), json!("GONE_FROM_TRASH")), "{result}");
+    assert_eq!(f.mailboxes_of("decoy"), vec!["mb-trash".to_string()], "the decoy stays in Trash");
 }
 
 #[test]

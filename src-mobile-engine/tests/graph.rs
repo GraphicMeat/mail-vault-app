@@ -362,9 +362,14 @@ fn graph_deleted_bin_recovers_by_move_and_by_upload() {
     assert_eq!(bin.len(), 1, "{bin:?}");
     assert_eq!((bin[0]["hasEml"].clone(), bin[0]["mailbox"].clone(), bin[0]["messageId"].clone()), (json!(false), json!("INBOX"), json!(imid)));
     let id = bin[0]["id"].as_str().unwrap().to_string();
+    // A decoy in the Inbox carrying the same Message-ID is not taken for it.
+    let decoy = f.g.add_message("inbox", "Charlie (copy)", now - 2 * HOUR, &plain("Not the same"));
+    f.g.state.lock().unwrap().messages.iter_mut().find(|m| m.id == decoy).unwrap().internet_message_id = imid.clone();
     assert!(f.rpc("mobile.deleted.recover", json!({ "ids": [id] }))["queued"][0]["seq"].is_i64());
     f.wait_pending_empty();
     assert_eq!(f.g.messages_in("inbox").iter().filter(|m| m.subject == "Charlie").count(), 1, "moved back");
+    assert!(f.g.message(&decoy).is_some(), "the decoy is untouched");
+    f.g.state.lock().unwrap().messages.retain(|m| m.id != decoy);
     assert!(f.g.messages_in("deleteditems").is_empty());
     assert!(f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().is_empty());
 
