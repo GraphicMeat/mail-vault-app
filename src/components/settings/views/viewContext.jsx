@@ -22,17 +22,19 @@ const DEFAULT = Object.freeze({
   formatBytes: (bytes) => `${bytes} B`,
   Private: PlainText,
   privateAttr: (value) => value,
+  privateInputClass: '',
 });
 
 const ViewContext = createContext(DEFAULT);
 
 /**
  * Provides the app's `t`, `locale`, `formatTime(date)`, `formatDateOnly(date, opts)`,
- * `formatDateTime(date)`, `formatBytes(n)`, `Private` (`<Private kind>{value}</Private>`) and
- * `privateAttr(value, kind)` to the views under it. A container re-renders on a language or format
+ * `formatDateTime(date)`, `formatBytes(n)`, `Private` (`<Private kind>{value}</Private>`),
+ * `privateAttr(value, kind)` and `privateInputClass` (the class a field showing a personal value
+ * wears, masked in privacy mode) to the views under it. A container re-renders on a language or format
  * change (its own hooks), and the value is rebuilt each render, so every view under it follows.
  */
-export function SettingsViewProvider({ t, locale, formatTime, formatDateOnly, formatDateTime, formatBytes, Private, privateAttr, children }) {
+export function SettingsViewProvider({ t, locale, formatTime, formatDateOnly, formatDateTime, formatBytes, Private, privateAttr, privateInputClass, children }) {
   const value = {
     t: t || DEFAULT.t,
     locale: locale || DEFAULT.locale,
@@ -42,11 +44,12 @@ export function SettingsViewProvider({ t, locale, formatTime, formatDateOnly, fo
     formatBytes: formatBytes || DEFAULT.formatBytes,
     Private: Private || DEFAULT.Private,
     privateAttr: privateAttr || DEFAULT.privateAttr,
+    privateInputClass: privateInputClass || DEFAULT.privateInputClass,
   };
   return <ViewContext.Provider value={value}>{children}</ViewContext.Provider>;
 }
 
 /** The translator of the app rendering this view (named as the apps' own hooks are). */
 export const useT = () => useContext(ViewContext).t;
-/** The whole context: `{ t, locale, formatTime, formatDateOnly, formatDateTime, formatBytes, Private, privateAttr }`. */
+/** The whole context: `{ t, locale, formatTime, formatDateOnly, formatDateTime, formatBytes, Private, privateAttr, privateInputClass }`. */
 export const useViewEnv = () => useContext(ViewContext);

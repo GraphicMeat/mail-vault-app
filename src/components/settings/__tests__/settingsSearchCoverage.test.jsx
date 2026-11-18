@@ -74,6 +74,7 @@ const ALLOWLIST = new Set([
   'settings.appearance.custom', 'common.from', 'common.folder', 'workspace.selectMessage',
   'premium.list.included', 'premium.list.locked', 'premium.list.title',
   'settings.accounts.preferences', // SettingsTabs group aria-label, not a setting
+  'settings.accounts.accounts', // the account list's own name (a list that does not reorder), not a setting
   'unsubscribe.scope', // the Unsubscribe list's account filter, not a setting
   'autoTag.newTagPlaceholder', 'autoTag.resultHeading',
   'fields.moveUp', 'fields.moveDown', 'fields.newOption', 'fields.optionColor',
