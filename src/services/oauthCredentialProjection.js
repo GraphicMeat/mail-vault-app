@@ -55,14 +55,14 @@ export async function initOAuthCredentialProjection() {
     await listen('credentials-changed', event => {
       const ids = event?.payload?.ids;
       if (Array.isArray(ids) && ids.every(id => typeof id === 'string')) {
-        void project(new Set(ids));
+        return project(new Set(ids)).catch(() => {});
       }
     });
     await listen('oauth2-tokens-refreshed', event => {
       const id = event?.payload?.accountId;
-      if (typeof id === 'string') void project(new Set([id]));
+      if (typeof id === 'string') return project(new Set([id])).catch(() => {});
     });
-    await listen('daemon-reconnected', () => { void project(null); });
+    await listen('daemon-reconnected', () => project(null).catch(() => {}));
   } catch { /* web dev mode: no Tauri events */ }
 }
 

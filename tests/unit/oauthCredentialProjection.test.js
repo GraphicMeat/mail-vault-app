@@ -124,8 +124,8 @@ describe('native OAuth credential projection', () => {
   it('a rejected fresh read is consumed without changing the visible grant', async () => {
     h.read = vi.fn(async () => { throw new Error('synthetic read failure'); });
     await projection.initOAuthCredentialProjection();
-    notify('credentials-changed', { ids: ['g1'], version: 6 });
-    await vi.waitFor(() => expect(h.read).toHaveBeenCalledTimes(1));
+    await notify('credentials-changed', { ids: ['g1'], version: 6 });
+    expect(h.read).toHaveBeenCalledTimes(1);
     expect(h.accounts[0]).toEqual(account());
     expect(h.send).not.toHaveBeenCalled();
   });
