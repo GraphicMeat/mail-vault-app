@@ -1,0 +1,165 @@
+// Settings > Templates as a view: the reusable messages compose inserts, a name and a plain-text
+// body each. `templates`: `[{ id?, name, body }]` (an imported one may have no id: its index keys
+// it). `onAdd(name, body)`, `onUpdate(index, template, { name, body })` and `onRemove(index,
+// template)` change the list; each may return a promise, and the form closes once an add or an
+// update resolves to anything but `false` (the phone keeps it open when its write is refused).
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FileText, Trash2, Plus, PenTool, Save } from 'lucide-react';
+import { SettingsPageLayout, SettingsCard } from '../../ui/SettingsForm';
+import { useT } from './viewContext';
+
+export function TemplatesView({ templates, onAdd, onUpdate, onRemove, notice = null }) {
+  const t = useT();
+  const [templateForm, setTemplateForm] = useState(null); // null | { mode: 'add' } | { mode: 'edit', index }
+  const [templateName, setTemplateName] = useState('');
+  const [templateBody, setTemplateBody] = useState('');
+
+  const close = () => {
+    setTemplateForm(null);
+    setTemplateName('');
+    setTemplateBody('');
+  };
+  const submit = async () => {
+    const name = templateName.trim();
+    const body = templateBody.trim();
+    if (!name || !body) return;
+    const done = templateForm.mode === 'add'
+      ? await onAdd(name, body)
+      : await onUpdate(templateForm.index, templates[templateForm.index], { name, body });
+    if (done !== false) close();
+  };
+
+  return (
+    <SettingsPageLayout>
+      <SettingsCard data-testid="settings-templates" icon={FileText} headingClassName="mb-4" title={t('settings.templates.emailTemplates')}>
+        <p className="text-sm text-mail-text-muted mb-4">
+          {t('settings.templates.createReusableTemplatesCommonEmails')}
+        </p>
+
+        <div className="space-y-3">
+          {templates.map((tpl, index) => (
+            // eslint-disable-next-line react/no-array-index-key -- an imported template may have no id
+            <div key={tpl.id ?? `#${index}`} className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
+              <div className="flex-1 min-w-0 mr-3">
+                <div className="text-sm font-medium text-mail-text truncate" dir="auto">{tpl.name}</div>
+                <div className="text-xs text-mail-text-muted truncate" dir="auto">
+                  {(tpl.body || '').length > 50 ? tpl.body.slice(0, 50) + '...' : tpl.body}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => {
+                    setTemplateForm({ mode: 'edit', index });
+                    setTemplateName(tpl.name || '');
+                    setTemplateBody(tpl.body || '');
+                  }}
+                  className="p-1.5 text-mail-text-muted hover:text-mail-text hover:bg-mail-border rounded-lg transition-colors"
+                  title={t('settings.templates.editTemplate')}
+                  aria-label={`${t('settings.templates.editTemplate')}: ${tpl.name}`}
+                >
+                  <PenTool size={14} />
+                </button>
+                <button
+                  onClick={() => onRemove(index, tpl)}
+                  className="p-1.5 text-mail-text-muted hover:text-mail-danger hover:bg-mail-border rounded-lg transition-colors"
+                  title={t('settings.templates.deleteTemplate')}
+                  aria-label={`${t('settings.templates.deleteTemplate')}: ${tpl.name}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {templates.length === 0 && !templateForm && (
+            <div className="text-sm text-mail-text-muted text-center py-3">
+              {t('settings.templates.noTemplatesYetCreateOne')}
+            </div>
+          )}
+
+          <AnimatePresence>
+            {templateForm && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-4 bg-mail-bg rounded-lg border border-mail-border space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-mail-text mb-1">
+                      {t('settings.templates.templateName')}
+                    </label>
+                    <input aria-label={t('settings.templates.templateName')}
+                      type="text"
+                      dir="auto"
+                      value={templateName}
+                      onChange={(e) => setTemplateName(e.target.value)}
+                      placeholder={t('settings.templates.eGFollowUpThank')}
+                      className="w-full px-3 py-2 bg-mail-surface border border-mail-border rounded-lg
+                                text-sm text-mail-text placeholder-mail-text-muted
+                                focus:border-mail-accent focus:outline-none transition-colors"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-mail-text mb-1">
+                      {t('settings.templates.templateBody')}
+                    </label>
+                    <textarea aria-label={t('settings.templates.templateBody')}
+                      dir="auto"
+                      value={templateBody}
+                      onChange={(e) => setTemplateBody(e.target.value)}
+                      placeholder={t('settings.templates.writeTemplateContentHere')}
+                      rows={5}
+                      className="w-full px-3 py-2 bg-mail-surface border border-mail-border rounded-lg
+                                text-sm text-mail-text placeholder-mail-text-muted
+                                focus:border-mail-accent focus:outline-none transition-colors resize-y"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 justify-end">
+                    <button
+                      onClick={close}
+                      className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
+                                hover:bg-mail-border rounded-lg transition-colors"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      onClick={submit}
+                      disabled={!templateName.trim() || !templateBody.trim()}
+                      className="px-3 py-1.5 text-sm bg-mail-accent-fill text-white rounded-lg
+                                hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                                flex items-center gap-1.5"
+                    >
+                      <Save size={14} />
+                      {templateForm.mode === 'add' ? t('common.save') : t('settings.accounts.update')}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {!templateForm && (
+            <button
+              onClick={() => {
+                setTemplateForm({ mode: 'add' });
+                setTemplateName('');
+                setTemplateBody('');
+              }}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-mail-accent-text
+                        hover:bg-mail-bg rounded-lg transition-colors w-full justify-center
+                        border border-dashed border-mail-border hover:border-mail-accent"
+            >
+              <Plus size={14} />
+              {t('settings.templates.addTemplate')}
+            </button>
+          )}
+        </div>
+      </SettingsCard>
+      {notice}
+    </SettingsPageLayout>
+  );
+}

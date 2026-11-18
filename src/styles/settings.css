@@ -232,3 +232,14 @@
   .settings-nav-item, .settings-tabs > button, .segmented-choice > button, .settings-segments > button,
   .settings-visual-option-label, .choice-card-button, .setting-row-control > :is(select, input) { min-height: 44px; }
 }
+
+/* Settings > Unsubscribe (views/UnsubscribeView.jsx): on a narrow screen (a phone, a narrow
+   window) each row wraps under its sender instead of five columns side by side. */
+@media (max-width: 600px) {
+  .unsubscribe-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .unsubscribe-table, .unsubscribe-table tbody { display: block; }
+  .unsubscribe-table tr { display: flex; flex-wrap: wrap; align-items: center; column-gap: 4px; padding: 6px 0; }
+  .unsubscribe-table td:first-child { flex: 1 1 100%; width: auto; max-width: 100%; }
+  .unsubscribe-table td:last-child:not(:first-child) { margin-left: auto; }
+  .unsubscribe-table .unsubscribe-confirm td { flex: 1 1 100%; }
+}
