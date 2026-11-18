@@ -65,8 +65,10 @@ export function useStartupLoad({ setPendingOperation, openMailFromSidebar }) {
           }
 
           // activateAccount handles all local cache + server loading in parallel
-          useMailStore.getState().activateAccount(firstVisible.id, 'INBOX')
-            .catch(e => console.warn('[QuickLoad] activateAccount failed (non-fatal):', e));
+          if (!useMailStore.getState().unifiedInbox) {
+            useMailStore.getState().activateAccount(firstVisible.id, 'INBOX')
+              .catch(e => console.warn('[QuickLoad] activateAccount failed (non-fatal):', e));
+          }
 
           // Check for pending bulk operations
           try {

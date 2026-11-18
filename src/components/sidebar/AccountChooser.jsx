@@ -7,7 +7,7 @@ import { useT } from '../../i18n/index.js';
 import { AccountSections } from './AccountSections';
 
 /** Searchable account selection stays anchored to the current account. */
-export function AccountChooser({ position, onClose, sections, displayNames, renderAccount, unifiedRow, onAddAccount }) {
+export function AccountChooser({ position, onClose, sections, displayNames, renderAccount, unifiedRow, onAddAccount, groupNav }) {
   const t = useT();
   const [query, setQuery] = useState('');
   const panelRef = useDialogA11y(true, onClose);
@@ -45,7 +45,9 @@ export function AccountChooser({ position, onClose, sections, displayNames, rend
     </label>
     <div className="sidebar-chooser-list">
       {showUnified && unifiedRow}
-      <AccountSections sections={matches} renderAccount={account => renderAccount(account, true)} />
+      <AccountSections sections={matches} renderAccount={account => renderAccount(account, true)}
+        {...groupNav} collapsed={normalized ? {} : groupNav?.collapsed}
+        onOpenGroup={name => { onClose(); groupNav?.openGroup(name); }} onToggleGroup={groupNav?.toggleGroup} />
       {matches.length === 0 && !showUnified && <p className="sidebar-no-results" role="status">{t('sidebar.noAccountsFound')}</p>}
     </div>
     <div className="sidebar-chooser-footer">

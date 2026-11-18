@@ -1,17 +1,22 @@
 import React from 'react';
 import { Private } from '../privacy/Private';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
+import { AccountGroupHeader, CollapsedGroupChip } from './AccountGroupHeader';
 
-export function AccountSections({ sections, renderAccount, compact = false }) {
+export function AccountSections({ sections, renderAccount, compact = false, collapsed, selectedGroup, unreadOf, onOpenGroup, onToggleGroup }) {
   const pa = usePrivateAttr();
   if (compact) return sections.map((section, index) => <React.Fragment key={section.name === null ? 'ungrouped' : `group-${section.name}`}>
     {index > 0 && <div role="separator" className="sidebar-collapsed-divider" title={pa(section.name, 'name')} />}
+    {section.name && onOpenGroup && <CollapsedGroupChip name={section.name} selected={selectedGroup === section.name} unread={unreadOf?.(section.name) || 0} onOpen={onOpenGroup} />}
     {section.accounts.map(renderAccount)}
   </React.Fragment>);
   return sections.map(section => section.name === null
     ? <React.Fragment key="ungrouped">{section.accounts.map(renderAccount)}</React.Fragment>
     : <div key={`group-${section.name}`} role="group" aria-label={pa(section.name, 'name')}>
-      <div className="sidebar-group-label"><Private kind="name">{section.name}</Private></div>
-      {section.accounts.map(renderAccount)}
+      {onOpenGroup ? <AccountGroupHeader name={section.name} collapsed={!!collapsed?.[section.name]}
+        selected={selectedGroup === section.name} unread={unreadOf?.(section.name) || 0}
+        onOpen={onOpenGroup} onToggle={onToggleGroup} />
+        : <div className="sidebar-group-label"><Private kind="name">{section.name}</Private></div>}
+      {(!onOpenGroup || !collapsed?.[section.name]) && section.accounts.map(renderAccount)}
     </div>);
 }

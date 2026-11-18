@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 import { raiseWindow } from '../../scripts/screenshots/window.js';
@@ -25,6 +25,12 @@ async function captureScreen(name, capture) {
   });
   await browser.pause(250);
   capture(name);
+  const selector = name.startsWith('sidebar-account-groups-')
+    ? '.sidebar-account-list [role="group"][aria-label="Work"]'
+    : name.startsWith('settings-account-group-')
+      ? '.account-settings-list input[id^="account-group-"]'
+      : '.sidebar-collapsed-accounts .sidebar-collapsed-divider';
+  writeFileSync(resolve(process.env.HARNESS_SHOTS_OUT || '.artifacts', `${name.replace(/-(light|dark)$/, '')}.reached`), `${selector}\n`);
 }
 
 describe('Account groups capture', function () {

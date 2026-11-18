@@ -24,9 +24,9 @@ const accounts = [
 beforeEach(() => {
   useSettingsStore.setState({ sidebarLayout: 'stacked', sidebarCollapsed: false, sidebarStyle: 'list',
     sidebarBackupStatusLocation: 'avatar', accountGroups: { a: 'Personal', b: 'Work', c: 'Work' },
-    accountOrder: [], hiddenAccounts: {}, accountColors: {}, displayNames: {}, unreadPerAccount: {},
+    accountOrder: [], hiddenAccounts: {}, accountColors: {}, displayNames: {}, unreadPerAccount: {}, collapsedAccountGroups: {},
     expandedFolders: {}, transferHoverEnabled: false, billingProfile: null });
-  useMailStore.setState({ accounts, activeAccountId: 'a', activeMailbox: 'INBOX', unifiedInbox: false,
+  useMailStore.setState({ accounts, activeAccountId: 'a', activeMailbox: 'INBOX', unifiedInbox: false, unifiedGroup: null,
     mailboxes: [], emails: [], localEmails: [], connectionStatus: 'connected', connectionError: null,
     connectionErrorType: null, suspectEmptyServerData: null, loading: false, loadingMore: false,
     totalEmails: 0, viewMode: 'all', folderStatus: {} });
@@ -34,6 +34,68 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); usePrivacyStore.setState({ enabled: false }); vi.restoreAllMocks(); });
 
 describe('sidebar account groups', () => {
+  it('opens a group inbox and leaves All Inboxes unselected', async () => {
+    const onOpenMail = vi.fn();
+    const load = useMailStore.getState().loadUnifiedInbox;
+    useMailStore.setState({ loadUnifiedInbox: vi.fn().mockResolvedValue() });
+    render(<Sidebar onOpenMail={onOpenMail} />);
+    fireEvent.click(within(screen.getByRole('group', { name: 'Work' })).getByRole('button', { name: 'Work inbox' }));
+    await vi.waitFor(() => expect(useMailStore.getState().unifiedGroup).toBe('Work'));
+    expect(onOpenMail).toHaveBeenCalled();
+    expect(within(screen.getByRole('group', { name: 'Work' })).getByRole('button', { name: 'Work inbox' }).getAttribute('aria-current')).toBe('true');
+    expect(screen.getByTestId('all-inboxes-btn').hasAttribute('aria-current')).toBe(false);
+    useMailStore.setState({ loadUnifiedInbox: load });
+  });
+  it('folds, keeps unread sum, and restores the fold after remount', () => {
+    useSettingsStore.setState({ unreadPerAccount: { b: 3, c: 4 } });
+    const view = render(<Sidebar />);
+    const work = () => screen.getByRole('group', { name: 'Work' });
+    const toggle = () => within(work()).getByRole('button', { name: 'Collapse Work' });
+    fireEvent.click(toggle());
+    expect(within(work()).getByRole('button', { name: 'Expand Work' }).getAttribute('aria-expanded')).toBe('false');
+    expect(work().textContent).toContain('7');
+    expect(within(work()).queryByRole('button', { name: /Bob/ })).toBeNull();
+    view.unmount();
+    render(<Sidebar />);
+    expect(within(work()).getByRole('button', { name: 'Expand Work' })).toBeTruthy();
+    fireEvent.click(within(work()).getByRole('button', { name: 'Expand Work' }));
+    expect(within(work()).getByRole('button', { name: /Bob/ })).toBeTruthy();
+  });
+  it('falls back to All Inboxes when the open group disappears', async () => {
+    const load = useMailStore.getState().loadUnifiedInbox;
+    useMailStore.setState({ unifiedInbox: true, unifiedGroup: 'Work', loadUnifiedInbox: vi.fn().mockResolvedValue() });
+    render(<Sidebar />);
+    act(() => useSettingsStore.setState({ accountGroups: { a: 'Personal' } }));
+    await vi.waitFor(() => expect(useMailStore.getState().unifiedGroup).toBeNull());
+    useMailStore.setState({ loadUnifiedInbox: load });
+  });
+  it('opens a folded group from the chooser and exposes matches during search', async () => {
+    useSettingsStore.setState({ sidebarLayout: 'switcher', collapsedAccountGroups: { Work: true } });
+    const load = useMailStore.getState().loadUnifiedInbox;
+    useMailStore.setState({ loadUnifiedInbox: vi.fn().mockResolvedValue() });
+    render(<Sidebar />);
+    fireEvent.click(screen.getByRole('button', { name: /Switch account/ }));
+    const chooser = screen.getByRole('dialog', { name: 'Accounts' });
+    expect(within(chooser).queryByRole('button', { name: /Bob/ })).toBeNull();
+    fireEvent.change(within(chooser).getByRole('searchbox'), { target: { value: 'bob' } });
+    expect(within(chooser).getByRole('button', { name: /Bob/ })).toBeTruthy();
+    fireEvent.click(within(chooser).getByRole('button', { name: 'Work inbox' }));
+    await vi.waitFor(() => expect(useMailStore.getState().unifiedGroup).toBe('Work'));
+    expect(screen.queryByRole('dialog', { name: 'Accounts' })).toBeNull();
+    useMailStore.setState({ loadUnifiedInbox: load });
+  });
+  it('opens a group from the rail while account avatars stay visible', async () => {
+    useSettingsStore.setState({ sidebarCollapsed: true, collapsedAccountGroups: { Work: true } });
+    const load = useMailStore.getState().loadUnifiedInbox;
+    useMailStore.setState({ loadUnifiedInbox: vi.fn().mockResolvedValue() });
+    render(<Sidebar />);
+    const rail = document.querySelector('.sidebar-collapsed-accounts');
+    expect(rail.querySelectorAll('button[aria-label*="@"]')).toHaveLength(3);
+    fireEvent.click(within(rail).getByRole('button', { name: 'Work inbox' }));
+    await vi.waitFor(() => expect(useMailStore.getState().unifiedGroup).toBe('Work'));
+    expect(rail.querySelectorAll('button[aria-label*="@"]')).toHaveLength(3);
+    useMailStore.setState({ loadUnifiedInbox: load });
+  });
   it('renders named groups and keeps account order', () => {
     render(<Sidebar />);
     const personal = screen.getByRole('group', { name: 'Personal' });

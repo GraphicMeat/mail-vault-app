@@ -44,6 +44,7 @@ export const createAccountSlice = (set) => ({
 
   // Unified inbox mode
   unifiedInbox: false,
+  unifiedGroup: null,
   unifiedFolder: 'INBOX',
 
   // ── Actions implemented by workflows (bound in bindStoreActions) ──

@@ -2,6 +2,7 @@
 
 import * as db from '../../services/db';
 import { useSettingsStore } from '../settingsStore';
+import { accountsInScope } from '../../services/accountGroups';
 import { getAccountCacheMailboxes as _getAccountMailboxes } from '../../services/cacheManager';
 import { _resolveMailboxPath, vaultKey, vaultKeys } from './unifiedHelpers';
 import { setArchivedGroup, deriveArchivedUnion } from './messageListSlice';
@@ -122,16 +123,16 @@ export const createUiSlice = (set, get) => ({
       // Refresh local state in background for up-to-date archive data
       if (get().unifiedInbox) {
         // Unified mode: refresh local data for all accounts using resolved folder paths
-        const { accounts, unifiedFolder } = get();
+        const { accounts, unifiedFolder, unifiedGroup } = get();
         const targetFolder = unifiedFolder || 'INBOX';
-        const { hiddenAccounts } = useSettingsStore.getState();
+        const scopeSettings = useSettingsStore.getState();
         const allLocalEmails = [];
         const allSavedIds = new Set();
         // Pairs whose vault read came back unknown: they keep what the store
         // already holds for them instead of dropping out of the union.
         let savedUnknown = false;
         const localsUnknown = [];
-        const viewedAccounts = accounts.filter(a => !hiddenAccounts[a.id]);
+        const viewedAccounts = accountsInScope(accounts, { ...scopeSettings, group: unifiedGroup });
         // Every viewed account contributes one pair even if its own read
         // throws (see messageListSlice's deriveArchivedUnion): a pair with no
         // cached entry just contributes nothing, which is the same as today.

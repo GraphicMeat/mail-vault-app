@@ -14,6 +14,37 @@ set -euo pipefail
 
 # Other cards share this script; each shot has its own flow.
 case ",${HARNESS_SHOTS:-}," in
+  *,group-inbox-list,*|*,group-folded,*)
+    cd "$(dirname "$0")/.."
+    out=${HARNESS_SHOTS_OUT:-${1:-$PWD/.artifacts}}
+    case "$out" in /*) ;; *) echo 'Shot output must be an absolute directory' >&2; exit 1 ;; esac
+    export HARNESS_SHOTS_OUT="$out"
+    mkdir -p "$out"
+    [ -d node_modules ] || npm ci
+    capture_conf=src-tauri/tauri.conf.json
+    capture_backup=$(mktemp)
+    cp "$capture_conf" "$capture_backup"
+    trap 'cp "$capture_backup" "$capture_conf"; rm -f "$capture_backup"' EXIT
+    python3 - "$capture_conf" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path) as source:
+    config = json.load(source)
+window = config['app']['windows'][0]
+window.update(width=1280, height=1000, center=True)
+with open(path, 'w') as target:
+    json.dump(config, target, indent=2)
+PY
+    npm run build:e2e
+    if ! npx wdio run wdio.conf.js --spec tests/e2e/capture-group-inbox.capture.js > "$out/group-inbox-wdio.log" 2>&1; then
+      tail -100 "$out/group-inbox-wdio.log" >&2
+      exit 1
+    fi
+    for shot in group-inbox-list group-folded; do
+      test -s "$out/$shot.reached" || { echo "capture.sh: $shot not reached" >&2; exit 1; }
+      for theme in light dark; do test -s "$out/$shot-$theme.png"; done
+    done
+    exit 0 ;;
   *,reply-joined-reader,*)
     cd "$(dirname "$0")/.."
     out=${HARNESS_SHOTS_OUT:-${1:-$PWD/.artifacts}}
@@ -41,6 +72,7 @@ case ",${HARNESS_SHOTS:-}," in
     npm run build:e2e
     npx wdio run wdio.conf.js --spec tests/e2e/capture-account-groups.capture.js
     for shot in sidebar-account-groups settings-account-group sidebar-collapsed-groups; do
+      test -s "$out/$shot.reached" || { echo "capture.sh: $shot not reached" >&2; exit 1; }
       for theme in light dark; do test -s "$out/$shot-$theme.png"; done
     done
     exit 0 ;;

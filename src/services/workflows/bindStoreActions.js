@@ -90,7 +90,7 @@ export function storeActions() {
     setActiveAccount: (accountId) => _setActiveAccount(accountId),
     activateAccount: (accountId, mailbox, opts) => _activateAccount(accountId, mailbox, opts),
     loadSubtree: (accountId, rootPath, opts) => _loadSubtree(accountId, rootPath, opts),
-    setUnifiedInbox: (enabled) => _setUnifiedInbox(enabled),
+    setUnifiedInbox: (...args) => _setUnifiedInbox(...args),
     switchUnifiedFolder: (mailbox) => _switchUnifiedFolder(mailbox),
     loadUnifiedInbox: (preUnifiedSnapshot, mailbox) => _loadUnifiedInbox(preUnifiedSnapshot, mailbox),
     saveEmailLocally: (uid) => _saveEmailLocally(uid),

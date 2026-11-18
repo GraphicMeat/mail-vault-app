@@ -330,6 +330,19 @@ vi.mock('../email/MessageStateIcon', async (importOriginal) => {
 afterEach(cleanup);
 
 describe('EmailList virtualization', () => {
+  it('shows the open group name as the list title', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const previous = { activeMailbox: mail.activeMailbox, unifiedInbox: mail.unifiedInbox, unifiedGroup: mail.unifiedGroup };
+    try {
+      Object.assign(mail, { activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedGroup: 'Work' });
+      render(React.createElement(EmailList));
+      expect(screen.getByTestId('mailbox-title').textContent).toBe('Work');
+    } finally {
+      Object.assign(mail, previous);
+    }
+  });
   beforeEach(() => {
     lastVirtualizerConfig = null;
     virtualizerConfigs = [];

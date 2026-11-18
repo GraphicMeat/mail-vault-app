@@ -214,6 +214,7 @@ const mergeShortcuts = (persisted) => {
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
   ...(persisted || {}),
+  collapsedAccountGroups: normalizeCollapsedGroups(persisted?.collapsedAccountGroups),
   appIcon: persisted?.appIcon === 'teal' ? 'teal' : 'purple',
   notificationSettings: {
     ...current.notificationSettings,
@@ -247,6 +248,13 @@ export const _mergePersistedSettings = (persisted, current) => ({
   blitzGpu: (persisted?.blitzGpu ?? current.blitzGpu) === true,
   socialExport: normalizeSocialExport(persisted?.socialExport ?? current.socialExport),
 });
+
+function normalizeCollapsedGroups(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value)
+    .filter(([name, collapsed]) => name.length > 0 && name.length <= 40 && collapsed === true)
+    .slice(-100));
+}
 
 /**
  * One canonical cleanup-rule shape: the one the add/edit form writes.
@@ -500,6 +508,7 @@ export const useSettingsStore = create(
       dismissedAliases: {},
       lastComposeIdentity: null, // { accountId, address } — identity of the last sent message; a new compose keeps the address when it is reading that same account
       accountGroups: {},
+      collapsedAccountGroups: {},
       accountColors: {}, // { [accountId]: string (hex color) } — user overrides for avatar color
       
       // Default settings
@@ -1154,6 +1163,13 @@ export const useSettingsStore = create(
         else delete accountGroups[accountId];
         return { accountGroups };
       }),
+      toggleAccountGroupCollapsed: (name) => set(state => {
+        if (typeof name !== 'string' || !name || name.length > 40) return {};
+        const collapsedAccountGroups = { ...state.collapsedAccountGroups };
+        if (collapsedAccountGroups[name]) delete collapsedAccountGroups[name];
+        else collapsedAccountGroups[name] = true;
+        return { collapsedAccountGroups: normalizeCollapsedGroups(collapsedAccountGroups) };
+      }),
 
       // Account color management
       setAccountColor: (accountId, color) => {
@@ -1615,6 +1631,7 @@ export const useSettingsStore = create(
           dismissedAliases: {},
           lastComposeIdentity: null,
           accountGroups: {},
+          collapsedAccountGroups: {},
           accountColors: {},
           defaultSignatureEnabled: true,
           undoSendEnabled: false,

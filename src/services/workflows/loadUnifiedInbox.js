@@ -4,6 +4,8 @@ import { refreshDraftProjection, projectDraftRows } from '../draftProjection';
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { accountsInScope } from '../accountGroups';
+import { abortActiveActivation } from './activateAccount';
 import { _buildRestoreDescriptor, _resolveMailboxPath, readerClearOnNavigation, rebaseFlags, emailScopeKey, vaultKey } from '../../stores/slices/unifiedHelpers';
 import { paintFlags } from '../../stores/messageRows';
 import { serverUids } from '../../stores/slices/serverUids';
@@ -22,11 +24,10 @@ const byDateDesc = (a, b) => (b.date ? new Date(b.date).getTime() : 0) - (a.date
 // left, the rows already on screen. Newest first, the load's own dedupe key.
 // Entering the view paints this at once; the disk reads widen it after.
 export function unifiedSeed(state, folder, snapshot = null) {
-  const { hiddenAccounts } = useSettingsStore.getState();
+  const scoped = accountsInScope(state.accounts, { ...useSettingsStore.getState(), group: state.unifiedGroup });
   const seen = new Set();
   const rows = [];
-  for (const account of state.accounts || []) {
-    if (hiddenAccounts[account.id]) continue;
+  for (const account of scoped) {
     const path = _resolveMailboxPath(_getAccountMailboxes(account.id) || [], folder);
     const push = (e, mailbox = path) => {
       const key = `${account.id}:${e.uid}`;
@@ -65,11 +66,12 @@ function settleLoading(get, useMailStore) {
 
 // ── setUnifiedInbox workflow ──
 
-export async function setUnifiedInbox(enabled) {
+export async function setUnifiedInbox(enabled, group = null) {
   const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
   if (enabled) {
+    if (get().unifiedGroup !== group) clearUnifiedFolders();
     const { activeAccountId, activeMailbox, emails: currentEmails } = get();
     const preUnifiedSnapshot = (activeMailbox === 'INBOX') ? { activeAccountId, emails: currentEmails } : null;
 
@@ -78,8 +80,10 @@ export async function setUnifiedInbox(enabled) {
       _saveRestore(_buildRestoreDescriptor(get()));
     }
 
+    abortActiveActivation();
     useMailStore.setState({
       unifiedInbox: true,
+      unifiedGroup: group,
       unifiedFolder: 'INBOX',
       activeMailbox: 'UNIFIED',
       selectedEmailId: null,
@@ -88,7 +92,7 @@ export async function setUnifiedInbox(enabled) {
       selectedThread: null,
       followReply: null,
       selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
-      ...paintSeed(unifiedSeed(get(), 'INBOX', preUnifiedSnapshot)),
+      ...paintSeed(unifiedSeed({ ...get(), unifiedGroup: group }, 'INBOX', preUnifiedSnapshot)),
     });
     settleLoading(get, useMailStore);
     get().loadUnifiedInbox(preUnifiedSnapshot, 'INBOX');
@@ -96,7 +100,7 @@ export async function setUnifiedInbox(enabled) {
     const _loadAbortController = getLoadAbortController();
     if (_loadAbortController) _loadAbortController.abort();
     clearUnifiedFolders();
-    useMailStore.setState({ unifiedInbox: false, unifiedFolder: 'INBOX', followReply: null, loadingProgress: null });
+    useMailStore.setState({ unifiedInbox: false, unifiedGroup: null, unifiedFolder: 'INBOX', followReply: null, loadingProgress: null });
   }
 }
 
@@ -155,9 +159,9 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   const { useMailStore } = await import('./boundStore');
   const get = () => useMailStore.getState();
 
-  const { accounts, unifiedFolder } = get();
+  const { accounts, unifiedFolder, unifiedGroup } = get();
   const targetFolder = mailbox || unifiedFolder || 'INBOX';
-  const { hiddenAccounts } = useSettingsStore.getState();
+  const scoped = accountsInScope(accounts, { ...useSettingsStore.getState(), group: unifiedGroup });
 
   let _loadAbortController = getLoadAbortController();
   if (_loadAbortController) _loadAbortController.abort();
@@ -176,7 +180,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
 
   const mailboxesByAccount = new Map();
   await Promise.all(
-    accounts.filter(a => !hiddenAccounts[a.id]).map(async (account) => {
+    scoped.map(async (account) => {
       const cachedMailboxes = _getAccountMailboxes(account.id);
       if (cachedMailboxes?.length) {
         mailboxesByAccount.set(account.id, cachedMailboxes);
@@ -236,8 +240,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
     }, 0);
   };
 
-  for (const account of accounts) {
-    if (hiddenAccounts[account.id]) continue;
+  for (const account of scoped) {
 
     const resolvedPath = _resolveMailboxPath(mailboxesByAccount.get(account.id) || [], targetFolder);
     resolvedPathsByAccount.set(account.id, resolvedPath);
@@ -271,8 +274,8 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
 
   if (signal.aborted) return;
 
-  if (preUnifiedSnapshot && !hiddenAccounts[preUnifiedSnapshot.activeAccountId]) {
-    const activeAccount = accounts.find(a => a.id === preUnifiedSnapshot.activeAccountId);
+  if (preUnifiedSnapshot) {
+    const activeAccount = scoped.find(a => a.id === preUnifiedSnapshot.activeAccountId);
     if (activeAccount) {
       const snapshotMailbox = _resolveMailboxPath(
         mailboxesByAccount.get(preUnifiedSnapshot.activeAccountId) || [],
@@ -342,8 +345,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   // servers, and this runs on every refresh. Not for the unified Sent and
   // Drafts views, which are the outgoing mail themselves.
   if (targetFolder === 'INBOX') {
-    for (const account of accounts) {
-      if (hiddenAccounts[account.id]) continue;
+    for (const account of scoped) {
       Promise.resolve(get().loadSentHeaders(account.id, { cacheOnly: true }))
         .catch(e => console.warn('[loadUnifiedInbox] Sent headers failed:', account.id, e?.message));
     }
@@ -405,10 +407,9 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   // resolvedPathsByAccount already was above. A pair with no cached group
   // entry just contributes nothing to the derived union (see
   // messageListSlice's deriveArchivedUnion).
-  const viewPairs = accounts.filter(a => !hiddenAccounts[a.id])
+  const viewPairs = scoped
     .map(a => [a.id, resolvedPathsByAccount.get(a.id) || targetFolder]);
-  const localPromises = accounts
-    .filter(a => !hiddenAccounts[a.id])
+  const localPromises = scoped
     .map(async (account) => {
       try {
         const localFolder = resolvedPathsByAccount.get(account.id) || targetFolder;

@@ -5,6 +5,7 @@
 import { projectDraftUids } from '../../services/draftProjection';
 import * as api from '../../services/api';
 import { useSettingsStore } from '../settingsStore';
+import { accountsInScope } from '../../services/accountGroups';
 import { buildThreads, normalizeMessageId } from '../../utils/emailParser';
 import { annotateRowAlerts } from '../../services/rowVerdicts';
 import { NO_SERVER_UIDS } from './serverUids';
@@ -475,13 +476,13 @@ export const createMessageListSlice = (set, get) => ({
       if (generation === _backedUpGeneration) set({ backedUpKeys, backedUpScopes, backupConfigured });
     };
 
-    const { activeAccountId, activeMailbox, unifiedInbox, accounts, unifiedFolder } = get();
+    const { activeAccountId, activeMailbox, unifiedInbox, accounts, unifiedFolder, unifiedGroup } = get();
     const targets = unifiedInbox
       // Per account, through the SAME resolver loadUnifiedInbox stamps its rows
       // with. A unified Sent view is 'Sent' to the picker and '[Gmail]/Sent
       // Mail' to one of the accounts in it; scanning the picker's name would
       // read a folder no row claims to be in.
-      ? (accounts || []).flatMap(a => {
+      ? accountsInScope(accounts, { group: unifiedGroup, accountGroups: useSettingsStore.getState().accountGroups }).flatMap(a => {
           const mailbox = _resolveMailboxPath(getAccountCacheMailboxes(a.id) || [], unifiedFolder || 'INBOX');
           // All inboxes threads each account's Sent copies into its INBOX
           // rows, so that account's Sent mirror is read too — at ITS path.
@@ -578,12 +579,13 @@ export const createMessageListSlice = (set, get) => ({
   getChatEmails: () => {
     const { sortedEmails, sentEmails, archivedEmailIds, viewMode } = get();
 
-    const { activeAccountId, activeMailbox, unifiedFolder } = get();
+    const { activeAccountId, activeMailbox, unifiedFolder, unifiedGroup, accounts } = get();
     // Hidden accounts decide which Sent rows All inboxes merges, so they are
     // part of the key: hiding one must drop its replies at once.
-    const { hiddenAccounts } = useSettingsStore.getState() || {};
+    const { hiddenAccounts, accountGroups } = useSettingsStore.getState() || {};
+    const scopedIds = new Set(accountsInScope(accounts, { hiddenAccounts, accountGroups, group: unifiedGroup }).map(account => account.id));
     const hiddenKey = Object.keys(hiddenAccounts || {}).filter(id => hiddenAccounts[id]).sort().join(',');
-    const fp = `${activeAccountId}-${activeMailbox}-${unifiedFolder}-${hiddenKey}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
+    const fp = `${activeAccountId}-${activeMailbox}-${unifiedFolder}-${unifiedGroup}-${hiddenKey}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
     if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0
       && _chatEmailsInputs?.sortedEmails === sortedEmails && _chatEmailsInputs?.sentEmails === sentEmails) return _chatEmailsCache;
     _chatEmailsInputs = { sortedEmails, sentEmails };
@@ -624,7 +626,7 @@ export const createMessageListSlice = (set, get) => ({
     const spans = activeMailbox === 'UNIFIED';
     for (const email of sentEmails) {
       const foreign = activeAccountId && email._accountId && email._accountId !== activeAccountId;
-      if (spans ? hiddenAccounts?.[email._accountId] : foreign) continue;
+      if (spans ? !scopedIds.has(email._accountId) : foreign) continue;
       if (email.messageId && seen.has(normalizeMessageId(email.messageId))) continue;
       if (email.messageId) seen.add(normalizeMessageId(email.messageId));
       email._fromSentFolder = true;

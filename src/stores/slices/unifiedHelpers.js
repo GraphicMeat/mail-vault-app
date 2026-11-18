@@ -507,7 +507,7 @@ export const AFTER_DELETE_MODES = ['none', ...Object.keys(AFTER_DELETE_RULES)];
 export const afterDeleteRule = (mode) => (Object.hasOwn(AFTER_DELETE_RULES, mode) ? { ...AFTER_DELETE_RULES[mode] } : null);
 
 /** The view a list belongs to: account, folder, branch scope, unified folder. */
-export const viewId = (s) => [s.activeAccountId, s.activeMailbox, s.mailboxScope?.root ?? '', s.unifiedFolder ?? ''].join('|');
+export const viewId = (s) => [s.activeAccountId, s.activeMailbox, s.mailboxScope?.root ?? '', s.unifiedFolder ?? '', s.unifiedGroup ?? ''].join('|');
 
 // ── Unified folder resolution ──────────────────────────────────────────────
 // Maps canonical folder IDs to IMAP specialUse flags for cross-provider resolution

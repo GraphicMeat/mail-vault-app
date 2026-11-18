@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeGroupName, resolveGroupName, groupAccounts } from '../accountGroups';
+import { normalizeGroupName, resolveGroupName, groupAccounts, accountsInScope, groupUnread } from '../accountGroups';
 
 const accounts = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
 
 describe('account groups', () => {
+  it('scopes visible accounts to a named group', () => {
+    const settings = { hiddenAccounts: { c: true }, accountGroups: { a: 'Work', b: 'Personal', c: 'Work' } };
+    expect(accountsInScope(accounts, settings)).toEqual([accounts[0], accounts[1], accounts[3]]);
+    expect(accountsInScope(accounts, { ...settings, group: 'Work' })).toEqual([accounts[0]]);
+    expect(accountsInScope(accounts, { ...settings, group: 'Missing' })).toEqual([]);
+    expect(groupUnread(accounts, 'Work', { ...settings, unreadPerAccount: { a: 2, c: 5 } })).toBe(2);
+  });
   it('normalizes names and limits them to 40 characters', () => {
     expect(normalizeGroupName('  My   Work  ')).toBe('My Work');
     expect(normalizeGroupName('a'.repeat(41))).toBe('a'.repeat(40));

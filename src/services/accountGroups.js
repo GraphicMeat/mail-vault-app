@@ -22,3 +22,13 @@ export function groupAccounts(orderedAccounts, groupOf) {
   }
   return [...(ungrouped.accounts.length || !named.size ? [ungrouped] : []), ...named.values()];
 }
+
+export function accountsInScope(accounts, { hiddenAccounts = {}, accountGroups = {}, group = null } = {}) {
+  return (accounts || []).filter(account => !hiddenAccounts?.[account.id]
+    && (group === null || accountGroups?.[account.id] === group));
+}
+
+export function groupUnread(accounts, group, { unreadPerAccount = {}, ...scope } = {}) {
+  return accountsInScope(accounts, { ...scope, group })
+    .reduce((sum, account) => sum + (unreadPerAccount?.[account.id] || 0), 0);
+}

@@ -138,6 +138,7 @@ const { useMailStore } = await import('../mailStore');
 await import('../../services/workflows/bindStoreActions');
 const { serverUids, NO_SERVER_UIDS } = await import('../slices/serverUids');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
+const { viewId } = await import('../slices/unifiedHelpers');
 const { useSnoozeStore } = await import('../snoozeStore');
 const { useFollowUpStore } = await import('../followUpStore');
 const { whenUnreadIdle } = await import('../../services/unreadCountsClient');
@@ -668,7 +669,7 @@ describe('getChatEmails in All inboxes', () => {
     });
   };
 
-  afterEach(() => { mockSettingsState.hiddenAccounts = {}; });
+  afterEach(() => { mockSettingsState.hiddenAccounts = {}; mockSettingsState.accountGroups = {}; useMailStore.setState({ unifiedGroup: null }); });
 
   it('merges every account\'s Sent rows, each keeping its own folder', () => {
     const lukeSent = sentRow('acct-1', 5, 3, 'Sent');
@@ -701,6 +702,12 @@ describe('getChatEmails in All inboxes', () => {
     const merged = useMailStore.getState().getChatEmails();
 
     expect(merged.map(e => e._accountId)).toEqual(['acct-1']);
+  });
+  it('leaves out Sent rows outside the open group', () => {
+    mockSettingsState.accountGroups = { 'acct-1': 'Personal', 'acct-2': 'Work', 'acct-3': 'Work' };
+    seed({ unifiedGroup: 'Work', sortedEmails: [inboxRow('acct-2', 7, 1)],
+      sentEmails: [sentRow('acct-1', 7, 4, 'Sent'), sentRow('acct-3', 8, 3, 'Sent')] });
+    expect(useMailStore.getState().getChatEmails().map(email => email._accountId)).toEqual(['acct-3', 'acct-2']);
   });
 
   it('drops a hidden account\'s replies the moment it is hidden, not at the next load', () => {
@@ -1349,6 +1356,7 @@ describe('unified inbox — every visible account\'s Sent joins the INBOX list',
     mockGetLocalEmails.mockResolvedValue([]);
     useMailStore.setState({
       accounts: ACCOUNTS, activeAccountId: 'acct-1', unifiedInbox: true, viewMode: 'all',
+      unifiedGroup: null,
       emails: [], localEmails: [], sortedEmails: [], _sortedEmailsFingerprint: '',
     });
   });
@@ -1356,6 +1364,25 @@ describe('unified inbox — every visible account\'s Sent joins the INBOX list',
   afterEach(() => {
     sentLoads.restore();
     mockSettingsState.hiddenAccounts = {};
+    mockSettingsState.accountGroups = {};
+  });
+
+  it('loads only group accounts, excluding the previous account snapshot', async () => {
+    mockSettingsState.accountGroups = { 'acct-1': 'Personal', 'acct-2': 'Work', 'acct-3': 'Work' };
+    useMailStore.setState({ unifiedGroup: 'Work' });
+    mockGetEmailHeadersPartial.mockImplementation(async id => ({ emails: [{ uid: 5, subject: id, date: '2026-01-01T00:00:00Z', flags: [] }] }));
+    await useMailStore.getState().loadUnifiedInbox({ activeAccountId: 'acct-1', emails: [{ uid: 1, subject: 'old' }] }, 'INBOX');
+    expect(mockGetEmailHeadersPartial.mock.calls.map(call => call[0])).toEqual(['acct-2', 'acct-3']);
+    expect(useMailStore.getState().emails.map(email => email._accountId)).toEqual(['acct-2', 'acct-3']);
+    expect(sentLoads.stub.mock.calls.map(call => call[0])).toEqual(['acct-2', 'acct-3']);
+    expect(viewId({ activeMailbox: 'UNIFIED', unifiedGroup: 'Work' })).not.toBe(viewId({ activeMailbox: 'UNIFIED' }));
+  });
+
+  it('empty group reads no account and clears rows', async () => {
+    useMailStore.setState({ unifiedGroup: 'Missing' });
+    await useMailStore.getState().loadUnifiedInbox(null, 'INBOX');
+    expect(mockGetEmailHeadersPartial).not.toHaveBeenCalled();
+    expect(useMailStore.getState().emails).toEqual([]);
   });
 
   it('loads each visible account\'s Sent for the INBOX view', async () => {
@@ -1387,8 +1414,18 @@ describe('refreshBackedUpUids', () => {
     mockBackupGetExternalLocation.mockReset();
     mockBackupGetExternalLocation.mockResolvedValue({ status: 'ready' });
     useMailStore.setState({
-      mailboxes: [], backedUpKeys: null, backedUpScopes: null, backupConfigured: null, unifiedFolder: null,
+      mailboxes: [], backedUpKeys: null, backedUpScopes: null, backupConfigured: null, unifiedFolder: null, unifiedGroup: null,
     });
+  });
+  it('scans only the open group\'s accounts', async () => {
+    mockSettingsState.accountGroups = { 'acct-1': 'Personal', 'acct-2': 'Work' };
+    mockBackupScanUids.mockResolvedValue([3]);
+    useMailStore.setState({ unifiedInbox: true, unifiedGroup: 'Work', unifiedFolder: 'INBOX', accounts: [
+      { id: 'acct-1', email: 'a@mock.test' }, { id: 'acct-2', email: 'b@mock.test' },
+    ] });
+    await useMailStore.getState().refreshBackedUpUids();
+    expect(mockBackupScanUids.mock.calls).toEqual([['b@mock.test', 'INBOX']]);
+    mockSettingsState.accountGroups = {};
   });
 
   // Renamed from "...so unified inbox cannot collide" — unifiedInbox is false
@@ -1867,16 +1904,42 @@ describe('All Inboxes paints before every account has read its disk', () => {
     mockReadLocalEmailIndex.mockResolvedValue(null);
     mockGetLocalEmails.mockResolvedValue([]);
     mockGetRestoreDescriptor.mockReturnValue(null);
+    mockSettingsState.accountGroups = {};
   });
   afterEach(() => {
     sentLoads.restore();
     mockGetRestoreDescriptor.mockReset().mockReturnValue(null);
     mockGetEmailHeadersPartial.mockReset().mockResolvedValue({ emails: [], totalEmails: 0 });
+    mockSettingsState.accountGroups = {};
   });
 
   const leaveSingleFolder = () => useMailStore.setState({
-    accounts: [A, B], activeAccountId: 'acct-a', activeMailbox: 'Archive', unifiedInbox: false,
+    accounts: [A, B], activeAccountId: 'acct-a', activeMailbox: 'Archive', unifiedInbox: false, unifiedGroup: null,
     emails: [], localEmails: [], sortedEmails: [], viewMode: 'all', _sortedEmailsFingerprint: '',
+  });
+
+  it('opens one group, keeps its cache on repeat, and clears scope on exit', async () => {
+    const { getUnifiedFolder, putUnifiedFolder } = await import('../../services/workflows/unifiedFolderCache');
+    mockSettingsState.accountGroups = { 'acct-a': 'Personal', 'acct-b': 'Work' };
+    mockGetRestoreDescriptor.mockImplementation(id => ({ firstWindow: rowsOf(id, [1], '20') }));
+    mockGetEmailHeadersPartial.mockReturnValue(new Promise(() => {}));
+    leaveSingleFolder();
+    putUnifiedFolder('INBOX', [{ uid: 99, _accountId: 'acct-a', _mailbox: 'INBOX' }]);
+
+    await useMailStore.getState().setUnifiedInbox(true, 'Work');
+    expect(useMailStore.getState().unifiedGroup).toBe('Work');
+    expect(keys(useMailStore.getState().emails)).toEqual(['acct-b:1']);
+    expect(getUnifiedFolder('INBOX')).toBeUndefined();
+    putUnifiedFolder('INBOX', [{ uid: 100, _accountId: 'acct-b', _mailbox: 'INBOX' }]);
+    await useMailStore.getState().setUnifiedInbox(true, 'Work');
+    expect(getUnifiedFolder('INBOX')).toBeTruthy();
+    await useMailStore.getState().switchUnifiedFolder('Sent');
+    expect(useMailStore.getState().unifiedGroup).toBe('Work');
+    await useMailStore.getState().setUnifiedInbox(false);
+    expect(useMailStore.getState().unifiedGroup).toBeNull();
+    await useMailStore.getState().setUnifiedInbox(true);
+    expect(keys(useMailStore.getState().emails).sort()).toEqual(['acct-a:1', 'acct-b:1']);
+    await useMailStore.getState().setUnifiedInbox(false);
   });
 
   it('entering shows the windows memory already holds, with no skeleton', async () => {

@@ -262,6 +262,7 @@ function EmailListComponent({ stacked = false }) {
   const saveEmailsLocally = useAccountStore(s => s.saveEmailsLocally);
   const toggleFlagged = useAccountStore(s => s.toggleFlagged);
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
+  const unifiedGroup = useAccountStore(s => s.unifiedGroup);
   const accountColors = useSettingsStore(s => s.accountColors);
   // Stable actions ref — object identity doesn't change unless actions change (they don't)
   const rowActions = useMemo(() => ({ saveEmailLocally, removeLocalEmail, removeLocalEmails, deleteEmailFromServer, saveEmailsLocally, toggleFlagged }), [saveEmailLocally, removeLocalEmail, removeLocalEmails, deleteEmailFromServer, saveEmailsLocally, toggleFlagged]);
@@ -665,7 +666,7 @@ function EmailListComponent({ stacked = false }) {
 
   const mailboxTitle = activeView ? viewLabel(activeView, t)
     : searchActive ? t('list.searchResults')
-    : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes')
+    : activeMailbox === 'UNIFIED' ? (unifiedGroup || t('sidebar.allInboxes'))
       : activeMailbox === 'INBOX' ? t('sidebar.inbox')
         : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox);
   const mailboxSummary = viewLoading ? ''
@@ -702,8 +703,8 @@ function EmailListComponent({ stacked = false }) {
       <div data-tauri-drag-region data-testid="email-list-header" className="mail-list-header">
         <div className="flex items-start justify-between gap-3 min-w-0">
           <div className="min-w-0 flex-1">
-            <h2 data-testid="mailbox-title" className="text-lg font-semibold text-mail-text truncate" title={mailboxTitle}>
-              {mailboxTitle}
+            <h2 data-testid="mailbox-title" className="text-lg font-semibold text-mail-text truncate" title={unifiedGroup && activeMailbox === 'UNIFIED' ? pa(mailboxTitle, 'name') : mailboxTitle}>
+              {unifiedGroup && activeMailbox === 'UNIFIED' ? <Private kind="name">{mailboxTitle}</Private> : mailboxTitle}
             </h2>
             <MailboxHeaderSummary summary={mailboxSummary} scope={mailboxScopeLabel} dateRange={dateRange} searchActive={searchActive || viewLoading} />
           </div>
@@ -837,7 +838,7 @@ function EmailListComponent({ stacked = false }) {
         ) : isExplorer ? (
           <ExplorerView emails={searchActive ? searchResults : sortedEmails}
             conversationEmails={mergedEmails || (searchActive ? searchResults : sortedEmails)}
-            context={explorerContext} rootLabel={searchActive ? t('list.searchResults') : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : activeMailbox === 'INBOX' ? t('sidebar.inbox') : decodeImapUtf7(activeMailbox)}
+            context={explorerContext} rootLabel={searchActive ? t('list.searchResults') : activeMailbox === 'UNIFIED' ? (unifiedGroup ? pa(unifiedGroup, 'name') : t('sidebar.allInboxes')) : activeMailbox === 'INBOX' ? t('sidebar.inbox') : decodeImapUtf7(activeMailbox)}
             unreadOnly={unreadOnly} selectedEmailId={selectedEmailId} unreadKeep={unreadKeep}
             selectedEmailIds={selectedEmailIds} getSelectionKey={selKey}
             onSetSelection={setEmailsSelected} onOpenThread={selectThread} rowHeight={ROW_HEIGHT}

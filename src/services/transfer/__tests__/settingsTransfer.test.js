@@ -44,6 +44,12 @@ beforeEach(() => {
 });
 
 describe('collectSettings', () => {
+  it('keeps fold state on this device', async () => {
+    h.settings.collapsedAccountGroups = { Work: true };
+    expect(JSON.stringify(collectSettings(['A']))).not.toContain('collapsedAccountGroups');
+    await applySettings({ appSettings: { collapsedAccountGroups: 42 } }, {}, { applyGlobal: true });
+    expect(h.settings.collapsedAccountGroups).toEqual({ Work: true });
+  });
   it('only carries allowlisted globals and the selected accounts', () => {
     const snap = collectSettings(['A']);
     const json = JSON.stringify(snap);

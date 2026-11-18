@@ -46,6 +46,7 @@ import { t } from '../../i18n/index.js';
 
 // ── AbortController for activateAccount — cancels previous activation on rapid switch ──
 let _activeController = null;
+export function abortActiveActivation() { _activeController?.abort('unified-switch'); }
 
 const MAILBOX_CACHE_FRESH_MS = 10 * 60 * 1000;
 const MAILBOX_PREFETCH_LIMIT = 2;
@@ -607,6 +608,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       activeMailbox: restored.mailbox || mailbox,
       unifiedInbox: false,
       mailboxScope: null,
+      unifiedGroup: null,
       emails: painted,
       totalEmails: ownPaint ? currentTotalEmails : restored.totalEmails,
       // All three were previously left at the OUTGOING account's values, so
@@ -686,6 +688,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       activeMailbox: mailbox,
       unifiedInbox: false,
       mailboxScope: null,
+      unifiedGroup: null,
       // Clear stale data from previous account/mailbox — prevents cross-account bleed
       emails: [],
       localEmails: [],

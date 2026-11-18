@@ -1,4 +1,5 @@
 import { hasValidCredentials } from './authUtils.js';
+import { accountsInScope } from './accountGroups.js';
 import { getAccountCacheMailboxes } from './cacheManager.js';
 import { mailboxDescendants, SUBTREE_PREFIX, isLocalMailbox } from './workflows/mailboxTree.js';
 import { _resolveMailboxPath, flattenMailboxes } from '../stores/slices/unifiedHelpers.js';
@@ -76,7 +77,7 @@ export async function buildSearchTargets(mail, settings, searchFilters) {
   const folder = searchFilters?.folder || 'current';
   const crossAccountUnifiedScope = mail.unifiedInbox
     && (folder === 'current' || folder === 'all' || !!searchFilters?.everyAccount);
-  const visibleAccounts = (mail.accounts || []).filter(account => !settings?.hiddenAccounts?.[account.id]);
+  const visibleAccounts = accountsInScope(mail.accounts, { ...settings, group: crossAccountUnifiedScope ? mail.unifiedGroup : null });
   const accounts = visibleAccounts.filter(account =>
     crossAccountUnifiedScope || account.id === mail.activeAccountId);
 

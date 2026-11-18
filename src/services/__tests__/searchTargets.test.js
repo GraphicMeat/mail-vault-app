@@ -39,6 +39,12 @@ describe('serverSearchTargets', () => {
 });
 
 describe('buildSearchTargets', () => {
+  it('limits unified group search to its accounts', async () => {
+    const mail = { accounts: [account('a'), account('b'), account('c')], activeAccountId: 'a',
+      activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX', unifiedGroup: 'Work', mailboxes: [] };
+    const targets = await buildSearchTargets(mail, { hiddenAccounts: {}, accountGroups: { a: 'Personal', b: 'Work', c: 'Work' } }, filters('current'));
+    expect(targets.map(target => target.accountId)).toEqual(['b', 'c']);
+  });
   beforeEach(() => {
     auth.hasValidCredentials.mockReset().mockImplementation(value => !!(value?.password || value?.oauth2AccessToken));
     auth.getAccountCacheMailboxes.mockReset().mockReturnValue(null);
