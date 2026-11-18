@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-10-17T12:28:09.757Z",
         "reason": "Agent verified DESIGN.md:287 explicitly specifies Inter for the marketing website; this content update does not change typography."
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "src/styles/sidebar-navigation.css"
+        ],
+        "createdAt": "2026-11-18T13:16:47.456Z",
+        "reason": "Agent: the fixed 2px role=progressbar track clips a literal progress fill; this intentional width change is confined to that indicator."
       }
     ]
   }
