@@ -646,6 +646,9 @@ fn store(shared: &Shared, p: &BodyParams, body: &Body, snippet: &str, opened: bo
             (account, folder, uid, now, &body.html, &body.text, &parts_json, bytes as i64),
         )?;
         c.execute(&format!("UPDATE messages SET snippet = ?4 WHERE {KEY}"), (account, folder, uid, snippet))?;
+        // What was found stays counted after the body leaves the cache (`tracking.rs`).
+        let vendors = body.stored.tracker_list.iter().map(|t| t.vendor.as_str());
+        crate::tracking::record(c, account, folder, uid, vendors, body.stored.trackers)?;
         Ok(())
     })?;
     // The body's words join the index (a tap: the index worker does it next).

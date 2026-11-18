@@ -431,3 +431,59 @@ fn a_mail_without_a_flagged_link_keeps_its_html() {
     assert_eq!(body["maxAlertLevel"], Value::Null);
     assert_eq!(body["html"].as_str().unwrap(), stored_html(&f, 1));
 }
+
+/// Settings > Privacy > Tracking's "what this install found": every stored body with a pixel
+/// counts once per message (an open twice, or a body fetched again, never adds), the vendors are
+/// tallied per message, free users' pixels count (found, not blocked), and the verdicts go with
+/// the account.
+#[test]
+fn tracking_stats_count_each_message_with_a_pixel_once() {
+    let two_pixels = "<p>Hi</p>\
+        <img src=\"https://track.example.net/open/a.gif\" width=\"1\" height=\"1\">\
+        <img src=\"https://track.example.net/open/b.gif\" width=\"1\" height=\"1\">";
+    let server = MockImap::start(
+        Scenario::new().mailbox(
+            Mailbox::new("INBOX")
+                .push_msg(html_only(1, PIXEL_HTML))
+                .push_msg(html_only(2, two_pixels))
+                .push_msg(html_only(3, "<p>clean</p>")),
+        ),
+    );
+    let f = setup(&server);
+    let empty = f.engine.rpc("mobile.tracking.stats", json!({})).unwrap();
+    assert_eq!((empty["messages"].clone(), empty["pixels"].clone()), (json!(0), json!(0)), "{empty}");
+    assert_eq!(empty["top"], json!([]));
+    assert!(empty["patterns"].as_u64().unwrap() > 0, "{empty}");
+
+    for uid in [1, 2, 3, 1] {
+        assert_eq!(f.body(uid)["gone"], false);
+    }
+    // A body dropped from the cache and fetched again is still one message.
+    f.db().execute("DELETE FROM bodies WHERE uid = 2", []).unwrap();
+    assert_eq!(f.body(2)["trackers"], 2);
+
+    let stats = f.engine.rpc("mobile.tracking.stats", json!({})).unwrap();
+    assert_eq!(stats["messages"], 2, "{stats}");
+    assert_eq!(stats["pixels"], 3, "{stats}");
+    assert_eq!(stats["top"], json!([["track.example.net", 2]]), "{stats}");
+
+    f.engine.rpc("mobile.accounts.remove", json!({ "accountId": f.account })).unwrap();
+    let gone = f.engine.rpc("mobile.tracking.stats", json!({})).unwrap();
+    assert_eq!(gone["messages"], 0, "{gone}");
+}
+
+/// A body cached before the tally existed is counted once, from its stored scan.
+#[test]
+fn tracking_stats_count_bodies_cached_before_the_tally() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(html_only(1, PIXEL_HTML))));
+    let f = setup(&server);
+    assert_eq!(f.body(1)["trackers"], 1);
+    // As an older build left it: the body, no verdict, no mark.
+    f.db()
+        .execute_batch("DELETE FROM settings WHERE key LIKE 'acct.%.trackers.%' OR key = 'engine.trackerTallyBackfilled.v1';")
+        .unwrap();
+    let stats = f.engine.rpc("mobile.tracking.stats", json!({})).unwrap();
+    assert_eq!((stats["messages"].clone(), stats["pixels"].clone()), (json!(1), json!(1)), "{stats}");
+    let again = f.engine.rpc("mobile.tracking.stats", json!({})).unwrap();
+    assert_eq!(again, stats);
+}

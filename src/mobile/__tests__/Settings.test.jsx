@@ -24,6 +24,8 @@ vi.mock('../transport.js', () => ({
         return { accountId: params.accountId, notify: engine.notify[params.accountId] ?? true };
       case 'mobile.folders.list':
         return { folders: [] };
+      case 'mobile.tracking.stats':
+        return { messages: 2, pixels: 3, top: [['Mailchimp', 2]], patterns: 1234 };
       case 'mobile.accounts.remove':
         if (engine.failRemove) throw Object.assign(new Error('no'), { code: 'INTERNAL' });
         return { removed: true };
@@ -335,6 +337,14 @@ describe('Settings pages, as desktop lays them out', () => {
     expect(controls('ai')).toEqual([t('ai.settings.enable')]);
     // The search index sits on the Storage page, as on desktop, after the offline download switch.
     expect(controls('search')).toEqual([t('mobile.settings.downloadToggle'), t('settings.searchIndex.bodies'), t('settings.searchIndex.attachments')]);
+  });
+
+  it('the tracking page shows what this phone found, as desktop\'s section does', async () => {
+    render(<Settings onClose={() => {}} page="tracking" />);
+    await waitFor(() => expect(screen.getByText('Mailchimp · 2')).toBeTruthy());
+    expect(engine.calls.some(([m]) => m === 'mobile.tracking.stats')).toBe(true);
+    expect(screen.getByText(t('settings.tracking.knownEndpointsBundled', { count: 1234 }))).toBeTruthy();
+    expect(screen.getByText(new RegExp(t('settings.tracking.pixelsFound', { count: 3 })))).toBeTruthy();
   });
 
   it('a setting the phone words its own way is found and landed on under that name', async () => {

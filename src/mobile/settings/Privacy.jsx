@@ -6,8 +6,9 @@
 //   every warning mark means (no screenshots: the phone bundles none).
 // - Tracking: the tracking-pixel switch while Premium is on (the engine strips them then,
 //   `trackerBlockingEnabled`), the upsell and the explainer otherwise; Upgrade opens the paywall.
-//   What this phone has found is not counted yet (engine: tracker tally), so that section is left
-//   out.
+//   What this phone has found (`mobile.tracking.stats`: messages with a pixel, the pixels, the
+//   vendors found most, the bundled table's size) is desktop's section under it; until the engine
+//   answers, or if it cannot, the section is left out. Its sources open in the system browser.
 // - Encryption: the OpenPGP keys the engine decrypts with, in the phone's secret store behind
 //   `mobile.pgp.*`. A pasted key goes to the engine once, on Import, and the field is cleared. A
 //   key file goes through the system picker: the page gets only its handle, hands it straight to
@@ -20,7 +21,7 @@ import { EncryptionView } from '../../components/settings/views/EncryptionView';
 import { useMobileStore } from '../store.js';
 import { useT } from '../i18n.js';
 import { daemonCall, pickFiles } from '../transport.js';
-import { MobileViewEnv, SaveFailed, useSavePrefs } from './MobileViewEnv.jsx';
+import { MobileViewEnv, SaveFailed, openExternal, useSavePrefs } from './MobileViewEnv.jsx';
 
 export function Security() {
   const prefs = useMobileStore((s) => s.prefs);
@@ -37,10 +38,18 @@ export function Tracking() {
   const enabled = useMobileStore((s) => s.prefs.trackerBlockingEnabled);
   const premium = useMobileStore((s) => s.premium.premium);
   const [save, failed] = useSavePrefs();
+  const [found, setFound] = useState(null);
+  useEffect(() => {
+    let live = true;
+    daemonCall('mobile.tracking.stats', {}).then((r) => { if (live && r) setFound(r); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const stats = found ? { messages: found.messages || 0, pixels: found.pixels || 0, top: Array.isArray(found.top) ? found.top : [] } : null;
   return (
     <MobileViewEnv>
       <TrackingView isPremium={premium} enabled={enabled} onToggle={(next) => save({ trackerBlockingEnabled: next })}
-        onUpgrade={() => useMobileStore.getState().openPaywall(null)} />
+        onUpgrade={() => useMobileStore.getState().openPaywall(null)}
+        stats={stats} patterns={Number.isInteger(found?.patterns) ? found.patterns : null} onOpenLink={openExternal} />
       <SaveFailed failed={failed} />
     </MobileViewEnv>
   );

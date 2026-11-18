@@ -36,6 +36,7 @@ mod settings;
 mod storage;
 mod sync;
 mod threads;
+mod tracking;
 mod transfer;
 mod usage;
 mod transfer_export;
