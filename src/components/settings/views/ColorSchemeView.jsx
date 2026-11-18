@@ -4,7 +4,7 @@ import React from 'react';
 import { Check, Moon, Smartphone, Sun } from 'lucide-react';
 import { SettingRow } from '../../ui/SettingRow';
 import { ColorOptionPreview, EmailThemePreviewView } from './PreviewViews';
-import { useViewT } from './viewContext';
+import { useT } from './viewContext';
 
 const THEME_ICONS = { light: Sun, dark: Moon, system: Smartphone };
 
@@ -16,7 +16,7 @@ const THEME_ICONS = { light: Sun, dark: Moon, system: Smartphone };
  */
 export function ColorSchemeView({ themes = ['light', 'dark'], theme, systemTheme = 'dark', onTheme, palettes, palette, onPalette,
   appIcon = null, emailViewerTheme, onEmailViewerTheme, emailPreview, afterEmailTheme = null }) {
-  const t = useViewT();
+  const t = useT();
   const current = palette || 'indigo';
   const drawn = value => (value === 'system' ? systemTheme : value);
   const themeLabel = value => (value === 'system' ? t('settings.section.system') : t(`settings.colors.${value}`));

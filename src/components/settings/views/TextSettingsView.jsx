@@ -5,14 +5,14 @@ import React, { useId } from 'react';
 import { Check } from 'lucide-react';
 import { SettingRow } from '../../ui/SettingRow';
 import { SegmentedChoice } from '../../ui/SegmentedChoice';
-import { useViewEnv, useViewT } from './viewContext';
+import { useViewEnv, useT } from './viewContext';
 
 // Each option is drawn in its own face. Family names are proper nouns and
 // stay untranslated; only "System font" and the group headings are copy.
 // Downloaded families (`downloaded`: `[{ id, family }]`) get a group of their
 // own, shown once there is one.
 export function FontOptionsView({ fonts, fontStack, value, onChange, downloaded = [] }) {
-  const t = useViewT();
+  const t = useT();
   const id = useId();
   return <div className="font-options">
     {[['ui', 'settings.text.interfaceFonts', false], ['mono', 'settings.text.codingFonts', true]].map(([kind, key, mono]) =>
@@ -48,7 +48,7 @@ export function TextSizeChoiceView({ label, value, onChange, scales }) {
 
 /** `fontOptions`: FontOptionsView's props; `moreFonts`: rendered under the font choices. */
 export function TextSettingsView({ textScale, onTextScale, scales, fontOptions, moreFonts = null }) {
-  const t = useViewT();
+  const t = useT();
   return (
     <section className="settings-preference-group" aria-labelledby="text-settings-heading">
       <h4 id="text-settings-heading">{t('settings.appearance.section.text')}</h4>

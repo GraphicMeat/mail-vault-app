@@ -2,7 +2,7 @@
 // renders (`children`). Desktop: AppearanceSettings.jsx; phone: src/mobile/settings/Appearance.jsx.
 import React from 'react';
 import { SettingsTabs } from '../../ui/SettingsTabs';
-import { useViewT } from './viewContext';
+import { useT } from './viewContext';
 import '../../../styles/settings-usability.css';
 
 export const APPEARANCE_SECTIONS = [
@@ -17,7 +17,7 @@ export const APPEARANCE_SECTIONS = [
 export const validAppearanceSection = value => APPEARANCE_SECTIONS.some(section => section.id === value) ? value : 'colors';
 
 export function AppearanceView({ section, onSectionChange, children }) {
-  const t = useViewT();
+  const t = useT();
   return (
     <SettingsTabs tabs={APPEARANCE_SECTIONS.map(({ id, key }) => ({ id, label: key === 'quickActions' ? t('quickActions.title') : key === 'language' ? t('settings.tab.language') : t(`settings.appearance.section.${key}`) }))}
       value={section} onChange={onSectionChange} label={t('settings.appearance.appearance')}>

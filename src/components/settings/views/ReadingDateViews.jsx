@@ -3,7 +3,7 @@
 import React from 'react';
 import { SettingRow } from '../../ui/SettingRow';
 import { DateTimePreview, ReadingPreview } from './PreviewViews';
-import { useViewT } from './viewContext';
+import { useT } from './viewContext';
 
 const READING = [
   { key: 'threadMode', label: 'threadMode',
@@ -20,7 +20,7 @@ const READING = [
 export const READING_ROWS = READING.map(row => row.key);
 
 export function ReadingView({ values, onChange, rows = READING_ROWS }) {
-  const t = useViewT();
+  const t = useT();
   return <section className="settings-preference-group" aria-labelledby="reading-settings-title">
     <h4 id="reading-settings-title">{t('settings.appearance.readingAndConversations')}</h4>
     {READING.filter(({ key }) => rows.includes(key)).map(({ key, label, options }) => {
@@ -39,7 +39,7 @@ export function ReadingView({ values, onChange, rows = READING_ROWS }) {
 
 /** `systemLanguage`: the language "System default" names (desktop `navigator.language`). */
 export function DateTimeView({ values, onChange, systemLanguage }) {
-  const t = useViewT();
+  const t = useT();
   const systemDefault = t('settings.appearance.systemDefault', { lang: systemLanguage });
   return <section className="settings-preference-group" aria-labelledby="date-settings-title">
     <h4 id="date-settings-title">{t('settings.appearance.dateAndTime')}</h4>

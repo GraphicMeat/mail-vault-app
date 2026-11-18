@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readStyleSheet } from './readStyleSheet.js';
 
 // TipTap's image resize draws its four corner handles as bare, unsized <div>s
 // (`data-resize-handle`) and leaves every pixel of styling to the app. Without
 // these rules they measure 0 x 0: the picture is selected and nothing can be
 // dragged, which is how the signature editor shipped.
-const css = readFileSync('src/styles/index.css', 'utf8');
+const css = readStyleSheet('src/styles/index.css');
 const rule = (selector) => {
   const start = css.indexOf(`${selector} {`);
   expect(start, `${selector} in index.css`).toBeGreaterThan(-1);

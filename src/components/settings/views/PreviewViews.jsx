@@ -7,7 +7,7 @@
 import React from 'react';
 import { AlertCircle, Archive, CheckCircle2, ChevronDown, Cloud, FileText, Folder, Inbox, MousePointer2, Reply, Send } from 'lucide-react';
 import { listRowGround } from '../../../utils/listRowGround';
-import { useViewEnv, useViewT } from './viewContext';
+import { useViewEnv, useT } from './viewContext';
 import '../../../styles/sidebar-layout-previews.css';
 import '../../../styles/sidebar-navigation.css';
 
@@ -15,7 +15,7 @@ export const SAMPLE_DATE = new Date(2026, 1, 25, 14, 30);
 export const FIRST_REPLY = new Date(2026, 1, 25, 9, 15);
 
 export function PreviewFrame({ label, children, note }) {
-  const t = useViewT();
+  const t = useT();
   return <figure className="preference-preview" aria-label={t('settings.preview.exampleOf', { setting: label })}>
     <figcaption>{note || t('settings.preview.example')}</figcaption>
     <div className="preference-preview-content">{children}</div>
@@ -24,7 +24,7 @@ export function PreviewFrame({ label, children, note }) {
 
 /** Both unselected and selected color choices show their own real tokens. */
 export function ColorOptionPreview({ theme, palette }) {
-  const t = useViewT();
+  const t = useT();
   return <span className="color-option-preview" data-theme={theme} data-palette={palette} aria-hidden="true">
     <span className="color-preview-rail"><Inbox aria-hidden="true" size={14} /><Folder aria-hidden="true" size={14} /></span>
     <span className="color-preview-mail">
@@ -37,7 +37,8 @@ export function ColorOptionPreview({ theme, palette }) {
 
 /** `effectiveTheme`: the theme a message shows in; `colors`: its `{ background, text }`. */
 export function EmailThemePreviewView({ effectiveTheme, colors }) {
-  const { t, formatTime } = useViewEnv();
+  const t = useT();
+  const { formatTime } = useViewEnv();
   return <PreviewFrame label={t('settings.appearance.emailViewerTheme')}>
     <div className="preview-email-header"><strong>Nell Okafor</strong><span>{formatTime(SAMPLE_DATE)}</span></div>
     <div className="preview-email-body" data-email-theme={effectiveTheme} style={{ backgroundColor: colors.background, color: colors.text }}>
@@ -50,7 +51,8 @@ export function EmailThemePreviewView({ effectiveTheme, colors }) {
 // The list's row gutter in miniature (RowGutter in EmailRow.jsx): the same
 // classes, so the sample stacks and aligns exactly as the real rows do.
 export function SampleRows({ singleLine = false, previewLines = 0, density }) {
-  const { t, formatTime } = useViewEnv();
+  const t = useT();
+  const { formatTime } = useViewEnv();
   const stacked = !singleLine || previewLines > 0;
   return <div className={`preview-message-rows ${singleLine ? 'preview-single-line' : ''}`} data-list-density={density}>
     {['Nell Okafor', 'Priya Raines'].map((sender, index) => <div className="preview-message-row" key={sender}>
@@ -70,7 +72,7 @@ export function SampleRows({ singleLine = false, previewLines = 0, density }) {
 
 /** `chatSample`: the sample conversation the chat view shows (the app draws it). */
 function PanePreview({ below = false, chat = false, chatSample = null }) {
-  const t = useViewT();
+  const t = useT();
   if (chat) return chatSample;
   return <div className={`preview-mail-layout ${below ? 'preview-mail-below' : ''}`}>
     <div className="preview-mail-list"><span className="preview-pane-label">{t('workspace.messages')}</span><SampleRows singleLine={below} /></div>
@@ -85,7 +87,7 @@ function PanePreview({ below = false, chat = false, chatSample = null }) {
  */
 export function WorkspacePreviewView({ setting, value, label, disabled, layoutMode, sidebarDensity, emailListStyle,
   accounts = [], accountColor, chatSample }) {
-  const t = useViewT();
+  const t = useT();
   let content;
   if (setting === 'viewStyle' || setting === 'layoutMode') {
     content = <PanePreview chatSample={chatSample} chat={setting === 'viewStyle' && value === 'chat'} below={(setting === 'layoutMode' ? value : layoutMode) === 'two-column'} />;
@@ -136,7 +138,7 @@ export function WorkspacePreviewView({ setting, value, label, disabled, layoutMo
 
 /** A bounded sidebar sample for each choice, visible even before selecting it. */
 export function SidebarLayoutPreview({ layout }) {
-  const t = useViewT();
+  const t = useT();
   const folders = [
     [Inbox, 'sidebar.inbox'], [Archive, 'common.archive'], [Send, 'list.sent'],
     [FileText, 'sidebar.drafts'], [Folder, 'sidebar.folders'],
@@ -164,7 +166,8 @@ export function SidebarLayoutPreview({ layout }) {
 }
 
 export function ReadingPreview({ setting, value, label }) {
-  const { t, formatTime } = useViewEnv();
+  const t = useT();
+  const { formatTime } = useViewEnv();
   let content;
   if (setting === 'threadMode') {
     content = <div className="preview-thread-list">

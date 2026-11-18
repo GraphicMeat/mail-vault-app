@@ -6,7 +6,7 @@ import { Check, Columns, Rows } from 'lucide-react';
 import { SettingRow } from '../../ui/SettingRow';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { SidebarLayoutPreview, WorkspacePreviewView } from './PreviewViews';
-import { useViewT } from './viewContext';
+import { useT } from './viewContext';
 
 const PREVIEW_LINE_CHOICES = [[0, 'listPreview.off'], [1, 'listPreview.one'], [2, 'listPreview.two'], [3, 'listPreview.three']];
 
@@ -33,7 +33,7 @@ const GROUPS = [
 export const WORKSPACE_ROWS = [...GROUPS.map(group => group.key), 'listPreviewLines', 'showMenuBar'];
 
 export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowIsNarrow = false, preview = {} }) {
-  const t = useViewT();
+  const t = useT();
   const choiceId = useId();
   const chat = values.viewStyle === 'chat';
   const previewLines = values.listPreviewLines;

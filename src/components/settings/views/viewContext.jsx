@@ -34,7 +34,7 @@ export function SettingsViewProvider({ t, locale, formatTime, formatDateOnly, ch
   return <ViewContext.Provider value={value}>{children}</ViewContext.Provider>;
 }
 
-/** The translator of the app rendering this view. */
-export const useViewT = () => useContext(ViewContext).t;
+/** The translator of the app rendering this view (named as the apps' own hooks are). */
+export const useT = () => useContext(ViewContext).t;
 /** The whole context: `{ t, locale, formatTime, formatDateOnly }`. */
 export const useViewEnv = () => useContext(ViewContext);

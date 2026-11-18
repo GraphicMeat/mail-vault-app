@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { readStyleSheet } from './readStyleSheet.js';
 import { readFileSync } from 'node:fs';
 
 // The list toolbar is one row at every list width. Labelled, its controls need
 // about 600px; below that the labels are hidden (kept for assistive tech) so
 // the same controls fit down to a narrow list, instead of wrapping a second
 // row in, then out of, existence as a click adds or removes a control.
-const css = readFileSync('src/styles/index.css', 'utf8');
+const css = readStyleSheet('src/styles/index.css');
 const rule = (selector) => {
   const start = css.indexOf(`${selector} {`);
   expect(start, `${selector} in index.css`).toBeGreaterThan(-1);

@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { PREMIUM_FEATURES } from '../../src/data/premiumFeatures.js';
 
-// The tab ids live in a JSX file this spec must not import (it would drag the
-// whole settings tree into jsdom), so read them out of the source instead.
-const settingsSource = readFileSync('src/components/SettingsPage.jsx', 'utf8');
+// The tab ids live in the settings manifest (SettingsPage.jsx re-exports them); read them out of
+// its source, as this spec always has, rather than import the settings tree.
+const settingsSource = readFileSync('src/components/settings/settingsManifest.js', 'utf8');
 const TAB_IDS = [...settingsSource.matchAll(/\{\s*id:\s*'([a-z-]+)'/g)].map(m => m[1]);
 
 describe('premium feature catalog', () => {

@@ -6,11 +6,11 @@ import { Button } from '../../ui/Button';
 import { SettingsPageLayout } from '../../ui/SettingsForm';
 import { LOCALES } from '../../../i18n/languages.js';
 import { translationReportReady } from '../../../utils/translationReport.js';
-import { useViewT } from './viewContext';
+import { useT } from './viewContext';
 
 /** `active`: the language in use; `onPick(code)` switches to another. */
 export function LanguageView({ active, onPick, children }) {
-  const t = useViewT();
+  const t = useT();
   return (
     <SettingsPageLayout>
       <div>
@@ -68,7 +68,7 @@ export function LanguageView({ active, onPick, children }) {
  * (the app opens the browser), then the fields clear.
  */
 export function TranslationIssueReportView({ initialLang, onSubmit }) {
-  const t = useViewT();
+  const t = useT();
   const [lang, setLang] = useState(initialLang);
   const [wrong, setWrong] = useState('');
   const [fix, setFix] = useState('');
