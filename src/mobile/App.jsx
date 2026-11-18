@@ -18,7 +18,8 @@
 // bottom right starts a new message, the viewer's More sheet a reply, reply to all or forward.
 // The drawer's Drafts entry opens the drafts list (DraftsList.jsx); a draft reopens in Compose.
 // Its Follow up entry opens the reminders list (FollowUpList.jsx); a reminder with no reply opens
-// its Sent copy the way a notification tap opens a message.
+// its Sent copy the way a notification tap opens a message. Its saved views (desktop's) open their
+// mail in ViewResults.jsx, a row opening as a search result does.
 // The outbox row (Outbox.jsx) sits between the header and the list while anything is unsent.
 //
 // Conversations (`threadMode` grouped or expandable): a list row that stands for several messages
@@ -38,6 +39,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { daemonCall, closeAuthSheet, listen, requestNotificationPermission, takeNotificationTap } from './transport.js';
 import { useMobileStore, ALL_INBOXES } from './store.js';
 import { ensureTags } from './tags.js';
+import { ensureViews, useViewStore } from './views.js';
 import MessageList from './MessageList.jsx';
 import Viewer from './Viewer.jsx';
 import ThreadView from './ThreadView.jsx';
@@ -55,6 +57,7 @@ import Compose from './Compose.jsx';
 import OutboxRow from './Outbox.jsx';
 import DraftsList from './DraftsList.jsx';
 import FollowUpList from './FollowUpList.jsx';
+import ViewResults from './ViewResults.jsx';
 import Settings from './Settings.jsx';
 import Search from './Search.jsx';
 import Premium from './Premium.jsx';
@@ -253,6 +256,8 @@ function App() {
     start();
     // The local labels, once: rows and the viewer only ask for their own (tags.js).
     ensureTags();
+    // And the saved views, for the drawer (views.js).
+    ensureViews();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Premium: read at launch, re-checked on return to the app, live on `mobile.premium.changed`.
@@ -641,6 +646,15 @@ function App() {
     setFollowUpsOpen(true);
   }, []);
   const closeFollowUps = useCallback(() => setFollowUpsOpen(false), []);
+  // A saved view from the drawer: its mail in a layer of its own (ViewResults.jsx).
+  const [openView, setOpenView] = useState(null);
+  const onView = useCallback((view) => {
+    setPanel(null);
+    setOpenView(view);
+  }, []);
+  const closeView = useCallback(() => setOpenView(null), []);
+  const savedViews = useViewStore((s) => s.views);
+  const viewCounts = useViewStore((s) => s.counts);
   // A reminder opens its Sent copy the way a notification tap opens a message.
   const onOpenFollowUp = useCallback((f) => {
     useMobileStore.getState().followUpSeen(f.id);
@@ -677,6 +691,7 @@ function App() {
   useBackLayer(searchOpen, closeSearch);
   useBackLayer(draftsOpen, closeDrafts);
   useBackLayer(followUpsOpen, closeFollowUps);
+  useBackLayer(Boolean(openView), closeView);
   useBackLayer(settingsOpen, closeSettings);
   const paywall = useMobileStore((s) => s.paywall);
   useEffect(() => {
@@ -823,7 +838,7 @@ function App() {
   return (
     <div className="mv-kb-layer mv-app">
       <header className="mv-header">
-        <button type="button" className="mv-iconbtn" aria-label={t('mobile.drawer.open')} onClick={() => setPanel('drawer')}>
+        <button type="button" className="mv-iconbtn" aria-label={t('mobile.drawer.open')} onClick={() => { setPanel('drawer'); ensureViews(); useViewStore.getState().loadCounts(); }}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
             <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
@@ -898,6 +913,9 @@ function App() {
           followUpsDue={followUps.filter((f) => f.state === 'due').length}
           onFollowUps={onFollowUps}
           onSettings={onSettings}
+          views={savedViews}
+          viewCounts={viewCounts}
+          onView={onView}
         />
       )}
       {panel === 'switcher' && (
@@ -971,6 +989,7 @@ function App() {
       {searchOpen && <Search onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeSearch} initialQuery={DEMO_SEARCH_QUERY} />}
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
+      {openView && <ViewResults view={openView} onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeView} />}
       {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} />}
       {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
       {compose && (

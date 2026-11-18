@@ -83,7 +83,7 @@ fn jmap(email: &str) -> PhoneAccount {
 
 /// The phone with `accounts`, added the way a desktop code adds them.
 fn with_accounts(e: &Engine, accounts: Vec<PhoneAccount>) {
-    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None, fields: None };
+    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None, fields: None, views: None };
     let sealed = seal_with(PW, &bundle, CHEAP).unwrap();
     let texts = frames(&sealed, MAX_FRAME_CHARS).unwrap();
     let r = e.rpc("mobile.transfer.import", json!({ "password": PW, "frames": texts })).unwrap();

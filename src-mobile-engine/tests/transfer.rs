@@ -121,7 +121,7 @@ fn jmap(email: &str, auth: PhoneAuth) -> PhoneAccount {
 
 /// The frame texts the desktop shows for `accounts`, sealed with `password`.
 fn code(password: &str, accounts: Vec<PhoneAccount>) -> Vec<String> {
-    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None, fields: None };
+    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None, fields: None, views: None };
     let sealed = seal_with(password, &bundle, CHEAP).unwrap();
     frames(&sealed, MAX_FRAME_CHARS).unwrap()
 }
@@ -446,7 +446,7 @@ fn an_import_brings_the_desktop_tags_and_their_assignments() {
             PhoneTagged { email: "not-in-the-code@example.test".into(), tag: 0, keys: vec!["three@x".into()] },
         ],
     };
-    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: Some(tags), fields: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: Some(tags), fields: None, views: None };
     let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
     let r = import(&e, &frames, PW);
     assert_eq!(r["ok"], true, "{r}");
@@ -517,7 +517,7 @@ fn an_import_brings_the_desktop_fields_and_their_values() {
             PhoneFieldValues { email: "o@outlook.test".into(), field: 1, values: vec![("two@x".into(), json!("hi"))] },
         ],
     };
-    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: None, fields: Some(fields) };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: None, fields: Some(fields), views: None };
     let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
     let r = import(&e, &frames, PW);
     assert_eq!(r["ok"], true, "{r}");
@@ -553,10 +553,51 @@ fn an_import_brings_the_desktop_fields_and_their_values() {
     assert_eq!(e.rpc("mobile.fields.list", json!({ "accountId": ann })).unwrap()["fields"].as_array().unwrap().len(), 2);
 
     // A block of another shape: the accounts still come, the fields do not.
-    let mut v = serde_json::to_value(PhoneBundle { v: 1, accounts: vec![imap("new@example.test")], settings: None, tags: None, fields: None }).unwrap();
+    let mut v = serde_json::to_value(PhoneBundle { v: 1, accounts: vec![imap("new@example.test")], settings: None, tags: None, fields: None, views: None }).unwrap();
     v["fields"] = json!({ "list": "nope" });
     let odd: PhoneBundle = serde_json::from_value(v).unwrap();
     let r = import(&e, &mailvault_core::transfer::phone::frames(&seal_with(PW, &odd, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap(), PW);
     assert_eq!(r["ok"], true, "{r}");
     assert_eq!(r["fields"], Value::Null);
+}
+
+/// The desktop's views come with the code, under the desktop's ids, their accounts by address and
+/// their tags by name; one the phone cannot follow is left out whole, never widened. A desktop
+/// whose starters were seeded makes its list the phone's: a starter it deleted is not seeded here.
+#[test]
+fn an_import_brings_the_desktop_views_it_can_follow() {
+    use mailvault_core::app_db::fields::FieldFilter;
+    use mailvault_core::app_db::views::ViewDef;
+    use mailvault_core::transfer::phone::{PhoneField, PhoneFields, PhoneTag, PhoneTags, PhoneView, PhoneViews};
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    let view = |id: &str, builtin: Option<&str>, def: ViewDef| PhoneView { id: id.into(), name: if builtin.is_some() { String::new() } else { id.into() }, icon: "tag".into(), builtin: builtin.map(str::to_string), def };
+    let filter = |id: &str| FieldFilter { field_id: id.into(), op: "isSet".into(), value: Value::Null };
+    let views = PhoneViews {
+        seeded: true,
+        list: vec![
+            view("builtin-starred", Some("starred"), ViewDef { starred: Some(true), query: "edited".into(), ..ViewDef::default() }),
+            view("bills", None, ViewDef { accounts: vec!["Ann@Example.test".into()], tags: vec!["work".into()], fields: vec![filter("g1")], ..ViewDef::default() }),
+            view("not-here", None, ViewDef { accounts: vec!["nobody@example.test".into()], ..ViewDef::default() }),
+            view("no-tag", None, ViewDef { tags: vec!["Missing".into()], ..ViewDef::default() }),
+            view("no-field", None, ViewDef { fields: vec![filter("zzz")], ..ViewDef::default() }),
+        ],
+    };
+    let tags = PhoneTags { list: vec![PhoneTag { name: "Work".into(), color: String::new() }], assigned: vec![] };
+    let fields = PhoneFields { list: vec![PhoneField { id: "g1".into(), email: None, name: "Owner".into(), kind: "text".into(), options: vec![] }], values: vec![] };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test")], settings: None, tags: Some(tags), fields: Some(fields), views: Some(views) };
+    let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
+    let r = import(&e, &frames, PW);
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["views"], json!({ "views": 2 }));
+
+    let listed = e.rpc("mobile.views.list", json!({})).unwrap()["views"].clone();
+    let ids: Vec<&str> = listed.as_array().unwrap().iter().map(|v| v["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, vec!["builtin-starred", "bills"], "the desktop's list, not the phone's starters");
+    assert_eq!(listed[0]["def"]["query"], "edited", "the desktop's edit of a starter");
+    let ann = e.rpc("mobile.accounts.list", json!({})).unwrap()["accounts"][0]["id"].clone();
+    assert_eq!(listed[1]["def"]["accounts"], json!([ann]));
+    let work = e.rpc("mobile.tags.list", json!({})).unwrap()["tags"][0]["id"].clone();
+    assert_eq!(listed[1]["def"]["tags"], json!([work]));
+    assert_eq!(listed[1]["def"]["fields"][0]["fieldId"], "g1");
 }

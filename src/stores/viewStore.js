@@ -13,18 +13,8 @@ import { normalizeSender } from '../utils/senderRules';
 import { appendTerms, parseGroups, serializeGroups } from '../utils/queryGroups';
 import { runAttachmentExport, startExportJob, viewExportKey } from '../services/attachmentExport';
 
-/// What a view is called. A starter carries no name in the database — storing
-/// "Needs reply" there would pin one language into the store — so it is
-/// translated by its builtin id, unless the person renamed it.
-export function viewLabel(view, translate) {
-  if (view?.name) return view.name;
-  // The caller hands its own translator in: this module imports none, and the
-  // parameter is named in full because the translator-in-scope scanner reads
-  // comments too and a one-letter call written anywhere here looks to it like
-  // a missing import.
-  if (view?.builtin) return translate(`views.builtin.${view.builtin}`);
-  return '';
-}
+// What a view is called (a starter by its builtin id): shared with the phone.
+export { viewLabel } from '../utils/viewLabel.js';
 
 /// The part of a view's saved definition its layout comes from. A layout
 /// change made against a different one is stale: an edit in Settings must not

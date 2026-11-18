@@ -829,13 +829,7 @@ pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         }
     }
     // Every account's folder paths, to map an index folder name back to the folder.
-    let folders: Vec<(String, String)> = engine
-        .read(|c| {
-            let mut st = c.prepare_cached("SELECT a.id, f.path FROM accounts a JOIN folders f ON f.account_id = a.id ORDER BY a.id, f.path")?;
-            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })
-        .map_err(internal)?;
+    let folders = folder_paths(engine)?;
     let accounts: Vec<String> = match &p.account_id {
         Some(a) => vec![a.clone()],
         None => {
@@ -863,39 +857,7 @@ pub(crate) fn local(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         };
         query::search(c, &req).map_err(internal)?
     };
-    // Index folder names are sanitized (`vault_dir_name`) and many-to-one: every folder of the
-    // account with that name is a candidate, and the Message-ID decides between them.
-    let mut by_dir: HashMap<(&str, String), Vec<&str>> = HashMap::new();
-    for (a, path) in &folders {
-        by_dir.entry((a.as_str(), text::vault_dir_name(path))).or_default().push(path.as_str());
-    }
-    let cols = crate::rpc::ROW_COLUMNS;
-    let rows: Vec<Value> = engine
-        .read(|c| {
-            let mut st = c.prepare_cached(&format!(
-                "SELECT {cols}, message_id FROM messages
-                 WHERE account_id = ?1 AND folder = ?2 AND uid = ?3 AND COALESCE(local_deleted, 0) = 0"
-            ))?;
-            let mut out = Vec::with_capacity(page.hits.len());
-            for hit in &page.hits {
-                let Some(paths) = by_dir.get(&(hit.account_id.as_str(), hit.vault_dir.clone())) else { continue };
-                for path in paths {
-                    let found = st
-                        .query_row((&hit.account_id, path, hit.uid as i64), |r| Ok((crate::rpc::row_json(r)?, r.get::<_, String>(10)?)))
-                        .optional()?;
-                    let Some((mut row, message_id)) = found else { continue };
-                    if !same_message(hit.message_id.as_deref(), &message_id) {
-                        continue;
-                    }
-                    row["accountId"] = json!(hit.account_id);
-                    row["folder"] = json!(path);
-                    out.push(row);
-                    break;
-                }
-            }
-            Ok(out)
-        })
-        .map_err(internal)?;
+    let rows = join_back(engine, &folders, &page.hits)?;
     let rows = if tag_ids.is_empty() { rows } else { keep_tagged(engine, rows, &tag_ids)? };
     let next = offset + page.hits.len();
     let cursor = if page.hits.is_empty() || next as u64 >= page.total { Value::Null } else { json!(next) };
@@ -1076,6 +1038,57 @@ fn keep_tagged(engine: &Engine, rows: Vec<Value>, tag_ids: &[String]) -> Result<
 
 /// Whether an index hit's Message-ID and a row's can name the same message (a side with none
 /// cannot contradict the other).
+/// Every account's folder paths `(account, path)`, to map an index folder name back to a folder
+/// ([`join_back`]).
+pub(crate) fn folder_paths(engine: &Engine) -> Result<Vec<(String, String)>, RpcError> {
+    engine
+        .read(|c| {
+            let mut st = c.prepare_cached("SELECT a.id, f.path FROM accounts a JOIN folders f ON f.account_id = a.id ORDER BY a.id, f.path")?;
+            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .map_err(internal)
+}
+
+/// The list rows (plus `accountId` and `folder`) of index `hits`, in their order, from `mobile.db`
+/// (on a reader; never with the search lock held). A hit whose row is gone or deleted locally is
+/// dropped. Index folder names are sanitized (`vault_dir_name`) and many-to-one: every folder of
+/// the account with that name (`folders`: [`folder_paths`]) is a candidate, and the Message-ID
+/// decides between them.
+pub(crate) fn join_back(engine: &Engine, folders: &[(String, String)], hits: &[query::SearchHit]) -> Result<Vec<Value>, RpcError> {
+    let mut by_dir: HashMap<(&str, String), Vec<&str>> = HashMap::new();
+    for (a, path) in folders {
+        by_dir.entry((a.as_str(), text::vault_dir_name(path))).or_default().push(path.as_str());
+    }
+    let cols = crate::rpc::ROW_COLUMNS;
+    engine
+        .read(|c| {
+            let mut st = c.prepare_cached(&format!(
+                "SELECT {cols}, message_id FROM messages
+                 WHERE account_id = ?1 AND folder = ?2 AND uid = ?3 AND COALESCE(local_deleted, 0) = 0"
+            ))?;
+            let mut out = Vec::with_capacity(hits.len());
+            for hit in hits {
+                let Some(paths) = by_dir.get(&(hit.account_id.as_str(), hit.vault_dir.clone())) else { continue };
+                for path in paths {
+                    let found = st
+                        .query_row((&hit.account_id, path, hit.uid as i64), |r| Ok((crate::rpc::row_json(r)?, r.get::<_, String>(10)?)))
+                        .optional()?;
+                    let Some((mut row, message_id)) = found else { continue };
+                    if !same_message(hit.message_id.as_deref(), &message_id) {
+                        continue;
+                    }
+                    row["accountId"] = json!(hit.account_id);
+                    row["folder"] = json!(path);
+                    out.push(row);
+                    break;
+                }
+            }
+            Ok(out)
+        })
+        .map_err(internal)
+}
+
 fn same_message(indexed: Option<&str>, row: &str) -> bool {
     let norm = |s: &str| s.trim().trim_matches(|c| c == '<' || c == '>').trim().to_ascii_lowercase();
     match indexed.map(norm).filter(|s| !s.is_empty()) {

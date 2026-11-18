@@ -1021,6 +1021,7 @@
   "fields.deleteConfirm": "Supprimer, avec toutes ses valeurs",
   "fields.explainer": "Les champs sont vos propres notes sur un message. Ils restent sur ce Mac : rien n’est écrit dans le message ni envoyé à votre serveur de messagerie.",
   "mobile.fields.explainer": "Les champs sont vos propres notes sur un message. Ils restent sur ce téléphone : rien n’est écrit dans le message ni envoyé à votre serveur de messagerie.",
+  "mobile.views.offlineNote": "Sur ce téléphone, une vue trouve les messages que ce téléphone garde hors ligne, pas tous ceux de votre serveur de messagerie.",
   "fields.kind.checkbox": "Case à cocher",
   "fields.kind.date": "Date",
   "fields.kind.multi_select": "Plusieurs choix",

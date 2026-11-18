@@ -4,12 +4,17 @@
 // folders, Drafts (the account's local drafts, with their count) opens the drafts list, and Follow up
 // (shown while the account has follow-up reminders, with the count that found no reply) opens the
 // reminders list; the footer's Settings opens the settings screen.
+// Desktop's saved views (`views`, with their counts) follow the folders, under desktop's Views
+// heading and each with desktop's icon, as on desktop's sidebar: a tap opens the view's mail
+// (ViewResults.jsx).
 import React from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
 import { folderLabel } from './folders.js';
+import { ViewIcon } from '../components/ViewIcon.jsx';
+import { viewLabel } from '../utils/viewLabel.js';
 
-export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings }) {
+export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView }) {
   const t = useT();
   return (
     <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
@@ -47,6 +52,18 @@ export default function FolderDrawer({ account, folders, activeFolder, onSelect,
             );
           })}
         </ul>
+      )}
+      {onView && views.length > 0 && (
+        <div className="mv-drawer__local mv-drawer__views" data-mv-views>
+          <h3 className="mv-drawer__heading">{t('views.section')}</h3>
+          {views.map((v) => (
+            <button key={v.id} type="button" className="mv-folder" data-mv-view-open={v.id} onClick={() => onView(v)}>
+              <span className="mv-folder__icon"><ViewIcon icon={v.icon} size={16} /></span>
+              <span className="mv-folder__name" dir="auto">{viewLabel(v, t)}</span>
+              {viewCounts[v.id] > 0 && <span className="mv-folder__count">{viewCounts[v.id]}</span>}
+            </button>
+          ))}
+        </div>
       )}
       {onDrafts && (
         <div className="mv-drawer__local">

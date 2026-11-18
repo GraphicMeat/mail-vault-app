@@ -1021,6 +1021,7 @@
   "fields.deleteConfirm": "连同所有值一起删除",
   "fields.explainer": "字段是你对邮件的私人备注。它们保存在这台 Mac 上，不会写入邮件，也不会发送到邮件服务器。",
   "mobile.fields.explainer": "字段是你对邮件的私人备注。它们保存在这部手机上，不会写入邮件，也不会发送到邮件服务器。",
+  "mobile.views.offlineNote": "在这部手机上，视图只查找手机离线保存的邮件，而不是邮件服务器上的所有邮件。",
   "fields.kind.checkbox": "勾选框",
   "fields.kind.date": "日期",
   "fields.kind.multi_select": "多选",

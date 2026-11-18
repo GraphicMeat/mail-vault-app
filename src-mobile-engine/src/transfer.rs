@@ -37,8 +37,9 @@ use crate::secrets::Credential;
 use crate::settings::{self as prefs, put_in};
 use mailvault_core::app_db::fields::{self as field_store, Field, GLOBAL};
 use mailvault_core::app_db::tags::{self as tag_store, Target};
+use mailvault_core::app_db::views::{self as view_store, View};
 use mailvault_core::transfer::phone::{
-    decode_phone_bundle, hex_color, tags as phone_tags, PhoneAccount, PhoneAuth, PhoneError, PhoneFields, PhoneKind, PhoneSettings, PhoneTags, MAX_FRAMES, MAX_FRAME_CHARS,
+    decode_phone_bundle, hex_color, tags as phone_tags, PhoneAccount, PhoneAuth, PhoneError, PhoneFields, PhoneKind, PhoneSettings, PhoneTags, PhoneViews, MAX_FRAMES, MAX_FRAME_CHARS,
     MIN_PASSWORD_CHARS,
 };
 use rusqlite::{Connection, OptionalExtension};
@@ -165,10 +166,14 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
         crate::search::wake(engine.shared());
     }
     let tags = bundle.tags.as_ref().map(|t| apply_tags(engine, &here, t));
-    let fields = bundle.fields.as_ref().map(|f| apply_fields(engine, &here, f).0);
+    let (fields, field_ids) = match bundle.fields.as_ref().map(|f| apply_fields(engine, &here, f)) {
+        Some((reply, ids)) => (Some(reply), ids),
+        None => (None, HashMap::new()),
+    };
+    let views = bundle.views.as_ref().map(|v| apply_views(engine, &here, v, &field_ids));
     Ok(json!({
         "ok": true, "imported": imported, "existing": existing, "skipped": skipped, "settingsApplied": settings_applied,
-        "tags": tags, "fields": fields,
+        "tags": tags, "fields": fields, "views": views,
     }))
 }
 
@@ -327,6 +332,61 @@ fn apply_fields(engine: &Engine, here: &HashSet<String>, block: &PhoneFields) ->
         json!({ "fields": null, "values": null })
     });
     (reply, mapped)
+}
+
+/// The desktop's saved views (`views.rs`), under the desktop's ids (one the phone has by id is
+/// replaced): each whose accounts (by address) are all on the phone now from this code (`here`),
+/// whose tags (by name) the phone has, and whose field conditions name a field the phone has
+/// (`field_ids`: desktop id -> phone id, from [`apply_fields`]). Any other is left out whole:
+/// dropping a condition would widen the view. A desktop whose starters were seeded makes the
+/// phone's list the desktop's (the phone never seeds them after). No Premium cap: an import
+/// brings every view. Never fails the import. Answers `{views}`: views applied.
+fn apply_views(engine: &Engine, here: &HashSet<String>, block: &PhoneViews, field_ids: &HashMap<String, String>) -> Value {
+    let shared = engine.shared();
+    let mut accounts: HashMap<String, Option<String>> = HashMap::new();
+    let mut wanted: Vec<(View, Vec<String>)> = Vec::new();
+    'views: for v in &block.list {
+        let mut ids = Vec::with_capacity(v.def.accounts.len());
+        for email in &v.def.accounts {
+            let id = accounts.entry(email.trim().to_lowercase()).or_insert_with(|| phone_account(engine, here, email).map(|(id, _)| id)).clone();
+            match id {
+                Some(id) => ids.push(id),
+                None => continue 'views,
+            }
+        }
+        let mut def = v.def.clone();
+        def.accounts = ids;
+        let view = View { id: v.id.clone(), name: v.name.clone(), icon: v.icon.clone(), position: 0, builtin: v.builtin.clone(), def };
+        let Ok(view) = crate::views::checked(view) else { continue };
+        wanted.push((view, v.def.tags.clone()));
+    }
+    let applied = shared.app_db.with(|c| {
+        let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
+        if block.seeded && !view_store::seeded(&tx) {
+            view_store::mark_seeded(&tx)?;
+        }
+        let mut count = 0;
+        'each: for (mut view, tag_names) in wanted {
+            let Some(tag_ids) = tag_store::ids_by_names(&tx, &tag_names)?.into_iter().collect::<Option<Vec<_>>>() else { continue };
+            view.def.tags = tag_ids;
+            for filter in &mut view.def.fields {
+                match field_ids.get(&filter.field_id) {
+                    Some(id) => filter.field_id = id.clone(),
+                    None if field_store::get(&tx, &filter.field_id)?.is_some() => {}
+                    None => continue 'each,
+                }
+            }
+            if view_store::save(&tx, &view).is_ok() {
+                count += 1;
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(json!({ "views": count }))
+    });
+    applied.unwrap_or_else(|e| {
+        shared.log(&format!("[transfer] views not imported: {e}"));
+        json!({ "views": null })
+    })
 }
 
 /// One write: each added account's own settings, and the desktop's global ones when no import

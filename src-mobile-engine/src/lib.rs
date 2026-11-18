@@ -41,6 +41,7 @@ mod threads;
 mod tracking;
 mod transfer;
 mod usage;
+mod views;
 mod transfer_export;
 mod unsubscribe;
 #[cfg(feature = "perf-gate")]

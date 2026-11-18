@@ -44,7 +44,7 @@ fn imap(email: &str) -> PhoneAccount {
 }
 
 fn code(accounts: Vec<PhoneAccount>, settings: Option<PhoneSettings>) -> Vec<String> {
-    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts, settings, tags: None, fields: None }, CHEAP).unwrap();
+    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts, settings, tags: None, fields: None, views: None }, CHEAP).unwrap();
     frames(&sealed, MAX_FRAME_CHARS).unwrap()
 }
 

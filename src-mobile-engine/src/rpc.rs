@@ -214,6 +214,12 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.transfer.import", crate::transfer::import),
     ("mobile.unsubscribe.list", crate::unsubscribe::list),
     ("mobile.unsubscribe.run", crate::unsubscribe::run),
+    ("mobile.views.counts", crate::views::counts),
+    ("mobile.views.delete", crate::views::delete),
+    ("mobile.views.evaluate", crate::views::evaluate),
+    ("mobile.views.list", crate::views::list),
+    ("mobile.views.reorder", crate::views::reorder),
+    ("mobile.views.save", crate::views::save),
 ];
 #[cfg(not(feature = "perf-gate"))]
 const TABLE: &[(&str, Handler)] = &[
@@ -320,6 +326,12 @@ const TABLE: &[(&str, Handler)] = &[
     ("mobile.transfer.import", crate::transfer::import),
     ("mobile.unsubscribe.list", crate::unsubscribe::list),
     ("mobile.unsubscribe.run", crate::unsubscribe::run),
+    ("mobile.views.counts", crate::views::counts),
+    ("mobile.views.delete", crate::views::delete),
+    ("mobile.views.evaluate", crate::views::evaluate),
+    ("mobile.views.list", crate::views::list),
+    ("mobile.views.reorder", crate::views::reorder),
+    ("mobile.views.save", crate::views::save),
 ];
 
 /// Largest perf record accepted, serialized. The real one is a few hundred bytes.

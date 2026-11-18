@@ -347,7 +347,7 @@ fn nothing_to_send_is_no_frames() {
 
 #[test]
 fn open_refuses_another_version_and_garbage() {
-    let future = PhoneBundle { v: 2, accounts: vec![], settings: None, tags: None, fields: None };
+    let future = PhoneBundle { v: 2, accounts: vec![], settings: None, tags: None, fields: None, views: None };
     let sealed = seal_with(PW, &future, cheap()).unwrap();
     assert!(matches!(open(PW, &sealed).unwrap_err(), PhoneError::Invalid(_)));
     // sealed but not deflate
@@ -376,7 +376,7 @@ fn errors_name_no_secret() {
 #[test]
 fn production_seal_uses_the_export_parameters() {
     // header bytes 7..19 carry m, t, p
-    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None };
     let sealed = seal(PW, &bundle).unwrap();
     let u32_at = |i: usize| u32::from_le_bytes([sealed[i], sealed[i + 1], sealed[i + 2], sealed[i + 3]]);
     assert_eq!(Params { m_kib: u32_at(7), t: u32_at(11), p: u32_at(15) }, crypto::EXPORT_PARAMS);
@@ -386,7 +386,7 @@ fn production_seal_uses_the_export_parameters() {
 fn open_refuses_key_derivation_above_the_export_parameters() {
     // A crafted code must not make the phone derive with more memory or time than the desktop
     // ever seals with (1 GiB at the crypto ceiling). Refused from the header, before argon2.
-    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None }, cheap()).unwrap();
+    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None }, cheap()).unwrap();
     let e = crypto::EXPORT_PARAMS;
     for (at, value) in [(7, e.m_kib + 1), (11, e.t + 1), (15, e.p + 1)] {
         let mut s = sealed.clone();
@@ -397,7 +397,7 @@ fn open_refuses_key_derivation_above_the_export_parameters() {
 
 #[test]
 fn open_accepts_exactly_the_export_parameters() {
-    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None };
     assert_eq!(open(PW, &seal(PW, &bundle).unwrap()).unwrap(), bundle);
 }
 
@@ -910,10 +910,64 @@ fn a_phone_from_before_fields_reads_a_code_that_has_them() {
     }
     let fields = PhoneFields { list: vec![PhoneField { id: "g1".into(), email: None, name: "Owner".into(), kind: "text".into(), options: vec![] }], values: vec![] };
     let tags = PhoneTags { list: vec![PhoneTag { name: "Work".into(), color: String::new() }], assigned: vec![] };
-    let blocks = PhoneBlocks { tags: Some(tags.clone()), fields: Some(fields) };
+    let blocks = PhoneBlocks { tags: Some(tags.clone()), fields: Some(fields), views: None };
     let qr = encode_phone_qr_blocks_with(PW, &sample(), None, blocks, cheap()).unwrap();
     let full = decode_phone_bundle(PW, &qr.frames).unwrap();
     assert!(full.fields.is_some());
     let old: TagsEraBundle = serde_json::from_value(serde_json::to_value(&full).unwrap()).unwrap();
     assert_eq!((old.v, old.accounts.len(), old.tags), (1, 4, Some(tags)));
+}
+
+// ── views ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn views_travel_by_address_and_tag_name_and_one_the_phone_cannot_follow_stays_home() {
+    use crate::app_db::views::{self as store, View, ViewDef};
+    let c = tag_store();
+    assert!(views::snapshot(&c, &sample()).unwrap().is_none(), "a desktop that never listed its views sends none");
+    store::ensure_starters(&c).unwrap();
+    let work = crate::app_db::tags::ensure(&c, "Work", "").unwrap();
+    crate::app_db::fields::save(&c, &field("f1", "*", "Priority", "select")).unwrap();
+    let view = |id: &str, def: ViewDef| View { id: id.into(), name: id.into(), icon: "tag".into(), position: 0, builtin: None, def };
+    let filter = |id: &str| crate::app_db::fields::FieldFilter { field_id: id.into(), op: "is".into(), value: json!("hi") };
+    store::save(&c, &view("mine", ViewDef { accounts: vec!["p".into()], tags: vec![work.id.clone()], fields: vec![filter("f1")], ..ViewDef::default() })).unwrap();
+    store::save(&c, &view("gone-account", ViewDef { accounts: vec!["gone".into()], ..ViewDef::default() })).unwrap();
+    store::save(&c, &view("gone-tag", ViewDef { tags: vec!["no-such-tag".into()], ..ViewDef::default() })).unwrap();
+    store::save(&c, &view("gone-field", ViewDef { fields: vec![filter("nope")], ..ViewDef::default() })).unwrap();
+
+    let snap = views::snapshot(&c, &sample()).unwrap().unwrap();
+    assert!(snap.seeded);
+    let ids: Vec<&str> = snap.list.iter().map(|v| v.id.as_str()).collect();
+    assert_eq!(ids, vec!["builtin-needs-reply", "builtin-starred", "builtin-attachments", "mine"]);
+    let mine = &snap.list[3].def;
+    assert_eq!(mine.accounts, vec!["p@example.com".to_string()]);
+    assert_eq!(mine.tags, vec!["Work".to_string()]);
+    assert_eq!(mine.fields[0].field_id, "f1");
+}
+
+#[test]
+fn views_ride_the_code_and_a_skipped_accounts_view_does_not() {
+    let view = |id: &str, accounts: Vec<String>| PhoneView {
+        id: id.into(), name: id.into(), icon: "tag".into(), builtin: None,
+        def: crate::app_db::views::ViewDef { accounts, ..Default::default() },
+    };
+    let sent = PhoneViews { list: vec![view("all", vec![]), view("theirs", vec!["skipped@example.com".into()]), view("mine", vec!["p@example.com".into()])], seeded: true };
+    let blocks = PhoneBlocks { views: Some(sent), ..PhoneBlocks::default() };
+    let qr = encode_phone_qr_blocks_with(PW, &sample(), None, blocks, cheap()).unwrap();
+    let got = decode_phone_bundle(PW, &qr.frames).unwrap().views.expect("views");
+    assert_eq!(got.list.iter().map(|v| v.id.as_str()).collect::<Vec<_>>(), vec!["all", "mine"]);
+    assert!(got.seeded);
+}
+
+#[test]
+fn a_code_without_views_or_with_a_views_block_of_another_shape_still_opens() {
+    for block in [None, Some(json!(7)), Some(json!({ "list": [{ "def": 1 }] }))] {
+        let mut v = serde_json::to_value(phone_bundle(&sample()).0).unwrap();
+        if let Some(b) = block {
+            v["views"] = b;
+        }
+        let back: PhoneBundle = serde_json::from_value(v).unwrap();
+        assert_eq!(back.accounts.len(), 4);
+        assert_eq!(back.views, None);
+    }
 }

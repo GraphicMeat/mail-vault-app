@@ -1021,6 +1021,7 @@
   "fields.deleteConfirm": "Elimina, con tutti i valori",
   "fields.explainer": "I campi sono i tuoi appunti su un messaggio. Restano su questo Mac: non vengono scritti nel messaggio né inviati al tuo server di posta.",
   "mobile.fields.explainer": "I campi sono i tuoi appunti su un messaggio. Restano su questo telefono: non vengono scritti nel messaggio né inviati al tuo server di posta.",
+  "mobile.views.offlineNote": "Su questo telefono, una vista trova la posta che il telefono tiene offline, non tutti i messaggi del tuo server di posta.",
   "fields.kind.checkbox": "Casella",
   "fields.kind.date": "Data",
   "fields.kind.multi_select": "Più scelte",

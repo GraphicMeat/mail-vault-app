@@ -248,6 +248,17 @@ pub fn ensure_starters(conn: &Connection) -> Result<usize, String> {
 
 const SEEDED: &str = "views_seeded";
 
+/// Whether the starters were seeded here (or will never be: [`mark_seeded`]).
+pub fn seeded(conn: &Connection) -> bool {
+    super::db::meta_get(conn, SEEDED).is_some()
+}
+
+/// The starters will not be seeded here: the views came from elsewhere (an import of another
+/// install's own list, which may have dropped or changed them).
+pub fn mark_seeded(conn: &Connection) -> Result<(), String> {
+    super::db::meta_set(conn, SEEDED, "1")
+}
+
 fn row_to_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<View> {
     let def_json: String = r.get(5)?;
     Ok(View {

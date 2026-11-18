@@ -1021,6 +1021,7 @@
   "fields.deleteConfirm": "Löschen, samt aller Werte",
   "fields.explainer": "Felder sind Ihre eigenen Notizen zu einer Nachricht. Sie liegen auf diesem Mac und werden weder in die Nachricht geschrieben noch an Ihren Mailserver gesendet.",
   "mobile.fields.explainer": "Felder sind Ihre eigenen Notizen zu einer Nachricht. Sie liegen auf diesem Telefon und werden weder in die Nachricht geschrieben noch an Ihren Mailserver gesendet.",
+  "mobile.views.offlineNote": "Auf diesem Telefon findet eine Ansicht die Mails, die dieses Telefon offline bereithält, nicht jede Nachricht auf Ihrem Mailserver.",
   "fields.kind.checkbox": "Kästchen",
   "fields.kind.date": "Datum",
   "fields.kind.multi_select": "Mehrfachauswahl",

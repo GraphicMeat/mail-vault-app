@@ -397,6 +397,8 @@ export const MOBILE_PAGES = {
   'time-capsule': 'desktopNotice',
   migration: 'desktopNotice',
   backup: 'desktopNotice',
+  // The phone lists and opens views from its folder drawer; the Views page and the editor are
+  // still to build.
   views: 'engine: saved views',
   'auto-tags': 'engine: auto-tag rules',
 };

@@ -17,6 +17,7 @@ pub mod frames;
 pub mod qr;
 pub mod settings;
 pub mod tags;
+pub mod views;
 #[cfg(test)]
 mod tests;
 
@@ -25,6 +26,7 @@ pub use frames::{frames, parse_frame, Assembler, FrameError, FrameHeader, Progre
 pub use qr::qr_svg;
 pub use fields::{PhoneField, PhoneFieldValues, PhoneFields};
 pub use tags::{PhoneTag, PhoneTagged, PhoneTags};
+pub use views::{PhoneView, PhoneViews};
 pub use settings::{
     offline_window, Degrade, PhoneAccountNotifications, PhoneAccountSettings, PhoneAiEndpoint, PhoneAlias, PhoneImportantSender, PhoneQuietHours, PhoneSettings,
     PhoneSignature, PhoneTemplate,
@@ -193,14 +195,18 @@ pub struct PhoneBundle {
     /// The desktop's custom fields and the newest of their values (`fields.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "settings::lenient_object")]
     pub fields: Option<PhoneFields>,
+    /// The desktop's saved views that the phone can follow (`views.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "settings::lenient_object")]
+    pub views: Option<PhoneViews>,
 }
 
 /// The desktop's own data a phone code may carry beside the accounts and settings, each cut to
-/// the room left ([`tags::fit`], [`fields::fit`]).
+/// the room left ([`tags::fit`], [`fields::fit`], [`views::fit`]).
 #[derive(Debug, Clone, Default)]
 pub struct PhoneBlocks {
     pub tags: Option<PhoneTags>,
     pub fields: Option<PhoneFields>,
+    pub views: Option<PhoneViews>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -293,7 +299,7 @@ pub fn phone_bundle_with_settings(accounts: &Value, settings: Option<&Value>) ->
             Err(reason) => skipped.push(Skipped { email: text(a, "email").unwrap_or("").to_string(), reason }),
         }
     }
-    (PhoneBundle { v: PHONE_BUNDLE_VERSION, accounts: out, settings: settings::global_settings(settings), tags: None, fields: None }, skipped)
+    (PhoneBundle { v: PHONE_BUNDLE_VERSION, accounts: out, settings: settings::global_settings(settings), tags: None, fields: None, views: None }, skipped)
 }
 
 /// A non-blank trimmed string field.
@@ -547,7 +553,7 @@ pub fn encode_phone_qr_full_with(password: &str, accounts: &Value, settings: Opt
     encode_phone_qr_blocks_with(password, accounts, settings, PhoneBlocks { tags, ..PhoneBlocks::default() }, params)
 }
 
-/// [`encode_phone_qr`] with the desktop's tags and fields (`tags::snapshot`, `fields::snapshot`),
+/// [`encode_phone_qr`] with the desktop's tags, fields and views (each block's `snapshot`),
 /// each cut to the room the code has left once what comes before it is in.
 pub fn encode_phone_qr_with_blocks(password: &str, accounts: &Value, settings: Option<&Value>, blocks: PhoneBlocks) -> Result<PhoneQr, PhoneError> {
     encode_phone_qr_blocks_with(password, accounts, settings, blocks, crypto::EXPORT_PARAMS)
@@ -575,6 +581,11 @@ pub fn encode_phone_qr_blocks_with(password: &str, accounts: &Value, settings: O
         f
     });
     fields::fit(&mut bundle);
+    bundle.views = blocks.views.map(|mut v| {
+        views::retain_accounts(&mut v, &carried);
+        v
+    });
+    views::fit(&mut bundle);
     let sealed = seal_with(password, &bundle, params)?;
     Ok(PhoneQr { frames: frames::frames(&sealed, MAX_FRAME_CHARS)?, skipped })
 }

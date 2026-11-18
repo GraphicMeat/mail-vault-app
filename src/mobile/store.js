@@ -31,6 +31,7 @@ import { followAppIcon } from './appIcon.js';
 import { loadMobileLocale } from './i18n.js';
 import { refreshTags } from './tags.js';
 import { refreshFields } from './fields.js';
+import { refreshViews } from './views.js';
 
 // The import's own refusals (`mobile.transfer.import`), shown by ImportFromDesktop.
 const IMPORT_CODES = ['BAD_PASSWORD', 'PASSWORD_SHORT', 'INVALID'];
@@ -796,6 +797,8 @@ export function createMobileStore() {
         if (reply.tags) refreshTags();
         // And its custom fields: every list and value is asked for again.
         if (reply.fields) refreshFields();
+        // And its saved views.
+        if (reply.views) refreshViews();
         // The desktop's settings took effect: the page follows them now, not at the next launch.
         if (result.settingsApplied) {
           await get().loadPrefs();
