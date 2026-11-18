@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.25.0] - 2026-11-18
+
 - Added: click an account group in the sidebar to read its accounts' mail in one list, and fold or unfold the group.
 - Fixed: switching account groups clears old bulk selections, discards stale mail reads, and refreshes backup indicators.
 - Fixed: Explorer view no longer reopens the previous account group's date or sender folder after switching groups.
