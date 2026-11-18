@@ -260,7 +260,9 @@ async fn backup_worker_stop_cancels_owned_work_but_keeps_drain_truth() {
         .unwrap()
         .send(Cmd::Wake)
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(30)).await;
+    let (done, processed) = oneshot::channel();
+    r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe { done }).unwrap();
+    processed.await.unwrap();
     assert!(r.calls.try_recv().is_err());
     assert!(
         r.state.backup_worker.controls.lock().unwrap().is_empty(),
