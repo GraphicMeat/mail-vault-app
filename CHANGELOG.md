@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - Fixed: a sidebar account group is now one row, same height and width as an account, with a single hover highlight; its left chevron folds and unfolds, the rest opens the group inbox.
+- Changed: Settings on the phone now look and work like Settings on the computer, page by page: Storage, Data usage, Search index, Billing, Diagnostics, Help and Move to another computer use the same controls, and Cleanup, Backup, Time Capsule and Migration show that they are in MailVault on desktop.
+- Fixed: on the phone, each account's own signature switch now decides whether its signature is added. An import from the computer could turn every signature off with no way to turn them back on.
 
 ## [2.25.0] - 2026-11-18
 
