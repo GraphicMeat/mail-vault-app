@@ -875,6 +875,8 @@ impl Engine {
         crate::search::start(&engine.shared);
         // Asleep until the first reminder's time (none: an hour at a time).
         crate::followup::start(&engine.shared);
+        // The deleted-mail bin's retention sweep (`bin.rs`).
+        crate::bin::start(&engine.shared);
         Ok(engine)
     }
 

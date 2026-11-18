@@ -89,3 +89,16 @@ fn the_refresh_interval_is_a_pref_in_minutes() {
     }
     assert_eq!(engine(&tmp).rpc("mobile.prefs.get", json!({})).unwrap()["refreshInterval"], 15, "it survives a reopen");
 }
+
+/// Desktop's "Keep deleted emails for": 1 day unless set, 1 to 30 days.
+#[test]
+fn the_deleted_bin_retention_is_a_pref_in_days() {
+    let tmp = tempfile::tempdir().unwrap();
+    let e = engine(&tmp);
+    assert_eq!(e.rpc("mobile.prefs.get", json!({})).unwrap()["deletedRetentionDays"], 1);
+    assert_eq!(e.rpc("mobile.prefs.set", json!({ "deletedRetentionDays": 30 })).unwrap()["deletedRetentionDays"], 30);
+    for bad in [json!({ "deletedRetentionDays": 0 }), json!({ "deletedRetentionDays": 31 }), json!({ "deletedRetentionDays": "7" })] {
+        assert_eq!(e.rpc("mobile.prefs.set", bad.clone()).unwrap_err().code(), "INVALID", "{bad}");
+    }
+    assert_eq!(engine(&tmp).rpc("mobile.prefs.get", json!({})).unwrap()["deletedRetentionDays"], 30, "it survives a reopen");
+}

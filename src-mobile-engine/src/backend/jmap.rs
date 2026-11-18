@@ -35,7 +35,7 @@
 //! server's `Retry-After` (capped) a few times as a transient condition. One session per account
 //! is kept in [`Sessions`] so a message open does not fetch the session again.
 
-use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, DeletePlan, FolderInfo, Found, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
 use crate::accounts::{self, failure, load_account, map_error, AccountRow, Code, InsertError};
 use crate::actions::Kind;
 use crate::db::{lock, Engine, Shared};
@@ -51,7 +51,7 @@ use mailvault_core::imap::PartInfo;
 use mailvault_core::jmap::discover::{self, Discovered};
 use mailvault_core::jmap::headers::{keywords_to_flags, to_header, HEADER_PROPS};
 use mailvault_core::jmap::push::{SseParser, StateChange};
-use mailvault_core::jmap::{BlobStream, JMailbox, JmapAuth, JmapClient, JmapError, RemoveOutcome};
+use mailvault_core::jmap::{BlobStream, ImportResult, JMailbox, JmapAuth, JmapClient, JmapError, RemoveOutcome};
 use mailvault_core::send::classify::classify_failure;
 use mailvault_core::send::sent_policy::{sent_copy_policy, SentCopy};
 use mailvault_core::smtp::{self, OutgoingEmail};
@@ -498,6 +498,21 @@ impl<'a> JmapBackend<'a> {
             .ok_or_else(|| Fail::Code(Code::Invalid, "the account has no inbox".into()))
     }
 
+    /// Core's delete rule (`actions::policy`) for `path`: in Trash, permanent (gone for good, or
+    /// its last label off); elsewhere a move, refused when the account has no Trash.
+    fn plan_for(&mut self, path: &str) -> Result<DeletePlan, Fail> {
+        let source = self.mailbox_id(path)?;
+        let trash = self.mailboxes(false)?.iter().find(|m| has_role(m, "trash")).map(|m| m.id.clone());
+        let place = jmap_trash_place(&source, trash.as_deref());
+        let permanent = delete_disposition(FolderRole::of(path, None), place, WithoutTrash::MoveToTrash) == DeleteDisposition::Permanent;
+        Ok(DeletePlan { permanent, trash })
+    }
+
+    /// Whether `id` names a mailbox the server lists now (read fresh).
+    fn mailbox_listed(&mut self, id: &str) -> Result<bool, Fail> {
+        Ok(self.mailboxes(true)?.iter().any(|m| m.id == id))
+    }
+
     /// The mailbox of `path` from this backend's list.
     fn mailbox(&mut self, path: &str, fresh: bool) -> Result<JMailbox, Fail> {
         let inbox = sync::is_inbox(path);
@@ -935,6 +950,7 @@ impl Backend for JmapBackend<'_> {
         kind: Kind,
         uids: &[u32],
         target: Option<&str>,
+        plan: Option<&DeletePlan>,
         before_wire: BeforeWire<'_>,
     ) -> Result<ApplyOutcome, Fail> {
         if folder.uid_validity.is_some_and(|v| v != GENERATION) {
@@ -972,11 +988,10 @@ impl Backend for JmapBackend<'_> {
             }
             Kind::Delete => {
                 let source = self.mailbox_id(path)?;
-                let trash = self.mailboxes(false)?.iter().find(|m| has_role(m, "trash")).map(|m| m.id.clone());
-                // Core's delete rule (`actions::policy`): in Trash, permanent (gone for good, or its
-                // last label off); elsewhere a move, refused when the account has no Trash.
-                let place = jmap_trash_place(&source, trash.as_deref());
-                let permanent = delete_disposition(FolderRole::of(path, None), place, WithoutTrash::MoveToTrash) == DeleteDisposition::Permanent;
+                let DeletePlan { permanent, trash } = match plan {
+                    Some(p) => p.clone(),
+                    None => self.plan_for(path)?,
+                };
                 before_wire()?;
                 let mut done: Vec<u32> = Vec::new();
                 let mut failed = None;
@@ -1043,6 +1058,87 @@ impl Backend for JmapBackend<'_> {
                 }
             }
         }
+    }
+
+    fn delete_plan(&mut self, folder: &FolderRow) -> Result<DeletePlan, Fail> {
+        self.plan_for(&folder.path)
+    }
+
+    fn raw(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<Vec<u8>>, Fail> {
+        let Some(id) = self.one_email_id(folder, uid)? else {
+            return Ok(None);
+        };
+        let blob = match self.get_one(&id, &["id", "blobId"], false) {
+            Ok(Some(v)) => v["blobId"].as_str().map(str::to_string),
+            Ok(None) => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        let Some(blob) = blob else {
+            return Err(Fail::Code(Code::Invalid, "Email/get answered no blobId".into()));
+        };
+        match self.call(async |c| c.download(&blob).await) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(CallErr::Jmap(e, _)) if is_not_found(&e) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn find_message_id(&mut self, folder: &str, message_id: &str) -> Result<Found, Fail> {
+        let wanted = mailvault_core::maildir::normalize_message_id(message_id);
+        if wanted.is_empty() {
+            return Ok(Found::Absent);
+        }
+        let mailbox = self.mailbox_id(folder)?;
+        if !self.mailbox_listed(&mailbox)? {
+            return Ok(Found::FolderGone);
+        }
+        let hit = self.call(async |c| c.find_message_id(&mailbox, &wanted).await).map_err(Fail::from)?;
+        Ok(hit.map_or(Found::Absent, Found::Here))
+    }
+
+    fn move_found(&mut self, from: &str, handle: &str, to: &str) -> Result<(), Fail> {
+        let source = self.mailbox_id(from)?;
+        let dest = self.mailbox_id(to)?;
+        // The email keeps its id; only its labels change.
+        let patches = vec![(handle.to_string(), vec![(source, false), (dest, true)])];
+        let out = self.call(async |c| c.set_mailboxes(&patches).await).map_err(Fail::from)?;
+        match out.failed.first() {
+            None => Ok(()),
+            Some((_, why)) => Err(Fail::Code(Code::Invalid, format!("Email/set refused {why}"))),
+        }
+    }
+
+    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags) -> Result<bool, Fail> {
+        let dest = self.mailbox_id(folder)?;
+        if !self.mailbox_listed(&dest)? {
+            return Ok(false);
+        }
+        let mut keywords = Vec::new();
+        if flags.seen {
+            keywords.push("$seen".to_string());
+        }
+        if flags.flagged {
+            keywords.push("$flagged".to_string());
+        }
+        if flags.answered {
+            keywords.push("$answered".to_string());
+        }
+        let received = mailvault_core::jmap::client::received_at_of(raw);
+        let out = self
+            .call(async |c| {
+                let blob = c.upload(raw).await?;
+                c.import(&blob, std::slice::from_ref(&dest), &keywords, received.as_deref()).await
+            })
+            .map_err(Fail::from)?;
+        if let ImportResult::AlreadyExists { existing_id } = out {
+            // The server keeps one copy per account: the folder gets that copy's label.
+            let patches = vec![(existing_id, vec![(dest.clone(), true)])];
+            let set = self.call(async |c| c.set_mailboxes(&patches).await).map_err(Fail::from)?;
+            if let Some((_, why)) = set.failed.first() {
+                return Err(Fail::Code(Code::Invalid, format!("Email/set refused {why}")));
+            }
+        }
+        Ok(true)
     }
 
     fn pass_done(&mut self, folder: &str) -> Result<(), Fail> {

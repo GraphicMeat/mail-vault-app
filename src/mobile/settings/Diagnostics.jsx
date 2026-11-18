@@ -29,6 +29,8 @@ const OPS = Object.freeze({
   unflag: ['flag', 'settings.pendingActions.opFlag'],
   seen: ['flag', 'settings.pendingActions.opFlag'],
   unseen: ['flag', 'settings.pendingActions.opFlag'],
+  // A reply's original marked answered (actions.rs `journal_answered`).
+  answered: ['flag', 'settings.pendingActions.opFlag'],
 });
 const opOf = (kind) => (Object.hasOwn(OPS, kind) ? OPS[kind] : ['other', 'settings.pendingActions.opOther']);
 
@@ -86,7 +88,8 @@ export function PendingActions() {
   const emailOf = (id) => accounts.find((a) => a.id === id)?.email || '';
   const entries = (list || []).map((entry) => {
     const [op, labelKey] = opOf(entry.kind);
-    const count = Array.isArray(entry.uids) ? entry.uids.length : 0;
+    // A recover from the deleted-mail bin (bin.rs `restore`) names its one message by bin row.
+    const count = entry.kind === 'restore' ? 1 : (Array.isArray(entry.uids) ? entry.uids.length : 0);
     const where = [emailOf(entry.accountId), entry.folder,
       entry.createdMs > 0 && t('settings.pendingActions.queuedAt', { date: formatFullDate(entry.createdMs, prefs) })].filter(Boolean).join(' · ');
     return {

@@ -11,8 +11,9 @@
 //!
 //! It lives beside app.db and never in the vault, so no vault walk, folder
 //! list, search index, count, unified view or backup ever sees it, and the
-//! daemon needs no entitlement for it. Written and read only by
-//! `src-daemon/src/handlers/deleted.rs`.
+//! daemon needs no entitlement for it. Written and read by
+//! `src-daemon/src/handlers/deleted.rs`, and on the phone by the mobile
+//! engine's `bin.rs` (its own app.db, its files in `<data_dir>/deleted`).
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
@@ -220,6 +221,61 @@ pub fn purge_expired(conn: &Connection, app_dir: &Path, now_ms: i64, retention_d
     Ok(ids.len())
 }
 
+/// One page of [`list`], newest first: at most `limit` rows that come after `after` (the
+/// `(deleted_at, id)` of the last row of the page before; `None` for the first). A row whose
+/// `.eml` went missing is dropped as in [`list`]. For the phone, whose bin can hold more than a
+/// screen takes in one read.
+pub fn list_page(conn: &Connection, app_dir: &Path, after: Option<(i64, &str)>, limit: usize) -> Result<Vec<Deleted>, String> {
+    let (at, id) = after.map_or((i64::MAX, ""), |(at, id)| (at, id));
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {COLUMNS} FROM deleted_messages WHERE deleted_at < ?1 OR (deleted_at = ?1 AND id > ?2)
+             ORDER BY deleted_at DESC, id LIMIT ?3"
+        ))
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<Deleted> = stmt
+        .query_map(params![at, id, limit as i64], from_row)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    let (kept, gone): (Vec<_>, Vec<_>) = rows.into_iter().partition(|d| live(app_dir, &d.id, d.has_eml));
+    for d in gone {
+        remove(conn, app_dir, &d.id)?;
+    }
+    Ok(kept)
+}
+
+/// [`purge_expired`] for at most `limit` rows, oldest first: a sweep that runs in small steps.
+/// Returns how many went.
+pub fn purge_expired_some(conn: &Connection, app_dir: &Path, now_ms: i64, retention_days: i64, limit: usize) -> Result<usize, String> {
+    let cutoff = now_ms - retention_days * DAY_MS;
+    let mut stmt = conn
+        .prepare("SELECT id FROM deleted_messages WHERE deleted_at <= ?1 ORDER BY deleted_at LIMIT ?2")
+        .map_err(|e| e.to_string())?;
+    let ids: Vec<String> = stmt
+        .query_map(params![cutoff, limit as i64], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    for id in &ids {
+        remove(conn, app_dir, id)?;
+    }
+    Ok(ids.len())
+}
+
+/// The ids of at most `limit` rows of `account_id` (every row with `None`).
+pub fn ids_of_account(conn: &Connection, account_id: Option<&str>, limit: usize) -> Result<Vec<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id FROM deleted_messages WHERE ?1 IS NULL OR account_id = ?1 LIMIT ?2")
+        .map_err(|e| e.to_string())?;
+    let ids = stmt
+        .query_map(params![account_id, limit as i64], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(ids)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,6 +365,64 @@ mod tests {
         std::fs::remove_file(eml_path(&dir, &id)).unwrap();
         assert!(list(&c, &dir).unwrap().is_empty());
         assert!(get(&c, &id).unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pages_follow_the_list_order_and_meet_without_gaps() {
+        let (dir, c) = store();
+        let row = json!({});
+        // Two rows share a time: the id orders them, as in `list`.
+        for (uid, at) in [(1, 10), (2, 20), (3, 20), (4, 30), (5, 5)] {
+            capture(&c, &dir, &cap(uid, None, &row, at), Some(&b"x"[..])).unwrap();
+        }
+        let all: Vec<String> = list(&c, &dir).unwrap().into_iter().map(|d| d.id).collect();
+        let mut paged = Vec::new();
+        let mut after: Option<(i64, String)> = None;
+        loop {
+            let page = list_page(&c, &dir, after.as_ref().map(|(at, id)| (*at, id.as_str())), 2).unwrap();
+            if page.is_empty() {
+                break;
+            }
+            assert!(page.len() <= 2);
+            let last = page.last().unwrap();
+            after = Some((last.deleted_at, last.id.clone()));
+            paged.extend(page.into_iter().map(|d| d.id));
+        }
+        assert_eq!(paged, all);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_bounded_purge_takes_the_oldest_first() {
+        let (dir, c) = store();
+        let row = json!({});
+        let now = 100 * DAY_MS;
+        let (oldest, _) = capture(&c, &dir, &cap(1, None, &row, now - 5 * DAY_MS), Some(&b"a"[..])).unwrap();
+        let (older, _) = capture(&c, &dir, &cap(2, None, &row, now - 3 * DAY_MS), Some(&b"b"[..])).unwrap();
+        let (fresh, _) = capture(&c, &dir, &cap(3, None, &row, now), Some(&b"c"[..])).unwrap();
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 1).unwrap(), 1);
+        assert!(get(&c, &oldest).unwrap().is_none() && !eml_path(&dir, &oldest).exists());
+        assert!(get(&c, &older).unwrap().is_some());
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 10).unwrap(), 1);
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 10).unwrap(), 0);
+        assert!(get(&c, &fresh).unwrap().is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ids_of_an_account_leave_the_others_out() {
+        let (dir, c) = store();
+        let row = json!({});
+        let (mine, _) = capture(&c, &dir, &cap(1, None, &row, 1), None).unwrap();
+        let other = Capture { account_id: "other", ..cap(1, None, &row, 2) };
+        let (theirs, _) = capture(&c, &dir, &other, None).unwrap();
+        assert_eq!(ids_of_account(&c, Some("acc"), 10).unwrap(), vec![mine.clone()]);
+        let mut every = ids_of_account(&c, None, 10).unwrap();
+        every.sort();
+        let mut want = vec![mine, theirs];
+        want.sort();
+        assert_eq!(every, want);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

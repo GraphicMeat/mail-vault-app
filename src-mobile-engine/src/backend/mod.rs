@@ -179,6 +179,30 @@ pub(crate) enum ApplyOutcome {
     Partial { gone: Vec<u32>, moved: Moved, error: (crate::accounts::Code, String) },
 }
 
+/// Where a delete of a folder's messages takes them: core's delete rule (`actions::policy`) for
+/// that folder, decided once ([`Backend::delete_plan`]) so the deleted-mail bin (`bin.rs`) keeps
+/// the bytes of exactly the deletes that are permanent, and [`Backend::apply`] then does that.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DeletePlan {
+    /// The messages leave the server (a delete in Trash). Otherwise they move to `trash`.
+    pub(crate) permanent: bool,
+    /// Trash as this backend names a folder (IMAP path, JMAP mailbox id, Graph folder id or
+    /// well-known name); `None` when it is not known (an IMAP account without one: the delete
+    /// creates it).
+    pub(crate) trash: Option<String>,
+}
+
+/// A Message-ID looked up in one folder ([`Backend::find_message_id`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Found {
+    /// A message with exactly that Message-ID; the handle [`Backend::move_found`] takes (an IMAP
+    /// uid, a JMAP email id, a Graph message id).
+    Here(String),
+    Absent,
+    /// The folder is proven gone.
+    FolderGone,
+}
+
 /// The journal's hook into [`Backend::apply`]: called once, right before the first command that
 /// moves or deletes goes on the wire, to record that it may have happened.
 pub(crate) type BeforeWire<'a> = &'a mut dyn FnMut() -> Result<(), Fail>;
@@ -332,15 +356,43 @@ pub(crate) trait Backend: Send {
     fn part_range(&mut self, folder: &FolderRow, uid: u32, section: &str, offset: u64, len: u32) -> Result<Option<Vec<u8>>, Fail>;
     /// Applies one journaled action to `uids` of `folder` (a move to `target`). When
     /// `folder.uid_validity` is set, another generation is [`ApplyOutcome::OtherGeneration`].
-    /// `before_wire` runs before the first command of a move or delete.
+    /// `before_wire` runs before the first command of a move or delete. A delete does what `plan`
+    /// says when given (the bin captured for it), else what [`Backend::delete_plan`] would say.
     fn apply(
         &mut self,
         folder: &FolderRow,
         kind: Kind,
         uids: &[u32],
         target: Option<&str>,
+        plan: Option<&DeletePlan>,
         before_wire: BeforeWire<'_>,
     ) -> Result<ApplyOutcome, Fail>;
+    /// What a delete in `folder` would do now (core's delete rule). Nothing changes on the server.
+    fn delete_plan(&mut self, _folder: &FolderRow) -> Result<DeletePlan, Fail> {
+        Err(Fail::unsupported("a delete plan"))
+    }
+    /// The whole message `uid` as the server holds it (RFC 822 bytes), for the bin's copy of a
+    /// permanent delete. `None` when it is gone, or the folder's generation is not
+    /// `folder.uid_validity`.
+    fn raw(&mut self, _folder: &FolderRow, _uid: u32) -> Result<Option<Vec<u8>>, Fail> {
+        Err(Fail::unsupported("a raw message"))
+    }
+    /// The message in `folder` (a stored path, or a [`DeletePlan::trash`]) whose Message-ID is
+    /// exactly `message_id` (a server search matches a substring; every hit is checked).
+    fn find_message_id(&mut self, _folder: &str, _message_id: &str) -> Result<Found, Fail> {
+        Err(Fail::unsupported("a Message-ID lookup"))
+    }
+    /// Moves the message [`Backend::find_message_id`] found in `from` to `to` (a stored path).
+    fn move_found(&mut self, _from: &str, _handle: &str, _to: &str) -> Result<(), Fail> {
+        Err(Fail::unsupported("a move back"))
+    }
+    /// Uploads `raw` into `folder` (a stored path) with `flags` and the date its Date header
+    /// gives: IMAP APPEND, JMAP `Email/import`, Graph a message made from the MIME and moved there
+    /// (Graph keeps it as a draft, as desktop's migration does). The caller checked that the
+    /// folder does not hold it already. `Ok(false)`: the folder is proven gone.
+    fn append(&mut self, _folder: &str, _raw: &[u8], _flags: Flags) -> Result<bool, Fail> {
+        Err(Fail::unsupported("an upload"))
+    }
     /// Whether `folder` may hold mail the last pass did not list, asked before a background run's
     /// pass. `true` (the default) runs the pass; a backend whose pass is expensive answers from a
     /// cheap request (Graph: the folder's newest message has no local uid yet).

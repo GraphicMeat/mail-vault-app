@@ -31,6 +31,8 @@ const ENGINE_READ = {
   searchIndexAttachments: true,
   // The log's detail level (logs.rs `VERBOSITY`, applied to the next line written).
   logVerbosity: true,
+  // How long the deleted-mail bin keeps a message (bin.rs `retention_days`, its sweep).
+  deletedRetentionDays: true,
 };
 
 function files(dir) {

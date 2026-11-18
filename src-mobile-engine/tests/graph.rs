@@ -343,6 +343,59 @@ fn graph_read_flag_move_delete_round_trip() {
     assert!(f.uids(&trash).is_empty());
 }
 
+/// The deleted-mail bin over Graph: a delete to Deleted Items is recorded without its bytes and
+/// recovers by moving back; a delete in Deleted Items keeps the MIME (`$value`) first and recovers
+/// as desktop's migration uploads (a message made from the MIME, moved, marked read). Graph keeps
+/// that copy a draft, which the mock records.
+#[test]
+fn graph_deleted_bin_recovers_by_move_and_by_upload() {
+    let f = setup();
+    let now = now_ms();
+    f.g.add_message("inbox", "Charlie", now - HOUR, &plain("Charlie"));
+    f.sync(None);
+    let uid = f.uids("INBOX")["Charlie"];
+    f.apply("seen", "INBOX", &[uid], None);
+    f.apply("delete", "INBOX", &[uid], None);
+    f.wait_pending_empty();
+    let imid = f.g.messages_in("deleteditems")[0].internet_message_id.clone();
+    let bin = f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().clone();
+    assert_eq!(bin.len(), 1, "{bin:?}");
+    assert_eq!((bin[0]["hasEml"].clone(), bin[0]["mailbox"].clone(), bin[0]["messageId"].clone()), (json!(false), json!("INBOX"), json!(imid)));
+    let id = bin[0]["id"].as_str().unwrap().to_string();
+    assert!(f.rpc("mobile.deleted.recover", json!({ "ids": [id] }))["queued"][0]["seq"].is_i64());
+    f.wait_pending_empty();
+    assert_eq!(f.g.messages_in("inbox").iter().filter(|m| m.subject == "Charlie").count(), 1, "moved back");
+    assert!(f.g.messages_in("deleteditems").is_empty());
+    assert!(f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().is_empty());
+
+    // For good, from Deleted Items: the MIME is kept first.
+    f.sync(None);
+    let uid = f.uids("INBOX")["Charlie"];
+    f.apply("delete", "INBOX", &[uid], None);
+    f.wait_pending_empty();
+    let trash = f.path_of("\\Trash");
+    f.sync(Some(&trash));
+    let in_trash = f.uids(&trash)["Charlie"];
+    let source = f.g.messages_in("deleteditems")[0].raw();
+    f.apply("delete", &trash, &[in_trash], None);
+    f.wait_pending_empty();
+    assert!(f.g.messages_in("deleteditems").is_empty() && f.g.count("permanentDelete") == 1);
+    let bin = f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().clone();
+    let kept: Vec<&Value> = bin.iter().filter(|r| r["hasEml"] == true).collect();
+    assert_eq!(kept.len(), 1, "{bin:?}");
+    let id = kept[0]["id"].as_str().unwrap().to_string();
+    assert_eq!(std::fs::read(f.tmp.path().join("deleted").join(format!("{id}.eml"))).unwrap(), source, "the MIME as Graph served it");
+    assert!(f.rpc("mobile.deleted.recover", json!({ "ids": [id] }))["queued"][0]["seq"].is_i64());
+    f.wait_pending_empty();
+    let back = f.g.messages_in("deleteditems");
+    assert_eq!(back.len(), 1, "uploaded once, where it was deleted from: {back:?}");
+    assert_eq!(back[0].internet_message_id, imid);
+    assert!(back[0].is_read, "marked read as it was");
+    assert!(back[0].is_draft, "Graph keeps a message made from MIME a draft");
+    assert!(f.g.messages_in("drafts").is_empty(), "nothing left behind in Drafts");
+    assert_eq!(f.g.requests().iter().filter(|r| *r == "POST /me/messages").count(), 1, "one upload");
+}
+
 #[test]
 fn opening_a_graph_message_fetches_no_attachment_and_a_tap_fetches_one() {
     let f = setup();

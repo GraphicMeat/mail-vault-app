@@ -1,7 +1,7 @@
 //! [`Backend`] over IMAP, through mailvault-core. One signed-in session per backend; every method
 //! runs core's futures on the calling thread through [`crate::net::block_on`].
 
-use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, DeletePlan, FolderInfo, Found, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, Watch, Window, STOP_CHECK};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -216,6 +216,44 @@ async fn read_part(session: &mut ImapSession, folder: &str, uid: u32, part: Opti
     Ok(bytes.map(|b| Some(imap::parts::decode_text(&b, part.charset.as_deref()))))
 }
 
+/// Core's delete rule (`actions::policy`) for `path`, against the folder core's delete would move
+/// to (`resolve_trash_path`). A LIST failure is a `Fail`.
+async fn delete_plan_in(session: &mut ImapSession, path: &str) -> Result<DeletePlan, Fail> {
+    let trash = imap::resolve_trash_path(session).await?;
+    let permanent =
+        delete_disposition(FolderRole::of(path, None), imap_trash_place(path, trash.as_deref()), WithoutTrash::MoveToTrash) == DeleteDisposition::Permanent;
+    Ok(DeletePlan { permanent, trash })
+}
+
+/// The message in `path` whose Message-ID is exactly `message_id` (core's exact lookup), or proof
+/// that the folder is gone.
+async fn find_in(session: &mut ImapSession, path: &str, message_id: &str) -> Result<Found, Fail> {
+    match abd_cmds::uids_by_message_id(session, path, message_id).await {
+        Ok(uids) => Ok(uids.into_iter().max().map_or(Found::Absent, |u| Found::Here(u.to_string()))),
+        Err(e) => {
+            if confirm_folder_gone(session, path, &e).await? {
+                return Ok(Found::FolderGone);
+            }
+            Err(Fail::from(e))
+        }
+    }
+}
+
+/// The IMAP flags a recovered message is appended with.
+fn flag_list(flags: Flags) -> String {
+    let mut out = Vec::new();
+    if flags.seen {
+        out.push("\\Seen");
+    }
+    if flags.flagged {
+        out.push("\\Flagged");
+    }
+    if flags.answered {
+        out.push("\\Answered");
+    }
+    out.join(" ")
+}
+
 async fn apply_in(
     session: &mut ImapSession,
     caps: &Caps,
@@ -223,6 +261,7 @@ async fn apply_in(
     kind: Kind,
     uids: &[u32],
     target: Option<&str>,
+    plan: Option<&DeletePlan>,
     before_wire: BeforeWire<'_>,
 ) -> Result<ApplyOutcome, Fail> {
     let path = folder.path.as_str();
@@ -266,11 +305,11 @@ async fn apply_in(
             }
         }
         Kind::Delete => {
-            // Core's delete rule (`actions::policy`), against the folder core's delete would move
-            // to (`resolve_trash_path`). A LIST failure is a `Fail`.
-            let trash = imap::resolve_trash_path(session).await?;
-            let permanent = delete_disposition(FolderRole::of(path, None), imap_trash_place(path, trash.as_deref()), WithoutTrash::MoveToTrash)
-                == DeleteDisposition::Permanent;
+            // The plan the bin captured for, else core's delete rule now (`delete_plan_in`).
+            let DeletePlan { permanent, trash } = match plan {
+                Some(p) => p.clone(),
+                None => delete_plan_in(session, path).await?,
+            };
             let expected = folder.uid_validity.map(|v| v as u32);
             before_wire()?;
             for uid in &present {
@@ -508,6 +547,7 @@ impl Backend for ImapBackend {
         kind: Kind,
         uids: &[u32],
         target: Option<&str>,
+        plan: Option<&DeletePlan>,
         before_wire: BeforeWire<'_>,
     ) -> Result<ApplyOutcome, Fail> {
         let caps = match self.caps.clone() {
@@ -518,7 +558,60 @@ impl Backend for ImapBackend {
                 c
             }
         };
-        self.step(async |session| apply_in(session, &caps, folder, kind, uids, target, before_wire).await)
+        self.step(async |session| apply_in(session, &caps, folder, kind, uids, target, plan, before_wire).await)
+    }
+
+    fn delete_plan(&mut self, folder: &FolderRow) -> Result<DeletePlan, Fail> {
+        self.step(async |session| delete_plan_in(session, &folder.path).await)
+    }
+
+    fn raw(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<Vec<u8>>, Fail> {
+        self.step(async |session| {
+            // On the SELECT that gives the uid its meaning: another generation names nothing.
+            let out = match folder.uid_validity {
+                Some(v) => abd_cmds::fetch_raw_identified(session, &folder.path, uid, v as u32, None).await,
+                None => abd_cmds::fetch_raw(session, &folder.path, uid).await,
+            };
+            match out {
+                Ok(m) => Ok(m.map(|m| m.raw)),
+                Err(e) if e.starts_with(abd_cmds::VALIDITY_CHANGED) => Ok(None),
+                Err(e) => Err(Fail::from(e)),
+            }
+        })
+    }
+
+    fn find_message_id(&mut self, folder: &str, message_id: &str) -> Result<Found, Fail> {
+        self.step(async |session| find_in(session, folder, message_id).await)
+    }
+
+    fn move_found(&mut self, from: &str, handle: &str, to: &str) -> Result<(), Fail> {
+        let uid: u32 = handle.parse().map_err(|_| Fail::Code(Code::Invalid, format!("not a uid: {handle}")))?;
+        let caps = match self.caps.clone() {
+            Some(c) => c,
+            None => {
+                let c = self.step(async |session| Ok(abd_cmds::capabilities(session).await?))?;
+                self.caps = Some(c.clone());
+                c
+            }
+        };
+        self.step(async |session| {
+            imap::move_uids(session, from, to, &[uid], caps.move_cmd, caps.uidplus).await?;
+            Ok(())
+        })
+    }
+
+    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags) -> Result<bool, Fail> {
+        let flags = flag_list(flags);
+        let date = imap::internal_date_from_raw(raw);
+        self.step(async |session| match imap::append_email(session, folder, raw, &flags, date.as_deref()).await {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                if confirm_folder_gone(session, folder, &e).await? {
+                    return Ok(false);
+                }
+                Err(Fail::from(e))
+            }
+        })
     }
 
     fn send(&mut self, email: &OutgoingEmail, from: &Identity) -> Result<SendOutcome, SendFail> {

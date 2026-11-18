@@ -485,6 +485,56 @@ fn jmap_actions_and_delete_to_trash() {
     assert!(f.api_calls("Email/set").iter().all(|r| !r.body_contains("\"destroy\":[\"lab\"]")));
 }
 
+/// The deleted-mail bin over JMAP: a move to Trash is recorded without its bytes and recovers by
+/// putting the Inbox label back; a delete in Trash keeps the whole message (the blob) first and
+/// recovers through `Email/import`, with its keywords.
+#[test]
+fn jmap_deleted_bin_recovers_by_label_and_by_import() {
+    let now = now_secs();
+    let f = setup(scenario(vec![email("c", "Charlie", now - 200)]));
+    f.sync(None);
+    let uid = f.uids("INBOX")["Charlie"];
+    f.apply("flag", "INBOX", &[uid], None);
+    f.apply("delete", "INBOX", &[uid], None);
+    f.wait_pending_empty();
+    assert_eq!(f.mailboxes_of("c"), vec!["mb-trash".to_string()]);
+    let bin = f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().clone();
+    assert_eq!(bin.len(), 1, "{bin:?}");
+    assert_eq!((bin[0]["hasEml"].clone(), bin[0]["trash"].clone(), bin[0]["mailbox"].clone()), (json!(false), json!("mb-trash"), json!("INBOX")));
+    let id = bin[0]["id"].as_str().unwrap().to_string();
+    let r = f.rpc("mobile.deleted.recover", json!({ "ids": [id] }));
+    assert!(r["queued"][0]["seq"].is_i64(), "{r}");
+    f.wait_pending_empty();
+    assert_eq!(f.mailboxes_of("c"), vec!["mb-inbox".to_string()], "the same email, back in the Inbox");
+    assert!(f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().is_empty());
+
+    // Then for good, from Trash: the blob is kept before the destroy.
+    f.sync(None);
+    let uid = f.uids("INBOX")["Charlie"];
+    f.apply("delete", "INBOX", &[uid], None);
+    f.wait_pending_empty();
+    f.sync(Some("mb-trash"));
+    let in_trash = f.uids("mb-trash")["Charlie"];
+    f.apply("delete", "mb-trash", &[in_trash], None);
+    f.wait_pending_empty();
+    assert!(f.email("c").is_none(), "destroyed");
+    let bin = f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().clone();
+    let kept: Vec<&Value> = bin.iter().filter(|r| r["hasEml"] == true).collect();
+    assert_eq!(kept.len(), 1, "{bin:?}");
+    assert_eq!(kept[0]["mailbox"], "mb-trash");
+    let id = kept[0]["id"].as_str().unwrap().to_string();
+    let file = std::fs::read(f.tmp.path().join("deleted").join(format!("{id}.eml"))).unwrap();
+    assert!(String::from_utf8_lossy(&file).contains("Subject: Charlie"), "the whole message is kept");
+    let r = f.rpc("mobile.deleted.recover", json!({ "ids": [id] }));
+    assert!(r["queued"][0]["seq"].is_i64(), "{r}");
+    f.wait_pending_empty();
+    let back = f.m.read(|s| s.emails_in(ACC, "mb-trash"));
+    assert_eq!(back.len(), 1, "imported once into Trash: {back:?}");
+    let e = f.email(&back[0]).unwrap();
+    assert!(e.keywords.contains("$flagged"), "with its keywords: {:?}", e.keywords);
+    assert!(f.api_calls("Email/import").len() == 1, "one import");
+}
+
 #[test]
 fn opening_a_jmap_message_fetches_no_attachment_and_a_tap_streams_one() {
     let now = now_secs();

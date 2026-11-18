@@ -28,7 +28,7 @@
 //! the server's `Retry-After` (capped) and retries, a few times, as a transient condition and
 //! never as an error. `open` makes no request.
 
-use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, FolderInfo, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Watch, Window};
+use super::{ApplyOutcome, Arrivals, Backend, BeforeWire, Change, DeletePlan, FolderInfo, Found, FolderRow, Flags, Header, Identity, Moved, RawBody, Selected, SendFail, SendOutcome, StopFlag, Watch, Window};
 use crate::accounts::{load_account, map_error, Code};
 use crate::actions::Kind;
 use crate::db::Shared;
@@ -436,6 +436,21 @@ impl<'a> GraphBackend<'a> {
         Ok(self.remote_ids(&folder.path, &[uid])?.pop().and_then(|(_, id)| id))
     }
 
+    /// Core's delete rule (`actions::policy`) for `path`: Deleted Items is known by the `\Trash`
+    /// its well-known name stored, so no folder merely named like it qualifies.
+    fn plan_for(&self, path: &str) -> Result<DeletePlan, Fail> {
+        let account = self.account.as_str();
+        let special: Option<String> = self
+            .shared
+            .read(|c| {
+                c.query_row("SELECT special_use FROM folders WHERE account_id = ?1 AND path = ?2", (account, path), |r| r.get(0)).optional()
+            })?
+            .flatten();
+        let permanent = delete_disposition(FolderRole::of(path, special.as_deref()), graph_trash_place(special.as_deref()), WithoutTrash::MoveToTrash)
+            == DeleteDisposition::Permanent;
+        Ok(DeletePlan { permanent, trash: Some("deleteditems".to_string()) })
+    }
+
     /// The message's attachments as parts (metadata, no bytes); `None` when the message is gone.
     fn attachments(&mut self, id: &str) -> Result<Option<Vec<PartInfo>>, Fail> {
         match self.call(async |c| c.list_attachments(id).await) {
@@ -707,6 +722,7 @@ impl Backend for GraphBackend<'_> {
         kind: Kind,
         uids: &[u32],
         target: Option<&str>,
+        plan: Option<&DeletePlan>,
         before_wire: BeforeWire<'_>,
     ) -> Result<ApplyOutcome, Fail> {
         if folder.uid_validity.is_some_and(|v| v != GENERATION) {
@@ -747,18 +763,10 @@ impl Backend for GraphBackend<'_> {
             // Graph has no answered flag (desktop sets none either): nothing to send.
             Kind::Answered => Ok(ApplyOutcome::Done { gone, moved: None, kept: Vec::new() }),
             Kind::Delete => {
-                // Core's delete rule (`actions::policy`): Deleted Items is known by the `\Trash`
-                // its well-known name stored, so no folder merely named like it qualifies.
-                let account = self.account.clone();
-                let special: Option<String> = self
-                    .shared
-                    .read(|c| {
-                        c.query_row("SELECT special_use FROM folders WHERE account_id = ?1 AND path = ?2", (&account, path), |r| r.get(0))
-                            .optional()
-                    })?
-                    .flatten();
-                let permanent = delete_disposition(FolderRole::of(path, special.as_deref()), graph_trash_place(special.as_deref()), WithoutTrash::MoveToTrash)
-                    == DeleteDisposition::Permanent;
+                let permanent = match plan {
+                    Some(p) => p.permanent,
+                    None => self.plan_for(path)?.permanent,
+                };
                 before_wire()?;
                 let mut done: Vec<u32> = Vec::new();
                 let mut failed = None;
@@ -851,6 +859,64 @@ impl Backend for GraphBackend<'_> {
                 }
             }
         }
+    }
+
+    fn delete_plan(&mut self, folder: &FolderRow) -> Result<DeletePlan, Fail> {
+        self.plan_for(&folder.path)
+    }
+
+    fn raw(&mut self, folder: &FolderRow, uid: u32) -> Result<Option<Vec<u8>>, Fail> {
+        let Some(id) = self.remote_id(folder, uid)? else {
+            return Ok(None);
+        };
+        match self.call(async |c| c.get_mime_content(&id).await) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn find_message_id(&mut self, folder: &str, message_id: &str) -> Result<Found, Fail> {
+        // Graph stores the id with its angle brackets and compares it whole (`eq`).
+        let bare = message_id.trim().trim_start_matches('<').trim_end_matches('>');
+        if bare.is_empty() {
+            return Ok(Found::Absent);
+        }
+        let imid = format!("<{bare}>");
+        let remote = remote_folder(folder).to_string();
+        match self.call(async |c| c.find_by_internet_message_id(&remote, &imid).await) {
+            Ok(ids) => Ok(ids.into_iter().next().map_or(Found::Absent, Found::Here)),
+            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => Ok(Found::FolderGone),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn move_found(&mut self, _from: &str, handle: &str, to: &str) -> Result<(), Fail> {
+        let dest = remote_folder(to).to_string();
+        self.call(async |c| c.move_message(handle, &dest).await).map(|_| ()).map_err(Fail::from)
+    }
+
+    fn append(&mut self, folder: &str, raw: &[u8], flags: Flags) -> Result<bool, Fail> {
+        // As desktop's migration uploads to Graph: a message made from the MIME (Graph files it
+        // in Drafts), moved to the folder, then marked.
+        let draft = self.call(async |c| c.create_message_from_mime(raw).await).map_err(Fail::from)?;
+        let dest = remote_folder(folder).to_string();
+        let id = match self.call(async |c| c.move_message(&draft, &dest).await) {
+            Ok(id) => id,
+            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => {
+                // The folder is gone: the upload leaves no copy behind in Drafts.
+                let _ = self.call(async |c| c.permanent_delete(&draft).await);
+                return Ok(false);
+            }
+            Err(e) => return Err(e.into()),
+        };
+        if flags.seen {
+            self.call(async |c| c.set_read_status(&id, true).await).map_err(Fail::from)?;
+        }
+        if flags.flagged {
+            self.call(async |c| c.set_flag_status(&id, true).await).map_err(Fail::from)?;
+        }
+        Ok(true)
     }
 
     /// An alias goes out through core's `send_mime_as` (a draft whose `from` is the alias, then

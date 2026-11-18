@@ -10,6 +10,7 @@ mod attachments;
 mod backend;
 mod background;
 mod billing_client;
+mod bin;
 mod body;
 mod chat;
 mod compose;

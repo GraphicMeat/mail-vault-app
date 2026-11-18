@@ -55,6 +55,34 @@ pub struct Msg {
     /// The body as Graph serves it (HTML).
     pub body_html: String,
     pub attachments: Vec<Att>,
+    /// The MIME a `POST /me/messages` made it from; `$value` serves it (else a MIME built from
+    /// the fields).
+    pub mime: Option<Vec<u8>>,
+    /// Made from MIME and never sent: Graph keeps such a message a draft.
+    pub is_draft: bool,
+}
+
+impl Msg {
+    /// The message as `$value` serves it.
+    pub fn raw(&self) -> Vec<u8> {
+        self.mime.clone().unwrap_or_else(|| {
+            format!(
+                "From: Alice <{}>\r\nSubject: {}\r\nMessage-ID: {}\r\nDate: Thu, 01 Jan 2026 12:00:00 +0000\r\nContent-Type: text/html; charset=utf-8\r\n\r\n{}\r\n",
+                self.from, self.subject, self.internet_message_id, self.body_html
+            )
+            .into_bytes()
+        })
+    }
+}
+
+/// A header's value in `mime` (unfolded lines only), for the mock's MIME upload.
+fn mime_header(mime: &[u8], name: &str) -> Option<String> {
+    let text = String::from_utf8_lossy(mime);
+    let head = text.split("\r\n\r\n").next().unwrap_or("");
+    head.lines().find_map(|l| {
+        let (k, v) = l.split_once(':')?;
+        k.trim().eq_ignore_ascii_case(name).then(|| v.trim().to_string())
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -263,6 +291,8 @@ impl GraphMock {
             reply_to: None,
             body_html: body_html.to_string(),
             attachments: Vec::new(),
+            mime: None,
+            is_draft: false,
         });
         id
     }
@@ -599,6 +629,10 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             let top: usize = query_param(q, "$top").and_then(|t| t.parse().ok()).unwrap_or(10);
             let skip: usize = query_param(q, "$skip").and_then(|t| t.parse().ok()).unwrap_or(0);
             let since = query_param(q, "$filter").and_then(|f| f.strip_prefix("receivedDateTime ge ").and_then(|d| parse_rfc3339(d.trim())));
+            // `internetMessageId eq '<id>'`: an exact match, quotes doubled inside.
+            let imid = query_param(q, "$filter").and_then(|f| {
+                f.strip_prefix("internetMessageId eq '").and_then(|r| r.strip_suffix('\'')).map(|v| v.replace("''", "'"))
+            });
             // `$search="phrase"` matches the subject and the body, and (as Graph does) cannot be
             // combined with `$filter` or `$orderby`.
             let search = query_param(q, "$search").map(|s| s.trim().trim_matches('"').replace("\\\"", "\"").replace("\\\\", "\\").to_lowercase());
@@ -610,6 +644,7 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
                 .messages
                 .iter()
                 .filter(|m| m.folder == fid && since.is_none_or(|s| m.received_ms >= s))
+                .filter(|m| imid.as_ref().is_none_or(|i| m.internet_message_id == *i))
                 .filter(|m| search.as_ref().is_none_or(|t| m.subject.to_lowercase().contains(t) || m.body_html.to_lowercase().contains(t)))
                 .collect();
             // Newest first unless asked otherwise.
@@ -633,6 +668,39 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
                 answer.2.push(("X-Mock-Delay-Ms".into(), st.list_pause_ms.to_string()));
             }
             answer
+        }
+        ("GET", ["me", "messages", id, "$value"]) => match st.messages.iter().find(|m| m.id == *id) {
+            Some(m) => (200, m.raw(), vec![("Content-Type".into(), "text/plain".into())]),
+            None => not_found(),
+        },
+        // A message made from MIME (base64, `text/plain`), filed in Drafts as a draft.
+        ("POST", ["me", "messages"]) => {
+            let text: String = String::from_utf8_lossy(&req.body).chars().filter(|c| !c.is_whitespace()).collect();
+            let Ok(mime) = base64::engine::general_purpose::STANDARD.decode(text.as_bytes()) else {
+                return (400, json!({ "error": { "code": "ErrorMimeContentInvalid" } }).to_string().into_bytes(), Vec::new());
+            };
+            let Some(drafts) = st.folder("drafts").map(|f| f.id.clone()) else { return not_found() };
+            let id = st.new_id("msg");
+            let m = Msg {
+                id,
+                folder: drafts,
+                subject: mime_header(&mime, "Subject").unwrap_or_default(),
+                from: mime_header(&mime, "From").unwrap_or_default(),
+                received_ms: 0,
+                modified_ms: 0,
+                is_read: false,
+                flagged: false,
+                has_attachments: false,
+                internet_message_id: mime_header(&mime, "Message-ID").unwrap_or_default(),
+                reply_to: None,
+                body_html: String::new(),
+                attachments: Vec::new(),
+                mime: Some(mime),
+                is_draft: true,
+            };
+            let v = message_json(&m, &me);
+            st.messages.push(m);
+            (201, v.to_string().into_bytes(), Vec::new())
         }
         ("GET", ["me", "messages", id]) => match st.messages.iter().find(|m| m.id == *id) {
             Some(m) => ok_json(message_json(m, &me)),
@@ -772,6 +840,8 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
                     reply_to: None,
                     body_html: String::new(),
                     attachments: Vec::new(),
+                    mime: None,
+                    is_draft: false,
                 });
             }
             (202, Vec::new(), Vec::new())

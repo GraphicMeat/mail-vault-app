@@ -146,6 +146,9 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("aiEndpointModel", Kind::Text(200), "\"\""),
     // An explicit AI action runs without its review once this endpoint was reviewed.
     ("aiSkipPreview", Kind::Bool, "false"),
+    // Settings > Storage > Deleted emails: how many days the bin keeps a deleted message
+    // (`bin.rs`), desktop's choices and default.
+    ("deletedRetentionDays", Kind::Int(1, 30), "1"),
 ];
 
 pub(crate) fn pref(key: &str) -> Option<(Kind, &'static str)> {

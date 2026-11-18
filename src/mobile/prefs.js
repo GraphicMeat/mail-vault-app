@@ -68,6 +68,8 @@ export const PREF_DEFAULTS = Object.freeze({
   aiEndpointUrl: '',
   aiEndpointModel: '',
   aiSkipPreview: false,
+  // Settings > Storage > Deleted emails: days the engine's bin keeps a deleted message (bin.rs).
+  deletedRetentionDays: 1,
 });
 
 export const THREAD_MODES = ['grouped', 'expandable', 'flat'];
