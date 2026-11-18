@@ -64,6 +64,23 @@ export function formatTimeOf(date, { timeFormat, appLocale }) {
 }
 
 /**
+ * A date without its time, per the dateFormat setting: a custom pattern (a broken one falls back
+ * to `MMM d, yyyy`), a preset, or the locale's own. The year shows for another year, or always
+ * with `alwaysShowYear`.
+ */
+export function formatDateOnlyWith(date, { dateFormat, customDateFormat, appLocale, alwaysShowYear = false, now = new Date() }) {
+  const showYear = alwaysShowYear || date.getFullYear() !== now.getFullYear();
+  if (dateFormat === 'custom' && customDateFormat) {
+    try { return formatPattern(date, customDateFormat, appLocale); } catch { return formatPattern(date, 'MMM d, yyyy', appLocale); }
+  }
+  if (dateFormat !== 'auto' && DATE_PRESETS[dateFormat]) {
+    return formatPattern(date, showYear ? DATE_PRESETS[dateFormat].withYear : DATE_PRESETS[dateFormat].withoutYear, appLocale);
+  }
+  const options = showYear ? { year: 'numeric', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' };
+  return new Intl.DateTimeFormat(intlLocaleFor(appLocale), options).format(date);
+}
+
+/**
  * The list's date column for `dateInput`: time today, "Yesterday", the weekday this week, then a
  * date per the dateFormat setting. `translate` turns the "Yesterday" key into text; `now` is the
  * reference instant (the current time unless a caller pins it).

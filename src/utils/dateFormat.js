@@ -1,6 +1,6 @@
 import { useSettingsStore } from '../stores/settingsStore';
 import { getLocale, t as tr } from '../i18n/index.js';
-import { DATE_PRESETS, formatPattern, intlLocaleFor, formatTimeOf, formatEmailDateWith } from './emailDateCore.js';
+import { DATE_PRESETS, formatPattern, intlLocaleFor, formatTimeOf, formatEmailDateWith, formatDateOnlyWith } from './emailDateCore.js';
 
 // The store-free logic lives in emailDateCore.js (shared with the mobile shell); this module
 // feeds it the settings store and the active app language.
@@ -69,22 +69,7 @@ export function formatDateOnly(dateInput, { alwaysShowYear = false } = {}) {
   if (isNaN(date.getTime())) return '';
 
   const { dateFormat, customDateFormat } = useSettingsStore.getState();
-  const isPreviousYear = date.getFullYear() !== new Date().getFullYear();
-  const showYear = alwaysShowYear || isPreviousYear;
-
-  if (dateFormat === 'custom' && customDateFormat) {
-    try { return _fmt(date, customDateFormat); } catch { return _fmt(date, 'MMM d, yyyy'); }
-  }
-
-  if (dateFormat !== 'auto' && DATE_PRESETS[dateFormat]) {
-    return _fmt(date, showYear ? DATE_PRESETS[dateFormat].withYear : DATE_PRESETS[dateFormat].withoutYear);
-  }
-
-  // 'auto' — locale default
-  const options = showYear
-    ? { year: 'numeric', month: 'short', day: 'numeric' }
-    : { month: 'short', day: 'numeric' };
-  return new Intl.DateTimeFormat(_locale(), options).format(date);
+  return formatDateOnlyWith(date, { dateFormat, customDateFormat, appLocale: getLocale(), alwaysShowYear });
 }
 
 /**

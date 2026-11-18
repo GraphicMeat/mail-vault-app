@@ -1,95 +1,24 @@
-import React, { useId } from 'react';
-import { Check, Columns, Rows } from 'lucide-react';
-import { useSettingsStore, normalizeListPreviewLines } from '../../stores/settingsStore';
-import { SettingRow } from '../ui/SettingRow';
-import { SidebarLayoutPreview, WorkspacePreview } from './PreferencePreview';
-import { useT } from '../../i18n/index.js';
-import { ToggleSwitch } from '../ui/ToggleSwitch';
+import React from 'react';
+import { useSettingsStore, normalizeListPreviewLines, getAccountColor } from '../../stores/settingsStore';
+import { PREVIEW_ACCOUNTS } from '../../data/previewMail';
+import { SampleConversation } from '../ui/SampleConversation';
 import { IS_LINUX } from '../../utils/menuBar';
+import { WORKSPACE_ROWS, WorkspaceView } from './views/WorkspaceView';
+import { DesktopViewEnv } from './DesktopViewEnv';
 
-const PREVIEW_LINE_CHOICES = [[0, 'listPreview.off'], [1, 'listPreview.one'], [2, 'listPreview.two'], [3, 'listPreview.three']];
+// The menu bar row is Linux's only (its File/Logs menu bar).
+const ROWS = WORKSPACE_ROWS.filter(key => key !== 'showMenuBar' || IS_LINUX);
+const setterOf = key => `set${key[0].toUpperCase()}${key.slice(1)}`;
 
+/** Desktop's container: the settings store over WorkspaceView, every row. */
 export function WorkspaceSettings({ windowIsNarrow }) {
-  const t = useT();
   const settings = useSettingsStore();
-  const choiceId = useId();
-  const chat = settings.viewStyle === 'chat';
-  const previewLines = normalizeListPreviewLines(settings.listPreviewLines);
-  const groups = [
-    { key: 'viewStyle', setter: 'setViewStyle', title: 'mailExperience',
-      options: [['list', 'emailView', 'emailViewHint'], ['chat', 'chatView', 'chatViewHint']] },
-    { key: 'layoutMode', setter: 'setLayoutMode', title: 'readingPane', disabled: chat,
-      options: [['three-column', 'besideList', 'besideListHint', Columns], ['two-column', 'belowList', 'belowListHint', Rows]] },
-    { key: 'sidebarLayout', title: 'sidebarLayout' },
-    { key: 'sidebarDensity', setter: 'setSidebarDensity', title: 'sidebarDensity',
-      options: [['comfortable', 'sidebarDensityComfortable', 'sidebarDensityComfortableHint'], ['compact', 'sidebarDensityCompact', 'sidebarDensityCompactHint']] },
-    // The message list's rows, the same two choices beside the sidebar's.
-    { key: 'listDensity', setter: 'setListDensity', title: 'listDensity', disabled: chat,
-      options: [['comfortable', 'sidebarDensityComfortable', 'listDensityComfortableHint'], ['compact', 'sidebarDensityCompact', 'listDensityCompactHint']] },
-    { key: 'folderIconStyle', setter: 'setFolderIconStyle', title: 'folderIcons',
-      options: [['colorful', 'folderIconsColorful', 'folderIconsColorfulHint'], ['theme', 'folderIconsTheme', 'folderIconsThemeHint']] },
-    { key: 'sidebarBackupStatusLocation', setter: 'setSidebarBackupStatusLocation', title: 'backupStatusLocation',
-      options: [['avatar', 'backupStatusAvatar', 'backupStatusAvatarHint'], ['row', 'backupStatusRow', 'backupStatusRowHint'], ['hidden', 'backupStatusHidden', 'backupStatusHiddenHint']] },
-    { key: 'sidebarStyle', setter: 'setSidebarStyle', title: 'navigation',
-      options: [['list', 'navigationList', 'navigationListHint'], ['tagcloud', 'navigationBubbles', 'navigationBubblesHint']] },
-    { key: 'emailListStyle', setter: 'setEmailListStyle', title: 'messageRows', disabled: chat,
-      options: [['compact', 'twoLineRows', 'twoLineRowsHint'], ['default', 'singleLineRows', 'singleLineRowsHint']] },
-  ];
+  const values = { ...settings, listPreviewLines: normalizeListPreviewLines(settings.listPreviewLines) };
   return (
-    <section className="settings-preference-group" data-testid="appearance-layout-section" aria-labelledby="workspace-settings-title">
-      <h4 id="workspace-settings-title">{t('workspace.title')}</h4>
-      {groups.map(({ key, setter, title, options, disabled }) => key === 'sidebarLayout' ? (
-        <SettingRow key={key} label={t('workspace.sidebarLayout')} className="sidebar-layout-setting">
-          <div role="group" className="sidebar-layout-choices">
-            {['stacked', 'split', 'switcher'].map(value => {
-              const suffix = value[0].toUpperCase() + value.slice(1);
-              const label = t(`workspace.sidebarLayout${suffix}`);
-              const hintId = `${choiceId}-${value}-hint`;
-              return <button key={value} type="button" className="sidebar-layout-choice" aria-label={label}
-                aria-describedby={hintId} aria-pressed={settings.sidebarLayout === value}
-                onClick={() => settings.setSidebarLayout(value)}>
-                <SidebarLayoutPreview layout={value} />
-                <span className="sidebar-layout-choice-copy">
-                  <span className="sidebar-layout-choice-label">{label}<Check size={15} aria-hidden="true" /></span>
-                  <span id={hintId} className="sidebar-layout-choice-hint">{t(`workspace.sidebarLayout${suffix}Hint`)}</span>
-                </span>
-              </button>;
-            })}
-          </div>
-        </SettingRow>
-      ) : (
-        <SettingRow key={key} label={t(`workspace.${title}`)} description={
-          key === 'layoutMode' && !chat && windowIsNarrow
-            ? t('settings.appearance.windowTooNarrowForThreeColumns')
-            : disabled ? undefined : t(`workspace.${options.find(([value]) => value === settings[key])?.[2] || options[0][2]}`)
-        } preview={<WorkspacePreview setting={key} value={settings[key]} label={t(`workspace.${title}`)} disabled={disabled} />}>
-          <div role="group" className="settings-segments">
-            {options.map(([value, label, , Icon]) => (
-              <button type="button" key={value} aria-pressed={settings[key] === value} disabled={disabled}
-                onClick={() => settings[setter](value)}>
-                {Icon && <Icon size={16} aria-hidden="true" />}{t(`workspace.${label}`)}
-              </button>
-            ))}
-          </div>
-        </SettingRow>
-      ))}
-      <SettingRow label={t('listPreview.title')}
-        description={chat ? undefined : t(previewLines ? 'listPreview.linesHint' : 'listPreview.offHint')}
-        preview={<WorkspacePreview setting="listPreviewLines" value={previewLines} label={t('listPreview.title')} disabled={chat} />}>
-        <div role="group" className="settings-segments" data-testid="list-preview-lines">
-          {PREVIEW_LINE_CHOICES.map(([value, key]) => (
-            <button type="button" key={value} aria-pressed={previewLines === value} disabled={chat}
-              onClick={() => settings.setListPreviewLines(value)}>
-              {t(key)}
-            </button>
-          ))}
-        </div>
-      </SettingRow>
-      {chat && <p className="mt-2 text-xs text-mail-text-muted">{t('workspace.emailViewOnly')}</p>}
-      {IS_LINUX && <SettingRow label={t('workspace.menuBar')} description={t('workspace.menuBarHint')}>
-        <ToggleSwitch active={settings.showMenuBar !== false} testId="show-menu-bar"
-          onClick={() => settings.setShowMenuBar(settings.showMenuBar === false)} />
-      </SettingRow>}
-    </section>
+    <DesktopViewEnv>
+      <WorkspaceView values={values} onChange={(key, value) => settings[setterOf(key)](value)} rows={ROWS}
+        windowIsNarrow={windowIsNarrow}
+        preview={{ accounts: PREVIEW_ACCOUNTS, accountColor: account => getAccountColor({}, account), chatSample: <SampleConversation compact /> }} />
+    </DesktopViewEnv>
   );
 }
