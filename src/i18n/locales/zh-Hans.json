@@ -4505,6 +4505,7 @@
   "mobile.offline.progress": "{{total}} 封中有 {{offline}} 封可离线查看",
   "mobile.offline.storage": "在此手机上占用 {{size}}",
   "mobile.searchIndex.description": "此手机上的私有索引让搜索即时完成，离线也可用。任何内容都不会离开此手机。",
+  "mobile.deletedBin.intro": "你删除的邮件会在这里保留一段时间，以便找回：从废纸篓找回，或从此手机为永久删除的邮件保存的副本找回。超过下方设置的时间后，将被永久删除。",
   "mobile.searchIndex.bodiesHint": "不仅在主题和发件人中，也在此手机上的邮件正文中查找字词。会占用更多空间。",
   "mobile.searchIndex.attachmentsHint": "在已下载到此手机的文本、Word、Excel 和 PowerPoint 附件中搜索。",
   "mobile.searchIndex.unavailable": "无法打开搜索索引。重建索引即可搜索此手机上的邮件。",

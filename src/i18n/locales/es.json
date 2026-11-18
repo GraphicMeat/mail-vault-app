@@ -4505,6 +4505,7 @@
   "mobile.offline.progress": "{{offline}} de {{total}} mensajes sin conexión",
   "mobile.offline.storage": "{{size}} en este teléfono",
   "mobile.searchIndex.description": "Un índice privado en este teléfono hace que la búsqueda sea instantánea, incluso sin conexión. Nada sale de este teléfono.",
+  "mobile.deletedBin.intro": "Los correos que eliminas se quedan aquí un tiempo para que puedas recuperarlos: desde la papelera o desde una copia que este teléfono guarda de los eliminados para siempre. Pasado el plazo de abajo, se eliminan para siempre.",
   "mobile.searchIndex.bodiesHint": "Encuentra palabras dentro de los mensajes de este teléfono, no solo en asuntos y remitentes. Ocupa más espacio.",
   "mobile.searchIndex.attachmentsHint": "Busca dentro de adjuntos de texto, Word, Excel y PowerPoint cuando ya estén en este teléfono.",
   "mobile.searchIndex.unavailable": "No se pudo abrir el índice de búsqueda. Reconstrúyelo para buscar en el correo de este teléfono.",

@@ -4505,6 +4505,7 @@
   "mobile.offline.progress": "{{offline}} von {{total}} Nachrichten offline",
   "mobile.offline.storage": "{{size}} auf diesem Telefon",
   "mobile.searchIndex.description": "Ein privater Index auf diesem Telefon liefert Suchergebnisse sofort, auch offline. Nichts verlässt dieses Telefon.",
+  "mobile.deletedBin.intro": "Gelöschte E-Mails bleiben eine Zeit lang hier, damit Sie sie zurückholen können: aus dem Papierkorb oder aus einer Kopie, die dieses Telefon von endgültig gelöschten E-Mails aufbewahrt. Nach der unten gewählten Zeit werden sie endgültig entfernt.",
   "mobile.searchIndex.bodiesHint": "Findet Wörter in den Nachrichten auf diesem Telefon, nicht nur in Betreff und Absender. Belegt mehr Speicherplatz.",
   "mobile.searchIndex.attachmentsHint": "Durchsucht Text-, Word-, Excel- und PowerPoint-Anhänge, sobald sie auf diesem Telefon sind.",
   "mobile.searchIndex.unavailable": "Der Suchindex konnte nicht geöffnet werden. Ein Neuaufbau macht die Mails auf diesem Telefon wieder durchsuchbar.",

@@ -335,8 +335,11 @@ describe('Settings pages, as desktop lays them out', () => {
     cleanup();
     // AI is off by default: only its switch until it is on (AiSettings.test.jsx).
     expect(controls('ai')).toEqual([t('ai.settings.enable')]);
-    // The search index sits on the Storage page, as on desktop, after the offline download switch.
-    expect(controls('search')).toEqual([t('mobile.settings.downloadToggle'), t('settings.searchIndex.bodies'), t('settings.searchIndex.attachments')]);
+    // The search index sits on the Storage page, as on desktop, after the offline download switch;
+    // the page ends with the deleted emails' retention, as desktop's does.
+    expect(controls('search')).toEqual([
+      t('mobile.settings.downloadToggle'), t('settings.searchIndex.bodies'), t('settings.searchIndex.attachments'), t('deletedBin.retention'),
+    ]);
   });
 
   it('the tracking page shows what this phone found, as desktop\'s section does', async () => {

@@ -13,6 +13,7 @@
 // - Search index (`search.rs`): message bodies and attachment text (Premium, as on desktop; without
 //   it the switch opens the Premium screen), the index's counts and size, and Rebuild. The engine
 //   applies every change on its index worker; this page reads `mobile.search.status` every 3 seconds.
+// - Deleted emails (DeletedEmails.jsx), under the page as desktop has it.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StorageView, StorageUsageRow } from '../../components/settings/views/StorageView';
 import { SearchIndexView } from '../../components/settings/views/SearchIndexView';
@@ -25,6 +26,7 @@ import { useMobileStore } from '../store.js';
 import { useT } from '../i18n.js';
 import { formatSize } from '../format.js';
 import { MobileViewEnv, SaveFailed, useSavePrefs } from './MobileViewEnv.jsx';
+import DeletedEmails from './DeletedEmails.jsx';
 
 export const WINDOWS = ['1m', '3m', '6m', '12m', 'all'];
 // Desktop's keep-window choices (DownloadModeControl), literal so the catalog tests see each one.
@@ -223,6 +225,7 @@ export default function Storage() {
           </>
         )}
         searchIndex={<SearchIndex />} />
+      <DeletedEmails />
     </MobileViewEnv>
   );
 }

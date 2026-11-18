@@ -4505,6 +4505,7 @@
   "mobile.offline.progress": "메시지 {{total}}개 중 {{offline}}개 오프라인",
   "mobile.offline.storage": "이 휴대폰에서 {{size}}",
   "mobile.searchIndex.description": "이 휴대폰의 비공개 색인으로 오프라인에서도 바로 검색할 수 있습니다. 어떤 데이터도 이 휴대폰 밖으로 나가지 않습니다.",
+  "mobile.deletedBin.intro": "삭제한 이메일은 되돌릴 수 있도록 한동안 여기에 남습니다. 휴지통에서, 또는 완전히 삭제한 이메일은 이 휴대폰이 보관하는 사본에서 되돌립니다. 아래에서 고른 기간이 지나면 완전히 삭제됩니다.",
   "mobile.searchIndex.bodiesHint": "제목과 보낸 사람뿐 아니라 이 휴대폰에 있는 메시지 본문에서도 단어를 찾습니다. 공간을 더 사용합니다.",
   "mobile.searchIndex.attachmentsHint": "이 휴대폰에 받은 텍스트, Word, Excel, PowerPoint 첨부 파일 안에서 검색합니다.",
   "mobile.searchIndex.unavailable": "검색 색인을 열 수 없습니다. 이 휴대폰의 메일을 검색하려면 다시 만드세요.",

@@ -4505,6 +4505,7 @@
   "mobile.offline.progress": "{{offline}} of {{total}} messages offline",
   "mobile.offline.storage": "{{size}} on this phone",
   "mobile.searchIndex.description": "A private index on this phone makes search instant, even offline. Nothing leaves this phone.",
+  "mobile.deletedBin.intro": "Emails you delete stay here for a while so you can bring them back: from Trash, or from a copy this phone keeps of mail deleted for good. After the time below they are removed for good.",
   "mobile.searchIndex.bodiesHint": "Find words inside the messages on this phone, not only in subjects and senders. Uses more space.",
   "mobile.searchIndex.attachmentsHint": "Search inside text, Word, Excel and PowerPoint attachments once they are on this phone.",
   "mobile.searchIndex.unavailable": "The search index could not be opened. Rebuild it to search the mail on this phone.",

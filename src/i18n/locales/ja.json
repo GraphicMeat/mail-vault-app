@@ -4505,6 +4505,7 @@
   "mobile.offline.progress": "{{total}} 件中 {{offline}} 件をオフライン保存",
   "mobile.offline.storage": "この端末で {{size}}",
   "mobile.searchIndex.description": "この端末内の非公開インデックスにより、オフラインでもすぐに検索できます。データがこの端末の外に出ることはありません。",
+  "mobile.deletedBin.intro": "削除したメールは、元に戻せるようにしばらくここに表示されます。ゴミ箱から、または完全に削除したメールはこの端末が保管するコピーから戻せます。下で選んだ期間を過ぎると完全に削除されます。",
   "mobile.searchIndex.bodiesHint": "件名や差出人だけでなく、この端末にあるメッセージの本文から語句を検索します。容量を多く使います。",
   "mobile.searchIndex.attachmentsHint": "この端末にあるテキスト、Word、Excel、PowerPoint の添付ファイルの中を検索します。",
   "mobile.searchIndex.unavailable": "検索インデックスを開けませんでした。この端末のメールを検索するには再構築してください。",

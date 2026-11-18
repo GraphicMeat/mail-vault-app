@@ -8,6 +8,7 @@
 - Added: on the phone, Settings > Privacy & security > Tracking shows what the phone has found, as on the computer: how many tracking pixels in how many messages, the senders' tracking services found most, and the bundled list's size and sources.
 - Fixed: a sidebar account group is now one row, same height and width as an account, with a single hover highlight; its left chevron folds and unfolds, the rest opens the group inbox.
 - Changed: Settings on the phone now look and work like Settings on the computer, page by page: Storage, Data usage, Search index, Billing, Diagnostics, Help and Move to another computer use the same controls, and Cleanup, Backup, Time Capsule and Migration show that they are in MailVault on desktop.
+- Added: deleted emails on the phone, as on the computer. Settings > Storage > Deleted emails lists what you deleted for as long as you choose (a day by default, up to 30), and Recover to server puts a message back where it was: one moved to Trash comes back out of Trash, and one deleted for good is kept on the phone first and uploaded again. Delete now removes it from the list for good.
 - Fixed: a reply sent from the phone now marks the message it answers as answered, on the phone and on the server, so it leaves "Needs reply" (a Microsoft account connected through Graph has no answered mark).
 - Fixed: on the phone, each account's own signature switch now decides whether its signature is added. An import from the computer could turn every signature off with no way to turn them back on.
 

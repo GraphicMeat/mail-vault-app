@@ -39,6 +39,8 @@ vi.mock('../transport.js', () => ({
         return { backgroundDownload: true };
       case 'mobile.offline.get':
         return { premium: false, network: {}, accounts: [] };
+      case 'mobile.deleted.list':
+        return { rows: [], next: null };
       case 'mobile.search.status':
         return { available: true, state: 'idle', indexed: 0, total: 0, sizeBytes: 0 };
       case 'mobile.dataUsage.get':
