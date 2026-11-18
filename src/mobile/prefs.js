@@ -13,7 +13,6 @@ export const PREF_DEFAULTS = Object.freeze({
   swipeLeftAction: 'delete',
   swipeRightAction: 'toggleRead',
   sendDelay: 0,
-  defaultSignatureEnabled: true,
   holdExternalContent: true,
   trackerBlockingEnabled: true,
   dateFormat: 'auto',
@@ -237,13 +236,12 @@ export function htmlToText(html) {
 
 /**
  * The signature compose appends for `account` (`mobile.accountSettings.get`), or '' when it has
- * none or it is off (its own `enabled`, and signatures overall: `defaultSignatureEnabled`).
- * Plain text: its `text`, else its html as text.
+ * none or its switch is off (its own `enabled`: the only switch, as on desktop, which has no
+ * signatures-overall setting). Plain text: its `text`, else its html as text.
  */
-export function signatureFor(accountSettings, prefs) {
+export function signatureFor(accountSettings) {
   const sig = accountSettings?.signature;
   if (!sig || sig.enabled === false) return '';
-  if ((prefs || PREF_DEFAULTS).defaultSignatureEnabled === false) return '';
   return (sig.text && sig.text.trim()) || htmlToText(sig.html);
 }
 

@@ -191,7 +191,7 @@ export default function Compose({ accountId, fromEmail, mode = 'new', original =
   if (signature.current === null) {
     signature.current = openDraft
       ? Promise.resolve('')
-      : settings.current.then((s) => (s ? signatureFor(s, useMobileStore.getState().prefs) : ''));
+      : settings.current.then((s) => (s ? signatureFor(s) : ''));
   }
   const [shownMode, setShownMode] = useState(mode);
   const modeRef = useRef(mode);

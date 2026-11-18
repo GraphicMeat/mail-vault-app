@@ -138,7 +138,7 @@ beforeEach(() => {
   engine.rescheduleError = null;
   engine.accountSettings = null;
   useMobileStore.setState({ paywall: null, premium: { premium: false, source: null, expiresMs: null } });
-  useMobileStore.setState((st) => ({ prefs: { ...st.prefs, sendDelay: 0, defaultSignatureEnabled: true }, undoSend: null, reopenDraft: null }));
+  useMobileStore.setState((st) => ({ prefs: { ...st.prefs, sendDelay: 0 }, undoSend: null, reopenDraft: null }));
   window.localStorage.clear();
 });
 afterEach(() => {
@@ -928,19 +928,18 @@ describe('Signature and undo send (desktop settings)', () => {
     await waitFor(() => expect(body().value).toBe(`\n\n-- \nAnn\n\n${QUOTE}`));
   });
 
-  it('no signature when it is off, signatures are off, or a draft reopens', async () => {
+  it('no signature when its switch is off or a draft reopens', async () => {
     engine.accountSettings = { accountId: 'a1', signature: { ...SIG, enabled: false } };
     renderCompose();
     await flush();
     expect(body().value).toBe('');
     cleanup();
+    // A stored signatures-overall preference (an old import) no longer turns the account's own off.
     engine.accountSettings = { accountId: 'a1', signature: SIG };
     useMobileStore.setState((st) => ({ prefs: { ...st.prefs, defaultSignatureEnabled: false } }));
     renderCompose();
-    await flush();
-    expect(body().value).toBe('');
+    await waitFor(() => expect(body().value).toContain('-- '));
     cleanup();
-    useMobileStore.setState((st) => ({ prefs: { ...st.prefs, defaultSignatureEnabled: true } }));
     engine.draft = { id: DRAFT_ID, accountId: 'a1', to: '', cc: '', bcc: '', subject: 'Kept', text: 'Draft body', attachments: [] };
     renderCompose({ draftId: DRAFT_ID });
     await waitFor(() => expect(body().value).toBe('Draft body'));

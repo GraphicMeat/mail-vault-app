@@ -279,7 +279,6 @@ fn apply_global(c: &Connection, s: &PhoneSettings) -> rusqlite::Result<()> {
         ("confirmBeforeDelete", s.confirm_before_delete),
         ("autoSaveDrafts", s.auto_save_drafts),
         ("attachmentReminder", s.attachment_reminder),
-        ("defaultSignatureEnabled", s.default_signature_enabled),
         ("holdExternalContent", s.hold_external_content),
         ("linkSafetyEnabled", s.link_safety_enabled),
         ("linkSafetyClickConfirm", s.link_safety_click_confirm),

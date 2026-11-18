@@ -98,14 +98,15 @@ describe('prefs.js', () => {
     expect(swipeKind('archive', {})).toBe(null);
   });
 
-  it('turns a signature into plain text and honours both switches', () => {
+  it('turns a signature into plain text; the account\'s own switch is the only one', () => {
     expect(htmlToText('<p>Ann&nbsp;<b>Example</b></p><div>CEO<br>Corp</div>')).toBe('Ann Example\nCEO\nCorp');
     const html = { signature: { html: '<p>Ann</p>', text: '', enabled: true } };
-    expect(signatureFor(html, PREF_DEFAULTS)).toBe('Ann');
-    expect(signatureFor({ signature: { html: '<p>x</p>', text: 'Plain', enabled: true } }, PREF_DEFAULTS)).toBe('Plain');
-    expect(signatureFor({ signature: { text: 'Plain', enabled: false } }, PREF_DEFAULTS)).toBe('');
-    expect(signatureFor(html, { ...PREF_DEFAULTS, defaultSignatureEnabled: false })).toBe('');
-    expect(signatureFor({ signature: null }, PREF_DEFAULTS)).toBe('');
+    expect(signatureFor(html)).toBe('Ann');
+    expect(signatureFor({ signature: { html: '<p>x</p>', text: 'Plain', enabled: true } })).toBe('Plain');
+    expect(signatureFor({ signature: { text: 'Plain', enabled: false } })).toBe('');
+    // Desktop has no signatures-overall setting, so the phone keeps none: no preference turns it off.
+    expect(PREF_DEFAULTS).not.toHaveProperty('defaultSignatureEnabled');
+    expect(signatureFor({ signature: null })).toBe('');
     expect(withSignature('', 'Ann')).toBe('\n\n-- \nAnn');
     expect(withSignature('Hi', '-- Ann')).toBe('Hi\n\n-- Ann');
     expect(withSignature('Hi', '')).toBe('Hi');

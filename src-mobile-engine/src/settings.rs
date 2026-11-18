@@ -79,7 +79,6 @@ pub(crate) const PREFS: &[(&str, Kind, &str)] = &[
     ("swipeRightAction", Kind::OneOf(SWIPES), "\"toggleRead\""),
     // Seconds a sent message waits with Undo; 0 sends at once. Within the free schedule limit.
     ("sendDelay", Kind::Int(0, 300), "0"),
-    ("defaultSignatureEnabled", Kind::Bool, "true"),
     // Remote images wait for "Load images".
     ("holdExternalContent", Kind::Bool, "true"),
     // Premium strips tracking pixels while it is on (body.rs).
