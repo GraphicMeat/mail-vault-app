@@ -347,7 +347,7 @@ fn nothing_to_send_is_no_frames() {
 
 #[test]
 fn open_refuses_another_version_and_garbage() {
-    let future = PhoneBundle { v: 2, accounts: vec![], settings: None, tags: None, fields: None, views: None };
+    let future = PhoneBundle { v: 2, accounts: vec![], settings: None, tags: None, fields: None, views: None, auto_tags: None };
     let sealed = seal_with(PW, &future, cheap()).unwrap();
     assert!(matches!(open(PW, &sealed).unwrap_err(), PhoneError::Invalid(_)));
     // sealed but not deflate
@@ -376,7 +376,7 @@ fn errors_name_no_secret() {
 #[test]
 fn production_seal_uses_the_export_parameters() {
     // header bytes 7..19 carry m, t, p
-    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None, auto_tags: None };
     let sealed = seal(PW, &bundle).unwrap();
     let u32_at = |i: usize| u32::from_le_bytes([sealed[i], sealed[i + 1], sealed[i + 2], sealed[i + 3]]);
     assert_eq!(Params { m_kib: u32_at(7), t: u32_at(11), p: u32_at(15) }, crypto::EXPORT_PARAMS);
@@ -386,7 +386,7 @@ fn production_seal_uses_the_export_parameters() {
 fn open_refuses_key_derivation_above_the_export_parameters() {
     // A crafted code must not make the phone derive with more memory or time than the desktop
     // ever seals with (1 GiB at the crypto ceiling). Refused from the header, before argon2.
-    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None }, cheap()).unwrap();
+    let sealed = seal_with(PW, &PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None, auto_tags: None }, cheap()).unwrap();
     let e = crypto::EXPORT_PARAMS;
     for (at, value) in [(7, e.m_kib + 1), (11, e.t + 1), (15, e.p + 1)] {
         let mut s = sealed.clone();
@@ -397,7 +397,7 @@ fn open_refuses_key_derivation_above_the_export_parameters() {
 
 #[test]
 fn open_accepts_exactly_the_export_parameters() {
-    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![], settings: None, tags: None, fields: None, views: None, auto_tags: None };
     assert_eq!(open(PW, &seal(PW, &bundle).unwrap()).unwrap(), bundle);
 }
 
@@ -910,7 +910,7 @@ fn a_phone_from_before_fields_reads_a_code_that_has_them() {
     }
     let fields = PhoneFields { list: vec![PhoneField { id: "g1".into(), email: None, name: "Owner".into(), kind: "text".into(), options: vec![] }], values: vec![] };
     let tags = PhoneTags { list: vec![PhoneTag { name: "Work".into(), color: String::new() }], assigned: vec![] };
-    let blocks = PhoneBlocks { tags: Some(tags.clone()), fields: Some(fields), views: None };
+    let blocks = PhoneBlocks { tags: Some(tags.clone()), fields: Some(fields), views: None, auto_tags: None };
     let qr = encode_phone_qr_blocks_with(PW, &sample(), None, blocks, cheap()).unwrap();
     let full = decode_phone_bundle(PW, &qr.frames).unwrap();
     assert!(full.fields.is_some());
@@ -970,4 +970,105 @@ fn a_code_without_views_or_with_a_views_block_of_another_shape_still_opens() {
         assert_eq!(back.accounts.len(), 4);
         assert_eq!(back.views, None);
     }
+}
+
+// ── Auto Tag rules ──────────────────────────────────────────────────────────
+
+fn auto_rule(tag_id: &str, provider: Value, enabled: bool) -> crate::app_db::auto_tags::RuleDraft {
+    crate::app_db::auto_tags::RuleDraft {
+        name: "Receipts".into(),
+        instruction: "receipts and invoices".into(),
+        constraints: crate::app_db::auto_tags::Constraints { from_domain: Some("shop.example".into()), ..Default::default() },
+        tag_id: tag_id.into(),
+        inbox_action: crate::app_db::auto_tags::InboxAction::Hide,
+        min_confidence: 0.8,
+        allow_remote: !provider.is_null(),
+        provider,
+        enabled,
+    }
+}
+
+#[test]
+fn auto_tag_rules_travel_by_tag_name_with_their_endpoint_and_never_a_rule_whose_tag_is_gone() {
+    use crate::app_db::auto_tags as store;
+    let c = tag_store();
+    assert!(auto_tags::snapshot(&c).unwrap().is_none(), "a desktop with no rules sends none");
+    let work = crate::app_db::tags::ensure(&c, "Work", "").unwrap();
+    let endpoint = json!({ "type": "endpoint", "url": "https://ai.example.test/v1", "model": "m" });
+    store::create(&c, auto_rule(&work.id, endpoint, true)).unwrap();
+    store::create(&c, auto_rule(&work.id, json!({ "type": "localGguf" }), false)).unwrap();
+    store::create(&c, auto_rule("no-such-tag", Value::Null, true)).unwrap();
+
+    let snap = auto_tags::snapshot(&c).unwrap().unwrap();
+    assert_eq!(snap.list.len(), 2, "the rule whose tag is gone stays home");
+    let remote = &snap.list[0];
+    assert_eq!((remote.tag.as_str(), remote.inbox_action, remote.min_confidence, remote.enabled), ("Work", crate::app_db::auto_tags::InboxAction::Hide, 0.8, true));
+    assert_eq!(remote.endpoint, Some(PhoneEndpoint { url: "https://ai.example.test/v1".into(), model: "m".into() }));
+    assert_eq!(remote.constraints.from_domain.as_deref(), Some("shop.example"));
+    assert_eq!(snap.list[1].endpoint, None, "an on-device provider is none on the phone");
+    assert_eq!(auto_tags::provider_of(remote.endpoint.as_ref()), json!({ "type": "endpoint", "url": "https://ai.example.test/v1", "model": "m" }));
+    assert_eq!(auto_tags::provider_of(None), Value::Null);
+}
+
+#[test]
+fn auto_tag_rules_ride_the_code() {
+    let rule = |id: &str| PhoneAutoTag {
+        id: id.into(), name: id.into(), instruction: "receipts".into(), constraints: Default::default(), tag: "Work".into(),
+        inbox_action: crate::app_db::auto_tags::InboxAction::Keep, min_confidence: 0.7, allow_remote: false, endpoint: None, enabled: true,
+    };
+    let sent = PhoneAutoTags { list: vec![rule("a"), rule("b")] };
+    let blocks = PhoneBlocks { auto_tags: Some(sent.clone()), ..PhoneBlocks::default() };
+    let qr = encode_phone_qr_blocks_with(PW, &sample(), None, blocks, cheap()).unwrap();
+    assert_eq!(decode_phone_bundle(PW, &qr.frames).unwrap().auto_tags, Some(sent));
+}
+
+#[test]
+fn many_auto_tag_rules_are_cut_to_their_room() {
+    let rule = |i: usize| PhoneAutoTag {
+        id: format!("rule-{i}"), name: format!("Rule {i}"), instruction: format!("{i} {}", "unrepeatable words ".repeat(20) + &i.to_string().repeat(40)),
+        constraints: Default::default(), tag: "Work".into(), inbox_action: crate::app_db::auto_tags::InboxAction::Keep,
+        min_confidence: 0.7, allow_remote: false, endpoint: None, enabled: true,
+    };
+    let mut bundle = phone_bundle(&sample()).0;
+    bundle.auto_tags = Some(PhoneAutoTags { list: (0..2000).map(rule).collect() });
+    let dropped = auto_tags::fit(&mut bundle);
+    let kept = bundle.auto_tags.as_ref().map_or(0, |a| a.list.len());
+    assert!(dropped > 0 && kept > 0, "kept {kept}, dropped {dropped}");
+    assert_eq!(kept + dropped, 2000);
+}
+
+#[test]
+fn a_code_without_auto_tags_or_with_a_block_of_another_shape_still_opens() {
+    for block in [None, Some(json!("x")), Some(json!({ "list": [{ "id": 1 }] })), Some(json!({ "list": [{ "id": "r", "inboxAction": "archive" }] }))] {
+        let mut v = serde_json::to_value(phone_bundle(&sample()).0).unwrap();
+        if let Some(b) = block {
+            v["autoTags"] = b;
+        }
+        let back: PhoneBundle = serde_json::from_value(v).unwrap();
+        assert_eq!(back.accounts.len(), 4);
+        assert_eq!(back.auto_tags, None);
+    }
+}
+
+#[test]
+fn a_phone_from_before_auto_tags_reads_a_code_that_has_them() {
+    // The bundle as the views build had it: no `autoTags`.
+    #[derive(serde::Deserialize)]
+    struct ViewsEraBundle {
+        v: u32,
+        accounts: Vec<PhoneAccount>,
+        #[serde(default)]
+        views: Option<PhoneViews>,
+    }
+    let rules = PhoneAutoTags { list: vec![PhoneAutoTag {
+        id: "r".into(), name: "R".into(), instruction: "receipts".into(), constraints: Default::default(), tag: "Work".into(),
+        inbox_action: crate::app_db::auto_tags::InboxAction::Keep, min_confidence: 0.7, allow_remote: false, endpoint: None, enabled: false,
+    }] };
+    let views = PhoneViews { list: vec![], seeded: true };
+    let blocks = PhoneBlocks { views: Some(views.clone()), auto_tags: Some(rules), ..PhoneBlocks::default() };
+    let qr = encode_phone_qr_blocks_with(PW, &sample(), None, blocks, cheap()).unwrap();
+    let full = decode_phone_bundle(PW, &qr.frames).unwrap();
+    assert!(full.auto_tags.is_some());
+    let old: ViewsEraBundle = serde_json::from_value(serde_json::to_value(&full).unwrap()).unwrap();
+    assert_eq!((old.v, old.accounts.len(), old.views), (1, 4, Some(views)));
 }

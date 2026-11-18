@@ -211,6 +211,20 @@ pub fn create(conn: &Connection, draft: RuleDraft) -> Result<Rule, String> {
     save(conn, &id, &draft, at, at, enabled_at)
 }
 
+/// A rule under a given id (one brought from another device): [`update`] when there is one,
+/// else made as [`create`] makes one, its go-forward window opening now when it is enabled.
+pub fn put(conn: &Connection, id: &str, draft: RuleDraft) -> Result<Rule, String> {
+    if id.trim().is_empty() {
+        return Err("an auto-tag rule needs an id".into());
+    }
+    if get(conn, id)?.is_some() {
+        return update(conn, id, draft);
+    }
+    let at = crate::clock::now_secs();
+    let enabled_at = draft.enabled.then_some(at);
+    save(conn, id, &draft, at, at, enabled_at)
+}
+
 pub fn update(conn: &Connection, id: &str, draft: RuleDraft) -> Result<Rule, String> {
     let existing = get(conn, id)?.ok_or_else(|| format!("no such auto-tag rule: {id}"))?;
     // The worker's go-forward window resets on every OFF→ON transition (an
@@ -712,6 +726,18 @@ mod tests {
             turned_on_again.enabled_at.unwrap() >= first_enabled_at,
             "re-enabling starts a fresh window, not the old one"
         );
+    }
+
+    #[test]
+    fn put_makes_a_rule_under_its_id_then_updates_it() {
+        let c = conn();
+        let made = put(&c, "from-desktop", RuleDraft { enabled: true, ..draft("Receipts") }).unwrap();
+        assert_eq!(made.id, "from-desktop");
+        assert!(made.enabled_at.is_some(), "an enabled rule's window opens when it arrives");
+        let again = put(&c, "from-desktop", RuleDraft { enabled: true, ..draft("Receipts, again") }).unwrap();
+        assert_eq!((again.name.as_str(), again.enabled_at, again.created_at), ("Receipts, again", made.enabled_at, made.created_at));
+        assert_eq!(list(&c).unwrap().len(), 1);
+        assert!(put(&c, " ", draft("x")).is_err());
     }
 
     #[test]

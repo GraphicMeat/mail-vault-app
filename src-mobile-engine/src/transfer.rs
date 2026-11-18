@@ -20,8 +20,11 @@
 //! room for (the newest of each tag and account in turn, core `transfer::phone::tags`), on the
 //! accounts of the code that are on the phone afterwards, keyed as desktop keys them (`tags.rs`).
 //!
+//! The desktop's custom fields, saved views and Auto Tag rules come too (`apply_fields`,
+//! `apply_views`, `apply_auto_tags`), each as far as the phone can follow it.
+//!
 //! Reply: `{ok: true, imported: [email], existing: [email], skipped: [{email, reason}],
-//! settingsApplied: bool, tags: null | {tags, assigned}}` (`settingsApplied`: this import applied
+//! settingsApplied: bool, tags: null | {tags, assigned}, fields, views, autoTags}` (`settingsApplied`: this import applied
 //! the desktop's global settings; `tags`: null when the code carried none), or
 //! `{ok: false, code}` with `PASSWORD_SHORT` (under 12 characters, nothing tried), `BAD_PASSWORD`
 //! (wrong password or a modified code, indistinguishable) or `INVALID` (not a whole MailVault
@@ -39,8 +42,8 @@ use mailvault_core::app_db::fields::{self as field_store, Field, GLOBAL};
 use mailvault_core::app_db::tags::{self as tag_store, Target};
 use mailvault_core::app_db::views::{self as view_store, View};
 use mailvault_core::transfer::phone::{
-    decode_phone_bundle, hex_color, tags as phone_tags, PhoneAccount, PhoneAuth, PhoneError, PhoneFields, PhoneKind, PhoneSettings, PhoneTags, PhoneViews, MAX_FRAMES, MAX_FRAME_CHARS,
-    MIN_PASSWORD_CHARS,
+    auto_tags as phone_auto_tags, decode_phone_bundle, hex_color, tags as phone_tags, PhoneAccount, PhoneAuth, PhoneAutoTags, PhoneError, PhoneFields, PhoneKind, PhoneSettings, PhoneTags,
+    PhoneViews, MAX_FRAMES, MAX_FRAME_CHARS, MIN_PASSWORD_CHARS,
 };
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
@@ -171,9 +174,10 @@ pub(crate) fn import(engine: &Engine, mut params: Value) -> Result<Value, RpcErr
         None => (None, HashMap::new()),
     };
     let views = bundle.views.as_ref().map(|v| apply_views(engine, &here, v, &field_ids));
+    let auto_tags = bundle.auto_tags.as_ref().map(|a| apply_auto_tags(engine, a));
     Ok(json!({
         "ok": true, "imported": imported, "existing": existing, "skipped": skipped, "settingsApplied": settings_applied,
-        "tags": tags, "fields": fields, "views": views,
+        "tags": tags, "fields": fields, "views": views, "autoTags": auto_tags,
     }))
 }
 
@@ -386,6 +390,43 @@ fn apply_views(engine: &Engine, here: &HashSet<String>, block: &PhoneViews, fiel
     applied.unwrap_or_else(|e| {
         shared.log(&format!("[transfer] views not imported: {e}"));
         json!({ "views": null })
+    })
+}
+
+/// The desktop's Auto Tag rules (`auto_tags.rs`), under the desktop's ids (one the phone has by id
+/// is updated): each whose tag (by name) the phone has. An enabled rule is turned on as of now on
+/// a phone that did not have it, so it never reaches back over mail already here; the endpoint it
+/// was allowed to use comes as its provider (the phone runs it only when that is the phone's
+/// endpoint too). Never fails the import. Answers `{autoTags}`: rules applied.
+fn apply_auto_tags(engine: &Engine, block: &PhoneAutoTags) -> Value {
+    let shared = engine.shared();
+    let applied = shared.app_db.with(|c| {
+        let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
+        let mut count = 0;
+        for r in &block.list {
+            let Some(Some(tag_id)) = tag_store::ids_by_names(&tx, std::slice::from_ref(&r.tag))?.into_iter().next() else { continue };
+            let draft = mailvault_core::app_db::auto_tags::RuleDraft {
+                name: r.name.clone(),
+                instruction: r.instruction.clone(),
+                constraints: r.constraints.clone(),
+                tag_id,
+                inbox_action: r.inbox_action,
+                min_confidence: r.min_confidence.clamp(0.0, 1.0),
+                allow_remote: r.allow_remote,
+                provider: phone_auto_tags::provider_of(r.endpoint.as_ref()),
+                enabled: r.enabled,
+            };
+            if mailvault_core::app_db::auto_tags::put(&tx, &r.id, draft).is_ok() {
+                count += 1;
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(json!({ "autoTags": count }))
+    });
+    crate::auto_tags::wake(shared);
+    applied.unwrap_or_else(|e| {
+        shared.log(&format!("[transfer] auto-tag rules not imported: {e}"));
+        json!({ "autoTags": null })
     })
 }
 

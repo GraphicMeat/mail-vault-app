@@ -121,7 +121,7 @@ fn jmap(email: &str, auth: PhoneAuth) -> PhoneAccount {
 
 /// The frame texts the desktop shows for `accounts`, sealed with `password`.
 fn code(password: &str, accounts: Vec<PhoneAccount>) -> Vec<String> {
-    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None, fields: None, views: None };
+    let bundle = PhoneBundle { v: 1, accounts, settings: None, tags: None, fields: None, views: None, auto_tags: None };
     let sealed = seal_with(password, &bundle, CHEAP).unwrap();
     frames(&sealed, MAX_FRAME_CHARS).unwrap()
 }
@@ -446,7 +446,7 @@ fn an_import_brings_the_desktop_tags_and_their_assignments() {
             PhoneTagged { email: "not-in-the-code@example.test".into(), tag: 0, keys: vec!["three@x".into()] },
         ],
     };
-    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: Some(tags), fields: None, views: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: Some(tags), fields: None, views: None, auto_tags: None };
     let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
     let r = import(&e, &frames, PW);
     assert_eq!(r["ok"], true, "{r}");
@@ -517,7 +517,7 @@ fn an_import_brings_the_desktop_fields_and_their_values() {
             PhoneFieldValues { email: "o@outlook.test".into(), field: 1, values: vec![("two@x".into(), json!("hi"))] },
         ],
     };
-    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: None, fields: Some(fields), views: None };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test"), graph("o@outlook.test")], settings: None, tags: None, fields: Some(fields), views: None, auto_tags: None };
     let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
     let r = import(&e, &frames, PW);
     assert_eq!(r["ok"], true, "{r}");
@@ -553,7 +553,7 @@ fn an_import_brings_the_desktop_fields_and_their_values() {
     assert_eq!(e.rpc("mobile.fields.list", json!({ "accountId": ann })).unwrap()["fields"].as_array().unwrap().len(), 2);
 
     // A block of another shape: the accounts still come, the fields do not.
-    let mut v = serde_json::to_value(PhoneBundle { v: 1, accounts: vec![imap("new@example.test")], settings: None, tags: None, fields: None, views: None }).unwrap();
+    let mut v = serde_json::to_value(PhoneBundle { v: 1, accounts: vec![imap("new@example.test")], settings: None, tags: None, fields: None, views: None, auto_tags: None }).unwrap();
     v["fields"] = json!({ "list": "nope" });
     let odd: PhoneBundle = serde_json::from_value(v).unwrap();
     let r = import(&e, &mailvault_core::transfer::phone::frames(&seal_with(PW, &odd, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap(), PW);
@@ -585,7 +585,7 @@ fn an_import_brings_the_desktop_views_it_can_follow() {
     };
     let tags = PhoneTags { list: vec![PhoneTag { name: "Work".into(), color: String::new() }], assigned: vec![] };
     let fields = PhoneFields { list: vec![PhoneField { id: "g1".into(), email: None, name: "Owner".into(), kind: "text".into(), options: vec![] }], values: vec![] };
-    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test")], settings: None, tags: Some(tags), fields: Some(fields), views: Some(views) };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test")], settings: None, tags: Some(tags), fields: Some(fields), views: Some(views), auto_tags: None };
     let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
     let r = import(&e, &frames, PW);
     assert_eq!(r["ok"], true, "{r}");
@@ -600,4 +600,51 @@ fn an_import_brings_the_desktop_views_it_can_follow() {
     let work = e.rpc("mobile.tags.list", json!({})).unwrap()["tags"][0]["id"].clone();
     assert_eq!(listed[1]["def"]["tags"], json!([work]));
     assert_eq!(listed[1]["def"]["fields"][0]["fieldId"], "g1");
+}
+
+/// The desktop's Auto Tag rules come with the code, under the desktop's ids, their tag by name;
+/// one whose tag the phone does not have stays home. An enabled rule is turned on as of the
+/// import (never reaching back over mail already here), and keeps the endpoint it was allowed for.
+#[test]
+fn an_import_brings_the_desktop_auto_tag_rules_it_can_follow() {
+    use mailvault_core::app_db::auto_tags::InboxAction;
+    use mailvault_core::transfer::phone::{PhoneAutoTag, PhoneAutoTags, PhoneEndpoint, PhoneTag, PhoneTags};
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    let rule = |id: &str, tag: &str, endpoint: Option<PhoneEndpoint>| PhoneAutoTag {
+        id: id.into(), name: id.into(), instruction: "receipts".into(), constraints: Default::default(), tag: tag.into(),
+        inbox_action: InboxAction::Hide, min_confidence: 0.8, allow_remote: endpoint.is_some(), endpoint, enabled: true,
+    };
+    let endpoint = PhoneEndpoint { url: "https://ai.example.test/v1".into(), model: "m".into() };
+    let rules = PhoneAutoTags { list: vec![rule("receipts", "work", Some(endpoint)), rule("orphan", "Missing", None)] };
+    let tags = PhoneTags { list: vec![PhoneTag { name: "Work".into(), color: String::new() }], assigned: vec![] };
+    let bundle = PhoneBundle { v: 1, accounts: vec![imap("ann@example.test")], settings: None, tags: Some(tags), fields: None, views: None, auto_tags: Some(rules) };
+    let frames = frames(&seal_with(PW, &bundle, CHEAP).unwrap(), MAX_FRAME_CHARS).unwrap();
+    let before = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+    let r = import(&e, &frames, PW);
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["autoTags"], json!({ "autoTags": 1 }));
+
+    let listed = e.rpc("mobile.autoTags.list", json!({})).unwrap()["rules"].clone();
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    let work = e.rpc("mobile.tags.list", json!({})).unwrap()["tags"][0]["id"].clone();
+    let got = &listed[0];
+    assert_eq!((got["id"].clone(), got["tagId"].clone(), got["inboxAction"].clone(), got["enabled"].clone()), (json!("receipts"), work, json!("hide"), json!(true)));
+    assert_eq!(got["provider"], json!({ "type": "endpoint", "url": "https://ai.example.test/v1", "model": "m" }));
+    assert!(got["enabledAt"].as_i64().unwrap() >= before, "turned on as of the import");
+
+    // Again: the same rule, not a second one.
+    let r = import(&e, &frames, PW);
+    assert_eq!(r["autoTags"], json!({ "autoTags": 1 }));
+    assert_eq!(e.rpc("mobile.autoTags.list", json!({})).unwrap()["rules"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn a_code_without_auto_tags_imports_as_before() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (e, _) = engine(tmp.path());
+    let r = import(&e, &code(PW, vec![imap("ann@example.test")]), PW);
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["autoTags"], Value::Null);
+    assert!(e.rpc("mobile.autoTags.list", json!({})).unwrap()["rules"].as_array().unwrap().is_empty());
 }
