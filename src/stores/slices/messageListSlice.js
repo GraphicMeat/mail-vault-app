@@ -189,6 +189,22 @@ export function invalidateChatAndThreadCaches() {
   _threadsInput = null;
 }
 
+function uniqueRows(rows, keyOf) {
+  const seen = new Set();
+  let dropped = 0;
+  const out = rows.filter((e) => {
+    // A row without a uid (a local draft placeholder) names no server message.
+    if (e?.uid == null) return true;
+    const key = keyOf(e);
+    if (seen.has(key)) { dropped++; return false; }
+    seen.add(key);
+    return true;
+  });
+  if (!dropped) return rows;
+  console.warn('[messageList] dropped %d duplicate row(s)', dropped);
+  return out;
+}
+
 /**
  * The display-row derivation, exactly as the store runs it.
  *
@@ -245,6 +261,14 @@ export function deriveDisplayRows({
     const id = rowIdentity(e, view);
     return id ? vaultKey(id.accountId, id.mailbox, id.uid) : null;
   };
+
+  // One row per message, whatever wrote `emails`. Several paths merge rows into
+  // it (cache drain, delta sync, page fetch, load more, undo) and each one that
+  // forgot to check the live list once showed the same message two or three
+  // times. The first copy wins: merges prepend the fresher row.
+  // Keyed by where the message lives, so a scoped view spanning folders or
+  // accounts keeps two different messages that share a uid.
+  emails = uniqueRows(emails, (e) => vaultKeyOf(e) ?? `uid:${uidKey(e)}`);
 
   let result = [];
 

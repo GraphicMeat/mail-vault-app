@@ -633,9 +633,12 @@ export async function loadEmails({ rereadFlags = false } = {}) {
         useMailStore.setState({ serverUids: serverUids(foundUids, { complete: true }) });
         const storeUidSet = new Set(existingEmails.map(e => e.uid));
 
-        const newUids = cachedUidNext
-          ? serverUidList.filter(uid => uid >= cachedUidNext)
-          : serverUidList.filter(uid => !storeUidSet.has(uid));
+        // The list may already hold a uid at or past cachedUidNext: the daemon
+        // writes a sidecar before it bumps the cache's uidNext, and the drain
+        // above can land the row in between. Treating it as new prepends a
+        // second copy of the message.
+        const newUids = serverUidList.filter(uid =>
+          !storeUidSet.has(uid) && (!cachedUidNext || uid >= cachedUidNext));
         const deletedUids = existingEmails.filter(e => !foundUids.has(e.uid)).map(e => e.uid);
         prunedUids = deletedUids;
 

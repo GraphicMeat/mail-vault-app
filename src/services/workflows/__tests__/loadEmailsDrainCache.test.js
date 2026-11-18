@@ -50,11 +50,12 @@ vi.mock('../../db', () => ({
 const mockCheckMailboxStatus = vi.fn();
 const mockFetchEmails = vi.fn();
 const mockSearchAllUids = vi.fn().mockResolvedValue([]);
+const mockFetchHeadersByUids = vi.fn().mockResolvedValue({ emails: [] });
 vi.mock('../../api', () => ({
   fetchEmails: (...a) => mockFetchEmails(...a),
   checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
   searchAllUids: (...a) => mockSearchAllUids(...a),
-  fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
+  fetchHeadersByUids: (...a) => mockFetchHeadersByUids(...a),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
 }));
 
@@ -128,6 +129,7 @@ beforeEach(() => {
   mockGetArchivedEmailIds.mockResolvedValue(new Set());
   mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
   mockSearchAllUids.mockResolvedValue([]);
+  mockFetchHeadersByUids.mockResolvedValue({ emails: [] });
 });
 
 describe('loadEmails — new mail the daemon already cached lands without an account switch', () => {
@@ -178,4 +180,69 @@ describe('loadEmails — new mail the daemon already cached lands without an acc
     expect(mockListCachedUids).not.toHaveBeenCalled();
     expect(mockGetEmailHeadersByUids).not.toHaveBeenCalled();
   });
+
+  // The daemon writes the sidecar before it bumps the cache's uidNext. A
+  // repaint in between drains uid 101 into the list while the meta still says
+  // uidNext 101, so the delta sync's "uid >= cachedUidNext" reads 101 as new
+  // and prepends a second copy. Every later race adds another: the user saw
+  // the same message three times in the inbox.
+  it('never adds a second row for a uid the drain already put in the list', async () => {
+    primeVisibleInbox(STORE_UIDS);
+    mockGetEmailHeadersMeta.mockResolvedValue({
+      uidValidity: 1, uidNext: 101, highestModseq: 5, totalEmails: 101, totalCached: 101,
+    });
+    mockListCachedUids.mockResolvedValue({ uids: [...STORE_UIDS, 101], changed: [] });
+    mockGetEmailHeadersByUids.mockResolvedValue([mkHeader(101)]);
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 102, highestModseq: 6, exists: 101 });
+    mockSearchAllUids.mockResolvedValue([101, ...STORE_UIDS]);
+    mockFetchHeadersByUids.mockResolvedValue({ emails: [mkHeader(101)] });
+
+    await useMailStore.getState().loadEmails();
+
+    const count = (list) => list.filter((e) => e.uid === 101).length;
+    expect(count(useMailStore.getState().emails)).toBe(1);
+    expect(count(useMailStore.getState().sortedEmails)).toBe(1);
+  });
+
+  it('adds a genuinely new uid once next to the one the drain already placed', async () => {
+    primeVisibleInbox(STORE_UIDS);
+    mockGetEmailHeadersMeta.mockResolvedValue({
+      uidValidity: 1, uidNext: 101, highestModseq: 5, totalEmails: 101, totalCached: 101,
+    });
+    mockListCachedUids.mockResolvedValue({ uids: [...STORE_UIDS, 101], changed: [] });
+    mockGetEmailHeadersByUids.mockResolvedValue([mkHeader(101)]);
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 103, highestModseq: 7, exists: 102 });
+    mockSearchAllUids.mockResolvedValue([102, 101, ...STORE_UIDS]);
+    mockFetchHeadersByUids.mockResolvedValue({ emails: [mkHeader(102)] });
+
+    await useMailStore.getState().loadEmails();
+
+    // Only the uid the list lacks goes to the server.
+    expect(mockFetchHeadersByUids).toHaveBeenCalledWith(expect.anything(), 'INBOX', [102]);
+    const listed = useMailStore.getState().emails.map((e) => e.uid);
+    expect(listed.filter((u) => u === 101)).toHaveLength(1);
+    expect(listed.filter((u) => u === 102)).toHaveLength(1);
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  it('stays at one row across repeated syncs while the cache uidNext lags', async () => {
+    primeVisibleInbox(STORE_UIDS);
+    mockGetEmailHeadersMeta.mockResolvedValue({
+      uidValidity: 1, uidNext: 101, highestModseq: 5, totalEmails: 101, totalCached: 101,
+    });
+    mockListCachedUids.mockResolvedValue({ uids: [...STORE_UIDS, 101], changed: [] });
+    mockGetEmailHeadersByUids.mockResolvedValue([mkHeader(101)]);
+    mockSearchAllUids.mockResolvedValue([101, ...STORE_UIDS]);
+    mockFetchHeadersByUids.mockResolvedValue({ emails: [mkHeader(101)] });
+
+    for (let modseq = 6; modseq <= 8; modseq++) {
+      mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 102, highestModseq: modseq, exists: 101 });
+      await useMailStore.getState().loadEmails();
+    }
+
+    const listed = useMailStore.getState().emails.map((e) => e.uid);
+    expect(new Set(listed).size).toBe(listed.length);
+    expect(listed).toHaveLength(101);
+  });
 });
+
