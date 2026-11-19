@@ -22,6 +22,9 @@
 - Account groups now show a removable chip; type a new group or choose an existing one from suggestions or the group cloud.
 - Added: group accounts (Personal, Work, Study or any name you pick) in Settings > Accounts > Profile. The sidebar lists each group under its own label, the account picker groups them too, the collapsed sidebar separates them with a divider, and groups travel in account transfer files.
 
+- Fixed: in Settings > Views, the editor's Save button label was hard to read in the light theme.
+- Changed: Settings > Billing shows a phone icon next to a phone in your devices.
+
 - Added: double-click an email in the list to open it in its own window. Right-click actions also have Open in new window, off by default; add it in Settings > Quick actions.
 - Fixed: double-clicking an email reloaded the email it had just opened. The second click now does nothing.
 - Changed: Contacts > All senders (and a contact's mail) lists mail as a table: Received, Sent and the other labels share one column width, the subject has the room, and every other row is shaded. Clicking a message opens it in its own window. Import vCard looks like Export vCard.

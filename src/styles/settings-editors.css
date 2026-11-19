@@ -29,20 +29,20 @@
 .settings-editor-section .ts-control input { color: var(--mail-text); }
 .settings-editor-section .ts-dropdown .option { color: var(--mail-text); }
 .settings-editor-section .ts-dropdown .active { background: var(--mail-surface-hover); }
-.settings-window .ts-wrapper.single .ts-control,
-.settings-window .ts-wrapper.single.input-active .ts-control,
-.settings-window .ts-dropdown { background: var(--mail-bg); color: var(--mail-text); border-color: var(--mail-border); box-shadow: none; }
-.settings-window .ts-control .item,
-.settings-window .ts-control input,
-.settings-window .ts-dropdown .option,
-.settings-window .ts-dropdown .optgroup-header,
-.settings-window .ts-dropdown .no-results,
-.settings-window .ts-dropdown .create { color: var(--mail-text); }
-.settings-window .ts-control input::placeholder { color: var(--mail-text-muted); opacity: 1; }
-.settings-window .ts-dropdown .optgroup-header { background: var(--mail-bg); }
-.settings-window .ts-dropdown .active,
-.settings-window .ts-dropdown .option:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
-.settings-window .ts-dropdown .active.create { color: var(--mail-text); }
+:is(.settings-window, .mv-shared-ui) .ts-wrapper.single .ts-control,
+:is(.settings-window, .mv-shared-ui) .ts-wrapper.single.input-active .ts-control,
+:is(.settings-window, .mv-shared-ui) .ts-dropdown { background: var(--mail-bg); color: var(--mail-text); border-color: var(--mail-border); box-shadow: none; }
+:is(.settings-window, .mv-shared-ui) .ts-control .item,
+:is(.settings-window, .mv-shared-ui) .ts-control input,
+:is(.settings-window, .mv-shared-ui) .ts-dropdown .option,
+:is(.settings-window, .mv-shared-ui) .ts-dropdown .optgroup-header,
+:is(.settings-window, .mv-shared-ui) .ts-dropdown .no-results,
+:is(.settings-window, .mv-shared-ui) .ts-dropdown .create { color: var(--mail-text); }
+:is(.settings-window, .mv-shared-ui) .ts-control input::placeholder { color: var(--mail-text-muted); opacity: 1; }
+:is(.settings-window, .mv-shared-ui) .ts-dropdown .optgroup-header { background: var(--mail-bg); }
+:is(.settings-window, .mv-shared-ui) .ts-dropdown .active,
+:is(.settings-window, .mv-shared-ui) .ts-dropdown .option:hover { background: var(--mail-surface-hover); color: var(--mail-text); }
+:is(.settings-window, .mv-shared-ui) .ts-dropdown .active.create { color: var(--mail-text); }
 @media (max-width: 680px) { .settings-editor-field { grid-template-columns: 1fr; gap: 6px; } .settings-editor-section { padding: 14px; } .settings-editor-split { grid-template-columns: 1fr; } }
 
 :is(.settings-window, .mv-shared-ui) .views-settings { gap: 0; padding: 28px; }
@@ -85,6 +85,8 @@
 :is(.settings-window, .mv-shared-ui) .view-editor .view-preview-rows li { min-height: 34px; padding: 8px 4px; border-bottom: 1px solid var(--mail-border); border-radius: 0; background: transparent; font-size: 12px; }
 :is(.settings-window, .mv-shared-ui) .view-editor .settings-editor-actions { margin-bottom: 16px; }
 :is(.settings-window, .mv-shared-ui) .view-editor .settings-editor-actions > button:not(.ui-button) { min-height: 32px; padding: 6px 10px; color: var(--mail-text-muted); }
+/* A filled Button (primary, danger) keeps its white label: the muted colour above is for plain buttons. */
+:is(.settings-window, .mv-shared-ui) .view-editor .settings-editor-actions > button.text-white { color: #fff; }
 :is(.settings-window, .mv-shared-ui) .view-editor .view-choice-field { display: grid; gap: 8px; margin-bottom: 16px; }
 :is(.settings-window, .mv-shared-ui) .view-editor .view-choice-field > span { color: var(--mail-text-muted); font-size: 12px; font-weight: 600; }
 :is(.settings-window, .mv-shared-ui) .view-editor .view-choice-group { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -9,7 +9,7 @@
 //   all; `removeLabel(name)`
 //   names each button), with `count / limit` and a `notice` above the list.
 import React from 'react';
-import { CheckCircle2, CreditCard, ExternalLink, Loader, Monitor, X } from 'lucide-react';
+import { CheckCircle2, CreditCard, ExternalLink, Loader, Monitor, Smartphone, X } from 'lucide-react';
 import { useT } from './viewContext';
 
 export function BillingPlanView({ isPremium, statusLabel, lines = null, children = null }) {
@@ -64,7 +64,7 @@ export function BillingDevicesView({ devices, count, limit, notice = null, onRem
         {devices.map(device => (
           <div key={device.key} className={`flex items-center justify-between px-3 py-2 rounded-lg ${device.current ? 'bg-mail-accent/5 border border-mail-accent/20' : 'bg-mail-bg'}`}>
             <div className="flex items-center gap-3 min-w-0">
-              <Monitor size={14} className={device.current ? 'text-mail-accent-text flex-shrink-0' : 'text-mail-text-muted flex-shrink-0'} />
+              {React.createElement(device.phone ? Smartphone : Monitor, { size: 14, className: device.current ? 'text-mail-accent-text flex-shrink-0' : 'text-mail-text-muted flex-shrink-0' })}
               <div className="min-w-0">
                 <p className="text-xs font-medium text-mail-text truncate">
                   {device.name}

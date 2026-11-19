@@ -94,6 +94,7 @@ export default function Billing() {
               devices={devices.map((d) => ({
                 key: d.key,
                 current: Boolean(d.current),
+                phone: d.platform === 'ios' || d.platform === 'android',
                 name: d.name || d.platform || t('settings.billing.unknownDevice'),
                 detail: [d.platform, d.appVersion && `v${d.appVersion}`, d.lastSeenMs && seenAgo(t, d.lastSeenMs)].filter(Boolean).join(' · '),
               }))} />

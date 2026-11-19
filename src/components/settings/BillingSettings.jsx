@@ -679,6 +679,7 @@ export function BillingSettings({ onNavigate, onReportBug }) {
           devices={activeClients.map(client => ({
             key: client.clientId,
             current: client.clientId === currentClientId,
+            phone: client.platform === 'ios' || client.platform === 'android',
             name: client.clientName || client.platform || t('settings.billing.unknownDevice'),
             detail: `${[client.platform, client.appVersion && `v${client.appVersion}`].filter(Boolean).join(' · ')}${client.lastSeenAt ? ` · ${timeAgo(client.lastSeenAt)}` : ''}`,
           }))} />
