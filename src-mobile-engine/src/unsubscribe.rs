@@ -25,13 +25,29 @@
 use crate::db::Engine;
 use crate::rpc::RpcError;
 use mailvault_core::app_db::unsubscribe::{self as store, Unsubscribe};
-use mailvault_core::unsubscribe::{plan, ONE_CLICK_BODY};
+use mailvault_core::unsubscribe::{plan, UnsubscribeTargets, ONE_CLICK_BODY};
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::time::Duration;
 
 const ONE_CLICK_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Core's [`plan`] as the phone follows it: the page opens a web link in the system browser only
+/// when it is `https:` (core also offers an `http:` link, and admits nothing but `mailto:`,
+/// `https:` and `http:` at all); a sender whose only web link is `http:` is unsubscribed by its
+/// `mailto:`, or offers nothing.
+fn phone_plan(list_unsubscribe: &str, post: Option<&str>, auth: Option<&str>) -> (Option<&'static str>, UnsubscribeTargets) {
+    let (method, mut targets) = plan(list_unsubscribe, post, auth);
+    if targets.http_url.as_deref().is_some_and(|u| !u.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://"))) {
+        targets.http_url = None;
+    }
+    let method = match method {
+        Some("browser") if targets.http_url.is_none() => targets.mailto.is_some().then_some("mailto"),
+        m => m,
+    };
+    (method, targets)
+}
 
 /// What sync keeps of a message's list headers: `None` when it has no List-Unsubscribe.
 pub(crate) fn unsub_json(h: &mailvault_core::imap::EmailHeader) -> Option<String> {
@@ -90,7 +106,7 @@ pub(crate) fn list(engine: &Engine, _: Value) -> Result<Value, RpcError> {
     let mut senders = Vec::new();
     for (account, address, last, name, folder, unsub, count) in groups {
         let Some(h) = headers(&unsub) else { continue };
-        let (Some(method), _) = plan(&h.list_unsubscribe, h.post.as_deref(), h.auth.as_deref()) else { continue };
+        let (Some(method), _) = phone_plan(&h.list_unsubscribe, h.post.as_deref(), h.auth.as_deref()) else { continue };
         senders.push(json!({
             "accountId": account, "address": address, "name": name.trim(), "folder": folder,
             "lastMs": last, "count": count, "method": method,
@@ -143,7 +159,7 @@ pub(crate) fn run(engine: &Engine, params: Value) -> Result<Value, RpcError> {
         return Err(RpcError::Invalid("no unsubscribe link from this sender".into()));
     };
     let h = headers(&unsub).ok_or_else(|| RpcError::Invalid("no unsubscribe link from this sender".into()))?;
-    let (method, targets) = plan(&h.list_unsubscribe, h.post.as_deref(), h.auth.as_deref());
+    let (method, targets) = phone_plan(&h.list_unsubscribe, h.post.as_deref(), h.auth.as_deref());
     let mut method = method.ok_or_else(|| RpcError::Invalid("no unsubscribe link from this sender".into()))?;
     let mut status = "opened";
     let mut error = None;
@@ -178,4 +194,27 @@ pub(crate) fn run(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     rows.push(row(method, status));
     engine.shared().net_log.read(|c| rows.iter().try_for_each(|r| store::record(c, r))).map_err(internal)?;
     Ok(json!({ "method": method, "status": status, "url": url, "oneClickError": error }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The page only ever opens an `https:` page: never `http:`, `javascript:` or `file:`.
+    #[test]
+    fn the_phone_opens_only_an_https_page() {
+        let (m, t) = phone_plan("<https://list.test/u>", None, None);
+        assert_eq!((m, t.http_url.as_deref()), (Some("browser"), Some("https://list.test/u")));
+        let (m, t) = phone_plan("<http://list.test/u>", None, None);
+        assert_eq!((m, t.http_url), (None, None), "an http page alone offers nothing");
+        let (m, t) = phone_plan("<http://list.test/u>, <mailto:u@list.test?subject=stop>", None, None);
+        assert_eq!((m, t.http_url, t.mailto.as_deref()), (Some("mailto"), None, Some("mailto:u@list.test?subject=stop")));
+        for bad in ["<javascript:alert(1)>", "<file:///etc/passwd>", "<JAVASCRIPT:x>"] {
+            let (m, t) = phone_plan(bad, None, None);
+            assert_eq!((m, t.http_url, t.mailto), (None, None, None), "{bad}");
+        }
+        // One-click stays (its URL is https by core's rule).
+        let (m, _) = phone_plan("<https://list.test/u>", Some("List-Unsubscribe=One-Click"), Some("mx; dkim=pass header.d=list.test"));
+        assert_eq!(m, Some("one-click"));
+    }
 }
