@@ -3,6 +3,9 @@
 // it). `onAdd(name, body)`, `onUpdate(index, template, { name, body })` and `onRemove(index,
 // template)` change the list; each may return a promise, and the form closes once an add or an
 // update resolves to anything but `false` (the phone keeps it open when its write is refused).
+// The form edits a template, not a place in the list: its id, or (without one) the template
+// itself, is found again at Save, so a list that changed meanwhile saves onto the right one, and
+// one that was removed meanwhile saves nothing.
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Trash2, Plus, PenTool, Save } from 'lucide-react';
@@ -11,7 +14,7 @@ import { useT } from './viewContext';
 
 export function TemplatesView({ templates, onAdd, onUpdate, onRemove, notice = null }) {
   const t = useT();
-  const [templateForm, setTemplateForm] = useState(null); // null | { mode: 'add' } | { mode: 'edit', index }
+  const [templateForm, setTemplateForm] = useState(null); // null | { mode: 'add' } | { mode: 'edit', id, tpl }
   const [templateName, setTemplateName] = useState('');
   const [templateBody, setTemplateBody] = useState('');
 
@@ -24,10 +27,16 @@ export function TemplatesView({ templates, onAdd, onUpdate, onRemove, notice = n
     const name = templateName.trim();
     const body = templateBody.trim();
     if (!name || !body) return;
-    const done = templateForm.mode === 'add'
-      ? await onAdd(name, body)
-      : await onUpdate(templateForm.index, templates[templateForm.index], { name, body });
-    if (done !== false) close();
+    if (templateForm.mode === 'add') {
+      if ((await onAdd(name, body)) !== false) close();
+      return;
+    }
+    const { id, tpl } = templateForm;
+    let index = id != null ? templates.findIndex((x) => x.id === id) : templates.indexOf(tpl);
+    // The phone's list is read again after each write: the same template, equal but not the same object.
+    if (index < 0 && id == null) index = templates.findIndex((x) => x.id == null && x.name === tpl.name && x.body === tpl.body);
+    if (index < 0) { close(); return; }
+    if ((await onUpdate(index, templates[index], { name, body })) !== false) close();
   };
 
   return (
@@ -50,7 +59,7 @@ export function TemplatesView({ templates, onAdd, onUpdate, onRemove, notice = n
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => {
-                    setTemplateForm({ mode: 'edit', index });
+                    setTemplateForm({ mode: 'edit', id: tpl.id ?? null, tpl });
                     setTemplateName(tpl.name || '');
                     setTemplateBody(tpl.body || '');
                   }}
