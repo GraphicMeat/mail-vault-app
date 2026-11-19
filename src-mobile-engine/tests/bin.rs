@@ -702,3 +702,21 @@ fn a_reused_uid_after_a_new_uidvalidity_keeps_its_own_copy() {
     let kept = std::fs::read(f.eml(new["id"].as_str().unwrap())).unwrap();
     assert!(String::from_utf8_lossy(&kept).contains("Subject: another5"), "its own bytes");
 }
+
+/// `app.db` busy (its other writer) while a permanent delete records its copy is passing: the
+/// delete is retried (`TIMEOUT`), never counted as a refusal, and lands once the store is free.
+#[test]
+fn a_busy_bin_store_is_retried_not_refused() {
+    let server = MockImap::start(scenario(&[], &[5]));
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    let blocker = f.app_db();
+    blocker.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let seq = f.delete("Trash", &[5]);
+    let r = first_result(&f, seq);
+    blocker.execute_batch("ROLLBACK").unwrap();
+    assert_eq!((r["outcome"].clone(), r["reason"].clone()), (json!("retrying"), json!("TIMEOUT")), "{r}");
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert_eq!(copies(&server, "Trash", 5), 0);
+    assert_eq!(f.bin().len(), 1);
+}

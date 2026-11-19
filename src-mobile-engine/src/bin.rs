@@ -160,6 +160,17 @@ pub(crate) enum Captured {
     Held,
 }
 
+/// A failure of the bin's own store on a permanent delete's path: `app.db` busy (its other
+/// writer) is passing, retried with the journal's backoff; anything else (a full disk, a broken
+/// store) is a refusal.
+fn store_failure(e: String) -> Result<Captured, Fail> {
+    let lower = e.to_ascii_lowercase();
+    if lower.contains("is locked") || lower.contains("busy") {
+        return Err(Fail::Code(crate::accounts::Code::Timeout, format!("deleted bin: {e}")));
+    }
+    Ok(Captured::Refused(format!("deleted bin: {e}")))
+}
+
 /// Why a permanent delete waits ([`Captured::Held`]), as the journal row's `last_error`.
 pub(crate) const DOWNLOAD_HELD: &str = "DOWNLOAD_HELD";
 
@@ -208,7 +219,7 @@ pub(crate) fn capture(
         row["uidValidity"] = json!(folder.uid_validity);
         let kept = match shared.app_db.with(|c| store::captures_of(c, &data, account, &folder.path, *uid)) {
             Ok(rows) => rows.into_iter().find(|d| d.row == row),
-            Err(e) if plan.permanent => return Ok(Captured::Refused(format!("deleted bin: {e}"))),
+            Err(e) if plan.permanent => return store_failure(e),
             Err(e) => {
                 shared.log(&format!("[bin] {account}: not recorded: {e}"));
                 continue;
@@ -267,7 +278,7 @@ pub(crate) fn capture(
             if !upgrade {
                 store::remove_eml(&data, &id);
             }
-            return Ok(Captured::Refused(format!("deleted bin: {e}")));
+            return store_failure(e);
         }
         record(&id)?;
     }
