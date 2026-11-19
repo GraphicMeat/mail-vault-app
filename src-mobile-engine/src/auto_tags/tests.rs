@@ -470,3 +470,39 @@ fn rules_round_trip_through_create_update_and_delete() {
     assert_eq!(e.rpc("mobile.autoTags.create", json!({ "rule": { "name": "" } })).unwrap_err().code(), "INVALID");
     assert_eq!(e.rpc("mobile.autoTags.delete", json!({ "id": id })).unwrap(), json!({ "rules": [] }));
 }
+
+/// A rule that arrives in a code (anyone's QR) never grants itself the right to send mail: even
+/// naming the phone's own endpoint and allowed on the desktop, it sends nothing until the phone's
+/// owner turns "Allow a remote AI provider" on, here.
+#[test]
+fn an_imported_rule_sends_nothing_until_the_phone_allows_it() {
+    use mailvault_core::app_db::auto_tags::InboxAction;
+    use mailvault_core::transfer::phone::{PhoneAutoTag, PhoneAutoTags, PhoneEndpoint};
+    let (_tmp, e) = engine();
+    let server = loopback(200, "MATCH: yes\nCONFIDENCE: 0.9");
+    message(&e, "plain", 1, "Your receipt", 0, Some("body"), Some(None));
+    let t = tag(&e, "Receipts");
+    set_endpoint(&e, &server.url);
+    let block = PhoneAutoTags {
+        list: vec![PhoneAutoTag {
+            id: "imported".into(), name: "Receipts".into(), instruction: "receipts and invoices".into(), constraints: Default::default(),
+            tag: "Receipts".into(), inbox_action: InboxAction::Keep, min_confidence: 0.5, allow_remote: true,
+            endpoint: Some(PhoneEndpoint { url: server.url.clone(), model: "m".into() }), enabled: true,
+        }],
+    };
+    assert_eq!(crate::transfer::apply_auto_tags(&e, &block), json!({ "autoTags": 1 }));
+    e.shared().app_db.with(|c| c.execute("UPDATE auto_tag_rules SET enabled_at = 0 WHERE id = 'imported'", []).map_err(|x| x.to_string())).unwrap();
+    let got = e.shared().app_db.with(|c| store::get(c, "imported")).unwrap().unwrap();
+    assert!(!got.allow_remote, "arrives off");
+    assert_eq!(got.provider["url"], json!(server.url), "the endpoint stays, for the phone's toggle to confirm");
+    assert_eq!(sweep(e.shared()).0, 0);
+    assert_eq!(server.hits.load(Ordering::SeqCst), 0, "nothing was sent");
+
+    // The phone's own yes, for that endpoint: now it runs.
+    e.rpc("mobile.autoTags.update", json!({ "id": "imported", "rule": draft(&t, true, Some(&server.url), true) })).unwrap();
+    e.shared().app_db.with(|c| c.execute("UPDATE auto_tag_rules SET enabled_at = 0 WHERE id = 'imported'", []).map_err(|x| x.to_string())).unwrap();
+    assert_eq!(sweep(e.shared()).0, 1);
+    // A second import of the same rule keeps the phone's yes.
+    crate::transfer::apply_auto_tags(&e, &block);
+    assert!(e.shared().app_db.with(|c| store::get(c, "imported")).unwrap().unwrap().allow_remote);
+}

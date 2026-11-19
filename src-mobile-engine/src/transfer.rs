@@ -33,6 +33,7 @@
 //!
 //! Never logged or put in a reply or error: the password, a frame, the bundle or a secret.
 
+use mailvault_core::app_db::db::in_txn;
 use crate::accounts::{self, AccountRow, InsertError};
 use crate::db::Engine;
 use crate::rpc::RpcError;
@@ -291,8 +292,7 @@ fn apply_fields(engine: &Engine, here: &HashSet<String>, block: &PhoneFields) ->
         values.push((group.field as usize, id, keyed));
     }
     let mut mapped: HashMap<String, String> = HashMap::new();
-    let applied = shared.app_db.with(|c| {
-        let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
+    let applied = shared.app_db.with(|c| in_txn(c, || {
         // Index in the block -> the phone's field.
         let mut placed: Vec<Option<Field>> = Vec::with_capacity(wanted.len());
         for field in &wanted {
@@ -300,14 +300,14 @@ fn apply_fields(engine: &Engine, here: &HashSet<String>, block: &PhoneFields) ->
                 placed.push(None);
                 continue;
             };
-            let same_name = field_store::list_all(&tx)?
+            let same_name = field_store::list_all(c)?
                 .into_iter()
                 .find(|f| f.scope == field.scope && f.name.to_lowercase() == field.name.to_lowercase() && f.id != field.id);
             // The phone has a field of that name in that scope already: the desktop's maps onto it.
             // Else the desktop's is made, or updated when the phone has it by id.
             let kept = match same_name {
                 Some(existing) => Some(existing),
-                None => field_store::save(&tx, field).ok(),
+                None => field_store::save(c, field).ok(),
             };
             if let Some(kept) = &kept {
                 mapped.insert(field.id.clone(), kept.id.clone());
@@ -322,14 +322,13 @@ fn apply_fields(engine: &Engine, here: &HashSet<String>, block: &PhoneFields) ->
             }
             for (key, value) in list {
                 if let Ok(Some(value)) = crate::fields::value_for(field, value) {
-                    field_store::set_value(&tx, account, key, &field.id, Some(&value))?;
+                    field_store::set_value(c, account, key, &field.id, Some(&value))?;
                     count += 1;
                 }
             }
         }
-        tx.commit().map_err(|e| e.to_string())?;
         Ok(json!({ "fields": placed.iter().flatten().count(), "values": count }))
-    });
+    }));
     let reply = applied.unwrap_or_else(|e| {
         shared.log(&format!("[transfer] fields not imported: {e}"));
         mapped.clear();
@@ -364,29 +363,27 @@ fn apply_views(engine: &Engine, here: &HashSet<String>, block: &PhoneViews, fiel
         let Ok(view) = crate::views::checked(view) else { continue };
         wanted.push((view, v.def.tags.clone()));
     }
-    let applied = shared.app_db.with(|c| {
-        let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
-        if block.seeded && !view_store::seeded(&tx) {
-            view_store::mark_seeded(&tx)?;
+    let applied = shared.app_db.with(|c| in_txn(c, || {
+        if block.seeded && !view_store::seeded(c) {
+            view_store::mark_seeded(c)?;
         }
         let mut count = 0;
         'each: for (mut view, tag_names) in wanted {
-            let Some(tag_ids) = tag_store::ids_by_names(&tx, &tag_names)?.into_iter().collect::<Option<Vec<_>>>() else { continue };
+            let Some(tag_ids) = tag_store::ids_by_names(c, &tag_names)?.into_iter().collect::<Option<Vec<_>>>() else { continue };
             view.def.tags = tag_ids;
             for filter in &mut view.def.fields {
                 match field_ids.get(&filter.field_id) {
                     Some(id) => filter.field_id = id.clone(),
-                    None if field_store::get(&tx, &filter.field_id)?.is_some() => {}
+                    None if field_store::get(c, &filter.field_id)?.is_some() => {}
                     None => continue 'each,
                 }
             }
-            if view_store::save(&tx, &view).is_ok() {
+            if view_store::save(c, &view).is_ok() {
                 count += 1;
             }
         }
-        tx.commit().map_err(|e| e.to_string())?;
         Ok(json!({ "views": count }))
-    });
+    }));
     applied.unwrap_or_else(|e| {
         shared.log(&format!("[transfer] views not imported: {e}"));
         json!({ "views": null })
@@ -397,14 +394,22 @@ fn apply_views(engine: &Engine, here: &HashSet<String>, block: &PhoneViews, fiel
 /// is updated): each whose tag (by name) the phone has. An enabled rule is turned on as of now on
 /// a phone that did not have it, so it never reaches back over mail already here; the endpoint it
 /// was allowed to use comes as its provider (the phone runs it only when that is the phone's
-/// endpoint too). Never fails the import. Answers `{autoTags}`: rules applied.
-fn apply_auto_tags(engine: &Engine, block: &PhoneAutoTags) -> Value {
+/// endpoint too), but never the permission to send mail there (`allowRemote` arrives off unless
+/// the phone gave it for that endpoint already): nothing leaves the phone until its owner says so
+/// on the phone. Never fails the import. Answers `{autoTags}`: rules applied.
+pub(crate) fn apply_auto_tags(engine: &Engine, block: &PhoneAutoTags) -> Value {
     let shared = engine.shared();
-    let applied = shared.app_db.with(|c| {
-        let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
+    let applied = shared.app_db.with(|c| in_txn(c, || {
         let mut count = 0;
         for r in &block.list {
-            let Some(Some(tag_id)) = tag_store::ids_by_names(&tx, std::slice::from_ref(&r.tag))?.into_iter().next() else { continue };
+            let Some(Some(tag_id)) = tag_store::ids_by_names(c, std::slice::from_ref(&r.tag))?.into_iter().next() else { continue };
+            let provider = phone_auto_tags::provider_of(r.endpoint.as_ref());
+            // Sending mail to an endpoint is the phone owner's yes, given on the phone: a code
+            // (anyone's QR) never grants it. A rule the phone has already keeps the phone's own
+            // answer while it names the same endpoint; any other arrives with it off, the
+            // endpoint kept as its provider so the phone's toggle confirms exactly that one.
+            let allow_remote = r.allow_remote
+                && mailvault_core::app_db::auto_tags::get(c, &r.id)?.is_some_and(|had| had.allow_remote && had.provider == provider);
             let draft = mailvault_core::app_db::auto_tags::RuleDraft {
                 name: r.name.clone(),
                 instruction: r.instruction.clone(),
@@ -412,17 +417,16 @@ fn apply_auto_tags(engine: &Engine, block: &PhoneAutoTags) -> Value {
                 tag_id,
                 inbox_action: r.inbox_action,
                 min_confidence: r.min_confidence.clamp(0.0, 1.0),
-                allow_remote: r.allow_remote,
-                provider: phone_auto_tags::provider_of(r.endpoint.as_ref()),
+                allow_remote,
+                provider,
                 enabled: r.enabled,
             };
-            if mailvault_core::app_db::auto_tags::put(&tx, &r.id, draft).is_ok() {
+            if mailvault_core::app_db::auto_tags::put(c, &r.id, draft).is_ok() {
                 count += 1;
             }
         }
-        tx.commit().map_err(|e| e.to_string())?;
         Ok(json!({ "autoTags": count }))
-    });
+    }));
     crate::auto_tags::wake(shared);
     applied.unwrap_or_else(|e| {
         shared.log(&format!("[transfer] auto-tag rules not imported: {e}"));
