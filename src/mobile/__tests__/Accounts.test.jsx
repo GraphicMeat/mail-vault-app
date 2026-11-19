@@ -325,4 +325,23 @@ describe('switching accounts', () => {
     expect(screen.getByLabelText(t('settings.accounts.displayName')).value).toBe('Ada');
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  it('picking another account in the list brings its settings into view', async () => {
+    const scrolled = vi.fn();
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scroll(...args) { scrolled(this, ...args); };
+    try {
+      engine.accounts = [PASSWORD_ACCOUNT, BOB];
+      useMobileStore.setState({ accounts: [PASSWORD_ACCOUNT, BOB], reauthState: null, syncState: {} });
+      render(<Page start="profile" />);
+      await flush();
+      expect(scrolled).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByText('bob@example.test'));
+      await flush();
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(scrolled.mock.calls[0][0].classList.contains('account-settings-detail')).toBe(true);
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
+  });
 });
