@@ -4,11 +4,14 @@
 //!
 //! Every body the engine stores is scanned for pixels with core's `body_scan`. A message the user
 //! opens (fetched then, or a download's body opened later) with at least one pixel leaves its
-//! verdict here, in the write that stores or stamps its body: `acct.<accountId>.trackers.<folder>\n<uid>` =
-//! `{"n": pixels, "v": [vendor, ...]}` in `settings` (no table of its own, like `usage.rs`; every
-//! row goes with the account). Keyed by message, so a body fetched again (evicted, refreshed)
-//! counts once, as desktop's per-message entries do. The verdict outlives the cached body: what
-//! was found stays found, as on desktop. Counts describe what was FOUND, never what was blocked
+//! verdict here, in the write that stores or stamps its body: `acct.<accountId>.trackers.<message>`
+//! = `{"n": pixels, "v": [vendor, ...]}` in `settings` (no table of its own, like `usage.rs`; every
+//! row goes with the account). Keyed by the message itself, as desktop keys its entries: its
+//! Message-ID (`mid\n<id>`), so a body fetched again (evicted, refreshed) or a message moved to
+//! another folder counts once, and a uid reused for another message (a new UIDVALIDITY, a local
+//! uid handed out again) never takes over the old one's verdict. Only a message without a
+//! Message-ID falls back to its place (`<folder>\n<uid>`). The verdict outlives the cached body
+//! and the message: what was found stays found, as on desktop. Counts describe what was FOUND, never what was blocked
 //! (a free user's pixels are found and kept), and only in messages opened, as the page's sentence
 //! says: a body the offline download fetched and nobody opened is not counted.
 //!
@@ -21,7 +24,7 @@
 
 use crate::db::{Engine, Shared};
 use crate::rpc::RpcError;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashMap};
 
@@ -32,8 +35,17 @@ const TOP: usize = 5;
 /// Rows one backfill transaction writes.
 const BATCH: usize = 200;
 
-fn key(account: &str, folder: &str, uid: i64) -> String {
-    format!("acct.{account}.trackers.{folder}\n{uid}")
+/// The verdict's key for message `uid` of `folder` (see the module): by its Message-ID, else by
+/// its place.
+fn key(c: &Connection, account: &str, folder: &str, uid: i64) -> rusqlite::Result<String> {
+    let mid: Option<String> = c
+        .query_row("SELECT message_id FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3", (account, folder, uid), |r| r.get(0))
+        .optional()?;
+    let mid = mid.map(|m| mailvault_core::maildir::normalize_message_id(&m)).filter(|m| !m.is_empty());
+    Ok(match mid {
+        Some(mid) => format!("acct.{account}.trackers.mid\n{mid}"),
+        None => format!("acct.{account}.trackers.{folder}\n{uid}"),
+    })
 }
 
 /// Records a stored body's verdict (inside the caller's write). Nothing for a body without pixels.
@@ -43,7 +55,7 @@ pub(crate) fn record<'a>(c: &Connection, account: &str, folder: &str, uid: i64, 
     }
     let vendors: BTreeSet<&str> = vendors.filter(|v| !v.trim().is_empty()).collect();
     let value = json!({ "n": pixels, "v": vendors }).to_string();
-    crate::settings::put_in(c, &key(account, folder, uid), &value)
+    crate::settings::put_in(c, &key(c, account, folder, uid)?, &value)
 }
 
 /// Counts the opened bodies (`last_access_ms` stamped) cached before the tally, once (from
@@ -78,7 +90,7 @@ fn backfill(shared: &Shared) -> Result<(), String> {
         shared
             .write(|c| {
                 for (a, f, u, n, vendors) in chunk {
-                    if crate::settings::get_in(c, &key(a, f, *u))?.is_none() {
+                    if crate::settings::get_in(c, &key(c, a, f, *u)?)?.is_none() {
                         record(c, a, f, *u, vendors.iter().map(String::as_str), *n)?;
                     }
                 }
@@ -124,4 +136,44 @@ pub(crate) fn stats(engine: &Engine, _: Value) -> Result<Value, RpcError> {
         "top": top.into_iter().map(|(v, n)| json!([v, n])).collect::<Vec<_>>(),
         "patterns": mailvault_core::body_scan::tracker_pattern_count(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MemorySecrets;
+    use std::sync::Arc;
+
+    fn row(e: &Engine, uid: i64, mid: &str) {
+        e.write(|c| {
+            c.execute(
+                "INSERT INTO messages (account_id, folder, uid, subject, from_name, from_address, date_ms, snippet, seen, flagged, has_attachments, to_json, thread_json, message_id)
+                 VALUES ('acc', 'INBOX', ?1, 's', 'n', 'a@x', 0, '', 0, 0, 0, '[]', '{}', ?2)",
+                rusqlite::params![uid, mid],
+            )
+        })
+        .unwrap();
+    }
+
+    /// A uid handed to another message (a new UIDVALIDITY, a local uid reused) keeps the old
+    /// message's verdict apart from the new one's; the same message opened in another folder
+    /// counts once.
+    #[test]
+    fn a_verdict_belongs_to_the_message_not_its_uid() {
+        let tmp = tempfile::tempdir().unwrap();
+        let e = Engine::open(tmp.path(), &tmp.path().join("cache"), Arc::new(MemorySecrets::default())).unwrap();
+        e.write(|c| c.execute("INSERT INTO accounts (id, email, display_name, imap_host, imap_port, security, kind, auth, needs_auth, created_ms) VALUES ('acc', 'me@x', '', 'h', 993, 'ssl', 'imap', 'password', 0, 1)", [])).unwrap();
+        row(&e, 7, "<a@x>");
+        e.write(|c| record(c, "acc", "INBOX", 7, ["Pixel A"].into_iter(), 2)).unwrap();
+        // Uid 7 now names another message.
+        e.write(|c| c.execute("DELETE FROM messages WHERE uid = 7", [])).unwrap();
+        row(&e, 7, "<b@x>");
+        e.write(|c| record(c, "acc", "INBOX", 7, ["Pixel B"].into_iter(), 1)).unwrap();
+        let s = stats(&e, json!({})).unwrap();
+        assert_eq!((s["messages"].clone(), s["pixels"].clone()), (json!(2), json!(3)), "{s}");
+        // Message b, moved to Archive and opened there: still one message.
+        e.write(|c| c.execute("UPDATE messages SET folder = 'Archive' WHERE uid = 7", [])).unwrap();
+        e.write(|c| record(c, "acc", "Archive", 7, ["Pixel B"].into_iter(), 1)).unwrap();
+        assert_eq!(stats(&e, json!({})).unwrap()["messages"], 2);
+    }
 }
