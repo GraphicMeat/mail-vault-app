@@ -101,7 +101,8 @@ const NO_SENDERS = { addresses: [], domains: [] };
  *   (`{value, label}`) and `defaultAccountId`.
  * - `onCreate(draft)`, `onUpdate(id, draft)`, `onDelete(id)`, `onToggle(rule)` (its Enabled
  *   switch in the list; by default an update with the rule as a draft), `onCreateTag(name)` (the
- *   tag, with its `id`), `onPreview({rule, accountId, provider})` (the rows; throws to refuse),
+ *   tag, with its `id`), `onPreview({rule, accountId, provider})` (the rows, or `{rows, note}` for
+ *   a partial list and the line that says why; throws to refuse),
  *   `onBackfill({ruleId, accountId, provider})`, `onUndo(ruleId, batchId)`.
  * - `providerFor(provider, accountId)`: the provider a preview or backfill of that account's mail
  *   uses (`provider` is the rule's when it allows a remote one, else `null`); throws to refuse.
@@ -131,6 +132,12 @@ export function AutoTagsView({
   const [newTagName, setNewTagName] = useState('');
   const [accountId, setAccountId] = useState(defaultAccountId || accountOptions[0]?.value || '');
   const [previewRows, setPreviewRows] = useState(null); // null | rows | { error }
+  const [previewNote, setPreviewNote] = useState('');
+  // `onPreview`'s answer: its rows, and the note of a list it cut short.
+  const showPreview = (answer) => {
+    setPreviewRows(Array.isArray(answer) ? answer : (Array.isArray(answer?.rows) ? answer.rows : []));
+    setPreviewNote(Array.isArray(answer) ? '' : answer?.note || '');
+  };
   const [previewing, setPreviewing] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [pendingRemoteConfirm, setPendingRemoteConfirm] = useState(false);
@@ -197,7 +204,7 @@ export function AutoTagsView({
     setPreviewRows(null);
     try {
       const rows = await onPreview({ rule: formToDraft(form), accountId, provider: providerForAccount() });
-      if (generation === previewGeneration.current) setPreviewRows(rows);
+      if (generation === previewGeneration.current) showPreview(rows);
     } catch (e) {
       if (generation === previewGeneration.current) setPreviewRows({ error: errorText(e) });
     } finally {
@@ -221,7 +228,7 @@ export function AutoTagsView({
       setPreviewing(true);
       try {
         const rows = await onPreview({ rule: formToDraft(form), accountId, provider: null });
-        if (!cancelled && generation === previewGeneration.current) setPreviewRows(rows);
+        if (!cancelled && generation === previewGeneration.current) showPreview(rows);
       } catch (error) {
         if (!cancelled && generation === previewGeneration.current) setPreviewRows({ error: errorText(error) });
       } finally {
@@ -436,6 +443,7 @@ export function AutoTagsView({
                     <div className="rounded-lg border border-mail-border p-2 max-h-56 overflow-y-auto" data-testid="auto-tag-preview-results">
                       <p className="text-xs text-mail-text-muted mb-2">{t('autoTag.previewWritesNothing')}</p>
                       {previewRows.error && <p className="text-xs text-mail-danger">{previewRows.error}</p>}
+                      {!previewRows.error && previewNote && <p className="text-xs text-mail-warning mb-2" role="note">{previewNote}</p>}
                       {!previewRows.error && previewRows.length === 0 && (
                         <p className="text-xs text-mail-text-muted">{t('autoTag.previewEmpty', { count: 200 })}</p>
                       )}

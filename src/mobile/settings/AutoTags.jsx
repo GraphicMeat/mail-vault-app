@@ -27,6 +27,12 @@ function refusal(reply) {
   return e;
 }
 
+/** Why a preview stopped early (`auto_tags.rs`), as the note above its partial list. */
+const PREVIEW_STOPS = Object.freeze({
+  AI_FAILED: 'mobile.autoTag.previewStoppedFailed',
+  TIME_LIMIT: 'mobile.autoTag.previewStoppedTime',
+});
+
 export default function AutoTags() {
   const t = useT();
   const accounts = useMobileStore((s) => s.accounts);
@@ -53,7 +59,7 @@ export default function AutoTags() {
   useEffect(() => {
     ensureTags();
     daemonCall('mobile.autoTags.list', {}).then((r) => { if (mounted.current) setRules(r?.rules || []); }, () => {});
-    loadStatus();
+    // The status is read by the endpoint effect below, on open as on each endpoint change.
     let stop = () => {};
     try {
       stop = listen('mobile.autoTags.progress', (p) => {
@@ -64,8 +70,8 @@ export default function AutoTags() {
       // No event bridge (plain browser dev): the readout follows the next status read.
     }
     return () => { if (typeof stop === 'function') stop(); };
-  }, [loadStatus]);
-  // The endpoint changed in Settings > AI: whether it leaves the phone changed with it.
+  }, []);
+  // On open, and when the endpoint changed in Settings > AI: whether it leaves the phone changed with it.
   useEffect(() => { loadStatus(); }, [url, loadStatus]);
 
   const accountOptions = useMemo(() => accounts.map((a) => ({ value: a.id, label: a.email })), [accounts]);
@@ -76,7 +82,11 @@ export default function AutoTags() {
   };
   const onCreate = (draft) => daemonCall('mobile.autoTags.create', { rule: draft }).then(saved);
   const onUpdate = (id, draft) => daemonCall('mobile.autoTags.update', { id, rule: draft }).then(saved);
-  const onDelete = (id) => daemonCall('mobile.autoTags.delete', { id }).then(saved, () => {});
+  const [deleteFailed, setDeleteFailed] = useState(false);
+  const onDelete = (id) => daemonCall('mobile.autoTags.delete', { id }).then(
+    (reply) => { if (mounted.current) setDeleteFailed(false); return saved(reply); },
+    () => { if (mounted.current) setDeleteFailed(true); },
+  );
   const onCreateTag = async (name) => {
     const id = await useTagStore.getState().createTag(name);
     return id ? { id } : null;
@@ -84,8 +94,11 @@ export default function AutoTags() {
   const onPreview = useCallback(async ({ rule, accountId }) => {
     const reply = await daemonCall('mobile.autoTags.preview', { rule, accountId });
     if (reply?.ok === false) throw refusal(reply);
-    return Array.isArray(reply?.candidates) ? reply.candidates : [];
-  }, []);
+    const rows = Array.isArray(reply?.candidates) ? reply.candidates : [];
+    // A preview the endpoint cut short (a failure, or the time it may take) lists what it checked.
+    const cut = PREVIEW_STOPS[reply?.stopped];
+    return cut ? { rows, note: t(cut) } : rows;
+  }, [t]);
   const onBackfill = async ({ ruleId, accountId }) => {
     const reply = await daemonCall('mobile.autoTags.backfill', { ruleId, accountId });
     if (reply?.ok === false) throw refusal(reply);
@@ -118,6 +131,9 @@ export default function AutoTags() {
   let notice = null;
   if (status && !configured) notice = <p className="text-xs text-mail-warning mb-3" role="note">{t('mobile.ai.notConfigured')}</p>;
   else if (status?.googleSkipped?.length) notice = <p className="text-xs text-mail-text-muted mb-3" role="note">{t('mobile.ai.googleNote')}</p>;
+  if (deleteFailed) {
+    notice = <>{notice}<p className="text-xs text-mail-danger mb-3" role="alert">{t('mobile.settings.saveFailed')}</p></>;
+  }
 
   return (
     <AutoTagsView rules={rules} backfills={backfills} tags={tags} accountOptions={accountOptions}
@@ -129,7 +145,8 @@ export default function AutoTags() {
       intro={t('mobile.autoTag.intro')} allowRemoteHint={t('mobile.autoTag.allowRemoteHint')} notice={notice}
       ruleNote={(rule) => (configured && !runsHere(rule) ? t('mobile.autoTag.needsRemote') : null)}
       renderRemoteConfirm={({ open, text, onCancel, onConfirm }) => (open ? (
-        <AiReview review={{ prompt: text, destination: url, leavesDevice: Boolean(status?.leavesDevice) }}
+        // Until the engine has said where the endpoint is, the sheet says the mail leaves the phone.
+        <AiReview review={{ prompt: text, destination: url, leavesDevice: status ? status.leavesDevice !== false : true }}
           onCancel={onCancel} onConfirm={onConfirm} />
       ) : null)} />
   );

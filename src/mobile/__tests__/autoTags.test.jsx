@@ -19,7 +19,12 @@ vi.mock('../transport.js', () => ({
       case 'mobile.autoTags.list':
         return { rules: structuredClone(engine.rules) };
       case 'mobile.autoTags.status':
+        if (engine.status === 'fail') throw Object.assign(new Error('busy'), { code: 'INTERNAL' });
         return structuredClone(engine.status);
+      case 'mobile.autoTags.delete':
+        if (engine.refuseDelete) throw Object.assign(new Error('no'), { code: 'INTERNAL' });
+        engine.rules = engine.rules.filter((r) => r.id !== params.id);
+        return { rules: structuredClone(engine.rules) };
       case 'mobile.autoTags.update': {
         const rule = { ...engine.rules.find((r) => r.id === params.id), ...params.rule };
         engine.rules = engine.rules.map((r) => (r.id === params.id ? rule : r));
@@ -63,6 +68,7 @@ beforeEach(() => {
   engine.status = { configured: true, leavesDevice: true, googleSkipped: [], backfills: {} };
   engine.listeners = {};
   engine.preview = { candidates: [] };
+  engine.refuseDelete = false;
   resetTagsForTests();
   useTagStore.setState({ tags: [{ id: 't1', name: 'Receipts', color: '', position: 0, count: 0 }] });
   useMobileStore.setState({
@@ -156,5 +162,43 @@ describe('Settings > Auto Tags on the phone', () => {
     useTagStore.setState({ byRow: { 'a1|INBOX|7': [] } });
     applyAssigned({ tagId: 't1', items: [{ accountId: 'a1', folder: 'INBOX', uid: 7 }, { accountId: 'a1', folder: 'INBOX', uid: 8 }] });
     expect(useTagStore.getState().byRow).toEqual({ 'a1|INBOX|7': ['t1'] });
+  });
+
+  it('reads the status once on open', async () => {
+    page();
+    await screen.findByTestId('auto-tag-note-r1');
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(called('mobile.autoTags.status')).toHaveLength(1);
+  });
+
+  it('with the status unread, the review sheet says the mail leaves the phone', async () => {
+    engine.status = 'fail';
+    page();
+    fireEvent.click(await screen.findByTitle(t('autoTag.edit')));
+    fireEvent.click(screen.getByTestId('auto-tag-allow-remote'));
+    expect(document.querySelector('[data-mv-ai-destination]').textContent).toContain(URL);
+    expect(screen.getByText(t('ai.preview.leavesDevice'))).toBeTruthy();
+  });
+
+  it('a preview cut short lists what it checked under a note saying why', async () => {
+    engine.rules = [{ ...structuredClone(RULE), allowRemote: true, provider: { type: 'endpoint', url: URL, model: 'm' } }];
+    engine.preview = { candidates: [{ accountId: 'a1', folder: 'INBOX', mailbox: 'INBOX', uid: 1, subject: 'Your receipt', matched: true, confidence: 0.9, refused: null }], stopped: 'TIME_LIMIT' };
+    page();
+    fireEvent.click(await screen.findByTitle(t('autoTag.edit')));
+    fireEvent.click(screen.getByText(t('autoTag.preview')));
+    const results = await screen.findByTestId('auto-tag-preview-results');
+    expect(within(results).getByText('Your receipt')).toBeTruthy();
+    expect(within(results).getByText(t('mobile.autoTag.previewStoppedTime'))).toBeTruthy();
+    engine.preview = { candidates: [], stopped: 'AI_FAILED' };
+    fireEvent.click(screen.getByText(t('autoTag.preview')));
+    expect(await screen.findByText(t('mobile.autoTag.previewStoppedFailed'))).toBeTruthy();
+  });
+
+  it('a refused delete says so and keeps the rule', async () => {
+    engine.refuseDelete = true;
+    page();
+    fireEvent.click(await screen.findByTitle(t('common.delete')));
+    expect(await screen.findByText(t('mobile.settings.saveFailed'))).toBeTruthy();
+    expect(screen.getByTestId('auto-tag-note-r1')).toBeTruthy();
   });
 });
