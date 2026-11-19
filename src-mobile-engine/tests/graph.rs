@@ -618,6 +618,25 @@ fn a_graph_send_whose_answer_is_lost_is_uncertain_and_never_resent() {
     assert_eq!(f.g.sent().len(), 1, "sent once, never again");
 }
 
+/// A reply over Graph leaves its original as it was: Graph has no answered flag (desktop never
+/// marks a Graph row answered), so nothing is journaled and the row does not flicker answered
+/// until the next flags pass.
+#[test]
+fn a_graph_reply_does_not_mark_the_original_answered() {
+    let f = setup();
+    let original = f.g.add_message("inbox", "Plans", now_ms() - HOUR, &plain("Plans"));
+    let imid = f.g.message(&original).unwrap().internet_message_id;
+    f.sync(None);
+    let from = f.events.len();
+    let id = f.send(json!({ "subject": "Re: Plans", "inReplyTo": imid, "references": imid })).unwrap()["id"].as_str().unwrap().to_string();
+    let (_, done) = f.events.wait(from, "send result", |n, v| n == "mobile.send.result" && v["id"] == id.as_str() && v["outcome"] != "queued");
+    assert_eq!(done["outcome"], "sent", "{done}");
+    let answered: i64 = f.db().query_row("SELECT answered FROM messages WHERE subject = 'Plans'", [], |r| r.get(0)).unwrap();
+    assert_eq!(answered, 0);
+    let journaled: i64 = f.db().query_row("SELECT COUNT(*) FROM pending_actions WHERE kind = 'answered'", [], |r| r.get(0)).unwrap();
+    assert_eq!(journaled, 0, "nothing for the server, which has no such flag");
+}
+
 #[test]
 fn a_token_graph_keeps_refusing_parks_the_account_after_three_passes() {
     let f = setup();

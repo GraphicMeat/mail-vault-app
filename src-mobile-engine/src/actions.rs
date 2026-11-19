@@ -463,9 +463,16 @@ pub(crate) fn has_pending(shared: &Shared, account: Option<&str>) -> bool {
 /// through the journal, one `answered` action per folder. Desktop's "Needs reply" view then
 /// stops listing them. A row already answered is left alone. `true` when something was journaled
 /// (the caller wakes the replay worker).
+///
+/// Not for a Graph account: Graph has no answered flag, so its rows are never answered, as on
+/// desktop (marking one here would only last until the next flags pass took it back).
 pub(crate) fn journal_answered(shared: &Shared, account: &str, in_reply_to: &str) -> Result<bool, Fail> {
     let id = in_reply_to.trim();
     if id.is_empty() {
+        return Ok(false);
+    }
+    let kind: Option<String> = shared.read(|c| c.query_row("SELECT kind FROM accounts WHERE id = ?1", [account], |r| r.get(0)).optional())?;
+    if kind.as_deref() == Some("graph") {
         return Ok(false);
     }
     // Stored as the header had it; a reply's In-Reply-To may differ in its angle brackets only.
