@@ -59,6 +59,14 @@ export default function ViewResults({ view, onOpen, onSwipe: swipeAction, onClos
     fetchPage(list.cursor);
   }, [list.state, list.cursor, fetchPage]);
 
+  // A failed read is asked again: the next page where the list stopped, or the first.
+  const retry = useCallback(() => {
+    if (busy.current) return;
+    const next = list.rows.length ? list.cursor : null;
+    setList((l) => ({ ...l, state: l.rows.length ? 'more' : 'loading' }));
+    fetchPage(next);
+  }, [list.rows.length, list.cursor, fetchPage]);
+
   // A page that left room (rows the join-back dropped, a tall screen) asks for the next one.
   useEffect(() => {
     const el = scroller.current;
@@ -97,7 +105,12 @@ export default function ViewResults({ view, onOpen, onSwipe: swipeAction, onClos
       <div ref={scroller} className="mv-search__results" data-mv-view-results onScroll={onScroll}>
         {list.state === 'loading' && <p className="mv-search__note" role="status">{t('views.preview.running')}</p>}
         {list.state === 'unavailable' && <p className="mv-search__note" role="alert">{t('views.unavailable.unavailable')}</p>}
-        {list.state === 'failed' && <p className="mv-search__note" role="alert">{t('views.unavailable.error')}</p>}
+        {list.state === 'failed' && (
+          <p className="mv-search__note" role="alert">
+            {t('views.unavailable.error')}{' '}
+            <button type="button" className="mv-textbtn" onClick={retry}>{t('common.retry')}</button>
+          </p>
+        )}
         {list.state !== 'loading' && list.state !== 'unavailable' && list.rows.length === 0 && list.state !== 'failed' && (
           <p className="mv-search__note">{t('views.preview.empty')}</p>
         )}

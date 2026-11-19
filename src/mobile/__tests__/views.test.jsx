@@ -94,4 +94,23 @@ describe('saved views on the phone', () => {
     await flush();
     expect(screen.getByRole('alert').textContent).toBe(t('views.unavailable.unavailable'));
   });
+
+  it('a next page that failed is asked again on Retry', async () => {
+    const { daemonCall } = await import('../transport.js');
+    engine.pages = [
+      { available: true, rows: [row(1, 'one'), row(2, 'two')], total: 3, cursor: [2] },
+      undefined,
+      { available: true, rows: [row(3, 'three')], total: 3, cursor: null },
+    ];
+    daemonCall.mockImplementationOnce(async (method, params) => { engine.calls.push([method, params]); return engine.pages[0]; });
+    daemonCall.mockImplementationOnce(async () => { throw Object.assign(new Error('busy'), { code: 'INTERNAL' }); });
+    render(<ViewResults view={BILLS} onOpen={() => {}} onClose={() => {}} />);
+    await flush();
+    expect(screen.getByText(t('views.unavailable.error'))).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t('common.retry') }));
+    await flush();
+    const subjects = [...document.querySelectorAll('.mv-row__subject')].map((s) => s.textContent);
+    expect(subjects).toEqual(['one', 'two', 'three']);
+    expect(screen.queryByText(t('views.unavailable.error'))).toBeNull();
+  });
 });
