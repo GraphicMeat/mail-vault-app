@@ -60,7 +60,7 @@ export function Behavior() {
       <BehaviorView values={prefs} onChange={(key, value) => save({ [key]: value })} rows={['refreshInterval']}
         swipeActions={SWIPES} afterDeleteModes={AFTER_DELETE} sameAccountApplies={prefs.afterDeleteSelect !== 'none'}
         sendDelayWarning={false}
-        copy={{ autoDownloadHint: t('mobile.prefs.autoDownloadHint'), swipeLabel: t('mobile.prefs.swipeRows'), swipeHint: t('mobile.prefs.swipeRowsHint') }} />
+        copy={{ autoDownloadHint: t('mobile.prefs.autoDownloadHint'), swipeLabel: t('mobile.prefs.swipeRows'), swipeHint: t('mobile.prefs.swipeRowsHint'), sendDelayHint: t('mobile.prefs.sendDelayHint') }} />
       <SaveFailed failed={failed} />
     </MobileViewEnv>
   );

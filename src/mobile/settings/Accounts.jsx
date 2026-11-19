@@ -309,6 +309,7 @@ function Advanced({ account, settings, write, onRemoved }) {
     <AccountAdvancedView colors={ACCOUNT_COLORS} color={accountColor({ ...account, color: own })}
       onColor={(color) => write({ color })} onResetColor={own ? () => write({ color: null }) : undefined}
       hidden={Boolean(settings.hidden)} onHidden={(hidden) => write({ hidden })}
+      copy={{ colorHint: t('mobile.accounts.colorHint'), hiddenHint: t('mobile.accounts.hiddenHint') }}
       remove={{
         confirming, removing, error,
         onAsk: () => { setError(null); setConfirming(true); },
@@ -331,6 +332,15 @@ export default function Accounts({ section: sectionProp, onSectionChange, onAddA
   const reauthState = useMobileStore((s) => s.reauthState);
   const syncState = useMobileStore((s) => s.syncState);
   const [selectedId, setSelectedId] = useState(accounts[0]?.id || null);
+  // The list sits over the selected account on the phone: a tap brings that account into view.
+  const layout = useRef(null);
+  const reveal = useRef(false);
+  const pick = (id) => { reveal.current = true; setSelectedId(id); };
+  useEffect(() => {
+    if (!reveal.current) return;
+    reveal.current = false;
+    layout.current?.querySelector('.account-settings-detail')?.scrollIntoView?.({ block: 'start' });
+  }, [selectedId]);
   const [savedAt, setSavedAt] = useState(0);
   const [editingPassword, setEditingPassword] = useState(false);
   const section = ACCOUNT_SECTIONS.includes(sectionProp) ? sectionProp : 'profile';
@@ -371,13 +381,13 @@ export default function Accounts({ section: sectionProp, onSectionChange, onAddA
   const props = account && settings ? { account, settings, write } : null;
   return (
     <MobileViewEnv>
-      <div className="account-settings-layout">
+      <div ref={layout} className="account-settings-layout">
         <AccountListView
           accounts={accounts.map((a) => ({
             id: a.id, email: a.email, initial: initialOf(a), color: accountColor(a), hidden: Boolean(a.hidden), oauth: a.oauth !== false,
             name: a.displayName && a.displayName !== a.email ? a.displayName : a.email.split('@')[0],
           }))}
-          selectedId={selectedId} onSelect={setSelectedId} onAdd={onAddAccount}
+          selectedId={selectedId} onSelect={pick} onAdd={onAddAccount}
           footer={<AccountTransferView accounts={accounts} onExportAccounts={onExport} />} />
         <AccountDetailView
           identity={account ? {

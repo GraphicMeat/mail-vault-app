@@ -196,7 +196,7 @@ export function BehaviorView({ values, onChange, rows = BEHAVIOR_ROWS, swipeActi
           <div>
             <label className="block font-medium text-mail-text mb-1">{t('settings.behavior.sendDelay')}</label>
             <div className="text-sm text-mail-text-muted mb-3">
-              {t('settings.behavior.delayOutgoingEmailsSoCan')}
+              {copy.sendDelayHint ?? t('settings.behavior.delayOutgoingEmailsSoCan')}
             </div>
             <select aria-label={t('settings.behavior.sendDelay')}
               value={sendDelay ?? 0}

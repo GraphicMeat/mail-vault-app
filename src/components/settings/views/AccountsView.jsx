@@ -579,7 +579,7 @@ export function AccountServerFormView({ values, onChange, onSave, onCancel, busy
  * `onHidden(bool)`, `onEyeClick`), and Remove (`remove`: `{ confirming, onAsk, onCancel,
  * onConfirm, removing, error, question, warning, confirmLabel }`).
  */
-export function AccountAdvancedView({ colors, color, onColor, onResetColor, downloadMode = null, hidden, onHidden, onEyeClick, remove }) {
+export function AccountAdvancedView({ colors, color, onColor, onResetColor, downloadMode = null, hidden, onHidden, onEyeClick, remove, copy = {} }) {
   const t = useT();
   return (
     <>
@@ -590,7 +590,7 @@ export function AccountAdvancedView({ colors, color, onColor, onResetColor, down
             {t('settings.accounts.avatarColor')}
           </label>
           <p className="text-sm text-mail-text-muted mb-2">
-            {t('settings.accounts.colorUsedAccountAvatarSidebar')}
+            {copy.colorHint ?? t('settings.accounts.colorUsedAccountAvatarSidebar')}
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             {colors.map(option => {
@@ -650,7 +650,7 @@ export function AccountAdvancedView({ colors, color, onColor, onResetColor, down
                 {hidden ? t('settings.accounts.accountHidden') : t('settings.accounts.accountVisible')}
               </div>
               <div className="text-sm text-mail-text-muted">
-                {t('settings.accounts.hiddenAccountsRemovedSidebarStop')}
+                {copy.hiddenHint ?? t('settings.accounts.hiddenAccountsRemovedSidebarStop')}
               </div>
             </div>
           </div>
