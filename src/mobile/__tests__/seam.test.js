@@ -18,7 +18,7 @@ const otherPlugin = (c) => c.startsWith('plugin:') && !SCANNER_INVOKES.includes(
 // Desktop stores (and `plugin-fs`) would bring the desktop RPC graph with them.
 // `sparkle` is the desktop updater; lucide's Sparkles icon files (the settings manifest's Cleanup
 // icon, shared with the phone) are not it.
-const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|(?<!lucide-react\/dist\/esm\/icons\/[\w-]*)sparkle|features\/blitz|e2eMotion|src\/stores\//i;
+const DESKTOP_ONLY = /plugin-shell|plugin-updater|plugin-fs|(?<!(?:^|\/)node_modules\/lucide-react\/dist\/esm\/icons\/[\w-]*)sparkle|features\/blitz|e2eMotion|src\/stores\//i;
 
 describe('mobile seam', () => {
   it('every_rpc_method_is_implemented', async () => {
@@ -85,6 +85,9 @@ describe('mobile seam', () => {
   it('the Sparkle pattern exempts only lucide icon files', () => {
     expect(DESKTOP_ONLY.test('node_modules/lucide-react/dist/esm/icons/sparkles.js')).toBe(false);
     expect(DESKTOP_ONLY.test('src/utils/sparkleUpdater.js')).toBe(true);
+    // Only lucide's own package: a look-alike path outside node_modules is not exempt.
+    expect(DESKTOP_ONLY.test('src/vendor/lucide-react/dist/esm/icons/sparkle.js')).toBe(true);
+    expect(DESKTOP_ONLY.test('src/node_modules_copy/lucide-react/dist/esm/icons/sparkle.js')).toBe(true);
     expect(DESKTOP_ONLY.test('node_modules/@tauri-apps/plugin-sparkle/index.js')).toBe(true);
   });
 
