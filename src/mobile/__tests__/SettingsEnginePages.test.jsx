@@ -139,6 +139,21 @@ describe('Settings > Unfinished server actions', () => {
   });
 });
 
+describe('Settings > Unfinished server actions, why it waits', () => {
+  it('a delete held for a download, a refusal and a timeout each read as the journal means them', async () => {
+    engine.pending = ['DOWNLOAD_HELD', 'REFUSED', 'TIMEOUT'].map((lastError, i) => (
+      { seq: 20 + i, accountId: 'a1', folder: 'Trash', kind: 'delete', uids: [i], state: 'retrying', lastError, attempts: 1, createdMs: Date.UTC(2026, 10, 1, 9) }
+    ));
+    render(<PendingActions />);
+    await waitFor(() => expect(items()).toHaveLength(3));
+    const [held, refused, timeout] = items();
+    expect(held.textContent).toContain(t('mobile.pendingActions.downloadHeld'));
+    expect(refused.textContent).toContain(t('mobile.pendingActions.refused'));
+    expect(refused.textContent).not.toContain(t('mobile.error.REFUSED'));
+    expect(timeout.textContent).toContain(t('mobile.pendingActions.timeout'));
+  });
+});
+
 describe('Settings > Storage', () => {
   it('shows the total, each account and each file', async () => {
     render(<StorageSettings />);

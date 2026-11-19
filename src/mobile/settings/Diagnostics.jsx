@@ -34,6 +34,16 @@ const OPS = Object.freeze({
 });
 const opOf = (kind) => (Object.hasOwn(OPS, kind) ? OPS[kind] : ['other', 'settings.pendingActions.opOther']);
 
+// Why an action still waits, where the journal's own codes mean something else than the accounts
+// error of that name: a permanent delete held until a network allows downloads (bin.rs
+// `DOWNLOAD_HELD`), a refusal counted toward giving up, a timeout that is retried on its own.
+const WAIT_REASONS = Object.freeze({
+  DOWNLOAD_HELD: 'mobile.pendingActions.downloadHeld',
+  REFUSED: 'mobile.pendingActions.refused',
+  TIMEOUT: 'mobile.pendingActions.timeout',
+});
+const reasonKey = (code) => (Object.hasOwn(WAIT_REASONS, code) ? WAIT_REASONS[code] : errorKey(code));
+
 export function PendingActions() {
   const t = useT();
   const accounts = useMobileStore((s) => s.accounts);
@@ -95,7 +105,7 @@ export function PendingActions() {
     return {
       id: entry.seq, seq: entry.seq, op, labelKey, total: count, gone: 0, left: count, where,
       tries: entry.attempts > 0 ? entry.attempts : null, untried: !(entry.attempts > 0),
-      reason: entry.lastError ? t(errorKey(entry.lastError)) : null, messages: null,
+      reason: entry.lastError ? t(reasonKey(entry.lastError)) : null, messages: null,
     };
   });
 
