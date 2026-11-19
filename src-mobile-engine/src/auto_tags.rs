@@ -45,9 +45,12 @@
 //! - `mobile.autoTags.create {rule}` / `.update {id, rule}` -> `{rule, rules}`; `.delete {id}` ->
 //!   `{rules}`. `rule` is desktop's `RuleDraft`.
 //! - `mobile.autoTags.preview {ruleId | rule, accountId, limit?}` -> `{candidates: [{accountId,
-//!   folder, mailbox, uid, messageId, subject, from, matched, confidence, refused}]}` over the
-//!   newest `limit` (at most [`PREVIEW_LIMIT`]) held messages; writes nothing. Or `{ok: false,
-//!   code}`: `AI_NOT_CONFIGURED`, `E_GOOGLE_MAIL_ON_DEVICE_ONLY`.
+//!   folder, mailbox, uid, messageId, subject, from, matched, confidence, refused}], stopped}`
+//!   over the newest `limit` (at most [`PREVIEW_LIMIT`]) held messages; writes nothing. It stops
+//!   at the first endpoint failure (`stopped: "AI_FAILED"`, the failed row last), as a backfill
+//!   does, and starts no request after [`PREVIEW_BUDGET`] (`stopped: "TIME_LIMIT"`); `stopped` is
+//!   `null` when every message was judged. Or `{ok: false, code}`: `AI_NOT_CONFIGURED`,
+//!   `E_GOOGLE_MAIL_ON_DEVICE_ONLY`.
 //! - `mobile.autoTags.backfill {ruleId, accountId, limit?}` -> `{batchId}`: queued on the worker,
 //!   reported by `mobile.autoTags.progress` (`{batchId, ruleId, processed, total, matched,
 //!   assigned?, done, code?}`). Or `{ok: false, code}`: the codes above, `NEEDS_REMOTE` (the rule
@@ -82,6 +85,9 @@ pub(crate) const PREVIEW_LIMIT: usize = 200;
 const SCAN_LIMIT: usize = 5_000;
 /// How long one verdict request may take.
 const VERDICT_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a preview (on the caller's RPC thread) keeps starting requests; with one request's
+/// [`VERDICT_TIMEOUT`] on top, the most it can take.
+pub(crate) const PREVIEW_BUDGET: Duration = Duration::from_secs(30);
 /// The first wait after a rule's endpoint failed; it doubles per failure up to [`RETRY_MAX`].
 pub(crate) const RETRY_BASE: Duration = Duration::from_secs(30);
 pub(crate) const RETRY_MAX: Duration = Duration::from_secs(3600);
@@ -664,7 +670,8 @@ fn ready(shared: &Shared, account: &str) -> Result<Result<Config, &'static str>,
     Ok(Ok(cfg))
 }
 
-/// `mobile.autoTags.preview`; see the module. Runs on the caller's RPC thread and writes nothing.
+/// `mobile.autoTags.preview`; see the module. Runs on the caller's RPC thread (bounded by
+/// [`PREVIEW_BUDGET`]) and writes nothing.
 pub(crate) fn preview(engine: &Engine, params: Value) -> Result<Value, RpcError> {
     let p: PreviewParams = parse(params)?;
     let shared = engine.shared();
@@ -679,12 +686,19 @@ pub(crate) fn preview(engine: &Engine, params: Value) -> Result<Value, RpcError>
     };
     let limit = p.limit.unwrap_or(PREVIEW_LIMIT).clamp(1, PREVIEW_LIMIT);
     let now = now_secs();
+    let until = Instant::now() + PREVIEW_BUDGET;
     let mut rows = Vec::new();
+    let mut stopped: Option<&str> = None;
     for h in held(shared, &p.account_id, 0, limit)? {
         if !h.passes(&rule, now) {
             continue;
         }
+        if Instant::now() >= until {
+            stopped = Some("TIME_LIMIT");
+            break;
+        }
         let verdict = evaluate(shared, &cfg, &p.account_id, &rule, &h.candidate);
+        let failed = matches!(verdict, Err(NoVerdict::Endpoint));
         let matched = matches!(verdict, Ok(v) if store::meets_threshold(v, rule.min_confidence));
         let (confidence, why) = match &verdict {
             Ok(Verdict::Match(c)) => (Some(*c), None),
@@ -696,8 +710,13 @@ pub(crate) fn preview(engine: &Engine, params: Value) -> Result<Value, RpcError>
             "messageId": h.message_id, "subject": h.candidate.subject, "from": h.candidate.from,
             "matched": matched, "confidence": confidence, "refused": why,
         }));
+        // The endpoint is down: every later message would wait out the same failure.
+        if failed {
+            stopped = Some("AI_FAILED");
+            break;
+        }
     }
-    Ok(json!({ "candidates": rows }))
+    Ok(json!({ "candidates": rows, "stopped": stopped }))
 }
 
 #[derive(Deserialize)]

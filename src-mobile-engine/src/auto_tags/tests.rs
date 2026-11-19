@@ -506,3 +506,22 @@ fn an_imported_rule_sends_nothing_until_the_phone_allows_it() {
     crate::transfer::apply_auto_tags(&e, &block);
     assert!(e.shared().app_db.with(|c| store::get(c, "imported")).unwrap().unwrap().allow_remote);
 }
+
+/// A preview stops at the first endpoint failure, as a backfill does: one request, not one per
+/// message, each waiting out the same failure on the caller's thread.
+#[test]
+fn a_preview_stops_at_a_failing_endpoint() {
+    let (_tmp, e) = engine();
+    let server = loopback(503, "{}");
+    set_endpoint(&e, &server.url);
+    for (uid, subject) in [(1, "One"), (2, "Two"), (3, "Three")] {
+        message(&e, "plain", uid, subject, 0, Some("body"), Some(None));
+    }
+    let t = tag(&e, "Receipts");
+    let id = rule(&e, draft(&t, true, Some(&server.url), false));
+    let r = e.rpc("mobile.autoTags.preview", json!({ "ruleId": id, "accountId": "plain" })).unwrap();
+    assert_eq!(server.hits.load(Ordering::SeqCst), 1, "{r}");
+    assert_eq!(r["candidates"].as_array().unwrap().len(), 1, "{r}");
+    assert_eq!(r["candidates"][0]["refused"], "AI_FAILED");
+    assert_eq!(r["stopped"], "AI_FAILED");
+}
