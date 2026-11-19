@@ -452,6 +452,10 @@ impl Engine {
         if (!was && downloads_allowed(self.shared())) || (!expensive && !constrained) {
             self.offline_wake();
         }
+        // A permanent delete held for the network (`bin::Captured::Held`) may go now.
+        if !was && downloads_allowed(self.shared()) {
+            self.replay().retry_all(self.shared());
+        }
     }
 
     /// Tests: `false` keeps the foreground downloader idle, for suites that count what the page's

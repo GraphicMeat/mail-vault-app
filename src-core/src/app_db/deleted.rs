@@ -122,6 +122,59 @@ pub fn capture(conn: &Connection, app_dir: &Path, c: &Capture, raw: Option<&[u8]
     Ok((id, true))
 }
 
+// ── The phone's capture, in steps ──────────────────────────────────────────
+//
+// [`capture`] writes the file and the row under one connection: the daemon's way. The phone keeps
+// its `app.db` behind one lock that foreground reads share, so it looks up under the lock, writes
+// the file (durably) outside it, and only then takes the lock again for the row: the same order
+// (file, then row), never a large write under the lock.
+
+/// The live rows kept for (account, mailbox, uid), any Message-ID, newest first: the caller
+/// decides which one (if any) is the message it is deleting now.
+pub fn captures_of(conn: &Connection, app_dir: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Vec<Deleted>, String> {
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {COLUMNS} FROM deleted_messages WHERE account_id = ?1 AND mailbox = ?2 AND uid = ?3 ORDER BY deleted_at DESC"
+        ))
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<Deleted> = stmt
+        .query_map(params![account_id, mailbox, uid], from_row)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().filter(|d| live(app_dir, &d.id, d.has_eml)).collect())
+}
+
+/// A fresh bin id.
+pub fn new_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
+/// Writes row `id`'s bytes, durably (`fsx::write_durable`): before its row, outside any lock.
+pub fn write_eml_durable(app_dir: &Path, id: &str, raw: &[u8]) -> Result<(), String> {
+    std::fs::create_dir_all(bin_dir(app_dir)).map_err(|e| crate::fsx::io_failure("create deleted bin", &e))?;
+    crate::fsx::write_durable(&eml_path(app_dir, id), raw).map_err(|e| crate::fsx::io_failure("write deleted copy", &e))
+}
+
+/// The row of a capture whose file (when `has_eml`) [`write_eml_durable`] already wrote. A row
+/// that is there already (byte-less) takes the bytes.
+pub fn insert_captured(conn: &Connection, id: &str, c: &Capture, has_eml: bool) -> Result<(), String> {
+    let flags = serde_json::to_string(c.flags).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO deleted_messages(id, account_id, mailbox, uid, message_id, flags, row_json, deleted_at, has_eml)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+         ON CONFLICT(id) DO UPDATE SET has_eml = MAX(has_eml, excluded.has_eml)",
+        params![id, c.account_id, c.mailbox, c.uid, c.message_id, flags, c.row.to_string(), c.deleted_at, has_eml],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+/// Row `id`'s file only (a capture whose row could not be written).
+pub fn remove_eml(app_dir: &Path, id: &str) {
+    let _ = std::fs::remove_file(eml_path(app_dir, id));
+}
+
 /// The newest copy kept of (account, mailbox, uid), whatever its Message-ID:
 /// for a retried delete whose message the server no longer holds.
 pub fn find(conn: &Connection, app_dir: &Path, account_id: &str, mailbox: &str, uid: u32) -> Result<Option<String>, String> {
@@ -246,14 +299,19 @@ pub fn list_page(conn: &Connection, app_dir: &Path, after: Option<(i64, &str)>, 
 }
 
 /// [`purge_expired`] for at most `limit` rows, oldest first: a sweep that runs in small steps.
-/// Returns how many went.
-pub fn purge_expired_some(conn: &Connection, app_dir: &Path, now_ms: i64, retention_days: i64, limit: usize) -> Result<usize, String> {
+/// The rows named in `keep` stay whatever their age (the phone's: rows a queued delete or
+/// restore still needs). Returns how many went.
+pub fn purge_expired_some(conn: &Connection, app_dir: &Path, now_ms: i64, retention_days: i64, limit: usize, keep: &[String]) -> Result<usize, String> {
     let cutoff = now_ms - retention_days * DAY_MS;
+    let keep = serde_json::to_string(keep).map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id FROM deleted_messages WHERE deleted_at <= ?1 ORDER BY deleted_at LIMIT ?2")
+        .prepare(
+            "SELECT id FROM deleted_messages WHERE deleted_at <= ?1 AND id NOT IN (SELECT value FROM json_each(?3))
+             ORDER BY deleted_at LIMIT ?2",
+        )
         .map_err(|e| e.to_string())?;
     let ids: Vec<String> = stmt
-        .query_map(params![cutoff, limit as i64], |r| r.get(0))
+        .query_map(params![cutoff, limit as i64, keep], |r| r.get(0))
         .map_err(|e| e.to_string())?
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
@@ -261,6 +319,14 @@ pub fn purge_expired_some(conn: &Connection, app_dir: &Path, now_ms: i64, retent
         remove(conn, app_dir, id)?;
     }
     Ok(ids.len())
+}
+
+/// Restamps when row `id` was deleted (the phone: when its delete really landed on the server,
+/// so retention counts from there and not from the capture).
+pub fn set_deleted_at(conn: &Connection, id: &str, at_ms: i64) -> Result<(), String> {
+    conn.execute("UPDATE deleted_messages SET deleted_at = ?2 WHERE id = ?1", params![id, at_ms])
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// The ids of at most `limit` rows of `account_id` (every row with `None`).
@@ -401,12 +467,30 @@ mod tests {
         let (oldest, _) = capture(&c, &dir, &cap(1, None, &row, now - 5 * DAY_MS), Some(&b"a"[..])).unwrap();
         let (older, _) = capture(&c, &dir, &cap(2, None, &row, now - 3 * DAY_MS), Some(&b"b"[..])).unwrap();
         let (fresh, _) = capture(&c, &dir, &cap(3, None, &row, now), Some(&b"c"[..])).unwrap();
-        assert_eq!(purge_expired_some(&c, &dir, now, 1, 1).unwrap(), 1);
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 1, &[]).unwrap(), 1);
         assert!(get(&c, &oldest).unwrap().is_none() && !eml_path(&dir, &oldest).exists());
         assert!(get(&c, &older).unwrap().is_some());
-        assert_eq!(purge_expired_some(&c, &dir, now, 1, 10).unwrap(), 1);
-        assert_eq!(purge_expired_some(&c, &dir, now, 1, 10).unwrap(), 0);
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 10, &[]).unwrap(), 1);
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 10, &[]).unwrap(), 0);
         assert!(get(&c, &fresh).unwrap().is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_bounded_purge_leaves_the_rows_it_is_told_to_keep() {
+        let (dir, c) = store();
+        let row = json!({});
+        let now = 100 * DAY_MS;
+        let (owed, _) = capture(&c, &dir, &cap(1, None, &row, now - 5 * DAY_MS), Some(&b"a"[..])).unwrap();
+        let (old, _) = capture(&c, &dir, &cap(2, None, &row, now - 3 * DAY_MS), Some(&b"b"[..])).unwrap();
+        // The kept row is the oldest: it must not fill the unit and starve the rest.
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 1, std::slice::from_ref(&owed)).unwrap(), 1);
+        assert!(get(&c, &old).unwrap().is_none());
+        assert!(get(&c, &owed).unwrap().is_some() && eml_path(&dir, &owed).exists());
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 10, std::slice::from_ref(&owed)).unwrap(), 0);
+        // Restamped when its delete lands, it is young again.
+        set_deleted_at(&c, &owed, now).unwrap();
+        assert_eq!(purge_expired_some(&c, &dir, now, 1, 10, &[]).unwrap(), 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

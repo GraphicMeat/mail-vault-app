@@ -1115,6 +1115,25 @@ impl Backend for JmapBackend<'_> {
         Ok(if hits.is_empty() { Found::Absent } else { Found::Here(hits) })
     }
 
+    fn find_by_sender(&mut self, folder: &str, from: &str, date_secs: i64) -> Result<Option<Found>, Fail> {
+        let from = from.trim().to_string();
+        if from.is_empty() {
+            return Ok(None);
+        }
+        let mailbox = self.mailbox_id(folder)?;
+        if !self.mailbox_listed(&mailbox)? {
+            return Ok(Some(Found::FolderGone));
+        }
+        // `receivedAt` is the date the import gave (the upload's Date header): two days around it.
+        let utc = |secs: i64| {
+            let (y, m, d) = mailvault_core::sync_core::dates::civil_from_days(secs.div_euclid(86_400));
+            format!("{y:04}-{m:02}-{d:02}T00:00:00Z")
+        };
+        let filter = json!({ "inMailbox": mailbox, "from": from, "after": utc(date_secs - 86_400), "before": utc(date_secs + 2 * 86_400) });
+        let ids = self.call(async |c| c.query_emails(filter.clone(), 50).await).map_err(Fail::from)?;
+        Ok(Some(if ids.is_empty() { Found::Absent } else { Found::Here(ids) }))
+    }
+
     fn found_header(&mut self, _folder: &str, handle: &str) -> Result<Option<Header>, Fail> {
         let ids = vec![handle.to_string()];
         let got = self.call(async |c| c.get_emails(&ids, HEADER_PROPS).await).map_err(Fail::from)?;

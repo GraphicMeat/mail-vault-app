@@ -442,3 +442,263 @@ fn a_move_back_never_takes_a_decoy_from_trash_or_junk() {
     assert_eq!(inbox.len(), 1);
     assert_eq!(inbox[0].raw, raw(1, "m1").into_bytes(), "the real one, not the decoy");
 }
+
+/// `raw` without its Message-ID header: a message nothing can find by one.
+fn raw_bare(uid: u32, subject: &str) -> String {
+    raw(uid, subject).replace(&format!("Message-ID: <bin-{uid}@example.com>\r\n"), "")
+}
+
+/// How many messages in `folder` carry `subject`.
+fn by_subject(server: &MockImap, folder: &str, subject: &str) -> usize {
+    let want = format!("Subject: {subject}\r\n");
+    server.state().find(folder).unwrap().messages.iter().filter(|m| String::from_utf8_lossy(&m.raw).contains(&want)).count()
+}
+
+/// Trash holding uid 5 with no Message-ID, and `faults` on the server from the start.
+fn bare_scenario() -> Scenario {
+    Scenario::new()
+        .mailbox(mailbox("INBOX", &[], vec![]))
+        .mailbox(mailbox("Trash", &["\\HasNoChildren", "\\Trash"], vec![Message::new(5, raw_bare(5, "bare5")).with_internal_ms(at(5))]))
+}
+
+/// The server as it is now, with `fault` armed from here on (its ordinals start fresh).
+fn arm(server: &MockImap, trigger: Trigger, action: Action) {
+    let mut sc = Scenario::new();
+    sc.state = server.state();
+    server.reset_scenario(sc.fault(trigger, action));
+}
+
+/// A kept message with no Message-ID whose upload failed before it landed: the retry uploads it
+/// again (`sent` means only that it may have gone). Done with nothing on the server would lose it
+/// on both sides once the bin row goes.
+#[test]
+fn a_recover_without_a_message_id_uploads_again_after_a_failed_upload() {
+    let server = MockImap::start(bare_scenario());
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    let seq = f.delete("Trash", &[5]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let bin = f.bin();
+    assert_eq!(bin.len(), 1, "{bin:?}");
+    assert_eq!((bin[0]["messageId"].clone(), bin[0]["hasEml"].clone()), (Value::Null, json!(true)), "{bin:?}");
+    let id = bin[0]["id"].as_str().unwrap().to_string();
+    assert_eq!(by_subject(&server, "Trash", "bare5"), 0);
+
+    // The first upload dies before the server stores it.
+    arm(&server, Trigger::nth("APPEND", 1), Action::DropConnection);
+    let seq = f.recover_seq(&id);
+    let r = f.events.final_result(seq);
+    assert_eq!(r["outcome"], "done", "{r}");
+    assert_eq!(by_subject(&server, "Trash", "bare5"), 1, "uploaded on the retry, not taken as done");
+    assert_eq!(server.count_commands("APPEND"), 2);
+    assert!(f.bin().is_empty(), "the row goes once the upload is confirmed");
+}
+
+/// A kept message with no Message-ID whose upload landed with its reply lost: the retry finds it
+/// by its sender, date and size and does not upload a second copy.
+#[test]
+fn a_recover_without_a_message_id_finds_an_upload_whose_reply_was_lost() {
+    let server = MockImap::start(bare_scenario());
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    let seq = f.delete("Trash", &[5]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let id = f.bin()[0]["id"].as_str().unwrap().to_string();
+
+    // The server stores the first upload, then the link drops before its reply.
+    arm(&server, Trigger::nth("APPEND", 1), Action::TruncateResponse(0));
+    let seq = f.recover_seq(&id);
+    let r = f.events.final_result(seq);
+    assert_eq!(r["outcome"], "done", "{r}");
+    assert_eq!(by_subject(&server, "Trash", "bare5"), 1, "one copy: the landed upload was found");
+    assert_eq!(server.count_commands("APPEND"), 1, "nothing uploaded twice");
+    assert!(f.bin().is_empty());
+}
+
+/// A server that turns the Trash search away is a refusal (counted, retried), not proof that the
+/// message left Trash.
+#[test]
+fn a_refused_trash_search_is_a_refusal_not_gone_from_trash() {
+    let server = MockImap::start(scenario(&[1], &[]));
+    let f = setup(&server);
+    f.sync(None);
+    let seq = f.delete("INBOX", &[1]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let id = f.bin()[0]["id"].as_str().unwrap().to_string();
+
+    // The recover looks in the Inbox first (1st search), then in Trash (2nd): that one is refused.
+    arm(&server, Trigger::nth_with("SEARCH", "MESSAGE-ID", 2), Action::RefuseWith("NO".into(), "Search refused".into()));
+    let seq = f.recover_seq(&id);
+    let retry = f.events.retrying(seq);
+    assert_eq!(retry["reason"], "REFUSED", "{retry}");
+    let r = f.events.final_result(seq);
+    assert_eq!(r["outcome"], "done", "the retry moves it back: {r}");
+    assert_eq!((copies(&server, "INBOX", 1), copies(&server, "Trash", 1)), (1, 0));
+}
+
+/// The server as it is now, with no faults.
+fn heal(server: &MockImap) {
+    let mut sc = Scenario::new();
+    sc.state = server.state();
+    server.reset_scenario(sc);
+}
+
+/// A restore still owed (the server keeps failing it) keeps its row past retention: the sweep
+/// purging it would turn the recover into "gone" with the only copy deleted.
+#[test]
+fn retention_never_purges_a_row_a_queued_restore_needs() {
+    let server = MockImap::start(scenario(&[], &[5]));
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    let seq = f.delete("Trash", &[5]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let id = f.bin()[0]["id"].as_str().unwrap().to_string();
+
+    arm(&server, Trigger::on("APPEND"), Action::DropConnection);
+    let seq = f.recover_seq(&id);
+    f.events.retrying(seq);
+    f.app_db().execute("UPDATE deleted_messages SET deleted_at = ?2 WHERE id = ?1", (&id, now_ms() - 2 * DAY)).unwrap();
+    assert_eq!(f.bin().len(), 1, "a list's purge step leaves the owed row");
+    assert!(f.eml(&id).exists());
+
+    heal(&server);
+    f.engine.rpc("mobile.actions.retry", json!({})).unwrap();
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert_eq!(copies(&server, "Trash", 5), 1, "recovered");
+}
+
+/// A permanent delete that waits (offline, failing) past the retention keeps its copy while it
+/// waits, and once it lands its retention counts from the landing, not from the capture.
+#[test]
+fn a_late_landing_delete_counts_its_retention_from_the_landing() {
+    let server = MockImap::start(scenario(&[], &[5]).fault(Trigger::on("STORE"), Action::DropConnection));
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    let seq = f.delete("Trash", &[5]);
+    f.events.retrying(seq);
+    let id = f.bin()[0]["id"].as_str().unwrap().to_string();
+    f.app_db().execute("UPDATE deleted_messages SET deleted_at = ?2 WHERE id = ?1", (&id, now_ms() - 2 * DAY)).unwrap();
+    assert_eq!(f.bin().len(), 1, "the owed delete's capture stays");
+
+    heal(&server);
+    f.engine.rpc("mobile.actions.retry", json!({})).unwrap();
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert_eq!(copies(&server, "Trash", 5), 0);
+    let bin = f.bin();
+    assert_eq!(bin.len(), 1, "kept for its retention after the landing: {bin:?}");
+    assert!(bin[0]["deletedAt"].as_i64().unwrap() > now_ms() - DAY);
+    assert!(f.eml(&id).exists());
+}
+
+/// Discard takes only bin rows: an id that is not one (a path) removes nothing anywhere.
+#[test]
+fn discard_of_an_id_that_is_not_a_bin_row_removes_nothing() {
+    let server = MockImap::start(scenario(&[], &[]));
+    let f = setup(&server);
+    let outside = f.tmp.path().join("core").join("x.eml");
+    std::fs::write(&outside, b"not the bin's").unwrap();
+    let r = f.engine.rpc("mobile.deleted.discard", json!({ "ids": ["../core/x"] })).unwrap();
+    assert_eq!(r["removed"], 0, "{r}");
+    assert!(outside.exists(), "a file outside the bin survives");
+    let r = f.engine.rpc("mobile.deleted.discard", json!({ "ids": ["00000000-0000-4000-8000-000000000000"] })).unwrap();
+    assert_eq!(r["removed"], 0, "{r}");
+}
+
+/// The first `mobile.action.result` for `seq`, whatever it says.
+fn first_result(f: &Fixture, seq: i64) -> Value {
+    f.events.wait(0, &format!("action.result for {seq}"), |n, v| n == "mobile.action.result" && v["seq"] == seq)
+}
+
+/// A permanent delete whose download the server refuses (not a passing failure) is counted like
+/// any refusal and dropped at the limit: the message stays on the server, the bin keeps nothing,
+/// and the account's later actions are not held behind it forever.
+#[test]
+fn a_refused_download_drops_the_permanent_delete_and_frees_the_journal() {
+    let server = MockImap::start(scenario(&[1], &[5]));
+    let f = setup(&server);
+    f.sync(None);
+    f.sync(Some("Trash"));
+    arm(&server, Trigger::with("FETCH", "BODY.PEEK[]"), Action::RefuseWith("NO".into(), "Message unreadable".into()));
+    let seq = f.delete("Trash", &[5]);
+    let flag = f.engine.rpc("mobile.actions.apply", json!({ "accountId": f.account, "folder": "INBOX", "uids": [1], "kind": "flag" })).unwrap()["queued"].as_i64().unwrap();
+    let r = f.events.final_result(seq);
+    assert_eq!((r["outcome"].clone(), r["reason"].clone()), (json!("dropped"), json!("REFUSED")), "{r}");
+    assert_eq!(copies(&server, "Trash", 5), 1, "never deleted without its copy");
+    assert!(f.bin().is_empty());
+    assert_eq!(f.events.final_result(flag)["outcome"], "done", "the next action went");
+}
+
+/// A move to Trash goes ahead when its bin row cannot be written (here: another writer holds
+/// `app.db`): Trash holds the message, the bin is only a convenience there.
+#[test]
+fn a_move_to_trash_goes_ahead_without_its_bin_row() {
+    let server = MockImap::start(scenario(&[1], &[]));
+    let f = setup(&server);
+    f.sync(None);
+    let blocker = f.app_db();
+    blocker.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let seq = f.delete("INBOX", &[1]);
+    let r = f.events.final_result(seq);
+    blocker.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(r["outcome"], "done", "{r}");
+    assert_eq!((copies(&server, "INBOX", 1), copies(&server, "Trash", 1)), (0, 1));
+}
+
+/// A permanent delete retried after a failure on the wire downloads nothing again: the copies of
+/// its messages are already kept.
+#[test]
+fn a_retried_permanent_delete_does_not_download_again() {
+    let server = MockImap::start(scenario(&[], &[5, 6]));
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    arm(&server, Trigger::nth("STORE", 1), Action::DropConnection);
+    let seq = f.delete("Trash", &[5, 6]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert_eq!(server.count_commands("BODY.PEEK[]"), 2, "each message downloaded once");
+    assert_eq!(f.bin().len(), 2);
+}
+
+/// On a constrained network (Low Data Mode, data saver) a permanent delete does not download: it
+/// waits, queued, and goes once the network allows downloads again.
+#[test]
+fn a_permanent_delete_waits_for_a_network_that_allows_downloads() {
+    let server = MockImap::start(scenario(&[], &[5]));
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    f.engine.rpc("mobile.network.state", json!({ "constrained": true, "expensive": true })).unwrap();
+    let seq = f.delete("Trash", &[5]);
+    let r = first_result(&f, seq);
+    assert_eq!((r["outcome"].clone(), r["reason"].clone()), (json!("retrying"), json!("DOWNLOAD_HELD")), "{r}");
+    assert_eq!(server.count_commands("BODY.PEEK[]"), 0, "nothing downloaded");
+    assert_eq!(copies(&server, "Trash", 5), 1);
+
+    f.engine.rpc("mobile.network.state", json!({ "constrained": false, "expensive": false })).unwrap();
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    assert_eq!(copies(&server, "Trash", 5), 0);
+    assert_eq!(f.bin().len(), 1);
+}
+
+/// A uid the server reused for another message after a UIDVALIDITY change never inherits the old
+/// message's kept bytes: the new delete keeps its own copy.
+#[test]
+fn a_reused_uid_after_a_new_uidvalidity_keeps_its_own_copy() {
+    let server = MockImap::start(bare_scenario());
+    let f = setup(&server);
+    f.sync(Some("Trash"));
+    let seq = f.delete("Trash", &[5]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    server.mutate(|s| {
+        let t = s.find_mut("Trash").unwrap();
+        t.messages.clear();
+        t.uid_validity += 1;
+        t.add(Message::new(5, raw_bare(5, "another5").replace("Sender 5", "Someone Else")).with_internal_ms(at(6)));
+    });
+    f.sync(Some("Trash"));
+    let seq = f.delete("Trash", &[5]);
+    assert_eq!(f.events.final_result(seq)["outcome"], "done");
+    let bin = f.bin();
+    assert_eq!(bin.len(), 2, "one row per message: {bin:?}");
+    let new = bin.iter().find(|r| r["row"]["subject"] == "another5").unwrap_or_else(|| panic!("no row for the new message: {bin:?}"));
+    let kept = std::fs::read(f.eml(new["id"].as_str().unwrap())).unwrap();
+    assert!(String::from_utf8_lossy(&kept).contains("Subject: another5"), "its own bytes");
+}

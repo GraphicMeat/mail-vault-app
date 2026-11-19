@@ -13,14 +13,18 @@
 //!   sender, date), its flags, its Message-ID and where Trash is. As on desktop, a message with no
 //!   Message-ID is not recorded, since nothing could find it in Trash again.
 //! - A permanent delete (in Trash, or Graph's Deleted Items) downloads the whole message first
-//!   (`Backend::raw`) and keeps it as `<data_dir>/deleted/<id>.eml`. A download that fails is a
-//!   failure of the delete: retried with the journal's backoff, never sent without its copy (the
-//!   desktop refuses such a delete for the same reason). Since the journal runs in order per
-//!   account, a message that never downloads holds that account's later actions back until it
-//!   does, or until the user cancels the delete in Settings > Unfinished server actions.
+//!   (`Backend::raw`) and keeps it as `<data_dir>/deleted/<id>.eml`, written durably (fsync)
+//!   outside the `app.db` lock. A download that fails for a passing reason is a failure of the
+//!   delete: retried with the journal's backoff, never sent without its copy (the desktop refuses
+//!   such a delete for the same reason). One the server refuses (or a copy the disk refuses) is a
+//!   refusal: counted, and at the limit the delete drops and the message stays on the server, so
+//!   it never holds the account's later actions back for good. A retry downloads nothing it kept
+//!   already. On a network the phone's background downloads stay off (data saver / Low Data Mode,
+//!   or the account's daily cap) the delete waits, queued with `DOWNLOAD_HELD`, and goes when the
+//!   network allows downloads again.
 //!
-//! The bin rows are written (file first, then row) and named in the journal row (`arg.bin`)
-//! before anything goes on the wire. A delete that does not happen (dropped, refused for good,
+//! The bin rows are written (file first, then row) and each named in the journal row (`arg.bin`)
+//! as it is made, before anything goes on the wire. A delete that does not happen (dropped, refused for good,
 //! cancelled, or its folder gone) takes them back out, except a permanent delete that went on the
 //! wire, which may have landed with its reply lost: its copy stays.
 //!
@@ -44,10 +48,12 @@
 //! - `mobile.deleted.recover {ids}` -> `{queued: [{id, seq}], failed: [{id, error}]}`, `error` a
 //!   catalog key.
 //! - `mobile.deleted.discard {ids}` or `{all: true}` -> `{removed}`: gone for good, file and row.
+//!   An id that is not a bin row's is skipped.
 //!
 //! Retention is desktop's `deletedRetentionDays` (a preference, 1 to 30 days, 1 by default),
-//! enforced by [`start`]'s sweep: a background thread at background priority that purges
-//! [`SWEEP_UNIT`] rows at a time, a minute after launch and then hourly. Removing an account
+//! counted from when the delete landed on the server, and enforced by [`start`]'s sweep: a
+//! background thread at background priority that purges [`SWEEP_UNIT`] rows at a time, a minute
+//! after launch and then hourly. A row a queued delete or restore still names is never purged. Removing an account
 //! removes its rows and files ([`forget_account`]). Nothing is Premium, as on desktop.
 
 use crate::backend::{Backend, DeletePlan, Flags, FolderRow, Header};
@@ -139,9 +145,40 @@ fn local_rows(shared: &Shared, account: &str, folder: &str, uids: &[u32]) -> Res
     })?)
 }
 
+/// What [`capture`] came to.
+pub(crate) enum Captured {
+    /// The bin rows of the delete are made (each named to `record` as it was).
+    Ready,
+    /// The server (or the disk) refused what the capture needs, not for a passing reason: the
+    /// download of a permanent delete answered no, or its copy could not be written. Counted
+    /// toward dropping the delete, which then leaves the message on the server.
+    Refused(String),
+    /// A permanent delete would download on a network the phone's background downloads stay off
+    /// (data saver, or the account's daily cap): it waits, queued.
+    Held,
+}
+
+/// Why a permanent delete waits ([`Captured::Held`]), as the journal row's `last_error`.
+pub(crate) const DOWNLOAD_HELD: &str = "DOWNLOAD_HELD";
+
+/// Whether a permanent delete's download waits: the network is constrained (Low Data Mode, data
+/// saver) or the account's background download cap is reached, as for every other download the
+/// phone makes without the user waiting on it.
+fn downloads_held(shared: &Shared, account: &str) -> bool {
+    !crate::offline::downloads_allowed(shared) || crate::usage::background_capped(shared, account)
+}
+
 /// The bin rows for a delete of `uids` about to be sent with `plan` (see the module): one per
-/// message, made now or found from an earlier attempt. A permanent delete downloads each message
-/// first; one the server no longer has is skipped (the delete finds it gone too).
+/// message, made now or found from an earlier attempt. Each is named to `record` (the journal row)
+/// as soon as it exists, so a later failure never makes an earlier message download again.
+///
+/// A row is this message's when it has the same place (account, folder, uid) and the same list
+/// row, generation (`uidValidity`) included: a uid the server reused for another message after a
+/// UIDVALIDITY change never inherits the old message's bytes. A permanent delete whose row holds
+/// the bytes already downloads nothing; otherwise it downloads the message (one the server no
+/// longer has is skipped: the delete finds it gone too), writes the copy durably outside the
+/// `app.db` lock, then the row under it. A move to Trash whose row cannot be written goes ahead
+/// without it (logged): the bin is a convenience there, Trash holds the message.
 pub(crate) fn capture(
     shared: &Shared,
     backend: &mut dyn Backend,
@@ -149,44 +186,90 @@ pub(crate) fn capture(
     folder: &FolderRow,
     uids: &[u32],
     plan: &DeletePlan,
-) -> Result<Vec<String>, Fail> {
+    record: &mut dyn FnMut(&str) -> Result<(), Fail>,
+) -> Result<Captured, Fail> {
     let Some(data) = dir(shared) else {
-        return Ok(Vec::new());
+        return Ok(Captured::Ready);
     };
-    let mut local = local_rows(shared, account, &folder.path, uids)?;
-    let mut ids = Vec::new();
+    let mut local = match local_rows(shared, account, &folder.path, uids) {
+        Ok(local) => local,
+        Err(Fail::Code(_, why)) if !plan.permanent => {
+            shared.log(&format!("[bin] {account}: not recorded (reading the rows: {why})"));
+            return Ok(Captured::Ready);
+        }
+        Err(e) => return Err(e),
+    };
     for uid in uids {
         crate::sync::not_closing(shared)?;
-        let Local { message_id, flags, row } =
+        let Local { message_id, flags, mut row } =
             local.remove(uid).unwrap_or(Local { message_id: None, flags: Vec::new(), row: json!({}) });
-        let raw = if plan.permanent {
-            match backend.raw(folder, *uid)? {
-                Some(raw) => Some(raw),
-                None => continue,
+        row["uidValidity"] = json!(folder.uid_validity);
+        let kept = match shared.app_db.with(|c| store::captures_of(c, &data, account, &folder.path, *uid)) {
+            Ok(rows) => rows.into_iter().find(|d| d.row == row),
+            Err(e) if plan.permanent => return Ok(Captured::Refused(format!("deleted bin: {e}"))),
+            Err(e) => {
+                shared.log(&format!("[bin] {account}: not recorded: {e}"));
+                continue;
             }
-        } else {
-            None
         };
-        let message_id = message_id.or_else(|| raw.as_deref().and_then(mailvault_core::maildir::message_id_key));
-        // A byte-less row is found again in Trash by its Message-ID only.
-        if raw.is_none() && message_id.is_none() {
+        if !plan.permanent {
+            let id = match kept {
+                Some(d) => d.id,
+                // A byte-less row is found again in Trash by its Message-ID only.
+                None if message_id.is_none() => continue,
+                None => {
+                    let id = store::new_id();
+                    let c = Capture { account_id: account, mailbox: &folder.path, uid: *uid, message_id: message_id.as_deref(), flags: &flags, row: &row, deleted_at: now_ms() };
+                    let made = shared.app_db.with(|conn| {
+                        store::insert_captured(conn, &id, &c, false)?;
+                        store::set_trash(conn, &id, plan.trash.as_deref(), None)
+                    });
+                    if let Err(e) = made {
+                        shared.log(&format!("[bin] {account}: not recorded: {e}"));
+                        continue;
+                    }
+                    id
+                }
+            };
+            record(&id)?;
             continue;
         }
+        let (id, upgrade) = match kept {
+            // Kept by an earlier attempt: nothing to download again.
+            Some(d) if d.has_eml => {
+                record(&d.id)?;
+                continue;
+            }
+            Some(d) => (d.id, true),
+            None => (store::new_id(), false),
+        };
+        if downloads_held(shared, account) {
+            return Ok(Captured::Held);
+        }
+        let raw = match backend.raw(folder, *uid) {
+            Ok(Some(raw)) => raw,
+            Ok(None) => continue,
+            // The server answered no (not the network, the sign-in or a timeout).
+            Err(Fail::Code(crate::accounts::Code::Invalid, why)) => return Ok(Captured::Refused(why)),
+            Err(f) => return Err(f),
+        };
+        let message_id = message_id.or_else(|| mailvault_core::maildir::message_id_key(&raw));
+        // File first (durable: it must outlive a power loss before the server delete), outside the
+        // lock; then the row.
+        if let Err(e) = store::write_eml_durable(&data, &id, &raw) {
+            return Ok(Captured::Refused(e));
+        }
+        drop(raw);
         let c = Capture { account_id: account, mailbox: &folder.path, uid: *uid, message_id: message_id.as_deref(), flags: &flags, row: &row, deleted_at: now_ms() };
-        let trash = if plan.permanent { None } else { plan.trash.as_deref() };
-        let id = shared
-            .app_db
-            .with(|conn| {
-                let (id, _) = store::capture(conn, &data, &c, raw.as_deref())?;
-                if trash.is_some() {
-                    store::set_trash(conn, &id, trash, None)?;
-                }
-                Ok(id)
-            })
-            .map_err(|e| Fail::Code(crate::accounts::Code::Invalid, format!("deleted bin: {e}")))?;
-        ids.push(id);
+        if let Err(e) = shared.app_db.with(|conn| store::insert_captured(conn, &id, &c, true)) {
+            if !upgrade {
+                store::remove_eml(&data, &id);
+            }
+            return Ok(Captured::Refused(format!("deleted bin: {e}")));
+        }
+        record(&id)?;
     }
-    Ok(ids)
+    Ok(Captured::Ready)
 }
 
 /// Whether `found` (a message a Message-ID lookup turned up) is the message bin row `row` kept,
@@ -271,11 +354,48 @@ fn sweep_ids(shared: &Shared, next: impl Fn(&rusqlite::Connection) -> Result<Vec
     }
 }
 
-/// One step of the retention sweep: at most [`SWEEP_UNIT`] expired rows. How many went.
+/// The bin rows the journal still needs, whatever their age: the captures of a queued delete (it
+/// may yet land, and then its copy is the only one) and the row of a queued restore.
+fn owed(shared: &Shared) -> Result<Vec<String>, String> {
+    shared
+        .read(|c| {
+        let mut st = c.prepare_cached(
+            "SELECT j.value FROM pending_actions p, json_each(p.arg, '$.bin') j WHERE p.kind = 'delete' AND j.type = 'text'
+             UNION
+             SELECT json_extract(arg, '$.binId') FROM pending_actions WHERE kind = ?1 AND json_extract(arg, '$.binId') IS NOT NULL",
+        )?;
+        let ids = st.query_map([RESTORE], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// A delete landed on the server: its rows count their retention from now, not from the capture
+/// (which may be days earlier for a delete that waited offline).
+pub(crate) fn landed(shared: &Shared, ids: &[String]) {
+    if ids.is_empty() {
+        return;
+    }
+    let at = now_ms();
+    if let Err(e) = shared.app_db.with(|c| ids.iter().try_for_each(|id| store::set_deleted_at(c, id, at))) {
+        shared.log(&format!("[bin] stamping a landed delete: {e}"));
+    }
+}
+
+/// One step of the retention sweep: at most [`SWEEP_UNIT`] expired rows, never one the journal
+/// still needs ([`owed`]). How many went.
 pub(crate) fn purge_step(shared: &Shared) -> usize {
     let Some(data) = dir(shared) else { return 0 };
     let days = retention_days(shared);
-    match shared.app_db.with(|c| store::purge_expired_some(c, &data, now_ms(), days, SWEEP_UNIT)) {
+    let keep = match owed(shared) {
+        Ok(ids) => ids,
+        Err(e) => {
+            // Not knowing what is owed purges nothing.
+            shared.log(&format!("[bin] retention: reading the journal: {e}"));
+            return 0;
+        }
+    };
+    match shared.app_db.with(|c| store::purge_expired_some(c, &data, now_ms(), days, SWEEP_UNIT, &keep)) {
         Ok(n) => n,
         Err(e) => {
             shared.log(&format!("[bin] retention: {e}"));
@@ -360,6 +480,11 @@ struct IdsParams {
     ids: Vec<String>,
     #[serde(default)]
     all: bool,
+}
+
+/// What a bin id is: core's `Uuid::new_v4()` text (36 characters, hex digits and dashes).
+pub(crate) fn is_bin_id(id: &str) -> bool {
+    id.len() == 36 && id.bytes().enumerate().all(|(i, b)| if matches!(i, 8 | 13 | 18 | 23) { b == b'-' } else { b.is_ascii_hexdigit() })
 }
 
 fn ids_of(p: &IdsParams) -> Result<(), RpcError> {
@@ -462,10 +587,20 @@ pub(crate) fn discard(engine: &Engine, params: Value) -> Result<Value, RpcError>
             }
         }
     } else {
-        for id in &p.ids {
-            let had = shared.app_db.with(|c| store::get(c, id)).map_err(internal)?.is_some();
-            shared.app_db.with(|c| store::remove(c, &data, id)).map_err(internal)?;
-            removed += usize::from(had);
+        // Only a real row's id: an id names a file too, and anything else could name one
+        // outside the bin.
+        for id in p.ids.iter().filter(|id| is_bin_id(id)) {
+            let gone = shared
+                .app_db
+                .with(|c| {
+                    if store::get(c, id)?.is_none() {
+                        return Ok(false);
+                    }
+                    store::remove(c, &data, id)?;
+                    Ok(true)
+                })
+                .map_err(internal)?;
+            removed += usize::from(gone);
         }
     }
     Ok(json!({ "removed": removed }))

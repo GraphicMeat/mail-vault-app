@@ -384,6 +384,15 @@ pub(crate) trait Backend: Send {
     fn find_message_id(&mut self, _folder: &str, _message_id: &str) -> Result<Found, Fail> {
         Err(Fail::unsupported("a Message-ID lookup"))
     }
+    /// The messages in `folder` that may be an upload of a message with no Message-ID whose reply
+    /// was lost: from `from` (an address), dated within about a day of `date_secs` (the upload's
+    /// date). Only candidates, as [`Backend::find_message_id`]'s are: the caller checks each with
+    /// [`Backend::found_header`] and `bin::same_message`. `None`: this backend cannot look that
+    /// way (Graph, whose dedup is the staged upload), and the caller uploads again: a duplicate
+    /// beats a loss.
+    fn find_by_sender(&mut self, _folder: &str, _from: &str, _date_secs: i64) -> Result<Option<Found>, Fail> {
+        Ok(None)
+    }
     /// The headers of a message [`Backend::find_message_id`] found in `folder`; `None` when it is
     /// gone. Its uid is meaningless.
     fn found_header(&mut self, _folder: &str, _handle: &str) -> Result<Option<Header>, Fail> {

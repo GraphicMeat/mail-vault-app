@@ -47,6 +47,35 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
+/// [`write_atomic`] that survives a power loss too: the temp file's bytes reach the disk before
+/// the rename, and the rename reaches it before this returns (the directory is synced on unix;
+/// Windows has no directory handle to sync, and its rename is journaled by NTFS). For a copy that
+/// must exist before something irreversible happens (the phone's deleted-mail bin, written
+/// before the server delete); every other caller keeps [`write_atomic`], which is faster.
+pub fn write_durable(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "write_durable: path has no file name")
+    })?;
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = path.with_file_name(temp_name(name, seq | 1 << 63));
+    let written = (|| {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()
+    })();
+    if let Err(e) = written.and_then(|()| fs::rename(&tmp, path)) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        fs::File::open(if dir.as_os_str().is_empty() { Path::new(".") } else { dir })?.sync_all()?;
+    }
+    Ok(())
+}
+
 /// Mark a file written from an email as downloaded from the Internet (the
 /// Mark-of-the-Web), the way browsers and Outlook do: an NTFS alternate data
 /// stream `Zone.Identifier` with `ZoneId=3`. Without it, opening a cached
@@ -149,6 +178,20 @@ fn temp_name(name: &std::ffi::OsStr, seq: u64) -> std::ffi::OsString {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_durable_write_replaces_the_file_and_leaves_no_temp() {
+        let dir = std::env::temp_dir().join(format!("mv-fsx-durable-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.eml");
+        write_durable(&path, b"first").unwrap();
+        write_durable(&path, b"second").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"second");
+        let names: Vec<_> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("a.eml")], "no temp left behind");
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_temp_name_never_parses_as_a_maildir_uid() {

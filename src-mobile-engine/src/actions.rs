@@ -623,6 +623,13 @@ impl Replay {
         self.queue.cv.notify_all();
     }
 
+    /// Every account tries again now, its backoff forgotten: the network changed (a permanent
+    /// delete held for the network may go, and a failure of the old network says nothing).
+    pub(crate) fn retry_all(&self, shared: &Arc<Shared>) {
+        lock(&self.queue.state).retry.clear();
+        self.wake(shared, None);
+    }
+
     /// Asks the thread to exit before its next action. Does not wait for it.
     pub(crate) fn stop(&self) {
         lock(&self.queue.state).stop = true;
@@ -827,6 +834,10 @@ enum Outcome {
     Refused(String),
     /// Done for `done` (moved, with `remap`) and `gone`; failed for the rest with the failure.
     Partial { done: Vec<u32>, gone: Vec<u32>, remap: Remap, error: (Code, String) },
+    /// Not tried now, and not a failure: the action waits (queued, `retrying` with this code as
+    /// its `last_error`) for a condition on the phone (a permanent delete's download on a
+    /// network downloads stay off).
+    Held(&'static str),
 }
 
 /// Replays the account's actions until the journal is empty (`Ok(true)`) or the head was refused
@@ -850,11 +861,26 @@ fn drain(shared: &Shared, backend: &mut dyn Backend, account: &str) -> Result<bo
             }
             continue;
         }
+        if let Outcome::Held(code) = outcome {
+            hold(shared, account, &a, code)?;
+            return Ok(false);
+        }
         if let Outcome::Partial { done, gone, remap, error } = outcome {
             record_partial(shared, account, &a, &done, &gone, &remap)?;
             return Err(Fail::Code(error.0, error.1));
         }
+        // A delete that landed: its bin rows (the stored arg names them; the capture wrote them in
+        // this attempt or an earlier one) count their retention from now.
+        let landed = if a.kind == Some(Kind::Delete) && matches!(outcome, Outcome::Done { .. }) {
+            sync::write_for(shared, account, |c| {
+                let text = c.query_row("SELECT arg FROM pending_actions WHERE seq = ?1", [a.seq], |r| r.get::<_, Option<String>>(0)).optional()?;
+                Ok(text.map(|t| Arg::read(t).bin).unwrap_or_default())
+            })?
+        } else {
+            Vec::new()
+        };
         record(shared, account, &a, outcome)?;
+        crate::bin::landed(shared, &landed);
         // Back on the server: the bin row goes after the journal row, so a crash between leaves a
         // row whose recover finds the message there already.
         if let (true, Some(id)) = (restored, a.arg.bin_id.as_deref()) {
@@ -897,6 +923,19 @@ fn refuse(shared: &Shared, account: &str, a: &Journaled, why: &str) -> Result<bo
     Ok(false)
 }
 
+/// Marks the head `retrying` with `code`, not counted as a failure or a refusal: it waits for the
+/// phone (`Outcome::Held`), and the account backs off as after a refusal.
+fn hold(shared: &Shared, account: &str, a: &Journaled, code: &str) -> Result<(), Fail> {
+    let marked = sync::write_for(shared, account, |c| {
+        c.execute("UPDATE pending_actions SET state = 'retrying', last_error = ?2 WHERE seq = ?1", (a.seq, code))
+    })?;
+    if marked > 0 {
+        shared.log(&format!("[actions] {account} seq {}: {code}", a.seq));
+        emit_result(shared, account, a.seq, "retrying", Some(code));
+    }
+    Ok(())
+}
+
 /// Records, before a move or delete goes on the wire, that it may have happened.
 fn mark_sent(shared: &Shared, account: &str, a: &Journaled) -> Result<(), Fail> {
     if a.arg.sent {
@@ -916,7 +955,10 @@ fn run_action(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jou
     let target = a.arg.target.as_deref();
     // A delete: into the bin first, then on the wire with the plan the bin captured for.
     let (a, plan) = if kind == Kind::Delete {
-        let (a, plan) = capture_delete(shared, backend, account, a, &folder)?;
+        let (a, plan) = match capture_delete(shared, backend, account, a, &folder)? {
+            Ok(ready) => ready,
+            Err(outcome) => return Ok(outcome),
+        };
         (std::borrow::Cow::Owned(a), Some(plan))
     } else {
         (std::borrow::Cow::Borrowed(a), None)
@@ -947,39 +989,57 @@ fn run_action(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jou
 }
 
 /// The bin's side of a delete (`bin.rs`): what the delete will do (its plan), the bin rows for its
-/// messages (the bytes too when it is permanent), and those rows recorded in the journal row, all
-/// before anything goes on the wire. A crash after the capture leaves rows the replay finds again
-/// (a capture is idempotent) and the delete still journaled; a delete that does not happen takes
-/// its rows back out ([`release_captures`]). A failed download is a failure, retried with backoff:
-/// a permanent delete never goes out without its copy.
-fn capture_delete(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Journaled, folder: &FolderRow) -> Result<(Journaled, DeletePlan), Fail> {
+/// messages (the bytes too when it is permanent), each recorded in the journal row as it is made,
+/// all before anything goes on the wire. A crash after the capture leaves rows the replay finds
+/// again (a capture is idempotent) and the delete still journaled; a delete that does not happen
+/// takes its rows back out ([`release_captures`]). A download that fails for a passing reason is a
+/// failure, retried with backoff: a permanent delete never goes out without its copy. One the
+/// server (or the disk) refuses is [`Outcome::Refused`], counted toward dropping the delete; one
+/// the network may not make now is [`Outcome::Held`]. `Err(outcome)` answers the attempt.
+fn capture_delete(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Journaled, folder: &FolderRow) -> Result<Result<(Journaled, DeletePlan), Outcome>, Fail> {
     let plan = backend.delete_plan(folder)?;
-    let ids = crate::bin::capture(shared, backend, account, folder, &a.uids, &plan)?;
-    let mut a = a.clone();
-    // The stored arg: an earlier attempt may have recorded rows (and `sent`).
-    let stored = sync::write_for(shared, account, |c| {
-        let Some(text) = c.query_row("SELECT arg FROM pending_actions WHERE seq = ?1", [a.seq], |r| r.get::<_, Option<String>>(0)).optional()? else {
-            return Ok(None);
-        };
-        let mut arg = Arg::read(text);
-        for id in &ids {
-            if !arg.bin.contains(id) {
-                arg.bin.push(id.clone());
+    // Names one bin row in the stored arg (an earlier attempt may have recorded rows, and `sent`).
+    let note = |id: Option<&str>| -> Result<Option<Arg>, Fail> {
+        sync::write_for(shared, account, |c| {
+            let Some(text) = c.query_row("SELECT arg FROM pending_actions WHERE seq = ?1", [a.seq], |r| r.get::<_, Option<String>>(0)).optional()? else {
+                return Ok(None);
+            };
+            let mut arg = Arg::read(text);
+            if let Some(id) = id.filter(|id| !arg.bin.iter().any(|b| b == id)) {
+                arg.bin.push(id.to_string());
+            }
+            arg.permanent = plan.permanent;
+            c.execute("UPDATE pending_actions SET arg = ?2 WHERE seq = ?1", (a.seq, serde_json::to_string(&arg).unwrap_or_default()))?;
+            Ok(Some(arg))
+        })
+    };
+    let mut made: Vec<String> = Vec::new();
+    let mut record = |id: &str| -> Result<(), Fail> {
+        made.push(id.to_string());
+        match note(Some(id))? {
+            Some(_) => Ok(()),
+            // Gone meanwhile (sync dropped it, or a discard): what was captured goes too.
+            None => {
+                crate::bin::drop_rows(shared, &made);
+                Err(Fail::Gone)
             }
         }
-        arg.permanent = plan.permanent;
-        c.execute("UPDATE pending_actions SET arg = ?2 WHERE seq = ?1", (a.seq, serde_json::to_string(&arg).unwrap_or_default()))?;
-        Ok(Some(arg))
-    })?;
-    match stored {
+    };
+    let captured = crate::bin::capture(shared, backend, account, folder, &a.uids, &plan, &mut record)?;
+    match captured {
+        crate::bin::Captured::Ready => {}
+        crate::bin::Captured::Refused(why) => return Ok(Err(Outcome::Refused(why))),
+        crate::bin::Captured::Held => return Ok(Err(Outcome::Held(crate::bin::DOWNLOAD_HELD))),
+    }
+    let mut a = a.clone();
+    match note(None)? {
         Some(arg) => a.arg = arg,
-        // Gone meanwhile (sync dropped it, or a discard): what was captured goes too.
         None => {
-            crate::bin::drop_rows(shared, &ids);
+            crate::bin::drop_rows(shared, &made);
             return Err(Fail::Gone);
         }
     }
-    Ok((a, plan))
+    Ok(Ok((a, plan)))
 }
 
 /// A delete that did not happen gives its bin rows back: every row of a move to Trash, and of a
@@ -998,8 +1058,9 @@ fn release_captures(shared: &Shared, arg: &Arg) {
 /// left and the Trash the bin recorded are looked in. With a Message-ID, a folder that holds the
 /// message already is done. Then a byte-less row is moved back out of Trash; with no candidate
 /// there that is the message, [`Reason::GoneFromTrash`]. A row with bytes is uploaded; without a
-/// Message-ID nothing can tell an upload that landed with its reply lost, so a second attempt
-/// after one went on the wire takes it as done rather than risk a duplicate.
+/// Message-ID, a second attempt after one went on the wire first looks for the upload by sender
+/// and date (`Backend::find_by_sender`, checked by `same_message`), and uploads again when it is
+/// not found or cannot be looked for: never "done" without a confirmed copy on the server.
 fn run_restore(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Journaled) -> Result<Outcome, Fail> {
     let done = Outcome::Done { gone: Vec::new(), remap: None, kept: Vec::new() };
     let Some(row) = a.arg.bin_id.as_deref().and_then(|id| crate::bin::get(shared, id)) else {
@@ -1059,6 +1120,8 @@ fn run_restore(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jo
         };
         let handle = match verified(backend, &trash, mid)? {
             Ok(Some(h)) => h,
+            // The server turned the search away: counted and retried, never "gone from Trash".
+            Err(refused @ Outcome::Refused(_)) => return Ok(refused),
             Ok(None) | Err(_) => return Ok(Outcome::Dropped { reason: Reason::GoneFromTrash, uids_gone: false }),
         };
         mark_sent(shared, account, a)?;
@@ -1067,8 +1130,33 @@ fn run_restore(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jo
             Err(f) => refusal(f),
         };
     };
-    if mid.is_none() && a.arg.sent {
-        return Ok(done);
+    // An upload went on the wire before and its reply was lost: without a Message-ID the message
+    // is looked for by its sender and date (where the backend can), and checked whole by
+    // `same_message`. Not found (or no way to look) uploads again: a duplicate beats a loss, and
+    // the bin row goes only once an upload is confirmed.
+    if let (None, true) = (mid, a.arg.sent) {
+        let from = row.row["from"]["address"].as_str().unwrap_or("").to_string();
+        let date_secs = mailvault_core::import_rehome::head_of(&raw).date_secs.or_else(|| row.row["date"].as_i64().map(|d| d.div_euclid(1000)));
+        let candidates = match date_secs {
+            Some(secs) if !from.trim().is_empty() => match backend.find_by_sender(&row.mailbox, &from, secs) {
+                Ok(found) => found,
+                Err(f) => return refusal(f),
+            },
+            _ => None,
+        };
+        match candidates {
+            Some(Found::FolderGone) => return Ok(Outcome::Dropped { reason: Reason::FolderGone, uids_gone: false }),
+            Some(Found::Here(handles)) => {
+                for h in handles {
+                    match backend.found_header(&row.mailbox, &h) {
+                        Ok(Some(header)) if crate::bin::same_message(&row, Some(&raw), &header) => return Ok(done),
+                        Ok(_) => {}
+                        Err(f) => return refusal(f),
+                    }
+                }
+            }
+            Some(Found::Absent) | None => {}
+        }
     }
     mark_sent(shared, account, a)?;
     let mut on_staged = |id: &str| -> Result<(), Fail> {
@@ -1163,6 +1251,7 @@ fn record(shared: &Shared, account: &str, a: &Journaled, outcome: Outcome) -> Re
     match outcome {
         // Counted by `refuse`, which records the drop at the limit.
         Outcome::Refused(why) => refuse(shared, account, a, &why).map(|_| ()),
+        Outcome::Held(code) => hold(shared, account, a, code),
         Outcome::Partial { done, gone, remap, .. } => record_partial(shared, account, a, &done, &gone, &remap),
         Outcome::Done { gone, remap, kept } => {
             let gen = shared.list_gen(account, &a.folder)? + 1;

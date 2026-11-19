@@ -21,6 +21,10 @@ use rusqlite::OptionalExtension;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
+use mailvault_core::clock::DAY_MS;
+/// Most candidates one lookup by sender hands back (newest first).
+const FIND_CAP: usize = 50;
+
 /// What signing in to an account takes: core's settings and the account's secrets (kept only to
 /// scrub them out of an error before that error is logged). The one place the engine builds a
 /// session's settings from an account row and its stored [`Credential`]; `Fail::Gone` when the
@@ -583,6 +587,30 @@ impl Backend for ImapBackend {
 
     fn find_message_id(&mut self, folder: &str, message_id: &str) -> Result<Found, Fail> {
         self.step(async |session| find_in(session, folder, message_id).await)
+    }
+
+    fn find_by_sender(&mut self, folder: &str, from: &str, date_secs: i64) -> Result<Option<Found>, Fail> {
+        let from = from.trim();
+        // Only what a quoted IMAP string carries as is; anything else cannot be asked for.
+        if from.is_empty() || !from.is_ascii() || from.contains(['"', '\\', '\r', '\n']) {
+            return Ok(None);
+        }
+        // INTERNALDATE is a whole day in the server's zone: a day either side of the upload's.
+        let ms = date_secs.saturating_mul(1000);
+        let since = sync::since_criteria(ms - DAY_MS);
+        let before = sync::since_criteria(ms + 2 * DAY_MS).replacen("SINCE", "BEFORE", 1);
+        let criteria = format!("{since} {before} FROM \"{from}\"");
+        let path = folder.to_string();
+        self.step(async |session| match abd_cmds::uid_search(session, &path, &criteria).await {
+            Ok(uids) if uids.is_empty() => Ok(Some(Found::Absent)),
+            Ok(uids) => Ok(Some(Found::Here(uids.into_iter().rev().take(FIND_CAP).map(|u| u.to_string()).collect()))),
+            Err(e) => {
+                if confirm_folder_gone(session, &path, &e).await? {
+                    return Ok(Some(Found::FolderGone));
+                }
+                Err(Fail::from(e))
+            }
+        })
     }
 
     fn found_header(&mut self, folder: &str, handle: &str) -> Result<Option<Header>, Fail> {
