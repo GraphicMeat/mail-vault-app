@@ -16,7 +16,7 @@
 //   (QuickActions.jsx).
 // - Language: the nine languages (`mobile.settings.set` `language`, loaded at once) and the
 //   translation issue report, opened in the system browser.
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import purple from '../../assets/mailvault-icon.png';
 import teal from '../../assets/mailvault-icon-teal.png';
 import { AppearanceView, validAppearanceSection } from '../../components/settings/views/AppearanceView';
@@ -121,12 +121,26 @@ function DateTime({ save }) {
   const prefs = useMobileStore((s) => s.prefs);
   const [draft, setDraft] = useState(null);
   const timer = useRef(null);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  // The typed pattern not written yet, and the latest writer: leaving the page writes it.
+  const pending = useRef(null);
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const flush = useCallback(() => {
+    clearTimeout(timer.current);
+    timer.current = null;
+    const value = pending.current;
+    if (value === null) return;
+    pending.current = null;
+    // Only the draft this write carried gives way to the stored value; a newer one stays.
+    Promise.resolve(saveRef.current({ customDateFormat: value })).finally(() => setDraft((d) => (d === value ? null : d)));
+  }, []);
+  useEffect(() => flush, [flush]);
   const onChange = (key, value) => {
     if (key !== 'customDateFormat') return save({ [key]: value });
     setDraft(value);
+    pending.current = value;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => { save({ customDateFormat: value }).finally(() => setDraft(null)); }, TYPING_PAUSE_MS);
+    timer.current = setTimeout(flush, TYPING_PAUSE_MS);
     return undefined;
   };
   const values = draft === null ? prefs : { ...prefs, customDateFormat: draft };

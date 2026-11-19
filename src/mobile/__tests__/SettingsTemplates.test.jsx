@@ -27,6 +27,7 @@ vi.mock('../transport.js', () => ({
 const { default: TemplatesSettings } = await import('../settings/Templates.jsx');
 // Mail preferences' Behavior: desktop's view over the phone's preferences.
 const { Behavior } = await import('../settings/MailPreferences.jsx');
+const { default: Appearance } = await import('../settings/Appearance.jsx');
 const { useMobileStore } = await import('../store.js');
 const { PREF_DEFAULTS, readPrefs } = await import('../prefs.js');
 
@@ -111,5 +112,39 @@ describe('templates', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: `${t('settings.templates.deleteTemplate')}: Later` })); });
     await flush();
     expect(sets().at(-1)).toEqual({ templates: [{ id: 'x', name: 'Thanks', body: 'Many thanks!' }] });
+  });
+});
+
+describe('custom date pattern', () => {
+  const pattern = () => screen.getByPlaceholderText(t('settings.appearance.eGDdMmYyyy'));
+
+  it('a pattern typed just before leaving the page is written', async () => {
+    useMobileStore.setState({ prefs: { ...PREF_DEFAULTS, dateFormat: 'custom' } });
+    const { unmount } = render(<Appearance section="date-time" />);
+    fireEvent.change(pattern(), { target: { value: 'dd.MM' } });
+    unmount();
+    await flush();
+    expect(sets()).toEqual([{ customDateFormat: 'dd.MM' }]);
+  });
+
+  it('a write that lands while typing goes on does not wipe the newer text', async () => {
+    vi.useFakeTimers();
+    try {
+      const { daemonCall } = await import('../transport.js');
+      let land;
+      daemonCall.mockImplementationOnce((method, params) => new Promise((resolve) => {
+        land = () => { engine.prefs = { ...engine.prefs, ...params }; resolve({ ...engine.prefs }); };
+      }));
+      engine.prefs = { ...engine.prefs, dateFormat: 'custom' };
+      useMobileStore.setState({ prefs: { ...PREF_DEFAULTS, dateFormat: 'custom' } });
+      render(<Appearance section="date-time" />);
+      fireEvent.change(pattern(), { target: { value: 'dd' } });
+      await act(async () => { vi.advanceTimersByTime(600); });
+      fireEvent.change(pattern(), { target: { value: 'dd.M' } });
+      await act(async () => { land(); for (let i = 0; i < 20; i++) await Promise.resolve(); });
+      expect(pattern().value).toBe('dd.M');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
