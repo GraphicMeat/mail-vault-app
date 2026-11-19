@@ -74,25 +74,6 @@ button:focus-visible {
   margin-bottom: 0.75rem;
 }
 
-.settings-input {
-  width: 100%;
-  padding: 0.625rem 1rem;
-  background-color: var(--mail-input-bg);
-  border: 1px solid var(--mail-border);
-  border-radius: 0.5rem;
-  color: var(--mail-text);
-  transition: border-color 0.15s ease;
-}
-
-.settings-input:focus {
-  border-color: var(--mail-accent);
-  outline: none;
-}
-
-.settings-input::placeholder {
-  color: var(--mail-text-muted);
-}
-
 /* Range Slider */
 input[type="range"] {
   -webkit-appearance: none;

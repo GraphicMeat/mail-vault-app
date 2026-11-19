@@ -1,0 +1,39 @@
+/* Settings pieces both apps draw (the settings views in src/components/settings/views): the
+   text field (`.settings-input`), the chat sample (PreviewViews SampleConversationView) and the
+   after-delete sample (Behavior). Desktop's index.css imports this where they used to sit in its
+   order; the phone's shared-ui.css imports it too. No other rule of either app targets them. */
+
+.settings-input {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background-color: var(--mail-input-bg);
+  border: 1px solid var(--mail-border);
+  border-radius: 0.5rem;
+  color: var(--mail-text);
+  transition: border-color 0.15s ease;
+}
+
+.settings-input:focus {
+  border-color: var(--mail-accent);
+  outline: none;
+}
+
+.settings-input::placeholder {
+  color: var(--mail-text-muted);
+}
+
+/* Shared sample content follows the selected Chat topic, which fills one pane. */
+.sample-chat { min-width: 0; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; line-height: 1.5; }
+.sample-chat-heading { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--mail-border); }
+.sample-chat-heading > svg { flex-shrink: 0; color: var(--mail-text-muted); }
+.sample-chat-heading strong, .sample-chat-heading span { display: block; overflow-wrap: anywhere; }
+.sample-chat-heading span { margin-top: 2px; color: var(--mail-text-muted); }
+.sample-chat-messages { display: flex; flex-direction: column; gap: 12px; padding: 16px 12px; }
+.sample-chat-message { align-self: flex-start; max-width: 85%; padding: 10px 12px; border-radius: 12px; background: var(--mail-surface-hover); overflow-wrap: anywhere; }
+.sample-chat-message > span { display: block; margin-top: 6px; text-align: right; font-size: 11px; color: var(--mail-text-muted); }
+.sample-chat-sent { align-self: flex-end; background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.sample-chat-sent > span { color: inherit; }
+.onboarding-after-delete-sample { margin-top: 8px; padding: 10px 12px; background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 8px; font-size: 12px; }
+.onboarding-after-delete-sample > figcaption { color: var(--mail-text-muted); font-size: 11px; }
+.onboarding-after-delete-sample p { margin-top: 6px; min-height: 36px; color: var(--mail-text); }
+.onboarding-after-delete-sample p > svg { display: inline; margin-right: 6px; vertical-align: middle; color: var(--mail-text-muted); }
