@@ -874,18 +874,21 @@ mod tests {
 
     /// `CARGO_BIN_EXE_*` exists only for integration tests, not for a bin's own
     /// unit tests, so find the daemon binary Cargo built beside the test
-    /// harness (`target/<profile>/deps/<test>` -> `target/<profile>/mailvault-daemon`).
-    /// `src-daemon/tests/` has an integration test, so a plain
-    /// `cargo test -p mailvault-daemon` always builds it.
+    /// harness. Older Cargo lays the harness out as
+    /// `target/<profile>/deps/<test>`, Cargo 1.100+ as
+    /// `target/<profile>/build/<pkg>/<hash>/out/<test>`; the binary is
+    /// `target/<profile>/mailvault-daemon` either way, so walk up until a
+    /// directory holds it. `src-daemon/tests/` has an integration test, so a
+    /// plain `cargo test -p mailvault-daemon` always builds it.
     pub(super) fn daemon_exe() -> std::path::PathBuf {
-        let mut dir = std::env::current_exe().expect("current_exe");
-        dir.pop();
-        if dir.ends_with("deps") {
-            dir.pop();
-        }
-        let exe = dir.join(format!("mailvault-daemon{}", std::env::consts::EXE_SUFFIX));
-        assert!(exe.exists(), "daemon binary not built at {}: run `cargo test -p mailvault-daemon` without --bin", exe.display());
-        exe
+        let name = format!("mailvault-daemon{}", std::env::consts::EXE_SUFFIX);
+        let harness = std::env::current_exe().expect("current_exe");
+        harness
+            .ancestors()
+            .skip(1)
+            .map(|dir| dir.join(&name))
+            .find(|exe| exe.is_file())
+            .unwrap_or_else(|| panic!("daemon binary {name} not found above {}: run `cargo test -p mailvault-daemon` without --bin", harness.display()))
     }
 
     fn host() -> Arc<RenderHost> {
