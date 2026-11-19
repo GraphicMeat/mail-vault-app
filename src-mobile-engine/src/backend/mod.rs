@@ -409,6 +409,12 @@ pub(crate) trait Backend: Send {
     /// uploads in two steps (Graph: make, then move) names what the first made through `on_staged`
     /// before the second, and a later attempt hands it back as `staged`, so a failed second step
     /// never leaves a copy behind or makes another.
+    /// The largest message [`Backend::append`] can upload, when the server caps it (Graph's MIME
+    /// create); `None`: no cap the engine knows of. A recover of a larger kept message is refused
+    /// before anything is sent, and the bin keeps it.
+    fn upload_cap(&self) -> Option<usize> {
+        None
+    }
     fn append(&mut self, _folder: &str, _raw: &[u8], _flags: Flags, _staged: Option<&str>, _on_staged: &mut dyn FnMut(&str) -> Result<(), Fail>) -> Result<bool, Fail> {
         Err(Fail::unsupported("an upload"))
     }

@@ -21,6 +21,7 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Every Graph test holds this for its whole run.
 pub fn serial() -> MutexGuard<'static, ()> {
@@ -128,6 +129,14 @@ pub struct State {
     pub slow_value_ms: u64,
     /// A folder's message listing answers after this pause (a slow network, page by page).
     pub list_pause_ms: u64,
+    /// The next this many moves answer 404 without moving (Graph's answer for an id it does not
+    /// find, the message's or the destination's).
+    pub moves_not_found: u32,
+    /// The next this many message PATCHes (read, flag) answer 503.
+    pub fail_patches: u32,
+    /// The largest `POST /me/messages` body (the base64 MIME) Graph takes; 0: 4 MiB, as real
+    /// Graph caps a request.
+    pub mime_cap: usize,
     next_id: u64,
 }
 
@@ -346,6 +355,16 @@ impl GraphMock {
     /// After `n` more successful moves, the next `k` moves answer 503 (a transient failure).
     pub fn fail_moves_after(&self, n: u32, k: u32) {
         self.st().fail_moves_after = Some((n, k));
+    }
+
+    /// The next `k` moves answer 404 without moving.
+    pub fn moves_not_found(&self, k: u32) {
+        self.st().moves_not_found = k;
+    }
+
+    /// The next `k` message PATCHes (read, flag) answer 503.
+    pub fn fail_patches(&self, k: u32) {
+        self.st().fail_patches = k;
     }
 
     /// Message `id`'s Reply-To.
@@ -675,6 +694,11 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
         },
         // A message made from MIME (base64, `text/plain`), filed in Drafts as a draft.
         ("POST", ["me", "messages"]) => {
+            let cap = if st.mime_cap == 0 { 4 * 1024 * 1024 } else { st.mime_cap };
+            if req.body.len() > cap {
+                let body = json!({ "error": { "code": "ErrorRequestEntityTooLarge", "message": "The request is too large." } });
+                return (413, body.to_string().into_bytes(), Vec::new());
+            }
             let text: String = String::from_utf8_lossy(&req.body).chars().filter(|c| !c.is_whitespace()).collect();
             let Ok(mime) = base64::engine::general_purpose::STANDARD.decode(text.as_bytes()) else {
                 return (400, json!({ "error": { "code": "ErrorMimeContentInvalid" } }).to_string().into_bytes(), Vec::new());
@@ -686,7 +710,8 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
                 folder: drafts,
                 subject: mime_header(&mime, "Subject").unwrap_or_default(),
                 from: mime_header(&mime, "From").unwrap_or_default(),
-                received_ms: 0,
+                // Graph stamps a message made from MIME with the time it was made, not its Date.
+                received_ms: SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0),
                 modified_ms: 0,
                 is_read: false,
                 flagged: false,
@@ -756,6 +781,11 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             }
         }
         ("PATCH", ["me", "messages", id]) => {
+            if st.fail_patches > 0 {
+                st.fail_patches -= 1;
+                let body = json!({ "error": { "code": "ServiceUnavailable", "message": "Try again." } });
+                return (503, body.to_string().into_bytes(), Vec::new());
+            }
             let body: Value = serde_json::from_slice(&req.body).unwrap_or_default();
             let Some(m) = st.messages.iter_mut().find(|m| m.id == *id) else { return not_found() };
             if let Some(r) = body["isRead"].as_bool() {
@@ -769,6 +799,10 @@ fn answer(req: &Request, state: &Mutex<State>, authority: &TokenAuthority, addr:
             ok_json(v)
         }
         ("POST", ["me", "messages", id, "move"]) => {
+            if st.moves_not_found > 0 {
+                st.moves_not_found -= 1;
+                return not_found();
+            }
             match st.fail_moves_after {
                 Some((0, k)) => {
                     st.fail_moves_after = (k > 1).then_some((0, k - 1));

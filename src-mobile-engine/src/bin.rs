@@ -36,7 +36,9 @@
 //! Message-ID); gone from Trash, the restore drops with `GONE_FROM_TRASH`, which the page shows as
 //! `deletedBin.goneFromTrash`. A kept message is uploaded (`Backend::append`: IMAP APPEND with its
 //! flags and date, JMAP `Email/import`, Graph a message made from the MIME, which Graph keeps as a
-//! draft, as desktop's migration does). The bin row goes once the restore is done. A recover of a
+//! draft, as desktop's migration does); one larger than the server takes in one upload (Graph's
+//! MIME create, `Backend::upload_cap`) drops with `TOO_LARGE` and stays in the bin. The bin row
+//! goes once the restore is done. A recover of a
 //! row whose delete the journal still owes is refused (`deletedBin.deleteStillQueued`). There is no
 //! "recover as a local copy": the phone has no vault.
 //!

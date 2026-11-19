@@ -170,6 +170,9 @@ pub(crate) enum Reason {
     Discarded,
     /// A `restore` of a message the bin kept no bytes of, and Trash no longer holds.
     GoneFromTrash,
+    /// A `restore` whose kept message is larger than the server takes as one upload
+    /// (`Backend::upload_cap`, Graph's MIME create). The bin keeps it.
+    TooLarge,
 }
 
 impl Reason {
@@ -180,6 +183,7 @@ impl Reason {
             Reason::Refused => "REFUSED",
             Reason::Discarded => "DISCARDED",
             Reason::GoneFromTrash => "GONE_FROM_TRASH",
+            Reason::TooLarge => "TOO_LARGE",
         }
     }
 }
@@ -1130,6 +1134,11 @@ fn run_restore(shared: &Shared, backend: &mut dyn Backend, account: &str, a: &Jo
             Err(f) => refusal(f),
         };
     };
+    // Over the server's upload cap: refused before anything is sent; the bin row stays (only a
+    // done restore takes it out).
+    if backend.upload_cap().is_some_and(|cap| raw.len() > cap) {
+        return Ok(Outcome::Dropped { reason: Reason::TooLarge, uids_gone: false });
+    }
     // An upload went on the wire before and its reply was lost: without a Message-ID the message
     // is looked for by its sender and date (where the backend can), and checked whole by
     // `same_message`. Not found (or no way to look) uploads again: a duplicate beats a loss, and

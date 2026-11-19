@@ -404,6 +404,75 @@ fn graph_deleted_bin_recovers_by_move_and_by_upload() {
     assert_eq!(f.g.requests().iter().filter(|r| *r == "POST /me/messages").count(), 1, "one upload");
 }
 
+/// A message deleted for good from Deleted Items, read, so the bin keeps its MIME: the bin id.
+fn kept_in_bin(f: &Fx, subject: &str, body: &str) -> String {
+    let id = f.g.add_message("deleteditems", subject, now_ms() - HOUR, body);
+    f.g.set_read(&id, true);
+    f.sync(None);
+    let trash = f.path_of("\\Trash");
+    f.sync(Some(&trash));
+    let uid = f.uids(&trash)[subject];
+    f.apply("delete", &trash, &[uid], None);
+    f.wait_pending_empty();
+    let bin = f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().clone();
+    let row = bin.iter().find(|r| r["row"]["subject"] == subject && r["hasEml"] == true).unwrap_or_else(|| panic!("not kept: {bin:?}"));
+    row["id"].as_str().unwrap().to_string()
+}
+
+fn recover(f: &Fx, id: &str) -> i64 {
+    let r = f.rpc("mobile.deleted.recover", json!({ "ids": [id] }));
+    r["queued"][0]["seq"].as_i64().unwrap_or_else(|| panic!("not queued: {r}"))
+}
+
+/// The marks after a recover's move fail: the message is back, and no retry uploads it again
+/// (the move gave it a new id; the old one names nothing).
+#[test]
+fn a_graph_recover_whose_marks_fail_after_the_move_makes_no_second_copy() {
+    let f = setup();
+    let id = kept_in_bin(&f, "Echo", &plain("Echo"));
+    f.g.fail_patches(1);
+    recover(&f, &id);
+    f.wait_pending_empty();
+    let back: Vec<_> = f.g.messages_in("deleteditems").into_iter().filter(|m| m.subject == "Echo").collect();
+    assert_eq!(back.len(), 1, "one copy: {back:?}");
+    assert_eq!(f.g.requests().iter().filter(|r| *r == "POST /me/messages").count(), 1, "one upload");
+    assert!(f.g.messages_in("drafts").is_empty());
+    assert!(f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().is_empty());
+}
+
+/// A 404 on the move names the made copy or the folder: with the folder there the copy is kept
+/// (and moved on the retry), never deleted as if its folder were gone.
+#[test]
+fn a_graph_move_not_found_with_the_folder_there_keeps_the_upload() {
+    let f = setup();
+    let id = kept_in_bin(&f, "Foxtrot", &plain("Foxtrot"));
+    let deletes = f.g.count("permanentDelete");
+    f.g.moves_not_found(1);
+    recover(&f, &id);
+    f.wait_pending_empty();
+    let back: Vec<_> = f.g.messages_in("deleteditems").into_iter().filter(|m| m.subject == "Foxtrot").collect();
+    assert_eq!(back.len(), 1, "recovered: {back:?}");
+    assert_eq!(f.g.count("permanentDelete"), deletes, "the copy was not taken back out");
+    assert!(f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().is_empty());
+}
+
+/// A kept message over Graph's MIME upload cap is refused before any upload with its own reason
+/// (`TOO_LARGE`), and the bin keeps it: never a silent loss.
+#[test]
+fn a_graph_recover_over_the_upload_cap_keeps_the_copy() {
+    let f = setup();
+    let big = format!("<p>{}</p>", "x".repeat(3_300_000));
+    let id = kept_in_bin(&f, "Golf", &big);
+    let from = f.events.list.lock().unwrap().len();
+    let seq = recover(&f, &id);
+    let (_, r) = f.events.wait(from, "restore result", |n, v| n == "mobile.action.result" && v["seq"] == seq && v["outcome"] != "retrying");
+    assert_eq!((r["outcome"].clone(), r["reason"].clone()), (json!("dropped"), json!("TOO_LARGE")), "{r}");
+    assert_eq!(f.g.requests().iter().filter(|r| *r == "POST /me/messages").count(), 0, "nothing uploaded");
+    let bin = f.rpc("mobile.deleted.list", json!({}))["rows"].as_array().unwrap().clone();
+    assert_eq!(bin.len(), 1, "the bin keeps it: {bin:?}");
+    assert!(f.tmp.path().join("deleted").join(format!("{id}.eml")).exists());
+}
+
 #[test]
 fn opening_a_graph_message_fetches_no_attachment_and_a_tap_fetches_one() {
     let f = setup();

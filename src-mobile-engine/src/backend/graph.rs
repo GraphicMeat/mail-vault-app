@@ -77,6 +77,22 @@ const MOVE_BATCH: usize = 99;
 
 /// The id a request names `path` by: the inbox by Graph's well-known name, any other folder by
 /// the Graph id stored as its path.
+/// The largest message a recover uploads to Graph: `POST /me/messages` takes the MIME base64
+/// encoded, and Graph refuses a request over about 4 MB; base64 makes 3 bytes 4.
+pub(crate) const MIME_UPLOAD_CAP: usize = 3 * 1024 * 1024 - 64 * 1024;
+
+/// The tag of a staged upload's id once the copy was moved into place (`append`).
+const MOVED: &str = "moved:";
+
+/// A failed call's text, for the log.
+fn call_text(e: CallErr) -> String {
+    match Fail::from(e) {
+        Fail::Code(code, why) => format!("{} {why}", code.as_str()),
+        Fail::Gone => "account gone".into(),
+        Fail::Closing => "closing".into(),
+    }
+}
+
 fn remote_folder(path: &str) -> &str {
     if sync::is_inbox(path) {
         "inbox"
@@ -438,6 +454,30 @@ impl<'a> GraphBackend<'a> {
 
     /// Core's delete rule (`actions::policy`) for `path`: Deleted Items is known by the `\Trash`
     /// its well-known name stored, so no folder merely named like it qualifies.
+    /// Whether Graph says folder `remote` (an id or a well-known name) is gone: a 404 for it.
+    fn folder_gone(&mut self, remote: &str) -> Result<bool, Fail> {
+        match self.call(async |c| c.get_folder(remote).await) {
+            Ok(_) => Ok(false),
+            Err(CallErr::Text(e)) if status_of(&e) == Some(404) => Ok(true),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// A recovered message's read and flag marks. Best effort: the message is back either way,
+    /// and failing the recover here would upload it again.
+    fn mark_recovered(&mut self, id: &str, flags: Flags) {
+        if flags.seen {
+            if let Err(e) = self.call(async |c| c.set_read_status(id, true).await) {
+                self.shared.log(&format!("[graph] recovered message left unread: {}", call_text(e)));
+            }
+        }
+        if flags.flagged {
+            if let Err(e) = self.call(async |c| c.set_flag_status(id, true).await) {
+                self.shared.log(&format!("[graph] recovered message left unflagged: {}", call_text(e)));
+            }
+        }
+    }
+
     fn plan_for(&self, path: &str) -> Result<DeletePlan, Fail> {
         let account = self.account.as_str();
         let special: Option<String> = self
@@ -905,12 +945,22 @@ impl Backend for GraphBackend<'_> {
         self.call(async |c| c.move_message(handle, &dest).await).map(|_| ()).map_err(Fail::from)
     }
 
+    fn upload_cap(&self) -> Option<usize> {
+        Some(MIME_UPLOAD_CAP)
+    }
+
     fn append(&mut self, folder: &str, raw: &[u8], flags: Flags, staged: Option<&str>, on_staged: &mut dyn FnMut(&str) -> Result<(), Fail>) -> Result<bool, Fail> {
         // As desktop's migration uploads to Graph: a message made from the MIME (Graph files it
-        // in Drafts), moved to the folder, then marked. The made message's id is recorded before
-        // the move (`on_staged`), so a retry after a failed move moves that copy rather than
-        // making a second; nothing is ever found by its Message-ID here.
+        // in Drafts), moved to the folder, then marked. What each step made is recorded before the
+        // next (`on_staged`): the made message's id before the move, so a retry after a failed
+        // move moves that copy rather than making a second; the moved copy's id (tagged
+        // [`MOVED`]; a move gives the message a new id) before the marks, so a retry after the
+        // move only marks. Nothing is ever found by its Message-ID here.
         let dest = remote_folder(folder).to_string();
+        if let Some(moved) = staged.and_then(|s| s.strip_prefix(MOVED)) {
+            self.mark_recovered(moved, flags);
+            return Ok(true);
+        }
         let mut draft = match staged {
             Some(id) => id.to_string(),
             None => {
@@ -923,26 +973,27 @@ impl Backend for GraphBackend<'_> {
         let id = loop {
             match self.call(async |c| c.move_message(&draft, &dest).await) {
                 Ok(id) => break id,
-                Err(CallErr::Text(e)) if status_of(&e) == Some(404) && !made_now => {
+                Err(CallErr::Text(e)) if status_of(&e) == Some(404) => {
+                    // A 404 names the draft or the folder: only a folder Graph says is gone is.
+                    if self.folder_gone(&dest)? {
+                        // The copy made for it is ours to take back out.
+                        let _ = self.call(async |c| c.permanent_delete(&draft).await);
+                        return Ok(false);
+                    }
+                    if made_now {
+                        // The draft made just now is not found: Graph is behind; try again later.
+                        return Err(Fail::Code(Code::HostUnreachable, format!("Graph move of a fresh copy: {e}")));
+                    }
                     // The staged copy is gone (deleted in Drafts by the user): make it again.
                     draft = self.call(async |c| c.create_message_from_mime(raw).await).map_err(Fail::from)?;
                     on_staged(&draft)?;
                     made_now = true;
                 }
-                Err(CallErr::Text(e)) if status_of(&e) == Some(404) => {
-                    // The folder is gone: the copy made just now is ours to take back out.
-                    let _ = self.call(async |c| c.permanent_delete(&draft).await);
-                    return Ok(false);
-                }
                 Err(e) => return Err(e.into()),
             }
         };
-        if flags.seen {
-            self.call(async |c| c.set_read_status(&id, true).await).map_err(Fail::from)?;
-        }
-        if flags.flagged {
-            self.call(async |c| c.set_flag_status(&id, true).await).map_err(Fail::from)?;
-        }
+        on_staged(&format!("{MOVED}{id}"))?;
+        self.mark_recovered(&id, flags);
         Ok(true)
     }
 
