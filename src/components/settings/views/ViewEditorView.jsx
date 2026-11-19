@@ -248,9 +248,11 @@ function QueryGroupsField({ prefix, label, placeholder, hint, groups, setGroups,
 /// when none). `renderPreview(def)` draws the preview, `renderConfirm({ open,
 /// onClose, onConfirm, title, description, confirmLabel, cancelLabel, loading
 /// })` the delete question; `privateTag(word)` masks a query word naming
-/// someone (desktop's privacy mode).
+/// someone (desktop's privacy mode). `presentation`: the Presentation section
+/// (grouping, sort, direction, timeline); an app whose view list does not
+/// follow them leaves it out, and a saved view keeps its values.
 export function ViewEditorView({
-  view, onClose, onSaved, onDiscard, showPreview = true, isNew = false,
+  view, onClose, onSaved, onDiscard, showPreview = true, isNew = false, presentation = true,
   accounts = [], tags = [], schema = [], suggestSenders, suggestTerms, privateTag = word => word,
   onSave, onDelete, onGuard, renderPreview, renderConfirm, errorText = cause => cause?.message || String(cause),
 }) {
@@ -560,7 +562,7 @@ export function ViewEditorView({
 
     </SettingsSection>
 
-    <SettingsSection title={t('views.presentation')} description={t('views.presentationHint')}>
+    {presentation && <SettingsSection title={t('views.presentation')} description={t('views.presentationHint')}>
     {/* Outside the schema block on purpose: none/sender/date need no schema,
         and an app with no account yet still has a grouping to choose. */}
     <div className="view-editor-row">
@@ -595,7 +597,7 @@ export function ViewEditorView({
         onClick={() => setShowTimeline(!showTimeline)} label={t('views.showTimeline')} />
     </SettingRow>
 
-    </SettingsSection>
+    </SettingsSection>}
 
     {(tags.length > 0 || schema.length > 0) && <SettingsSection title={t('views.filter.more')} description={t('views.moreHint')}>
     {tags.length > 0 && <div className="view-choice-field">

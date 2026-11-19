@@ -428,6 +428,7 @@ const NOT_ON_PHONE = {
   'image text (OCR) runs on desktop only': ['settings.searchIndex.imageText'],
   'mailbox concurrency: a desktop search speed setting; the phone searches its own index': ['settings.searchIndex.concurrency'],
   'download modes: the phone keeps a window of recent mail per account (Keep mail from the last)': ['settings.storage.downloadMode'],
+  'a view on the phone lists its mail newest first in one list: no grouping, sort or timeline': ['views.showTimeline'],
   'runs from a portable drive, which a phone cannot': [
     'portable.title', 'portable.copyConfig', 'portable.copyMail', 'portable.removeFromHost', 'portable.newPassword',
     'settings.transfer.confirmPassword', 'portable.running.title', 'portable.currentPassword',
@@ -473,7 +474,7 @@ const ON_PHONE = [
   'settings.notifications.perAccountSettings', 'settings.notifications.badge', 'settings.notifications.showBadgeCount', 'settings.notifications.badgeShows',
   'notifyPolicy.quietHours.title', 'notifyPolicy.allowlist.title',
   'fields.section', 'fields.newName', 'fields.newKind', 'fields.copyFrom',
-  'views.section', 'views.new', 'views.showTimeline',
+  'views.section', 'views.new',
   'autoTag.name', 'autoTag.instruction', 'autoTag.tag', 'autoTag.hasAttachments', 'autoTag.listIdPresent', 'autoTag.fromAddress', 'autoTag.fromDomain',
   'autoTag.minConfidence', 'autoTag.allowRemote', 'autoTag.enabledLabel',
   'settings.accounts.displayName', 'settings.accounts.emailSignature', 'settings.accounts.enableSignature',

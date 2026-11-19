@@ -139,6 +139,18 @@ describe('Settings > Views on the phone', () => {
     expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
   });
 
+  it('the page\'s own Back takes an untouched new view with it', async () => {
+    await openPage();
+    fireEvent.click(screen.getByTestId('views-new'));
+    await flush();
+    const made = calls('mobile.views.save').at(-1).view;
+    fireEvent.click(document.querySelector('.mv-settings__header button'));
+    await flush();
+    expect(document.querySelector('[data-mv-settings-on]').getAttribute('data-mv-settings-on')).toBe('root');
+    expect(calls('mobile.views.delete')).toEqual([{ id: made.id }]);
+    expect(engine.views.some((v) => v.id === made.id)).toBe(false);
+  });
+
   it('lists the views in order under desktop\'s page, with the free plan and the offline note', async () => {
     await openPage();
     const rows = [...document.querySelectorAll('[data-testid^="views-row-"]')].map((b) => b.textContent);
@@ -165,6 +177,21 @@ describe('Settings > Views on the phone', () => {
     expect(calls('mobile.views.save').at(-1).view).toMatchObject({ id: 'v1', name: 'Receipts', def: expect.objectContaining({ query: 'invoice' }) });
     expect(screen.queryByTestId('view-editor-form')).toBeNull();
     expect(screen.getByTestId('views-row-v1').textContent).toBe('Receipts');
+  });
+
+  it('the editor leaves out the presentation the phone list does not follow, and a save keeps it', async () => {
+    engine.views = [STARRED, { ...BILLS, def: { query: 'invoice', sort: 'subject', direction: 'asc', group: 'sender', showTimeline: true } }];
+    await openPage();
+    fireEvent.click(screen.getByTestId('views-row-v1'));
+    await flush();
+    expect(screen.queryByTestId('view-sort')).toBeNull();
+    expect(screen.queryByTestId('view-direction')).toBeNull();
+    expect(screen.queryByTestId('view-group')).toBeNull();
+    expect(screen.queryByTestId('view-show-timeline')).toBeNull();
+    fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Receipts' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    await flush();
+    expect(calls('mobile.views.save').at(-1).view.def).toMatchObject({ sort: 'subject', direction: 'asc', group: 'sender', showTimeline: true });
   });
 
   it('the sender typeahead asks the phone\'s index for the accounts the view reads', async () => {

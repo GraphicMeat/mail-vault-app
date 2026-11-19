@@ -5,7 +5,9 @@
 // free plan's three, which opens the paywall), a row opens its editor under the list, and a new
 // view nobody saved goes when its editor is left. The editor's typeaheads and its preview read the
 // phone's own index (`mobile.views.suggestSenders`, `.suggestTerms`, `.evaluate` with the
-// definition), so a view finds only the mail the phone keeps offline: the page says so.
+// definition), so a view finds only the mail the phone keeps offline: the page says so. A view's
+// mail on the phone is one list, newest first, so the editor leaves out desktop's Presentation
+// (grouping, sort, direction, timeline); a view keeps the values desktop gave it.
 //
 // Leaving an editor with edits asks first, as desktop's unsaved-changes prompt does (its words and
 // its list of what changed, in a sheet): system Back while an editor is open, a tap on another
@@ -216,6 +218,16 @@ export default function Views({ startNew = false, onStarted, onLeaveGuard }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onLeaveGuard, leave]);
 
+  // However the page is left (its own Back, a search result, Settings closing), a new view nobody
+  // saved goes with it, as system Back's editor close takes it.
+  useEffect(() => () => {
+    const id = draft.current;
+    draft.current = null;
+    if (id && useViewStore.getState().views.some((view) => view.id === id)) {
+      void useViewStore.getState().deleteView(id).catch(() => {});
+    }
+  }, []);
+
   // An editor opens under the list: brought into view.
   useEffect(() => {
     if (editingId) editorRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
@@ -263,7 +275,7 @@ export default function Views({ startNew = false, onStarted, onLeaveGuard }) {
         onReorder={(ids) => { void store.reorderViews(ids).catch((cause) => setError(say(cause))); }}>
         {editing && (
           <div ref={editorRef} data-mv-view-editor={editing.id}>
-            <ViewEditorView key={editing.id} view={editing} isNew={editing.id === newlyCreatedId}
+            <ViewEditorView key={editing.id} view={editing} isNew={editing.id === newlyCreatedId} presentation={false}
               accounts={accountsAll} tags={tags} schema={schema}
               suggestSenders={suggestSenders} suggestTerms={suggestTerms}
               onSave={store.saveView} onDelete={store.deleteView} errorText={say} onGuard={onGuard}
