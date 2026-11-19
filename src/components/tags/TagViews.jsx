@@ -8,7 +8,7 @@
 //   the phone's list row, has none); nothing when there are none.
 // - TagListView: every tag, each with its delete button (`onDelete(id)`): the manage list.
 //
-// Their styles (`local-mail-label*`) are in styles/quick-actions.css, which each app loads itself.
+// Their styles (`local-mail-label*`, `field-strip`) are in styles/labels-fields.css, which each app loads itself.
 // The translator is the rendering app's, from settings/views/viewContext: a container that is not
 // inside a settings page provides just its `t` (SettingsViewProvider), and only while it has chips.
 import React from 'react';

@@ -1,3 +1,7 @@
+/* Tags on a message and its custom-field strip (labels-fields.css, shared with the phone),
+   first: the rest of this sheet never targets them, so their place in it changes nothing. */
+@import './labels-fields.css';
+
 .quick-actions {
   display: inline-flex;
   align-items: center;
@@ -631,61 +635,6 @@
   background: var(--mail-bg);
 }
 
-.local-mail-labels,
-.quick-actions-label-list {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 4px;
-  max-width: 45%;
-  overflow: hidden;
-}
-
-.quick-actions-label-list {
-  max-width: none;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.local-mail-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  max-width: 160px;
-  min-height: 18px;
-  padding: 1px 5px;
-  border: 1px solid var(--mail-border);
-  border-radius: 4px;
-  color: var(--mail-text-muted);
-  background: var(--mail-surface);
-  font-size: 11px;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-/* A tag that carries a colour tints its own border and text; the rest keep the
-   neutral chip. */
-.local-mail-label[style*="--tag-color"] {
-  border-color: var(--tag-color);
-  color: var(--tag-color);
-}
-
-.local-mail-label > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.local-mail-label button {
-  flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--mail-text-muted);
-  font-size: 12px;
-}
-
 /* ── Saved views ─────────────────────────────────────────────────────────── */
 
 .sidebar-views-section {
@@ -775,69 +724,6 @@
 }
 
 /* ── Custom fields ───────────────────────────────────────────────────────── */
-
-.field-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 0 4px;
-  font-size: 11px;
-  color: var(--mail-text-muted);
-}
-
-.field-strip-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.field-strip-name {
-  color: var(--mail-text-muted);
-}
-
-.field-strip input[type="text"],
-.field-strip input[type="date"],
-.field-strip select {
-  padding: 1px 4px;
-  border: 1px solid var(--mail-border);
-  border-radius: 4px;
-  background: var(--mail-surface);
-  color: var(--mail-text);
-  font-size: 11px;
-  max-width: 180px;
-}
-
-.field-multi {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.field-multi label {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.field-multi label.is-chosen {
-  color: var(--mail-text);
-}
-
-/* A choice that carries a colour tints the chip it was chosen on; the swatch
-   is the same idea for a native select, which cannot tint its own option. */
-.field-multi label.is-chosen[style*="--tag-color"] {
-  color: var(--tag-color);
-}
-
-.field-swatch {
-  /* An inline span ignores a width; the swatch is the only thing this element
-     is, so it takes a box of its own. */
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--tag-color);
-}
 
 .fields-list {
   display: flex;

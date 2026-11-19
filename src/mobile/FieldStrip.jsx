@@ -6,7 +6,7 @@ import { FieldStripView } from '../components/fields/FieldViews';
 import { SettingsViewProvider } from '../components/settings/views/viewContext';
 import { useT } from './i18n.js';
 import { useFieldStore, useRowFields } from './fields.js';
-import '../styles/quick-actions.css';
+import '../styles/labels-fields.css';
 
 export default function FieldStrip({ accountId, folder, uid, className = '' }) {
   const t = useT();

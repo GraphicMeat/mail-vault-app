@@ -6,7 +6,7 @@ import { TagChipsView } from '../components/tags/TagViews';
 import { SettingsViewProvider } from '../components/settings/views/viewContext';
 import { useT } from './i18n.js';
 import { useRowTags, useTagStore } from './tags.js';
-import '../styles/quick-actions.css';
+import '../styles/labels-fields.css';
 
 export default function TagChips({ accountId, folder, uid, removable = false, className = '' }) {
   const t = useT();

@@ -4,6 +4,7 @@ import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
 import { readFileSync } from 'node:fs';
 import tailwindConfig from './tailwind.config.js';
+import { MOBILE_TAILWIND_CONTENT } from './src/mobile/tailwindContent.js';
 
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -41,7 +42,8 @@ export default defineConfig({
   css: {
     postcss: {
       plugins: [
-        tailwindcss({ ...tailwindConfig, content: [...tailwindConfig.content, './mobile.html'] }),
+        // Only what the phone renders (src/mobile/tailwindContent.js), not desktop's whole src/.
+        tailwindcss({ ...tailwindConfig, content: [...MOBILE_TAILWIND_CONTENT] }),
         scopePreflight(),
         autoprefixer(),
       ],
