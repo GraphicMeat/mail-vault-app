@@ -9,15 +9,22 @@ import React, { useState } from 'react';
 import { render, screen, cleanup, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 
-const engine = vi.hoisted(() => ({ calls: [], settings: null, update: null, accounts: [] }));
+const engine = vi.hoisted(() => ({ calls: [], settings: null, update: null, accounts: [], others: {}, hold: {}, getFails: 0 }));
 
 vi.mock('../transport.js', () => ({
   daemonCall: vi.fn(async (method, params = {}) => {
     engine.calls.push([method, params]);
     switch (method) {
       case 'mobile.accountSettings.get':
+        if (engine.getFails > 0) { engine.getFails -= 1; throw Object.assign(new Error('busy'), { code: 'INTERNAL' }); }
+        if (engine.hold[params.accountId]) await engine.hold[params.accountId];
+        if (engine.others[params.accountId]) return { ...engine.others[params.accountId], accountId: params.accountId };
         return { ...engine.settings, accountId: params.accountId };
       case 'mobile.accountSettings.set':
+        if (engine.others[params.accountId]) {
+          engine.others[params.accountId] = { ...engine.others[params.accountId], ...params.values };
+          return { ...engine.others[params.accountId], accountId: params.accountId };
+        }
         engine.settings = { ...engine.settings, ...params.values };
         return { ...engine.settings, accountId: params.accountId };
       case 'mobile.accounts.update':
@@ -69,6 +76,9 @@ async function open(account = PASSWORD_ACCOUNT, section = 'profile') {
 beforeEach(() => {
   engine.calls = [];
   engine.update = null;
+  engine.others = {};
+  engine.hold = {};
+  engine.getFails = 0;
   engine.settings = { displayName: 'Ada', hidden: false, signature: null, sendAs: '', aliases: [], sentFolder: null, color: null };
 });
 afterEach(cleanup);
@@ -278,5 +288,41 @@ describe('advanced', () => {
     await flush();
     expect(writes().at(-1)).toEqual({ hidden: true });
     expect(callsOf('mobile.accounts.list').length).toBeGreaterThan(0);
+  });
+});
+
+describe('switching accounts', () => {
+  const BOB = { ...PASSWORD_ACCOUNT, id: 'b1', email: 'bob@example.test', displayName: 'Bob' };
+
+  it('a name typed just before switching is kept by its own account, and the next account shows its own', async () => {
+    engine.others.b1 = { displayName: 'Bob', hidden: false, signature: null, sendAs: '', aliases: [], sentFolder: null, color: null };
+    let release;
+    engine.hold.b1 = new Promise((r) => { release = r; });
+    engine.accounts = [PASSWORD_ACCOUNT, BOB];
+    useMobileStore.setState({ accounts: [PASSWORD_ACCOUNT, BOB], reauthState: null, syncState: {} });
+    render(<Page start="profile" />);
+    await flush();
+    fireEvent.change(screen.getByLabelText(t('settings.accounts.displayName')), { target: { value: 'Ann' } });
+    // Within the save delay: the typed name goes with Ada's account as the page switches.
+    fireEvent.click(screen.getByText('bob@example.test'));
+    await flush();
+    release();
+    await flush();
+    expect(callsOf('mobile.accountSettings.set')).toEqual([{ accountId: 'a1', values: { displayName: 'Ann' } }]);
+    expect(screen.getByLabelText(t('settings.accounts.displayName')).value).toBe('Bob');
+    fireEvent.change(screen.getByLabelText(t('settings.accounts.displayName')), { target: { value: 'Bobby' } });
+    await wait(500);
+    await flush();
+    expect(callsOf('mobile.accountSettings.set').slice(1)).toEqual([{ accountId: 'b1', values: { displayName: 'Bobby' } }]);
+  });
+
+  it('a failed read offers a retry, and a later read clears it', async () => {
+    engine.getFails = 1;
+    await open(PASSWORD_ACCOUNT, 'profile');
+    expect(screen.queryByLabelText(t('settings.accounts.displayName'))).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: t('common.retry') }));
+    await flush();
+    expect(screen.getByLabelText(t('settings.accounts.displayName')).value).toBe('Ada');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

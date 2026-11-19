@@ -27,6 +27,7 @@ import {
 } from '../../components/settings/views/AccountsView';
 import { AliasesView } from '../../components/settings/views/AliasesView';
 import { AccountTransferView } from '../../components/settings/views/AccountTransferView';
+import { Button } from '../../components/ui/Button';
 import { useMobileStore } from '../store.js';
 import { useT } from '../i18n.js';
 import { daemonCall } from '../transport.js';
@@ -53,33 +54,50 @@ export function picksSentFolder(account) {
 
 const signatureText = (sig) => (sig ? (sig.text || htmlToText(sig.html)) : '');
 
-/** One account's settings (`mobile.accountSettings.get`), and `write(values)` that keeps them. */
+/**
+ * One account's settings (`mobile.accountSettings.get`), and `write(values)` that keeps them. The
+ * values are kept with the account they were read for and only that account's are handed out, so a
+ * write or a read that lands after a switch never fills another account's form. `loadFailed` with
+ * `retry()` when the read failed; `saveFailed` when the last write of this account was refused.
+ */
 function useAccountSettings(accountId, onSaved) {
-  const [values, setValues] = useState(null);
-  const [failed, setFailed] = useState(false);
+  const [got, setGot] = useState({ id: null, values: null });
+  const [loadFailed, setLoadFailed] = useState(null);
+  const [saveFailed, setSaveFailed] = useState(null);
+  const [tries, setTries] = useState(0);
   useEffect(() => {
     let live = true;
-    setValues(null);
     if (!accountId) return undefined;
     daemonCall('mobile.accountSettings.get', { accountId }).then(
-      (v) => { if (live) setValues(v || {}); },
-      () => { if (live) setFailed(true); },
+      (v) => {
+        if (!live) return;
+        setGot({ id: accountId, values: v || {} });
+        setLoadFailed(null);
+      },
+      () => { if (live) setLoadFailed(accountId); },
     );
     return () => { live = false; };
-  }, [accountId]);
+  }, [accountId, tries]);
   const write = useCallback(async (patch) => {
     try {
       const next = await daemonCall('mobile.accountSettings.set', { accountId, values: patch });
-      setValues((v) => (v && v.accountId !== accountId ? v : next || v));
-      setFailed(false);
+      setGot((g) => (g.id === accountId && next ? { id: accountId, values: next } : g));
+      setSaveFailed((f) => (f === accountId ? null : f));
       onSaved(patch);
       return true;
     } catch {
-      setFailed(true);
+      setSaveFailed(accountId);
       return false;
     }
   }, [accountId, onSaved]);
-  return { values, write, failed };
+  const retry = useCallback(() => setTries((n) => n + 1), []);
+  return {
+    values: accountId && got.id === accountId ? got.values : null,
+    write,
+    loadFailed: Boolean(accountId) && loadFailed === accountId,
+    saveFailed: Boolean(accountId) && saveFailed === accountId,
+    retry,
+  };
 }
 
 /** The account's folders (`mobile.folders.list`), selectable ones only. */
@@ -332,7 +350,7 @@ export default function Accounts({ section: sectionProp, onSectionChange, onAddA
     setSavedAt(Date.now());
     if ('displayName' in patch || 'color' in patch || 'hidden' in patch) useMobileStore.getState().reloadAccounts();
   }, []);
-  const { values: settings, write, failed } = useAccountSettings(account?.id, onSaved);
+  const { values: settings, write, loadFailed, saveFailed, retry } = useAccountSettings(account?.id, onSaved);
 
   const sync = account ? syncState?.[account.id] : null;
   const reconnecting = Boolean(reauthState?.busy && reauthState.accountId === account?.id);
@@ -366,8 +384,14 @@ export default function Accounts({ section: sectionProp, onSectionChange, onAddA
             name: account.displayName || account.email, email: account.email, color: accountColor(account), initial: initialOf(account),
           } : null}
           saved={Boolean(savedAt)} status={status || { label: '', tone: 'idle' }} section={section} onSection={onSectionChange}>
-          {failed && <p className="text-xs text-mail-danger" role="alert">{t('mobile.settings.saveFailed')}</p>}
-          {account && !settings && !failed && <div aria-busy="true" />}
+          {saveFailed && <p className="text-xs text-mail-danger" role="alert">{t('mobile.settings.saveFailed')}</p>}
+          {account && !settings && loadFailed && (
+            <div className="flex flex-wrap items-center gap-2" role="alert">
+              <p className="text-xs text-mail-danger">{t('mobile.settings.loadFailed')}</p>
+              <Button variant="secondary" size="sm" onClick={retry}>{t('common.retry')}</Button>
+            </div>
+          )}
+          {account && !settings && !loadFailed && <div aria-busy="true" />}
           {props && section === 'profile' && <Profile key={account.id} {...props} />}
           {props && section === 'aliases' && <Aliases key={account.id} {...props} />}
           {props && section === 'connection' && (
