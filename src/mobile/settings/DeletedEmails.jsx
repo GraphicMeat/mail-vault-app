@@ -17,8 +17,20 @@ import { useMobileStore } from '../store.js';
 import { useT } from '../i18n.js';
 import { SaveFailed, useSavePrefs } from './MobileViewEnv.jsx';
 
-/** A dropped restore's reason as desktop's catalog copy. */
-const failureKey = (reason) => (reason === 'GONE_FROM_TRASH' ? 'deletedBin.goneFromTrash' : 'deletedBin.recoverFailed');
+/** A dropped restore's reason (`actions.rs` `Reason`) as catalog copy; literal keys for the catalog tests. */
+const FAILURE_KEYS = Object.freeze({
+  GONE_FROM_TRASH: 'deletedBin.goneFromTrash',
+  TOO_LARGE: 'mobile.deletedBin.tooLarge',
+  REFUSED: 'mobile.deletedBin.refused',
+  GONE: 'deletedBin.gone',
+});
+const failureKey = (reason) => (Object.hasOwn(FAILURE_KEYS, reason) ? FAILURE_KEYS[reason] : 'deletedBin.recoverFailed');
+
+/** The catalog keys `mobile.deleted.recover` answers a refusal with (bin.rs); anything else is the generic one. */
+const RECOVER_REFUSALS = new Set(['deletedBin.recoverFailed', 'deletedBin.deleteStillQueued']);
+const refusalKey = (error) => (RECOVER_REFUSALS.has(error) ? error : 'deletedBin.recoverFailed');
+
+const rowsOf = (page) => (Array.isArray(page?.rows) ? page.rows : []);
 
 export default function DeletedEmails() {
   const t = useT();
@@ -34,14 +46,28 @@ export default function DeletedEmails() {
   const restores = useRef(new Map());
   useEffect(() => () => { mounted.current = false; }, []);
 
+  // Each read of the list from the top is a generation: a page asked for before it is dropped,
+  // so a Load more that lands after a re-read never adds its rows twice.
+  const generation = useRef(0);
+  // How many rows are on screen: a re-read reads that far again, so loaded pages stay.
+  const shown = useRef(0);
+  useEffect(() => { shown.current = rows?.length || 0; }, [rows]);
+
   const load = useCallback(async () => {
+    const mine = ++generation.current;
     try {
-      const page = await daemonCall('mobile.deleted.list', {});
-      if (!mounted.current) return;
-      setRows(Array.isArray(page?.rows) ? page.rows : []);
-      setNext(page?.next || null);
+      let all = [];
+      let after = null;
+      do {
+        const page = await daemonCall('mobile.deleted.list', after ? { after } : {});
+        if (!mounted.current || mine !== generation.current) return;
+        all = all.concat(rowsOf(page));
+        after = page?.next || null;
+      } while (after && all.length < shown.current);
+      setRows(all);
+      setNext(after);
     } catch {
-      if (!mounted.current) return;
+      if (!mounted.current || mine !== generation.current) return;
       setRows((r) => r || []);
       setError(t('deletedBin.loadFailed'));
     }
@@ -49,10 +75,14 @@ export default function DeletedEmails() {
 
   const more = async () => {
     if (!next) return;
+    const mine = generation.current;
     try {
       const page = await daemonCall('mobile.deleted.list', { after: next });
-      if (!mounted.current) return;
-      setRows((r) => [...(r || []), ...(Array.isArray(page?.rows) ? page.rows : [])]);
+      if (!mounted.current || mine !== generation.current) return;
+      setRows((r) => {
+        const have = new Set((r || []).map((d) => d.id));
+        return [...(r || []), ...rowsOf(page).filter((d) => !have.has(d.id))];
+      });
       setNext(page?.next || null);
     } catch {
       if (mounted.current) setError(t('deletedBin.loadFailed'));
@@ -100,7 +130,7 @@ export default function DeletedEmails() {
         if (row) restores.current.set(q.seq, { accountId: row.accountId, mailbox: row.mailbox });
       }
       const failed = reply?.failed?.[0];
-      if (failed && mounted.current) setError(t(failed.error || 'deletedBin.recoverFailed'));
+      if (failed && mounted.current) setError(t(refusalKey(failed.error)));
     } catch {
       if (mounted.current) setError(t('deletedBin.recoverFailed'));
     }

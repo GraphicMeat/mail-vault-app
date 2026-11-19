@@ -121,4 +121,60 @@ describe('Settings > Storage > Deleted emails on the phone', () => {
     expect(engine.calls).toContainEqual(['mobile.deleted.list', { after: { deletedAt: ROW.deletedAt, id: 'b1' } }]);
     expect(screen.queryByText(t('explorer.loadMore'))).toBeNull();
   });
+
+  it('an action result keeps the pages already loaded', async () => {
+    engine.next = { deletedAt: ROW.deletedAt, id: 'b1' };
+    page();
+    await row();
+    fireEvent.click(screen.getByText(t('explorer.loadMore')));
+    expect(await screen.findByText('Older one')).toBeTruthy();
+    emit('mobile.action.result', { seq: 99, accountId: 'a1', outcome: 'done' });
+    await act(async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); });
+    expect(screen.getByText('Older one')).toBeTruthy();
+    expect(screen.getByText('Quarterly report')).toBeTruthy();
+  });
+
+  it('a page read while the list is read again is not added twice', async () => {
+    const { daemonCall } = await import('../transport.js');
+    engine.next = { deletedAt: ROW.deletedAt, id: 'b1' };
+    page();
+    await row();
+    let land;
+    daemonCall.mockImplementationOnce((method, params) => new Promise((resolve) => {
+      engine.calls.push([method, params]);
+      land = () => resolve({ rows: [{ ...ROW, id: 'b9', row: { subject: 'Older one' } }], next: null });
+    }));
+    fireEvent.click(screen.getByText(t('explorer.loadMore')));
+    // The re-read already holds the older row: the page asked for before it adds nothing.
+    engine.rows = [ROW, { ...ROW, id: 'b9', row: { subject: 'Older one' } }];
+    engine.next = null;
+    emit('mobile.action.result', { seq: 99, accountId: 'a1', outcome: 'done' });
+    await act(async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); });
+    await act(async () => { land(); for (let i = 0; i < 20; i++) await Promise.resolve(); });
+    expect(screen.getAllByText('Older one')).toHaveLength(1);
+    expect(screen.getAllByText('Quarterly report')).toHaveLength(1);
+  });
+
+  it('a recover too large for the server says it stays here', async () => {
+    page();
+    fireEvent.click((await row()).querySelector('[data-action="recover-server"]'));
+    await waitFor(() => expect(engine.calls).toContainEqual(['mobile.deleted.recover', { ids: ['b1'] }]));
+    emit('mobile.action.result', { seq: 41, accountId: 'a1', outcome: 'dropped', reason: 'TOO_LARGE' });
+    expect((await screen.findByRole('alert')).textContent).toBe(t('mobile.deletedBin.tooLarge'));
+  });
+
+  it('a recover the server refused says so', async () => {
+    page();
+    fireEvent.click((await row()).querySelector('[data-action="recover-server"]'));
+    await waitFor(() => expect(engine.calls).toContainEqual(['mobile.deleted.recover', { ids: ['b1'] }]));
+    emit('mobile.action.result', { seq: 41, accountId: 'a1', outcome: 'dropped', reason: 'REFUSED' });
+    expect((await screen.findByRole('alert')).textContent).toBe(t('mobile.deletedBin.refused'));
+  });
+
+  it('an error that is not a known catalog key reads as the generic failure', async () => {
+    engine.recover = { queued: [], failed: [{ id: 'b1', error: 'SOMETHING_NEW' }] };
+    page();
+    fireEvent.click((await row()).querySelector('[data-action="recover-server"]'));
+    expect((await screen.findByRole('alert')).textContent).toBe(t('deletedBin.recoverFailed'));
+  });
 });
