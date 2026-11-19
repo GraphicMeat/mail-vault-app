@@ -358,7 +358,6 @@ export function AccountConnectionView({
               <input aria-label={replaceLabel}
                 type="password"
                 autoFocus
-                autoComplete="current-password"
                 value={newPassword}
                 disabled={passwordBusy}
                 onChange={(e) => onNewPassword(e.target.value)}

@@ -9,7 +9,7 @@
 // (`{ blocked, loaded }`), `paused`/`onPause`/`onResume` (desktop's live feed), `notShown` (desktop's
 // list of what is not recorded), `intro` (the page's description in the app's words),
 // `onOpenLink(url)` for the map's attribution.
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowUpRight, ArrowDownLeft, Pause, Play, Copy, Check } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { SettingsPageLayout, SettingsSection } from '../../ui/SettingsForm';
@@ -98,7 +98,7 @@ export function NetworkActivityView({ rows, summary, places, query, onQuery, ret
   const t = useT();
   const { locale, privateAttr, formatBytes } = useViewEnv();
   const [copied, setCopied] = useState(false);
-  const shown = filterEvents(rows, filters);
+  const shown = useMemo(() => filterEvents(rows, filters), [rows, filters]);
   const accounts = distinct([...summary.accounts, query.account], locale);
 
   const copy = async () => {
