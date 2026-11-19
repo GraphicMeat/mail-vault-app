@@ -154,7 +154,7 @@ function Offline({ labelOf }) {
           })}
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-mail-text-muted">{asked ? t('mobile.offline.downloading') : t('mobile.offline.hint')}</p>
-            <Button size="sm" data-mv-download-now onClick={downloadNow}>{t('mobile.offline.downloadNow')}</Button>
+            <Button size="sm" className="shrink-0 whitespace-nowrap" data-mv-download-now onClick={downloadNow}>{t('mobile.offline.downloadNow')}</Button>
           </div>
         </div>
       )}

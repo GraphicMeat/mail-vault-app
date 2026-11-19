@@ -43,6 +43,8 @@ describe('shared settings views at phone width', () => {
     const src = view('TransferExportView.jsx');
     expect(src).toMatch(/<label key=\{a\.id\} className="[^"]*\bmin-w-0\b/);
     expect(src).toMatch(/<span className="truncate min-w-0">/);
+    // A fieldset's own minimum is its widest row: it must be allowed to shrink too.
+    expect(src).toMatch(/<fieldset className="min-w-0">/);
   });
 
   it('Fields: a field row wraps, and its fields and buttons are settings controls at 44px', () => {
@@ -76,7 +78,7 @@ describe('shared settings views at phone width', () => {
   });
 
   it('a chip in a list row gives way instead of being cut', () => {
-    expect(rule(phone, '.mv-row .local-mail-label')).toMatch(/min-width: 0/);
+    expect(rule(phone, '.mv-row .local-mail-label:last-child')).toMatch(/min-width: 0/);
     expect(readFileSync(new URL('../../styles/labels-fields.css', import.meta.url), 'utf8')).toMatch(/\.local-mail-label > span \{[^}]*text-overflow: ellipsis/);
   });
 });

@@ -279,11 +279,12 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .local-mail-labels.mv-viewer__tags { display: flex; flex-wrap: wrap; max-width: none; margin: 4px 16px 0; }
 /* Desktop's chips on the phone: a chip in the list gives way with an ellipsis rather than being cut,
    and a chip's remove is a plain glyph that a finger reaches through a ring around it. */
-.mv-row .local-mail-label { min-width: 0; flex-shrink: 1; }
+.mv-row .local-mail-label { flex-shrink: 0; }
+.mv-row .local-mail-label:last-child { min-width: 0; flex-shrink: 1; }
 .local-mail-labels.mv-viewer__tags { gap: 6px; }
 .mv-viewer__tags .local-mail-label { min-height: 24px; padding: 2px 6px; font-size: 0.8125rem; }
-.local-mail-labels .local-mail-label button { position: relative; width: 16px; height: 16px; padding: 0; border: 0; background: none; color: var(--mail-text-muted); font: inherit; font-size: 0.875rem; line-height: 1; appearance: none; -webkit-appearance: none; }
-.local-mail-labels .local-mail-label button::before { content: ''; position: absolute; inset: -14px -10px; }
+:is(.local-mail-labels, .quick-actions-label-list) .local-mail-label button { position: relative; width: 16px; height: 16px; padding: 0; border: 0; background: none; color: var(--mail-text-muted); font: inherit; font-size: 0.875rem; line-height: 1; appearance: none; -webkit-appearance: none; }
+:is(.local-mail-labels, .quick-actions-label-list) .local-mail-label button::before { content: ''; position: absolute; inset: -14px; }
 /* The viewer's custom fields (desktop's strip) under the header, wrapping at the phone's width. */
 .field-strip.mv-viewer__fields { flex-wrap: wrap; margin: 6px 16px 0; }
 /* The strip's controls at the phone's text size, as tall as a finger needs. */
@@ -1257,7 +1258,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-shared-ui .settings-section .settings-editor-section { margin: 12px 0 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--mail-border); border-radius: 0; background: none; }
 /* A button beside a field keeps its label on one line; the field gives way. */
 .mv-shared-ui .settings-editor-field-control .flex > input { flex: 1 1 auto; min-width: 0; }
-.mv-shared-ui :is(.settings-editor-field-control, .settings-section) .flex > button { flex: none; white-space: nowrap; }
+.mv-shared-ui .settings-editor-field-control .flex > button { flex: none; white-space: nowrap; }
 /* Auto Tags: a rule's name and notes across the row, its switch and buttons under them. */
 .mv-shared-ui .auto-tag-rule { flex-wrap: wrap; row-gap: 8px; }
 .mv-shared-ui .auto-tag-rule-copy { flex: 1 1 100%; margin-right: 0; }
@@ -1272,7 +1273,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-shared-ui .net-activity-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mv-shared-ui .net-activity-table, .mv-shared-ui .net-activity-table tbody { display: block; }
 .mv-shared-ui .net-activity-table tr { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; row-gap: 2px; padding: 8px 4px; }
-.mv-shared-ui .net-activity-table td { padding: 0; }
+.mv-shared-ui .net-activity-table td { padding: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .mv-shared-ui .net-activity-table td.net-activity-host { order: -1; flex: 1 1 100%; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-weight: 500; font-size: 0.8125rem; }
 /* Mail preferences > Fields: each field a row that wraps, its choices under it, every control a
    settings field or button at a finger's size. */
@@ -1282,11 +1283,11 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-shared-ui .fields-row-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
 .mv-shared-ui .fields-row > button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; min-height: 44px; padding: 0 8px; border-radius: 8px; color: var(--mail-text-muted); }
 .mv-shared-ui .fields-row > button:disabled { opacity: .4; }
-.mv-shared-ui .field-options { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
+.mv-shared-ui .field-options { flex: 1 1 100%; min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-top: 0; padding-bottom: 4px; }
 .mv-shared-ui .field-option { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .mv-shared-ui .field-options form { display: flex; }
 .mv-shared-ui :is(.field-option > input:not([type="color"]), .field-options form > input, .fields-add > input, .fields-add > select, .fields-copy > select) {
-  flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 0 12px; border: 1px solid var(--mail-border); border-radius: 8px;
+  flex: 1 1 auto; min-width: 0; max-width: none; min-height: 44px; padding: 0 12px; border: 1px solid var(--mail-border); border-radius: 8px;
   background: var(--mail-input-bg); color: var(--mail-text); font-size: 1rem;
 }
 .mv-shared-ui .field-option > input[type="color"] { flex: none; width: 44px; height: 44px; padding: 4px; border: 1px solid var(--mail-border); border-radius: 8px; background: var(--mail-input-bg); }
@@ -1297,6 +1298,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-shared-ui :is(.fields-add, .fields-copy) { gap: 8px; font-size: 0.875rem; }
 .mv-shared-ui .fields-add > input, .mv-shared-ui .fields-copy > select, .mv-shared-ui .fields-copy > label { flex: 1 1 100%; }
 .mv-shared-ui .fields-copy > label { display: flex; align-items: center; gap: 8px; }
+/* A field's own text input takes what its row leaves, not its default 20 characters. */
+.mv-shared-ui :is(.field-option > input:not([type="color"]), .field-options form > input) { flex-basis: 0; width: 0; }
 .mv-settings__heading {
   margin: 24px 16px 8px;
   font-size: 0.75rem;

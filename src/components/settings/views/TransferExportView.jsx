@@ -18,7 +18,8 @@ export function TransferExportView({
   const mismatch = confirm !== '' && password !== confirm;
   return (
     <>
-      <fieldset>
+      {/* A fieldset is as wide as its widest row unless told otherwise: a long address would widen the page. */}
+      <fieldset className="min-w-0">
         <legend className="text-xs font-medium text-mail-text-muted mb-2">{t('settings.transfer.accounts')}</legend>
         <div className="space-y-1 max-h-48 overflow-y-auto">
           {accounts.map(a => (
