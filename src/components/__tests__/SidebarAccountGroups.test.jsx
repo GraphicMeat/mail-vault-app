@@ -8,6 +8,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { usePrivacyStore } from '../../stores/privacyStore';
 import { openFolder } from '../../services/workflows/loadSubtree';
 import { getUnifiedFolder, putUnifiedFolder } from '../../services/workflows/unifiedFolderCache';
+import { readFileSync } from 'node:fs';
 import { t } from '../../i18n';
 import '../../services/workflows/bindStoreActions';
 
@@ -46,6 +47,27 @@ describe('sidebar account groups', () => {
     expect(within(screen.getByRole('group', { name: 'Work' })).getByRole('button', { name: 'Work inbox' }).getAttribute('aria-current')).toBe('true');
     expect(screen.getByTestId('all-inboxes-btn').hasAttribute('aria-current')).toBe(false);
     useMailStore.setState({ loadUnifiedInbox: load });
+  });
+  it('renders a group as ONE row: shared account-row box, fold + open inside it', async () => {
+    const load = useMailStore.getState().loadUnifiedInbox;
+    useMailStore.setState({ loadUnifiedInbox: vi.fn().mockResolvedValue() });
+    render(<Sidebar />);
+    const work = screen.getByRole('group', { name: 'Work' });
+    const open = within(work).getByRole('button', { name: 'Work inbox' });
+    const fold = within(work).getByRole('button', { name: 'Collapse Work' });
+    const row = open.closest('.sidebar-account-row');
+    expect(row).toBeTruthy();
+    expect(row.contains(fold)).toBe(true);
+    expect(row.parentElement).toBe(work);
+    fireEvent.click(open);
+    await vi.waitFor(() => expect(row.classList.contains('sidebar-account-selected')).toBe(true));
+    useMailStore.setState({ loadUnifiedInbox: load });
+  });
+  it('highlights the group on the row, not on its two buttons', () => {
+    const css = readFileSync('src/styles/sidebar-navigation.css', 'utf8');
+    expect(css).not.toMatch(/\.sidebar-group-(open|toggle)[^{]*:hover/);
+    expect(css).not.toMatch(/\.sidebar-group-open\[aria-current[^{]*\{[^}]*background/);
+    expect(css).not.toMatch(/\.sidebar-group-header\s*\{/);
   });
   it('folds, keeps unread sum, and restores the fold after remount', () => {
     useSettingsStore.setState({ unreadPerAccount: { b: 3, c: 4 } });

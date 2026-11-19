@@ -7,7 +7,7 @@ import { useT } from '../../i18n/index.js';
 export function AccountGroupHeader({ name, collapsed, selected, unread, onOpen, onToggle }) {
   const t = useT();
   const pa = usePrivateAttr();
-  return <div className="sidebar-group-header">
+  return <div className={`sidebar-account-row sidebar-group-row${selected ? ' sidebar-account-selected' : ''}`}>
     <button type="button" className="sidebar-group-toggle" aria-expanded={!collapsed}
       aria-label={pa(t(collapsed ? 'sidebar.groupExpand' : 'sidebar.groupCollapse', { name }), 'name')}
       onClick={() => onToggle(name)}><ChevronDown size={14} aria-hidden="true" /></button>

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fixed: a sidebar account group is now one row, same height and width as an account, with a single hover highlight; its left chevron folds and unfolds, the rest opens the group inbox.
+
 ## [2.25.0] - 2026-11-18
 
 - Added: click an account group in the sidebar to read its accounts' mail in one list, and fold or unfold the group.
