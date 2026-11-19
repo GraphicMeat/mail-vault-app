@@ -288,6 +288,16 @@ describe('mobile store', () => {
     expect(localStorage.getItem(STORAGE_ACCOUNT)).toBeNull();
   });
 
+  it('removing an account reads the tags, fields and views again', async () => {
+    const store = createMobileStore();
+    await store.getState().init();
+    engine.calls = [];
+    await store.getState().removeAccount('a3');
+    const asked = engine.calls.map(([m]) => m);
+    expect(asked).toContain('mobile.tags.list');
+    expect(asked).toContain('mobile.views.list');
+  });
+
   it('removing another account keeps the active one', async () => {
     const store = createMobileStore();
     await store.getState().init();

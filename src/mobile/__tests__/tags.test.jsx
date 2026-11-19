@@ -154,3 +154,48 @@ describe('local labels on the phone', () => {
     expect(chips(document.querySelector('.quick-actions-label-list'))).toEqual(['Home']);
   });
 });
+
+describe('the label cache', () => {
+  it('a refused change takes back only its own rows, not a change made meanwhile', async () => {
+    const { daemonCall } = await import('../transport.js');
+    const { useTagStore } = await import('../tags.js');
+    engine.tags = [WORK, HOME];
+    await launch();
+    const a = { accountId: 'a1', folder: 'INBOX', uid: 1 };
+    const b = { accountId: 'a1', folder: 'INBOX', uid: 2 };
+    let refuse;
+    daemonCall.mockImplementationOnce(() => new Promise((_, reject) => { refuse = () => reject(new Error('no')); }));
+    let first;
+    await act(async () => { first = useTagStore.getState().setOnRows([a], 't-work', true); });
+    await act(async () => { await useTagStore.getState().setOnRows([b], 't-home', true); });
+    await act(async () => { refuse(); await first; });
+    const byRow = useTagStore.getState().byRow;
+    expect(byRow['a1|INBOX|1']).toEqual([]);
+    expect(byRow['a1|INBOX|2']).toEqual(['t-home']);
+  });
+
+  it('a refused tag delete puts back the tag, not the whole list as it was', async () => {
+    const { daemonCall } = await import('../transport.js');
+    const { useTagStore } = await import('../tags.js');
+    engine.tags = [WORK, HOME];
+    await launch();
+    let refuse;
+    daemonCall.mockImplementationOnce(() => new Promise((_, reject) => { refuse = () => reject(new Error('no')); }));
+    let gone;
+    await act(async () => { gone = useTagStore.getState().deleteTag('t-work'); });
+    await act(async () => { await useTagStore.getState().createTag('Later'); });
+    await act(async () => { refuse(); await gone; });
+    expect(useTagStore.getState().tags.map((x) => x.id)).toEqual(['t-work', 't-home', 't-Later']);
+  });
+
+  it('a failed refresh is asked again by the next ensureTags', async () => {
+    const { daemonCall } = await import('../transport.js');
+    const { refreshTags, useTagStore } = await import('../tags.js');
+    engine.tags = [WORK];
+    daemonCall.mockImplementationOnce(async () => { throw new Error('offline'); });
+    await act(async () => { await refreshTags(); });
+    expect(useTagStore.getState().tags).toEqual([]);
+    await act(async () => { await ensureTags(); });
+    expect(useTagStore.getState().tags.map((x) => x.id)).toEqual(['t-work']);
+  });
+});

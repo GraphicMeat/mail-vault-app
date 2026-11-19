@@ -164,3 +164,17 @@ describe('custom fields on the phone', () => {
     expect(screen.getByTestId('new-field-form')).toBeTruthy();
   });
 });
+
+describe('the field value cache', () => {
+  it('a refused value takes back only itself, not a value set meanwhile', async () => {
+    const { daemonCall } = await import('../transport.js');
+    const { useFieldStore } = await import('../fields.js');
+    let refuse;
+    daemonCall.mockImplementationOnce(() => new Promise((_, reject) => { refuse = () => reject(new Error('no')); }));
+    let first;
+    await act(async () => { first = useFieldStore.getState().setValue(ITEM, 'f1', 'hi'); });
+    await act(async () => { await useFieldStore.getState().setValue(ITEM, 'f2', true); });
+    await act(async () => { refuse(); await first; });
+    expect(useFieldStore.getState().byRow['a1|INBOX|7']).toEqual({ f2: true });
+  });
+});

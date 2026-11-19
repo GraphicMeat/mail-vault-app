@@ -71,7 +71,18 @@ export const useTagStore = create((set, get) => ({
       get().setTags(reply?.tags);
       return true;
     } catch {
-      set({ tags: before.tags, byRow: before.byRow });
+      // Only what this delete took goes back: the tag (unless the list has it again) and its
+      // chips on the rows that had it, over any change made meanwhile.
+      const at = before.tags.findIndex((tag) => tag.id === id);
+      const had = Object.keys(before.byRow).filter((k) => before.byRow[k].includes(id));
+      set((state) => {
+        let tags = state.tags;
+        if (at >= 0 && !tags.some((tag) => tag.id === id)) {
+          tags = [...tags];
+          tags.splice(Math.min(at, tags.length), 0, before.tags[at]);
+        }
+        return { tags, byRow: withTag(state.byRow, had.filter((k) => k in state.byRow), id) };
+      });
       return false;
     }
   },
@@ -80,12 +91,14 @@ export const useTagStore = create((set, get) => ({
   setOnRows: async (rows, tagId, on) => {
     const keys = rows.map((r) => rowKey(r.accountId, r.folder, r.uid));
     const before = get().byRow;
+    // The rows this change really changes: only theirs go back when the engine refuses it.
+    const changed = keys.filter((k) => (before[k] || EMPTY).includes(tagId) !== on);
     set({ byRow: on ? withTag(before, keys, tagId) : withoutTag(before, keys, tagId) });
     try {
       if (on) await daemonCall('mobile.tags.assign', { tagId, items: rows.map(item) });
       else await daemonCall('mobile.tags.unassign', { tagId, items: rows.map(item) });
     } catch {
-      set({ byRow: before });
+      set((state) => ({ byRow: on ? withoutTag(state.byRow, changed, tagId) : withTag(state.byRow, changed, tagId) }));
       return false;
     }
     // The counts the manage list shows are the engine's.
@@ -123,8 +136,13 @@ export function ensureTags() {
 /** After an import brought tags: the list again, and every row's chips asked for again. */
 export function refreshTags() {
   useTagStore.setState({ byRow: {} });
-  loading = useTagStore.getState().loadTags().catch(() => []);
-  return loading;
+  // A failed load is asked again by the next call, as `ensureTags`'s is.
+  const load = useTagStore.getState().loadTags().catch(() => {
+    if (loading === load) loading = null;
+    return [];
+  });
+  loading = load;
+  return load;
 }
 
 let pending = new Map();

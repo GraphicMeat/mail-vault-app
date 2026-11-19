@@ -913,6 +913,10 @@ export function createMobileStore() {
           const { [id]: _state, ...syncState } = s.syncState;
           return { accounts: rest, unread, syncState };
         });
+        // Its tags, fields and views went with it (the engine's lists change): read them again.
+        refreshTags();
+        refreshFields(id);
+        refreshViews();
         if (activeAccountId !== id) {
           // All Inboxes loses that account's mail; with one account left it is that account's inbox.
           if (spans && rest.length < 2) open(activeAccountId, INBOX);

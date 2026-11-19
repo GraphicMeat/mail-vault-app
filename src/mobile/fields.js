@@ -93,7 +93,8 @@ export const useFieldStore = create((set, get) => ({
   /** Set or clear one value of a row: shown at once, put back when the engine refuses. */
   setValue: async (row, fieldId, value) => {
     const key = rowKey(row.accountId, row.folder, row.uid);
-    const before = get().byRow;
+    const had = Object.hasOwn(get().byRow[key] || EMPTY, fieldId);
+    const previous = had ? get().byRow[key][fieldId] : undefined;
     const cleared = value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length);
     set((state) => {
       const current = { ...(state.byRow[key] || EMPTY) };
@@ -105,7 +106,13 @@ export const useFieldStore = create((set, get) => ({
       await daemonCall('mobile.fields.set', { item: item(row), fieldId, value: cleared ? null : value });
       return true;
     } catch {
-      set({ byRow: before });
+      // Only this value goes back, over any other change made meanwhile.
+      set((state) => {
+        const current = { ...(state.byRow[key] || EMPTY) };
+        if (had) current[fieldId] = previous;
+        else delete current[fieldId];
+        return { byRow: { ...state.byRow, [key]: current } };
+      });
       return false;
     }
   },
@@ -121,9 +128,12 @@ export function requestFields(accountId) {
   useFieldStore.getState().loadFields(accountId).catch(() => {}).finally(() => asked.delete(accountId));
 }
 
-/** After an import brought fields: every list known so far asked for again, every value dropped. */
-export function refreshFields() {
-  const known = Object.keys(useFieldStore.getState().fields);
+/**
+ * After an import brought fields, or an account went (`removed`, whose list is not asked for
+ * again): every list known so far asked for again, every value dropped.
+ */
+export function refreshFields(removed = null) {
+  const known = Object.keys(useFieldStore.getState().fields).filter((id) => id !== removed);
   useFieldStore.setState({ fields: {}, byRow: {} });
   asked.clear();
   for (const id of known) requestFields(id);
