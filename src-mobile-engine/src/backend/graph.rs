@@ -80,6 +80,8 @@ const MOVE_BATCH: usize = 99;
 /// The largest message a recover uploads to Graph: `POST /me/messages` takes the MIME base64
 /// encoded, and Graph refuses a request over about 4 MB; base64 makes 3 bytes 4.
 pub(crate) const MIME_UPLOAD_CAP: usize = 3 * 1024 * 1024 - 64 * 1024;
+// Core sends the MIME as one unwrapped base64 string: the cap's encoding fits a 4 MiB request.
+const _: () = assert!(MIME_UPLOAD_CAP.div_ceil(3) * 4 <= 4 * 1024 * 1024);
 
 /// The tag of a staged upload's id once the copy was moved into place (`append`).
 const MOVED: &str = "moved:";
