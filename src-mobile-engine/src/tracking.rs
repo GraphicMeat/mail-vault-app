@@ -6,12 +6,13 @@
 //! opens (fetched then, or a download's body opened later) with at least one pixel leaves its
 //! verdict here, in the write that stores or stamps its body: `acct.<accountId>.trackers.<message>`
 //! = `{"n": pixels, "v": [vendor, ...]}` in `settings` (no table of its own, like `usage.rs`; every
-//! row goes with the account). Keyed by the message itself, as desktop keys its entries: its
-//! Message-ID (`mid\n<id>`), so a body fetched again (evicted, refreshed) or a message moved to
-//! another folder counts once, and a uid reused for another message (a new UIDVALIDITY, a local
-//! uid handed out again) never takes over the old one's verdict. Only a message without a
-//! Message-ID falls back to its place (`<folder>\n<uid>`). The verdict outlives the cached body
-//! and the message: what was found stays found, as on desktop. Counts describe what was FOUND, never what was blocked
+//! row goes with the account). Keyed by the message itself, as desktop keys its entries: core's
+//! message key (`app_db::identity::msg_key_or_remote`, the key tags and fields use), its
+//! Message-ID, else its server id (Graph, JMAP), else its place. So a body fetched again
+//! (evicted, refreshed) or a message moved to another folder counts once, and a uid reused for
+//! another message (a new UIDVALIDITY, a local uid handed out again) never takes over the old
+//! one's verdict. The verdict outlives the cached body and the message: what was found stays
+//! found, as on desktop. Counts describe what was FOUND, never what was blocked
 //! (a free user's pixels are found and kept), and only in messages opened, as the page's sentence
 //! says: a body the offline download fetched and nobody opened is not counted.
 //!
@@ -35,17 +36,21 @@ const TOP: usize = 5;
 /// Rows one backfill transaction writes.
 const BATCH: usize = 200;
 
-/// The verdict's key for message `uid` of `folder` (see the module): by its Message-ID, else by
-/// its place.
+/// The verdict's key for message `uid` of `folder` (see the module): core's message key.
 fn key(c: &Connection, account: &str, folder: &str, uid: i64) -> rusqlite::Result<String> {
-    let mid: Option<String> = c
-        .query_row("SELECT message_id FROM messages WHERE account_id = ?1 AND folder = ?2 AND uid = ?3", (account, folder, uid), |r| r.get(0))
+    let found: Option<(Option<String>, Option<String>)> = c
+        .query_row(
+            "SELECT m.message_id, r.remote_id FROM messages m
+             LEFT JOIN remote_ids r ON r.account_id = m.account_id AND r.folder = m.folder AND r.uid = m.uid
+             WHERE m.account_id = ?1 AND m.folder = ?2 AND m.uid = ?3",
+            (account, folder, uid),
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .optional()?;
-    let mid = mid.map(|m| mailvault_core::maildir::normalize_message_id(&m)).filter(|m| !m.is_empty());
-    Ok(match mid {
-        Some(mid) => format!("acct.{account}.trackers.mid\n{mid}"),
-        None => format!("acct.{account}.trackers.{folder}\n{uid}"),
-    })
+    let (mid, remote) = found.unwrap_or_default();
+    let dir = mailvault_core::search_index::text::vault_dir_name(folder);
+    let k = mailvault_core::app_db::identity::msg_key_or_remote(mid.as_deref(), &dir, uid as u32, remote.as_deref());
+    Ok(format!("acct.{account}.trackers.{k}"))
 }
 
 /// Records a stored body's verdict (inside the caller's write). Nothing for a body without pixels.
