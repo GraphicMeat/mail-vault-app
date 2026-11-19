@@ -108,7 +108,18 @@
 .view-query-entry .typeahead-chips { flex: 0 1 240px; }
 .typeahead-field { position: relative; display: inline-flex; flex: 1 1 160px; min-width: 0; }
 .typeahead-field input { width: 100%; min-width: 0; }
-:is(.settings-window, .mv-shared-ui) .view-editor .typeahead-chip { cursor: default; }
+:is(.settings-window, .mv-shared-ui) :is(.view-editor, .account-group-field) .typeahead-chip { cursor: default; }
+.account-group-field .typeahead-chips { padding: 5px; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); }
+.account-group-field .typeahead-field { flex-basis: 180px; }
+.account-group-field .typeahead-field input { min-height: 34px; padding: 6px 8px; border: 0; background: transparent; outline: none; }
+.account-group-field .typeahead-chips:focus-within { border-color: var(--mail-accent); }
+.account-group-cloud { margin-top: 12px; }
+.account-group-cloud-label { display: block; margin-bottom: 7px; color: var(--mail-text-muted); font-size: 12px; }
+.account-group-cloud-pills { display: flex; flex-wrap: wrap; gap: 7px; }
+.account-group-cloud-pills button { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 6px 10px; border: 1px solid var(--mail-border); border-radius: 999px; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; overflow-wrap: anywhere; }
+.account-group-cloud-pills button:hover { background: var(--mail-surface-hover); }
+.account-group-cloud-pills button[aria-pressed="true"] { border-color: var(--mail-accent); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.account-group-cloud-pills button span { opacity: .65; font-variant-numeric: tabular-nums; }
 .typeahead-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; }
 .typeahead-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; width: max-content; min-width: 100%; max-width: min(360px, 90vw); max-height: 240px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--mail-border); border-radius: 10px; background: var(--mail-bg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
 .typeahead-list [role="option"] { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--mail-text); font-size: 13px; cursor: pointer; }
