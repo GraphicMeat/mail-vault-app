@@ -74,7 +74,7 @@ const Row = React.memo(function Row({ e }) {
       </td>
       <td className={CELL}>{PROTOCOL_LABELS[e.protocol] || e.protocol}</td>
       {/* A lookup is a name and its answer, not a connection to port 53. */}
-      <td className={`${CELL} max-w-[16rem] truncate`} title={!dns && e.ip ? e.ip : undefined}>
+      <td className={`${CELL} net-activity-host max-w-[16rem] truncate`} title={!dns && e.ip ? e.ip : undefined}>
         {dns ? target(e, '\u2192') : e.host}
       </td>
       <td className={`${CELL} tabular-nums`} data-testid="net-port">{dns ? '' : e.port}</td>
@@ -122,10 +122,11 @@ export function NetworkActivityView({ rows, summary, places, query, onQuery, ret
   return (
     <SettingsPageLayout data-testid="network-activity">
       <SettingsSection title={t('settings.tab.networkActivity')} description={intro ?? t('netActivity.intro')}>
-        <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="net-activity-filters flex flex-wrap items-center gap-2 mb-3">
           <label className="flex items-center gap-2 text-xs text-mail-text-muted">
             {t('netActivity.retention')}
             <select
+              aria-label={t('netActivity.retention')}
               value={retention}
               onChange={e => onRetention(e.target.value)}
               className={SELECT}
@@ -136,7 +137,7 @@ export function NetworkActivityView({ rows, summary, places, query, onQuery, ret
           {retentionError && <span role="alert" className="text-xs text-mail-danger">{t('netActivity.retentionFailed')}</span>}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mb-2">
+        <div className="net-activity-filters flex flex-wrap items-center gap-2 mb-2">
           <select aria-label={t('netActivity.range')} value={query.range} onChange={e => onQuery({ range: e.target.value })} className={SELECT}>
             {rangesFor(retention).map(r => <option key={r} value={r}>{t(`netActivity.ranges.${r}`)}</option>)}
           </select>
@@ -156,7 +157,7 @@ export function NetworkActivityView({ rows, summary, places, query, onQuery, ret
 
         <NetworkMapView places={places} selected={query.country} onSelect={country => onQuery({ country })} onOpenLink={onOpenLink} />
 
-        <div className="flex flex-wrap items-center gap-2 mb-2">
+        <div className="net-activity-filters flex flex-wrap items-center gap-2 mb-2">
           <select aria-label={t('netActivity.protocol')} value={filters.protocol} onChange={e => onFilter('protocol', e.target.value)} className={SELECT}>
             <option value="">{t('netActivity.allProtocols')}</option>
             {distinct(rows.map(e => e.protocol), locale).map(p => <option key={p} value={p}>{PROTOCOL_LABELS[p] || p}</option>)}
@@ -189,7 +190,7 @@ export function NetworkActivityView({ rows, summary, places, query, onQuery, ret
           <p className="text-sm text-mail-text-muted py-4">{t('netActivity.empty')}</p>
         ) : (
           <div className="overflow-x-auto max-h-[28rem] overflow-y-auto rounded-lg border border-mail-border">
-            <table className="w-full text-xs">
+            <table className="net-activity-table w-full text-xs">
               <thead className="sticky top-0 bg-mail-surface"><tr className="border-b border-mail-border text-mail-text-muted">
                 <th className={`${CELL} font-medium`}>{t('netActivity.time')}</th>
                 <th className={CELL}><span className="sr-only">{t('netActivity.direction')}</span></th>

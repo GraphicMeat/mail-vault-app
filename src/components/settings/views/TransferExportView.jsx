@@ -22,9 +22,9 @@ export function TransferExportView({
         <legend className="text-xs font-medium text-mail-text-muted mb-2">{t('settings.transfer.accounts')}</legend>
         <div className="space-y-1 max-h-48 overflow-y-auto">
           {accounts.map(a => (
-            <label key={a.id} className="flex items-center gap-2 text-sm text-mail-text">
+            <label key={a.id} className="flex items-center gap-2 min-w-0 text-sm text-mail-text">
               <input type="checkbox" className="accent-mail-accent" checked={selected.has(a.id)} disabled={disabled || undefined} onChange={() => onToggle(a.id)} />
-              <span className="truncate"><Private kind="email">{a.email}</Private></span>
+              <span className="truncate min-w-0"><Private kind="email">{a.email}</Private></span>
             </label>
           ))}
         </div>

@@ -8,7 +8,7 @@ import { useT } from './viewContext';
 export function AppIconView({ icons, selected, pending = false, error = false, onChoose }) {
   const t = useT();
   return <SettingRow label={t('settings.icons.title')} description={t('settings.icons.hint')}
-    preview={<figure aria-label={t('settings.icons.title')}><img src={icons[selected]} width="80" height="80" alt="" /><figcaption>{t(`settings.icons.${selected}`)}</figcaption></figure>}>
+    preview={<figure className="app-icon-preview" aria-label={t('settings.icons.title')}><img src={icons[selected]} width="80" height="80" alt="" /><figcaption>{t(`settings.icons.${selected}`)}</figcaption></figure>}>
     <div>
       <div role="group" aria-label={t('settings.icons.title')} className="settings-visual-options">
         {Object.entries(icons).map(([value, src]) => <button type="button" key={value}

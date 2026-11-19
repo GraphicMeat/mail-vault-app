@@ -274,8 +274,8 @@ export function AutoTagsView({
             const note = ruleNote(rule);
             const action = showInboxAction ? inboxActionText(rule) : '';
             return (
-              <div key={rule.id} className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
-                <div className="flex-1 min-w-0 mr-3">
+              <div key={rule.id} className="auto-tag-rule flex items-center justify-between p-3 bg-mail-bg rounded-lg">
+                <div className="auto-tag-rule-copy flex-1 min-w-0 mr-3">
                   <div className="text-sm font-medium text-mail-text truncate">{rule.name}</div>
                   <div className="text-xs text-mail-text-muted truncate">{rule.instruction}</div>
                   <div className="text-xs text-mail-text-muted mt-0.5">
@@ -284,7 +284,7 @@ export function AutoTagsView({
                   </div>
                   {note && <div className="text-xs text-mail-warning mt-0.5" data-testid={`auto-tag-note-${rule.id}`}>{note}</div>}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="auto-tag-rule-actions flex items-center gap-2 shrink-0">
                   <ToggleSwitch
                     testId={`auto-tag-enabled-${rule.id}`}
                     active={rule.enabled}

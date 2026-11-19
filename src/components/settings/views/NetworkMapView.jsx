@@ -116,7 +116,7 @@ export function NetworkMapView({ places, selected, onSelect, onOpenLink }) {
             <div
               role="tooltip"
               data-testid="net-map-tooltip"
-              className="pointer-events-none absolute z-10 max-w-[16rem] rounded-md border border-mail-border bg-mail-surface px-2 py-1 text-xs shadow-lg"
+              className="net-map-tooltip pointer-events-none absolute z-10 max-w-[16rem] rounded-md border border-mail-border bg-mail-surface px-2 py-1 text-xs shadow-lg"
               style={tipAt(hover)}
             >
               <Details place={active} name={hover.code === LOCAL ? t('netActivity.map.localNetwork') : names.get(hover.code)} />
