@@ -8,5 +8,7 @@
   "80216d6eec31": "No. I messaggi archiviati in Gmail contano ancora nello spazio Google. Per liberare spazio, salva una copia altrove, controlla che si apra, poi elimina la copia sul server.",
   "2093c8a032fe": "Come scaricare tutte le email di Gmail (2 metodi) - MailVault",
   "c3dca7229114": "Spazio Gmail pieno? Come liberarlo in sicurezza - MailVault",
-  "47deb8746eb8": "Come esportare la posta di iCloud sul Mac o sul PC - MailVault"
+  "47deb8746eb8": "Come esportare la posta di iCloud sul Mac o sul PC - MailVault",
+  "fa496a39893d": "Non esiste MailStore per Mac. <strong>MailStore Home</strong>, uno degli strumenti più diffusi per archiviare la posta in locale, funziona solo su Windows 10 e 11. Se usi macOS (o Linux), ti serve un'alternativa.",
+  "f0ed491adec8": "Non in elenco: MailStore Home, un archiviatore gratuito molto diffuso, è solo per Windows. MailStore indica Windows 10 e Windows 11 come sistemi supportati. Se arrivi da lì, vedi <a href=\"/guides/mailstore-alternative-mac.html\">l'alternativa a MailStore per Mac</a> o <a href=\"/guides/mailstore-alternatives-compared.html\">alternative a MailStore a confronto</a>."
 }

@@ -8,5 +8,7 @@
   "80216d6eec31": "不能。归档的 Gmail 邮件仍占用你的 Google 存储空间。要释放空间，先把副本保存到别处，确认可以打开，再删除服务器上的副本。",
   "2093c8a032fe": "如何下载全部 Gmail 邮件（2 种方法） - MailVault",
   "c3dca7229114": "Gmail 存储空间已满？安全释放空间的方法 - MailVault",
-  "47deb8746eb8": "如何将 iCloud 邮件导出到 Mac 或 PC - MailVault"
+  "47deb8746eb8": "如何将 iCloud 邮件导出到 Mac 或 PC - MailVault",
+  "fa496a39893d": "MailStore 没有 Mac 版。<strong>MailStore Home</strong> 是把邮件归档到本地最流行的工具之一，但只能在 Windows 10 和 11 上运行。如果你用的是 macOS（或 Linux），就需要一个替代方案。",
+  "f0ed491adec8": "未列入：MailStore Home 是一款流行的免费归档工具，但只支持 Windows。MailStore 列出的支持系统是 Windows 10 和 Windows 11。如果你是从它转过来的，请参阅 <a href=\"/guides/mailstore-alternative-mac.html\">Mac 上的 MailStore 替代方案</a>或 <a href=\"/guides/mailstore-alternatives-compared.html\">MailStore 替代方案对比</a>。"
 }

@@ -8,5 +8,7 @@
   "80216d6eec31": "Nein. Archivierte Gmail-Nachrichten zählen weiter zu deinem Google-Speicher. Um Platz zu schaffen, speichere eine Kopie woanders, prüfe, ob sie sich öffnen lässt, und lösche dann die Serverkopie.",
   "2093c8a032fe": "Alle Gmail-E-Mails herunterladen: 2 Wege - MailVault",
   "c3dca7229114": "Gmail-Speicher voll? So schaffst du sicher Platz - MailVault",
-  "47deb8746eb8": "iCloud Mail auf den Mac oder PC exportieren - MailVault"
+  "47deb8746eb8": "iCloud Mail auf den Mac oder PC exportieren - MailVault",
+  "fa496a39893d": "Es gibt kein MailStore für Mac. <strong>MailStore Home</strong>, eines der beliebtesten Werkzeuge, um E-Mails lokal zu archivieren, läuft nur unter Windows 10 und 11. Wenn du macOS (oder Linux) nutzt, brauchst du eine Alternative.",
+  "f0ed491adec8": "Nicht auf der Liste: MailStore Home, ein beliebter kostenloser Archivierer, läuft nur unter Windows. MailStore nennt Windows 10 und Windows 11 als unterstützte Systeme. Wenn du davon kommst, sieh dir <a href=\"/guides/mailstore-alternative-mac.html\">die MailStore-Alternative für Mac</a> oder <a href=\"/guides/mailstore-alternatives-compared.html\">MailStore-Alternativen im Vergleich</a> an."
 }

@@ -144,7 +144,6 @@
   "f6178ef194d5": "它很少能腾出多少空间。Outlook.com 会在 10 天后自动删除「垃圾邮件」中的项目。查看「设置」中的存储页面，看看哪些文件夹才是真正最大的。",
   "b5d014972fe4": "为 Outlook.com 腾出空间，同时保留你的邮件",
   "cfb31ef1e766": "分步为 Hotmail 和 Outlook.com 腾出空间：清空「已删除邮件」，找出最大的邮件，在本地保留旧邮件的副本，再在线删除。",
-  "cb63fcf8c752": "如果你搜索过邮件归档软件，很可能已经见过 <strong>MailStore Home</strong>。它是在 Windows 上把邮件归档到本地最流行的工具之一。问题是，MailStore Home 只能在 Windows 10 和 11 上运行，没有 Mac 版。如果你用的是 macOS（或 Linux），就需要一个替代方案。",
   "7a8ee0d4f7ff": "本页讲的是 Mac。想看与 Windows 版的正面对比，请阅读 <a href=\"/compare/mailvault-vs-mailstore-home.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailVault 与 MailStore Home 对比</a>。如果你需要为整个公司建立归档，请参阅 <a href=\"/guides/mailstore-server-alternative.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailStore Server 替代方案</a>；要把所有选择并排比较，请参阅 <a href=\"/guides/mailstore-alternatives-compared.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailStore 替代方案对比</a>。",
   "ddf894b6eb92": "<strong>本地搜索，离线可用。</strong>MailVault 为你 Mac 上的邮件建立全文索引，无需联网即可搜索。你可以按发件人、日期、文件夹或标签缩小范围。在我们<a href=\"/blog/search-50000-emails-in-milliseconds.html\" class=\"text-primary-500 hover:text-primary-600 underline\">公布的搜索测试</a>中，在 50,000 封邮件中最慢的一次搜索耗时 14 毫秒。",
   "f3f636834b27": "<strong>有多少内容留在你的 Mac 上。</strong>默认情况下，MailVault 在你的电脑上保留最近几个月的邮件，你可以选择 1、3、6 或 12 个月。你归档的邮件和你的备份永远不会因这项设置而被删除。「全部保存」（Premium）会保留每个文件夹和全部历史。",

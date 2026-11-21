@@ -8,5 +8,7 @@
   "80216d6eec31": "Não. Mensagens arquivadas no Gmail continuam contando no seu armazenamento do Google. Para liberar espaço, salve uma cópia em outro lugar, confira se ela abre e depois apague a cópia do servidor.",
   "2093c8a032fe": "Como baixar todos os seus e-mails do Gmail (2 jeitos) - MailVault",
   "c3dca7229114": "Armazenamento do Gmail cheio? Como liberar espaço com segurança - MailVault",
-  "47deb8746eb8": "Como exportar o iCloud Mail para o Mac ou PC - MailVault"
+  "47deb8746eb8": "Como exportar o iCloud Mail para o Mac ou PC - MailVault",
+  "fa496a39893d": "Não existe MailStore para Mac. O <strong>MailStore Home</strong>, uma das ferramentas mais populares para arquivar e-mails localmente, só roda no Windows 10 e 11. Se você está no macOS (ou no Linux), precisa de uma alternativa.",
+  "f0ed491adec8": "Fora da lista: o MailStore Home, um arquivador gratuito popular, é só para Windows. O MailStore lista o Windows 10 e o Windows 11 como sistemas compatíveis. Se você está vindo dele, veja <a href=\"/guides/mailstore-alternative-mac.html\">a alternativa ao MailStore para Mac</a> ou <a href=\"/guides/mailstore-alternatives-compared.html\">alternativas ao MailStore comparadas</a>."
 }

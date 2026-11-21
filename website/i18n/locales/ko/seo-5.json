@@ -144,7 +144,6 @@
   "f6178ef194d5": "비워지는 공간은 많지 않습니다. Outlook.com은 정크 메일의 항목을 10일 뒤에 저절로 지웁니다. 어느 폴더가 정말 가장 큰지는 설정의 스토리지 페이지에서 확인하십시오.",
   "b5d014972fe4": "메일은 간직하면서 Outlook.com 공간 비우기",
   "cfb31ef1e766": "Hotmail과 Outlook.com의 공간을 단계별로 비우기: 지운 편지함을 비우고, 가장 큰 메일을 찾고, 오래된 메일의 로컬 사본을 만든 다음 온라인에서 지웁니다.",
-  "cb63fcf8c752": "메일 보관 소프트웨어를 찾아본 적이 있다면 아마 <strong>MailStore Home</strong>을 보았을 것입니다. Windows에서 메일을 로컬에 보관하는 가장 인기 있는 도구 중 하나입니다. 문제는 MailStore Home이 Windows 10과 11에서만 실행되고 Mac 버전이 없다는 것입니다. macOS(또는 Linux)를 쓴다면 대안이 필요합니다.",
   "7a8ee0d4f7ff": "이 페이지는 Mac에 관한 것입니다. Windows판과 직접 비교하려면 <a href=\"/compare/mailvault-vs-mailstore-home.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailVault vs MailStore Home</a>을 읽으십시오. 회사 전체를 위한 보관 시스템이 필요하다면 <a href=\"/guides/mailstore-server-alternative.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailStore Server 대안</a>을, 모든 선택지를 나란히 보려면 <a href=\"/guides/mailstore-alternatives-compared.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailStore 대안 비교</a>를 보십시오.",
   "ddf894b6eb92": "<strong>오프라인 로컬 검색.</strong> MailVault는 Mac에 있는 메일로 전문 인덱스를 만들고, 연결 없이 검색합니다. 보낸 사람, 날짜, 폴더, 태그로 범위를 좁힐 수 있습니다. <a href=\"/blog/search-50000-emails-in-milliseconds.html\" class=\"text-primary-500 hover:text-primary-600 underline\">저희가 공개한 검색 시험</a>에서 메시지 50,000개를 대상으로 가장 느린 검색이 14밀리초였습니다.",
   "f3f636834b27": "<strong>Mac에 얼마나 남길지.</strong> MailVault는 기본적으로 최근 몇 달 치 메일을 컴퓨터에 두며, 1, 3, 6, 12개월 중에서 고를 수 있습니다. 보관한 메일과 백업은 이 설정 때문에 지워지지 않습니다. 모두 보관(Premium)은 모든 폴더와 전체 기록을 간직합니다.",

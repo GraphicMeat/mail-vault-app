@@ -144,7 +144,6 @@
   "f6178ef194d5": "たいして空きません。Outlook.com は迷惑メールのアイテムを 10 日後に自動で削除します。どのフォルダが本当に大きいかは、設定のストレージのページで確認してください。",
   "b5d014972fe4": "メールを残したまま Outlook.com の容量を空ける",
   "cfb31ef1e766": "Hotmail と Outlook.com の空き容量を増やす手順：削除済みアイテムを空にし、最も大きなメールを見つけ、古いメールのローカルのコピーを残してから、オンラインで削除します。",
-  "cb63fcf8c752": "メールのアーカイブソフトを探したことがあるなら、おそらく <strong>MailStore Home</strong> を見つけたでしょう。Windows でメールをローカルにアーカイブするツールとして、最も人気のあるものの 1 つです。問題は、MailStore Home が Windows 10 と 11 でしか動かず、Mac 版がないことです。macOS（や Linux）を使っているなら、代わりが必要です。",
   "7a8ee0d4f7ff": "このページは Mac についてのものです。Windows 版との直接比較は <a href=\"/compare/mailvault-vs-mailstore-home.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailVault と MailStore Home の比較</a>を読んでください。会社全体のアーカイブが必要なら <a href=\"/guides/mailstore-server-alternative.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailStore Server の代わり</a>を、すべての選択肢の比較は <a href=\"/guides/mailstore-alternatives-compared.html\" class=\"text-primary-500 hover:text-primary-600 underline\">MailStore の代わりの比較</a>を参照してください。",
   "ddf894b6eb92": "<strong>オフラインでのローカル検索。</strong>MailVault は Mac 上のメールの全文インデックスを作り、接続なしで検索します。送信者、日付、フォルダ、タグで絞り込めます。<a href=\"/blog/search-50000-emails-in-milliseconds.html\" class=\"text-primary-500 hover:text-primary-600 underline\">公開している検索テスト</a>では、50,000 通のメッセージを対象にした最も遅い検索でも 14 ミリ秒でした。",
   "f3f636834b27": "<strong>Mac にどれだけ残すか。</strong>MailVault は既定で直近の数か月分のメールをコンピュータに残し、1、3、6、12 か月から選べます。アーカイブしたメールとバックアップがこの設定で削除されることはありません。すべて保存（Premium）は、すべてのフォルダと全期間のメールを残します。",
