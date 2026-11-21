@@ -1,6 +1,5 @@
 {
   "be42c02db587": "Comment supprimer des milliers d'anciens e-mails sans risque (gardez d'abord une copie)",
-  "3020dc8e54fe": "Comment télécharger tous vos e-mails Gmail : Takeout ou archive IMAP — MailVault",
   "5a059d0e513d": "Il existe exactement deux façons pratiques d'obtenir une copie complète de votre compte Gmail sur votre propre ordinateur : Google Takeout, intégré aux outils de compte de Google, et un outil d'archivage par IMAP, qui se connecte à Gmail comme le ferait un client de messagerie et télécharge chaque message séparément. Les résultats sont très différents, et le bon choix dépend de ce que vous comptez réellement faire du téléchargement ensuite.",
   "3496ed70e848": "Option 1 : Google Takeout",
   "4e62eeb134d6": "Ce que vous obtenez, c'est un unique gros fichier texte par libellé ou dossier, au format mbox Unix classique &mdash; tous les e-mails mis bout à bout. C'est une sauvegarde complète et légitime, mais elle a de vraies limites :",
@@ -43,7 +42,6 @@
   "1dc1c9122a58": "Oui, si l'archive est stockée en fichiers individuels plutôt qu'en un gros export unique. Des fichiers .eml individuels se cherchent avec les outils de recherche de fichiers habituels ou dans un client de messagerie, contrairement à un export groupé qu'il faudrait d'abord importer quelque part.",
   "7e91aa798c2f": "Les e-mails clients sont souvent votre seule trace du périmètre, des validations et des conditions de paiement. Voici comment indépendants et petites entreprises peuvent constituer une archive locale, permanente et consultable de leur courrier client.",
   "5c821a170c34": "L'archivage des e-mails pour les indépendants et les petites entreprises : garder le courrier client pour toujours",
-  "b90247dd7e56": "Comment exporter iCloud Mail vers votre ordinateur — MailVault",
   "4a3eb7ee186f": "Apple ne propose pas de bouton « exporter mon courrier » en un clic pour iCloud Mail, ce qui surprend beaucoup de gens souhaitant sauvegarder un compte @icloud.com, @me.com ou @mac.com. La bonne nouvelle, c'est qu'iCloud Mail prend pleinement en charge l'accès IMAP standard : n'importe quel client de messagerie ou outil de sauvegarde compatible IMAP peut télécharger votre courrier &mdash; il suffit de le configurer correctement, avec une étape propre à Apple : un mot de passe spécifique à l'application.",
   "c1040f51ba83": "Étape 1 : générez un mot de passe spécifique à l'application",
   "4c5fee3ac1fc": "Sous Connexion et sécurité, choisissez Mots de passe pour applications.",
@@ -84,7 +82,6 @@
   "691f15a747f4": "Aucune dépendance à un éditeur &mdash; vos e-mails ne sont prisonniers d'aucun format propriétaire.",
   "3180dfa0b292": "Arrêtez de payer pour du stockage e-mail",
   "0ca482fb35f9": "Boîte mail pleine ? Archivez vos e-mails en local avec MailVault, puis supprimez-les du serveur sans risque. Libérez du stockage Gmail, Outlook ou IMAP sans rien perdre.",
-  "3e6eb6eb2155": "Stockage Gmail plein ? Voici comment y remédier (sans payer à vie) — MailVault",
   "92ad45801dca": "Gmail donne 15 Go à chaque compte gratuit, partagés entre Gmail, Google Drive et Google Photos. Quand vous atteignez cette limite, deux choses arrivent : vous ne recevez plus de courrier (les expéditeurs reçoivent un message d'échec), et Google vous presse d'acheter plus de stockage. Rien de dangereux, mais les deux sont pénibles, et le remède auquel la plupart des gens pensent &mdash; payer $1.99/mois à Google pour 100 Go &mdash; ne fait que repousser le problème. Votre boîte continue de grossir, et vous finirez par revenir ici.",
   "eb623ba9f726": "Voici ce qui marche vraiment, par ordre d'effort.",
   "1c567c0816be": "1. Découvrez ce qui occupe réellement votre espace",

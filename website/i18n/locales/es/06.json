@@ -1,6 +1,5 @@
 {
   "be42c02db587": "Cómo borrar miles de correos antiguos sin riesgo (guarda antes una copia)",
-  "3020dc8e54fe": "Cómo descargar todos tus correos de Gmail: Takeout frente a archivo IMAP — MailVault",
   "5a059d0e513d": "Hay exactamente dos formas prácticas de llevar una copia completa de tu cuenta de Gmail a tu propio ordenador: Google Takeout, que viene integrado en las herramientas de cuenta de Google, y una herramienta de archivado por IMAP, que se conecta a Gmail igual que un cliente de correo y descarga cada mensaje por separado. Dan resultados muy distintos, y cuál te conviene depende de qué quieras hacer después con la descarga.",
   "3496ed70e848": "Opción 1: Google Takeout",
   "4e62eeb134d6": "Lo que obtienes es un único archivo de texto grande por etiqueta o carpeta en el clásico formato mbox de Unix &mdash; todos los correos concatenados uno detrás de otro. Es una copia legítima y completa, pero tiene limitaciones reales:",
@@ -43,7 +42,6 @@
   "1dc1c9122a58": "Sí, si el archivo está guardado como archivos sueltos y no como una única exportación grande. Los archivos .eml individuales se pueden buscar con las herramientas normales de búsqueda de archivos o dentro de un cliente de correo, a diferencia de una exportación única que tendrías que importar antes en algún sitio.",
   "7e91aa798c2f": "El correo con clientes suele ser tu único registro del alcance, las aprobaciones y las condiciones de pago. Así pueden los autónomos y las pequeñas empresas construir un archivo local, permanente y buscable del correo con clientes.",
   "5c821a170c34": "Archivado de correo para autónomos y pequeñas empresas: conserva el correo de clientes para siempre",
-  "b90247dd7e56": "Cómo exportar iCloud Mail a tu ordenador — MailVault",
   "4a3eb7ee186f": "Apple no ofrece un botón de \"exportar mi correo\" para iCloud Mail, lo que sorprende a mucha gente que quiere copiar una cuenta @icloud.com, @me.com o @mac.com. La buena noticia es que iCloud Mail admite acceso IMAP estándar, así que cualquier cliente de correo o herramienta de copia con IMAP puede descargar tu correo: solo hay que configurarlo bien, incluido un paso propio de Apple, la contraseña específica de aplicación.",
   "c1040f51ba83": "Paso 1: genera una contraseña específica de aplicación",
   "4c5fee3ac1fc": "En Inicio de sesión y seguridad, elige Contraseñas específicas para apps.",
@@ -84,7 +82,6 @@
   "691f15a747f4": "Sin ataduras: tus correos no están atrapados en ningún formato propietario.",
   "3180dfa0b292": "Deja de pagar por almacenamiento de correo",
   "0ca482fb35f9": "¿Buzón lleno? Archiva los correos en local con MailVault y bórralos después del servidor sin riesgo. Libera espacio en Gmail, Outlook o cualquier cuenta IMAP sin perder nada.",
-  "3e6eb6eb2155": "¿Almacenamiento de Gmail lleno? Así se arregla (sin pagar para siempre) — MailVault",
   "92ad45801dca": "Gmail da a cada cuenta gratuita 15 GB, compartidos entre Gmail, Google Drive y Google Fotos. Cuando llegas a ese límite pasan dos cosas: dejas de recibir correo nuevo (a quien te escribe le rebota el mensaje) y Google empieza a insistirte para que compres más almacenamiento. Ninguna de las dos es peligrosa, pero las dos molestan, y la solución a la que recurre casi todo el mundo &mdash; pagar a Google $1.99/mes por 100 GB &mdash; solo retrasa el problema. Tu buzón sigue creciendo y, tarde o temprano, vuelves a estar aquí.",
   "eb623ba9f726": "Esto es lo que funciona de verdad, ordenado por esfuerzo.",
   "1c567c0816be": "1. Averigua qué está ocupando tu espacio",

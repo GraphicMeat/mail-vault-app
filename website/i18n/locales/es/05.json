@@ -85,8 +85,6 @@
   "b841382615a4": "Abre varios correos archivados y comprueba que se ven bien, mira que los adjuntos se abran y busca un mensaje concreto que recuerdes para confirmar que está. Haz esto antes de iniciar el cierre de la cuenta, no después.",
   "da06b8855501": "¿Cierras una cuenta de correo, dejas un trabajo o cierras un negocio? Esta es la lista de comprobación paso a paso para copiar cada correo antes de que la cuenta y sus datos desaparezcan para siempre.",
   "41e255b97dff": "Cómo copiar tu correo antes de cerrar o borrar una cuenta",
-  "174d2fdaa9d1": "Cómo borrar miles de correos antiguos sin riesgo (guarda antes una copia) — MailVault",
-  "494bcfb28819": "Un buzón con 20.000, 50.000 o más de 100.000 correos acumulados en una década es de lo más normal, y acaba convirtiéndose en un problema: búsquedas lentas, avisos de almacenamiento o simplemente la incomodidad de no saber ya qué hay ahí dentro. Borrar en bloque es el instinto correcto, pero hacerlo sin cuidado es como la gente pierde algo que necesitaba años después: un contrato antiguo, el recibo de una garantía, una conversación que resulta importante en una reclamación. Este es un proceso que te deja la bandeja limpia sin ese riesgo.",
   "74c250659ae8": "Paso 1: copia todo antes de borrar nada",
   "39948bfca535": "Este es el paso que hace seguro todo lo demás, y no es negociable. Descarga a tu propio ordenador una copia completa del buzón que vas a limpiar, antes de borrar ni un solo mensaje. Una vez que tienes una copia local verificada, todas las decisiones de borrado de abajo pasan a tener poco riesgo: si te equivocas al pensar que algo se podía borrar, sigue estando en tu archivo.",
   "10f6a6eb6e16": "Paso 2: verifica que la copia funcionó de verdad",
@@ -106,6 +104,5 @@
   "21fcb8ba8ea6": "¿Borrar un correo libera espacio de inmediato?",
   "71160237c8a6": "Normalmente no. La mayoría de los proveedores mueven el correo borrado a una papelera que sigue contando para tu cuota hasta que se vacía, a mano o tras un plazo de conservación automático.",
   "2d998a942855": "¿Cuál es la forma más rápida de encontrar boletines y correo promocional antiguo para borrarlo?",
-  "379f93d56632": "Busca por remitente los dominios conocidos de boletines y de marketing, o usa los filtros de categoría o etiqueta de tu proveedor si los tiene. Suelen ser una parte enorme de un buzón desordenado y casi siempre se pueden quitar sin riesgo una vez archivados.",
-  "b9be6777ea36": "¿Te enfrentas a un buzón con decenas de miles de correos antiguos? Este es un proceso seguro para borrar correo viejo en bloque sin perder nada que puedas necesitar más adelante."
+  "379f93d56632": "Busca por remitente los dominios conocidos de boletines y de marketing, o usa los filtros de categoría o etiqueta de tu proveedor si los tiene. Suelen ser una parte enorme de un buzón desordenado y casi siempre se pueden quitar sin riesgo una vez archivados."
 }

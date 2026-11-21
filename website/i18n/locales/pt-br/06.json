@@ -1,6 +1,5 @@
 {
   "be42c02db587": "Como apagar milhares de e-mails antigos com segurança (guarde uma cópia antes)",
-  "3020dc8e54fe": "Como baixar todos os seus e-mails do Gmail: Takeout ou arquivo IMAP — MailVault",
   "5a059d0e513d": "Existem exatamente duas formas práticas de trazer uma cópia completa da sua conta do Gmail para o seu computador: o Google Takeout, que já vem nas ferramentas de conta do Google, e uma ferramenta de arquivamento por IMAP, que se conecta ao Gmail do mesmo jeito que um cliente de e-mail e baixa cada mensagem individualmente. Os resultados são bem diferentes, e qual você quer depende do que você pretende fazer com o download depois.",
   "3496ed70e848": "Opção 1: Google Takeout",
   "4e62eeb134d6": "O que você recebe é um único arquivo de texto grande por marcador/pasta no clássico formato mbox do Unix &mdash; cada e-mail emendado no seguinte. É um backup completo e legítimo, mas tem limitações reais:",
@@ -43,7 +42,6 @@
   "1dc1c9122a58": "Sim, se o arquivo estiver guardado como arquivos individuais em vez de uma exportação única e grande. Arquivos .eml individuais podem ser pesquisados com as ferramentas normais de busca de arquivos ou dentro de um cliente de e-mail, ao contrário de um pacote único que você precisaria importar em algum lugar antes.",
   "7e91aa798c2f": "O e-mail dos clientes costuma ser seu único registro de escopo, aprovações e condições de pagamento. Veja como freelancers e pequenas empresas podem construir um arquivo local permanente e pesquisável do e-mail dos clientes.",
   "5c821a170c34": "Arquivamento de e-mail para freelancers e pequenas empresas: guarde o e-mail dos clientes para sempre",
-  "b90247dd7e56": "Como exportar o iCloud Mail para o seu computador — MailVault",
   "4a3eb7ee186f": "A Apple não oferece um botão de \"exportar meu e-mail\" em um clique para o iCloud Mail, o que surpreende muita gente que quer fazer backup de uma conta @icloud.com, @me.com ou @mac.com. A boa notícia é que o iCloud Mail suporta acesso IMAP padrão por completo, o que significa que qualquer cliente de e-mail ou ferramenta de backup com IMAP consegue baixar suas mensagens &mdash; você só precisa configurar direito, incluindo uma etapa específica da Apple: uma senha específica de aplicativo.",
   "c1040f51ba83": "Passo 1: gere uma senha específica de aplicativo",
   "4c5fee3ac1fc": "Em Início de sessão e segurança, escolha Senhas específicas de aplicativo.",
@@ -84,7 +82,6 @@
   "691f15a747f4": "Sem dependência de fornecedor &mdash; seus e-mails não ficam presos a nenhum formato proprietário.",
   "3180dfa0b292": "Pare de pagar por armazenamento de e-mail",
   "0ca482fb35f9": "Caixa postal cheia? Arquive e-mails localmente com o MailVault e depois apague-os do servidor com segurança. Libere espaço no Gmail, no Outlook ou em qualquer IMAP sem perder nada.",
-  "3e6eb6eb2155": "Armazenamento do Gmail cheio? Veja como resolver (sem pagar para sempre) — MailVault",
   "92ad45801dca": "O Gmail dá a cada conta gratuita 15 GB, compartilhados entre Gmail, Google Drive e Google Photos. Quando você bate nesse limite, duas coisas acontecem: você para de receber e-mails novos (quem envia recebe uma mensagem de devolução) e o Google começa a insistir para você comprar mais espaço. Nenhuma das duas é perigosa, mas as duas irritam, e a saída que a maioria das pessoas escolhe &mdash; pagar $1.99/mês ao Google por 100 GB &mdash; só adia o problema. Sua caixa postal continua crescendo e, em algum momento, você volta para cá.",
   "eb623ba9f726": "Veja o que realmente funciona, em ordem de esforço.",
   "1c567c0816be": "1. Descubra o que está ocupando seu espaço",

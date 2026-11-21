@@ -85,8 +85,6 @@
   "b841382615a4": "Öffne mehrere archivierte E-Mails und prüfe, dass sie korrekt angezeigt werden, kontrolliere, dass Anhänge sich öffnen, und suche nach einer bestimmten Nachricht, an die du dich erinnerst, um zu bestätigen, dass sie da ist. Tu das, bevor du die Kontoschließung anstößt, nicht danach.",
   "da06b8855501": "Du schließt ein E-Mail-Konto, verlässt einen Job oder machst ein Unternehmen dicht? Hier ist eine Schritt-für-Schritt-Checkliste, um jede E-Mail zu sichern, bevor das Konto und seine Daten endgültig verschwinden.",
   "41e255b97dff": "E-Mails sichern, bevor du ein Konto schließt oder löschst",
-  "174d2fdaa9d1": "Tausende alte E-Mails sicher löschen (vorher eine Kopie behalten) — MailVault",
-  "494bcfb28819": "Ein Postfach mit 20.000, 50.000 oder 100.000+ E-Mails, angesammelt über ein Jahrzehnt, ist verbreitet, und irgendwann wird es zum Problem &mdash; langsame Suche, Speicherwarnungen oder einfach das ungute Gefühl, nicht mehr zu wissen, was da eigentlich drin ist. Massenweise zu löschen ist der richtige Reflex, aber es unbedacht zu tun, ist der Weg, auf dem Menschen etwas verlieren, das sie Jahre später gebraucht hätten: einen alten Vertrag, einen Beleg für einen Garantiefall, eine Unterhaltung, die sich in einem Streit als wichtig erweist. Hier ist ein Ablauf, der dir einen aufgeräumten Posteingang ohne dieses Risiko bringt.",
   "74c250659ae8": "Schritt 1: Sichere alles, bevor du irgendetwas löschst",
   "39948bfca535": "Das ist der Schritt, der den Rest dieses Ablaufs sicher macht, und er ist nicht verhandelbar. Lade eine vollständige Kopie des Postfachs, das du aufräumen willst, auf deinen eigenen Computer, bevor du eine einzige Nachricht löschst. Sobald du eine geprüfte lokale Kopie hast, wird jede Löschentscheidung unten risikoarm &mdash; solltest du dich je irren, ob etwas gefahrlos gelöscht werden kann, liegt es immer noch in deinem Archiv.",
   "10f6a6eb6e16": "Schritt 2: Prüfe, dass das Backup wirklich funktioniert hat",
@@ -106,6 +104,5 @@
   "21fcb8ba8ea6": "Gibt eine gelöschte E-Mail den Speicher wirklich sofort frei?",
   "71160237c8a6": "Meistens nicht sofort. Die meisten Anbieter verschieben gelöschte Post in einen Papierkorb, der weiter gegen dein Kontingent zählt, bis er geleert wird &mdash; von Hand oder nach einer automatischen Aufbewahrungsfrist.",
   "2d998a942855": "Wie finde ich alte Newsletter und Werbemails am schnellsten zum Löschen?",
-  "379f93d56632": "Suche nach Absender für bekannte Newsletter- und Marketing-Domains, oder nutze die Kategorie- und Label-Filter deines Anbieters, falls es sie gibt. Sie machen typischerweise einen großen Teil eines vollgestopften Postfachs aus und lassen sich nach dem Archivieren fast immer gefahrlos entfernen.",
-  "b9be6777ea36": "Du stehst vor einem Postfach mit Zehntausenden alten E-Mails? Hier ist ein sicherer Ablauf, um alte Post massenweise zu löschen, ohne etwas zu verlieren, das du später noch brauchst."
+  "379f93d56632": "Suche nach Absender für bekannte Newsletter- und Marketing-Domains, oder nutze die Kategorie- und Label-Filter deines Anbieters, falls es sie gibt. Sie machen typischerweise einen großen Teil eines vollgestopften Postfachs aus und lassen sich nach dem Archivieren fast immer gefahrlos entfernen."
 }

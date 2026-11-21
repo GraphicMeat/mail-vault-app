@@ -1,6 +1,5 @@
 {
   "be42c02db587": "Tausende alte E-Mails sicher löschen (vorher eine Kopie behalten)",
-  "3020dc8e54fe": "Alle deine Gmail-E-Mails herunterladen: Takeout gegen IMAP-Archiv — MailVault",
   "5a059d0e513d": "Es gibt genau zwei praktikable Wege, eine vollständige Kopie deines Gmail-Kontos auf den eigenen Computer zu bekommen: Google Takeout, das in Googles Kontowerkzeuge eingebaut ist, und ein IMAP-basiertes Archivierungswerkzeug, das sich mit Gmail so verbindet wie ein Mailclient und jede Nachricht einzeln herunterlädt. Sie liefern sehr unterschiedliche Ergebnisse, und was du willst, hängt davon ab, was du mit dem Download danach eigentlich vorhast.",
   "3496ed70e848": "Möglichkeit 1: Google Takeout",
   "4e62eeb134d6": "Du bekommst eine einzelne, große Textdatei je Label bzw. Ordner im klassischen Unix-mbox-Format &mdash; jede E-Mail hinter der nächsten aneinandergehängt. Das ist ein legitimes, vollständiges Backup, hat aber echte Grenzen:",
@@ -43,7 +42,6 @@
   "1dc1c9122a58": "Ja, wenn das Archiv als einzelne Dateien statt als ein großer Export vorliegt. Einzelne .eml-Dateien lassen sich mit normalen Dateisuchen oder in einem Mailclient durchsuchen, anders als ein einzelner gebündelter Export, den du erst irgendwo importieren müsstest.",
   "7e91aa798c2f": "Kundenmails sind oft dein einziger Beleg für Umfang, Freigaben und Zahlungsbedingungen. So bauen Freiberufler und kleine Unternehmen ein dauerhaftes, durchsuchbares lokales Archiv der Kundenpost auf.",
   "5c821a170c34": "E-Mail-Archivierung für Freiberufler und kleine Unternehmen: Kundenpost für immer behalten",
-  "b90247dd7e56": "iCloud Mail auf deinen Computer exportieren — MailVault",
   "4a3eb7ee186f": "Apple bietet keinen Knopf zum Exportieren der eigenen Post in iCloud Mail, was viele überrascht, die ein @icloud.com-, @me.com- oder @mac.com-Konto sichern wollen. Die gute Nachricht: iCloud Mail unterstützt den normalen IMAP-Zugriff vollständig, das heißt, jeder IMAP-fähige Mailclient und jedes Backup-Werkzeug kann deine Post herunterladen &mdash; du musst es nur richtig einrichten, samt einem Apple-eigenen Schritt: einem app-spezifischen Passwort.",
   "c1040f51ba83": "Schritt 1: Ein app-spezifisches Passwort erzeugen",
   "4c5fee3ac1fc": "Unter „Anmelden und Sicherheit“ die app-spezifischen Passwörter wählen.",
@@ -84,7 +82,6 @@
   "691f15a747f4": "keine Anbieterbindung &mdash; deine E-Mails stecken in keinem proprietären Format fest.",
   "3180dfa0b292": "Hör auf, für E-Mail-Speicher zu zahlen",
   "0ca482fb35f9": "Postfach voll? Archiviere E-Mails mit MailVault lokal und lösche sie dann gefahrlos vom Server. Mach Speicher bei Gmail, Outlook oder jedem IMAP-Konto frei, ohne etwas zu verlieren.",
-  "3e6eb6eb2155": "Gmail-Speicher voll? So bekommst du ihn frei (ohne ewig zu zahlen) — MailVault",
   "92ad45801dca": "Gmail gibt jedem kostenlosen Konto 15 GB, geteilt zwischen Gmail, Google Drive und Google Fotos. Erreichst du diese Grenze, passieren zwei Dinge: Du empfängst keine neue Post mehr (Absender bekommen eine Fehlermeldung zurück), und Google drängt dich, mehr Speicher zu kaufen. Beides ist nicht gefährlich, aber lästig, und die Lösung, zu der die meisten greifen &mdash; $1.99/Monat für 100 GB an Google zu zahlen &mdash;, schiebt das Problem nur auf. Dein Postfach wächst weiter, und irgendwann bist du wieder hier.",
   "eb623ba9f726": "Hier ist, was tatsächlich hilft, nach Aufwand sortiert.",
   "1c567c0816be": "1. Finde heraus, was deinen Platz wirklich belegt",

@@ -85,8 +85,6 @@
   "b841382615a4": "Ouvrez plusieurs e-mails archivés et vérifiez qu'ils s'affichent correctement, contrôlez que les pièces jointes s'ouvrent, et cherchez un message précis dont vous vous souvenez pour confirmer sa présence. Faites-le avant d'engager la fermeture du compte, pas après.",
   "da06b8855501": "Vous fermez un compte e-mail, quittez un emploi ou cessez une activité ? Voici une liste d'étapes pour sauvegarder chaque e-mail avant que le compte et ses données ne disparaissent pour de bon.",
   "41e255b97dff": "Comment sauvegarder votre courrier avant de fermer ou supprimer un compte",
-  "174d2fdaa9d1": "Comment supprimer des milliers d'anciens e-mails sans risque (gardez d'abord une copie) — MailVault",
-  "494bcfb28819": "Une boîte mail avec 20 000, 50 000 ou plus de 100 000 e-mails accumulés en dix ans, c'est courant, et cela finit par poser problème &mdash; recherche lente, alertes de stockage, ou simplement le malaise de ne plus savoir ce qu'il y a dedans. Supprimer en masse est le bon réflexe, mais le faire sans précaution, c'est ainsi qu'on perd ce dont on aura besoin des années plus tard : un vieux contrat, un reçu pour une garantie, une conversation qui compte finalement dans un litige. Voici une méthode pour obtenir une boîte propre sans ce risque.",
   "74c250659ae8": "Étape 1 : sauvegardez tout avant de supprimer quoi que ce soit",
   "39948bfca535": "C'est l'étape qui rend tout le reste sûr, et elle n'est pas négociable. Téléchargez une copie complète de la boîte que vous vous apprêtez à nettoyer sur votre propre ordinateur, avant de supprimer un seul message. Une fois que vous avez une copie locale vérifiée, chaque décision de suppression ci-dessous devient peu risquée &mdash; si vous vous trompez sur ce qui pouvait être supprimé, c'est toujours dans votre archive.",
   "10f6a6eb6e16": "Étape 2 : vérifiez que la sauvegarde a bien fonctionné",
@@ -106,6 +104,5 @@
   "21fcb8ba8ea6": "Supprimer un e-mail libère-t-il vraiment du stockage tout de suite ?",
   "71160237c8a6": "En général non, pas immédiatement. La plupart des fournisseurs déplacent le courrier supprimé dans une corbeille qui compte toujours dans votre quota jusqu'à ce qu'elle soit vidée, à la main ou après une période de rétention automatique.",
   "2d998a942855": "Quel est le moyen le plus rapide de trouver les vieilles newsletters et les e-mails promotionnels à supprimer ?",
-  "379f93d56632": "Cherchez par expéditeur les domaines de newsletters et de marketing connus, ou utilisez les filtres de catégorie ou de libellé de votre fournisseur, s'il en propose. Ils représentent souvent une grande part d'une boîte encombrée et il est presque toujours sans risque de les retirer une fois archivés.",
-  "b9be6777ea36": "Face à une boîte mail de dizaines de milliers de vieux e-mails ? Voici une méthode sûre pour supprimer en masse d'anciens messages sans perdre ce dont vous pourriez avoir besoin plus tard."
+  "379f93d56632": "Cherchez par expéditeur les domaines de newsletters et de marketing connus, ou utilisez les filtres de catégorie ou de libellé de votre fournisseur, s'il en propose. Ils représentent souvent une grande part d'une boîte encombrée et il est presque toujours sans risque de les retirer une fois archivés."
 }

@@ -61,7 +61,7 @@
 
 ## Email guides and research
 
-- [Does Archiving Gmail Free Up Space?](https://mailvaultapp.com/blog/does-archiving-gmail-free-up-space.html): Gmail Archive clears your inbox, not your storage. Learn the difference between archiving in Gmail and keeping an independent copy before deleting mail.
+- [Does Archiving Gmail Free Up Space?](https://mailvaultapp.com/blog/does-archiving-gmail-free-up-space.html): No. Archived Gmail messages still count toward your Google storage. To free space, save a copy elsewhere, check that it opens, then delete the server copy.
 - [Which Personal Emails Should You Keep?](https://mailvaultapp.com/blog/which-personal-emails-should-you-keep.html): Decide which personal emails are worth keeping, from meaningful conversations to useful attachments, and start a small archive you can find your way around.
 - [IMAP Works for Outlook.com and Hotmail Again, and It Is Now the Default](https://mailvaultapp.com/blog/imap-works-for-outlook-and-hotmail.html): MailVault connects Outlook.com and Hotmail over IMAP with Microsoft sign-in by default; accounts on Microsoft Graph get a one-click switch
 - [MailVault 2.24: Choose What Opens After You Delete](https://mailvaultapp.com/blog/mailvault-2-24-choose-what-opens-after-delete.html): choose the next or previous email, or the next or previous unread one, to open after a delete; it started as a Discord feature request
