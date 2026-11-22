@@ -48,7 +48,7 @@ beforeEach(() => {
   };
   useViewStore.setState({ views: [], counts: {}, activeViewId: null, unavailableReason: null, loading: false });
   useSearchStore.getState().clearSearch();
-  useSettingsStore.setState({ hideViewMail: false, hideViewMailViews: null });
+  useSettingsStore.setState({ hideViewMail: false, hideViewMailViews: null, hideViewMailByMailbox: {}, hideViewMailByAccount: {} });
   useViewHideStore.getState().clear();
   // A count one spec left pending would hold every later count behind it.
   __resetViewCountsForTests();
@@ -692,6 +692,62 @@ describe('mail the views hold, hidden from the mailbox lists', () => {
     useSettingsStore.getState().setHideViewMailViews(['v1', 'v2']);
     await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(2));
     expect(hiddenCalls()[1][1].viewIds).toEqual(['v1', 'v2']);
+  });
+
+  it('sends each folder\'s own pick, and asks again when one changes', async () => {
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.hidden_members' ? HELD : {}));
+    useSettingsStore.setState({ hideViewMail: true, hideViewMailViews: ['v1'], hideViewMailByMailbox: { 'acct-1': { Work: ['v2'] } } });
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(1));
+    expect(hiddenCalls()[0][1]).toEqual({
+      accounts: [expect.objectContaining({ accountId: 'acct-1' })], viewIds: ['v1'],
+      viewIdsByMailbox: { 'acct-1': { Work: ['v2'] } },
+    });
+    useSettingsStore.getState().setHideViewMailForMailbox('acct-1', 'INBOX', []);
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(2));
+    expect(hiddenCalls()[1][1].viewIdsByMailbox).toEqual({ 'acct-1': { Work: ['v2'], INBOX: [] } });
+  });
+
+  it('an empty all-folders pick still asks when a folder picked views of its own', async () => {
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.hidden_members' ? HELD : {}));
+    useSettingsStore.setState({ hideViewMail: true, hideViewMailViews: [], hideViewMailByMailbox: { 'acct-1': { INBOX: ['v1'] } } });
+    await refreshHiddenMembers();
+    expect(hiddenCalls().length).toBeGreaterThan(0);
+    expect(useViewHideStore.getState().keys?.size).toBe(2);
+  });
+
+  it('sends each account\'s own pick, and an account pick alone is enough to ask', async () => {
+    harness.daemonCall.mockImplementation(method => Promise.resolve(method === 'views.hidden_members' ? HELD : {}));
+    useSettingsStore.setState({ hideViewMail: true, hideViewMailViews: [], hideViewMailByAccount: { 'acct-1': ['v2'] } });
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(1));
+    expect(hiddenCalls()[0][1]).toEqual({
+      accounts: [expect.objectContaining({ accountId: 'acct-1' })], viewIds: [],
+      viewIdsByAccount: { 'acct-1': ['v2'] },
+    });
+    expect(useViewHideStore.getState().keys?.size).toBe(2);
+    useSettingsStore.getState().setHideViewMailForAccount('acct-1', ['v1']);
+    await vi.waitFor(() => expect(hiddenCalls()).toHaveLength(2));
+    expect(hiddenCalls()[1][1].viewIdsByAccount).toEqual({ 'acct-1': ['v1'] });
+  });
+
+  it('the picker\'s numbers: each view\'s mail per account and folder, or null when unknown', async () => {
+    const MEMBERS = { v1: { 'acct-1': { INBOX: [1, 2] } } };
+    harness.daemonCall.mockImplementation(method => Promise.resolve(
+      method === 'views.picker_members' ? { available: true, members: MEMBERS } : {}));
+    expect(await useViewStore.getState().loadPickerMembers()).toEqual(MEMBERS);
+    expect(harness.daemonCall).toHaveBeenCalledWith('views.picker_members', { accounts: [expect.objectContaining({ accountId: 'acct-1' })] });
+    harness.daemonCall.mockImplementation(method => Promise.resolve(
+      method === 'views.picker_members' ? { available: false, members: {} } : {}));
+    expect(await useViewStore.getState().loadPickerMembers()).toBeNull();
+    harness.daemonCall.mockImplementation(() => Promise.reject(new Error('gone')));
+    expect(await useViewStore.getState().loadPickerMembers()).toBeNull();
+  });
+
+  it('folders that only hide nothing, over an empty pick, ask nothing', async () => {
+    fill();
+    useSettingsStore.setState({ hideViewMail: true, hideViewMailViews: [], hideViewMailByMailbox: { 'acct-1': { INBOX: [] } } });
+    await refreshHiddenMembers();
+    expect(hiddenCalls()).toHaveLength(0);
+    expect(useViewHideStore.getState().keys).toBeNull();
   });
 
   it('an empty pick hides nothing and asks nothing', async () => {

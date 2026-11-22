@@ -241,6 +241,20 @@ vi.mock('../../stores/settingsStore', async () => {
     // Never picked: the button opens the picker instead of hiding.
     hideViewMailViews: null,
     setHideViewMailViews: vi.fn(ids => store.setState({ hideViewMailViews: ids })),
+    // Each folder's own pick, account -> mailbox -> view ids; absent follows the default.
+    hideViewMailByMailbox: {},
+    // Each account's own pick, account -> view ids; absent follows the default.
+    hideViewMailByAccount: {},
+    setHideViewMailForAccount: vi.fn((accountId, ids) => store.setState(s => {
+      const next = { ...s.hideViewMailByAccount };
+      if (ids === null) delete next[accountId]; else next[accountId] = ids;
+      return { hideViewMailByAccount: next };
+    })),
+    setHideViewMailForMailbox: vi.fn((accountId, mailbox, ids) => store.setState(s => {
+      const perAccount = { ...(s.hideViewMailByMailbox[accountId] || {}) };
+      if (ids === null) delete perAccount[mailbox]; else perAccount[mailbox] = ids;
+      return { hideViewMailByMailbox: { ...s.hideViewMailByMailbox, [accountId]: perAccount } };
+    })),
     // A real store underneath, so a saved view's layout change re-renders the
     // list the way the app's store does.
     viewOverrides: {},
@@ -2763,7 +2777,8 @@ describe('the hide view mail toggle', () => {
   const count = () => screen.getByTestId('email-list-count').textContent;
 
   const mount = async ({
-    views = [{ id: 'v1', name: 'Saved', def: {} }], activeViewId = null, hideViewMail = false, hideViewMailViews = ['v1'],
+    views = [{ id: 'v1', name: 'Saved', def: {} }], activeViewId = null, hideViewMail = false, hideViewMailViews = ['v1'], hideViewMailByMailbox = {},
+    hideViewMailByAccount = {}, pickerMembers = null, accounts = [{ id: 'acc1', email: 'me@test.com' }],
     totalEmails = 2, sortedEmails = makeEmails(2), emails, activeMailbox = 'INBOX', mailboxScope = null,
     unifiedInbox = false, hiddenByMailbox = null, keys = null,
   } = {}) => {
@@ -2772,11 +2787,11 @@ describe('the hide view mail toggle', () => {
     const { useViewStore } = await import('../../stores/viewStore');
     const { useViewHideStore } = await import('../../stores/viewHideStore');
     useMailStore.setState({
-      sortedEmails, totalEmails, emails: emails ?? sortedEmails, activeMailbox, activeAccountId: 'acc1', mailboxScope, unifiedInbox,
+      sortedEmails, totalEmails, emails: emails ?? sortedEmails, activeMailbox, activeAccountId: 'acc1', mailboxScope, unifiedInbox, accounts,
       unreadOnly: false, selectedEmailIds: new Set(), selectedThread: null,
     });
-    useSettingsStore.setState({ emailListView: 'list', emailListGrouping: 'chronological', viewOverrides: {}, hideViewMail, hideViewMailViews });
-    useViewStore.setState({ views, activeViewId });
+    useSettingsStore.setState({ emailListView: 'list', emailListGrouping: 'chronological', viewOverrides: {}, hideViewMail, hideViewMailViews, hideViewMailByMailbox, hideViewMailByAccount });
+    useViewStore.setState({ views, activeViewId, loadPickerMembers: vi.fn(async () => pickerMembers) });
     useViewHideStore.setState({ keys, hiddenByMailbox, unreadByMailbox: null });
     const { EmailList } = await import('../EmailList.jsx');
     const utils = render(React.createElement(EmailList.type));
@@ -2790,10 +2805,12 @@ describe('the hide view mail toggle', () => {
     const { useSettingsStore } = await import('../../stores/settingsStore');
     const { useViewStore } = await import('../../stores/viewStore');
     const { useViewHideStore } = await import('../../stores/viewHideStore');
-    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, emails: undefined, activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false });
-    useSettingsStore.setState({ emailListView: 'list', hideViewMail: false, hideViewMailViews: null, viewOverrides: {} });
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, emails: undefined, activeMailbox: 'INBOX', mailboxScope: null, unifiedInbox: false, accounts: [{ id: 'acc1', email: 'me@test.com' }] });
+    useSettingsStore.setState({ emailListView: 'list', hideViewMail: false, hideViewMailViews: null, hideViewMailByMailbox: {}, hideViewMailByAccount: {}, viewOverrides: {} });
+    useSettingsStore.getState().setHideViewMailForAccount.mockClear();
     useSettingsStore.getState().setHideViewMail.mockClear();
     useSettingsStore.getState().setHideViewMailViews.mockClear();
+    useSettingsStore.getState().setHideViewMailForMailbox.mockClear();
     useViewStore.setState({ views: [], activeViewId: null, loading: false });
     useViewHideStore.setState({ keys: null, hiddenByMailbox: null, unreadByMailbox: null });
   });
@@ -2913,6 +2930,179 @@ describe('the hide view mail toggle', () => {
     const { container } = await mount({ hideViewMailViews: ['gone'] });
     expect(toggle(container).disabled).toBe(true);
     expect(config(container).disabled).toBe(false);
+  });
+
+  const selectAll = () => screen.getByTestId('hide-view-mail-all');
+  const scopeAll = () => screen.queryByRole('radio', { name: 'All accounts' });
+  const scopeAccount = () => screen.queryByRole('radio', { name: 'me@test.com' });
+  const scopeFolder = () => screen.queryByRole('radio', { name: 'Only INBOX' });
+  const pressed = () => picks().map(button => button.getAttribute('aria-pressed'));
+
+  it('Select all picks every view, and then clears them all', async () => {
+    const { container } = await mount({ hideViewMailViews: null, views: TWO });
+    fireEvent.click(config(container));
+    await settle();
+    expect(selectAll().textContent).toBe('Select all');
+    fireEvent.click(pick('v1'));
+    fireEvent.click(selectAll());
+    expect(pressed()).toEqual(['true', 'true']);
+    expect(selectAll().textContent).toBe('Clear all');
+    fireEvent.click(selectAll());
+    expect(pressed()).toEqual(['false', 'false']);
+    expect(selectAll().textContent).toBe('Select all');
+  });
+
+  it('a pick for this folder alone keeps the all-folders pick and turns the hide on', async () => {
+    const { container } = await mount({ hideViewMailViews: ['v1'], views: TWO });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(config(container));
+    await settle();
+    expect(scopeAll().getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(scopeFolder());
+    expect(scopeFolder().getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByText('Mail any picked view holds is left out of INBOX.')).toBeTruthy();
+    // A folder with no pick of its own starts on the all-folders pick.
+    expect(pressed()).toEqual(['true', 'false']);
+    fireEvent.click(pick('v1'));
+    fireEvent.click(pick('v2'));
+    fireEvent.click(screen.getByTestId('hide-view-mail-ok'));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMailForMailbox).toHaveBeenLastCalledWith('acc1', 'INBOX', ['v2']);
+    expect(useSettingsStore.getState().hideViewMailViews).toEqual(['v1']);
+    expect(useSettingsStore.getState().setHideViewMail).toHaveBeenLastCalledWith(true);
+  });
+
+  it('a folder with its own pick opens on it, and can go back to the all-folders pick', async () => {
+    const { container } = await mount({ hideViewMailViews: ['v1'], hideViewMailByMailbox: { acc1: { INBOX: [] } }, views: TWO });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(config(container));
+    await settle();
+    expect(scopeFolder().getAttribute('aria-checked')).toBe('true');
+    expect(pressed()).toEqual(['false', 'false']);
+    fireEvent.click(screen.getByTestId('hide-view-mail-follow-default'));
+    expect(pressed()).toEqual(['true', 'false']);
+    fireEvent.click(screen.getByTestId('hide-view-mail-ok'));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMailForMailbox).toHaveBeenLastCalledWith('acc1', 'INBOX', null);
+    expect(useSettingsStore.getState().hideViewMailByMailbox.acc1).toEqual({});
+  });
+
+  it('emptying one folder\'s pick leaves the hide on for the others', async () => {
+    const { container } = await mount({ hideViewMailViews: ['v1'], hideViewMail: true, views: TWO });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(config(container));
+    await settle();
+    fireEvent.click(scopeFolder());
+    fireEvent.click(pick('v1'));
+    fireEvent.click(screen.getByTestId('hide-view-mail-ok'));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMailForMailbox).toHaveBeenLastCalledWith('acc1', 'INBOX', []);
+    expect(useSettingsStore.getState().setHideViewMail).not.toHaveBeenCalledWith(false);
+    expect(useSettingsStore.getState().hideViewMail).toBe(true);
+  });
+
+  it('a pick that only some folder holds still makes the switch live', async () => {
+    const { container } = await mount({ hideViewMailViews: [], hideViewMailByMailbox: { acc1: { Work: ['v1'] } } });
+    expect(toggle(container).disabled).toBe(false);
+  });
+
+  it('offers no folder or account pick in the unified inbox, and no folder pick over a folder branch', async () => {
+    const first = await mount({ unifiedInbox: true, views: TWO });
+    fireEvent.click(config(first.container));
+    await settle();
+    expect(scopeFolder()).toBeNull();
+    expect(scopeAll()).toBeNull();
+    cleanup();
+    const second = await mount({ mailboxScope: { paths: ['Work', 'Work/Bills'] }, activeMailbox: 'Work', views: TWO });
+    fireEvent.click(config(second.container));
+    await settle();
+    // A branch is one account: its account pick is on offer, a folder's is not.
+    expect(screen.queryByRole('radio', { name: /^Only / })).toBeNull();
+    expect(scopeAccount()).not.toBeNull();
+  });
+
+  const counts = () => picks().map(button => button.querySelector('[data-testid="hide-view-mail-pick-count"]')?.textContent ?? null);
+  const summary = () => screen.queryByTestId('hide-view-mail-summary');
+
+  it('each view shows its mail in the scope, and one with none in this folder cannot be picked there', async () => {
+    const { container } = await mount({ views: TWO, pickerMembers: { v1: { acc1: { INBOX: [1, 2], Work: [7] } }, v2: { acc1: { Work: [5] } } } });
+    fireEvent.click(config(container));
+    await settle();
+    expect(counts()).toEqual(['3', '1']);
+    expect(picks().map(button => button.disabled)).toEqual([false, false]);
+    fireEvent.click(scopeFolder());
+    expect(counts()).toEqual(['2', '0']);
+    expect(pick('v2').disabled).toBe(true);
+    expect(pick('v2').getAttribute('title')).toBe('No mail from this view in INBOX');
+    expect(pick('v1').disabled).toBe(false);
+  });
+
+  it('the folder tab is off, with a note, when no view holds mail in this folder', async () => {
+    const { container } = await mount({ views: TWO, pickerMembers: { v2: { acc1: { Work: [5] } } } });
+    fireEvent.click(config(container));
+    await settle();
+    expect(scopeFolder().disabled).toBe(true);
+    expect(screen.getByTestId('hide-view-mail-scope-note').textContent).toBe('No view holds mail in INBOX');
+    expect(scopeAccount().disabled).toBe(false);
+  });
+
+  it('an account pick keeps the all-accounts pick, and the folder starts from it', async () => {
+    const { container } = await mount({ hideViewMailViews: ['v1'], views: TWO });
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    fireEvent.click(config(container));
+    await settle();
+    fireEvent.click(scopeAccount());
+    expect(scopeAccount().getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByText('Mail any picked view holds is left out of every folder in me@test.com.')).toBeTruthy();
+    expect(pressed()).toEqual(['true', 'false']);
+    fireEvent.click(pick('v1'));
+    fireEvent.click(pick('v2'));
+    fireEvent.click(screen.getByTestId('hide-view-mail-ok'));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMailForAccount).toHaveBeenLastCalledWith('acc1', ['v2']);
+    expect(useSettingsStore.getState().hideViewMailViews).toEqual(['v1']);
+    expect(useSettingsStore.getState().setHideViewMail).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(config(container));
+    await settle();
+    expect(scopeAccount().getAttribute('aria-checked')).toBe('true');
+    expect(pressed()).toEqual(['false', 'true']);
+    fireEvent.click(scopeFolder());
+    expect(pressed()).toEqual(['false', 'true']);
+    fireEvent.click(scopeAccount());
+    fireEvent.click(screen.getByTestId('hide-view-mail-follow-default'));
+    expect(pressed()).toEqual(['true', 'false']);
+    fireEvent.click(screen.getByTestId('hide-view-mail-ok'));
+    await settle();
+    expect(useSettingsStore.getState().setHideViewMailForAccount).toHaveBeenLastCalledWith('acc1', null);
+  });
+
+  it('says which accounts the picks hide mail in, and how much, as you pick', async () => {
+    const { container } = await mount({
+      views: TWO, hideViewMailViews: ['v1', 'v2'],
+      accounts: [{ id: 'acc1', email: 'me@test.com' }, { id: 'acc2', email: 'two@test.com', name: 'Second' }],
+      pickerMembers: { v1: { acc1: { INBOX: [1, 2], Work: [7] }, acc2: { INBOX: [9] } }, v2: { acc1: { INBOX: [2, 3] } } },
+    });
+    fireEvent.click(config(container));
+    await settle();
+    expect(summary().textContent).toBe('Hides mail in 2 accounts');
+    expect(summary().getAttribute('title')).toBe('me@test.com: 4\nSecond: 1');
+    // INBOX alone stops hiding v2's mail: 1, 2 and Work's 7 are left.
+    fireEvent.click(scopeFolder());
+    fireEvent.click(pick('v2'));
+    expect(summary().getAttribute('title')).toBe('me@test.com: 3\nSecond: 1');
+    fireEvent.click(scopeAll());
+    fireEvent.click(selectAll());
+    expect(summary().textContent).toBe('Hides mail in 1 account');
+    expect(summary().getAttribute('title')).toBe('me@test.com: 2');
+  });
+
+  it('shows no summary or numbers while they are unknown', async () => {
+    const { container } = await mount({ views: TWO });
+    fireEvent.click(config(container));
+    await settle();
+    expect(summary()).toBeNull();
+    expect(counts()).toEqual([null, null]);
   });
 
   it('is not offered inside a view', async () => {

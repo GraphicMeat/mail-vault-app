@@ -151,7 +151,20 @@ export const useViewStore = create((set, get) => ({
     return get().views;
   },
 
-  /// `keepOnEmpty`: the daemon answers `{}` while the index cannot count, and a
+  /// The hide picker's numbers: `{ view: { account: { mailbox: [uid] } } }`,
+  /// each view's own mail as the lists show it, or null when the daemon
+  /// cannot say (index building, call failed). Null shows no numbers and
+  /// blocks no pick.
+  loadPickerMembers: async () => {
+    try {
+      const reply = await daemonCall('views.picker_members', { accounts: accountsPayload() });
+      return reply?.available && reply.members && typeof reply.members === 'object' ? reply.members : null;
+    } catch {
+      return null;
+    }
+  },
+
+  /// `keepOnEmpty`:the daemon answers `{}` while the index cannot count, and a
   /// change made mid-build should not blank badges that were true a moment ago.
   /// One count at a time. Each runs every view over every account on the
   /// index lock a view being opened waits on, and opening a view, saving one,
@@ -512,6 +525,21 @@ const hideViewMailViews = () => {
   const ids = useSettingsStore.getState?.()?.hideViewMailViews;
   return Array.isArray(ids) ? ids : null;
 };
+/// Each folder's own pick, account -> mailbox -> view ids.
+const hideViewMailByMailbox = () => {
+  const picks = useSettingsStore.getState?.()?.hideViewMailByMailbox;
+  return picks && typeof picks === 'object' ? picks : {};
+};
+/// Each account's own pick, account -> view ids.
+const hideViewMailByAccount = () => {
+  const picks = useSettingsStore.getState?.()?.hideViewMailByAccount;
+  return picks && typeof picks === 'object' ? picks : {};
+};
+/// Nothing to hide anywhere: the all-accounts pick is empty and no account
+/// or folder picked a view of its own.
+const nothingPicked = () => hideViewMailViews()?.length === 0
+  && !Object.values(hideViewMailByAccount()).some(ids => ids?.length)
+  && !Object.values(hideViewMailByMailbox()).some(boxes => Object.values(boxes || {}).some(ids => ids?.length));
 
 /// Which messages the saved views hold, for the lists that leave them out
 /// (`useViewHideStore`). Only asked while `hideViewMail` is on; off, the
@@ -521,7 +549,7 @@ const hideViewMailViews = () => {
 /// `refreshCounts` does. A failure leaves the membership unknown, which
 /// shows everything.
 export function refreshHiddenMembers() {
-  if (!hideViewMailOn() || hideViewMailViews()?.length === 0) {
+  if (!hideViewMailOn() || nothingPicked()) {
     // A queued ask finds the setting off and asks nothing.
     useViewHideStore.getState().clear();
     return Promise.resolve();
@@ -536,12 +564,17 @@ export function refreshHiddenMembers() {
   hiddenInFlight = (async () => {
     try {
       const viewIds = hideViewMailViews();
-      const reply = await daemonCall('views.hidden_members', viewIds
-        ? { accounts: accountsPayload(), viewIds }
-        : { accounts: accountsPayload() });
+      const byAccount = hideViewMailByAccount();
+      const byMailbox = hideViewMailByMailbox();
+      const reply = await daemonCall('views.hidden_members', {
+        accounts: accountsPayload(),
+        ...(viewIds ? { viewIds } : {}),
+        ...(Object.keys(byAccount).length ? { viewIdsByAccount: byAccount } : {}),
+        ...(Object.keys(byMailbox).length ? { viewIdsByMailbox: byMailbox } : {}),
+      });
       // Turned off (or every view unpicked) while the answer was on its way:
       // it must not hide anything.
-      if (!hideViewMailOn() || hideViewMailViews()?.length === 0) useViewHideStore.getState().clear();
+      if (!hideViewMailOn() || nothingPicked()) useViewHideStore.getState().clear();
       else useViewHideStore.getState().setMembers(reply);
     } catch {
       useViewHideStore.getState().clear();
@@ -552,7 +585,7 @@ export function refreshHiddenMembers() {
   return hiddenInFlight;
 }
 
-/// The setting flipped or the picked views changed: on asks, off forgets. Also fires when the persisted
+/// The setting flipped or the picked views (all folders or one) changed: on asks, off forgets. Also fires when the persisted
 /// settings load at launch. `subscribe?.`: many specs mock the settings store
 /// with `getState` alone, and importing this module must not throw there.
 let stopHideViewMailWatch = null;
@@ -560,7 +593,9 @@ function watchHideViewMail() {
   stopHideViewMailWatch?.();
   stopHideViewMailWatch = useSettingsStore.subscribe?.((state, previous) => {
     if (state.hideViewMail === previous?.hideViewMail
-      && state.hideViewMailViews === previous?.hideViewMailViews) return;
+      && state.hideViewMailViews === previous?.hideViewMailViews
+      && state.hideViewMailByMailbox === previous?.hideViewMailByMailbox
+      && state.hideViewMailByAccount === previous?.hideViewMailByAccount) return;
     void refreshHiddenMembers();
   }) || null;
 }

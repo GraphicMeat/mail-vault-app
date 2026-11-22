@@ -80,7 +80,34 @@ describe('Hide view mail', function () {
     await browser.execute(() => document.querySelector('[data-testid="hide-view-mail-ok"]')?.click());
   };
   const forgetPick = () => browser.execute(() =>
-    window.__SETTINGS_STORE__?.setState({ hideViewMail: false, hideViewMailViews: null }));
+    window.__SETTINGS_STORE__?.setState({ hideViewMail: false, hideViewMailViews: null, hideViewMailByMailbox: {}, hideViewMailByAccount: {} }));
+  const click = (testId) => browser.execute((id) => {
+    const button = document.querySelector(`[data-testid="${id}"]`);
+    button?.click();
+    return !!button;
+  }, testId);
+  const openPicker = async () => {
+    expect(await click('hide-view-mail-config')).toBe(true);
+    await browser.waitUntil(() => browser.execute(() => !!document.querySelector('[data-testid="hide-view-mail-modal"]')),
+      { timeout: 5_000, timeoutMsg: 'the picker never opened' });
+  };
+  /// Until the row is gone from INBOX. An index still building answers
+  /// "unknown", which hides nothing, and nothing asks again until a count
+  /// refresh: flip the switch to ask again.
+  const waitHidden = async (why) => {
+    let lastFlip = Date.now();
+    await browser.waitUntil(async () => {
+      const now = await listed();
+      if (!now.inStore && !now.inDom) return true;
+      if (Date.now() - lastFlip > 5_000) {
+        await clickToggle();
+        await browser.pause(200);
+        await clickToggle();
+        lastFlip = Date.now();
+      }
+      return false;
+    }, { timeout: 90_000, interval: 500, timeoutMsg: why });
+  };
 
   before(async function () {
     await waitForApp();
@@ -179,20 +206,7 @@ describe('Hide view mail', function () {
     await browser.waitUntil(async () => (await toggleState()) === 'true',
       { timeout: 5_000, timeoutMsg: 'OK in the picker did not turn the hide on' });
 
-    // An index still building answers "unknown", which hides nothing, and
-    // nothing asks again until a count refresh: flip it to ask again.
-    let lastFlip = Date.now();
-    await browser.waitUntil(async () => {
-      const now = await listed();
-      if (!now.inStore && !now.inDom) return true;
-      if (Date.now() - lastFlip > 5_000) {
-        await clickToggle();
-        await browser.pause(200);
-        await clickToggle();
-        lastFlip = Date.now();
-      }
-      return false;
-    }, { timeout: 90_000, interval: 500, timeoutMsg: `"${subject}" stayed in INBOX with the toggle on` });
+    await waitHidden(`"${subject}" stayed in INBOX with the toggle on`);
     expect(await toggleState()).toBe('true');
     await browser.waitUntil(async () => (await headerTotal()) === before - 1, {
       timeout: 15_000, interval: 300,
@@ -210,5 +224,79 @@ describe('Hide view mail', function () {
       timeout: 15_000, interval: 300,
       timeoutMsg: `the header total should be back at ${before}`,
     });
+  });
+
+  // Runs after the case above: the all-folders pick holds the view, the hide is off.
+  it('a folder\'s own empty pick gives its mail back while the hide stays on, and the all-folders pick takes it again', async function () {
+    // Start hidden, so the row coming back is the folder pick at work.
+    await clickToggle();
+    await browser.waitUntil(async () => (await toggleState()) === 'true',
+      { timeout: 5_000, timeoutMsg: 'the toggle did not turn back on' });
+    await waitHidden(`"${subject}" stayed in INBOX with the toggle on again`);
+
+    await openPicker();
+    // The scope switch is a radio group: All folders, Only <folder>.
+    expect(await browser.execute(() => {
+      const radio = [...document.querySelectorAll('[data-testid="hide-view-mail-modal"] [role="radio"]')]
+        .find((button) => /^Only /.test(button.textContent || ''));
+      radio?.click();
+      return !!radio;
+    })).toBe(true);
+    // Starts on the all-folders pick, so the bulk button reads Clear all.
+    await browser.waitUntil(() => browser.execute(() =>
+      document.querySelector('[data-testid="hide-view-mail-all"]')?.textContent === 'Clear all'),
+    { timeout: 5_000, timeoutMsg: 'the folder scope did not start on the all-folders pick' });
+    expect(await click('hide-view-mail-all')).toBe(true);
+    expect(await click('hide-view-mail-ok')).toBe(true);
+    const own = await browser.execute(() => window.__SETTINGS_STORE__?.getState().hideViewMailByMailbox);
+    expect(Object.values(own || {}).map((boxes) => boxes.INBOX)).toEqual([[]]);
+    await browser.waitUntil(async () => {
+      const now = await listed();
+      return now.inStore && now.inDom;
+    }, { timeout: 30_000, interval: 300, timeoutMsg: `"${subject}" did not come back with INBOX's own empty pick` });
+    expect(await toggleState()).toBe('true');
+
+    await openPicker();
+    expect(await click('hide-view-mail-follow-default')).toBe(true);
+    expect(await click('hide-view-mail-ok')).toBe(true);
+    await waitHidden(`"${subject}" stayed in INBOX after it went back to the all-folders pick`);
+    expect(await toggleState()).toBe('true');
+  });
+
+  // Runs after the case above: hidden through the all-accounts pick.
+  it('counts the view\'s mail and the account it hides in; an account\'s own empty pick gives it back', async function () {
+    const radio = (re) => browser.execute((source) => {
+      const button = [...document.querySelectorAll('[data-testid="hide-view-mail-modal"] [role="radio"]')]
+        .find((b) => new RegExp(source).test(b.textContent || ''));
+      button?.click();
+      return !!button;
+    }, re.source);
+    await openPicker();
+    // The daemon's numbers: this view holds exactly the one archived message.
+    await browser.waitUntil(() => browser.execute((id) =>
+      document.querySelector(`[data-testid="hide-view-mail-pick"][data-view-id="${id}"] [data-testid="hide-view-mail-pick-count"]`)?.textContent === '1', VIEW_ID),
+    { timeout: 30_000, interval: 300, timeoutMsg: 'the picker never counted the view\'s one message' });
+    const summary = await browser.execute(() => {
+      const el = document.querySelector('[data-testid="hide-view-mail-summary"]');
+      return el ? { text: el.textContent, title: el.getAttribute('title') } : null;
+    });
+    expect(summary.text).toBe('Hides mail in 1 account');
+    expect(summary.title).toMatch(/: 1$/);
+
+    // The account tab is the one that is neither all accounts nor a folder.
+    expect(await radio(/^(?!All accounts$)(?!Only ).+/)).toBe(true);
+    expect(await click('hide-view-mail-all')).toBe(true);
+    expect(await click('hide-view-mail-ok')).toBe(true);
+    const own = await browser.execute(() => window.__SETTINGS_STORE__?.getState().hideViewMailByAccount);
+    expect(Object.values(own || {})).toEqual([[]]);
+    await browser.waitUntil(async () => {
+      const now = await listed();
+      return now.inStore && now.inDom;
+    }, { timeout: 30_000, interval: 300, timeoutMsg: `"${subject}" did not come back with the account's own empty pick` });
+
+    await openPicker();
+    expect(await click('hide-view-mail-follow-default')).toBe(true);
+    expect(await click('hide-view-mail-ok')).toBe(true);
+    await waitHidden(`"${subject}" stayed in INBOX after the account went back to the all-accounts pick`);
   });
 });

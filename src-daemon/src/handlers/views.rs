@@ -176,25 +176,46 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
         // Every message any saved view finds, per account and mailbox, for
         // the list that hides view mail. Background work: not foreground.
         // `viewIds` narrows it to the views the person picked; absent is all.
+        // `viewIdsByMailbox` (account -> mailbox -> ids) is a folder's own
+        // pick, which replaces `viewIds` in that folder alone.
         "views.hidden_members" => {
             let accounts = accounts_of(params)?;
             let picked: Option<Vec<String>> = params
                 .get("viewIds")
                 .map(|ids| serde_json::from_value(ids.clone()).map_err(|e| format!("viewIds: {e}")))
                 .transpose()?;
+            let picks = Picks {
+                default: picked,
+                by_account: optional_param(params, "viewIdsByAccount")?,
+                by_mailbox: optional_param(params, "viewIdsByMailbox")?,
+            };
             let (all, keys) = app_db::with(app_dir, |conn| {
                 views::ensure_starters(conn)?;
                 let mut all = views::list(conn)?;
-                if let Some(picked) = &picked {
-                    all.retain(|view| picked.contains(&view.id));
-                }
+                // A view only some account or folder picked still runs, for it.
+                all.retain(|view| picks.names_anywhere(&view.id));
                 let mut keys = HashMap::new();
                 for view in &all {
                     keys.insert(view.id.clone(), filter_keys(conn, &view.def, &accounts)?);
                 }
                 Ok((all, keys))
             })?;
-            hidden_members(state, &all, &accounts, &keys)
+            hidden_members(state, &all, &accounts, &keys, &picks)
+        }
+        // The hide picker's numbers: each view's own members per account and
+        // mailbox, as the lists show them. Background work, as above.
+        "views.picker_members" => {
+            let accounts = accounts_of(params)?;
+            let (all, keys) = app_db::with(app_dir, |conn| {
+                views::ensure_starters(conn)?;
+                let all = views::list(conn)?;
+                let mut keys = HashMap::new();
+                for view in &all {
+                    keys.insert(view.id.clone(), filter_keys(conn, &view.def, &accounts)?);
+                }
+                Ok((all, keys))
+            })?;
+            picker_members(state, &all, &accounts, &keys)
         }
         // The reader pane's view builder: the open message's distinctive
         // words. Foreground: a person is looking at the message.
@@ -571,6 +592,56 @@ fn messages_of(
 /// Uids per custody lock hold in `hidden_members`.
 const HIDDEN_MEMBERS_UNIT: usize = 900;
 
+/// The views picked to hide: `default` everywhere (None is every view), an
+/// account's own pick in place of it in that account, and a folder's own pick
+/// in place of both in that folder. `[]` hides nothing where it applies.
+struct Picks {
+    default: Option<Vec<String>>,
+    by_account: HashMap<String, Vec<String>>,
+    by_mailbox: HashMap<String, HashMap<String, Vec<String>>>,
+}
+
+impl Picks {
+    fn names_anywhere(&self, view: &str) -> bool {
+        let named = |ids: &Vec<String>| ids.iter().any(|id| id == view);
+        self.default.as_ref().is_none_or(named)
+            || self.by_account.values().any(named)
+            || self.by_mailbox.values().flat_map(HashMap::values).any(named)
+    }
+
+    /// The pick that holds in this account's folders that have none of their own.
+    fn in_account(&self, view: &str, account: &str) -> bool {
+        match self.by_account.get(account) {
+            Some(ids) => ids.iter().any(|id| id == view),
+            None => self.default.as_ref().is_none_or(|ids| ids.iter().any(|id| id == view)),
+        }
+    }
+
+    /// Whether `view` can hide anything in `account` at all.
+    fn runs_for(&self, view: &str, account: &str) -> bool {
+        self.in_account(view, account)
+            || self
+                .by_mailbox
+                .get(account)
+                .is_some_and(|boxes| boxes.values().any(|ids| ids.iter().any(|id| id == view)))
+    }
+
+    fn in_mailbox(&self, view: &str, account: &str, mailbox: &str) -> bool {
+        match self.by_mailbox.get(account).and_then(|boxes| boxes.get(mailbox)) {
+            Some(ids) => ids.iter().any(|id| id == view),
+            None => self.in_account(view, account),
+        }
+    }
+}
+
+/// An optional map parameter: absent or null is empty.
+fn optional_param<T: serde::de::DeserializeOwned + Default>(params: &Value, key: &str) -> Result<T, String> {
+    match params.get(key) {
+        None | Some(Value::Null) => Ok(T::default()),
+        Some(value) => serde_json::from_value(value.clone()).map_err(|e| format!("{key}: {e}")),
+    }
+}
+
 /// `{ available, members: { account: { mailbox: { uids, unread } } } }`: the
 /// union of every view's messages, narrowed to the uids the header cache
 /// lists (what the mail list shows), with `unread` counted from the cached
@@ -578,11 +649,14 @@ const HIDDEN_MEMBERS_UNIT: usize = 900;
 /// is never hidden. An index or custody store that cannot answer is
 /// `available: false` with no members, which the app reads as "hide nothing";
 /// an empty `members` with `available: true` is a real "nothing to hide".
+///
+/// Each (view, account, mailbox) counts only where `picks` names the view.
 fn hidden_members(
     state: &DaemonState,
     all: &[View],
     accounts: &[Account],
     keys: &HashMap<String, HashMap<String, Vec<String>>>,
+    picks: &Picks,
 ) -> Result<Value, String> {
     use std::collections::{BTreeMap, BTreeSet};
     let unavailable = || serde_json::json!({ "available": false, "members": {} });
@@ -591,7 +665,12 @@ fn hidden_members(
     let empty = HashMap::new();
     for view in all {
         let per_view = keys.get(&view.id).unwrap_or(&empty);
-        for account in accounts.iter().filter(|account| view.def.accounts.is_empty() || view.def.accounts.contains(&account.account_id)) {
+        // A view no pick names for an account is not run there at all.
+        for account in accounts
+            .iter()
+            .filter(|account| view.def.accounts.is_empty() || view.def.accounts.contains(&account.account_id))
+            .filter(|account| picks.runs_for(&view.id, &account.account_id))
+        {
             // Keys only, uncapped, one index lock hold per (view, account):
             // no row JSON, no snippet, no page walk.
             let request = request_for(&view.def, account, per_view, now);
@@ -605,6 +684,9 @@ fn hidden_members(
                 // A local-only (or ambiguous) folder is not on the list it
                 // would be hidden from.
                 if local_only {
+                    continue;
+                }
+                if !picks.in_mailbox(&view.id, &account.account_id, &mailbox) {
                     continue;
                 }
                 found.entry(account.account_id.clone()).or_default().entry(mailbox).or_default().insert(uid);
@@ -650,6 +732,84 @@ fn hidden_members(
             members.insert(account_id, Value::Object(per_account));
         }
     }
+    Ok(serde_json::json!({ "available": true, "members": members }))
+}
+
+/// `{ available, members: { view: { account: { mailbox: [uid] } } } }`: each
+/// view's own members, narrowed to the uids the header cache lists, as
+/// `hidden_members` narrows its union. A view with nothing listed is left out.
+/// An index or custody store that cannot answer is `available: false`.
+fn picker_members(
+    state: &DaemonState,
+    all: &[View],
+    accounts: &[Account],
+    keys: &HashMap<String, HashMap<String, Vec<String>>>,
+) -> Result<Value, String> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let unavailable = || serde_json::json!({ "available": false, "members": {} });
+    let now = mailvault_core::clock::now_secs();
+    let empty = HashMap::new();
+    // account -> mailbox -> view -> uids
+    let mut found: BTreeMap<String, BTreeMap<String, BTreeMap<String, BTreeSet<u32>>>> = BTreeMap::new();
+    for view in all {
+        let per_view = keys.get(&view.id).unwrap_or(&empty);
+        for account in accounts.iter().filter(|account| view.def.accounts.is_empty() || view.def.accounts.contains(&account.account_id)) {
+            let request = request_for(&view.def, account, per_view, now);
+            let hits = match crate::search_index::member_keys(&state.search_index, &request)? {
+                Ok(hits) => hits,
+                Err(_) => return Ok(unavailable()),
+            };
+            for (_, vault_dir, uid) in hits {
+                let (mailbox, local_only, _) =
+                    crate::handlers::mail_search::mailbox_for_vault_dir(&vault_dir, &account.known_mailboxes);
+                if local_only {
+                    continue;
+                }
+                found
+                    .entry(account.account_id.clone())
+                    .or_default()
+                    .entry(mailbox)
+                    .or_default()
+                    .entry(view.id.clone())
+                    .or_default()
+                    .insert(uid);
+            }
+        }
+    }
+    let mut members: BTreeMap<String, serde_json::Map<String, Value>> = BTreeMap::new();
+    for (account_id, mailboxes) in found {
+        for (mailbox, per_view) in mailboxes {
+            // One cache read per folder, over every view's uids at once.
+            let wanted: Vec<u32> = per_view.values().flatten().copied().collect::<BTreeSet<u32>>().into_iter().collect();
+            let mut listed: BTreeSet<u32> = BTreeSet::new();
+            for unit in wanted.chunks(HIDDEN_MEMBERS_UNIT) {
+                match crate::custody::with_conn(state, |conn| {
+                    mailvault_core::custody::cache::flags_by_uids(conn, &account_id, &mailbox, unit)
+                }) {
+                    Ok(rows) => listed.extend(rows.iter().map(|(uid, _)| *uid)),
+                    Err(e) => {
+                        tracing::warn!("[views] picker_members: header cache unreadable for {account_id}: {e}");
+                        return Ok(unavailable());
+                    }
+                }
+            }
+            for (view_id, uids) in per_view {
+                let kept: Vec<u32> = uids.into_iter().filter(|uid| listed.contains(uid)).collect();
+                if kept.is_empty() {
+                    continue;
+                }
+                let per_account = members.entry(view_id).or_default();
+                let boxes = per_account
+                    .entry(account_id.clone())
+                    .or_insert_with(|| Value::Object(serde_json::Map::new()));
+                if let Value::Object(boxes) = boxes {
+                    boxes.insert(mailbox.clone(), serde_json::json!(kept));
+                }
+            }
+        }
+    }
+    let members: serde_json::Map<String, Value> =
+        members.into_iter().map(|(view, accounts)| (view, Value::Object(accounts))).collect();
     Ok(serde_json::json!({ "available": true, "members": members }))
 }
 
@@ -1502,6 +1662,128 @@ mod tests {
         let none = call(&s, "views.hidden_members", json!({ "accounts": accounts(), "viewIds": [] })).await;
         assert_eq!(none["available"], true, "{none}");
         assert_eq!(none["members"], json!({}), "{none}");
+    }
+
+    /// INBOX: uids 1 (starred, read), 2 (read), 3 (unread); Work: uid 4
+    /// (starred, read); all cached. Views v1 (starred) and v2 (unread) only.
+    async fn two_folders(s: &Arc<DaemonState>) -> Value {
+        index(s); // INBOX: uids 1 (starred, Seen), 2 (Seen), 3 (unread)
+        let conn_guard = lock(&s.search_index.db);
+        let conn = conn_guard.as_ref().unwrap();
+        let p = mailvault_core::maildir::INFO_PREFIX;
+        // Work: uid 4, starred and read.
+        conn.execute(
+            "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
+               from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags)
+             VALUES ('a','Work',4,?1,0,0,'<four@x.test>',1788825600,'ann@x.test','ann','work four','me@x.test',0,1,?2,?3)",
+            rusqlite::params![
+                format!("4{p}FS.eml"),
+                json!({ "uid": 4, "subject": "Work four", "messageId": "<four@x.test>", "from": {"address": "ann@x.test"} }).to_string(),
+                mailvault_core::message_store::flag_letters(&mailvault_core::message_store::flags_in_name(&format!("4{p}FS.eml"))),
+            ],
+        )
+        .unwrap();
+        drop(conn_guard);
+        crate::custody::with_conn(s, |conn| {
+            let h = |uid: u32, flags: Value| json!({ "uid": uid, "flags": flags, "date": "Mon, 07 Sep 2026 10:00:00 +0000" });
+            mailvault_core::custody::cache::save_headers(
+                conn, "a", "INBOX",
+                &json!({ "emails": [h(1, json!(["\\Seen", "\\Flagged"])), h(2, json!(["\\Seen"])), h(3, json!([]))] }).to_string(),
+            )?;
+            mailvault_core::custody::cache::save_headers(
+                conn, "a", "Work",
+                &json!({ "emails": [h(4, json!(["\\Seen", "\\Flagged"]))] }).to_string(),
+            )
+        })
+        .unwrap();
+        call(s, "views.list", json!({})).await;
+        for id in ["builtin-needs-reply", "builtin-starred", "builtin-attachments"] {
+            call(s, "views.delete", json!({ "id": id })).await;
+        }
+        call(s, "views.save", json!({ "view": { "id": "v1", "name": "S", "icon": "star", "position": 0, "builtin": null, "def": { "starred": true } } })).await;
+        call(s, "views.save", json!({ "view": { "id": "v2", "name": "U", "icon": "mail", "position": 1, "builtin": null, "def": { "unread": true } } })).await;
+        json!([{ "accountId": "a", "address": "me@x.test", "knownMailboxes": ["INBOX", "Work"] }])
+    }
+
+    /// A folder can keep its own pick of views. `viewIdsByMailbox` names it per
+    /// account and mailbox; a folder it does not name follows `viewIds`, and
+    /// an empty pick there hides nothing in that folder alone.
+    #[tokio::test]
+    async fn hidden_members_follows_each_folders_own_pick() {
+        let s = st();
+        let accounts = two_folders(&s).await;
+        let uids = |out: &Value, mailbox: &str| out["members"]["a"][mailbox]["uids"].clone();
+
+        // INBOX follows the default (unread), Work picked starred for itself.
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts, "viewIds": ["v2"], "viewIdsByMailbox": { "a": { "Work": ["v1"] } } })).await;
+        assert_eq!(out["available"], true, "{out}");
+        assert_eq!(uids(&out, "INBOX"), json!([3]), "{out}");
+        assert_eq!(uids(&out, "Work"), json!([4]), "{out}");
+
+        // An empty pick for INBOX hides nothing there, Work keeps the default.
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts, "viewIds": ["v1", "v2"], "viewIdsByMailbox": { "a": { "INBOX": [] } } })).await;
+        assert!(out["members"]["a"].get("INBOX").is_none(), "{out}");
+        assert_eq!(uids(&out, "Work"), json!([4]), "{out}");
+
+        // A view only one folder picked still runs, for that folder alone.
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts, "viewIds": [], "viewIdsByMailbox": { "a": { "Work": ["v1"] } } })).await;
+        assert!(out["members"]["a"].get("INBOX").is_none(), "{out}");
+        assert_eq!(uids(&out, "Work"), json!([4]), "{out}");
+
+        // Another account's folder pick does not leak into this one.
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts, "viewIds": ["v1"], "viewIdsByMailbox": { "b": { "INBOX": [] } } })).await;
+        assert_eq!(uids(&out, "INBOX"), json!([1]), "{out}");
+    }
+
+    /// An account's own pick replaces the all-folders pick in every folder
+    /// of that account; a folder's own pick still wins over it.
+    #[tokio::test]
+    async fn hidden_members_follows_an_accounts_own_pick_under_a_folders() {
+        let s = st();
+        let accounts = two_folders(&s).await;
+        let uids = |out: &Value, mailbox: &str| out["members"]["a"][mailbox]["uids"].clone();
+
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts, "viewIds": ["v2"], "viewIdsByAccount": { "a": ["v1"] } })).await;
+        assert_eq!(uids(&out, "INBOX"), json!([1]), "{out}");
+        assert_eq!(uids(&out, "Work"), json!([4]), "{out}");
+
+        // A view only the account picked still runs, under an empty default.
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts, "viewIds": [], "viewIdsByAccount": { "a": ["v1"] } })).await;
+        assert_eq!(uids(&out, "INBOX"), json!([1]), "{out}");
+
+        // The folder's own pick beats the account's.
+        let out = call(&s, "views.hidden_members", json!({
+            "accounts": accounts, "viewIds": [], "viewIdsByAccount": { "a": ["v1"] },
+            "viewIdsByMailbox": { "a": { "Work": [], "INBOX": ["v2"] } },
+        })).await;
+        assert_eq!(uids(&out, "INBOX"), json!([3]), "{out}");
+        assert!(out["members"]["a"].get("Work").is_none(), "{out}");
+
+        // Another account's pick does not reach this one.
+        let out = call(&s, "views.hidden_members", json!({ "accounts": accounts, "viewIds": ["v2"], "viewIdsByAccount": { "b": [] } })).await;
+        assert_eq!(uids(&out, "INBOX"), json!([3]), "{out}");
+    }
+
+    /// The hide picker's numbers: every view's own members, per account and
+    /// mailbox, narrowed to what the header cache lists. A view that holds
+    /// nothing listed is left out.
+    #[tokio::test]
+    async fn picker_members_lists_each_views_mail_per_folder() {
+        let s = st();
+        let accounts = two_folders(&s).await;
+        call(&s, "views.save", json!({ "view": { "id": "v3", "name": "None", "icon": "mail", "position": 2, "builtin": null, "def": { "query": "nothing-matches-this" } } })).await;
+        let out = call(&s, "views.picker_members", json!({ "accounts": accounts })).await;
+        assert_eq!(out["available"], true, "{out}");
+        assert_eq!(out["members"]["v1"], json!({ "a": { "INBOX": [1], "Work": [4] } }), "{out}");
+        assert_eq!(out["members"]["v2"], json!({ "a": { "INBOX": [3] } }), "{out}");
+        assert!(out["members"].get("v3").is_none(), "{out}");
+    }
+
+    #[tokio::test]
+    async fn picker_members_is_unavailable_without_an_index() {
+        let s = st();
+        let out = call(&s, "views.picker_members", json!({ "accounts": accounts() })).await;
+        assert_eq!(out["available"], false, "{out}");
     }
 
     /// A message the header cache no longer lists is not on the list to hide.

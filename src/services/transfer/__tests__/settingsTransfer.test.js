@@ -145,6 +145,20 @@ describe('applySettings', () => {
     expect(h.settings.dismissedAliases.A2).toEqual(['a-old@example.test']);
   });
 
+  // Each folder's own pick of views to hide is keyed by account: it goes
+  // with the account it belongs to, re-keyed, and never as a global.
+  it('carries each account\'s per-folder hide picks along, re-keyed', async () => {
+    h.settings.hideViewMailByMailbox = { A: { INBOX: ['v1'] }, B: { Work: [] } };
+    h.settings.hideViewMailByAccount = { A: ['v2'], B: [] };
+    const snap = collectSettings(['A']);
+    expect(snap.accountSettings.hideViewMailByMailbox).toEqual({ A: { INBOX: ['v1'] } });
+    expect(snap.appSettings.hideViewMailByMailbox).toBeUndefined();
+
+    await applySettings(snap, { A: 'A2' }, { applyGlobal: true });
+    expect(h.settings.hideViewMailByMailbox).toEqual({ A: { INBOX: ['v1'] }, B: { Work: [] }, A2: { INBOX: ['v1'] } });
+    expect(h.settings.hideViewMailByAccount).toEqual({ A: ['v2'], B: [], A2: ['v2'] });
+  });
+
   it('never maps an id through an inherited property of idMap', async () => {
     const snap = { accountSettings: { signatures: { constructor: { html: 'proto sig' }, toString: { html: 'x' } } } };
     await applySettings(snap, {}, { applyGlobal: false });

@@ -741,6 +741,7 @@ pub(crate) const METHODS: &[Method] = &[
     row("views.keyword_detail", Domain::Views, LEGACY).foreground(),
     row("views.keywords", Domain::Views, LEGACY).foreground(),
     row("views.list", Domain::Views, LEGACY),
+    row("views.picker_members", Domain::Views, LEGACY),
     row("views.reorder", Domain::Views, LEGACY),
     row("views.save", Domain::Views, LEGACY),
     row("views.senders", Domain::Views, LEGACY).foreground(),

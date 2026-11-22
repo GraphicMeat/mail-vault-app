@@ -430,6 +430,7 @@
   {"name": "views.keyword_detail", "replySecs": null},
   {"name": "views.keywords", "replySecs": null},
   {"name": "views.list", "replySecs": null},
+  {"name": "views.picker_members", "replySecs": null},
   {"name": "views.reorder", "replySecs": null},
   {"name": "views.save", "replySecs": null},
   {"name": "views.senders", "replySecs": null},

@@ -431,6 +431,7 @@ export const RPC_METHODS = Object.freeze([
   "views.keyword_detail",
   "views.keywords",
   "views.list",
+  "views.picker_members",
   "views.reorder",
   "views.save",
   "views.senders",

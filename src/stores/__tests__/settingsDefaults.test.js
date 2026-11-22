@@ -74,6 +74,44 @@ describe('settings defaults', () => {
     expect(state().hideViewMailViews).toEqual([]);
   });
 
+  // A folder can keep its own pick. Absent follows the all-folders pick, an
+  // empty list hides nothing there, and null drops the folder's own pick.
+  it('a folder keeps its own pick of views to hide, and can go back to the default', async () => {
+    const { useSettingsStore } = await loadOn('Win32');
+    const { GLOBAL_SETTINGS_ALLOWLIST, PER_ACCOUNT_MAPS } = await import('../../services/transfer/settingsTransfer');
+    const state = () => useSettingsStore.getState();
+    expect(state().hideViewMailByMailbox).toEqual({});
+    expect(PER_ACCOUNT_MAPS).toContain('hideViewMailByMailbox');
+    expect(GLOBAL_SETTINGS_ALLOWLIST).not.toContain('hideViewMailByMailbox');
+    state().setHideViewMailForMailbox('a1', 'INBOX', ['v1', 'v1', 3, '']);
+    state().setHideViewMailForMailbox('a1', 'Work|Bills', []);
+    state().setHideViewMailForMailbox('a2', 'INBOX', ['v2']);
+    expect(state().hideViewMailByMailbox).toEqual({ a1: { INBOX: ['v1'], 'Work|Bills': [] }, a2: { INBOX: ['v2'] } });
+    state().setHideViewMailForMailbox('a1', 'INBOX', null);
+    state().setHideViewMailForMailbox('a2', 'INBOX', null);
+    expect(state().hideViewMailByMailbox).toEqual({ a1: { 'Work|Bills': [] } });
+    state().setHideViewMailForMailbox('', 'INBOX', ['v1']);
+    state().setHideViewMailForMailbox('a1', '', ['v1']);
+    expect(state().hideViewMailByMailbox).toEqual({ a1: { 'Work|Bills': [] } });
+  });
+
+  // An account can keep its own pick too: it replaces the all-accounts pick
+  // in each of that account's folders, under any folder's own pick.
+  it('an account keeps its own pick of views to hide, and can go back to the default', async () => {
+    const { useSettingsStore } = await loadOn('Win32');
+    const { GLOBAL_SETTINGS_ALLOWLIST, PER_ACCOUNT_MAPS } = await import('../../services/transfer/settingsTransfer');
+    const state = () => useSettingsStore.getState();
+    expect(state().hideViewMailByAccount).toEqual({});
+    expect(PER_ACCOUNT_MAPS).toContain('hideViewMailByAccount');
+    expect(GLOBAL_SETTINGS_ALLOWLIST).not.toContain('hideViewMailByAccount');
+    state().setHideViewMailForAccount('a1', ['v1', 'v1', 3, '']);
+    state().setHideViewMailForAccount('a2', []);
+    expect(state().hideViewMailByAccount).toEqual({ a1: ['v1'], a2: [] });
+    state().setHideViewMailForAccount('a1', null);
+    state().setHideViewMailForAccount('', ['v1']);
+    expect(state().hideViewMailByAccount).toEqual({ a2: [] });
+  });
+
   it('text starts in Instrument Sans at 100%, keeps only known choices, and travels in a transfer', async () => {
     const { useSettingsStore } = await loadOn('Win32');
     const { GLOBAL_SETTINGS_ALLOWLIST } = await import('../../services/transfer/settingsTransfer');

@@ -618,6 +618,12 @@ export const useSettingsStore = create(
       hideViewMail: false,
       // The views whose mail that hides; null until the person first picks.
       hideViewMailViews: null,
+      // A folder's own pick, account -> mailbox -> view ids, in place of the
+      // one above there. Absent follows it; [] hides nothing in that folder.
+      hideViewMailByMailbox: {},
+      // An account's own pick, account -> view ids, in place of the
+      // all-accounts pick in that account's folders without one of their own.
+      hideViewMailByAccount: {},
       explorerGrouping: 'date', // 'date' | 'sender' | 'conversation'
       explorerDateDepth: 'month',
       explorerPaths: {},
@@ -1369,6 +1375,33 @@ export const useSettingsStore = create(
       setHideViewMailViews: ids => set({
         hideViewMailViews: [...new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string' && id) : [])],
       }),
+      // null drops the account's own pick, so it follows the all-accounts one.
+      setHideViewMailForAccount: (accountId, ids) => set(state => {
+        if (typeof accountId !== 'string' || !accountId) return state;
+        const next = { ...(state.hideViewMailByAccount || {}) };
+        if (ids === null) {
+          if (!(accountId in next)) return state;
+          delete next[accountId];
+        } else {
+          next[accountId] = [...new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string' && id) : [])];
+        }
+        return { hideViewMailByAccount: next };
+      }),
+      // null drops the folder's own pick, so it follows the all-folders one.
+      setHideViewMailForMailbox: (accountId, mailbox, ids) => set(state => {
+        if (typeof accountId !== 'string' || !accountId || typeof mailbox !== 'string' || !mailbox) return state;
+        const all = state.hideViewMailByMailbox || {};
+        const perAccount = { ...(all[accountId] || {}) };
+        if (ids === null) {
+          if (!(mailbox in perAccount)) return state;
+          delete perAccount[mailbox];
+        } else {
+          perAccount[mailbox] = [...new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string' && id) : [])];
+        }
+        const next = { ...all };
+        if (Object.keys(perAccount).length) next[accountId] = perAccount; else delete next[accountId];
+        return { hideViewMailByMailbox: next };
+      }),
       setExplorerGrouping: value => set({ explorerGrouping: normalizeExplorerGrouping(value) }),
       setExplorerDateDepth: value => set({ explorerDateDepth: normalizeExplorerDateDepth(value) }),
       setExplorerPath: (scope, path) => set(state => {
@@ -1674,6 +1707,8 @@ export const useSettingsStore = create(
           listTimelineVisible: false,
           hideViewMail: false,
           hideViewMailViews: null,
+          hideViewMailByMailbox: {},
+          hideViewMailByAccount: {},
           explorerGrouping: 'date',
           explorerDateDepth: 'month',
           explorerPaths: {},
