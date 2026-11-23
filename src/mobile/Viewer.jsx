@@ -40,6 +40,7 @@ import { afterNextPaint, bodyLoaded, notePrepare, viewerPainted } from './perf.j
 import { useT } from './i18n.js';
 import MovePicker from './MovePicker.jsx';
 import TagChips from './TagChips.jsx';
+import KeepButton from './KeepButton.jsx';
 import TagSheet from './TagSheet.jsx';
 import FieldStrip from './FieldStrip.jsx';
 import Sheet from './Sheet.jsx';
@@ -504,6 +505,7 @@ export default function Viewer({ accountId, folder, row, onClose, folders = [], 
             {t('common.back')}
           </button>
           {trackerCount > 0 && <TrackerShield count={trackerCount} stripped={Boolean(body.trackersStripped)} onOpen={() => setTrackerList(true)} />}
+          <KeepButton accountId={accountId} folder={folder} row={row} />
         </header>
         <Header row={row} />
         <TagChips accountId={accountId} folder={folder} uid={row.uid} removable className="mv-viewer__tags" />

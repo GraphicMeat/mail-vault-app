@@ -2,6 +2,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, cleanup, act } from '@testing-library/react';
 
+import '../../../services/workflows/bindStoreActions';
+
 const order = [];
 vi.mock('../../../utils/notificationOpen', () => ({
   openNotificationTarget: vi.fn(async target => { order.push(['open', target, useNotesStore.getState().isOpen]); }),

@@ -4749,5 +4749,6 @@
   "keep.dock": "已保留的邮件",
   "keep.move": "移动已保留的邮件",
   "keep.closeStack": "关闭气泡",
+  "keep.stack_one": "{{name}}，已保留 {{count}} 封邮件",
   "keep.stack_other": "{{name}}，已保留 {{count}} 封邮件"
 }

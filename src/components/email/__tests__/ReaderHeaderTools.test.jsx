@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { ReaderHeaderTools } from '../ReaderHeaderTools';
-import { useSelectionStore } from '../../../stores/selectionStore';
+import { useMailStore } from '../../../stores/mailStore';
 
 afterEach(cleanup);
 
@@ -20,7 +20,7 @@ describe('ReaderHeaderTools', () => {
   it('close calls onClose, else closes the selection', () => {
     const onClose = vi.fn();
     const closeEmail = vi.fn();
-    useSelectionStore.setState({ closeEmail });
+    useMailStore.setState({ closeEmail });
     const { rerender } = render(<ReaderHeaderTools onClose={onClose} />);
     fireEvent.click(screen.getByTestId('close-viewer'));
     expect(onClose).toHaveBeenCalledTimes(1);

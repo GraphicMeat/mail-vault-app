@@ -58,6 +58,7 @@ import { errorKey } from './errors.js';
 import { runPerfGate } from './perf.js';
 import { useT } from './i18n.js';
 import { useBackLayer } from './backStack.js';
+import KeepDock from './KeepDock.jsx';
 import Toasts from './Toasts.jsx';
 import Compose from './Compose.jsx';
 import OutboxRow from './Outbox.jsx';
@@ -99,6 +100,8 @@ const DEMO_TOAST = PERF_BUILD && (QUERY.get('ui') === 'toast' || QUERY.get('toas
 const DEMO_MOVE = VIEWER_SCRIPT && QUERY.get('move') === '1';
 const DEMO_COMPOSE = (PERF_BUILD && { compose: 'new', reply: 'reply' }[QUERY.get('ui')]) || null;
 const DEMO_OUTBOX = PERF_BUILD && QUERY.get('ui') === 'outbox';
+// `?ui=keep` (perf-gate only): kept emails staged in the dock, one group open over the viewer (keepDemo.js).
+const DEMO_KEEP = PERF_BUILD && QUERY.get('ui') === 'keep';
 // `?ui=drafts` (perf-gate only): the drafts list over two saved drafts of the seed account.
 const DEMO_DRAFTS = PERF_BUILD && QUERY.get('ui') === 'drafts';
 // `?ui=settings` (perf-gate only): the settings screen open, for screenshots.
@@ -121,6 +124,7 @@ const DEMO_NOTIFY = PERF_BUILD && QUERY.get('ui') === 'notify';
 const NO_TOUR = PERF || QUERY.has('ui') || QUERY.has('probe');
 let demoComposeStarted = false;
 let viewerScriptStarted = false;
+let demoKeepStarted = false;
 let perfStarted = false;
 
 // One probe per launch, even if the list loads twice (a retry after a failed first page).
@@ -364,6 +368,19 @@ function App() {
       .then(({ runViewerProbe }) => runViewerProbe({ query: QUERY, list, open: openRow, close: () => setOpen(null), log: logLine }))
       .catch((err) => logLine({ error: errorOf(err) }));
   }, [perfGate, status, listState, list]);
+
+  useEffect(() => {
+    if (import.meta.env.MV_PERF_GATE !== '1') return;
+    if (!DEMO_KEEP || demoKeepStarted || status !== 'ready' || listState !== 'ready' || !list) return;
+    demoKeepStarted = true;
+    const store = useMobileStore.getState();
+    import('./keepDemo.js')
+      .then(({ stageKeepDemo }) => stageKeepDemo({
+        list, placeOf: store.placeOf, log: logLine,
+        openRow: (row) => setOpen({ row, ...useMobileStore.getState().placeOf(row) }),
+      }))
+      .catch((err) => logLine({ error: errorOf(err) }));
+  }, [status, listState, list]);
 
   useEffect(() => {
     if (DEMO_TOAST && status === 'ready') useMobileStore.setState({ undo: { id: -1, kind: 'delete', count: 1, target: null }, pending: 2 });
@@ -1003,6 +1020,7 @@ function App() {
           initialPicking={DEMO_MOVE}
         />
       )}
+      <KeepDock onOpen={setTap} autoExpand={DEMO_KEEP} />
       {moving && (
         <MovePicker folders={moving.folders || []} current={moving.folder} onPick={onSwipeMove} onClose={closeMoving} />
       )}

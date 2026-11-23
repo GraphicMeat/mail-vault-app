@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { KeepDockView } from '../KeepDockView';
@@ -54,7 +54,7 @@ describe('KeepDockView', () => {
 
   it("the count is the bubble's centred content", () => {
     const style = document.createElement('style');
-    style.textContent = readFileSync(fileURLToPath(new URL('../../../styles/keep.css', import.meta.url)), 'utf8');
+    style.textContent = readFileSync(resolve(process.cwd(), 'src/styles/keep.css'), 'utf8');
     document.head.append(style);
     setup();
     const computed = getComputedStyle(samBubble());

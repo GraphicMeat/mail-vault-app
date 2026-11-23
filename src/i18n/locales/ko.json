@@ -4749,5 +4749,6 @@
   "keep.dock": "보관한 이메일",
   "keep.move": "보관한 이메일 이동",
   "keep.closeStack": "버블 닫기",
+  "keep.stack_one": "{{name}}, 보관한 이메일 {{count}}개",
   "keep.stack_other": "{{name}}, 보관한 이메일 {{count}}개"
 }

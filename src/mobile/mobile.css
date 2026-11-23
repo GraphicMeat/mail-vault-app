@@ -352,6 +352,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
   border-bottom: 1px solid var(--mail-border);
 }
 .mv-viewer__bar { padding-top: var(--mv-safe-top); margin: 0 -8px; display: flex; align-items: center; justify-content: space-between; }
+.mv-viewer__bar [data-mv-keep] { margin-inline-start: auto; }
+.mv-viewer__bar [data-mv-keep][aria-pressed='true'] { color: var(--mail-accent-text); }
 .mv-viewer__shield {
   display: inline-flex;
   align-items: center;
@@ -1561,3 +1563,8 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-view__note { margin: 8px 16px 0; font-size: 0.75rem; }
 /* Under the viewer (z 10), as search is, so a row opens over it. */
 .mv-drafts.mv-view { z-index: 8; }
+
+/* The dock of kept emails sits above the viewer (10) and thread (9), below drafts and settings (12). */
+.mv-app .keep-dock { z-index: 11; }
+.mv-app .keep-dock[data-side='right'] { right: calc(var(--mv-safe-right) + 8px); }
+.mv-app .keep-dock[data-side='left'] { left: calc(var(--mv-safe-left) + 8px); }

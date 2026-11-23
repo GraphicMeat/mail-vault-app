@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); useMailStore.setState({ accounts: before }); });
 
-const samBubble = () => screen.getAllByTestId('keep-bubble')[0];
+const samBubble = () => screen.getByLabelText(/Sam Rivera/);
 
 describe('desktop KeepDock', () => {
   it('clicking a kept subject opens it in its own folder', () => {

@@ -8,7 +8,7 @@
 // - `onOpen(item)`, `onRemove(id)` (one email), `onCloseStack(key)` (the whole bubble), `onMove(dock)`.
 // Nothing here removes by clicking a bubble: only the panel's X buttons remove.
 import React, { useEffect, useRef, useState } from 'react';
-import { useViewEnv } from '../settings/views/viewContext';
+import { useT, useViewEnv } from '../settings/views/viewContext';
 import { bubbleLabel, keepId, nudgeDock, snapDock } from '../../shared/keep';
 import '../../styles/keep.css';
 
@@ -31,7 +31,7 @@ function useCollapseOnDismiss(rootRef, expandedKey, onExpand) {
 
 /** The handle that moves the dock: a drag drops it on the nearer side, arrow keys nudge it. */
 function Grip({ dock, rootRef, onMove }) {
-  const { t } = useViewEnv();
+  const t = useT();
   const start = useRef(null);
   const shift = (dx, dy) => { rootRef.current.style.transform = `translate(${dx}px, ${dy}px)`; };
   const drop = () => {
@@ -71,7 +71,8 @@ function Grip({ dock, rootRef, onMove }) {
 }
 
 function Row({ item, onOpen, onRemove }) {
-  const { t, Private, formatDateOnly } = useViewEnv();
+  const t = useT();
+  const { Private, formatDateOnly } = useViewEnv();
   return (
     <li className="keep-row-wrap">
       <button type="button" className="keep-row" data-testid="keep-row" onClick={() => onOpen(item)}>
@@ -85,7 +86,8 @@ function Row({ item, onOpen, onRemove }) {
 }
 
 function Panel({ stack, onOpen, onRemove, onClose }) {
-  const { t, Private } = useViewEnv();
+  const t = useT();
+  const { Private } = useViewEnv();
   return (
     <div className="keep-panel" data-testid="keep-panel">
       <div className="keep-panel-head">
@@ -102,7 +104,7 @@ function Panel({ stack, onOpen, onRemove, onClose }) {
 }
 
 function Stack({ stack, expanded, onExpand, onOpen, onRemove, onCloseStack }) {
-  const { t } = useViewEnv();
+  const t = useT();
   const [peeking, setPeeking] = useState(false);
   const pointerType = useRef('mouse');
   // A press focuses the bubble too; only keyboard focus peeks, or a tap that folds the panel would reopen it.
@@ -146,7 +148,7 @@ function Stack({ stack, expanded, onExpand, onOpen, onRemove, onCloseStack }) {
 }
 
 export function KeepDockView({ stacks, dock, expandedKey, onExpand, onOpen, onRemove, onCloseStack, onMove }) {
-  const { t } = useViewEnv();
+  const t = useT();
   const rootRef = useRef(null);
   useCollapseOnDismiss(rootRef, expandedKey, onExpand);
   if (!stacks.length) return null;

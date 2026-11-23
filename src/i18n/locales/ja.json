@@ -4749,5 +4749,6 @@
   "keep.dock": "保持したメール",
   "keep.move": "保持したメールを移動",
   "keep.closeStack": "バブルを閉じる",
+  "keep.stack_one": "{{name}}、保持したメール {{count}} 件",
   "keep.stack_other": "{{name}}、保持したメール {{count}} 件"
 }

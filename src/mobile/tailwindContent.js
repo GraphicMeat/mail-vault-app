@@ -10,6 +10,7 @@ export const MOBILE_TAILWIND_CONTENT = Object.freeze([
   './src/components/settings/settingsManifest.js',
   './src/components/ui/**/*.{js,jsx}',
   './src/components/tags/**/*.{js,jsx}',
+  './src/components/keep/**/*.{js,jsx}',
   './src/components/fields/**/*.{js,jsx}',
   './src/components/transfer/**/*.{js,jsx}',
   './src/components/ViewIcon.jsx',

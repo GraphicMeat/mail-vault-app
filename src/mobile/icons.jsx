@@ -20,6 +20,11 @@ export function FlagIcon({ filled = false }) {
   return svg(<><path d="M5 21V4" /><path d="M5 4h11l-2 4 2 4H5" fill={filled ? 'currentColor' : 'none'} /></>);
 }
 
+/** A bookmark (keep in bubble), filled once the message is kept. */
+export function BookmarkIcon({ filled = false }) {
+  return svg(<path d="M6 4h12v17l-6-4-6 4z" fill={filled ? 'currentColor' : 'none'} />);
+}
+
 export function MoveIcon() {
   return svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M10 13h6m-2-2 2 2-2 2" /></>);
 }
