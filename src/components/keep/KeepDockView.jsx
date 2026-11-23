@@ -20,11 +20,12 @@ function useCollapseOnDismiss(rootRef, expandedKey, onExpand) {
     if (!expandedKey) return undefined;
     const onKey = event => { if (event.key === 'Escape') onExpand(null); };
     const onPress = event => { if (!rootRef.current?.contains(event.target)) onExpand(null); };
-    document.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onPress);
+    // Capture phase: the app's own Escape and press handlers may stop the event before it bubbles here.
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('pointerdown', onPress, true);
     return () => {
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onPress);
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('pointerdown', onPress, true);
     };
   }, [expandedKey, onExpand, rootRef]);
 }
