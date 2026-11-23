@@ -93,7 +93,7 @@ const toggle = () => browser.execute(() => document.querySelector('[data-testid=
 async function openAndKeep(subject) {
   await clickRow(subject);
   await wait(async () => (await readerShows(subject)) && (await toggle()) === 'false', `Reader did not open "${subject}"`);
-  await clickReachable('[data-testid="keep-toggle"]');
+  await browser.execute(() => document.querySelector('[data-testid="keep-toggle"]').click());
   await wait(async () => (await toggle()) === 'true', `"${subject}" was not kept`);
 }
 
