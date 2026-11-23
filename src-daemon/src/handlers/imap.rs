@@ -839,12 +839,14 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
             let action = opt_str_arg(params, "action").unwrap_or_else(|| "add".to_string());
             // `written` is what PERMANENTFLAGS let through — empty is a
             // success the caller has to see, not an error: the server simply
-            // cannot keep the flag.
-            let result = with_priority(&state.imap_pool, &account, |mut session| async move {
-                let written = imap::set_flags(&mut session, &mailbox, uid, &flags, &action)
+            // cannot keep the flag. A dead pooled socket is asked again on a
+            // new connection (`run_uid_store`: re-sending ±FLAGS is a no-op).
+            let (mailbox, flags, action) = (&mailbox, &flags, &action);
+            let result = state.imap_pool.run_uid_store(&account, true, |mut session| async move {
+                let written = imap::set_flags(&mut session, mailbox, uid, flags, action)
                     .await
                     .map_err(|e| format!("Failed to update flags: {}", e))?;
-                Ok((written, session, Some(mailbox)))
+                Ok((written, session, Some(mailbox.clone())))
             })
             .await;
             match result {
@@ -984,17 +986,17 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
             // empty map on the first call of a process and takes the slow
             // COPY path.
             //
-            // Same `pool_ref`/`acct` binding as imap_delete_email's
-            // (`message_delete::remove_imap`) —
-            // `with_priority` is `FnOnce` here so it's not load-bearing for
-            // compilation, but kept for the identical capture shape.
+            // A dead pooled socket at the opening SELECT is asked again on a
+            // new connection (`run_retrying_unsent`); past it the MOVE, or a
+            // COPY that may have landed, is never re-sent.
             let pool_ref: &ImapPool = &state.imap_pool;
             let acct = &account;
-            let result = with_priority(&state.imap_pool, &account, |mut session| async move {
+            let (source_mailbox, target_mailbox, uids) = (&source_mailbox, &target_mailbox, &uids);
+            let result = state.imap_pool.run_retrying_unsent(&account, true, |mut session| async move {
                 let has_move = pool_ref.has_capability(acct, "MOVE").await;
                 let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
-                let result = imap::move_uids(&mut session, &source_mailbox, &target_mailbox, &uids, has_move, has_uidplus).await?;
-                Ok((result, session, Some(source_mailbox)))
+                let result = imap::move_uids(&mut session, source_mailbox, target_mailbox, uids, has_move, has_uidplus).await?;
+                Ok((result, session, Some(source_mailbox.clone())))
             })
             .await;
             match result {

@@ -175,6 +175,13 @@ pub fn is_connection_lost(err: &str) -> bool {
     NEEDLES.iter().any(|n| lowered.contains(n))
 }
 
+/// A dead socket reported by the SELECT that opens an operation
+/// (`imap::select_mailbox`: `SELECT <mailbox> failed: ...`), so nothing after
+/// it was sent. `run_retrying_unsent` retries only these.
+pub fn died_at_select(err: &str) -> bool {
+    err.starts_with("SELECT ") && is_connection_lost(err)
+}
+
 /// A session checked out from the pool, guarded by a semaphore permit.
 /// The permit is released when this guard is dropped (after return_to_pool stores
 /// the session or the guard is dropped on error). This prevents connection
@@ -493,6 +500,52 @@ impl ImapPool {
         Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
     {
         self.run_retrying(config, priority, f, None).await
+    }
+
+    /// Run a **UID STORE of flags** (`+FLAGS`/`-FLAGS`), once more on a
+    /// brand-new connection if the first attempt died with the socket.
+    ///
+    /// Same dead pooled socket as `run_uid_delete`: a queued flag change sat
+    /// in Unfinished server actions as `SELECT INBOX failed: connection
+    /// lost`. Adding or removing a flag is idempotent — a STORE whose reply
+    /// was lost and is sent again leaves the same flags — so the re-send is
+    /// safe wherever the socket died.
+    pub async fn run_uid_store<F, Fut, T>(
+        &self,
+        config: &ImapConfig,
+        priority: bool,
+        f: F,
+    ) -> Result<T, String>
+    where
+        F: Fn(ImapSession) -> Fut,
+        Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
+    {
+        self.run_retrying(config, priority, f, None).await
+    }
+
+    /// Run a mutation that is NOT safe to send twice (a move, which may be a
+    /// COPY), once more on a new connection only when the socket died at the
+    /// SELECT that comes first: then nothing was sent and asking again is the
+    /// same as asking once. A loss later surfaces, because the mutation may
+    /// have landed.
+    pub async fn run_retrying_unsent<F, Fut, T>(
+        &self,
+        config: &ImapConfig,
+        priority: bool,
+        f: F,
+    ) -> Result<T, String>
+    where
+        F: Fn(ImapSession) -> Fut,
+        Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
+    {
+        refuse_jmap(config)?;
+        match self.attempt(config, priority, false, &f, None).await {
+            Err(e) if died_at_select(&e) => {
+                warn!("[IMAP pool] {} — nothing was sent, retrying once on a new connection", e);
+                self.attempt(config, priority, true, &f, None).await
+            }
+            other => other,
+        }
     }
 
     async fn run_retrying<F, Fut, T>(

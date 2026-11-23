@@ -64,6 +64,8 @@ mod message_delete;
 mod delete_queue;
 #[cfg(test)]
 mod message_delete_characterization_tests;
+#[cfg(test)]
+mod mutation_retry_tests;
 mod mbox_upload;
 mod mbox_upload_job;
 mod migration;
