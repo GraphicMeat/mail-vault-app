@@ -1,0 +1,18 @@
+{
+  "cff9b1c41785": "Un buzón local guarda copias descargadas de tus correos en el disco de tu ordenador. Un buzón en la nube guarda los mensajes en los servidores de tu proveedor y sincroniza los cambios entre dispositivos. Si eliminas un mensaje del servidor, desaparece del buzón sincronizado, pero la copia local que guardaste por separado permanece en tu disco.",
+  "ca219a7c8e1c": "El botón Archivar de Gmail quita la etiqueta Recibidos y deja el correo en los servidores de Google. Para liberar espacio en Gmail, <a href=\"/guides/download-all-gmail-emails.html\">guarda una copia</a> de los correos que quieras conservar. Comprueba que puedes abrir los mensajes y archivos adjuntos guardados. Después, elimina los mensajes antiguos o grandes que hayas respaldado y vacía la papelera de Gmail.",
+  "c55703e81504": "Copia de seguridad manual del correo en MailVault",
+  "b62e88a1783a": "Cómo borrar correos antiguos en bloque y conservar una copia de seguridad",
+  "4ac2c4a3eb8c": "Cómo borrar correos antiguos en bloque y conservar una copia de seguridad - MailVault",
+  "c46dc9afc59b": "Elige una fecha de corte, guarda una copia de seguridad por separado y comprueba que puedes abrir sus mensajes y adjuntos sin conexión. Después, elimina solo el lote que verificaste.",
+  "138cf8b34a52": "Elige una fecha de corte, guarda una copia de seguridad por separado y abre algunos correos y adjuntos sin conexión antes de eliminar el lote verificado.",
+  "4a89fa595f77": "Paso 1: Elige una fecha de corte",
+  "5c4f2ff4df76": "Por ejemplo, para conservar los correos de Gmail desde 2023, busca <code>before:2023/01/01</code>. Revisa los resultados antes de seleccionar mensajes. Si aparecen miles, empieza por un intervalo más corto.",
+  "0be0865c57d9": "Paso 2: Guarda una copia de seguridad por separado",
+  "8769b1c350d6": "Descarga una copia local del buzón o del lote que vas a limpiar. Guarda una copia de seguridad en otra unidad antes de eliminar mensajes del servidor.",
+  "87854e18c549": "Paso 3: Comprueba la copia sin conexión",
+  "c3ef69022fd9": "Desconéctate de internet. Abre varios mensajes del lote desde la copia de seguridad y abre al menos un adjunto. Si algo falta o no se abre, corrige la copia y vuelve a comprobarla antes de eliminar los correos.",
+  "b9dee3e4b416": "Paso 4: Elimina el lote verificado",
+  "ab115bec2325": "Vuelve a conectarte y repite la búsqueda por fecha en tu buzón en línea. Comprueba que la selección coincide con el lote respaldado y muévela a la papelera.",
+  "f0cb8642c8b1": "MailVault es una aplicación de escritorio gratuita para macOS, Windows y Linux que permite descargar y comprobar copias locales. Conecta tu cuenta por IMAP con el acceso de Google o Microsoft cuando se admita, o con las credenciales IMAP del proveedor, como las contraseñas de aplicación de Yahoo e iCloud, y archiva todo tu buzón como archivos <code>.eml</code> individuales en tu disco. Como cada correo es su propio archivo, después puedes recorrer el archivo completo y buscar en él &mdash; no es una exportación puntual en la que tengas que rebuscar por separado. Archivar a mano es gratis e ilimitado, así que hacer copia de un buzón con decenas de miles de correos antes de una gran limpieza no cuesta nada. Estas instrucciones sobre la estructura de archivos se refieren al formato Maildir predeterminado. Ajustes → Almacenamiento también ofrece almacenamiento JMAP, que conserva los bytes originales de los mensajes con registros JSON y elimina los duplicados de mensajes idénticos."
+}

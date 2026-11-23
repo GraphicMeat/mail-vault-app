@@ -1,5 +1,4 @@
 {
-  "be42c02db587": "Como apagar milhares de e-mails antigos com segurança (guarde uma cópia antes)",
   "5a059d0e513d": "Existem exatamente duas formas práticas de trazer uma cópia completa da sua conta do Gmail para o seu computador: o Google Takeout, que já vem nas ferramentas de conta do Google, e uma ferramenta de arquivamento por IMAP, que se conecta ao Gmail do mesmo jeito que um cliente de e-mail e baixa cada mensagem individualmente. Os resultados são bem diferentes, e qual você quer depende do que você pretende fazer com o download depois.",
   "3496ed70e848": "Opção 1: Google Takeout",
   "4e62eeb134d6": "O que você recebe é um único arquivo de texto grande por marcador/pasta no clássico formato mbox do Unix &mdash; cada e-mail emendado no seguinte. É um backup completo e legítimo, mas tem limitações reais:",
@@ -103,8 +102,8 @@
   "e0b868d6479c": "Busque larger:10M ou larger:25M no Gmail para revelar seus maiores e-mails e anexos, ou veja a divisão do armazenamento em one.google.com/storage para saber quanto é Gmail e quanto é Drive e Photos.",
   "e0382fd1c4b8": "É seguro apagar e-mails antigos depois de arquivá-los com o MailVault?",
   "86c087d40198": "Sim, desde que você confira o arquivo local antes. Abra alguns e-mails arquivados no MailVault, confirme que os anexos estão íntegros e busque uma mensagem específica de que você se lembra antes de apagar qualquer coisa dos servidores do Gmail.",
-  "4ab867abc412": "O Gmail diz que seu armazenamento está cheio e as mensagens novas estão voltando. Veja o que realmente libera espaço, o que não libera e como arquivar e-mails antigos localmente em vez de pagar ao Google todo mês.",
-  "20754e172986": "Armazenamento do Gmail cheio? Veja como resolver (sem pagar para sempre)",
+  "4ab867abc412": "Salve uma cópia dos e-mails que você quer guardar e confira se as mensagens e os anexos abrem. Depois, exclua os e-mails já salvos e esvazie a Lixeira do Gmail.",
+  "20754e172986": "Gmail cheio? Como liberar espaço sem perder seus e-mails",
   "1c05d305350a": "Ferramenta de backup IMAP: o que realmente procurar — MailVault",
   "31f298af9929": "Existem muitas ferramentas de backup e arquivamento de e-mail por IMAP por aí, de utilitários gratuitos de código aberto a suítes corporativas de arquivamento que custam milhares por ano. A maioria das páginas de marketing é quase idêntica &mdash; \"seguro\", \"confiável\", \"backups fáceis\". As diferenças que realmente importam estão por baixo do texto de marketing, em decisões sobre formato de arquivo e posse dos dados que você em geral só descobre depois de já ter se comprometido com uma ferramenta. Veja o que conferir de verdade.",
   "5b2d4974f9a0": "1. Em que formato ela salva de fato?",

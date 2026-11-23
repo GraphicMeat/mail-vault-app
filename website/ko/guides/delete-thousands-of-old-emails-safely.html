@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>오래된 이메일을 잃지 않고 한꺼번에 삭제하는 방법 - MailVault</title>
-  <meta name="description" content="오래된 이메일을 잃지 않고 한꺼번에 삭제하는 순서: 메일함을 백업하고, 사본이 열리는지 확인하고, 눈에 띄는 불필요한 메일을 정리하고, 기간별로 삭제한 다음 휴지통을 비웁니다.">
+  <title>오래된 이메일을 일괄 삭제하고 백업을 보관하는 방법 - MailVault</title>
+  <meta name="description" content="기준 날짜를 정하고 별도의 백업을 저장한 다음, 오프라인에서 몇 가지 이메일과 첨부 파일을 열어 본 뒤 확인한 묶음을 삭제하세요.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ko/guides/delete-thousands-of-old-emails-safely.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/ko/guides/delete-thousands-of-old-emails-safely.html">
-  <meta property="og:title" content="오래된 이메일을 잃지 않고 한꺼번에 삭제하는 방법 - MailVault">
-  <meta property="og:description" content="오래된 이메일을 잃지 않고 한꺼번에 삭제하는 순서: 메일함을 백업하고, 사본이 열리는지 확인하고, 눈에 띄는 불필요한 메일을 정리하고, 기간별로 삭제한 다음 휴지통을 비웁니다.">
+  <meta property="og:title" content="오래된 이메일을 일괄 삭제하고 백업을 보관하는 방법 - MailVault">
+  <meta property="og:description" content="기준 날짜를 정하고 별도의 백업을 저장한 다음, 오프라인에서 몇 가지 이메일과 첨부 파일을 열어 본 뒤 확인한 묶음을 삭제하세요.">
   <meta property="og:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="오래된 이메일을 잃지 않고 한꺼번에 삭제하는 방법 - MailVault">
-  <meta name="twitter:description" content="오래된 이메일을 잃지 않고 한꺼번에 삭제하는 순서: 메일함을 백업하고, 사본이 열리는지 확인하고, 눈에 띄는 불필요한 메일을 정리하고, 기간별로 삭제한 다음 휴지통을 비웁니다.">
+  <meta name="twitter:title" content="오래된 이메일을 일괄 삭제하고 백업을 보관하는 방법 - MailVault">
+  <meta name="twitter:description" content="기준 날짜를 정하고 별도의 백업을 저장한 다음, 오프라인에서 몇 가지 이메일과 첨부 파일을 열어 본 뒤 확인한 묶음을 삭제하세요.">
   <meta name="twitter:image:alt" content="MailVault: 빠른 검색. 비공개 메일. 영원히 내 것. macOS, Windows, Linux에서 무료이며 앱 미리 보기를 담았습니다.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -34,11 +34,11 @@
 {
   "@context": "https://schema.org",
   "@type": "Article",
-  "headline": "오래된 메일 수천 통을 안전하게 삭제하는 방법(사본을 먼저 만드십시오)",
-  "description": "오래된 이메일을 잃지 않고 한꺼번에 삭제하는 순서: 메일함을 백업하고, 사본이 열리는지 확인하고, 눈에 띄는 불필요한 메일을 정리하고, 기간별로 삭제한 다음 휴지통을 비웁니다.",
+  "headline": "오래된 이메일을 일괄 삭제하고 백업을 보관하는 방법",
+  "description": "기준 날짜를 정하고 별도의 백업을 저장한 다음, 오프라인에서 몇 가지 이메일과 첨부 파일을 열어 본 뒤 확인한 묶음을 삭제하세요.",
   "url": "https://mailvaultapp.com/ko/guides/delete-thousands-of-old-emails-safely.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-10-22",
+  "dateModified": "2026-11-21",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -211,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">오래된 메일 수천 통을 안전하게 삭제하는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">오래된 이메일을 일괄 삭제하고 백업을 보관하는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>7분 분량</span>
           </div>
@@ -219,33 +219,25 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-          <p>
-            오래된 이메일을 후회 없이 한꺼번에 삭제하려면 메일함 전체 사본을 내려받아 열리는지 확인하고, 눈에 띄는 불필요한 메일을 정리하고, 기준 날짜보다 오래된 메일을 모두 삭제한 다음, 휴지통을 비워 실제로 공간을 확보합니다. 10년이 지나면 메일이 2만, 5만, 10만 통을 넘는 경우가 흔하며, 부주의한 일괄 삭제로 오래된 계약서, 보증 영수증, 분쟁에서 중요한 대화를 잃게 됩니다. 아래 단계가 이를 막아 줍니다.
-          </p>
+          <p>기준 날짜를 정하고 별도의 백업을 저장한 뒤, 오프라인에서 메시지와 첨부 파일이 열리는지 확인하세요. 확인한 묶음만 삭제하세요.</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1단계: 무엇을 지우기 전에 전부 백업하십시오</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1단계: 기준 날짜 정하기</h3>
 
-          <p>
-            이 단계가 나머지 절차를 안전하게 만들며, 타협할 수 없는 단계입니다. 메시지 하나를 지우기 전에, 정리하려는 메일함의 완전한 사본을 자기 컴퓨터로 내려받으십시오. 검증된 로컬 사본이 있으면 아래의 모든 삭제 결정이 위험하지 않게 됩니다 &mdash; 지워도 된다고 판단한 것이 틀렸더라도 그것은 여전히 보관본에 있습니다.
-          </p>
+          <p>예를 들어 Gmail에서 2023년 이후의 이메일을 보관하려면 <code>before:2023/01/01</code>을 검색하세요. 메시지를 선택하기 전에 검색 결과를 살펴보세요. 결과가 수천 건이면 더 짧은 기간부터 시작하세요.</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2단계: 백업이 실제로 되었는지 검증하십시오</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2단계: 별도의 백업 저장하기</h3>
 
-          <p>
-            건너뛰지 마십시오. 여러 해와 여러 폴더에서 보관된 메일을 무작위로 몇 통 열어 보고, 첨부파일이 열리는지 확인하고, 기억하는 특정 메시지 두세 개를 검색해 정말로 들어 있는지 확인하십시오. 확인하지 않은 백업은 일괄 삭제처럼 되돌릴 수 없는 결정에 기댈 수 있는 백업이 아닙니다.
-          </p>
+          <p>정리할 메일함이나 이메일 묶음의 로컬 사본을 다운로드하세요. 서버의 사본을 삭제하기 전에 다른 드라이브에 별도의 백업을 저장하세요.</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3단계: 쉽고 뻔한 것부터 지우십시오</h3>
+          <!-- help-demo-inline --><!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end -->
 
-          <p>
-            백업을 검증했다면, 실시간 메일함에서 확실히 지워도 되는 메일부터 시작하십시오. 뉴스레터, 홍보 메일, 자동 알림, 오래된 메일링 리스트 요약본 같은 것들입니다. 알려진 뉴스레터와 마케팅 도메인을 발신자로 검색해 한꺼번에 선택하십시오. 오래된 메일함에서 대개 가장 큰 덩어리이며, 보관해 둔 뒤라면 위험이 사실상 없습니다.
-          </p>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3단계: 오프라인에서 백업 확인하기</h3>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4단계: 하나씩 판단하지 말고 오래된 순서로 지우십시오</h3>
+          <p>인터넷 연결을 끊으세요. 백업에서 해당 묶음의 메시지 몇 개와 첨부 파일을 하나 이상 열어 보세요. 누락되거나 열리지 않는 항목이 있으면 삭제 전에 백업을 바로잡고 다시 확인하세요.</p>
 
-          <p>
-            수천 통을 하나하나 검토하는 대신 기간으로 검색하십시오 &mdash; 예를 들어 3년이나 5년보다 오래된 것 전부 &mdash; 그리고 그 범위 안에서 한꺼번에 선택하십시오. 지나가면서 눈에 띄게 중요한 것(큰 첨부파일, "계약", "청구서", "영수증", "세금" 같은 단어가 든 제목)은 빠르게 훑되, 메시지 하나하나에 고민하지 마십시오. 전체 보관본이 이미 안전망으로 있습니다.
-          </p>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4단계: 확인한 묶음 삭제하기</h3>
+
+          <p>인터넷에 다시 연결하고 온라인 메일함에서 같은 날짜 조건으로 검색하세요. 선택한 메시지가 백업한 묶음과 일치하는지 확인하고 휴지통으로 옮기세요.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5단계: 공간을 실제로 되찾으려면 휴지통을 비우십시오</h3>
 
@@ -256,7 +248,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">백업 단계를 MailVault로 하기</h3>
 
           <p>
-            MailVault는 위의 1단계와 2단계를 위해 만든 macOS, Windows, Linux용 무료 데스크톱 앱입니다. IMAP으로 계정을 연결하고(지원하는 경우 Google 또는 Microsoft 로그인, Yahoo와 iCloud는 앱 비밀번호 등 제공업체별 IMAP 인증 정보 사용) 전체 사서함을 디스크의 개별 <code>.eml</code> 파일로 보관하세요. 메일 한 통 한 통이 파일이므로, 나중에 전체 보관본을 둘러보고 검색할 수 있습니다 &mdash; 따로 뒤져야 하는 일회성 내보내기가 아닙니다. 수동 보관은 무료이고 무제한이므로, 대대적인 정리 전에 메일 수만 통이 든 메일함을 백업해도 비용이 들지 않습니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트와 JSON 레코드를 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
+            MailVault는 로컬 사본을 다운로드하고 확인할 수 있는 macOS, Windows, Linux용 무료 데스크톱 앱입니다. IMAP으로 계정을 연결하고(지원하는 경우 Google 또는 Microsoft 로그인, Yahoo와 iCloud는 앱 비밀번호 등 제공업체별 IMAP 인증 정보 사용) 전체 사서함을 디스크의 개별 <code>.eml</code> 파일로 보관하세요. 메일 한 통 한 통이 파일이므로, 나중에 전체 보관본을 둘러보고 검색할 수 있습니다 &mdash; 따로 뒤져야 하는 일회성 내보내기가 아닙니다. 수동 보관은 무료이고 무제한이므로, 대대적인 정리 전에 메일 수만 통이 든 메일함을 백업해도 비용이 들지 않습니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트와 JSON 레코드를 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">한꺼번에 지우기 전에 백업하십시오</p>
@@ -301,7 +293,7 @@
       </article>
 
     </div>
-  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>버전 <span translate="no">2.25.0</span></div><div>검토일 <time datetime="2026-10-22">2026년 10월 22일</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>버전 <span translate="no">2.25.0</span></div><div>검토일 <time datetime="2026-10-22">2026년 10월 22일</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">

@@ -1,5 +1,4 @@
 {
-  "be42c02db587": "Comment supprimer des milliers d'anciens e-mails sans risque (gardez d'abord une copie)",
   "5a059d0e513d": "Il existe exactement deux façons pratiques d'obtenir une copie complète de votre compte Gmail sur votre propre ordinateur : Google Takeout, intégré aux outils de compte de Google, et un outil d'archivage par IMAP, qui se connecte à Gmail comme le ferait un client de messagerie et télécharge chaque message séparément. Les résultats sont très différents, et le bon choix dépend de ce que vous comptez réellement faire du téléchargement ensuite.",
   "3496ed70e848": "Option 1 : Google Takeout",
   "4e62eeb134d6": "Ce que vous obtenez, c'est un unique gros fichier texte par libellé ou dossier, au format mbox Unix classique &mdash; tous les e-mails mis bout à bout. C'est une sauvegarde complète et légitime, mais elle a de vraies limites :",

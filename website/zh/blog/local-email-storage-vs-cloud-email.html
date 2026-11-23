@@ -47,6 +47,7 @@
 {
   "@context": "https://schema.org",
   "@type": "BlogPosting",
+  "dateModified": "2026-11-21",
   "headline": "本地邮件存储与云端邮件：哪份副本由你掌控？",
   "description": "从访问、隐私、恢复和维护几个方面比较本地邮件存储与云端邮件。了解如何用 MailVault 归档补充现有邮件服务。",
   "author": {
@@ -92,7 +93,8 @@
 <article><header class="mb-8"><h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">本地邮件存储与云端邮件：哪份副本由你掌控？</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">区分投递、同步与保留</a></li><li><a href="#help-section-2">比较实际取舍</a></li><li><a href="#help-section-3">隐私取决于整体配置</a></li><li><a href="#help-section-4">结合两者的配置方式</a></li><li><a href="#help-section-5">根据必须保留下来的内容选择</a></li><li><a href="#help-section-6">相关指南</a></li></ul></details><!-- help-contents:end --></header>
 <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-<p>本地邮件存储与云端邮件，解决的是同一问题的不同部分。服务提供商接收邮件，并让当前邮箱能在多台设备上使用。本地归档则提供一份可在自己电脑上保留和检查的副本。很多人两者都需要。</p>
+<p>本地邮箱把下载的邮件副本保存在电脑硬盘上。云端邮箱把邮件保存在服务商的服务器上，并在多台设备间同步更改。如果从服务器删除邮件，它会从同步的邮箱中消失，但单独保存的本地副本仍留在硬盘上。</p>
+<figure class="mv-search-diagram"><a class="mv-shot" data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/state-icons-light-1440.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px" width="1440" height="932" alt="MailVault 在邮件旁显示服务器和本地归档状态。 · MailVault version 2.16.0 zh" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a><figcaption>每封邮件的状态有助于区分服务提供商的副本和磁盘上的副本。</figcaption></figure>
 <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-1">区分投递、同步与保留</h2>
 <p>投递将邮件送达账户。同步在客户端与服务器之间反映变化。保留则为以后留下副本。把邮件移到服务器上名为“归档”的文件夹，只是改变它在邮箱中的位置，并不会自动在 Mac 上创建独立副本。</p>
 <p>在 MailVault 中，明确执行归档的邮件以 .eml 文件存放在本地 Maildir 目录树中。即使从服务提供商处删除邮件，保存的副本也可以继续保留。删除服务器邮件前，请确认归档已完成，并验证邮件及附件能够打开。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
@@ -104,7 +106,6 @@
 <li><strong>存储。</strong>服务器配额与本地磁盘空间是两种不同的限制。下载邮件不会释放服务器空间；确认副本已保存后，删除服务器上的副本才会释放空间。</li>
 <li><strong>维护。</strong>服务提供商负责运营其服务。你则需要维护本地存储的健康、做好保护，并检查备份。</li>
 </ul>
-<figure class="mv-search-diagram"><a class="mv-shot" data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/state-icons-light-1440.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px" width="1440" height="932" alt="MailVault 在邮件旁显示服务器和本地归档状态。 · MailVault version 2.16.0 zh" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a><figcaption>每封邮件的状态有助于区分服务提供商的副本和磁盘上的副本。</figcaption></figure>
 <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-3">隐私取决于整体配置</h2>
 <p>本地搜索让归档检索留在你的电脑上。这不会使普通邮件变成端到端加密，也不会让服务提供商停止处理新邮件。本地文件同样需要防止未授权访问。如果将保管库放入云同步文件夹，该文件夹所属的服务就成了归档的另一个存储位置。</p>
 <p>不同云服务在访问控制、加密和保留策略上各不相同。应评估实际服务及其设置，而不是认为所有托管存储都一样。关于 Mac 这一端的选择，请参阅<a href="/zh/blog/private-email-archive-for-mac.html">私人归档检查清单</a>。</p>

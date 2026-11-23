@@ -1,5 +1,4 @@
 {
-  "be42c02db587": "Cómo borrar miles de correos antiguos sin riesgo (guarda antes una copia)",
   "5a059d0e513d": "Hay exactamente dos formas prácticas de llevar una copia completa de tu cuenta de Gmail a tu propio ordenador: Google Takeout, que viene integrado en las herramientas de cuenta de Google, y una herramienta de archivado por IMAP, que se conecta a Gmail igual que un cliente de correo y descarga cada mensaje por separado. Dan resultados muy distintos, y cuál te conviene depende de qué quieras hacer después con la descarga.",
   "3496ed70e848": "Opción 1: Google Takeout",
   "4e62eeb134d6": "Lo que obtienes es un único archivo de texto grande por etiqueta o carpeta en el clásico formato mbox de Unix &mdash; todos los correos concatenados uno detrás de otro. Es una copia legítima y completa, pero tiene limitaciones reales:",

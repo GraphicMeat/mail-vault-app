@@ -1,0 +1,18 @@
+{
+  "cff9b1c41785": "Uma caixa de e-mail local guarda cópias baixadas das mensagens no disco do seu computador. Uma caixa de e-mail na nuvem mantém as mensagens nos servidores do provedor e sincroniza as alterações entre dispositivos. Se você excluir uma mensagem do servidor, ela desaparece da caixa sincronizada, mas a cópia local salva separadamente fica no seu disco.",
+  "ca219a7c8e1c": "Arquivar e-mails no Gmail não libera espaço. O botão Arquivar tira a mensagem da Caixa de entrada, mas ela continua nos servidores do Google. Para liberar espaço no Gmail, <a href=\"/guides/download-all-gmail-emails.html\">salve uma cópia</a> dos e-mails que você quer guardar. Confira se as mensagens e os anexos salvos abrem. Depois, exclua os e-mails antigos ou grandes que você já salvou e esvazie a Lixeira do Gmail.",
+  "c55703e81504": "Backup manual das mensagens no MailVault",
+  "b62e88a1783a": "Como apagar e-mails antigos em massa e guardar um backup",
+  "4ac2c4a3eb8c": "Como apagar e-mails antigos em massa e guardar um backup - MailVault",
+  "c46dc9afc59b": "Escolha uma data de corte, salve um backup separado e confira se as mensagens e os anexos abrem sem internet. Depois, exclua apenas o lote que você verificou.",
+  "138cf8b34a52": "Escolha uma data de corte, salve um backup separado e abra alguns e-mails e anexos sem internet antes de excluir o lote verificado.",
+  "4a89fa595f77": "Passo 1: escolha uma data de corte",
+  "5c4f2ff4df76": "Por exemplo, para manter no Gmail os e-mails de 2023 em diante, pesquise <code>before:2023/01/01</code>. Confira os resultados antes de selecionar as mensagens. Se aparecerem milhares, comece com um intervalo menor.",
+  "0be0865c57d9": "Passo 2: salve um backup separado",
+  "8769b1c350d6": "Baixe uma cópia local da caixa de e-mail ou do lote que você vai limpar. Salve um backup em outra unidade antes de apagar as cópias do servidor.",
+  "87854e18c549": "Passo 3: confira o backup sem internet",
+  "c3ef69022fd9": "Desconecte-se da internet. Abra no backup algumas mensagens do lote e pelo menos um anexo. Se algo estiver faltando ou não abrir, corrija o backup e confira de novo antes de apagar.",
+  "b9dee3e4b416": "Passo 4: exclua o lote verificado",
+  "ab115bec2325": "Reconecte-se e repita a busca por data na caixa de e-mail online. Confira se a seleção corresponde ao lote que você salvou e mova as mensagens para a Lixeira.",
+  "f0cb8642c8b1": "O MailVault é um aplicativo gratuito para macOS, Windows e Linux que permite baixar e conferir cópias locais. Conecte sua conta por IMAP com login do Google ou da Microsoft quando aceito, ou com as credenciais IMAP do provedor, como senhas de aplicativo do Yahoo e iCloud, e arquive toda a caixa como arquivos <code>.eml</code> individuais no disco. Como cada e-mail é um arquivo próprio, você pode navegar e pesquisar o arquivo completo depois &mdash; não é uma exportação única que você precisa vasculhar à parte. Arquivar à mão é grátis e ilimitado, então fazer backup de uma caixa postal com dezenas de milhares de e-mails antes de uma grande limpeza não custa nada. Estas instruções sobre a estrutura dos arquivos se referem ao formato padrão Maildir. Configurações → Armazenamento também oferece armazenamento JMAP, que mantém os bytes originais das mensagens com registros JSON e elimina mensagens idênticas duplicadas."
+}

@@ -47,6 +47,7 @@
 {
   "@context": "https://schema.org",
   "@type": "BlogPosting",
+  "dateModified": "2026-11-21",
   "headline": "로컬 이메일 저장과 클라우드 이메일: 어떤 사본을 직접 관리할 수 있을까요?",
   "description": "접근, 개인정보 보호, 복구, 관리 측면에서 로컬 이메일 저장과 클라우드 메일을 비교합니다. MailVault 보관함으로 기존 메일 서비스를 보완하는 방법을 알아봅니다.",
   "author": {
@@ -92,7 +93,8 @@
 <article><header class="mb-8"><h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">로컬 이메일 저장과 클라우드 이메일: 어떤 사본을 직접 관리할 수 있을까요?</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">배달, 동기화, 보존을 구분하기</a></li><li><a href="#help-section-2">실제 장단점 비교하기</a></li><li><a href="#help-section-3">개인정보 보호는 전체 구성에 달려 있습니다</a></li><li><a href="#help-section-4">두 가지를 함께 사용하는 구성</a></li><li><a href="#help-section-5">반드시 남아야 하는 것을 기준으로 선택하기</a></li><li><a href="#help-section-6">관련 가이드</a></li></ul></details><!-- help-contents:end --></header>
 <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-<p>로컬 이메일 저장과 클라우드 이메일은 같은 문제의 서로 다른 부분을 해결합니다. 메일 서비스는 메시지를 받고 현재 메일상자를 여러 기기에서 사용할 수 있게 합니다. 로컬 보관함은 자신의 컴퓨터에 보존하고 직접 살펴볼 수 있는 사본을 제공합니다. 많은 사람에게 둘 다 필요합니다.</p>
+<p>로컬 메일함은 다운로드한 이메일 사본을 컴퓨터 드라이브에 저장합니다. 클라우드 메일함은 메일 서비스의 서버에 메시지를 보관하고 기기 간에 변경 사항을 동기화합니다. 서버에서 메시지를 삭제하면 동기화된 메일함에서도 사라지지만, 별도로 저장한 로컬 사본은 드라이브에 남습니다.</p>
+<figure class="mv-search-diagram"><a class="mv-shot" data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/state-icons-light-1440.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/state-icons-720.webp 720w, /screenshots/ko/state-icons-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px"><img src="/screenshots/ko/state-icons-light-1440.webp" srcset="/screenshots/ko/state-icons-light-720.webp 720w, /screenshots/ko/state-icons-light-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px" width="1440" height="932" alt="메시지 옆에 서버 및 로컬 보관 상태를 보여 주는 MailVault. · MailVault version 2.16.0 ko" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a><figcaption>메시지별 상태로 서비스 제공업체의 사본과 디스크에 있는 사본을 구분할 수 있습니다.</figcaption></figure>
 <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-1">배달, 동기화, 보존을 구분하기</h2>
 <p>배달은 메시지를 계정으로 전달합니다. 동기화는 클라이언트와 서버 사이의 변경을 반영합니다. 보존은 나중을 위해 사본을 남깁니다. 메시지를 서버의 ‘보관’ 폴더로 옮기면 메일상자 안의 위치가 바뀝니다. Mac에 별도 사본이 자동으로 생기는 것은 아닙니다.</p>
 <p>MailVault에서 직접 보관한 메시지는 로컬 Maildir 트리에 .eml 파일로 저장됩니다. 서비스 제공업체에서 메시지를 삭제해도 저장한 사본은 남길 수 있습니다. 서버 메일을 삭제하기 전에 보관이 완료되었는지, 메시지와 첨부 파일이 열리는지 확인합니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
@@ -104,7 +106,6 @@
 <li><strong>저장 공간.</strong> 서버 할당량과 로컬 디스크 공간은 별개의 한도입니다. 메일을 다운로드하는 것만으로 서버 공간이 늘지는 않습니다. 저장을 확인한 서버 사본을 삭제해야 공간이 확보됩니다.</li>
 <li><strong>유지 관리.</strong> 서비스 제공업체는 자신의 서비스를 운영합니다. 로컬 저장 장치를 정상 상태로 유지하고 보호하며 백업을 확인하는 일은 사용자 몫입니다.</li>
 </ul>
-<figure class="mv-search-diagram"><a class="mv-shot" data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/state-icons-light-1440.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/state-icons-720.webp 720w, /screenshots/ko/state-icons-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px"><img src="/screenshots/ko/state-icons-light-1440.webp" srcset="/screenshots/ko/state-icons-light-720.webp 720w, /screenshots/ko/state-icons-light-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px" width="1440" height="932" alt="메시지 옆에 서버 및 로컬 보관 상태를 보여 주는 MailVault. · MailVault version 2.16.0 ko" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a><figcaption>메시지별 상태로 서비스 제공업체의 사본과 디스크에 있는 사본을 구분할 수 있습니다.</figcaption></figure>
 <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-3">개인정보 보호는 전체 구성에 달려 있습니다</h2>
 <p>로컬 검색은 보관함 검색을 자신의 컴퓨터 안에서 처리합니다. 그렇다고 일반 이메일에 종단간 암호화가 적용되거나 서비스 제공업체가 새 메일을 처리하지 않게 되는 것은 아닙니다. 로컬 파일도 무단 접근으로부터 보호해야 합니다. 보관함을 클라우드 동기화 폴더에 두면 해당 폴더의 서비스도 보관함의 또 다른 저장 장소가 됩니다.</p>
 <p>클라우드 서비스마다 접근 제어, 암호화, 보존 방식이 다릅니다. 모든 호스팅 저장소가 같다고 가정하지 말고 실제 서비스와 설정을 평가합니다. Mac 쪽의 선택에 관해서는 <a href="/ko/blog/private-email-archive-for-mac.html">개인 보관함 점검 목록</a>을 참고합니다.</p>

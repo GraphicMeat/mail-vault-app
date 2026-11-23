@@ -1,5 +1,4 @@
 {
-  "be42c02db587": "Tausende alte E-Mails sicher löschen (vorher eine Kopie behalten)",
   "5a059d0e513d": "Es gibt genau zwei praktikable Wege, eine vollständige Kopie deines Gmail-Kontos auf den eigenen Computer zu bekommen: Google Takeout, das in Googles Kontowerkzeuge eingebaut ist, und ein IMAP-basiertes Archivierungswerkzeug, das sich mit Gmail so verbindet wie ein Mailclient und jede Nachricht einzeln herunterlädt. Sie liefern sehr unterschiedliche Ergebnisse, und was du willst, hängt davon ab, was du mit dem Download danach eigentlich vorhast.",
   "3496ed70e848": "Möglichkeit 1: Google Takeout",
   "4e62eeb134d6": "Du bekommst eine einzelne, große Textdatei je Label bzw. Ordner im klassischen Unix-mbox-Format &mdash; jede E-Mail hinter der nächsten aneinandergehängt. Das ist ein legitimes, vollständiges Backup, hat aber echte Grenzen:",

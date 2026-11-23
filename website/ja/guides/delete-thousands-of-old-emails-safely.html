@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>古いメールを失わずに一括削除する方法 - MailVault</title>
-  <meta name="description" content="古いメールを失わずに一括削除する手順：メールボックスをバックアップし、コピーが開けることを確認し、明らかに不要なものを片付け、古い順に削除して、最後にゴミ箱を空にします。">
+  <title>古いメールを一括削除してバックアップを残す方法 - MailVault</title>
+  <meta name="description" content="基準日を決めて別の場所にバックアップを保存し、メールや添付ファイルをオフラインで開いてから、確認済みの分だけ削除する方法を説明します。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ja/guides/delete-thousands-of-old-emails-safely.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/ja/guides/delete-thousands-of-old-emails-safely.html">
-  <meta property="og:title" content="古いメールを失わずに一括削除する方法 - MailVault">
-  <meta property="og:description" content="古いメールを失わずに一括削除する手順：メールボックスをバックアップし、コピーが開けることを確認し、明らかに不要なものを片付け、古い順に削除して、最後にゴミ箱を空にします。">
+  <meta property="og:title" content="古いメールを一括削除してバックアップを残す方法 - MailVault">
+  <meta property="og:description" content="基準日を決めて別の場所にバックアップを保存し、メールや添付ファイルをオフラインで開いてから、確認済みの分だけ削除する方法を説明します。">
   <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="古いメールを失わずに一括削除する方法 - MailVault">
-  <meta name="twitter:description" content="古いメールを失わずに一括削除する手順：メールボックスをバックアップし、コピーが開けることを確認し、明らかに不要なものを片付け、古い順に削除して、最後にゴミ箱を空にします。">
+  <meta name="twitter:title" content="古いメールを一括削除してバックアップを残す方法 - MailVault">
+  <meta name="twitter:description" content="基準日を決めて別の場所にバックアップを保存し、メールや添付ファイルをオフラインで開いてから、確認済みの分だけ削除する方法を説明します。">
   <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -34,11 +34,11 @@
 {
   "@context": "https://schema.org",
   "@type": "Article",
-  "headline": "数千通の古いメールを安全に削除する方法（まずコピーを取る）",
-  "description": "古いメールを失わずに一括削除する手順：メールボックスをバックアップし、コピーが開けることを確認し、明らかに不要なものを片付け、古い順に削除して、最後にゴミ箱を空にします。",
+  "headline": "古いメールを一括削除してバックアップを残す方法",
+  "description": "基準日を決めて別の場所にバックアップを保存し、メールや添付ファイルをオフラインで開いてから、確認済みの分だけ削除する方法を説明します。",
   "url": "https://mailvaultapp.com/ja/guides/delete-thousands-of-old-emails-safely.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-10-22",
+  "dateModified": "2026-11-21",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -211,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">数千通の古いメールを安全に削除する方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">古いメールを一括削除してバックアップを残す方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>7分で読めます</span>
           </div>
@@ -219,33 +219,25 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-          <p>
-            古いメールを後悔せずに一括削除するには、メールボックスの完全なコピーをダウンロードして開けることを確認し、明らかに不要なものを片付け、基準日より古いものをすべて削除し、最後にゴミ箱を空にして容量を実際に空けます。10年分で2万、5万、10万通を超えるメールボックスは珍しくありません。不用意な一括削除は、古い契約書、保証の領収書、争いになったときに必要なやり取りを失う原因になります。以下の手順でそれを防ぎます。
-          </p>
+          <p>基準日を決め、別の場所にバックアップを保存し、メールや添付ファイルをオフラインで開けることを確認します。その後、確認した分だけ削除します。</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順1: 何かを削除する前に、すべてをバックアップする</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順 1：基準日を決める</h3>
 
-          <p>
-            この手順が、以降のすべてを安全にします。譲れない前提です。これから整理するメールボックスの完全なコピーを、1通も削除する前に自分のコンピューターへダウンロードしてください。検証済みのローカルのコピーがあれば、以降のどの削除の判断も低リスクになります &mdash; 削除して大丈夫だという判断が間違っていたとしても、アーカイブの中に残っているからです。
-          </p>
+          <p>たとえば Gmail で 2023 年以降のメールを残すなら、<code>before:2023/01/01</code> で検索します。メールを選択する前に検索結果を確認してください。数千件見つかった場合は、期間を絞って始めます。</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順2: バックアップが本当にうまくいったか検証する</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順 2：別の場所にバックアップを保存する</h3>
 
-          <p>
-            これを飛ばさないでください。年やフォルダの違うアーカイブ済みのメールを無作為にいくつか開き、添付ファイルが開くことを確かめ、覚えている特定のメッセージを2、3件検索して本当にあることを確認してください。確認していないバックアップは、一括削除のような後戻りできない判断の拠りどころにはできません。
-          </p>
+          <p>整理するメールボックスや対象のメールをダウンロードして手元に保存します。サーバー上のコピーを削除する前に、別のドライブにバックアップを保存してください。</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順3: まずは簡単で明らかなものから削除する</h3>
+          <!-- help-demo-inline --><!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end -->
 
-          <p>
-            バックアップの検証が済んだら、現役のメールボックスから消しても明らかに安全なものから始めます。ニュースレター、宣伝のメール、自動の通知、古いメーリングリストのまとめなどです。既知のニュースレターやマーケティングのドメインを送信者で検索して、まとめて選択します。これは古いメールボックスで最大のかたまりであることが多く、アーカイブさえ済んでいればリスクはほぼゼロです。
-          </p>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順 3：オフラインでバックアップを確認する</h3>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順4: 1通ずつ迷わず、期間で削除する</h3>
+          <p>インターネット接続を切り、バックアップから対象のメールを数通と添付ファイルを少なくとも 1 つ開きます。見つからないものや開けないものがあれば、バックアップを取り直してからもう一度確認してください。</p>
 
-          <p>
-            数千通を1通ずつ見ていくのではなく、期間で検索して &mdash; たとえば3年より前、5年より前のすべて &mdash; その範囲の中でまとめて選びます。進めながら、明らかに重要そうなもの（大きな添付ファイル、「契約」「請求」「領収」「税」といった語を含む件名）にはざっと目を通しますが、1通ずつ悩む必要はありません。完全なアーカイブという安全網がすでにあるのですから。
-          </p>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順 4：確認した分だけ削除する</h3>
+
+          <p>インターネットに再接続し、サーバー上のメールボックスで同じ日付条件を使って検索します。選択したメールがバックアップした分と一致することを確認し、ゴミ箱へ移動します。</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順5: 実際に容量を取り戻すためにゴミ箱を空にする</h3>
 
@@ -256,7 +248,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">バックアップの手順をMailVaultで行う</h3>
 
           <p>
-            MailVault は、上のステップ 1 とステップ 2 のために作られた macOS・Windows・Linux 向けの無料のデスクトップアプリです。 IMAP でアカウントを接続します（対応している場合は Google または Microsoft ログインを使い、Yahoo や iCloud ではアプリパスワードなど各プロバイダーの IMAP 認証情報を使います）。メールボックス全体を個別の <code>.eml</code> ファイルとしてディスクにアーカイブします。 各メールが独立したファイルなので、後からアーカイブ全体を閲覧・検索できます &mdash; 別に掘り返さなければならない 1 回限りのエクスポートではありません。 手動のアーカイブは無料で無制限なので、大掃除の前に何万通ものメールがあるメールボックスをバックアップしても費用はかかりません。 このファイル構成の説明は、標準の Maildir 形式を対象としています。設定 → ストレージでは JMAP ストレージも選択でき、元のメッセージのバイト列を JSON レコードとともに保持し、同一メッセージの重複を排除します。</p>
+            MailVault は、メールのローカルコピーをダウンロードして確認できる macOS、Windows、Linux 用の無料デスクトップアプリです。 IMAP でアカウントを接続します（対応している場合は Google または Microsoft ログインを使い、Yahoo や iCloud ではアプリパスワードなど各プロバイダーの IMAP 認証情報を使います）。メールボックス全体を個別の <code>.eml</code> ファイルとしてディスクにアーカイブします。 各メールが独立したファイルなので、後からアーカイブ全体を閲覧・検索できます &mdash; 別に掘り返さなければならない 1 回限りのエクスポートではありません。 手動のアーカイブは無料で無制限なので、大掃除の前に何万通ものメールがあるメールボックスをバックアップしても費用はかかりません。 このファイル構成の説明は、標準の Maildir 形式を対象としています。設定 → ストレージでは JMAP ストレージも選択でき、元のメッセージのバイト列を JSON レコードとともに保持し、同一メッセージの重複を排除します。</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">一括削除の前にバックアップを</p>
@@ -301,7 +293,7 @@
       </article>
 
     </div>
-  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>バージョン <span translate="no">2.25.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>バージョン <span translate="no">2.25.0</span></div><div>確認日 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">

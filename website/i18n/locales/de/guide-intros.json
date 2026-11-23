@@ -1,0 +1,18 @@
+{
+  "cff9b1c41785": "Ein lokales Postfach speichert heruntergeladene E-Mails auf dem Laufwerk deines Computers. Ein Cloud-Postfach hält die Nachrichten auf den Servern deines Anbieters und synchronisiert Änderungen zwischen deinen Geräten. Wenn du eine Nachricht auf dem Server löschst, verschwindet sie aus dem synchronisierten Postfach. Eine separat gespeicherte lokale Kopie bleibt auf deinem Laufwerk erhalten.",
+  "ca219a7c8e1c": "Die Schaltfläche „Archivieren“ entfernt in Gmail das Label „Posteingang“. Die Nachricht bleibt auf den Servern von Google. Um Gmail-Speicher freizugeben, <a href=\"/guides/download-all-gmail-emails.html\">speichere eine Kopie</a> der E-Mails, die du behalten möchtest. Prüfe, ob sich die gespeicherten Nachrichten und Anhänge öffnen lassen. Lösche dann die gesicherten alten oder großen Nachrichten und leere den Gmail-Papierkorb.",
+  "c55703e81504": "Manuelle E-Mail-Sicherung in MailVault",
+  "b62e88a1783a": "Alte E-Mails in großen Mengen löschen und eine Sicherung behalten",
+  "4ac2c4a3eb8c": "Alte E-Mails in großen Mengen löschen und eine Sicherung behalten - MailVault",
+  "c46dc9afc59b": "Wähle einen Stichtag, speichere eine separate Sicherung und prüfe offline, ob sich die Nachrichten und Anhänge daraus öffnen lassen. Lösche dann nur die geprüfte Gruppe.",
+  "138cf8b34a52": "Lege einen Stichtag fest, erstelle eine separate Sicherung und öffne daraus offline einige E-Mails und Anhänge, bevor du die geprüfte Gruppe löschst.",
+  "4a89fa595f77": "Schritt 1: Einen Stichtag wählen",
+  "5c4f2ff4df76": "Wenn du zum Beispiel in Gmail alle E-Mails ab 2023 behalten möchtest, suche nach <code>before:2023/01/01</code>. Gehe die Ergebnisse durch, bevor du Nachrichten auswählst. Starte bei Tausenden Treffern mit einem kürzeren Zeitraum.",
+  "0be0865c57d9": "Schritt 2: Eine separate Sicherung speichern",
+  "8769b1c350d6": "Lade eine lokale Kopie des Postfachs oder der Nachrichten herunter, die du löschen willst. Speichere eine separate Sicherung auf einem zweiten Laufwerk, bevor du Serverkopien löschst.",
+  "87854e18c549": "Schritt 3: Die Sicherung offline prüfen",
+  "c3ef69022fd9": "Trenne die Internetverbindung. Öffne aus der Sicherung einige E-Mails, darunter mindestens einen Anhang. Fehlt etwas oder lässt sich etwas nicht öffnen, korrigiere die Sicherung und prüfe sie erneut vor dem Löschen.",
+  "b9dee3e4b416": "Schritt 4: Die geprüften Nachrichten löschen",
+  "ab115bec2325": "Stelle die Internetverbindung wieder her und suche in deinem Online-Postfach nach demselben Zeitraum. Prüfe, ob die Auswahl mit den gesicherten Nachrichten übereinstimmt, und verschiebe sie in den Papierkorb.",
+  "f0cb8642c8b1": "MailVault ist eine kostenlose Desktop-App für macOS, Windows und Linux, mit der du lokale Kopien herunterladen und prüfen kannst. Verbinde dein Konto über IMAP mit Google- oder Microsoft-Anmeldung, soweit unterstützt, beziehungsweise anbieterspezifischen IMAP-Zugangsdaten wie App-Passwörtern für Yahoo und iCloud, und archiviere dein gesamtes Postfach als einzelne <code>.eml</code>-Dateien auf deiner Festplatte. Weil jede E-Mail eine eigene Datei ist, kannst du das ganze Archiv danach durchsehen und durchsuchen &mdash; es ist kein einmaliger Export, den du separat durchwühlen musst. Manuelles Archivieren ist kostenlos und unbegrenzt, ein Postfach mit Zehntausenden E-Mails vor einem großen Aufräumen zu sichern kostet also nichts. Diese Angaben zur Dateistruktur gelten für das Standardformat Maildir. Unter Einstellungen → Speicher gibt es auch JMAP-Speicher, der die ursprünglichen Nachrichtenbytes mit JSON-Datensätzen aufbewahrt und identische Nachrichten dedupliziert."
+}

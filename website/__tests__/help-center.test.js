@@ -48,6 +48,33 @@ describe('help center navigation', () => {
     }
   });
 
+  it('keeps the direct answer above search and contents on definition pages', () => {
+    const document = new JSDOM(readFileSync('website/blog/what-is-an-email-message-id.html', 'utf8')).window.document;
+    const lead = document.querySelector('article h1').nextElementSibling;
+    expect(lead.textContent).toContain('A Message-ID identifies');
+    expect(lead.nextElementSibling.matches('form.mv-help-search')).toBe(true);
+  });
+
+  it('places the bulk-delete backup demonstration beside the backup instructions', () => {
+    const document = new JSDOM(readFileSync('website/guides/delete-thousands-of-old-emails-safely.html', 'utf8')).window.document;
+    const demos = document.querySelectorAll('.mv-help-demo');
+    expect(demos).toHaveLength(1);
+    expect(document.querySelector('article').contains(demos[0])).toBe(true);
+    expect(demos[0].querySelector('img').src).toContain('/en/manual-backup.webp');
+  });
+
+  it.each([
+    'best-email-clients-2027',
+    'export-outlook-to-pst',
+    'open-google-takeout-gmail-mbox',
+    'move-mailstore-home-archive-to-mac',
+  ])('uses the editorial review date on %s', slug => {
+    const document = new JSDOM(readFileSync(`website/blog/${slug}.html`, 'utf8')).window.document;
+    const reviewed = document.querySelector('article time[data-article-reviewed]').dateTime;
+    const stamps = [...document.querySelectorAll('.mv-help-version time')];
+    expect(stamps.map(time => time.dateTime)).toEqual([reviewed, reviewed]);
+  });
+
   it('shows workflow demonstrations only on relevant help pages', () => {
     for (const file of ['faq/scheduled-send.html','blog/email-templates-for-client-replies.html']) {
       const document = new JSDOM(readFileSync('website/'+file,'utf8')).window.document;

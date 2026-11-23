@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>如何批量删除旧邮件而不丢失内容 - MailVault</title>
-  <meta name="description" content="批量删除旧邮件而不丢失内容：先备份邮箱，确认副本可以打开，清理明显无用的邮件，按时间删除，最后清空废纸篓。">
+  <title>如何批量删除旧邮件并保留备份 - MailVault</title>
+  <meta name="description" content="选定截止日期并保存独立备份，离线打开几封邮件及其附件，然后再删除已核查的那批邮件。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/guides/delete-thousands-of-old-emails-safely.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/zh/guides/delete-thousands-of-old-emails-safely.html">
-  <meta property="og:title" content="如何批量删除旧邮件而不丢失内容 - MailVault">
-  <meta property="og:description" content="批量删除旧邮件而不丢失内容：先备份邮箱，确认副本可以打开，清理明显无用的邮件，按时间删除，最后清空废纸篓。">
+  <meta property="og:title" content="如何批量删除旧邮件并保留备份 - MailVault">
+  <meta property="og:description" content="选定截止日期并保存独立备份，离线打开几封邮件及其附件，然后再删除已核查的那批邮件。">
   <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="如何批量删除旧邮件而不丢失内容 - MailVault">
-  <meta name="twitter:description" content="批量删除旧邮件而不丢失内容：先备份邮箱，确认副本可以打开，清理明显无用的邮件，按时间删除，最后清空废纸篓。">
+  <meta name="twitter:title" content="如何批量删除旧邮件并保留备份 - MailVault">
+  <meta name="twitter:description" content="选定截止日期并保存独立备份，离线打开几封邮件及其附件，然后再删除已核查的那批邮件。">
   <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -34,11 +34,11 @@
 {
   "@context": "https://schema.org",
   "@type": "Article",
-  "headline": "如何安全地删除成千上万封旧邮件（先留一份副本）",
-  "description": "批量删除旧邮件而不丢失内容：先备份邮箱，确认副本可以打开，清理明显无用的邮件，按时间删除，最后清空废纸篓。",
+  "headline": "如何批量删除旧邮件并保留备份",
+  "description": "选定截止日期并保存独立备份，离线打开几封邮件及其附件，然后再删除已核查的那批邮件。",
   "url": "https://mailvaultapp.com/zh/guides/delete-thousands-of-old-emails-safely.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-10-22",
+  "dateModified": "2026-11-21",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -211,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何安全地删除成千上万封旧邮件</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何批量删除旧邮件并保留备份</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>7 分钟阅读</span>
           </div>
@@ -219,33 +219,25 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-          <p>
-            要批量删除旧邮件又不后悔，先下载邮箱的完整副本并确认可以打开，清理明显无用的邮件，删除某个截止日期之前的全部邮件，最后清空废纸篓，空间才会真正释放。用了十年的邮箱有 2 万、5 万甚至 10 万封以上邮件很常见，而草率的批量删除正是人们弄丢旧合同、保修凭证或在纠纷中重要的往来邮件的原因。下面的步骤可以避免这种情况。
-          </p>
+          <p>选定截止日期，保存一份独立备份，并离线确认邮件和附件可以打开。然后只删除已核查的那批邮件。</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 1 步：删任何东西之前先把一切备份好</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 1 步：选定截止日期</h3>
 
-          <p>
-            这一步让后面的整个流程变得安全，而且没有商量余地。在你删掉哪怕一封邮件之前，先把即将清理的那个邮箱完整地下载到你自己的电脑上。有了一份经过验证的本地副本，下面每一个删除决定都变成低风险 &mdash; 万一你判断错了，某封邮件其实还需要，它仍然在你的归档里。
-          </p>
+          <p>例如，要保留 Gmail 中 2023 年及以后的邮件，可以搜索 <code>before:2023/01/01</code>。选中邮件前先查看搜索结果。如果有数千条结果，先缩短日期范围。</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 2 步：验证备份真的成功了</h3>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 2 步：保存一份独立备份</h3>
 
-          <p>
-            别跳过这一步。随机抽几封不同年份、不同文件夹的归档邮件打开，确认附件能打开，并搜索两三封你记得的具体邮件，确认它们真的在。对于批量删除这么终局的决定，没检查过的备份，是不能拿来当依据的。
-          </p>
+          <p>下载要清理的邮箱或那批邮件的本地副本。删除服务器上的副本前，把独立备份存到另一块硬盘上。</p>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 3 步：先删掉那些容易判断、明显没用的</h3>
+          <!-- help-demo-inline --><!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end -->
 
-          <p>
-            备份验证之后，从明显可以从在线邮箱里移除的邮件开始：订阅邮件、促销邮件、自动通知、旧的邮件列表摘要。按发件人搜索已知的订阅和营销域名，然后批量选中。这通常是任何旧邮箱里最大的一块，而且在已归档之后风险基本为零。
-          </p>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 3 步：离线检查备份</h3>
 
-          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 4 步：按时间删，而不是一封封猜</h3>
+          <p>断开网络连接。从备份中打开这批邮件中的几封，并打开至少一个附件。如果有邮件或附件缺失或打不开，请修复备份，重新检查后再删除。</p>
 
-          <p>
-            与其一封封看几千封邮件，不如按日期范围搜索 &mdash; 比如三年或五年以上的全部 &mdash; 然后在这个范围内批量选中。过的时候快速扫一眼有没有明显重要的东西（大附件，主题里带「合同」「发票」「收据」「税」之类的词），但别为每一封纠结。你已经有完整归档作安全网了。
-          </p>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 4 步：删除已核查的那批邮件</h3>
+
+          <p>重新联网后，在在线邮箱中按相同日期条件搜索。确认选中的邮件与已备份的那批一致，再将它们移到回收站。</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 5 步：清空回收站，空间才真的回来</h3>
 
@@ -256,7 +248,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">用 MailVault 完成备份这一步</h3>
 
           <p>
-            MailVault 是一款适用于 macOS、Windows 和 Linux 的免费桌面应用，专为上面的第 1 步和第 2 步而做。 通过 IMAP 连接账户（在支持时使用 Google 或 Microsoft 登录，Yahoo 和 iCloud 等则使用应用密码等提供商专用的 IMAP 凭据），将整个邮箱归档为磁盘上单独的 <code>.eml</code> 文件。 因为每封邮件都是一个独立的文件，之后你可以浏览和搜索整个归档 &mdash; 它不是一份需要你另外去翻找的一次性导出。 手动归档免费且不限次数，所以在一次大清理之前备份一个有几万封邮件的邮箱，不花任何费用。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，保留原始邮件字节和 JSON 记录，并对相同邮件去重。</p>
+            MailVault 是一款适用于 macOS、Windows 和 Linux 的免费桌面应用，可下载和检查本地副本。 通过 IMAP 连接账户（在支持时使用 Google 或 Microsoft 登录，Yahoo 和 iCloud 等则使用应用密码等提供商专用的 IMAP 凭据），将整个邮箱归档为磁盘上单独的 <code>.eml</code> 文件。 因为每封邮件都是一个独立的文件，之后你可以浏览和搜索整个归档 &mdash; 它不是一份需要你另外去翻找的一次性导出。 手动归档免费且不限次数，所以在一次大清理之前备份一个有几万封邮件的邮箱，不花任何费用。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，保留原始邮件字节和 JSON 记录，并对相同邮件去重。</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">批量删除之前先备份</p>
@@ -301,7 +293,7 @@
       </article>
 
     </div>
-  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --><!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>版本 <span translate="no">2.25.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>版本 <span translate="no">2.25.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">

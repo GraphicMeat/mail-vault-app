@@ -10,7 +10,8 @@ const version = JSON.parse(fs.readFileSync(path.join(ROOT, '../package.json'), '
 // Advance this date after reviewing the documentation, not on every build.
 const reviewed = '2026-10-22';
 const reviewedLabel = new Intl.DateTimeFormat('en-GB', { day:'numeric', month:'long', year:'numeric', timeZone:'UTC' }).format(new Date(reviewed));
-const versionInfo = `<div class="mv-help-version"><div>Version <span translate="no">${version}</span></div><div>Reviewed <time datetime="${reviewed}">${reviewedLabel}</time></div></div>`;
+const defaultReviewTime = `<time datetime="${reviewed}">${reviewedLabel}</time>`;
+const helpVersion = reviewTime => `<div class="mv-help-version"><div>Version <span translate="no">${version}</span></div><div>Reviewed ${reviewTime}</div></div>`;
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const plain = value => new JSDOM(value).window.document.body.textContent.replace(/\s+/g, ' ').trim();
 const files = ['faq', 'guides', 'blog'].flatMap(dir => fs.readdirSync(path.join(ROOT, dir)).filter(f => f.endsWith('.html')).map(f => `${dir}/${f}`));
@@ -75,7 +76,7 @@ const questions = topics.flatMap(topic => {
   return [...document.querySelectorAll('article[id]')].map(article => ({ id:article.id, title:article.querySelector('h2')?.textContent.trim(), rel:`${topic.rel}#${article.id}` })).filter(q => q.title);
 });
 
-function sidebar(rel) {
+function sidebar(rel, versionInfo) {
   const link = (href, title, cls = '') => `<a href="${href}"${href === '/' + rel ? ' aria-current="page"' : ''}${cls ? ` class="${cls}"` : ''}>${title}</a>`;
   return `<details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics">${link('/docs.html','<img src="/icon-128.webp" width="28" height="28" alt="">MailVault help','mv-help-home')}${topics.map(t => link('/'+t.rel,escape(t.title))).join('')}${link('/docs.html#guides','Practical guides','mv-help-divider')}${link('/docs.html#articles','Articles')}${link('/features.html','Feature reference')}${link('/changelog.html','Release notes')}</nav>${versionInfo}</details>`;
 }
@@ -100,7 +101,9 @@ function demo(rel) {
   if (!name) return '';
   const item = helpMedia.locales.en.workflows[name];
   const attribute = `data-mailvault-version="${helpMedia.version}" data-mailvault-version-kind="capture"`;
-  const caption = item.imageAlt.replace(/ · MailVault version \d+\.\d+\.\d+ en$/, '');
+  const caption = rel === 'guides/gmail-storage-full.html'
+    ? 'Manual email backup in MailVault'
+    : item.imageAlt.replace(/ · MailVault version \d+\.\d+\.\d+ en$/, '');
   const transcript = Array.isArray(item.transcript) ? item.transcript.join(' ') : item.transcript;
   return `<!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="${item.image}"><img src="${item.image}" width="1440" height="1056" loading="lazy" alt="${escape(item.imageAlt)}" ${attribute}></a><figcaption>${escape(caption)}</figcaption><video controls playsinline preload="none" poster="${item.poster}" aria-label="${escape(item.videoLabel)}" ${attribute}><source src="${item.video}" type="video/mp4"><track kind="captions" src="${item.captions}" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>${escape(transcript)}</p></details></section><!-- help-demo:end -->`;
 }
@@ -158,6 +161,8 @@ for (const rel of ['docs.html','faq.html','blog.html',...files]) {
     .replace(/<link rel="stylesheet" href="\/assets\/help-center.css[^>]*>\s*/g,'')
     .replace(/<script defer src="\/assets\/help-center.js[^>]*><\/script>\s*/g,'')
     .replace(/<dialog class="mv-help-lightbox"[\s\S]*?<\/dialog>\s*/g,'');
+  const reviewTime = html.match(/<time\b[^>]*\bdata-article-reviewed\b[^>]*>[^<]*<\/time>/i)?.[0];
+  const versionInfo = helpVersion(reviewTime?.replace(/ data-article-reviewed(?:="")?/, '') || defaultReviewTime);
   const isHub = !rel.includes('/');
   html = html.replace(/<main\b[^>]*>([\s\S]*?)<\/main>/i, (_, original) => {
     const unwrapped = original.replace(/^\s*<div class="mv-help-content">([\s\S]*)<\/div>\s*$/,'$1');
@@ -175,10 +180,13 @@ for (const rel of ['docs.html','faq.html','blog.html',...files]) {
         return attrs.includes('id=') ? tag : `<h2${attrs} id="${id}">${title}</h2>`;
       });
       const contents = h2.length > 2 ? `<details class="mv-help-contents" open><summary>On this page</summary><ul>${h2.map(h=>`<li><a href="#${h.id}">${escape(h.title)}</a></li>`).join('')}</ul></details>` : '';
-      content = content.replace(/(<h1\b[^>]*>[\s\S]*?<\/h1>)/i, `$1<!-- help-intro:start -->${search(false)}<!-- help-intro:end --><!-- help-contents:start -->${contents}<!-- help-contents:end -->`);
+      content = content.replace(/(<h1\b[^>]*>[\s\S]*?<\/h1>(?:\s*<p class="mv-lead">[^<]*<\/p>(?=\s*<\/header>))?)/i, `$1<!-- help-intro:start -->${search(false)}<!-- help-intro:end --><!-- help-contents:start -->${contents}<!-- help-contents:end -->`);
       content = enhanceFigures(content);
     }
-    return `<!-- help-shell:start --><div class="mv-wrap mv-help-layout">${sidebar(rel)}<!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">${content}${demo(rel)}<!-- help-version:start --><footer class="mv-help-review">${versionInfo}</footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->`;
+    const demonstration = demo(rel);
+    const inlineDemo = content.includes('<!-- help-demo-inline -->');
+    if (inlineDemo) content = content.replace('<!-- help-demo-inline -->', '<!-- help-demo-inline -->' + demonstration);
+    return `<!-- help-shell:start --><div class="mv-wrap mv-help-layout">${sidebar(rel, versionInfo)}<!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">${content}${inlineDemo ? '' : demonstration}<!-- help-version:start --><footer class="mv-help-review">${versionInfo}</footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->`;
   });
   html = html.replace('</head>','<link rel="stylesheet" href="/assets/help-center.css?v=2">\n</head>');
   html = html.replace(/<a\b[^>]*href="\/demo\/[^>]*>/g, tag => tag.includes('aria-label=') ? tag : tag.replace(/>$/, ' aria-label="Open the MailVault demo in a new window">'));

@@ -1,0 +1,18 @@
+{
+  "cff9b1c41785": "Une boîte mail locale conserve des copies téléchargées de vos messages sur le disque de votre ordinateur. Une boîte mail dans le cloud conserve les messages sur les serveurs de votre fournisseur et synchronise les changements entre vos appareils. Si vous supprimez un message du serveur, il disparaît de la boîte synchronisée, mais la copie locale enregistrée séparément reste sur votre disque.",
+  "ca219a7c8e1c": "Le bouton Archiver de Gmail retire le libellé Boîte de réception et laisse le message sur les serveurs de Google. Pour libérer de l’espace dans Gmail, <a href=\"/guides/download-all-gmail-emails.html\">enregistrez une copie</a> des e-mails à conserver. Vérifiez que les messages et pièces jointes enregistrés s’ouvrent. Supprimez ensuite les messages anciens ou volumineux sauvegardés, puis videz la corbeille Gmail.",
+  "c55703e81504": "Sauvegarde manuelle des e-mails dans MailVault",
+  "b62e88a1783a": "Supprimer d’anciens e-mails en masse et conserver une sauvegarde",
+  "4ac2c4a3eb8c": "Supprimer d’anciens e-mails en masse et conserver une sauvegarde - MailVault",
+  "c46dc9afc59b": "Choisissez une date limite, enregistrez une sauvegarde séparée et vérifiez hors ligne que les messages et pièces jointes s’ouvrent. Supprimez ensuite uniquement le lot vérifié.",
+  "138cf8b34a52": "Fixez une date limite, créez une sauvegarde séparée et ouvrez quelques e-mails et pièces jointes hors ligne avant de supprimer le lot vérifié.",
+  "4a89fa595f77": "Étape 1 : choisissez une date limite",
+  "5c4f2ff4df76": "Par exemple, pour conserver vos e-mails Gmail à partir de 2023, recherchez <code>before:2023/01/01</code>. Examinez les résultats avant de sélectionner des messages. S’il y en a des milliers, commencez par une période plus courte.",
+  "0be0865c57d9": "Étape 2 : enregistrez une sauvegarde séparée",
+  "8769b1c350d6": "Téléchargez une copie locale de la boîte mail ou du lot à nettoyer. Enregistrez une sauvegarde sur un deuxième disque avant de supprimer les copies du serveur.",
+  "87854e18c549": "Étape 3 : vérifiez la sauvegarde hors ligne",
+  "c3ef69022fd9": "Coupez la connexion internet. Ouvrez quelques messages du lot depuis la sauvegarde, ainsi qu’au moins une pièce jointe. Si un élément manque ou ne s’ouvre pas, corrigez la sauvegarde et vérifiez-la de nouveau avant de supprimer les messages.",
+  "b9dee3e4b416": "Étape 4 : supprimez le lot vérifié",
+  "ab115bec2325": "Reconnectez-vous et relancez la même recherche par date dans votre boîte mail en ligne. Vérifiez que la sélection correspond au lot sauvegardé, puis déplacez-la dans la corbeille.",
+  "f0cb8642c8b1": "MailVault est une application gratuite pour macOS, Windows et Linux qui permet de télécharger et de vérifier des copies locales. Connectez votre compte par IMAP avec la connexion Google ou Microsoft lorsqu’elle est prise en charge, ou les identifiants IMAP du fournisseur, comme les mots de passe d’application Yahoo et iCloud, puis archivez toute votre boîte sous forme de fichiers <code>.eml</code> individuels sur votre disque. Comme chaque e-mail est un fichier distinct, vous pouvez ensuite parcourir et chercher dans toute l'archive &mdash; ce n'est pas un export ponctuel qu'il faut fouiller à part. L'archivage manuel est gratuit et illimité : sauvegarder une boîte de dizaines de milliers d'e-mails avant un grand nettoyage ne coûte donc rien. Ces indications sur la structure des fichiers concernent le format Maildir utilisé par défaut. Paramètres → Stockage propose aussi le stockage JMAP, qui conserve les octets des messages d’origine avec des enregistrements JSON et déduplique les messages identiques."
+}

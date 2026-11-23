@@ -1,0 +1,18 @@
+{
+  "cff9b1c41785": "Una casella di posta locale salva sul disco del computer le copie delle email scaricate. Una casella nel cloud conserva i messaggi sui server del provider e sincronizza le modifiche tra i dispositivi. Se elimini un messaggio dal server, scompare dalla casella sincronizzata, ma la copia locale salvata separatamente rimane sul disco.",
+  "ca219a7c8e1c": "Il pulsante Archivia di Gmail rimuove l’etichetta Posta in arrivo e lascia il messaggio sui server di Google. Per liberare spazio su Gmail, <a href=\"/guides/download-all-gmail-emails.html\">salva una copia</a> delle email che vuoi tenere. Verifica che i messaggi e gli allegati salvati si aprano. Poi elimina i messaggi vecchi o pesanti di cui hai fatto il backup e svuota il cestino di Gmail.",
+  "c55703e81504": "Backup manuale delle email in MailVault",
+  "b62e88a1783a": "Come eliminare in blocco le vecchie email e conservarne un backup",
+  "4ac2c4a3eb8c": "Come eliminare in blocco le vecchie email e conservarne un backup - MailVault",
+  "c46dc9afc59b": "Scegli una data limite, salva un backup separato e verifica che messaggi e allegati si aprano offline. Poi elimina solo il gruppo di messaggi che hai verificato.",
+  "138cf8b34a52": "Scegli una data limite, salva un backup separato e apri alcune email e allegati offline prima di eliminare il gruppo verificato.",
+  "4a89fa595f77": "Passaggio 1: scegli una data limite",
+  "5c4f2ff4df76": "Ad esempio, per tenere su Gmail le email dal 2023 in poi, cerca <code>before:2023/01/01</code>. Controlla i risultati prima di selezionare i messaggi. Se ne trovi migliaia, inizia con un intervallo più breve.",
+  "0be0865c57d9": "Passaggio 2: salva un backup separato",
+  "8769b1c350d6": "Scarica una copia locale della casella o del gruppo di messaggi da ripulire. Salva un backup su un’altra unità prima di eliminare le copie dal server.",
+  "87854e18c549": "Passaggio 3: verifica il backup offline",
+  "c3ef69022fd9": "Scollegati da Internet. Dal backup, apri alcuni messaggi del gruppo e almeno un allegato. Se qualcosa manca o non si apre, correggi il backup e ripeti la verifica prima di eliminare i messaggi.",
+  "b9dee3e4b416": "Passaggio 4: elimina il gruppo verificato",
+  "ab115bec2325": "Riconnettiti e ripeti la stessa ricerca per data nella casella online. Verifica che la selezione corrisponda al gruppo di cui hai fatto il backup, poi spostala nel cestino.",
+  "f0cb8642c8b1": "MailVault è un’app desktop gratuita per macOS, Windows e Linux per scaricare e verificare copie locali. Collega il tuo account tramite IMAP con l’accesso Google o Microsoft dove supportato, oppure con le credenziali IMAP del provider, come le password per app di Yahoo e iCloud, e archivia l’intera casella come file <code>.eml</code> individuali sul disco. Poiché ogni email è un file a sé, in seguito puoi sfogliare e cercare nell'intero archivio &mdash; non è un'esportazione una tantum da scavare a parte. L'archiviazione manuale è gratuita e illimitata, quindi fare il backup di una casella con decine di migliaia di email prima di una grande pulizia non costa nulla. Queste istruzioni sulla struttura dei file si riferiscono al formato predefinito Maildir. Impostazioni → Archiviazione offre anche l’archiviazione JMAP, che conserva i byte originali dei messaggi con record JSON e deduplica i messaggi identici."
+}
