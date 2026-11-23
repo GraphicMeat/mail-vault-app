@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../../i18n/index.js';
 import { tileUrl, hitRender, serializeRender, foldRender } from './service';
 import { useSurfaceDoc } from './surfaces/useSurfaceDoc';
@@ -256,7 +256,10 @@ const BlitzTiles = forwardRef(function BlitzTiles({ html, theme, onLink, onOpenI
 
   // The menu belongs to the doc it was opened on: a message switch or re-open closes it. A theme or
   // palette flip closes it too: its inline colours are those of the theme it opened in.
-  useEffect(() => { menuSeq.current++; setMenu(null); }, [html, doc?.docId, dark, palette]);
+  // A layout effect: done inside the commit that shows the doc. As a passive effect it could run a
+  // task later (a render over the scheduler's slice), after a right-click on the new tiles, and
+  // drop that click's menu as stale.
+  useLayoutEffect(() => { menuSeq.current++; setMenu(null); }, [html, doc?.docId, dark, palette]);
 
   const onContextMenu = useCallback((e) => {
     e.preventDefault();

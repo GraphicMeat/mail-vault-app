@@ -39,7 +39,8 @@ describe('the module entry', () => {
   it('loads and installs the probe in an e2e build', async () => {
     vi.stubEnv('VITE_E2E', '1');
     await load();
-    expect(typeof window.__MV_BLITZ_PERF__?.run).toBe('function');
+    // The entry imports the probe lazily: how long that takes is the machine's business.
+    await vi.waitFor(() => expect(typeof window.__MV_BLITZ_PERF__?.run).toBe('function'), { timeout: 10000 });
   });
 
   it('does not load the probe in a production build', async () => {

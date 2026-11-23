@@ -1265,6 +1265,30 @@ describe('body context menu', () => {
     expect(document.body.textContent).not.toContain('jane-doe');
     expect(document.body.textContent).not.toContain('Jane');
   });
+
+  // The doc-change reset must be done by the time the tiles are on screen: a right-click landing
+  // between that commit and a deferred effect would be counted as stale and open nothing. A render
+  // over the scheduler's 5 ms slice is what defers a passive effect to a later task (a loaded machine).
+  it('a right-click in the tick the tiles appear still opens the menu', async () => {
+    openRender.mockResolvedValue({ docId: 2, rev: 1, meta: meta() });
+    hitRender.mockResolvedValue({ link: null, fold: null });
+    const slow = { get dark() { const t0 = performance.now(); while (performance.now() - t0 < 12) { /* spin */ } return false; } };
+    let fired = false;
+    const seen = new MutationObserver(() => {
+      const tile = document.querySelector('[data-testid="blitz-tile"]');
+      if (!tile || fired) return;
+      fired = true;
+      tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 }));
+    });
+    seen.observe(document.body, { childList: true, subtree: true });
+    try {
+      render(tiles({ theme: slow }));
+      await waitFor(() => expect(fired).toBe(true));
+    } finally {
+      seen.disconnect();
+    }
+    await screen.findByTestId('blitz-context-menu');
+  });
 });
 
 describe('dark mode (interim: light menu and selection until a dark swatch probe)', () => {
