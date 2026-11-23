@@ -51,6 +51,9 @@ describe('bubbleLabel', () => {
     expect(bubbleLabel(stack(1, { name: '', address: 'x@y' }))).toBe('X');
     expect(bubbleLabel(stack(1, { name: '', address: '' }))).toBe('?');
   });
+  it('takes a whole character, not half a surrogate pair', () => {
+    expect(bubbleLabel(stack(1, { name: '\u{1D4D0}ria' }))).toBe('\u{1D4D0}');
+  });
 });
 
 describe('withToggled', () => {

@@ -114,7 +114,7 @@ export function keptStacks(items, liveAccountIds) {
 export function bubbleLabel({ items, sender }) {
   if (items.length > 1) return String(items.length);
   const name = (sender && (sender.name || sender.address)) || '';
-  return name ? name.trim().charAt(0).toUpperCase() || '?' : '?';
+  return name ? [...name.trim()][0]?.toUpperCase() || '?' : '?';
 }
 
 /** The lowest top (screen fraction) at which a dock of this height still clears the bottom bar. */

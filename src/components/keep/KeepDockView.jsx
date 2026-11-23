@@ -44,6 +44,7 @@ function useDismissPanels(rootRef, active, dismiss) {
 function Grip({ dock, rootRef, onMove }) {
   const t = useT();
   const start = useRef(null);
+  const moved = useRef(false);
   const shift = (dx, dy) => { rootRef.current.style.transform = `translate(${dx}px, ${dy}px)`; };
   const drop = () => {
     const root = rootRef.current;
@@ -62,14 +63,18 @@ function Grip({ dock, rootRef, onMove }) {
         // Capture keeps the drag on the grip past its edge; a pointer that already ended has none to give.
         try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* the drag still follows the grip */ }
         start.current = { x: event.clientX, y: event.clientY };
+        moved.current = false;
       }}
       onPointerMove={event => {
-        if (start.current) shift(event.clientX - start.current.x, event.clientY - start.current.y);
+        if (!start.current) return;
+        moved.current = true;
+        shift(event.clientX - start.current.x, event.clientY - start.current.y);
       }}
       onPointerUp={() => {
         if (!start.current) return;
         start.current = null;
-        drop();
+        // A plain click on the grip must not re-snap (and lift) a dock that has grown taller than its room.
+        if (moved.current) drop();
       }}
       onPointerCancel={() => { start.current = null; rootRef.current.style.transform = ''; }}
       onKeyDown={event => {
@@ -105,9 +110,9 @@ function Panel({ stack, onOpen, onRemove, onClose }) {
   // A panel that would run under the foot opens upward instead, when there is room above the bubble.
   useLayoutEffect(() => {
     // The panel's parent is its stack (a child's layout effect runs before the stack's ref is set).
-    const bubble = panelRef.current.parentElement.getBoundingClientRect();
+    const stack = panelRef.current.parentElement.getBoundingClientRect();
     const { height } = panelRef.current.getBoundingClientRect();
-    setFlip(bubble.top + height > window.innerHeight - BOTTOM_CLEARANCE && bubble.bottom - height >= 0);
+    setFlip(stack.top + height > window.innerHeight - BOTTOM_CLEARANCE && stack.bottom - height >= 0);
   }); // every render: a moved dock or a changed list changes the room, and an unchanged flip bails out
   return (
     <div ref={panelRef} className="keep-panel" data-testid="keep-panel" data-flip={flip ? '' : undefined}>
@@ -175,7 +180,10 @@ export function KeepDockView({ stacks, dock, expandedKey, onExpand, onOpen, onRe
   const t = useT();
   const rootRef = useRef(null);
   // The one stack a mouse hover or keyboard focus shows a panel for; a tap's panel is `expandedKey`.
-  const [peekKey, setPeekKey] = useState(null);
+  const [peekedKey, setPeekKey] = useState(null);
+  // A stack that unmounts fires no pointerleave or blur: a peek on a gone stack is no peek (as useExpandedStack).
+  const peekKey = stacks.some(stack => stack.key === peekedKey) ? peekedKey : null;
+  useEffect(() => { if (peekedKey !== null && peekKey === null) setPeekKey(null); }, [peekedKey, peekKey]);
   const dismiss = useCallback(() => { setPeekKey(null); onExpand(null); }, [onExpand]);
   useDismissPanels(rootRef, Boolean(expandedKey || peekKey), dismiss);
   if (!stacks.length) return null;
@@ -189,7 +197,7 @@ export function KeepDockView({ stacks, dock, expandedKey, onExpand, onOpen, onRe
       aria-label={t('keep.dock')}
       // The dock never runs below the screen: past this height its bubbles wrap into another column.
       // --keep-top is the dock's height; keep.css lifts it clear of a phone's status bar.
-      style={{ '--keep-top': `${dock.top * 100}vh`, maxHeight: `calc(${(1 - dock.top) * 100}vh - ${BOTTOM_CLEARANCE}px)` }}
+      style={{ '--keep-top': `${dock.top * 100}vh`, maxHeight: `calc(100vh - max(var(--keep-top), var(--keep-top-inset, 0px)) - ${BOTTOM_CLEARANCE}px)` }}
     >
       <Grip dock={dock} rootRef={rootRef} onMove={onMove} />
       {stacks.map(stack => (

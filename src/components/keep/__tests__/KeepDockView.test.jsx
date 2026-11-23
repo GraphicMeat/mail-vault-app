@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React from 'react';
+import React, { useState } from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -27,6 +27,16 @@ function setup(props = {}) {
 const bubbles = () => screen.getAllByTestId('keep-bubble');
 const samBubble = () => bubbles()[0];
 const lenaBubble = () => bubbles()[1];
+
+// The app side of the view: it holds the expanded key as the real containers do.
+function Host({ initial = null, ...props }) {
+  const [expandedKey, setExpandedKey] = useState(initial);
+  return <KeepDockView {...props} stacks={props.stacks ?? stacks} dock={{ side: 'right', top: 0.4 }}
+    expandedKey={expandedKey} onExpand={setExpandedKey} />;
+}
+const hostHandlers = () => ({ onOpen: vi.fn(), onRemove: vi.fn(), onCloseStack: vi.fn(), onMove: vi.fn() });
+// What a real mouse press on a bubble does: pointerdown, then focus, then click.
+const press = bubble => { fireEvent.pointerDown(bubble, { pointerType: 'mouse' }); fireEvent.focus(bubble); fireEvent.click(bubble); };
 
 describe('KeepDockView', () => {
   it('renders nothing with nothing kept', () => {
@@ -247,7 +257,8 @@ describe('KeepDockView', () => {
 
   it('the dock is bounded to the screen below it and wraps into columns', () => {
     setup({ dock: { side: 'right', top: 0.4 } });
-    expect(screen.getByTestId('keep-dock').style.maxHeight).toContain('60vh');
+    // The same inset the CSS top uses, so a phone's status bar does not push the dock past the bottom clearance.
+    expect(screen.getByTestId('keep-dock').style.maxHeight).toContain('max(var(--keep-top), var(--keep-top-inset, 0px))');
     const css = readFileSync(resolve(process.cwd(), 'src/styles/keep.css'), 'utf8');
     expect(css.match(/\n\.keep-dock\s*\{[^}]*\}/)[0]).toMatch(/flex-wrap:\s*wrap/);
   });
@@ -321,6 +332,45 @@ describe('KeepDockView', () => {
     const { onMove } = setup();
     fireEvent.pointerDown(samBubble(), { pointerType: 'mouse' });
     fireEvent.click(samBubble());
+    expect(onMove).not.toHaveBeenCalled();
+  });
+
+  it('a mouse press on a bubble opens and folds its panel, and the focus it takes does not peek it back open', () => {
+    render(<Host {...hostHandlers()} />);
+    press(samBubble());
+    expect(screen.getByTestId('keep-panel')).toBeTruthy();
+    press(samBubble());
+    expect(screen.queryByTestId('keep-panel')).toBeNull();
+  });
+
+  it('Escape after a folded press is left to the app', () => {
+    render(<Host {...hostHandlers()} />);
+    press(samBubble());
+    press(samBubble());
+    expect(fireEvent.keyDown(document.body, { key: 'Escape' })).toBe(true);
+  });
+
+  it('a hover peek on a stack that is gone does not capture Escape, nor reopen when the stack returns', () => {
+    const appEscape = vi.fn();
+    window.addEventListener('keydown', appEscape);
+    const handlers = hostHandlers();
+    const view = render(<Host {...handlers} />);
+    fireEvent.pointerEnter(lenaBubble(), { pointerType: 'mouse' });
+    fireEvent.click(screen.getByTestId('keep-row-remove'));
+    expect(handlers.onRemove).toHaveBeenCalledWith('a1|INBOX|4');
+    view.rerender(<Host {...handlers} stacks={[stacks[0]]} />);
+    expect(fireEvent.keyDown(document.body, { key: 'Escape' })).toBe(true);
+    expect(appEscape).toHaveBeenCalledTimes(1);
+    window.removeEventListener('keydown', appEscape);
+    view.rerender(<Host {...handlers} />);
+    expect(screen.queryByTestId('keep-panel')).toBeNull();
+  });
+
+  it('a plain click on the grip does not move the dock', () => {
+    const { onMove } = setup();
+    const grip = screen.getByTestId('keep-dock-grip');
+    fireEvent.pointerDown(grip, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerUp(grip, { pointerId: 1 });
     expect(onMove).not.toHaveBeenCalled();
   });
 });
