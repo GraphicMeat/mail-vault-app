@@ -13,13 +13,15 @@
 // row does not swipe.
 // The message's tags follow the subject on its line, as on desktop's row (TagChips.jsx).
 // Deliberately not built on src/components/EmailRow: that pulls in the desktop stores.
-import React, { memo } from 'react';
+// `RowFace` is what the row shows; Settings > Appearance > Layout draws its sample with it.
+import React, { forwardRef, memo } from 'react';
 import { displayText } from '../utils/bidiText.js';
 import { cleanPreviewText } from '../utils/previewText.js';
 import { formatEmailDate } from './format.js';
 import { t as translate, useT } from './i18n.js';
 import SwipeRow from './SwipeRow.jsx';
 import { accountColor } from './accountColor.js';
+import { initialOf } from './AccountSwitcher.jsx';
 import { EnvelopeIcon, TrashIcon, FlagIcon, MoveIcon } from './icons.jsx';
 import { useMobileStore } from './store.js';
 import { swipeKind, rowHeight, PREF_DEFAULTS } from './prefs.js';
@@ -34,7 +36,54 @@ function senderOf(row, t = translate) {
   return displayText(row.fromName, '') || displayText(row.fromAddress, '') || t('explorer.unknownSender');
 }
 
-/** `account`: set in All Inboxes, where the row starts with a dot in that account's colour. */
+/**
+ * What a row shows, at `prefs`' density and preview lines: sender, conversation count, flag, date,
+ * subject (then `tags`), the message's text. `shown`: the row as it reads (a conversation's unread
+ * and flag); `as`: the element (a button in the list, a plain box in a sample). The rest of the
+ * props and the ref go to that element (SwipeRow drives the list's row through them).
+ */
+export const RowFace = forwardRef(function RowFace({ row, shown = row, prefs, account = null, tags = null, as: Face = 'button', ...rest }, ref) {
+  const t = useT();
+  const previewLines = [0, 1, 2, 3].includes(prefs.listPreviewLines) ? prefs.listPreviewLines : 1;
+  return (
+    <Face
+      {...rest}
+      ref={ref}
+      type={Face === 'button' ? 'button' : undefined}
+      className={`mv-row${!shown.seen ? ' mv-row--unread' : ''}${prefs.listDensity === 'compact' ? ' mv-row--compact' : ''}`}
+    >
+      <span className="mv-row__top">
+        {account && (
+          <span className="mv-row__acct" role="img" aria-label={account.email} style={{ backgroundColor: accountColor(account) }}>{initialOf(account)}</span>
+        )}
+        <span className="mv-row__sender" dir="auto">{senderOf(row, t)}</span>
+        {row.threadCount > 1 && (
+          <span className="mv-row__count" data-mv-thread-count={row.threadCount} role="img" aria-label={t('email.thread.messagesInThread', { count: row.threadCount })}>
+            {row.threadCount}
+          </span>
+        )}
+        {shown.flagged && <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flagged')} />}
+        <span className="mv-row__date">{formatEmailDate(row.dateMs, undefined, prefs)}</span>
+      </span>
+      <span className="mv-row__line">
+        <span className="mv-row__subject" dir="auto">{displayText(row.subject, t('common.noSubject'))}</span>
+        {tags}
+      </span>
+      {previewLines > 0 && (
+        <span
+          className={previewLines > 1 ? 'mv-row__snippet mv-row__snippet--lines' : 'mv-row__snippet'}
+          data-mv-preview-lines={previewLines}
+          style={previewLines > 1 ? { WebkitLineClamp: previewLines } : undefined}
+          dir="auto"
+        >
+          {cleanPreviewText(row.snippet)}
+        </span>
+      )}
+    </Face>
+  );
+});
+
+/** `account`: set in All Inboxes, where the row starts with desktop's account badge: the account's initial on its colour. */
 function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = null, account = null }) {
   const t = useT();
   const swipes = useMobileStore((s) => s.prefs.trackpadSwipeEnabled !== false);
@@ -44,8 +93,6 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
   // A folder's rows name neither; All Inboxes' and search's name both.
   const accountId = useMobileStore((s) => s.activeAccountId);
   const folder = useMobileStore((s) => s.activeFolder);
-  const dates = prefs;
-  const previewLines = [0, 1, 2, 3].includes(prefs.listPreviewLines) ? prefs.listPreviewLines : 1;
   const style = { height: `${rowHeight(prefs)}px`, transform: `translateY(${start}px)` };
   if (!row) {
     return <div className="mv-row-slot mv-row--placeholder" data-index={index} data-loaded="0" style={style} aria-hidden="true" />;
@@ -54,7 +101,6 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
   const shown = row.threadCount > 1
     ? { ...row, seen: row.seen && !(row.threadUnread > 0), flagged: row.flagged || row.threadFlagged === true }
     : row;
-  const unread = !shown.seen;
   const onAction = (side) => {
     const kind = swipeKind(side === 'leading' ? leadingAction : trailingAction, shown);
     if (onSwipe && kind) onSwipe(kind, shown);
@@ -86,38 +132,8 @@ function MessageRow({ row, index, start = 0, onOpen, onSwipe, initialSwipe = nul
         leading={spec(leadingAction)}
         trailing={spec(trailingAction)}
       >
-        <button
-          type="button"
-          className={`mv-row${unread ? ' mv-row--unread' : ''}${prefs.listDensity === 'compact' ? ' mv-row--compact' : ''}`}
-        >
-          <span className="mv-row__top">
-            {account && (
-              <span className="mv-row__acct" role="img" aria-label={account.email} style={{ backgroundColor: accountColor(account) }} />
-            )}
-            <span className="mv-row__sender" dir="auto">{senderOf(row, t)}</span>
-            {row.threadCount > 1 && (
-              <span className="mv-row__count" data-mv-thread-count={row.threadCount} role="img" aria-label={t('email.thread.messagesInThread', { count: row.threadCount })}>
-                {row.threadCount}
-              </span>
-            )}
-            {shown.flagged && <span className="mv-row__flag" role="img" aria-label={t('mobile.actions.flagged')} />}
-            <span className="mv-row__date">{formatEmailDate(row.dateMs, undefined, dates)}</span>
-          </span>
-          <span className="mv-row__line">
-            <span className="mv-row__subject" dir="auto">{displayText(row.subject, t('common.noSubject'))}</span>
-            <TagChips accountId={row.accountId || accountId} folder={row.folder || folder} uid={row.uid} />
-          </span>
-          {previewLines > 0 && (
-            <span
-              className={previewLines > 1 ? 'mv-row__snippet mv-row__snippet--lines' : 'mv-row__snippet'}
-              data-mv-preview-lines={previewLines}
-              style={previewLines > 1 ? { WebkitLineClamp: previewLines } : undefined}
-              dir="auto"
-            >
-              {cleanPreviewText(row.snippet)}
-            </span>
-          )}
-        </button>
+        <RowFace row={row} shown={shown} prefs={prefs} account={account}
+          tags={<TagChips accountId={row.accountId || accountId} folder={row.folder || folder} uid={row.uid} />} />
       </SwipeRow>
     </div>
   );

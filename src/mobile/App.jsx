@@ -22,6 +22,11 @@
 // mail in ViewResults.jsx, a row opening as a search result does.
 // The outbox row (Outbox.jsx) sits between the header and the list while anything is unsent.
 //
+// All Inboxes keeps an account in front (compose's From), but nothing on screen names it: the
+// header's account button says All Inboxes (desktop's account chooser does the same), the drawer
+// lists no account's folders, Drafts and Follow up count every shown account's, and the sign-in
+// banners show for every shown account.
+//
 // Conversations (`threadMode` grouped or expandable): a list row that stands for several messages
 // opens them on a screen of their own (ThreadView.jsx), under the viewer; a swipe on it acts on all
 // of them.
@@ -46,7 +51,7 @@ import Viewer from './Viewer.jsx';
 import ThreadView from './ThreadView.jsx';
 import ChatView from './ChatView.jsx';
 import AddAccount from './AddAccount.jsx';
-import AccountSwitcher, { Avatar, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
+import AccountSwitcher, { Avatar, AllInboxesIcon, ReauthBanner, RefusedBanner } from './AccountSwitcher.jsx';
 import FolderDrawer from './FolderDrawer.jsx';
 import { folderLabel } from './folders.js';
 import { errorKey } from './errors.js';
@@ -668,8 +673,10 @@ function App() {
     setFollowUpsOpen(false);
     setTap({ accountId: f.accountId, folder: f.folder, uid: f.uid });
   }, []);
+  // A draft reopens from its own account (in All Inboxes the list holds every account's).
   const onOpenDraft = useCallback((id) => {
-    const { activeAccountId: accountId } = useMobileStore.getState();
+    const s = useMobileStore.getState();
+    const accountId = s.drafts.find((d) => d.id === id)?.accountId ?? s.activeAccountId;
     if (accountId) setCompose({ key: Date.now(), accountId, mode: 'new', draftId: id });
   }, []);
   /// Where Settings opens: its first screen, or (the drawer's Views Edit and New) Settings > Views.
@@ -869,11 +876,15 @@ function App() {
             <button
               type="button"
               className="mv-header__account"
-              aria-label={t('mobile.switcher.open', { email: account.email })}
+              aria-label={t('mobile.switcher.open', { email: allInboxes ? t('sidebar.allInboxes') : account.email })}
               onClick={() => setPanel('switcher')}
             >
-              <Avatar account={account} small />
-              <span className="mv-header__email" dir="auto">{account.email}</span>
+              {allInboxes ? (
+                <span className="mv-avatar mv-avatar--small mv-avatar--all" aria-hidden="true"><AllInboxesIcon size={14} /></span>
+              ) : (
+                <Avatar account={account} small />
+              )}
+              <span className="mv-header__email" dir="auto">{allInboxes ? t('sidebar.allInboxes') : account.email}</span>
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                 <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -888,8 +899,12 @@ function App() {
         </button>
         <SyncChip sync={sync} total={listState === 'ready' ? total : null} onRetry={onRefresh} />
       </header>
-      <ReauthBanner account={account} state={reauthState} onReauth={onReauth} />
-      <RefusedBanner account={account} onRetry={onRetrySignIn} />
+      {(allInboxes ? shownAccounts : [account]).map((a) => (
+        <React.Fragment key={a?.id ?? 'none'}>
+          <ReauthBanner account={a} state={reauthState} onReauth={onReauth} />
+          <RefusedBanner account={a} onRetry={onRetrySignIn} />
+        </React.Fragment>
+      ))}
       <OutboxRow initialOpen={DEMO_OUTBOX} />
       {listState === 'ready' && list && chatView && (
         <ChatView key={listKey} accountId={activeAccountId} folder={activeFolder} list={list} onOpen={onOpen} onSwipe={onSwipe} />
@@ -1012,7 +1027,7 @@ function App() {
       {draftsOpen && <DraftsList onOpen={onOpenDraft} onClose={closeDrafts} />}
       {followUpsOpen && <FollowUpList onOpen={onOpenFollowUp} onClose={closeFollowUps} />}
       {openView && <ViewResults view={openView} onOpen={onOpenResult} onSwipe={onSwipe} onClose={closeView} />}
-      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} page={settingsAt.page} newView={settingsAt.newView} />}
+      {settingsOpen && <Settings onClose={closeSettings} onReplayTour={onReplayTour} onAddAccount={onSettingsAddAccount} page={(DEMO_SETTINGS && QUERY.get('page')) || settingsAt.page} section={DEMO_SETTINGS ? QUERY.get('section') : null} newView={settingsAt.newView} />}
       {paywall && <Premium feature={paywall.feature} signIn={paywall.signIn} onClose={closePaywall} />}
       {compose && (
         <Compose

@@ -26,7 +26,7 @@ import { createPageCache, PAGE_SIZE } from './messagePages.js';
 import { ALL_INBOXES } from './folders.js';
 import { errorCodeOf, errorKey } from './errors.js';
 import { oauthSignIn, oauthReauth, cancelOAuth } from './oauth.js';
-import { PREF_DEFAULTS, readPrefs, applyLook, threadedList } from './prefs.js';
+import { PREF_DEFAULTS, readPrefs, applyLook, threadedList, visibleAccounts } from './prefs.js';
 import { followAppIcon } from './appIcon.js';
 import { loadMobileLocale } from './i18n.js';
 import { refreshTags } from './tags.js';
@@ -153,33 +153,40 @@ export function createMobileStore() {
       set({ outbox });
     }
 
-    /** The active account's local drafts, newest first (the drawer's Drafts entry and list). */
+    /** Whose drafts and reminders the drawer shows: the active account's, every shown one's in All Inboxes. */
+    function localScope() {
+      const { activeAccountId, activeFolder, accounts } = get();
+      if (!activeAccountId) return [];
+      return activeFolder === ALL_INBOXES ? visibleAccounts(accounts).map((a) => a.id) : [activeAccountId];
+    }
+
+    /** The drafts of `localScope()`, newest first (the drawer's Drafts entry and list). */
     async function loadDrafts() {
-      const accountId = get().activeAccountId;
-      if (!accountId) return;
+      const ids = localScope();
+      if (!ids.length) return;
       let rows;
       try {
         rows = await daemonCall('mobile.drafts.list');
       } catch {
         return; // a hint: a failed read keeps the last list
       }
-      if (get().activeAccountId !== accountId) return;
-      set({ drafts: (Array.isArray(rows) ? rows : []).filter((d) => d.accountId === accountId) });
+      if (localScope().join() !== ids.join()) return;
+      set({ drafts: (Array.isArray(rows) ? rows : []).filter((d) => ids.includes(d.accountId)) });
     }
 
-    /** The active account's follow-up reminders, soonest first (the drawer's Follow up entry). */
+    /** The follow-up reminders of `localScope()`, soonest first (the drawer's Follow up entry). */
     async function loadFollowUps() {
-      const accountId = get().activeAccountId;
-      if (!accountId) return;
+      const ids = localScope();
+      if (!ids.length) return;
       let reply;
       try {
         reply = await daemonCall('mobile.followup.list');
       } catch {
         return; // a hint: a failed read keeps the last list
       }
-      if (get().activeAccountId !== accountId) return;
+      if (localScope().join() !== ids.join()) return;
       const items = Array.isArray(reply?.items) ? reply.items : [];
-      set({ followUps: items.filter((f) => f.accountId === accountId) });
+      set({ followUps: items.filter((f) => ids.includes(f.accountId)) });
     }
 
     function onSendResult(p) {
@@ -276,12 +283,17 @@ export function createMobileStore() {
     /** Opens `folder` of `accountId`: a fresh list, remembered for the next launch. */
     function open(accountId, folder) {
       flush();
+      const spanned = get().activeFolder === ALL_INBOXES;
       const list = listFor(accountId, folder, threadedList(get().prefs));
       set({ activeAccountId: accountId, activeFolder: folder, list, listGen: null });
       writeStorage(STORAGE_ACCOUNT, accountId);
       writeStorage(STORAGE_FOLDER, JSON.stringify({ accountId, path: folder }));
-      // Into or out of All Inboxes the chip counts other accounts.
+      // Into or out of All Inboxes the chip counts other accounts, and so do Drafts and Follow up.
       loadPending();
+      if (spanned !== (folder === ALL_INBOXES)) {
+        loadDrafts();
+        loadFollowUps();
+      }
       return list;
     }
 
@@ -408,8 +420,8 @@ export function createMobileStore() {
       notice: null, // a one-line toast: { id, key }
       outbox: [], // unsent messages: [{ id, accountId, subject, state, lastError, scheduledMs, notBeforeMs }]
       recentSearches: savedSearches(),
-      drafts: [], // the active account's drafts: [{ id, accountId, to, subject, updatedMs }]
-      followUps: [], // the active account's reminders: [{ id, accountId, subject, recipients, sentAt, remindAt, state, folder, uid, seen }]
+      drafts: [], // the active account's drafts (every shown account's in All Inboxes): [{ id, accountId, to, subject, updatedMs }]
+      followUps: [], // the active account's reminders (every shown account's in All Inboxes): [{ id, accountId, subject, recipients, sentAt, remindAt, state, folder, uid, seen }]
       premium: { premium: false, source: null, expiresMs: null }, // the engine's Premium answer (premium.js keeps it current)
       premiumLost: null, // 'DEVICE_REPLACED' once the account gave this phone's place to another device
       premiumLapsed: false, // Premium was on in this session and has ended

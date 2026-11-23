@@ -1,6 +1,9 @@
 // Settings > Appearance > Layout as a view. `values`: the layout settings by key; `onChange(key,
 // value)` sets one. `rows`: the keys this app shows (desktop all; the phone those a phone layout
-// has). `preview`: the extra props WorkspacePreviewView draws with (sample accounts, chat sample).
+// has). `preview`: the extra props WorkspacePreviewView draws with (sample accounts, chat sample,
+// the app's own list rows).
+// Message list density and preview lines sit together and share one sample, under the pair. A
+// hint that follows the choice keeps the height of its longest, so a change moves nothing.
 import React, { useId } from 'react';
 import { Check, Columns, Rows } from 'lucide-react';
 import { SettingRow } from '../../ui/SettingRow';
@@ -18,9 +21,10 @@ const GROUPS = [
   { key: 'sidebarLayout', titleKey: 'workspace.sidebarLayout' },
   { key: 'sidebarDensity', titleKey: 'workspace.sidebarDensity',
     options: [['comfortable', 'sidebarDensityComfortable', 'sidebarDensityComfortableHint'], ['compact', 'sidebarDensityCompact', 'sidebarDensityCompactHint']] },
-  // The message list's rows, the same two choices beside the sidebar's.
+  // The message list's rows, the same two choices beside the sidebar's, then their preview lines.
   { key: 'listDensity', titleKey: 'workspace.listDensity', chatDisables: true,
     options: [['comfortable', 'sidebarDensityComfortable', 'listDensityComfortableHint'], ['compact', 'sidebarDensityCompact', 'listDensityCompactHint']] },
+  { key: 'listPreviewLines', titleKey: 'listPreview.title', chatDisables: true },
   { key: 'folderIconStyle', titleKey: 'workspace.folderIcons',
     options: [['colorful', 'folderIconsColorful', 'folderIconsColorfulHint'], ['theme', 'folderIconsTheme', 'folderIconsThemeHint']] },
   { key: 'sidebarBackupStatusLocation', titleKey: 'workspace.backupStatusLocation',
@@ -30,7 +34,14 @@ const GROUPS = [
   { key: 'emailListStyle', titleKey: 'workspace.messageRows', chatDisables: true,
     options: [['compact', 'twoLineRows', 'twoLineRowsHint'], ['default', 'singleLineRows', 'singleLineRowsHint']] },
 ];
-export const WORKSPACE_ROWS = [...GROUPS.map(group => group.key), 'listPreviewLines', 'showMenuBar'];
+export const WORKSPACE_ROWS = [...GROUPS.map(group => group.key), 'showMenuBar'];
+
+/** The hint of the current choice among all of them, stacked: as tall as the longest. */
+function StableHint({ hints, current }) {
+  return <span className="setting-hint-stack">
+    {[...new Set(hints)].map(hint => <span key={hint} aria-hidden={hint === current ? undefined : 'true'}>{hint}</span>)}
+  </span>;
+}
 
 export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowIsNarrow = false, preview = {} }) {
   const t = useT();
@@ -39,12 +50,27 @@ export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowI
   const previewLines = values.listPreviewLines;
   const shown = new Set(rows);
   const previewOf = (key, value, label, disabled) => <WorkspacePreviewView {...preview} setting={key} value={value} label={label}
-    disabled={disabled} layoutMode={values.layoutMode} sidebarDensity={values.sidebarDensity} emailListStyle={values.emailListStyle} />;
+    disabled={disabled} layoutMode={values.layoutMode} sidebarDensity={values.sidebarDensity} emailListStyle={values.emailListStyle}
+    listDensity={values.listDensity} listPreviewLines={previewLines} />;
+  // Density and preview lines share one sample, under preview lines when both are here.
+  const listLabel = t('workspace.messages');
   return (
     <section className="settings-preference-group" data-testid="appearance-layout-section" aria-labelledby="workspace-settings-title">
       <h4 id="workspace-settings-title">{t('workspace.title')}</h4>
       {GROUPS.filter(({ key }) => shown.has(key)).map(({ key, titleKey, options, chatDisables }) => {
         const disabled = chatDisables && chat;
+        if (key === 'listPreviewLines') return <SettingRow key={key} label={t('listPreview.title')}
+          description={disabled ? undefined : <StableHint hints={[t('listPreview.linesHint'), t('listPreview.offHint')]} current={t(previewLines ? 'listPreview.linesHint' : 'listPreview.offHint')} />}
+          preview={previewOf(key, previewLines, shown.has('listDensity') ? listLabel : t('listPreview.title'), disabled)}>
+          <div role="group" className="settings-segments" data-testid="list-preview-lines">
+            {PREVIEW_LINE_CHOICES.map(([value, choiceKey]) => (
+              <button type="button" key={value} aria-pressed={previewLines === value} disabled={disabled}
+                onClick={() => onChange('listPreviewLines', value)}>
+                {t(choiceKey)}
+              </button>
+            ))}
+          </div>
+        </SettingRow>;
         return key === 'sidebarLayout' ? (
           <SettingRow key={key} label={t('workspace.sidebarLayout')} className="sidebar-layout-setting">
             <div role="group" className="sidebar-layout-choices">
@@ -68,8 +94,9 @@ export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowI
           <SettingRow key={key} label={t(titleKey)} description={
             key === 'layoutMode' && !chat && windowIsNarrow
               ? t('settings.appearance.windowTooNarrowForThreeColumns')
-              : disabled ? undefined : t(`workspace.${options.find(([value]) => value === values[key])?.[2] || options[0][2]}`)
-          } preview={previewOf(key, values[key], t(titleKey), disabled)}>
+              : disabled ? undefined : <StableHint hints={options.map(option => t(`workspace.${option[2]}`))}
+                current={t(`workspace.${options.find(([value]) => value === values[key])?.[2] || options[0][2]}`)} />
+          } preview={key === 'listDensity' && shown.has('listPreviewLines') ? undefined : previewOf(key, values[key], t(titleKey), disabled)}>
             <div role="group" className="settings-segments">
               {options.map(([value, label, , Icon]) => (
                 <button type="button" key={value} aria-pressed={values[key] === value} disabled={disabled}
@@ -81,18 +108,6 @@ export function WorkspaceView({ values, onChange, rows = WORKSPACE_ROWS, windowI
           </SettingRow>
         );
       })}
-      {shown.has('listPreviewLines') && <SettingRow label={t('listPreview.title')}
-        description={chat ? undefined : t(previewLines ? 'listPreview.linesHint' : 'listPreview.offHint')}
-        preview={previewOf('listPreviewLines', previewLines, t('listPreview.title'), chat)}>
-        <div role="group" className="settings-segments" data-testid="list-preview-lines">
-          {PREVIEW_LINE_CHOICES.map(([value, key]) => (
-            <button type="button" key={value} aria-pressed={previewLines === value} disabled={chat}
-              onClick={() => onChange('listPreviewLines', value)}>
-              {t(key)}
-            </button>
-          ))}
-        </div>
-      </SettingRow>}
       {chat && <p className="mt-2 text-xs text-mail-text-muted">{t('workspace.emailViewOnly')}</p>}
       {shown.has('showMenuBar') && <SettingRow label={t('workspace.menuBar')} description={t('workspace.menuBarHint')}>
         <ToggleSwitch active={values.showMenuBar !== false} testId="show-menu-bar"

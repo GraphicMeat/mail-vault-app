@@ -2,16 +2,18 @@
 // All Inboxes on mobile, as desktop has it: with two or more accounts the folder drawer offers
 // every account's inbox as one list, newest first, each row marked with its account's colour. A
 // row's actions (open, read, flag, delete, swipe) go to that row's own account and folder, and a
-// refresh syncs every account's inbox.
+// refresh syncs every account's inbox. While it is open nothing on screen names one account: the
+// header's account button and the folder drawer say All Inboxes, the drawer's Drafts and Follow up
+// count every account's, and a lapsed sign-in shows for every account in the list.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { t } from '../i18n.js';
 
 const engine = vi.hoisted(() => ({
-  calls: [], handlers: new Map(), accounts: [], folders: {}, rows: {}, gen: 1, gens: {}, pending: {},
+  calls: [], handlers: new Map(), accounts: [], folders: {}, rows: {}, gen: 1, gens: {}, pending: {}, drafts: [], followUps: [],
 }));
 
 /** The engine's unified order: (dateMs DESC, uid DESC, accountId DESC). */
@@ -40,6 +42,12 @@ vi.mock('../transport.js', () => ({
         return { pending: (engine.pending[params.accountId] || []).map((p) => ({ ...p })) };
       case 'mobile.actions.apply':
         return { queued: 1, skipped: [] };
+      case 'mobile.drafts.list':
+        return engine.drafts.map((d) => ({ ...d }));
+      case 'mobile.drafts.get':
+        return { cc: '', bcc: '', text: '', attachments: [], ...engine.drafts.find((d) => d.id === params.id) };
+      case 'mobile.followup.list':
+        return { items: engine.followUps.map((f) => ({ ...f })) };
       case 'mobile.message.body':
         return { html: '<p>Body</p>', text: null, attachments: [], remoteImages: 0, trackers: 0, gone: false };
       case 'mobile.messages.page': {
@@ -93,6 +101,8 @@ const callsOf = (method) => engine.calls.filter(([m]) => m === method).map(([, p
 const inbox = (unseen) => ({ path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', unseen, total: 10, depth: 0, noselect: false });
 const folder = (path) => ({ path, name: path, specialUse: null, unseen: 0, total: 0, depth: 0, noselect: false });
 const acct = (id) => ({ id, email: `${id}@example.test`, displayName: id });
+const draft = (id, accountId) => ({ id, accountId, to: '', subject: `Draft ${id}`, updatedMs: 1 });
+const followUp = (id, accountId) => ({ id, accountId, subject: `Sent ${id}`, recipients: [], sentAt: 1, remindAt: 2, state: 'due', folder: 'Sent', uid: 1, seen: false });
 const row = (uid, dateMs, extra = {}) => ({
   uid, dateMs, subject: `Mail ${uid}@${dateMs}`, fromName: 'S', fromAddress: 's@example.test', snippet: '', seen: false, flagged: false, to: [], ...extra,
 });
@@ -110,6 +120,8 @@ beforeEach(() => {
   engine.gen = 1;
   engine.gens = {};
   engine.pending = {};
+  engine.drafts = [];
+  engine.followUps = [];
   engine.accounts = [acct('a1'), acct('a2')];
   engine.folders = { a1: [inbox(3), folder('Sent')], a2: [inbox(4)] };
   // uid 5 lives in both accounts: only the account tells the two apart.
@@ -260,6 +272,25 @@ describe('All Inboxes store', () => {
     expect(callsOf('mobile.messages.page').length).toBe(before + 1);
   });
 
+  it('holds every account\'s drafts and reminders while open, on a restored launch too, and one account\'s once left', async () => {
+    engine.drafts = [draft('d1', 'a1'), draft('d2', 'a2')];
+    engine.followUps = [followUp('f2', 'a2')];
+    const ids = (items) => items.map((x) => x.id).sort();
+    const store = await unifiedStore();
+    await waitFor(() => expect(ids(store.getState().drafts)).toEqual(['d1', 'd2']));
+    await waitFor(() => expect(ids(store.getState().followUps)).toEqual(['f2']));
+
+    const again = createMobileStore();
+    await again.getState().init({ sync: false });
+    expect(again.getState().activeFolder).toBe(ALL_INBOXES);
+    await waitFor(() => expect(ids(again.getState().drafts)).toEqual(['d1', 'd2']));
+    await waitFor(() => expect(ids(again.getState().followUps)).toEqual(['f2']));
+
+    await store.getState().selectFolder('INBOX');
+    await waitFor(() => expect(ids(store.getState().drafts)).toEqual(['d1']));
+    await waitFor(() => expect(store.getState().followUps).toEqual([]));
+  });
+
   it('picking an account in the switcher opens that account, not All Inboxes', async () => {
     const store = await unifiedStore();
     await store.getState().selectAccount('a2');
@@ -313,6 +344,8 @@ describe('account marker', () => {
     expect(dot).toBeTruthy();
     expect(dot.getAttribute('aria-label')).toBe('a2@example.test');
     expect(dot.style.backgroundColor).not.toBe('');
+    // Desktop's badge: the account's initial on its colour, the letter the switcher's avatar shows.
+    expect(dot.textContent).toBe('A');
     unmount();
     const plain = render(<MessageRow row={row(5, 1)} index={0} onOpen={() => {}} />);
     expect(plain.container.querySelector('.mv-row__acct')).toBeNull();
@@ -464,6 +497,53 @@ describe('All Inboxes in the app', () => {
     await syncState('a2', 'idle');
     expect(document.querySelector('.mv-pull--busy')).toBeNull();
     expect(list.style.transform).toBe('');
+  });
+
+  it('the header names no one account: its button says All Inboxes and still opens the accounts', async () => {
+    await mountUnified();
+    const header = document.querySelector('.mv-header');
+    expect(header.textContent).not.toContain('a1@example.test');
+    expect(screen.queryByRole('button', { name: t('mobile.switcher.open', { email: 'a1@example.test' }) })).toBeNull();
+    const button = screen.getByRole('button', { name: t('mobile.switcher.open', { email: t('sidebar.allInboxes') }) });
+    expect(button.querySelector('.mv-avatar--all')).toBeTruthy();
+    fireEvent.click(button);
+    expect(screen.getByRole('dialog', { name: t('mobile.switcher.title') })).toBeTruthy();
+  });
+
+  it('the folder drawer shows All Inboxes, not the last account\'s address or folders', async () => {
+    await mountUnified();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
+    const drawer = screen.getByRole('dialog', { name: t('mobile.drawer.title') });
+    expect(drawer.textContent).not.toContain('a1@example.test');
+    // a1's folders (it has a Sent) are not offered: a tap there would leave All Inboxes for a1.
+    expect(within(drawer).queryByText('Sent')).toBeNull();
+    expect(within(drawer).queryByText(t('sidebar.inbox'))).toBeNull();
+    expect(within(drawer).queryByText(t('mobile.drawer.empty'))).toBeNull();
+    const entry = within(drawer).getByRole('button', { name: t('sidebar.allInboxes') });
+    expect(entry.getAttribute('aria-current')).toBe('true');
+    expect(within(drawer).getByRole('button', { name: t('mobile.settings.title') })).toBeTruthy();
+    fireEvent.click(entry);
+    expect(screen.queryByRole('dialog', { name: t('mobile.drawer.title') })).toBeNull();
+    expect(store().activeFolder).toBe(storeModule.ALL_INBOXES);
+  });
+
+  it('the drawer counts every account\'s drafts and reminders, and a draft opens from its own account', async () => {
+    engine.drafts = [draft('d1', 'a1'), draft('d2', 'a2')];
+    engine.followUps = [followUp('f2', 'a2')];
+    await mountUnified();
+    fireEvent.click(screen.getByRole('button', { name: t('mobile.drawer.open') }));
+    await waitFor(() => expect(screen.getByLabelText(t('mobile.drafts.count', { count: 2 }))).toBeTruthy());
+    expect(screen.getByLabelText(t('mobile.followUp.count', { count: 1 }))).toBeTruthy();
+    fireEvent.click(document.querySelector('[data-mv-drafts]'));
+    await waitFor(() => expect(screen.getByText('Draft d2')).toBeTruthy());
+    fireEvent.click(screen.getByText('Draft d2'));
+    await waitFor(() => expect(document.querySelector('.mv-compose__from')?.textContent).toBe('a2@example.test'));
+  });
+
+  it('a lapsed sign-in shows for any account in the list, not only the one in front', async () => {
+    engine.accounts = [acct('a1'), { ...acct('a2'), needsAuth: true, oauth: true }];
+    await mountUnified();
+    expect(screen.getByText(t('mobile.reauth.banner', { email: 'a2@example.test' }))).toBeTruthy();
   });
 
   it('pull to refresh syncs every account', async () => {

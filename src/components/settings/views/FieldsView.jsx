@@ -11,6 +11,7 @@
 // phone's says where it keeps them).
 import React, { useEffect, useState } from 'react';
 import { Trash2, Globe, User, ChevronUp, ChevronDown } from 'lucide-react';
+import { SettingsCard } from '../../ui/SettingsForm';
 import { useT, useViewEnv } from './viewContext';
 
 const KINDS = ['select', 'multi_select', 'date', 'checkbox', 'text'];
@@ -150,7 +151,7 @@ export function FieldsView({
     return at >= 0 && at < size - 1;
   };
 
-  return <section className="fields-settings" aria-label={t('fields.section')}>
+  return <SettingsCard className="fields-settings" aria-label={t('fields.section')}>
     <div className="sidebar-section-heading"><h2>{t('fields.section')}</h2></div>
     <p className="text-xs text-mail-text-muted">{t(explainerKey)}</p>
 
@@ -192,7 +193,7 @@ export function FieldsView({
         onChange={event => setKind(event.target.value)}>
         {KINDS.map(option => <option key={option} value={option}>{t(`fields.kind.${option}`)}</option>)}
       </select>
-      <button type="submit">{t('fields.add')}</button>
+      <button type="submit" disabled={!name.trim()}>{t('fields.add')}</button>
     </form>
 
     {others.length > 0 && <div className="fields-copy">
@@ -214,5 +215,5 @@ export function FieldsView({
         {t('fields.copyRun')}
       </button>}
     </div>}
-  </section>;
+  </SettingsCard>;
 }

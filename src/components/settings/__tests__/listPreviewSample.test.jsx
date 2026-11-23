@@ -11,12 +11,14 @@ import en from '../../../i18n/locales/en.json';
 
 afterEach(cleanup);
 
-const rows = (container) => [...container.querySelectorAll('.preview-message-row')];
+// The sample as it shows now: a list sample also holds its tallest state, hidden, to keep its height.
+const shown = (container) => container.querySelector('.preview-list-sample > .preview-message-rows') || container;
+const rows = (container) => [...shown(container).querySelectorAll('.preview-message-row')];
 
 it('clamps the sample message to the chosen number of preview lines', () => {
   for (const lines of [1, 2, 3]) {
     const { container } = render(<WorkspacePreview setting="listPreviewLines" value={lines} label="Preview lines" />);
-    const snippets = [...container.querySelectorAll('.preview-message-snippet')];
+    const snippets = [...shown(container).querySelectorAll('.preview-message-snippet')];
     expect(snippets).toHaveLength(2);
     for (const snippet of snippets) {
       expect(snippet.textContent).toBe(en['listPreview.sample']);
@@ -28,7 +30,22 @@ it('clamps the sample message to the chosen number of preview lines', () => {
 
 it('draws no sample message with preview lines off', () => {
   const { container } = render(<WorkspacePreview setting="listPreviewLines" value={0} label="Preview lines" />);
-  expect(container.querySelector('.preview-message-snippet')).toBeNull();
+  expect(shown(container).querySelector('.preview-message-snippet')).toBeNull();
+});
+
+it('one sample shows the density and the preview lines together, as tall as its tallest state', () => {
+  const clamp = (snippet) => snippet.style.webkitLineClamp || snippet.style.WebkitLineClamp;
+  for (const [setting, value, other] of [['listPreviewLines', 2, { listDensity: 'compact' }], ['listDensity', 'compact', { listPreviewLines: 2 }]]) {
+    const { container } = render(<WorkspacePreview setting={setting} value={value} {...other} label="Message list" />);
+    const live = shown(container);
+    expect(live.dataset.listDensity).toBe('compact');
+    expect([...live.querySelectorAll('.preview-message-snippet')].map(clamp)).toEqual(['2', '2']);
+    const tallest = container.querySelector('.preview-list-sample > .preview-list-sample-tallest');
+    expect(tallest.getAttribute('aria-hidden')).toBe('true');
+    expect(tallest.querySelector('.preview-message-rows').dataset.listDensity).toBe('comfortable');
+    expect([...tallest.querySelectorAll('.preview-message-snippet')].map(clamp)).toEqual(['3', '3']);
+    cleanup();
+  }
 });
 
 it('leads every sample row with the list gutter, stacked while the row has two lines', () => {

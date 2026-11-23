@@ -2,8 +2,9 @@
 // comes in as props or from the view context (viewContext.jsx). Desktop's PreferencePreview.jsx
 // feeds them from its stores; the phone's containers from its prefs.
 //
-// Draw only illustrative content. These examples never mount a real mail
-// component or put sample messages into the user's accounts or mail stores.
+// Draw only illustrative content. These examples never put sample messages into the user's
+// accounts or mail stores; the one real component they may show is an app's own list row, handed
+// in drawn over sample messages (`listSample`), so the list sample cannot drift from the list.
 import React from 'react';
 import { AlertCircle, Archive, ArrowLeft, CheckCircle2, ChevronDown, Cloud, FileText, Folder, Inbox, MousePointer2, Reply, Send } from 'lucide-react';
 import { listRowGround } from '../../../utils/listRowGround';
@@ -82,12 +83,14 @@ function PanePreview({ below = false, chat = false, chatSample = null }) {
 }
 
 /**
- * The example beside a Layout choice. `layoutMode`, `sidebarDensity`, `emailListStyle`: the other
- * settings it is drawn with; `accounts`: sample accounts (`{ id, name, email }`) with
- * `accountColor(account)`; `chatSample`: the chat view's sample conversation.
+ * The example beside a Layout choice. `layoutMode`, `sidebarDensity`, `emailListStyle`,
+ * `listDensity`, `listPreviewLines`: the other settings it is drawn with; `accounts`: sample
+ * accounts (`{ id, name, email }`) with `accountColor(account)`; `chatSample`: the chat view's
+ * sample conversation; `listSample({ density, previewLines, singleLine })`: the app's own list
+ * rows over sample messages (SampleRows without it).
  */
 export function WorkspacePreviewView({ setting, value, label, disabled, layoutMode, sidebarDensity, emailListStyle,
-  accounts = [], accountColor, chatSample }) {
+  listDensity, listPreviewLines, accounts = [], accountColor, chatSample, listSample }) {
   const t = useT();
   let content;
   if (setting === 'viewStyle' || setting === 'layoutMode') {
@@ -126,11 +129,19 @@ export function WorkspacePreviewView({ setting, value, label, disabled, layoutMo
       <div><span className="preview-pane-label">{t('workspace.accounts')}</span><span className="preview-nav-item preview-nav-active"><span className="preview-account-initial">P</span>Prime Cut Studio</span><span className="preview-nav-item"><span className="preview-account-initial">R</span>Rowan Marsh</span></div>
       <div className="preview-folder-navigation"><span className="preview-pane-label">{t('sidebar.folders')}</span><span className="preview-nav-item preview-nav-active"><Inbox aria-hidden="true" size={13} />{t('sidebar.inbox')}</span><span className="preview-nav-item"><Archive aria-hidden="true" size={13} />{t('common.archive')}</span><span className="preview-nav-item"><Send aria-hidden="true" size={13} />{t('list.sent')}</span></div>
     </div>;
-  } else if (setting === 'listPreviewLines') {
-    content = <SampleRows previewLines={value} />;
-  } else if (setting === 'listDensity') {
-    // In the row layout the list is set to, one line or two.
-    content = <SampleRows singleLine={emailListStyle === 'default'} density={value === 'compact' ? 'compact' : 'comfortable'} />;
+  } else if (setting === 'listPreviewLines' || setting === 'listDensity') {
+    // One sample for both, in the row layout the list is set to, and under it (hidden) its tallest
+    // state, three lines and comfortable, which holds the sample's height while either changes.
+    const singleLine = emailListStyle === 'default';
+    const lines = (setting === 'listPreviewLines' ? value : listPreviewLines) || 0;
+    const density = (setting === 'listDensity' ? value : listDensity) === 'compact' ? 'compact' : 'comfortable';
+    const rows = (rowDensity, previewLines) => (listSample
+      ? listSample({ density: rowDensity, previewLines, singleLine })
+      : <SampleRows singleLine={singleLine} density={rowDensity} previewLines={previewLines} />);
+    content = <div className="preview-list-sample">
+      {rows(density, lines)}
+      <div className="preview-list-sample-tallest" aria-hidden="true">{rows('comfortable', 3)}</div>
+    </div>;
   } else {
     content = <SampleRows singleLine={value === 'default'} />;
   }

@@ -1,9 +1,14 @@
 // The folder drawer: the active account's folders, depth first as the engine lists them, with
-// unread counts (All Inboxes sits in the accounts sheet, above the accounts). Special-use folders get their translated name; a folder that cannot be opened
-// (`noselect`) is shown as a heading for its children. Names come from `folders.js`. Below the
-// folders, Drafts (the account's local drafts, with their count) opens the drafts list, and Follow up
-// (shown while the account has follow-up reminders, with the count that found no reply) opens the
-// reminders list; the footer's Settings opens the settings screen.
+// unread counts (All Inboxes is picked in the accounts sheet, above the accounts). Special-use folders get their translated name; a folder that cannot be opened
+// (`noselect`) is shown as a heading for its children. Names come from `folders.js`. While All
+// Inboxes is open (`activeFolder` is ALL_INBOXES) the drawer names no account: All Inboxes is its
+// one entry, in place of the address and folders of the account kept in front, as desktop's
+// sidebar swaps to its unified list (UnifiedFolderList reads desktop's account store, so it is not
+// reused; the engine lists no unified folder but All Inboxes, so the drawer offers none). Below the
+// folders, Drafts (the local drafts, with their count) opens the drafts list, and Follow up
+// (shown while there are follow-up reminders, with the count that found no reply) opens the
+// reminders list; in All Inboxes both are every shown account's. The footer's Settings opens the
+// settings screen.
 // Desktop's saved views (`views`, with their counts) follow the folders, under desktop's Views
 // heading and each with desktop's icon, as on desktop's sidebar: a tap opens the view's mail
 // (ViewResults.jsx). The heading carries desktop's Edit and New (`onEditViews`, `onNewView`: Settings
@@ -12,19 +17,30 @@ import React from 'react';
 import { Pencil, Plus } from 'lucide-react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
-import { folderLabel } from './folders.js';
+import { folderLabel, ALL_INBOXES } from './folders.js';
+import { AllInboxesIcon } from './AccountSwitcher.jsx';
 import { ViewIcon } from '../components/ViewIcon.jsx';
 import { viewLabel } from '../utils/viewLabel.js';
 
 export default function FolderDrawer({ account, folders, activeFolder, onSelect, onClose, drafts = 0, onDrafts, followUps = 0, followUpsDue = 0, onFollowUps, onSettings, views = [], viewCounts = {}, onView, onEditViews, onNewView }) {
   const t = useT();
+  const allInboxes = activeFolder === ALL_INBOXES;
   return (
     <Sheet kind="drawer" label={t('mobile.drawer.title')} onClose={onClose}>
       <div className="mv-drawer__head">
         <h2 className="mv-drawer__title">{t('mobile.drawer.title')}</h2>
-        {account && <p className="mv-drawer__account" dir="auto">{account.email}</p>}
+        {account && !allInboxes && <p className="mv-drawer__account" dir="auto">{account.email}</p>}
       </div>
-      {folders.length === 0 ? (
+      {allInboxes ? (
+        <ul className="mv-folders">
+          <li>
+            <button type="button" className="mv-folder mv-folder--active" aria-current="true" data-mv-drawer-all-inboxes onClick={onClose}>
+              <span className="mv-folder__icon"><AllInboxesIcon size={16} /></span>
+              <span className="mv-folder__name">{t('sidebar.allInboxes')}</span>
+            </button>
+          </li>
+        </ul>
+      ) : folders.length === 0 ? (
         <p className="mv-drawer__empty">{t('mobile.drawer.empty')}</p>
       ) : (
         <ul className="mv-folders">

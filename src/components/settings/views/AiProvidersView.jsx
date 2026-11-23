@@ -18,7 +18,7 @@ import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { SettingRow } from '../../ui/SettingRow';
 import { Button } from '../../ui/Button';
-import { SettingsPageLayout } from '../../ui/SettingsForm';
+import { SettingsCard, SettingsPageLayout } from '../../ui/SettingsForm';
 import { useT } from './viewContext';
 
 export function AiProvidersView({
@@ -32,6 +32,7 @@ export function AiProvidersView({
   const endpoint = values.provider === 'endpoint';
   return (
     <SettingsPageLayout>
+      <SettingsCard>
       <SettingRow
         label={t('ai.settings.enable')}
         description={t('ai.settings.enableHint')}
@@ -138,6 +139,7 @@ export function AiProvidersView({
           )}
         </>
       )}
+      </SettingsCard>
 
       {notice}
       {review}

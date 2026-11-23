@@ -26,6 +26,12 @@ it('gives every Appearance preference a sample without adding mail actions to se
   for (const section of ['Colors', 'Layout', 'Reading', 'Date & time']) {
     fireEvent.click(screen.getByRole('tab', { name: section, exact: true }));
     for (const row of container.querySelectorAll('.setting-row')) {
+      // Message list density shares the sample under Preview lines, the row after it.
+      if (row.querySelector('.setting-row-copy > :first-child').textContent === 'Message list density') {
+        expect(row.querySelector('figure')).toBeNull();
+        expect(row.nextElementSibling.querySelector('.preview-list-sample')).not.toBeNull();
+        continue;
+      }
       expect(row.querySelector('figure, .color-option-preview, .sidebar-layout-sample')).not.toBeNull();
     }
     for (const figure of screen.getAllByRole('figure')) {
@@ -108,11 +114,14 @@ it('shows grouped, expanded and separate messages, and reverses the sample reply
   expect(messages()).toEqual(['Two works for me.', 'Shall we meet at two?']);
 });
 
-it('sets the message list density beside the sidebar\'s, on a sample of its own, without touching the sidebar', () => {
-  useSettingsStore.setState({ listDensity: 'comfortable', sidebarDensity: 'comfortable' });
+it('sets the message list density beside the sidebar\'s, on the list sample it shares with preview lines, without touching the sidebar', () => {
+  useSettingsStore.setState({ listDensity: 'comfortable', sidebarDensity: 'comfortable', listPreviewLines: 2 });
   render(<AppearanceSettings initialSection="layout" />);
   const group = screen.getByRole('group', { name: 'Message list density' });
-  const sample = () => example('Message list density').querySelector('.preview-message-rows');
+  expect(document.querySelectorAll('.preview-list-sample')).toHaveLength(1);
+  const sample = () => example('Messages').querySelector('.preview-list-sample > .preview-message-rows');
+  // The one sample shows the preview lines too.
+  expect(sample().querySelectorAll('.preview-message-snippet')).toHaveLength(2);
   expect(sample().dataset.listDensity).toBe('comfortable');
   // Two lines, as the list is set here, so the sample is the list's own shape.
   expect(sample().classList.contains('preview-single-line')).toBe(false);
@@ -125,9 +134,11 @@ it('sets the message list density beside the sidebar\'s, on a sample of its own,
   // The sidebar's own control sits just before it.
   const labels = [...document.querySelectorAll('.setting-row-copy > :first-child')].map(label => label.textContent);
   expect(labels.indexOf('Message list density')).toBe(labels.indexOf('Sidebar density') + 1);
+  // Preview lines right after it, the shared sample under the pair.
+  expect(labels.indexOf('Preview lines')).toBe(labels.indexOf('Message list density') + 1);
   fireEvent.click(screen.getByRole('button', { name: 'Chat' }));
   expect(within(group).getByRole('button', { name: 'Comfortable' }).disabled).toBe(true);
-  useSettingsStore.setState({ listDensity: 'comfortable', viewStyle: 'list' });
+  useSettingsStore.setState({ listDensity: 'comfortable', viewStyle: 'list', listPreviewLines: 1 });
 });
 
 it('changes backup placement immediately without changing the backup schedule', () => {

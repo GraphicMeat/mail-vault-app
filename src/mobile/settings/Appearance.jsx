@@ -9,7 +9,8 @@
 // - Text: text size and font (prefs.js applyLook). Every font ships with the app; the phone
 //   downloads none, so desktop's "More fonts" is not here.
 // - Layout: mail view (with desktop's sample conversation for the chat view), list density and
-//   preview lines (rowHeight, MessageRow.jsx).
+//   preview lines (rowHeight, MessageRow.jsx), the pair sharing one sample drawn with the list's
+//   own row face (MessageRow.jsx RowFace) over sample messages, at the chosen text size.
 // - Reading: conversations, their order, signatures and the viewer toolbar's buttons.
 // - Date & time: date and time formats; a custom pattern is written as typing pauses.
 // - Quick actions: desktop's presets, action list and add row for the viewer's bar
@@ -24,16 +25,17 @@ import { ColorSchemeView } from '../../components/settings/views/ColorSchemeView
 import { AppIconView } from '../../components/settings/views/AppIconView';
 import { TextSettingsView } from '../../components/settings/views/TextSettingsView';
 import { WorkspaceView } from '../../components/settings/views/WorkspaceView';
-import { SampleConversationView } from '../../components/settings/views/PreviewViews';
+import { FIRST_REPLY, SAMPLE_DATE, SampleConversationView } from '../../components/settings/views/PreviewViews';
 import { DateTimeView, ReadingView } from '../../components/settings/views/ReadingDateViews';
 import { LanguageView, TranslationIssueReportView } from '../../components/settings/views/LanguageView';
 import { getEmailColors } from '../../utils/mailChrome';
 import { translationReportUrl } from '../../utils/translationReport.js';
 import { useMobileStore } from '../store.js';
-import { getMobileLocale, loadMobileLocale } from '../i18n.js';
+import { getMobileLocale, loadMobileLocale, useT } from '../i18n.js';
 import { daemonCall, setAppIcon } from '../transport.js';
 import { normalizeAppIcon } from '../appIcon.js';
-import { APP_FONTS, PALETTES, TEXT_SCALES, THEMES, fontStack, viewerTheme } from '../prefs.js';
+import { APP_FONTS, PALETTES, TEXT_SCALES, THEMES, fontStack, rowHeight, viewerTheme } from '../prefs.js';
+import { RowFace } from '../MessageRow.jsx';
 import QuickActions from './QuickActions.jsx';
 import { MobileViewEnv, SaveFailed, useSavePrefs, openExternal } from './MobileViewEnv.jsx';
 
@@ -100,10 +102,29 @@ function Text({ save }) {
 /** The layout rows a phone has: the mail view, and the list's density and preview lines. */
 const LAYOUT_ROWS = ['viewStyle', 'listDensity', 'listPreviewLines'];
 
+/** The list's sample: two rows as the list draws them, at `density` and `previewLines`. */
+function ListSample({ density, previewLines }) {
+  const t = useT();
+  const prefs = { ...useMobileStore((s) => s.prefs), listDensity: density, listPreviewLines: previewLines };
+  const rows = [
+    { uid: 1, fromName: 'Nell Okafor', subject: t('settings.preview.subject'), dateMs: SAMPLE_DATE.getTime(), snippet: t('listPreview.sample'), seen: false },
+    { uid: 2, fromName: 'Priya Raines', subject: t('preview.row4.subject'), dateMs: FIRST_REPLY.getTime(), snippet: t('listPreview.sample'), seen: true },
+  ];
+  return (
+    <div className="mv-list-sample">
+      {rows.map((row) => (
+        <div key={row.uid} className="mv-row-slot" style={{ height: `${rowHeight(prefs)}px` }}>
+          <RowFace row={row} prefs={prefs} as="div" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Layout({ save }) {
   const prefs = useMobileStore((s) => s.prefs);
   return <WorkspaceView values={prefs} rows={LAYOUT_ROWS} onChange={(key, value) => save({ [key]: value })}
-    preview={{ chatSample: <SampleConversationView compact /> }} />;
+    preview={{ chatSample: <SampleConversationView compact />, listSample: (sample) => <ListSample {...sample} /> }} />;
 }
 
 /** Reading less the row highlight, which follows a pointer the phone has not got. */

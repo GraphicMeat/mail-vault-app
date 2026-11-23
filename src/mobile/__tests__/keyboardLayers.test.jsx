@@ -126,6 +126,21 @@ describe('the shared keyboard layer rule', () => {
       expect(own, sel).not.toMatch(/(^|[\s;])(inset|bottom|top|height|position)\s*:/);
     }
   });
+
+  // iOS keeps the layout viewport, so the keyboard area below a raised layer's box would show the
+  // screen underneath (the message list) through the translucent keyboard and around its corners.
+  it('paints the keyboard area below a raised layer opaque, with the screen background', () => {
+    const below = css.match(/(?:^|\n)\.mv-kb-layer\[data-mv-keyboard\]::after \{([^}]*)\}/)?.[1] ?? '';
+    expect(below).toContain('content:');
+    expect(below).toContain('position: absolute');
+    expect(below).toMatch(/top: 100%/);
+    expect(below).toMatch(/height: 100vh/);
+    expect(below).toContain('background: var(--mail-bg)');
+    // Placed outside the box: a layer that clips its overflow would hide it.
+    for (const sel of ['.mv-kb-layer', '.mv-compose', '.mv-search', '.mv-settings', '.mv-tour', '.mv-add-overlay', '.mv-app', '.mv-premium']) {
+      expect(rule(sel), sel).not.toMatch(/(^|[\s;])(overflow|contain|clip-path)\s*:/);
+    }
+  });
 });
 
 describe('Settings over the iOS keyboard', () => {

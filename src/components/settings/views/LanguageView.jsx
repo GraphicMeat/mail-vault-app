@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 import { Button } from '../../ui/Button';
-import { SettingsPageLayout } from '../../ui/SettingsForm';
+import { SettingsCard, SettingsPageLayout } from '../../ui/SettingsForm';
 import { LOCALES } from '../../../i18n/languages.js';
 import { translationReportReady } from '../../../utils/translationReport.js';
 import { useT } from './viewContext';
@@ -13,7 +13,7 @@ export function LanguageView({ active, onPick, children }) {
   const t = useT();
   return (
     <SettingsPageLayout>
-      <div>
+      <SettingsCard>
         <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.language.title')}</h4>
         <p className="text-xs text-mail-text-muted mb-4">{t('settings.language.subtitle')}</p>
 
@@ -52,7 +52,7 @@ export function LanguageView({ active, onPick, children }) {
             );
           })}
         </div>
-      </div>
+      </SettingsCard>
 
       {children}
     </SettingsPageLayout>
@@ -84,7 +84,7 @@ export function TranslationIssueReportView({ initialLang, onSubmit }) {
   const field = 'w-full px-3 py-2 text-sm rounded-lg bg-mail-surface border border-mail-border text-mail-text';
 
   return (
-    <div className="pt-6 border-t border-mail-border">
+    <SettingsCard>
       <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.language.report.title')}</h4>
       <p className="text-xs text-mail-text-muted mb-4">{t('settings.language.report.subtitle')}</p>
 
@@ -115,6 +115,6 @@ export function TranslationIssueReportView({ initialLang, onSubmit }) {
           {t('settings.language.report.submit')}
         </Button>
       </div>
-    </div>
+    </SettingsCard>
   );
 }

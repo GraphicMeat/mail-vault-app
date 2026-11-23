@@ -4,9 +4,10 @@
 // use for or whose feature the phone engine lacks (MOBILE_PAGES says which and why).
 //
 // - The first screen is desktop's sidebar: the setting search, the section headings and their
-//   pages, Billing (while Premium is on), Diagnostics and Help pinned under them. Premium sits
-//   above them: "Premium: active until <date> (App Store)" or "Free", opening the Premium screen;
-//   a phone whose place another device took says so, with Sign in again.
+//   pages, Billing (while Premium is on), Diagnostics and Help pinned under them, each group one
+//   desktop settings card (SettingsCard) with its heading and rows, as every page's settings are.
+//   Premium sits above them: "Premium: active until <date> (App Store)" or "Free", opening the
+//   Premium screen; a phone whose place another device took says so, with Sign in again.
 // - A page opens under desktop's page header (title, description) with Back. A host (Storage,
 //   Privacy & security, Diagnostics) shows its pages as desktop's tabs; Appearance and Mail
 //   preferences show their sections the same way.
@@ -30,6 +31,7 @@ import {
 } from '../components/settings/settingsManifest';
 import { SettingsTabs } from '../components/ui/SettingsTabs';
 import { Button } from '../components/ui/Button';
+import { SettingsCard } from '../components/ui/SettingsForm';
 import { SettingsViewProvider } from '../components/settings/views/viewContext';
 import { DesktopNoticeView } from '../components/settings/views/DesktopNoticeView';
 import { useMobileStore } from './store.js';
@@ -99,12 +101,13 @@ export function placeOf(page) {
 }
 
 /**
- * `page`: the page to open on (the first screen, `'root'`, by default): see `placeOf`. `newView`:
- * Views opens on a new view (once).
+ * `page`: the page to open on (the first screen, `'root'`, by default): see `placeOf`; `section`:
+ * that page's section to open on (Appearance's, Mail preferences', an account's). `newView`: Views
+ * opens on a new view (once).
  */
-export default function Settings({ onClose, onReplayTour, onAddAccount, version = APP_VERSION, page: startPage = 'root', newView = false }) {
+export default function Settings({ onClose, onReplayTour, onAddAccount, version = APP_VERSION, page: startPage = 'root', section: startSection = null, newView = false }) {
   const t = useT();
-  const [place, setPlace] = useState(() => placeOf(startPage));
+  const [place, setPlace] = useState(() => ({ ...placeOf(startPage), ...(startSection ? { section: startSection } : {}) }));
   const [query, setQuery] = useState('');
   const contentRef = useRef(null);
   const searchTarget = useRef(null);
@@ -251,7 +254,7 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
                 </div>
                 <div className="settings-nav-pages">
                   {query.trim() ? (
-                    <>
+                    <SettingsCard className="settings-nav-group">
                       <p className="settings-nav-heading" role="status">{t('settings.navigation.results', { count: results.length })}</p>
                       {results.map((page) => (
                         <button key={`${page.id}-${page.section || ''}-${page.labelKey}`} type="button" className="settings-nav-item settings-search-result"
@@ -263,9 +266,10 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
                         </button>
                       ))}
                       {results.length === 0 && <p className="px-3 py-2 text-sm text-mail-text-muted">{t('settings.navigation.searchHint')}</p>}
-                    </>
+                    </SettingsCard>
                   ) : (
                     <>
+                      <SettingsCard className="settings-nav-group">
                       <p className="settings-nav-heading">{t('common.premium')}</p>
                       <button type="button" className="settings-nav-item" data-mv-premium-row
                         onClick={() => useMobileStore.getState().openPaywall(null)}>
@@ -280,19 +284,20 @@ export default function Settings({ onClose, onReplayTour, onAddAccount, version 
                           </Button>
                         </p>
                       )}
+                      </SettingsCard>
                       {settingsSections.map((section) => {
                         const tabs = section.tabs.filter(visible);
                         return tabs.length ? (
-                          <React.Fragment key={section.labelKey}>
+                          <SettingsCard key={section.labelKey} className="settings-nav-group">
                             <p className="settings-nav-heading">{t(section.labelKey)}</p>
                             {tabs.map(navItem)}
-                          </React.Fragment>
+                          </SettingsCard>
                         ) : null;
                       })}
                     </>
                   )}
                 </div>
-                {!query.trim() && <div className="settings-nav-footer">{footerTabs.filter(visible).map(navItem)}</div>}
+                {!query.trim() && <div className="settings-nav-footer"><SettingsCard className="settings-nav-group">{footerTabs.filter(visible).map(navItem)}</SettingsCard></div>}
               </nav>
             </div>
           ) : body}

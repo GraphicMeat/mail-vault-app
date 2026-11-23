@@ -5,7 +5,9 @@
 // `position: fixed; inset: 0` layer sits on the layout viewport, so the pan pushes its top bar off
 // the screen and its bottom stays under the keyboard. The layer is instead placed on the visual
 // viewport itself: top = offsetTop, height = visual height (--mv-vv-top / --mv-vv-height, set only
-// while the keyboard is up; the CSS falls back to the full screen). An Android WebView that resizes
+// while the keyboard is up; the CSS falls back to the full screen). [data-mv-keyboard] also makes the
+// CSS paint the keyboard's area below the layer opaque, so the screen underneath never shows through
+// the translucent keyboard. An Android WebView that resizes
 // shrinks innerHeight along with the visual viewport, so it reads as "no keyboard" and keeps
 // `inset: 0` on the already smaller window.
 import { useEffect } from 'react';

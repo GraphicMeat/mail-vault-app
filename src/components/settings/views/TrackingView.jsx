@@ -10,7 +10,7 @@ import React from 'react';
 import { ExternalLink, Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Button } from '../../ui/Button';
-import { SettingsPageLayout } from '../../ui/SettingsForm';
+import { SettingsCard, SettingsPageLayout } from '../../ui/SettingsForm';
 import { useT } from './viewContext';
 
 /** The beacon, exactly as senders ship it. Shown verbatim — this is the point. */
@@ -139,16 +139,16 @@ export function TrackingView({ isPremium, enabled: trackerBlockingEnabled, onTog
       )}
 
       {/* Before / after */}
-      <div>
+      <SettingsCard>
         <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.beforeAfter')}</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <SampleMail blocked={false} />
           <SampleMail blocked />
         </div>
-      </div>
+      </SettingsCard>
 
       {/* The code itself */}
-      <div>
+      <SettingsCard>
         <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.whatTrackingPixelLooksLike')}</h4>
         <div className="space-y-2">
           <div>
@@ -160,10 +160,10 @@ export function TrackingView({ isPremium, enabled: trackerBlockingEnabled, onTog
             <pre className="p-3 rounded-lg bg-mail-surface border border-mail-border text-[11px] font-mono text-mail-text whitespace-pre-wrap break-all overflow-x-auto">{CLEANED_SAMPLE}</pre>
           </div>
         </div>
-      </div>
+      </SettingsCard>
 
       {/* What it costs you to load one */}
-      <div>
+      <SettingsCard>
         <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.whatOnePixelTellsSender')}</h4>
         <ul className="space-y-1">
           {LEAKED().map((line, i) => (
@@ -173,10 +173,10 @@ export function TrackingView({ isPremium, enabled: trackerBlockingEnabled, onTog
             </li>
           ))}
         </ul>
-      </div>
+      </SettingsCard>
 
       {/* What this install has actually seen */}
-      {stats && <div className="pt-4 border-t border-mail-border">
+      {stats && <SettingsCard>
         <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.mail')}</h4>
         {stats.messages > 0 ? (
           <>
@@ -220,7 +220,7 @@ export function TrackingView({ isPremium, enabled: trackerBlockingEnabled, onTog
             </button>
           ))}
         </div>
-      </div>}
+      </SettingsCard>}
     </SettingsPageLayout>
   );
 }

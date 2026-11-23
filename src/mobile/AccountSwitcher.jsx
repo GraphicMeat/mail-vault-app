@@ -2,7 +2,8 @@
 // (every inbox as one list, with their unread count), then every account with its inbox unread
 // count, the open one checked, plus "Add account". Removing an account lives in Settings > the
 // account, not here. An account whose provider sign-in lapsed (`needsAuth`) offers "Sign in
-// again"; `ReauthBanner` says the same above the message list.
+// again"; `ReauthBanner` says the same above the message list. `AllInboxesIcon` is the All Inboxes
+// glyph, also worn by the header's account button and the drawer while All Inboxes is open.
 import React, { useState } from 'react';
 import Sheet from './Sheet.jsx';
 import { useT } from './i18n.js';
@@ -57,17 +58,22 @@ function AccountRow({ account, active, unread, onSelect, onReauth, reauthBusy })
   );
 }
 
+/** The All Inboxes glyph (an inbox tray). */
+export function AllInboxesIcon({ size = 18 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 13h4l1.5 2.5h5L16 13h4" /><path d="M5.5 6h13L20 13v5H4v-5z" />
+    </svg>
+  );
+}
+
 /** All Inboxes, above the accounts: `allInboxes` is `{ unread }`, or null with fewer than two. */
 function AllInboxesRow({ unread, active, onSelect }) {
   const t = useT();
   return (
     <li className="mv-acct mv-acct--all">
       <button type="button" className="mv-acct__main" data-mv-all-inboxes aria-current={active ? 'true' : undefined} onClick={onSelect}>
-        <span className="mv-avatar mv-avatar--all" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 13h4l1.5 2.5h5L16 13h4" /><path d="M5.5 6h13L20 13v5H4v-5z" />
-          </svg>
-        </span>
+        <span className="mv-avatar mv-avatar--all" aria-hidden="true"><AllInboxesIcon /></span>
         <span className="mv-acct__text"><span className="mv-acct__email">{t('sidebar.allInboxes')}</span></span>
         {unread > 0 && (
           <span className="mv-badge" aria-label={t('mobile.unreadCount', { count: unread })}>{unread}</span>

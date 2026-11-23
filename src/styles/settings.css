@@ -154,6 +154,18 @@
 .preview-single-line .preview-message-copy { flex-direction: row; gap: 10px; }
 .preview-single-line .preview-message-copy > strong { flex: 0 1 38%; }
 .preview-single-line .preview-message-copy > span { flex: 1; }
+/* Preview lines under a single-line row, across its width. */
+.preview-single-line .preview-message-copy { flex-wrap: wrap; }
+.preview-single-line .preview-message-copy > .preview-message-snippet { flex: 1 1 100%; }
+/* The list sample (Appearance > Layout) and its tallest state share one cell: the sample keeps
+   that height whatever it shows, so changing density or preview lines moves nothing. */
+.preview-list-sample { display: grid; }
+.preview-list-sample > * { grid-area: 1 / 1; min-width: 0; }
+.preview-list-sample-tallest { visibility: hidden; }
+/* A hint that follows a choice (WorkspaceView), stacked with the others: as tall as the longest. */
+.setting-hint-stack { display: grid; }
+.setting-hint-stack > * { grid-area: 1 / 1; }
+.setting-hint-stack > [aria-hidden="true"] { visibility: hidden; }
 .preview-mail-layout { display: flex; min-height: 132px; }
 .preview-mail-list { width: 46%; min-width: 0; flex-shrink: 0; border-right: 1px solid var(--mail-border); }
 .preview-mail-list .preview-time, .preview-mail-list .row-gutter { display: none; }

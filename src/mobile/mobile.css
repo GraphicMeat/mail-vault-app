@@ -54,13 +54,27 @@ body {
    keyboardViewport.js, set by KeyboardLayer.jsx or the hook itself): iOS pans the visual viewport
    over a fixed layer, so `inset: 0` would put its top bar off the screen and its bottom under the
    keyboard. Placed with top/height, never a transform: the sheets inside are fixed to the screen
-   too. A layer's own rule sets only its stacking, layout and background. */
+   too. A layer's own rule sets only its stacking, layout and background, and never clips its
+   overflow. iOS keeps the layout viewport, so the keyboard's area below a raised layer is still
+   the screen underneath, showing through the translucent keyboard and around its rounded corners:
+   ::after paints it with the screen background, opaque, outside the layer's box. Android resizes
+   the window instead and never sets [data-mv-keyboard]. */
 .mv-kb-layer {
   position: fixed;
   top: var(--mv-vv-top, 0px);
   right: 0;
   left: 0;
   height: var(--mv-vv-height, 100%);
+}
+.mv-kb-layer[data-mv-keyboard]::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  height: 100vh;
+  background: var(--mail-bg);
+  pointer-events: none;
 }
 .mv-app { display: flex; flex-direction: column; }
 
@@ -244,7 +258,21 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 }
 .mv-row:active { background: var(--mail-surface-hover); }
 /* All Inboxes: the row's account, in that account's colour (desktop's account dot). */
-.mv-row__acct { flex: none; width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.mv-row__acct {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  align-self: center;
+  color: #fff;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+}
 .mv-row__count {
   flex: none;
   min-width: 20px;
@@ -1223,7 +1251,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-settings__header .settings-header-context { flex: 1; }
 .mv-settings .settings-sidebar.mv-settings__nav { width: auto; border-right: 0; background: none; }
 .mv-settings .mv-settings__nav .settings-navigation { overflow: visible; padding-top: 12px; }
-.mv-settings .mv-settings__nav .settings-nav-pages { flex: none; overflow: visible; }
+.mv-settings .mv-settings__nav .settings-nav-pages { flex: none; overflow: visible; padding: 8px 16px 12px; }
 .mv-settings .mv-settings__nav .settings-search input { min-height: 44px; font-size: 1rem; }
 .mv-settings__body {
   flex: 1;
@@ -1237,6 +1265,24 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
 .mv-settings .account-settings-list { width: auto; max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid var(--mail-border); }
 .mv-settings .account-settings-layout .account-settings-detail { overflow: visible; }
 .mv-settings .account-settings-detail [role="tabpanel"] { overflow: visible; }
+
+/* Settings in cards: every group of settings sits on a surface, as desktop's cards
+   (`.settings-section`, SettingsCard) draw one, so a page reads group by group at 375pt. The first
+   screen's navigation groups are SettingsCards (Settings.jsx), tight around their rows. Desktop's
+   quiet Appearance groups and its flat account detail are cards here only (narrowSettings.test.js). */
+.mv-shared-ui .settings-nav-group { padding: 4px; }
+.mv-shared-ui .settings-nav-group + .settings-nav-group { margin-top: 12px; }
+.mv-shared-ui .settings-nav-group .settings-nav-heading { padding: 10px 12px 4px; }
+.mv-shared-ui .settings-nav-group .settings-nav-item:last-child { margin-bottom: 0; }
+.mv-settings .mv-settings__nav .settings-nav-footer { padding: 0 16px 20px; border-top: 0; }
+.mv-shared-ui .settings-preference-group { background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 12px; padding: 16px; }
+.mv-shared-ui .settings-preference-group + .settings-preference-group { margin-top: 16px; padding-top: 16px; }
+.mv-shared-ui .account-settings-detail .settings-section { background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 12px; padding: 16px; }
+.mv-shared-ui .account-settings-detail .settings-section + .settings-section { margin-top: 16px; padding-top: 16px; }
+.mv-shared-ui .account-settings-list { background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 12px; margin: 12px 16px 0; overflow: hidden; }
+.mv-shared-ui .account-settings-identity { background: var(--mail-surface); border: 1px solid var(--mail-border); border-radius: 12px; margin: 12px 16px 0; padding: 12px 16px; }
+/* Appearance > Layout's list sample: the list's own rows, standing in the sample, not placed by a list. */
+.mv-list-sample .mv-row-slot { position: relative; }
 
 /* Desktop's settings views at the phone's width (all under `.mv-shared-ui`, so desktop never sees
    these): the same controls and colours, laid out to fit 375pt and a finger. */
@@ -1279,7 +1325,7 @@ button.mv-chip { min-height: 44px; border-color: transparent; }
    settings field or button at a finger's size. */
 .mv-shared-ui .fields-settings { padding: 20px 16px; }
 .mv-shared-ui .fields-list { gap: 8px; }
-.mv-shared-ui .fields-row { flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; border-radius: 12px; background: var(--mail-surface); font-size: 0.875rem; }
+.mv-shared-ui .fields-row { flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; border-radius: 12px; background: var(--mail-bg); font-size: 0.875rem; }
 .mv-shared-ui .fields-row-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
 .mv-shared-ui .fields-row > button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; min-height: 44px; padding: 0 8px; border-radius: 8px; color: var(--mail-text-muted); }
 .mv-shared-ui .fields-row > button:disabled { opacity: .4; }

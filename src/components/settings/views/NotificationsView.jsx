@@ -323,7 +323,8 @@ export function NotificationsView({ enabled, onEnabled, enabledBusy = false, sho
           />
           <button
             type="submit"
-            className="px-3 py-2 rounded-lg border border-mail-border text-sm text-mail-text hover:bg-mail-surface-hover transition-colors"
+            disabled={!newSender.trim()}
+            className="px-3 py-2 rounded-lg border border-mail-border text-sm text-mail-text hover:bg-mail-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('notifyPolicy.allowlist.add')}
           </button>

@@ -53,13 +53,13 @@ export function SecurityView({ values, onChange, legend = null }) {
           levels, and their explanations were hardcoded English — so eight
           locales read a half-translated paragraph, and nothing here mentioned
           sender impersonation, Reply-To mismatch or the tracker glyphs at all. */}
-      <div className="pt-4 border-t border-mail-border">
+      <SettingsCard>
         <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.security.howWorks')}</h4>
         {legend}
         <p className="mt-3 text-xs text-mail-text-muted">
           {t('settings.security.allScanningPerformedLocallyDevice')}
         </p>
-      </div>
+      </SettingsCard>
     </SettingsPageLayout>
   );
 }

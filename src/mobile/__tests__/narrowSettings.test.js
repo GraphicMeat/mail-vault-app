@@ -82,3 +82,46 @@ describe('shared settings views at phone width', () => {
     expect(readFileSync(new URL('../../styles/labels-fields.css', import.meta.url), 'utf8')).toMatch(/\.local-mail-label > span \{[^}]*text-overflow: ellipsis/);
   });
 });
+
+describe('settings cards on the phone (settingsCards.test.jsx finds every setting on one)', () => {
+  const SURFACE = /background: var\(--mail-surface\);[^}]*border: 1px solid var\(--mail-border\);[^}]*border-radius: 12px/;
+  it('desktop\'s cards are surfaces on the phone', () => {
+    expect(rule(phone, '.settings-section')).toMatch(/background: var\(--mail-surface\); border: 1px solid var\(--mail-border\); border-radius: 12px/);
+    expect(rule(phone, '.settings-editor-section')).toMatch(/border: 1px solid var\(--mail-border\); border-radius: 12px; background: var\(--mail-surface\)/);
+  });
+
+  it('Appearance\'s groups, an account\'s header and sections and the account list are cards on the phone only, in tokens', () => {
+    for (const selector of ['.mv-shared-ui .settings-preference-group', '.mv-shared-ui .account-settings-detail .settings-section', '.mv-shared-ui .account-settings-list', '.mv-shared-ui .account-settings-identity']) {
+      const decl = rule(phone, selector);
+      expect(decl, selector).toMatch(SURFACE);
+      expect(decl, selector).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    }
+    // Desktop keeps its quiet Appearance (no card) and its flat account detail.
+    expect(rule(desktop, '.settings-preference-group')).toBe('');
+    expect(desktop).not.toMatch(/\.mv-shared-ui \.settings-preference-group/);
+    // Cards stand apart by a gap, not a rule inside the next card.
+    expect(rule(phone, '.mv-shared-ui .settings-preference-group + .settings-preference-group')).toMatch(/margin-top: 16px;[^}]*padding-top: 16px/);
+  });
+});
+
+describe('the list sample (Appearance > Layout) keeps its place', () => {
+  it('the sample is as tall as its tallest state, in both apps', () => {
+    for (const css of [phone, desktop]) {
+      expect(rule(css, '.preview-list-sample')).toMatch(/display: grid/);
+      expect(rule(css, '.preview-list-sample > *')).toMatch(/grid-area: 1 \/ 1/);
+      expect(rule(css, '.preview-list-sample-tallest')).toMatch(/visibility: hidden/);
+    }
+  });
+
+  it('a hint that follows the choice is as tall as its longest', () => {
+    for (const css of [phone, desktop]) {
+      expect(rule(css, '.setting-hint-stack')).toMatch(/display: grid/);
+      expect(rule(css, '.setting-hint-stack > *')).toMatch(/grid-area: 1 \/ 1/);
+      expect(rule(css, '.setting-hint-stack > [aria-hidden="true"]')).toMatch(/visibility: hidden/);
+    }
+  });
+
+  it('the phone\'s sample rows stand in the page, not placed by a list', () => {
+    expect(rule(phone, '.mv-list-sample .mv-row-slot')).toMatch(/position: relative/);
+  });
+});

@@ -2,7 +2,7 @@
 // for what a phone can honestly do.
 //
 // - The plan: "Premium: active until <date> (App Store)" (premium.js), as desktop's current plan.
-// - Manage subscription: a store subscription goes to the store's own page (Apple's subscriptions
+// - Manage subscription, on the plan's card: a store subscription goes to the store's own page (Apple's subscriptions
 //   page on iOS, Play's on Android), handed to the system as every link is. A website
 //   subscription has none here: its page (the Stripe portal) can buy or restart a plan, which
 //   neither store lets an app offer. Buying and restoring stay on the Premium screen (Premium.jsx).
@@ -72,12 +72,12 @@ export default function Billing() {
   return (
     <MobileViewEnv>
       <SettingsPageLayout>
-        <BillingPlanView isPremium={premium.premium === true} statusLabel={premiumSummary(premium)} />
-
-        {store && (
-          <ManageSubscriptionButton data-mv-manage={store} onClick={() => openExternal(MANAGE_URL[store])}
-            hint={t('mobile.premium.manageHint', { store: t(`mobile.premium.source.${store}`) })} />
-        )}
+        <BillingPlanView isPremium={premium.premium === true} statusLabel={premiumSummary(premium)}>
+          {store && (
+            <ManageSubscriptionButton data-mv-manage={store} onClick={() => openExternal(MANAGE_URL[store])}
+              hint={t('mobile.premium.manageHint', { store: t(`mobile.premium.source.${store}`) })} />
+          )}
+        </BillingPlanView>
 
         {list.state === 'failed' && (
           <div className="flex items-center justify-between gap-3" role="alert">

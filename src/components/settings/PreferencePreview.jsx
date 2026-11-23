@@ -34,7 +34,10 @@ export const WorkspacePreview = withDesktopEnv(function WorkspacePreview(props) 
   const layoutMode = useSettingsStore(s => s.layoutMode);
   const sidebarDensity = useSettingsStore(s => s.sidebarDensity);
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
-  return <WorkspacePreviewView {...props} layoutMode={layoutMode} sidebarDensity={sidebarDensity} emailListStyle={emailListStyle}
+  const listDensity = useSettingsStore(s => s.listDensity);
+  const listPreviewLines = useSettingsStore(s => s.listPreviewLines);
+  return <WorkspacePreviewView listDensity={listDensity} listPreviewLines={listPreviewLines} {...props}
+    layoutMode={layoutMode} sidebarDensity={sidebarDensity} emailListStyle={emailListStyle}
     accounts={PREVIEW_ACCOUNTS} accountColor={account => getAccountColor({}, account)} chatSample={<SampleConversation compact />} />;
 });
 
