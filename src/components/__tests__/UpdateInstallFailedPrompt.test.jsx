@@ -18,6 +18,8 @@ vi.mock('@tauri-apps/api/event', () => ({
   },
 }));
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: (...a) => harness.relaunch(...a) }));
+harness.checkForUpdates = vi.fn();
+vi.mock('tauri-plugin-sparkle-updater-api', () => ({ checkForUpdates: (...a) => harness.checkForUpdates(...a) }));
 
 const { UpdateInstallFailedPrompt } = await import('../UpdateInstallFailedPrompt');
 const { useSettingsStore } = await import('../../stores/settingsStore');
@@ -32,6 +34,8 @@ beforeEach(() => {
   harness.listeners.clear();
   harness.relaunch.mockReset();
   harness.relaunch.mockResolvedValue(undefined);
+  harness.checkForUpdates.mockReset();
+  harness.checkForUpdates.mockResolvedValue(undefined);
   snapshot = useSettingsStore.getState();
   useSettingsStore.setState({ updateResumeAfterRestart: false });
 });
@@ -72,5 +76,17 @@ describe('UpdateInstallFailedPrompt', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(useSettingsStore.getState().updateResumeAfterRestart).toBe(false);
     expect(harness.relaunch).not.toHaveBeenCalled();
+  });
+
+  // 2026-11-23: Update downloaded a nightly DMG the feed had replaced
+  // overnight (404). After Sparkle's error, one fresh check offers the current one.
+  it('checks the feed again once a failed download cycle has ended', async () => {
+    render(<UpdateInstallFailedPrompt />);
+    await act(async () => {});
+    await abort({ domain: 'SUSparkleErrorDomain', code: 2001, message: 'An error occurred while downloading the update.' });
+    expect(harness.checkForUpdates).not.toHaveBeenCalled();
+    await act(async () => { await harness.listeners.get('sparkle://did-finish-update-cycle')?.({ payload: { updateCheck: 'userInitiated' } }); });
+    await waitFor(() => expect(harness.checkForUpdates).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });

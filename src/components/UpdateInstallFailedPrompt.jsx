@@ -4,7 +4,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useSettingsStore } from '../stores/settingsStore';
 import { flushSafeStorage } from '../stores/safeStorage';
-import { isRecoverableInstallFailure } from '../utils/updateInstallFailure';
+import { createStaleDownloadRecheck, isRecoverableInstallFailure } from '../utils/updateInstallFailure';
 import { useT } from '../i18n/index.js';
 
 /**
@@ -14,6 +14,9 @@ import { useT } from '../i18n/index.js';
  * folder (seen on 2.15.0 -> 2.19.1). The download is intact and a fresh app
  * process installs it, so the offer is a restart, after which
  * useUpdateAvailable hands the cached update straight to Sparkle.
+ *
+ * Also re-checks the feed once after a failed download (see
+ * createStaleDownloadRecheck).
  */
 export function UpdateInstallFailedPrompt() {
   const t = useT();
@@ -21,17 +24,24 @@ export function UpdateInstallFailedPrompt() {
 
   useEffect(() => {
     if (import.meta.env.VITE_MV_APPSTORE === '1') return;
-    let unlisten;
+    const unlisteners = [];
     let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) =>
+    // A failed download is usually an enclosure the feed has since replaced:
+    // once Sparkle's error is dismissed, check the current feed once more.
+    const stale = createStaleDownloadRecheck({
+      recheck: () => import('tauri-plugin-sparkle-updater-api')
+        .then(({ checkForUpdates }) => checkForUpdates())
+        .catch(e => console.warn('[update] re-check after a failed download failed:', e)),
+    });
+    const keep = (fn) => { if (!active) fn(); else unlisteners.push(fn); };
+    import('@tauri-apps/api/event').then(({ listen }) => {
       listen('sparkle://did-abort-with-error', (event) => {
         if (isRecoverableInstallFailure(event.payload)) setOpen(true);
-      }).then(fn => {
-        if (!active) fn();
-        else unlisten = fn;
-      })
-    ).catch(() => {});
-    return () => { active = false; if (unlisten) unlisten(); };
+        stale.onAbort(event.payload);
+      }).then(keep);
+      listen('sparkle://did-finish-update-cycle', () => stale.onCycleFinished()).then(keep);
+    }).catch(() => {});
+    return () => { active = false; unlisteners.forEach(fn => fn()); };
   }, []);
 
   if (!open) return null;

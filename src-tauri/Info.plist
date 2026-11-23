@@ -8,10 +8,13 @@
     <true/>
     <key>SUPublicEDKey</key>
     <string>9OobPkT0p5WGp0wf2aSbADivVllEKZaz0gKhElMocU0=</string>
+    <!-- Off: a Sparkle scheduled check opens a session that waits on the
+         user indefinitely, pinned to the item it found; on 2026-11-23 one held
+         a nightly whose DMG was replaced overnight, and Update hit a 404.
+         The app probes the feed itself on launch and daily (updater.rs).
+         An explicit value also keeps Sparkle's permission prompt away. -->
     <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
+    <false/>
     <!-- macOS malloc otherwise keeps freed pages dirty until the system is
          under memory pressure, so one large header load left the app and its
          daemon (which inherits this environment) at their peak footprint for

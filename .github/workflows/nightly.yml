@@ -127,6 +127,18 @@ jobs:
             LOG=$(git log --oneline --no-decorate -n 20 "$GITHUB_SHA")
           fi
           NOTES=$(printf 'Nightly build of `%s` (%s).\n\nNot a stable release: use the latest tagged version for daily use.\n\n### Commits\n%s\n' "$GITHUB_SHA" "$VERSION" "${LOG:-none}")
+          # Keep the DMG the outgoing feed points at for one more night. A Sparkle
+          # session that found it may still download it after this run (one held
+          # the previous nightly for 20 hours on 2026-11-23, then hit a 404).
+          PREV_DMG_PATH=""
+          if gh release download nightly -p appcast.xml -O prev-appcast.xml 2>/dev/null; then
+            PREV=$(node scripts/nightly-previous-dmg.mjs prev-appcast.xml)
+            if [ -n "$PREV" ] && [ "$PREV" != "$(basename "$DMG")" ] \
+              && gh release download nightly -p "$PREV" -D prev-dmg 2>/dev/null; then
+              PREV_DMG_PATH="prev-dmg/${PREV}"
+              echo "Keeping the previous nightly DMG: ${PREV}"
+            fi
+          fi
           gh release delete nightly --cleanup-tag --yes 2>/dev/null || true
           gh release create nightly \
             --target "$GITHUB_SHA" \
@@ -134,5 +146,6 @@ jobs:
             --title "Nightly ${DATE} (${SHORT})" \
             --notes "$NOTES" \
             "$DMG" \
-            "$APPCAST"
+            "$APPCAST" \
+            ${PREV_DMG_PATH:+"$PREV_DMG_PATH"}
           echo "Published nightly ${VERSION} from ${GITHUB_SHA}"

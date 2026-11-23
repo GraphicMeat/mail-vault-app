@@ -176,6 +176,58 @@ pub fn commit_log(compare: GithubCompare) -> CommitLog {
     CommitLog { total: compare.total_commits.max(commits.len()), url: compare.html_url, commits }
 }
 
+/// What one Sparkle information probe (`checkForUpdateInformation`) found.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProbeOutcome {
+    Found { version: String, notes: String },
+    UpToDate,
+    Failed(String),
+}
+
+/// Reads one probe's answer off the plugin's `sparkle://` events, in the order
+/// they arrive. Only this probe's own events count: an update found by an
+/// earlier session (the plugin's `last_found_update` keeps it forever) is never
+/// reported as this probe's result.
+#[derive(Debug, Default)]
+pub struct SparkleProbe {
+    found: Option<(String, String)>,
+}
+
+impl SparkleProbe {
+    /// Feed one event; `Some` once the probe's cycle has finished.
+    pub fn on_event(&mut self, event: &str, payload: &serde_json::Value) -> Option<ProbeOutcome> {
+        match event {
+            "sparkle://did-find-valid-update" => {
+                let text = |key| payload.get(key).and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                self.found = Some((text("version"), text("releaseNotes")));
+                None
+            }
+            // Probe cycles only: a user-initiated or scheduled session ending
+            // says nothing about this probe.
+            "sparkle://did-finish-update-cycle"
+                if payload.get("updateCheck").and_then(|v| v.as_str()) == Some("information") =>
+            {
+                if let Some((version, notes)) = self.found.take() {
+                    return Some(ProbeOutcome::Found { version, notes });
+                }
+                let error = payload.get("error").filter(|e| !e.is_null());
+                // SUNoUpdateError (1001) is how Sparkle ends a cycle that found nothing.
+                match error.and_then(|e| e.get("code")).and_then(|c| c.as_i64()) {
+                    None | Some(1001) => Some(ProbeOutcome::UpToDate),
+                    Some(_) => Some(ProbeOutcome::Failed(
+                        error
+                            .and_then(|e| e.get("message"))
+                            .and_then(|m| m.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                    )),
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
 fn rank(version: &str) -> Option<(u64, u64, u64, u64)> {
     let version = version.split('+').next()?;
     let (core, pre) = match version.split_once('-') {
@@ -367,5 +419,47 @@ mod tests {
                 { "sha": "1111111", "subject": "fix: older", "author": "A", "date": "2026-09-01T00:00:00Z", "url": "u1" },
             ])
         );
+    }
+
+    fn ev(probe: &mut SparkleProbe, event: &str, payload: serde_json::Value) -> Option<ProbeOutcome> {
+        probe.on_event(event, &payload)
+    }
+
+    #[test]
+    fn a_probe_reports_the_update_its_own_cycle_found() {
+        let mut p = SparkleProbe::default();
+        assert_eq!(ev(&mut p, "sparkle://did-find-valid-update", serde_json::json!({ "version": "2.25.0-nightly.202611230359.gb1a8e11", "releaseNotes": "n" })), None);
+        assert_eq!(
+            ev(&mut p, "sparkle://did-finish-update-cycle", serde_json::json!({ "updateCheck": "information" })),
+            Some(ProbeOutcome::Found { version: "2.25.0-nightly.202611230359.gb1a8e11".into(), notes: "n".into() })
+        );
+    }
+
+    #[test]
+    fn a_probe_that_found_nothing_is_up_to_date() {
+        let mut p = SparkleProbe::default();
+        assert_eq!(ev(&mut p, "sparkle://did-not-find-update", serde_json::json!({})), None);
+        assert_eq!(
+            ev(&mut p, "sparkle://did-finish-update-cycle", serde_json::json!({ "updateCheck": "information", "error": { "code": 1001, "domain": "SUSparkleErrorDomain", "message": "up to date" } })),
+            Some(ProbeOutcome::UpToDate)
+        );
+        let mut p = SparkleProbe::default();
+        assert_eq!(ev(&mut p, "sparkle://did-finish-update-cycle", serde_json::json!({ "updateCheck": "information" })), Some(ProbeOutcome::UpToDate));
+    }
+
+    #[test]
+    fn a_probe_whose_feed_failed_says_so() {
+        let mut p = SparkleProbe::default();
+        assert_eq!(
+            ev(&mut p, "sparkle://did-finish-update-cycle", serde_json::json!({ "updateCheck": "information", "error": { "code": 1002, "domain": "SUSparkleErrorDomain", "message": "An error occurred in retrieving update information." } })),
+            Some(ProbeOutcome::Failed("An error occurred in retrieving update information.".into()))
+        );
+    }
+
+    #[test]
+    fn another_sessions_cycle_does_not_end_the_probe() {
+        let mut p = SparkleProbe::default();
+        assert_eq!(ev(&mut p, "sparkle://did-finish-update-cycle", serde_json::json!({ "updateCheck": "userInitiated" })), None);
+        assert_eq!(ev(&mut p, "sparkle://did-finish-update-cycle", serde_json::json!({ "updateCheck": "background" })), None);
     }
 }

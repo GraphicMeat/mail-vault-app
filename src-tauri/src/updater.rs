@@ -357,29 +357,22 @@ pub(crate) async fn check_for_updates(handle: tauri::AppHandle, show_no_update: 
         }
     };
 
-    // Trigger a probe-only check — fires Sparkle events without showing native UI.
-    // The frontend JS side listens for sparkle://did-find-valid-update directly.
-    // Here we also poll last_found_update() to bridge into the existing update-available event.
-    if let Err(e) = sparkle.check_for_update_information() {
-        error!("Failed to initiate Sparkle update check: {}", e);
+    // Sparkle refuses a probe while a session runs. The only session left is
+    // one the user started (Sparkle's own window), so bring that forward.
+    if sparkle.session_in_progress().unwrap_or(false) {
+        info!("Sparkle session already in progress — showing it");
         if show_no_update {
-            handle.dialog()
-                .message(native_text(&handle, "dlg_check_failed_retry", "Could not check for updates. Please try again later."))
-                .title(native_text(&handle, "dlg_update_error_title", "Update Error"))
-                .show(|_| {});
+            let _ = sparkle.check_for_updates();
         }
         return;
     }
 
-    // Give Sparkle time to fetch and parse the appcast
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-
-    // Check if Sparkle found an update
-    match sparkle.last_found_update() {
-        Ok(Some(update_info)) => {
-            let version = update_info.version.clone();
-            let notes = update_info.release_notes.clone().unwrap_or_default();
-
+    // A probe-only check (no native UI), answered by its own events. Never
+    // `last_found_update()`: the plugin keeps the last item any session found,
+    // forever, so a probe that is slow or refused would report an old one.
+    use mailvault_core::update_track::ProbeOutcome;
+    match probe_sparkle_feed(&handle).await {
+        ProbeOutcome::Found { version, notes } => {
             info!("Update available: {} -> {}", env!("CARGO_PKG_VERSION"), version);
             let _ = handle.emit("update-available", serde_json::json!({
                 "version": version,
@@ -388,7 +381,7 @@ pub(crate) async fn check_for_updates(handle: tauri::AppHandle, show_no_update: 
                 "isManualCheck": show_no_update
             }));
         }
-        _ => {
+        ProbeOutcome::UpToDate => {
             info!("No updates available");
             if show_no_update {
                 handle.dialog()
@@ -397,13 +390,80 @@ pub(crate) async fn check_for_updates(handle: tauri::AppHandle, show_no_update: 
                     .show(|_| {});
             }
         }
+        ProbeOutcome::Failed(e) => {
+            error!("Sparkle update check failed: {}", e);
+            if show_no_update {
+                handle.dialog()
+                    .message(native_text(&handle, "dlg_check_failed_retry", "Could not check for updates. Please try again later."))
+                    .title(native_text(&handle, "dlg_update_error_title", "Update Error"))
+                    .show(|_| {});
+            }
+        }
     }
+}
+
+/// Run one Sparkle information probe and wait for its own outcome events.
+#[cfg(all(target_os = "macos", feature = "sparkle"))]
+async fn probe_sparkle_feed(handle: &tauri::AppHandle) -> mailvault_core::update_track::ProbeOutcome {
+    use mailvault_core::update_track::{ProbeOutcome, SparkleProbe};
+    use tauri::Listener;
+    use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
+
+    let Some(sparkle) = handle.sparkle_updater() else {
+        return ProbeOutcome::Failed("Sparkle updater not available".into());
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(&'static str, serde_json::Value)>();
+    let ids: Vec<_> = ["sparkle://did-find-valid-update", "sparkle://did-finish-update-cycle"]
+        .into_iter()
+        .map(|name| {
+            let tx = tx.clone();
+            handle.listen_any(name, move |event| {
+                let payload = serde_json::from_str(event.payload()).unwrap_or_default();
+                let _ = tx.send((name, payload));
+            })
+        })
+        .collect();
+
+    let outcome = match sparkle.check_for_update_information() {
+        Err(e) => ProbeOutcome::Failed(e.to_string()),
+        Ok(()) => {
+            let mut probe = SparkleProbe::default();
+            let wait = async {
+                while let Some((name, payload)) = rx.recv().await {
+                    if let Some(outcome) = probe.on_event(name, &payload) {
+                        return outcome;
+                    }
+                }
+                ProbeOutcome::Failed("update events stopped".into())
+            };
+            tokio::time::timeout(std::time::Duration::from_secs(60), wait)
+                .await
+                .unwrap_or_else(|_| ProbeOutcome::Failed("no answer from the feed in 60 s".into()))
+        }
+    };
+    for id in ids {
+        handle.unlisten(id);
+    }
+    outcome
 }
 
 pub(crate) fn setup_updates(app: &mut tauri::App) {
     // Point Sparkle at the right feed before anything can check it —
     // both the delayed check below and Sparkle's own schedule.
     apply_update_track(&app.handle(), persisted_update_track().as_deref());
+
+    // Sparkle's own scheduler stays off (Info.plist SUEnableAutomaticChecks):
+    // its session waits on the user indefinitely, pinned to the item it found,
+    // and a nightly replaced meanwhile made Update download a 404. Saying so
+    // in user defaults too overrides any value an older build left there.
+    #[cfg(all(target_os = "macos", feature = "sparkle"))]
+    {
+        use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
+        if let Some(sparkle) = app.handle().sparkle_updater() {
+            let _ = sparkle.set_automatically_checks_for_updates(false);
+        }
+    }
 
     // Check for updates in background
     let update_handle = app.handle().clone();
@@ -412,11 +472,10 @@ pub(crate) fn setup_updates(app: &mut tauri::App) {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         check_for_updates(update_handle.clone(), false).await;
 
-        // Sparkle schedules its own checks. tauri-plugin-updater only
-        // checks when asked, and a Windows app can run for weeks, so
-        // check again once a day. Wall clock, polled hourly: a monotonic
-        // 24h sleep would not count the hours the machine slept.
-        #[cfg(any(target_os = "linux", windows))]
+        // Neither updater checks on its own (Sparkle's scheduler is off, see
+        // above) and an app can run for weeks, so check again once a day.
+        // Wall clock, polled hourly: a monotonic 24h sleep would not count the
+        // hours the machine slept.
         {
             const DAY: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
             let mut last_check = std::time::SystemTime::now();

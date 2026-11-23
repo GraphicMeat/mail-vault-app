@@ -6,8 +6,8 @@
 // when macOS refused it its cache folder on the app's first run) and 4010
 // SUAgentInvalidationError (its progress agent went away). Everything else is
 // either not an install failure or not helped by a restart.
-import { describe, expect, it } from 'vitest';
-import { isRecoverableInstallFailure } from '../updateInstallFailure';
+import { describe, expect, it, vi } from 'vitest';
+import { createStaleDownloadRecheck, isRecoverableInstallFailure } from '../updateInstallFailure';
 
 const sparkle = (code) => ({ domain: 'SUSparkleErrorDomain', code, message: 'x' });
 
@@ -39,5 +39,50 @@ describe('isRecoverableInstallFailure', () => {
     expect(isRecoverableInstallFailure(undefined)).toBe(false);
     expect(isRecoverableInstallFailure({})).toBe(false);
     expect(isRecoverableInstallFailure({ domain: 'SUSparkleErrorDomain', code: '4005' })).toBe(false);
+  });
+});
+
+// A download that dies (2000s) is usually an enclosure the feed no longer
+// serves: the nightly prerelease is replaced every night and its DMG name
+// carries the build stamp. Once Sparkle's cycle ends, one fresh check reads the
+// current feed and offers what is there now. One per ten minutes, never a loop.
+describe('createStaleDownloadRecheck', () => {
+  const setup = () => {
+    let t = 0;
+    const recheck = vi.fn();
+    const r = createStaleDownloadRecheck({ recheck, now: () => t });
+    return { r, recheck, advance: (ms) => { t += ms; } };
+  };
+
+  it('checks the feed again once the failed download cycle has ended', () => {
+    const { r, recheck } = setup();
+    r.onAbort(sparkle(2001));
+    expect(recheck).not.toHaveBeenCalled();
+    r.onCycleFinished();
+    expect(recheck).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing for a cycle that did not fail a download', () => {
+    const { r, recheck } = setup();
+    r.onCycleFinished();
+    r.onAbort(sparkle(4005));
+    r.onCycleFinished();
+    r.onAbort({ domain: 'NSURLErrorDomain', code: 2001 });
+    r.onCycleFinished();
+    expect(recheck).not.toHaveBeenCalled();
+  });
+
+  it('never loops: a second failure soon after its re-check stands', () => {
+    const { r, recheck, advance } = setup();
+    r.onAbort(sparkle(2001));
+    r.onCycleFinished();
+    advance(60_000);
+    r.onAbort(sparkle(2001));
+    r.onCycleFinished();
+    expect(recheck).toHaveBeenCalledTimes(1);
+    advance(10 * 60_000);
+    r.onAbort(sparkle(2001));
+    r.onCycleFinished();
+    expect(recheck).toHaveBeenCalledTimes(2);
   });
 });
