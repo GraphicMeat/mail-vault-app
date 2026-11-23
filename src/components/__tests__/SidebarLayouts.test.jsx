@@ -162,7 +162,7 @@ describe('Sidebar layouts', () => {
     const search = screen.getByRole('searchbox', { name: t('sidebar.findFolder') });
     fireEvent.change(search, { target: { value: 'Project 11' } });
     act(() => useMailStore.setState({ activeAccountId: 'personal', mailboxes: [{ name: 'INBOX', path: 'INBOX' }] }));
-    expect(screen.queryByRole('searchbox', { name: t('sidebar.findFolder') })).toBeNull();
+    expect(screen.getByRole('searchbox', { name: t('sidebar.findFolder') }).value).toBe('');
     expect(screen.getByTestId('folder-row').dataset.path).toBe('INBOX');
   });
 
@@ -178,9 +178,32 @@ describe('Sidebar layouts', () => {
     act(() => useMailStore.setState({ mailboxes: [{ name: 'Project 11', path: 'Project 11' }] }));
     expect(screen.getByRole('searchbox', { name: t('sidebar.findFolder') }).value).toBe('Project 11');
     act(() => useMailStore.setState({ unifiedInbox: true }));
-    expect(screen.queryByRole('searchbox', { name: t('sidebar.findFolder') })).toBeNull();
+    expect(screen.getByRole('searchbox', { name: t('sidebar.findFolder') }).value).toBe('');
     act(() => useMailStore.setState({ unifiedInbox: false, mailboxes }));
     expect(screen.getByRole('searchbox', { name: t('sidebar.findFolder') }).value).toBe('');
+  });
+
+  it('offers folder search for an account with few folders', () => {
+    useMailStore.setState({ mailboxes: [{ name: 'INBOX', path: 'INBOX' }, { name: 'Sent', path: 'Sent', specialUse: '\\Sent' }] });
+    render(<Sidebar />);
+    fireEvent.change(screen.getByRole('searchbox', { name: t('sidebar.findFolder') }), { target: { value: 'sen' } });
+    expect(screen.getByRole('button', { name: 'Sent' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'INBOX' })).toBeNull();
+  });
+
+  it('searches and colours the All Inboxes folders', () => {
+    useMailStore.setState({ unifiedInbox: true, unifiedFolder: 'INBOX' });
+    render(<Sidebar />);
+    const list = screen.getByTestId('sidebar-folder-list');
+    const inbox = within(list).getByText(t('sidebar.inbox')).closest('[role="button"]');
+    expect(inbox.querySelector('svg').style.color).not.toBe('');
+    const trash = within(list).getByText(t('settings.storage.trash')).closest('[role="button"]');
+    expect(trash.querySelector('svg').style.color).not.toBe(inbox.querySelector('svg').style.color);
+    fireEvent.change(screen.getByRole('searchbox', { name: t('sidebar.findFolder') }), { target: { value: t('settings.storage.trash') } });
+    expect(within(list).getByText(t('settings.storage.trash'))).toBeTruthy();
+    expect(within(list).queryByText(t('sidebar.inbox'))).toBeNull();
+    fireEvent.change(screen.getByRole('searchbox', { name: t('sidebar.findFolder') }), { target: { value: 'zzz' } });
+    expect(within(list).getByRole('status').textContent).toBe(t('sidebar.noFoldersFound'));
   });
 
   it('keeps backup actions separate in the chooser and closes before opening backup settings', () => {

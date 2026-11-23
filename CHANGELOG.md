@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed: every account and All Inboxes now show Find folder, not only accounts with ten or more folders, and the All Inboxes folders use the same role colours as an account's folders.
 - Fixed: a flag change or a move no longer lands in Unfinished server actions with "connection lost" when the server had quietly closed an idle connection. MailVault now asks again on a new connection, as it already did for reading and deleting mail; a move that lost the connection after it was sent is still left for you to retry, so it can never leave two copies.
 - Fixed: on macOS, Check for Updates always shows the update the feed offers now, and Update downloads that one. An update check left open since the day before could offer a nightly that had since been replaced and fail to download it; MailVault now checks the feed itself each day, and after a failed download checks it again once. Takes effect from the build after this one: the installed build still has the old updater.
 - Fixed: Delete everywhere refused some new mail with "had changed on the server", and that mail was never saved to your vault. An old mbox import could sit at a message number the server had not used yet; when the server later gave that number to new mail, the import hid it. Opening the folder now moves such an import out of the way, so the new message is saved and deletes normally, and the import stays in your vault. A saved copy whose ID ends in a bracketed address (like `@[1.2.3.4]`) now counts as the server's copy instead of being moved aside.

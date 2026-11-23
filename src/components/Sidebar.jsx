@@ -1098,13 +1098,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               </button>
             ))}
           </div>
-          {!unifiedInbox && (mailboxes.length >= 10 || folderQuery) && <label className="sidebar-find-field">
+          <label className="sidebar-find-field">
             <Search size={14} aria-hidden="true" />
             <input type="search" value={folderQuery} onChange={event => setFolderQuery(event.target.value)}
               aria-label={t('sidebar.findFolder')} placeholder={t('sidebar.findFolder')} />
-          </label>}
+          </label>
           <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
-            {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} /> : (
+            {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} mailHidden={mailHidden} searchQuery={folderQuery} /> : (
               <Folders accountId={activeAccountId} mailboxes={shownMailboxes} activeMailbox={activeViewId || mailHidden ? null : activeMailbox} expanded={expandedFolders}
                 onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
                 onContextMenu={onFolderContextMenu} searchQuery={folderQuery}
