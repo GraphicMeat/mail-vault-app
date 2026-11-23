@@ -186,7 +186,7 @@ function ResizeDivider({ orientation, onResize, onResizeEnd }) {
 
 function App() {
   const t = useT();
-  const { insightsOpen, notesOpen, contactsOpen, overlayOpen, openInsights, closeInsights, openNotes, closeNotes, openContacts, closeContacts, openMailFromSidebar } = useOverlayPages();
+  const { insightsOpen, notesOpen, contactsOpen, overlayOpen, openInsights, closeInsights, openNotes, closeNotes, openContacts, closeContacts, openMailFromSidebar, openMailTarget } = useOverlayPages();
   const init = useAccountStore(s => s.init);
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -518,7 +518,7 @@ function App() {
 
   useNativeBridges({ setMailtoError, openSettings, setShowShortcutsModal, setComposeState, showSettings, settingsMinimized, minimizeSettings, openMailFromSidebar, handleReportBug });
 
-  const { quickLoadDone, quickLoadHadAccountsRef } = useStartupLoad({ setPendingOperation, openMailFromSidebar });
+  const { quickLoadDone, quickLoadHadAccountsRef } = useStartupLoad({ setPendingOperation, openMailTarget });
 
   // Full initialization with delay (includes keychain access)
   // Gated on shouldStartFullInit(): fires once quick load has run and either

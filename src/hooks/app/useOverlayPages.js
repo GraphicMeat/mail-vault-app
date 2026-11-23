@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { createInsightsReaderScope } from '../../services/insightsReaderScope';
 import { useMailStore } from '../../stores/mailStore';
 import * as selectionWorkflow from '../../services/workflows/selectEmail';
+import { openNotificationTarget } from '../../utils/notificationOpen';
 
 // Leaving Insights or Notes for the mail the user picked: never bring the
 // earlier selection back over it.
@@ -70,7 +71,12 @@ export function useOverlayPages() {
     if (contacts) { selectionWorkflow.cancelInsightsSelection?.(); useContactsViewStore.getState().close(); }
     void insightsReaderScope.current.exit(KEEP_NO_SELECTION);
   }, []);
+  // Leave the overlay page, then show one message: a banner click, a kept-email bubble.
+  const openMailTarget = useCallback(target => {
+    openMailFromSidebar();
+    return openNotificationTarget(target, useMailStore.getState);
+  }, [openMailFromSidebar]);
   useEffect(() => () => { useInsightsStore.getState().resetSession(); useNotesStore.getState().close(); useContactsViewStore.getState().close(); }, []);
 
-  return { insightsOpen, notesOpen, contactsOpen, overlayOpen, openInsights, closeInsights, openNotes, closeNotes, openContacts, closeContacts, openMailFromSidebar };
+  return { insightsOpen, notesOpen, contactsOpen, overlayOpen, openInsights, closeInsights, openNotes, closeNotes, openContacts, closeContacts, openMailFromSidebar, openMailTarget };
 }

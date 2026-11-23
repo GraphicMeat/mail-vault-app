@@ -3,7 +3,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useMailStore } from '../../stores/mailStore';
 import { bulkOperationManager, isDeleteBulkType } from '../../services/BulkOperationManager';
 import { tErr } from '../../i18n/index.js';
-import { openNotificationTarget, startNotificationDeleteBridge, startNotificationOpenBridge } from '../../utils/notificationOpen';
+import { startNotificationDeleteBridge, startNotificationOpenBridge } from '../../utils/notificationOpen';
 import { useCodeBubbleStore } from '../../stores/codeBubbleStore';
 
 // Debug: log to Rust side via invoke
@@ -13,7 +13,7 @@ const debugLog = (...args) => {
   window.__TAURI__?.core?.invoke?.('log_from_frontend', { message: msg }).catch(() => {});
 };
 
-export function useStartupLoad({ setPendingOperation, openMailFromSidebar }) {
+export function useStartupLoad({ setPendingOperation, openMailTarget }) {
   // Track if quick load is done
   const [quickLoadDone, setQuickLoadDone] = useState(false);
   const quickLoadHadAccountsRef = useRef(false);
@@ -112,11 +112,8 @@ export function useStartupLoad({ setPendingOperation, openMailFromSidebar }) {
         startNotificationOpenBridge({
           invoke,
           listen,
-          open: (target) => {
-            openMailFromSidebar();
-            return openNotificationTarget(target, useMailStore.getState)
-              .catch(e => console.warn('[notification] could not open the clicked email:', e));
-          },
+          open: (target) => openMailTarget(target)
+            .catch(e => console.warn('[notification] could not open the clicked email:', e)),
         }),
         // The code bubble's own delete (Trash, with its undo); its bubble goes too.
         startNotificationDeleteBridge({
@@ -132,7 +129,7 @@ export function useStartupLoad({ setPendingOperation, openMailFromSidebar }) {
       if (!active) stops.forEach(stop => stop());
     }).catch(() => {}); // not in Tauri
     return () => { active = false; stops.forEach(stop => stop()); };
-  }, [quickLoadDone, openMailFromSidebar]);
+  }, [quickLoadDone, openMailTarget]);
 
   return { quickLoadDone, quickLoadHadAccountsRef };
 }
