@@ -84,7 +84,6 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1px;
   padding: 6px 8px;
   border: 0;
   border-radius: 8px;
@@ -95,7 +94,6 @@
 }
 .keep-row:hover, .keep-row:focus-visible { background: var(--mail-accent-tint); }
 .keep-row-subject { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.keep-row-date { font-size: 11px; color: var(--mail-text-muted); }
 .keep-x {
   flex: none;
   width: 28px;

@@ -72,12 +72,11 @@ function Grip({ dock, rootRef, onMove }) {
 
 function Row({ item, onOpen, onRemove }) {
   const t = useT();
-  const { Private, formatDateOnly } = useViewEnv();
+  const { Private } = useViewEnv();
   return (
     <li className="keep-row-wrap">
       <button type="button" className="keep-row" data-testid="keep-row" onClick={() => onOpen(item)}>
         <span className="keep-row-subject"><Private kind="text">{item.subject || t('common.noSubject')}</Private></span>
-        <span className="keep-row-date">{formatDateOnly(new Date(item.keptAt))}</span>
       </button>
       <button type="button" className="keep-x" data-testid="keep-row-remove" aria-label={t('keep.remove')}
         title={t('keep.remove')} onClick={() => onRemove(keepId(item))}>×</button>
