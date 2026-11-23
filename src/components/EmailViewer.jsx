@@ -736,7 +736,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
           />
           <span className="min-w-0 break-words"><Private kind="text">{selectedEmail.subject}</Private></span>
         </h1>
-        <ReaderHeaderTools onOpenInWindow={showOpenInWindow ? openInWindow : undefined} onClose={onClose} />
+        <ReaderHeaderTools onOpenInWindow={showOpenInWindow ? openInWindow : undefined} onClose={onClose} keepEmail={selectedEmail} />
       </div>
 
       {/* Custody band — the reading pane opens under the claim about where this

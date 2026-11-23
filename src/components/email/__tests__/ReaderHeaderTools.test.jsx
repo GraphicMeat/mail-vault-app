@@ -29,4 +29,13 @@ describe('ReaderHeaderTools', () => {
     fireEvent.click(screen.getByTestId('close-viewer'));
     expect(closeEmail).toHaveBeenCalledTimes(1);
   });
+
+  it("shows the keep toggle for the reader's email", () => {
+    const keepEmail = { uid: 7, subject: 'Plan', from: { name: 'Sam', address: 'sam@x' }, _accountId: 'a1', _mailbox: 'INBOX' };
+    const { rerender } = render(<ReaderHeaderTools />);
+    expect(screen.queryByTestId('keep-toggle')).toBeNull();
+    rerender(<ReaderHeaderTools keepEmail={keepEmail} />);
+    const order = [...screen.getByTestId('keep-toggle').parentElement.children].map(el => el.getAttribute('data-testid'));
+    expect(order).toEqual(['keep-toggle', 'close-viewer']);
+  });
 });

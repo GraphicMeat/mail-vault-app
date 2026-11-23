@@ -39,6 +39,7 @@ import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
 import { SettingsBubble } from './components/settings/SettingsBubble';
 import { CodeBubbles } from './components/CodeBubble';
+import { KeepDock } from './components/KeepDock';
 import { useCodeBubbleStore } from './stores/codeBubbleStore';
 import { useUnsavedStore } from './stores/unsavedStore';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
@@ -904,6 +905,8 @@ function App() {
           })}
         </div>
       )}
+
+      <KeepDock onOpen={openMailTarget} />
 
       {settingsLayer}
 

@@ -764,12 +764,9 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
   );
 
   // Determine newest email by date (sort-order independent)
-  const newestKey = useMemo(() => {
-    if (!thread.emails.length) return null;
-    return emailKey(thread.emails.reduce((newest, email) =>
-      new Date(email.date) > new Date(newest.date) ? email : newest
-    ));
-  }, [thread.emails]);
+  const newestEmail = useMemo(() => thread.emails.reduce((newest, email) =>
+    !newest || new Date(email.date) > new Date(newest.date) ? email : newest, null), [thread.emails]);
+  const newestKey = newestEmail ? emailKey(newestEmail) : null;
 
   // The message shown open is the newest one the thread was opened on. Mail
   // that arrives while it is up joins folded, because an open unread message
@@ -960,7 +957,7 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
           </button>
         )}
 
-        <ReaderHeaderTools className="ml-2" />
+        <ReaderHeaderTools className="ml-2" keepEmail={newestEmail} />
         </>}
       </div>
 
