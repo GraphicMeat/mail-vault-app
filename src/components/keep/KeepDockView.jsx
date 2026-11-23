@@ -49,7 +49,8 @@ function Grip({ dock, rootRef, onMove }) {
       aria-label={t('keep.move')}
       title={t('keep.move')}
       onPointerDown={event => {
-        event.currentTarget.setPointerCapture?.(event.pointerId);
+        // Capture keeps the drag on the grip past its edge; a pointer that already ended has none to give.
+        try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* the drag still follows the grip */ }
         start.current = { x: event.clientX, y: event.clientY };
       }}
       onPointerMove={event => {

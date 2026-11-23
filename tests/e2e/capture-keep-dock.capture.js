@@ -140,6 +140,21 @@ const pointerOver = (selector, entering) => browser.execute((sel, enter) => {
 const pressEscape = () => browser.execute(() => (document.activeElement || document.body)
   .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
 
+/** A mouse drag of the dock's grip by dx, dy: tauri-wd's pointer actions do not reach this webview. */
+const dragGrip = (dx, dy) => browser.execute((moveX, moveY) => {
+  const grip = document.querySelector('[data-testid="keep-dock-grip"]');
+  const box = grip.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  const fire = (type, at) => grip.dispatchEvent(new PointerEvent(type, {
+    bubbles: true, pointerId: 1, pointerType: 'mouse', clientX: at.x, clientY: at.y,
+  }));
+  fire('pointerdown', { x, y });
+  fire('pointermove', { x: x + moveX / 2, y: y + moveY / 2 });
+  fire('pointermove', { x: x + moveX, y: y + moveY });
+  fire('pointerup', { x: x + moveX, y: y + moveY });
+}, dx, dy);
+
 const bubble = label => `[data-testid="keep-bubble"][aria-label^="${label}"]`;
 const panelInsideViewport = () => browser.execute(() => {
   const r = document.querySelector('[data-testid="keep-panel"]').getBoundingClientRect();
@@ -219,8 +234,7 @@ describe('Keep in bubble capture', function () {
     await shoot('keep-dock-reopened', '[data-testid="keep-toggle"][aria-pressed="true"]');
 
     // Move the dock by its grip to the left half.
-    await browser.action('pointer').move({ origin: await $('[data-testid="keep-dock-grip"]') }).down()
-      .move({ x: -700, y: 40, origin: 'pointer', duration: 300 }).up().perform();
+    await dragGrip(-700, 40);
     await wait(() => browser.execute(() => document.querySelector('[data-testid="keep-dock"]').dataset.side === 'left'), 'Dock did not snap left');
     await assertCentred('Sam Rivera', 1280);
     await shoot('keep-dock-left', '[data-testid="keep-dock"][data-side="left"]');
